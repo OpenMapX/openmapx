@@ -75,14 +75,17 @@ describe("collection orchestrator", () => {
 
   test("a failing provider sets unavailable and area wins over it", async () => {
     const lines: string[] = [];
+    const far = provider("far", [{ id: "far:1", sources: ["s"] }], {
+      coverage: { bbox: [2, 48, 3, 49] },
+    });
     const items = collection(
       ctxWith(
         [
-          provider("a", [{ id: "a:1", sources: ["s"] }]),
-          provider("down", new Error("down")),
-          provider("far", [{ id: "far:1", sources: ["s"] }], {
-            coverage: { bbox: [2, 48, 3, 49] },
+          provider("a", [{ id: "a:1", sources: ["s"] }], {
+            coverage: { bbox: [8, 48.5, 9, 49.5] },
           }),
+          provider("down", new Error("down")),
+          far,
         ],
         undefined,
         lines,
@@ -94,6 +97,7 @@ describe("collection orchestrator", () => {
       partial: "unavailable",
     });
     await items.read(BBOX);
+    expect(far.list).not.toHaveBeenCalled();
     expect(lines.filter((l) => l.startsWith("warn"))).toEqual([
       "warn [test] provider down failed list: down",
     ]);
@@ -112,4 +116,41 @@ describe("collection orchestrator", () => {
   test("with no provider the read is empty", async () => {
     expect(await collection(ctxWith([])).read(BBOX)).toEqual({ items: [] });
   });
+});
+
+test("deduplicates each outage reason, logs recovery once, and reports a later outage", async () => {
+  const lines: string[] = [];
+  let failure: Error | null = new Error("upstream401");
+  const flaky = provider("flaky", [], {
+    list: vi.fn(async () => {
+      if (failure) throw failure;
+      return { items: [] };
+    }),
+  });
+  const items = collection(ctxWith([flaky], undefined, lines));
+  const warnings = () => lines.filter((line) => line.startsWith("warn"));
+
+  await items.read(BBOX);
+  await items.read(BBOX);
+  expect(warnings()).toEqual(["warn [test] provider flaky failed list: upstream401"]);
+
+  failure = new Error("ECONNREFUSED");
+  await items.read(BBOX);
+  await items.read(BBOX);
+  expect(warnings()).toEqual([
+    "warn [test] provider flaky failed list: upstream401",
+    "warn [test] provider flaky failed list: ECONNREFUSED",
+  ]);
+
+  failure = null;
+  await items.read(BBOX);
+  await items.read(BBOX);
+  expect(lines.filter((line) => line.startsWith("info"))).toEqual([
+    "info [test] provider flaky recovered",
+  ]);
+
+  failure = new Error("ECONNREFUSED");
+  await items.read(BBOX);
+  expect(warnings()).toHaveLength(3);
+  expect(warnings().at(-1)).toBe("warn [test] provider flaky failed list: ECONNREFUSED");
 });

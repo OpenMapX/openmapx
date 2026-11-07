@@ -7,9 +7,9 @@ function response(body: string, headers: Record<string, string> = {}) {
 
 describe("bounded binary responses", () => {
   it.each([
-    ["an oversized declared length", { "Content-Length": "100" }],
-    ["a disallowed media type", { "Content-Type": "text/html" }],
-  ])("cancels the upstream body after rejecting %s", async (_label, headers) => {
+    ["an oversized declared length", { "Content-Length": "100" }, /too large/i],
+    ["a disallowed media type", { "Content-Type": "text/html" }, /content type/i],
+  ])("cancels the upstream body after rejecting %s", async (_label, headers, error) => {
     let cancelled = false;
     const upstream = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -28,19 +28,10 @@ describe("bounded binary responses", () => {
         maxBytes: 10,
         allowedContentTypes: ["image/png"],
       }),
-    ).toThrow();
+    ).toThrow(error);
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(cancelled).toBe(true);
-  });
-
-  it("rejects an oversized declared length before exposing a stream", () => {
-    expect(() =>
-      createBoundedBinaryProxyStream(response("x", { "Content-Length": "100" }), {
-        maxBytes: 10,
-        allowedContentTypes: ["image/png"],
-      }),
-    ).toThrow(/too large/i);
   });
 
   it("streams an allowed body without buffering it in the helper", async () => {
@@ -61,20 +52,6 @@ describe("bounded binary responses", () => {
         allowedContentTypes: ["image/png"],
       }),
     ).resolves.toMatchObject({ data: Buffer.from("0123456789") });
-  });
-
-  it("destroys the stream when actual bytes exceed the ceiling", async () => {
-    const { body } = createBoundedBinaryProxyStream(response("x".repeat(100)), {
-      maxBytes: 10,
-      allowedContentTypes: ["image/png"],
-    });
-    await expect(
-      (async () => {
-        for await (const _chunk of body) {
-          // consume to trigger the streaming ceiling
-        }
-      })(),
-    ).rejects.toThrow(/too large/i);
   });
 
   it("cancels the upstream body when the streaming ceiling is exceeded", async () => {

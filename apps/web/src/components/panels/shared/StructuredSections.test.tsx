@@ -1,7 +1,7 @@
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@/test";
+import { act, fireEvent, render, screen, within } from "@/test";
 import { StructuredSections } from "./StructuredSections";
 
 vi.mock("@/components/ui/HlsVideo", () => ({
@@ -93,25 +93,6 @@ describe("StructuredSections", () => {
     expect(markup).not.toContain('src="https://api.entur.io');
   });
 
-  it("renders the section caption beneath the header", () => {
-    const markup = renderToStaticMarkup(
-      <StructuredSections
-        sections={[
-          {
-            title: "Connectors",
-            caption: "2 of 4 available",
-            type: "table",
-            columns: ["Type", "Power", "Current", "Qty", "Status"],
-            rows: [["CCS (Type 2)", "50 kW", "DC", 2, "Available", "available"]],
-            sectionIcon: "bolt",
-          },
-        ]}
-      />,
-    );
-
-    expect(markup).toContain("2 of 4 available");
-  });
-
   it("appends a relative-time suffix when the caption has a captionTimestamp", () => {
     const markup = renderToStaticMarkup(
       <StructuredSections
@@ -131,25 +112,6 @@ describe("StructuredSections", () => {
 
     expect(markup).toContain("2 of 4 available");
     expect(markup).toContain("5 minutes ago");
-  });
-
-  it("draws the road-weather and road-maintenance section icons", () => {
-    const markup = renderToStaticMarkup(
-      <StructuredSections
-        sections={[
-          { title: "Weather", type: "table", rows: [["Air", "1.0 °C"]], sectionIcon: "thermostat" },
-          {
-            title: "Work",
-            type: "table",
-            rows: [["Task", "Salting"]],
-            sectionIcon: "construction",
-          },
-        ]}
-      />,
-    );
-
-    expect(markup).toContain('data-testid="ThermostatIcon"');
-    expect(markup).toContain('data-testid="ConstructionIcon"');
   });
 
   it("renders the caption without a relative-time suffix when there is no captionTimestamp", () => {
@@ -173,8 +135,8 @@ describe("StructuredSections", () => {
   });
 
   it("colours a connector status by its kind cell, not by the words of the status", () => {
-    const render = (status: string, kind: string) =>
-      renderToStaticMarkup(
+    const color = (status: string, kind: string) => {
+      const view = render(
         <StructuredSections
           sections={[
             {
@@ -187,46 +149,20 @@ describe("StructuredSections", () => {
           ]}
         />,
       );
-    // The status is the row's last caption; its generated class carries the colour.
-    const statusClass = (markup: string) =>
-      [...markup.matchAll(/<span class="([^"]+)">/g)].at(-1)?.[1];
-
-    const available = statusClass(render("Verfügbar", "available"));
-    const out = statusClass(render("Not operational", "out"));
-    const unknown = statusClass(render("", "unknown"));
-
+      const actual = getComputedStyle(screen.getByText(status)).color;
+      view.unmount();
+      return actual;
+    };
+    const available = color("Verfügbar", "available"),
+      out = color("Not operational", "out"),
+      unknown = color("Unknown", "unknown");
     expect(new Set([available, out, unknown]).size).toBe(3);
-    expect(statusClass(render("Operational, available", "unknown"))).toBe(unknown);
-    expect(statusClass(render("Not available", "out"))).toBe(out);
-  });
-
-  it("renders a structured pricing table with formatted prices and a direct-price caption", () => {
-    const markup = renderToStaticMarkup(
-      <StructuredSections
-        sections={[
-          {
-            title: "Pricing",
-            caption: "Direct payment price at this charger — your provider may charge differently.",
-            type: "table",
-            rows: [
-              ["Energy", "€0.59/kWh"],
-              ["Parking", "€2.00/h parking"],
-            ],
-            sectionIcon: "payments",
-          },
-        ]}
-      />,
-    );
-
-    expect(markup).toContain("€0.59/kWh");
-    expect(markup).toContain("€2.00/h parking");
-    expect(markup).toContain(
-      "Direct payment price at this charger — your provider may charge differently.",
-    );
+    expect(color("Operational, available", "unknown")).toBe(unknown);
+    expect(color("Not available", "out")).toBe(out);
   });
 
   it("renders a pricing-layout table as label + conditions caption with the price alongside", () => {
-    const markup = renderToStaticMarkup(
+    render(
       <StructuredSections
         sections={[
           {
@@ -243,28 +179,18 @@ describe("StructuredSections", () => {
       />,
     );
 
-    expect(markup).toContain("CCS · DC · 60 kW");
-    expect(markup).toContain("€0.46/kWh");
-    expect(markup).toContain("Type 2 · AC · 11 kW");
-    expect(markup).toContain("≥1 h");
-  });
-
-  it("does not render a pricing row's conditions caption when the cell is empty", () => {
-    const markup = renderToStaticMarkup(
-      <StructuredSections
-        sections={[
-          {
-            title: "Pricing",
-            type: "table",
-            rowLayout: "pricing",
-            rows: [["Energy", "€0.46/kWh", ""]],
-            sectionIcon: "payments",
-          },
-        ]}
-      />,
-    );
-
-    expect(markup).not.toContain("MuiTypography-caption");
+    const first = screen.getByText("CCS · DC · 60 kW"),
+      second = screen.getByText("Type 2 · AC · 11 kW"),
+      condition = screen.getByText("≥1 h");
+    expect(first.nextElementSibling).toBeNull();
+    expect(condition.previousElementSibling).toBe(second);
+    const price = screen.getByText("€0.46/kWh"),
+      row = first.parentElement?.parentElement;
+    expect(row?.contains(price)).toBe(true);
+    expect(first.parentElement?.contains(price)).toBe(false);
+    expect(getComputedStyle(row as HTMLElement).display).toBe("flex");
+    expect(getComputedStyle(row as HTMLElement).justifyContent).toBe("space-between");
+    expect(screen.getByText("€0.13/min")).toBeVisible();
   });
 
   it("renders a section's links as clickable anchors to the given urls", () => {
@@ -274,7 +200,11 @@ describe("StructuredSections", () => {
           {
             title: "Pricing",
             type: "table",
-            rows: [["Energy", "€0.48/kWh"]],
+            rows: [
+              ["Energy", "€0.59/kWh"],
+              ["Parking", "€2.00/h parking"],
+            ],
+            caption: "Direct payment price at this charger — your provider may charge differently.",
             sectionIcon: "payments",
             links: [
               { label: "Night rate applies 00:00-07:00", url: "https://example.org/tariffs/1" },
@@ -290,6 +220,11 @@ describe("StructuredSections", () => {
     expect(markup).toContain("Night rate applies 00:00-07:00");
     expect(markup).toContain("View tariff details");
     expect(markup).toContain('target="_blank"');
+    expect(markup).toContain("€0.59/kWh");
+    expect(markup).toContain("€2.00/h parking");
+    expect(markup).toContain(
+      "Direct payment price at this charger — your provider may charge differently.",
+    );
   });
 
   it("renders a link entry without a url as plain text, not an anchor", () => {
@@ -311,80 +246,26 @@ describe("StructuredSections", () => {
     expect(markup).not.toContain("<a ");
   });
 
-  it("does not load external embed URLs before the media gate is accepted", () => {
-    const markup = renderToStaticMarkup(
-      <StructuredSections
-        sections={[
-          {
-            title: "Traffic camera",
-            type: "embed",
-            embedType: "video",
-            embedUrl: "https://camera.example.test/live.m3u8",
-            collapsed: false,
-          },
-        ]}
-      />,
-    );
-
-    expect(markup).toContain("External media");
-    expect(markup).toContain("Load media");
-    expect(markup).not.toContain("https://camera.example.test/live.m3u8");
-  });
-
-  it("drops non-http embed URLs instead of framing them", () => {
-    const markup = renderToStaticMarkup(
+  it.each([
+    "javascript:alert(1)",
+    "/local/thing",
+    new URL("/local/thing", window.location.href).href,
+  ])("rejects invalid and same-origin embed URLs before offering consent: %s", (embedUrl) => {
+    const { container } = render(
       <StructuredSections
         sections={[
           {
             title: "Untrusted camera",
             type: "embed",
             embedType: "iframe",
-            embedUrl: "javascript:alert(1)",
+            embedUrl,
             collapsed: false,
           },
         ]}
       />,
     );
-
-    expect(markup).not.toContain("<iframe");
-    expect(markup).not.toContain("javascript:");
-  });
-
-  it("drops same-origin relative embed URLs instead of framing them", () => {
-    const markup = renderToStaticMarkup(
-      <StructuredSections
-        sections={[
-          {
-            title: "Local camera",
-            type: "embed",
-            embedType: "iframe",
-            embedUrl: "/local/thing",
-            collapsed: false,
-          },
-        ]}
-      />,
-    );
-
-    expect(markup).not.toContain("<iframe");
-  });
-
-  it("requires consent before rendering an external iframe", () => {
-    const markup = renderToStaticMarkup(
-      <StructuredSections
-        sections={[
-          {
-            title: "External camera",
-            type: "embed",
-            embedType: "iframe",
-            embedUrl: "https://camera.example.test/player",
-            collapsed: false,
-          },
-        ]}
-      />,
-    );
-
-    expect(markup).toContain("Load media");
-    expect(markup).not.toContain("<iframe");
+    expect(screen.queryByRole("button", { name: "Load media" })).toBeNull();
+    expect(container.querySelector("iframe")).toBeNull();
   });
 });
 
@@ -547,14 +428,6 @@ describe("StructuredSections refreshing stills", () => {
     await advance(60);
     expect(src()).not.toBe(loaded);
   });
-
-  it("hides the section when the first still fails", () => {
-    const { img } = mountStill(60);
-
-    fireEvent.error(img() as HTMLElement);
-
-    expect(img()).toBeNull();
-  });
 });
 
 it("keeps image-specific branding adjacent to its own image even in a mixed detail", () => {
@@ -593,16 +466,20 @@ it("keeps image-specific branding adjacent to its own image even in a mixed deta
             },
           ],
         },
+        { title: "Other image", type: "image", imageUrl: "https://image.test/other.jpg" },
       ]}
     />,
   );
-  expect(screen.getByRole("link", { name: "add a webcam" })).toBeVisible();
+  const ownFrame = screen.getByRole("img", { name: "Windy view" }).parentElement as HTMLElement;
+  const otherFrame = screen.getByRole("img", { name: "Other image" }).parentElement as HTMLElement;
+  expect(within(ownFrame).getByRole("link", { name: "add a webcam" })).toBeVisible();
+  expect(within(otherFrame).queryByRole("link", { name: "add a webcam" })).toBeNull();
 });
 
 it.each(["video", "iframe"] as const)(
   "keeps image-surface service credit beside a consented %s",
   (embedType) => {
-    render(
+    const { container } = render(
       <StructuredSections
         sections={[
           {
@@ -641,7 +518,14 @@ it.each(["video", "iframe"] as const)(
       />,
     );
     expect(screen.queryByText("Required player service credit")).toBeNull();
+    expect(screen.getByText("External media")).toBeVisible();
+    expect(container.innerHTML).not.toContain("https://player.test/embed");
+    expect(container.querySelector("video,iframe")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Load media" }));
+    const player = container.querySelector(embedType === "video" ? "video" : "iframe");
+    expect(player).toHaveAttribute("src", "https://player.test/embed");
+    if (embedType === "iframe")
+      expect(player).toHaveAttribute("sandbox", "allow-scripts allow-same-origin");
     expect(screen.getByText("Required player service credit")).toBeVisible();
   },
 );

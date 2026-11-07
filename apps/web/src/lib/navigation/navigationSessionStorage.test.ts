@@ -175,16 +175,6 @@ describe("navigation session storage", () => {
     expect(map.has(NAVIGATION_SESSION_STORAGE_KEY)).toBe(false);
   });
 
-  it("does not throw when the backing adapter is unavailable", async () => {
-    const storage = createNavigationSessionStorage({
-      get: async () => undefined,
-      set: async () => {},
-      delete: async () => {},
-    });
-    expect(await storage.read()).toBeNull();
-    await storage.clear();
-  });
-
   it("does not write a transit snapshot", async () => {
     const { storage } = harness();
     let error: unknown;

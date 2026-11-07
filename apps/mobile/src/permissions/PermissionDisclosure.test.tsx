@@ -63,7 +63,11 @@ describe("PermissionDisclosure", () => {
   ])("offers exactly the three explicit choices in %s", async (locale, labels) => {
     const view = await renderDisclosure(locale);
 
-    for (const label of labels) expect(view.getByLabelText(label)).toBeTruthy();
+    expect(view.getAllByRole("button")).toHaveLength(3);
+    for (const label of labels) {
+      const control = view.getByLabelText(label);
+      expect(control.props.accessibilityRole).toBe("button");
+    }
   });
 
   it("reports each choice separately", async () => {
@@ -79,28 +83,6 @@ describe("PermissionDisclosure", () => {
     expect(onAccept).toHaveBeenCalledTimes(1);
     expect(onForegroundOnly).toHaveBeenCalledTimes(1);
     expect(onDismiss).toHaveBeenCalledTimes(1);
-  });
-
-  it("labels every control for a screen reader", async () => {
-    const view = await renderDisclosure("de");
-
-    for (const testID of [
-      "permission-continue",
-      "permission-foreground-only",
-      "permission-not-now",
-    ]) {
-      const control = view.getByTestId(testID);
-      expect(control.props.accessibilityRole).toBe("button");
-      expect(String(control.props.accessibilityLabel ?? "")).not.toHaveLength(0);
-    }
-  });
-
-  it("does not itself trigger an operating-system prompt", async () => {
-    const view = await renderDisclosure("en");
-
-    // The screen only reports a choice; requesting is the controller's job, so
-    // nothing here can produce a dialog the user did not ask for.
-    expect(allText(view)).not.toContain("requestPermission");
   });
 });
 

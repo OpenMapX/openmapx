@@ -202,25 +202,7 @@ describe("RidePanel", () => {
     ]);
   });
 
-  it("renders one chip per available provider", async () => {
-    renderPanel();
-    expect((await screen.findByText("Uber")).textContent).toBe("Uber");
-    expect(screen.getByText("Bolt").textContent).toBe("Bolt");
-  });
-
-  it("renders exactly one open action, for the selected provider only", async () => {
-    renderPanel();
-    const actions = await screen.findAllByRole("button", { name: /open in/i });
-    expect(actions).toHaveLength(1);
-    expect(actions[0].textContent?.toLowerCase()).toContain("uber");
-  });
-
-  it("says availability was not checked for a link-out provider", async () => {
-    renderPanel();
-    expect(await screen.findByText(/availability is not checked/i)).not.toBeNull();
-  });
-
-  it("keeps a stale price off screen when the expiry is unparseable", async () => {
+  it("blocks booking and offers refresh when the expiry is unparseable", async () => {
     // `now >= Date.parse(x)` is false for NaN, which would leave the price up
     // forever; the canonical rule treats an unparseable expiry as expired.
     providers = {
@@ -237,24 +219,38 @@ describe("RidePanel", () => {
       {
         providerId: "uber",
         attributions: [],
-        quotes: [{ productId: "x", product: { id: "x", name: "X" }, expiresAt: "not-a-date" }],
+        quotes: [{ ...quote("X", 123.45), expiresAt: "not-a-date" }],
       },
     ];
     renderPanel();
     expect(await screen.findByText(/out of date/i)).not.toBeNull();
-  });
-
-  it("does not warn about coordinates for a provider whose link carries them", async () => {
-    renderPanel();
-    await screen.findByText("Uber");
-    expect(screen.queryByText(/cannot carry your pickup/i)).toBeNull();
+    const book = screen.getByRole("button", { name: /book/i });
+    expect(book).toBeDisabled();
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    try {
+      await userEvent.click(book);
+      expect(open).not.toHaveBeenCalled();
+    } finally {
+      open.mockRestore();
+    }
+    expect(screen.getByRole("button", { name: /refresh/i })).toBeInTheDocument();
   });
 
   it("warns that a coordinate-less provider will not carry the trip", async () => {
     renderPanel();
+    expect(await screen.findByText("Uber")).toHaveTextContent("Uber");
+    expect(screen.getByText("Bolt")).toHaveTextContent("Bolt");
+    expect(screen.getByText(/availability is not checked/i)).toBeInTheDocument();
+    expect(screen.queryByText(/cannot carry your pickup/i)).toBeNull();
+    const initialActions = screen.getAllByRole("button", { name: /open in/i });
+    expect(initialActions).toHaveLength(1);
+    expect(initialActions[0]).toHaveTextContent(/uber/i);
     // Bolt publishes no parameterised link format, so selecting it must say so.
     await userEvent.click(await screen.findByText("Bolt"));
     expect(await screen.findByText(/cannot carry your pickup/i)).not.toBeNull();
+    const selectedActions = screen.getAllByRole("button", { name: /open in/i });
+    expect(selectedActions).toHaveLength(1);
+    expect(selectedActions[0]).toHaveTextContent(/bolt/i);
   });
   it("does not render a failed quote envelope's static supplier notice", () => {
     comparison();

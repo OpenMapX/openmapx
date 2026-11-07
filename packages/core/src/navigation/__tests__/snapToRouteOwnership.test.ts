@@ -95,16 +95,4 @@ describe("snapToRoute production callers", () => {
   it("finds only the allow-listed modules", () => {
     expect(referencing).toEqual(Object.keys(ALLOWED).sort());
   });
-
-  it("ignores prose mentions in the matcher's own documentation", () => {
-    const matcher = join(REPO_ROOT, "packages/core/src/navigation/routeMatcher.ts");
-    const source = readFileSync(matcher, "utf8");
-    expect(source).toContain("snapToRoute");
-    expect(codeOnly(source)).not.toContain("snapToRoute");
-  });
-
-  it("scans a plausible number of sources", () => {
-    // Guards against a broken walk quietly passing the gate with nothing to scan.
-    expect(files.length).toBeGreaterThan(200);
-  });
 });

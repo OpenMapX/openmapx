@@ -31,6 +31,8 @@ import { StateStore } from "../../src/state.js";
 
 let tmp: string | undefined;
 afterEach(() => {
+  opsCalls.length = 0;
+  opsBehaviour.fail = false;
   if (tmp) {
     rmSync(tmp, { recursive: true, force: true });
     tmp = undefined;
@@ -154,9 +156,7 @@ describe("motis-import stage", () => {
       runner: async () => undefined,
     });
     opsBehaviour.fail = true;
-    const result = await motisImportRun(ctx).finally(() => {
-      opsBehaviour.fail = false;
-    });
+    const result = await motisImportRun(ctx);
     expect(result.status).toBe("error");
     expect(result.message).toMatch(/failed to \(re\)start motis-staging/);
   });

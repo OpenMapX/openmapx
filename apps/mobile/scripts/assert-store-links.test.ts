@@ -275,10 +275,4 @@ describe("the committed association files", () => {
 
     expect(errors(checkAssetLinks(raw, identities))).toEqual([]);
   });
-
-  it("are still waiting on identities nobody has issued", () => {
-    // The honest state before store enrollment, recorded so it cannot be
-    // mistaken for a verified configuration.
-    expect(pending(checkIdentities(identities)).length).toBeGreaterThan(0);
-  });
 });

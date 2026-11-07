@@ -1,7 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -892,16 +891,16 @@ describe("assembled production service authority", () => {
     }
   });
 
-  it("keeps the production DM source, startup ordering and all installer calls in the actual entry point", () => {
+  it("keeps production data-source wiring and recovery order in the actual entry point", () => {
     const entry = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
     expect(entry).toContain("createProductionOpsRuntime({");
-    expect(entry).toContain(
-      "createDataTransitTrustedOpsDataSource(\n            controlStartup.installation,",
+    expect(entry).toMatch(
+      /createDataTransitTrustedOpsDataSource\(\s*controlStartup\.installation,/,
     );
     expect(entry).toContain("createFileTrustedOpsDataSource({");
-    expect(entry.indexOf("await communityRepositories.recover()")).toBeLessThan(
-      entry.indexOf("const controlStartup ="),
-    );
+    const recovery = entry.indexOf("await communityRepositories.recover()");
+    expect(recovery).toBeGreaterThanOrEqual(0);
+    expect(recovery).toBeLessThan(entry.indexOf("const controlStartup ="));
   });
 });
 

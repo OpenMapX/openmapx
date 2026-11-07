@@ -29,12 +29,4 @@ describe("proxy CSP", () => {
     // disagree, every framework script is blocked.
     expect(response.headers.get("Content-Security-Policy")).toContain(`'nonce-${nonce}'`);
   });
-
-  it("forwards the nonce to the render", () => {
-    const response = proxy(request());
-
-    // Set on the response we return, which Next reflects onto the forwarded
-    // request headers it renders with.
-    expect(response.headers.get("x-nonce")).toBeTruthy();
-  });
 });

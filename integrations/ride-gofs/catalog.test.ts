@@ -48,19 +48,19 @@ function catalogWith(
 }
 
 describe("resolveFeeds", () => {
-  it("includes upstream entries whose discovery document parses", async () => {
+  it("includes parsed upstream feeds with stable IDs and omits placeholder URLs", async () => {
     const { catalog } = catalogWith({}, async () => ({
       data: { en: { feeds: [{ name: "zones", url: "https://x/z" }] } },
     }));
     const feeds = await catalog.resolveFeeds();
-    expect(feeds.map((f) => f.name)).toContain("Freebee Miami Beach");
-    expect(feeds.find((f) => f.name === "Freebee Miami Beach")?.origin).toBe("upstream");
-  });
-
-  it("drops the placeholder 'forthcoming' URL", async () => {
-    const { catalog } = catalogWith();
-    const feeds = await catalog.resolveFeeds();
-    expect(feeds.map((f) => f.name)).not.toContain("Pace On Demand");
+    expect(
+      feeds
+        .filter((f) => f.origin === "upstream")
+        .map(({ id, name, origin }) => ({ id, name, origin })),
+    ).toEqual([
+      { id: "taxi-montreal", name: "Taxi Montréal", origin: "upstream" },
+      { id: "freebee-miami-beach", name: "Freebee Miami Beach", origin: "upstream" },
+    ]);
   });
 
   it("marks a 401 feed credential-required rather than dropping it", async () => {
@@ -142,14 +142,6 @@ describe("resolveFeeds", () => {
     const { catalog, fetchJson } = catalogWith({ useUpstreamCatalog: false });
     await catalog.resolveFeeds();
     expect(fetchJson.mock.calls.map(([u]) => u)).not.toContain(UPSTREAM_URL);
-  });
-
-  it("derives a stable slug id from the system name", async () => {
-    const { catalog } = catalogWith({}, async () => ({
-      data: { en: { feeds: [{ name: "zones", url: "https://x/z" }] } },
-    }));
-    const feeds = await catalog.resolveFeeds();
-    expect(feeds.map((f) => f.id)).toContain("freebee-miami-beach");
   });
 });
 

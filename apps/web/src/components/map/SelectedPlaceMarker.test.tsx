@@ -101,13 +101,8 @@ it("labels the pin with the place panel's title and hides the basemap's own labe
     names: ["Berliner Fernsehturm", "Fernsehturm Berlin"],
     stylePoiId: "5564352411",
   });
-  view.unmount();
-});
-
-it("stops hiding the basemap label once nothing is selected", () => {
-  const view = render(<SelectedPlaceMarker />);
-
-  const hideHook = useHiddenStylePoi as unknown as ReturnType<typeof vi.fn>;
+  act(() => usePlaceStore.setState({ selectedPlace: null }));
+  view.rerender(<SelectedPlaceMarker />);
   expect(hideHook.mock.calls.at(-1)?.[0]).toBeNull();
   view.unmount();
 });

@@ -235,11 +235,11 @@ describe("agent-owned Transitous catalog lock", () => {
     expect(result.active).toMatchObject({ ref: REF, lockedBy: "operator", comment: "pinned" });
   });
 
-  it("rejects an oversized lock rather than loading it", async () => {
+  it("rejects an oversized legacy proposal rather than loading it", async () => {
     const rootDir = root();
-    writeFileSync(lockPath(rootDir), `{"ref":"${"x".repeat(300_000)}"}`, { mode: 0o644 });
+    writeFileSync(proposedPath(rootDir), `{"ref":"${"x".repeat(300_000)}"}`, { mode: 0o644 });
     await expect(
       dispatchOpsOperation(runtimeFor(rootDir), { kind: "transitousLock.inspect" }, context()),
-    ).rejects.toThrow(/not wired/i);
+    ).rejects.toThrow("Transitous lock is too large");
   });
 });

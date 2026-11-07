@@ -27,9 +27,10 @@ describe("finite catalog workflow edges", () => {
     expect(() =>
       verifyFiniteControlEdge("data-manager", "catalog.activate", "paired-pin-commit", "ops-agent"),
     ).not.toThrow();
-    expect(() =>
-      verifyFiniteControlEdge("data-manager", "transit-sync", "paired-pin-commit", "ops-agent"),
-    ).toThrow();
+    for (const kind of ["transit-sync", "transit-maintenance"] as const)
+      expect(() =>
+        verifyFiniteControlEdge("data-manager", kind, "paired-pin-commit", "ops-agent"),
+      ).toThrow();
     expect(() =>
       verifyFiniteControlEdge(
         "data-manager",

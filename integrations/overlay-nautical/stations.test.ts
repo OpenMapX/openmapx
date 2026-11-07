@@ -53,14 +53,14 @@ describe("stationsInBbox", () => {
     station({ id: "west", lat: 50, lng: -5 }),
     station({ id: "tide", lat: 50.5, lng: 5.5, types: ["tide-predictions"] }),
     station({ id: "ioc", network: "ioc", lat: 50.2, lng: 5.2 }),
+    station({ id: "southwest", lat: 45, lng: 0 }),
+    station({ id: "northeast", lat: 55, lng: 10 }),
   ];
   const bbox = { west: 0, south: 45, east: 10, north: 55 };
 
   it("keeps only stations inside the bbox (inclusive edges)", () => {
     const ids = stationsInBbox(stations, bbox).map((s) => s.id);
-    expect(ids).toContain("in");
-    expect(ids).not.toContain("north");
-    expect(ids).not.toContain("west");
+    expect(ids).toEqual(["in", "tide", "ioc", "southwest", "northeast"]);
   });
 
   it("filters by capability type", () => {

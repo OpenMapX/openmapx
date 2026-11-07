@@ -84,37 +84,11 @@ describe("offline live-data gating", () => {
     });
   });
 
-  it("does not schedule incidents, route-match, or alert requests offline", async () => {
-    renderHook(() => {
-      const resource = useNavIncidents();
-      useNavTrafficSignals();
-      useNavAlerts(resource);
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(fetchRoadConditionsWithStatus).not.toHaveBeenCalled();
-    expect(fetchRouteMatchWindow).not.toHaveBeenCalled();
-    expect(fetchRoadAlerts).not.toHaveBeenCalled();
-    expect(useNavigationStore.getState().liveDataUnavailable).toBe(true);
-  });
-
   it("clears live speed data while retaining static route-step limits", async () => {
     useNavigationStore.getState().setConnectivity("online");
     const { result } = renderHook(() => useNavTrafficSignals());
     await waitFor(() => expect(result.current).toEqual([]));
     expect(useNavigationStore.getState().liveSpeedLimits).toEqual([50, null]);
-
-    act(() => useNavigationStore.getState().setConnectivity("offline"));
-    await waitFor(() => expect(result.current).toEqual([]));
-    expect(useNavigationStore.getState().liveSpeedLimits).toBeNull();
-    expect(useNavigationStore.getState().route?.steps[0]?.speedLimit).toBe(50);
-  });
-
-  it("publishes the route's countries and keeps them offline", async () => {
-    useNavigationStore.getState().setConnectivity("online");
-    renderHook(() => useNavTrafficSignals());
     await waitFor(() =>
       expect(useNavigationStore.getState().routeCountries).toEqual([
         { fromMeters: 0, countryCode: "DE" },
@@ -122,9 +96,9 @@ describe("offline live-data gating", () => {
     );
 
     act(() => useNavigationStore.getState().setConnectivity("offline"));
-    await act(async () => {
-      await Promise.resolve();
-    });
+    await waitFor(() => expect(result.current).toEqual([]));
+    expect(useNavigationStore.getState().liveSpeedLimits).toBeNull();
+    expect(useNavigationStore.getState().route?.steps[0]?.speedLimit).toBe(50);
     expect(useNavigationStore.getState().routeCountries).toEqual([
       { fromMeters: 0, countryCode: "DE" },
     ]);
@@ -136,7 +110,11 @@ describe("offline live-data gating", () => {
       useNavTrafficSignals();
       useNavAlerts(resource);
     });
+    await act(async () => {});
     expect(fetchRoadConditionsWithStatus).not.toHaveBeenCalled();
+    expect(fetchRouteMatchWindow).not.toHaveBeenCalled();
+    expect(fetchRoadAlerts).not.toHaveBeenCalled();
+    expect(useNavigationStore.getState().liveDataUnavailable).toBe(true);
 
     act(() => useNavigationStore.getState().setConnectivity("online"));
     rerender();

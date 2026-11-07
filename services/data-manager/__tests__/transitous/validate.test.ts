@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crc32 } from "node:zlib";
 import { execa } from "execa";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import { run as validateRun } from "../../src/jobs/transitous/validate.js";
 import { StateStore } from "../../src/state.js";
@@ -25,10 +25,6 @@ beforeAll(async () => {
   } catch {
     unzipAvailable = false;
   }
-});
-
-afterAll(() => {
-  // no-op
 });
 
 /**
@@ -75,12 +71,8 @@ async function makeZip(target: string, members: Record<string, string>): Promise
 }
 
 describe("validate stage", () => {
-  it("treats a missing feed_info.txt as a warning, not a validation failure", async () => {
-    if (!unzipAvailable) {
-      // On CI hosts without unzip the validate stage soft-passes — we test
-      // that branch in a separate case below.
-      return;
-    }
+  it("treats a missing feed_info.txt as a warning, not a validation failure", async ({ skip }) => {
+    if (!unzipAvailable) skip("Native unzip is unavailable");
     tmp = mkdtempSync(join(tmpdir(), "openmapx-validate-invalid-"));
     const gtfsDir = join(tmp, "gtfs");
     mkdirSync(gtfsDir, { recursive: true });
@@ -108,8 +100,8 @@ describe("validate stage", () => {
     expect(warnings).toEqual([{ id: "de_vbb", reason: "missing feed_info.txt" }]);
   });
 
-  it("marks a corrupt non-empty archive as invalid", async () => {
-    if (!unzipAvailable) return;
+  it("marks a corrupt non-empty archive as invalid", async ({ skip }) => {
+    if (!unzipAvailable) skip("Native unzip is unavailable");
     tmp = mkdtempSync(join(tmpdir(), "openmapx-validate-corrupt-"));
     const gtfsDir = join(tmp, "gtfs");
     mkdirSync(gtfsDir, { recursive: true });

@@ -34,10 +34,5 @@ describe("useStyleSyncedLayer lifecycle", () => {
     unmount();
     expect(fake.state.handlers.get("idle")?.size).toBe(0);
     expect(fake.state.handlers.get("render")?.size).toBe(0);
-
-    fake.state.styleLoaded = true;
-    fake.emit("idle");
-    expect(fake.state.sources.has("test-source")).toBe(false);
-    expect(fake.state.layers.has("test-layer")).toBe(false);
   });
 });

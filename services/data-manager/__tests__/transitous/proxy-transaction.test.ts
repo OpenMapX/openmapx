@@ -13,11 +13,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 // nginx validate+reload is one typed agent operation now; a failure of either
 // half surfaces as a rejected operation.
-const opsCalls: { kind: string }[] = [];
 const opsBehaviour: { fail: boolean } = { fail: false };
 vi.mock("../../src/ops-client.js", () => ({
   runOpsOperation: vi.fn(async (operation: { kind: string; candidateId?: string }) => {
-    opsCalls.push(operation);
     if (opsBehaviour.fail) throw new Error("feed proxy validate/reload failed");
     return { candidateId: operation.candidateId, reloaded: true };
   }),
@@ -36,6 +34,7 @@ let tmp: string | undefined;
 afterEach(() => {
   if (tmp) rmSync(tmp, { recursive: true, force: true });
   tmp = undefined;
+  opsBehaviour.fail = false;
 });
 
 function setup(candidateVars: Record<string, unknown>, currentVars: Record<string, unknown>) {

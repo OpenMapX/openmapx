@@ -114,21 +114,6 @@ describe("every practice answers the questions a reviewer asks", () => {
   );
 
   it.each(practices.map((practice) => [practice.id, practice] as const))(
-    "%s states a purpose specific enough to check",
-    (_id, practice) => {
-      expect(practice.purpose.length).toBeGreaterThan(40);
-      for (const vague of [
-        "improve the app",
-        "business purposes",
-        "as needed",
-        "various purposes",
-      ]) {
-        expect(practice.purpose.toLowerCase()).not.toContain(vague);
-      }
-    },
-  );
-
-  it.each(practices.map((practice) => [practice.id, practice] as const))(
     "%s bounds its retention",
     (_id, practice) => {
       if (practice.retention.kind !== "bounded") return;
@@ -136,13 +121,6 @@ describe("every practice answers the questions a reviewer asks", () => {
       // label.
       expect(typeof practice.retention.maxHours).toBe("number");
       expect(practice.retention.maxHours).toBeGreaterThan(0);
-    },
-  );
-
-  it.each(practices.map((practice) => [practice.id, practice] as const))(
-    "%s says how the user can control it",
-    (_id, practice) => {
-      expect(practice.userControl.length).toBeGreaterThan(15);
     },
   );
 

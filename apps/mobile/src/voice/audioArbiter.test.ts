@@ -23,6 +23,7 @@ function fixture(speaking = false) {
   return {
     audio,
     arbiter,
+    elapsed: () => now,
     age: (ms: number) => {
       now += ms;
     },
@@ -58,7 +59,8 @@ it("waits at most six seconds for speaking guidance then stops it", async () => 
   });
   await f.arbiter.acquire(() => true);
   expect(f.audio.stop).toHaveBeenCalledTimes(1);
-  expect(f.audio.getStatus).toHaveBeenCalledTimes(122);
+  expect(f.elapsed()).toBeGreaterThanOrEqual(6000);
+  expect(f.elapsed()).toBeLessThanOrEqual(6050);
 });
 it("waits for guidance completion then flushes the native queue", async () => {
   const f = fixture(true);

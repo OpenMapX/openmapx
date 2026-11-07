@@ -29,7 +29,7 @@ import {
 import { services as coreServices } from "@openmapx/core/server";
 
 const OPS_JOB_JOURNAL_MAX_ENTRIES = 256;
-export const OPS_JOB_JOURNAL_MAX_BYTES = 24 * 1024 * 1024;
+const OPS_JOB_JOURNAL_MAX_BYTES = 24 * 1024 * 1024;
 export const OPS_JOB_JOURNAL_MAX_ORPHANS = 8;
 const OPERATION_ID = /^job1_[A-Za-z0-9_-]{16,64}$/;
 const OPERATION_KEY = /^opk1_[A-Za-z0-9_-]{16,64}$/;

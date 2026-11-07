@@ -11,7 +11,7 @@ vi.mock("@/lib/reducedMotion", () => ({ prefersReducedMotion: () => reduced.curr
 const ctx = { mapRef: { current: null as unknown }, mapReady: true, styleVersion: 0 };
 vi.mock("@/integration-api/map/MapContext", () => ({ useMap: () => ctx }));
 
-import { MapPaddingSync, PADDING_EASE_MS } from "./MapPaddingSync";
+import { MapPaddingSync } from "./MapPaddingSync";
 
 const navInitial = useNavigationStore.getState();
 const NO_PADDING = { top: 0, bottom: 0, left: 0, right: 0 };
@@ -74,21 +74,16 @@ describe("MapPaddingSync", () => {
       options: { left: 400 },
       eventData: { programmatic: true },
     });
+    const initialCount = transitions(fake).length;
+    act(() => fake.emit("resize"));
+    expect(transitions(fake)).toHaveLength(initialCount);
     act(() => publishMapObstruction("rail", "left", 0));
     expect(transitions(fake).at(-1)).toMatchObject({
       method: "easeTo",
-      options: { padding: { left: 0 }, duration: PADDING_EASE_MS },
+      options: { padding: { left: 0 } },
       eventData: { programmatic: true, paddingSync: true },
     });
-  });
-
-  it("does nothing when the map already carries the target", () => {
-    publishMapObstruction("rail", "left", 400);
-    const fake = mount();
-    expect(transitions(fake).at(-1)?.method).toBe("setPadding");
-    const before = transitions(fake).length;
-    act(() => fake.emit("resize"));
-    expect(transitions(fake)).toHaveLength(before);
+    expect(transitions(fake).at(-1)?.options.duration).toBeGreaterThan(0);
   });
 
   it("defers during a user gesture and applies on moveend", () => {
@@ -295,21 +290,12 @@ describe("MapPaddingSync", () => {
     );
     act(() => publishMapObstruction("rail", "left", 400));
     expect(transitions(fake).some((t) => t.method === "easeTo")).toBe(false);
-    act(() => useNavigationStore.setState({ cameraMode: "overview" }));
-    expect(transitions(fake).at(-1)?.method).toBe("easeTo");
-  });
-
-  it("never measures the container while the follow camera owns the padding", () => {
-    const fake = mount();
-    act(() =>
-      useNavigationStore.setState({ status: "navigating", kind: "ground", cameraMode: "follow" }),
-    );
-    // The follow loop publishes a camera every frame, and each `moveend` lands
-    // here: reading the container would force a layout per navigation frame.
     const getContainer = vi.spyOn(fake.map, "getContainer");
     act(() => fake.emit("moveend", { programmatic: true }));
     act(() => fake.emit("moveend", { programmatic: true }));
     expect(getContainer).not.toHaveBeenCalled();
+    act(() => useNavigationStore.setState({ cameraMode: "overview" }));
+    expect(transitions(fake).at(-1)?.method).toBe("easeTo");
   });
 
   it("jumps under reduced motion", () => {

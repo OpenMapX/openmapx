@@ -34,7 +34,10 @@ describe("PrivacyReadinessChecklist", () => {
     expect(screen.queryByText("future-check")).not.toBeInTheDocument();
 
     const summary = screen.getAllByText("privacySetup.readiness.technicalDetails")[1];
+    const details = summary.closest("details");
+    expect(details).not.toHaveAttribute("open");
     fireEvent.click(summary);
+    expect(details).toHaveAttribute("open");
     expect(summary.closest("details")).toHaveTextContent("future-check");
     expect(summary.closest("details")).toHaveTextContent("future-detail");
   });

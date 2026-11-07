@@ -40,8 +40,17 @@ describe("exceptional identity evidence review", () => {
     fireEvent.change(screen.getByLabelText("privacyAdmin.workflows.reasonableDoubtCode"), {
       target: { value: "account-unavailable" },
     });
+    expect(button).toBeDisabled();
     fireEvent.mouseDown(screen.getByLabelText("privacyAdmin.workflows.identityEvidence"));
     fireEvent.click(await screen.findByRole("option", { name: "identity.txt" }));
+    expect(button).not.toBeDisabled();
+    fireEvent.change(screen.getByLabelText("privacyAdmin.workflows.reasonableDoubtCode"), {
+      target: { value: "" },
+    });
+    expect(button).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("privacyAdmin.workflows.reasonableDoubtCode"), {
+      target: { value: "account-unavailable" },
+    });
     expect(button).not.toBeDisabled();
     fireEvent.click(button);
     await waitFor(() => expect(calls).toHaveLength(1));
@@ -51,7 +60,7 @@ describe("exceptional identity evidence review", () => {
       outcome: "verified",
       method: "exceptional_evidence",
       reasonableDoubtCode: "account-unavailable",
-      evidenceAttachmentId: detail.attachments[0]!.id,
+      evidenceAttachmentId: detail.attachments[0]?.id,
     });
   });
   it("shows representative authority independently from identity proof and excludes expired evidence", async () => {

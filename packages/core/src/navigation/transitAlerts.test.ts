@@ -42,7 +42,7 @@ describe("collectActiveAlerts", () => {
   it("dedupes an alert repeated across legs", () => {
     const shared = alert("dup", "warning");
     const legs = [leg([shared]), leg([shared])];
-    expect(collectActiveAlerts(legs, 0)).toHaveLength(1);
+    expect(collectActiveAlerts(legs, 0)).toEqual([shared]);
   });
 
   it("returns an empty list when there are no alerts", () => {

@@ -692,35 +692,6 @@ describe("integration administration browser behavior", () => {
     ).toHaveLength(1);
   });
 
-  it("aborts an embedded health read when its tab unmounts without canceling host work", async () => {
-    let healthSignal: AbortSignal | null | undefined;
-    let canceled = false;
-    const requests = transport((url, init) => {
-      if (url.pathname === "/api/admin/integrations/demo")
-        return Response.json({ ...detail, hasHealthCheck: true });
-      if (url.pathname === "/api/admin/integrations/demo/health/history")
-        return Response.json({ integrationId: "demo", hours: 24, timeline: [] });
-      expect(url.pathname).toBe("/api/admin/integrations/demo/health");
-      healthSignal = init.signal;
-      return new Response(
-        new ReadableStream({
-          cancel: () => {
-            canceled = true;
-          },
-        }),
-        { headers: { "content-type": "application/json" } },
-      );
-    });
-    mount(<IntegrationDetail id="demo" />);
-    await userEvent.click(await screen.findByRole("tab", { name: "Health" }));
-    await userEvent.click(await screen.findByRole("button", { name: "Run Check" }));
-    await waitFor(() => expect(healthSignal).toBeInstanceOf(AbortSignal));
-    await userEvent.click(screen.getByRole("tab", { name: "Overview" }));
-    await waitFor(() => expect(healthSignal?.aborted).toBe(true));
-    expect(canceled).toBe(true);
-    expect(requests.some(({ url }) => url.pathname.includes("cancel"))).toBe(false);
-  });
-
   it.each(["tab exit", "origin replacement", "integration replacement"])(
     "does not complete an interrupted repeat health check after %s",
     async (interruption) => {

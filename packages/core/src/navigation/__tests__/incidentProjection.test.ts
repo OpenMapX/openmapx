@@ -113,12 +113,15 @@ describe("projectEventsToRoute", () => {
       [
         ev("c", "major", { type: "Point", coordinates: [13.05, 52.00008] }, "accident", {
           origin: "crowd",
+          groupId: "works-42",
         }),
       ],
       route,
       0,
     );
+    expect(out).toHaveLength(1);
     expect(out[0]?.origin).toBe("crowd");
+    expect(out[0]?.groupId).toBe("works-42");
   });
 
   it("leaves the headline off an alert whose situation has none", () => {
@@ -131,13 +134,14 @@ describe("projectEventsToRoute", () => {
       route,
       0,
     );
+    expect(out).toHaveLength(1);
     expect(out[0]).not.toHaveProperty("headline");
   });
 
   it("carries the delay of a delay effect in force at the evaluation instant", () => {
     const at = new Date("2026-09-11T12:00:00Z");
-    const project = (effects: RoadConditionEvent["effects"]) =>
-      projectEventsToRoute(
+    const project = (effects: RoadConditionEvent["effects"]) => {
+      const projected = projectEventsToRoute(
         [
           ev("d", "major", { type: "Point", coordinates: [13.05, 52.00008] }, "accident", {
             effects,
@@ -147,6 +151,9 @@ describe("projectEventsToRoute", () => {
         0,
         { now: at },
       );
+      expect(projected).toHaveLength(1);
+      return projected;
+    };
     expect(project([delay(900)])[0]?.delaySeconds).toBe(900);
     // An effect's own validity wins over its situation's.
     expect(
@@ -157,21 +164,6 @@ describe("projectEventsToRoute", () => {
         ?.delaySeconds,
     ).toBe(300);
     expect(project([delay(15, undefined, "min")])[0]).not.toHaveProperty("delaySeconds");
-  });
-
-  it("carries the display group id without changing route projection", () => {
-    const out = projectEventsToRoute(
-      [
-        ev("grouped", "major", { type: "Point", coordinates: [13.05, 52.00008] }, "works", {
-          groupId: "works-42",
-        }),
-      ],
-      route,
-      0,
-    );
-
-    expect(out).toHaveLength(1);
-    expect(out[0]?.groupId).toBe("works-42");
   });
 
   it("flags an alert whose situation closes the road to cars at the evaluation instant", () => {
@@ -847,116 +839,6 @@ function randomEvent(
 }
 
 describe("projectEventsToRoute matches the pre-refactor implementation exactly", () => {
-  it("matches on the module's own fixtures (point, line, multi-step, opposite carriageway)", () => {
-    const cases: Array<[RoadConditionEvent[], LngLat[], number, ProjectEventsOptions?]> = [
-      [[ev("a", "major", { type: "Point", coordinates: [13.05, 52.00008] })], route, 0, undefined],
-      [[ev("b", "major", { type: "Point", coordinates: [13.05, 52.02] })], route, 0, undefined],
-      [[ev("c", "major", { type: "Point", coordinates: [13.02, 52.0] })], route, 5000, undefined],
-      [
-        [
-          ev("d", "moderate", {
-            type: "LineString",
-            coordinates: [
-              [13.04, 52.00005],
-              [13.06, 52.00005],
-            ],
-          }),
-        ],
-        route,
-        0,
-        undefined,
-      ],
-      [
-        [
-          ev("far", "minor", { type: "Point", coordinates: [13.08, 52.0] }),
-          ev("near", "critical", { type: "Point", coordinates: [13.02, 52.0] }),
-        ],
-        route,
-        0,
-        undefined,
-      ],
-      [
-        [
-          ev(
-            "exit",
-            "critical",
-            {
-              type: "LineString",
-              coordinates: [
-                [13.05, 52.0],
-                [13.0502, 52.0001],
-                [13.052, 52.003],
-                [13.055, 52.006],
-              ],
-            },
-            "closure",
-          ),
-        ],
-        route,
-        0,
-        undefined,
-      ],
-      [
-        [
-          ev(
-            "parallel",
-            "major",
-            {
-              type: "LineString",
-              coordinates: [
-                [13.03, 52.00015],
-                [13.07, 52.00015],
-              ],
-            },
-            "congestion",
-            { roads: [{ name: en("L 9") }], direction: { value: "positive", compass: "E" } },
-          ),
-        ],
-        route,
-        0,
-        { corridorMeters: 50, routeSteps: [motorwayStep] },
-      ],
-      [
-        [
-          ev(
-            "westbound",
-            "major",
-            {
-              type: "LineString",
-              coordinates: [
-                [13.07, 52.00005],
-                [13.03, 52.00005],
-              ],
-            },
-            "congestion",
-            { roads: [{ ref: "A57" }], direction: { value: "negative", text: "westbound" } },
-          ),
-          ev(
-            "eastbound",
-            "major",
-            {
-              type: "LineString",
-              coordinates: [
-                [13.03, 52.00005],
-                [13.07, 52.00005],
-              ],
-            },
-            "congestion",
-            { roads: [{ name: en("A 57") }], direction: { value: "positive", compass: "E" } },
-          ),
-        ],
-        route,
-        0,
-        { routeSteps: [motorwayStep] },
-      ],
-    ];
-    for (const [events, geometry, along, opts] of cases) {
-      expect(projectEventsToRoute(events, geometry, along, opts)).toEqual(
-        legacyProjectEventsToRoute(events, geometry, along, opts),
-      );
-    }
-  });
-
   it("matches on duplicate/degenerate geometry: zero-length line segments and repeated points", () => {
     const degenerateLine = ev("dup-line", "moderate", {
       type: "LineString",

@@ -163,6 +163,7 @@ describe("valhallaLanes", () => {
       end_shape_index: 0,
       lanes: [{ directions: 2 }, { directions: 64 }],
     });
+    expect(lanes).toHaveLength(2);
     expect(lanes?.every((lane) => lane.valid === undefined && lane.preferred === undefined)).toBe(
       true,
     );
@@ -338,14 +339,6 @@ describe("buildCostingOptions", () => {
       buildCostingOptions({ useLiveTraffic: true } as RoutingOptions, "auto").speed_types,
     ).toEqual(["freeflow", "constrained", "predicted", "current"]);
   });
-
-  it("omits 'current' when useLiveTraffic is falsy", () => {
-    expect(buildCostingOptions({} as RoutingOptions, "auto").speed_types).toEqual([
-      "freeflow",
-      "constrained",
-      "predicted",
-    ]);
-  });
 });
 
 describe("buildExclusions", () => {
@@ -495,10 +488,6 @@ describe("valhallaService.getRoute exclusion body params", () => {
     await valhallaService.getRoute(WPS, "driving", {});
     expect(capturedBody).not.toHaveProperty("exclude_locations");
     expect(capturedBody).not.toHaveProperty("exclude_polygons");
-  });
-
-  it("requests turn-lane data", async () => {
-    await valhallaService.getRoute(WPS, "driving", {});
     expect(capturedBody.turn_lanes).toBe(true);
   });
 
@@ -515,11 +504,6 @@ describe("valhallaService.getRoute exclusion body params", () => {
   it("preserves maneuver road names for incident matching", async () => {
     const result = await valhallaService.getRoute(WPS, "driving", {});
     expect(result.routes[0]?.steps[0]?.roadNames).toEqual(["A 57", "E 31"]);
-  });
-
-  it("requests turn-lane data for optimized routes", async () => {
-    await valhallaService.optimizeRoute(WPS, "driving", {});
-    expect(capturedBody.turn_lanes).toBe(true);
   });
 
   it.each(["driving", "motorcycle"] as const)(
@@ -592,6 +576,7 @@ describe("valhallaService.getRoute exclusion body params", () => {
     });
     expect(capturedBody.exclude_locations).toEqual([{ lon: 5.1, lat: 52.1 }]);
     expect(capturedBody.exclude_polygons).toEqual([ring]);
+    expect(capturedBody.turn_lanes).toBe(true);
   });
 });
 
@@ -664,7 +649,7 @@ describe("buildTrafficRequestExtras", () => {
     const extras = buildTrafficRequestExtras(live, "auto", costingOptions, 2, true);
     expect(extras.prioritize_bidirectional).toBe(true);
     expect(extras.reverse_time_tracking).toBe("heuristic");
-    expect(extras.recostings).toBeDefined();
+    expect(extras.recostings).toHaveLength(1);
   });
 
   it("omits the bidirectional fields when departAt pins the departure", () => {
@@ -677,7 +662,7 @@ describe("buildTrafficRequestExtras", () => {
     );
     expect(extras.prioritize_bidirectional).toBeUndefined();
     expect(extras.reverse_time_tracking).toBeUndefined();
-    expect(extras.recostings).toBeDefined();
+    expect(extras.recostings).toHaveLength(1);
   });
 
   it("omits the bidirectional fields for arriveBy", () => {
@@ -694,7 +679,7 @@ describe("buildTrafficRequestExtras", () => {
   it("omits the bidirectional fields when there are more than two waypoints", () => {
     const extras = buildTrafficRequestExtras(live, "auto", costingOptions, 3, true);
     expect(extras.prioritize_bidirectional).toBeUndefined();
-    expect(extras.recostings).toBeDefined();
+    expect(extras.recostings).toHaveLength(1);
   });
 
   it("recosts against everything except live speeds, preserving other options", () => {
@@ -719,32 +704,10 @@ describe("buildTrafficRequestExtras", () => {
 });
 
 describe("getRoute request body", () => {
-  const okResponse = {
-    trip: {
-      summary: { length: 1, time: 60 },
-      legs: [
-        {
-          shape: "_p~iF~ps|U",
-          summary: { length: 1, time: 60 },
-          maneuvers: [
-            {
-              type: 1,
-              instruction: "Drive north.",
-              length: 1,
-              time: 60,
-              begin_shape_index: 0,
-              end_shape_index: 1,
-            },
-          ],
-        },
-      ],
-    },
-  };
-
   const capture = () => {
     const spy = vi.fn(
       async () =>
-        new Response(JSON.stringify(okResponse), {
+        new Response(JSON.stringify(MINIMAL_VALHALLA_RESPONSE), {
           status: 200,
           headers: { "content-type": "application/json" },
         }),
@@ -835,32 +798,11 @@ describe("getRoute request body", () => {
 });
 
 describe("getRoute near a road closed to all but local access", () => {
-  const okResponse = {
-    trip: {
-      summary: { length: 1, time: 60 },
-      legs: [
-        {
-          shape: "_p~iF~ps|U",
-          summary: { length: 1, time: 60 },
-          maneuvers: [
-            {
-              type: 1,
-              instruction: "Drive north.",
-              length: 1,
-              time: 60,
-              begin_shape_index: 0,
-              end_shape_index: 1,
-            },
-          ],
-        },
-      ],
-    },
-  };
   const noPath = () =>
     new Response('{"error_code":442,"error":"No path could be found for input"}', {
       status: 400,
     });
-  const ok = () => Response.json(okResponse);
+  const ok = () => Response.json(MINIMAL_VALHALLA_RESPONSE);
   const WPS: [number, number][] = [
     [13.3, 52.5],
     [13.486, 52.4373],

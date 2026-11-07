@@ -280,7 +280,11 @@ describe("reviews-keypair routes", () => {
 
   it("POST rejects an invalid publicJwk with 400", async () => {
     dbMock.queueSelect([]); // no existing keypair
-    const res = await post({ mode: "unencrypted", publicJwk: { kty: "RSA" } });
+    const res = await post({
+      publicJwk: { kty: "RSA" },
+      passphraseCiphertext: "ct",
+      wraps: [{ wrapType: "passphrase", label: "Pass" }],
+    });
     expect(res.statusCode).toBe(400);
   });
 

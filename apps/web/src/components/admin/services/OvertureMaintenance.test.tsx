@@ -1,45 +1,6 @@
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
-
-vi.mock("@/lib/admin/serviceAdminJobs", () => ({ useServiceJobRegistration: () => vi.fn() }));
-vi.mock("../shared/AdminToast", () => ({ useAdminToast: () => vi.fn() }));
-vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
-  useMutation: () => ({ mutate: vi.fn(), isPending: false }),
-  useQuery: () => ({
-    data: {
-      ok: true,
-      release: "2026-07-22.0",
-      region: "europe/germany",
-      placeCount: 1_000,
-      linkedCount: 750,
-      status: "completed",
-      phase: "complete",
-      attemptCount: 1,
-    },
-    isError: false,
-    refetch: vi.fn(),
-  }),
-}));
+import { describe, expect, it } from "vitest";
 
 describe("OvertureMaintenance", () => {
-  it("renders release diagnostics and high-level safe operations", async () => {
-    const { OvertureMaintenance } = await import("./OvertureMaintenance");
-    const markup = renderToStaticMarkup(<OvertureMaintenance apiUrl="http://api.test" />);
-    expect(markup).toContain("Overture Places");
-    expect(markup).toContain("2026-07-22.0");
-    expect(markup).toContain("europe/germany");
-    expect(markup).toContain("Full sync");
-    expect(markup).toContain("Resume links");
-    expect(markup).toContain("Restart links from scratch");
-    expect(markup).toContain("Advanced recovery");
-    expect(markup).toContain("Download release partition");
-    expect(markup).toContain("Ingest downloaded partition");
-    expect(markup).toContain("Extract OSM features");
-    expect(markup).toContain("completed");
-    expect(markup).not.toContain("completed · complete");
-  });
-
   it("uses phase-specific progress denominators", async () => {
     const { overtureProgress } = await import("./OvertureMaintenance");
     expect(

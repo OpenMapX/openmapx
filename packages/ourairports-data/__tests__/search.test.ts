@@ -64,8 +64,11 @@ describe("OurAirports search index", () => {
   });
 
   it("name prefix beats name-contains", () => {
-    const results = index.query("frankfurt");
-    expect(results[0]?.iata).toBe("FRA");
+    const competing = buildSearchIndex([
+      { ...fra, id: 4, ident: "TEST", iata: "TST", icao: "TEST", name: "Main Frankfurt Airport" },
+      fra,
+    ]);
+    expect(competing.query("frankfurt").map((record) => record.id)).toEqual([1, 4]);
   });
 
   it("keyword match returns the airport", () => {

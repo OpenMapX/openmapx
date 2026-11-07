@@ -58,39 +58,7 @@ describe("encodePredictedSpeeds", () => {
     expect(encodePredictedSpeeds(fixtures.all50.buckets2016)).toBe(fixtures.all50.base64);
   });
 
-  it("matches pyvalhalla's intermediate int16 coefficients for the all-50 fixture", () => {
-    const coefs = computeCoefs(fixtures.all50.buckets2016);
-    expect(coefs).toEqual(fixtures.all50.coefs);
-  });
-
   it("matches pyvalhalla exactly for the rush-hour week", () => {
     expect(encodePredictedSpeeds(fixtures.rush.buckets2016)).toBe(fixtures.rush.base64);
   });
-
-  it("matches pyvalhalla's intermediate int16 coefficients for the rush fixture", () => {
-    const coefs = computeCoefs(fixtures.rush.buckets2016);
-    expect(coefs).toEqual(fixtures.rush.coefs);
-  });
 });
-
-// Recomputes the int16 coefficients the same way `encodePredictedSpeeds` does
-// internally, so a mismatch localizes to a specific coefficient index rather
-// than just failing on the final base64 string.
-function computeCoefs(buckets2016: number[]): number[] {
-  const COEFFICIENT_COUNT = 200;
-  const BUCKETS_PER_WEEK = 2016;
-  const coefs: number[] = [];
-  for (let c = 0; c < COEFFICIENT_COUNT; c++) {
-    let sum = 0;
-    for (let b = 0; b < BUCKETS_PER_WEEK; b++) {
-      sum += buckets2016[b] * Math.cos((Math.PI / BUCKETS_PER_WEEK) * (b + 0.5) * c);
-    }
-    if (c === 0) sum *= 1 / Math.sqrt(2);
-    sum *= Math.sqrt(2 / BUCKETS_PER_WEEK);
-    // Normalize -0 to 0: Math.round(-0.3) === -0, which is a JS representation
-    // quirk (Object.is(-0, 0) === false) with no numeric or serialized-byte
-    // meaning — writeInt16BE(-0) and writeInt16BE(0) both produce 0x0000.
-    coefs.push(Math.round(sum) + 0);
-  }
-  return coefs;
-}

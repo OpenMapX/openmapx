@@ -164,6 +164,16 @@ its expiry or as soon as a patched version is published.
 
 ### Testing
 
+Give each contract a clear test owner. Prefer a real public entry point with
+controlled external dependencies; a fake should not implement the behavior the
+test claims to verify. Keep distinct security, persistence, lifecycle, wire and
+platform risks, including static checks that enforce operational contracts.
+Combine repeated scenarios and carry their unique assertions into the surviving
+owner before deleting them. For repaired or transferred regression coverage,
+confirm that a temporary production defect makes the intended assertion fail,
+restore the source, and rerun the owner. Test size and coverage overlap alone do
+not establish redundancy.
+
 Tests run from a single root `vitest.config.ts`, split into two projects —
 `node` (API, integrations, packages, services, scripts) and `web` (the Next.js
 app and React-bound packages, in jsdom). There are no per-package Vitest configs

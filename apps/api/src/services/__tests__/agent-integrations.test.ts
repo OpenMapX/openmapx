@@ -466,7 +466,6 @@ describe("recoverAgentIntegrations", () => {
 });
 
 describe("readLoadableIntegrations", () => {
-  // These share the module's last-reported state and run in order.
   const previousUrl = process.env.OPS_AGENT_URL;
   afterEach(() => {
     vi.useRealTimers();
@@ -506,6 +505,9 @@ describe("readLoadableIntegrations", () => {
     process.env.OPS_AGENT_URL = "http://ops-agent:8080";
     vi.useFakeTimers();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const files = [{ path: "manifest.json", sha256: SHA }];
+    agentAnswers([snapshot([{ integrationId: "intg-one", files }])]);
+    await integrations.readLoadableIntegrations();
     executeMock.mockRejectedValueOnce(new Error("connection refused"));
     const onChange = vi.fn();
 

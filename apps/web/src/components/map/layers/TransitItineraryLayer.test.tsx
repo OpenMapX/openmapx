@@ -114,16 +114,6 @@ describe("TransitItineraryLayer", () => {
     expect(state.fitBounds).toHaveBeenCalledTimes(1);
   });
 
-  it("redraws the itinerary with its data after a style rebuild", () => {
-    render(<TransitItineraryLayer />);
-    act(() => fake.map.setStyle({} as never));
-
-    for (const layer of LAYERS) expect(fake.state.layers.has(layer)).toBe(true);
-    expect(features("transit-itinerary-source")).toHaveLength(2);
-    expect(features("transit-itinerary-points-source")).toHaveLength(3);
-    expect(state.fitBounds).toHaveBeenCalledTimes(1);
-  });
-
   it("removes its layers and sources when the itinerary is cleared", () => {
     const { rerender } = render(<TransitItineraryLayer />);
     state.directions = { ...state.directions, mode: "driving" };

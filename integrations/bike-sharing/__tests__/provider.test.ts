@@ -182,15 +182,6 @@ describe("bikeSharingProvider.search", () => {
 sharedMobilityProviderContract({
   name: "bike sharing",
   provider: bikeSharingProvider,
-  fixtures,
   formFactors: ["bicycle", "cargo_bicycle"],
   mapContextOptions: { systemIds: ["voioslo"], vehicleTypeIds: ["scooter"] },
-  arrangeInventory({ station, vehicle }) {
-    vi.mocked(searchNextbike).mockResolvedValue([]);
-    vi.mocked(searchCityBikes).mockResolvedValue([]);
-    vi.mocked(searchDonkey).mockResolvedValue([]);
-    vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [station], vehicles: [] });
-    vi.mocked(searchDbBikes).mockResolvedValue({ stations: [], vehicles: [vehicle] });
-    vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
-  },
 });

@@ -34,26 +34,14 @@ describe("generateCandidatePairs", () => {
     expect(pairs).toHaveLength(0);
   });
 
-  it("includes overture places within 150m radius", () => {
+  it("includes nearby places with their identities, distance, and bounded similarity", () => {
     const pairs = generateCandidatePairs([BERLIN_CENTER], [OVERTURE_CLOSE]);
-    expect(pairs.length).toBeGreaterThanOrEqual(1);
+    expect(pairs).toHaveLength(1);
     const pair = pairs[0];
     expect(pair.osmPoi.osmId).toBe("1");
     expect(pair.overturePlace.gersId).toBe("ov-close");
-  });
-
-  it("result pairs include distanceM below 150m", () => {
-    const pairs = generateCandidatePairs([BERLIN_CENTER], [OVERTURE_CLOSE]);
-    expect(pairs.length).toBeGreaterThanOrEqual(1);
-    const pair = pairs[0];
     expect(pair.distanceM).toBeLessThan(150);
     expect(pair.distanceM).toBeGreaterThan(0);
-  });
-
-  it("result pairs include nameDice field as a number", () => {
-    const pairs = generateCandidatePairs([BERLIN_CENTER], [OVERTURE_CLOSE]);
-    expect(pairs.length).toBeGreaterThanOrEqual(1);
-    const pair = pairs[0];
     expect(typeof pair.nameDice).toBe("number");
     expect(pair.nameDice).toBeGreaterThanOrEqual(0);
     expect(pair.nameDice).toBeLessThanOrEqual(1);
@@ -65,17 +53,31 @@ describe("generateCandidatePairs", () => {
     expect(pairs).toHaveLength(0);
   });
 
-  it("stratifies candidates across the 4 dice-similarity bands", () => {
-    const osmPoi = BERLIN_CENTER;
+  it("samples each of the four similarity bands before taking another from one band", () => {
+    const osmPoi = { ...BERLIN_CENTER, name: "abcdefghij" };
+    // These names share 9, 7, 4, and 0 of the source's 9 bigrams: the
+    // independently known Dice scores are 1, 7/9, 4/9, and 0.
+    // High bands deliberately precede low bands so a global slice cannot pass.
     const places: OverturePlace[] = [
-      { gersId: "high", name: "Café Berlin", lat: 52.520898, lng: 13.405 },
-      { gersId: "mid-high", name: "Cafe Berlín", lat: 52.52085, lng: 13.405 },
-      { gersId: "mid-low", name: "Restaurant Mitte", lat: 52.5208, lng: 13.405 },
-      { gersId: "low", name: "xyz", lat: 52.52075, lng: 13.405 },
-    ];
-    const pairs = generateCandidatePairs([osmPoi], places, { targetPairs: 8 });
-    const gersIds = pairs.map((p) => p.overturePlace.gersId);
-    expect(gersIds).toContain("high");
+      ["high", "abcdefghij"],
+      ["mid-high", "abcdefghzz"],
+      ["mid-low", "abcdezzzzz"],
+      ["low", "zzzzzzzzzz"],
+    ].flatMap(([band, name]) =>
+      [1, 2].map((ordinal) => ({
+        gersId: `${band}-${ordinal}`,
+        name,
+        lat: 52.520898,
+        lng: 13.405,
+      })),
+    );
+    const pairs = generateCandidatePairs([osmPoi], places, { targetPairs: 4 });
+    expect(pairs.map((pair) => pair.overturePlace.gersId)).toEqual([
+      "low-1",
+      "mid-low-1",
+      "mid-high-1",
+      "high-1",
+    ]);
   });
 
   it("handles empty OSM list", () => {

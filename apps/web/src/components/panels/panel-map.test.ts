@@ -1,17 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { DETAIL_PANELS, SIDEBAR_PANELS } from "./panel-map";
+import { SIDEBAR_PANELS } from "./panel-map";
 import { DIRECTIONS_DETENTS, PLACE_DETENTS } from "./sheet/detents";
 
 describe("panel-map", () => {
-  it("SIDEBAR_PANELS has exactly the expected panel ids, each with a truthy component", () => {
-    expect(Object.keys(SIDEBAR_PANELS).sort()).toEqual(
-      ["category", "datasource", "directions", "parking", "place", "saved", "timeline"].sort(),
-    );
-    for (const entry of Object.values(SIDEBAR_PANELS)) {
-      expect(entry.component).toBeDefined();
-    }
-  });
-
   it("leaves search-bar clearance to the shell except where the panel handles the bar itself", () => {
     const overrides = Object.fromEntries(
       Object.entries(SIDEBAR_PANELS)
@@ -31,10 +22,5 @@ describe("panel-map", () => {
     expect(SIDEBAR_PANELS.datasource.detents).toBeUndefined();
     expect(SIDEBAR_PANELS.saved.detents).toBeUndefined();
     expect(SIDEBAR_PANELS.timeline.detents).toBeUndefined();
-  });
-
-  it("DETAIL_PANELS has exactly the place-card id with a truthy component", () => {
-    expect(Object.keys(DETAIL_PANELS)).toEqual(["place-card"]);
-    expect(DETAIL_PANELS["place-card"]).toBeDefined();
   });
 });

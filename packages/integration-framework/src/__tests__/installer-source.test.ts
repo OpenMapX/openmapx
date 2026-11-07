@@ -7,10 +7,12 @@ const clone = vi.hoisted(() => vi.fn());
 vi.mock("@openmapx/core/server", async (actual) => ({
   ...(await actual<typeof import("@openmapx/core/server")>()),
   gitShallowCloneSnapshot: clone,
+  gitShallowClone: clone,
 }));
 
 import {
   createIntegrationArtifactPreparation,
+  installIntegration,
   prepareIntegrationSource,
   publishPreparedIntegration,
   settleIntegrationPublication,
@@ -100,4 +102,18 @@ it("rejects executable source without publishing it", async () => {
       createIntegrationArtifactPreparation({ rootDir: root }),
     ),
   ).rejects.toThrow(/code|declarative|executable/i);
+});
+
+it("admits a GitHub shorthand source as the canonical allowed Git URL", async () => {
+  const root = mkdtempSync(join(tmpdir(), "openmapx-shorthand-source-"));
+  roots.push(root);
+  mkdirSync(join(root, "services"));
+  const stopped = new Error("Controlled clone stop");
+  clone.mockRejectedValue(stopped);
+  await expect(installIntegration({ source: "github:owner/repo", rootDir: root })).rejects.toBe(
+    stopped,
+  );
+  expect(clone).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ url: "https://github.com/owner/repo.git" }),
+  );
 });

@@ -44,7 +44,9 @@ describe("decideLifecycle", () => {
     it.each<AppVisibility>(["active", "inactive", "background"])(
       "keeps a running background session while %s",
       (visibility) => {
-        expect(kinds(plan({ visibility }))).toContain("keep-tracking");
+        const decision = decideLifecycle(plan({ visibility }));
+        expect(planIncludes(decision, "keep-tracking")).toBe(true);
+        expect(planIncludes(decision, "offer-resume")).toBe(false);
       },
     );
 
@@ -53,15 +55,6 @@ describe("decideLifecycle", () => {
 
       expect(actions).toContain("offer-resume");
       expect(actions).not.toContain("keep-tracking");
-    });
-
-    it("treats a running task plus a recorded session as authoritative", () => {
-      // This is the ordinary process-recreation case: the OS relaunched the app
-      // into a callback, and both halves of the state agree.
-      const decision = decideLifecycle(plan({ visibility: "background" }));
-
-      expect(planIncludes(decision, "keep-tracking")).toBe(true);
-      expect(planIncludes(decision, "offer-resume")).toBe(false);
     });
   });
 

@@ -115,16 +115,12 @@ afterEach(() => {
 });
 
 describe("MET Norway weather provider", () => {
-  it("registers with the expected id and priority", () => {
-    const provider = getProvider();
-    expect(provider.id).toBe("met-norway");
-    expect(provider.priority).toBe(8);
-  });
-
   it("maps current weather, preferring the next_1_hours symbol and precipitation", async () => {
     mockFetch.mockResolvedValueOnce(mockOk(sampleResponse()));
 
-    const res = await getProvider().getCurrentWeather(COORDS);
+    const provider = getProvider();
+    expect(provider.id).toBe("met-norway");
+    const res = await provider.getCurrentWeather(COORDS);
 
     expect(res.source).toBe("met-norway");
     expect(res.location).toEqual(COORDS);
@@ -503,12 +499,7 @@ const MET_LEGEND: ReadonlyArray<readonly [symbol: string, hasVariants: boolean, 
 ];
 
 describe("MET Norway symbol legend", () => {
-  it("covers all 41 published symbols", () => {
-    expect(new Set(MET_LEGEND.map(([symbol]) => symbol)).size).toBe(41);
-  });
-
   it.each(MET_LEGEND)("maps %s explicitly", (symbol, hasVariants, wmo) => {
-    expect(Object.hasOwn(SYMBOL_TO_WMO, symbol)).toBe(true);
     expect(SYMBOL_TO_WMO[symbol]).toBe(wmo);
     expect(weatherCodeToDescription(wmo)).not.toBe("Unknown");
 

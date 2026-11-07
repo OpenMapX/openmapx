@@ -17,6 +17,8 @@ const EXPECTED = [
   "resolveScheduleConstraints",
   "resolveTemporalCapabilities",
   "worstSupport",
+  "isoWithOffsetInZone",
+  "zonedWallClockToInstant",
 ] as const;
 
 describe("scheduling export surface", () => {
@@ -24,10 +26,5 @@ describe("scheduling export surface", () => {
     for (const name of EXPECTED) {
       expect(core, `missing export: ${name}`).toHaveProperty(name);
     }
-  });
-
-  it("exposes isoWithOffsetInZone alongside the other timezone helpers", () => {
-    expect(core).toHaveProperty("isoWithOffsetInZone");
-    expect(core).toHaveProperty("zonedWallClockToInstant");
   });
 });

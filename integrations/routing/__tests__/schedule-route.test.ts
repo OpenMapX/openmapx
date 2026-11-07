@@ -114,14 +114,6 @@ describe("POST /directions/schedule", () => {
       ).toEqual(fallback ? [{ kind: "approximate-travel-times", providerId: "routing-osrm" }] : []);
     },
   );
-  it("is registered", () => {
-    const ctx = newContext();
-    expect(
-      ctx.registered.routes.some(
-        (entry) => entry.method === "POST" && entry.path === "/directions/schedule",
-      ),
-    ).toBe(true);
-  });
 
   it("rejects a malformed body with 400 and the reason", async () => {
     const sent = await post(newContext(), { waypoints: [COLOGNE] });

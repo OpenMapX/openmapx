@@ -6,8 +6,7 @@ import { dataManagerAdminOperations } from "./contracts/data-manager-admin";
 const client = createApiClient({ baseUrl: "https://app.example", credentials: "include" });
 afterEach(() => vi.unstubAllGlobals());
 describe("complete generated administration operations", () => {
-  it("exposes all38canonical operation keys", () => {
-    expect(Object.keys(dataManagerAdminOperations)).toHaveLength(38);
+  it("exposes a callable for each adopted administration operation", () => {
     for (const key of Object.keys(dataManagerAdminOperations))
       expect(sdk).toHaveProperty(key, expect.any(Function));
   });

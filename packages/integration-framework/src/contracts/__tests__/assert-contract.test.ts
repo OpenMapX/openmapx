@@ -163,6 +163,19 @@ describe("assertTransitProviderContract", () => {
     expect(() => assertTransitProviderContract(fixture(false))).not.toThrow();
     expect(() => assertTransitProviderContract(fixture(true))).not.toThrow();
   });
+
+  it("requires the methods advertised by reachability capabilities", () => {
+    const brokenProvider = {
+      id: "transit-broken-reachability",
+      capabilities: {
+        ...allFalseTransitCapabilities,
+        reachability: { estimatedSurface: true, exactPointChecks: true },
+      },
+    };
+    expect(() => assertTransitProviderContract(brokenProvider)).toThrow(
+      /getReachabilitySurface.*checkReachabilityDestinations/s,
+    );
+  });
 });
 
 describe("assertRealtimeProviderContract", () => {

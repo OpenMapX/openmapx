@@ -73,7 +73,8 @@ describe("deepLink helpers", () => {
 
   it("round-trips camera and labeled waypoint values", () => {
     const camera = { center: [13.38886, 52.517036] as [number, number], zoom: 14.345 };
-    const parsedCamera = parseCameraParam(formatCameraParam(camera));
+    expect(formatCameraParam(camera)).toBe("52.517036,13.38886,14.35,0,0");
+    const parsedCamera = parseCameraParam("52.517036,13.38886,14.35,0,0");
     expect(parsedCamera?.center).toEqual([13.38886, 52.517036]);
     expect(parsedCamera?.zoom).toBe(14.35);
 
@@ -81,7 +82,8 @@ describe("deepLink helpers", () => {
       coords: [13.369, 52.525] as [number, number],
       label: "Berlin, Hauptbahnhof",
     };
-    expect(parseLabeledPoint(formatLabeledPoint(waypoint))).toEqual(waypoint);
+    expect(formatLabeledPoint(waypoint)).toBe("52.525,13.369,Berlin, Hauptbahnhof");
+    expect(parseLabeledPoint("52.525,13.369,Berlin, Hauptbahnhof")).toEqual(waypoint);
   });
 
   it("parses measurement point lists", () => {

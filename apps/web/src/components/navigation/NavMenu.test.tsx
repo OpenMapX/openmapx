@@ -21,15 +21,6 @@ const baseProps = {
 };
 
 describe("NavMenu", () => {
-  it("renders the core rows and always-available toggles", () => {
-    const html = renderToStaticMarkup(<NavMenu {...baseProps} />);
-    expect(html).toContain("menu.directions");
-    expect(html).toContain("overview");
-    expect(html).toContain("menu.showSatellite");
-    expect(html).toContain("keepScreenOn");
-    expect(html).toContain("menu.settings");
-  });
-
   it("hides overlay toggles whose integration isn't registered", () => {
     const html = renderToStaticMarkup(<NavMenu {...baseProps} />);
     expect(html).not.toContain("menu.showTraffic");

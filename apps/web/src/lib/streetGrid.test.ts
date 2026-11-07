@@ -202,23 +202,31 @@ describe("streetGrid", () => {
     expect(computeStreetGridAlignment(fake.map)).toEqual({ status: "no-grid" });
   });
 
-  it("keys the memo on style, camera, viewport size and padding", () => {
-    const fake = createFakeMap({
-      zoom: 15.13,
-      bearing: 10.3,
-      center: { lng: 8.12345678, lat: 50.1 },
+  it("keys equivalent geometry alike and invalidates each style, camera and viewport dependency", () => {
+    const options = { zoom: 15.13, bearing: 10.3, center: { lng: 8.12345678, lat: 50.1 } };
+    const base = createFakeMap(options);
+    const key = alignmentCacheKey(base.map, 2);
+    expect(alignmentCacheKey(base.map, 2)).toBe(key);
+    const drift = createFakeMap({
+      ...options,
+      zoom: 15.14,
+      bearing: 10.31,
+      center: { lng: 8.12345679, lat: 50.10000001 },
     });
-    expect(alignmentCacheKey(fake.map, 2)).toBe("2:15.25:8.1235:50.1000:10.5:0:1200x800:0,0,0,0");
-    fake.state.pitch = 25;
-    expect(alignmentCacheKey(fake.map, 2)).toContain(":25:1200x800:");
-    fake.state.padding = { top: 10, right: 20, bottom: 30, left: 40 };
-    expect(alignmentCacheKey(fake.map, 2)).toContain(":10,20,30,40");
-    const narrow = createFakeMap({
-      zoom: 15.13,
-      bearing: 10.3,
-      center: fake.state.center,
-      containerWidth: 800,
-    });
-    expect(alignmentCacheKey(narrow.map, 2)).toContain(":800x800:");
+    expect(alignmentCacheKey(drift.map, 2)).toBe(key);
+    expect(alignmentCacheKey(base.map, 3)).not.toBe(key);
+    for (const change of [
+      { zoom: 16 },
+      { bearing: 12 },
+      { center: { lng: 8.124, lat: 50.1 } },
+      { center: { lng: 8.12345678, lat: 50.2 } },
+      { pitch: 25 },
+      { containerWidth: 800 },
+      { containerHeight: 600 },
+    ]) {
+      expect(alignmentCacheKey(createFakeMap({ ...options, ...change }).map, 2)).not.toBe(key);
+    }
+    base.state.padding = { top: 10, right: 20, bottom: 30, left: 40 };
+    expect(alignmentCacheKey(base.map, 2)).not.toBe(key);
   });
 });

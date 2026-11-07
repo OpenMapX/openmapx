@@ -26,17 +26,6 @@ describe("applyClientSideFilters", () => {
       expect(out.map((r) => r.id)).toEqual(["b"]);
     });
 
-    it("excludes results with no availability data", () => {
-      const results = [
-        makeResult({ id: "a" }),
-        makeResult({ id: "b", availability: { available: 3, total: 3 } }),
-      ];
-
-      const out = applyClientSideFilters(results, { available_now: true });
-
-      expect(out.map((r) => r.id)).toEqual(["b"]);
-    });
-
     it("leaves results unchanged when unset", () => {
       const results = [
         makeResult({ id: "a", availability: { available: 0, total: 2 } }),

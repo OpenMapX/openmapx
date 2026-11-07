@@ -17,10 +17,4 @@ describe("NlpUnmappedNotice", () => {
     expect(container.textContent).toContain("search.couldNotFilterBy");
     expect(container.textContent).toContain("best, instagrammable");
   });
-
-  it("renders a single attribute without a separator", () => {
-    const { container } = render(<NlpUnmappedNotice attributes={["cozy"]} />);
-    expect(container.textContent).toContain("search.couldNotFilterBy cozy");
-    expect(container.textContent).not.toContain(",");
-  });
 });

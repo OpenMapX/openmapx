@@ -242,56 +242,34 @@ describe("formatImpactCost", () => {
 
 describe("RouteImpactBadge", () => {
   it("renders cost and CO2 summary text", () => {
-    renderBadge({ impact: mockDieselImpact });
+    const view = renderBadge({ impact: mockDieselImpact });
+    expect(screen.getByRole("status")).toBe(screen.getByTestId("route-impact-badge"));
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.getByTestId("eco-choice-chip")).toHaveTextContent("Eco Choice");
     const textEl = screen.getByTestId("impact-summary-text");
     expect(textEl.textContent).toContain("6.80");
     expect(textEl.textContent).toContain("8.4 kg CO₂");
-  });
-
-  it("renders Eco Choice badge when isLowestEmissions is true", () => {
-    renderBadge({ impact: mockDieselImpact });
-    const ecoChip = screen.getByTestId("eco-choice-chip");
-    expect(ecoChip).toBeInTheDocument();
-    expect(ecoChip.textContent).toBe("Eco Choice");
-  });
-
-  it("does not render Eco Choice badge when isLowestEmissions is false", () => {
-    renderBadge({ impact: mockEvImpactTollsUnknown });
+    view.rerender(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <RouteImpactBadge impact={mockEvImpactTollsUnknown} />
+      </NextIntlClientProvider>,
+    );
     expect(screen.queryByTestId("eco-choice-chip")).toBeNull();
-  });
-
-  it("calls onClick when clicked", () => {
-    const handleClick = vi.fn();
-    renderBadge({ impact: mockDieselImpact, onClick: handleClick });
-
-    const badge = screen.getByTestId("route-impact-badge");
-    fireEvent.click(badge);
-    expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
   it("activates onClick via keyboard (Enter and Space)", async () => {
     const handleClick = vi.fn();
     renderBadge({ impact: mockDieselImpact, onClick: handleClick });
 
-    const badge = screen.getByTestId("route-impact-badge");
+    const badge = screen.getByRole("button", { name: /Eco Choice.*6\.80.*8\.4 kg CO₂/ });
+    fireEvent.click(badge);
+    expect(handleClick).toHaveBeenCalledTimes(1);
     badge.focus();
     await userEvent.keyboard("{Enter}");
-    expect(handleClick).toHaveBeenCalledTimes(1);
+    expect(handleClick).toHaveBeenCalledTimes(2);
 
     await userEvent.keyboard(" ");
-    expect(handleClick).toHaveBeenCalledTimes(2);
-  });
-
-  it("renders non-button div when onClick is not provided", () => {
-    renderBadge({ impact: mockDieselImpact, onClick: undefined });
-    const badge = screen.getByTestId("route-impact-badge");
-    expect(badge.tagName.toLowerCase()).toBe("div");
-  });
-
-  it("uses a button for the interactive summary", () => {
-    renderBadge({ impact: mockDieselImpact, onClick: vi.fn() });
-    const badge = screen.getByTestId("route-impact-badge");
-    expect(badge.tagName.toLowerCase()).toBe("button");
+    expect(handleClick).toHaveBeenCalledTimes(3);
   });
 
   it("renders German localized text and eco label", () => {

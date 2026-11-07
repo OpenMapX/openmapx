@@ -4,7 +4,6 @@ import {
   groundStartPackageSchema,
   MOBILE_NAVIGATION_SESSION_MAX_AGE_MS,
   MOBILE_NAVIGATION_SESSION_SCHEMA_VERSION,
-  routeFingerprint,
 } from "@openmapx/core/navigation";
 import type { LocationProfileKind } from "../../location/profiles";
 
@@ -176,9 +175,4 @@ export function createGroundPreparingSession(
       reroute: { status: "idle", attempts: 0 },
     },
   };
-}
-
-/** Identity of the route a session is currently following. */
-export function groundRouteFingerprint(session: GroundMobileSession): string {
-  return routeFingerprint(session.payload.startPackage.route.geometry);
 }

@@ -90,14 +90,21 @@ describe("rankItineraries", () => {
   });
 
   it("'fewerTransfers' sorts by transfers then duration", () => {
-    const ranked = rankItineraries(list, "fewerTransfers");
-    expect(ranked.map((i) => i.transfers)).toEqual([0, 1, 3]);
-    expect(ranked).not.toBe(list); // new array, input untouched
+    const tied = itin({ duration: 1200, transfers: 1, walkDistance: 80 });
+    const input = [...list, tied];
+    const ranked = rankItineraries(input, "fewerTransfers");
+    expect(ranked).toEqual([slowFewTransfers, tied, midLittleWalk, fastManyTransfers]);
+    expect(input).toEqual([...list, tied]);
   });
 
   it("'lessWalking' sorts by walk distance then duration", () => {
-    const ranked = rankItineraries(list, "lessWalking");
-    expect(ranked.map((i) => i.walkDistance)).toEqual([50, 100, 800]);
+    const tied = itin({ duration: 1200, transfers: 2, walkDistance: 50 });
+    expect(rankItineraries([...list, tied], "lessWalking")).toEqual([
+      tied,
+      midLittleWalk,
+      fastManyTransfers,
+      slowFewTransfers,
+    ]);
   });
 });
 
@@ -141,11 +148,5 @@ describe("TRANSIT_ACCESS_MOTIS_MODES", () => {
       postTransitModes: ["CAR_PARKING"],
       directModes: ["CAR"],
     });
-  });
-
-  it("every access option has a mapping entry", () => {
-    for (const mode of TRANSIT_ACCESS_OPTIONS) {
-      expect(TRANSIT_ACCESS_MOTIS_MODES[mode]).toBeDefined();
-    }
   });
 });

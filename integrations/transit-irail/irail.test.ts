@@ -57,7 +57,7 @@ describe("irail provider", () => {
       // Use a narrow area around Brussels-South
       const stops = await getStops(50.835, 4.336, 5000);
 
-      expect(stops.length).toBeGreaterThanOrEqual(1);
+      expect(stops.map((stop) => stop.id)).toEqual(["ir:BE.NMBS.008814001"]);
       const bxl = stops.find((s) => s.id === "ir:BE.NMBS.008814001");
       expect(bxl).toBeDefined();
       expect(bxl?.name).toBe("Brussels-South");
@@ -67,24 +67,18 @@ describe("irail provider", () => {
       expect(bxl?.provider).toBe("irail");
     });
 
-    it("populates station cache on first call", async () => {
-      mockStationsResponse();
-
-      const { getStops } = await loadModule();
-      await getStops(50.8, 4.3, 100000);
-
-      // First call should fetch stations
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      const fetchUrl = mockFetch.mock.calls[0][0] as string;
-      expect(fetchUrl).toContain("/stations/");
-    });
-
     it("uses cache on second call", async () => {
       mockStationsResponse();
 
       const mod = await loadModule();
       await mod.getStops(50.8, 4.3, 100000);
-      await mod.getStops(51.0, 4.4, 100000);
+      const cached = await mod.getStops(51.0, 4.4, 100000);
+      expect(cached.map((stop) => stop.id)).toEqual([
+        "ir:BE.NMBS.008814001",
+        "ir:BE.NMBS.008821006",
+        "ir:BE.NMBS.008891009",
+      ]);
+      expect(mockFetch.mock.calls[0][0]).toContain("/stations/");
 
       // Should only fetch once — cache is used for second call
       expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -177,7 +171,7 @@ describe("irail provider", () => {
 
       // First departure: 120s delay
       expect(deps[0].delaySeconds).toBe(120);
-      expect(deps[0].expectedAt).toBeDefined();
+      expect(deps[0].expectedAt).toBe(new Date((epochSeconds + 120) * 1000).toISOString());
       expect(deps[0].platform).toBe("3");
       expect(deps[0].canceled).toBe(false);
       expect(deps[0].occupancy).toBe("low");
@@ -297,8 +291,8 @@ describe("irail provider", () => {
       expect(stop.departed).toBe(true);
       expect(stop.canceled).toBe(false);
       // Expected times should include the delay
-      expect(stop.expectedDeparture).toBeDefined();
-      expect(stop.expectedArrival).toBeDefined();
+      expect(stop.expectedDeparture).toBe(new Date((depTime + 60) * 1000).toISOString());
+      expect(stop.expectedArrival).toBe(new Date((arrTime + 60) * 1000).toISOString());
     });
 
     it("returns null on non-ok response", async () => {
@@ -490,7 +484,11 @@ describe("irail provider", () => {
       const itin = plan.itineraries[0];
       if (!itin) throw new Error("itin was undefined");
       expect(itin.transfers).toBe(2);
-      expect(itin.legs).toHaveLength(3); // origin -> via1, via1 -> via2, via2 -> dest
+      expect(itin.legs.map((leg) => [leg.from.name, leg.to.name])).toEqual([
+        ["Brussels-South", "Leuven"],
+        ["Leuven", "Mechelen"],
+        ["Mechelen", "Antwerpen-Centraal"],
+      ]);
     });
 
     it("returns null on fetch error", async () => {
@@ -503,13 +501,17 @@ describe("irail provider", () => {
       expect(plan).toBeNull();
     });
 
-    it("returns null when no stations available", async () => {
+    it("returns null outside Belgium or when no stations are available", async () => {
       mockFetch.mockResolvedValueOnce(mockOk({ station: [] }));
 
       const { planConnections } = await loadModule();
-      const plan = await planConnections(0, 0, 1, 1, "2026-03-10", "10:00");
+      expect(await planConnections(0, 0, 1, 1, "2026-03-10", "10:00")).toBeNull();
+      expect(mockFetch).not.toHaveBeenCalled();
 
+      const plan = await planConnections(50.835, 4.336, 50.881, 4.715, "2026-03-10", "10:00");
       expect(plan).toBeNull();
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch.mock.calls[0][0]).toContain("/stations/");
     });
   });
 });

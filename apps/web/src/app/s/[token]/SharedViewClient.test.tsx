@@ -74,7 +74,12 @@ describe("SharedViewClient", () => {
     });
     expect(screen.getByText("Berlin")).toBeInTheDocument();
     expect(screen.getByText("Hamburg")).toBeInTheDocument();
-    expect(screen.getByText("Open route in OpenMapX")).toBeInTheDocument();
+    const href = screen.getByRole("link", { name: "Open route in OpenMapX" }).getAttribute("href");
+    expect(href?.startsWith("/")).toBe(true);
+    const url = new URL(href ?? "", "https://share.example");
+    expect(url.pathname).toBe("/");
+    expect(url.searchParams.get("panel")).toBe("directions");
+    expect(url.searchParams.getAll("wp")).toEqual(["52.52,13.405,Berlin", "53.55,9.99,Hamburg"]);
   });
 
   it("renders the unavailable state for a null share", () => {

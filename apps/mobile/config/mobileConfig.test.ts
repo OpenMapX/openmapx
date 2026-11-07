@@ -68,15 +68,13 @@ describe("readMobileConfig origins", () => {
 });
 
 describe("readMobileConfig identity", () => {
-  it("separates development identity from the store identity", () => {
-    expect(readMobileConfig({ OPENMAPX_MOBILE_RELEASE: "0" }).appId).toBe("org.openmapx.app.dev");
-  });
-
   it("gives development builds their own scheme and display name", () => {
     const config = readMobileConfig({ OPENMAPX_MOBILE_RELEASE: "0" });
     expect(config.scheme).toBe("openmapx-dev");
     expect(config.appName).toBe("OpenMapX Dev");
     expect(config.release).toBe(false);
+
+    expect(config.appId).toBe("org.openmapx.app.dev");
   });
 
   it.each(["", " org.openmapx.app", "org.openmapx.app ", "openmapx", "org.openmapx", "org..app"])(

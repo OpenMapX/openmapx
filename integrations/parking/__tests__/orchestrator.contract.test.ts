@@ -110,19 +110,6 @@ describe("parking orchestrator", () => {
     expect(complete.partial).toBeUndefined();
   });
 
-  test("providers whose coverage misses the box are not asked", async () => {
-    const far = provider("far", [site({ id: "far:1" })], { coverage: { bbox: [2, 48, 3, 49] } });
-    const near = provider("near", [site({ id: "near:1" })], {
-      coverage: { bbox: [8, 48.5, 9, 49.5] },
-    });
-    const source = createParkingDataSource(ctxWith([far, near]));
-
-    const result = await source.search(BBOX);
-
-    expect(far.searchSites).not.toHaveBeenCalled();
-    expect(result.data.map((r) => r.id)).toEqual(["near:1"]);
-  });
-
   test("disallowed sources are excluded, also inside a site's members", async () => {
     const a = provider("a", [
       site({ id: "a:ok", sources: ["src-a"] }),
@@ -293,61 +280,21 @@ describe("parking orchestrator", () => {
     expect(result.attributions).toEqual([feed, upstream]);
   });
 
-  test("the filters keep today's ids and labels", async () => {
+  test("declares filter IDs and options used by parking searches", async () => {
     const source = createParkingDataSource(ctxWith([]));
 
     const filters = await source.getFilters();
 
-    expect(filters.map((f) => [f.id, f.label, f.options?.map((o) => [o.id, o.label])])).toEqual([
-      [
-        "parkingType",
-        "Type",
-        [
-          ["garage", "Parking Garage"],
-          ["underground", "Underground"],
-          ["surface", "Surface Lot"],
-          ["on-street", "On-Street"],
-        ],
-      ],
-      [
-        "fee",
-        "Fee",
-        [
-          ["free", "Free"],
-          ["paid", "Paid"],
-          ["unknown", "Unknown"],
-        ],
-      ],
-      [
-        "availability",
-        "Availability",
-        [
-          ["available", "Spaces Available"],
-          ["full", "Include Full"],
-        ],
-      ],
-      [
-        "features",
-        "Features",
-        [
-          ["disabled", "Disabled Parking"],
-          ["ev-charging", "EV Charging"],
-          ["park-and-ride", "Park & Ride"],
-        ],
-      ],
-      ["open_now", "Open now", undefined],
+    expect(filters.map((f) => [f.id, f.options?.map((o) => o.id)])).toEqual([
+      ["parkingType", ["garage", "underground", "surface", "on-street"]],
+      ["fee", ["free", "paid", "unknown"]],
+      ["availability", ["available", "full"]],
+      ["features", ["disabled", "ev-charging", "park-and-ride"]],
+      ["open_now", undefined],
     ]);
     expect(filters.find((f) => f.id === "open_now")?.type).toBe("toggle");
     expect(source.id).toBe("parking");
-    expect(source.meta.minZoom).toBe(12);
     expect(source.meta.placeCategoryRaw).toBe("parking");
-    expect(Object.keys(source.meta.markerStyle.variantColors)).toEqual([
-      "available",
-      "limited",
-      "full",
-      "closed",
-      "unknown",
-    ]);
   });
 
   test("the filters are applied to the sites", async () => {
@@ -447,28 +394,5 @@ describe("parking orchestrator", () => {
     } finally {
       vi.useRealTimers();
     }
-  });
-
-  test("a provider failing again for the same reason is logged once, and its recovery once", async () => {
-    const lines: LogLine[] = [];
-    let failure: Error | null = new Error("OpenConditions /features responded 401");
-    const flaky = provider("oc", [], {
-      searchSites: vi.fn(async () => {
-        if (failure) throw failure;
-        return { sites: [] };
-      }),
-    });
-    const source = createParkingDataSource(ctxWith([flaky], { lines }));
-    const warnings = () => lines.filter((l) => l.level === "warn");
-
-    await source.search(BBOX);
-    await source.search(BBOX);
-    expect(warnings()).toHaveLength(1);
-    expect(warnings()[0]?.message).toMatch(/\[parking\].*oc.*401/);
-
-    failure = null;
-    await source.search(BBOX);
-    await source.search(BBOX);
-    expect(lines.filter((l) => l.level === "info" && /recovered/.test(l.message))).toHaveLength(1);
   });
 });

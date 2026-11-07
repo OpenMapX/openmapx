@@ -1,4 +1,4 @@
-import { act, render } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetBackNavigationForTests } from "@/lib/backNavigation";
 import {
@@ -9,7 +9,7 @@ import {
 import { publishMobilePanelHeight } from "@/lib/mobilePanelHeight";
 import { settleHistory } from "@/test/history";
 import { detentIndex, PLACE_DETENTS } from "./detents";
-import { isHostKeyDown, keyboardDetent, MobileBottomSheet } from "./MobileBottomSheet";
+import { MobileBottomSheet } from "./MobileBottomSheet";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
@@ -41,48 +41,77 @@ globalThis.IntersectionObserver =
   IntersectionObserverStub as unknown as typeof IntersectionObserver;
 
 describe("keyboardDetent", () => {
-  it("steps up and down between detents", () => {
-    expect(keyboardDetent("ArrowUp", "peek", PLACE_DETENTS)).toBe("mid");
-    expect(keyboardDetent("ArrowUp", "mid", PLACE_DETENTS)).toBe("full");
-    expect(keyboardDetent("ArrowDown", "full", PLACE_DETENTS)).toBe("mid");
-  });
-
-  it("stops at the ends instead of wrapping", () => {
-    expect(keyboardDetent("ArrowUp", "full", PLACE_DETENTS)).toBeNull();
-    expect(keyboardDetent("ArrowDown", "peek", PLACE_DETENTS)).toBeNull();
-  });
-
-  it("jumps with Home and End", () => {
-    expect(keyboardDetent("Home", "full", PLACE_DETENTS)).toBe("peek");
-    expect(keyboardDetent("End", "peek", PLACE_DETENTS)).toBe("full");
-  });
-
-  it("ignores unrelated keys", () => {
-    expect(keyboardDetent("Enter", "mid", PLACE_DETENTS)).toBeNull();
-  });
-
-  it("steps straight from peek to full without a mid detent", () => {
-    expect(keyboardDetent("ArrowUp", "peek", TWO_SNAP)).toBe("full");
-    expect(keyboardDetent("ArrowDown", "full", TWO_SNAP)).toBe("peek");
-  });
-
-  it("still jumps with Home and End without a mid detent", () => {
-    expect(keyboardDetent("Home", "full", TWO_SNAP)).toBe("peek");
-    expect(keyboardDetent("End", "peek", TWO_SNAP)).toBe("full");
-  });
-});
-
-describe("isHostKeyDown", () => {
-  it("accepts a key that originated on the host itself", () => {
-    const host = {};
-    expect(isHostKeyDown({ target: host, currentTarget: host })).toBe(true);
-  });
-
-  it("ignores a key bubbling up from a descendant field", () => {
-    const host = {};
-    const dateInput = {};
-    expect(isHostKeyDown({ target: dateInput, currentTarget: host })).toBe(false);
-  });
+  it.each([
+    { label: "three", config: { ...PLACE_DETENTS, initial: "peek" as const }, upper: 3, middle: 2 },
+    { label: "two", config: TWO_SNAP, upper: 2, middle: 2 },
+  ])(
+    "moves only the focused sheet host through its configured keyboard detents: $label",
+    async ({ config, upper, middle }) => {
+      vi.stubGlobal("matchMedia", () => ({ matches: false }));
+      const view = render(
+        <MobileBottomSheet id="keyboard-sheet" zIndex={1} detents={config}>
+          <input aria-label="Departure" />
+        </MobileBottomSheet>,
+      );
+      try {
+        await act(async () => {
+          await customElements.whenDefined("bottom-sheet");
+        });
+        const host = view.container.querySelector("bottom-sheet") as HTMLElement & {
+          snapToPoint: ReturnType<typeof vi.fn>;
+        };
+        host.snapToPoint = vi.fn();
+        const field = screen.getByRole("textbox", { name: "Departure" });
+        act(() => field.focus());
+        for (const key of ["ArrowUp", "Home", "End"]) {
+          expect(fireEvent.keyDown(field, { key })).toBe(true);
+          expect(host.snapToPoint).not.toHaveBeenCalled();
+        }
+        expect(host).toHaveAttribute("tabindex", "0");
+        act(() => host.focus());
+        expect(document.activeElement).toBe(host);
+        const stay = (key: string) => {
+          host.snapToPoint.mockClear();
+          expect(fireEvent.keyDown(host, { key })).toBe(true);
+          expect(host.snapToPoint).not.toHaveBeenCalled();
+        };
+        const move = (key: string, index: number, detent: "peek" | "mid" | "full") => {
+          host.snapToPoint.mockClear();
+          expect(fireEvent.keyDown(host, { key })).toBe(false);
+          expect(host.snapToPoint).toHaveBeenCalledTimes(1);
+          expect(host.snapToPoint).toHaveBeenCalledWith(index, { behavior: "smooth" });
+          act(() =>
+            host.dispatchEvent(
+              new CustomEvent("snap-position-change", {
+                detail: {
+                  snapIndex: index,
+                  sheetState: detent === "full" ? "expanded" : "partially-expanded",
+                },
+              }),
+            ),
+          );
+        };
+        stay("ArrowDown");
+        stay("Enter");
+        if (upper === 3) {
+          move("ArrowUp", middle, "mid");
+          move("ArrowUp", upper, "full");
+        } else move("ArrowUp", upper, "full");
+        stay("ArrowUp");
+        stay("End");
+        if (upper === 3) {
+          move("ArrowDown", middle, "mid");
+          move("ArrowDown", 1, "peek");
+        } else move("ArrowDown", 1, "peek");
+        stay("Home");
+        move("End", upper, "full");
+        move("Home", 1, "peek");
+      } finally {
+        view.unmount();
+        vi.unstubAllGlobals();
+      }
+    },
+  );
 });
 
 describe("snap marker keying", () => {

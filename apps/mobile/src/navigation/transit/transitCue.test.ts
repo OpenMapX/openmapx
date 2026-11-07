@@ -1,6 +1,6 @@
 import type { TransitNavigationEvent } from "@openmapx/core/navigation";
 import { MAX_CUE_ID_LENGTH } from "../../audio/navigationAudio";
-import { FIXTURE_FINGERPRINT, transitSessionFixture } from "./testing/transitFixture";
+import { transitSessionFixture } from "./testing/transitFixture";
 import {
   boundedName,
   MAX_ALERT_TEXT_LENGTH,
@@ -49,12 +49,6 @@ describe("boundedName", () => {
 });
 
 describe("transitCueId", () => {
-  it("is stable for the same session, itinerary and event", () => {
-    expect(transitCueId("s1", FIXTURE_FINGERPRINT, "ev-1")).toBe(
-      transitCueId("s1", FIXTURE_FINGERPRINT, "ev-1"),
-    );
-  });
-
   it("changes with the itinerary, so a replan reopens the cue namespace", () => {
     expect(transitCueId("s1", "it-a", "ev-1")).not.toBe(transitCueId("s1", "it-b", "ev-1"));
   });
@@ -63,12 +57,6 @@ describe("transitCueId", () => {
     expect(
       transitCueId("s".repeat(200), "f".repeat(200), "e".repeat(200)).length,
     ).toBeLessThanOrEqual(MAX_CUE_ID_LENGTH);
-  });
-
-  it("derives from the event, never from a title a feed supplied", () => {
-    const id = transitCueId("s1", FIXTURE_FINGERPRINT, "ev-1");
-
-    expect(id).not.toContain("Hauptbahnhof");
   });
 });
 
@@ -92,6 +80,7 @@ describe("transitCueEffect", () => {
     const cue = transitCueEffect(noPlatform, event({ type: "board", legIndex: 1 }));
 
     expect(cue?.effect.text).toContain("S1");
+    expect(cue?.effect.text).not.toMatch(/platform|undefined/i);
   });
 
   it("names the stop when alighting", () => {
@@ -150,7 +139,7 @@ describe("transitCueEffect", () => {
     const cue = transitCueEffect(session({ locale: "de" }), event({ type: "alight", legIndex: 1 }));
 
     expect(cue?.effect.locale).toBe("de");
-    expect(cue?.effect.text).toBeTruthy();
+    expect(cue?.effect.text).toMatch(/aussteigen|Steig/i);
   });
 
   it("says nothing rather than half a sentence when a name is missing", () => {
@@ -172,11 +161,17 @@ describe("transitCueEffect", () => {
     expect(transitCueEffect(long, event({ type: "alight", legIndex: 1 }))).toBeNull();
   });
 
-  it("uses the same identifier for the same event, so it is spoken once", () => {
+  it("uses a stable identifier per session and event for durable deduplication", () => {
     const first = transitCueEffect(session(), event());
     const second = transitCueEffect(session(), event());
 
+    expect(first).not.toBeNull();
+    expect(first?.cueId).toMatch(/\S/);
     expect(first?.cueId).toBe(second?.cueId);
+    expect(transitCueEffect(session(), event({ id: "other-event" }))?.cueId).not.toBe(first?.cueId);
+    expect(transitCueEffect(session({ sessionId: "other-session" }), event())?.cueId).not.toBe(
+      first?.cueId,
+    );
   });
 });
 

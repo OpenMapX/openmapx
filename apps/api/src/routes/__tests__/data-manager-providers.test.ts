@@ -1,7 +1,7 @@
 import { createApiClient } from "@openmapx/core";
 import { getApiDataManagerProviders } from "@openmapx/core/api-admin-sdk";
 import Fastify, { type FastifyInstance } from "fastify";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProviderHealthState } from "../../services/provider-health/index.js";
 import { administrationSdkFetch } from "./helpers/administration-sdk-fetch";
 
@@ -41,7 +41,7 @@ vi.mock("../../services/provider-health/registry.js", () => ({
 }));
 
 beforeAll(() => {
-  process.env.DATA_MANAGER_AUTH_TOKEN = "service-token";
+  vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "service-token");
 });
 
 let app: FastifyInstance;
@@ -51,6 +51,11 @@ beforeAll(async () => {
   app = Fastify({ logger: false });
   await app.register(dataManagerRoute);
   await app.ready();
+});
+
+afterAll(async () => {
+  await app?.close();
+  vi.unstubAllEnvs();
 });
 
 beforeEach(() => {

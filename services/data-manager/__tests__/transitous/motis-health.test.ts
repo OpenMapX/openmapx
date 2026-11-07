@@ -177,7 +177,8 @@ describe("motis-health stage", () => {
 
     const result = await motisHealthRun(ctxFor(dataDir));
     expect(result.status).toBe("ok");
-    expect(n).toBeGreaterThanOrEqual(2); // retried past the initial 400
+    // Two liveness attempts precede the six functional probes.
+    expect(n).toBe(8);
   }, 12_000);
 
   it("fails when a probe responds with a non-JSON content-type", async () => {

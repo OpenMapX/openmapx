@@ -630,10 +630,6 @@ describe.each(["direct", "worker"] as const)("writeLiveTraffic overrides %s", (m
     expect(readFileSync(tarPath)).toEqual(before);
   });
 
-  it("keys an edge exactly as the writer keys the identity it persists", () => {
-    expect(edgeKey(FORWARD_EDGE)).toBe(`${LEVEL}:${TILE}:${FORWARD_INDEX}`);
-  });
-
   it("writes a closed record for an override edge that has no CSV row", async () => {
     const res = await writeLiveTraffic({
       tarPath,

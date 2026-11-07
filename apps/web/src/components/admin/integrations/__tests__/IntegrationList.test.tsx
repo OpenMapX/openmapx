@@ -49,27 +49,7 @@ describe("IntegrationList pagination", () => {
     await screen.findByText("Provider 000");
     const names = screen.getAllByText(/^Provider \d{3}$/);
     expect(names.length).toBe(25); // default rowsPerPage
-  });
-
-  it("shows the full filtered count in the pager", async () => {
-    render(<IntegrationList />, { wrapper: createQueryWrapper() });
-    await screen.findByText("Provider 000");
     await screen.findByText(/of 60/);
-  });
-
-  it("shows the next slice when paging forward", async () => {
-    const user = userEvent.setup();
-    render(<IntegrationList />, { wrapper: createQueryWrapper() });
-
-    await screen.findByText("Provider 000");
-    // Page 1 = providers 000..024; 025 is on page 2.
-    expect(screen.queryByText("Provider 025")).toBeNull();
-
-    const nextButton = await screen.findByRole("button", { name: /next page/i });
-    await user.click(nextButton);
-
-    await screen.findByText("Provider 025");
-    expect(screen.queryByText("Provider 000")).toBeNull();
   });
 
   it("resets to the first page when a filter changes", async () => {
@@ -82,6 +62,7 @@ describe("IntegrationList pagination", () => {
     const nextButton = await screen.findByRole("button", { name: /next page/i });
     await user.click(nextButton);
     await screen.findByText("Provider 025");
+    expect(screen.queryByText("Provider 000")).toBeNull();
 
     // Typing in search filters AND resets to page 1: the matching subset starts
     // from the first page again.

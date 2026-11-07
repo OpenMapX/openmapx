@@ -62,14 +62,6 @@ beforeEach(() => {
 });
 
 describe("visibility", () => {
-  it("renders for a valid node, way and relation reference", () => {
-    for (const osmId of ["node/12", "way/42", "relation/7"]) {
-      const { unmount } = renderEntry(osmId);
-      expect(screen.getByTestId("osm-contribution-entry")).not.toBeNull();
-      unmount();
-    }
-  });
-
   it("renders nothing without a usable OSM reference", () => {
     for (const osmId of [
       undefined,
@@ -106,6 +98,8 @@ describe("activation", () => {
     session.mockReturnValue({ data: null } as never);
     const view = renderEntry("node/12");
     await userEvent.click(screen.getByTestId("osm-contribution-entry"));
+    expect(screen.getByTestId("auth-dialog")).not.toBeNull();
+    expect(screen.queryByTestId("osm-contribution-dialog")).toBeNull();
     await userEvent.click(screen.getByText("Complete authentication"));
     expect(screen.queryByTestId("osm-contribution-dialog")).toBeNull();
     session.mockReturnValue({ data: { user: { id: "u1" } } });
@@ -150,20 +144,6 @@ describe("activation", () => {
     window.history.replaceState(null, "", "/");
   });
 
-  it("opens the sign-in dialog when signed out", async () => {
-    session.mockReturnValue({ data: null } as never);
-    renderEntry("node/12");
-    await userEvent.click(screen.getByTestId("osm-contribution-entry"));
-    expect(screen.getByTestId("auth-dialog")).not.toBeNull();
-    expect(screen.queryByTestId("osm-contribution-dialog")).toBeNull();
-  });
-
-  it("opens the editor directly when signed in", async () => {
-    renderEntry("node/12");
-    await userEvent.click(screen.getByTestId("osm-contribution-entry"));
-    expect(screen.getByTestId("osm-contribution-dialog")).not.toBeNull();
-  });
-
   it("activates from the keyboard", async () => {
     renderEntry("node/12");
     await userEvent.tab();
@@ -174,10 +154,19 @@ describe("activation", () => {
 
 describe("editor input", () => {
   it("passes only the parsed OSM reference, never place content", async () => {
-    renderEntry("way/42");
-    await userEvent.click(screen.getByTestId("osm-contribution-entry"));
-    const props = dialogProps.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(props.ref_).toEqual({ type: "way", id: 42 });
-    expect(Object.keys(props).sort()).toEqual(["onClose", "open", "ref_"]);
+    for (const [osmId, expected] of [
+      ["node/12", { type: "node", id: 12 }],
+      ["way/42", { type: "way", id: 42 }],
+      ["relation/7", { type: "relation", id: 7 }],
+    ] as const) {
+      dialogProps.mockClear();
+      const { unmount } = renderEntry(osmId);
+      await userEvent.click(screen.getByTestId("osm-contribution-entry"));
+      expect(screen.getByTestId("osm-contribution-dialog")).not.toBeNull();
+      const props = dialogProps.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(props.ref_).toEqual(expected);
+      expect(Object.keys(props).sort()).toEqual(["onClose", "open", "ref_"]);
+      unmount();
+    }
   });
 });

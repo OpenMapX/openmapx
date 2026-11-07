@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Route } from "../types/routing";
-import { buildGroundNavigationPackage, groundRouteFingerprint } from "./groundPackage";
+import { buildGroundNavigationPackage } from "./groundPackage";
 
 function route(overrides: Partial<Route> = {}): Route {
   return {
@@ -33,15 +33,6 @@ const input = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("buildGroundNavigationPackage", () => {
-  it("builds a package the protocol accepts", () => {
-    const result = buildGroundNavigationPackage(input());
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.startPackage.kind).toBe("ground");
-    expect(result.startPackage.route.geometry).toHaveLength(3);
-  });
-
   it("preserves the provider, options, alternatives and waypoints", () => {
     const result = buildGroundNavigationPackage(
       input({
@@ -56,9 +47,17 @@ describe("buildGroundNavigationPackage", () => {
     if (!result.ok) return;
     expect(result.startPackage.routeProvider).toBe("valhalla");
     expect(result.startPackage.routeOptions).toEqual({ avoidTolls: true });
-    expect(result.startPackage.alternatives).toHaveLength(1);
-    expect(result.startPackage.destinationWaypoints).toHaveLength(2);
+    expect(result.startPackage.alternatives).toMatchObject([
+      { distance: 1_200, geometry: route().geometry },
+    ]);
+    expect(result.startPackage.destinationWaypoints).toEqual([
+      [8.68, 50.11],
+      [8.7, 50.13],
+    ]);
     expect(result.startPackage.routeSelectionIntent).toBe("userSelected");
+
+    expect(result.startPackage.kind).toBe("ground");
+    expect(result.startPackage.route.geometry).toEqual(route().geometry);
   });
 
   it("carries no field the schema does not name", () => {
@@ -122,38 +121,6 @@ describe("buildGroundNavigationPackage", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.startPackage.alternatives).toHaveLength(8);
-  });
-});
-
-describe("groundRouteFingerprint", () => {
-  it("is stable across equal routes", () => {
-    expect(groundRouteFingerprint(route())).toBe(groundRouteFingerprint(route()));
-  });
-
-  it("changes when the followed line changes", () => {
-    const rerouted = route({
-      geometry: [
-        [8.68, 50.11],
-        [8.6805, 50.1105],
-        [8.7, 50.13],
-      ],
-    });
-
-    // Telling "same route, one revision on" from "different route" is what keeps
-    // a progress delta off a line that is no longer there.
-    expect(groundRouteFingerprint(rerouted)).not.toBe(groundRouteFingerprint(route()));
-  });
-
-  it("ignores float noise below about a centimetre", () => {
-    const jittered = route({
-      geometry: [
-        [8.68 + 1e-12, 50.11],
-        [8.69, 50.12],
-        [8.7, 50.13],
-      ],
-    });
-
-    expect(groundRouteFingerprint(jittered)).toBe(groundRouteFingerprint(route()));
   });
 });
 

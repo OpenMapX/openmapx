@@ -126,10 +126,22 @@ describe("status routes", () => {
     );
     expect(anonymous.headers.vary ?? "").not.toContain("Cookie");
     expect(anonymous.json()).toMatchObject({ stale: true, snapshotAgeMs: 1_234 });
-    for (const service of anonymous.json().services) {
-      expect(service).not.toHaveProperty("url");
-      expect(service).not.toHaveProperty("error");
-    }
+    expect(anonymous.json().services).toEqual([
+      {
+        id: "postgresql",
+        name: "PostgreSQL",
+        category: "Infrastructure",
+        status: "down",
+        responseTime: 12,
+      },
+      {
+        id: "github",
+        name: "GitHub API",
+        category: "External",
+        status: "up",
+        responseTime: 8,
+      },
+    ]);
     expect(anonymous.json()).not.toHaveProperty("refreshErrorClass");
     expect(requireAdmin).not.toHaveBeenCalled();
     await app.close();
@@ -207,6 +219,7 @@ describe("status routes", () => {
 
 describe("status dependency probe", () => {
   beforeEach(() => {
+    vi.stubEnv("SMTP_HOST", undefined);
     mocks.sql.mockResolvedValue([]);
     mocks.getAllIntegrations.mockReturnValue([
       { id: "enabled", enabled: true, manifest: { healthCheck: { type: "http" } } },
@@ -230,6 +243,7 @@ describe("status dependency probe", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
   });
 
   it("fans out to platform dependencies and combines cached integration health", async () => {

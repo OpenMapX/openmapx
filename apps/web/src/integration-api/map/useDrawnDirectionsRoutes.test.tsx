@@ -24,7 +24,6 @@ vi.mock("@openmapx/core", async (importOriginal) => {
 
 vi.mock("next-intl", () => ({ useLocale: () => "en" }));
 
-import { buildScheduleRequest } from "@/lib/directions/scheduleRequest";
 import { useDrawnDirectionsRoutes } from "./useDrawnDirectionsRoutes";
 
 const FILLED_WAYPOINTS: Waypoint[] = [
@@ -142,27 +141,53 @@ describe("useDrawnDirectionsRoutes scheduled trips", () => {
     );
   });
 
-  it("builds the same scheduled request the panel builds", () => {
-    act(() => {
-      useDirectionsStore.setState({ waypoints: CONSTRAINED_WAYPOINTS });
-    });
-    renderHook(() => useDrawnDirectionsRoutes(), { wrapper: createQueryWrapper() });
-
-    const expected = buildScheduleRequest({
-      waypoints: CONSTRAINED_WAYPOINTS,
-      mode: "driving",
-      timeMode: "now",
-      tripTime: null,
-      avoidHighways: false,
-      avoidTolls: false,
-      avoidFerries: false,
-      avoidClosures: useSettingsStore.getState().avoidIncidents,
+  it("forwards the explicit scheduled constraints and options and disables the plain query", () => {
+    const previousSettings = {
       units: useSettingsStore.getState().units,
-      lang: "en",
+      avoidIncidents: useSettingsStore.getState().avoidIncidents,
+    };
+    const previousDirections = useDirectionsStore.getState();
+    const previousFlags = {
+      avoidHighways: previousDirections.avoidHighways,
+      avoidTolls: previousDirections.avoidTolls,
+      avoidFerries: previousDirections.avoidFerries,
+    };
+    act(() => {
+      useDirectionsStore.setState({
+        mode: "driving",
+        waypoints: CONSTRAINED_WAYPOINTS,
+        timeMode: "now",
+        tripTime: null,
+        avoidHighways: true,
+        avoidTolls: false,
+        avoidFerries: true,
+      });
+      useSettingsStore.setState({ units: "imperial", avoidIncidents: true });
     });
-    expect(useScheduledDirectionsMock).toHaveBeenCalledWith(expected);
-    // The plain query stands down so the two cannot fetch different routes.
-    expect(useDirectionsMock).toHaveBeenCalledWith(expect.objectContaining({ waypoints: [] }));
+    try {
+      renderHook(() => useDrawnDirectionsRoutes(), { wrapper: createQueryWrapper() });
+      expect(useScheduledDirectionsMock).toHaveBeenCalledWith({
+        waypoints: [
+          [13.4, 52.5],
+          [13.45, 52.55],
+          [13.5, 52.6],
+        ],
+        schedules: [null, { arriveBy: "2026-09-01T14:00" }, null],
+        mode: "driving",
+        avoidHighways: true,
+        avoidTolls: false,
+        avoidFerries: true,
+        avoidClosures: true,
+        units: "imperial",
+        lang: "en",
+      });
+      expect(useDirectionsMock).toHaveBeenCalledWith(expect.objectContaining({ waypoints: [] }));
+    } finally {
+      act(() => {
+        useSettingsStore.setState(previousSettings);
+        useDirectionsStore.setState(previousFlags);
+      });
+    }
   });
 
   it("passes the store's trip time to the plain directions query", () => {

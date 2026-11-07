@@ -54,7 +54,7 @@ describe("geocoding orchestrator served-provider tagging", () => {
   it("tags autocomplete suggestions with the serving integration id", async () => {
     const ctx = ctxWith([["geocoding-maptiler", provider([result("a")])]]);
     const suggestions = await getGeocodingProvider(ctx).autocomplete("q");
-    expect(suggestions.every((s) => s.provider === "geocoding-maptiler")).toBe(true);
+    expect(suggestions.map((s) => s.provider)).toEqual(["geocoding-maptiler"]);
   });
 
   it("forwards the location bias through the fallback chain", async () => {

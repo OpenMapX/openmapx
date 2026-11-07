@@ -149,11 +149,8 @@ it("keeps the last provider active when a reload cannot acquire binding authorit
     serviceId: "engine-a",
   });
 });
-it("exposes the actual activated generation without leaking configuration values", async () => {
-  const host = await import("./integration-host"),
-    inspect = (host as unknown as { inspectIntegrationRuntime: (id: string) => unknown })
-      .inspectIntegrationRuntime;
-  expect(typeof inspect).toBe("function");
+it("exposes the actual activated generation and its captured binding", async () => {
+  const { inspectIntegrationRuntime: inspect } = await import("./integration-host");
   expect(inspect("binding-test")).toMatchObject({
     generationId: expect.any(String),
     configRevision: expect.any(String),

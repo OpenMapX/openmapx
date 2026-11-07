@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AdminDraftProvider } from "@/lib/admin/AdminDraftProvider";
 import * as documentExit from "@/lib/admin/adminDocumentExit";
@@ -30,6 +30,9 @@ describe("assisted artifact delivery availability", () => {
     renderPrivacyComponent(detail, (client) => (
       <PrivacyArtifactDelivery detail={detail} client={client} />
     ));
+    fireEvent.change(screen.getByLabelText("privacyAdmin.workflows.deliveryReason"), {
+      target: { value: "operator requested" },
+    });
     await waitFor(() =>
       expect(screen.getByText(/privacyAdmin.workflows.downloadUnavailable/)).toBeInTheDocument(),
     );
@@ -38,13 +41,20 @@ describe("assisted artifact delivery availability", () => {
     ).toBeDisabled();
     expect(fetch).not.toHaveBeenCalled();
   });
-  it("keeps representative delivery unavailable without explicit authority and recipient authorization", async () => {
+  it.each([
+    ["revoked", true],
+    ["ready", false],
+  ] as const)("denies artifact %s with assisted delivery allowed=%s", async (state, allowed) => {
+    vi.stubGlobal("isSecureContext", true);
+    vi.stubGlobal("showSaveFilePicker", vi.fn());
     const detail = privacyDetail();
+    detail.request.state = "ready";
+    detail.capabilities.assistedDelivery = allowed;
     detail.artifacts = [
       {
         id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
-        state: "revoked",
-        filename: "revoked.zip",
+        state,
+        filename: "export.zip",
         plaintextBytes: 8,
         expiresAt: "2030-01-01T00:00:00Z",
       },
@@ -52,6 +62,10 @@ describe("assisted artifact delivery availability", () => {
     renderPrivacyComponent(detail, (client) => (
       <PrivacyArtifactDelivery detail={detail} client={client} />
     ));
+    fireEvent.change(screen.getByLabelText("privacyAdmin.workflows.deliveryReason"), {
+      target: { value: "operator requested" },
+    });
+    await act(async () => {});
     expect(screen.getByText("privacyAdmin.workflows.artifactNotAuthorized")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "privacyAdmin.workflows.startAssistedDelivery" }),

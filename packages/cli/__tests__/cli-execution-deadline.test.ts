@@ -150,7 +150,7 @@ it("fix1 unsigned metadata can only clamp policy and cannot authorize a remote m
     vi.unstubAllEnvs();
   }
 });
-it("passes the retained generation execution to its guarded receiver while legacy link stays closed", async () => {
+it("permits the guarded generation-start operation while legacy link stays closed", async () => {
   const { vi } = await import("vitest"),
     { withCliExecutionDeadline, constrainCliDataManagerTransport } = await import(
       "../src/lib/execution-deadline"

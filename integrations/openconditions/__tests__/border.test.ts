@@ -167,6 +167,7 @@ describe("border-crossings-openconditions", () => {
   test("a status past its validity states nothing", () => {
     const later = crossing("Peace Bridge", undefined, new Date("2026-10-15T02:00:00Z"))!;
     expect(later.open).toBeUndefined();
+    expect(later.queues).toHaveLength(6);
     expect(later.queues.every((q) => q.stale)).toBe(true);
   });
 

@@ -124,18 +124,13 @@ function helloPayload(injected: string[]): Record<string, unknown> | null {
 }
 
 describe("current native against a current web app", () => {
-  it("negotiates the highest version both have", async () => {
-    const { injected } = await handshaken({ min: MOBILE_PROTOCOL_MIN, max: MOBILE_PROTOCOL_MAX });
-
-    expect(helloPayload(injected)?.selectedProtocolVersion).toBe(MOBILE_PROTOCOL_MAX);
-  });
-
   it("accepts the current vocabulary", async () => {
-    const { bridge, dispatched, nonce } = await handshaken({
+    const { bridge, dispatched, nonce, injected } = await handshaken({
       min: MOBILE_PROTOCOL_MIN,
       max: MOBILE_PROTOCOL_MAX,
     });
 
+    expect(helloPayload(injected)?.selectedProtocolVersion).toBe(MOBILE_PROTOCOL_MAX);
     const outcome = await bridge.receive({
       url: `${WEB_ORIGIN}/`,
       data: envelope(
@@ -153,22 +148,13 @@ describe("current native against a current web app", () => {
 });
 
 describe("current native against a web app it cannot meet", () => {
-  it("reports no negotiated version rather than guessing", async () => {
-    const { injected } = await handshaken({
-      min: MOBILE_PROTOCOL_MAX + 1,
-      max: MOBILE_PROTOCOL_MAX + 2,
-    });
-
-    // The page has to say "update required" and start nothing.
-    expect(helloPayload(injected)?.selectedProtocolVersion).toBeNull();
-  });
-
   it("dispatches no command afterwards", async () => {
-    const { bridge, dispatched, nonce } = await handshaken({
+    const { bridge, dispatched, nonce, injected } = await handshaken({
       min: MOBILE_PROTOCOL_MAX + 1,
       max: MOBILE_PROTOCOL_MAX + 2,
     });
 
+    expect(helloPayload(injected)?.selectedProtocolVersion).toBeNull();
     await bridge.receive({
       url: `${WEB_ORIGIN}/`,
       data: envelope(nonce, "snapshot.request", {}, MOBILE_PROTOCOL_MAX + 1, "m-4"),
@@ -219,22 +205,11 @@ describe("a web reload mid-session", () => {
     });
 
     expect(outcome).toEqual({ status: "rejected", code: "handshake-required" });
-  });
-
-  it("refuses a command replayed with the previous document's nonce", async () => {
-    const { bridge, registry, nonce } = await handshaken({
-      min: MOBILE_PROTOCOL_MIN,
-      max: MOBILE_PROTOCOL_MAX,
-    });
-    registry.beginDocumentLoad(NOW + 1);
-
-    const outcome = await bridge.receive({
+    const stale = await bridge.receive({
       url: `${WEB_ORIGIN}/`,
       data: envelope(nonce, "snapshot.request", {}, MOBILE_PROTOCOL_MAX, "m-7"),
     });
-
-    // A page that no longer exists cannot be issuing commands.
-    expect(outcome).toEqual({ status: "rejected", code: "wrong-channel" });
+    expect(stale).toEqual({ status: "rejected", code: "wrong-channel" });
   });
 });
 
@@ -264,6 +239,7 @@ describe("a web deployment changing build id mid-session", () => {
 
     // A new build is a new conversation, not a mismatch to report.
     expect(injected.length).toBeGreaterThan(before);
-    expect(helloPayload(injected)?.selectedProtocolVersion).toBe(MOBILE_PROTOCOL_MAX);
+    expect(helloPayload(injected.slice(before))?.selectedProtocolVersion).toBe(MOBILE_PROTOCOL_MAX);
+    expect(registry.handshake()?.webBuildId).toBe("web-build-2");
   });
 });

@@ -1,7 +1,7 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type BoundCondition,
   type BoundSpan,
@@ -16,6 +16,20 @@ import {
 } from "../jobs/traffic/span-edges.js";
 import type { WayEdge } from "../jobs/traffic/ways-to-edges.js";
 import { boundCondition, effect } from "./fixtures/road-condition.js";
+
+const temporaryDirectories: string[] = [];
+async function temporaryDirectory(prefix: string): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), prefix));
+  temporaryDirectories.push(directory);
+  return directory;
+}
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
+});
 
 // GraphId value for {level 0, tile 1, index 7} = (7 << 25) | (1 << 3) | 0
 const gid = (level: number, tile: number, index: number): number =>
@@ -365,7 +379,7 @@ describe("resolveSpanEdges", () => {
 
 describe("span edge cache persistence", () => {
   it("round-trips through the state file and keeps only the referenced keys", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "span-edges-"));
+    const dir = await temporaryDirectory("span-edges-");
     const path = join(dir, "nested", "span_edges.json");
     const cache: SpanEdgeCache = new Map([
       ["keep", [{ forward: true, level: 0, tile: 1, index: 7 }]],
@@ -384,7 +398,7 @@ describe("span edge cache persistence", () => {
   });
 
   it("returns an empty cache for a missing or corrupt state file", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "span-edges-"));
+    const dir = await temporaryDirectory("span-edges-");
     expect((await loadSpanEdgeCache(join(dir, "missing.json"))).size).toBe(0);
     const corrupt = join(dir, "corrupt.json");
     await writeFile(corrupt, "{not json", "utf8");

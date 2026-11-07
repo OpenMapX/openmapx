@@ -73,9 +73,14 @@ describe("isInstalledShell", () => {
 
 describe("shellFeatureBoundary", () => {
   it("keeps browser-owned capabilities enabled in an ordinary browser", () => {
-    const boundary = shellFeatureBoundary(scopeWith());
-
-    for (const value of Object.values(boundary)) expect(value).toBe(true);
+    expect(shellFeatureBoundary(scopeWith())).toEqual({
+      microphone: true,
+      browserGeolocationWatch: true,
+      browserSpeech: true,
+      browserNotifications: true,
+      browserSessionPersistence: true,
+      browserWakeLock: true,
+    });
   });
 
   it.each([
@@ -95,10 +100,5 @@ describe("shellFeatureBoundary", () => {
     const negotiating = scopeWith({ [CHANNEL_GLOBAL]: { nonce: "abc" } });
 
     expect(shellFeatureBoundary(negotiating).microphone).toBe(false);
-  });
-
-  it("keeps them removed when the bridge turns out to be incompatible", () => {
-    // A shell that cannot run navigation is still an installed binary.
-    expect(shellFeatureBoundary(shell()).microphone).toBe(false);
   });
 });

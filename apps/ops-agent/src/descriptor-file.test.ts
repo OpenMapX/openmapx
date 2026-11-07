@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import {
   chmodSync,
   fstatSync,
@@ -179,7 +180,7 @@ describe("descriptor-anchored bounded reads", () => {
 
     const special = fixture();
     rmSync(special.file);
-    symlinkSync("/dev/null", special.file);
+    execFileSync("mkfifo", ["-m", "600", special.file], { timeout: 3000 });
     expect(() =>
       readDescriptorAnchoredUtf8(special.root, ["one", "two", "value.json"], {
         maximumBytes: 16,

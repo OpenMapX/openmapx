@@ -39,19 +39,32 @@ afterAll(() => app?.close());
 
 beforeEach(() => {
   selectResolveWith = [];
-  delete process.env.LEGAL_NAME;
-  delete process.env.LEGAL_STREET;
-  delete process.env.LEGAL_POSTAL_CODE;
-  delete process.env.LEGAL_CITY;
-  delete process.env.LEGAL_COUNTRY;
-  delete process.env.LEGAL_EMAIL;
-  delete process.env.LEGAL_PHONE;
-  delete process.env.LEGAL_HOSTING_PROVIDER;
-  delete process.env.LEGAL_HOSTING_LOCATIONS;
-  delete process.env.LEGAL_SUPERVISORY_AUTHORITY;
-  delete process.env.LEGAL_SERVER_LOG_RETENTION_DAYS;
+  for (const key of [
+    "LEGAL_NAME",
+    "LEGAL_STREET",
+    "LEGAL_POSTAL_CODE",
+    "LEGAL_CITY",
+    "LEGAL_COUNTRY",
+    "LEGAL_EMAIL",
+    "LEGAL_PHONE",
+    "LEGAL_HOSTING_PROVIDER",
+    "LEGAL_HOSTING_LOCATIONS",
+    "LEGAL_SUPERVISORY_AUTHORITY",
+    "LEGAL_SUPERVISORY_AUTHORITY_URL",
+    "LEGAL_SERVER_LOG_RETENTION_DAYS",
+    "LEGAL_DATA_REQUEST_EMAIL",
+    "LEGAL_DSAR_CASE_RETENTION_DAYS",
+    "LEGAL_IDENTITY_EVIDENCE_RETENTION_DAYS",
+    "LEGAL_EXPORT_ARTIFACT_RETENTION_HOURS",
+    "LEGAL_DEPLOYMENT_JURISDICTION",
+    "LEGAL_PRIVACY_SOURCES",
+  ])
+    vi.stubEnv(key, undefined);
 });
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  vi.unstubAllEnvs();
+});
 
 describe("GET /legal-config", () => {
   it("returns safe defaults when nothing is configured", async () => {
@@ -119,7 +132,7 @@ describe("GET /legal-config", () => {
 
   it("lets the env var take priority over the admin-database value", async () => {
     selectResolveWith = [{ key: "legalHostingProvider", value: "Hetzner Online GmbH" }];
-    process.env.LEGAL_HOSTING_PROVIDER = "OVHcloud";
+    vi.stubEnv("LEGAL_HOSTING_PROVIDER", "OVHcloud");
     const res = await app.inject({ method: "GET", url: "/legal-config" });
     expect(res.json().hostingProvider).toBe("OVHcloud");
   });
@@ -129,8 +142,8 @@ describe("GET /legal-config", () => {
       { key: "legalControllerName", value: "Database Controller" },
       { key: "legalControllerEmail", value: "database@example.test" },
     ];
-    process.env.LEGAL_NAME = "Environment Controller";
-    process.env.LEGAL_EMAIL = "environment@example.test";
+    vi.stubEnv("LEGAL_NAME", "Environment Controller");
+    vi.stubEnv("LEGAL_EMAIL", "environment@example.test");
 
     const res = await app.inject({ method: "GET", url: "/legal-config" });
 
@@ -156,7 +169,7 @@ describe("GET /legal-config", () => {
   });
 
   it("does not publish an invalid env or database address line", async () => {
-    process.env.LEGAL_STREET = "Env Street\nInjected";
+    vi.stubEnv("LEGAL_STREET", "Env Street\nInjected");
     selectResolveWith = [{ key: "legalControllerStreet", value: "DB Street\nInjected" }];
 
     const res = await app.inject({ method: "GET", url: "/legal-config" });
@@ -166,14 +179,14 @@ describe("GET /legal-config", () => {
 
   it("treats a blank env var as unset and falls back to the database value", async () => {
     selectResolveWith = [{ key: "legalHostingProvider", value: "Hetzner Online GmbH" }];
-    process.env.LEGAL_HOSTING_PROVIDER = "";
+    vi.stubEnv("LEGAL_HOSTING_PROVIDER", "");
     const res = await app.inject({ method: "GET", url: "/legal-config" });
     expect(res.json().hostingProvider).toBe("Hetzner Online GmbH");
   });
 
   it("lets the supervisory-authority env var win over the database value", async () => {
     selectResolveWith = [{ key: "legalSupervisoryAuthority", value: "DB Authority" }];
-    process.env.LEGAL_SUPERVISORY_AUTHORITY = "Env Authority";
+    vi.stubEnv("LEGAL_SUPERVISORY_AUTHORITY", "Env Authority");
     const res = await app.inject({ method: "GET", url: "/legal-config" });
     expect(res.json().supervisoryAuthority).toBe("Env Authority");
   });
@@ -185,7 +198,7 @@ describe("GET /legal-config", () => {
   });
 
   it("honours a positive integer log-retention env var", async () => {
-    process.env.LEGAL_SERVER_LOG_RETENTION_DAYS = "7";
+    vi.stubEnv("LEGAL_SERVER_LOG_RETENTION_DAYS", "7");
     const res = await app.inject({ method: "GET", url: "/legal-config" });
     expect(res.json().serverLogRetentionDays).toBe(7);
   });

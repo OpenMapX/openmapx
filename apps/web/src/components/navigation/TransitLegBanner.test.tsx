@@ -15,6 +15,10 @@ vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
   useLocale: () => "en",
 }));
+vi.mock("@/lib/mobile/useMobileRuntime", () => ({
+  useMobileRuntime: () => ({ browserAuthority: true }),
+}));
+vi.mock("@/lib/navigation/transitCueLedger", () => ({ claimBrowserTransitCue: () => true }));
 vi.mock("@/lib/navigation/useNavigationVoice", () => ({ useNavigationVoice: () => vi.fn() }));
 vi.mock("@/lib/navigation/navNotify", () => ({
   notifyGetOff: vi.fn(),
@@ -148,21 +152,43 @@ describe("TransitLegBanner while waiting at the boarding stop", () => {
   });
 
   it("never sounds the get-off alarm before boarding", () => {
-    render(<TransitLegBanner leg={freshLeg()} legIndex={0} transitProgress={waitingAt(0.0035)} />);
+    const leg = freshLeg();
+    const approaching = {
+      ...waitingAt(0.0035),
+      position: [0.0035, 0] as [number, number],
+      stopCursor: 3,
+    };
+    const view = render(<TransitLegBanner leg={leg} legIndex={0} transitProgress={approaching} />);
     expect(playAlarmTone).not.toHaveBeenCalled();
     expect(notifyGetOff).not.toHaveBeenCalled();
+    view.rerender(
+      <TransitLegBanner
+        leg={leg}
+        legIndex={0}
+        transitProgress={{ ...approaching, phase: "riding" }}
+      />,
+    );
+    expect(playAlarmTone).toHaveBeenCalledTimes(1);
   });
 });
 
 it("never sounds an alight alarm for a cancelled current service, even with riding progress", () => {
   vi.clearAllMocks();
-  render(
+  const leg = freshLeg();
+  const approaching = {
+    ...progressAt(0.0035),
+    position: [0.0035, 0] as [number, number],
+    stopCursor: 3,
+  };
+  const view = render(
     <TransitLegBanner
-      leg={{ ...freshLeg(), cancelled: true }}
+      leg={{ ...leg, cancelled: true }}
       legIndex={0}
-      transitProgress={progressAt(0.0035)}
+      transitProgress={approaching}
     />,
   );
   expect(playAlarmTone).not.toHaveBeenCalled();
   expect(notifyGetOff).not.toHaveBeenCalled();
+  view.rerender(<TransitLegBanner leg={leg} legIndex={0} transitProgress={approaching} />);
+  expect(playAlarmTone).toHaveBeenCalledTimes(1);
 });

@@ -49,7 +49,6 @@ afterEach(() => {
 describe("CacheManager", () => {
   it("previews a scoped glob and confirms only the captured preview target", async () => {
     const user = userEvent.setup();
-    mockRoutes();
     fetchMock.mockImplementation(async (url, options) =>
       String(url).endsWith("/clear")
         ? {
@@ -73,7 +72,6 @@ describe("CacheManager", () => {
   });
   it("invalidates the displayed preview on edit and prevents foreign-prefix requests", async () => {
     const user = userEvent.setup();
-    mockRoutes();
     fetchMock.mockImplementation(async (url) => ({
       ok: true,
       json: async () =>
@@ -96,15 +94,6 @@ describe("CacheManager", () => {
     expect(screen.getByRole("button", { name: "Clear previewed pattern" })).toBeDisabled();
     expect(clearCalls()).toHaveLength(1);
   });
-  it("renders namespace rows with key counts", async () => {
-    mockRoutes();
-    render(<CacheManager />, { wrapper: createQueryWrapper() });
-
-    await screen.findByText("int:geocoding");
-    expect(screen.getByText("cache:geocode")).toBeDefined();
-    expect(screen.getByText("12")).toBeDefined();
-    expect(screen.getByText("3")).toBeDefined();
-  });
 
   it("clears a single namespace through the confirm dialog", async () => {
     const user = userEvent.setup();
@@ -112,6 +101,9 @@ describe("CacheManager", () => {
     render(<CacheManager />, { wrapper: createQueryWrapper() });
 
     await screen.findByText("int:geocoding");
+    expect(screen.getByText("cache:geocode")).toBeInTheDocument();
+    expect(screen.getByText("12")).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
 
     // First row's per-namespace Clear button.
     const clearButtons = screen.getAllByRole("button", { name: "Clear" });

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { integrationConfig } from "../../db/integration-config-schema";
 import { makeRateLimitTierHook } from "../../server-wiring";
 import { integrationConfigDbFixture } from "../../services/__tests__/helpers/integration-config-db";
-import type { IntegrationImportPorts } from "../../services/integration-config-import";
+import type { applyTrustedConfigurationWithEvidence } from "../../services/trusted-config-operations";
 import { TrustedConfigurationApplyError } from "../../services/trusted-config-outcome";
 import { makeCsrfGuardHook } from "../../utils/csrf";
 import { healthCheckSweepLimit, RateLimiter, serviceActionLimit } from "../../utils/rate-limit";
@@ -37,7 +37,8 @@ vi.mock("../../services/job-runner.js", () => ({
 }));
 
 const configDb = integrationConfigDbFixture();
-const mockApplyWithEvidence = vi.fn<IntegrationImportPorts["apply"]>();
+const mockApplyWithEvidence =
+  vi.fn<() => ReturnType<typeof applyTrustedConfigurationWithEvidence>>();
 const mockApply = vi.fn().mockResolvedValue({ revisionId: "revision_1" });
 vi.mock("../../services/trusted-config-operations.js", () => ({
   integrationSchemas: () =>

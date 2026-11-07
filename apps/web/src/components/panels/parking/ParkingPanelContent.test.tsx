@@ -18,7 +18,20 @@ vi.mock("@openmapx/core", async (importOriginal) => ({
   useClearParkedLocation: () => ({ mutate: state.clear, isPending: false }),
 }));
 
-vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
+vi.mock("next-intl", async () => {
+  const mocked = (await import("@/test/intl")).mockNextIntl();
+  return {
+    ...mocked,
+    useTranslations: (namespace?: string) => {
+      const t = mocked.useTranslations(namespace);
+      return Object.assign(
+        (key: string, values?: { name?: string }) =>
+          namespace === "parking" && key === "forVehicle" ? t(key) + ":" + values?.name : t(key),
+        t,
+      );
+    },
+  };
+});
 
 import { ParkingPanelContent } from "./ParkingPanelContent";
 
@@ -62,6 +75,7 @@ describe("ParkingPanelContent", () => {
     render(<ParkingPanelContent />);
     await userEvent.click(screen.getByRole("button", { name: /parking.clear/ }));
     expect(state.clear).toHaveBeenCalledWith("p1");
+    expect(useSidebarStore.getState().activeSidebarId).toBeNull();
   });
 
   it("arms the map picker for Change location", async () => {
@@ -110,9 +124,12 @@ describe("ParkingPanelContent", () => {
   });
 
   it("names the vehicle when the record has one", () => {
-    state.vehicles = [{ id: "v1", name: "Blue Golf", isDefault: true }];
+    state.vehicles = [
+      { id: "v2", name: "Other vehicle", isDefault: true },
+      { id: "v1", name: "Blue Golf", isDefault: false },
+    ];
     state.parked = [{ ...RECORD, vehicleId: "v1" }];
     render(<ParkingPanelContent />);
-    expect(screen.getByText(/parking.forVehicle/)).toBeInTheDocument();
+    expect(screen.getByText("parking.forVehicle:Blue Golf")).toBeInTheDocument();
   });
 });

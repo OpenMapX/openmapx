@@ -395,22 +395,6 @@ describe("isCompatiblePlatformVersion", () => {
 // ─── Manifest reading + filtering ─────────────────────────────────────────
 
 describe("readBackupManifest", () => {
-  it("loads a well-formed manifest", () => {
-    const dir = writeBackup("good", {
-      name: "good",
-      createdAt: "2026-04-19T00:00:00Z",
-      services: [
-        {
-          id: "postgis",
-          volumes: [{ name: "openmapx-pgdata", mode: "pg_dump", file: "x", sizeBytes: 0 }],
-        },
-      ],
-    });
-    const m = readBackupManifest(join(dir, "manifest.json"));
-    expect(m.name).toBe("good");
-    expect(m.services).toHaveLength(1);
-  });
-
   it("rejects missing and obsolete manifest format versions", () => {
     const missing = writeBackup("missing-format", {
       formatVersion: undefined,
@@ -962,9 +946,10 @@ describe("discoverBackupableServices", () => {
     });
     writeManifest("nodata", { ...baseService, id: "nodata" });
 
+    process.env.OPENMAPX_ENABLED_SERVICES = "postgis,tileserver,redis,nodata";
     const targets = await discoverBackupableServices({ rootDir: tmp });
     const ids = targets.map((t) => t.id).sort();
-    expect(ids).toEqual(["postgis"]);
+    expect(ids).toEqual(["postgis", "tileserver"]);
 
     const pg = targets.find((t) => t.id === "postgis");
     expect(pg?.version).toBe("1.0.0");
@@ -1042,6 +1027,7 @@ describe("discoverBackupableServices", () => {
       id: "tileserver",
       volumes: [{ name: "openmapx-tiles", mountAt: "/data", backup: true, backupMode: "tar" }],
     });
+    process.env.OPENMAPX_ENABLED_SERVICES = "postgis,tileserver";
     const out = await discoverBackupableServices({ rootDir: tmp, serviceIds: ["postgis"] });
     expect(out.map((t) => t.id)).toEqual(["postgis"]);
   });

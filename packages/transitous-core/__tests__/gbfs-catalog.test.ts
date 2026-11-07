@@ -45,11 +45,11 @@ describe("pinned MobilityData GBFS compiler", () => {
     expect(blockedId).toBeTruthy();
     const compiled = compileGbfsCatalog({
       rows,
-      countries: ["de", "at"],
+      countries: ["de", "at", "ch"],
       existingSources: [],
       quarantine: [{ sourceId: blockedId ?? "", reason: "bad", firstSeen: "x", lastChecked: "y" }],
       maxAdditions: 1,
     });
-    expect(compiled.summary).toMatchObject({ included: 1, quarantined: 1 });
+    expect(compiled.summary).toMatchObject({ included: 1, quarantined: 1, limited: 1 });
   });
 });

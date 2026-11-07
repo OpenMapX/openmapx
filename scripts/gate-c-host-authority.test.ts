@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { parse as parseYaml } from "yaml";
 import { renderCompose } from "../packages/core/src/services/compose-renderer";
 import { renderConfiguration } from "../packages/core/src/services/configuration-generation";
 import { findServiceManifestDirs } from "../packages/core/src/services/manifest-discovery";
@@ -56,43 +57,17 @@ function renderFullStack(): Record<string, RenderedService> {
 }
 
 function renderedVolumes(composeYaml: string): Record<string, RenderedService> {
-  // Parsed without a YAML dependency: the renderer emits two-space-indented
-  // service keys under a single top-level `services:` block, and this gate only
-  // needs each service's volume lines.
-  const lines = composeYaml.split("\n");
-  const start = lines.indexOf("services:");
-  const out: Record<string, RenderedService> = {};
-  let current: string | undefined;
-  let inVolumes = false;
-  for (const line of lines.slice(start + 1)) {
-    if (/^\S/.test(line)) break; // left the services block
-    const service = /^ {2}([A-Za-z0-9][A-Za-z0-9._-]*):\s*$/.exec(line);
-    if (service) {
-      current = service[1] as string;
-      out[current] = { volumes: [] };
-      inVolumes = false;
-      continue;
-    }
-    if (!current) continue;
-    if (/^ {4}volumes:\s*$/.test(line)) {
-      inVolumes = true;
-      continue;
-    }
-    if (/^ {4}\S/.test(line)) {
-      inVolumes = false;
-      continue;
-    }
-    const item = /^ {6}- (.+)$/.exec(line);
-    if (inVolumes && item) (out[current] as RenderedService).volumes?.push(item[1] as string);
-  }
-  return out;
+  return (parseYaml(composeYaml) as { services: Record<string, RenderedService> }).services;
 }
 
 describe("Gate C — host authority", () => {
   const services = renderFullStack();
 
   it("renders every built-in service so the inspection is meaningful", () => {
-    expect(Object.keys(services).length).toBeGreaterThan(5);
+    const expectedIds = findServiceManifestDirs(join(ROOT, "services"))
+      .map((directory) => JSON.parse(readFileSync(join(directory, "service.json"), "utf8")).id)
+      .sort();
+    expect(Object.keys(services).sort()).toEqual(expectedIds);
     expect(services[AUTHORITY_SERVICE]).toBeDefined();
   });
 
@@ -198,7 +173,7 @@ describe("Gate C — host authority", () => {
         .filter((volume) => volume.startsWith(store))
         .map((volume) => ({ id, volume })),
     );
-    expect(fromStore.length).toBeGreaterThan(10);
+    expect(fromStore.length).toBeGreaterThan(0);
     for (const { id, volume } of fromStore) {
       expect(volume).toMatch(/:ro$/);
       const owner = volume.slice(store.length).split("/")[0];

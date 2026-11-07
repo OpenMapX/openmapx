@@ -200,29 +200,6 @@ it("refreshes locale and context data, clears context, and handles zoom and sour
   context = undefined;
 });
 
-it("draws a moving result's track under its marker, credited by the track, and clears it", () => {
-  fake.state.zoom = 12;
-  const tracked = results[0] as (typeof results)[number] & { track?: number[][] };
-  tracked.track = [
-    [7.99, 49.99],
-    [8, 50],
-  ];
-  useDataSourceStore.setState({ activeSource: "sample", filters: {}, viewportZoom: 12 });
-  const view = render(<DataSourceLayer />);
-  const tracks = fake.state.sources.get("ds-sample-tracks")?.data as GeoJSON.FeatureCollection;
-  expect(tracks.features).toHaveLength(1);
-  expect(tracks.features[0]?.geometry).toEqual({ type: "LineString", coordinates: tracked.track });
-  expect(fake.state.layers.get("ds-sample-tracks")).toMatchObject({ type: "line" });
-
-  act(() => {
-    useDataSourceStore.setState({ activeSource: null });
-  });
-  expect(fake.state.sources.has("ds-sample-tracks")).toBe(false);
-  expect(fake.state.layers.has("ds-sample-tracks")).toBe(false);
-  view.unmount();
-  delete tracked.track;
-});
-
 it("builds tracks only for results with two or more positions", async () => {
   const { buildTrackGeoJson } = await import("@/integration-api/map/dataSourceFeatures");
   const base = { id: "v", name: "", source: "s", variant: "plowing", coordinates: [8, 50] };
@@ -724,6 +701,15 @@ it("credits the status supplier on a visible track when its endpoint is offscree
   const view = render(<DataSourceLayer />);
   try {
     const tracks = fake.state.sources.get("ds-sample-tracks")?.data as GeoJSON.FeatureCollection;
+    expect(tracks.features).toHaveLength(1);
+    expect(tracks.features[0]?.geometry).toEqual({
+      type: "LineString",
+      coordinates: [
+        [7, 49],
+        [8, 50],
+      ],
+    });
+    expect(fake.state.layers.get("ds-sample-tracks")).toMatchObject({ type: "line" });
     fake.setRenderedFeatures("ds-sample-markers", []);
     fake.setRenderedFeatures("ds-sample-tracks", tracks.features as never);
     act(() => {
@@ -739,6 +725,9 @@ it("credits the status supplier on a visible track when its endpoint is offscree
     expect(html).toContain("status supplier");
     expect(html).not.toContain("offscreen endpoint supplier");
     expect(html).not.toContain("unused-record");
+    act(() => useDataSourceStore.setState({ activeSource: null }));
+    expect(fake.state.sources.has("ds-sample-tracks")).toBe(false);
+    expect(fake.state.layers.has("ds-sample-tracks")).toBe(false);
   } finally {
     view.unmount();
     results[0] = previous;

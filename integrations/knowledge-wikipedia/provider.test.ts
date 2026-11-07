@@ -62,6 +62,7 @@ describe("Wikipedia knowledge provider", () => {
   });
   it("returns null when the wikipedia tag is absent", async () => {
     expect(await wikipediaSource.lookup({})).toBeNull();
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -104,6 +105,55 @@ describe("Wikipedia knowledge provider", () => {
       .map((c) => String(c[0]))
       .find((u) => u.includes("/page/summary/"));
     expect(summaryUrl).toBe("https://de.wikipedia.org/api/rest_v1/page/summary/Eiffelturm");
+  });
+
+  it.each([
+    ["de", "de"],
+    [undefined, "en"],
+  ])("uses fallback language %s for an unprefixed title", async (lang, expectedLanguage) => {
+    routes = {
+      "/page/summary/": summaryBody({ thumbnail: undefined, originalimage: undefined }),
+    };
+    const result = await wikipediaSource.lookup({ wikipedia: "Eiffel Tower" }, lang);
+    expect(result?.description).toBe("Iron lattice tower in Paris");
+    expect(mockFetch.mock.calls[0]?.[0]).toBe(
+      `https://${expectedLanguage}.wikipedia.org/api/rest_v1/page/summary/Eiffel_Tower`,
+    );
+  });
+
+  it("defers a thumbnail-only image when Commons cannot supply its credit", async () => {
+    routes = {
+      "/page/summary/": summaryBody({ originalimage: undefined }),
+      "titles=": { query: { pages: {} } },
+    };
+    const result = await wikipediaSource.lookup({ wikipedia: "en:Eiffel Tower" });
+    expect(result?.photos).toBeUndefined();
+    expect(mockFetch.mock.calls.map((call) => String(call[0]))).toContainEqual(
+      expect.stringContaining("titles=File%3ATour_Eiffel.jpg"),
+    );
+  });
+
+  it("withholds an image with no Commons file identity without requesting metadata", async () => {
+    routes = {
+      "/page/summary/": summaryBody({
+        thumbnail: undefined,
+        originalimage: {
+          source: "https://some-cdn.example.com/image.jpg",
+          width: 800,
+          height: 600,
+        },
+      }),
+    };
+    const result = await wikipediaSource.lookup({ wikipedia: "en:Eiffel Tower" });
+    expect(result?.description).toBe("Iron lattice tower in Paris");
+    expect(result?.photos).toBeUndefined();
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns null when a successful summary has no extractable data", async () => {
+    routes = { "/page/summary/": {} };
+    expect(await wikipediaSource.lookup({ wikipedia: "en:Eiffel Tower" })).toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
   it("extracts the Commons filename and attaches the rich photo", async () => {

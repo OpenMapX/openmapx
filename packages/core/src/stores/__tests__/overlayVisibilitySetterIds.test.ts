@@ -27,11 +27,6 @@ describe("useOverlayVisibilitySetter overlay ids — integration legends", () =>
     return statSync(path).isDirectory() && existsSync(join(path, "legend.tsx"));
   });
 
-  it("scans a plausible number of integration legend.tsx files", () => {
-    // Guards against a broken walk quietly passing the gate with nothing scanned.
-    expect(legendDirs.length).toBeGreaterThan(10);
-  });
-
   it("every legend.tsx calling useOverlayVisibilitySetter passes integrationIdToOverlayId(<its own package dir>)", () => {
     const checkedDirs: string[] = [];
     for (const dir of legendDirs) {

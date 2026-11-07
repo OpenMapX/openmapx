@@ -10,7 +10,7 @@ vi.mock("../jobs/execution/legacy-mutation.js", () => ({
   }),
 }));
 
-import { mkdtemp } from "node:fs/promises";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -87,9 +87,25 @@ function waysToEdgesWithTwoForwardEdges(): Map<number, WayEdge[]> {
   ]);
 }
 
-async function tempCachePath(): Promise<string> {
-  return join(await mkdtemp(join(tmpdir(), "traffic-live-span-cache-")), "span-edges-cache.json");
+const roots: string[] = [];
+const crons: ReturnType<typeof setupCron>[] = [];
+function tempRoot(): string {
+  const root = mkdtempSync(join(tmpdir(), "traffic-live-conditions-"));
+  roots.push(root);
+  return root;
 }
+async function tempCachePath(): Promise<string> {
+  return join(tempRoot(), "span-edges-cache.json");
+}
+afterEach(async () => {
+  for (const cron of crons) cron.stop();
+  try {
+    await Promise.all(crons.splice(0).map((cron) => cron.closeTrafficWriter()));
+  } finally {
+    vi.useRealTimers();
+    for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  }
+});
 
 /**
  * A writer that applied every override it was handed. The cron reads the
@@ -127,11 +143,10 @@ interface Seams {
   fetchTrafficPolicy?: CronSetupOptions["fetchTrafficPolicy"];
 }
 
-let cachePathCounter = 0;
-
 function setupCronWithSeams(seams: Seams) {
-  return setupCron({
-    dataDir: "/tmp/openmapx-traffic-live-conditions",
+  const dataDir = tempRoot();
+  const cron = setupCron({
+    dataDir,
     countries: [],
     store: {} as never,
     singleFlight: {} as never,
@@ -170,10 +185,10 @@ function setupCronWithSeams(seams: Seams) {
     traceSpanEdges: seams.traceSpanEdges,
     // Never the real `<dataDir>/traffic` path: each cron gets its own scratch
     // file unless a test deliberately shares one.
-    spanEdgeCachePath:
-      seams.spanEdgeCachePath ??
-      join(tmpdir(), "openmapx-span-edge-cache-tests", `${process.pid}-${cachePathCounter++}.json`),
+    spanEdgeCachePath: seams.spanEdgeCachePath ?? join(dataDir, "span-edges-cache.json"),
   });
+  crons.push(cron);
+  return cron;
 }
 
 /** Lets a `void`-fired background refresh settle before assertions. */
@@ -190,9 +205,6 @@ describe("traffic-live conditions merge", () => {
     expect(write.mock.calls[0]?.[0].overrides?.size).toBe(0);
     expect(cron.getTrafficConditionsApplied().observationIds).toEqual([]);
     cron.stop();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
   });
 
   it("withholds the old edge map when maintenance completes while loading it", async () => {

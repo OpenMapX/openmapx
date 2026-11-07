@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createProviderAvatarSync, type ProviderAvatarDeps } from "../provider-avatar.js";
 
-const CIPHERTEXT = "$ba$stored-ciphertext-never-sent-upstream";
 const USABLE_TOKEN = "usable-plaintext-token";
 
 function build(overrides: Partial<ProviderAvatarDeps> = {}) {
@@ -71,7 +70,6 @@ describe("account update", () => {
   it("never sends a stored value upstream, only the resolved token", async () => {
     const fetchProviderImage = vi.fn(async (_provider: string, token: string) => {
       expect(token).toBe(USABLE_TOKEN);
-      expect(token).not.toBe(CIPHERTEXT);
       return undefined;
     });
     const { sync } = build({ fetchProviderImage });

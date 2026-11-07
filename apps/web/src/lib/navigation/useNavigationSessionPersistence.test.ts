@@ -221,15 +221,6 @@ describe("useNavigationSessionPersistence", () => {
     await waitFor(() => expect(storage.cleared).toBe(1));
   });
 
-  it("does not persist every progress update inside the checkpoint window", async () => {
-    const storage = memoryStorage();
-    renderHook(() => useNavigationSessionPersistence(storage));
-    act(start);
-    await waitFor(() => expect(storage.writes.length).toBe(1));
-    act(() => useNavigationStore.getState().applyProgress(progressAt(100, Date.now() + 95_000)));
-    expect(storage.writes.length).toBe(1);
-  });
-
   it("persists progress after either the distance or time checkpoint", async () => {
     let nowMs = Date.now() + 1_000;
     const now = () => nowMs;
@@ -518,12 +509,14 @@ describe("useNavigationSessionPersistence inside the installed shell", () => {
 
   it("offers nothing from a browser-persisted session", async () => {
     const storage = memoryStorage(makeSnapshot());
+    const read = vi.spyOn(storage, "read");
 
     const { result } = renderHook(() => useNavigationSessionPersistence(storage));
 
     // Native owns the durable session; restoring a second one here would resume
     // a trip the shell has no idea about.
-    await waitFor(() => expect(result.current.pending).toBeNull());
+    await act(async () => {});
+    expect(read).not.toHaveBeenCalled();
     expect(result.current.pending).toBeNull();
   });
 

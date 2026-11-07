@@ -1,8 +1,8 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const policySnapshot = vi.hoisted(() =>
   vi.fn(async () => ({
@@ -136,13 +136,22 @@ let repoRootDir: string;
 
 beforeAll(async () => {
   repoRootDir = mkdtempSync(join(tmpdir(), "openmapx-dm-state-"));
-  process.env.OPENMAPX_ROOT_DIR = repoRootDir;
-  process.env.DATA_MANAGER_AUTH_TOKEN = "test-token";
+  vi.stubEnv("OPENMAPX_ROOT_DIR", repoRootDir);
+  vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "test-token");
 
   const { dataManagerRoute } = await import("../data-manager.js");
   app = Fastify({ logger: false });
   await app.register(dataManagerRoute);
   await app.ready();
+});
+
+afterAll(async () => {
+  try {
+    await app?.close();
+  } finally {
+    vi.unstubAllEnvs();
+    if (repoRootDir) rmSync(repoRootDir, { recursive: true, force: true });
+  }
 });
 
 beforeEach(() => {

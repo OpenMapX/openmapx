@@ -170,11 +170,8 @@ function findUnsafeHrefs(file: string): string[] {
 describe("JSX href sanitization coverage", () => {
   const files = collectTsxFiles(SRC_DIR);
 
-  it("scans the web source tree", () => {
-    expect(files.length).toBeGreaterThan(100);
-  });
-
   it("guards every runtime URL passed through JSX href", () => {
+    expect(files.length).toBeGreaterThan(100);
     const offenders = files.flatMap(findUnsafeHrefs);
     expect(offenders).toEqual([]);
   });

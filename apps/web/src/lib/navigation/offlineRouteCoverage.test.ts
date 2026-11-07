@@ -132,11 +132,6 @@ describe("offline route coverage", () => {
     expect(coverage(resolver, [0.2, 0.2])).toEqual({ kind: "not-downloaded", packageIds: [] });
   });
 
-  it("uses a package downloaded after the session checkpoint", async () => {
-    const resolver = await resolverWith([record(idA, manifest(idA))]);
-    expect(coverage(resolver, [0.2, 0.2])).toEqual({ kind: "covered", packageId: idA });
-  });
-
   it("reports route-line-only when an installed package intersects the route but not the fix", async () => {
     const resolver = await resolverWith([record(idA, manifest(idA))]);
     expect(coverage(resolver, [1.5, 1.5])).toEqual({
@@ -174,25 +169,20 @@ describe("offline route coverage", () => {
     ).toEqual([idA]);
   });
 
-  it("never scans the route geometry itself", async () => {
+  it("uses cached route IDs without scanning and returns an independent result", async () => {
     const resolver = await resolverWith([record(idA, manifest(idA))]);
     const scan = vi.spyOn(resolver, "packageIdsForGeometry");
-    const cached = [idA];
-    expect(
-      getOfflineRouteCoverage({ coordinate: [1.5, 1.5], routePackageIds: cached, resolver }),
-    ).toEqual({ kind: "route-line-only", packageIds: [idA] });
-    expect(scan).not.toHaveBeenCalled();
-  });
-
-  it("returns a defensive copy of the cached route package ids", async () => {
-    const resolver = await resolverWith([record(idA, manifest(idA))]);
     const cached = [idA];
     const result = getOfflineRouteCoverage({
       coordinate: [1.5, 1.5],
       routePackageIds: cached,
       resolver,
     });
-    expect(result.kind === "route-line-only" && result.packageIds).not.toBe(cached);
+    expect(result).toEqual({ kind: "route-line-only", packageIds: [idA] });
+    expect(scan).not.toHaveBeenCalled();
+    if (result.kind !== "route-line-only") throw new Error("Expected cached route-only coverage");
+    result.packageIds.push(idB);
+    expect(cached).toEqual([idA]);
   });
 });
 

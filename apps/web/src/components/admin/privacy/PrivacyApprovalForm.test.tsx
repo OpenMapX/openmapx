@@ -15,9 +15,13 @@ vi.stubGlobal("fetch", fetchMock);
 
 describe("PrivacyApprovalForm", () => {
   beforeEach(() => {
+    let issued = 0;
     Object.defineProperty(globalThis.crypto, "randomUUID", {
       configurable: true,
-      value: () => "11111111-1111-4111-8111-111111111111",
+      value: () =>
+        issued++ === 0
+          ? "11111111-1111-4111-8111-111111111111"
+          : "22222222-2222-4222-8222-222222222222",
     });
   });
 
@@ -29,7 +33,23 @@ describe("PrivacyApprovalForm", () => {
     render(<PrivacyApprovalForm evidenceVersion="evidence-v1" onRecorded={() => undefined} />);
 
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "privacySetup.approval.record" })).toBeDisabled();
+    const submit = screen.getByRole("button", { name: "privacySetup.approval.record" });
+    expect(submit).toBeDisabled();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "security-review" } });
+    fireEvent.change(screen.getByLabelText("privacySetup.approval.reviewedAt"), {
+      target: { value: "2026-09-05T10:00" },
+    });
+    fireEvent.change(screen.getByLabelText("privacySetup.approval.expiresAt"), {
+      target: { value: "2026-10-05T10:00" },
+    });
+    expect(submit).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "privacySetup.approval.approve" }));
+    expect(submit).not.toBeDisabled();
+    fireEvent.change(screen.getByLabelText("privacySetup.approval.expiresAt"), {
+      target: { value: "2026-09-04T10:00" },
+    });
+    expect(submit).toBeDisabled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("reuses the same idempotency key when an unchanged submission is retried", async () => {
@@ -156,7 +176,9 @@ describe("PrivacyApprovalForm", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
     const payload = JSON.parse(String(request.body)) as { findingsDigest: string };
-    expect(payload.findingsDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(payload.findingsDigest).toBe(
+      "22f4789025ea21629332c328cb6ef1d4f02f7591ec14d437a0436d2cafba583f",
+    );
     expect(String(request.body)).not.toContain("review-record-2026-09");
   });
 });

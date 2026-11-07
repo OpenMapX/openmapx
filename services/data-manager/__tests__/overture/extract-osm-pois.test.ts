@@ -101,7 +101,7 @@ describe("featureToOsmPoiRecord", () => {
 
   it("uses Osmium source attributes for areas and excludes them from OSM tags", () => {
     const area = featureToOsmPoiRecord({
-      id: "a50844156",
+      id: "a999",
       geometry: {
         type: "Polygon",
         coordinates: [
@@ -113,7 +113,7 @@ describe("featureToOsmPoiRecord", () => {
           ],
         ],
       },
-      properties: { "@type": "way", "@id": 25422078, name: "WVV", amenity: "parking" },
+      properties: { "@type": "way", "@id": "25422078", name: "WVV", amenity: "parking" },
     });
 
     expect(area).toMatchObject({
@@ -122,6 +122,7 @@ describe("featureToOsmPoiRecord", () => {
       name: "WVV",
       tags: { name: "WVV", amenity: "parking" },
     });
+    expect(area?.tags).toEqual({ name: "WVV", amenity: "parking" });
   });
 
   it("decodes Osmium area IDs when source attributes are unavailable", () => {

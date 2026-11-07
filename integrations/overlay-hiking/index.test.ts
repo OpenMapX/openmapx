@@ -31,10 +31,10 @@ describe("coord-transform", () => {
   it("bboxToMercator orders output as [minX, minY, maxX, maxY]", () => {
     const [minX, minY, maxX, maxY] = bboxToMercator(45, 5, 47, 8);
     // south=45 west=5 north=47 east=8
-    expect(minX).toBeCloseTo(lngToMercatorX(5), 6);
-    expect(minY).toBeCloseTo(latToMercatorY(45), 6);
-    expect(maxX).toBeCloseTo(lngToMercatorX(8), 6);
-    expect(maxY).toBeCloseTo(latToMercatorY(47), 6);
+    expect(minX).toBeCloseTo(556597.454, 2);
+    expect(minY).toBeCloseTo(5621521.486, 2);
+    expect(maxX).toBeCloseTo(890555.926, 2);
+    expect(maxY).toBeCloseTo(5942074.072, 2);
     expect(maxX).toBeGreaterThan(minX);
     expect(maxY).toBeGreaterThan(minY);
   });

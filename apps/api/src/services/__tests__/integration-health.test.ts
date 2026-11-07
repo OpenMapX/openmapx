@@ -203,7 +203,7 @@ describe("integration-health SSRF guard", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("delegates final-response cancellation to the status-only transport", async () => {
+  it("uses status-only transport without issuing a raw fetch", async () => {
     fetchSpy.mockRejectedValue(new Error("raw fetch must not run"));
     coreServerMocks.safeFetchStatus.mockResolvedValue({
       status: 200,

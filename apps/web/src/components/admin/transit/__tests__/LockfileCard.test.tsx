@@ -152,7 +152,7 @@ function mount() {
 async function selectProposal() {
   fireEvent.mouseDown(await screen.findByLabelText("Proposal"));
   fireEvent.click(await screen.findByRole("option", { name: /main@proposed/ }));
-  await screen.findByText("Credentials for " + proposalId);
+  await screen.findByText(`Credentials for ${proposalId}`);
 }
 it("creates a paired proposal without announcing an active catalog change", async () => {
   mount();
@@ -193,16 +193,21 @@ it("requires the exact diff acknowledgement and final confirmation before activa
   expect(mocks.toast).not.toHaveBeenCalledWith("Validated catalog pair activated", "success");
   expect(await screen.findByText(/Catalog job .*running/)).toBeInTheDocument();
 });
-it("blocks activation for failed evidence and unresolved publication", async () => {
-  mocks.eligible = false;
-  mocks.validationStatus = "failed";
-  mocks.publication = "unknown";
+it.each([
+  ["failed evidence", false, "failed", "committed"],
+  ["unresolved publication", true, "passed", "unknown"],
+] as const)("blocks activation for %s", async (_label, eligible, validationStatus, publication) => {
+  mocks.eligible = eligible;
+  mocks.validationStatus = validationStatus;
+  mocks.publication = publication;
   mount();
   await selectProposal();
-  expect(screen.getByText("Staging import failed")).toBeInTheDocument();
+  if (validationStatus === "failed")
+    expect(screen.getByText("Staging import failed")).toBeInTheDocument();
   expect(screen.getByRole("checkbox")).toBeDisabled();
   expect(screen.getByRole("button", { name: "Activate validated pair" })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "Validate inactive slot" })).toBeDisabled();
+  if (publication === "unknown")
+    expect(screen.getByRole("button", { name: "Validate inactive slot" })).toBeDisabled();
   expect(mocks.activate).not.toHaveBeenCalled();
 });
 it("does not cancel a remote job when its observer unmounts or the account changes", async () => {

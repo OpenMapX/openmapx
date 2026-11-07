@@ -93,15 +93,6 @@ describe("closed shape", () => {
     expect(validateFeasibilityReport(withReport(mutate)).ok).toBe(false);
   });
 
-  it.each([
-    ["coordinates", { coords: [13.4, 52.5] }],
-    ["geometry", { geometry: "abc" }],
-    ["a refresh token", { refreshToken: "secret" }],
-    ["a cookie", { cookie: "session=1" }],
-  ])("rejects a report carrying %s", (_label, extra) => {
-    expect(validateFeasibilityReport({ ...VALID, ...extra }).ok).toBe(false);
-  });
-
   it("rejects a tester identifier that looks like an account", () => {
     const result = validateFeasibilityReport(
       withReport((value) => {

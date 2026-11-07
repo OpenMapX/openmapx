@@ -11,25 +11,15 @@ function reset() {
 describe("directionsStore transit options", () => {
   beforeEach(reset);
 
-  it("defaults to no preferred modes and 'best' route preference", () => {
-    const s = useDirectionsStore.getState();
-    expect(s.transitPreferredModes).toEqual([]);
-    expect(s.transitRoutePreference).toBe("best");
-  });
-
-  it("toggleTransitPreferredMode adds then removes a mode", () => {
+  it("toggleTransitPreferredMode adds then removes a mode and resets the selected itinerary", () => {
+    useDirectionsStore.setState({ activeItineraryIndex: 2 });
     useDirectionsStore.getState().toggleTransitPreferredMode("bus");
     expect(useDirectionsStore.getState().transitPreferredModes).toEqual(["bus"]);
+    expect(useDirectionsStore.getState().activeItineraryIndex).toBe(0);
     useDirectionsStore.getState().toggleTransitPreferredMode("subway");
     expect(useDirectionsStore.getState().transitPreferredModes).toEqual(["bus", "subway"]);
     useDirectionsStore.getState().toggleTransitPreferredMode("bus");
     expect(useDirectionsStore.getState().transitPreferredModes).toEqual(["subway"]);
-  });
-
-  it("toggling a preference resets the active itinerary index", () => {
-    useDirectionsStore.setState({ activeItineraryIndex: 2 });
-    useDirectionsStore.getState().toggleTransitPreferredMode("tram");
-    expect(useDirectionsStore.getState().activeItineraryIndex).toBe(0);
   });
 
   it("setTransitRoutePreference updates and resets the active itinerary index", () => {
@@ -51,16 +41,12 @@ describe("directionsStore transit options", () => {
     });
   });
 
-  it("defaults deutschlandticketOnly to false and toggles it", () => {
-    expect(useDirectionsStore.getState().deutschlandticketOnly).toBe(false);
-    useDirectionsStore.getState().setDeutschlandticketOnly(true);
-    expect(useDirectionsStore.getState().deutschlandticketOnly).toBe(true);
-  });
-
   it("close() resets transit options back to defaults", () => {
+    expect(useDirectionsStore.getState().deutschlandticketOnly).toBe(false);
     useDirectionsStore.getState().toggleTransitPreferredMode("train");
     useDirectionsStore.getState().setTransitRoutePreference("lessWalking");
     useDirectionsStore.getState().setDeutschlandticketOnly(true);
+    expect(useDirectionsStore.getState().deutschlandticketOnly).toBe(true);
     useDirectionsStore.getState().close();
     const s = useDirectionsStore.getState();
     expect(s.transitPreferredModes).toEqual([]);
@@ -74,14 +60,11 @@ describe("waypoint schedules", () => {
     useDirectionsStore.getState().close();
   });
 
-  it("starts with no trip time and no constraints", () => {
+  it("sets and clears a waypoint schedule", () => {
     const state = useDirectionsStore.getState();
     expect(state.timeMode).toBe("now");
     expect(state.tripTime).toBeNull();
     expect(state.hasScheduleConstraints()).toBe(false);
-  });
-
-  it("sets and clears a waypoint schedule", () => {
     useDirectionsStore.getState().setWaypointSchedule(0, { dwellSeconds: 600 });
     expect(useDirectionsStore.getState().waypoints[0].schedule).toEqual({ dwellSeconds: 600 });
     useDirectionsStore.getState().setWaypointSchedule(0, null);

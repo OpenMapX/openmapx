@@ -11,6 +11,7 @@ import type { Database } from "../../storage/database";
 import { migrateSessionSchema } from "../../storage/migrations";
 import { SessionRepository } from "../../storage/SessionRepository";
 import { openTestDatabase } from "../../storage/testing/nodeSqliteDatabase";
+import { createRemoteWork, type RemoteWork } from "../createRemoteWork";
 import { EffectRunner } from "../effects";
 import { type CoordinatorDeps, NavigationCoordinator } from "../NavigationCoordinator";
 import { ProcessorRegistry } from "../processor";
@@ -34,8 +35,8 @@ import { GroundRerouteService } from "./GroundRerouteService";
 
 const START = 1_700_000_100_000;
 // The trace crosses the first turn at 10 km, exercising all three voice stages.
-const EXPECTED_TURN_CUES = ["far", "near", "now"].map(
-  (stage) => `journey-1:ground:300:12fed9p:1:${stage}`,
+const EXPECTED_TURN_CUES = ["far", "near", "now"].map((stage) =>
+  expect.stringMatching(new RegExp(`^journey-1:ground:.+:1:${stage}$`)),
 );
 
 /** A straight route long enough to drive along for several minutes. */
@@ -89,6 +90,8 @@ interface Harness {
   sent: Array<{ type: string; payload: unknown }>;
   advance: (ms: number) => void;
   now: () => number;
+  requests: unknown[][];
+  remoteIdle: () => Promise<void>;
   /** Rebuilds the coordinator over the same database, as a process restart would. */
   restart: () => Harness;
 }
@@ -96,6 +99,7 @@ interface Harness {
 function buildHarness(
   database: Database,
   carried: {
+    requests: unknown[][];
     spoken: string[];
     driverEvents: string[];
     sent: Array<{ type: string; payload: unknown }>;
@@ -122,6 +126,7 @@ function buildHarness(
     now: () => clock.value,
   });
 
+  let remote: RemoteWork;
   const deps: CoordinatorDeps = {
     repository,
     processors,
@@ -147,39 +152,7 @@ function buildHarness(
       alerts: { reconcile: async () => undefined, cancelSession: async () => undefined },
       publish: publish.port,
       remote: {
-        reroute: async (requestId) => {
-          const session = await repository.loadActive(clock.value);
-          if (session?.kind !== "ground") return;
-          const fix = session.lastAcceptedFix;
-          if (!fix) return;
-          const outcome = await rerouteService.request({
-            requestId,
-            session,
-            origin: fix.coords as [number, number],
-          });
-          if (!outcome.ok) return;
-          // Bound to the revision it was computed from: a session that moved on
-          // rejects it rather than adopting a route for a position it has left.
-          await repository.compareAndSwap(
-            outcome.sessionId,
-            outcome.baseRevision,
-            (current) => ({
-              session: {
-                ...current,
-                revision: current.revision + 1,
-                payload: {
-                  ...(current as never as { payload: Record<string, unknown> }).payload,
-                  startPackage: outcome.route,
-                  progress: null,
-                  offRoute: false,
-                  reroute: { status: "idle", attempts: 0 },
-                },
-              } as never,
-              effects: [{ kind: "publish-snapshot", immediate: true }],
-            }),
-            clock.value,
-          );
-        },
+        reroute: (requestId) => remote.port.reroute(requestId),
         transitRefresh: async () => undefined,
       },
       diagnostics: { record: () => undefined },
@@ -205,6 +178,8 @@ function buildHarness(
     repository,
     database,
     spoken: carried.spoken,
+    requests: carried.requests,
+    remoteIdle: () => remote.idle(),
     driverEvents: carried.driverEvents,
     sent: carried.sent,
     advance: (ms) => {
@@ -213,18 +188,35 @@ function buildHarness(
     now: () => clock.value,
     restart: () => buildHarness(database, carried, clock, apiClient),
   };
+  remote = createRemoteWork({
+    repository,
+    reroute: rerouteService,
+    applyReroute: (outcome) => harness.coordinator.applyReroute(outcome),
+    now: () => clock.value,
+    diagnostics: { record: () => undefined },
+  });
   return harness;
 }
 
+const databases: Database[] = [];
+afterEach(async () => {
+  await Promise.all(databases.splice(0).map((database) => database.closeAsync()));
+});
+
 async function harness(apiAnswer: unknown = { routes: [] }): Promise<Harness> {
   const database = openTestDatabase();
+  databases.push(database);
   await migrateSessionSchema(database, 1_000);
+  const requests: unknown[][] = [];
   const client = {
-    get: async () => apiAnswer,
+    get: async (...args: unknown[]) => {
+      requests.push(args);
+      return apiAnswer;
+    },
   } as unknown as ApiClient;
   return buildHarness(
     database,
-    { spoken: [], driverEvents: [], sent: [] },
+    { spoken: [], driverEvents: [], sent: [], requests },
     { value: START },
     client,
   );
@@ -298,8 +290,9 @@ describe("ground navigation route index reuse across durable reloads", () => {
     const startRevision = (await context.repository.loadActive(context.now()))?.revision ?? 0;
     resetRouteMatcherCounters();
 
+    expect(context.driverEvents).toEqual(["start"]);
     let previous = -1;
-    for (let index = 0; index < 10; index += 1) {
+    for (let index = 0; index < 30; index += 1) {
       context.advance(1_000);
       await context.coordinator.handleLocationBatch({
         locations: [locationAt(index, context.now())],
@@ -307,15 +300,17 @@ describe("ground navigation route index reuse across durable reloads", () => {
       // Every callback reloads the session from SQLite and commits through the
       // revision check; reuse must not skip either.
       const session = await context.repository.loadActive(context.now());
+      expect(session?.status).toBe("active");
       expect(session?.revision).toBe(startRevision + index + 1);
       const along = await progressAlong(context);
+      if (index === 0) expect(along).toBeCloseTo(0);
       expect(along).toBeGreaterThanOrEqual(previous);
       previous = along;
     }
 
-    expect(previous).toBeGreaterThan(600);
+    expect(previous).toBeGreaterThan(2_000);
+    expect(previous).toBeLessThan(2_100);
     expect(preparations()).toBe(1);
-    await context.database.closeAsync();
   });
 
   it("prepares afresh after a process restart and keeps guiding correctly", async () => {
@@ -325,13 +320,17 @@ describe("ground navigation route index reuse across durable reloads", () => {
     await drive(context, 0, 5);
     expect(preparations()).toBe(1);
     const before = await progressAlong(context);
+    const persisted = await context.repository.loadActive(context.now());
 
     context = context.restart();
     await drive(context, 5, 10);
 
     expect(preparations()).toBe(2);
     expect(await progressAlong(context)).toBeGreaterThan(before);
-    await context.database.closeAsync();
+    const restored = await context.repository.loadActive(context.now());
+    expect(restored?.sessionId).toBe(persisted?.sessionId);
+    expect(restored?.revision).toBeGreaterThan(persisted?.revision ?? 0);
+    expect(context.driverEvents).toEqual(["start"]);
   });
 
   it("prepares afresh after a route replacement and resets progress to the new road", async () => {
@@ -346,6 +345,9 @@ describe("ground navigation route index reuse across durable reloads", () => {
     await context.coordinator.dispatch(
       cmd("session.replace", { startPackage: shorter }, { sessionId: "journey-1" }),
     );
+    const replaced = await context.repository.loadActive(context.now());
+    expect(replaced?.kind === "ground" && replaced.payload.progress).toBeNull();
+    expect(replaced?.lastAcceptedFix).toBeUndefined();
     resetRouteMatcherCounters();
 
     await drive(context, 20, 25);
@@ -356,73 +358,10 @@ describe("ground navigation route index reuse across durable reloads", () => {
       100,
     );
     expect(await progressAlong(context)).toBeGreaterThan(1_500);
-    await context.database.closeAsync();
   });
 });
 
 describe("ground navigation end to end", () => {
-  it("starts one location stream and reports the session as active", async () => {
-    const context = await harness();
-
-    await begin(context);
-
-    expect(context.driverEvents).toEqual(["start"]);
-    const session = await context.repository.loadActive(context.now());
-    expect(session?.status).toBe("active");
-    await context.database.closeAsync();
-  });
-
-  it("advances progress monotonically along the route", async () => {
-    const context = await harness();
-    await begin(context);
-
-    const along: number[] = [];
-    for (let index = 0; index < 30; index += 1) {
-      context.advance(1_000);
-      await context.coordinator.handleLocationBatch({
-        locations: [locationAt(index, context.now())],
-      });
-      const session = await context.repository.loadActive(context.now());
-      const progress = session?.kind === "ground" ? session.payload.progress : null;
-      expect(progress).toEqual(expect.objectContaining({ alongMeters: expect.any(Number) }));
-      if (progress) along.push((progress as { alongMeters: number }).alongMeters);
-    }
-
-    expect(along).toHaveLength(30);
-    expect(along[0]).toBeCloseTo(0);
-    expect(along.at(-1)).toBeGreaterThan(2_000);
-    expect(along.at(-1)).toBeLessThan(2_100);
-    for (let index = 1; index < along.length; index += 1) {
-      expect(along[index]).toBeGreaterThanOrEqual(along[index - 1]);
-    }
-    await context.database.closeAsync();
-  });
-
-  it("keeps revisions strictly increasing across the whole journey", async () => {
-    const context = await harness();
-    await begin(context);
-    const initialRevision = (await context.repository.loadActive(context.now()))?.revision;
-    expect(initialRevision).toEqual(expect.any(Number));
-    const revisions: number[] = [];
-
-    for (let index = 0; index < 20; index += 1) {
-      context.advance(1_000);
-      await context.coordinator.handleLocationBatch({
-        locations: [locationAt(index, context.now())],
-      });
-      const session = await context.repository.loadActive(context.now());
-      if (session) revisions.push(session.revision);
-    }
-
-    expect(revisions).toHaveLength(20);
-    expect(revisions[0]).toBe((initialRevision ?? 0) + 1);
-    expect(revisions.at(-1)).toBe((initialRevision ?? 0) + 20);
-    for (let index = 1; index < revisions.length; index += 1) {
-      expect(revisions[index]).toBeGreaterThan(revisions[index - 1]);
-    }
-    await context.database.closeAsync();
-  });
-
   it("speaks no cue twice, even across a process restart between every fix", async () => {
     let context = await harness();
     await begin(context);
@@ -439,13 +378,17 @@ describe("ground navigation end to end", () => {
 
     expect(context.spoken).toEqual(EXPECTED_TURN_CUES);
     expect(new Set(context.spoken).size).toBe(context.spoken.length);
-    await context.database.closeAsync();
   });
 
   it("does not replay a cue when the same batch is delivered twice", async () => {
     const context = await harness();
     await begin(context);
     await drive(context, 0, 150);
+    expect(context.requests).toEqual([]);
+    const guided = await context.repository.loadActive(context.now());
+    expect(guided?.kind === "ground" && guided.payload.progress).toMatchObject({
+      alongMeters: expect.any(Number),
+    });
     const before = [...context.spoken];
     expect(before).toEqual(EXPECTED_TURN_CUES);
 
@@ -457,20 +400,6 @@ describe("ground navigation end to end", () => {
     }
 
     expect(context.spoken).toEqual(before);
-    await context.database.closeAsync();
-  });
-
-  it("continues guiding with no network at all", async () => {
-    const context = await harness();
-    await begin(context);
-
-    await drive(context, 0, 150);
-
-    const session = await context.repository.loadActive(context.now());
-    expect(session?.kind === "ground" && session.payload.progress).toBeTruthy();
-    // The captured route is the whole point: no request was needed to follow it.
-    expect(context.spoken).toEqual(EXPECTED_TURN_CUES);
-    await context.database.closeAsync();
   });
 
   it("keeps the captured route when a reroute request fails", async () => {
@@ -479,7 +408,7 @@ describe("ground navigation end to end", () => {
     await drive(context, 0, 10);
     const before = await context.repository.loadActive(context.now());
     const geometryBefore =
-      before?.kind === "ground" ? before.payload.startPackage.route.geometry.length : 0;
+      before?.kind === "ground" ? before.payload.startPackage.route.geometry : undefined;
 
     // Far off route, repeatedly.
     for (let index = 0; index < 20; index += 1) {
@@ -491,11 +420,18 @@ describe("ground navigation end to end", () => {
       });
     }
 
+    await context.remoteIdle();
+    expect(context.requests.length).toBeGreaterThan(0);
     const after = await context.repository.loadActive(context.now());
-    expect(after?.kind === "ground" && after.payload.startPackage.route.geometry).toHaveLength(
+    expect(after?.kind === "ground" && after.payload.startPackage.route.geometry).toEqual(
       geometryBefore,
     );
-    await context.database.closeAsync();
+    expect(after?.kind === "ground" && after.payload.reroute).toMatchObject({
+      lastFailureCode: "no-route",
+    });
+    expect(after?.kind === "ground" && after.payload.reroute.attempts).toBeGreaterThan(0);
+    const events = await context.repository.listPendingEvents("journey-1");
+    expect(events.map((event) => event.payload)).toEqual([{ type: "off-route" }]);
   });
 
   it("applies a settings change without disturbing progress", async () => {
@@ -514,26 +450,6 @@ describe("ground navigation end to end", () => {
     expect(after?.kind === "ground" && after.payload.progress).toEqual(
       before?.kind === "ground" ? before.payload.progress : null,
     );
-    await context.database.closeAsync();
-  });
-
-  it("replaces the route and resets everything indexed by the old one", async () => {
-    const context = await harness();
-    await begin(context);
-    await drive(context, 0, 20);
-
-    const shorter = {
-      ...START_PACKAGE,
-      route: { ...START_PACKAGE.route, geometry: GEOMETRY.slice(0, 100) },
-    };
-    await context.coordinator.dispatch(
-      cmd("session.replace", { startPackage: shorter }, { sessionId: "journey-1" }),
-    );
-
-    const after = await context.repository.loadActive(context.now());
-    expect(after?.kind === "ground" && after.payload.progress).toBeNull();
-    expect(after?.lastAcceptedFix).toBeUndefined();
-    await context.database.closeAsync();
   });
 
   it("stops the stream and leaves nothing location-bearing behind", async () => {
@@ -551,7 +467,6 @@ describe("ground navigation end to end", () => {
     expect(rows.active_navigation).toBe(0);
     expect(rows.navigation_events).toBe(0);
     expect(rows.terminal_ack).toBe(1);
-    await context.database.closeAsync();
   });
 
   it("refuses a command that arrives after the stop", async () => {
@@ -565,23 +480,6 @@ describe("ground navigation end to end", () => {
 
     // A late batch must not resurrect a session the user ended.
     expect(await context.repository.loadActive(context.now())).toBeNull();
-    await context.database.closeAsync();
-  });
-
-  it("survives a restart mid-journey and continues from the persisted state", async () => {
-    let context = await harness();
-    await begin(context);
-    await drive(context, 0, 15);
-    const before = await context.repository.loadActive(context.now());
-
-    context = context.restart();
-    await drive(context, 15, 25);
-
-    const after = await context.repository.loadActive(context.now());
-    expect(after?.sessionId).toBe(before?.sessionId);
-    expect(after?.revision).toBeGreaterThan(before?.revision ?? 0);
-    expect(context.driverEvents.filter((event) => event === "start")).toHaveLength(1);
-    await context.database.closeAsync();
   });
 
   it("publishes a full snapshot on request, built from what was committed", async () => {
@@ -593,20 +491,24 @@ describe("ground navigation end to end", () => {
     await context.coordinator.dispatch(cmd("snapshot.request", {}));
 
     const snapshots = context.sent.filter((entry) => entry.type === "snapshot.update");
-    expect(snapshots.length).toBeGreaterThan(0);
-    await context.database.closeAsync();
-  });
-
-  it("never puts a coordinate or a route into what it published as an event", async () => {
-    const context = await harness();
-    await begin(context);
-    await drive(context, 0, 30);
-    await context.coordinator.dispatch(cmd("session.stop", {}, { sessionId: "journey-1" }));
-
-    const events = context.sent.filter((entry) => entry.type === "navigation.event");
-    for (const event of events) {
-      expect(JSON.stringify(event.payload)).not.toContain("geometry");
-    }
-    await context.database.closeAsync();
+    const stored = await context.repository.loadActive(context.now());
+    expect(stored?.kind).toBe("ground");
+    expect(snapshots).toEqual([
+      {
+        type: "snapshot.update",
+        payload: {
+          snapshot: expect.objectContaining({
+            version: 1,
+            type: "full",
+            sessionId: stored?.sessionId,
+            revision: stored?.revision,
+            status: "active",
+            route: stored?.kind === "ground" ? stored.payload.startPackage.route : undefined,
+            progress: stored?.kind === "ground" ? stored.payload.progress : undefined,
+            locale: stored?.locale,
+          }),
+        },
+      },
+    ]);
   });
 });

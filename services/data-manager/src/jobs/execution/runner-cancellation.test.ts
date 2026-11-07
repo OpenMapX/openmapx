@@ -79,13 +79,20 @@ function processPeer(file: string, initial: unknown, env: NodeJS.ProcessEnv = pr
   const send = (value: unknown) => child.stdin.write(JSON.stringify(value) + "\n");
   async function next(type: string): Promise<Record<string, unknown>> {
     for (;;) {
-      const line = await Promise.race([
-        iterator.next(),
-        new Promise<never>((_, reject) => {
-          const timer = setTimeout(() => reject(Error(`Child ${type} timeout: ${stderr}`)), 15000);
-          timer.unref();
-        }),
-      ]);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const line = await (async () => {
+        try {
+          return await Promise.race([
+            iterator.next(),
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(() => reject(Error(`Child ${type} timeout: ${stderr}`)), 15000);
+              timer.unref();
+            }),
+          ]);
+        } finally {
+          clearTimeout(timer);
+        }
+      })();
       if (line.done) throw Error(`Child exited before ${type}: ${stderr}`);
       const value = JSON.parse(line.value) as Record<string, unknown>;
       if (value.type === type) return value;

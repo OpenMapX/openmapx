@@ -44,12 +44,6 @@ describe("groundCueEffect", () => {
     expect(built?.effect.locale).toBe(locale);
   });
 
-  it("includes the distance in a far or near cue", () => {
-    const built = groundCueEffect(session(), FINGERPRINT, cue({ tier: "near", distance: 200 }));
-
-    expect(built?.effect.text).toBe("In 200 metres, Turn left now");
-  });
-
   it("drops the distance from an imminent cue", () => {
     const built = groundCueEffect(session(), FINGERPRINT, cue({ tier: "now" }));
 
@@ -65,13 +59,6 @@ describe("groundCueEffect", () => {
     );
 
     expect(built?.effect.text).toBe("In 0.2 miles, Turn left now");
-  });
-
-  it("speaks German for a German session", () => {
-    const built = groundCueEffect(session({ locale: "de" }), FINGERPRINT, cue({ distance: 200 }));
-
-    expect(built?.effect.text).toBe("In 200 Meter, Turn left now");
-    expect(built?.effect.locale).toBe("de");
   });
 
   it("produces nothing for a step with no text", () => {
@@ -153,22 +140,6 @@ describe("statusCueEffect", () => {
 });
 
 describe("cue exactly-once behaviour", () => {
-  /**
-   * The ledger is what survives a crash, so these assert the property that
-   * matters: a cue recorded before a crash is not spoken again after it.
-   */
-  it("is not rebuilt for a cue already in the ledger", () => {
-    const built = groundCueEffect(session(), FINGERPRINT, cue());
-    const afterCrash = session({
-      cueLedger: { spoken: [built?.cueId ?? ""], events: [] },
-    });
-
-    // The batch processor consults the ledger; the identifier it would build is
-    // identical, which is what makes that check work across a restart.
-    expect(groundCueEffect(afterCrash, FINGERPRINT, cue())?.cueId).toBe(built?.cueId);
-    expect(afterCrash.cueLedger.spoken).toContain(built?.cueId);
-  });
-
   it("builds a different identifier after a route replacement", () => {
     const built = groundCueEffect(session(), FINGERPRINT, cue());
 

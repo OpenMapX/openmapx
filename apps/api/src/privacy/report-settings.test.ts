@@ -1,23 +1,30 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resolvePrivacyReportLegalFacts } from "./report-settings.js";
 
+beforeEach(() => {
+  for (const name of [
+    "LEGAL_NAME",
+    "LEGAL_STREET",
+    "LEGAL_POSTAL_CODE",
+    "LEGAL_CITY",
+    "LEGAL_COUNTRY",
+    "LEGAL_EMAIL",
+    "LEGAL_PHONE",
+    "LEGAL_DATA_REQUEST_EMAIL",
+    "LEGAL_DEPLOYMENT_JURISDICTION",
+    "LEGAL_SUPERVISORY_AUTHORITY",
+    "LEGAL_SUPERVISORY_AUTHORITY_URL",
+    "LEGAL_PRIVACY_SOURCES",
+    "LEGAL_DSAR_CASE_RETENTION_DAYS",
+    "LEGAL_IDENTITY_EVIDENCE_RETENTION_DAYS",
+    "LEGAL_EXPORT_ARTIFACT_RETENTION_HOURS",
+  ])
+    vi.stubEnv(name, undefined);
+});
 afterEach(() => vi.unstubAllEnvs());
 
 describe("privacy report legal facts", () => {
   it("uses persisted controller facts when deployment env is unset", async () => {
-    for (const name of [
-      "LEGAL_NAME",
-      "LEGAL_STREET",
-      "LEGAL_POSTAL_CODE",
-      "LEGAL_CITY",
-      "LEGAL_COUNTRY",
-      "LEGAL_EMAIL",
-      "LEGAL_PHONE",
-      "LEGAL_DATA_REQUEST_EMAIL",
-      "LEGAL_DEPLOYMENT_JURISDICTION",
-      "LEGAL_SUPERVISORY_AUTHORITY",
-    ])
-      vi.stubEnv(name, "");
     const database = {
       select: () => ({
         from: async () => [
@@ -48,18 +55,6 @@ describe("privacy report legal facts", () => {
   });
 
   it("accepts a dedicated request contact when no general legal email is configured", async () => {
-    for (const name of [
-      "LEGAL_NAME",
-      "LEGAL_STREET",
-      "LEGAL_POSTAL_CODE",
-      "LEGAL_CITY",
-      "LEGAL_COUNTRY",
-      "LEGAL_EMAIL",
-      "LEGAL_DATA_REQUEST_EMAIL",
-      "LEGAL_DEPLOYMENT_JURISDICTION",
-      "LEGAL_SUPERVISORY_AUTHORITY",
-    ])
-      vi.stubEnv(name, "");
     const database = {
       select: () => ({
         from: async () => [
@@ -151,18 +146,6 @@ describe("privacy report legal facts", () => {
     ["legalControllerStreet", "Street 1\nHidden line", "controllerStreet"],
     ["legalControllerEmail", "not-an-email", "controllerEmail"],
   ])("rejects invalid persisted operator fact %s", async (key, value, expectedField) => {
-    for (const name of [
-      "LEGAL_NAME",
-      "LEGAL_STREET",
-      "LEGAL_POSTAL_CODE",
-      "LEGAL_CITY",
-      "LEGAL_COUNTRY",
-      "LEGAL_EMAIL",
-      "LEGAL_DATA_REQUEST_EMAIL",
-      "LEGAL_DEPLOYMENT_JURISDICTION",
-      "LEGAL_SUPERVISORY_AUTHORITY",
-    ])
-      vi.stubEnv(name, "");
     const rows = [
       { key: "legalControllerName", value: "Controller" },
       { key: "legalControllerStreet", value: "Street 1" },

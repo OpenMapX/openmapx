@@ -285,27 +285,19 @@ describe.runIf(runTraefikTests)("Traefik's dynamic directory in the agent's stat
     expect(started(traefik)).toBe(before);
   }, 120_000);
 
-  it("never shows a reader of the routes a half-written file", async () => {
+  it("keeps route files whole and, on a shared kernel, serves only complete route sets", async () => {
     const run = await replaceUnderTraefik();
     expect([...run.read.values()].reduce((sum, count) => sum + count, 0)).toBeGreaterThan(100);
     // Both versions were read, and nothing else.
     expect(new Set(run.read.keys())).toEqual(run.whole);
     expect(started(run.traefik)).toBe(run.before);
-  }, 120_000);
-
-  it.skipIf(sharedFromAnotherKernel())(
-    "never shows Traefik a missing or partial route set while render replaces it",
-    async () => {
-      const run = await replaceUnderTraefik();
+    if (!sharedFromAnotherKernel()) {
       expect(run.missing).toBe(0);
       expect(run.served.length).toBeGreaterThan(20);
-      const sets = new Set(run.served.map((names) => JSON.stringify(names)));
-      expect(sets).toEqual(
+      expect(new Set(run.served.map((names) => JSON.stringify(names)))).toEqual(
         new Set([JSON.stringify(routerNames(FEW)), JSON.stringify(routerNames(MANY))]),
       );
       expect(run.fileProviderErrors).toEqual([]);
-      expect(started(run.traefik)).toBe(run.before);
-    },
-    120_000,
-  );
+    }
+  }, 120_000);
 });

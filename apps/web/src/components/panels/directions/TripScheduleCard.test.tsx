@@ -85,20 +85,9 @@ describe("TripScheduleCard", () => {
     expect(screen.getByText("Dentist")).toBeTruthy();
     expect(screen.getByText("Airport")).toBeTruthy();
     expect(screen.getByText("10:00 – 10:30")).toBeTruthy();
-  });
-
-  it("shows a zone badge only where the stop's zone differs from the viewer's", () => {
-    render(
-      <TripScheduleCard
-        schedule={schedule}
-        fidelity="exact"
-        warnings={[]}
-        waypointLabels={labels}
-      />,
-    );
-    // The viewer sits in Europe/Berlin, so only the New York stop is off-zone.
     expect(screen.queryByText("UTC+2")).toBeNull();
     expect(screen.getByText("UTC-4")).toBeTruthy();
+    expect(screen.queryAllByTestId("schedule-day-divider")).toHaveLength(0);
   });
 
   it("shows the stay and the wait when a stop has both", () => {
@@ -180,17 +169,5 @@ describe("TripScheduleCard", () => {
       <TripScheduleCard schedule={multi} fidelity="exact" warnings={[]} waypointLabels={labels} />,
     );
     expect(screen.getAllByTestId("schedule-day-divider")).toHaveLength(1);
-  });
-
-  it("renders no divider when the trip stays on one day", () => {
-    render(
-      <TripScheduleCard
-        schedule={schedule}
-        fidelity="exact"
-        warnings={[]}
-        waypointLabels={labels}
-      />,
-    );
-    expect(screen.queryAllByTestId("schedule-day-divider")).toHaveLength(0);
   });
 });

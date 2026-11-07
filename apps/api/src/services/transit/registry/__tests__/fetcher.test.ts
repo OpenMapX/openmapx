@@ -118,7 +118,7 @@ describe("fetchRegistryEntries", () => {
     expect(entries).toEqual([]);
   });
 
-  it("Unsupported protocol filtered: efa entry is absent from results", async () => {
+  it("parses EFA entries before the manager applies adapter support", async () => {
     const efaJson = {
       name: "EFA Provider",
       type: { efa: {} }, // efa is unsupported in the manager adapter set
@@ -137,11 +137,7 @@ describe("fetchRegistryEntries", () => {
 
     const entries = await fetchRegistryEntries();
 
-    // efa protocol is in SUPPORTED_PROTOCOLS map in fetcher (protocol parsing),
-    // but let's verify it *is* actually parsed as a valid protocol in fetcher.
-    // The fetcher returns entries for any known protocol — filtering by adapter
-    // happens in the manager. So efa entries *are* returned by the fetcher.
-    // The test verifies the entry exists (protocol=efa) — manager filters it later.
+    // Parsing known protocols and selecting available adapters are separate boundaries.
     const efaEntry = entries.find((e) => e.protocol === "efa");
     // The fetcher itself supports parsing efa as a protocol type
     expect(efaEntry).toBeDefined();

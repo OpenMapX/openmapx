@@ -213,7 +213,7 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
       proof: { challengeId: started.challengeId, nonce: started.nonce },
     };
   }
-  it("verifies only the current expected email with a consumed proof, revokes sessions and audits once", async () => {
+  it("verifies only the current expected email with a consumed proof and audits once", async () => {
     const admin = await actor(),
       { provisionAccount, assistedAccountAction } = await import("./account-provisioning"),
       target = await provisionAccount({

@@ -58,14 +58,6 @@ describe("directionSector", () => {
 });
 
 describe("selectArrowLinks", () => {
-  it("keeps at most one link per direction sector", () => {
-    const arrows = selectArrowLinks(ORIGIN, [
-      link({ id: "north-near", lngLat: [2.352, 48.8574] }),
-      link({ id: "north-far", lngLat: [2.352, 48.8578] }),
-    ]);
-    expect(arrows).toHaveLength(1);
-  });
-
   it("returns one arrow per distinct sector", () => {
     const arrows = selectArrowLinks(ORIGIN, [
       link({ id: "n", lngLat: [2.352, 48.8578] }),

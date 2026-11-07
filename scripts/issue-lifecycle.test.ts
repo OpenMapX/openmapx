@@ -190,7 +190,7 @@ describe("issue lifecycle housekeeping", () => {
   it.each(["commented", "labeled"])("ignores unrelated %s actions", async (action) => {
     const f = fixture();
     await f.run(action);
-    expect(names(f.issue)).toHaveLength(3);
+    expect(names(f.issue)).toEqual(["integration", "needs-info", "needs-triage"]);
   });
   it("ignores PR payloads and non-issue events before any API access", async () => {
     const f = fixture();
@@ -199,12 +199,13 @@ describe("issue lifecycle housekeeping", () => {
     };
     await f.run("closed", "pull_request");
     await f.run("closed", "issues", { pull_request: {} });
+    expect(names(f.issue)).toEqual(["integration", "needs-info", "needs-triage"]);
   });
   it("also excludes PRs returned by the issues API", async () => {
     const f = fixture();
     f.issue.pull_request = {};
     await f.run();
-    expect(names(f.issue)).toHaveLength(3);
+    expect(names(f.issue)).toEqual(["integration", "needs-info", "needs-triage"]);
   });
   it("tolerates a raced missing label only after confirming its absence", async () => {
     const f = fixture();
@@ -223,7 +224,7 @@ describe("issue lifecycle housekeeping", () => {
         throw Object.assign(new Error("API failure"), { status });
       };
       await expect(f.run()).rejects.toThrow("API failure");
-      expect(names(f.issue)).toHaveLength(3);
+      expect(names(f.issue)).toEqual(["integration", "needs-info", "needs-triage"]);
     },
   );
   it("fails visibly on repeated concurrent changes rather than retrying forever", async () => {

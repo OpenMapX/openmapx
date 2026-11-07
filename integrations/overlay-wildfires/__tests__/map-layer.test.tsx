@@ -69,6 +69,8 @@ const FEED = {
   "noaa-hms": "us-noaa-hms-smoke",
 } as const;
 const VIIRS = "nasa-firms-viirs-fires";
+const SOURCE_ID = "openmapx-wildfires-source";
+const CIRCLE_LAYER_ID = "openmapx-wildfires-circles";
 
 function providerCollection(source: "nifc" | "effis" | "noaa-hms") {
   const id = `${source}:1`;
@@ -305,6 +307,10 @@ describe("WildfireLayer source orchestration", () => {
     useWildfireStore.setState({ showEffisBurnedAreas: false, showNoaaSmoke: true });
     render(<WildfireLayer />);
 
+    await waitFor(() =>
+      expect(fake.state.sources.has("openmapx-wildfires-nifc-source")).toBe(true),
+    );
+    expect(credits()).toEqual([]);
     await waitFor(() => {
       renderLoadedFeatures();
       expect(credits()).toEqual([VIIRS, FEED.nifc, FEED["noaa-hms"]].sort());
@@ -470,6 +476,93 @@ describe("WildfireLayer source orchestration", () => {
 
     act(() => useWildfireStore.getState().setShowNoaaSmoke(false));
     await waitFor(() => expect(popupState.instances[1]?.removeCalls).toBe(1));
+  });
+  it("keeps FIRMS inactive until showHotspots turns on, then removes it when turned off", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ type: "FeatureCollection", features: [] }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    useWildfireStore.setState({
+      showHotspots: false,
+      showNifcPerimeters: false,
+      showEffisBurnedAreas: false,
+    });
+    render(<WildfireLayer />);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fake.state.sources.has(SOURCE_ID)).toBe(false);
+
+    act(() => {
+      useWildfireStore.getState().setShowHotspots(true);
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fake.state.layers.get(CIRCLE_LAYER_ID)?.type).toBe("circle");
+
+    act(() => {
+      useWildfireStore.getState().setShowHotspots(false);
+    });
+    await waitFor(() => expect(fake.state.sources.has(SOURCE_ID)).toBe(false));
+    expect(fake.state.layers.has(CIRCLE_LAYER_ID)).toBe(false);
+  });
+
+  it("owns one popup at a time and clears the closed popup before another activation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ type: "FeatureCollection", features: [] }),
+      })),
+    );
+    useWildfireStore.setState({ showHotspots: true });
+    useWildfireStore.setState({ showNifcPerimeters: false, showEffisBurnedAreas: false });
+    render(<WildfireLayer />);
+    await waitFor(() => expect(fake.state.layers.has(CIRCLE_LAYER_ID)).toBe(true));
+
+    act(() => {
+      handler("click", CIRCLE_LAYER_ID)({ features: [HOTSPOT_FEATURE] });
+      handler("click", CIRCLE_LAYER_ID)({ features: [HOTSPOT_FEATURE] });
+    });
+    expect(popupState.instances).toHaveLength(2);
+    expect(popupState.instances[0]?.removeCalls).toBe(1);
+    expect(popupState.instances[1]?.removeCalls).toBe(0);
+
+    act(() => {
+      useWildfireStore.getState().setShowHotspots(false);
+    });
+    await waitFor(() => expect(popupState.instances[1]?.removeCalls).toBe(1));
+
+    act(() => {
+      useWildfireStore.getState().setShowHotspots(true);
+    });
+    await waitFor(() => expect(fake.state.layers.has(CIRCLE_LAYER_ID)).toBe(true));
+    act(() => {
+      handler("click", CIRCLE_LAYER_ID)({ features: [HOTSPOT_FEATURE] });
+    });
+
+    expect(popupState.instances).toHaveLength(3);
+    expect(popupState.instances[1]?.removeCalls).toBe(1);
+    expect(popupState.instances[2]?.removeCalls).toBe(0);
+  });
+
+  it("removes the current FIRMS popup exactly once when the whole coordinator unmounts", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ type: "FeatureCollection", features: [] }),
+      })),
+    );
+    useWildfireStore.setState({ showHotspots: true });
+    useWildfireStore.setState({ showNifcPerimeters: false, showEffisBurnedAreas: false });
+    const { unmount } = render(<WildfireLayer />);
+    await waitFor(() => expect(fake.state.layers.has(CIRCLE_LAYER_ID)).toBe(true));
+
+    act(() => handler("click", CIRCLE_LAYER_ID)({ features: [HOTSPOT_FEATURE] }));
+    expect(popupState.instances).toHaveLength(1);
+
+    unmount();
+    expect(popupState.instances[0]?.removeCalls).toBe(1);
   });
 });
 

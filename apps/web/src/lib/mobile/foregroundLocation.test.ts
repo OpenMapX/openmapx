@@ -35,10 +35,14 @@ function geolocationThat(
 
 /** A client whose single request answers with `answer`, recording the payload. */
 function fakeClient(answer: () => unknown) {
-  const sent: { type: string; payload: Record<string, unknown> }[] = [];
+  const sent: {
+    type: string;
+    payload: Record<string, unknown>;
+    options?: { timeoutMs?: number };
+  }[] = [];
   const client = {
-    request: (type: string, payload: Record<string, unknown>) => {
-      sent.push({ type, payload });
+    request: (type: string, payload: Record<string, unknown>, options?: { timeoutMs?: number }) => {
+      sent.push({ type, payload, options });
       const result = answer();
       return result instanceof Error ? Promise.reject(result) : Promise.resolve(result);
     },
@@ -151,5 +155,6 @@ describe("nativeForegroundFix", () => {
     // So the shell's own answer wins the race and the page reports what really
     // happened rather than a generic timeout.
     expect(sent[0].payload.timeoutMs).toBe(5_000);
+    expect(sent[0].options).toEqual({ timeoutMs: 7_000 });
   });
 });

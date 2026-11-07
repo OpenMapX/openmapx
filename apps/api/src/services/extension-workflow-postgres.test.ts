@@ -121,7 +121,6 @@ afterAll(async () => {
   if (host) rmSync(host.root, { recursive: true, force: true });
   await fixture?.stop();
   vi.restoreAllMocks();
-  vi.restoreAllMocks();
   vi.unstubAllEnvs();
 });
 it.skipIf(!enabled)(

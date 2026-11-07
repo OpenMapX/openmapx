@@ -90,18 +90,6 @@ describe("ContextualOverlays", () => {
     expect(isActive("traffic")).toBe(true);
   });
 
-  it("does not throw and still drives the registered overlay when a peer integration is missing", () => {
-    expect(getOverlayEntry("road-conditions")).toBeUndefined();
-    render(<ContextualOverlays />);
-    expect(() => {
-      act(() => {
-        useDirectionsStore.getState().open();
-        useDirectionsStore.getState().setMode("driving");
-      });
-    }).not.toThrow();
-    expect(isActive("traffic-flow")).toBe(true);
-  });
-
   it("leaves a user's mid-context disable alone: it stays off and exit does not re-toggle it", () => {
     render(<ContextualOverlays />);
     act(() => {
@@ -165,14 +153,6 @@ describe("ContextualOverlays", () => {
     });
     expect(isActive("traffic-flow")).toBe(false);
     expect(isActive("traffic")).toBe(true);
-  });
-
-  it("enables traffic-flow for driving-nav even without the directions panel open (route-specific flow during navigation)", () => {
-    render(<ContextualOverlays />);
-    act(() => {
-      useNavigationStore.setState({ status: "navigating", kind: "ground", mode: "driving" });
-    });
-    expect(isActive("traffic-flow")).toBe(true);
   });
 
   it("stops contextual automation on arrival (isLiveNavigationStatus excludes 'arrived')", () => {

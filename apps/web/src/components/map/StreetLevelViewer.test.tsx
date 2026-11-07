@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { useStreetLevelStore } from "@openmapx/core";
-import { render, waitFor } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next-intl", () => ({
@@ -77,10 +77,10 @@ describe("StreetLevelViewer consent gate", () => {
     providersMock.mockReturnValue({ providers: [direct], isLoading: false });
 
     render(<StreetLevelViewer />);
-    useStreetLevelStore.getState().requestImageLoad({ providerId: "mapillary", imageId: "xyz" });
+    await act(async () => {
+      useStreetLevelStore.getState().requestImageLoad({ providerId: "mapillary", imageId: "xyz" });
+    });
 
-    // Give any effect a chance to (wrongly) fire.
-    await new Promise((r) => setTimeout(r, 50));
     expect(useStreetLevelStore.getState().activeImage).toBeNull();
     expect(useStreetLevelStore.getState().pendingImage).toEqual({
       providerId: "mapillary",
@@ -92,9 +92,10 @@ describe("StreetLevelViewer consent gate", () => {
     // A deep link fires requestImageLoad before the providers query settles.
     providersMock.mockReturnValue({ providers: [], isLoading: true });
     const { rerender } = render(<StreetLevelViewer />);
-    useStreetLevelStore.getState().requestImageLoad({ providerId: "panoramax", imageId: "abc" });
+    await act(async () => {
+      useStreetLevelStore.getState().requestImageLoad({ providerId: "panoramax", imageId: "abc" });
+    });
 
-    await new Promise((r) => setTimeout(r, 20));
     expect(useStreetLevelStore.getState().activeImage).toBeNull();
 
     // Providers resolve.

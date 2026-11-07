@@ -5,7 +5,7 @@ import {
   DAWARICH_SUPPORTED_IMAGE_DIGEST,
 } from "@openmapx/core/privacy";
 import Fastify from "fastify";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   createDockerDawarichRuntimeInspector,
   registerDawarichSubjectExportRoute,
@@ -20,9 +20,19 @@ const request = {
   rights: ["access"] as const,
 };
 
+const apps: ReturnType<typeof Fastify>[] = [];
+afterEach(async () => {
+  await Promise.all(apps.splice(0).map((app) => app.close()));
+});
+function createApp() {
+  const app = Fastify({ logger: false });
+  apps.push(app);
+  return app;
+}
+
 describe("managed Dawarich subject export", () => {
   it("keeps the collector route fixed and streams a bounded response", async () => {
-    const app = Fastify({ logger: false });
+    const app = createApp();
     registerDawarichSubjectExportRoute(app, {
       apiToken: "api-token",
       inspectRuntime: async () => ({
@@ -53,7 +63,7 @@ describe("managed Dawarich subject export", () => {
   });
 
   it("rejects an image or revision drift before running the collector", async () => {
-    const app = Fastify({ logger: false });
+    const app = createApp();
     let called = false;
     registerDawarichSubjectExportRoute(app, {
       apiToken: "api-token",
@@ -80,7 +90,7 @@ describe("managed Dawarich subject export", () => {
   });
 
   it("aborts and destroys a collector that exceeds the streaming byte bound", async () => {
-    const app = Fastify({ logger: false });
+    const app = createApp();
     let source!: Readable;
     let collectorSignal!: AbortSignal;
     registerDawarichSubjectExportRoute(app, {
@@ -107,15 +117,9 @@ describe("managed Dawarich subject export", () => {
   });
 
   it("does not consume a request id when a different request is already running", async () => {
-    const app = Fastify({ logger: false });
-    let started!: () => void;
-    let release!: () => void;
-    const collectorStarted = new Promise<void>((resolve) => {
-      started = resolve;
-    });
-    const collectorRelease = new Promise<void>((resolve) => {
-      release = resolve;
-    });
+    const app = createApp();
+    const started = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
     registerDawarichSubjectExportRoute(app, {
       apiToken: "api-token",
       inspectRuntime: async () => ({
@@ -124,35 +128,40 @@ describe("managed Dawarich subject export", () => {
         commit: DAWARICH_SUPPORTED_COMMIT,
       }),
       runCollector: async () => {
-        started();
-        await collectorRelease;
+        started.resolve();
+        await release.promise;
         return Readable.from([Buffer.from("tar")]);
       },
     });
     await app.ready();
-    const first = app.inject({
-      method: "POST",
-      url: "/v1/privacy/dawarich-subject-export",
-      headers: { authorization: "Bearer api-token" },
-      payload: request,
-    });
-    await collectorStarted;
-    const busy = await app.inject({
-      method: "POST",
-      url: "/v1/privacy/dawarich-subject-export",
-      headers: { authorization: "Bearer api-token" },
-      payload: request,
-    });
-    expect(busy.statusCode).toBe(409);
-    release();
-    expect((await first).statusCode).toBe(200);
-    const replay = await app.inject({
-      method: "POST",
-      url: "/v1/privacy/dawarich-subject-export",
-      headers: { authorization: "Bearer api-token" },
-      payload: request,
-    });
-    expect(replay.statusCode).toBe(409);
+    const send = (payload: typeof request) =>
+      app.inject({
+        method: "POST",
+        url: "/v1/privacy/dawarich-subject-export",
+        headers: { authorization: "Bearer api-token" },
+        payload,
+      });
+    const first = send(request);
+    await started.promise;
+    const waiting = { ...request, requestId: "00000000-0000-4000-8000-000000000002" };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const busy = await Promise.race([
+        send(waiting),
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => reject(Error("busy request did not refuse promptly")), 2000);
+        }),
+      ]);
+      expect(busy.statusCode).toBe(409);
+      expect(busy.json()).toMatchObject({ error: "busy" });
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      release.resolve();
+      expect((await first).statusCode).toBe(200);
+    }
+    expect((await send(waiting)).statusCode).toBe(200);
+    expect((await send(waiting)).statusCode).toBe(409);
+    expect((await send(request)).statusCode).toBe(409);
   });
 
   it("inspects the pinned image, digest and collector revision without exposing env values", async () => {

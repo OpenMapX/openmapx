@@ -43,10 +43,9 @@ function buildFakeDb(rows: Array<{ id: string }>): {
 
 describe("reconcileOrphanedJobs", () => {
   it("marks orphaned legacy jobs interrupted without inventing a containment time", async () => {
-    const now = new Date("2026-06-27T10:00:00.000Z");
     const { handle, captured } = buildFakeDb([{ id: "job-a" }, { id: "job-b" }]);
 
-    const ids = await reconcileOrphanedJobs({ db: handle, now: () => now });
+    const ids = await reconcileOrphanedJobs({ db: handle });
 
     expect(ids).toEqual(["job-a", "job-b"]);
     expect(captured.whereCalled).toBe(true);

@@ -254,7 +254,7 @@ function geometryIntersects(
   return false;
 }
 
-/** The pre-index resolver behaviour, kept verbatim as the differential oracle. */
+/** Historical pre-index oracle for pruning parity; literal geometry cases own geometric truth. */
 function exhaustiveCompatible(
   records: readonly OfflinePackageRecord[],
   allowedPackageIds?: readonly string[],
@@ -342,17 +342,73 @@ describe("offline package resolver index", () => {
     expect(resolver.get(specs[0].id)).toBeUndefined();
   });
 
-  it("keeps empty and single-point geometry behaviour", async () => {
-    const records = createCatalogSpecs(32, 2).map((spec) => createRecord(spec));
-    const resolver = await createResolverFor(records);
-    expect(resolver.packageIdsForGeometry([])).toEqual([]);
-    const point: [number, number] = [
-      (records[0].manifest.coverage.bbox.west + records[0].manifest.coverage.bbox.east) / 2,
-      (records[0].manifest.coverage.bbox.south + records[0].manifest.coverage.bbox.north) / 2,
+  it("returns exact package IDs for literal boundary and crossing geometries", async () => {
+    const id = packageIdFor(1);
+    const record = createRecord({
+      id,
+      bbox: { west: 0, south: 0, east: 1, north: 1 },
+      generatedAt: GENERATED_AT[0],
+      status: "ready",
+      datasetId: "openmapx",
+      tileSchema: "openmaptiles",
+    });
+    const resolver = await createResolverFor([record]);
+    const cases: Array<{ geometry: [number, number][]; expected: string[] }> = [
+      { geometry: [], expected: [] },
+      { geometry: [[0.5, 0.5]], expected: [id] },
+      { geometry: [[2, 2]], expected: [] },
+      {
+        geometry: [
+          [-1, 0.5],
+          [2, 0.5],
+        ],
+        expected: [id],
+      },
+      {
+        geometry: [
+          [2, 0.5],
+          [-1, 0.5],
+        ],
+        expected: [id],
+      },
+      {
+        geometry: [
+          [0.5, -1],
+          [0.5, 2],
+        ],
+        expected: [id],
+      },
+      {
+        geometry: [
+          [-1, 1],
+          [2, 1],
+        ],
+        expected: [id],
+      },
+      {
+        geometry: [
+          [-1, 0],
+          [0, 0],
+        ],
+        expected: [id],
+      },
+      {
+        geometry: [
+          [-1, 0.9],
+          [0.9, 2],
+        ],
+        expected: [],
+      },
+      {
+        geometry: [
+          [-1, 2],
+          [2, 2],
+        ],
+        expected: [],
+      },
     ];
-    expect(resolver.packageIdsForGeometry([point])).toEqual(
-      exhaustivePackageIdsForGeometry(records, [point]),
-    );
+    for (const { geometry, expected } of cases)
+      expect(resolver.packageIdsForGeometry(geometry)).toEqual(expected);
   });
 
   it("still exposes non-ready and incompatible records through get()", async () => {

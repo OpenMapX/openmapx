@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  rmSync,
   statSync,
   utimesSync,
   writeFileSync,
@@ -11,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./administrative-runtime", () => ({
   inspectBackupInventory: vi.fn(() => ({ backups: [], warningCount: 0 })),
@@ -42,8 +43,14 @@ function digest(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+const roots: string[] = [];
+afterEach(() => {
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
 function makeBackup() {
   const root = mkdtempSync(join(tmpdir(), "openmapx-privacy-backup-runtime-"));
+  roots.push(root);
   chmodSync(root, 0o700);
   const backupId = "backup-1";
   const backupDirectory = join(root, "infra", "docker", "backups", backupId);

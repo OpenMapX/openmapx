@@ -86,62 +86,61 @@ describe("processTransitBatch parity with the shared engine", () => {
 });
 
 describe("processTransitBatch commits", () => {
-  it("advances exactly one revision per batch", () => {
-    const current = session();
+  it.each([{ fixes: [] }, { fixes: [fixAt(NOW - 2_000), fixAt(NOW - 1_000), fixAt(NOW)] }])(
+    "commits one revision and snapshot per callback (%p)",
+    ({ fixes }) => {
+      const current = session();
 
-    const outcome = run({
-      session: current,
-      fixes: [fixAt(NOW - 2_000), fixAt(NOW - 1_000), fixAt(NOW)],
+      const outcome = run({
+        session: current,
+        fixes,
+      });
+
+      expect(outcome.session.revision).toBe(current.revision + 1);
+      expect(
+        (outcome.effects ?? []).filter((effect) => effect.kind === "publish-snapshot"),
+      ).toHaveLength(1);
+    },
+  );
+
+  it("keeps complete moving progress and cue state across batched, single and cold-cache callbacks", () => {
+    const initial = session();
+    const itinerary = initial.payload.startPackage.itinerary as {
+      legs: Array<Record<string, unknown>>;
+    };
+    Object.assign(itinerary.legs[0], {
+      from: { name: "Home", lat: 50.11, lng: 8.67 },
+      to: { name: "Platform", lat: 50.11, lng: 8.68 },
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [8.67, 50.11],
+          [8.68, 50.11],
+        ],
+      },
     });
-
-    expect(outcome.session.revision).toBe(current.revision + 1);
-  });
-
-  it("advances one revision even for a wake-up with no fix", () => {
-    const current = session();
-
-    expect(run({ session: current, fixes: [] }).session.revision).toBe(current.revision + 1);
-  });
-
-  it("publishes one snapshot for the batch", () => {
-    const outcome = run({ fixes: [fixAt(NOW - 1_000), fixAt(NOW)] });
-
-    expect((outcome.effects ?? []).filter((e) => e.kind === "publish-snapshot")).toHaveLength(1);
-  });
-
-  it("reaches the same state whether fixes arrive singly or as one batch", () => {
-    const fixes = [fixAt(NOW - 3_000), fixAt(NOW - 2_000), fixAt(NOW - 1_000)];
-
-    let singly = session();
-    const cache = new TransitItineraryCache();
-    for (const fix of fixes) {
-      singly = run({ session: singly, fixes: [fix], nowMs: fix.timestampMs, cache })
-        .session as TransitMobileSession;
-    }
-    const batched = run({ fixes, nowMs: fixes[fixes.length - 1].timestampMs })
-      .session as TransitMobileSession;
-
-    expect(batched.payload.tickState.currentLegIndex).toBe(
-      singly.payload.tickState.currentLegIndex,
+    const fixes = [8.672, 8.676, 8.679].map((lng, index) =>
+      fixAt(NOW - (3 - index) * 60_000, { coords: [lng, 50.11] }),
     );
-    expect(batched.payload.tickState.phase).toBe(singly.payload.tickState.phase);
-  });
-
-  it("is unaffected by recreating the prepared itinerary cache between fixes", () => {
-    const fixes = [fixAt(NOW - 3_000), fixAt(NOW - 2_000), fixAt(NOW - 1_000)];
-
-    const drive = (recreate: boolean) => {
-      let current = session();
+    const batched = run({
+      session: structuredClone(initial),
+      fixes,
+      nowMs: fixes.at(-1)!.timestampMs,
+    }).session as TransitMobileSession;
+    expect(batched.lastAcceptedFix?.coords).toEqual([8.679, 50.11]);
+    expect(batched.payload.progress).not.toBeNull();
+    for (const recreate of [false, true]) {
+      let current = structuredClone(initial);
       let cache = new TransitItineraryCache();
       for (const fix of fixes) {
         if (recreate) cache = new TransitItineraryCache();
         current = run({ session: current, fixes: [fix], nowMs: fix.timestampMs, cache })
           .session as TransitMobileSession;
       }
-      return current;
-    };
-
-    expect(drive(true).payload.tickState).toEqual(drive(false).payload.tickState);
+      expect(current.payload).toEqual(batched.payload);
+      expect(current.lastAcceptedFix).toEqual(batched.lastAcceptedFix);
+      expect(current.cueLedger).toEqual(batched.cueLedger);
+    }
   });
 });
 
@@ -183,23 +182,6 @@ describe("processTransitBatch events", () => {
     const outcome = run({ session: muted, action: { type: "alight", legIndex: 1 } });
     expect((outcome.effects ?? []).filter((e) => e.kind === "speak")).toEqual([]);
     expect(outcome.session.cueLedger.events.length).toBeGreaterThan(0);
-  });
-
-  it("marks the session arrived when the engine says so", () => {
-    const arriving = riding();
-    arriving.payload.tickState.currentLegIndex = 2;
-    arriving.payload.tickState.phase = "walking";
-
-    const outcome = run({
-      session: arriving,
-      nowMs: new Date("2026-08-09T09:30:00Z").getTime(),
-    });
-
-    if (outcome.arrived) {
-      expect(outcome.session.status).toBe("arrived");
-    } else {
-      expect(outcome.session.status).toBe("active");
-    }
   });
 
   it("preserves an active session from alighting through the final walk", () => {
@@ -266,13 +248,6 @@ describe("processTransitBatch location profile", () => {
 });
 
 describe("TransitItineraryCache", () => {
-  it("reuses one prepared index for the same itinerary object", () => {
-    const cache = new TransitItineraryCache();
-    const current = session();
-
-    expect(cache.preparedFor(current)).toBe(cache.preparedFor(current));
-  });
-
   it("reuses geometry and stops after storage reload, invalidating only for changed navigation data", () => {
     const cache = new TransitItineraryCache();
     const first = cache.preparedFor(session());
@@ -357,18 +332,13 @@ describe("processTransitBatch stop areas", () => {
     const withAreas = run({ session: sessionWithAreas(true), fixes: [fix] });
     const without = run({ session: sessionWithAreas(false), fixes: [fix] });
     expect((withAreas.session as TransitMobileSession).payload.tickState.currentLegIndex).toBe(1);
-    expect((without.session as TransitMobileSession).payload.tickState.currentLegIndex).toBe(0);
-  });
-
-  it("publishes the engine's leg and phase as the page's follow-along progress", () => {
-    const fix = fixAt(NOW, { coords: [8.6758, 50.11], accuracy: 5 });
-    const outcome = run({ session: sessionWithAreas(true), fixes: [fix] });
-    expect((outcome.session as TransitMobileSession).payload.progress).toMatchObject({
+    expect((withAreas.session as TransitMobileSession).payload.progress).toMatchObject({
       currentLegIndex: 1,
       phase: "waiting-to-board",
       arrived: false,
       position: [8.6758, 50.11],
     });
+    expect((without.session as TransitMobileSession).payload.tickState.currentLegIndex).toBe(0);
   });
 
   it("does not report a position before any fix is accepted", () => {

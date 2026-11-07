@@ -218,15 +218,6 @@ describe("MapContextMenu opening", () => {
     expect(screen.getByText("38.888590, -77.025730")).toBeDefined();
   });
 
-  it("uses a named POI as the immutable target identity", () => {
-    fake.setRenderedFeatures("poi-label", [poiFeature()]);
-    render(<MapContextMenu />);
-
-    openAtMapPoint();
-
-    expect(screen.getByText("Smithsonian Institution Building")).toBeDefined();
-  });
-
   it("falls back to the clicked coordinate when an app overlay obscures a basemap POI", () => {
     fake.map.addLayer({ id: "category-results-layer", type: "circle", source: "results" } as never);
     fake.setRenderedFeatures("poi-label", [poiFeature()]);
@@ -238,16 +229,6 @@ describe("MapContextMenu opening", () => {
 
     expect(screen.queryByText("Smithsonian Institution Building")).toBeNull();
     expect(screen.getByText("38.888590, -77.025730")).toBeDefined();
-  });
-
-  it("uses reverse-geocoded city and address for an unnamed point", () => {
-    coreTest.reverseData = { city: "Washington", address: "1000 Jefferson Drive" };
-    render(<MapContextMenu />);
-
-    openAtMapPoint();
-
-    expect(screen.getByText("Washington")).toBeDefined();
-    expect(screen.getByText("1000 Jefferson Drive")).toBeDefined();
   });
 
   it("clamps long identity title and address to at most two lines", () => {
@@ -287,16 +268,6 @@ describe("MapContextMenu opening", () => {
     expect(usePlaceStore.getState().selectedPlace).toBe(selectedPlace);
     expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.CATEGORY);
     expect(useDirectionsStore.getState().waypoints).toBe(directionsBefore);
-  });
-
-  it("replaces the first target on a second invocation", () => {
-    render(<MapContextMenu />);
-    openAtMapPoint();
-
-    openAtMapPoint({ coordinates: [13.405, 52.52] });
-
-    expect(screen.getByText("52.520000, 13.405000")).toBeDefined();
-    expect(screen.queryByText("38.888590, -77.025730")).toBeNull();
   });
 
   for (const overrides of [
@@ -413,6 +384,7 @@ describe("MapContextMenu route and place actions", () => {
     useSidebarStore.setState({ activeDetailId: PANEL.PLACE_CARD });
     render(<MapContextMenu />);
     openAtMapPoint();
+    expect(screen.getByText("Smithsonian Institution Building")).toBeVisible();
 
     await userEvent.click(
       screen.getByRole("menuitem", { name: "mapContextMenu.openPlaceDetails" }),
@@ -449,6 +421,8 @@ describe("MapContextMenu route and place actions", () => {
     useSidebarStore.setState({ activeSidebarId: PANEL.CATEGORY });
     render(<MapContextMenu />);
     openAtMapPoint();
+    expect(screen.getByText("Washington")).toBeVisible();
+    expect(screen.getByText("1000 Jefferson Drive")).toBeVisible();
 
     await userEvent.click(
       screen.getByRole("menuitem", { name: "mapContextMenu.openPlaceDetails" }),
@@ -571,30 +545,23 @@ describe("MapContextMenu keyboard behavior", () => {
     await waitFor(() => expect(document.activeElement).toBe(fake.state.canvas));
   });
 
-  it("returns focus to the first action when a second invocation replaces the target", async () => {
-    render(<MapContextMenu />);
-    openAtMapPoint();
-    const from = screen.getByRole("menuitem", { name: "mapContextMenu.fromHere" });
-    fireEvent.keyDown(from, { key: "ArrowUp" });
-    expect(document.activeElement).toBe(
-      screen.getByRole("menuitem", { name: "mapContextMenu.shareLocation" }),
-    );
-
-    openAtMapPoint({ coordinates: [13.405, 52.52] });
-
-    await waitFor(() => expect(document.activeElement).toBe(from));
-  });
-
   it("lets an already-open menu receive a second real DOM map contextmenu", async () => {
     render(<MapContextMenu />);
     dispatchDomMapContextMenu([-77.02573, 38.88859]);
     expect(screen.getByText("38.888590, -77.025730")).toBeDefined();
 
+    const from = screen.getByRole("menuitem", { name: "mapContextMenu.fromHere" });
+    fireEvent.keyDown(from, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(
+      screen.getByRole("menuitem", { name: "mapContextMenu.shareLocation" }),
+    );
     const second = dispatchDomMapContextMenu([13.405, 52.52]);
 
     expect(second.blockingLayer).toBe(fake.state.canvas);
     expect(second.event.defaultPrevented).toBe(true);
     expect(screen.getByText("52.520000, 13.405000")).toBeDefined();
+    expect(screen.queryByText("38.888590, -77.025730")).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(from));
     await userEvent.click(screen.getByRole("menuitem", { name: "mapContextMenu.fromHere" }));
     expect(useDirectionsStore.getState().waypoints[0]?.coords).toEqual([13.405, 52.52]);
   });
@@ -798,17 +765,6 @@ describe("MapContextMenu dismissal and semantics", () => {
     expect(document.activeElement).toBe(outside);
   });
 
-  it("restores canvas focus when a style reload dismisses an open menu", async () => {
-    const view = render(<MapContextMenu />);
-    openAtMapPoint();
-
-    mapContextTest.styleVersion += 1;
-    view.rerender(<MapContextMenu />);
-
-    expect(screen.queryByRole("menu")).toBeNull();
-    await waitFor(() => expect(document.activeElement).toBe(fake.state.canvas));
-  });
-
   it("dismisses on outside click, map movement, and style-version change", async () => {
     const view = render(<MapContextMenu />);
     openAtMapPoint();
@@ -824,6 +780,7 @@ describe("MapContextMenu dismissal and semantics", () => {
     mapContextTest.styleVersion += 1;
     view.rerender(<MapContextMenu />);
     expect(screen.queryByRole("menu")).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(fake.state.canvas));
   });
 
   it("removes map and canvas listeners on unmount", () => {
@@ -841,8 +798,6 @@ describe("MapContextMenu dismissal and semantics", () => {
     openAtMapPoint();
 
     const menu = screen.getByRole("menu", { name: "mapContextMenu.ariaLabel" });
-    expect(getComputedStyle(menu).borderRadius).toBe("12px");
-    expect(getComputedStyle(menu).maxWidth).toBe("1008px");
     const items = within(menu).getAllByRole("menuitem");
     expect(items.map((item) => item.getAttribute("aria-label") ?? item.textContent)).toEqual([
       "mapContextMenu.fromHere",

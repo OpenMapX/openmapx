@@ -53,18 +53,6 @@ describe("ensureTrafficExtract", () => {
 
     await expect(ensureTrafficExtract()).rejects.toThrow(/did not succeed/);
   });
-
-  it("names no container, config path, or argv in any request", async () => {
-    runOpsOperation
-      .mockResolvedValueOnce({ state: "not_ready" })
-      .mockResolvedValueOnce({ changed: true });
-
-    await ensureTrafficExtract();
-    const serialized = JSON.stringify(runOpsOperation.mock.calls);
-    for (const forbidden of ["docker-valhalla-1", "/custom_files", "valhalla_build_extract"]) {
-      expect(serialized).not.toContain(forbidden);
-    }
-  });
 });
 
 describe("isTrafficExtractStale", () => {

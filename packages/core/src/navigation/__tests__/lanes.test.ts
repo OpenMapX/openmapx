@@ -29,20 +29,13 @@ describe("resolveRecommendedLanes", () => {
   });
   it("preserves explicit engine rejection instead of guessing from turn arrows", () => {
     const lanes = [lane(["left"], false), lane(["through"], false), lane(["right"], false)];
-    expect(
-      resolveRecommendedLanes(lanes, { type: "turn", modifier: "left" }).map((l) => l.valid),
-    ).toEqual([false, false, false]);
+    const out = resolveRecommendedLanes(lanes, { type: "turn", modifier: "left" });
+    expect(out.map((l) => l.valid)).toEqual([false, false, false]);
+    expect(out[0].active).toBeUndefined();
   });
   it("trusts the engine when a lane is already valid", () => {
     const lanes = [lane(["left"], true), lane(["through"])];
     expect(resolveRecommendedLanes(lanes, { type: "turn", modifier: "right" })).toBe(lanes);
-  });
-
-  it("does not override rejection even for an exact turn match", () => {
-    const lanes = [lane(["left"]), lane(["through"]), lane(["right"])];
-    const out = resolveRecommendedLanes(lanes, { type: "turn", modifier: "left" });
-    expect(out.map((l) => l.valid)).toEqual([false, false, false]);
-    expect(out[0].active).toBeUndefined();
   });
 
   it("does not infer branch identity from the same side", () => {

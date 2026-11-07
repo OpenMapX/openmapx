@@ -109,15 +109,6 @@ describe("AuthDialog dismissal policy", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("remains dismissible by default", async () => {
-    const { AuthDialog } = await import("./AuthDialog");
-    const onClose = vi.fn();
-    render(<AuthDialog open onClose={onClose} />);
-
-    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
-    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-  });
-
   it("cannot be dismissed by Escape, backdrop or a close action when disabled", async () => {
     const { AuthDialog } = await import("./AuthDialog");
     const onClose = vi.fn();

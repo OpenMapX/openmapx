@@ -1,6 +1,6 @@
 import Alert, { type AlertProps } from "@mui/material/Alert";
 
-export const COMPACT_ALERT_SX = {
+const COMPACT_ALERT_SX = {
   py: 0,
   "& .MuiAlert-action": {
     alignItems: "center",

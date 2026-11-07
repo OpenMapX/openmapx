@@ -95,7 +95,7 @@ describe("GET /preset-suggest", () => {
     await handler({ query: { q: "shop", lang: "en", limit: "2" } }, reply);
 
     const payload = reply.payload as { matches: unknown[] };
-    expect(payload.matches.length).toBeLessThanOrEqual(2);
+    expect(payload.matches).toHaveLength(2);
   });
 
   it("falls back to the default cap when limit is non-numeric (NaN protection)", async () => {
@@ -109,6 +109,6 @@ describe("GET /preset-suggest", () => {
     const payload = reply.payload as { matches: unknown[] };
     // Default cap is 8 matches; before the fix NaN bypassed the cap entirely
     // and the route returned every match (potentially hundreds).
-    expect(payload.matches.length).toBeLessThanOrEqual(8);
+    expect(payload.matches).toHaveLength(8);
   });
 });

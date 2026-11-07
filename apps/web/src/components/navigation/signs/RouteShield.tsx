@@ -33,7 +33,6 @@ export function RouteShield({ roadRef, country, size = "banner" }: Props) {
       component="span"
       role="img"
       aria-label={roadRef}
-      data-bg={colors.bg}
       sx={{
         display: "inline-block",
         borderRadius: 1,

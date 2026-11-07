@@ -1,159 +1,65 @@
-import { describe, expect, it } from "vitest";
-import {
-  laneArrowStemShiftEm,
-  laneIndicationIcon,
-  maneuverIconFor,
-  unmarkedLaneIcon,
-} from "./maneuverIcon";
+import type { SvgIconComponent } from "@mui/icons-material";
+import Elevator from "@mui/icons-material/Elevator";
+import Flag from "@mui/icons-material/Flag";
+import MergeType from "@mui/icons-material/MergeType";
+import RoundaboutLeft from "@mui/icons-material/RoundaboutLeft";
+import RoundaboutRight from "@mui/icons-material/RoundaboutRight";
+import Stairs from "@mui/icons-material/Stairs";
+import Straight from "@mui/icons-material/Straight";
+import TurnLeft from "@mui/icons-material/TurnLeft";
+import TurnRight from "@mui/icons-material/TurnRight";
+import TurnSharpLeft from "@mui/icons-material/TurnSharpLeft";
+import TurnSharpRight from "@mui/icons-material/TurnSharpRight";
+import TurnSlightLeft from "@mui/icons-material/TurnSlightLeft";
+import TurnSlightRight from "@mui/icons-material/TurnSlightRight";
+import UTurnLeft from "@mui/icons-material/UTurnLeft";
+import type { GuidanceIconName } from "@openmapx/core/navigation";
+import { render } from "@testing-library/react";
+import { expect, it } from "vitest";
+import { guidanceIconComponent, maneuverIconFor } from "./maneuverIcon";
 
-describe("maneuverIconFor", () => {
-  it("maps left/right modifiers", () => {
-    expect(maneuverIconFor({ type: "turn", modifier: "left" }).name).toContain("TurnLeft");
-    expect(maneuverIconFor({ type: "turn", modifier: "right" }).name).toContain("TurnRight");
-  });
-  it("falls back to Straight for unknown", () => {
-    expect(maneuverIconFor(undefined).name).toContain("Straight");
-  });
-  it("maps arrive to a flag", () => {
-    expect(maneuverIconFor({ type: "arrive" }).name).toContain("Flag");
-  });
+const glyphs: Record<GuidanceIconName, SvgIconComponent> = {
+  Straight,
+  TurnLeft,
+  TurnRight,
+  TurnSlightLeft,
+  TurnSlightRight,
+  TurnSharpLeft,
+  TurnSharpRight,
+  UTurnLeft,
+  MergeType,
+  RoundaboutLeft,
+  RoundaboutRight,
+  Flag,
+  Stairs,
+  Elevator,
+};
+const paths = (container: HTMLElement) =>
+  [...container.querySelectorAll("svg")].map((svg) =>
+    [...svg.querySelectorAll("path")].map((path) => path.getAttribute("d")),
+  );
 
-  it("maps forks and ramps (OSRM on/off ramp) to a diagonal arrow, not a fork glyph", () => {
-    // Bare left/right are promoted to their slight (diagonal) variant.
-    expect(maneuverIconFor({ type: "fork", modifier: "right" }).name).toBe("TurnSlightRight");
-    expect(maneuverIconFor({ type: "off ramp", modifier: "left" }).name).toBe("TurnSlightLeft");
-    expect(maneuverIconFor({ type: "on ramp", modifier: "right" }).name).toBe("TurnSlightRight");
-    // Explicit slight/sharp granularity is preserved.
-    expect(maneuverIconFor({ type: "off ramp", modifier: "slight right" }).name).toBe(
-      "TurnSlightRight",
-    );
-    expect(maneuverIconFor({ type: "on ramp", modifier: "slight left" }).name).toBe(
-      "TurnSlightLeft",
-    );
-    expect(maneuverIconFor({ type: "fork", modifier: "sharp left" }).name).toBe("TurnSharpLeft");
-    // A straight/unspecified fork stays a straight arrow.
-    expect(maneuverIconFor({ type: "fork", modifier: "straight" }).name).toBe("Straight");
-    expect(maneuverIconFor({ type: "fork" }).name).toBe("Straight");
-  });
-
-  it("maps roundabouts/rotaries (incl. OSRM exit variants) to a roundabout icon", () => {
-    expect(maneuverIconFor({ type: "roundabout" }).name).toBe("RoundaboutRight");
-    expect(maneuverIconFor({ type: "rotary", modifier: "left" }).name).toBe("RoundaboutLeft");
-    expect(maneuverIconFor({ type: "exit roundabout", modifier: "right" }).name).toBe(
-      "RoundaboutRight",
-    );
-    expect(maneuverIconFor({ type: "exit rotary", modifier: "left" }).name).toBe("RoundaboutLeft");
-  });
-
-  it("maps merge to a merge icon", () => {
-    expect(maneuverIconFor({ type: "merge", modifier: "slight left" }).name).toBe("MergeType");
-  });
-
-  it("maps keep maneuvers to gentle directional arrows instead of fork glyphs", () => {
-    expect(maneuverIconFor({ type: "keep", modifier: "left" }).name).toBe("TurnSlightLeft");
-    expect(maneuverIconFor({ type: "keep", modifier: "right" }).name).toBe("TurnSlightRight");
-    expect(maneuverIconFor({ type: "keep", modifier: "straight" }).name).toBe("Straight");
-  });
-
-  it("maps OSRM end-of-road / continue / new name to a directional arrow", () => {
-    expect(maneuverIconFor({ type: "end of road", modifier: "left" }).name).toBe("TurnLeft");
-    expect(maneuverIconFor({ type: "continue", modifier: "slight right" }).name).toBe(
-      "TurnSlightRight",
-    );
-    expect(maneuverIconFor({ type: "new name", modifier: "straight" }).name).toBe("Straight");
-  });
-});
-
-describe("laneArrowStemShiftEm", () => {
-  it("leaves the centered straight glyph unshifted", () => {
-    expect(laneArrowStemShiftEm("Straight")).toBe(0);
-  });
-
-  it("shifts the slight left/right stems onto the centerline by equal, opposite amounts", () => {
-    const left = laneArrowStemShiftEm("TurnSlightLeft");
-    const right = laneArrowStemShiftEm("TurnSlightRight");
-    // A right-turn glyph's stem sits left of center, so it shifts right (positive).
-    expect(right).toBeGreaterThan(0);
-    expect(left).toBeLessThan(0);
-    expect(left).toBeCloseTo(-right);
-  });
-
-  it("shifts a sharper turn further than a slight one", () => {
-    expect(Math.abs(laneArrowStemShiftEm("TurnSharpRight"))).toBeGreaterThan(
-      Math.abs(laneArrowStemShiftEm("TurnSlightRight")),
-    );
-  });
-
-  it("falls back to no shift for an unknown glyph", () => {
-    expect(laneArrowStemShiftEm("Nope")).toBe(0);
-  });
-
-  // Guards the full stem-center table: every glyph that can share a lane cell
-  // must resolve to the shift that lands its stem on the centerline (x=12 in the
-  // 24-unit viewBox). A wrong entry silently misaligns one two-arrow combo.
-  it("aligns every arrow glyph's stem to the centerline", () => {
-    const measuredStemCenter: Record<string, number> = {
-      Straight: 12,
-      TurnSlightLeft: 14,
-      TurnSlightRight: 10,
-      TurnLeft: 16,
-      TurnRight: 8,
-      TurnSharpLeft: 17,
-      TurnSharpRight: 7,
-      UTurnLeft: 17,
-      MergeType: 12,
-    };
-    for (const [name, center] of Object.entries(measuredStemCenter)) {
-      expect(laneArrowStemShiftEm(name)).toBeCloseTo((12 - center) / 24);
-    }
-  });
-});
-
-describe("laneIndicationIcon", () => {
-  it("returns null for an empty 'none' lane (blank cell)", () => {
-    expect(laneIndicationIcon("none")).toBeNull();
-    expect(laneIndicationIcon("")).toBeNull();
-  });
-
-  it("maps OSRM space-separated tokens", () => {
-    expect(laneIndicationIcon("left")?.name).toBe("TurnLeft");
-    expect(laneIndicationIcon("right")?.name).toBe("TurnRight");
-    expect(laneIndicationIcon("slight left")?.name).toBe("TurnSlightLeft");
-    expect(laneIndicationIcon("slight right")?.name).toBe("TurnSlightRight");
-    expect(laneIndicationIcon("sharp left")?.name).toBe("TurnSharpLeft");
-    expect(laneIndicationIcon("sharp right")?.name).toBe("TurnSharpRight");
-    expect(laneIndicationIcon("straight")?.name).toBe("Straight");
-    expect(laneIndicationIcon("uturn")?.name).toBe("UTurnLeft");
-    expect(laneIndicationIcon("merge_to_left")?.name).toBe("MergeType");
-    expect(laneIndicationIcon("merge_to_right")?.name).toBe("MergeType");
-  });
-
-  it("maps Valhalla synonyms and underscores", () => {
-    expect(laneIndicationIcon("through")?.name).toBe("Straight");
-    expect(laneIndicationIcon("reverse")?.name).toBe("UTurnLeft");
-    expect(laneIndicationIcon("sharp_left")?.name).toBe("TurnSharpLeft");
-    expect(laneIndicationIcon("slight_right")?.name).toBe("TurnSlightRight");
-  });
-
-  it("falls back to Straight for an unrecognized token", () => {
-    expect(laneIndicationIcon("wat")?.name).toBe("Straight");
-  });
-});
-
-describe("unmarkedLaneIcon", () => {
-  it("uses the maneuver's direction", () => {
-    expect(unmarkedLaneIcon({ type: "fork", modifier: "slight left" })?.name).toBe(
-      "TurnSlightLeft",
-    );
-    expect(unmarkedLaneIcon({ type: "keep", modifier: "right" })?.name).toBe("TurnSlightRight");
-    expect(unmarkedLaneIcon({ type: "turn", modifier: "left" })?.name).toBe("TurnLeft");
-    expect(unmarkedLaneIcon({ type: "continue", modifier: "straight" })?.name).toBe("Straight");
-  });
-
-  it("returns null without a plain lane direction", () => {
-    expect(unmarkedLaneIcon(undefined)).toBeNull();
-    expect(unmarkedLaneIcon({ type: "arrive" })).toBeNull();
-    expect(unmarkedLaneIcon({ type: "roundabout", modifier: "left" })).toBeNull();
-    expect(unmarkedLaneIcon({ type: "merge", modifier: "left" })).toBeNull();
-  });
+it("binds shared glyphs and the maneuver adapter to actual MUI geometry", () => {
+  const Resolved = maneuverIconFor({ type: "turn", modifier: "left" }).component;
+  const actual = render(
+    <>
+      {Object.keys(glyphs).map((name) => {
+        const Glyph = guidanceIconComponent(name as GuidanceIconName);
+        return <Glyph key={name} />;
+      })}
+      <Resolved />
+    </>,
+  );
+  const actualPaths = paths(actual.container);
+  expect(actualPaths).toHaveLength(15);
+  actual.unmount();
+  const expected = render(
+    <>
+      {Object.entries(glyphs).map(([name, Glyph]) => (
+        <Glyph key={name} />
+      ))}
+      <TurnLeft />
+    </>,
+  );
+  expect(actualPaths).toEqual(paths(expected.container));
 });

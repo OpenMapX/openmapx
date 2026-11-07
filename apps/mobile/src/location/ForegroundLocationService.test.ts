@@ -67,23 +67,15 @@ function harness(options: {
 
 describe("ForegroundLocationService", () => {
   it("returns a fresh fix", async () => {
-    const { service } = harness({ fix: fixAt(1_000) });
+    const { service, calls } = harness({ fix: fixAt(1_000) });
 
     await expect(service.getFix(OPTIONS)).resolves.toEqual({
       status: "ok",
       fix: fixAt(1_000),
     });
-  });
-
-  it("never requests background permission for a foreground action", async () => {
-    const { service, calls } = harness({ fix: fixAt(1_000) });
-
-    await service.getFix(OPTIONS);
-
-    // Asking for Always location to centre a map is both wrong and a store
-    // review finding.
     expect(calls.requestBackground).toBe(0);
     expect(calls.requestForeground).toBe(0);
+    expect(calls.start).toBe(0);
   });
 
   it("reports a denial rather than prompting", async () => {
@@ -148,8 +140,7 @@ describe("ForegroundLocationService", () => {
       fix: fixAt(100_000),
     });
 
-    await service.getFix(OPTIONS);
-
+    await expect(service.getFix(OPTIONS)).resolves.toEqual({ status: "ok", fix: fixAt(100_000) });
     expect(calls.getCurrentFix).toBe(1);
   });
 
@@ -160,13 +151,5 @@ describe("ForegroundLocationService", () => {
 
     await expect(late.service.getFix(OPTIONS)).resolves.toEqual({ status: "timeout" });
     await expect(empty.service.getFix(OPTIONS)).resolves.toEqual({ status: "unavailable" });
-  });
-
-  it("starts no location stream of its own", async () => {
-    const { service, calls } = harness({ fix: fixAt(1_000) });
-
-    await service.getFix(OPTIONS);
-
-    expect(calls.start).toBe(0);
   });
 });

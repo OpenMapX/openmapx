@@ -121,6 +121,8 @@ describe("stratifiedSamplePoints", () => {
   it("is deterministic and stays inside the bbox", () => {
     const bbox: [number, number, number, number] = [13.3, 52.45, 13.5, 52.55];
     const a = stratifiedSamplePoints(bbox, 50);
+    expect(a).toHaveLength(50);
+    expect(new Set(a.map((point) => `${point.lng},${point.lat}`)).size).toBe(50);
     expect(stratifiedSamplePoints(bbox, 50)).toEqual(a);
     for (const point of a) {
       expect(point.lng).toBeGreaterThanOrEqual(bbox[0]);

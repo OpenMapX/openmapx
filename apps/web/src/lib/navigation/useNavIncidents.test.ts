@@ -58,14 +58,6 @@ describe("useNavIncidents — fetch-gate matrix", () => {
     useSettingsStore.setState({ incidentAlerts: true, avoidIncidents: false });
   });
 
-  it("fetches when incidentAlerts ON, avoidIncidents OFF", async () => {
-    useSettingsStore.setState({ incidentAlerts: true, avoidIncidents: false });
-    startNav();
-    renderHook(() => useNavIncidents());
-    await flush();
-    expect(fetchRoadConditionsWithStatus).toHaveBeenCalledTimes(1);
-  });
-
   it("fetches when incidentAlerts OFF, avoidIncidents ON", async () => {
     useSettingsStore.setState({ incidentAlerts: false, avoidIncidents: true });
     startNav();
@@ -74,19 +66,12 @@ describe("useNavIncidents — fetch-gate matrix", () => {
     expect(fetchRoadConditionsWithStatus).toHaveBeenCalledTimes(1);
   });
 
-  it("does NOT fetch when both settings are OFF", async () => {
-    useSettingsStore.setState({ incidentAlerts: false, avoidIncidents: false });
-    startNav();
-    renderHook(() => useNavIncidents());
-    await flush();
-    expect(fetchRoadConditionsWithStatus).not.toHaveBeenCalled();
-  });
-
   it("returns status=disabled and no incidents when both settings are OFF", async () => {
     useSettingsStore.setState({ incidentAlerts: false, avoidIncidents: false });
     startNav();
     const { result } = renderHook(() => useNavIncidents());
     await flush();
+    expect(fetchRoadConditionsWithStatus).not.toHaveBeenCalled();
     expect(result.current.status).toBe("disabled");
     expect(result.current.incidents.length).toBe(0);
   });
@@ -130,6 +115,7 @@ describe("useNavIncidents — truthful status", () => {
     startNav();
     const { result } = renderHook(() => useNavIncidents());
     await flush();
+    expect(fetchRoadConditionsWithStatus).toHaveBeenCalledTimes(1);
     expect(result.current.status).toBe("fresh");
     expect(result.current.successfulRevision).toBe(1);
     expect(result.current.routeIdentity).toBe(route);

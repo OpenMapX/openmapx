@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db, sql } from "../index";
@@ -208,14 +208,5 @@ describe.skipIf(skipDatabase)("personal vehicles and parking with PostgreSQL", (
       .from(personalVehicle)
       .where(and(eq(personalVehicle.id, "v-ev"), eq(personalVehicle.userId, TEST_USER)));
     expect(row.ev).toEqual(ev);
-  });
-
-  it("finds the unassigned record with an IS NULL predicate", async () => {
-    await park("p-null", null, 51.55);
-    const rows = await db
-      .select()
-      .from(parkedLocation)
-      .where(and(eq(parkedLocation.userId, TEST_USER), isNull(parkedLocation.vehicleId)));
-    expect(rows).toHaveLength(1);
   });
 });

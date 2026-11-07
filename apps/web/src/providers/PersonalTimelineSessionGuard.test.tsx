@@ -48,25 +48,22 @@ describe("PersonalTimelineSessionGuard", () => {
     });
   });
 
-  it.each(["ordinary account switch", "impersonation identity replacement"])(
-    "purges all timeline data on %s",
-    () => {
-      const client = seedPrivateState();
-      session.current = { data: { user: { id: "user-a" } }, isPending: false };
-      const { rerender } = render(<PersonalTimelineSessionGuard />, {
-        wrapper: createQueryWrapper(client),
-      });
+  it("purges timeline data on account identity replacement", () => {
+    const client = seedPrivateState();
+    session.current = { data: { user: { id: "user-a" } }, isPending: false };
+    const { rerender } = render(<PersonalTimelineSessionGuard />, {
+      wrapper: createQueryWrapper(client),
+    });
 
-      session.current = { data: { user: { id: "user-b" } }, isPending: false };
-      rerender(<PersonalTimelineSessionGuard />);
+    session.current = { data: { user: { id: "user-b" } }, isPending: false };
+    rerender(<PersonalTimelineSessionGuard />);
 
-      expect(client.getQueriesData({ queryKey: PERSONAL_TIMELINE_QUERY_KEY })).toEqual([]);
-      expect(usePersonalTimelineStore.getState()).toMatchObject({
-        selectedDate: null,
-        selectedEntryId: null,
-      });
-    },
-  );
+    expect(client.getQueriesData({ queryKey: PERSONAL_TIMELINE_QUERY_KEY })).toEqual([]);
+    expect(usePersonalTimelineStore.getState()).toMatchObject({
+      selectedDate: null,
+      selectedEntryId: null,
+    });
+  });
 
   it("does not purge a same-user rerender", () => {
     const client = seedPrivateState();
@@ -96,15 +93,6 @@ describe("PersonalTimelineSessionGuard", () => {
       selectedDate: "2026-08-09",
       selectedEntryId: "private-a",
     });
-  });
-
-  it("does not purge on an initially settled login", () => {
-    const client = seedPrivateState();
-    session.current = { data: { user: { id: "user-a" } }, isPending: false };
-
-    render(<PersonalTimelineSessionGuard />, { wrapper: createQueryWrapper(client) });
-
-    expect(client.getQueriesData({ queryKey: PERSONAL_TIMELINE_QUERY_KEY })).toHaveLength(2);
   });
 
   it("purges a paused user-A mutation before user B comes online", async () => {

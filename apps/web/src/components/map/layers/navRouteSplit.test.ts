@@ -129,19 +129,21 @@ describe("splitNavRoute", () => {
     expect(features.map((f) => f.properties?.kind)).toEqual(["traveled", "remaining"]);
   });
 
-  it("does not throw when alongMeters exceeds the geometry length (stale reroute progress)", () => {
-    // After a reroute the new, shorter route is applied while `progress` still
-    // holds the previous route's far-larger alongMeters for one render. The
-    // clamp must keep the slice start within the line instead of throwing
-    // "Start position is beyond line".
-    expect(() => splitNavRoute(ROUTE, 9_000_000)).not.toThrow();
-    const kinds = splitNavRoute(ROUTE, 9_000_000).map((f) => f.properties?.kind);
-    expect(kinds).toContain("traveled");
-  });
-
-  it("is safe at exactly the geometry length", () => {
-    expect(() => splitNavRoute(ROUTE, lengthKm * 1000)).not.toThrow();
-  });
+  it.each([lengthKm * 1000, 9_000_000])(
+    "clamps exact-end and stale reroute progress to the geometry endpoint: %s",
+    (distance) => {
+      const features = splitNavRoute(ROUTE, distance);
+      expect(features.map((feature) => feature.properties?.kind)).toEqual([
+        "traveled",
+        "remaining",
+      ]);
+      const traveled = features[0].geometry as GeoJSON.LineString;
+      const remaining = features[1].geometry as GeoJSON.LineString;
+      expect(traveled.coordinates).toEqual(ROUTE);
+      expect(remaining.coordinates.length).toBeGreaterThanOrEqual(2);
+      for (const coordinate of remaining.coordinates) expect(coordinate).toEqual(ROUTE.at(-1));
+    },
+  );
 
   it("returns nothing for a degenerate geometry", () => {
     expect(splitNavRoute([[0, 0]], 0)).toEqual([]);
@@ -191,24 +193,6 @@ describe("navRouteProgressFraction", () => {
     expect(Math.abs(fraction - 0.5)).toBeGreaterThan(0.01);
   });
 
-  it("handles a high-latitude route (~78°) without throwing and stays within [0, 1]", () => {
-    const route: LngLat[] = [
-      [10, 77],
-      [10.5, 78],
-      [11, 78.5],
-    ];
-    const prepared = buildNavRouteLine(route);
-    if (!prepared) throw new Error("expected a prepared line");
-    const totalMeters = prepared.lengthKm * 1000;
-
-    for (const ratio of [0, 0.3, 0.6, 1]) {
-      const fraction = navRouteProgressFraction(prepared, totalMeters * ratio);
-      expect(Number.isFinite(fraction)).toBe(true);
-      expect(fraction).toBeGreaterThanOrEqual(0);
-      expect(fraction).toBeLessThanOrEqual(1);
-    }
-  });
-
   it("handles a route crossing the equator without throwing", () => {
     const route: LngLat[] = [
       [5, -10],
@@ -251,49 +235,18 @@ describe("navRouteProgressFraction", () => {
     expect(navRouteProgressFraction(prepared, Number.POSITIVE_INFINITY)).toBe(1);
     expect(navRouteProgressFraction(prepared, Number.NEGATIVE_INFINITY)).toBe(0);
   });
-
-  it("handles degenerate geometry without throwing: a 2-point route", () => {
-    const prepared = buildNavRouteLine([
-      [6.9, 50.9],
-      [6.91, 50.91],
-    ]);
-    expect(prepared).not.toBeNull();
-    if (!prepared) return;
-
-    expect(() => navRouteProgressFraction(prepared, prepared.lengthKm * 500)).not.toThrow();
-    expect(Number.isFinite(navRouteProgressFraction(prepared, prepared.lengthKm * 500))).toBe(true);
-  });
-
-  it("handles degenerate geometry without throwing: duplicate consecutive points", () => {
-    const prepared = buildNavRouteLine([
-      [6.9, 50.9],
-      [6.9, 50.9],
-      [6.95, 50.94],
-    ]);
-    expect(prepared).not.toBeNull();
-    if (!prepared) return;
-
-    expect(() => navRouteProgressFraction(prepared, 100)).not.toThrow();
-    expect(Number.isFinite(navRouteProgressFraction(prepared, 100))).toBe(true);
-  });
-
-  it("handles degenerate geometry without throwing: a NaN coordinate from a bad polyline decode", () => {
-    const prepared = buildNavRouteLine([
-      [6.9, 50.9],
-      [Number.NaN, 50.95],
-      [6.97, 50.95],
-    ]);
-    expect(prepared).not.toBeNull();
-    if (!prepared) return;
-
-    expect(() => navRouteProgressFraction(prepared, 500)).not.toThrow();
-    expect(navRouteProgressFraction(prepared, 500)).toBe(0);
-  });
 });
 
 describe("navigation progress full-route parity", () => {
   const fixtures: { name: string; geometry: LngLat[] }[] = [
     { name: "exact segment boundaries", geometry: DENSE_ROUTE },
+    {
+      name: "a two-point route",
+      geometry: [
+        [6.9, 50.9],
+        [6.91, 50.91],
+      ],
+    },
     {
       name: "duplicate start, middle and end vertices",
       geometry: [

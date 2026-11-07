@@ -48,7 +48,6 @@ describe("buildElementXml", () => {
     expect(xml).toMatchInlineSnapshot(
       `"<?xml version="1.0" encoding="UTF-8"?><osm version="0.6" generator="OpenMapX"><way id="42" version="3" changeset="99"><nd ref="1"/><nd ref="2"/><nd ref="3"/><nd ref="1"/><tag k="building" v="yes"/></way></osm>"`,
     );
-    expect([...xml.matchAll(/<nd ref="(\d+)"\/>/g)].map((m) => m[1])).toEqual(["1", "2", "3", "1"]);
   });
 
   it("preserves every ordered relation member, including an empty role", () => {
@@ -81,10 +80,6 @@ describe("buildElementXml", () => {
     const a = buildElementXml({ ...node, tags: { b: "2", a: "1", c: "3" } });
     const b = buildElementXml({ ...node, tags: { c: "3", a: "1", b: "2" } });
     expect(a).toBe(b);
-  });
-
-  it("omits the visible attribute when it is not known", () => {
-    expect(buildElementXml(way)).not.toContain("visible=");
   });
 
   it("emits visible=false verbatim", () => {

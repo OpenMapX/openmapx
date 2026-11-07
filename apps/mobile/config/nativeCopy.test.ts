@@ -32,7 +32,6 @@ describe("native copy completeness", () => {
   it("explains background use and how tracking stops in every locale", () => {
     for (const locale of MOBILE_LOCALES) {
       const always = IOS_USAGE_DESCRIPTIONS[locale].NSLocationAlwaysAndWhenInUseUsageDescription;
-      expect(always.length).toBeGreaterThan(80);
       expect(always).toMatch(locale === "en" ? /background/i : /Hintergrund/i);
       expect(always).toMatch(locale === "en" ? /stops/i : /endet/i);
     }

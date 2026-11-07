@@ -111,18 +111,18 @@ describe("traceContourRings", () => {
   });
 
   it("interpolates proportionally between two reachable corners", () => {
-    // 300 s and 900 s across a cell, contoured at 600 s, crosses at the middle.
+    // 300 s and 1500 s, contoured at 600 s, crosses one quarter along the edge.
     const rings = traceContourRings(
-      field((column) => (column === 0 ? 300 : 900)),
+      field((column) => (column === 0 ? 300 : 1500)),
       LATTICE,
       600,
     );
-    const midpointX = LATTICE.originX + 0.5 * LATTICE.spacing;
+    const crossingX = LATTICE.originX + 0.25 * LATTICE.spacing;
     const crossingXs = rings
       .flat()
       .map(([x]) => x)
       .filter((x) => x > LATTICE.originX);
-    expect(Math.max(...crossingXs)).toBeCloseTo(midpointX, 6);
+    expect(Math.max(...crossingXs)).toBeCloseTo(crossingX, 6);
   });
 
   it("separates an ambiguous saddle when any corner is unreachable", () => {
@@ -131,12 +131,12 @@ describe("traceContourRings", () => {
         if (column === 0 && row === 0) return 100;
         if (column === 1 && row === 1) return 100;
         if (column === 1 && row === 0) return null;
-        return 9_000;
+        return 601;
       }),
       LATTICE,
       600,
     );
-    expect(rings.length).toBeGreaterThanOrEqual(1);
+    expect(rings).toHaveLength(2);
   });
 
   it("rejects a field whose length does not match the lattice", () => {

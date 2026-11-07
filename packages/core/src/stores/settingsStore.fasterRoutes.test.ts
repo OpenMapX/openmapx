@@ -1,30 +1,34 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { configureStorage, getStorage } from "../platform/storage";
 import { useSettingsStore } from "./settingsStore";
 
+const previousStorage = getStorage();
 beforeEach(() => {
+  const values = new Map<string, string>();
+  configureStorage({
+    getString: (key) => values.get(key) ?? null,
+    setString: (key, value) => {
+      values.set(key, value);
+    },
+    remove: (key) => {
+      values.delete(key);
+    },
+  });
   useSettingsStore.setState({ fasterRoutes: true, autoSwitchFasterRoutes: false });
 });
+afterEach(() => configureStorage(previousStorage));
 
 describe("fasterRoutes setting", () => {
-  it("defaults on", () => {
-    expect(useSettingsStore.getState().fasterRoutes).toBe(true);
-  });
-
-  it("defaults automatic switching off", () => {
-    expect(useSettingsStore.getState().autoSwitchFasterRoutes).toBe(false);
-  });
-
-  it("persists the choice", () => {
-    useSettingsStore.getState().setFasterRoutes(false);
-    expect(useSettingsStore.getState().fasterRoutes).toBe(false);
-    useSettingsStore.getState().setFasterRoutes(true);
-    expect(useSettingsStore.getState().fasterRoutes).toBe(true);
-  });
-
-  it("persists the automatic-switch choice", () => {
-    useSettingsStore.getState().setAutoSwitchFasterRoutes(true);
-    expect(useSettingsStore.getState().autoSwitchFasterRoutes).toBe(true);
-    useSettingsStore.getState().setAutoSwitchFasterRoutes(false);
-    expect(useSettingsStore.getState().autoSwitchFasterRoutes).toBe(false);
+  it.each([
+    ["fasterRoutes", "setFasterRoutes", "openmapx:nav:fasterRoutes"],
+    ["autoSwitchFasterRoutes", "setAutoSwitchFasterRoutes", "openmapx:nav:autoSwitchFasterRoutes"],
+  ] as const)("persists and hydrates %s in both directions", (field, setter, key) => {
+    for (const choice of [false, true]) {
+      useSettingsStore.getState()[setter](choice);
+      expect(getStorage().getString(key)).toBe(String(choice));
+      useSettingsStore.setState({ [field]: !choice });
+      useSettingsStore.getState().hydrate();
+      expect(useSettingsStore.getState()[field]).toBe(choice);
+    }
   });
 });

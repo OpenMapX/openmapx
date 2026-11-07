@@ -39,11 +39,7 @@ vi.mock("undici", async (importOriginal) => {
 
 import { lookup as dnsLookup } from "node:dns/promises";
 import { fetch as undiciFetch } from "undici";
-import {
-  OPERATOR_FEED_MAX_BYTES,
-  type OperatorFeedRelayAuditEvent,
-  OperatorFeedRelayStore,
-} from "./operator-feed-relay.js";
+import { type OperatorFeedRelayAuditEvent, OperatorFeedRelayStore } from "./operator-feed-relay.js";
 
 const lookupMock = dnsLookup as unknown as ReturnType<typeof vi.fn>;
 const undiciFetchMock = undiciFetch as unknown as ReturnType<typeof vi.fn>;
@@ -184,7 +180,7 @@ describe("OperatorFeedRelayStore", () => {
     const payload = await relay.consume({ handle: registration.handle, runId: "run-a" });
 
     expect(optionsSeen).toMatchObject({
-      maxBytes: OPERATOR_FEED_MAX_BYTES,
+      maxBytes: 512 * 1024 * 1024,
       credentialPolicy: "same-origin",
       allowedContentTypes: [],
     });

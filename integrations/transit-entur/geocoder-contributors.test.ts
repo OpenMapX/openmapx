@@ -135,7 +135,7 @@ it("never acquires NSR data when its supplier is denied or undeclared", async ()
       manifest: ownManifest as never,
       http: fakeHttpClient(request),
     });
-    ctx.getDisallowedSourceIds = async () => new Set(["entur-geocoder-nsr"]);
+    ctx.getDisallowedSourceIds = async () => new Set(declared ? ["entur-geocoder-nsr"] : []);
     setup(ctx);
     await expect(ctx.registered.transit[0].searchStopsByName?.("Oslo", 10)).rejects.toMatchObject({
       kind: "policy",

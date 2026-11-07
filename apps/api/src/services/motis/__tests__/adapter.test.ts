@@ -9,17 +9,8 @@ vi.mock("@motis-project/motis-client", () => ({
   geocode: vi.fn(),
 }));
 
-vi.mock("@openmapx/core", async () => {
-  const actual = await vi.importActual<Record<string, unknown>>("@openmapx/core");
-  return {
-    ...actual,
-    decodePolyline: (_encoded: string): [number, number][] => [
-      [13.4, 52.5],
-      [13.41, 52.51],
-      [13.42, 52.52],
-    ],
-  };
-});
+// Literal Google polyline fixture at precision 5; fixed coordinate oracles below.
+const ENCODED_SHAPE = "_|l_I_expAo}@o}@o}@o}@";
 
 import {
   getArrivals,
@@ -581,7 +572,7 @@ describe("planTrip", () => {
                 tripId: "trip:tram1",
                 displayName: "M1",
                 routeColor: null,
-                legGeometry: { points: "encodedPolyline", precision: 5 },
+                legGeometry: { points: ENCODED_SHAPE, precision: 5 },
                 intermediateStops: [
                   { name: "Mid Stop", lat: 52.515, lon: 13.415, stopId: "de:mid" },
                 ],
@@ -638,7 +629,11 @@ describe("planTrip", () => {
     expect(tramLeg.to.stopId).toBe("test:de:stop2");
     expect(tramLeg._intermediateStopCount).toBe(1);
     expect(tramLeg.geometry.type).toBe("LineString");
-    expect(tramLeg.geometry.coordinates.length).toBeGreaterThanOrEqual(2);
+    expect(tramLeg.geometry.coordinates).toEqual([
+      [13.4, 52.5],
+      [13.41, 52.51],
+      [13.42, 52.52],
+    ]);
   });
 
   it("falls back to scheduled times when start and end times are equal (bad GTFS-RT)", async () => {

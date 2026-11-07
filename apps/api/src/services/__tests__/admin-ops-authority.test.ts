@@ -6,8 +6,7 @@ import type { JobContext } from "../job-runner.js";
 process.env.BETTER_AUTH_SECRET ||= "admin-ops-authority-test-stub-secret";
 
 const dockerComposeAction = vi.fn().mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
-const applyTrustedConfiguration = vi.fn();
-const executeAndWait = vi.fn();
+const prepareServiceGeneration = vi.fn();
 const registryGet = vi.fn();
 const executeAdminJobOperation = vi.fn().mockResolvedValue({ changed: true });
 
@@ -19,19 +18,14 @@ vi.mock("../../utils/docker-compose.js", () => ({
   dockerStatus: vi.fn(),
 }));
 vi.mock("../trusted-config-operations.js", () => ({
-  applyTrustedConfiguration: (...args: unknown[]) => applyTrustedConfiguration(...args),
+  applyTrustedConfiguration: vi.fn(),
 }));
 vi.mock("../ops-client.js", async (importActual) => ({
   ...(await importActual<typeof import("../ops-client.js")>()),
   createApiOpsClient: () => ({}),
-  executeAndWait: (...args: unknown[]) => executeAndWait(...args),
 }));
 vi.mock("../service-preparation", () => ({
-  prepareServiceGeneration: async () => {
-    const prepared = await applyTrustedConfiguration();
-    await executeAndWait();
-    return prepared;
-  },
+  prepareServiceGeneration: (...args: unknown[]) => prepareServiceGeneration(...args),
 }));
 vi.mock("../service-registry.js", () => ({
   getServiceRegistry: () => ({ get: registryGet }),
@@ -50,8 +44,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   executeAdminJobOperation.mockResolvedValue({ changed: true });
   dockerComposeAction.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
-  applyTrustedConfiguration.mockResolvedValue({ revisionId: `cfg1_${"r".repeat(43)}` });
-  executeAndWait.mockResolvedValue({ plan: [] });
+  prepareServiceGeneration.mockResolvedValue({ revisionId: `cfg1_${"r".repeat(43)}` });
 });
 
 function context(): JobContext {
@@ -152,33 +145,29 @@ describe("admin service authority split", () => {
     }
   });
 
-  it("keeps start and apply phases ordered ahead of the lifecycle effect", async () => {
+  it("awaits generation preparation before start and apply lifecycle effects", async () => {
     registryGet.mockReturnValue({ manifest: { id: "redis" }, enabled: true, isBuiltIn: true });
-    const order: string[] = [];
-    applyTrustedConfiguration.mockImplementation(async () => {
-      order.push("configuration");
-      return { revisionId: `cfg1_${"r".repeat(43)}` };
-    });
-    executeAndWait.mockImplementation(async () => {
-      order.push("hardlinks");
-      return { plan: [] };
-    });
-    executeAdminJobOperation.mockImplementation(async (_ctx, operation) => {
-      order.push(operation.kind);
-      return { changed: true };
-    });
-
-    await serviceStart("redis", context());
-    await serviceApply("redis", context());
-
-    expect(order).toEqual([
-      "configuration",
-      "hardlinks",
-      "service.start",
-      "configuration",
-      "hardlinks",
-      "service.recreate",
-    ]);
+    for (const run of [serviceStart, serviceApply]) {
+      prepareServiceGeneration.mockClear();
+      executeAdminJobOperation.mockClear();
+      const gate = Promise.withResolvers<void>();
+      prepareServiceGeneration.mockImplementationOnce(async () => {
+        await gate.promise;
+        return { revisionId: `cfg1_${"r".repeat(43)}` };
+      });
+      const pending = run("redis", context());
+      const settled = Promise.allSettled([pending]);
+      try {
+        await vi.waitFor(() => expect(prepareServiceGeneration).toHaveBeenCalledOnce());
+        expect(executeAdminJobOperation).not.toHaveBeenCalled();
+        gate.resolve();
+        await pending;
+        expect(executeAdminJobOperation).toHaveBeenCalledOnce();
+      } finally {
+        gate.resolve();
+        await settled;
+      }
+    }
   });
 
   it.each([

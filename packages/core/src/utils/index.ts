@@ -33,7 +33,6 @@ export {
   BRAND_QID_KEYS,
   brandForPlaceLogo,
   brandToFilter,
-  commonsLogoUrl,
   firstBrandIdentity,
   gapFillBranding,
   withBrandingContributors,

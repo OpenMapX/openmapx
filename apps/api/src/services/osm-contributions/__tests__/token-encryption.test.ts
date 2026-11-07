@@ -119,7 +119,7 @@ describe("OAuth token encryption at rest", () => {
 });
 
 describe("production auth options", () => {
-  it("enables token encryption and keeps sign-in scopes minimal", async () => {
+  it("enables token encryption and registers generic OAuth", async () => {
     process.env.BETTER_AUTH_SECRET ??= SECRET;
     const { auth } = await import("../../../auth.js");
     expect(auth.options.account?.encryptOAuthTokens).toBe(true);

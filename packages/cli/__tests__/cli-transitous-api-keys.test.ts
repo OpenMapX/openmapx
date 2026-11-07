@@ -28,8 +28,6 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  type CommandRunner,
-  DEFAULT_TRANSITOUS_REPO_URL,
   describeTransitousApiKeysMigration,
   ensureTransitousApiKeysFile,
   generateTransitousApiKeys,

@@ -1,13 +1,12 @@
-import { readFileSync } from "node:fs";
 import {
   type IntegrationContext,
   type PlatformEndpointId,
   type RealtimeProvider,
   resolveIntegrationPlatformEndpoint,
 } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import manifest from "../manifest.json";
 
 vi.mock("@motis-project/motis-client", () => ({
   stoptimes: vi.fn(),
@@ -55,7 +54,7 @@ function createCtx(config: Record<string, unknown> = { endpoint: "http://motis:8
     resolvePlatformEndpoint: (id: PlatformEndpointId) =>
       resolveIntegrationPlatformEndpoint(
         {
-          manifest: { endpointConfigKeys: { motis: "endpoint", transitous: "transitousUrl" } },
+          manifest,
           config,
         },
         () => null,
@@ -87,30 +86,7 @@ describe("live-transit-motis provider", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-  });
-
-  it("registers a RealtimeProvider with the expected shape", async () => {
-    const mod = await loadModule();
-    const { ctx, getProvider } = createCtx();
-    mod.setup(ctx);
-    const provider = getProvider();
-
-    expect(provider.id).toBe("live-transit-motis");
-    expect(provider.coverage).toEqual({ all: true });
-    expect(provider.priority).toBe(12);
-    expect(provider.capabilities).toEqual({
-      vehiclePositions: true,
-      alerts: { byStop: true, byRoute: false, byBbox: false },
-      tripUpdates: true,
-    });
-    expect(provider.attribution.map((a) => a.sourceId)).toEqual(
-      expect.arrayContaining(["transitous", "motis-rt"]),
-    );
-    expect(typeof provider.getAlertsForStop).toBe("function");
-    expect(typeof provider.getTripUpdate).toBe("function");
-    expect(typeof provider.getVehiclePositions).toBe("function");
-    expect(provider.getAlertsForRoute).toBeUndefined();
-    expect(provider.getAlertsForBbox).toBeUndefined();
+    vi.unstubAllEnvs();
   });
 
   it("maps radar positions to the canonical live-transit vehicle contract", async () => {
@@ -131,7 +107,20 @@ describe("live-transit-motis provider", () => {
     const mod = await loadModule();
     const { ctx, getProvider } = createCtx();
     mod.setup(ctx);
-    const result = await getProvider().getVehiclePositions?.([8, 49, 9, 51]);
+    const provider = getProvider();
+    expect(provider.id).toBe("live-transit-motis");
+    expect(provider.coverage).toEqual({ all: true });
+    expect(provider.capabilities).toEqual({
+      vehiclePositions: true,
+      alerts: { byStop: true, byRoute: false, byBbox: false },
+      tripUpdates: true,
+    });
+    expect(provider.attribution.map((a) => a.sourceId)).toEqual(
+      expect.arrayContaining(["transitous", "motis-rt"]),
+    );
+    expect(provider.getAlertsForRoute).toBeUndefined();
+    expect(provider.getAlertsForBbox).toBeUndefined();
+    const result = await provider.getVehiclePositions?.([8, 49, 9, 51]);
 
     expect(result?.data).toEqual([
       expect.objectContaining({
@@ -312,56 +301,6 @@ describe("live-transit-motis provider", () => {
     });
   });
 
-  it("maps severity levels to ServiceAlert severities", async () => {
-    const mod = await loadModule();
-    const { mapMotisAlertSeverity } = mod.__testing;
-    expect(mapMotisAlertSeverity("SEVERE")).toBe("severe");
-    expect(mapMotisAlertSeverity("WARNING")).toBe("warning");
-    expect(mapMotisAlertSeverity("INFO")).toBe("info");
-    expect(mapMotisAlertSeverity("UNKNOWN_SEVERITY")).toBe("info");
-    expect(mapMotisAlertSeverity(undefined)).toBe("info");
-  });
-
-  describe("self-hosted MOTIS resolution", () => {
-    const manifest = JSON.parse(
-      readFileSync(new URL("../manifest.json", import.meta.url), "utf8"),
-    ) as IntegrationContext["manifest"];
-
-    afterEach(() => {
-      vi.unstubAllEnvs();
-    });
-
-    function ctxWith(opts: { service?: string; configEndpoint?: string }): IntegrationContext {
-      const ctx = createMockIntegrationContext({
-        manifest,
-        config: opts.configEndpoint ? { endpoint: opts.configEndpoint } : {},
-      });
-      ctx.getRequiredService = (key) =>
-        key === "motis" && opts.service
-          ? { serviceId: "motis", url: opts.service, enabled: true }
-          : null;
-      return ctx;
-    }
-
-    it("ranks the service, then the endpoint setting, then MOTIS_URL", () => {
-      vi.stubEnv("MOTIS_URL", "http://env.example:9000");
-      const both = ctxWith({
-        service: "http://motis.registry:8080",
-        configEndpoint: "http://config.example",
-      });
-      expect(both.resolvePlatformEndpoint("motis")?.url).toBe("http://motis.registry:8080");
-      expect(
-        ctxWith({ configEndpoint: "http://config.example" }).resolvePlatformEndpoint("motis")?.url,
-      ).toBe("http://config.example");
-      expect(ctxWith({}).resolvePlatformEndpoint("motis")?.url).toBe("http://env.example:9000");
-    });
-
-    it("reports no local MOTIS when nothing is wired", () => {
-      vi.stubEnv("MOTIS_URL", "");
-      expect(ctxWith({}).resolvePlatformEndpoint("motis")).toBeNull();
-    });
-  });
-
   describe("prefix routing", () => {
     it("keeps clients scoped to their integration setup generation", async () => {
       const motisClient = await import("@motis-project/motis-client");
@@ -386,38 +325,39 @@ describe("live-transit-motis provider", () => {
       expect(secondClient?.getConfig().baseUrl).toBe("https://second-local.example");
     });
 
-    it("routeForId picks the client + attribution by id prefix", async () => {
+    it("serves stops and vehicles from Transitous without a local MOTIS", async () => {
+      vi.stubEnv("MOTIS_URL", "");
+      const motisClient = await import("@motis-project/motis-client");
+      const { getMotisVehicleRadar } = await import("@openmapx/mobility-core/motis-radar");
+      vi.mocked(motisClient.stoptimes).mockResolvedValueOnce({
+        data: { place: { alerts: [] } },
+      } as never);
+      vi.mocked(getMotisVehicleRadar).mockResolvedValueOnce([
+        {
+          id: "mo:vehicle",
+          provider: "mo",
+          mode: "rail",
+          lat: 50,
+          lng: 8,
+          label: "Train",
+          updatedAt: "2026-08-31T12:00:00Z",
+        },
+      ]);
       const mod = await loadModule();
-      const { ctx } = createCtx({ endpoint: "http://motis:8080" });
+      const { ctx, getProvider } = createCtx({});
       mod.setup(ctx);
-      const { createLiveTransitMotisInstances, routeForId } = mod.__testing;
-      const instances = createLiveTransitMotisInstances(ctx);
-
-      expect(routeForId("mo:NL:123", instances).client).toBe(instances.transitous.client);
-      expect(routeForId("ms:DE:456", instances).client).toBe(instances.local.client);
-      expect(routeForId("8000105", instances).client).toBe(instances.local.client);
-
-      expect(routeForId("mo:x", instances).attribution[0]?.sourceId).toBe("transitous");
-      expect(routeForId("ms:x", instances).attribution[0]?.sourceId).toBe("motis-rt");
+      const provider = getProvider();
+      const alerts = await provider.getAlertsForStop?.("8000105");
+      expect(vi.mocked(motisClient.stoptimes).mock.calls[0][0].client?.getConfig().baseUrl).toBe(
+        "https://api.transitous.org",
+      );
+      expect(alerts?.attributions.map((credit) => credit.sourceId)).toEqual(["transitous"]);
+      const vehicles = await provider.getVehiclePositions?.([8, 49, 9, 51]);
+      expect(vehicles?.data).toMatchObject([{ id: "mo:vehicle", sourceId: "transitous" }]);
+      expect(vehicles?.attributions.map((credit) => credit.sourceId)).toEqual(["transitous"]);
     });
 
-    it("serves everything from Transitous without a local MOTIS", async () => {
-      const mod = await loadModule();
-      const { ctx } = createCtx({});
-      mod.setup(ctx);
-      const { createLiveTransitMotisInstances, routeForId, vehicleSource } = mod.__testing;
-      const instances = createLiveTransitMotisInstances(ctx);
-
-      expect(instances.local).toBeUndefined();
-      expect(routeForId("8000105", instances).client).toBe(instances.transitous.client);
-      expect(routeForId("8000105", instances).attribution[0]?.sourceId).toBe("transitous");
-      expect(vehicleSource(instances)).toEqual({
-        instance: instances.transitous,
-        sourceId: "transitous",
-      });
-    });
-
-    it("queries Transitous for mo: stops and the local instance for ms: stops", async () => {
+    it("queries Transitous for mo: stops and the local instance for ms: and unprefixed stops", async () => {
       const motisClient = await import("@motis-project/motis-client");
       vi.mocked(motisClient.stoptimes).mockResolvedValue({
         data: { place: { alerts: [] } },
@@ -437,6 +377,10 @@ describe("live-transit-motis provider", () => {
       expect(transitousClient).toBeDefined();
       expect(localClient).toBeDefined();
       expect(transitousClient).not.toBe(localClient);
+      expect(transitousClient?.getConfig().baseUrl).toBe("https://api.transitous.org");
+      expect(localClient?.getConfig().baseUrl).toBe("http://motis:8080");
+      await provider.getAlertsForStop?.("8000105");
+      expect(vi.mocked(motisClient.stoptimes).mock.calls.at(-1)?.[0]?.client).toBe(localClient);
     });
   });
 });

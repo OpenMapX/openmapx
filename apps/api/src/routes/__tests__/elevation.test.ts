@@ -67,6 +67,7 @@ describe("POST /elevation", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body).toEqual(MOCK_ELEVATION_RESULT);
+    expect(mockGetElevation).toHaveBeenCalledWith(VALID_COORDINATES, undefined);
     expect(res.headers["cache-control"]).toBe("public, max-age=86400");
   });
 
@@ -102,18 +103,6 @@ describe("POST /elevation", () => {
     expect(mockGetElevation).toHaveBeenCalledWith(VALID_COORDINATES, 1500);
   });
 
-  it("passes undefined routeDistance when not provided", async () => {
-    mockGetElevation.mockResolvedValue(MOCK_ELEVATION_RESULT);
-
-    await app.inject({
-      method: "POST",
-      url: "/elevation",
-      payload: { coordinates: VALID_COORDINATES },
-    });
-
-    expect(mockGetElevation).toHaveBeenCalledWith(VALID_COORDINATES, undefined);
-  });
-
   it("returns 502 when elevation service returns null", async () => {
     mockGetElevation.mockResolvedValue(null);
 
@@ -140,18 +129,6 @@ describe("POST /elevation", () => {
     expect(res.statusCode).toBe(502);
     const body = res.json();
     expect(body.error).toBe("Elevation data unavailable");
-  });
-
-  it("sets Cache-Control: public, max-age=86400 on success", async () => {
-    mockGetElevation.mockResolvedValue(MOCK_ELEVATION_RESULT);
-
-    const res = await app.inject({
-      method: "POST",
-      url: "/elevation",
-      payload: { coordinates: VALID_COORDINATES },
-    });
-
-    expect(res.headers["cache-control"]).toBe("public, max-age=86400");
   });
 
   it("returns 400 for invalid coordinate format", async () => {

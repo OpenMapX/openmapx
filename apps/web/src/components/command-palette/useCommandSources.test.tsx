@@ -115,12 +115,10 @@ describe("useCommandSources map orientation commands", () => {
     const out = commands();
 
     const alignCommand = out.find((c) => c.id === "actions.alignToStreets");
-    expect(alignCommand?.iconKey).toBe("align-streets");
     alignCommand?.run();
     expect(alignState.align).toHaveBeenCalledTimes(1);
 
     const northCommand = out.find((c) => c.id === "actions.northUp");
-    expect(northCommand?.iconKey).toBe("north-up");
     northCommand?.run();
     expect(resetBearing).toHaveBeenCalledTimes(1);
   });

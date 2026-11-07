@@ -65,11 +65,16 @@ describe("generated request boundary", () => {
 describe("instance isolation", () => {
   it("uses its own origin and credentials, not the singleton's", async () => {
     mockFetch(() => jsonResponse({ ok: true }));
-    const native = createApiClient({ baseUrl: "https://api.example/", credentials: "omit" });
-
+    const config = { baseUrl: "https://api.example/", credentials: "omit" as const };
+    const native = createApiClient(config);
+    config.baseUrl = "https://evil.example/";
+    configureApiClient({ baseUrl: "https://changed.example/", credentials: "include" });
     await native.get("/api/x");
     expect(calls[0].url).toBe("https://api.example/api/x");
     expect(calls[0].init.credentials).toBe("omit");
+    const headers = new Headers(calls[0].init.headers);
+    expect(headers.has("cookie")).toBe(false);
+    expect(headers.has("authorization")).toBe(false);
   });
 
   it("keeps two interleaved clients on their own configuration", async () => {
@@ -82,37 +87,6 @@ describe("instance isolation", () => {
     expect(byUrl["https://a.example/one"]).toBe("omit");
     expect(byUrl["https://b.example/two"]).toBe("include");
     expect(byUrl["https://a.example/three"]).toBe("omit");
-  });
-
-  it("still omits credentials after the singleton is reconfigured to include them", async () => {
-    mockFetch(() => jsonResponse({ ok: true }));
-    const native = createApiClient({ baseUrl: "https://api.example/", credentials: "omit" });
-
-    configureApiClient({ baseUrl: "https://web.example/", credentials: "include" });
-    await native.get("/api/x");
-
-    expect(calls[0].init.credentials).toBe("omit");
-    expect(calls[0].url.startsWith("https://api.example/")).toBe(true);
-  });
-
-  it("sends no cookie or authorization header for a native-shaped client", async () => {
-    mockFetch(() => jsonResponse({ ok: true }));
-    const native = createApiClient({ baseUrl: "https://api.example/", credentials: "omit" });
-    await native.get("/api/x");
-
-    const headers = new Headers(calls[0].init.headers as HeadersInit);
-    expect(headers.get("cookie")).toBeNull();
-    expect(headers.get("authorization")).toBeNull();
-  });
-
-  it("freezes the instance config so a caller cannot mutate it later", () => {
-    const config = { baseUrl: "https://api.example/", credentials: "omit" as const };
-    createApiClient(config);
-    expect(() => {
-      (config as { baseUrl: string }).baseUrl = "https://evil.example/";
-    }).not.toThrow();
-    // The client copied the config, so the original object is irrelevant to it.
-    expect(config.baseUrl).toBe("https://evil.example/");
   });
 
   it("leaves the singleton following the global configuration", async () => {
@@ -291,22 +265,20 @@ describe("timeouts and aborts", () => {
 
   it("clears its timer on success, so nothing keeps the loop alive", async () => {
     vi.useFakeTimers();
-    const clearSpy = vi.spyOn(globalThis, "clearTimeout");
     mockFetch(() => jsonResponse({ ok: true }));
     const client = createApiClient({ baseUrl: "https://api.example/", credentials: "omit" });
     await client.get("/x", undefined, { timeoutMs: 5_000 });
-    expect(clearSpy).toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("clears its timer when the request fails", async () => {
     vi.useFakeTimers();
-    const clearSpy = vi.spyOn(globalThis, "clearTimeout");
     mockFetch(() => {
       throw new Error("network down");
     });
     const client = createApiClient({ baseUrl: "https://api.example/", credentials: "omit" });
     await expect(client.get("/x", undefined, { timeoutMs: 5_000 })).rejects.toThrow("network down");
-    expect(clearSpy).toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("recognises its own abort error", () => {
@@ -316,12 +288,6 @@ describe("timeouts and aborts", () => {
 });
 
 describe("error hygiene", () => {
-  it("maps a non-2xx response to a status-bearing error", async () => {
-    mockFetch(() => jsonResponse({ message: "nope" }, 503));
-    const client = createApiClient({ baseUrl: "https://api.example/", credentials: "omit" });
-    await expect(client.get("/x")).rejects.toBeInstanceOf(ApiClientError);
-  });
-
   it("keeps the response body out of anything that gets logged", async () => {
     const secret = "user@example.com";
     mockFetch(() => jsonResponse({ email: secret }, 403));
@@ -330,6 +296,8 @@ describe("error hygiene", () => {
     await client.get("/x").then(
       () => expect.unreachable("expected a rejection"),
       (error: ApiClientError) => {
+        expect(error).toBeInstanceOf(ApiClientError);
+        expect(error.status).toBe(403);
         expect(JSON.stringify(error)).not.toContain(secret);
         expect(error.message).not.toContain(secret);
       },

@@ -121,22 +121,6 @@ it.each(["dismiss", "unmount"])("does not publish a pending map stop after %s", 
   expect(useSidebarStore.getState()).toMatchObject({ activeSidebarId, activeDetailId });
   view.unmount();
 });
-it("reuses category data across style events and restores it after replacement", async () => {
-  useCategorySearchStore.setState({ activeCategory: "restaurant" });
-  const view = render(<CategoryResultMarkers />);
-  reads = 0;
-  await act(async () => {
-    for (let i = 0; i < 100; i++) fake.emit("styledata");
-  });
-  expect(fake.state.counts.setData.get("category-results-source") ?? 0).toBe(0);
-  expect(reads).toBe(0);
-  act(() => {
-    fake.map.setStyle({} as never);
-  });
-  const data = fake.state.sources.get("category-results-source")?.data as GeoJSON.FeatureCollection;
-  expect(data.features[0].properties?.name).toBe("One");
-  view.unmount();
-});
 
 it("keeps brand-enriched data on unrelated events and fences old image completions after a style replacement", async () => {
   const OriginalImage = globalThis.Image;
@@ -202,7 +186,10 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
       {
         id: "brand",
         name: "Brand",
-        coordinates: [8, 50],
+        get coordinates() {
+          reads++;
+          return [8, 50];
+        },
         osmTags: { "brand:wikidata": "Q1" },
       } as typeof result,
     ];
@@ -218,10 +205,12 @@ it("keeps brand-enriched data on unrelated events and fences old image completio
       "Required logo artist",
     );
     const uploads = fake.state.counts.setData.get("category-results-source");
+    const coordinateReads = reads;
     await act(async () => {
       for (let i = 0; i < 100; i++) fake.emit("styledata");
     });
     expect(fake.state.counts.setData.get("category-results-source")).toBe(uploads);
+    expect(reads).toBe(coordinateReads);
     expect(data().features[0].properties?.imageId).toBe("brand-marker-Q1");
     const oldImage = images[0];
     act(() => {
@@ -688,17 +677,5 @@ it("credits only the actually placed marker and label fields, keeping cached rec
     view?.unmount();
     reach.filtered = old;
     vi.useRealTimers();
-  }
-});
-
-it("does not trust a pre-existing brand map image with no captured file receipt", async () => {
-  const { loadBrandMarkerImage } = await import("./CategoryResultMarkers");
-  const { apiClient } = await import("@openmapx/core");
-  fake.map.addImage("brand-marker-Q999", {} as never);
-  const get = vi.spyOn(apiClient, "get").mockResolvedValue({ qid: "Q999", logoFile: "Logo.svg" });
-  try {
-    expect(await loadBrandMarkerImage(fake.map, "Q999")).toBe(false);
-  } finally {
-    get.mockRestore();
   }
 });

@@ -12,14 +12,12 @@ import { registerSavedRoute } from "./routes/saved-contract";
 import {
   controlledRequestLoggingOptions,
   corsOptions,
-  EXPENSIVE_PUBLIC_PATTERNS,
   makeRateLimitTierHook,
   makeSecurityResponseHeaderHook,
   makeStatusAwareRateLimit,
   makeTimelineAwareRateLimit,
   type RateLimitTiers,
   registerControlledRequestLogging,
-  TILE_PUBLIC_PATTERNS,
   trustProxyConfig,
   uniformErrorHandler,
 } from "./server-wiring.js";
@@ -401,12 +399,6 @@ describe("makeRateLimitTierHook", () => {
     { url: "/api/saved", tier: "public" },
     { url: "/whatever", tier: null },
   ];
-
-  it("keeps integration routes out of global pattern classifiers", () => {
-    for (const pattern of [...EXPENSIVE_PUBLIC_PATTERNS, ...TILE_PUBLIC_PATTERNS]) {
-      expect(pattern.source).not.toContain("integrations");
-    }
-  });
 
   for (const { method = "GET", url, tier } of cases) {
     it(`routes ${method} ${url} to the ${tier ?? "no"} tier`, async () => {

@@ -55,7 +55,6 @@ import { getSubjectDataRegistration, SUBJECT_DATA_CATALOGUE } from "./catalogue.
 import {
   type CollectorSourcePart,
   type CollectorSourcePartEntry,
-  includedPart,
   projectSubjectRecord,
   type SubjectExportRecord,
   stableRecordId,
@@ -90,7 +89,6 @@ export interface OpenMapxCollectorContext {
 
 type QueryDb = typeof defaultDb;
 const PRIMARY_QUERY_PAGE_SIZE = 256;
-const TEST_MATERIALIZATION_RECORD_LIMIT = 10_000;
 
 interface DrizzleCursorQuery<T> extends PromiseLike<T[]> {
   toSQL(): { sql: string; params: unknown[] };
@@ -1435,41 +1433,6 @@ export async function* streamOpenMapxRegistrationRecords(
     default:
       return;
   }
-}
-
-/** Bounded materialization helper for focused projection tests. Live snapshot
- * collection always uses collectOpenMapxDataSnapshot and encrypted streams. */
-export async function collectOpenMapxRegistration(
-  registrationId: string,
-  context: OpenMapxCollectorContext,
-): Promise<CollectorSourcePart> {
-  const registration = getSubjectDataRegistration(registrationId);
-  if (!registration) throw new Error("Unknown privacy registration");
-  if (registration.strategy === "not_personal")
-    return {
-      registrationId,
-      category: registration.category,
-      records: [],
-      outcome: "not_applicable",
-      warningCodes: [],
-      capturedAt: new Date().toISOString(),
-    };
-  if (registration.strategy === "operator_task")
-    return {
-      registrationId,
-      category: registration.category,
-      records: [],
-      outcome: "omitted_with_reason",
-      warningCodes: ["operator-review-required"],
-      capturedAt: new Date().toISOString(),
-    };
-  const streamedRecords: ReturnType<typeof projectSubjectRecord>[] = [];
-  for await (const record of streamOpenMapxRegistrationRecords(registrationId, context)) {
-    if (streamedRecords.length >= TEST_MATERIALIZATION_RECORD_LIMIT)
-      throw new Error("test collector materialization limit exceeded");
-    streamedRecords.push(record);
-  }
-  return includedPart(registrationId, registration.category, streamedRecords);
 }
 
 const PRIMARY_ARTICLE_TARGETS: Readonly<Record<string, string>> = {

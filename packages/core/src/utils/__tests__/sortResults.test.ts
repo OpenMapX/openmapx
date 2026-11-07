@@ -37,15 +37,11 @@ describe("sortResultsByIntent", () => {
   });
 
   it("sorts by ascending distance from the reference point", () => {
-    const sorted = sortResultsByIntent([FAR, NEAR, MID], "distance", REFERENCE);
-    expect(sorted?.map((p) => p.id)).toEqual(["near", "mid", "far"]);
-  });
-
-  it("does not mutate the input array when sorting by distance", () => {
     const input = [FAR, NEAR, MID];
     const sorted = sortResultsByIntent(input, "distance", REFERENCE);
     expect(input.map((p) => p.id)).toEqual(["far", "near", "mid"]);
     expect(sorted).not.toBe(input);
+    expect(sorted?.map((p) => p.id)).toEqual(["near", "mid", "far"]);
   });
 
   it("is a no-op for distance when there is no reference point", () => {

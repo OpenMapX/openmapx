@@ -76,6 +76,7 @@ describe("import dialog", () => {
   it("reviews errors and unresolved names, excludes approximate places by default, imports and selects on finish", async () => {
     const { close } = mount();
     await screen.findByDisplayValue("Trip");
+    expect(screen.getByRole("combobox")).toHaveTextContent("New list");
     expect(screen.getByText(/empty.gpx/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Include approximate/)).not.toBeChecked();
     fireEvent.click(screen.getByText(/Not found/));
@@ -148,11 +149,6 @@ describe("import dialog", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("“Maps (your places)” is optional");
     expect(screen.queryByLabelText("List name")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Import" })).toBeDisabled();
-  });
-  it("shows the new-list destination before the target selector is opened", async () => {
-    mount();
-    await screen.findByDisplayValue("Trip");
-    expect(screen.getByRole("combobox")).toHaveTextContent("New list");
   });
   it("preselects the detail list and lets users include approximate places", async () => {
     mount("trip");

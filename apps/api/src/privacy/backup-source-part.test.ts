@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readdir } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -245,12 +245,18 @@ describe("backup source tar", () => {
 
   it("rejects a declaration that reclassifies OpenMapX rows as Dawarich and removes spooled files", async () => {
     const parent = join(tmpdir(), `openmapx-backup-source-${process.pid}-${Date.now()}`);
-    await expect(
-      spoolBackupSourceTar(Readable.from([fixture({ wrongFamily: true })]), {
-        spoolParentDirectory: parent,
-      }),
-    ).rejects.toMatchObject({ code: "manifest_mismatch" } satisfies Partial<BackupSourcePartError>);
-    expect(await readdir(parent)).toEqual([]);
+    try {
+      await expect(
+        spoolBackupSourceTar(Readable.from([fixture({ wrongFamily: true })]), {
+          spoolParentDirectory: parent,
+        }),
+      ).rejects.toMatchObject({
+        code: "manifest_mismatch",
+      } satisfies Partial<BackupSourcePartError>);
+      expect(await readdir(parent)).toEqual([]);
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
   });
 
   it("rejects the legacy Dawarich-only shape", async () => {

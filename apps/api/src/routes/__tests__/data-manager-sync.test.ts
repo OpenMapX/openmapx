@@ -1,5 +1,5 @@
 import Fastify, { type FastifyInstance } from "fastify";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../auth", () => ({
   auth: {
@@ -31,8 +31,8 @@ vi.mock("../../db/index.js", () => {
 const fetchMock = vi.hoisted(() => vi.fn());
 
 beforeAll(() => {
-  process.env.DATA_MANAGER_AUTH_TOKEN = "service-token";
-  process.env.DATA_MANAGER_URL = "https://data-manager.test:4000";
+  vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "service-token");
+  vi.stubEnv("DATA_MANAGER_URL", "https://data-manager.test:4000");
   vi.stubGlobal("fetch", fetchMock);
 });
 
@@ -48,6 +48,12 @@ beforeAll(async () => {
   app = Fastify({ logger: false });
   await app.register(dataManagerRoute);
   await app.ready();
+});
+
+afterAll(async () => {
+  await app?.close();
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 beforeEach(() => {

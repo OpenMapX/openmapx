@@ -122,97 +122,26 @@ function setupCron(options: CronSetupOptions) {
   return setupProductionCron({ executionReceiver: receiverFixture(), ...options });
 }
 
-interface JobRow {
-  id: string;
-  kind: string;
-  status: string;
-  triggeredBy: string | null;
-  idempotencyKey: string | null;
-  startedAt: Date;
-}
-
-/**
- * Real single-flight controller wired against a stub db. Because the real
- * controller uses drizzle's `and()` / `eq()` / `gt()` helpers, the predicate
- * never reaches the stub as a JS function — it arrives as a serialized SQL
- * tree we can't introspect cheaply. We work around this by patching the
- * controller's `db.select` so the where-clause checks fall back to the
- * recorded `idempotencyKey` + 24h window directly.
- */
-function buildIdempotencyAwareDb(opts: { now: () => number; uuid: () => string }) {
-  const rows: JobRow[] = [];
-
+/** Controlled storage results for the real controller; SQL predicates are covered by PostgreSQL. */
+function buildSingleFlightDb(opts: { uuid: () => string }) {
+  const selectRows = vi.fn().mockResolvedValue([]);
   const stub = {
     select() {
       return {
-        from(_table: unknown) {
-          return {
-            where(_predicate: unknown) {
-              // The real controller passes an `and(eq(idempotencyKey, key), gt(startedAt, cutoff))`.
-              // For the test we approximate by inspecting the most-recent
-              // arguments captured on the stub. We expose a side channel
-              // through `(stub as any).__expectedKey` that tests set.
-              return {
-                orderBy() {
-                  return {
-                    limit(_n: number) {
-                      const key = (stub as unknown as { __expectedKey?: string }).__expectedKey;
-                      if (!key) return Promise.resolve([]);
-                      const cutoff = opts.now() - 24 * 60 * 60 * 1000;
-                      const found = rows
-                        .filter((r) => r.idempotencyKey === key && r.startedAt.getTime() > cutoff)
-                        .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
-                        .slice(0, _n);
-                      return Promise.resolve(found.map((r) => ({ id: r.id })));
-                    },
-                  };
-                },
-              };
-            },
-          };
-        },
-      };
-    },
-    insert(_table: unknown) {
-      return {
-        values(v: {
-          kind: string;
-          status: string;
-          triggeredBy: string | null;
-          idempotencyKey?: string | null;
-          metadata?: unknown;
-        }) {
-          const row: JobRow = {
-            id: opts.uuid(),
-            kind: v.kind,
-            status: v.status,
-            triggeredBy: v.triggeredBy ?? null,
-            idempotencyKey: v.idempotencyKey ?? null,
-            startedAt: new Date(opts.now()),
-          };
-          rows.push(row);
-          return {
-            returning() {
-              return Promise.resolve([{ id: row.id }]);
-            },
-          };
-        },
-      };
-    },
-    update() {
-      return {
-        set() {
+        from() {
           return {
             where() {
-              return Promise.resolve();
+              return { orderBy: () => ({ limit: selectRows }) };
             },
           };
         },
       };
     },
+    insert() {
+      return { values: () => ({ returning: async () => [{ id: opts.uuid() }] }) };
+    },
   };
-
-  return { stub, rows };
+  return { stub, selectRows };
 }
 
 describe("setupCron", () => {
@@ -235,8 +164,7 @@ describe("setupCron", () => {
 
   function makeController(): SingleFlightController {
     let counter = 0;
-    const { stub } = buildIdempotencyAwareDb({
-      now: () => Date.now(),
+    const { stub } = buildSingleFlightDb({
       uuid: () => `job-${++counter}`,
     });
     return createSingleFlightController({ db: stub as never });
@@ -539,41 +467,6 @@ describe("setupCron", () => {
     handles.stop();
   });
 
-  it("skips a scheduled run while another sync is in-flight", async () => {
-    const controller = makeController();
-    // Simulate an existing in-flight job by directly starting one.
-    const first = await controller.tryStartSync({
-      trigger: "manual",
-      triggeredBy: "test",
-    });
-    expect(first.ok).toBe(true);
-
-    const runPipeline = vi.fn().mockResolvedValue({
-      jobId: "should-not-be-called",
-      results: [],
-      finalStatus: "ok" as const,
-    });
-
-    const handles = setupCron({
-      dataDir,
-      countries: [],
-      store: {} as never,
-      singleFlight: controller,
-      logger: { info: () => {}, warn: () => {}, error: () => {} },
-      syncCronExpression: "0 0 1 1 *", // far-future; we trigger manually
-      feedProxyReloadCronExpression: "disabled",
-      executionReceiver: receiverFixture({
-        admitLocal: async () => {
-          throw Error("configuration_maintenance_busy");
-        },
-      }),
-    });
-
-    await handles.runSyncNow();
-    expect(runPipeline).not.toHaveBeenCalled();
-    handles.stop();
-  });
-
   it("opens a pipeline-failure issue when a scheduled sync ends in error", async () => {
     const createIssue = vi.fn(async (_title: string, _body: string) => "https://x/issues/1");
     const runPipeline = vi.fn().mockResolvedValue({
@@ -694,7 +587,7 @@ describe("setupCron", () => {
       handles.stop();
     });
 
-    it("creates a paired proposal even when the Transitous SHA is unchanged, and never activates", async () => {
+    it("delegates proposal creation to the installed paired resolver without invoking host operations", async () => {
       seedLocks();
       const resolveCatalogProposal = vi.fn(async () => ({
         proposalId: "00000000-0000-4000-8000-000000000001",
@@ -1097,14 +990,12 @@ describe("setupCron", () => {
 describe("tryStartSync", () => {
   function makeController() {
     let counter = 0;
-    const built = buildIdempotencyAwareDb({
-      now: () => Date.now(),
+    const built = buildSingleFlightDb({
       uuid: () => `job-${++counter}`,
     });
     return {
       controller: createSingleFlightController({ db: built.stub as never }),
-      stub: built.stub as { __expectedKey?: string },
-      rows: built.rows,
+      selectRows: built.selectRows,
     };
   }
 
@@ -1243,8 +1134,8 @@ describe("tryStartSync", () => {
     }
   });
 
-  it("returns duplicate-idempotency-key when the key was used in <24h", async () => {
-    const { controller, stub } = makeController();
+  it("returns the original job identity when storage reports a duplicate key", async () => {
+    const { controller, selectRows } = makeController();
     const first = await controller.tryStartSync({
       trigger: "api",
       triggeredBy: "alice",
@@ -1253,16 +1144,18 @@ describe("tryStartSync", () => {
     expect(first.ok).toBe(true);
     controller.markSyncFinished();
 
-    // The stub looks up by `__expectedKey`; the real controller passes the
-    // key through drizzle's `and()` filter — this back-channel mirrors that.
-    stub.__expectedKey = "dedup-key";
+    if (!first.ok) throw Error("Expected the first reservation to succeed");
+    selectRows.mockResolvedValueOnce([{ id: first.jobId }]);
     const replay = await controller.tryStartSync({
       trigger: "api",
       triggeredBy: "alice",
       idempotencyKey: "dedup-key",
     });
-    expect(replay.ok).toBe(false);
-    if (!replay.ok) expect(replay.reason).toBe("duplicate-idempotency-key");
+    expect(replay).toEqual({
+      ok: false,
+      reason: "duplicate-idempotency-key",
+      existingJobId: first.jobId,
+    });
   });
 
   it("markSyncFinished clears the lock so the next call succeeds", async () => {
@@ -1278,8 +1171,7 @@ describe("tryStartSync", () => {
 describe("awaitInflightSync", () => {
   it("returns 'finished' immediately when nothing is in-flight", async () => {
     let counter = 0;
-    const { stub } = buildIdempotencyAwareDb({
-      now: () => Date.now(),
+    const { stub } = buildSingleFlightDb({
       uuid: () => `job-${++counter}`,
     });
     const controller = createSingleFlightController({ db: stub as never });
@@ -1289,8 +1181,7 @@ describe("awaitInflightSync", () => {
 
   it("times out when the inflight flag is never cleared", async () => {
     let counter = 0;
-    const { stub } = buildIdempotencyAwareDb({
-      now: () => Date.now(),
+    const { stub } = buildSingleFlightDb({
       uuid: () => `job-${++counter}`,
     });
     const controller = createSingleFlightController({ db: stub as never });

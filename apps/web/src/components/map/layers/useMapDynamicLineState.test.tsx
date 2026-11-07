@@ -41,22 +41,6 @@ afterEach(() => {
 });
 
 describe("useMapDynamicLineState", () => {
-  it("applies paint and filter values once the layer exists", () => {
-    addLine();
-
-    render(
-      <Probe
-        paint={{ line: { "line-gradient": ["get", "a"] } }}
-        filters={{ line: ["==", "a", 1] }}
-      />,
-    );
-
-    expect(fake.state.paint.get("line")?.["line-gradient"]).toEqual(["get", "a"]);
-    expect(fake.state.filters.get("line")).toEqual(["==", "a", 1]);
-    expect(fake.state.counts.setPaintPropertyByName.get("line:line-gradient")).toBe(1);
-    expect(fake.state.counts.setFilter.get("line")).toBe(1);
-  });
-
   it("does not call setPaintProperty or setFilter again when the value is unchanged on re-render", () => {
     addLine();
     const gradient = ["get", "a"];
@@ -65,6 +49,8 @@ describe("useMapDynamicLineState", () => {
     const { rerender } = render(
       <Probe paint={{ line: { "line-gradient": gradient } }} filters={{ line: filter }} />,
     );
+    expect(fake.state.paint.get("line")?.["line-gradient"]).toEqual(gradient);
+    expect(fake.state.filters.get("line")).toEqual(filter);
     rerender(<Probe paint={{ line: { "line-gradient": gradient } }} filters={{ line: filter }} />);
     rerender(
       <Probe
@@ -75,16 +61,16 @@ describe("useMapDynamicLineState", () => {
 
     expect(fake.state.counts.setPaintPropertyByName.get("line:line-gradient")).toBe(1);
     expect(fake.state.counts.setFilter.get("line")).toBe(1);
-  });
-
-  it("applies exactly one call when the value changes", () => {
-    addLine();
-
-    const { rerender } = render(<Probe paint={{ line: { "line-gradient": ["get", "a"] } }} />);
-    rerender(<Probe paint={{ line: { "line-gradient": ["get", "b"] } }} />);
-
+    rerender(
+      <Probe
+        paint={{ line: { "line-gradient": ["get", "b"] } }}
+        filters={{ line: ["==", "a", 2] }}
+      />,
+    );
     expect(fake.state.counts.setPaintPropertyByName.get("line:line-gradient")).toBe(2);
     expect(fake.state.paint.get("line")?.["line-gradient"]).toEqual(["get", "b"]);
+    expect(fake.state.counts.setFilter.get("line")).toBe(2);
+    expect(fake.state.filters.get("line")).toEqual(["==", "a", 2]);
   });
 
   it("skips a layer that does not exist yet, without throwing, and applies once it appears", () => {
@@ -197,7 +183,12 @@ describe("useMapDynamicLineState", () => {
       },
     );
 
-    expect(() => render(<Probe paint={{ line: boom as never }} />)).not.toThrow();
+    const view = render(<Probe paint={{ line: boom as never }} />);
     expect(errors.count).toBeGreaterThan(0);
+    const before = errors.count;
+    view.rerender(<Probe paint={{ line: { "line-gradient": ["get", "recovered"] } }} />);
+    expect(fake.state.paint.get("line")?.["line-gradient"]).toEqual(["get", "recovered"]);
+    view.rerender(<Probe paint={{ line: boom as never }} />);
+    expect(errors.count).toBeGreaterThan(before);
   });
 });

@@ -29,43 +29,51 @@ describe("Dawarich runtime contracts", () => {
       (entry) => entry.type === "journey",
     );
     if (!journey) throw new Error("fixture needs a journey");
-    expect(
-      timelineResponseSchema.parse({
-        ...timelineResponseFixture,
-        days: [
-          {
-            ...timelineResponseFixture.days[0],
-            entries: [
-              timelineResponseFixture.days[0].entries[0],
-              {
-                ...journey,
-                distance: null,
-                avg_speed: null,
-                elevation_gain: null,
-                elevation_loss: null,
-                speed_unit: null,
-                day_distance: null,
-                day_duration: null,
-              },
-            ],
-          },
-        ],
-      }).days[0].entries,
-    ).toHaveLength(2);
+    const parsed = timelineResponseSchema.parse({
+      ...timelineResponseFixture,
+      days: [
+        {
+          ...timelineResponseFixture.days[0],
+          entries: [
+            timelineResponseFixture.days[0].entries[0],
+            {
+              ...journey,
+              distance: null,
+              avg_speed: null,
+              elevation_gain: null,
+              elevation_loss: null,
+              speed_unit: null,
+              day_distance: null,
+              day_duration: null,
+            },
+          ],
+        },
+      ],
+    });
+    expect(parsed.days[0].entries).toHaveLength(2);
+    expect(parsed.days[0].entries[1]).toMatchObject({
+      distance: null,
+      avg_speed: null,
+      elevation_gain: null,
+      elevation_loss: null,
+      speed_unit: null,
+      day_distance: null,
+      day_duration: null,
+    });
   });
 
   it("accepts a null optional visit point count", () => {
-    expect(
-      timelineResponseSchema.parse({
-        ...timelineResponseFixture,
-        days: [
-          {
-            ...timelineResponseFixture.days[0],
-            entries: [{ ...timelineResponseFixture.days[0].entries[0], point_count: null }],
-          },
-        ],
-      }).days[0].entries,
-    ).toHaveLength(1);
+    const parsed = timelineResponseSchema.parse({
+      ...timelineResponseFixture,
+      days: [
+        {
+          ...timelineResponseFixture.days[0],
+          entries: [{ ...timelineResponseFixture.days[0].entries[0], point_count: null }],
+        },
+      ],
+    });
+    expect(parsed.days[0].entries).toHaveLength(1);
+    expect(parsed.days[0].entries[0]).toMatchObject({ point_count: null });
   });
 
   it.each([

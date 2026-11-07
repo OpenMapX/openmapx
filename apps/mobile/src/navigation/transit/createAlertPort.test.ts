@@ -73,8 +73,14 @@ function fakeScheduler() {
   return { scheduler, calls, held: () => held };
 }
 
+const databases: ReturnType<typeof openTestDatabase>[] = [];
+afterEach(async () => {
+  await Promise.all(databases.splice(0).map((db) => db.closeAsync()));
+});
+
 async function harness(options: { available?: boolean } = {}) {
   const database = openTestDatabase();
+  databases.push(database);
   await migrateSessionSchema(database, 1_000);
   const repository = new SessionRepository(database);
   const { scheduler, calls, held } = fakeScheduler();
@@ -85,22 +91,10 @@ async function harness(options: { available?: boolean } = {}) {
     now: () => NOW,
     isAvailable: () => options.available !== false,
   });
-  return { repository, port, scheduler, calls, held, close: () => database.closeAsync() };
+  return { repository, port, scheduler, calls, held };
 }
 
 describe("createAlertPort.reconcile", () => {
-  it("schedules the alert the policy computed", async () => {
-    const context = await harness();
-    await context.repository.createPreparing(riding());
-
-    await context.port.reconcile("session-t1");
-
-    const recorded = await context.repository.listScheduledAlerts("session-t1");
-    expect(recorded).toHaveLength(1);
-    expect(context.held()).toEqual([recorded[0].alertId]);
-    await context.close();
-  });
-
   it("does not reschedule when nothing meaningfully changed", async () => {
     // A cancel-and-re-add every tick is churn platforms rate-limit, and it opens
     // a window with no alert scheduled at all.
@@ -114,18 +108,10 @@ describe("createAlertPort.reconcile", () => {
     // The row is untouched: same identifier, same trigger, no cancel issued.
     expect(await context.repository.listScheduledAlerts("session-t1")).toEqual(first);
     expect(context.calls.filter((call) => call.startsWith("cancel:"))).toEqual([]);
-    await context.close();
-  });
 
-  it("still asks the scheduler, because the system may have lost the request", async () => {
-    const context = await harness();
-    await context.repository.createPreparing(riding());
-    await context.port.reconcile("session-t1");
-
-    await context.port.reconcile("session-t1");
-
+    expect(first).toHaveLength(1);
+    expect(context.held()).toEqual([first[0].alertId]);
     expect(context.calls.filter((call) => call.startsWith("reconcile:"))).toHaveLength(2);
-    await context.close();
   });
 
   it("reschedules under the same identifier when the time shifts", async () => {
@@ -145,7 +131,6 @@ describe("createAlertPort.reconcile", () => {
     const after = (await context.repository.listScheduledAlerts("session-t1"))[0];
     expect(after.alertId).toBe(before.alertId);
     expect(after.triggerAtMs).not.toBe(before.triggerAtMs);
-    await context.close();
   });
 
   it("schedules nothing when the rider declined the permission", async () => {
@@ -157,7 +142,6 @@ describe("createAlertPort.reconcile", () => {
 
     expect(await context.repository.listScheduledAlerts("session-t1")).toEqual([]);
     expect(context.calls).toEqual([]);
-    await context.close();
   });
 
   it("clears the alert once there is nothing to schedule", async () => {
@@ -173,7 +157,6 @@ describe("createAlertPort.reconcile", () => {
 
     expect(await context.repository.listScheduledAlerts("session-t1")).toEqual([]);
     expect(context.held()).toEqual([]);
-    await context.close();
   });
 
   it("ignores a reconcile for a session that is no longer active", async () => {
@@ -183,7 +166,6 @@ describe("createAlertPort.reconcile", () => {
     await context.port.reconcile("some-other-session");
 
     expect(context.calls).toEqual([]);
-    await context.close();
   });
 
   it("ignores a ground session, which has no stop to miss", async () => {
@@ -193,32 +175,46 @@ describe("createAlertPort.reconcile", () => {
     await context.port.reconcile("session-1");
 
     expect(context.calls).toEqual([]);
-    await context.close();
   });
 });
 
 describe("createAlertPort.cancelSession", () => {
   it("cancels at the operating system before forgetting the row", async () => {
-    // The other order would leave an alert nothing knows how to cancel if this
-    // crashed between the two.
     const context = await harness();
     await context.repository.createPreparing(riding());
     await context.port.reconcile("session-t1");
-    const scheduled = (await context.repository.listScheduledAlerts("session-t1"))[0];
-
-    await context.port.cancelSession("session-t1");
-
-    expect(context.calls).toContain(`cancel:${scheduled.alertId}`);
+    const recorded = await context.repository.listScheduledAlerts("session-t1");
+    const originalCancel = context.scheduler.cancelSession;
+    let release!: () => void;
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const allowed = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    context.scheduler.cancelSession = async (ids) => {
+      entered();
+      await allowed;
+      await originalCancel(ids);
+    };
+    const pending = context.port.cancelSession("session-t1");
+    try {
+      await started;
+      expect(await context.repository.listScheduledAlerts("session-t1")).toEqual(recorded);
+    } finally {
+      release();
+      await pending;
+    }
+    expect(context.calls).toContain(`cancel:${recorded[0].alertId}`);
     expect(await context.repository.listScheduledAlerts("session-t1")).toEqual([]);
     expect(context.held()).toEqual([]);
-    await context.close();
   });
 
   it("is safe to call when nothing was scheduled", async () => {
     const context = await harness();
 
     await expect(context.port.cancelSession("session-t1")).resolves.toBeUndefined();
-    await context.close();
   });
 });
 
@@ -239,7 +235,6 @@ describe("cancelOrphanedAlerts", () => {
 
     expect(removed).toBe(1);
     expect(context.held()).toEqual([]);
-    await context.close();
   });
 
   it("keeps an alert the active session still owns", async () => {
@@ -255,7 +250,6 @@ describe("cancelOrphanedAlerts", () => {
 
     expect(removed).toBe(0);
     expect(context.held()).toHaveLength(1);
-    await context.close();
   });
 
   it("does nothing when the system holds nothing", async () => {
@@ -268,6 +262,5 @@ describe("cancelOrphanedAlerts", () => {
         now: () => NOW,
       }),
     ).toBe(0);
-    await context.close();
   });
 });

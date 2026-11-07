@@ -50,20 +50,9 @@ describe("DeepLinkManager before the overlay registry is initialized", () => {
     expect(useWeatherStore.getState().activeSubLayer).toBe("wind");
     expect(window.location.search).toContain("ov=weather");
     expect(window.location.search).toContain("weather=wind");
-  });
-
-  it("does not re-apply the link when the registry is refreshed later", () => {
-    window.history.replaceState(null, "", "/?ov=weather");
-    render(<DeepLinkManager />);
-    act(() => initOverlayRegistry([WEATHER]));
-    expect(isOverlayActive("weather")).toBe(true);
-
     act(() => useWeatherStore.getState().closePanel());
     expect(isOverlayActive("weather")).toBe(false);
-
-    // Periodic integration-metadata refresh rebuilds the registry.
     act(() => initOverlayRegistry([WEATHER]));
-
     expect(isOverlayActive("weather")).toBe(false);
   });
 });

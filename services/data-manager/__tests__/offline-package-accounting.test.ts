@@ -265,7 +265,7 @@ describe("offline-package per-principal accounting", () => {
     expect(await store.retainedUsage(principalB)).toEqual({ references: 0, logicalBytes: 0 });
   });
   it.each([principalA, "b".repeat(64)])(
-    "reconciles missing ready bytes across store recovery for %s",
+    "reconciles missing ready bytes during admission for %s",
     async (owner) => {
       const store = new MemoryOfflinePackageAccountingStore();
       const item = job(1);

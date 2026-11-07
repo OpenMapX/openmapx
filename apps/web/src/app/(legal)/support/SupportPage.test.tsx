@@ -30,26 +30,10 @@ describe("SupportPage", () => {
     expect(view.getByText("support@openmapx.com")).toBeInTheDocument();
   });
 
-  it.each([["/privacy"], ["/terms"], ["/licenses"], ["/delete-account"]])(
-    "links to %s",
-    async (href) => {
-      const view = await renderPage();
-
+  it("links to legal and account pages", async () => {
+    const view = await renderPage();
+    for (const href of ["/privacy", "/terms", "/licenses", "/delete-account"]) {
       expect(view.container.querySelector(`a[href="${href}"]`)).toBeTruthy();
-    },
-  );
-
-  it("explains why guidance stops when the screen locks", async () => {
-    const view = await renderPage();
-
-    // The single most confusing thing about the app, explained rather than
-    // answered with "reinstall".
-    expect(view.getByText(en.legal.supportNavigationStopsBody)).toBeInTheDocument();
-  });
-
-  it("is honest that a cold offline start cannot show the map", async () => {
-    const view = await renderPage();
-
-    expect(view.getByText(en.legal.supportOfflineBody)).toBeInTheDocument();
+    }
   });
 });

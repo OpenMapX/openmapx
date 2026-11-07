@@ -162,12 +162,6 @@ describe("actual extension forms and SDK ownership", () => {
     expect(screen.queryByRole("button", { name: "Uninstall" })).toBeNull();
     expect(screen.queryByText(/Showing last loaded/)).toBeNull();
   });
-  it("preserves the full commit and gives its caption a wrapping rule", async () => {
-    mount();
-    await reviewUrl();
-    const caption = await screen.findByText(`Commit ${"a".repeat(40)}`);
-    expect(caption).toHaveStyle({ overflowWrap: "anywhere" });
-  });
   it("renders independent revocation/staleness, unknown version and the existing critical guard", async () => {
     intercept = (u) =>
       u.pathname.endsWith("/catalog")
@@ -213,6 +207,7 @@ describe("actual extension forms and SDK ownership", () => {
     mount();
     await reviewUrl();
     await screen.findByText("127.0.0.1:8080 → container 80/tcp");
+    expect(screen.getByText(`Commit ${"a".repeat(40)}`)).toHaveStyle({ overflowWrap: "anywhere" });
     expect(screen.getByText("[::]:5353 → container 53/udp")).toBeInTheDocument();
     expect(screen.getByText(/APP_MODE/)).toBeInTheDocument();
     const confirm = screen.getByRole("button", { name: "Confirm ports and install" });
@@ -321,18 +316,6 @@ describe("actual extension forms and SDK ownership", () => {
     await screen.findByText("Host port confirmation does not match");
     expect(calls.filter((c) => c.url.pathname.includes("/update/"))).toHaveLength(1);
     expect(previewCalls()).toHaveLength(1);
-  });
-  it("prevents repeated uninstall clicks while its accepted request is pending", async () => {
-    const pending = deferred<Response>();
-    vi.stubGlobal("confirm", () => true);
-    intercept = (_u, i) => (i.method === "DELETE" ? pending.promise : undefined);
-    mount();
-    fireEvent.click(screen.getByRole("tab", { name: "Installed" }));
-    const remove = await screen.findByRole("button", { name: "Uninstall" });
-    fireEvent.click(remove);
-    fireEvent.click(remove);
-    await waitFor(() => expect(calls.filter((c) => c.init.method === "DELETE")).toHaveLength(1));
-    await act(async () => pending.resolve(Response.json({ jobId: "job-1" }, { status: 202 })));
   });
   it("retires a displayed preview when its catalog snapshot changes", async () => {
     const { qc } = mount();
@@ -470,6 +453,7 @@ describe("destructive target exclusion survives tab disposal", () => {
           name: "Uninstall",
         });
       await screen.findByText("Demo extension");
+      fireEvent.click(button("Demo extension"));
       fireEvent.click(button("Demo extension"));
       await waitFor(() => expect(deletes).toEqual(["demo"]));
       fireEvent.click(screen.getByRole("tab", { name: "Browse" }));

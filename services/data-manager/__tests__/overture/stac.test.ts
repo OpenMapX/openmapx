@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import { captureOvertureCatalogue } from "../../src/jobs/overture/attribution-capture.js";
 import {
   buildOverturePullContract,
-  OVERTURE_PLACE_COLUMNS,
   pullContractPath,
   readOverturePullContract,
   resolveOvertureStacContract,
@@ -99,8 +98,13 @@ describe("Overture STAC release contract", () => {
       selectedAssetRows: 200,
     });
     expect(contract.assets).toHaveLength(1);
-    expect(contract.assets[0]).toMatchObject({ itemId: "00001", numRows: 200 });
-    expect(contract.assets[0]?.href).not.toContain("*");
+    expect(contract.assets[0]).toMatchObject({
+      itemId: "00001",
+      numRows: 200,
+      href:
+        `https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/release/${release}/` +
+        "theme=places/type=place/part-00001-immutable.parquet",
+    });
   });
 
   it("fails closed when an archived release has no STAC catalog", async () => {
@@ -175,7 +179,25 @@ describe("local Overture pull contract", () => {
       region,
       rowCount: 42,
       contributors: ["Overture", "meta"],
-      columns: [...OVERTURE_PLACE_COLUMNS],
+      columns: [
+        "id",
+        "geometry",
+        "theme",
+        "type",
+        "version",
+        "names",
+        "basic_category",
+        "taxonomy",
+        "addresses",
+        "websites",
+        "socials",
+        "emails",
+        "phones",
+        "brand",
+        "confidence",
+        "operating_status",
+        "sources",
+      ],
       sourcesCatalogue: expect.arrayContaining([
         expect.objectContaining({ sourceId: "foursquare" }),
       ]),

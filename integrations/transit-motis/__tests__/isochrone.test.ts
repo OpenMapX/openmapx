@@ -1,3 +1,4 @@
+import { latticePointAt } from "@openmapx/mobility-core/isoline";
 import { TRANSIT_WALK_PROFILE } from "@openmapx/mobility-core/transit-reachability";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -35,14 +36,26 @@ beforeEach(() => {
 
 describe("sampleMotisTravelTimeField", () => {
   it("samples every lattice point and preserves lattice order", async () => {
-    respondWith(120);
+    let nextDuration = 120;
+    oneToManyIntermodalPost.mockImplementation(async ({ body }) => ({
+      data: {
+        street_durations: body.many.map(() => ({ duration: nextDuration++ })),
+        transit_durations: body.many.map(() => []),
+      },
+    }));
     const field = await sampleMotisTravelTimeField(INSTANCE, REQUEST, {
-      maxBatchSize: 128,
+      maxBatchSize: 16,
       maxSamples: 64,
       deadlineMs: 60_000,
     });
-    expect(field.values).toHaveLength(field.lattice.nx * field.lattice.ny);
-    expect(field.values.every((value) => value === 120)).toBe(true);
+    const count = field.lattice.nx * field.lattice.ny;
+    expect(field.values).toEqual(Array.from({ length: count }, (_, index) => 120 + index));
+    expect(oneToManyIntermodalPost.mock.calls.flatMap(([request]) => request.body.many)).toEqual(
+      Array.from({ length: count }, (_, index) => {
+        const [lng, lat] = latticePointAt(field.lattice, index);
+        return `${lat},${lng}`;
+      }),
+    );
   });
 
   it("splits into batches no larger than the advertised limit", async () => {

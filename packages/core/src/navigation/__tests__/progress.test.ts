@@ -74,6 +74,7 @@ describe("computeProgress", () => {
     expect(p.currentStepIndex).toBe(1);
     expect(p.distanceToNextManeuver).toBe(50); // end of step 1 (200) - 150
     expect(p.distanceRemaining).toBe(150);
+    expect(p.durationRemaining).toBeCloseTo(30, 5);
   });
 
   it("computes distances for a forced step index (the step-advance gate)", () => {
@@ -92,11 +93,6 @@ describe("computeProgress", () => {
     const forced = computeProgress(route, 150, 0);
     const geometric = computeProgress(route, 150);
     expect(forced.durationRemaining).toBe(geometric.durationRemaining);
-  });
-
-  it("computes duration remaining as partial current step + later steps", () => {
-    const p = computeProgress(route, 150); // half of step 1 left + step 2
-    expect(p.durationRemaining).toBeCloseTo(30, 5); // 10 + 20
   });
 
   it("clamps past the end", () => {

@@ -72,11 +72,7 @@ describe("nearestFeature", () => {
   ];
 
   it("picks the closest candidate across providers", () => {
-    expect(nearestFeature(features, 10, 10)?.id).toBe("near");
-  });
-
-  it("preserves the owning provider", () => {
-    expect(nearestFeature(features, 10, 10)?.providerId).toBe("mapillary");
+    expect(nearestFeature(features, 10, 10)).toMatchObject({ id: "near", providerId: "mapillary" });
   });
 
   it("returns null when there are no candidates", () => {

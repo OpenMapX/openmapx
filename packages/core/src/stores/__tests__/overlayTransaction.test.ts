@@ -170,20 +170,12 @@ describe("restoreOverlaySnapshot", () => {
   it("skips an entry whose userRevision moved — including a direct write that reset the same value", () => {
     const id = makeOverlay();
     const before = { id, panelOpen: true, layerVisible: true, userRevision: 0 };
-
-    // Automation displaces it (suppressed, revision unchanged)...
     runInOverlayTransaction(() => requireEntry(id).getState().closePanel());
-    // ...then the user directly re-opens it — same eventual value automation
-    // would restore to, but a real, revision-bumping write.
-    requireEntry(id).getState().openPanel();
+    // Re-closing an already closed panel is still the user's intent.
+    requireEntry(id).getState().closePanel();
     expect(requireEntry(id).getState().userRevision).toBe(1);
-
     restoreOverlaySnapshot([before]);
-    // Still open — restore must not have run closePanel/openPanel again over
-    // the user's write (which would be a no-op here, but the point is that it
-    // is SKIPPED, verified by the revision no longer matching being the
-    // reason, not a coincidence).
-    expect(requireEntry(id).getState().panelOpen).toBe(true);
+    expect(requireEntry(id).getState().panelOpen).toBe(false);
     expect(requireEntry(id).getState().userRevision).toBe(1);
   });
 

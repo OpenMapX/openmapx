@@ -5,7 +5,6 @@ import {
   type CameraRequest,
   cameraForRequest,
   clearCameraRequest,
-  compact,
   frameBoundsInstant,
   issueCameraRequest,
   jumpToView,
@@ -99,12 +98,6 @@ describe("toInsets", () => {
 
   it("falls back when nothing is asked for", () => {
     expect(toInsets(undefined, 80)).toEqual({ top: 80, bottom: 80, left: 80, right: 80 });
-  });
-});
-
-describe("compact", () => {
-  it("drops undefined members and keeps falsy ones", () => {
-    expect(compact({ zoom: undefined, bearing: 0, pitch: 45 })).toEqual({ bearing: 0, pitch: 45 });
   });
 });
 

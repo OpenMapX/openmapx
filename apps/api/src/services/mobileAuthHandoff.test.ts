@@ -4,7 +4,6 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { db, sql } from "../db";
 import { mobileAuthHandoff } from "../db/schema";
 import {
-  challengeForVerifier,
   HANDOFF_TTL_MS,
   hashCallbackCode,
   MAX_OUTSTANDING_PER_USER,
@@ -44,8 +43,9 @@ describe.skipIf(skipDatabase)("MobileAuthHandoffService with PostgreSQL", () => 
     await db.delete(mobileAuthHandoff).where(eq(mobileAuthHandoff.userId, OTHER_USER));
   });
 
-  const VERIFIER = randomBytes(32).toString("base64url");
-  const CHALLENGE = challengeForVerifier(VERIFIER);
+  // Public PKCE S256 interoperability vector; expected challenge is independent of the service helper.
+  const VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+  const CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
   const STATE = randomBytes(16).toString("base64url");
 
   const service = new MobileAuthHandoffService();
@@ -68,7 +68,7 @@ describe.skipIf(skipDatabase)("MobileAuthHandoffService with PostgreSQL", () => 
     it("returns a code that expires in two minutes", async () => {
       const result = await issued();
 
-      expect(result.expiresAtMs).toBe(NOW + HANDOFF_TTL_MS);
+      expect(result.expiresAtMs).toBe(NOW + 120_000);
       expect(result.callbackCode.length).toBeGreaterThan(32);
     });
 

@@ -47,7 +47,7 @@ const SHEET_SETTLE_MS = 120;
  * the movement land on detents. Steps straight from peek to full when the
  * config has no mid detent.
  */
-export function keyboardDetent(key: string, current: Detent, config: DetentConfig): Detent | null {
+function keyboardDetent(key: string, current: Detent, config: DetentConfig): Detent | null {
   if (key === "Home") return current === "peek" ? null : "peek";
   if (key === "End") return current === "full" ? null : "full";
   const step = key === "ArrowUp" ? 1 : key === "ArrowDown" ? -1 : 0;
@@ -64,7 +64,7 @@ export function keyboardDetent(key: string, current: Detent, config: DetentConfi
  * originated on the host itself (reachable via its `tabIndex`, not by
  * delegation) should move the sheet.
  */
-export function isHostKeyDown(event: { target: unknown; currentTarget: unknown }): boolean {
+function isHostKeyDown(event: { target: unknown; currentTarget: unknown }): boolean {
   return event.target === event.currentTarget;
 }
 

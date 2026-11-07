@@ -32,15 +32,8 @@ interface TrafficLogger {
 }
 
 export interface RefreshWaysToEdgesDeps {
-  /**
-   * Test seam: yields `way_edges.txt` lines without reading the shared mount.
-   * Production callers omit this and stream the real file.
-   */
-  readWayEdgesLines?: (path: string) => AsyncIterable<string>;
   /** Where to write the filtered JSON map. Defaults under `DATA_DIR`. */
   outputPath?: string;
-  /** Test seam: where `valhalla_ways_to_edges` left its output. */
-  wayEdgesPath?: string;
   logger?: TrafficLogger;
 }
 
@@ -123,12 +116,11 @@ export async function refreshWaysToEdges(
   // covered-way filter below is data-manager's own concern and stays here.
   await runOpsOperation({ kind: "valhalla.traffic.refreshWaysToEdges" });
 
-  const wayEdgesPath = deps.wayEdgesPath ?? defaultWayEdgesPath();
-  const readLines = deps.readWayEdgesLines ?? defaultReadWayEdgesLines;
+  const wayEdgesPath = defaultWayEdgesPath();
 
   const result: Record<number, WayEdge[]> = {};
   let edgeCount = 0;
-  for await (const line of readLines(wayEdgesPath)) {
+  for await (const line of defaultReadWayEdgesLines(wayEdgesPath)) {
     const parsed = parseWayEdgesLine(line, coveredWayIds);
     if (!parsed) continue;
     result[parsed.wayId] = parsed.edges;

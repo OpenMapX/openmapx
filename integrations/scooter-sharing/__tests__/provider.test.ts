@@ -188,13 +188,6 @@ describe("scooterSharingProvider.search", () => {
 sharedMobilityProviderContract({
   name: "scooter sharing",
   provider: scooterSharingProvider,
-  fixtures,
   formFactors: ["scooter_standing", "scooter_seated", "moped"],
   mapContextOptions: { systemIds: ["voioslo"], vehicleTypeIds: ["scooter"] },
-  arrangeInventory({ station, vehicle }) {
-    vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [station], vehicles: [vehicle] });
-    vi.mocked(searchFelyx).mockResolvedValue([]);
-    vi.mocked(searchDeNwMobidromScooter).mockResolvedValue({ stations: [], vehicles: [] });
-    vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
-  },
 });

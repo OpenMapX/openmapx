@@ -12,13 +12,6 @@ import {
 } from "./index";
 
 describe("data-manager wire contracts", () => {
-  it("owns all 62 explicit operations with two named glyph HEAD/GET contracts", () => {
-    expect(Object.keys(dataManagerOperations)).toHaveLength(62);
-    expect(dataManagerOperations.getOfflineGlyph.path).toBe(
-      "/offline/packages/glyphs/:version/:fontstack/:range.pbf",
-    );
-    expect(dataManagerOperations.headOfflineGlyph.method).toBe("HEAD");
-  });
   it("matches the exact reviewed explicit operation inventory", () => {
     const inventory = JSON.parse(
       readFileSync(new URL("./__fixtures__/reviewed-surface.json", import.meta.url), "utf8"),

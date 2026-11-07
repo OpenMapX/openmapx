@@ -73,12 +73,6 @@ afterEach(() => {
 });
 
 describe("AccountAvatarButton", () => {
-  it("renders an explicit non-submit button", () => {
-    render(<AuthorityBoundAvatar />);
-
-    expect(screen.getByRole("button", { name: "map.account" }).getAttribute("type")).toBe("button");
-  });
-
   it("does not submit a surrounding form when tapped", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
@@ -93,22 +87,10 @@ describe("AccountAvatarButton", () => {
       </form>,
     );
 
-    await user.click(screen.getByRole("button", { name: "map.account" }));
+    const account = screen.getByRole("button", { name: "map.account" });
+    expect(account.getAttribute("type")).toBe("button");
+    await user.click(account);
     expect(onSubmit).not.toHaveBeenCalled();
-  });
-
-  it("renders the current signed-in account", async () => {
-    sessionState.current = {
-      data: signedInSession("user-a", "session-a", "Alice"),
-      isPending: false,
-    };
-
-    render(<AuthorityBoundAvatar />);
-
-    expect(await screen.findByTestId("private-account-menu")).toHaveAttribute(
-      "data-user-id",
-      "user-a",
-    );
   });
 
   it("opens one account dialog from the signed-in account menu", async () => {
@@ -119,6 +101,10 @@ describe("AccountAvatarButton", () => {
     const user = userEvent.setup();
     render(<AuthorityBoundAvatar />);
 
+    expect(await screen.findByTestId("private-account-menu")).toHaveAttribute(
+      "data-user-id",
+      "user-a",
+    );
     await user.click(await screen.findByRole("button", { name: "open account settings" }));
 
     expect(screen.getAllByTestId("account-settings-dialog")).toHaveLength(1);

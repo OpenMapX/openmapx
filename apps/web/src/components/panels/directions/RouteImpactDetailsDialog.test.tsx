@@ -145,16 +145,6 @@ function renderDialog(
 }
 
 describe("formatEnergyConsumed", () => {
-  it("formats diesel fuel liters", () => {
-    expect(
-      formatEnergyConsumed(
-        { fuelLiters: 4.2, electricityKwh: null, provenance: mockDieselImpact.energy.provenance },
-        "diesel",
-        "en",
-      ),
-    ).toBe("4.2 L Diesel");
-  });
-
   it("formats petrol fuel liters with localized label", () => {
     expect(
       formatEnergyConsumed(
@@ -165,18 +155,6 @@ describe("formatEnergyConsumed", () => {
         "Strom",
       ),
     ).toBe("5,1 L Benzin");
-  });
-
-  it("formats electricity kWh with localized label", () => {
-    expect(
-      formatEnergyConsumed(
-        { fuelLiters: null, electricityKwh: 16.4, provenance: mockDieselImpact.energy.provenance },
-        "bev",
-        "de",
-        "Benzin",
-        "Strom",
-      ),
-    ).toBe("16,4 kWh Strom");
   });
 
   it("returns dash when energy is null", () => {
@@ -192,17 +170,23 @@ describe("formatEnergyConsumed", () => {
 
 describe("RouteImpactDetailsDialog", () => {
   describe("Breakdown Section", () => {
-    it("renders dialog with title and vehicle name", () => {
-      renderDialog({ impact: mockDieselImpact });
-      expect(screen.getByTestId("dialog-vehicle-name").textContent).toBe("VW Golf 2.0 TDI");
-      expect(screen.getByTestId("breakdown-tab-content")).toBeInTheDocument();
-    });
-
     it("displays the well-to-wheel emissions breakdown for ICE diesel", () => {
       renderDialog({ impact: mockDieselImpact });
       expect(screen.getByTestId("wtw-total-emissions").textContent).toContain("8.4 kg CO₂");
       expect(screen.getByTestId("tailpipe-emissions").textContent).toContain("7 kg CO₂");
       expect(screen.getByTestId("upstream-emissions").textContent).toContain("1.4 kg CO₂");
+      expect(screen.getByTestId("dialog-vehicle-name")).toHaveTextContent("VW Golf 2.0 TDI");
+      expect(screen.getByTestId("energy-consumed-value")).toHaveTextContent("4.2 L Diesel");
+      expect(screen.getByTestId("energy-cost-value").textContent).toContain("6.80");
+      expect(screen.getByTestId("tolls-cost-value").textContent).toContain(
+        "Tolls may apply; cost unknown",
+      );
+      expect(screen.getByTestId("total-cost-value").textContent).toContain("6.80");
+      expect(screen.getByText("Known subtotal")).toBeInTheDocument();
+      expect(screen.queryByTestId("per-person-section")).toBeNull();
+      expect(screen.getByTestId("comparison-explanation-banner")).toBeInTheDocument();
+      expect(screen.getByText("Saves 3.2 km distance")).toBeInTheDocument();
+      expect(screen.getByTestId("dialog-eco-choice-chip")).toBeInTheDocument();
     });
 
     it("displays the emissions breakdown for EV with zero direct tailpipe note", () => {
@@ -212,53 +196,19 @@ describe("RouteImpactDetailsDialog", () => {
         "0 g (Zero direct emissions)",
       );
       expect(screen.getByTestId("upstream-emissions").textContent).toContain("2.4 kg CO₂");
-    });
-
-    it("displays energy consumed", () => {
-      renderDialog({ impact: mockEvImpactMultiOccupancy });
       expect(screen.getByTestId("energy-consumed-value").textContent).toContain(
         "16.4 kWh Electric",
       );
-    });
-
-    it("displays a known subtotal with unknown toll coverage", () => {
-      renderDialog({ impact: mockDieselImpact });
-      expect(screen.getByTestId("energy-cost-value").textContent).toContain("6.80");
-      expect(screen.getByTestId("tolls-cost-value").textContent).toContain(
-        "Tolls may apply; cost unknown",
-      );
-      expect(screen.getByTestId("total-cost-value").textContent).toContain("6.80");
-      expect(screen.getByText("Known subtotal")).toBeInTheDocument();
-    });
-
-    it("displays monetary cost breakdown with unknown tolls", () => {
-      renderDialog({ impact: mockEvImpactMultiOccupancy });
       expect(screen.getByTestId("energy-cost-value").textContent).toContain("4.20");
       expect(screen.getByTestId("tolls-cost-value").textContent).toContain(
         "Tolls apply (amount unknown)",
       );
       expect(screen.getByTestId("total-cost-value").textContent).toContain("4.20");
       expect(screen.getByTestId("total-cost-value").textContent).not.toContain("+");
-    });
-
-    it("does not show per-person breakdown when occupancy is 1", () => {
-      renderDialog({ impact: mockDieselImpact });
-      expect(screen.queryByTestId("per-person-section")).toBeNull();
-    });
-
-    it("shows per-person breakdown when occupancy > 1", () => {
-      renderDialog({ impact: mockEvImpactMultiOccupancy });
       expect(screen.getByTestId("per-person-section")).toBeInTheDocument();
       expect(screen.getByTestId("per-person-emissions").textContent).toContain("800 g CO₂");
       expect(screen.getByTestId("per-person-cost").textContent).toContain("1.40");
       expect(screen.getAllByText("Known subtotal").length).toBeGreaterThan(0);
-    });
-
-    it("displays comparison banner with explanation and Eco Choice chip", () => {
-      renderDialog({ impact: mockDieselImpact });
-      expect(screen.getByTestId("comparison-explanation-banner")).toBeInTheDocument();
-      expect(screen.getByText("Saves 3.2 km distance")).toBeInTheDocument();
-      expect(screen.getByTestId("dialog-eco-choice-chip")).toBeInTheDocument();
     });
   });
 
@@ -334,7 +284,9 @@ describe("RouteImpactDetailsDialog", () => {
       });
 
       fireEvent.click(screen.getByTestId("tab-assumptions"));
-      expect(screen.getByTestId("vehicle-select")).toBeInTheDocument();
+      fireEvent.mouseDown(screen.getByRole("combobox"));
+      fireEvent.click(screen.getByRole("option", { name: "Tesla Model 3" }));
+      expect(handleAssumptions).toHaveBeenCalledWith({ vehicleId: "v2" });
     });
   });
 
@@ -397,6 +349,7 @@ describe("RouteImpactDetailsDialog", () => {
       });
 
       expect(screen.getByText("Routen-Auswirkungen")).toBeInTheDocument();
+      expect(screen.getByTestId("energy-consumed-value")).toHaveTextContent("16,4 kWh Elektrisch");
       expect(screen.getByTestId("wtw-total-emissions").textContent).toContain("2,4 kg CO₂");
       expect(screen.getByTestId("tailpipe-emissions").textContent).toContain(
         "0 g (Keine direkten Emissionen)",

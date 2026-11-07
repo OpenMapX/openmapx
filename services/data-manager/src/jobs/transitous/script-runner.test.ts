@@ -1,7 +1,4 @@
-import {
-  mintTransitousCapability,
-  verifyTransitousCapability,
-} from "@openmapx/core/transitous-runner";
+import { verifyTransitousCapability } from "@openmapx/core/transitous-runner";
 import { describe, expect, it } from "vitest";
 import { createTransitousScriptRunner, TransitousScriptError } from "./script-runner.js";
 
@@ -55,6 +52,14 @@ describe("Transitous script runner client", () => {
     expect(
       verifyTransitousCapability(KEY, capability, { script: "generate-attribution" }, NOW).ok,
     ).toBe(true);
+    expect(
+      verifyTransitousCapability(
+        KEY,
+        capability,
+        { script: "generate-attribution" },
+        NOW + 60 * 60_000,
+      ).ok,
+    ).toBe(false);
   });
 
   it("mints a distinct capability per run so none can be replayed", async () => {
@@ -159,13 +164,5 @@ describe("Transitous script runner client", () => {
       now: () => NOW,
     });
     await expect(run({ script: "garbage-collect" })).rejects.toThrow(/not configured/i);
-  });
-
-  it("does not mint a capability that outlives the run it authorizes", () => {
-    // The client stamps `now`, so a queued run that sits for an hour presents an
-    // already-expired token rather than a still-valid one.
-    const run = { script: "garbage-collect" } as const;
-    const capability = mintTransitousCapability(KEY, { now: NOW, run });
-    expect(verifyTransitousCapability(KEY, capability, run, NOW + 60 * 60_000).ok).toBe(false);
   });
 });

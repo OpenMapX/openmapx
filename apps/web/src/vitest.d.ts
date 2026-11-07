@@ -74,7 +74,9 @@ interface VitestMockFunction {
   (...args: unknown[]): unknown;
   mock: { calls: unknown[][] };
   mockImplementation(implementation: VitestMockImplementation): VitestMockFunction;
+  mockImplementationOnce(implementation: VitestMockImplementation): VitestMockFunction;
   mockResolvedValue(value: unknown): VitestMockFunction;
+  mockResolvedValueOnce(value: unknown): VitestMockFunction;
   mockRejectedValue(value: unknown): VitestMockFunction;
   mockRejectedValueOnce(value: unknown): VitestMockFunction;
   mockReturnValue(value: unknown): VitestMockFunction;

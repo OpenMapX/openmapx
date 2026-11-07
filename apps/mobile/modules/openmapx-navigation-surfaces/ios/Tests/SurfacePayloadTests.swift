@@ -11,9 +11,8 @@ final class SurfacePayloadTests: XCTestCase {
     XCTAssertTrue(SurfacePolicy.accepts(owner: "A", revision: 1, incoming: p))
     XCTAssertFalse(SurfacePolicy.accepts(owner: "A", revision: 3, incoming: p))
     XCTAssertFalse(SurfacePolicy.canClear(owner: "B", expected: "A"))
-    XCTAssertLessThanOrEqual(try JSONEncoder().encode(p).count, 3000)
   }
-  func testMultibyteOversizeAndControlRejected() throws {
+  func testOversizedAndControlTextRejected() throws {
     XCTAssertThrowsError(try SurfacePayload.decode(payload(String(repeating: "ä", count: 2000))))
     XCTAssertThrowsError(try SurfacePayload.decode(payload("secret\nvalue")))
   }

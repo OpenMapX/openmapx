@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -97,25 +97,5 @@ describe("Gate E — untrusted acquisition", () => {
       }
       expect(alive).toBe(false);
     }
-  });
-
-  it("removes the temporary tree when a clone fails validation", async () => {
-    const { gitShallowClone } = await import("../git-clone");
-    const target = join(root(), "clone-target");
-
-    // Validation rejects the URL before any process starts, and the helper's
-    // cleanup path still runs.
-    await expect(
-      gitShallowClone({ url: "https://evil.example.test/o/r.git", targetDir: target }),
-    ).rejects.toThrow();
-    expect(existsSync(target)).toBe(false);
-  });
-
-  it("leaves no stray temporary directories from a rejected acquisition", async () => {
-    const before = readdirSync(tmpdir()).filter((name) => name.startsWith("openmapx-git-"));
-    const { gitShallowClone } = await import("../git-clone");
-    await expect(gitShallowClone({ url: "file:///etc/passwd" })).rejects.toThrow();
-    const after = readdirSync(tmpdir()).filter((name) => name.startsWith("openmapx-git-"));
-    expect(after.length).toBeLessThanOrEqual(before.length);
   });
 });

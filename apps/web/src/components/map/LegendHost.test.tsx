@@ -100,24 +100,17 @@ afterEach(() => {
 });
 
 describe("LegendHost", () => {
-  it("stays hidden while standalone toolbars are inactive", () => {
+  it("shows and releases the host for each independent standalone tool", () => {
     renderHost();
-
     expect(screen.queryByRole("button", { name: "hideLegend" })).toBeNull();
-  });
-
-  it("shows the host when measurement is active without a generic overlay panel", () => {
-    useMeasurementStore.getState().activate();
-    renderHost();
-
-    expect(screen.queryByRole("button", { name: "hideLegend" })).not.toBeNull();
-  });
-
-  it("shows the host when travel time is active without a generic overlay panel", () => {
-    useTravelTimeStore.getState().activate();
-    renderHost();
-
-    expect(screen.queryByRole("button", { name: "hideLegend" })).not.toBeNull();
+    act(() => useMeasurementStore.getState().activate());
+    expect(screen.getByRole("button", { name: "hideLegend" })).toBeInTheDocument();
+    act(() => useMeasurementStore.getState().deactivate());
+    expect(screen.queryByRole("button", { name: "hideLegend" })).toBeNull();
+    act(() => useTravelTimeStore.getState().activate());
+    expect(screen.getByRole("button", { name: "hideLegend" })).toBeInTheDocument();
+    act(() => useTravelTimeStore.getState().deactivate());
+    expect(screen.queryByRole("button", { name: "hideLegend" })).toBeNull();
   });
 
   function hostRules(): string {
@@ -135,14 +128,6 @@ describe("LegendHost", () => {
       .filter((css) => css.includes(`.${host?.classList[1]}{bottom:`))
       .join(" ");
   }
-
-  it("keeps the toggle flush on the map edge while the footer leaves its column free", () => {
-    useMeasurementStore.getState().activate();
-    act(() => publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 22));
-    renderHost();
-
-    expect(bottomRule()).toContain("bottom:var(--omx-safe-bottom)");
-  });
 
   it("stands the legend on a footer whose credits run under the toggle", () => {
     useMeasurementStore.getState().activate();
@@ -205,8 +190,9 @@ describe("LegendHost", () => {
     useMeasurementStore.getState().activate();
     renderHost();
 
-    expect(hostRules()).toContain("transition:left 0.25s ease;");
-    expect(hostRules()).not.toMatch(/transition:[^;]*bottom/);
+    const host = screen.getByRole("button", { name: "hideLegend" }).parentElement!;
+    const transition = getComputedStyle(host).transition;
+    expect(transition).not.toMatch(/(^|,)\s*(bottom|all)(\s|$)/);
   });
 
   describe("while a sheet drives the follow on the compositor", () => {

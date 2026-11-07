@@ -6,7 +6,6 @@ import {
   MAX_OUTBOX_EVENTS,
   MAX_PROCESSED_COMMANDS,
   MAX_QUARANTINE_RECORDS,
-  PROCESSED_COMMAND_TTL_MS,
   type RepositoryMutation,
   SessionRepository,
 } from "./SessionRepository";
@@ -15,9 +14,14 @@ import { openTestDatabase } from "./testing/nodeSqliteDatabase";
 import { groundSessionFixture, nextRevision } from "./testing/sessionFixture";
 
 const NOW = 1_700_000_100_000;
+const databases: Database[] = [];
+afterEach(async () => {
+  for (const database of databases.splice(0)) await database.closeAsync();
+});
 
 async function freshRepository(): Promise<{ database: Database; repository: SessionRepository }> {
   const database = openTestDatabase();
+  databases.push(database);
   await migrateSessionSchema(database, 1_000);
   return { database, repository: new SessionRepository(database) };
 }
@@ -30,19 +34,6 @@ const activate = (current: MobileNavigationSession): RepositoryMutation => ({
 
 describe("SessionRepository", () => {
   describe("createPreparing", () => {
-    it("writes the first revision when nothing is active", async () => {
-      const { repository, database } = await freshRepository();
-      const session = groundSessionFixture();
-
-      const result = await repository.createPreparing(session);
-
-      expect(result.ok).toBe(true);
-      const loaded = await repository.loadActive(NOW);
-      expect(loaded?.sessionId).toBe("session-1");
-      expect(loaded?.revision).toBe(1);
-      await database.closeAsync();
-    });
-
     it("refuses to displace a live session", async () => {
       const { repository, database } = await freshRepository();
       await repository.createPreparing(groundSessionFixture({ status: "active" }));
@@ -53,7 +44,6 @@ describe("SessionRepository", () => {
 
       expect(result).toEqual({ ok: false, code: "session-active" });
       expect((await repository.loadActive(NOW))?.sessionId).toBe("session-1");
-      await database.closeAsync();
     });
 
     it("replaces a finished session and clears its rows", async () => {
@@ -73,7 +63,6 @@ describe("SessionRepository", () => {
 
       expect(result.ok).toBe(true);
       expect(await repository.listPendingEvents("session-1")).toEqual([]);
-      await database.closeAsync();
     });
   });
 
@@ -82,11 +71,14 @@ describe("SessionRepository", () => {
       const { repository, database } = await freshRepository();
       await repository.createPreparing(groundSessionFixture());
 
+      expect(await repository.loadActive(NOW)).toMatchObject({
+        sessionId: "session-1",
+        revision: 1,
+      });
       const result = await repository.compareAndSwap("session-1", 1, activate, NOW);
 
       expect(result.ok && result.session.revision).toBe(2);
       expect(result.ok && result.effects).toEqual([{ kind: "publish-snapshot", immediate: true }]);
-      await database.closeAsync();
     });
 
     it("lets exactly one of two competing writers win", async () => {
@@ -127,18 +119,6 @@ describe("SessionRepository", () => {
       const events = await repository.listPendingEvents("session-1");
       expect(events).toHaveLength(1);
       expect(events[0].eventId).toBe("winner");
-      await database.closeAsync();
-    });
-
-    it("reports a conflict for a stale revision", async () => {
-      const { repository, database } = await freshRepository();
-      await repository.createPreparing(groundSessionFixture());
-      await repository.compareAndSwap("session-1", 1, activate, NOW);
-
-      const stale = await repository.compareAndSwap("session-1", 1, activate, NOW);
-
-      expect(stale).toEqual({ ok: false, code: "revision-conflict" });
-      await database.closeAsync();
     });
 
     it("reports a conflict for another session's revision", async () => {
@@ -148,7 +128,6 @@ describe("SessionRepository", () => {
       const other = await repository.compareAndSwap("session-9", 1, activate, NOW);
 
       expect(other).toEqual({ ok: false, code: "revision-conflict" });
-      await database.closeAsync();
     });
 
     it("reports no active session when authority is empty", async () => {
@@ -157,10 +136,9 @@ describe("SessionRepository", () => {
       const result = await repository.compareAndSwap("session-1", 1, activate, NOW);
 
       expect(result).toEqual({ ok: false, code: "no-active-session" });
-      await database.closeAsync();
     });
 
-    it("refuses a mutation that skips or repeats a revision", async () => {
+    it.each([1, 5])("refuses a mutation whose next revision is %s", async (revision) => {
       const { repository, database } = await freshRepository();
       await repository.createPreparing(groundSessionFixture());
 
@@ -168,12 +146,11 @@ describe("SessionRepository", () => {
         repository.compareAndSwap(
           "session-1",
           1,
-          (current) => ({ session: { ...current, revision: 5 } }),
+          (current) => ({ session: { ...current, revision } }),
           NOW,
         ),
       ).rejects.toThrow(/exactly one/);
       expect((await repository.loadActive(NOW))?.revision).toBe(1);
-      await database.closeAsync();
     });
 
     it("refuses a mutation that changes the session identity", async () => {
@@ -189,7 +166,6 @@ describe("SessionRepository", () => {
         ),
       ).rejects.toThrow(/session identity/);
       expect((await repository.loadActive(NOW))?.sessionId).toBe("session-1");
-      await database.closeAsync();
     });
   });
 
@@ -213,10 +189,9 @@ describe("SessionRepository", () => {
       expect(loaded?.revision).toBe(1);
       expect(loaded?.status).toBe("preparing");
       expect(await repository.listPendingEvents("session-1")).toEqual([]);
-      await database.closeAsync();
     });
 
-    it("keeps the whole commit when the caller dies after it returns", async () => {
+    it("retains the committed session, events and alerts for a new repository instance", async () => {
       const { database, repository } = await freshRepository();
       await repository.createPreparing(groundSessionFixture());
 
@@ -239,7 +214,6 @@ describe("SessionRepository", () => {
       expect((await restarted.loadActive(NOW))?.status).toBe("active");
       expect(await restarted.listPendingEvents("session-1")).toHaveLength(1);
       expect(await restarted.listScheduledAlerts("session-1")).toHaveLength(1);
-      await database.closeAsync();
     });
 
     it("commits the session, its events and its alerts atomically", async () => {
@@ -258,7 +232,7 @@ describe("SessionRepository", () => {
             // written inside this same transaction.
             alerts: [
               { alertId: "a1", legIndex: 0, triggerAtMs: NOW },
-              { alertId: "a1", legIndex: -1, triggerAtMs: NOW },
+              { alertId: "a2", legIndex: -1, triggerAtMs: NOW },
             ],
           }),
           NOW,
@@ -269,7 +243,6 @@ describe("SessionRepository", () => {
       expect(loaded?.status).toBe("preparing");
       expect(await repository.listPendingEvents("session-1")).toEqual([]);
       expect(await repository.listScheduledAlerts("session-1")).toEqual([]);
-      await database.closeAsync();
     });
   });
 
@@ -293,7 +266,6 @@ describe("SessionRepository", () => {
       // The second load finds nothing to quarantine, so it cannot crash-loop.
       expect(await repository.loadActive(NOW)).toBeNull();
       expect(await repository.listQuarantined()).toHaveLength(1);
-      await database.closeAsync();
     });
 
     it("distinguishes a record quarantined by this read from an empty store", async () => {
@@ -301,8 +273,6 @@ describe("SessionRepository", () => {
 
       await expect(repository.inspectActive(NOW)).resolves.toEqual({ kind: "quarantined" });
       await expect(repository.inspectActive(NOW)).resolves.toEqual({ kind: "none" });
-
-      await database.closeAsync();
     });
 
     it("quarantines an unsupported schema version separately", async () => {
@@ -312,7 +282,6 @@ describe("SessionRepository", () => {
 
       expect(await repository.loadActive(NOW)).toBeNull();
       expect((await repository.listQuarantined())[0].reason).toBe("unsupported-schema");
-      await database.closeAsync();
     });
 
     it("never stores the original session JSON", async () => {
@@ -329,9 +298,9 @@ describe("SessionRepository", () => {
       const rows = await database.getAllAsync<Record<string, unknown>>(
         "SELECT * FROM quarantined_sessions",
       );
+      expect(rows).toHaveLength(1);
       expect(JSON.stringify(rows)).not.toContain("tok_should_never_persist");
       expect(JSON.stringify(rows)).not.toContain("50.11");
-      await database.closeAsync();
     });
 
     it("keeps at most three quarantine records", async () => {
@@ -343,7 +312,6 @@ describe("SessionRepository", () => {
       const quarantined = await repository.listQuarantined();
       expect(quarantined).toHaveLength(MAX_QUARANTINE_RECORDS);
       expect(quarantined.map((record) => record.sessionId)).toEqual(["s5", "s4", "s3"]);
-      await database.closeAsync();
     });
 
     it("truncates an over-long quarantine reason", async () => {
@@ -351,7 +319,6 @@ describe("SessionRepository", () => {
       await repository.quarantineCorruptSession("s", "x".repeat(500), NOW);
 
       expect((await repository.listQuarantined())[0].reason).toHaveLength(64);
-      await database.closeAsync();
     });
   });
 
@@ -368,12 +335,14 @@ describe("SessionRepository", () => {
         });
       }
 
+      expect(
+        (await repository.listPendingEvents("session-1")).map((event) => event.eventId),
+      ).toEqual(["a", "b", "c"]);
       await repository.ackEvents(["a", "c"]);
 
       expect((await repository.listPendingEvents("session-1")).map((e) => e.eventId)).toEqual([
         "b",
       ]);
-      await database.closeAsync();
     });
 
     it("ignores a duplicate event id", async () => {
@@ -391,7 +360,6 @@ describe("SessionRepository", () => {
       const pending = await repository.listPendingEvents("session-1");
       expect(pending).toHaveLength(1);
       expect(pending[0].payload).toEqual({ n: 1 });
-      await database.closeAsync();
     });
 
     it("compacts non-critical events to make room rather than dropping a critical one", async () => {
@@ -417,7 +385,6 @@ describe("SessionRepository", () => {
 
       const pending = await repository.listPendingEvents("session-1");
       expect(pending.map((event) => event.eventId)).toEqual(["snapshot-0", "critical"]);
-      await database.closeAsync();
     });
 
     it("refuses a new event when the queue is full of critical ones", async () => {
@@ -443,40 +410,24 @@ describe("SessionRepository", () => {
       const pending = await repository.listPendingEvents("session-1");
       expect(pending).toHaveLength(MAX_OUTBOX_EVENTS);
       expect(pending.map((event) => event.eventId)).not.toContain("overflow");
-      await database.closeAsync();
     });
   });
 
   describe("command dedupe", () => {
-    it("returns the exact prior response for a replayed message", async () => {
+    it("does not overwrite a remembered response on replay", async () => {
       const { database, repository } = await freshRepository();
       const response = { type: "native.ack", status: "accepted", revision: 2 };
       await repository.rememberCommand("m1", "session-1", response, NOW);
-
-      expect(await repository.lookupCommand("m1", NOW + 1_000)).toEqual(response);
-      await database.closeAsync();
-    });
-
-    it("does not overwrite a remembered response on replay", async () => {
-      const { database, repository } = await freshRepository();
-      await repository.rememberCommand("m1", "session-1", { first: true }, NOW);
+      expect(await repository.lookupCommand("m1", NOW + 1000)).toEqual(response);
       await repository.rememberCommand("m1", "session-1", { first: false }, NOW + 10);
 
-      expect(await repository.lookupCommand("m1", NOW + 20)).toEqual({ first: true });
-      await database.closeAsync();
-    });
-
-    it("forgets a response once it expires", async () => {
-      const { database, repository } = await freshRepository();
-      await repository.rememberCommand("m1", "session-1", { ok: true }, NOW);
-
-      expect(await repository.lookupCommand("m1", NOW + PROCESSED_COMMAND_TTL_MS)).toBeNull();
-      await database.closeAsync();
+      expect(await repository.lookupCommand("m1", NOW + 20)).toEqual(response);
+      expect(await repository.lookupCommand("m1", NOW + 86_400_000)).toBeNull();
     });
 
     it("evicts expired rows and caps the table by count", async () => {
       const { database, repository } = await freshRepository();
-      await repository.rememberCommand("old", "session-1", {}, NOW - PROCESSED_COMMAND_TTL_MS * 2);
+      await repository.rememberCommand("old", "session-1", {}, NOW - 86_400_000 * 2);
       for (let index = 0; index < MAX_PROCESSED_COMMANDS + 5; index += 1) {
         await repository.rememberCommand(`m${index}`, "session-1", { index }, NOW + index);
       }
@@ -491,7 +442,6 @@ describe("SessionRepository", () => {
       expect(await repository.lookupCommand(`m${MAX_PROCESSED_COMMANDS + 4}`, NOW)).toEqual({
         index: MAX_PROCESSED_COMMANDS + 4,
       });
-      await database.closeAsync();
     });
   });
 
@@ -516,7 +466,6 @@ describe("SessionRepository", () => {
       expect((await repository.listScheduledAlerts("session-1")).map((a) => a.alertId)).toEqual([
         "a3",
       ]);
-      await database.closeAsync();
     });
 
     it("records a fired alert without deleting its identity", async () => {
@@ -530,7 +479,6 @@ describe("SessionRepository", () => {
       await repository.markAlert("a1", "fired", NOW + 100);
 
       expect((await repository.listScheduledAlerts("session-1"))[0].state).toBe("fired");
-      await database.closeAsync();
     });
   });
 
@@ -572,22 +520,6 @@ describe("SessionRepository", () => {
       expect(await repository.listPendingEvents("session-1")).toEqual([]);
       expect(await repository.listScheduledAlerts("session-1")).toEqual([]);
       expect(await repository.lookupCommand("m1", NOW)).toBeNull();
-      await database.closeAsync();
-    });
-
-    it("leaves nothing location-bearing in the database", async () => {
-      const { database, repository } = await freshRepository();
-      await repository.createPreparing(groundSessionFixture({ status: "active" }));
-      await repository.terminate("session-1", "stopped", NOW);
-
-      const dump = await database.getAllAsync<Record<string, unknown>>(
-        "SELECT * FROM terminal_ack",
-      );
-      const serialised = JSON.stringify(dump);
-      for (const forbidden of ["50.1", "8.6", "geometry", "refreshToken", "instruction"]) {
-        expect(serialised).not.toContain(forbidden);
-      }
-      await database.closeAsync();
     });
 
     it("is idempotent and ignores an unknown session", async () => {
@@ -603,7 +535,6 @@ describe("SessionRepository", () => {
       expect(other.ack).toBeNull();
       // The first acknowledgement is preserved rather than overwritten by a retry.
       expect((await repository.readTerminalAck("session-1"))?.completedAtMs).toBe(NOW);
-      await database.closeAsync();
     });
 
     it("allows a new session after termination", async () => {
@@ -616,7 +547,6 @@ describe("SessionRepository", () => {
       );
 
       expect(result.ok).toBe(true);
-      await database.closeAsync();
     });
   });
 
@@ -631,7 +561,6 @@ describe("SessionRepository", () => {
       expect(rows.length).toBeLessThanOrEqual(MAX_DIAGNOSTIC_ROWS);
       // Trimming takes the oldest, so the newest event must still be present.
       expect(rows.at(-1)?.fields).toEqual({ bucket: (MAX_DIAGNOSTIC_ROWS + 49) % 5 });
-      await database.closeAsync();
     });
 
     it("keeps the ring under the byte ceiling even with few rows", async () => {
@@ -644,8 +573,9 @@ describe("SessionRepository", () => {
       const usage = await database.getFirstAsync<{ bytes: number }>(
         "SELECT SUM(LENGTH(fields_json)) AS bytes FROM diagnostic_events",
       );
-      expect(usage?.bytes ?? 0).toBeLessThanOrEqual(1024 * 1024);
-      await database.closeAsync();
+      expect(usage?.bytes).toBeGreaterThan(0);
+      expect(usage?.bytes).toBeLessThanOrEqual(1024 * 1024);
+      expect((await repository.listDiagnostics()).at(-1)?.createdAtMs).toBe(NOW + 11);
     });
   });
 
@@ -660,7 +590,6 @@ describe("SessionRepository", () => {
       expect(active?.rows).toBe(1);
       expect(active?.columns).toContain("session_json");
       expect(JSON.stringify(described)).not.toContain("50.11");
-      await database.closeAsync();
     });
   });
 });

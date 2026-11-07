@@ -19,7 +19,7 @@ import {
 import { type MapEdge, publishMapObstruction } from "@/lib/mapObstructions";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
 
-export const PADDING_EASE_MS = 250;
+const PADDING_EASE_MS = 250;
 /** A padding change this soon after an instant framing request jumps as well. */
 const INSTANT_AFTER_REQUEST_MS = 300;
 

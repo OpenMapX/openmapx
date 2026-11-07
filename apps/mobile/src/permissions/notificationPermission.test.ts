@@ -77,40 +77,20 @@ describe("notificationReducer", () => {
     expect(effects).toEqual([{ kind: "resolved", availability: "available" }]);
   });
 
-  it("resolves as denied without blocking navigation", () => {
-    // A rider who declines the backup still gets guidance.
-    const { state, effects } = drive([
-      start("not-determined"),
-      { type: "disclosure-accepted" },
-      { type: "result", state: "denied", canAskAgain: false },
-    ]);
-
-    expect(state).toEqual({ state: "denied", canAskAgain: false });
-    expect(effects).toEqual([{ kind: "resolved", availability: "denied" }]);
-  });
-
-  it("always ends in a resolved effect, whatever the rider chose", () => {
-    const paths: NotificationEvent[][] = [
-      [start("not-determined", false)],
-      [start("granted")],
-      [start("denied")],
-      [start("not-determined"), { type: "disclosure-declined" }],
-      [
+  it.each([false, true])(
+    "resolves denial without blocking navigation (canAskAgain=%s)",
+    (canAskAgain) => {
+      // A rider who declines the backup still gets guidance.
+      const { state, effects } = drive([
         start("not-determined"),
         { type: "disclosure-accepted" },
-        { type: "result", state: "granted", canAskAgain: false },
-      ],
-      [
-        start("not-determined"),
-        { type: "disclosure-accepted" },
-        { type: "result", state: "denied", canAskAgain: true },
-      ],
-    ];
+        { type: "result", state: "denied", canAskAgain },
+      ]);
 
-    for (const path of paths) {
-      expect(drive(path).effects.some((effect) => effect.kind === "resolved")).toBe(true);
-    }
-  });
+      expect(state).toEqual({ state: "denied", canAskAgain });
+      expect(effects).toEqual([{ kind: "resolved", availability: "denied" }]);
+    },
+  );
 
   it("emits at most one operating-system request per attempt", () => {
     const events: NotificationEvent[] = [

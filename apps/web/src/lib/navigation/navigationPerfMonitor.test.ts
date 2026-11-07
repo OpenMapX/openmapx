@@ -121,17 +121,6 @@ describe("navigationPerfMonitor", () => {
     expect(monitor.snapshot().running).toBe(false);
   });
 
-  it("attaches exactly one listener per map event and one store subscription", () => {
-    const { monitor, fake, store, observers } = setup();
-    monitor.start(fake.map, store.store);
-    for (const event of ["render", "move", "moveend", "idle"]) {
-      expect(fake.state.handlers.get(event)?.size).toBe(1);
-    }
-    expect(store.subscribed()).toBe(true);
-    expect(observers.created.map((o) => o.entryType).sort()).toEqual(["longtask", "resource"]);
-    monitor.stop();
-  });
-
   it("does not multiply listeners across repeated start/stop cycles", () => {
     const { monitor, fake, store, observers } = setup();
     for (let i = 0; i < 5; i += 1) {
@@ -139,7 +128,15 @@ describe("navigationPerfMonitor", () => {
       monitor.stop();
     }
     monitor.start(fake.map, store.store);
-    expect(fake.state.handlers.get("render")?.size).toBe(1);
+    for (const event of ["render", "move", "moveend", "idle"])
+      expect(fake.state.handlers.get(event)?.size).toBe(1);
+    expect(store.subscribed()).toBe(true);
+    expect(
+      observers.created
+        .slice(-2)
+        .map((o) => o.entryType)
+        .sort(),
+    ).toEqual(["longtask", "resource"]);
     expect(observers.created.filter((o) => o.entryType === "resource")).toHaveLength(6);
     monitor.stop();
     for (const event of ["render", "move", "moveend", "idle"]) {

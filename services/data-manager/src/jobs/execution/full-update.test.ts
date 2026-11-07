@@ -294,10 +294,17 @@ it.skipIf(
       if (admitted.execution !== "async") throw Error("Async Full Update required");
       operationId = admitted.operationId;
       rootOperationKey = key;
-      await Promise.race([
-        started,
-        new Promise((_, reject) => setTimeout(() => reject(Error("Transit did not start")), 60000)),
-      ]);
+      let transitStartTimeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          started,
+          new Promise((_, reject) => {
+            transitStartTimeout = setTimeout(() => reject(Error("Transit did not start")), 60000);
+          }),
+        ]);
+      } finally {
+        clearTimeout(transitStartTimeout);
+      }
       expect(effects).toEqual(["download-osm", "transit-sync"]);
       expect(services.currentConfigurationGeneration(host.infraDir)).toBe(host.initial.revisionId);
       expect(existsSync(commands) ? readFileSync(commands, "utf8") : "").not.toContain(

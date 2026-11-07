@@ -52,23 +52,14 @@ const sampleRangeHeight: [number, number][] = [
 
 describe("elevationService", () => {
   describe("getElevation()", () => {
-    it("returns points and interval from /height response", async () => {
-      mockFetch.mockResolvedValueOnce(mockOk(makeHeightResponse(sampleRangeHeight)));
-
-      const { elevationService } = await import("../elevation.service.js");
-      const result = await elevationService.getElevation(sampleCoords, 5000);
-
-      expect(result).not.toBeNull();
-      expect(result?.points).toHaveLength(4);
-      expect(result?.interval).toBe(50); // 5km < 100km → 50m resample
-    });
-
     it("maps each range_height pair to {distance, elevation}", async () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeHeightResponse(sampleRangeHeight)));
 
       const { elevationService } = await import("../elevation.service.js");
       const result = await elevationService.getElevation(sampleCoords, 5000);
 
+      expect(result?.points).toHaveLength(4);
+      expect(result?.interval).toBe(50);
       expect(result?.points[0].distance).toBe(0);
       expect(result?.points[0].elevation).toBe(34.5);
       expect(result?.points[1].distance).toBe(50);
@@ -106,54 +97,20 @@ describe("elevationService", () => {
       await elevationService.getElevation(sampleCoords, 5000);
 
       const callArgs = encodeMock.mock.calls[callsBefore][0] as [number, number][];
-      expect(callArgs).toHaveLength(3);
+      expect(callArgs).toEqual(sampleCoords);
     });
 
-    it("uses resample distance 50m for routes < 100km", async () => {
+    it.each([
+      [50_000, 50],
+      [200_000, 100],
+      [600_000, 200],
+      [0, 50],
+      [undefined, 50],
+    ])("uses resample interval %s -> %s metres", async (distance, interval) => {
       mockFetch.mockResolvedValueOnce(mockOk(makeHeightResponse(sampleRangeHeight)));
-
       const { elevationService } = await import("../elevation.service.js");
-      const result = await elevationService.getElevation(sampleCoords, 50_000);
-
-      expect(result?.interval).toBe(50);
-    });
-
-    it("uses resample distance 100m for routes 100-500km", async () => {
-      mockFetch.mockResolvedValueOnce(mockOk(makeHeightResponse(sampleRangeHeight)));
-
-      const { elevationService } = await import("../elevation.service.js");
-      const result = await elevationService.getElevation(sampleCoords, 200_000); // 200km
-
-      expect(result?.interval).toBe(100);
-    });
-
-    it("uses resample distance 200m for routes ≥500km", async () => {
-      mockFetch.mockResolvedValueOnce(mockOk(makeHeightResponse(sampleRangeHeight)));
-
-      const { elevationService } = await import("../elevation.service.js");
-      const result = await elevationService.getElevation(sampleCoords, 600_000); // 600km
-
-      expect(result?.interval).toBe(200);
-    });
-
-    it("defaults to 50m resample when routeDistance is 0", async () => {
-      mockFetch.mockResolvedValueOnce(mockOk(makeHeightResponse(sampleRangeHeight)));
-
-      const { elevationService } = await import("../elevation.service.js");
-      const result = await elevationService.getElevation(sampleCoords, 0);
-
-      // routeLengthKm = 0/1000 = 0, then `|| 50` → 50km < 100 → resample 50
-      expect(result?.interval).toBe(50);
-    });
-
-    it("defaults to 50m resample when routeDistance is undefined", async () => {
-      mockFetch.mockResolvedValueOnce(mockOk(makeHeightResponse(sampleRangeHeight)));
-
-      const { elevationService } = await import("../elevation.service.js");
-      const result = await elevationService.getElevation(sampleCoords);
-
-      // routeDistanceMetres undefined → 0 / 1000 = 0, `|| 50` → 50km < 100 → resample 50
-      expect(result?.interval).toBe(50);
+      const result = await elevationService.getElevation(sampleCoords, distance);
+      expect(result?.interval).toBe(interval);
     });
 
     it("returns null on HTTP error", async () => {

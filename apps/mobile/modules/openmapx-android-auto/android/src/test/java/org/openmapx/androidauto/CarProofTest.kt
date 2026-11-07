@@ -5,7 +5,6 @@ import androidx.car.app.navigation.model.NavigationTemplate
 import androidx.car.app.testing.TestCarContext
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -29,8 +28,10 @@ class CarProofTest {
         .put("remainingSeconds", 20)
         .put("etaMs", 1700000000000)
     try {
-      CarState.projection = p
+      CarState.projection = null
       val screen = NavigationScreen(context)
+      assertTrue(screen.onGetTemplate() is NavigationTemplate)
+      CarState.projection = p
       assertTrue(screen.onGetTemplate() is NavigationTemplate)
       p.put("rerouting", true)
       assertTrue(screen.onGetTemplate() is NavigationTemplate)
@@ -47,24 +48,4 @@ class CarProofTest {
     assertEquals(20.0, value.getDouble("bottom"), 0.0)
   }
 
-  @Test
-  fun idleTemplateIsValid() {
-    val screen =
-      NavigationScreen(
-        TestCarContext.createCarContext(org.robolectric.RuntimeEnvironment.getApplication())
-      )
-    assertTrue(screen.onGetTemplate() is NavigationTemplate)
-  }
-
-  @Test
-  fun unknownManeuverIsSafeAndRerouteKeepsTrip() {
-    val p =
-      JSONObject()
-        .put("instruction", "Continue")
-        .put("maneuverIcon", "unknown")
-        .put("remainingDistance", 200)
-        .put("remainingSeconds", 20)
-        .put("etaMs", 1700000000000)
-    assertNotNull(CarTripMapper.trip(org.robolectric.RuntimeEnvironment.getApplication(), p, "Destination"))
-  }
 }

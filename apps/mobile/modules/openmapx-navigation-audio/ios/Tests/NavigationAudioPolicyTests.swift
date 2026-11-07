@@ -23,14 +23,7 @@ final class CueLedgerTests: XCTestCase {
     XCTAssertEqual(ledger.count, 3)
     XCTAssertFalse(ledger.contains("cue-0"))
     XCTAssertTrue(ledger.contains("cue-3"))
-  }
-
-  func testAnEvictedCueCanBeSpokenAgain() {
-    var ledger = CueLedger(capacity: 2)
-    ledger.record("a")
-    ledger.record("b")
-    ledger.record("c")
-    XCTAssertTrue(ledger.record("a"))
+    XCTAssertTrue(ledger.record("cue-0"))
   }
 
   func testResetClearsEverything() {
@@ -44,25 +37,24 @@ final class CueLedgerTests: XCTestCase {
   func testCapacityIsNeverLessThanOne() {
     var ledger = CueLedger(capacity: 0)
     XCTAssertTrue(ledger.record("a"))
+    XCTAssertTrue(ledger.record("b"))
     XCTAssertEqual(ledger.count, 1)
+    XCTAssertFalse(ledger.contains("a"))
+    XCTAssertTrue(ledger.contains("b"))
   }
 }
 
 final class AudioSessionPolicyTests: XCTestCase {
-  func testActivatesOnlyForTheFirstQueuedUtterance() {
+  func testActivatesForTheQueueLifetimeWithoutUnderflow() {
     var policy = AudioSessionPolicy()
     XCTAssertTrue(policy.willEnqueue())
     XCTAssertFalse(policy.willEnqueue())
     XCTAssertTrue(policy.isActive)
-  }
-
-  func testDeactivatesOnlyWhenTheQueueDrains() {
-    var policy = AudioSessionPolicy()
-    policy.willEnqueue()
-    policy.willEnqueue()
     XCTAssertFalse(policy.didFinishUtterance())
     XCTAssertTrue(policy.didFinishUtterance())
     XCTAssertFalse(policy.isActive)
+    XCTAssertFalse(policy.didFinishUtterance())
+    XCTAssertEqual(policy.pendingUtterances, 0)
   }
 
   func testStopDeactivatesImmediatelyRegardlessOfQueueDepth() {
@@ -72,19 +64,7 @@ final class AudioSessionPolicyTests: XCTestCase {
     XCTAssertTrue(policy.didStop())
     XCTAssertEqual(policy.pendingUtterances, 0)
     XCTAssertFalse(policy.isActive)
-  }
-
-  func testStopOnAnIdlePolicyDoesNotRequestDeactivation() {
-    var policy = AudioSessionPolicy()
     XCTAssertFalse(policy.didStop())
-  }
-
-  func testFinishingMoreUtterancesThanQueuedDoesNotUnderflow() {
-    var policy = AudioSessionPolicy()
-    policy.willEnqueue()
-    XCTAssertTrue(policy.didFinishUtterance())
-    XCTAssertFalse(policy.didFinishUtterance())
-    XCTAssertEqual(policy.pendingUtterances, 0)
   }
 
   func testRefusesSpeechWhileInterrupted() {
@@ -94,25 +74,18 @@ final class AudioSessionPolicyTests: XCTestCase {
     XCTAssertFalse(policy.acceptsSpeech)
     XCTAssertFalse(policy.isActive)
     XCTAssertEqual(policy.pendingUtterances, 0)
-  }
-
-  func testAcceptsSpeechAgainAfterTheInterruptionEnds() {
-    var policy = AudioSessionPolicy()
-    policy.didBeginInterruption()
     policy.didEndInterruption()
     XCTAssertTrue(policy.acceptsSpeech)
     XCTAssertTrue(policy.willEnqueue())
   }
+
 }
 
 final class SpeechLocaleTests: XCTestCase {
   func testMapsSupportedLocalesToVoices() {
     XCTAssertEqual(SpeechLocale.parse("en")?.voiceIdentifier, "en-US")
     XCTAssertEqual(SpeechLocale.parse("de")?.voiceIdentifier, "de-DE")
-  }
-
-  func testIsCaseInsensitive() {
-    XCTAssertEqual(SpeechLocale.parse("DE"), .de)
+    XCTAssertEqual(SpeechLocale.parse("DE")?.voiceIdentifier, "de-DE")
   }
 
   func testRejectsUnsupportedLocalesRatherThanFallingBack() {
@@ -123,54 +96,28 @@ final class SpeechLocaleTests: XCTestCase {
 }
 
 final class SpeechRateTests: XCTestCase {
-  private let defaultRate: Float = 0.5
   private let minimumRate: Float = 0.0
   private let maximumRate: Float = 1.0
 
-  func testUsesThePlatformDefaultWhenNoMultiplierIsGiven() {
-    XCTAssertEqual(
-      speechRate(
-        multiplier: nil, defaultRate: defaultRate,
-        minimumRate: minimumRate, maximumRate: maximumRate),
-      defaultRate)
+  func testMapsAndBoundsRatesAroundThePlatformDefault() {
+    let cases: [(Double?, Float, Float)] = [
+      (nil, 0.5, 0.5), (1.5, 0.5, 0.75), (2.0, 0.8, 1.0),
+      (9.0, 0.2, 0.4), (0.1, 0.5, 0.25), (.nan, 0.5, 0.5), (.infinity, 0.5, 0.5),
+    ]
+    for (multiplier, platformDefault, expected) in cases {
+      XCTAssertEqual(
+        speechRate(multiplier: multiplier, defaultRate: platformDefault,
+                   minimumRate: minimumRate, maximumRate: maximumRate),
+        expected, accuracy: 0.0001)
+    }
   }
 
-  func testScalesAroundThePlatformDefault() {
-    XCTAssertEqual(
-      speechRate(
-        multiplier: 1.5, defaultRate: defaultRate,
-        minimumRate: minimumRate, maximumRate: maximumRate),
-      0.75, accuracy: 0.0001)
-  }
-
-  func testClampsToThePlatformMaximum() {
-    XCTAssertEqual(
-      speechRate(
-        multiplier: 2.0, defaultRate: 0.8,
-        minimumRate: minimumRate, maximumRate: maximumRate),
-      maximumRate)
-  }
-
-  func testClampsAnOutOfContractMultiplierBeforeScaling() {
-    XCTAssertEqual(
-      speechRate(
-        multiplier: 9.0, defaultRate: 0.2,
-        minimumRate: minimumRate, maximumRate: maximumRate),
-      0.4, accuracy: 0.0001)
-  }
-
-  func testFallsBackToTheDefaultForANonFiniteMultiplier() {
-    XCTAssertEqual(
-      speechRate(
-        multiplier: .nan, defaultRate: defaultRate,
-        minimumRate: minimumRate, maximumRate: maximumRate),
-      defaultRate)
-  }
 }
 
 final class SpeechValidationTests: XCTestCase {
   func testAcceptsOrdinaryGuidance() {
     XCTAssertTrue(validateSpeechText("In 200 metres, turn right onto Hauptstraße."))
+    XCTAssertTrue(validateSpeechText("Turn right.\nThen continue straight."))
   }
 
   func testRejectsEmptyAndOversizedText() {
@@ -183,10 +130,6 @@ final class SpeechValidationTests: XCTestCase {
     XCTAssertFalse(validateSpeechText("Turn\u{0}left"))
     XCTAssertFalse(validateSpeechText("Turn\u{1B}left"))
     XCTAssertFalse(validateSpeechText("Turn\u{7F}left"))
-  }
-
-  func testAllowsANewlineBetweenSentences() {
-    XCTAssertTrue(validateSpeechText("Turn right.\nThen continue straight."))
   }
 
   func testBoundsCueIdentifiers() {

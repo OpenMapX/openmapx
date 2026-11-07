@@ -1,7 +1,7 @@
 import type { PersonalTimelineDayV1, TimelineConnectionView } from "@openmapx/core";
 import { PANEL, usePersonalTimelineStore, useSidebarStore } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, createFakeMap, expectStyleSwapIsLossless, type FakeMap, render } from "@/test";
+import { act, createFakeMap, type FakeMap, render } from "@/test";
 
 let fake: FakeMap;
 const fitBounds = vi.fn();
@@ -98,7 +98,6 @@ vi.mock("@/integration-api/map/MapContext", () => ({
 }));
 
 import {
-  buildTimelineLayerGroup,
   PERSONAL_TIMELINE_TRACKS_LAYER_ID,
   PERSONAL_TIMELINE_TRACKS_SOURCE_ID,
   PERSONAL_TIMELINE_VISITS_LAYER_ID,
@@ -137,27 +136,9 @@ describe("TimelineMapLayer", () => {
     expect(fake.state.sources.size).toBe(0);
   });
 
-  it("builds one normalized group with stable sources, layer slots and selection expressions", () => {
-    const group = buildTimelineLayerGroup(day(), "journey-1");
-
-    expect(Object.keys(group.sources)).toEqual([
-      PERSONAL_TIMELINE_TRACKS_SOURCE_ID,
-      PERSONAL_TIMELINE_VISITS_SOURCE_ID,
-    ]);
-    expect(group.layers.map(({ id, slot }) => [id, slot])).toEqual([
-      [PERSONAL_TIMELINE_TRACKS_LAYER_ID, "overlay-lines"],
-      [PERSONAL_TIMELINE_VISITS_LAYER_ID, "overlay-points"],
-    ]);
-    expect((group.layers[0] as { paint: Record<string, unknown> }).paint).toMatchObject({
-      "line-width": ["case", ["==", ["get", "id"], "journey-1"], 6, 3],
-    });
-    expect((group.layers[1] as { paint: Record<string, unknown> }).paint).toMatchObject({
-      "circle-radius": ["case", ["==", ["get", "id"], "journey-1"], 10, 6],
-    });
-  });
-
   it("queries the owner/date and draws both normalized sources while active", () => {
     openTimeline();
+    act(() => usePersonalTimelineStore.getState().selectEntry("journey-1"));
     render(<TimelineMapLayer />);
 
     expect(connectionHook).toHaveBeenCalledWith("user-a");
@@ -170,6 +151,32 @@ describe("TimelineMapLayer", () => {
     );
     expect(fake.state.layers.has(PERSONAL_TIMELINE_TRACKS_LAYER_ID)).toBe(true);
     expect(fake.state.layers.has(PERSONAL_TIMELINE_VISITS_LAYER_ID)).toBe(true);
+    const order = fake.map.getLayersOrder();
+    expect(order.indexOf(PERSONAL_TIMELINE_TRACKS_LAYER_ID)).toBeLessThan(
+      order.indexOf(PERSONAL_TIMELINE_VISITS_LAYER_ID),
+    );
+    expect(order.indexOf(PERSONAL_TIMELINE_VISITS_LAYER_ID)).toBeLessThan(
+      order.indexOf("place-labels"),
+    );
+    expect(fake.state.paint.get(PERSONAL_TIMELINE_TRACKS_LAYER_ID)?.["line-width"]).toEqual([
+      "case",
+      ["==", ["get", "id"], "journey-1"],
+      6,
+      3,
+    ]);
+    expect(fake.state.paint.get(PERSONAL_TIMELINE_VISITS_LAYER_ID)?.["circle-radius"]).toEqual([
+      "case",
+      ["==", ["get", "id"], "journey-1"],
+      10,
+      6,
+    ]);
+    act(() => usePersonalTimelineStore.getState().selectEntry("visit-1"));
+    expect(fake.state.paint.get(PERSONAL_TIMELINE_VISITS_LAYER_ID)?.["circle-radius"]).toEqual([
+      "case",
+      ["==", ["get", "id"], "visit-1"],
+      10,
+      6,
+    ]);
   });
 
   it("does not call the day hook until an active readable connection exists", () => {
@@ -245,23 +252,6 @@ describe("TimelineMapLayer", () => {
     expect(fake.map.getCanvas().style.cursor).toBe("pointer");
     act(() => fake.emit("mouseleave"));
     expect(fake.map.getCanvas().style.cursor).toBe("");
-  });
-
-  it("reconciles both sources and selected styling across a style reload", () => {
-    openTimeline();
-    act(() => usePersonalTimelineStore.getState().selectEntry("visit-1"));
-    render(<TimelineMapLayer />);
-
-    expectStyleSwapIsLossless(fake);
-    expect(fake.state.sources.get(PERSONAL_TIMELINE_VISITS_SOURCE_ID)?.data).toEqual(
-      queryState.day.data.map.visits,
-    );
-    expect(fake.state.paint.get(PERSONAL_TIMELINE_VISITS_LAYER_ID)?.["circle-radius"]).toEqual([
-      "case",
-      ["==", ["get", "id"], "visit-1"],
-      10,
-      6,
-    ]);
   });
 
   it("removes all sources, layers, handlers, cursor and selection when the panel closes", () => {

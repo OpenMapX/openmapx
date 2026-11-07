@@ -90,6 +90,7 @@ describe("TransitNavigationView runtime ownership", () => {
       kind: "transit",
       itinerary,
       transitProgress: null,
+      keepScreenOn: true,
     });
   });
 
@@ -104,11 +105,13 @@ describe("TransitNavigationView runtime ownership", () => {
 
     expect(calls.engine).toBeGreaterThan(0);
     expect(calls.liveRefresh).toContain(true);
-    expect(calls.wakeLock.length).toBeGreaterThan(0);
+    expect(calls.wakeLock).toContain(true);
   });
 
   it("runs none of them inside the installed shell", () => {
-    mount(shellScope());
+    const view = mount(shellScope());
+    fireEvent.click(view.getByLabelText("navigation.moreOptions"));
+    expect(view.getByText("navigation.overview")).toBeInTheDocument();
 
     // Native holds the rotating refresh token, schedules the alight alert, and
     // owns the wake lock. A second consumer of any of the three is a second
@@ -116,13 +119,6 @@ describe("TransitNavigationView runtime ownership", () => {
     expect(calls.engine).toBe(0);
     expect(calls.liveRefresh).toEqual([]);
     expect(calls.wakeLock).toEqual([]);
-  });
-
-  it("still renders the trip UI under native authority", () => {
-    const view = mount(shellScope());
-
-    // The WebView remains the product UI; only the ownership moved.
-    expect(view.container.textContent).not.toBe("");
   });
 });
 
@@ -160,22 +156,11 @@ describe("TransitNavigationView map coverage", () => {
     useNavigationStore.getState().stopNavigation();
   });
 
-  // This view stays mounted for the whole session and renders nothing until a
-  // trip runs, so registering its column on `status === "arrived"` alone would
-  // reserve a column of map on every idle screen.
-  it("reserves the chrome column only once a transit trip is on screen", () => {
+  it("releases the column on arrival, where only the floating card remains", () => {
+    useNavigationStore.setState({ status: "idle", kind: "transit", itinerary });
     mount({});
     expect(getMapObstructionInsets().left).toBe(0);
-    cleanup();
-
-    useNavigationStore.setState({ status: "navigating", kind: "transit", itinerary });
-    mount({});
-    expect(getMapObstructionInsets().left).toBe(NAV_LANDSCAPE_PANEL_WIDTH + 32);
-  });
-
-  it("releases the column on arrival, where only the floating card remains", () => {
-    useNavigationStore.setState({ status: "navigating", kind: "transit", itinerary });
-    mount({});
+    act(() => useNavigationStore.setState({ status: "navigating" }));
     expect(getMapObstructionInsets().left).toBe(NAV_LANDSCAPE_PANEL_WIDTH + 32);
 
     act(() => useNavigationStore.setState({ status: "arrived" }));

@@ -3,9 +3,16 @@ import { fetchTrafficPolicy } from "../jobs/traffic/policy.js";
 
 describe("traffic policy client", () => {
   it("rejects expired, non-authoritative and malformed leases", async () => {
+    const valid = {
+      schemaVersion: 1,
+      authoritative: true,
+      revision: "v1",
+      validUntil: new Date(Date.now() + 120_000).toISOString(),
+      disallowedSourceIds: [],
+    };
     for (const body of [
       {},
-      { schemaVersion: 1, authoritative: false },
+      { ...valid, authoritative: false },
       {
         schemaVersion: 1,
         authoritative: true,

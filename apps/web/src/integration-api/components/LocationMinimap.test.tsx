@@ -125,15 +125,6 @@ afterEach(() => {
 });
 
 describe("LocationMinimap", () => {
-  it("configures the versioned worker before constructing its map", async () => {
-    render(<LocationMinimap lng={6.084959} lat={50.780558} />);
-
-    await waitFor(() => expect(maplibreTest.workerUrlsAtConstruction).toHaveLength(1));
-    expect(maplibreTest.workerUrlsAtConstruction).toEqual([
-      "/runtime/maplibre-gl/6.1.0/maplibre-gl-worker.mjs",
-    ]);
-  });
-
   it("constructs with the latest camera when props change during style loading", async () => {
     let resolveStyle: (style: Record<string, unknown>) => void = () => {};
     testState.loadOpenMapXStyle.mockImplementation(
@@ -152,6 +143,9 @@ describe("LocationMinimap", () => {
   it("moves the existing map when coordinates or zoom change", async () => {
     const view = render(<LocationMinimap lng={1} lat={2} zoom={10} />);
     await waitFor(() => expect(maplibreTest.maps).toHaveLength(1));
+    expect(maplibreTest.workerUrlsAtConstruction).toEqual([
+      "/runtime/maplibre-gl/6.1.0/maplibre-gl-worker.mjs",
+    ]);
 
     view.rerender(<LocationMinimap lng={3} lat={4} zoom={12} />);
 

@@ -332,7 +332,12 @@ describe("transit planning controller", () => {
     const result = { data: undefined, isLoading: false, isError: true, error, refetch };
     mocks.plan.mockReturnValue(result);
     const view = renderHook(() => useTransitDirectionsPlan(snapshot()));
-    expect(view.result.current.planQuery).toBe(result);
+    expect(view.result.current.planQuery).toMatchObject({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error,
+    });
     act(() => {
       view.result.current.paging.loadNext();
       view.result.current.paging.loadPrevious();

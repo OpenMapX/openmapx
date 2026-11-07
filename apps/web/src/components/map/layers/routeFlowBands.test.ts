@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import type { LngLat, RouteFlowSpan } from "@openmapx/core";
 import { lineString } from "@turf/helpers";
 import length from "@turf/length";
@@ -12,6 +13,19 @@ import {
   clipSpans,
   MIN_DRAWN_METERS,
 } from "./routeFlowBands";
+
+const requireFromMapLibre = createRequire(import.meta.resolve("maplibre-gl/package.json"));
+const { featureFilter } = requireFromMapLibre("@maplibre/maplibre-gl-style-spec") as {
+  featureFilter: (
+    filter: maplibregl.FilterSpecification,
+    rootKey: string,
+  ) => {
+    filter: (
+      globals: { zoom: number },
+      feature: { type: number; properties: Record<string, unknown> },
+    ) => boolean;
+  };
+};
 
 const M = 0.001 / 111.32;
 const ROUTE = Array.from({ length: 21 }, (_, i) => [8, 50 + 100 * i * M] as [number, number]);
@@ -99,29 +113,15 @@ function oracleBuildBandFeatures(
   }
   return features;
 }
-
-/**
- * Interprets exactly the two filter shapes {@link activeSpanFilter} can
- * produce — a real MapLibre expression evaluator would be overkill for two
- * known shapes, and would hide a shape drift instead of failing loudly on one.
- */
+/** Evaluate the actual MapLibre wire filter instead of reproducing its operators. */
 function passesFilter(
   filterSpec: maplibregl.FilterSpecification,
   feature: GeoJSON.Feature,
 ): boolean {
-  const props = (feature.properties ?? {}) as Record<string, unknown>;
-  const filter = filterSpec as unknown as unknown[];
-  if (filter[0] === "==") {
-    return props.variant === filter[2];
-  }
-  if (filter[0] === "all") {
-    const [, eq, cmp] = filter as [string, unknown[], unknown[]];
-    const variantOk = props.variant === (eq as unknown[])[2];
-    const [, boundary] = cmp as [string, number, unknown[]];
-    const startMeters = props.startMeters as number;
-    return variantOk && boundary <= startMeters;
-  }
-  throw new Error(`unrecognised filter shape: ${JSON.stringify(filter)}`);
+  return featureFilter(filterSpec, "route-traffic.filter").filter(
+    { zoom: 16 },
+    { type: 2, properties: feature.properties ?? {} },
+  );
 }
 
 /** Coordinates + the properties both old and new code agree on, order-independent. */
@@ -235,27 +235,11 @@ describe("split static/current spans match the pre-split oracle", () => {
     );
   });
 
-  it("a span with a negative startMeters", () => {
-    expectMatchesOracle(ACTIVE, [span(-50, 400)], 0);
-  });
-
   it("a span with a negative startMeters and alongMeters exactly 0", () => {
     // clipSpans's own `alongMeters <= 0` early return keeps the negative
     // startMeters untouched; buildCurrentSpanFeatures must contribute nothing.
     expectMatchesOracle(ACTIVE, [span(-50, 400)], 0);
     expect(buildCurrentSpanFeatures(ACTIVE, [span(-50, 400)], 0)).toEqual([]);
-  });
-
-  it("alongMeters exactly 0 with an ordinary span", () => {
-    expectMatchesOracle(ACTIVE, [span(100, 400)], 0);
-  });
-
-  it("an alternate route never receives alongMeters", () => {
-    expectMatchesOracle(ALT, [span(400, 800)], 600);
-  });
-
-  it("empty spans for the route", () => {
-    expectMatchesOracle(ACTIVE, [], 300);
   });
 
   it("a route with a NaN coordinate degrades to nothing drawn, not a throw", () => {

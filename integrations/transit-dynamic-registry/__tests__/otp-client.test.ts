@@ -276,6 +276,11 @@ describe("generated dynamic OTP acquisition", () => {
       reason: "store_unavailable" as const,
       retryAfterMs: null,
     }));
+    const missing = createOtpGraphQlAdapter({ ...f.options, upstreamRuntime: undefined });
+    await expect(missing.searchByName!(f.entry, "X", 1)).rejects.toThrow(
+      "OTP upstream unavailable",
+    );
+    expect(f.http.calls).toHaveLength(0);
     const adapter = createOtpGraphQlAdapter({
       ...f.options,
       upstreamRuntime: { ...f.runtime, admitSharedRequest: denied },
@@ -290,7 +295,7 @@ describe("generated dynamic OTP acquisition", () => {
       expect.objectContaining({ scope: "https://api.peatus.ee", key: "anonymous", delayMs: 37000 }),
     );
   });
-  it("shares credential bucket across Digitransit regions, isolates other keys and anonymous authorities", async () => {
+  it("shares credential bucket across Digitransit regions and isolates other keys", async () => {
     const f = fixture();
     const signal = new AbortController().signal;
     const keyed = OTP_PROFILES.filter((p) => p.keyed);

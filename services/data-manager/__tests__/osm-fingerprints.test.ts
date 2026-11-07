@@ -6,6 +6,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -18,7 +19,7 @@ it("publishes SHA256 metadata inside the same snapshot publication lock", async 
   const root = mkdtempSync(join(tmpdir(), "omx-osm-evidence-"));
   let publishedUnderLock = false;
   try {
-    await downloadOsm({
+    const result = await downloadOsm({
       region: "europe/germany",
       dataDir: root,
       store: new StateStore(root),
@@ -28,7 +29,6 @@ it("publishes SHA256 metadata inside the same snapshot publication lock", async 
         publishedUnderLock = existsSync(join(root, "osm/europe-germany.osm.pbf.openmapx.json"));
       },
       downloadImpl: async (_url, target, options) => {
-        mkdirSync(join(root, "osm"), { mode: 0o700, recursive: true });
         const tmp = target + ".test-part";
         writeFileSync(tmp, "fixture pbf bytes", { mode: 0o600 });
         await options.beforePublish?.(tmp);
@@ -37,6 +37,8 @@ it("publishes SHA256 metadata inside the same snapshot publication lock", async 
       },
     });
     expect(publishedUnderLock).toBe(true);
+    expect(result.sizeBytes).toBe(17);
+    expect(statSync(join(root, "osm")).mode & 0o777).toBe(0o700);
     const evidence = JSON.parse(
       readFileSync(join(root, "osm/europe-germany.osm.pbf.openmapx.json"), "utf8"),
     );

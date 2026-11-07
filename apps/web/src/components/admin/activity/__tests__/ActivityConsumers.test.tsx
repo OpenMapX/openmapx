@@ -180,16 +180,26 @@ describe("Activity generated SDK consumers", () => {
   it("aborts list acquisition on unmount and bounds stalled JSON reads", async () => {
     vi.useFakeTimers();
     const signals: AbortSignal[] = [];
-    vi.stubGlobal(
-      "fetch",
-      (_input: string, init: RequestInit) =>
-        new Promise<Response>((_resolve, reject) => {
-          const signal = init.signal;
-          if (!signal) throw new Error("Missing query cancellation signal");
-          signals.push(signal);
-          signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
-        }),
-    );
+    vi.stubGlobal("fetch", (_input: string, init: RequestInit) => {
+      const signal = init.signal;
+      if (!signal) throw new Error("Missing query cancellation signal");
+      signals.push(signal);
+      if (signals.length === 2) {
+        return Promise.resolve(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(new TextEncoder().encode('{"id":'));
+              },
+            }),
+            { headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      return new Promise<Response>((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+      });
+    });
     const list = mount(<JobList />);
     await act(async () => {});
     expect(signals).toHaveLength(1);

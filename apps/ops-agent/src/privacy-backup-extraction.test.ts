@@ -5,7 +5,7 @@ import {
   privacyBackupSubjectLocatorDigest,
 } from "@openmapx/core/ops";
 import Fastify from "fastify";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { registerPrivacyBackupExtractionRoute } from "./privacy-backup-extraction";
 
 const token = "api-token";
@@ -13,8 +13,14 @@ const capabilityKey = randomBytes(32);
 const fixed = new Date("2026-09-04T10:00:00.000Z");
 const requestIds = () => ({ requestId: randomUUID(), taskId: randomUUID() });
 
-async function makeApp() {
+const apps: Array<ReturnType<typeof Fastify>> = [];
+afterEach(async () => {
+  await Promise.all(apps.splice(0).map((app) => app.close()));
+});
+
+async function makeApp(runCollector = async () => Readable.from([Buffer.from("tar-data")])) {
   const app = Fastify({ logger: false });
+  apps.push(app);
   registerPrivacyBackupExtractionRoute(app, {
     apiToken: token,
     capabilityKey,
@@ -26,7 +32,7 @@ async function makeApp() {
       formatVersion: 2,
       verified: true,
     }),
-    runCollector: async () => Readable.from([Buffer.from("tar-data")]),
+    runCollector,
   });
   await app.ready();
   return app;
@@ -94,8 +100,9 @@ describe("privacy backup extraction endpoint", () => {
       payload: input,
     });
     expect(replay.statusCode).toBe(409);
+    expect(replay.json().error).toBe("capability_replayed");
     const changed = await body();
-    const tampered = { ...changed, capability: input.capability };
+    const tampered = { ...changed, taskId: randomUUID() };
     const mismatch = await app.inject({
       method: "POST",
       url: "/v1/privacy/backup-subject-export",
@@ -103,37 +110,29 @@ describe("privacy backup extraction endpoint", () => {
       payload: tampered,
     });
     expect(mismatch.statusCode).toBe(409);
+    expect(mismatch.json().error).toBe("capability_invalid");
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/v1/privacy/backup-subject-export",
+          headers,
+          payload: changed,
+        })
+      ).statusCode,
+    ).toBe(200);
   });
 
-  it("does not consume a capability while another extraction is active", async () => {
-    let started!: () => void;
-    let release!: () => void;
-    const extractionStarted = new Promise<void>((resolve) => {
-      started = resolve;
+  it("does not consume a fresh capability while another extraction is active", async () => {
+    const started = Promise.withResolvers<void>();
+    const released = Promise.withResolvers<void>();
+    const app = await makeApp(async () => {
+      started.resolve();
+      await released.promise;
+      return Readable.from([Buffer.from("tar-data")]);
     });
-    const extractionRelease = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const app = Fastify({ logger: false });
-    registerPrivacyBackupExtractionRoute(app, {
-      apiToken: token,
-      capabilityKey,
-      now: () => fixed,
-      inspectBackup: async (request) => ({
-        backupId: request.backupId,
-        manifestDigest: request.manifestDigest,
-        platformVersion: "1.0.0",
-        formatVersion: 2,
-        verified: true,
-      }),
-      runCollector: async () => {
-        started();
-        await extractionRelease;
-        return Readable.from([Buffer.from("tar-data")]);
-      },
-    });
-    await app.ready();
     const input = await body();
+    const waiting = await body();
     const headers = { authorization: `Bearer ${token}` };
     const first = app.inject({
       method: "POST",
@@ -141,22 +140,50 @@ describe("privacy backup extraction endpoint", () => {
       headers,
       payload: input,
     });
-    await extractionStarted;
-    const busy = await app.inject({
-      method: "POST",
-      url: "/v1/privacy/backup-subject-export",
-      headers,
-      payload: input,
-    });
-    expect(busy.statusCode).toBe(409);
-    release();
-    expect((await first).statusCode).toBe(200);
-    const replay = await app.inject({
-      method: "POST",
-      url: "/v1/privacy/backup-subject-export",
-      headers,
-      payload: input,
-    });
-    expect(replay.statusCode).toBe(409);
+    try {
+      await started.promise;
+      const pendingBusy = app.inject({
+        method: "POST",
+        url: "/v1/privacy/backup-subject-export",
+        headers,
+        payload: waiting,
+      });
+      const deadline = Promise.withResolvers<never>();
+      const timer = setTimeout(
+        () => deadline.reject(new Error("Busy request waited for the running extraction")),
+        2_000,
+      );
+      let busy: Awaited<typeof pendingBusy>;
+      try {
+        busy = await Promise.race([pendingBusy, deadline.promise]);
+      } finally {
+        clearTimeout(timer);
+      }
+      expect(busy.statusCode).toBe(409);
+      expect(busy.json().error).toBe("busy");
+      released.resolve();
+      expect((await first).statusCode).toBe(200);
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: "/v1/privacy/backup-subject-export",
+            headers,
+            payload: waiting,
+          })
+        ).statusCode,
+      ).toBe(200);
+      const replay = await app.inject({
+        method: "POST",
+        url: "/v1/privacy/backup-subject-export",
+        headers,
+        payload: waiting,
+      });
+      expect(replay.statusCode).toBe(409);
+      expect(replay.json().error).toBe("capability_replayed");
+    } finally {
+      released.resolve();
+      await first;
+    }
   });
 });

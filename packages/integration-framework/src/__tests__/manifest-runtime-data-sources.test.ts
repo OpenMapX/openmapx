@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { IntegrationContext } from "../context.js";
 import { validateDataSource, validateManifest } from "../manifest.js";
-import { createMockIntegrationContext } from "../testing/index.js";
 
 const source = {
   sourceId: "nl-ndw-events",
@@ -86,28 +84,5 @@ describe("validateDataSource", () => {
     expect(result.errors).toEqual(
       validateDataSource({ ...source, domain: "weather" }, ["road-conditions"]).errors,
     );
-  });
-});
-
-describe("mock context setDataSources", () => {
-  it("records every call", () => {
-    const ctx = createMockIntegrationContext();
-    ctx.setDataSources([source]);
-    ctx.setDataSources([]);
-    expect(ctx.registered.dataSourceLists).toEqual([[source], []]);
-  });
-
-  it("returns the sources the host rules accept, as the host does", () => {
-    const ctx = createMockIntegrationContext({
-      manifest: runtimeManifest as unknown as IntegrationContext["manifest"],
-    });
-    const accepted = ctx.setDataSources([
-      source,
-      { ...source, sourceId: "xx-no-homepage-events", url: "" },
-      { ...source, sourceId: "xx-weather-events", domain: "weather" },
-      { ...source, name: "Duplicate" },
-    ]);
-    expect(accepted).toEqual([source]);
-    expect(ctx.registered.dataSourceLists[0]).toHaveLength(4);
   });
 });

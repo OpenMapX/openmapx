@@ -22,17 +22,6 @@ describe("loadBrandIndex", () => {
     const { loadBrandIndex } = await import("../loader");
     expect(() => loadBrandIndex()).toThrow(/Unsupported brand artifact version: 3/);
   });
-
-  it("parses the real artifact and resolves a known qid via byQid", async () => {
-    const { loadBrandIndex } = await import("../loader");
-
-    const index = loadBrandIndex();
-
-    expect(index.source).toBe("8.0.20260918");
-    expect(index.entries.length).toBeGreaterThan(1000);
-    const sample = index.entries[0];
-    expect(index.byQid.get(sample.qid)).toBe(sample);
-  });
 });
 
 it("hydrates the selected artifact field origins into independent portable snapshots", async () => {
@@ -57,6 +46,7 @@ it("hydrates the selected artifact field origins into independent portable snaps
   }));
   const { loadBrandIndex } = await import("../loader");
   const index = loadBrandIndex();
+  expect(index.source).toBe("fixture");
   expect(index.entries[0].fieldContributors?.name).toEqual([nsi, wd]);
   expect(index.entries[0].fieldContributors?.kind).toEqual([]);
   const capturedName = index.entries[0].fieldContributors?.name[0];

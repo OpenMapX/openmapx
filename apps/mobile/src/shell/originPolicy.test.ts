@@ -27,12 +27,6 @@ describe("classifyNavigation", () => {
     expect(classifyNavigation(url, config)).not.toBe("allow-in-webview");
   });
 
-  it("allows paths on the exact configured origin", () => {
-    expect(classifyNavigation("https://openmapx.com/directions?q=x", config)).toBe(
-      "allow-in-webview",
-    );
-  });
-
   it.each([
     "https://openmapx.com",
     "https://openmapx.com/",

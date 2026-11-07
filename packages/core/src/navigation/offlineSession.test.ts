@@ -4,7 +4,6 @@ import type { Route, RouteStep } from "../types/routing";
 import {
   createNavigationSessionSnapshot,
   isNavigationSessionExpired,
-  NAVIGATION_SESSION_MAX_AGE_MS,
   navigationSessionFingerprint,
   parseNavigationSessionSnapshot,
 } from "./offlineSession";
@@ -270,15 +269,6 @@ const corruptions: [string, Corrupt][] = [
 ];
 
 describe("navigation session snapshot", () => {
-  it("creates a schema-version-one snapshot with route and maneuver data", () => {
-    const snapshot = createNavigationSessionSnapshot(input());
-    expect(snapshot.schemaVersion).toBe(1);
-    expect(snapshot.kind).toBe("ground");
-    expect(snapshot.route.steps[0].instruction).toBe("Turn right");
-    expect(snapshot.routes).toHaveLength(2);
-    expect(snapshot.routeFingerprint).toContain("nav1-");
-  });
-
   it("copies only the supported route/session fields", () => {
     const source = route() as Route & {
       rawResponse?: unknown;
@@ -299,6 +289,12 @@ describe("navigation session snapshot", () => {
     const original = createNavigationSessionSnapshot(input());
     const parsed = parseNavigationSessionSnapshot(JSON.parse(JSON.stringify(original)));
     expect(parsed).toEqual(original);
+    expect(parsed).toMatchObject({
+      schemaVersion: 1,
+      kind: "ground",
+      route: { steps: [expect.objectContaining({ instruction: "Turn right" }), expect.anything()] },
+    });
+    expect(parsed?.routes).toHaveLength(2);
   });
 
   it("round-trips junction bearings and the motorway flag", () => {
@@ -392,15 +388,8 @@ describe("navigation session snapshot", () => {
 
   it("expires after the bounded retention window", () => {
     const snapshot = createNavigationSessionSnapshot(input());
-    expect(
-      isNavigationSessionExpired(snapshot, snapshot.updatedAtMs + NAVIGATION_SESSION_MAX_AGE_MS),
-    ).toBe(false);
-    expect(
-      isNavigationSessionExpired(
-        snapshot,
-        snapshot.updatedAtMs + NAVIGATION_SESSION_MAX_AGE_MS + 1,
-      ),
-    ).toBe(true);
+    expect(isNavigationSessionExpired(snapshot, snapshot.updatedAtMs + 86_400_000)).toBe(false);
+    expect(isNavigationSessionExpired(snapshot, snapshot.updatedAtMs + 86_400_000 + 1)).toBe(true);
   });
 
   it("preserves every optional nested route, leg, and step field through a round trip", () => {

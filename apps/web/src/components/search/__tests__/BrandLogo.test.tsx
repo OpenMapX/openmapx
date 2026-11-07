@@ -59,30 +59,9 @@ describe("BrandLogo", () => {
       "href",
       credited.pageUrl,
     );
-  });
-  it("renders a proxied Commons URL when the brand has a logo", () => {
-    render(
-      <BrandLogo brand={{ qid: "Q1", name: "Aldi", kind: ["brand"], logoFile: "Aldi logo.svg" }} />,
-    );
     const img = screen.getByRole("img", { name: "Aldi" });
     expect(img.getAttribute("src")).toContain("/api/image-proxy?url=");
     expect(decodeURIComponent(img.getAttribute("src") ?? "")).toContain("Aldi_logo.svg");
-  });
-
-  it("never points the browser directly at Commons", () => {
-    render(
-      <BrandLogo brand={{ qid: "Q1", name: "Aldi", kind: ["brand"], logoFile: "Aldi logo.svg" }} />,
-    );
-    const src = screen.getByRole("img", { name: "Aldi" }).getAttribute("src") ?? "";
-    expect(src.startsWith("https://commons.wikimedia.org")).toBe(false);
-  });
-
-  it("falls back to the preset icon when the brand has no logo", () => {
-    const { container } = render(
-      <BrandLogo brand={{ qid: "Q1", name: "Nameless", kind: ["brand"] }} />,
-    );
-    expect(screen.queryByRole("img", { name: "Nameless" })).toBeNull();
-    expect(container.firstChild).not.toBeNull();
   });
 
   it("renders a heading alone when the brand has no logo", () => {
@@ -104,15 +83,6 @@ describe("BrandLogo", () => {
     fireEvent.error(screen.getByRole("img", { name: "Aldi" }));
     expect(screen.getByText("Aldi Süd")).toBeVisible();
     expect(container.querySelector("svg")).toBeNull();
-  });
-
-  it("falls back to the preset icon when the logo image fails to load", () => {
-    render(
-      <BrandLogo brand={{ qid: "Q1", name: "Aldi", kind: ["brand"], logoFile: "Aldi logo.svg" }} />,
-    );
-    const img = screen.getByRole("img", { name: "Aldi" });
-    fireEvent.error(img);
-    expect(screen.queryByRole("img", { name: "Aldi" })).toBeNull();
   });
 });
 
@@ -137,6 +107,7 @@ it("credits the selected catalogue filename only while its licensed bytes are di
   expect(screen.getByText("Captured filename selection")).toBeVisible();
   expect(screen.queryByText("Undisplayed catalogue label")).toBeNull();
   fireEvent.error(screen.getByRole("img", { name: "Aldi" }));
+  expect(screen.queryByRole("img", { name: "Aldi" })).toBeNull();
   expect(screen.queryByText("Captured filename selection")).toBeNull();
   expect(screen.queryByText("Logo artist", { exact: false })).toBeNull();
 });

@@ -123,9 +123,10 @@ describe("Open-Meteo modeled air-quality provider", () => {
     ).toBe(true);
   });
 
-  it("rejects mismatched arrays and undocumented units", async () => {
+  it.each(["array length", "undocumented unit"])("rejects invalid %s", async (kind) => {
     const malformed = response();
-    malformed.hourly.pm2_5.pop();
+    if (kind === "array length") malformed.hourly.pm2_5.pop();
+    else malformed.hourly_units.pm2_5 = "ppm";
     const ctx = createMockIntegrationContext({
       http: fakeHttpClient({ "air-quality": malformed }),
     });

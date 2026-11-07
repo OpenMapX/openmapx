@@ -35,9 +35,7 @@ function makeReply(): FakeReply {
   return reply;
 }
 
-function makeRouteCtx(orchestratorOverrides?: {
-  searchByFilter?: (...args: unknown[]) => Promise<unknown>;
-}): IntegrationContext & { routes: Map<string, RouteHandler> } {
+function makeRouteCtx(): IntegrationContext & { routes: Map<string, RouteHandler> } {
   const routes = new Map<string, RouteHandler>();
   const ctx = {
     registerRoute(method: string, path: string, handler: RouteHandler) {
@@ -52,7 +50,6 @@ function makeRouteCtx(orchestratorOverrides?: {
     },
     log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
     routes,
-    ...(orchestratorOverrides ?? {}),
   } as unknown as IntegrationContext & { routes: Map<string, RouteHandler> };
   return ctx;
 }
@@ -168,9 +165,7 @@ describe("POST /filter route", () => {
 
     expect(reply.statusCode).toBe(200);
     const payload = reply.payload as { results: unknown[]; partial: boolean };
-    expect(Array.isArray(payload.results)).toBe(true);
-    expect(payload.results).toHaveLength(1);
-    expect(typeof payload.partial).toBe("boolean");
+    expect(payload).toMatchObject({ results: fakeResults, partial: false });
   });
 
   it("400 for an invalid filter (empty selectors array)", async () => {

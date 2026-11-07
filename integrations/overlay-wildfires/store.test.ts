@@ -45,29 +45,6 @@ describe("useWildfireStore", () => {
     });
   });
 
-  it("turns low-confidence detections on and off", () => {
-    useWildfireStore.getState().setShowLowConfidence(true);
-    expect(useWildfireStore.getState().showLowConfidence).toBe(true);
-    useWildfireStore.getState().setShowLowConfidence(false);
-    expect(useWildfireStore.getState().showLowConfidence).toBe(false);
-  });
-
-  it("changes each source visibility without changing the other source choices", () => {
-    const state = useWildfireStore.getState();
-    state.setShowHotspots(false);
-    state.setShowNifcPerimeters(false);
-    state.setShowEffisBurnedAreas(false);
-    state.setShowNoaaSmoke(true);
-
-    expect(useWildfireStore.getState()).toMatchObject({
-      showHotspots: false,
-      showNifcPerimeters: false,
-      showEffisBurnedAreas: false,
-      showNoaaSmoke: true,
-      dayRange: 1,
-    });
-  });
-
   it("updates one source status without leaking into another source", () => {
     useWildfireStore.getState().setSourceStatus("nifc", {
       loading: true,

@@ -10,7 +10,6 @@ import {
   rmSync,
   statSync,
   symlinkSync,
-  truncateSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -72,7 +71,7 @@ function sealed(issuedAtMs = now) {
   });
 }
 
-function distinctSealed(index: number) {
+function distinctSealed(index: number, input: TrustedConfigurationPayload = payload()) {
   return sealTrustedConfigurationSnapshot({
     role: "api",
     operationKey: "opk1_0123456789abcdef",
@@ -83,7 +82,7 @@ function distinctSealed(index: number) {
       kind: "stack.render",
       revisionId,
     }),
-    payload: payload(),
+    payload: input,
     token,
     issuedAtMs: now,
     nonce: `nonce_${index.toString().padStart(16, "0")}`,
@@ -149,30 +148,43 @@ describe("file-backed trusted configuration source", () => {
   it("rejects queue entry-count and retained-byte exhaustion before mutation", async () => {
     const countDirectory = root();
     for (let index = 0; index < 129; index += 1) {
-      writeFileSync(join(countDirectory, `cfg1_${index.toString().padStart(43, "0")}.json`), "{}", {
-        mode: 0o600,
-      });
+      writeReady(countDirectory, distinctSealed(index));
     }
     await expect(
       initializeTrustedSnapshotDirectory(countDirectory, {
         allowedUids: [process.geteuid?.() ?? process.getuid?.() ?? 0],
         expectedGid: statSync(countDirectory).gid,
         token,
+        nowMs: now + 1,
       }),
     ).rejects.toThrow("Trusted configuration snapshot directory rejected");
     expect(readdirSync(countDirectory)).toHaveLength(130);
 
     const byteDirectory = root();
+    const input = payload();
+    input.serviceSecrets = [
+      {
+        serviceId: "redis",
+        values: {
+          ...Object.fromEntries(
+            Array.from({ length: 8 }, (_, index) => [`TOKEN_${index}`, "x".repeat(60000)]),
+          ),
+          PAD: "",
+        },
+      },
+    ];
+    const padding = OPS_TRUSTED_CONFIG_MAX_BYTES - distinctSealed(0, input).bytes.length;
+    input.serviceSecrets[0]!.values.PAD = "x".repeat(padding);
+    expect(distinctSealed(0, input).bytes.length).toBe(512 * 1024);
     for (let index = 0; index < 33; index += 1) {
-      const file = join(byteDirectory, `cfg1_${index.toString().padStart(43, "A")}.json`);
-      writeFileSync(file, "", { mode: 0o600 });
-      truncateSync(file, OPS_TRUSTED_CONFIG_MAX_BYTES);
+      writeReady(byteDirectory, distinctSealed(index, input));
     }
     await expect(
       initializeTrustedSnapshotDirectory(byteDirectory, {
         allowedUids: [process.geteuid?.() ?? process.getuid?.() ?? 0],
         expectedGid: statSync(byteDirectory).gid,
         token,
+        nowMs: now + 1,
       }),
     ).rejects.toThrow("Trusted configuration snapshot directory rejected");
     expect(readdirSync(byteDirectory)).toHaveLength(34);
@@ -742,7 +754,8 @@ describe("file-backed trusted configuration source", () => {
       const directory = root();
       const snapshot = kind === "stale" ? sealed(now - 10 * 60_000) : sealed();
       const ready = join(directory, `${snapshot.revisionId}.json`);
-      const target = join(directory, "target");
+      const outside = root();
+      const target = join(outside, "target");
       if (kind === "symlink") {
         writeFileSync(target, snapshot.bytes, { mode: 0o600 });
         symlinkSync(target, ready);
@@ -750,14 +763,21 @@ describe("file-backed trusted configuration source", () => {
         writeFileSync(target, snapshot.bytes, { mode: 0o600 });
         linkSync(target, ready);
       } else if (kind === "oversized") {
-        writeFileSync(ready, Buffer.alloc(OPS_TRUSTED_CONFIG_MAX_BYTES + 1), { mode: 0o600 });
+        writeFileSync(
+          ready,
+          Buffer.concat([
+            snapshot.bytes,
+            Buffer.alloc(OPS_TRUSTED_CONFIG_MAX_BYTES + 1 - snapshot.bytes.length, 0x20),
+          ]),
+          { mode: 0o600 },
+        );
       } else if (kind === "malformed") {
         writeFileSync(ready, Buffer.from([0x7b, 0x22, 0xff, 0x22, 0x7d]), { mode: 0o600 });
       } else {
         writeReady(directory, snapshot);
         if (kind === "writable") chmodSync(ready, 0o620);
       }
-      const sentinel = join(directory, "output-sentinel");
+      const sentinel = join(outside, "output-sentinel");
       writeFileSync(sentinel, "unchanged", { mode: 0o600 });
       await expect(
         source(directory).claim(

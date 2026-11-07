@@ -33,7 +33,9 @@ const parking = vi.hoisted(() => ({ saveAt: vi.fn(async () => "saved" as const) 
 vi.mock("@/components/panels/parking/useSaveParking", () => ({
   useSaveParking: () => ({ saveAt: parking.saveAt, saveHere: vi.fn(), isSaving: false }),
 }));
-const share = vi.hoisted(() => ({ shareUrl: vi.fn(async () => "copied" as const) }));
+const share = vi.hoisted(() => ({
+  shareUrl: vi.fn(async (..._args: unknown[]) => "copied" as const),
+}));
 vi.mock("@/lib/deepLink", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/deepLink")>()),
   shareUrl: share.shareUrl,
@@ -86,20 +88,6 @@ afterEach(() => {
 describe("MapClickFloatingCard on a phone", () => {
   beforeEach(() => asDevice("phone"));
 
-  it("offers the context menu's actions as a row", () => {
-    render(<MapClickFloatingCard />);
-    for (const name of [
-      "place.directions",
-      "mapContextMenu.fromHere",
-      "common.share",
-      "parking.saveParking",
-      "common.copy",
-      "common.details",
-    ]) {
-      expect(screen.getByRole("button", { name })).toBeDefined();
-    }
-  });
-
   it("starts a route from the pin", async () => {
     render(<MapClickFloatingCard />);
     await userEvent.click(screen.getByRole("button", { name: "mapContextMenu.fromHere" }));
@@ -114,6 +102,9 @@ describe("MapClickFloatingCard on a phone", () => {
     render(<MapClickFloatingCard />);
     await userEvent.click(screen.getByRole("button", { name: "common.share" }));
     expect(share.shareUrl).toHaveBeenCalledTimes(1);
+    const payload = share.shareUrl.mock.calls[0]?.[0] as unknown as { url: string; title: string };
+    expect(new URL(payload.url).searchParams.get("at")).toBe("50.776,6.083");
+    expect(payload.title).toBe("Aachen");
     expect(await screen.findByText("mapContextMenu.linkCopied")).toBeDefined();
   });
 
@@ -128,11 +119,13 @@ describe("MapClickFloatingCard on a phone", () => {
 describe("MapClickFloatingCard on a touch screen wider than a phone", () => {
   beforeEach(() => asDevice("touch tablet"));
 
-  it("offers the same row of actions", () => {
+  it("starts a route from a pin on a touch tablet", async () => {
     render(<MapClickFloatingCard />);
-    for (const name of ["mapContextMenu.fromHere", "common.share", "parking.saveParking"]) {
-      expect(screen.getByRole("button", { name })).toBeDefined();
-    }
+    expect(screen.getByRole("button", { name: "common.share" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "parking.saveParking" })).toBeDefined();
+    await userEvent.click(screen.getByRole("button", { name: "mapContextMenu.fromHere" }));
+    expect(useDirectionsStore.getState().waypoints[0].coords).toEqual(PIN);
+    expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.DIRECTIONS);
   });
 });
 
@@ -172,11 +165,12 @@ describe("MapClickFloatingCard on a basemap place", () => {
   });
 
   it("offers its name to copy", async () => {
-    installClipboard();
+    const writeText = installClipboard();
     render(<MapClickFloatingCard />);
     await userEvent.click(screen.getByRole("button", { name: "common.copy" }));
     const menu = await screen.findByRole("menu");
-    expect(within(menu).getByText("Café Kaiser")).toBeDefined();
+    await userEvent.click(within(menu).getByText("Café Kaiser"));
+    expect(writeText).toHaveBeenCalledWith("Café Kaiser");
   });
 
   it("routes to it under its name", async () => {

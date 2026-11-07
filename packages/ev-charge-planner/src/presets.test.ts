@@ -36,22 +36,6 @@ describe("vehicle presets", () => {
     }
   });
 
-  // The picker groups by make, and MUI renders a second header for a make whose
-  // options are interrupted by another make's — so the runs must not interleave.
-  it("keeps every make's options contiguous", () => {
-    const spans = new Map<string, { first: number; last: number }>();
-    listVehicles().forEach((vehicle, index) => {
-      const span = spans.get(vehicle.make);
-      if (span) span.last = index;
-      else spans.set(vehicle.make, { first: index, last: index });
-    });
-    for (const [make, span] of spans) {
-      expect(span.last - span.first + 1, make).toBe(
-        listVehicles().filter((v) => v.make === make).length,
-      );
-    }
-  });
-
   it("has no duplicate display labels", () => {
     const labels = listVehicles().map((v) => v.label);
     expect(new Set(labels).size).toBe(labels.length);

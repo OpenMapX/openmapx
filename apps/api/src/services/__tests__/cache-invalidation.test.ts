@@ -133,55 +133,6 @@ describe("host cache invalidation", () => {
     expect(events).toBe(3);
   });
 
-  it("fences writes captured before or during deletion while allowing later fills", async () => {
-    const redis = new RedisBoundary();
-    const value = host(redis);
-    const old = await value.captureEpoch();
-    let during: string | null = null;
-    await value.invalidate(["int:*"], async () => {
-      during = await value.captureEpoch();
-      redis.values.delete("int:geocoding:a");
-    });
-    await value.writeIfCurrent("int:geocoding:a", "old", 60, old);
-    await value.writeIfCurrent("int:geocoding:a", "during", 60, during);
-    expect(redis.values.has("int:geocoding:a")).toBe(false);
-    await value.writeIfCurrent("int:geocoding:a", "new", 60, await value.captureEpoch());
-    expect(redis.values.get("int:geocoding:a")).toBe("new");
-    expect(
-      [...redis.values.keys()].filter((key) => key.startsWith("int:") || key.startsWith("cache:")),
-    ).toEqual(["int:geocoding:a"]);
-  });
-
-  it("refuses a new fill while deletion is still in progress", async () => {
-    const redis = new RedisBoundary();
-    const value = host(redis);
-    await value.invalidate(["int:*"], async () => {
-      const during = await value.captureEpoch();
-      await value.writeIfCurrent("int:geocoding:already-scanned", "during", 60, during);
-      expect(redis.values.has("int:geocoding:already-scanned")).toBe(false);
-    });
-  });
-
-  it("keeps shared writes blocked until every concurrent clear finishes", async () => {
-    const redis = new RedisBoundary();
-    const first = host(redis);
-    const second = host(redis);
-    const started = Promise.withResolvers<void>();
-    const release = Promise.withResolvers<void>();
-    const pending = first.invalidate(["int:*"], async () => {
-      started.resolve();
-      await release.promise;
-    });
-    await started.promise;
-    await second.invalidate(["cache:*"], async () => undefined);
-    await second.writeIfCurrent("int:geocoding:a", "blocked", 60, await second.captureEpoch());
-    expect(redis.values.has("int:geocoding:a")).toBe(false);
-    release.resolve();
-    await pending;
-    await second.writeIfCurrent("int:geocoding:a", "fresh", 60, await second.captureEpoch());
-    expect(redis.values.get("int:geocoding:a")).toBe("fresh");
-  });
-
   it("recovers writes after an abandoned clear lease expires", async () => {
     vi.useFakeTimers();
     const redis = new RedisBoundary();

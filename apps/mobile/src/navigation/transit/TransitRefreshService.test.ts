@@ -100,35 +100,16 @@ describe("TransitRefreshService.request", () => {
       journey: async () => ({ data: { stops: [{ stopId: "stop-a" }] } }),
     });
 
-    const outcome = await service(client).request(request());
-
-    expect(outcome.ok).toBe(true);
-    expect((calls[0].body as { token: string }).token).toBe(FIXTURE_TOKEN);
-    expect(JSON.stringify(outcome)).toContain(NEW_TOKEN);
-  });
-
-  it("binds the result to the generation and request that asked for it", async () => {
-    const { client } = fakeClient({
-      refresh: async () => refreshedItinerary(),
-      journey: async () => ({ data: { stops: [] } }),
-    });
-
     const outcome = await service(client).request(request({ generation: 9, requestId: "r9" }));
 
-    // A reply from a generation a replan superseded must be discardable.
-    expect(outcome.generation).toBe(9);
-    expect(outcome.requestId).toBe("r9");
-    expect(outcome.sessionId).toBe("session-t1");
-  });
-
-  it("bounds the request with a timeout and an abort signal", async () => {
-    const { client, calls } = fakeClient({
-      refresh: async () => refreshedItinerary(),
-      journey: async () => ({ data: { stops: [] } }),
+    expect(outcome).toMatchObject({
+      ok: true,
+      generation: 9,
+      requestId: "r9",
+      sessionId: "session-t1",
+      itinerary: refreshedItinerary().data.itinerary,
     });
-
-    await service(client).request(request());
-
+    expect((calls[0].body as { token: string }).token).toBe(FIXTURE_TOKEN);
     expect(calls[0].options.timeoutMs).toBe(15_000);
     expect(calls[0].options.signal).toBeInstanceOf(AbortSignal);
   });
@@ -141,7 +122,7 @@ describe("TransitRefreshService.request", () => {
     const outcome = await service(client).request(request({ session: tokenless }));
 
     expect(outcome).toMatchObject({ ok: false, failure: "retryable" });
-    expect(calls.every((call) => call.kind === "get")).toBe(true);
+    expect(calls.map((call) => call.kind)).toEqual(["get"]);
   });
 
   describe("failure classification", () => {
@@ -183,25 +164,12 @@ describe("TransitRefreshService.request", () => {
     it("treats an unexplained error as ambiguous", async () => {
       const { client } = fakeClient({
         refresh: async () => {
-          throw new Error("socket hang up");
-        },
-      });
-
-      expect(await service(client).request(request())).toMatchObject({
-        ok: false,
-        failure: "ambiguous",
-      });
-    });
-
-    it("leaks neither the old nor the new token into a failure", async () => {
-      const { client } = fakeClient({
-        refresh: async () => {
-          throw new Error(`refresh failed for token ${FIXTURE_TOKEN}`);
+          throw new Error(`socket hang up for token ${FIXTURE_TOKEN}`);
         },
       });
 
       const outcome = await service(client).request(request());
-
+      expect(outcome).toMatchObject({ ok: false, failure: "ambiguous" });
       expect(JSON.stringify(outcome)).not.toContain(FIXTURE_TOKEN);
     });
   });

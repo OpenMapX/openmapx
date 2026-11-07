@@ -354,12 +354,6 @@ describe("publish ordering and success", () => {
       );
     }
   });
-
-  it("sends exactly one element update", async () => {
-    const { service, client } = makeService();
-    await service.publish(ctx, publishRequest());
-    expect(client.updateElement).toHaveBeenCalledTimes(1);
-  });
 });
 
 describe("publish gating", () => {
@@ -478,28 +472,31 @@ describe("changeset lifecycle", () => {
     expect(calls).toEqual(["getElement", "createChangeset", "updateElement", "closeChangeset"]);
   });
 
-  it("treats an already-closed changeset as closed and retries only a confirmed-open one", async () => {
-    let closeAttempts = 0;
-    const client = makeClient({
-      closeChangeset: vi.fn(async () => {
-        closeAttempts += 1;
-        if (closeAttempts === 1) {
-          throw new OsmUpstreamError({
-            status: null,
-            operation: "close_changeset",
-            requestMayHaveBeenApplied: true,
-            reason: "x",
-          });
-        }
-      }),
-      getChangeset: vi.fn(async () => ({ id: 77, open: true })),
-    });
-    const { service } = makeService({ client });
-    await expect(service.publish(ctx, publishRequest())).resolves.toMatchObject({
-      changesetId: 77,
-    });
-    expect(closeAttempts).toBe(2);
-  });
+  it.each([false, true])(
+    "retries changeset close only when reconciliation reports open=%s",
+    async (open) => {
+      let closeAttempts = 0;
+      const client = makeClient({
+        closeChangeset: vi.fn(async () => {
+          closeAttempts += 1;
+          if (closeAttempts === 1) {
+            throw new OsmUpstreamError({
+              status: null,
+              operation: "close_changeset",
+              requestMayHaveBeenApplied: true,
+              reason: "x",
+            });
+          }
+        }),
+        getChangeset: vi.fn(async () => ({ id: 77, open })),
+      });
+      const { service } = makeService({ client });
+      await expect(service.publish(ctx, publishRequest())).resolves.toMatchObject({
+        changesetId: 77,
+      });
+      expect(closeAttempts).toBe(open ? 2 : 1);
+    },
+  );
 
   it("does not turn a confirmed update into a failure when close cannot be confirmed", async () => {
     const client = makeClient({

@@ -33,11 +33,4 @@ describe("usePersonalTimelineStore", () => {
       selectedEntryId: null,
     });
   });
-
-  it("registers timeline as a sidebar panel", () => {
-    expect(getPanel(PANEL.TIMELINE)).toMatchObject({
-      id: "timeline",
-      layer: "sidebar",
-    });
-  });
 });

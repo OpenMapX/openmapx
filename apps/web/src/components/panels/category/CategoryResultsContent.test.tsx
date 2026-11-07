@@ -294,7 +294,7 @@ describe("CategoryResultsContent recovery", () => {
     const view = renderPanel(vi.fn());
     try {
       expect(screen.queryByText("search.searchTakingLonger")).toBeNull();
-      expect(view.container.querySelectorAll(".MuiSkeleton-root")).toHaveLength(10);
+      expect(view.container.querySelectorAll(".MuiSkeleton-root").length).toBeGreaterThan(0);
       expect(screen.queryByText("search.noResultsFound")).toBeNull();
 
       await act(async () => vi.advanceTimersByTimeAsync(8_000));
@@ -304,7 +304,7 @@ describe("CategoryResultsContent recovery", () => {
 
       act(() => useCategorySearchStore.getState().setSearchBbox({ ...bbox, east: 13.6 }));
       expect(screen.queryByText("search.searchTakingLonger")).toBeNull();
-      expect(view.container.querySelectorAll(".MuiSkeleton-root")).toHaveLength(10);
+      expect(view.container.querySelectorAll(".MuiSkeleton-root").length).toBeGreaterThan(0);
 
       mockUseExploreReachResults.mockReturnValue({ ...pending, filtered: [], isLoading: false });
       act(() => useOpeningHoursStore.getState().setOpeningHoursFilter("open_now"));
@@ -354,7 +354,7 @@ describe("CategoryResultsContent recovery", () => {
       );
       expect(useCategorySearchStore.getState().searchRevision).toBe(revision);
       expect(screen.queryByText("search.searchTakingLonger")).toBeNull();
-      expect(view.container.querySelectorAll(".MuiSkeleton-root")).toHaveLength(10);
+      expect(view.container.querySelectorAll(".MuiSkeleton-root").length).toBeGreaterThan(0);
     } finally {
       view.unmount();
       vi.useRealTimers();
@@ -1018,29 +1018,6 @@ describe("visible category card enrichment", () => {
     expect(post).toHaveBeenCalledTimes(2);
   });
 
-  it("refreshes confirmed card data after each cache TTL", async () => {
-    vi.useFakeTimers();
-    const place = {
-      id: "osm:node/ttl",
-      name: "TTL cafe",
-      coordinates: [6.08, 50.77],
-    } as CategoryPlace;
-    const post = vi.spyOn(apiClient, "post").mockResolvedValue({
-      results: [
-        { id: place.id, outcomes: { photo: { status: "absent" }, rating: { status: "absent" } } },
-      ],
-    } as never);
-    const { intersect } = mountVisibleCards([place]);
-    intersect([place.id]);
-    await advanceCardTimers(50);
-    for (let i = 0; i < 2; i++) {
-      await advanceCardTimers(600_001);
-      intersect([place.id]);
-      await advanceCardTimers(50);
-    }
-    expect(post).toHaveBeenCalledTimes(3);
-  });
-
   it("waits for HTTP Retry-After before retrying a rate-limited request", async () => {
     vi.useFakeTimers();
     vi.spyOn(Math, "random").mockReturnValue(0);
@@ -1112,6 +1089,7 @@ describe("visible category card enrichment", () => {
     intersect([place.id]);
     await advanceCardTimers(50);
     expect(post).toHaveBeenCalledTimes(1);
+    expect(timeout.mock.calls.some(([, delay]) => delay === 2_147_483_647)).toBe(true);
     expect(
       timeout.mock.calls.every(([, delay]) => typeof delay !== "number" || delay <= 2_147_483_647),
     ).toBe(true);

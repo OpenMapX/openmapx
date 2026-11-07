@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createQueryWrapper, render, screen, userEvent, waitFor } from "@/test";
 import { AdminOperationCard } from "../AdminOperationCard";
-import { type AdminOperationContract, initialFormValues } from "../adminOperationsApi";
+import type { AdminOperationContract } from "../adminOperationsApi";
 
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://api.test" }),
@@ -61,13 +61,6 @@ function jsonResponse(status: number, body: unknown) {
 afterEach(() => {
   responses.length = 0;
   fetchCalls.length = 0;
-});
-
-describe("initialFormValues", () => {
-  it("seeds every field from the contract defaults", () => {
-    expect(initialFormValues(updateContract)).toEqual({ region: "", failFast: false });
-    expect(initialFormValues(cleanContract)).toEqual({ target: "all" });
-  });
 });
 
 describe("AdminOperationCard", () => {
@@ -156,6 +149,7 @@ describe("AdminOperationCard", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "Queue Cleanup Data" }));
     expect(await screen.findByText("Confirm data cleanup")).toBeTruthy();
+    expect(JSON.parse(String(fetchCalls[0]?.[1]?.body))).toEqual({ target: "all" });
     expect(screen.getByText("This removes local data files.")).toBeTruthy();
     expect(screen.getByText("Remove local data files for target all")).toBeTruthy();
   });

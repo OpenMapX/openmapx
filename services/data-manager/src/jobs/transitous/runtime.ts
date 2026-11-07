@@ -18,8 +18,3 @@ export function getSingleFlightController(): SingleFlightController {
   }
   return cached;
 }
-
-/** Test-only: reset the singleton (used by integration tests). */
-export function __resetSingleFlightController(): void {
-  cached = null;
-}

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,8 +16,13 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const scriptPath = resolve(repositoryRoot, "apps/web/scripts/generate-license-notices.mjs");
 const outputPath = resolve(repositoryRoot, "apps/web/src/generated/open-source-licenses.json");
 
-it("includes data-manager runtime dependency licenses in the generated notices", () => {
-  const original = existsSync(outputPath) ? readFileSync(outputPath, "utf8") : undefined;
+it("generates the data-manager dependency and Foursquare data-source license notices", () => {
+  let original: Buffer | undefined;
+  try {
+    original = readFileSync(outputPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
 
   try {
     execFileSync(
@@ -40,24 +45,6 @@ it("includes data-manager runtime dependency licenses in the generated notices",
     );
     expect(glyphComposite?.licenseText).toContain("BSD 2-Clause License");
     expect(protocolBuffers).toBeDefined();
-  } finally {
-    if (original === undefined) {
-      if (existsSync(outputPath)) unlinkSync(outputPath);
-    } else writeFileSync(outputPath, original, "utf8");
-  }
-});
-
-it("includes the Foursquare OS Places notice in the generated notices", () => {
-  const original = existsSync(outputPath) ? readFileSync(outputPath, "utf8") : undefined;
-
-  try {
-    execFileSync(
-      process.execPath,
-      ["--experimental-strip-types", "--no-warnings=ExperimentalWarning", scriptPath],
-      { cwd: repositoryRoot, stdio: "pipe" },
-    );
-
-    const payload = JSON.parse(readFileSync(outputPath, "utf8")) as LicensePayload;
     const foursquare = payload.notices.find((notice) => notice.name === "Foursquare OS Places");
 
     expect(foursquare).toEqual(
@@ -72,7 +59,7 @@ it("includes the Foursquare OS Places notice in the generated notices", () => {
     expect(foursquare?.licenseText).toContain("Foursquare OS Places");
   } finally {
     if (original === undefined) {
-      if (existsSync(outputPath)) unlinkSync(outputPath);
-    } else writeFileSync(outputPath, original, "utf8");
+      rmSync(outputPath, { force: true });
+    } else writeFileSync(outputPath, original);
   }
 });

@@ -67,7 +67,7 @@ export type {
   GroundNavigationSettings,
   GroundPackageError,
 } from "./groundPackage";
-export { buildGroundNavigationPackage, groundRouteFingerprint } from "./groundPackage";
+export { buildGroundNavigationPackage } from "./groundPackage";
 export {
   type GuidanceIconName,
   type GuidanceLaneArrow,

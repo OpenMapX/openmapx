@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Inline drizzle-builder stub kept in vi.hoisted so the vi.mock factory (hoisted
 // above imports) can reference it. `selectRows` is what the next select()...
@@ -55,10 +55,11 @@ function flipByte(base64: string): string {
 }
 
 beforeEach(() => {
-  vi.unstubAllEnvs();
   h.state.selectRows = [];
   h.state.inserted = [];
 });
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe("crypto layer", () => {
   beforeEach(() => {

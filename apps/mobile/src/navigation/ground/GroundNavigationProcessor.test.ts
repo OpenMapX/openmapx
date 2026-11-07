@@ -108,27 +108,18 @@ describe("processGroundBatch parity with processFix", () => {
   });
 
   it("applies the session's voice timing rather than the engine default", () => {
-    const current = session();
-    current.payload.startPackage.settings.voiceTiming = "early";
-
-    const outcome = processGroundBatch({
-      session: current,
-      fixes: [fixAt(5, NOW)],
-      nowMs: NOW,
-      cache: new GroundRouteCache(),
-    });
-
-    // Early timing widens the trigger distances, so the engine's own state must
-    // differ from a run at the default multiplier.
-    const atDefault = processFix(
-      current.payload.startPackage.route as never,
-      fixAt(5, NOW),
-      current.payload.tickState as never,
-      { ...navOptionsForMode("driving"), announceMultiplier: 1 },
-      prepareRouteMatcher(current.payload.startPackage.route.geometry),
-    );
-    expect(outcome.session).toBeTruthy();
-    expect(atDefault.progress).toBeTruthy();
+    const run = (voiceTiming: "early" | "normal") => {
+      const current = session();
+      current.payload.startPackage.settings.voiceTiming = voiceTiming;
+      return processGroundBatch({
+        session: current,
+        fixes: [fixAt(20, NOW)],
+        nowMs: NOW,
+        cache: new GroundRouteCache(),
+      });
+    };
+    expect(run("early").effects).toContainEqual(expect.objectContaining({ kind: "speak" }));
+    expect(run("normal").effects?.filter((effect) => effect.kind === "speak")).toEqual([]);
   });
 });
 
@@ -162,45 +153,19 @@ describe("processGroundBatch equivalence under restart and batching", () => {
     expect(batched.payload.progress).toEqual(singly.payload.progress);
     expect(batched.payload.tickState.offRouteScore).toBe(singly.payload.tickState.offRouteScore);
     expect(batched.lastAcceptedFix).toEqual(singly.lastAcceptedFix);
-  });
-
-  it("is unaffected by recreating the prepared route cache between every fix", () => {
-    const cached = drive(
-      trace.map((fix) => [fix]),
-      false,
-    );
     const recreated = drive(
       trace.map((fix) => [fix]),
       true,
     );
-
-    expect(recreated.payload.progress).toEqual(cached.payload.progress);
-    expect(recreated.payload.tickState).toEqual(cached.payload.tickState);
-  });
-
-  it("advances the revision exactly once per batch", () => {
-    const current = session();
-
-    const outcome = processGroundBatch({
-      session: current,
-      fixes: trace,
-      nowMs: NOW + 12_000,
-      cache: new GroundRouteCache(),
-    });
-
-    expect(outcome.session.revision).toBe(current.revision + 1);
-  });
-
-  it("publishes one snapshot for a batch, not one per fix", () => {
+    expect(recreated).toEqual(singly);
     const outcome = processGroundBatch({
       session: session(),
       fixes: trace,
       nowMs: NOW + 12_000,
       cache: new GroundRouteCache(),
     });
-
-    const snapshots = (outcome.effects ?? []).filter((e) => e.kind === "publish-snapshot");
-    expect(snapshots).toHaveLength(1);
+    expect(outcome.session.revision).toBe(session().revision + 1);
+    expect(outcome.effects?.filter((effect) => effect.kind === "publish-snapshot")).toHaveLength(1);
   });
 });
 
@@ -255,45 +220,6 @@ describe("processGroundBatch rejected and stale fixes", () => {
     expect(outcome.payload.offRoute).toBe(true);
   });
 
-  it("clears coasting when a real fix is accepted", () => {
-    const current = session();
-    current.payload.coasting = true;
-
-    const outcome = processGroundBatch({
-      session: current,
-      fixes: [fixAt(5, NOW)],
-      nowMs: NOW,
-      cache: new GroundRouteCache(),
-    }).session as GroundMobileSession;
-
-    expect(outcome.payload.coasting).toBe(false);
-  });
-
-  it("keeps coasting when only synthetic fixes arrive", () => {
-    const current = session();
-    current.payload.coasting = true;
-
-    const outcome = processGroundBatch({
-      session: current,
-      fixes: [fixAt(5, NOW, { coasted: true })],
-      nowMs: NOW,
-      cache: new GroundRouteCache(),
-    }).session as GroundMobileSession;
-
-    expect(outcome.payload.coasting).toBe(true);
-  });
-
-  it("marks a synthetic fix as coasted in the persisted record", () => {
-    const outcome = processGroundBatch({
-      session: session(),
-      fixes: [fixAt(5, NOW, { coasted: true })],
-      nowMs: NOW,
-      cache: new GroundRouteCache(),
-    }).session as GroundMobileSession;
-
-    expect(outcome.lastAcceptedFix?.coasted).toBe(true);
-  });
-
   it("waits for a real destination fix before completing a coasted session", () => {
     const cache = new GroundRouteCache();
     const current = session();
@@ -307,6 +233,7 @@ describe("processGroundBatch rejected and stale fixes", () => {
     const estimated = coasted.session as GroundMobileSession;
     expect(estimated.payload.progress?.distanceRemaining).toBe(0);
     expect(estimated.payload.coasting).toBe(true);
+    expect(estimated.lastAcceptedFix?.coasted).toBe(true);
     expect(coasted.arrived).toBe(false);
     expect(estimated.status).toBe("active");
     expect(coasted.enqueue ?? []).not.toEqual(
@@ -322,6 +249,7 @@ describe("processGroundBatch rejected and stale fixes", () => {
     expect(real.arrived).toBe(true);
     expect(real.session.status).toBe("arrived");
     expect((real.session as GroundMobileSession).payload.coasting).toBe(false);
+    expect(real.session.lastAcceptedFix?.coasted).toBeUndefined();
   });
 });
 
@@ -330,33 +258,24 @@ describe("processGroundBatch cue selection", () => {
   function spokenFor(nowMs: number) {
     const outcome = processGroundBatch({
       session: session(),
-      fixes: Array.from({ length: 40 }, (_, index) => fixAt(index, NOW + index * 1_000)),
+      fixes: Array.from({ length: 28 }, (_, index) => fixAt(index, NOW + index * 1_000)),
       nowMs,
       cache: new GroundRouteCache(),
     });
     return (outcome.effects ?? []).filter((effect) => effect.kind === "speak");
   }
 
-  it("speaks at most one cue for a batch", () => {
-    expect(spokenFor(NOW + 40_000).length).toBeLessThanOrEqual(1);
-  });
-
-  it("stays silent when the batch is too old to be useful", () => {
-    // Delivered five minutes after the fixes were taken: every maneuver in it is
-    // behind the user, and announcing one would send them the wrong way.
+  it("speaks one current cue, suppresses stale audio and retains its ledger", () => {
+    const current = spokenFor(NOW + 28_000);
+    expect(current).toHaveLength(1);
     expect(spokenFor(NOW + 5 * 60_000)).toEqual([]);
-  });
-
-  it("records every cue the engine reached, even the ones it did not speak", () => {
-    const outcome = processGroundBatch({
+    const late = processGroundBatch({
       session: session(),
-      fixes: Array.from({ length: 40 }, (_, index) => fixAt(index, NOW + index * 1_000)),
+      fixes: Array.from({ length: 28 }, (_, index) => fixAt(index, NOW + index * 1_000)),
       nowMs: NOW + 5 * 60_000,
       cache: new GroundRouteCache(),
-    }).session as GroundMobileSession;
-
-    // Silence now must not become a repeat later.
-    expect(outcome.cueLedger.spoken.length).toBeGreaterThan(0);
+    });
+    expect(late.session.cueLedger.spoken).toContain((current[0] as { cueId: string }).cueId);
   });
 
   it("emits no audio at all when voice is disabled", () => {
@@ -365,8 +284,8 @@ describe("processGroundBatch cue selection", () => {
 
     const outcome = processGroundBatch({
       session: current,
-      fixes: Array.from({ length: 40 }, (_, index) => fixAt(index, NOW + index * 1_000)),
-      nowMs: NOW + 40_000,
+      fixes: Array.from({ length: 28 }, (_, index) => fixAt(index, NOW + index * 1_000)),
+      nowMs: NOW + 28_000,
       cache: new GroundRouteCache(),
     });
 
@@ -411,23 +330,6 @@ describe("GroundRouteCache retention across reloaded sessions", () => {
       cache: new GroundRouteCache(),
     });
   }
-
-  it("prepares once for equal geometry delivered in a new array each time", () => {
-    const cache = new GroundRouteCache();
-    let current = session();
-    for (let index = 0; index < 8; index += 1) {
-      const outcome = processGroundBatch({
-        session: reloaded(current),
-        fixes: [fixAt(index, NOW + index * 1_000)],
-        nowMs: NOW + index * 1_000,
-        cache,
-      });
-      current = outcome.session as GroundMobileSession;
-    }
-
-    expect(preparations()).toBe(1);
-    expect(current.revision).toBe(session().revision + 8);
-  });
 
   it("matches a cold cache after every reused call", () => {
     const warm = new GroundRouteCache();
@@ -650,16 +552,6 @@ describe("GroundRouteCache retention across reloaded sessions", () => {
 describe("GroundNavigationProcessor", () => {
   const processor = () => new GroundNavigationProcessor();
 
-  it("prepares a valid package", () => {
-    const result = processor().prepare(session().payload.startPackage, {
-      sessionId: "session-1",
-      nowMs: NOW,
-      permissionMode: "background",
-    });
-
-    expect(result.ok).toBe(true);
-  });
-
   it("refuses a package the engine could not guide", () => {
     const startPackage = session().payload.startPackage;
     const result = processor().prepare(
@@ -680,15 +572,15 @@ describe("GroundNavigationProcessor", () => {
     const mutation = processor().processFixes(current, away, NOW + 20_000);
     const next = mutation.session as GroundMobileSession;
 
-    if (next.payload.reroute.status === "pending") {
-      expect(mutation.effects).toContainEqual({
-        kind: "request-reroute",
-        requestId: next.payload.reroute.requestId,
-      });
-    } else {
-      // The engine's backoff may not have elapsed; either way nothing was sent.
-      expect((mutation.effects ?? []).some((e) => e.kind === "request-reroute")).toBe(false);
-    }
+    expect(next.payload.reroute.status).toBe("pending");
+    expect(mutation.effects).toContainEqual({
+      kind: "request-reroute",
+      requestId: expect.any(String),
+    });
+    expect(mutation.effects).toContainEqual({
+      kind: "request-reroute",
+      requestId: next.payload.reroute.requestId,
+    });
   });
 
   it("resets every geometry-indexed value on replacement", () => {

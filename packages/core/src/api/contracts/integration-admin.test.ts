@@ -210,8 +210,7 @@ function success(
   return contract.schema.parse(value);
 }
 describe("integration administration canonical producer contracts", () => {
-  it("binds exactly the 35 approved operation IDs, methods, paths and admin auth", () => {
-    expect(contracts).toHaveProperty("integrationAdminOperations");
+  it("binds the approved operation IDs, methods, paths and admin auth", () => {
     expect(
       Object.entries(contracts.integrationAdminOperations).map(([id, op]) => [
         id,
@@ -660,7 +659,10 @@ it.each(["previewAdminStandaloneIntegration", "installAdminStandaloneIntegration
         jobId: "568ce225-448a-4a8f-86c3-3994d4c6d8a9",
         operationId: "99b22375-7d2c-486c-a2f5-d92391ceda2a",
       }),
-    ).toHaveProperty("operationId");
+    ).toEqual({
+      jobId: "568ce225-448a-4a8f-86c3-3994d4c6d8a9",
+      operationId: "99b22375-7d2c-486c-a2f5-d92391ceda2a",
+    });
     expect(op.request.headers.safeParse({ "idempotency-key": "fixture-operation" }).success).toBe(
       true,
     );

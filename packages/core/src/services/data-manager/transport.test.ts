@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   bindDataManagerOperation,
   createDataManagerTransport,
-  DataManagerHttpError,
   unwrapDataManagerResponse,
   validateDataManagerBaseUrl,
 } from "./transport";
@@ -45,12 +44,9 @@ describe("canonical data-manager acquisition", () => {
       headers: Headers;
     }>("/search-index/status", { transport });
     expect(result.status).toBe(404);
-    expect(() => unwrapDataManagerResponse(result)).toThrow(DataManagerHttpError);
-    try {
-      unwrapDataManagerResponse(result);
-    } catch (error) {
-      expect((error as DataManagerHttpError).status).toBe(404);
-    }
+    expect(() => unwrapDataManagerResponse(result)).toThrowError(
+      expect.objectContaining({ name: "DataManagerHttpError", status: 404 }),
+    );
   });
   it("uses bearer auth with redirect rejection and preserves configured budgets", async () => {
     const acquire = vi.fn().mockResolvedValue(json({ datasets: [] }));
@@ -83,7 +79,7 @@ describe("canonical data-manager acquisition", () => {
       expect(response.body?.locked).toBe(false);
     }
   });
-  it("owns late responses after header timeout and aborts a stalled JSON read", async () => {
+  it("aborts a stalled JSON read and releases its reader", async () => {
     let canceled = false;
     const response = new Response(
       new ReadableStream({
@@ -286,9 +282,12 @@ describe("canonical data-manager acquisition", () => {
           new Response("sensitive credential", { headers: { "content-type": "application/json" } }),
         ),
     });
-    await expect(
-      bindDataManagerOperation("getDatasets")("/datasets", { transport: malformed }),
-    ).rejects.toThrow("invalid JSON");
+    const error = await bindDataManagerOperation("getDatasets")("/datasets", {
+      transport: malformed,
+    }).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect(String(error)).toContain("invalid JSON");
+    expect(`${String(error)} ${JSON.stringify(error)}`).not.toContain("sensitive credential");
     let resolve!: (value: Response) => void;
     let canceled = false;
     const transport = createDataManagerTransport({

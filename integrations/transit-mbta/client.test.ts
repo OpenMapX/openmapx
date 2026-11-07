@@ -10,7 +10,7 @@ import {
 import { Predictions, Stops } from "./generated/models";
 import { mbtaRequest } from "./transport";
 
-export function runtime() {
+function runtime() {
   return {
     admitSharedRequest: vi.fn(
       async (_input: { scope: string; key: string; policy?: SharedRequestPolicy }) => ({
@@ -347,7 +347,7 @@ describe("MBTA failure and lifetime boundaries", () => {
       });
     expect(f.http.calls).toHaveLength(0);
   });
-  it("times out a stalled HTTP dependency without publishing its late result", async () => {
+  it("times out a stalled HTTP dependency and clears its owned timer", async () => {
     vi.useFakeTimers();
     const f = fixture();
     f.http.getResponse = () => new Promise(() => {});

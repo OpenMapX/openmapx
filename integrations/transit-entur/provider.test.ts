@@ -86,16 +86,6 @@ describe("encodeServiceJourneyId / decodeServiceJourneyId", () => {
   ])("decode(%j)", (token, expected) => {
     expect(decodeServiceJourneyId(token)).toEqual(expected);
   });
-
-  it.each([
-    ["RUT:ServiceJourney:1", "2026-03-10"],
-    ["RUT:ServiceJourney:42", undefined],
-    ["ABC:ServiceJourney:9", "1999-12-31"],
-  ])("round-trips decode(encode(%j, %j))", (id, date) => {
-    const decoded = decodeServiceJourneyId(encodeServiceJourneyId(id, date));
-    expect(decoded.serviceJourneyId).toBe(id);
-    expect(decoded.date).toBe(date);
-  });
 });
 
 describe("isQuayId", () => {

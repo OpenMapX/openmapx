@@ -15,11 +15,6 @@ const mockRoute: Route = {
 };
 
 describe("WalkingHandoffCard", () => {
-  it("renders walking duration and distance when route is provided", () => {
-    render(<WalkingHandoffCard route={mockRoute} isLoading={false} onStartWalking={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /navigation.startWalking/ })).toBeInTheDocument();
-  });
-
   it("calls onStartWalking when Start button is clicked", async () => {
     const onStartWalking = vi.fn();
     render(

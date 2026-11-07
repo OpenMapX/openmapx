@@ -120,8 +120,12 @@ describe("useDefaultVehicle", () => {
   });
 
   it("returns null with an empty garage", async () => {
-    const { result } = renderHook(() => useDefaultVehicle(), { wrapper: wrapper(client()) });
-    await waitFor(() => expect(result.current).toBeNull());
+    const { result } = renderHook(
+      () => ({ vehicles: useVehicles(), selected: useDefaultVehicle() }),
+      { wrapper: wrapper(client()) },
+    );
+    await waitFor(() => expect(result.current.vehicles.isSuccess).toBe(true));
+    expect(result.current.selected).toBeNull();
   });
 });
 

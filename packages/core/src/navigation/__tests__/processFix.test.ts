@@ -225,20 +225,10 @@ describe("processFix", () => {
     expect(r.accuracyRejected).toBe(true);
   });
 
-  it("does not flag accuracyRejected for an acceptable fix", () => {
+  it("projects progress, bearing, speed and segment across on-route fixes", () => {
     const r = processFix(
       route,
-      { coords: [0.001, 0], accuracy: 5, timestampMs: 1000 },
-      emptyState,
-      opts,
-    );
-    expect(r.accuracyRejected).toBe(false);
-  });
-
-  it("produces progress for an on-route fix", () => {
-    const r = processFix(
-      route,
-      { coords: [0.001, 0], accuracy: 5, timestampMs: 1000 },
+      { coords: [0.001, 0], accuracy: 5, timestampMs: 1000, speed: 12.5 },
       emptyState,
       opts,
     );
@@ -248,34 +238,16 @@ describe("processFix", () => {
     expect(r.progress?.etaEpochMs).toBeGreaterThan(1000);
     // Route runs due east, so the travel bearing should be ~90°.
     expect(r.progress?.bearing).toBeCloseTo(90, 0);
-  });
-
-  it("exposes the route-geometry segment index of the snapped position", () => {
-    // Geometry is [0,0]→[0.002,0]→[0.004,0]: two segments (0 and 1).
-    const onFirst = processFix(
-      route,
-      { coords: [0.001, 0], accuracy: 5, timestampMs: 1000 },
-      emptyState,
-      opts,
-    );
-    expect(onFirst.progress?.segmentIndex).toBe(0);
-    const onSecond = processFix(
-      route,
-      { coords: [0.003, 0], accuracy: 5, timestampMs: 1000 },
-      emptyState,
-      opts,
-    );
-    expect(onSecond.progress?.segmentIndex).toBe(1);
-  });
-
-  it("uses the GPS-reported speed when present", () => {
-    const r = processFix(
-      route,
-      { coords: [0.001, 0], accuracy: 5, timestampMs: 1000, speed: 12.5 },
-      emptyState,
-      opts,
-    );
+    expect(r.accuracyRejected).toBe(false);
     expect(r.progress?.speedMps).toBe(12.5);
+    expect(r.progress?.segmentIndex).toBe(0);
+    const next = processFix(
+      route,
+      { coords: [0.003, 0], accuracy: 5, timestampMs: 2000 },
+      r.nextState,
+      opts,
+    );
+    expect(next.progress?.segmentIndex).toBe(1);
   });
 
   it("estimates speed from along-route progress when GPS speed is absent", () => {
@@ -352,16 +324,6 @@ describe("processFix", () => {
       opts,
     );
     expect(f3.progress?.currentStepIndex).toBe(1);
-  });
-
-  it("arrives near the destination", () => {
-    const r = processFix(
-      route,
-      { coords: [0.004, 0], accuracy: 5, timestampMs: 5000 },
-      emptyState,
-      opts,
-    );
-    expect(r.arrived).toBe(true);
   });
 
   describe.each([true, false])("destination proximity with steps=%s", (withSteps) => {
@@ -465,7 +427,7 @@ describe("processFix on a route with no steps (geometry-only)", () => {
   it("reports full progress and does not arrive at the start", () => {
     const r = processFix(
       noStepsRoute,
-      { coords: [0, 0], accuracy: 5, timestampMs: 0 },
+      { coords: [0, 0], accuracy: 5, timestampMs: 1_000_000 },
       emptyState,
       opts,
     );
@@ -477,7 +439,7 @@ describe("processFix on a route with no steps (geometry-only)", () => {
     expect(r.progress?.alongMeters).toBeCloseTo(0, 0);
     expect(r.progress?.deviationMeters).toBeCloseTo(0, 3);
     expect(r.progress?.segmentIndex).toBe(0);
-    expect(r.progress?.etaEpochMs).toBeGreaterThan(0);
+    expect(r.progress?.etaEpochMs).toBeCloseTo(1_100_000, 0);
     expect(r.offRoute).toBe(false);
     expect(r.needsReroute).toBe(false);
     expect(r.arrived).toBe(false);

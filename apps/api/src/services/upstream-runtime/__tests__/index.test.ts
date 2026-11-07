@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createRedisUpstreamRuntime, type UpstreamRedisClient } from "../index";
+import { CONSUME_QUOTA_SCRIPT, RELEASE_LEASE_SCRIPT } from "../scripts";
 
 class FakeRedis implements UpstreamRedisClient {
   readonly values = new Map<string, string>();
@@ -18,43 +19,8 @@ class FakeRedis implements UpstreamRedisClient {
     return this.values.delete(key) ? 1 : 0;
   }
 
-  async eval(script: string, numberOfKeys: number, ...args: string[]): Promise<unknown> {
-    const keys = args.slice(0, numberOfKeys);
-    const argv = args.slice(numberOfKeys);
-    if (script.includes("openmapx-release-lease")) {
-      if (this.values.get(keys[0] ?? "") !== argv[0]) return 0;
-      return this.del(keys[0] ?? "");
-    }
-    if (script.includes("openmapx-consume-quota")) {
-      const cost = Number(argv[0]);
-      const now = Number(argv[1]);
-      const windows = keys.map((key, index) => ({
-        key,
-        limit: Number(argv[2 + index * 2]),
-        durationMs: Number(argv[3 + index * 2]),
-      }));
-      const denied = windows.filter(
-        ({ key, limit }) => Number(this.values.get(key) ?? "0") + cost > limit,
-      );
-      const allowed = denied.length === 0;
-      if (allowed) {
-        for (const { key } of windows) {
-          this.values.set(key, String(Number(this.values.get(key) ?? "0") + cost));
-        }
-      }
-      return JSON.stringify({
-        allowed,
-        remaining: windows.map(({ key, limit }) =>
-          Math.max(0, limit - Number(this.values.get(key) ?? "0")),
-        ),
-        retryAt: allowed
-          ? null
-          : Math.max(
-              ...denied.map(({ durationMs }) => (Math.floor(now / durationMs) + 1) * durationMs),
-            ),
-      });
-    }
-    throw new Error("unknown script");
+  async eval(): Promise<unknown> {
+    throw new Error("Cache fixture must not execute lease or quota behavior");
   }
 }
 
@@ -94,23 +60,50 @@ describe("RedisUpstreamRuntime", () => {
     expect(await runtime.read("provider:cell")).toEqual({ state: "miss" });
   });
 
-  it("leases refreshes and releases only for the owning token", async () => {
-    const runtime = createRedisUpstreamRuntime(new FakeRedis(), {
+  it("sends refresh lease acquisition and exact owner-token release to Redis", async () => {
+    const redis = {
+      get: vi.fn(),
+      set: vi.fn().mockResolvedValue("OK"),
+      del: vi.fn(),
+      eval: vi.fn(),
+    };
+    const runtime = createRedisUpstreamRuntime(redis, {
       namespace: "test",
       integrationId: "air-quality",
     });
     const lease = await runtime.acquireLease("refresh", 1_000);
-    expect(lease).not.toBeNull();
-    expect(await runtime.acquireLease("refresh", 1_000)).toBeNull();
+    expect(lease?.token).toMatch(/^[a-f0-9-]{36}$/);
+    const key = redis.set.mock.calls[0][0];
+    expect(key).toMatch(/^upstream:test:air-quality:lease:[a-f0-9]{64}$/);
+    expect(redis.set).toHaveBeenCalledExactlyOnceWith(key, lease?.token, "PX", 1_000, "NX");
+    redis.eval.mockResolvedValue(0);
     await runtime.releaseLease("refresh", "not-owner");
-    expect(await runtime.acquireLease("refresh", 1_000)).toBeNull();
+    redis.eval.mockResolvedValue(1);
     await runtime.releaseLease("refresh", lease?.token ?? "");
-    expect(await runtime.acquireLease("refresh", 1_000)).not.toBeNull();
+    expect(redis.eval.mock.calls).toEqual([
+      [RELEASE_LEASE_SCRIPT, 1, key, "not-owner"],
+      [RELEASE_LEASE_SCRIPT, 1, key, lease?.token],
+    ]);
   });
 
-  it("consumes every quota window atomically and returns retry time", async () => {
+  it("sends every quota window and maps decisions while rotating only elapsed period keys", async () => {
     let now = 10_000;
-    const redis = new FakeRedis();
+    const redis = {
+      get: vi.fn(),
+      set: vi.fn(),
+      del: vi.fn(),
+      eval: vi
+        .fn()
+        .mockResolvedValueOnce(
+          JSON.stringify({ allowed: true, remaining: [1, 1_751], retryAt: null }),
+        )
+        .mockResolvedValueOnce(
+          JSON.stringify({ allowed: false, remaining: [1, 1_751], retryAt: 60_000 }),
+        )
+        .mockResolvedValueOnce(
+          JSON.stringify({ allowed: true, remaining: [48, 1_749], retryAt: null }),
+        ),
+    };
     const runtime = createRedisUpstreamRuntime(redis, {
       namespace: "test",
       integrationId: "air-quality",
@@ -120,20 +113,40 @@ describe("RedisUpstreamRuntime", () => {
       { id: "minute", limit: 50, durationMs: 60_000 },
       { id: "hour", limit: 1_800, durationMs: 3_600_000 },
     ] as const;
-
-    expect(await runtime.consumeQuota({ bucket: "openaq", cost: 49, windows })).toMatchObject({
+    expect(await runtime.consumeQuota({ bucket: "openaq", cost: 49, windows })).toEqual({
       allowed: true,
       remaining: { minute: 1, hour: 1_751 },
+      retryAt: null,
     });
-    expect(await runtime.consumeQuota({ bucket: "openaq", cost: 2, windows })).toMatchObject({
+    expect(await runtime.consumeQuota({ bucket: "openaq", cost: 2, windows })).toEqual({
       allowed: false,
-      retryAt: 60_000,
       remaining: { minute: 1, hour: 1_751 },
+      retryAt: 60_000,
     });
     now = 60_001;
-    expect(await runtime.consumeQuota({ bucket: "openaq", cost: 2, windows })).toMatchObject({
+    expect(await runtime.consumeQuota({ bucket: "openaq", cost: 2, windows })).toEqual({
       allowed: true,
       remaining: { minute: 48, hour: 1_749 },
+      retryAt: null,
     });
+    const calls = redis.eval.mock.calls;
+    expect(calls).toHaveLength(3);
+    for (const call of calls) {
+      expect(call[0]).toBe(CONSUME_QUOTA_SCRIPT);
+      expect(call[1]).toBe(2);
+      expect(
+        call
+          .slice(2, 4)
+          .every((key: string) => /^upstream:test:air-quality:quota:[a-f0-9]{64}$/.test(key)),
+      ).toBe(true);
+    }
+    expect(calls.map((call) => call.slice(4))).toEqual([
+      ["49", "10000", "50", "60000", "1800", "3600000"],
+      ["2", "10000", "50", "60000", "1800", "3600000"],
+      ["2", "60001", "50", "60000", "1800", "3600000"],
+    ]);
+    expect(calls[1].slice(2, 4)).toEqual(calls[0].slice(2, 4));
+    expect(calls[2][2]).not.toBe(calls[0][2]);
+    expect(calls[2][3]).toBe(calls[0][3]);
   });
 });

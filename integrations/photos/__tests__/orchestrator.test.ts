@@ -102,30 +102,6 @@ describe("searchHeroPhotos", () => {
     expect(errors).toEqual([error]);
   });
   it("resolves OSM Commons filenames through per-file metadata", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          query: {
-            pages: {
-              1: {
-                title: "File:Example.jpg",
-                imageinfo: [
-                  {
-                    url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Example.jpg",
-                    mime: "image/jpeg",
-                    extmetadata: {
-                      Artist: { value: "Creator" },
-                      LicenseShortName: { value: "CC BY 4.0" },
-                      LicenseUrl: { value: "https://creativecommons.org/licenses/by/4.0/" },
-                    },
-                  },
-                ],
-              },
-            },
-          },
-        }),
-      ),
-    );
     const photos = await searchHeroPhotos(
       { image: "https://example.com/place.jpg", "image:0": "File:Example.jpg" },
       [
@@ -165,7 +141,9 @@ describe("searchHeroPhotos", () => {
     });
   });
   it("does not display a Commons filename when metadata acquisition fails", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("busy", { status: 503 }));
-    expect(await searchHeroPhotos({ image: "File:Missing.jpg" }, [])).toEqual([]);
+    const get = vi.fn().mockRejectedValue(new Error("metadata unavailable"));
+    const provider = createOsmImagePhotoProvider({ http: { get } } as never);
+    expect(await searchHeroPhotos({ image: "File:Missing.jpg" }, [provider])).toEqual([]);
+    expect(get).toHaveBeenCalledOnce();
   });
 });

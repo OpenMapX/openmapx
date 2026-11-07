@@ -22,7 +22,7 @@ function detail(qid: string, logoFile?: string): BrandDetail {
 describe("useBrandLogos", () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it("resolves each distinct QID to its logo filename with one hook call", async () => {
+  it("resolves the requested QIDs to their logo metadata", async () => {
     const spy = vi.spyOn(apiClient, "get").mockImplementation(async (path: string) => {
       if (path.endsWith("Q1")) return detail("Q1", "Aldi_logo.svg");
       if (path.endsWith("Q2")) return detail("Q2");

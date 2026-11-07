@@ -94,13 +94,6 @@ describe("computeBboxFromPoly", () => {
     expect(bbox.north).toBeCloseTo(52.6783, 3);
   });
 
-  it("ignores the name/section-header/END lines (not 2 numeric tokens)", () => {
-    // Only the four coordinate lines contribute; headers must not skew the bbox.
-    const bbox = computeBboxFromPoly(poly);
-    expect(bbox.north).toBeLessThan(90);
-    expect(bbox.west).toBeGreaterThan(-180);
-  });
-
   it("throws when the .poly has no coordinate lines", () => {
     expect(() => computeBboxFromPoly("none\nEND\n")).toThrow(/no coordinates/);
   });

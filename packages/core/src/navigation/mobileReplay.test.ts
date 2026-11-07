@@ -112,14 +112,8 @@ function replayTransit(
 describe.each(TRANSIT_FIXTURES)("%s", (name) => {
   const fixture = loadTransitFixture(name);
 
-  it("is synthetic test data, not a real journey", () => {
-    expect(fixture.coordinateSystem).toContain("synthetic");
-  });
-
-  it("produces a stable final state and ordered event list", () => {
+  it("reaches the expected final state with the expected ordered events", () => {
     const first = replayTransit(fixture);
-    const second = replayTransit(fixture);
-    expect(second).toEqual(first);
     const expectedEvents =
       name === "transit-transfer"
         ? [
@@ -162,25 +156,6 @@ describe.each(TRANSIT_FIXTURES)("%s", (name) => {
 
   it("matches an uninterrupted run when state is serialized between every fix", () => {
     expect(replayTransit(fixture, { serializeBetween: true })).toEqual(replayTransit(fixture));
-  });
-
-  it("reaches the same state whether fixes arrive singly or as one batch", () => {
-    // A batch is delivered chronologically, which is what the coordinator
-    // guarantees by sorting before it processes anything.
-    const singly = replayTransit(fixture);
-    const batched = replayTransit({
-      ...fixture,
-      fixes: [...fixture.fixes].sort((a, b) => a.offsetMs - b.offsetMs),
-    });
-    expect(batched).toEqual(singly);
-  });
-
-  it("ignores duplicates and reversed delivery once sorted and deduplicated", () => {
-    const noisy = [...fixture.fixes, ...fixture.fixes].sort((a, b) => a.offsetMs - b.offsetMs);
-    const deduplicated = noisy.filter(
-      (entry, index, all) => index === 0 || entry.offsetMs !== all[index - 1].offsetMs,
-    );
-    expect(replayTransit({ ...fixture, fixes: deduplicated })).toEqual(replayTransit(fixture));
   });
 
   it("never advances more than one leg per tick", () => {

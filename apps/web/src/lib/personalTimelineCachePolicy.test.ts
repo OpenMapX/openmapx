@@ -55,24 +55,6 @@ describe("personal timeline cache policy", () => {
   it("uses a cache buster newer than the legacy timeline-mutation format", () => {
     expect(PERSONAL_TIMELINE_CACHE_BUSTER).not.toBe("v1");
   });
-  it("never dehydrates paused local review-key secrets", () => {
-    const client = new QueryClient();
-    onlineManager.setOnline(false);
-    const mutation = client.getMutationCache().build(client, {
-      mutationKey: ["mangrovePrivate", "setup"],
-      mutationFn: async () => undefined,
-    });
-    void mutation.execute({
-      passphrase: "private passphrase fixture",
-      importJwk: { d: "private scalar fixture" },
-    });
-    expect(mutation.state.isPaused).toBe(true);
-    const stored = JSON.stringify(
-      dehydrate(client, { shouldDehydrateMutation: shouldDehydrateOpenMapXMutation }),
-    );
-    expect(stored).not.toContain("private passphrase fixture");
-    expect(stored).not.toContain("private scalar fixture");
-  });
   it("excludes secrets from a real paused local-key setup hook", () => {
     const client = new QueryClient();
     onlineManager.setOnline(false);

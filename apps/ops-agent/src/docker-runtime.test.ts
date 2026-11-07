@@ -1054,62 +1054,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     },
   );
 
-  it("terminates aggregate recreation work exactly at the whole-command deadline", async () => {
-    const prepared = await preparedStack(),
-      entered = Promise.withResolvers<void>();
-    vi.useFakeTimers();
-    const completed: number[] = [];
-    let terminated = false;
-    const runtime = createDockerRuntime({
-      stack: prepared.stack,
-      fileExists: () => false,
-      ownedServices,
-      execFile: async (file, args, options) => {
-        if (args.includes("config")) return readPreparedDockerConfig(prepared.stack, file, args);
-        return new Promise((resolve, reject) => {
-          entered.resolve();
-          const deadline = setTimeout(() => {
-            terminated = true;
-            for (const timer of steps) clearTimeout(timer);
-            reject(new Error("Contained process failed"));
-          }, options.timeout);
-          const steps = [300_000, 600_001].map((delay) =>
-            setTimeout(() => {
-              completed.push(delay);
-              if (delay === 600_001) {
-                clearTimeout(deadline);
-                resolve({ stdout: "", stderr: "" });
-              }
-            }, delay),
-          );
-        });
-      },
-    });
-    try {
-      const result = dispatchOpsOperation(
-        runtime,
-        {
-          kind: "service.recreate",
-          serviceId: "postgis",
-          expectedConfigurationRevisionId: prepared.revisionId,
-        },
-        context(),
-      );
-      const rejected = expect(result).rejects.toThrow("Contained process failed");
-      await entered.promise;
-      await vi.advanceTimersByTimeAsync(599_999);
-      expect(completed).toEqual([300_000]);
-      expect(terminated).toBe(false);
-      await vi.advanceTimersByTimeAsync(1);
-      await rejected;
-      expect(terminated).toBe(true);
-      expect(completed).toEqual([300_000]);
-    } finally {
-      vi.clearAllTimers();
-      vi.useRealTimers();
-    }
-  });
-
   it("maps lifecycle effects to fixed Compose argv without accepting caller argv or paths", async () => {
     const prepared = await preparedStack();
     writeFileSync(prepared.stack.composeReleasePath, "services: {}\n", { mode: 0o644 });

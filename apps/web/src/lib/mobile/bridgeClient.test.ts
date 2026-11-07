@@ -205,13 +205,6 @@ describe("voice dispatch", () => {
 });
 
 describe("BridgeClient.attach", () => {
-  it("attaches inside the shell", () => {
-    const { client } = harness();
-
-    expect(client.attach()).toBe(true);
-    expect(client.isAvailable).toBe(true);
-  });
-
   it("does not attach in an ordinary browser", () => {
     const { client } = harness({ scope: {} });
 
@@ -226,51 +219,26 @@ describe("BridgeClient.attach", () => {
 
     expect(client.attach()).toBe(false);
   });
-
-  it("removes its listener when closed", () => {
-    const context = harness();
-    context.client.attach();
-
-    context.client.close();
-
-    expect(context.handlerCount()).toBe(0);
-  });
 });
 
 describe("BridgeClient.hello", () => {
   it("negotiates and reports what the shell can do", async () => {
     const context = harness();
-    context.client.attach();
+    expect(context.client.attach()).toBe(true);
+    expect(context.client.isAvailable).toBe(true);
+    expect(context.handlerCount()).toBe(1);
 
     const pending = context.client.hello();
+    expect(JSON.parse(context.sent[0])).toMatchObject({
+      channelNonce: NONCE,
+      payload: { webBuildId: "web-build-1" },
+    });
     deliverHello(context);
     const result = await pending;
 
     expect(result.selectedProtocolVersion).toBe(MOBILE_PROTOCOL_MAX);
     expect(result.capabilities.groundNavigation).toBe(true);
     expect(context.client.negotiated).toBe(result);
-  });
-
-  it("sends the web build id so the shell knows which page it is talking to", async () => {
-    const context = harness();
-    context.client.attach();
-
-    const pending = context.client.hello();
-    deliverHello(context);
-    await pending;
-
-    expect(JSON.parse(context.sent[0]).payload.webBuildId).toBe("web-build-1");
-  });
-
-  it("stamps the channel nonce of this document", async () => {
-    const context = harness();
-    context.client.attach();
-
-    const pending = context.client.hello();
-    deliverHello(context);
-    await pending;
-
-    expect(JSON.parse(context.sent[0]).channelNonce).toBe(NONCE);
   });
 
   it("times out rather than waiting forever for a shell that never answers", async () => {
@@ -348,6 +316,8 @@ describe("BridgeClient.request", () => {
     });
 
     await expect(pending).resolves.toMatchObject({ type: "session.stopped" });
+    expect(context.timerCount()).toBe(0);
+    expect(context.client.pendingCount).toBe(0);
   });
 
   it("matches an error to the command that named it", async () => {
@@ -465,25 +435,6 @@ describe("BridgeClient.request", () => {
     await expect(pending).rejects.toMatchObject({ code: "timeout" });
   });
 
-  it("leaves no timer behind once a reply arrives", async () => {
-    const context = await negotiated();
-
-    const pending = context.client.request("session.stop", {}, { sessionId: "s1" });
-    const forMessageId = JSON.parse(context.sent[0]).messageId as string;
-    context.deliver({
-      protocolVersion: MOBILE_PROTOCOL_MAX,
-      type: "session.stopped",
-      messageId: "n4",
-      channelNonce: NONCE,
-      sentAtMs: 1_700_000_000_000,
-      payload: { sessionId: "s1", finalStatus: "stopped", revision: 1, forMessageId },
-    });
-    await pending;
-
-    expect(context.timerCount()).toBe(0);
-    expect(context.client.pendingCount).toBe(0);
-  });
-
   it("refuses new work once too many requests are outstanding", async () => {
     const context = await negotiated();
     const pendings: Promise<unknown>[] = [];
@@ -507,12 +458,9 @@ describe("BridgeClient.request", () => {
     context.client.close();
 
     await expect(pending).rejects.toMatchObject({ code: "channel-reset" });
-  });
-
-  it("refuses new work after closing", async () => {
-    const context = await negotiated();
-    context.client.close();
-
+    expect(context.handlerCount()).toBe(0);
+    expect(context.timerCount()).toBe(0);
+    expect(context.client.pendingCount).toBe(0);
     await expect(context.client.request("snapshot.request", {})).rejects.toMatchObject({
       code: "channel-reset",
     });
@@ -529,48 +477,21 @@ describe("BridgeClient inbound messages", () => {
     return context;
   }
 
-  it("delivers an unsolicited snapshot to subscribers", async () => {
-    const context = await negotiated();
-    const seen: unknown[] = [];
-    context.client.subscribe((message) => seen.push(message));
-
-    context.deliver(snapshotMessage(7));
-
-    expect(seen).toHaveLength(1);
-  });
-
-  it("ignores a message for a document that no longer exists", async () => {
-    // The shell rotates the nonce per load.
-    const context = await negotiated();
-    const seen: unknown[] = [];
-    context.client.subscribe((message) => seen.push(message));
-
-    context.deliver({ ...snapshotMessage(7), channelNonce: "some-other-document" });
-
-    expect(seen).toEqual([]);
-  });
-
-  it("ignores a message that does not match the protocol", async () => {
-    const context = await negotiated();
-    const seen: unknown[] = [];
-    context.client.subscribe((message) => seen.push(message));
-
-    context.deliver({ type: "snapshot.update", payload: { snapshot: {} } });
-    context.deliver("not an object");
-    context.deliver(null);
-
-    expect(seen).toEqual([]);
-  });
-
-  it("stops delivering once unsubscribed", async () => {
+  it("filters native snapshots by document and schema and stops after unsubscribe", async () => {
     const context = await negotiated();
     const seen: unknown[] = [];
     const unsubscribe = context.client.subscribe((message) => seen.push(message));
-
-    unsubscribe();
-    context.deliver(snapshotMessage(7));
-
+    const event = snapshotMessage(7);
+    context.deliver({ ...event, channelNonce: "some-other-document" });
+    context.deliver({ type: "snapshot.update", payload: { snapshot: {} } });
+    context.deliver("not an object");
+    context.deliver(null);
     expect(seen).toEqual([]);
+    context.deliver(event);
+    expect(seen).toEqual([event]);
+    unsubscribe();
+    context.deliver(snapshotMessage(8));
+    expect(seen).toEqual([event]);
   });
 });
 

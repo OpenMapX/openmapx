@@ -39,12 +39,9 @@ describe("captureTransitLegStops", () => {
     expect(captures).toHaveLength(1);
     expect(captures[0].legIndex).toBe(1);
     expect(captures[0].tripId).toBe("t1");
-  });
 
-  it("slices from board through alight inclusively", () => {
-    const [capture] = captureTransitLegStops(legs, { t1: journey }, 1_000);
-    expect(capture.stops.map((s) => s.stopId)).toEqual(["b", "c"]);
-    expect(capture.status).toBe("captured");
+    expect(captures[0].stops.map((s) => s.stopId)).toEqual(["b", "c"]);
+    expect(captures[0].status).toBe("captured");
   });
 
   it("keeps schedule, live, platform and cancellation fields", () => {
@@ -100,7 +97,7 @@ describe("captureTransitLegStops", () => {
       { t1: journey },
       4_242,
     );
-    expect(captures.every((c) => c.capturedAtMs === 4_242)).toBe(true);
+    expect(captures.map((c) => c.capturedAtMs)).toEqual([4_242, 4_242]);
   });
 
   it("skips stops without usable coordinates", () => {

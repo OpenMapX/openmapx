@@ -76,15 +76,9 @@ describe("WaypointScheduleDialog", () => {
     expect(screen.getByText(/Europe\/Berlin/)).toBeTruthy();
   });
 
-  it("hides the time input until a constraint kind is chosen", () => {
-    renderDialog();
-    expect(screen.queryByTestId("schedule-time-input")).toBeNull();
-    fireEvent.click(screen.getByLabelText("directions.scheduleArriveBy"));
-    expect(screen.getByTestId("schedule-time-input")).toBeTruthy();
-  });
-
   it("saves the chosen kind and dwell with the resolved zone", async () => {
     const { onSave } = renderDialog();
+    expect(screen.queryByTestId("schedule-time-input")).toBeNull();
     fireEvent.click(screen.getByLabelText("directions.scheduleFixedAt"));
     await enterDateTime(screen.getByTestId("schedule-time-input"), "2026-09-01T14:00");
     fireEvent.change(screen.getByTestId("schedule-dwell-input"), { target: { value: "30" } });

@@ -13,19 +13,6 @@ vi.mock("@openmapx/integration-framework/react", () => {
       providerCountry: "US",
       providerPrivacyUrl: "https://www.nasa.gov/privacy/",
     },
-    {
-      sourceId: "noaa-hms",
-      name: "NOAA Hazard Mapping System Smoke Detection",
-      url: "https://www.ospo.noaa.gov/products/land/hms.html",
-      licensing: licensingFromDeclaration(
-        "U.S. Public Domain",
-        undefined,
-        "NOAA Hazard Mapping System Smoke Detection",
-      ),
-      attribution: "NOAA / NESDIS HMS Smoke Detection",
-      providerCountry: "US",
-      providerPrivacyUrl: "https://www.noaa.gov/privacy/",
-    },
   ];
   return {
     useIntegrationRegistry: () => ({

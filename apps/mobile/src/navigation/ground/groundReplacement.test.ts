@@ -114,95 +114,41 @@ describe("validateGroundReplacement", () => {
 });
 
 describe("applyGroundReplacement", () => {
-  const result = () =>
-    applyGroundReplacement(advancedSession(), replacement() as never, NOW)
-      .session as GroundMobileSession;
-
-  it("adopts the replacement itinerary together with its route", () => {
-    const waypoints = [
+  it("commits the copied itinerary, resets geometry state and preserves journey history", () => {
+    const waypoints: Array<[number, number]> = [
       [8.7, 50.15],
       [8.71, 50.11],
       [8.727, 50.11],
     ];
     const source = replacement({ destinationWaypoints: waypoints });
-    const next = applyGroundReplacement(advancedSession(), source as never, NOW)
-      .session as GroundMobileSession;
+    const mutation = applyGroundReplacement(advancedSession(), source as never, NOW);
+    const next = mutation.session as GroundMobileSession;
+    expect(next.revision).toBe(10);
+    expect(next.payload.startPackage.route.geometry).toEqual(GEOMETRY.slice(0, 20));
     expect(next.payload.startPackage.destinationWaypoints).toEqual(waypoints);
-    waypoints[1][0] = 9;
-    expect(next.payload.startPackage.destinationWaypoints[1]).toEqual([8.71, 50.11]);
-  });
-
-  it("advances exactly one revision", () => {
-    expect(result().revision).toBe(10);
-  });
-
-  it("adopts the new route", () => {
-    expect(result().payload.startPackage.route.geometry).toHaveLength(20);
-  });
-
-  it.each([
-    ["progress", (s: GroundMobileSession) => s.payload.progress, null],
-    ["off route", (s: GroundMobileSession) => s.payload.offRoute, false],
-    ["weak GPS", (s: GroundMobileSession) => s.payload.weakGps, false],
-    ["coasting", (s: GroundMobileSession) => s.payload.coasting, false],
-    ["speed limit", (s: GroundMobileSession) => s.payload.currentSpeedLimit, null],
-    ["off-route score", (s: GroundMobileSession) => s.payload.tickState.offRouteScore, 0],
-  ])("resets %s, which belonged to the old geometry", (_label, read, expected) => {
-    expect(read(result())).toEqual(expected);
-  });
-
-  it("resets the step gate", () => {
-    const tick = result().payload.tickState as unknown as Record<string, unknown>;
-
-    expect(tick.committedStepIndex).toBeUndefined();
-    expect(tick.reachedStepEnd).toBeUndefined();
-    expect(tick.spokenCues).toEqual([]);
-  });
-
-  it("drops the last accepted fix, which was snapped against the old route", () => {
-    const next = result();
-
-    expect(next.lastAcceptedFix).toBeUndefined();
+    expect(next.payload).toMatchObject({
+      progress: null,
+      offRoute: false,
+      weakGps: false,
+      coasting: false,
+      currentSpeedLimit: null,
+      tickState: {
+        offRouteScore: 0,
+        spokenCues: [],
+        rerouteBackoffMs: 6_000,
+        lastRerouteAtMs: NOW - 30_000,
+      },
+      reroute: { status: "idle", attempts: 2 },
+    });
+    expect(next.payload.tickState.committedStepIndex).toBeUndefined();
+    expect(next.payload.tickState.reachedStepEnd).toBeUndefined();
     expect(Object.hasOwn(next, "lastAcceptedFix")).toBe(false);
-  });
-
-  it("clears any in-flight reroute", () => {
-    expect(result().payload.reroute).toEqual({ status: "idle", attempts: 2 });
-  });
-
-  it("keeps the reroute backoff, which describes the journey rather than the road", () => {
-    const tick = result().payload.tickState;
-
-    expect(tick.rerouteBackoffMs).toBe(6_000);
-    expect(tick.lastRerouteAtMs).toBe(NOW - 30_000);
-  });
-
-  it("keeps the cue ledger, whose entries are namespaced by route", () => {
-    // Entries for the old route are already unreachable, and clearing them would
-    // lose events the page may not have acknowledged yet.
-    expect(result().cueLedger).toEqual({ spoken: ["old-cue"], events: ["old-event"] });
-  });
-
-  it("publishes a full snapshot immediately", () => {
-    const mutation = applyGroundReplacement(advancedSession(), replacement() as never, NOW);
-
+    expect(next.cueLedger).toEqual({ spoken: ["old-cue"], events: ["old-event"] });
     expect(mutation.effects).toEqual([{ kind: "publish-snapshot", immediate: true }]);
-  });
-
-  it("produces a session the shared schema still accepts", () => {
-    // A blank `lastAcceptedFix` key would fail a strict parse on the next load.
-    const parsed = parseMobileSession(JSON.stringify(result()));
-
-    expect(parsed.ok).toBe(true);
-  });
-
-  it("does not share mutable state with the package it adopted", () => {
-    const source = replacement();
-    const next = applyGroundReplacement(advancedSession(), source as never, NOW)
-      .session as GroundMobileSession;
-
+    expect(parseMobileSession(JSON.stringify(next)).ok).toBe(true);
+    waypoints[1][0] = 9;
     source.route.geometry.push([9.99, 49.99]);
-
-    expect(next.payload.startPackage.route.geometry).toHaveLength(20);
+    expect(next.payload.startPackage.destinationWaypoints[1]).toEqual([8.71, 50.11]);
+    expect(next.payload.startPackage.route.geometry).toEqual(GEOMETRY.slice(0, 20));
   });
 });

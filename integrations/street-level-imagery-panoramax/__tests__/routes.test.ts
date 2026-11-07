@@ -39,12 +39,6 @@ describe("street-level-imagery-panoramax setup", () => {
     ]);
   });
 
-  it("registers a street-level-imagery provider", () => {
-    const { ctx, registerStreetLevelProvider } = buildCtx();
-    setup(ctx);
-    expect(registerStreetLevelProvider).toHaveBeenCalledOnce();
-  });
-
   it("serves capabilities describing an MVT coverage layer", async () => {
     const { ctx, routes } = buildCtx();
     setup(ctx);
@@ -139,19 +133,6 @@ describe("upstream failure handling", () => {
 });
 
 describe("GET /search", () => {
-  it("registers the search route in the sorted path list", () => {
-    const { ctx, routes } = buildCtx();
-    setup(ctx);
-    expect(routes.map((r) => r.path).sort()).toEqual([
-      "/capabilities",
-      "/images/:id",
-      "/images/:id/links",
-      "/nearest",
-      "/search",
-      "/tiles/:z/:x/:y",
-    ]);
-  });
-
   it("rejects an invalid lng with 400", async () => {
     const { ctx, routes } = buildCtx();
     setup(ctx);

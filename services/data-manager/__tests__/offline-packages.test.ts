@@ -443,7 +443,7 @@ describe("offline package generation", () => {
     );
   });
 
-  it("keeps jobs distinct, rejects invalid coverage before extraction, and preserves old output on failure", async () => {
+  it("keeps jobs distinct, rejects invalid coverage before extraction, and publishes no output on failure", async () => {
     const dataDir = createDataDir();
     const storage = new OfflinePackageStorage(join(dataDir, "offline-packages"));
     const extract = vi.fn(async () => {

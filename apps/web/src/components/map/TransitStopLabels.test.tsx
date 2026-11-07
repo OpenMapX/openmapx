@@ -143,33 +143,6 @@ describe("TransitStopLabels", () => {
       source: "transit-stop-labels",
     });
   });
-
-  it("draws nothing on a style without basemap tiles to read", async () => {
-    context.mapRef.current = fakeMap([], false);
-    render(<TransitStopLabels />);
-    await nextFrame();
-    expect(lastGroup()).toBeNull();
-  });
-
-  it("reads the tiles again once the map settles somewhere new", async () => {
-    const features: ReturnType<typeof poi>[] = [];
-    const map = fakeMap(features);
-    context.mapRef.current = map;
-    render(<TransitStopLabels />);
-    await nextFrame();
-    expect(lastGroup()).toBeNull();
-
-    features.push(
-      poi(
-        3,
-        { class: "bus", subclass: "bus_stop", name: "Jüdenstraße", rank: 2 },
-        [13.4093, 52.5179],
-      ),
-    );
-    map.fire("moveend");
-    await nextFrame();
-    expect(labelledNames()).toEqual([["Jüdenstraße", false]]);
-  });
   it("bounds follow-camera work across frames, retaining a trailing refresh", async () => {
     const features = [poi(1, { class: "bus", name: "First", rank: 1 }, [13.4, 52.5])];
     const map = fakeMap(features);
@@ -272,6 +245,7 @@ describe("TransitStopLabels", () => {
     context.mapRef.current = map;
     render(<TransitStopLabels />);
     await nextFrame();
+    expect(lastGroup()).toBeNull();
     features.push(poi(1, { class: "bus", name: "User stop", rank: 1 }, [13.4, 52.5]));
     map.fire("moveend");
     await nextFrame();
@@ -292,11 +266,13 @@ describe("TransitStopLabels", () => {
     await nextFrame();
     expect(labelledNames()).toEqual([["Deutsch", false]]);
     map.fire("moveend", { programmatic: true });
-    context.mapRef.current = fakeMap([], false);
+    const absent = fakeMap(features, false);
+    context.mapRef.current = absent;
     context.styleVersion++;
     view.rerender(<TransitStopLabels />);
     await nextFrame();
     expect(lastGroup()).toBeNull();
+    expect(absent.querySourceFeatures).not.toHaveBeenCalled();
     map.fire("moveend");
     await act(async () => vi.advanceTimersByTime(500));
     await nextFrame();

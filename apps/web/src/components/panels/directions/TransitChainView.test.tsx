@@ -81,52 +81,23 @@ const plan = {
 const labels = ["Home", "Dentist", "Airport"];
 
 describe("TransitChainView", () => {
-  it("renders one itinerary card per segment", () => {
+  it("places each itinerary, wait and delay under the stops its segment connects", () => {
     render(<TransitChainView plan={plan} waypointLabels={labels} />);
-    expect(screen.getAllByTestId("itinerary-card")).toHaveLength(2);
-  });
-
-  it("names each segment by the stops it connects", () => {
-    render(<TransitChainView plan={plan} waypointLabels={labels} />);
-    expect(screen.getByText(/Home – Dentist/)).toBeTruthy();
-    expect(screen.getByText(/Dentist – Airport/)).toBeTruthy();
-  });
-
-  it("shows the boarding wait where the traveller waits for the service", () => {
-    render(<TransitChainView plan={plan} waypointLabels={labels} />);
-    expect(screen.getByText(/directions\.chainBoardingWait/)).toBeTruthy();
-  });
-
-  it("shows the realtime delay on a delayed segment", () => {
-    render(<TransitChainView plan={plan} waypointLabels={labels} />);
-    expect(screen.getByText(/directions\.chainDelay/)).toBeTruthy();
-  });
-
-  it("renders each warning against its segment", () => {
-    render(
-      <TransitChainView
-        plan={{
-          ...plan,
-          warnings: [
-            { kind: "missed-connection", afterSegmentIndex: 0, overlapSeconds: 900 },
-            { kind: "cancelled-leg", segmentIndex: 1 },
-          ],
-        }}
-        waypointLabels={labels}
-      />,
-    );
-    expect(screen.getByText("directions.chainMissedConnection")).toBeTruthy();
-    expect(screen.getByText("directions.chainCancelledLeg")).toBeTruthy();
-  });
-
-  it("renders a broken-off segment's warning after the last rendered segment", () => {
-    render(
-      <TransitChainView
-        plan={{ ...plan, warnings: [{ kind: "no-connection", segmentIndex: 2 }] }}
-        waypointLabels={labels}
-      />,
-    );
-    expect(screen.getByText("directions.chainNoConnection")).toBeTruthy();
+    const cards = screen.getAllByTestId("itinerary-card");
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toHaveTextContent("2400");
+    expect(cards[1]).toHaveTextContent("1800");
+    const first = screen.getByText(/Home – Dentist/);
+    const second = screen.getByText(/Dentist – Airport/);
+    const wait = screen.getByText(/directions\.chainBoardingWait/);
+    const delay = screen.getByText(/directions\.chainDelay/);
+    const expectPrecedes = (a: Node, b: Node) =>
+      expect(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expectPrecedes(first, wait);
+    expectPrecedes(wait, cards[0]);
+    expectPrecedes(cards[0], second);
+    expectPrecedes(second, delay);
+    expectPrecedes(delay, cards[1]);
   });
 });
 

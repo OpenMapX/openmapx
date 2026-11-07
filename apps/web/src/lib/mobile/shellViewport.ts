@@ -15,7 +15,7 @@ const SCALE_KEYS = /^(initial-scale|minimum-scale|maximum-scale|user-scalable)$/
 const LOCKED_SCALE = ["initial-scale=1", "minimum-scale=1", "maximum-scale=1", "user-scalable=no"];
 
 /** The viewport content with its scale keys replaced and every other key kept. */
-export function lockedViewportContent(content: string | null): string {
+function lockedViewportContent(content: string | null): string {
   const kept = (content ?? "")
     .split(",")
     .map((part) => part.trim())

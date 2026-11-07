@@ -54,19 +54,6 @@ vi.mock("../../services/job-runner.js", () => ({
   },
 }));
 
-const mockRestoreOwned = vi.fn().mockResolvedValue(true);
-vi.mock("../../services/integration-config-store", () => ({
-  persistIntegrationConfigPatch: async () => ({
-    previous: [],
-    owns: async () => true,
-    restore: mockRestoreOwned,
-  }),
-  persistIntegrationImport: async () => ({
-    previous: [],
-    owns: async () => true,
-    restore: mockRestoreOwned,
-  }),
-}));
 vi.mock("../../services/trusted-config-operations.js", () => ({
   integrationSchemas: () => new Map([["geocoding-maptiler", {}]]),
   applyTrustedConfigurationWithEvidence: async () => ({
@@ -475,7 +462,7 @@ describe("POST /admin/integrations/health/run", () => {
 
 describe("POST /admin/integrations/:id/enable", () => {
   it.each(["unknown", "committed", "not_committed"] as const)(
-    "delegates %s apply evidence without a route-owned restore",
+    "delegates %s apply evidence to the configuration producer",
     async (outcome) => {
       const error = new TrustedConfigurationApplyError({
         ...(outcome === "unknown"
@@ -499,7 +486,6 @@ describe("POST /admin/integrations/:id/enable", () => {
         headers: { "idempotency-key": "admin-route-enable-fixture-0001" },
       });
       expect(res.statusCode).toBe(500);
-      expect(mockRestoreOwned).not.toHaveBeenCalled();
       expect(applyTrustedConfiguration).toHaveBeenCalledWith(
         expect.objectContaining({
           kind: "integrationConfig.apply",
@@ -527,7 +513,6 @@ describe("POST /admin/integrations/:id/enable", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().ok).toBe(true);
-    expect(mockRestoreOwned).not.toHaveBeenCalled();
     expect(mockWriteAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: "integration.enabled", targetId: "geocoding-maptiler" }),
     );

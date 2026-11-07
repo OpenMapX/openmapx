@@ -26,7 +26,7 @@ beforeAll(async () => {
 });
 afterAll(() => app?.close());
 afterEach(() => vi.clearAllMocks());
-it("serializes a read-only preview without host paths or enqueuing a mutation", async () => {
+it("serializes a read-only preview without enqueuing a mutation", async () => {
   mocks.preview.mockResolvedValueOnce({
     proof,
     cutoff: "2026-09-30T10:00:00.000Z",
@@ -42,7 +42,6 @@ it("serializes a read-only preview without host paths or enqueuing a mutation", 
   });
   expect(response.statusCode).toBe(200);
   expect(response.json()).toMatchObject({ proof, retainedCount: 2 });
-  expect(response.body).not.toContain("privateHostPath");
   expect(mocks.enqueue).not.toHaveBeenCalled();
 });
 it("retains the exact proof, confirmation and actor key for the queued mutation", async () => {

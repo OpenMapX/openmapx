@@ -61,16 +61,6 @@ describe("createViewportFetchScheduler", () => {
     });
   }
 
-  it("evaluates almost immediately on the first markDirty after being idle", () => {
-    const scheduler = makeScheduler();
-    scheduler.recordFetch(WORLD, 0);
-    viewport = FAR_AWAY;
-    scheduler.markDirty();
-    expect(onDue).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(0);
-    expect(onDue).toHaveBeenCalledTimes(1);
-  });
-
   it("bounds evaluations, getViewport reads, and timer creations under a 60Hz burst for a minute", () => {
     const scheduler = makeScheduler();
     scheduler.recordFetch(WORLD, Date.now());
@@ -98,6 +88,7 @@ describe("createViewportFetchScheduler", () => {
     scheduler.recordFetch(WORLD, Date.now());
     viewport = FAR_AWAY;
     scheduler.markDirty();
+    expect(onDue).not.toHaveBeenCalled();
     vi.advanceTimersByTime(0);
     expect(onDue).toHaveBeenCalledTimes(1);
   });

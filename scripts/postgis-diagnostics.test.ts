@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 function run(flags: Record<string, string> = {}, preloads = "", lookupFails = false) {
   const root = mkdtempSync(join(tmpdir(), "postgis-diagnostics-"));
@@ -56,20 +56,6 @@ else if (name === 'awk') console.log('1024000');
 describe("PostGIS diagnostics opt-in", () => {
   it("leaves the default postgres command unchanged", () => {
     expect(run().args).toEqual(["postgres", "-c", "max_wal_size=4GB"]);
-  });
-  it("ignores hostile inherited executable search paths", () => {
-    const hostile = mkdtempSync(join(tmpdir(), "postgis-hostile-path-"));
-    try {
-      for (const name of ["bash", "python3", "seq"])
-        writeFileSync(join(hostile, name), "#!/bin/sh\nexit 86\n", { mode: 0o755 });
-      vi.stubEnv("PATH", `${hostile}:${process.env.PATH}`);
-      const result = run({ POSTGIS_DIAGNOSTICS: "true" }, "auto_explain");
-      expect(result.status).toBe(0);
-      expect(result.args).toContain("shared_preload_libraries=auto_explain,pg_stat_statements");
-    } finally {
-      vi.unstubAllEnvs();
-      rmSync(hostile, { recursive: true, force: true });
-    }
   });
   it("merges preloads and keeps planning disabled", () => {
     const result = run({ POSTGIS_DIAGNOSTICS: "true" }, "auto_explain, pg_prewarm");

@@ -81,6 +81,8 @@ describe("buildTransitNavigationPackage", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
+    expect(result.startPackage.captures).toHaveLength(1);
+    expect(result.startPackage.itinerary).toEqual(itinerary());
     const capture = result.startPackage.captures.find((entry) => entry.tripId === "trip-1");
     expect(capture?.status).toBe("captured");
     expect(capture?.stops.map((stop) => stop.stopId)).toEqual([
@@ -103,22 +105,6 @@ describe("buildTransitNavigationPackage", () => {
     expect(capture.stops).toEqual([]);
   });
 
-  it("captures nothing for a walking leg", () => {
-    const result = build();
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.startPackage.captures).toHaveLength(1);
-  });
-
-  it("keeps the itinerary the rider is following", () => {
-    const result = build();
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect((result.startPackage.itinerary as { legs: unknown[] }).legs).toHaveLength(3);
-  });
-
   it("carries the locale, units and settings it was given", () => {
     const result = build({ locale: "de", units: "imperial" });
 
@@ -130,10 +116,10 @@ describe("buildTransitNavigationPackage", () => {
   });
 
   it("carries replan options only when they exist", () => {
-    expect(
-      build().ok &&
-        (build() as { startPackage: { replanOptions?: unknown } }).startPackage.replanOptions,
-    ).toBeUndefined();
+    const withoutOptions = build();
+    expect(withoutOptions.ok).toBe(true);
+    if (!withoutOptions.ok) throw new Error("valid fixture rejected");
+    expect(withoutOptions.startPackage.replanOptions).toBeUndefined();
 
     const withOptions = build({ replanOptions: { wheelchair: true, maxTransfers: 2 } });
     expect(withOptions.ok).toBe(true);
@@ -158,10 +144,6 @@ describe("buildTransitNavigationPackage", () => {
 });
 
 describe("transitItineraryFingerprint", () => {
-  it("is stable for the same structural trip", () => {
-    expect(transitItineraryFingerprint(itinerary())).toBe(transitItineraryFingerprint(itinerary()));
-  });
-
   it("does not change when a live time moves", () => {
     // This is the whole point: a refresh that reports a delay must not read as a
     // different journey, or progress would be discarded every thirty seconds.
@@ -213,6 +195,8 @@ describe("stripTransitSecretsForSnapshot", () => {
     const stripped = stripTransitSecretsForSnapshot(itinerary());
 
     expect(JSON.stringify(stripped)).not.toContain(TOKEN);
+    const { refreshToken: _token, ...visible } = itinerary() as unknown as Record<string, unknown>;
+    expect(stripped).toEqual(visible);
     expect((stripped as { refreshToken?: string }).refreshToken).toBeUndefined();
   });
 
@@ -222,13 +206,6 @@ describe("stripTransitSecretsForSnapshot", () => {
     const nested = { a: { b: [{ c: { refreshToken: TOKEN } }] } };
 
     expect(JSON.stringify(stripTransitSecretsForSnapshot(nested))).not.toContain(TOKEN);
-  });
-
-  it("keeps everything the page actually needs", () => {
-    const stripped = stripTransitSecretsForSnapshot(itinerary()) as { legs: unknown[] };
-
-    expect(stripped.legs).toHaveLength(3);
-    expect(JSON.stringify(stripped)).toContain("Hauptbahnhof");
   });
 
   it("leaves a value that is not an object alone", () => {

@@ -151,7 +151,11 @@ describe("DiagnosticRepository", () => {
       await diagnostics.record("engine.timing", { iterations: index });
     }
 
-    expect((await diagnostics.list()).length).toBeLessThanOrEqual(5_000);
+    const rows = await diagnostics.list();
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length).toBeLessThanOrEqual(5_000);
+    expect(rows.some((row) => row.fields.iterations === 5099)).toBe(true);
+    expect(rows.some((row) => row.fields.iterations === 0)).toBe(false);
     await close();
   });
 

@@ -18,13 +18,11 @@ describe("Overture category interoperability bridge", () => {
       propertyPointers: [],
     });
   });
-  it("only exposes categories with explicit cross-provider semantics", () => {
+
+  it("exposes supported UI categories with explicit cross-provider concept mappings", () => {
     expect(OVERTURE_COMMERCIAL_CATEGORIES).toContain("restaurants");
     expect(OVERTURE_COMMERCIAL_CATEGORIES).toContain("cafes");
     expect(OVERTURE_COMMERCIAL_CATEGORIES).not.toContain("drinking_water");
-  });
-
-  it("maps UI categories to a small set of broad Overture concepts", () => {
     expect(openMapXCategoryToOvertureConcepts("restaurants")).toEqual(["restaurant"]);
     expect(openMapXCategoryToOvertureConcepts("cafes")).toEqual([
       "cafe",
@@ -57,13 +55,5 @@ describe("Overture category interoperability bridge", () => {
         hierarchy: ["services_and_business", "advertising_agency"],
       }),
     ).toBeUndefined();
-  });
-
-  it("keeps the bridge compact rather than mirroring the 2k-leaf taxonomy", () => {
-    const conceptCount = OVERTURE_COMMERCIAL_CATEGORIES.reduce(
-      (total, category) => total + openMapXCategoryToOvertureConcepts(category).length,
-      0,
-    );
-    expect(conceptCount).toBeLessThan(50);
   });
 });

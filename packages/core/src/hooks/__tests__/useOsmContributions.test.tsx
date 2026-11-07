@@ -69,17 +69,22 @@ beforeEach(() => {
 
 describe("query keys", () => {
   it("are stable and scoped", () => {
-    expect(osmContributionKeys.capabilities()).toEqual(["osmContributions", "capabilities"]);
-    expect(osmContributionKeys.context(REF)).toEqual(["osmContributions", "context", "node", 12]);
-    expect(osmContributionKeys.categories(REF, "point", "en", "cafe")).toEqual([
-      "osmContributions",
-      "categories",
-      "node",
-      12,
-      "point",
-      "en",
-      "cafe",
-    ]);
+    expect(osmContributionKeys.context(REF)).toEqual(osmContributionKeys.context({ ...REF }));
+    expect(osmContributionKeys.context(REF)).not.toEqual(
+      osmContributionKeys.context({ ...REF, id: 13 }),
+    );
+    expect(osmContributionKeys.context(REF)).not.toEqual(
+      osmContributionKeys.context({ ...REF, type: "way" }),
+    );
+    const keys = [
+      osmContributionKeys.capabilities(),
+      osmContributionKeys.context(REF),
+      osmContributionKeys.categories(REF, "point", "en", "cafe"),
+      osmContributionKeys.categories(REF, "area", "en", "cafe"),
+      osmContributionKeys.categories(REF, "point", "de", "cafe"),
+      osmContributionKeys.categories(REF, "point", "en", "shop"),
+    ];
+    expect(new Set(keys.map((key) => JSON.stringify(key))).size).toBe(keys.length);
   });
 });
 
@@ -111,8 +116,9 @@ describe("useOsmContributionCapabilities", () => {
 describe("useOsmContributionContext", () => {
   it("requests the element path and always refetches live data", async () => {
     const get = vi.spyOn(apiClient, "get").mockResolvedValue(CONTEXT);
-    const { result } = renderHook(() => useOsmContributionContext(REF, "de", true), {
-      wrapper: wrapper(),
+    const queryWrapper = wrapper();
+    const { result, unmount } = renderHook(() => useOsmContributionContext(REF, "de", true), {
+      wrapper: queryWrapper,
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(get).toHaveBeenCalledWith(
@@ -121,6 +127,13 @@ describe("useOsmContributionContext", () => {
       expect.objectContaining({ signal: expect.anything() }),
     );
     expect(result.current.data?.version).toBe(4);
+    unmount();
+    get.mockResolvedValue({ ...CONTEXT, version: 5 });
+    const remounted = renderHook(() => useOsmContributionContext(REF, "de", true), {
+      wrapper: queryWrapper,
+    });
+    await waitFor(() => expect(remounted.result.current.data?.version).toBe(5));
+    expect(get).toHaveBeenCalledTimes(2);
   });
 
   it("is disabled without a ref", () => {
@@ -210,6 +223,10 @@ describe("mutations", () => {
       comment: "Corrected the name from the sign",
     });
     expect(published.changesetId).toBe(77);
+    expect(post).toHaveBeenLastCalledWith(
+      "/api/osm/contributions/publish",
+      expect.objectContaining({ ref: REF, idempotencyKey: UUID, evidence: { kind: "survey" } }),
+    );
 
     post.mockResolvedValue({
       noteId: 9,
@@ -223,6 +240,11 @@ describe("mutations", () => {
       idempotencyKey: UUID,
     });
     expect(created.noteId).toBe(9);
+    expect(post).toHaveBeenLastCalledWith("/api/osm/contributions/notes", {
+      ref: REF,
+      text: "The entrance is on the other side.",
+      idempotencyKey: UUID,
+    });
   });
 
   it("translates a structured error payload into a typed contribution error", async () => {

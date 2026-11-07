@@ -1,11 +1,6 @@
 import Fastify from "fastify";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { RateLimiter, statusPublicApiLimit } from "../rate-limit";
-
-afterEach(() => {
-  // Vitest's afterEach runs before the next test starts; nothing to clear here
-  // because each test instantiates its own RateLimiter.
-});
 
 function buildApp(limiter: RateLimiter, opts: { trustProxy?: boolean | string | string[] } = {}) {
   const app = Fastify({ trustProxy: opts.trustProxy ?? false });

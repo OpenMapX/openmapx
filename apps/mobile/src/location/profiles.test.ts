@@ -58,17 +58,9 @@ describe("profileFor", () => {
     expect(profileFor("driving").timeIntervalMs).toBe(1_000);
   });
 
-  it("returns an identical profile for repeated lookups", () => {
-    expect(profileFor("walking")).toBe(profileFor("walking"));
-  });
-
   it("rejects an unknown profile kind rather than guessing a cadence", () => {
     expect(() => profileFor("teleport" as LocationProfileKind)).toThrow(
       /unknown location profile/i,
     );
-  });
-
-  it("keeps every declared kind in the table", () => {
-    for (const kind of LOCATION_PROFILE_KINDS) expect(profileFor(kind)).toBeDefined();
   });
 });

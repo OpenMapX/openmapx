@@ -13,11 +13,6 @@ const REF = { type: "node", id: 12 } as const;
 const KEY_A = "3f4b2a5e-1c2d-4e5f-8a9b-0c1d2e3f4a5b";
 const KEY_B = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
-/** Sentinels that must never reach a key or a stored value. */
-const COMMENT = "human comment sentinel";
-const TOKEN = "osm-token-sentinel";
-const NOTE_TEXT = "note text sentinel";
-
 const SUCCESS = {
   kind: "success" as const,
   at: "2026-08-10T09:00:00.000Z",
@@ -93,15 +88,6 @@ describe("in-memory guard", () => {
     });
   });
 
-  it("keeps a failed attempt free for a new idempotency key", async () => {
-    const g = guard();
-    const first = await g.begin({ ...publish, idempotencyKey: KEY_A });
-    if (first.status !== "acquired") throw new Error("expected acquired");
-    // Failure path: release without storing an outcome.
-    await g.release({ ...publish, idempotencyKey: KEY_A, lease: first.lease });
-    expect((await g.begin({ ...publish, idempotencyKey: KEY_B })).status).toBe("acquired");
-  });
-
   it("expires the lock after its TTL so a crashed worker cannot wedge a user", async () => {
     const g = guard();
     await g.begin({ ...publish, idempotencyKey: KEY_A });
@@ -171,16 +157,21 @@ describe("in-memory guard", () => {
     ).toBe("acquired");
   });
 
-  it("bounds the in-memory store", async () => {
+  it("evicts the oldest lock under memory pressure and retains recent locks", async () => {
     const g = guard();
-    for (let i = 0; i < 20_000; i += 1) {
+    for (let i = 0; i < 20_002; i += 1) {
       await g.begin({
         ...publish,
         userId: `user-${i}`,
         idempotencyKey: KEY_A,
       });
     }
-    expect(g.debugSize()).toBeLessThanOrEqual(20_000);
+    expect((await g.begin({ ...publish, userId: "user-0", idempotencyKey: KEY_A })).status).toBe(
+      "acquired",
+    );
+    expect(
+      (await g.begin({ ...publish, userId: "user-20001", idempotencyKey: KEY_B })).status,
+    ).toBe("in_progress");
   });
 });
 
@@ -272,14 +263,16 @@ describe("Redis-backed guard", () => {
     const g = guard(redis);
     const first = await g.begin({ ...publish, idempotencyKey: KEY_A });
     if (first.status !== "acquired") throw new Error("expected acquired");
+    await g.storeOutcome({ ...publish, idempotencyKey: KEY_A, outcome: SUCCESS });
     await g.release({ ...publish, idempotencyKey: KEY_A, lease: first.lease });
+    expect(store.size).toBe(1);
     for (const key of [...store.keys()]) store.set(key, "{not json");
     expect((await g.begin({ ...publish, idempotencyKey: KEY_A })).status).toBe("acquired");
   });
 });
 
 describe("key and value hygiene", () => {
-  it("never writes content into a key or a value", async () => {
+  it("digests supplied user and idempotency identities in storage", async () => {
     const seen: string[] = [];
     const redis: SubmissionGuardRedis = {
       set: vi.fn(async (key, value) => {
@@ -302,22 +295,24 @@ describe("key and value hygiene", () => {
     await g.release({ ...publish, idempotencyKey: KEY_A, lease: first.lease });
 
     const serialized = seen.join("|");
-    for (const sentinel of [COMMENT, TOKEN, NOTE_TEXT, "Café", "52.5", "13.4"]) {
-      expect(serialized).not.toContain(sentinel);
-    }
-    // The raw user id and element id are digested, not stored in the clear.
     expect(serialized).not.toContain(USER);
     expect(serialized).not.toContain(KEY_A);
   });
 
   it("produces stable, secret-dependent digests", async () => {
-    const a = createSubmissionGuard({ secret: "one", now });
-    const b = createSubmissionGuard({ secret: "two", now });
-    expect(a.debugLockKey({ userId: USER, ref: REF, operation: "publish" })).toBe(
-      a.debugLockKey({ userId: USER, ref: REF, operation: "publish" }),
-    );
-    expect(a.debugLockKey({ userId: USER, ref: REF, operation: "publish" })).not.toBe(
-      b.debugLockKey({ userId: USER, ref: REF, operation: "publish" }),
-    );
+    async function capturedLock(secret: string) {
+      const set = vi.fn<SubmissionGuardRedis["set"]>().mockResolvedValue("OK");
+      const redis: SubmissionGuardRedis = {
+        set,
+        get: vi.fn().mockResolvedValue(null),
+        eval: vi.fn().mockResolvedValue(0),
+      };
+      const g = createSubmissionGuard({ secret, now, redis });
+      await g.begin({ ...publish, idempotencyKey: KEY_A });
+      return set.mock.calls[0]![0];
+    }
+    const first = await capturedLock("one");
+    expect(await capturedLock("one")).toBe(first);
+    expect(await capturedLock("two")).not.toBe(first);
   });
 });

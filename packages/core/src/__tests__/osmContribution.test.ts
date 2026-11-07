@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { API_ENDPOINTS } from "../api/endpoints";
 import {
-  countCodePoints,
   osmCategorySuggestionSchema,
   osmContributionCapabilitiesSchema,
   osmContributionContextSchema,
@@ -43,14 +42,6 @@ function publishRequest(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
-
-describe("countCodePoints", () => {
-  it("counts Unicode code points, not UTF-16 code units", () => {
-    expect(ASTRAL.length).toBe(2);
-    expect(countCodePoints(ASTRAL)).toBe(1);
-    expect(countCodePoints(ASTRAL.repeat(255))).toBe(255);
-  });
-});
 
 describe("osmElementRefSchema", () => {
   it("accepts node, way and relation with positive ids", () => {

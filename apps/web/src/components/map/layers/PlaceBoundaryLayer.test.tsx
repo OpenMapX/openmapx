@@ -1,6 +1,6 @@
 import { act, render } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createFakeMap, expectStyleSwapIsLossless } from "@/test";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { createFakeMap } from "@/test";
 
 let fake = createFakeMap({
   styleLoaded: true,
@@ -59,15 +59,6 @@ vi.mock("@openmapx/core", async (importOriginal) => ({
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { PlaceBoundaryLayer } from "./PlaceBoundaryLayer";
-
-describe("PlaceBoundaryLayer across a style change", () => {
-  it("keeps the boundary outline", () => {
-    render(<PlaceBoundaryLayer />);
-    const before = fake.state.sources.get("place-boundary-source")?.data as { features: unknown[] };
-    expect(before.features.length).toBeGreaterThan(0);
-    expectStyleSwapIsLossless(fake);
-  });
-});
 
 beforeEach(() => {
   fake = createFakeMap({ styleLoaded: true, baseLayers: [{ id: "place-labels", type: "symbol" }] });

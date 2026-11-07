@@ -253,6 +253,7 @@ describe("ambient place policy", () => {
     }
     expect(ambientPlaceFromOsm({ ...osm, category: "shop/bakery" })!.minZoom).toBe(15);
     expect(ambientPlaceFromOsm({ ...osm, category: "shop/books" })!.minZoom).toBe(15);
+    expect(ambientPlaceFromOsm({ ...osm, category: "tourism:artwork" })!.minZoom).toBe(16);
   });
   it("promotes only corroborated cultural landmarks and preserves exclusion/tenant policy", () => {
     const base = { ...osm, category: "amenity/place_of_worship" };
@@ -303,12 +304,6 @@ describe("ambient place policy", () => {
     for (const tags of ["not-json", "[]", "null", { access: true }]) {
       expect(ambientPlaceFromOsm({ ...osm, tags } as never)).toBeNull();
     }
-  });
-  it("ranks useful categories first and defers tenants to zoom 18", () => {
-    expect(ambientPlaceFromOsm(osm)!.minZoom).toBe(13);
-    expect(ambientPlaceFromOsm({ ...osm, category: "shop:bakery" })!.minZoom).toBe(15);
-    expect(ambientPlaceFromOsm({ ...osm, category: "tourism:artwork" })!.minZoom).toBe(16);
-    expect(ambientPlaceFromOsm({ ...osm, tags: { level: "1" } })!.minZoom).toBe(18);
   });
   it("fuses only accepted links, preserves OSM location and survives excluded Overture", () => {
     const a = ambientPlaceFromOsm(osm)!;

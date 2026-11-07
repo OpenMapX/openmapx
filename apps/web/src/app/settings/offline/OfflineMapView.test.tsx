@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { render, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import type { OfflinePackageRecord } from "@/lib/offlineAreas";
 
 import { act, createFakeMap } from "@/test";
@@ -93,24 +93,27 @@ const record = {
 afterEach(() => {
   pendingMaps.length = 0;
   fakeMapClass.workerUrlsAtConstruction.length = 0;
+  mocks.refresh.mockResolvedValue(undefined);
   vi.clearAllMocks();
 });
 
-describe("OfflineMapView", () => {
-  it("refreshes an existing resolver before creating the map", async () => {
-    render(<OfflineMapView packages={[record]} />);
-
-    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledTimes(1));
-    expect(mocks.register).toHaveBeenCalledTimes(1);
-    expect(fakeMapClass.workerUrlsAtConstruction).toEqual([
-      "/runtime/maplibre-gl/6.1.0/maplibre-gl-worker.mjs",
-    ]);
-  });
-});
-
 it("installs and restores offline coverage without waiting for archive tiles", async () => {
+  let finishRefresh!: () => void;
+  mocks.refresh.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        finishRefresh = resolve;
+      }),
+  );
   const view = render(<OfflineMapView packages={[record]} />);
+  await waitFor(() => expect(mocks.refresh).toHaveBeenCalledTimes(1));
+  expect(pendingMaps).toEqual([]);
+  await act(async () => finishRefresh());
   await waitFor(() => expect(pendingMaps).toHaveLength(1));
+  expect(mocks.register).toHaveBeenCalledTimes(1);
+  expect(fakeMapClass.workerUrlsAtConstruction).toEqual([
+    "/runtime/maplibre-gl/6.1.0/maplibre-gl-worker.mjs",
+  ]);
   const pending = pendingMaps[0];
   expect(pending.map.getLayer("offline-packages-line")).toBeDefined();
   const source = pending.state.sources.get("offline-packages-source")?.data;

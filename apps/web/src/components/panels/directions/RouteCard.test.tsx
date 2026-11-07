@@ -318,6 +318,7 @@ describe("RouteCard keyboard actions", () => {
           onDetails={onDetails}
           units="metric"
           impact={mockDieselImpact}
+          vehicles={mockVehicles}
         />
       </NextIntlClientProvider>,
     );
@@ -326,8 +327,16 @@ describe("RouteCard keyboard actions", () => {
     await user.keyboard("{Enter}");
     await user.keyboard(" ");
     expect(onDetails).toHaveBeenCalledTimes(2);
-    await user.click(screen.getByTestId("route-impact-badge"));
-    expect(screen.getByRole("dialog")).toBeDefined();
+    const badge = screen.getByTestId("route-impact-badge");
+    expect(badge).toHaveTextContent("8.4 kg CO₂");
+    expect(badge).toHaveTextContent("~€6.80");
+    expect(screen.queryByText(/20\.1 kg CO₂/)).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await user.click(badge);
+    expect(screen.getByRole("dialog", { name: /^Route Impact/ })).toBeInTheDocument();
+    expect(screen.getByTestId("dialog-vehicle-name")).toHaveTextContent("VW Golf 2.0 TDI");
+    await user.click(screen.getByTestId("dialog-close-button"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(onSelect).not.toHaveBeenCalled();
     expect(view.container.querySelector("button button, button input, label button")).toBeNull();
   });
@@ -357,16 +366,13 @@ describe("RouteCard keyboard actions", () => {
 });
 
 describe("RouteCard compact traffic explanation", () => {
-  it("describes the caveat when keyboard users select a route", () => {
-    renderCard(baseRoute);
-    const ids = screen.getByRole("radio").getAttribute("aria-describedby")?.split(" ") ?? [];
-    expect(ids.map((id) => document.getElementById(id)?.textContent).join(" ")).toContain(
-      "Traffic data unavailable",
-    );
-  });
   it("shows a compact delay and describes it to keyboard users", () => {
     renderCard({ ...baseRoute, duration: 6300, baselineDuration: 3600 });
     expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\(\+45 min\)$/);
+    const heading = screen.getByRole("heading", { level: 6 });
+    expect(heading).toHaveTextContent("1 h 45 min (+45 min)");
+    expect(heading.contains(screen.getByTestId("traffic-delay"))).toBe(true);
+    expect(screen.getAllByTestId("traffic-delay")).toHaveLength(1);
     expect(screen.queryByText(/baseline/i)).toBeNull();
     expect(screen.queryByText("Traffic data unavailable")).toBeNull();
     const ids = screen.getByRole("radio").getAttribute("aria-describedby")?.split(" ") ?? [];
@@ -433,10 +439,6 @@ describe("RouteCard compact traffic explanation", () => {
     );
     expect(screen.getByText("(+45 min)")).toBeInTheDocument();
   });
-  it("localizes the compact delay in German", () => {
-    renderCard({ ...baseRoute, duration: 6300, baselineDuration: 3600 }, "metric", "de");
-    expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\(\+45 min\)$/);
-  });
   it.each(["route", "peek"] as const)(
     "opens and closes traffic info without selecting the %s route",
     (selectionKind) => {
@@ -454,7 +456,10 @@ describe("RouteCard compact traffic explanation", () => {
           />
         </NextIntlClientProvider>,
       );
-      fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
+      const button = screen.getByRole("button", { name: "About traffic" });
+      expect(button.closest("label")).toBeNull();
+      expect(button.parentElement?.closest("button")).toBeNull();
+      fireEvent.click(button);
       expect(screen.getByRole("dialog", { name: "About traffic" })).toBeInTheDocument();
       expect(onSelect).not.toHaveBeenCalled();
       fireEvent.click(screen.getByRole("button", { name: "Close" }));
@@ -607,24 +612,21 @@ describe("RouteCard Start under native authority", () => {
     fireEvent.click(start());
 
     await waitFor(() => expect(startTypes(sent)).toEqual(["session.prepare", "session.start"]));
+    expect(sent.find((message) => message.type === "session.prepare")?.payload).toMatchObject({
+      startPackage: {
+        kind: "ground",
+        route: {
+          geometry: [
+            [6.08, 50.77],
+            [6.68, 51.51],
+          ],
+        },
+      },
+    });
     // The authoritative snapshot is what makes a session visible, so there is no
     // half-started UI to undo if any of this fails.
     expect(useNavigationStore.getState().status).toBe("idle");
     expect(onSelect).not.toHaveBeenCalled();
-  });
-
-  it("sends the route inside the start package", async () => {
-    const { sent, start } = renderInShell(compatibleShell);
-    await negotiated(sent);
-
-    fireEvent.click(start());
-
-    await waitFor(() => expect(sent.some((m) => m.type === "session.prepare")).toBe(true));
-    const prepare = sent.find((m) => m.type === "session.prepare") as {
-      payload: { startPackage: { kind: string; route: { geometry: unknown[] } } };
-    };
-    expect(prepare.payload.startPackage.kind).toBe("ground");
-    expect(prepare.payload.startPackage.route.geometry).toHaveLength(2);
   });
 
   it("sends one command however fast the button is tapped", async () => {
@@ -662,14 +664,6 @@ describe("RouteCard Start under browser authority", () => {
   beforeEach(seedWaypoints);
   afterEach(() => useNavigationStore.getState().stopNavigation());
 
-  it("still starts the browser session directly", async () => {
-    const view = renderCard(baseRoute);
-
-    fireEvent.click(view.getByRole("button", { name: "Start" }));
-
-    await waitFor(() => expect(useNavigationStore.getState().status).toBe("navigating"));
-  });
-
   it("carries the route assessment into navigation and shows its limited status", async () => {
     const roadConditionImpact: RoadConditionRouteImpact = {
       availability: "limited",
@@ -697,7 +691,10 @@ describe("RouteCard Start under browser authority", () => {
     fireEvent.click(view.getByRole("button", { name: "Start" }));
 
     await waitFor(() =>
-      expect(useNavigationStore.getState().roadConditionImpact).toEqual(roadConditionImpact),
+      expect(useNavigationStore.getState()).toMatchObject({
+        status: "navigating",
+        roadConditionImpact,
+      }),
     );
   });
 });
@@ -778,98 +775,6 @@ const mockVehicles: PersonalVehicle[] = [
 ];
 
 describe("RouteCard impact integration", () => {
-  it("renders RouteImpactBadge when impact prop is provided", () => {
-    render(
-      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
-        <RouteCard
-          route={baseRoute}
-          index={0}
-          active
-          onSelect={() => {}}
-          onDetails={() => {}}
-          units="metric"
-          impact={mockDieselImpact}
-        />
-      </NextIntlClientProvider>,
-    );
-
-    const badge = screen.getByTestId("route-impact-badge");
-    expect(badge).toBeDefined();
-    // Displays vehicle-aware emissions and cost instead of static 170 g/km estimate
-    expect(badge.textContent).toContain("8.4 kg CO₂");
-    expect(badge.textContent).toContain("~€6.80");
-    // Ensure static ~20 kg CO2 is not rendered
-    expect(screen.queryByText(/20\.1 kg CO₂/)).toBeNull();
-  });
-
-  it("displays Eco Choice badge on alternative with lowest emissions", () => {
-    const ecoImpact: RouteImpact = {
-      ...mockDieselImpact,
-      comparison: {
-        isLowestEmissions: true,
-        isLowestCost: false,
-        isFastest: false,
-        emissionsDeltaGrams: -500,
-        emissionsDeltaPct: -5.9,
-        costDelta: 0,
-        reason: { kind: "shorter", distanceMeters: 3200 },
-      },
-    };
-
-    render(
-      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
-        <RouteCard
-          route={baseRoute}
-          index={1}
-          active={false}
-          onSelect={() => {}}
-          onDetails={() => {}}
-          units="metric"
-          impact={ecoImpact}
-        />
-      </NextIntlClientProvider>,
-    );
-
-    const ecoChip = screen.getByTestId("eco-choice-chip");
-    expect(ecoChip).toBeDefined();
-    expect(ecoChip.textContent).toBe("Eco Choice");
-  });
-
-  it("tapping the impact badge opens RouteImpactDetailsDialog", async () => {
-    const handleUpdateAssumptions = vi.fn();
-
-    render(
-      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
-        <RouteCard
-          route={baseRoute}
-          index={0}
-          active
-          onSelect={() => {}}
-          onDetails={() => {}}
-          units="metric"
-          impact={mockDieselImpact}
-          vehicles={mockVehicles}
-          onUpdateAssumptions={handleUpdateAssumptions}
-        />
-      </NextIntlClientProvider>,
-    );
-
-    // Dialog is initially closed
-    expect(screen.queryByRole("dialog")).toBeNull();
-
-    // Tap badge
-    fireEvent.click(screen.getByTestId("route-impact-badge"));
-
-    // Dialog is now open
-    expect(screen.getByRole("dialog")).toBeDefined();
-    expect(screen.getByText("Route Impact")).toBeDefined();
-    expect(screen.getByTestId("dialog-vehicle-name").textContent).toBe("VW Golf 2.0 TDI");
-
-    // Close dialog
-    fireEvent.click(screen.getByTestId("dialog-close-button"));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-  });
-
   it("falls back to legacy estimateDrivingCo2Grams when impact is omitted", () => {
     render(
       <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
@@ -1085,20 +990,6 @@ describe("RouteCard current congestion coverage", () => {
     );
     expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
   });
-
-  it("keeps significant delays colored even with complete coverage", () => {
-    renderCard({
-      ...baseRoute,
-      duration: 6300,
-      baselineDuration: 3600,
-      trafficCoverage: freshCoverage,
-    });
-    expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
-      "var(--omx-traffic-heavy)",
-    );
-    expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\(\+45 min\)$/);
-    expect(screen.queryByText("Traffic data unavailable")).toBeNull();
-  });
 });
 
 describe("RouteCard expired congestion estimates", () => {
@@ -1120,6 +1011,10 @@ describe("RouteCard expired congestion estimates", () => {
       },
     });
     expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\(\+45 min\)$/);
+    expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
+      "var(--omx-traffic-heavy)",
+    );
+    expect(screen.queryByText("Traffic data unavailable")).toBeNull();
     act(() => vi.advanceTimersByTime(30000));
     expect(screen.queryByTestId("traffic-delay")).toBeNull();
     expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
@@ -1127,43 +1022,6 @@ describe("RouteCard expired congestion estimates", () => {
       "rgba(0, 0, 0, 0.87)",
     );
   });
-});
-
-describe("RouteCard compact traffic header", () => {
-  it("shows the parenthesized delay directly in the duration heading", () => {
-    renderCard({ ...baseRoute, duration: 6300, baselineDuration: 3600 });
-    expect(screen.getByRole("heading", { level: 6 })).toHaveTextContent("1 h 45 min (+45 min)");
-    expect(
-      screen.getByRole("heading", { level: 6 }).contains(screen.getByTestId("traffic-delay")),
-    ).toBe(true);
-    expect(screen.getAllByTestId("traffic-delay")).toHaveLength(1);
-  });
-
-  it.each(["route", "peek"] as const)(
-    "keeps the info button outside the %s selection control",
-    (selectionKind) => {
-      const onSelect = vi.fn();
-      render(
-        <NextIntlClientProvider locale="en" messages={en}>
-          <RouteCard
-            route={baseRoute}
-            index={0}
-            active
-            selectionKind={selectionKind}
-            onSelect={onSelect}
-            onDetails={() => {}}
-            units="metric"
-          />
-        </NextIntlClientProvider>,
-      );
-      const button = screen.getByRole("button", { name: "About traffic" });
-      expect(button.closest("label")).toBeNull();
-      expect(button.parentElement?.closest("button")).toBeNull();
-      fireEvent.click(button);
-      expect(screen.getByRole("dialog", { name: "About traffic" })).toBeInTheDocument();
-      expect(onSelect).not.toHaveBeenCalled();
-    },
-  );
 });
 
 it.each(["route", "peek"] as const)(

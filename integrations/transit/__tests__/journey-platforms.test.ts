@@ -69,9 +69,11 @@ describe("journey passenger-platform enrichment", () => {
   });
   it("checks policy again after asynchronous acquisition", async () => {
     const f = context();
+    const acquire = f.acquire.getMockImplementation();
+    if (!acquire) throw new Error("Missing platform acquisition fixture");
     f.acquire.mockImplementation(async () => {
       Object.assign(f.ctx, { getDisallowedSourceIds: async () => new Set(["siri"]) });
-      return { data: [], attributions: [], freshness: base.freshness };
+      return acquire();
     });
     expect(await enrichJourneyPlatforms({ ctx: f.ctx, timed }, base)).toBe(base);
   });

@@ -545,20 +545,6 @@ describe("renderServiceSnippet", () => {
     expect(doc.networks["openmapx-proxy"]).toBeUndefined();
   });
 
-  it("renders environment from manifest when no resolved config present", () => {
-    const snippet = renderServiceSnippet(
-      svc("alpha", {
-        container: {
-          image: "t/alpha",
-          tag: "latest",
-          environment: { LOG_LEVEL: "info", FOO: "bar" },
-        },
-      }),
-      {},
-    );
-    expect(snippet.environment).toEqual({ LOG_LEVEL: "info", FOO: "bar" });
-  });
-
   it("overlays resolvedServiceConfigs on top of the manifest environment", () => {
     const snippet = renderServiceSnippet(
       svc("alpha", {
@@ -599,13 +585,6 @@ describe("renderServiceSnippet", () => {
       },
     );
     expect(snippet.environment).toEqual({ KEEP: "me" });
-  });
-
-  it("only applies resolved config for the matching service id", () => {
-    const snippet = renderServiceSnippet(svc("alpha"), {
-      resolvedServiceConfigs: new Map([["beta", { BAD: "wrong" }]]),
-    });
-    expect(snippet.environment).toBeUndefined();
   });
 
   it("renders volumes (named) and bind mounts for consumes/config", () => {
@@ -850,6 +829,7 @@ describe("renderCompose", () => {
       },
     });
     expect(parsed.volumes).toEqual({ "openmapx-alpha-data": null });
+    expect(result.warnings).toBeUndefined();
   });
 
   it("forwards resolvedServiceConfigs into each service's rendered environment", () => {
@@ -876,14 +856,14 @@ describe("renderCompose", () => {
     expect(composeServices.beta.environment).toEqual({ SOMETHING: "y" });
   });
 
-  it("computes hardlink plan from consumes/produces", () => {
+  it("orders producers before consumers and emits the matching default-instance hardlink and mount", () => {
     const services = [
+      svc("valhalla", {
+        consumes: [{ type: "osm-data", mountAt: "/custom_files", required: true }],
+      }),
       svc("data-manager", {
         provides: ["osm-data"],
         produces: [{ type: "osm-data", sourceDir: "data/osm" }],
-      }),
-      svc("valhalla", {
-        consumes: [{ type: "osm-data", mountAt: "/custom_files", required: true }],
       }),
     ];
     const result = renderCompose(services, { domain: "example.com" });
@@ -895,6 +875,12 @@ describe("renderCompose", () => {
         dataType: "osm-data",
       },
     ]);
+    const doc = parseYaml(result.composeYaml) as {
+      services: Record<string, { volumes: string[] }>;
+    };
+    const ids = Object.keys(doc.services);
+    expect(ids.indexOf("data-manager")).toBeLessThan(ids.indexOf("valhalla"));
+    expect(doc.services.valhalla.volumes).toContain("./data/valhalla/osm-data:/custom_files");
   });
 
   it("passes consumes targetFilename through to the hardlink plan", () => {
@@ -961,22 +947,6 @@ describe("renderCompose", () => {
     // Compose volumes: distinct mount sources.
     expect(result.composeYaml).toContain("./data/motis/osm-data:/motis-data/osm");
     expect(result.composeYaml).toContain("./data/motis/gtfs-data:/motis-data/gtfs");
-  });
-
-  it("topologically sorts services so producers come before consumers", () => {
-    const services = [
-      svc("valhalla", {
-        consumes: [{ type: "osm-data", mountAt: "/custom_files", required: true }],
-      }),
-      svc("data-manager", {
-        provides: ["osm-data"],
-        produces: [{ type: "osm-data", sourceDir: "data/osm" }],
-      }),
-    ];
-    const result = renderCompose(services, { domain: "example.com" });
-    const parsed = parseYaml(result.composeYaml) as { services: Record<string, unknown> };
-    const ids = Object.keys(parsed.services);
-    expect(ids.indexOf("data-manager")).toBeLessThan(ids.indexOf("valhalla"));
   });
 
   it("emits one Traefik router per additionalRoutes entry, all bound to the same backend", () => {
@@ -1050,25 +1020,6 @@ describe("renderCompose", () => {
   });
 
   describe("multi-instance produces / consumes", () => {
-    it("matches a default-instance producer to a no-instance consumer", () => {
-      const producer = svc("data", {
-        produces: [{ type: "osm-pbf", sourceDir: "data/osm" }],
-      });
-      const consumer = svc("valhalla", {
-        consumes: [{ type: "osm-pbf", mountAt: "/custom_files", required: true }],
-      });
-      const result = renderCompose([producer, consumer], { domain: "example.com" });
-      expect(result.hardlinkPlan).toEqual([
-        {
-          source: "data/osm",
-          target: "data/valhalla/osm-pbf",
-          consumerService: "valhalla",
-          dataType: "osm-pbf",
-        },
-      ]);
-      expect(result.composeYaml).toContain("./data/valhalla/osm-pbf:/custom_files");
-    });
-
     it("matches a (type, instance)-keyed consumer to the corresponding producer instance", () => {
       const producer = svc("data", {
         produces: [
@@ -1204,12 +1155,6 @@ describe("renderCompose", () => {
       expect(result.warnings?.[0]).toContain("skipping optional bind-mount");
       // The skipped mount must not appear in the compose YAML.
       expect(result.composeYaml).not.toContain("/secrets/transitous-feed-proxy.age");
-    });
-
-    it("omits the warnings field on RenderResult when nothing was skipped", () => {
-      const services = [svc("alpha")];
-      const result = renderCompose(services, { domain: "example.com" });
-      expect(result.warnings).toBeUndefined();
     });
 
     it("silently skips a missing producer when consumer is required: false", () => {

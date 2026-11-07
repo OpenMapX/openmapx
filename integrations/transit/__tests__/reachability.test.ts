@@ -65,6 +65,8 @@ describe("transit reachability server helpers", () => {
     } satisfies TransitReachabilitySurface;
     const thinned = thinTransitReachabilitySurface(surface);
     expect(thinned.seeds.length).toBeLessThanOrEqual(MAX_TRANSIT_REACHABILITY_SEEDS);
+    expect(thinned.seeds[0]).toEqual({ lng: 5, lat: 50, arrivalSeconds: 0 });
+    expect(thinTransitReachabilitySurface(surface)).toEqual(thinned);
     expect(thinned.thinning.originalSeedCount).toBe(5_000);
     expect(thinned.thinning.gridMetres).toBeGreaterThanOrEqual(100);
   });

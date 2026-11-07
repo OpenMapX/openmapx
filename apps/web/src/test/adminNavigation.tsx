@@ -17,6 +17,7 @@ const subscribe = (fn: () => void) => {
   };
 };
 export const adminTestHistory = {
+  read,
   push(url: string) {
     entries = [...entries.slice(0, index + 1), url];
     index++;

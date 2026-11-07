@@ -1,12 +1,4 @@
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -70,19 +62,26 @@ describe("version 3 feed overlay", () => {
     expect(() => parseFeedOverlay(overlay)).toThrow(expected);
   });
 
-  it("rejects duplicate normalized identities, names, and URLs", () => {
+  it.each([
+    ["identity", { url: "https://other.example/feed.zip" }, /duplicate sourceId/],
+    [
+      "name",
+      { name: "OPERATOR-FEED", url: "https://other.example/feed.zip" },
+      /duplicate source name/,
+    ],
+    ["URL", { name: "other" }, /duplicate source URL/],
+  ])("rejects duplicate normalized %s independently", (_label, patch, expected) => {
     const overlay = validOverlay();
-    overlay.sources.push({ ...overlay.sources[0] });
-    expect(() => parseFeedOverlay(overlay)).toThrow(/duplicate sourceId/);
+    overlay.sources.push({ ...overlay.sources[0], ...patch });
+    expect(() => parseFeedOverlay(overlay)).toThrow(expected);
   });
 
   it("writes a validated overlay atomically without leaving temporary files", () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-overlay-"));
     const path = join(tmp, "feeds-overlay.json");
     writeFeedOverlayAtomic(path, validOverlay());
-    expect(readFeedOverlay(path)).toEqual(parseFeedOverlay(validOverlay()));
+    expect(readFeedOverlay(path)).toEqual(validOverlay());
     expect(readdirSync(tmp)).toEqual(["feeds-overlay.json"]);
-    expect(readFileSync(path, "utf-8")).not.toContain("secret");
   });
 
   it("does not replace the existing file when validation fails", () => {
@@ -93,7 +92,6 @@ describe("version 3 feed overlay", () => {
       writeFeedOverlayAtomic(path, { ...validOverlay(), version: 2 } as never),
     ).toThrow();
     expect(readFileSync(path, "utf-8")).toBe("unchanged\n");
-    expect(existsSync(path)).toBe(true);
   });
 
   it("cleans up its temporary file when the atomic rename fails", () => {

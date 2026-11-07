@@ -160,11 +160,6 @@ describe("App WebView policy", () => {
     expect(mockInjectedScripts).toContain("<goBack>");
   });
 
-  it("allowlists only the exact configured origin", async () => {
-    await renderApp();
-    expect(mockWebViewProps.originWhitelist).toEqual(["https://openmapx.com"]);
-  });
-
   it("enables the hardening flags the security model depends on", async () => {
     await renderApp();
     expect(mockWebViewProps.limitsNavigationsToAppBoundDomains).toBe(true);
@@ -176,16 +171,11 @@ describe("App WebView policy", () => {
     expect(mockWebViewProps.javaScriptCanOpenWindowsAutomatically).toBe(false);
     expect(mockWebViewProps.thirdPartyCookiesEnabled).toBe(false);
     expect(mockWebViewProps.sharedCookiesEnabled).toBe(true);
-  });
-
-  it("injects no generic native object into the page", async () => {
-    await renderApp();
+    expect(mockWebViewProps.originWhitelist).toEqual(["https://openmapx.com"]);
     expect(mockWebViewProps.injectedJavaScriptObject).toBeUndefined();
     expect(mockWebViewProps.injectedJavaScript).toBeUndefined();
-  });
-
-  it("lets only the map zoom, never the interface", async () => {
-    await renderApp();
+    expect(mockWebViewProps.mediaCapturePermissionGrantType).toBe("deny");
+    expect(mockWebViewProps.geolocationEnabled).toBe(false);
     expect(mockWebViewProps.setBuiltInZoomControls).toBe(false);
     expect(mockWebViewProps.setDisplayZoomControls).toBe(false);
   });
@@ -305,16 +295,6 @@ describe("App bridge channel", () => {
     await emitAsync(mockWebViewProps.onLoadStart);
 
     expect(nonceIn(bootstrap())).toBe(before);
-  });
-
-  it("prepares a different nonce for the next document", async () => {
-    await renderApp();
-    const first = nonceIn(bootstrap());
-    await emitAsync(mockWebViewProps.onLoadStart);
-
-    await emitAsync(mockWebViewProps.onLoadEnd);
-
-    expect(nonceIn(bootstrap())).not.toBe(first);
   });
 
   it("keeps the negotiated channel across Android's same-document history reports", async () => {
@@ -534,26 +514,42 @@ describe("App bridge channel", () => {
     expect(mockWebViewProps.source).toBe(source);
   });
 
-  it("ignores a message from outside the compiled origin", async () => {
-    await renderApp();
-    await emitAsync(mockWebViewProps.onLoadStart);
-
-    await expect(
-      emitAsync(mockWebViewProps.onMessage, {
-        nativeEvent: { url: "https://evil.example/", data: "{}" },
-      }),
-    ).resolves.toBeUndefined();
+  it("rejects an outside-origin command while forwarding the same valid command from the product", async () => {
+    mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
+    const nonce = await hello();
+    const message = {
+      protocolVersion: MOBILE_PROTOCOL_MAX,
+      channelNonce: nonce,
+      sentAtMs: Date.now(),
+      messageId: "prepare-origin",
+      type: "session.prepare",
+      payload: { startPackage: groundSessionFixture().payload.startPackage },
+    };
+    await emitAsync(mockWebViewProps.onMessage, {
+      nativeEvent: { url: "https://evil.example/", data: JSON.stringify(message) },
+    });
+    expect(mockNavigation.coordinator.dispatch).not.toHaveBeenCalled();
+    expect(
+      decodedMessages().some((reply) => reply.payload?.forMessageId === "prepare-origin"),
+    ).toBe(false);
+    await post(nonce, message);
+    expect(mockNavigation.coordinator.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "session.prepare", messageId: "prepare-origin" }),
+    );
   });
 
-  it("survives a message that is not a string", async () => {
-    await renderApp();
-    await emitAsync(mockWebViewProps.onLoadStart);
+  it("survives a non-string message on a negotiated channel", async () => {
+    mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
+    await hello();
+    const before = [...decodedMessages()];
 
     await expect(
       emitAsync(mockWebViewProps.onMessage, {
         nativeEvent: { url: "https://openmapx.com/", data: undefined },
       }),
     ).resolves.toBeUndefined();
+    expect(mockNavigation.coordinator.dispatch).not.toHaveBeenCalled();
+    expect(decodedMessages()).toEqual(before);
   });
 
   it("advertises no native navigation mode when the foreground graph could not be composed", async () => {
@@ -855,22 +851,6 @@ describe("App bridge channel", () => {
     expect(start).toHaveBeenCalledWith("r1", "en-US");
   });
 
-  it("hands every page command to the navigation coordinator", async () => {
-    mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
-    const nonce = await hello();
-
-    await post(nonce, {
-      messageId: "prepare-1",
-      type: "session.prepare",
-      payload: { startPackage: groundSessionFixture().payload.startPackage },
-    });
-
-    expect(mockNavigation.coordinator.dispatch).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "session.prepare", messageId: "prepare-1" }),
-    );
-    expect(decodedMessages().some((message) => message.type === "native.error")).toBe(false);
-  });
-
   it("disposes the navigation graph when the app unmounts", async () => {
     mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
     const view = await renderApp();
@@ -881,13 +861,6 @@ describe("App bridge channel", () => {
     });
 
     expect(mockNavigation.dispose).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not compose native navigation in a feasibility build", async () => {
-    mockManifest = { ...RELEASE_MANIFEST, release: false, feasibilityMode: true };
-    await renderApp();
-
-    expect(mockCreateForegroundNavigation).not.toHaveBeenCalled();
   });
 });
 
@@ -972,32 +945,22 @@ describe("App load states", () => {
     expect(view.queryByTestId("shell-loading")).toBeNull();
   });
 
-  it("shows a retryable error overlay when the load fails", async () => {
-    const view = await renderApp();
-    await emit(mockWebViewProps.onError);
-    expect(view.getByTestId("shell-state-load-error")).toBeTruthy();
-    expect(view.getByTestId("shell-action-retry")).toBeTruthy();
-  });
-
   it("treats an HTTP error as a failed load", async () => {
     const view = await renderApp();
     await emit(mockWebViewProps.onHttpError);
     expect(view.getByTestId("shell-state-load-error")).toBeTruthy();
   });
 
-  it("returns to loading and remounts the WebView when retry is pressed", async () => {
+  it("keeps a failed load failed until retry returns it to loading", async () => {
     const view = await renderApp();
     await emit(mockWebViewProps.onError);
+    expect(view.getByTestId("shell-state-load-error")).toBeTruthy();
+    expect(view.getByTestId("shell-action-retry")).toBeTruthy();
+    await emit(mockWebViewProps.onLoadEnd);
+    expect(view.getByTestId("shell-state-load-error")).toBeTruthy();
     await fireEvent.press(view.getByTestId("shell-action-retry"));
     expect(view.getByTestId("shell-loading")).toBeTruthy();
     expect(view.queryByTestId("shell-state-load-error")).toBeNull();
-  });
-
-  it("does not resurrect the ready state after an error", async () => {
-    const view = await renderApp();
-    await emit(mockWebViewProps.onError);
-    await emit(mockWebViewProps.onLoadEnd);
-    expect(view.getByTestId("shell-state-load-error")).toBeTruthy();
   });
 });
 
@@ -1053,6 +1016,7 @@ describe("App feasibility surface", () => {
     mockManifest = { ...RELEASE_MANIFEST, release: false, feasibilityMode: true };
     const view = await renderApp();
     expect(view.getByTestId("feasibility-overlay")).toBeTruthy();
+    expect(mockCreateForegroundNavigation).not.toHaveBeenCalled();
     expect(mockRecoveryController.reconcile).not.toHaveBeenCalled();
   });
 });
@@ -1065,39 +1029,9 @@ describe("App fatal configuration", () => {
       const view = await renderApp();
       expect(view.getByTestId("shell-state-fatal-config")).toBeTruthy();
       expect(view.queryByTestId("product-webview")).toBeNull();
+      expect(view.queryByTestId("shell-action-retry")).toBeNull();
     },
   );
-
-  it("offers no action on the fatal state, because none would help", async () => {
-    mockManifest = undefined;
-    const view = await renderApp();
-    expect(view.queryByTestId("shell-action-retry")).toBeNull();
-  });
-});
-
-describe("App WebView protected capabilities", () => {
-  it("denies the page camera and microphone outright", async () => {
-    await renderApp();
-
-    // The shell declares neither permission. A store build that prompts for a
-    // capability it never declared is a rejection rather than a feature.
-    expect(mockWebViewProps.mediaCapturePermissionGrantType).toBe("deny");
-  });
-
-  it("gives the page no geolocation of its own", async () => {
-    await renderApp();
-
-    // A second location producer would race the one that actually keeps working
-    // with the screen off.
-    expect(mockWebViewProps.geolocationEnabled).toBe(false);
-  });
-
-  it("opens no second window", async () => {
-    await renderApp();
-
-    expect(mockWebViewProps.setSupportMultipleWindows).toBe(false);
-    expect(mockWebViewProps.javaScriptCanOpenWindowsAutomatically).toBe(false);
-  });
 });
 
 it("requires native confirmation before ending the exact cold-launch surface owner", async () => {

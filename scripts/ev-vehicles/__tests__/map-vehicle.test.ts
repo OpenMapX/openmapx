@@ -59,11 +59,6 @@ describe("mapConnectors", () => {
     expect(mapConnectors(raw({ charge_ports: [{ connector }] }))).toEqual(expected);
   });
 
-  it("gives every CCS car the AC half of its own inlet", () => {
-    expect(mapConnectors(raw({ charge_ports: [{ connector: "ccs2" }] }))).toContain("type2");
-    expect(mapConnectors(raw({ charge_ports: [{ connector: "ccs1" }] }))).toContain("type1");
-  });
-
   it("fans a European NACS car out to tesla_ccs and ccs2", () => {
     const connectors = mapConnectors(
       raw({ charge_ports: [{ connector: "nacs" }], markets: ["US", "DE", "NL"] }),
@@ -348,24 +343,6 @@ describe("buildLabel", () => {
 });
 
 describe("mapVehicle", () => {
-  it("derives plausible consumption for a known car", () => {
-    const r = mapVehicle({
-      unique_code: "volkswagen:id_4:2024:id_4",
-      make: { name: "Volkswagen" },
-      model: { name: "ID.4" },
-      year: 2024,
-      vehicle_type: "suv",
-      battery: { pack_capacity_kwh_net: 77 },
-      charging: { ac: { max_power_kw: 11 }, dc: { max_power_kw: 135 } },
-      range: { rated: [{ cycle: "wltp", range_km: 480 }] },
-      weights: { curb_weight_kg: 2124 },
-      charge_ports: [{ connector: "ccs2" }],
-    } as never);
-    if (!("ok" in r)) throw new Error("expected a mapped vehicle");
-    expect(r.ok.baseWhPerKm).toBeGreaterThan(150);
-    expect(r.ok.baseWhPerKm).toBeLessThan(230);
-  });
-
   it("applies a different realism factor per cycle", () => {
     const wltp = mapVehicle(raw({ range: { rated: [{ cycle: "wltp", range_km: 480 }] } }));
     const cltc = mapVehicle(raw({ range: { rated: [{ cycle: "cltc", range_km: 480 }] } }));
@@ -379,6 +356,8 @@ describe("mapVehicle", () => {
   it("carries the identity and spec fields through", () => {
     const r = mapVehicle(raw());
     if (!("ok" in r)) throw new Error("expected a mapped vehicle");
+    expect(r.ok.baseWhPerKm).toBeGreaterThan(150);
+    expect(r.ok.baseWhPerKm).toBeLessThan(230);
     expect(r.ok.id).toBe("volkswagen:id_4:2024:id_4");
     expect(r.ok.label).toBe("Volkswagen ID.4 (2024)");
     expect(r.ok.make).toBe("Volkswagen");

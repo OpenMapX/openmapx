@@ -78,11 +78,6 @@ const SOURCE = "nav-route-source";
 const TRAVELED = "nav-route-traveled";
 const REMAINING_CASING = "nav-route-remaining-casing";
 
-function featureCount(): number {
-  const data = fake.state.sources.get(SOURCE)?.data as { features?: unknown[] } | undefined;
-  return data?.features?.length ?? 0;
-}
-
 /** The `f` boundary out of a `["step", ["line-progress"], v0, f, v1]` gradient. */
 function gradientFraction(layerId: string): number {
   const gradient = fake.state.paint.get(layerId)?.["line-gradient"] as unknown[] | undefined;
@@ -107,7 +102,7 @@ function projectX(lng: number): number {
 function projectY(lat: number): number {
   const sin = Math.sin((lat * Math.PI) / 180);
   const y = 0.5 - (0.25 * Math.log((1 + sin) / (1 - sin))) / Math.PI;
-  return y < 0 ? 0 : y > 1 ? 1 : y;
+  return y < 0 ? 0 : Math.min(y, 1);
 }
 function reconstructPositionFromFraction(
   prepared: NavRouteLine,
@@ -140,43 +135,8 @@ if (!preparedRoute) throw new Error("expected a prepared line");
 const routeTotalMeters = preparedRoute.lengthKm * 1000;
 
 describe("NavigationRouteLayer across a style change", () => {
-  it("draws the route line while navigating", () => {
-    render(<NavigationRouteLayer />);
-    expect(fake.state.layers.has(REMAINING)).toBe(true);
-    expect(featureCount()).toBeGreaterThan(0);
-  });
-
-  it("rebuilds its layers after a theme swap without waiting for a new styleVersion", () => {
-    render(<NavigationRouteLayer />);
-    act(() => {
-      fake.map.setStyle({} as never);
-    });
-    // A dark-mode swap calls setStyle, which drops every source and layer. The
-    // styleVersion counter is driven by a one-shot listener that can be missed,
-    // so recovery has to come from the map's own styledata event.
-    expect(fake.state.layers.has(REMAINING)).toBe(true);
-  });
-
-  it("re-pushes the route geometry after a theme swap, not just the empty layers", () => {
-    render(<NavigationRouteLayer />);
-    act(() => {
-      fake.map.setStyle({} as never);
-    });
-    // Recreating the source leaves it empty; without a re-push the driver sees
-    // no route line until something else happens to change the geometry.
-    expect(featureCount()).toBeGreaterThan(0);
-  });
-
   it("loses nothing at all across a style change", () => {
     render(<NavigationRouteLayer />);
-    expectStyleSwapIsLossless(fake);
-  });
-
-  it("keeps the alternates and the active route across two consecutive style changes", () => {
-    render(<NavigationRouteLayer />);
-    act(() => {
-      fake.map.setStyle({} as never);
-    });
     expectStyleSwapIsLossless(fake);
   });
 

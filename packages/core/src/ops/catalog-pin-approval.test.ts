@@ -27,7 +27,6 @@ it("admits only the paired approval identity through the durable policy", () => 
   ).toThrow();
 });
 
-import { verifyFiniteControlEdge } from "../build-artifacts/target-lease";
 import { opsOperationFingerprint } from "./fingerprint";
 
 it.each([
@@ -58,20 +57,4 @@ it.each([
   expect(opsOperationSchema.safeParse({ ...body, kind: "transitousLock.inspect" }).success).toBe(
     false,
   );
-});
-it("allows only catalog activation to reserve the closed paired approval phase", () => {
-  expect(() =>
-    verifyFiniteControlEdge("data-manager", "transit-sync", "paired-pin-commit", "ops-agent"),
-  ).toThrow();
-  expect(() =>
-    verifyFiniteControlEdge(
-      "data-manager",
-      "transit-maintenance",
-      "paired-pin-commit",
-      "ops-agent",
-    ),
-  ).toThrow();
-  expect(() =>
-    verifyFiniteControlEdge("data-manager", "catalog.activate", "paired-pin-commit", "ops-agent"),
-  ).not.toThrow();
 });

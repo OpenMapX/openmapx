@@ -71,10 +71,6 @@ it("renewal refuses an expired timed root after all original identity details we
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 async function api() {
-  expect(
-    existsSync(join(import.meta.dirname, "control-authority.ts")),
-    "missing role-private certified control authority",
-  ).toBe(true);
   return import("./control-authority");
 }
 it("provisions three distinct role keys durably and reuses the exact installation", async () => {
@@ -118,12 +114,7 @@ it("rejects role-key substitution even with the same UID and valid Ed25519 key",
     /role|key|trust/,
   );
 });
-it("provides deadline-only role attestations without target ownership", async () => {
-  const module = await api();
-  expect(module).toHaveProperty("attestParentExecution");
-  expect(module).toHaveProperty("verifyParentExecution");
-});
-it("rejects duplicate control headers and the aggregate header budget", async () => {
+it("rejects duplicate control headers and oversized individual headers", async () => {
   const a = await api();
   expect(() =>
     a.controlHeaders([

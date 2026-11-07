@@ -419,20 +419,25 @@ dbDescribe("durable exact platform preview", () => {
       .update(platformConfigurationPreview)
       .set({ preview: { ...own, privatePurposeProof: privateSentinel } })
       .where(eq(platformConfigurationPreview.id, own.previewId));
-    const { collectOpenMapxRegistration } = await import("../../privacy/openmapx-collectors"),
-      part = await collectOpenMapxRegistration("platform-configuration-previews", {
+    const { streamOpenMapxRegistrationRecords } = await import("../../privacy/openmapx-collectors");
+    const records = [];
+    for await (const record of streamOpenMapxRegistrationRecords(
+      "platform-configuration-previews",
+      {
         userId: actorId,
         cutoffAt: new Date(now.getTime() + 30000),
         database: fixture.db,
-      });
-    expect(part.records).toHaveLength(1);
-    expect(part.records[0]?.data).toMatchObject({
+      },
+    ))
+      records.push(record);
+    expect(records).toHaveLength(1);
+    expect(records[0]?.data).toMatchObject({
       createdAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + 600000).toISOString(),
       consumedAt: null,
       retiredAt: null,
     });
-    expect(JSON.stringify(part)).not.toContain(privateSentinel);
+    expect(JSON.stringify(records)).not.toContain(privateSentinel);
     for (const value of [
       own.previewId,
       foreign.previewId,
@@ -441,8 +446,8 @@ dbDescribe("durable exact platform preview", () => {
       own.authPolicyRevision,
       own.newOrigin,
     ])
-      expect(JSON.stringify(part)).not.toContain(value);
-    expect(Object.keys(part.records[0]!.data).sort()).toEqual([
+      expect(JSON.stringify(records)).not.toContain(value);
+    expect(Object.keys(records[0]!.data).sort()).toEqual([
       "consumedAt",
       "createdAt",
       "expiresAt",

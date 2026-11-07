@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, createFakeMap, type FakeMap, render } from "@/test";
+import { createFakeMap, type FakeMap, render } from "@/test";
 
 const state = vi.hoisted(() => {
   const a = { sourceId: "a", name: "Timetable A" };
@@ -107,27 +107,5 @@ describe("core transit map acquisition receipts", () => {
     expect(fake.state.counts.addLayer.get("vehicle-live-layer")).toBe(added);
     expect(fake.state.counts.removeLayer.get("vehicle-live-layer")).toBeUndefined();
     expect(features("vehicle-live-source")[0].geometry?.coordinates).toEqual([8.01, 50.01]);
-  });
-
-  it("redraws every transit layer with its data after a style rebuild", () => {
-    render(<Layers />);
-    act(() => fake.map.setStyle({} as never));
-
-    for (const layer of [
-      "transit-route-detail-line",
-      "transit-route-detail-stops",
-      "transit-route-detail-current-stop",
-      "vehicle-live-layer",
-      "selected-stop-platforms",
-      "selected-stop-platform-labels",
-    ]) {
-      expect(fake.state.layers.has(layer)).toBe(true);
-    }
-    expect(fake.state.sources.get("transit-route-detail-source")?.data).toMatchObject({
-      geometry: { type: "LineString" },
-    });
-    expect(features("transit-route-detail-stops-source")).toHaveLength(1);
-    expect(features("vehicle-live-source")).toHaveLength(1);
-    expect(features("selected-stop-platform-source")).toHaveLength(1);
   });
 });

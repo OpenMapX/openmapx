@@ -553,11 +553,12 @@ describe("findJunctionDecisionPoints synthetic cases", () => {
     ]);
     const point = findJunctionDecisionPoints(route)[0];
     expect(point.kind).toBe("exit");
+    expect(point.sign).toEqual({ exitNumbers: ["20"] });
     expect(point.activeLanes).toEqual([]);
     expect(point.laneCount).toBeUndefined();
   });
 
-  it("ignores a fork with no flags and no sign", () => {
+  it("ignores a keep with no preceding motorway evidence", () => {
     const route = syntheticRoute([
       { step: { instruction: "Drive" } },
       { step: { instruction: "Keep right", maneuver: { type: "keep", modifier: "right" } } },
@@ -648,16 +649,6 @@ describe("findJunctionDecisionPoints synthetic cases", () => {
     // Eastbound approach peeling north-east: ~45° divergence from the geometry.
     expect(Math.abs(point.divergenceDeg)).toBeGreaterThan(5);
     expect(Math.abs(point.divergenceDeg)).toBeLessThan(60);
-  });
-
-  it("reports no lanes for a step the engine sent none for", () => {
-    const route = syntheticRoute([
-      { step: { instruction: "Drive", motorway: true, maneuver: { type: "depart" } } },
-      { step: { instruction: "Exit right", maneuver: { type: "fork", modifier: "right" } } },
-    ]);
-    const point = findJunctionDecisionPoints(route)[0];
-    expect(point.laneCount).toBeUndefined();
-    expect(point.activeLanes).toEqual([]);
   });
 });
 

@@ -189,13 +189,21 @@ describe("fetchHighLowPredictions", () => {
     expect(log.calls.some((c) => c.level === "warn" && c.message.includes("503"))).toBe(true);
   });
 
-  it("returns null and warns when fetch fails (timeout/abort -> null response)", async () => {
+  it("aborts stalled transport at the deadline and returns null with a warning", async () => {
+    vi.useFakeTimers();
     const log = makeLogger();
-    mockFetch.mockResolvedValue(null);
-
-    const result = await fetchHighLowPredictions("9410230", log);
-
-    expect(result).toBeNull();
+    let signal: AbortSignal | undefined;
+    mockFetch.mockImplementation((_url, options) => {
+      signal = options.signal;
+      return new Promise((_resolve, reject) => {
+        signal?.addEventListener("abort", () => reject(signal?.reason), { once: true });
+      });
+    });
+    const pending = fetchHighLowPredictions("9410230", log);
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(await pending).toBeNull();
+    expect(signal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
     expect(log.calls.some((c) => c.level === "warn" && c.message.includes("fetch failed"))).toBe(
       true,
     );
@@ -294,8 +302,8 @@ describe("fetchTideCurve", () => {
     ).toBe(true);
   });
 
-  it("returns null when fetch returns null (timeout)", async () => {
-    mockFetch.mockResolvedValue(null);
+  it("returns null when curve transport rejects", async () => {
+    mockFetch.mockRejectedValue(new Error("network unavailable"));
 
     const result = await fetchTideCurve("9410230", makeLogger());
 
@@ -527,8 +535,8 @@ describe("fetchLatestMet", () => {
     expect(result).toEqual({ time: "2025-06-14 12:00", airTempF: 68.0 });
   });
 
-  it("returns null when every fetch fails (null responses)", async () => {
-    mockFetch.mockResolvedValue(null);
+  it("returns null when every met transport rejects", async () => {
+    mockFetch.mockRejectedValue(new Error("network unavailable"));
 
     const result = await fetchLatestMet("9410230", makeLogger());
 

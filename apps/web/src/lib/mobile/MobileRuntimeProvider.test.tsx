@@ -1,6 +1,6 @@
 import { setNavigationAuthority, useNavigationStore } from "@openmapx/core";
 import { MOBILE_PROTOCOL_MAX, MOBILE_PROTOCOL_MIN } from "@openmapx/core/navigation";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MobileRuntimeProvider } from "./MobileRuntimeProvider";
 import { CHANNEL_GLOBAL } from "./mobileShellEnvironment";
@@ -103,19 +103,10 @@ describe("MobileRuntimeProvider in an ordinary browser", () => {
     expect(text("state")).toBe("browser");
     expect(text("browser-authority")).toBe("true");
     expect(text("in-shell")).toBe("false");
-  });
-
-  it("changes no browser capability", () => {
-    mount({});
-
     expect(text("microphone")).toBe("true");
-  });
-
-  it("allows both navigation modes", () => {
-    mount({});
-
     expect(text("ground")).toBe("true");
     expect(text("transit")).toBe("true");
+    expect(useNavigationStore.getState().navigationAuthority).toBe("browser");
   });
 
   it("leaves page zoom alone", () => {
@@ -134,38 +125,26 @@ describe("MobileRuntimeProvider inside the shell", () => {
   it("starts negotiating rather than in browser authority", () => {
     // Even one frame of `browser` inside an installed app would let the browser
     // navigation engine start.
-    mount(shellScope().scope);
 
-    expect(text("state")).toBe("negotiating");
-    expect(text("browser-authority")).toBe("false");
-  });
-
-  it("removes the shell-forbidden capabilities on the first render", () => {
-    mount(shellScope().scope);
-
-    expect(text("in-shell")).toBe("true");
-    expect(text("microphone")).toBe("false");
-  });
-
-  it("stops the interface from zooming", () => {
     document.head.innerHTML =
       '<meta name="viewport" content="width=device-width, maximum-scale=5">';
-    mount(shellScope().scope);
+    try {
+      const shell = shellScope();
+      mount(shell.scope);
 
-    expect(document.querySelector('meta[name="viewport"]')?.getAttribute("content")).toBe(
-      "width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no",
-    );
-    document.head.innerHTML = "";
-  });
-
-  it("becomes compatible once the shell answers", async () => {
-    const shell = shellScope();
-    mount(shell.scope);
-
-    deliverHello(shell);
-
-    await waitFor(() => expect(text("state")).toBe("native-compatible"));
-    expect(text("browser-authority")).toBe("false");
+      expect(text("state")).toBe("negotiating");
+      expect(text("browser-authority")).toBe("false");
+      expect(text("in-shell")).toBe("true");
+      expect(text("microphone")).toBe("false");
+      expect(useNavigationStore.getState().navigationAuthority).toBe("native");
+      expect(shell.sent).toHaveLength(1);
+      expect(JSON.parse(shell.sent[0]).type).toBe("web.hello");
+      expect(document.querySelector('meta[name="viewport"]')?.getAttribute("content")).toBe(
+        "width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no",
+      );
+    } finally {
+      document.head.innerHTML = "";
+    }
   });
 
   it("reports only the modes the shell actually has a processor for", async () => {
@@ -175,6 +154,8 @@ describe("MobileRuntimeProvider inside the shell", () => {
     deliverHello(shell);
 
     await waitFor(() => expect(text("ground")).toBe("true"));
+    expect(text("state")).toBe("native-compatible");
+    expect(text("browser-authority")).toBe("false");
     // Claiming transit would strand the rider on a session nothing can advance.
     expect(text("transit")).toBe("false");
   });
@@ -195,14 +176,6 @@ describe("MobileRuntimeProvider inside the shell", () => {
 
     await waitFor(() => expect(text("state")).toBe("native-error"));
     expect(text("browser-authority")).toBe("false");
-  });
-
-  it("sends the handshake as soon as it mounts", async () => {
-    const shell = shellScope();
-    mount(shell.scope);
-
-    await waitFor(() => expect(shell.sent).toHaveLength(1));
-    expect(JSON.parse(shell.sent[0]).type).toBe("web.hello");
   });
 });
 
@@ -234,24 +207,6 @@ describe("MobileRuntimeProvider read model", () => {
         ...overrides,
       },
     },
-  });
-
-  it("adopts a full snapshot", async () => {
-    const shell = await negotiated();
-
-    shell.deliver(snapshot());
-
-    await waitFor(() => expect(text("revision")).toBe("4"));
-  });
-
-  it("applies the next delta", async () => {
-    const shell = await negotiated();
-    shell.deliver(snapshot());
-    await waitFor(() => expect(text("revision")).toBe("4"));
-
-    shell.deliver(snapshot({ type: "progress", revision: 5, kind: undefined }));
-
-    await waitFor(() => expect(text("revision")).toBe("5"));
   });
 
   it("asks for a full snapshot rather than rendering across a gap", async () => {
@@ -346,36 +301,6 @@ describe("MobileRuntimeProvider store integration", () => {
     },
   });
 
-  it("takes navigation authority on the first render, before any handshake", () => {
-    mount(shellScope().scope);
-
-    // Waiting for the handshake would leave the browser engine free to start a
-    // second session during negotiation.
-    expect(useNavigationStore.getState().navigationAuthority).toBe("native");
-  });
-
-  it("leaves an ordinary browser under browser authority", () => {
-    mount({});
-
-    expect(useNavigationStore.getState().navigationAuthority).toBe("browser");
-  });
-
-  it("projects a native snapshot into the fields the UI reads", async () => {
-    const shell = shellScope();
-    mount(shell.scope);
-    deliverHello(shell);
-    await waitFor(() => expect(text("state")).toBe("native-compatible"));
-
-    shell.deliver(snapshot());
-
-    await waitFor(() => expect(useNavigationStore.getState().nativeRevision).toBe(4));
-    const state = useNavigationStore.getState();
-    expect(state.status).toBe("navigating");
-    expect(state.currentSpeedLimit).toBe(50);
-    expect(state.permissionMode).toBe("background");
-    expect(state.progress).toEqual({ alongMeters: 100 });
-  });
-
   it("ignores late transit full responses but accepts a newer on-time prediction", async () => {
     const shell = shellScope();
     mount(shell.scope);
@@ -440,36 +365,39 @@ describe("MobileRuntimeProvider store integration", () => {
     await waitFor(() => expect(text("state")).toBe("native-compatible"));
 
     shell.deliver(snapshot());
+    await waitFor(() => expect(text("store-revision")).toBe("4"));
+    expect(text("revision")).toBe("4");
+    expect(useNavigationStore.getState()).toMatchObject({
+      nativeRevision: 4,
+      status: "navigating",
+      currentSpeedLimit: 50,
+      permissionMode: "background",
+      progress: { alongMeters: 100 },
+    });
     shell.deliver(
       snapshot({ type: "progress", revision: 5, kind: undefined, progress: { alongMeters: 200 } }),
     );
+    await waitFor(() => expect(text("store-revision")).toBe("5"));
+    expect(text("revision")).toBe("5");
+    expect(useNavigationStore.getState().progress).toEqual({ alongMeters: 200 });
     shell.deliver(
       snapshot({ type: "progress", revision: 6, kind: undefined, progress: { alongMeters: 300 } }),
     );
 
-    await waitFor(() => expect(text("store-revision")).toBe("6"));
-    expect(text("revision")).toBe("6");
+    // Preserve the original batched-update regression after the per-step projection controls.
+    shell.deliver(
+      snapshot({ type: "progress", revision: 7, kind: undefined, progress: { alongMeters: 400 } }),
+    );
+    shell.deliver(
+      snapshot({ type: "progress", revision: 8, kind: undefined, progress: { alongMeters: 500 } }),
+    );
+    await waitFor(() => expect(text("store-revision")).toBe("8"));
+    expect(text("revision")).toBe("8");
     const renderPhaseUpdates = errors.mock.calls.filter((call) =>
       String(call[0]).includes("while rendering a different component"),
     );
     errors.mockRestore();
     expect(renderPhaseUpdates).toEqual([]);
-  });
-
-  it("advances the store by one revision on a delta", async () => {
-    const shell = shellScope();
-    mount(shell.scope);
-    deliverHello(shell);
-    await waitFor(() => expect(text("state")).toBe("native-compatible"));
-    shell.deliver(snapshot());
-    await waitFor(() => expect(useNavigationStore.getState().nativeRevision).toBe(4));
-
-    shell.deliver(
-      snapshot({ type: "progress", revision: 5, kind: undefined, progress: { alongMeters: 200 } }),
-    );
-
-    await waitFor(() => expect(useNavigationStore.getState().nativeRevision).toBe(5));
-    expect(useNavigationStore.getState().progress).toEqual({ alongMeters: 200 });
   });
 
   it("updates displayed walking progress in order and heals a revision gap with a full snapshot", async () => {
@@ -559,33 +487,24 @@ describe("MobileRuntimeProvider store integration", () => {
     await waitFor(() => expect(text("walking-readout")).toBe("2:40:8.003"));
   });
 
-  it("reconciles once when the app returns to the foreground", async () => {
+  it.each(["visibilitychange", "online"] as const)("reconciles once after %s", async (event) => {
     const shell = shellScope();
     mount(shell.scope);
     deliverHello(shell);
     await waitFor(() => expect(text("state")).toBe("native-compatible"));
     await waitFor(() => expect(shell.isListening("visibilitychange")).toBe(true));
+    expect(shell.isListening("online")).toBe(true);
     shell.sent.length = 0;
 
-    shell.fire("visibilitychange");
+    act(() => shell.fire(event));
 
     await waitFor(() => expect(shell.sent.length).toBeGreaterThan(0));
-    expect(JSON.parse(shell.sent[0]).type).toBe("snapshot.request");
-  });
-
-  it("reconciles when connectivity returns", async () => {
-    const shell = shellScope();
-    mount(shell.scope);
-    deliverHello(shell);
-    await waitFor(() => expect(text("state")).toBe("native-compatible"));
-    await waitFor(() => expect(shell.isListening("online")).toBe(true));
-    shell.sent.length = 0;
-
-    shell.fire("online");
-
-    await waitFor(() =>
-      expect(shell.sent.some((raw) => JSON.parse(raw).type === "snapshot.request")).toBe(true),
-    );
+    expect(shell.sent.map((raw) => JSON.parse(raw).type)).toEqual(["snapshot.request"]);
+    act(() => {
+      shell.fire("visibilitychange");
+      shell.fire("online");
+    });
+    expect(shell.sent.map((raw) => JSON.parse(raw).type)).toEqual(["snapshot.request"]);
   });
 });
 

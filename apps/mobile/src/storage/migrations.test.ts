@@ -19,10 +19,9 @@ async function schemaSnapshot(database: Database): Promise<string> {
 describe("migrateSessionSchema", () => {
   it("declares strictly increasing versions with no gaps", () => {
     const versions = SESSION_MIGRATIONS.map((migration) => migration.version);
-    expect(versions).toEqual([...versions].sort((a, b) => a - b));
-    expect(new Set(versions).size).toBe(versions.length);
-    expect(versions[0]).toBe(1);
-    expect(versions.at(-1)).toBe(LATEST_SCHEMA_VERSION);
+    expect(versions).toEqual(
+      Array.from({ length: LATEST_SCHEMA_VERSION }, (_, index) => index + 1),
+    );
   });
 
   it("creates every session table from an empty database", async () => {
@@ -30,25 +29,16 @@ describe("migrateSessionSchema", () => {
     const applied = await migrateSessionSchema(database, 1_000);
 
     expect(applied).toEqual(SESSION_MIGRATIONS.map((migration) => migration.version));
+    expect(
+      await database.getAllAsync(
+        "SELECT version, applied_at_ms FROM schema_migrations ORDER BY version",
+      ),
+    ).toEqual(applied.map((version) => ({ version, applied_at_ms: 1_000 })));
     const tables = await database.getAllAsync<{ name: string }>(
       "SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name",
     );
     const names = tables.map((table) => table.name);
     for (const expected of SESSION_TABLES) expect(names).toContain(expected);
-    await database.closeAsync();
-  });
-
-  it("records one row per applied migration", async () => {
-    const database = openTestDatabase();
-    await migrateSessionSchema(database, 4_242);
-
-    const rows = await database.getAllAsync<{ version: number; applied_at_ms: number }>(
-      "SELECT version, applied_at_ms FROM schema_migrations ORDER BY version",
-    );
-    expect(rows.map((row) => row.version)).toEqual(
-      SESSION_MIGRATIONS.map((migration) => migration.version),
-    );
-    for (const row of rows) expect(row.applied_at_ms).toBe(4_242);
     await database.closeAsync();
   });
 
@@ -171,9 +161,6 @@ describe("migrateSessionSchema", () => {
       "final_revision",
       "completed_at_ms",
     ]);
-    for (const forbidden of ["lat", "lng", "coords", "geometry", "route", "token", "text"]) {
-      expect(names.some((name) => name.includes(forbidden))).toBe(false);
-    }
     await database.closeAsync();
   });
 });

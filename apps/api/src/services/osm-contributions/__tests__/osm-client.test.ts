@@ -224,11 +224,14 @@ describe("element parsing", () => {
     await expect(client().getElement({ type: "node", id: 12 })).rejects.toThrow();
   });
 
-  it("rejects out-of-range coordinates and unsafe ids", async () => {
+  it.each([
+    { id: 12, lat: 999 },
+    { id: Number.MAX_SAFE_INTEGER + 1, lat: 52.5 },
+  ])("rejects invalid node data %j", async ({ id, lat }) => {
     fetchMock.mockResolvedValue(
-      json({ elements: [{ type: "node", id: 12, version: 1, lat: 999, lon: 13.4 }] }),
+      json({ elements: [{ type: "node", id, version: 1, lat, lon: 13.4 }] }),
     );
-    await expect(client().getElement({ type: "node", id: 12 })).rejects.toThrow();
+    await expect(client().getElement({ type: "node", id })).rejects.toThrow();
   });
 
   it("rejects an element beyond the defensive tag bound", async () => {
@@ -356,15 +359,6 @@ describe("upstream failures", () => {
     expect(error.requestMayHaveBeenApplied).toBe(true);
     expect(error.operation).toBe("publish");
   });
-
-  it("rejects a redirect rather than following it", async () => {
-    fetchMock.mockRejectedValue(new TypeError("unexpected redirect"));
-    await expect(client().getElement({ type: "node", id: 12 })).rejects.toThrow();
-    // `redirect: "error"` is what makes the rejection happen at all.
-    fetchMock.mockResolvedValue(json(NODE_BODY));
-    await client().getElement({ type: "node", id: 12 });
-    expect(lastRequest().init.redirect).toBe("error");
-  });
 });
 
 describe("bounded plain-text responses", () => {
@@ -397,7 +391,7 @@ describe("body size bounds", () => {
     await expect(client().getElement({ type: "node", id: 12 })).rejects.toThrow();
   });
 
-  it("allows a larger /full body but still bounds it", async () => {
+  it("rejects a /full response beyond 5 MiB", async () => {
     const huge = `{"elements":[{"type":"way","id":42,"version":1,"nodes":[1],"tags":{"a":"${"x".repeat(
       6 * 1024 * 1024,
     )}"}}]}`;

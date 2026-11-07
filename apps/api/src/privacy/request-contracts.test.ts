@@ -15,6 +15,10 @@ describe("privacy request contracts", () => {
     expect(isValidRequestTransition("ready", "withdrawn")).toBe(true);
     expect(isValidRequestTransition("delivered", "withdrawn")).toBe(false);
     expect(() => assertValidRequestTransition("ready", "ready")).toThrow();
+    expect(() => assertValidRequestTransition("received", "closed")).toThrow(
+      "Invalid privacy request transition: received -> closed",
+    );
+    expect(() => assertValidRequestTransition("ready", "withdrawn")).not.toThrow();
   });
 
   it("defaults self-service requests to the combined package", () => {
@@ -90,7 +94,9 @@ describe("privacy request contracts", () => {
   });
 
   it("fails closed for unresolved required tasks", () => {
-    expect(() => assertAssemblyReady([{ required: true, status: "pending" }])).toThrow();
+    expect(() => assertAssemblyReady([{ required: true, status: "pending" }])).toThrow(
+      "unresolved",
+    );
     expect(() => assertAssemblyReady([{ required: true, status: "operator_review" }])).toThrow();
     expect(() => assertAssemblyReady([{ required: false, status: "pending" }])).not.toThrow();
   });

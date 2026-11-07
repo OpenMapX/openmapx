@@ -146,22 +146,34 @@ describe("terrain on the vector basemap", () => {
   });
 
   it("restores missing layers after a style reload", () => {
-    const { map, resetStyle } = fakeMap();
+    const { map, sources, layers, resetStyle } = fakeMap();
     syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], "full", options);
+    const initialSources = [...sources];
+    const initialLayers = [...layers];
+    expect(initialSources.length).toBeGreaterThan(0);
+    expect(initialLayers.length).toBeGreaterThan(0);
     resetStyle();
     syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], "full", options);
-    expect(map.addLayer).toHaveBeenCalledTimes(8);
-    expect(map.addSource).toHaveBeenCalledTimes(6);
+    expect([...layers]).toEqual(initialLayers);
+    expect([...sources]).toEqual(initialSources);
     expect(map.setTerrain).toHaveBeenCalledTimes(2);
   });
 
   it("does not repeatedly mutate the style on styledata", () => {
     const { map } = fakeMap();
     syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], "full", options);
+    const writes = [
+      map.addSource.mock.calls.length,
+      map.addLayer.mock.calls.length,
+      map.setTerrain.mock.calls.length,
+    ];
+    for (const count of writes) expect(count).toBeGreaterThan(0);
     syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], "full", options);
-    expect(map.addSource).toHaveBeenCalledTimes(3);
-    expect(map.addLayer).toHaveBeenCalledTimes(4);
-    expect(map.setTerrain).toHaveBeenCalledTimes(1);
+    expect([
+      map.addSource.mock.calls.length,
+      map.addLayer.mock.calls.length,
+      map.setTerrain.mock.calls.length,
+    ]).toEqual(writes);
     expect(map.setPaintProperty).not.toHaveBeenCalled();
   });
 });

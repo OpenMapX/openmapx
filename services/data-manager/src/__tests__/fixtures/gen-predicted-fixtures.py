@@ -27,8 +27,8 @@ day = [100,100,100,100,100,100,100, 45,45,45, 80,80,80,80,80,80,80, 40,40,40, 10
 rush = day * 7
 b1 = expand(all50, 50); c1, e1 = enc(b1)
 b2 = expand(rush, 100); c2, e2 = enc(b2)
-json.dump({"all50": {"buckets2016": b1, "coefs": c1, "base64": e1, "freeFlow": 50, "hourly": all50},
-           "rush":  {"hourly_day": day, "freeFlow": 100, "buckets2016": b2, "coefs": c2, "base64": e2}},
+json.dump({"all50": {"buckets2016": b1, "base64": e1, "freeFlow": 50, "hourly": all50},
+           "rush":  {"hourly_day": day, "freeFlow": 100, "buckets2016": b2, "base64": e2}},
           open("predicted-fixtures.json", "w"))
 print("all50 base64:", e1)
 print("rush  base64:", e2)

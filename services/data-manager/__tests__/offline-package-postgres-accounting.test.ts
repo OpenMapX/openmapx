@@ -229,7 +229,7 @@ integration("PostgreSQL offline-package accounting", () => {
     }
   });
 
-  it("serializes 50 process-level contenders and restores ownership/runnable state", async () => {
+  it("serializes 50 contenders across PostgreSQL store instances and restores ownership/runnable state", async () => {
     const storeA = new PostgresOfflinePackageAccountingStore(sql);
     const storeB = new PostgresOfflinePackageAccountingStore(sql);
     const first = record(1);

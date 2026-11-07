@@ -4,16 +4,20 @@ import { applyRequiredMigrations } from "./startup-migrations.js";
 describe("applyRequiredMigrations", () => {
   it("completes the required migration before startup can continue", async () => {
     const order: string[] = [];
-
-    await applyRequiredMigrations({
+    const migration = Promise.withResolvers<void>();
+    const startup = applyRequiredMigrations({
       migrationsDirectory: "/app/migrations",
       directoryExists: () => true,
       migrate: async () => {
         order.push("migrate");
+        await migration.promise;
       },
-    });
-    order.push("continue-startup");
+    }).then(() => order.push("continue-startup"));
 
+    await Promise.resolve();
+    expect(order).toEqual(["migrate"]);
+    migration.resolve();
+    await startup;
     expect(order).toEqual(["migrate", "continue-startup"]);
   });
 

@@ -234,54 +234,20 @@ describe("mergeRegionalStations", () => {
       coordinates: [13.41, 52.52],
       sources: ["test"],
     });
-    const original = { ...station };
-    const input = [station];
+    const secondary = makeStation({
+      id: "s2",
+      name: "Supplement",
+      coordinates: [13.41, 52.52003],
+      sources: ["supplement"],
+      address: { street: "Supplement street" },
+      website: "https://supplement.example",
+    });
+    const input = [station, secondary];
+    const original = structuredClone(input);
 
     mergeRegionalStations(input);
 
-    expect(input).toHaveLength(1);
-    expect(station.id).toBe(original.id);
-    expect(station.name).toBe(original.name);
-  });
-
-  it("enriches capacity from secondary when primary has undefined capacity", () => {
-    const primary = makeStation({
-      id: "p1",
-      name: "Primary",
-      coordinates: [13.41, 52.52],
-      sources: ["de-cambio"],
-      // capacity is undefined by default
-    });
-    const secondary = makeStation({
-      id: "s1",
-      name: "Secondary",
-      coordinates: [13.41, 52.52001],
-      sources: ["open-data"],
-      capacity: 15,
-    });
-
-    const result = mergeRegionalStations([primary, secondary]);
-    expect(result[0].capacity).toBe(15);
-  });
-
-  it("does not override primary capacity with secondary capacity", () => {
-    const primary = makeStation({
-      id: "p1",
-      name: "Primary",
-      coordinates: [13.41, 52.52],
-      sources: ["de-cambio"],
-      capacity: 8,
-    });
-    const secondary = makeStation({
-      id: "s1",
-      name: "Secondary",
-      coordinates: [13.41, 52.52001],
-      sources: ["open-data"],
-      capacity: 20,
-    });
-
-    const result = mergeRegionalStations([primary, secondary]);
-    expect(result[0].capacity).toBe(8);
+    expect(input).toEqual(original);
   });
 
   it("keeps a live station's availability when a static station within 50 m is seen first", () => {

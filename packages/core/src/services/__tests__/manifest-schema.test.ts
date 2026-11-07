@@ -122,11 +122,6 @@ describe("service manifest secret field names", () => {
     );
     expect(result.valid).toBe(false);
   });
-
-  it("accepts a service with no operator configuration", () => {
-    const result = validateServiceManifest({ ...minimalManifest }, { firstParty: false });
-    expect(result.valid).toBe(true);
-  });
 });
 
 describe("service manifest gpu field", () => {

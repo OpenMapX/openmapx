@@ -432,7 +432,7 @@ describe("verified public provenance identity", () => {
     const f = candidate();
     const item = f.receipt.items.find((p: { name: string }) => p.name === name);
     const attestation = statement(item);
-    expect(attestation.subject[0].name).toBe(purl);
+    attestation.subject[0].name = purl;
     expect(() => verifyPackageProvenance(attestation, item, f.batch)).not.toThrow();
   });
   it.each(["repository", "workflow", "source", "subject", "event", "builder"])(

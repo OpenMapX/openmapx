@@ -193,22 +193,24 @@ describe("autocomplete", () => {
     expect(results[0].sublabel).toBe("Berlin, Unter den Linden 1, Berlin, Germany");
   });
 
-  it("sets sublabel to undefined when label equals full buildLabel", async () => {
+  it.each([
+    ["omits a redundant sublabel when the full label equals the name", undefined, undefined],
+    ["retains country context when it repeats the name", "Germany", "Germany, Germany"],
+  ])("%s", async (_label, country, sublabel) => {
     const feature = makeBerlinFeature({
       name: "Germany",
       street: undefined,
       housenumber: undefined,
       city: undefined,
+      country,
     });
     mockFetch.mockResolvedValueOnce(mockOk(makePhotonResponse([feature])));
     const { photonService } = await loadModule();
 
     const results = await photonService.autocomplete("Germany");
 
-    // label = name = "Germany", buildLabel = "Germany, Germany" (name + country)
-    // These are different, so sublabel should be defined
     expect(results[0].label).toBe("Germany");
-    expect(results[0].sublabel).toBe("Germany, Germany");
+    expect(results[0].sublabel).toBe(sublabel);
   });
 
   it("uses buildLabel as label when name is missing", async () => {

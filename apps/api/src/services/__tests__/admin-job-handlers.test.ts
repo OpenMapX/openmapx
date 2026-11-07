@@ -221,7 +221,10 @@ describe("admin job handlers", () => {
           input: raw,
         });
         const ctx = dataCtx(payload);
-        await handleDataOperationJob(ctx);
+        const result = await handleDataOperationJob(ctx);
+        if (id === "overture-sync")
+          expect(result).toEqual({ operation: "overture-sync", resourceId: "europe/germany" });
+        expect(runCliMock).not.toHaveBeenCalled();
         expect(runAdminOperationMock.mock.calls).toEqual([[ctx, effect, `admin-job.data.${id}`]]);
         if (id === "overture-conflate")
           expect(audit.mock.calls[0][0].details).toEqual({
@@ -281,25 +284,6 @@ describe("admin job handlers", () => {
       } finally {
         await app.close();
       }
-    });
-
-    it("maps a validated catalog input to a typed agent operation", async () => {
-      runAdminOperationMock.mockClear();
-      const ctx = dataCtx({
-        operation: "overture-sync",
-        version: 1,
-        input: { region: "europe/germany" },
-      });
-      await expect(handleDataOperationJob(ctx)).resolves.toEqual({
-        operation: "overture-sync",
-        resourceId: "europe/germany",
-      });
-      expect(runAdminOperationMock).toHaveBeenCalledWith(
-        ctx,
-        { kind: "data.overtureSync", regionId: "europe/germany" },
-        "admin-job.data.overture-sync",
-      );
-      expect(runCliMock).not.toHaveBeenCalled();
     });
 
     it("re-validates the stored input before submitting", async () => {
@@ -612,19 +596,22 @@ describe("admin job handlers", () => {
       );
     });
 
-    it("rejects flag-shaped and unknown service IDs before submitting", async () => {
-      runAdminOperationMock.mockClear();
-      await expect(
-        handleServiceBulkJob({
-          jobId: "job",
-          payload: { action: "start", serviceIds: ["--all"] },
-          signal: new AbortController().signal,
-          log: vi.fn(),
-          setProgress: vi.fn(),
-          checkpoint: vi.fn(),
-        }),
-      ).rejects.toThrow();
-      expect(runAdminOperationMock).not.toHaveBeenCalled();
-    });
+    it.each(["--all", "missing-service"])(
+      "rejects service ID %s before submitting",
+      async (serviceId) => {
+        runAdminOperationMock.mockClear();
+        await expect(
+          handleServiceBulkJob({
+            jobId: "job",
+            payload: { action: "start", serviceIds: [serviceId] },
+            signal: new AbortController().signal,
+            log: vi.fn(),
+            setProgress: vi.fn(),
+            checkpoint: vi.fn(),
+          }),
+        ).rejects.toThrow();
+        expect(runAdminOperationMock).not.toHaveBeenCalled();
+      },
+    );
   });
 });

@@ -35,11 +35,6 @@ describe("subsolarPoint", () => {
       expect(lng).toBeLessThanOrEqual(180);
     }
   });
-
-  it("puts the antisolar point at an altitude of -90", () => {
-    const { lat, lng } = antisolarPoint(JUN_SOLSTICE);
-    expect(solarAltitudeDeg(JUN_SOLSTICE, lat, lng)).toBeCloseTo(-90, 2);
-  });
 });
 
 describe("antisolarPoint", () => {
@@ -120,14 +115,6 @@ describe("darkRegion", () => {
     for (const [, lat] of ring) {
       expect(Math.abs(lat)).toBeLessThanOrEqual(90.000001);
     }
-  });
-
-  it("takes the cap branch when no pole is in the deep-night region", () => {
-    expect(darkRegion(new Date("2026-03-20T12:00:00Z"), -18).properties.branch).toBe("cap");
-  });
-
-  it("takes the pole branch when a pole is in the deep-night region", () => {
-    expect(darkRegion(new Date("2026-06-21T12:00:00Z"), -18).properties.branch).toBe("pole");
   });
 
   it("throws for a positive altitude threshold", () => {

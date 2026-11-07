@@ -397,6 +397,8 @@ describe("GET /maptiler/*", () => {
   });
 
   it("returns 503 when no MapTiler key is configured", async () => {
+    vi.stubEnv("MAPTILER_KEY", undefined);
+    vi.stubEnv("NEXT_PUBLIC_MAPTILER_KEY", undefined);
     vi.stubGlobal("fetch", vi.fn());
 
     const res = await app.inject({

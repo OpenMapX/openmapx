@@ -44,18 +44,6 @@ describe("navigationStore", () => {
   beforeEach(() => useNavigationStore.getState().stopNavigation());
   afterEach(() => vi.useRealTimers());
 
-  it("starts ground navigation", () => {
-    useNavigationStore.getState().startGroundNavigation(route, "driving", [
-      [0, 0],
-      [1, 1],
-    ]);
-    const s = useNavigationStore.getState();
-    expect(s.status).toBe("navigating");
-    expect(s.mode).toBe("driving");
-    expect(s.route).toBe(route);
-    expect(s.cameraMode).toBe("follow");
-  });
-
   it("expires the held route's current road-condition assessment at its lease boundary", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-12T12:00:00Z"));
@@ -131,6 +119,12 @@ describe("navigationStore", () => {
       ],
       [alt],
     );
+    expect(useNavigationStore.getState()).toMatchObject({
+      status: "navigating",
+      mode: "driving",
+      cameraMode: "follow",
+      route,
+    });
     expect(useNavigationStore.getState().routes).toHaveLength(2);
     expect(useNavigationStore.getState().activeRouteIndex).toBe(0);
 
@@ -233,18 +227,6 @@ describe("navigationStore", () => {
     expect(useNavigationStore.getState().progress).toBeNull();
   });
 
-  it("clears live speed limits on reroute (they index the old geometry)", () => {
-    const store = useNavigationStore.getState();
-    store.startGroundNavigation(route, "driving", [
-      [0, 0],
-      [1, 1],
-    ]);
-    store.setLiveSpeedLimits([50, 70, 70]);
-    expect(useNavigationStore.getState().liveSpeedLimits).toEqual([50, 70, 70]);
-    store.applyReroute({ ...route, distance: 200 } as Route);
-    expect(useNavigationStore.getState().liveSpeedLimits).toBeNull();
-  });
-
   it("completeArrival then stop resets", () => {
     const store = useNavigationStore.getState();
     store.startGroundNavigation(route, "driving", [
@@ -284,21 +266,6 @@ describe("navigationStore", () => {
     expect(s.transitProgress).toBeNull();
   });
 
-  it("applyTransitProgress stores progress", () => {
-    const store = useNavigationStore.getState();
-    store.startTransitNavigation(itinerary);
-    const tp: TransitProgress = {
-      currentLegIndex: 1,
-      snapped: [1, 2],
-      fractionAlongLeg: 0.5,
-      deviationMeters: 12,
-      arrived: false,
-      phase: "riding",
-    };
-    store.applyTransitProgress(tp);
-    expect(useNavigationStore.getState().transitProgress).toBe(tp);
-  });
-
   it("stopNavigation resets kind/itinerary/transitProgress", () => {
     const store = useNavigationStore.getState();
     store.startTransitNavigation(itinerary);
@@ -310,6 +277,26 @@ describe("navigationStore", () => {
       arrived: false,
       phase: "walking",
     });
+    expect(useNavigationStore.getState().transitProgress?.phase).toBe("walking");
+    store.startGroundNavigation(route, "driving", [
+      [0, 0],
+      [1, 1],
+    ]);
+    expect(useNavigationStore.getState()).toMatchObject({
+      kind: "ground",
+      itinerary: null,
+      transitProgress: null,
+    });
+    store.startTransitNavigation(itinerary);
+    store.applyTransitProgress({
+      currentLegIndex: 1,
+      snapped: [1, 2],
+      fractionAlongLeg: 0.5,
+      deviationMeters: 12,
+      arrived: false,
+      phase: "riding",
+    });
+    expect(useNavigationStore.getState().transitProgress?.phase).toBe("riding");
     store.stopNavigation();
     const s = useNavigationStore.getState();
     expect(s.status).toBe("idle");
@@ -341,18 +328,34 @@ describe("navigationStore", () => {
     s = useNavigationStore.getState();
     expect(s.transitProgress).toBeNull();
   });
-
-  it("startGroundNavigation resets transit bits", () => {
-    const store = useNavigationStore.getState();
-    store.startTransitNavigation(itinerary);
-    store.startGroundNavigation(route, "driving", [
-      [0, 0],
-      [1, 1],
-    ]);
-    const s = useNavigationStore.getState();
-    expect(s.kind).toBe("ground");
-    expect(s.itinerary).toBeNull();
-    expect(s.transitProgress).toBeNull();
+  it("rejects another selected vehicle without replacing the itinerary and marks live data unavailable", () => {
+    const current = {
+      ...itinerary,
+      legs: [
+        {
+          mode: "bus",
+          tripId: "selected",
+          from: { name: "A", lat: 0, lng: 0 },
+          to: { name: "B", lat: 0, lng: 0.02 },
+          startTime: "2020-01-01T00:00:00Z",
+          endTime: "2020-01-01T00:10:00Z",
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [0, 0],
+              [0.02, 0],
+            ],
+          },
+        },
+      ],
+    } as TripItinerary;
+    useNavigationStore.getState().startTransitNavigation(current);
+    const other = structuredClone(current);
+    other.legs[0].tripId = "another";
+    useNavigationStore.getState().updateItinerary(other);
+    expect(useNavigationStore.getState().itinerary).toBe(current);
+    expect(useNavigationStore.getState().liveDataUnavailable).toBe(true);
+    expect(useNavigationStore.getState().transitRefreshUnavailable).toBe(true);
   });
 });
 
@@ -394,6 +397,7 @@ describe("navigationStore applyGroundFix", () => {
     const store = useNavigationStore.getState();
     store.setWeakGps(true);
     store.setOffRoute(true);
+    store.setCoasting(true);
 
     let seen: {
       progress: NavProgress | null;
@@ -426,6 +430,7 @@ describe("navigationStore applyGroundFix", () => {
     unsubscribe();
 
     expect(calls).toBe(1);
+    expect(useNavigationStore.getState().progress).toBe(progress);
     // Every field must already carry its new value in that one notification —
     // no subscriber ever observes a half-applied fix.
     expect(seen).toEqual({
@@ -435,16 +440,6 @@ describe("navigationStore applyGroundFix", () => {
       currentSpeedLimit: 50,
       coasting: false,
     });
-  });
-
-  it("preserves the progress object identity", () => {
-    useNavigationStore.getState().applyGroundFix({
-      progress,
-      weakGps: false,
-      offRoute: false,
-      currentSpeedLimit: null,
-    });
-    expect(useNavigationStore.getState().progress).toBe(progress);
   });
 
   it("keeps coasting when the update omits it (synthetic fix)", () => {
@@ -461,19 +456,6 @@ describe("navigationStore applyGroundFix", () => {
     expect(publications).toBe(1);
     expect(useNavigationStore.getState().coasting).toBe(true);
     expect(useNavigationStore.getState().currentSpeedLimit).toBe(30);
-  });
-
-  it("clears coasting when the update passes false (real fix re-anchors)", () => {
-    const store = useNavigationStore.getState();
-    store.setCoasting(true);
-    store.applyGroundFix({
-      progress,
-      weakGps: false,
-      offRoute: false,
-      currentSpeedLimit: null,
-      coasting: false,
-    });
-    expect(useNavigationStore.getState().coasting).toBe(false);
   });
 
   it("treats an explicit undefined coasting like an omitted one", () => {
@@ -656,6 +638,11 @@ describe("navigationStore preference persistence", () => {
     useNavigationStore.setState({ voiceEnabled: true });
     useNavigationStore.getState().hydrate();
     expect(useNavigationStore.getState().voiceEnabled).toBe(false);
+    useNavigationStore.getState().startGroundNavigation(route, "driving", [
+      [0, 0],
+      [1, 1],
+    ]);
+    expect(useNavigationStore.getState().voiceEnabled).toBe(false);
   });
 
   it("persists keepScreenOn across a toggle + hydrate (simulated reload)", () => {
@@ -670,15 +657,6 @@ describe("navigationStore preference persistence", () => {
     useNavigationStore.getState().hydrate();
     expect(useNavigationStore.getState().voiceEnabled).toBe(true);
     expect(useNavigationStore.getState().keepScreenOn).toBe(true);
-  });
-
-  it("startGroundNavigation preserves persisted toggle prefs", () => {
-    useNavigationStore.getState().toggleVoice();
-    useNavigationStore.getState().startGroundNavigation(route, "driving", [
-      [0, 0],
-      [1, 1],
-    ]);
-    expect(useNavigationStore.getState().voiceEnabled).toBe(false);
   });
 });
 
@@ -719,11 +697,8 @@ describe("navigationStore native read model", () => {
     useNavigationStore.getState().clearNativeReadModel();
   });
 
-  it("starts under browser authority", () => {
-    expect(useNavigationStore.getState().navigationAuthority).toBe("browser");
-  });
-
   it("populates the fields the navigation UI reads from a full snapshot", () => {
+    useNavigationStore.setState({ fasterRoute: { savedSeconds: 90 } as never, weakGps: true });
     useNavigationStore.getState().applyNativeFullSnapshot(projection());
 
     const state = useNavigationStore.getState();
@@ -736,6 +711,8 @@ describe("navigationStore native read model", () => {
     expect(state.permissionMode).toBe("background");
     expect(state.nativeRevision).toBe(4);
     expect(state.nativeRouteFingerprint).toBe("route-a");
+    expect(state.fasterRoute).toBeNull();
+    expect(state.weakGps).toBe(false);
   });
 
   it("never hydrates an already-expired current road-condition assessment", () => {
@@ -757,17 +734,6 @@ describe("navigationStore native read model", () => {
       availability: "expired",
       reasons: ["evidence_expired"],
     });
-  });
-
-  it("replaces a stale browser read model rather than merging into it", () => {
-    useNavigationStore.setState({ fasterRoute: { savedSeconds: 90 } as never, weakGps: true });
-
-    useNavigationStore.getState().applyNativeFullSnapshot(projection());
-
-    // A browser-only offer that outlived its engine would be a button that
-    // reroutes a session this page does not own.
-    expect(useNavigationStore.getState().fasterRoute).toBeNull();
-    expect(useNavigationStore.getState().weakGps).toBe(false);
   });
 
   it("cannot hydrate browser-only replay state", () => {
@@ -804,12 +770,6 @@ describe("navigationStore native read model", () => {
     expect(useNavigationStore.getState().applyNativeDelta(delta())).toBe("applied");
     expect(useNavigationStore.getState().progress).toEqual({ alongMeters: 200 });
     expect(useNavigationStore.getState().nativeRevision).toBe(5);
-  });
-
-  it("keeps the route a delta does not carry", () => {
-    useNavigationStore.getState().applyNativeFullSnapshot(projection());
-    useNavigationStore.getState().applyNativeDelta(delta());
-
     expect(useNavigationStore.getState().route).toBe(route);
   });
 

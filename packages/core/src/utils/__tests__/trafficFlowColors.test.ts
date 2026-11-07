@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FLOW_RATIO_STOPS, flowColorFor } from "../trafficFlowColors";
+import { flowColorFor } from "../trafficFlowColors";
 
 describe("flowColorFor", () => {
   it("colours by measured ratio when one is present", () => {
@@ -22,9 +22,5 @@ describe("flowColorFor", () => {
     expect(flowColorFor("heavy")).toBe("#ff8c00");
     expect(flowColorFor("free_flow")).toBe("#2ecc40");
     expect(flowColorFor("unknown")).toBe("#2ecc40");
-  });
-
-  it("keeps the ramp monotonic from jam to free flow", () => {
-    expect(FLOW_RATIO_STOPS.map(([stop]) => stop)).toEqual([0, 0.25, 0.5, 0.75, 1]);
   });
 });

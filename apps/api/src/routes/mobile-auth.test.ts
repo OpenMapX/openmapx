@@ -49,13 +49,18 @@ const STATE = "s".repeat(22);
 let app: FastifyInstance;
 
 beforeAll(async () => {
-  process.env.WEB_ORIGIN = WEB_ORIGIN;
+  vi.stubEnv("WEB_ORIGIN", WEB_ORIGIN);
+  vi.stubEnv("MOBILE_AUTH_ALLOWED_ORIGINS", undefined);
   const { mobileAuthRoute } = await import("./mobile-auth.js");
   app = await buildTestApp(mobileAuthRoute, { prefix: "/api" });
 });
 
 afterAll(async () => {
-  await app?.close();
+  try {
+    await app?.close();
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });
 
 beforeEach(() => {
@@ -123,19 +128,10 @@ describe("POST /mobile-auth/issue", () => {
     const response = await issue(validIssue);
 
     expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body.callbackCode).toBe("code-value");
-    // No token, no user, no redirect target: a server that could be told where
-    // to send a code is a server that can be told to send it elsewhere.
-    expect(body.token).toBeUndefined();
-    expect(body.userId).toBeUndefined();
-    expect(body.redirectUri).toBeUndefined();
-  });
-
-  it("never caches the response", async () => {
-    const response = await issue(validIssue);
-
-    // A one-time token in a shared cache is one somebody else can use.
+    expect(response.json()).toEqual({
+      callbackCode: "code-value",
+      expiresAtMs: 1_700_000_120_000,
+    });
     expectMobilePrivacy(response);
   });
 
@@ -185,7 +181,10 @@ describe("POST /mobile-auth/issue", () => {
   it("reports a refused handoff as a bad request", async () => {
     handoff.issue = { ok: false, reason: "invalid-request" };
 
-    expect((await issue({ ...validIssue, purpose: "delete-account" })).statusCode).toBe(400);
+    const response = await issue(validIssue);
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: "invalid_request" });
+    expect(handoff.issued).toHaveLength(1);
   });
 
   it("reports too many outstanding attempts distinctly", async () => {
@@ -273,11 +272,13 @@ describe("POST /mobile-auth/issue", () => {
 });
 
 describe("POST /mobile-auth/exchange", () => {
-  it("returns the one-time token once", async () => {
+  it("returns only the one-time token", async () => {
     const response = await exchange(validExchange);
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().token).toBe("ott-value");
+    expect(response.json()).toEqual({ token: "ott-value" });
+    expectMobilePrivacy(response);
+    expect(response.headers["set-cookie"]).toBeUndefined();
   });
 
   it("needs no authentication", async () => {
@@ -285,12 +286,6 @@ describe("POST /mobile-auth/exchange", () => {
 
     // That is the whole point: it is how the WebView gets a session.
     expect((await exchange(validExchange)).statusCode).toBe(200);
-  });
-
-  it("never caches the response", async () => {
-    const response = await exchange(validExchange);
-
-    expectMobilePrivacy(response);
   });
 
   it("refuses a cross-origin caller", async () => {
@@ -301,7 +296,7 @@ describe("POST /mobile-auth/exchange", () => {
     expect(handoff.exchanged).toEqual([]);
   });
 
-  it("passes the verifier through and never stores it", async () => {
+  it("passes the verifier and state through to the handoff service", async () => {
     await exchange(validExchange);
 
     expect(handoff.exchanged[0]).toMatchObject({
@@ -311,12 +306,8 @@ describe("POST /mobile-auth/exchange", () => {
     });
   });
 
-  it.each([
-    { label: "an unknown code", reason: "invalid" },
-    { label: "a wrong verifier", reason: "invalid" },
-    { label: "an expired handoff", reason: "invalid" },
-  ])("reports $label with the same status and body", async ({ reason }) => {
-    handoff.exchange = { ok: false, reason };
+  it("maps a handoff service rejection to the fixed public error", async () => {
+    handoff.exchange = { ok: false, reason: "invalid" };
 
     const response = await exchange(validExchange);
 
@@ -324,13 +315,6 @@ describe("POST /mobile-auth/exchange", () => {
     // what an attacker is probing for.
     expect(response.statusCode).toBe(400);
     expect(response.json()).toEqual({ error: "invalid_request" });
-  });
-
-  it("sets no cookie of its own", async () => {
-    const response = await exchange(validExchange);
-
-    // Better Auth's own verify call is what establishes the WebView session.
-    expect(response.headers["set-cookie"]).toBeUndefined();
   });
 
   it("rejects a 4097-byte fixed-length body before exchange", async () => {

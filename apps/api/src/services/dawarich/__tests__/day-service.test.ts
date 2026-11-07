@@ -384,30 +384,6 @@ describe("TimelineDayService", () => {
     expect(day.warnings).toEqual(["PARTIAL_TRACK_PAGE_LIMIT"]);
   });
 
-  it("stops at the configured page cap and retains the bounded partial result", async () => {
-    const { service, client } = harness();
-    client.getTimeline.mockResolvedValueOnce(
-      timelineWithTrackIds(
-        Array.from({ length: 20 }, (_, pageIndex) =>
-          trackIds(500, `fixture-track-${pageIndex + 1}`),
-        ).flat(),
-      ),
-    );
-    client.getTracksPage.mockImplementation(async (_range, page) => ({
-      data: {
-        ...tracksPageFixture,
-        features: trackFeatures(500, `fixture-track-${page}`),
-      },
-      pagination: { currentPage: page, totalPages: 21, totalCount: 10_500 },
-    }));
-
-    const day = await service.getPersonalTimelineDay(USER_ID, "2026-01-02");
-
-    expect(client.getTracksPage).toHaveBeenCalledTimes(20);
-    expect(day.map.tracks.features).toHaveLength(10_000);
-    expect(day.warnings).toEqual(["PARTIAL_TRACK_PAGE_LIMIT"]);
-  });
-
   it("retains 20 validated pages from the real client when aggregate totals exceed the cap", async () => {
     const ids = Array.from({ length: 20 }, (_, pageIndex) =>
       trackIds(500, `fixture-real-page-${pageIndex + 1}`),

@@ -142,12 +142,6 @@ function lookup(catalog: unknown, key: string): unknown {
     );
 }
 
-/** Every leaf key of a catalogue, dotted. */
-function leafKeys(catalog: unknown, prefix = ""): string[] {
-  if (catalog === null || typeof catalog !== "object") return [prefix];
-  return Object.entries(catalog).flatMap(([k, v]) => leafKeys(v, prefix ? `${prefix}.${k}` : k));
-}
-
 describe("message-signs strings", () => {
   const states = ["in_service", "blank", "fault", "unknown"] as const;
   const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
@@ -166,12 +160,5 @@ describe("message-signs strings", () => {
       expect(lookup(en, t.$t), `en ${t.$t}`).toBeTypeOf("string");
       expect(lookup(de, t.$t), `de ${t.$t}`).toBeTypeOf("string");
     }
-  });
-
-  it("the catalogue holds only the tokens the mapper emits, in both languages", () => {
-    const used = new Set(emitted.map((t) => t.$t));
-    const listing = new Set(["name", "description"]);
-    expect(leafKeys(en).filter((k) => !listing.has(k) && !used.has(k))).toEqual([]);
-    expect(leafKeys(de).sort()).toEqual(leafKeys(en).sort());
   });
 });

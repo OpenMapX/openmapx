@@ -101,19 +101,6 @@ describe("GET /brand-suggest route", () => {
     expect(reply.headers["Cache-Control"]).toBe("public, max-age=3600");
   });
 
-  it("clamps an oversized limit query param to 20", async () => {
-    const ctx = makeCtx();
-    setup(ctx);
-    const handler = ctx.routes.get("/brand-suggest");
-    if (!handler) throw new Error("handler not registered");
-    const reply = makeReply();
-
-    await handler({ query: { q: "a", limit: "500" }, params: {} }, reply);
-
-    const payload = reply.payload as { matches: unknown[] };
-    expect(payload.matches.length).toBeLessThanOrEqual(20);
-  });
-
   it("ignores a malformed country code rather than rejecting the request", async () => {
     const ctx = makeCtx();
     setup(ctx);
@@ -183,40 +170,24 @@ describe("GET /brand/:qid route", () => {
     await handler({ query: {}, params: { qid } }, reply);
 
     expect(reply.statusCode).toBe(200);
-    expect((reply.payload as { qid: string }).qid).toBe(qid);
+    const entry = reply.payload as { qid: string; name: string; matchNames: string[] };
+    expect(entry.qid).toBe(qid);
+    expect(entry.qid).toMatch(/^Q\d+$/);
+    expect(entry.name.toLowerCase()).toContain("starbucks");
+    expect(entry.matchNames.length).toBeGreaterThan(0);
     expect(reply.headers["Cache-Control"]).toBe("public, max-age=86400");
   });
 });
 
 describe("brand catalog behind the routes", () => {
-  it("suggests a well-known chain by exact name", () => {
-    const matches = suggestBrands("starbucks", "us", 8);
-    expect(matches.length).toBeGreaterThan(0);
-    expect(matches[0].name.toLowerCase()).toContain("starbucks");
-    expect(matches[0].qid).toMatch(/^Q\d+$/);
-  });
-
-  it("returns nothing for a query shorter than the route's floor", () => {
-    expect(suggestBrands("", undefined, 8)).toEqual([]);
-  });
-
   it("clamps the limit to 20", () => {
-    expect(suggestBrands("a", undefined, 500).length).toBeLessThanOrEqual(20);
-  });
-
-  it("resolves a suggested brand by QID", () => {
-    const qid = suggestBrands("starbucks", "us", 1)[0].qid;
-    const entry = getBrandByQid(qid);
-    expect(entry?.qid).toBe(qid);
-    expect(entry?.matchNames.length).toBeGreaterThan(0);
-  });
-
-  it("returns undefined for an unknown QID", () => {
-    expect(getBrandByQid("Q00000000")).toBeUndefined();
+    expect(suggestBrands("bank", undefined, 500)).toHaveLength(20);
   });
 
   it("produces suggestions whose compiled filters all pass validation", () => {
-    for (const match of suggestBrands("aldi", "de", 5)) {
+    const matches = suggestBrands("aldi", "de", 5);
+    expect(matches.length).toBeGreaterThan(0);
+    for (const match of matches) {
       const result = validateOverpassFilter(brandToFilter(match));
       expect(result.ok).toBe(true);
     }

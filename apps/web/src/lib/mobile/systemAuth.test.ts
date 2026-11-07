@@ -52,25 +52,11 @@ describe("redeemSystemAuth", () => {
     // Better Auth's own verify is what actually sets the cookie.
     expect(h.verified).toEqual(["ott-value"]);
     expect(h.refreshed()).toBe(1);
-  });
-
-  it("sends the verifier and never asks the server to store it", async () => {
-    const h = deps();
-
-    await redeemSystemAuth(HANDOFF, h.deps);
-
     expect(JSON.parse(String(h.calls[0].init.body))).toEqual({
       callbackCode: HANDOFF.callbackCode,
       codeVerifier: HANDOFF.codeVerifier,
       state: HANDOFF.state,
     });
-  });
-
-  it("never caches the exchange", async () => {
-    const h = deps();
-
-    await redeemSystemAuth(HANDOFF, h.deps);
-
     expect(h.calls[0].init.cache).toBe("no-store");
     expect(h.calls[0].init.credentials).toBe("include");
   });
@@ -115,16 +101,6 @@ describe("redeemSystemAuth", () => {
 
     await expect(redeemSystemAuth(HANDOFF, h.deps)).resolves.toBe("invalid");
     expect(h.refreshed()).toBe(0);
-  });
-
-  it("returns no token to its caller", async () => {
-    const h = deps();
-
-    const result = await redeemSystemAuth(HANDOFF, h.deps);
-
-    // The caller learns whether it worked, which is all it has any use for.
-    expect(result).toBe("ok");
-    expect(typeof result).toBe("string");
   });
 
   it("treats a response with no token as invalid", async () => {

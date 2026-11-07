@@ -76,9 +76,12 @@ describe("resolveCatalogBumpCandidate", () => {
       if (args.includes("fetch")) throw new Error("network down");
       return { stdout: "" };
     };
-    await expect(resolveCatalogBumpCandidate({ catalogDir, runner })).rejects.toMatchObject({
-      code: "git-fetch-failed",
-    });
+    const failure = await resolveCatalogBumpCandidate({ catalogDir, runner }).catch(
+      (error) => error,
+    );
+    expect(failure).toMatchObject({ code: "git-fetch-failed", message: "network down" });
+    expect(failure).toBeInstanceOf(CatalogBumpError);
+    expect(failure).toBeInstanceOf(Error);
   });
 
   it("throws submodule-resolution-failed on an unparseable ls-tree", async () => {
@@ -143,14 +146,5 @@ describe("lockFromCandidate", () => {
     expect(lock.lockedBy).toBe("auto-bump");
     expect(lock.comment).toBe("why");
     expect(typeof lock.lockedAt).toBe("string");
-  });
-});
-
-describe("CatalogBumpError", () => {
-  it("carries a machine-readable code", () => {
-    const err = new CatalogBumpError("git-fetch-failed", "boom");
-    expect(err.code).toBe("git-fetch-failed");
-    expect(err.message).toBe("boom");
-    expect(err).toBeInstanceOf(Error);
   });
 });

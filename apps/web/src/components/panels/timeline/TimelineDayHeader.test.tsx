@@ -79,7 +79,7 @@ describe("TimelineDayHeader", () => {
     fireEvent.change(screen.getByLabelText("timeline.datePicker"), {
       target: { value: "2026-03-30" },
     });
-    expect(onDateChange).not.toHaveBeenCalledWith("2026-03-30");
+    expect(onDateChange).not.toHaveBeenCalled();
   });
 
   it("keeps Today available as the direct recovery action from a future date", async () => {

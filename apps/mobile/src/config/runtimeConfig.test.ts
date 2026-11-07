@@ -58,10 +58,13 @@ describe("parseRuntimeConfig", () => {
   });
 
   it("never echoes the offending value in its message", () => {
+    expect(() =>
+      parseRuntimeConfig({ ...VALID, webOrigin: "https://attacker.example/steal" }),
+    ).toThrow(MobileConfigError);
     try {
       parseRuntimeConfig({ ...VALID, webOrigin: "https://attacker.example/steal" });
-      throw new Error("expected a rejection");
     } catch (error) {
+      expect(error).toBeInstanceOf(MobileConfigError);
       expect((error as Error).message).not.toContain("attacker.example");
     }
   });

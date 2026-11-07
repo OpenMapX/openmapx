@@ -67,22 +67,12 @@ describe("SnapshotPublisher throttling", () => {
     const { publisher, delivered, advance } = harness();
     publisher.offer(progressAt(1));
 
-    publisher.offer(progressAt(2));
-    publisher.offer(progressAt(3));
-    publisher.offer(progressAt(4));
+    for (let revision = 2; revision < 50; revision += 1) publisher.offer(progressAt(revision));
     advance(PROGRESS_INTERVAL_MS);
     publisher.flushPending();
 
-    expect(delivered.map((s) => s.revision)).toEqual([1, 4]);
-  });
-
-  it("holds at most one snapshot back at a time", () => {
-    const { publisher } = harness();
-    publisher.offer(progressAt(1));
-
-    for (let revision = 2; revision < 50; revision += 1) publisher.offer(progressAt(revision));
-
-    expect(publisher.hasPending).toBe(true);
+    expect(delivered.map((s) => s.revision)).toEqual([1, 49]);
+    expect(publisher.hasPending).toBe(false);
   });
 
   it("does not deliver early when the interval has not elapsed", () => {

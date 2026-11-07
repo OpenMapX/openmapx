@@ -20,10 +20,6 @@ describe("resolveSourceHeader", () => {
     });
   });
 
-  it("titles a fuel detail without a domain by its data source", () => {
-    expect(resolveSourceHeader(fuelDetail)).toMatchObject({ titleKey: "fuelPrices" });
-  });
-
   it("titles road weather, road maintenance and border crossings by their data source", () => {
     // Their details carry OpenConditions feed ids, which no header is keyed by.
     const of = (providerId: string, source: string) =>
@@ -64,12 +60,6 @@ describe("pickRentalActionUrl", () => {
     expect(
       pickRentalActionUrl(labeled({ web: action.web, android: action.android }), "Mozilla iPhone"),
     ).toBe(action.web);
-  });
-
-  it("keeps an https web handoff unchanged", () => {
-    expect(pickRentalActionUrl(labeled({ web: "https://lime.app/x" }), "Mozilla Desktop")).toBe(
-      "https://lime.app/x",
-    );
   });
 
   it("preserves an Android custom-scheme handoff", () => {

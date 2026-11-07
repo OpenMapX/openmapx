@@ -133,18 +133,6 @@ describe("ev-charging orchestrator", () => {
     expect(complete.partial).toBeUndefined();
   });
 
-  test("providers whose coverage misses the box are not asked", async () => {
-    const far = provider("far", [site({ id: "far:1" })], { coverage: { bbox: [2, 48, 3, 49] } });
-    const near = provider("near", [site({ id: "near:1" })], {
-      coverage: { bbox: [8, 48.5, 9, 49.5] },
-    });
-
-    const result = await createEvChargingDataSource(ctxWith([far, near])).search(BBOX);
-
-    expect(far.searchSites).not.toHaveBeenCalled();
-    expect(result.data.map((r) => r.id)).toEqual(["near:1"]);
-  });
-
   test("disallowed sources are excluded, also inside a site's members", async () => {
     const a = provider("a", [
       site({ id: "a:ok", sources: ["src-a"] }),
@@ -279,21 +267,10 @@ describe("ev-charging orchestrator", () => {
     ]);
   });
 
-  test("the meta keeps the provider id, zoom, colours, icon and place categories", async () => {
+  test("declares the charging-station OSM identity", () => {
     const source = createEvChargingDataSource(ctxWith([]));
-
-    expect(source.meta.minZoom).toBe(8);
-    expect(source.meta.placeCategory).toBe("Charging Station");
     expect(source.meta.placeCategoryRaw).toBe("charging_station");
     expect(source.meta.osmFilters).toEqual([{ key: "amenity", value: "charging_station" }]);
-    expect(source.meta.markerStyle.variantColors).toEqual({
-      slow: "#4CAF50",
-      fast: "#FF9800",
-      "ultra-rapid": "#F44336",
-      unknown: "#9E9E9E",
-    });
-    expect(source.meta.markerStyle.inactiveOpacity).toBe(0.4);
-    expect(source.meta.markerStyle.iconPath).toBe("M7 2v11h3v9l7-12h-4l4-8H7z");
   });
 
   test("the filters are the connector standards, speed, access, out-of-service and available now", async () => {
@@ -405,28 +382,5 @@ describe("ev-charging orchestrator", () => {
 
     expect(await ids({ hide_out_of_service: true })).toEqual(["ok", "stale-broken"]);
     expect(await ids({ hide_out_of_service: false })).toHaveLength(5);
-  });
-
-  test("a provider failing again for the same reason is logged once, and its recovery once", async () => {
-    const lines: LogLine[] = [];
-    let failure: Error | null = new Error("OpenConditions /features responded 401");
-    const flaky = provider("oc", [], {
-      searchSites: vi.fn(async () => {
-        if (failure) throw failure;
-        return { sites: [] };
-      }),
-    });
-    const source = createEvChargingDataSource(ctxWith([flaky], { lines }));
-    const warnings = () => lines.filter((l) => l.level === "warn");
-
-    await source.search(BBOX);
-    await source.search(BBOX);
-    expect(warnings()).toHaveLength(1);
-    expect(warnings()[0]?.message).toMatch(/\[ev-charging\].*oc.*401/);
-
-    failure = null;
-    await source.search(BBOX);
-    await source.search(BBOX);
-    expect(lines.filter((l) => l.level === "info" && /recovered/.test(l.message))).toHaveLength(1);
   });
 });

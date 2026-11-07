@@ -62,7 +62,15 @@ describe("TransitNavigationProcessor.replace", () => {
     });
 
   it("adopts the new itinerary and its own token", () => {
-    const outcome = processor().replace(session(), replacement(), NOW);
+    const previous = session();
+    previous.payload.tickState.currentLegIndex = 1;
+    previous.payload.tickState.phase = "riding";
+    previous.payload.confidence = "schedule";
+    previous.payload.progress = { currentLegIndex: 1, stale: true };
+    previous.payload.refresh = { status: "in-flight", generation: 4, requestId: "r1", attempts: 1 };
+    previous.lastAcceptedFix = { coords: [8.7, 50.11], accuracy: 5, timestampMs: NOW };
+    previous.payload.scheduledAlerts = [{ id: "a1", legIndex: 1, triggerAtMs: NOW + 60_000 }];
+    const outcome = processor().replace(previous, replacement(), NOW);
     const next = (outcome as { session: TransitMobileSession }).session;
 
     expect(next.payload.startPackage.itineraryFingerprint).toBe("it-replacement-3");
@@ -70,40 +78,13 @@ describe("TransitNavigationProcessor.replace", () => {
     // against a different one.
     expect(next.payload.refreshToken).toBe("tok_replacement");
     expect(next.payload.refreshToken).not.toBe(FIXTURE_TOKEN);
-  });
-
-  it("resets progress, phase and confidence", () => {
-    const advanced = session();
-    advanced.payload.tickState.currentLegIndex = 1;
-    advanced.payload.tickState.phase = "riding";
-    advanced.payload.confidence = "schedule";
-
-    const next = (
-      processor().replace(advanced, replacement(), NOW) as {
-        session: TransitMobileSession;
-      }
-    ).session;
-
     expect(next.payload.tickState.currentLegIndex).toBe(0);
     expect(next.payload.tickState.phase).toBe("walking");
     expect(next.payload.confidence).toBe("gps");
     expect(next.payload.progress).toBeNull();
-  });
-
-  it("invalidates every in-flight network generation", () => {
-    // A reply already on the wire cannot land on a session it no longer
-    // describes.
-    const busy = session();
-    busy.payload.refresh = { status: "in-flight", generation: 4, requestId: "r1", attempts: 1 };
-
-    const next = (
-      processor().replace(busy, replacement(), NOW) as {
-        session: TransitMobileSession;
-      }
-    ).session;
-
-    expect(next.payload.refresh.generation).toBe(5);
-    expect(next.payload.refresh.status).toBe("ready");
+    expect(next.payload.refresh).toMatchObject({ generation: 5, status: "ready" });
+    expect(Object.hasOwn(next, "lastAcceptedFix")).toBe(false);
+    expect(next.payload.scheduledAlerts).toEqual([]);
   });
 
   it("cancels superseded alerts before scheduling anything new", () => {
@@ -114,35 +95,10 @@ describe("TransitNavigationProcessor.replace", () => {
     };
 
     const kinds = outcome.effects.map((effect) => effect.kind);
+    expect(kinds.indexOf("cancel-session-alerts")).toBeGreaterThanOrEqual(0);
+    expect(kinds.indexOf("reconcile-alerts")).toBeGreaterThanOrEqual(0);
     expect(kinds.indexOf("cancel-session-alerts")).toBeLessThan(kinds.indexOf("reconcile-alerts"));
     expect(kinds).toContain("publish-snapshot");
-  });
-
-  it("drops the last fix, which was matched against the old itinerary", () => {
-    const withFix = session();
-    withFix.lastAcceptedFix = { coords: [8.7, 50.11], accuracy: 5, timestampMs: NOW };
-
-    const next = (
-      processor().replace(withFix, replacement(), NOW) as {
-        session: TransitMobileSession;
-      }
-    ).session;
-
-    expect(next.lastAcceptedFix).toBeUndefined();
-    expect(Object.hasOwn(next, "lastAcceptedFix")).toBe(false);
-  });
-
-  it("clears the scheduled alerts of the trip it replaced", () => {
-    const scheduled = session();
-    scheduled.payload.scheduledAlerts = [{ id: "a1", legIndex: 1, triggerAtMs: NOW + 60_000 }];
-
-    const next = (
-      processor().replace(scheduled, replacement(), NOW) as {
-        session: TransitMobileSession;
-      }
-    ).session;
-
-    expect(next.payload.scheduledAlerts).toEqual([]);
   });
 
   it.each(["arrived", "stopped", "expired", "error"] as const)(
@@ -168,21 +124,6 @@ describe("TransitNavigationProcessor.replace", () => {
 });
 
 describe("TransitNavigationProcessor.onConnectivityRestored", () => {
-  it("refreshes live data without replanning a selected journey", () => {
-    // Refreshing times on a trip the rider can no longer make would only make
-    // the wrong plan look current.
-    const stranded = session();
-    stranded.payload.refresh = { status: "stale", generation: 3, attempts: 0 };
-
-    return processor()
-      .onConnectivityRestored(stranded, NOW)
-      .then((mutation) => {
-        expect(mutation?.effects).toEqual([
-          { kind: "request-transit-refresh", requestId: expect.any(String) },
-        ]);
-      });
-  });
-
   it("refreshes when only the live data went stale", async () => {
     const stale = session();
     stale.payload.refresh = { status: "stale", generation: 3, attempts: 1 };

@@ -94,7 +94,6 @@ export {
   type GuidanceIconName,
   type GuidanceLaneArrow,
   type GuidanceLaneCell,
-  groundRouteFingerprint,
   guidanceApproachMeters,
   type IncidentAlert,
   incidentTypeLabelKey,

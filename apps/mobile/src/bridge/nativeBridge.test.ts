@@ -272,15 +272,6 @@ describe("NativeBridge.receive", () => {
       expect(context.injected).toEqual([]);
     });
 
-    it("correlates the current handshake reply to the hello command", async () => {
-      const { bridge, registry, injected } = harness();
-      const channel = registry.beginDocumentLoad(NOW);
-
-      await bridge.receive({ url: `${WEB_ORIGIN}/`, data: hello(channel.nonce) });
-
-      expect(decodePayload(injected[0]).payload.forMessageId).toBe("hello-1");
-    });
-
     it("rejects a command sent before the handshake", async () => {
       const { bridge, registry, dispatched } = harness();
       const channel = registry.beginDocumentLoad(NOW);
@@ -305,23 +296,11 @@ describe("NativeBridge.receive", () => {
       // The page still learns a shell exists, so it can ask for an update.
       expect(injected).toHaveLength(1);
       expect(decodePayload(injected[0]).payload.selectedProtocolVersion).toBeNull();
-      expect(dispatched).toEqual([]);
-    });
-
-    it("refuses commands after a failed negotiation", async () => {
-      const { bridge, registry, dispatched } = harness();
-      const channel = registry.beginDocumentLoad(NOW);
-      await bridge.receive({
-        url: `${WEB_ORIGIN}/`,
-        data: hello(channel.nonce, { min: 9, max: 12 }),
-      });
-
-      const outcome = await bridge.receive({
+      const refused = await bridge.receive({
         url: `${WEB_ORIGIN}/`,
         data: command(channel.nonce, { messageId: "after-fail" }),
       });
-
-      expect(rejection(outcome)).toBe("handshake-required");
+      expect(rejection(refused)).toBe("handshake-required");
       expect(dispatched).toEqual([]);
     });
 
@@ -391,7 +370,6 @@ describe("NativeBridge.receive", () => {
 
       expect(rejection(outcome)).toBe("invalid-json");
       expect(dispatched).toEqual([]);
-      expect(nonce).toBeTruthy();
     });
 
     it("rejects a prototype-polluting key", async () => {
@@ -415,7 +393,6 @@ describe("NativeBridge.receive", () => {
 
       expect(rejection(outcome)).toBe("payload-too-large");
       expect(dispatched).toEqual([]);
-      expect(nonce).toBeTruthy();
     });
 
     it("rejects a timestamp far from the receiver's clock", async () => {
@@ -467,32 +444,32 @@ describe("NativeBridge.send", () => {
     expect(injected).toEqual([]);
   });
 
-  it("queues output until the handshake completes", async () => {
-    const { bridge, registry, injected } = harness();
-    registry.beginDocumentLoad(NOW);
-
-    expect(bridge.send("permission.state", { permission: "denied" })).toBe("queued");
-    expect(injected).toEqual([]);
-  });
-
   it("flushes queued output after the handshake", async () => {
     const { bridge, registry, injected } = harness();
     const channel = registry.beginDocumentLoad(NOW);
-    bridge.send("permission.state", { permission: "denied" });
+    expect(bridge.send("permission.state", { permission: "denied" })).toBe("queued");
+    expect(injected).toEqual([]);
 
     await bridge.receive({ url: `${WEB_ORIGIN}/`, data: hello(channel.nonce) });
 
     expect(injected).toHaveLength(2);
-    expect(decodePayload(injected[0]).type).toBe("native.hello");
+    expect(decodePayload(injected[0])).toMatchObject({
+      type: "native.hello",
+      payload: { forMessageId: "hello-1" },
+    });
     expect(decodePayload(injected[1]).type).toBe("permission.state");
     expect(bridge.queuedCount).toBe(0);
   });
 
   it("sends immediately once handshaken", async () => {
-    const { bridge, injected } = await handshaken();
+    const { bridge, injected, nonce } = await handshaken();
 
     expect(bridge.send("permission.state", { permission: "background" })).toBe("sent");
-    expect(decodePayload(injected[1]).type).toBe("permission.state");
+    expect(decodePayload(injected[1])).toMatchObject({
+      type: "permission.state",
+      channelNonce: nonce,
+      payload: { permission: "background" },
+    });
   });
 
   it("adds exact correlation to a current direct reply", async () => {
@@ -521,19 +498,25 @@ describe("NativeBridge.send", () => {
   });
 
   it("keeps only the freshest queued snapshot", async () => {
-    const { bridge, registry } = harness();
-    registry.beginDocumentLoad(NOW);
+    const { bridge, registry, injected } = harness();
+    const channel = registry.beginDocumentLoad(NOW);
 
     bridge.send("snapshot.update", { snapshot: { revision: 1 } });
     bridge.send("snapshot.update", { snapshot: { revision: 2 } });
     bridge.send("snapshot.update", { snapshot: { revision: 3 } });
 
     expect(bridge.queuedCount).toBe(1);
+    await bridge.receive({ url: WEB_ORIGIN, data: hello(channel.nonce) });
+    expect(injected.map(decodePayload)).toMatchObject([
+      { type: "native.hello" },
+      { type: "snapshot.update", payload: { snapshot: { revision: 3 } } },
+    ]);
+    expect(bridge.queuedCount).toBe(0);
   });
 
   it("drops a snapshot rather than a critical event when the queue is full", async () => {
-    const { bridge, registry } = harness();
-    registry.beginDocumentLoad(NOW);
+    const { bridge, registry, injected } = harness();
+    const channel = registry.beginDocumentLoad(NOW);
     bridge.send("snapshot.update", { snapshot: {} });
     for (let index = 0; index < MAX_QUEUED_OUTBOUND - 1; index += 1) {
       bridge.send("navigation.event", { eventId: `e${index}`, event: {} });
@@ -541,26 +524,31 @@ describe("NativeBridge.send", () => {
 
     expect(bridge.send("navigation.event", { eventId: "critical", event: {} })).toBe("queued");
     expect(bridge.queuedCount).toBe(MAX_QUEUED_OUTBOUND);
+    await bridge.receive({ url: WEB_ORIGIN, data: hello(channel.nonce) });
+    const delivered = injected.map(decodePayload).slice(1);
+    expect(delivered.every((message) => message.type === "navigation.event")).toBe(true);
+    expect(delivered.map((message) => message.payload.eventId)).toEqual([
+      ...Array.from({ length: MAX_QUEUED_OUTBOUND - 1 }, (_, i) => `e${i}`),
+      "critical",
+    ]);
   });
 
   it("refuses new output when the queue holds nothing droppable", async () => {
-    const { bridge, registry } = harness();
-    registry.beginDocumentLoad(NOW);
+    const { bridge, registry, injected } = harness();
+    const channel = registry.beginDocumentLoad(NOW);
     for (let index = 0; index < MAX_QUEUED_OUTBOUND; index += 1) {
       bridge.send("navigation.event", { eventId: `e${index}`, event: {} });
     }
 
     expect(bridge.send("navigation.event", { eventId: "overflow", event: {} })).toBe("dropped");
     expect(bridge.queuedCount).toBe(MAX_QUEUED_OUTBOUND);
-  });
-
-  it("stamps every message with the current channel nonce", async () => {
-    const { bridge, injected, nonce } = await handshaken();
-
-    bridge.send("permission.state", { permission: "foreground" });
-
-    const delivered = decodePayload(injected[1]) as unknown as { channelNonce: string };
-    expect(delivered.channelNonce).toBe(nonce);
+    await bridge.receive({ url: WEB_ORIGIN, data: hello(channel.nonce) });
+    expect(
+      injected
+        .map(decodePayload)
+        .slice(1)
+        .map((message) => message.payload.eventId),
+    ).toEqual(Array.from({ length: MAX_QUEUED_OUTBOUND }, (_, i) => `e${i}`));
   });
 
   it("discards queued output for a document that is gone", async () => {
@@ -575,11 +563,6 @@ describe("NativeBridge.send", () => {
 });
 
 describe("intake protocol compatibility", () => {
-  it("offers platform-evidence protocol 5 while retaining protocol 3 navigation", () => {
-    expect(MOBILE_PROTOCOL_MIN).toBe(3);
-    expect(MOBILE_PROTOCOL_MAX).toBe(5);
-  });
-
   it("stamps pre-handshake navigation output with the selected older version", async () => {
     const { bridge, registry, injected } = harness();
     const channel = registry.beginDocumentLoad(NOW);

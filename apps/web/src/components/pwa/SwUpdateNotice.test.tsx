@@ -164,13 +164,6 @@ describe("waiting web updates", () => {
     expect(sw.skipWaiting).toHaveBeenCalledTimes(1);
   });
 
-  it("preserves ordinary PWA visibility handling", async () => {
-    await mountWaiting();
-    Object.defineProperty(document, "visibilityState", { value: "hidden" });
-    act(() => document.dispatchEvent(new Event("visibilitychange")));
-    expect(sw.skipWaiting).toHaveBeenCalledTimes(1);
-  });
-
   it("keeps the visible snackbar and manual reload fallback", async () => {
     await mountWaiting();
     act(() => vi.advanceTimersByTime(30_000));

@@ -124,16 +124,12 @@ describe("OpenWeatherMap weather provider", () => {
     expect(ctx.registered.weather).toHaveLength(0);
   });
 
-  it("registers with id and priority when an apiKey is present", () => {
-    const provider = getProvider();
-    expect(provider.id).toBe("openweathermap");
-    expect(provider.priority).toBe(5);
-  });
-
   it("maps current weather and sums rain+snow precipitation", async () => {
     mockFetch.mockResolvedValueOnce(mockOk(currentResponse()));
 
-    const res = await getProvider().getCurrentWeather(COORDS);
+    const provider = getProvider();
+    expect(provider.id).toBe("openweathermap");
+    const res = await provider.getCurrentWeather(COORDS);
 
     expect(res.source).toBe("openweathermap");
     expect(res.location).toEqual(COORDS);

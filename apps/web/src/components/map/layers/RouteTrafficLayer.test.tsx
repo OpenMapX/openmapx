@@ -53,6 +53,7 @@ vi.mock("@/integration-api/map/useDrawnDirectionsRoutes", () => ({
 // (`staticFeatures` in particular) look unstable when they are not.
 const SPANS_RESULT = {
   r0: [{ startMeters: 200, endMeters: 900, los: "queuing", confidence: "measured" }],
+  r1: [{ startMeters: 200, endMeters: 900, los: "queuing", confidence: "measured" }],
 };
 const useRouteFlow = vi.fn(() => SPANS_RESULT);
 vi.mock("@openmapx/core", async (importOriginal) => ({
@@ -88,34 +89,29 @@ describe("RouteTrafficLayer", () => {
     drawn.mode = "driving";
   });
 
-  it("creates both band layers in their slots", () => {
+  it("paints bands sliced from the active route", () => {
     render(<RouteTrafficLayer />);
     expect(fake.state.layers.has("route-traffic-active")).toBe(true);
     expect(fake.state.layers.has("route-traffic-alt")).toBe(true);
-  });
-
-  it("paints bands sliced from the active route", () => {
-    render(<RouteTrafficLayer />);
+    const [routes, enabled] = useRouteFlow.mock.calls.at(-1) as [Array<{ id: string }>, boolean];
+    expect(routes.map((route) => route.id)).toEqual(["r0", "r1"]);
+    expect(enabled).toBe(true);
     const source = fake.state.sources.get("route-traffic-source");
     const data = source?.data as GeoJSON.FeatureCollection;
     expect(data.features.length).toBeGreaterThan(0);
     expect(data.features[0].properties?.variant).toBe("active");
   });
 
-  it("asks for flow on the alternates as well as the active route", () => {
-    render(<RouteTrafficLayer />);
-    const [routes] = useRouteFlow.mock.calls[useRouteFlow.mock.calls.length - 1] as [
-      Array<{ id: string }>,
-      boolean,
-    ];
-    expect(routes.map((r) => r.id)).toEqual(["r0", "r1"]);
-  });
-
   it("widens bands and moves the active route's current span into the current-span source while navigating", () => {
-    useNavigationStore.getState().startGroundNavigation(NAV_ROUTE, "driving", [
-      [8, 50],
-      [8, 50.02],
-    ]);
+    useNavigationStore.getState().startGroundNavigation(
+      NAV_ROUTE,
+      "driving",
+      [
+        [8, 50],
+        [8, 50.02],
+      ],
+      [{ ...NAV_ROUTE, geometry: drawn.routes[1].geometry } as Route],
+    );
     useNavigationStore.getState().applyProgress({ alongMeters: 300 } as NavProgress);
 
     render(<RouteTrafficLayer />);
@@ -136,6 +132,9 @@ describe("RouteTrafficLayer", () => {
       ?.data as GeoJSON.FeatureCollection;
     const staticActive = staticData.features.find((f) => f.properties?.variant === "active");
     expect(staticActive?.properties?.startMeters).toBe(200);
+    const staticAlt = staticData.features.find((feature) => feature.properties?.variant === "alt");
+    expect(staticAlt?.properties?.startMeters).toBe(200);
+    expect((staticAlt?.geometry as GeoJSON.LineString).coordinates[0][0]).toBeLessThan(8.0035);
 
     // The active layer's filter must exclude that same span (its startMeters,
     // 200, is behind alongMeters, 300) so it is not drawn twice.
@@ -171,26 +170,6 @@ describe("RouteTrafficLayer", () => {
     expect(after.features).toHaveLength(0);
   });
 
-  it("never lets alongMeters reach the polled query, even while navigating", () => {
-    useNavigationStore.getState().startGroundNavigation(NAV_ROUTE, "driving", [
-      [8, 50],
-      [8, 50.02],
-    ]);
-    useNavigationStore.getState().applyProgress({ alongMeters: 300 } as NavProgress);
-
-    render(<RouteTrafficLayer />);
-
-    const [routes] = useRouteFlow.mock.calls[useRouteFlow.mock.calls.length - 1] as [
-      Array<Record<string, unknown>>,
-      boolean,
-    ];
-    expect(routes.length).toBeGreaterThan(0);
-    for (const route of routes) {
-      expect(Object.keys(route).sort()).toEqual(["geometry", "id"]);
-      expect("alongMeters" in route).toBe(false);
-    }
-  });
-
   it("stops polling once the driver arrives but keeps drawing the last-fetched bands", () => {
     useNavigationStore.getState().startGroundNavigation(NAV_ROUTE, "driving", [
       [8, 50],
@@ -221,18 +200,6 @@ describe("RouteTrafficLayer", () => {
     expect(fake.state.paint.get("route-traffic-active")?.["line-width"]).toBe(widthBefore);
   });
 
-  it("keeps polling in planning mode, where there is no nav status to gate on", () => {
-    render(<RouteTrafficLayer />);
-    expect(useRouteFlow.mock.calls.at(-1)?.[1]).toBe(true);
-  });
-
-  it("keeps the congestion bands across a style change", () => {
-    render(<RouteTrafficLayer />);
-    const before = fake.state.sources.get("route-traffic-source")?.data as { features: unknown[] };
-    expect(before.features.length).toBeGreaterThan(0);
-    expectStyleSwapIsLossless(fake);
-  });
-
   it("keeps useRouteFlow's routes array identity stable, never re-publishes the static traffic source, and never removes/re-adds a traffic layer across 100 progress updates", () => {
     useNavigationStore.getState().startGroundNavigation(NAV_ROUTE, "driving", [
       [8, 50],
@@ -244,6 +211,7 @@ describe("RouteTrafficLayer", () => {
     const { rerender } = render(<RouteTrafficLayer />);
     const firstRoutesArg = useRouteFlow.mock.calls.at(-1)?.[0];
     expect(firstRoutesArg).toBeDefined();
+    expect((firstRoutesArg as unknown[]).length).toBeGreaterThan(0);
     // Fresh window: an earlier test's mount may have already bumped these
     // once, which is not what this test is checking.
     fake.state.counts.setData.delete("route-traffic-source");
@@ -261,6 +229,8 @@ describe("RouteTrafficLayer", () => {
 
     for (const call of useRouteFlow.mock.calls) {
       expect(call[0]).toBe(firstRoutesArg);
+      for (const route of call[0] as Array<Record<string, unknown>>)
+        expect("alongMeters" in route).toBe(false);
     }
     expect(fake.state.counts.setData.get("route-traffic-source")).toBeUndefined();
     // The current source is expected to update — at most once per progress

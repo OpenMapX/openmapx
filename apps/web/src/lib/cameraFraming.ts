@@ -54,7 +54,7 @@ export interface CameraTarget {
 }
 
 /** Drops `undefined` members: MapLibre treats `'bearing' in options` as a request. */
-export function compact<T extends object>(options: T): T {
+function compact<T extends object>(options: T): T {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(options)) {
     if (value !== undefined) out[key] = value;

@@ -53,7 +53,6 @@ export function ExitSignStrip({ sign, country, size = "banner", hideHeadline = f
         <Box
           component="span"
           data-testid="exit-number-badge"
-          data-bg={palette.exitBadge.bg}
           sx={{
             bgcolor: palette.exitBadge.bg,
             color: palette.exitBadge.fg,

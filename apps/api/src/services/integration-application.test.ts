@@ -621,6 +621,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     it.each(["service-query", "vault", "file"] as const)(
       "refuses unavailable strict %s acquisition before admission",
       async (failure) => {
+        const expectedRevision = (await credentials()).configurationRevision;
         const run = vi.spyOn(host.runtime, "stack.render"),
           path = join(host.root, "integrations/binding-test/config.json");
         if (failure === "service-query")
@@ -633,7 +634,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         }
         try {
           expect(await state.fixture.sql`SELECT * FROM capability_binding`).toHaveLength(1);
-          const rejected = await credential("PUT", "a".repeat(64));
+          const rejected = await credential("PUT", expectedRevision);
           expect(rejected.statusCode).toBeGreaterThanOrEqual(400);
           expect(await state.fixture.sql`SELECT * FROM integration_config`).toHaveLength(0);
           expect(await state.fixture.sql`SELECT * FROM integration_secret`).toHaveLength(

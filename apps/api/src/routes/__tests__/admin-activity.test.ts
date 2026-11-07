@@ -192,7 +192,6 @@ describe("Activity canonical producer", () => {
 describe("actual generated Activity SDK through Fastify serialization", () => {
   it("retains full list actor, both details, metrics, cancellation and native stream target", async () => {
     const sdk = await import("@openmapx/core/api-admin-sdk");
-    expect(sdk.listAdminActivityJobs).toBeTypeOf("function");
     const { adminJobEventsRoute } = await import("../admin-job-events");
     const app = Fastify();
     await app.register(adminActivityRoute, { prefix: "/api" });
@@ -264,7 +263,6 @@ describe("actual generated Activity SDK through Fastify serialization", () => {
   });
   it("validates actual 400/401/403/404/429/500 JSON and Retry-After", async () => {
     const sdk = await import("@openmapx/core/api-admin-sdk");
-    expect(sdk.listAdminActivityJobs).toBeTypeOf("function");
     const app = Fastify();
     await app.register(adminActivityRoute, { prefix: "/api" });
     vi.stubGlobal("fetch", administrationSdkFetch(app));

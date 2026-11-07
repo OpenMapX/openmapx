@@ -64,6 +64,10 @@ afterEach(() => {
 });
 
 describe("Wikimedia photo provider — File: tag", () => {
+  it("returns no tag photos without contacting Commons when the tag is absent", async () => {
+    expect(await wikimediaProvider.searchByTags({ name: "Test" })).toEqual([]);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
   it("surfaces a metadata rate limit in strict card lookup", async () => {
     vi.stubGlobal(
       "fetch",
@@ -86,9 +90,10 @@ describe("Wikimedia photo provider — File: tag", () => {
     };
 
     const photos = await wikimediaProvider.searchByTags({
-      wikimedia_commons: "File:eiffel_Tower.jpg",
+      wikimedia_commons: "  File:eiffel_Tower.jpg  ",
     });
     expect(photos).toHaveLength(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(photos[0]).toMatchObject({
       author: "Jane Doe",
       licensing: licensingFromDeclaration("CC BY-SA 4.0", undefined, "Commons file", "imagery"),
@@ -277,21 +282,86 @@ describe("Wikimedia photo provider — Category tag", () => {
     });
     expect(String(mockFetch.mock.calls[0]?.[0])).toContain("mime%7Cmediatype");
   });
-  it("requests categorymembers and parses each returned page", async () => {
+  it.each(["Category:Paris", "Paris"])(
+    "requests categorymembers for %s and parses each page",
+    async (tag) => {
+      routes = {
+        "generator=categorymembers": {
+          query: {
+            pages: { "10": commonsPage(), "11": commonsPage({ title: "File:Second.jpg" }) },
+          },
+        },
+        "generator=geosearch": { query: { pages: {} } },
+      };
+
+      const photos = await wikimediaProvider.searchByTags({ wikimedia_commons: tag });
+
+      expect(photos).toHaveLength(2);
+      expect(photos.map((photo) => photo.pageUrl)).toEqual([
+        "https://commons.wikimedia.org/wiki/File:Eiffel_Tower.jpg",
+        "https://commons.wikimedia.org/wiki/File:Second.jpg",
+      ]);
+      expect(photos[0]?.author).toBe("Jane Doe");
+      const catUrl = mockFetch.mock.calls
+        .map((c) => String(c[0]))
+        .find((u) => u.includes("generator=categorymembers"));
+      expect(catUrl).toContain("gcmtitle=Category%3AParis");
+      expect(catUrl).toContain("gcmtype=file");
+      expect(catUrl).toContain("gcmlimit=6");
+    },
+  );
+});
+
+describe("Wikimedia category request bounds and failures", () => {
+  it.each([
+    [undefined, 6],
+    [999, 6],
+    [2, 2],
+  ])("requests at most six category members for limit %s", async (limit, expected) => {
     routes = {
-      "generator=categorymembers": { query: { pages: { "10": commonsPage() } } },
-      "generator=geosearch": { query: { pages: {} } },
+      "generator=categorymembers": {
+        query: {
+          pages: Object.fromEntries(
+            Array.from({ length: expected }, (_, index) => [
+              String(index),
+              commonsPage({ title: `File:Requested ${index}.jpg` }),
+            ]),
+          ),
+        },
+      },
     };
-
-    const photos = await wikimediaProvider.searchByTags({ wikimedia_commons: "Category:Paris" });
-
-    expect(photos).toHaveLength(1);
-    expect(photos[0]?.author).toBe("Jane Doe");
-    const catUrl = mockFetch.mock.calls
-      .map((c) => String(c[0]))
-      .find((u) => u.includes("generator=categorymembers"));
-    expect(catUrl).toContain("gcmtitle=Category%3AParis");
+    const photos = await wikimediaProvider.searchByTags(
+      { wikimedia_commons: "Category:Paris" },
+      limit,
+    );
+    expect(photos).toHaveLength(expected);
+    expect(photos.map((photo) => photo.pageUrl)).toEqual(
+      Array.from(
+        { length: expected },
+        (_, index) => `https://commons.wikimedia.org/wiki/File:Requested_${index}.jpg`,
+      ),
+    );
+    const requested = new URL(String(mockFetch.mock.calls[0]?.[0]));
+    expect(requested.searchParams.get("gcmlimit")).toBe(String(expected));
   });
+
+  it.each(["unparseable metadata", "HTTP failure", "abort failure"])(
+    "returns no category photos for %s",
+    async (failure) => {
+      routes = {
+        "generator=categorymembers": {
+          query: { pages: { "1": commonsPage({ imageinfo: [] }) } },
+        },
+      };
+      if (failure === "HTTP failure")
+        mockFetch.mockResolvedValueOnce(new Response(null, { status: 503 }));
+      if (failure === "abort failure")
+        mockFetch.mockRejectedValueOnce(new DOMException("Aborted", "AbortError"));
+      expect(await wikimediaProvider.searchByTags({ wikimedia_commons: "Category:Paris" })).toEqual(
+        [],
+      );
+    },
+  );
 });
 
 describe("Wikimedia photo provider — geosearch", () => {

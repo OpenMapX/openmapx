@@ -56,18 +56,10 @@ describe("DeleteAccountActions", () => {
     fireEvent.click(view.getByRole("button", { name: en.legal.deleteAccountButton }));
 
     expect(deleteCalls).toEqual([]);
-    expect(view.getByText(en.account.deleteAccountWarning)).toBeInTheDocument();
-  });
-
-  it("states what survives at the moment of the decision", () => {
-    const view = renderActions();
-
-    fireEvent.click(view.getByRole("button", { name: en.legal.deleteAccountButton }));
-
-    // Not only further up the page, where it can be scrolled past.
-    const warning = view.getByText(en.account.deleteAccountWarning).textContent ?? "";
-    expect(warning).toContain("Mangrove");
-    expect(warning).toContain("Dawarich");
+    const warning = view.getByText(en.account.deleteAccountWarning);
+    expect(warning).toBeInTheDocument();
+    expect(warning.textContent).toContain("Mangrove");
+    expect(warning.textContent).toContain("Dawarich");
   });
 
   it("deletes once confirmed", async () => {
@@ -116,17 +108,6 @@ describe("DeleteAccountPage", () => {
     expect(view.getByText(en.legal.deleteAccountWhatBody)).toBeInTheDocument();
     // A page that only listed what is deleted would be the misleading half.
     expect(view.getByText(en.legal.deleteAccountKeptBody)).toBeInTheDocument();
-  });
-
-  it("says how long it takes", async () => {
-    const view = render(
-      <QueryClientProvider client={new QueryClient()}>
-        <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
-          {await DeleteAccountPage()}
-        </NextIntlClientProvider>
-      </QueryClientProvider>,
-    );
-
     expect(view.getByText(en.legal.deleteAccountTimingBody)).toBeInTheDocument();
   });
 });

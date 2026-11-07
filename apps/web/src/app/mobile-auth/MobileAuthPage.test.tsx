@@ -84,8 +84,12 @@ function stubIssue(response: { ok: boolean; body?: unknown }) {
 
 describe("MobileAuthClient", () => {
   it("issues a handoff and redirects to the compiled callback scheme", async () => {
-    const calls = stubIssue({ ok: true, body: { callbackCode: "code-value" } });
+    const calls = stubIssue({
+      ok: true,
+      body: { callbackCode: "code-value", token: "must-not-appear" },
+    });
     const view = renderClient();
+    expect(view.queryByTestId("auth-dialog")).toBeNull();
 
     fireEvent.click(view.getByRole("button", { name: en.mobileAuth.continueToApp }));
 
@@ -95,17 +99,6 @@ describe("MobileAuthClient", () => {
     expect(callback.searchParams.get("code")).toBe("code-value");
     expect(callback.searchParams.get("state")).toBe(STATE);
     expect(calls[0].url).toBe("https://api.example.test/mobile-auth/issue");
-  });
-
-  it("puts no token or session data in the callback URL", async () => {
-    stubIssue({ ok: true, body: { callbackCode: "code-value", token: "must-not-appear" } });
-    const view = renderClient();
-
-    fireEvent.click(view.getByRole("button", { name: en.mobileAuth.continueToApp }));
-
-    await waitFor(() => expect(replaced).toHaveLength(1));
-    // A one-time token in a URL is a token in browser history, in the OS log of
-    // the routed intent, and in whatever the app was handed.
     expect(replaced[0]).not.toContain("must-not-appear");
     expect(replaced[0]).not.toContain(CHALLENGE);
   });
@@ -125,18 +118,12 @@ describe("MobileAuthClient", () => {
     expect(calls[0].init.cache).toBe("no-store");
   });
 
-  it("asks the user to sign in first when there is no session", () => {
+  it("offers sign-in here and returns to the same handoff afterwards", () => {
     sessionState.data = null;
     const view = renderClient();
 
     expect(view.getByText(en.mobileAuth.signInFirst)).toBeInTheDocument();
     expect(view.getByRole("button", { name: en.mobileAuth.continueToApp })).toBeDisabled();
-  });
-
-  it("offers sign-in here and returns to the same handoff afterwards", () => {
-    sessionState.data = null;
-    const view = renderClient();
-
     const dialog = view.getByTestId("auth-dialog");
     expect(dialog).toHaveAttribute("data-dismissible", "false");
     const returnTo = new URL(dialog.getAttribute("data-callback-path") ?? "", "https://x.test");
@@ -147,12 +134,6 @@ describe("MobileAuthClient", () => {
       code_challenge: CHALLENGE,
       code_challenge_method: "S256",
     });
-  });
-
-  it("offers no sign-in once a session exists", () => {
-    const view = renderClient();
-
-    expect(view.queryByTestId("auth-dialog")).toBeNull();
   });
 
   it("keeps the sign-in dialog mounted while a signed-out session refetches", () => {
@@ -249,6 +230,7 @@ describe("MobileAuthPage query validation", () => {
   });
 
   it("falls back to sign-in for an unknown purpose rather than honouring it", async () => {
+    const calls = stubIssue({ ok: true, body: { callbackCode: "code-value" } });
     const view = await renderPage({
       purpose: "delete-account",
       state: STATE,
@@ -257,5 +239,12 @@ describe("MobileAuthPage query validation", () => {
     });
 
     expect(view.getByText(en.mobileAuth.purposeSignIn)).toBeInTheDocument();
+    fireEvent.click(view.getByRole("button", { name: en.mobileAuth.continueToApp }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({
+      purpose: "sign-in",
+      state: STATE,
+      codeChallenge: CHALLENGE,
+    });
   });
 });

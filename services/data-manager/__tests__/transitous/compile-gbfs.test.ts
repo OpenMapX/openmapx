@@ -105,7 +105,7 @@ describe("bounded GBFS candidate validation", () => {
     });
   });
 
-  it("reports malformed JSON and timeouts without throwing across providers", async () => {
+  it("reports malformed JSON without throwing across providers", async () => {
     lookupMock.mockResolvedValue(PUBLIC);
     globalThis.fetch = vi.fn(async () => new Response("not-json")) as typeof fetch;
     expect(await validateGbfsAddition(ADDITION, 1000, "now")).toMatchObject({ ok: false });

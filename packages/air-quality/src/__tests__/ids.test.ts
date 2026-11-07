@@ -11,13 +11,11 @@ const observation = {
 };
 
 describe("air-quality identities", () => {
-  it("is deterministic and excludes user coordinates and standards by construction", () => {
+  it("is deterministic and canonicalizes equivalent timestamps", () => {
     const id = observationId(observation);
     expect(observationId({ ...observation })).toBe(id);
     expect(id).toMatch(/^obs_1_[A-Za-z0-9_-]{43}$/);
     expect(id).not.toContain("station-1");
-    expect(Object.keys(observation)).not.toContain("coordinates");
-    expect(Object.keys(observation)).not.toContain("standardId");
     expect(observationId({ ...observation, evaluatedAt: "2026-08-30T10:00:00Z" })).toBe(id);
     expect(() => observationId({ ...observation, evaluatedAt: "not-a-time" })).toThrow(
       /evaluatedAt/,

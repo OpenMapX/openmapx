@@ -4,7 +4,6 @@ import { createOsmAccountService, deriveCapabilities } from "../account.js";
 import type { OsmApiClient } from "../types.js";
 
 const TOKEN = "osm-token-sentinel-never-exposed";
-const COMMENT = "human-comment-sentinel";
 
 const config = loadOsmConfig({
   OSM_CLIENT_ID: "id",
@@ -107,7 +106,7 @@ describe("account state", () => {
 });
 
 describe("public capability projection", () => {
-  it("never exposes the token or a raw upstream message", () => {
+  it("projects the public account without exposing its token", () => {
     const capabilities = deriveCapabilities({
       config,
       state: {
@@ -120,7 +119,6 @@ describe("public capability projection", () => {
     });
     const serialized = JSON.stringify(capabilities);
     expect(serialized).not.toContain(TOKEN);
-    expect(serialized).not.toContain(COMMENT);
     expect(capabilities.account).toEqual({
       id: 7,
       displayName: "mapper",

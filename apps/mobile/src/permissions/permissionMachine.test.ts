@@ -1,6 +1,4 @@
 import {
-  ANDROID_BACKGROUND_VIA_SETTINGS_SDK,
-  ANDROID_VISIBLE_START_SDK,
   type PermissionEvent,
   type PermissionFlowState,
   type PermissionPlatform,
@@ -199,7 +197,7 @@ describe("permissionReducer", () => {
     });
 
     it("routes to settings from Android 11 onwards, where the dialog does not exist", () => {
-      for (const sdkInt of [ANDROID_BACKGROUND_VIA_SETTINGS_SDK, 33, 34, 36]) {
+      for (const sdkInt of [30, 33, 34, 36]) {
         const { state, effects } = drive({ os: "android", sdkInt }, [
           START,
           { type: "disclosure-accepted" },
@@ -233,7 +231,7 @@ describe("permissionReducer", () => {
     });
 
     it("records that Android 14 needs a visible start", () => {
-      expect(requiresVisibleStart({ os: "android", sdkInt: ANDROID_VISIBLE_START_SDK })).toBe(true);
+      expect(requiresVisibleStart({ os: "android", sdkInt: 34 })).toBe(true);
       expect(requiresVisibleStart({ os: "android", sdkInt: 33 })).toBe(false);
       expect(requiresVisibleStart(IOS)).toBe(false);
     });

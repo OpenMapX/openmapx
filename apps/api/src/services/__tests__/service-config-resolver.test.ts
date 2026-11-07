@@ -1,5 +1,5 @@
 import { services as coreServices } from "@openmapx/core/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock the DB module before importing the resolver so the real postgres
 // connection is never touched. Each test overrides what the mocked chain
@@ -27,11 +27,14 @@ import {
   resolveServiceConfigWithSources,
 } from "../service-config-resolver";
 
+beforeEach(() => {
+  for (const key of Object.keys(process.env)) {
+    if (key.startsWith("SERVICE_TEST_")) vi.stubEnv(key, undefined);
+  }
+});
 afterEach(() => {
   selectLimitMock.mockReset();
-  for (const key of Object.keys(process.env)) {
-    if (key.startsWith("SERVICE_TEST_")) delete process.env[key];
-  }
+  vi.unstubAllEnvs();
 });
 
 describe("resolveServiceConfigWithSources", () => {
@@ -61,14 +64,14 @@ describe("resolveServiceConfigWithSources", () => {
 
   it("env vars override DB values (highest priority)", async () => {
     selectLimitMock.mockResolvedValueOnce([{ config: { memory_limit: "2g" } }]);
-    process.env.SERVICE_TEST_MEMORY_LIMIT = "8g";
+    vi.stubEnv("SERVICE_TEST_MEMORY_LIMIT", "8g");
     const r = await resolveServiceConfigWithSources({ id: "test", configSchema: schema });
     expect(r.memory_limit).toEqual({ value: "8g", source: "env" });
   });
 
   it("returns effective values without source metadata for readiness consumers", async () => {
     selectLimitMock.mockResolvedValueOnce([{ config: { memory_limit: "2g", workers: 6 } }]);
-    process.env.SERVICE_TEST_MEMORY_LIMIT = "8g";
+    vi.stubEnv("SERVICE_TEST_MEMORY_LIMIT", "8g");
 
     await expect(
       resolveEffectiveServiceConfig({ id: "test", configSchema: schema }),
@@ -104,7 +107,7 @@ describe("resolveAllServiceConfigs", () => {
 
   it("reports env-sourced keys out of band and never puts their value in the render values", async () => {
     selectLimitMock.mockResolvedValueOnce([{ config: { workers: 8 } }]);
-    process.env.SERVICE_TEST_MEMORY_LIMIT = "secret-ish-8g";
+    vi.stubEnv("SERVICE_TEST_MEMORY_LIMIT", "secret-ish-8g");
     const { values, envKeys } = await resolveAllServiceConfigs([
       { id: "test", configSchema: schema },
     ]);
@@ -115,7 +118,7 @@ describe("resolveAllServiceConfigs", () => {
 
   it("carries an env-sourced proxy host's value, so the render routes the host the env names", async () => {
     selectLimitMock.mockResolvedValueOnce([]);
-    process.env.SERVICE_TEST_APPLICATION_HOSTS = "maps.example.org";
+    vi.stubEnv("SERVICE_TEST_APPLICATION_HOSTS", "maps.example.org");
     const manifest = {
       id: "test",
       configSchema: {
@@ -161,7 +164,7 @@ describe("resolveAllServiceConfigs", () => {
 
 describe("typed render settings and host ownership", () => {
   it("materializes public numeric resources while retaining legacy host expressions", async () => {
-    process.env.SERVICE_TEST_OPENMAPX_MEMORY_MIB = "4096";
+    vi.stubEnv("SERVICE_TEST_OPENMAPX_MEMORY_MIB", "4096");
     selectLimitMock.mockResolvedValueOnce([{ config: { OPENMAPX_MEMORY_MIB: 1024 } }]);
     const input = {
       id: "test",
@@ -174,8 +177,8 @@ describe("typed render settings and host ownership", () => {
     const resolved = await resolveAllServiceConfigs([input]);
     expect(resolved.values.get("test")).toEqual({ OPENMAPX_MEMORY_MIB: 4096 });
     expect(resolved.envKeys.has("test")).toBe(false);
-    delete process.env.SERVICE_TEST_OPENMAPX_MEMORY_MIB;
-    process.env.SERVICE_TEST_HOST_MEMORY = "16g";
+    vi.stubEnv("SERVICE_TEST_OPENMAPX_MEMORY_MIB", undefined);
+    vi.stubEnv("SERVICE_TEST_HOST_MEMORY", "16g");
     selectLimitMock.mockResolvedValueOnce([{ config: { OPENMAPX_MEMORY_MIB: 1024 } }]);
     const legacy = await resolveAllServiceConfigs([
       { ...input, containerMemory: "${SERVICE_TEST_HOST_MEMORY:-8g}" },
@@ -184,7 +187,7 @@ describe("typed render settings and host ownership", () => {
     expect(legacy.envKeys.has("test")).toBe(false);
   });
   it("locks direct host knobs and retains their actual manifest interpolation", async () => {
-    process.env.SERVICE_TEST_ORIGINAL_THREADS = "8";
+    vi.stubEnv("SERVICE_TEST_ORIGINAL_THREADS", "8");
     selectLimitMock.mockResolvedValueOnce([{ config: { THREADS: 4 } }]);
     const input = {
       id: "test",

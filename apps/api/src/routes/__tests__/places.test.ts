@@ -296,7 +296,7 @@ describe("POST /places/card-enrichment", () => {
     });
   });
 
-  it("aborts timed-out rating work and does not launch overlapping legacy work", async () => {
+  it("aborts timed-out rating work after one provider call", async () => {
     let aborted = false;
     mockFetchAggregate.mockImplementation(
       (_subject, _providers, options) =>
@@ -683,6 +683,9 @@ describe("POST /places/card-enrichment", () => {
         payload,
       });
       expect(response.statusCode).toBe(200);
+      expect(response.json().results.map((result: { id: string }) => result.id)).toEqual(
+        payload.places.map((item) => item.id),
+      );
       expect(
         response
           .json()
@@ -836,6 +839,9 @@ describe("POST /places/card-enrichment", () => {
         payload,
       });
       expect(response.statusCode).toBe(200);
+      expect(response.json().results.map((result: { id: string }) => result.id)).toEqual(
+        payload.places.map((item) => item.id),
+      );
       expect(
         response
           .json()
@@ -1184,7 +1190,7 @@ describe("GET /places/:id", () => {
     expect(mockLookupDbStation).toHaveBeenCalledWith("8011160", undefined);
   });
 
-  it("returns 404 for eva: scheme with non-numeric EVA number", async () => {
+  it("returns 404 when the registered EVA resolver reports no match", async () => {
     const res = await app.inject({
       method: "GET",
       url: `/places/${encodeURIComponent("eva:abc")}`,
@@ -1204,6 +1210,7 @@ describe("GET /places/:id", () => {
     expect(res.statusCode).toBe(400);
     const body = res.json();
     expect(body.error).toBe("Non-resolvable place ID requires lat and lng query parameters");
+    expect(res.headers["cache-control"]).toBeUndefined();
   });
 
   it("returns 400 when name is missing for opaque ID", async () => {
@@ -1438,19 +1445,7 @@ describe("GET /places/:id", () => {
     expect(res.statusCode).toBe(404);
     const body = res.json();
     expect(body.error).toContain("No OSM match found");
-  });
-
-  it("prevents HTTP reuse of a calculated hours verdict", async () => {
-    mockLookupByOsmRef.mockResolvedValue(MOCK_PLACE);
-    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
-    mockBuildReviewLinks.mockReturnValue([]);
-
-    const res = await app.inject({
-      method: "GET",
-      url: `/places/${encodeURIComponent("osm:node/12345")}`,
-    });
-
-    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(res.headers["cache-control"]).toBeUndefined();
   });
 
   it("does not collide when a colon-bearing lang shifts the cache-key separator", async () => {
@@ -1492,29 +1487,6 @@ describe("GET /places/:id", () => {
     expect(mockWithCache.mock.calls[0]?.[0]).not.toBe(mockWithCache.mock.calls[1]?.[0]);
   });
 
-  it("does not set Cache-Control on 400 error", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/places/custom-123",
-    });
-
-    expect(res.statusCode).toBe(400);
-    expect(res.headers["cache-control"]).toBeUndefined();
-  });
-
-  it("does not set Cache-Control on 404 error", async () => {
-    mockLookupByNameAndCoords.mockResolvedValue(null);
-    mockLookupByCoords.mockResolvedValue(null);
-
-    const res = await app.inject({
-      method: "GET",
-      url: `/places/custom-123?${qs({ lat: "52.52", lng: "13.37", name: "Nonexistent" })}`,
-    });
-
-    expect(res.statusCode).toBe(404);
-    expect(res.headers["cache-control"]).toBeUndefined();
-  });
-
   it("passes lang parameter through to services", async () => {
     mockLookupByOsmRef.mockResolvedValue(MOCK_PLACE);
     mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
@@ -1531,19 +1503,27 @@ describe("GET /places/:id", () => {
     });
   });
 
-  it("handles way/ and relation/ OSM refs", async () => {
-    mockLookupByOsmRef.mockResolvedValue({ ...MOCK_PLACE, id: "osm:way/67890" });
-    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
-    mockBuildReviewLinks.mockReturnValue([]);
+  it.each(["way", "relation"])(
+    "dispatches a %s OSM ref to the registered resolver",
+    async (type) => {
+      mockLookupByOsmRef.mockResolvedValue({ ...MOCK_PLACE, id: `osm:${type}/67890` });
+      mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+      mockBuildReviewLinks.mockReturnValue([]);
 
-    const res = await app.inject({
-      method: "GET",
-      url: `/places/${encodeURIComponent("osm:way/67890")}`,
-    });
+      const res = await app.inject({
+        method: "GET",
+        url: `/places/${encodeURIComponent(`osm:${type}/67890`)}`,
+      });
 
-    expect(res.statusCode).toBe(200);
-    expect(mockLookupByOsmRef).toHaveBeenCalledWith("way", "67890", "osm:way/67890", undefined);
-  });
+      expect(res.statusCode).toBe(200);
+      expect(mockLookupByOsmRef).toHaveBeenCalledWith(
+        type,
+        "67890",
+        `osm:${type}/67890`,
+        undefined,
+      );
+    },
+  );
 
   it("returns 500 with generic message on unexpected error", async () => {
     mockLookupByOsmRef.mockRejectedValue(new Error("Unexpected failure"));
@@ -1713,48 +1693,44 @@ describe("GET /places/:id", () => {
     });
     mockBuildReviewLinks.mockReturnValue([]);
 
-    const startTimes: Record<string, number> = {};
-
-    // Stagger resolution: boundary=30ms, photos=20ms, reviews=10ms.
-    // If run sequentially the total would be ≥60ms; the start-time spread
-    // tells us they actually overlap without relying on wall-clock duration.
-    mockFetchOsmBoundary.mockImplementation(() => {
-      startTimes.boundary = Date.now();
-      return new Promise((resolve) =>
-        setTimeout(() => resolve({ boundary: null, boundingBox: null }), 30),
-      );
+    const started = new Set<string>();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
     });
-    mockSearchHeroPhotos.mockImplementation(() => {
-      startTimes.photos = Date.now();
-      return new Promise((resolve) => setTimeout(() => resolve([]), 20));
+    mockFetchOsmBoundary.mockImplementation(async () => {
+      started.add("boundary");
+      await gate;
+      return { boundary: null, boundingBox: null };
     });
-    mockFetchAggregate.mockImplementation(() => {
-      startTimes.reviews = Date.now();
-      return new Promise((resolve) => setTimeout(() => resolve(null), 10));
+    mockSearchHeroPhotos.mockImplementation(async () => {
+      started.add("photos");
+      await gate;
+      return [];
     });
-
-    const res = await app.inject({
-      method: "GET",
-      url: `/places/${encodeURIComponent("osm:node/12345")}`,
+    mockFetchAggregate.mockImplementation(async () => {
+      started.add("reviews");
+      await gate;
+      return null;
     });
 
+    const request = app
+      .inject({
+        method: "GET",
+        url: `/places/${encodeURIComponent("osm:node/12345")}`,
+      })
+      .then((response) => response);
+    try {
+      await vi.waitFor(() => {
+        expect(started).toEqual(new Set(["boundary", "photos", "reviews"]));
+      });
+    } finally {
+      release();
+      await request;
+    }
+    const res = await request;
     expect(res.statusCode).toBe(200);
-    const body = res.json();
-    // Response shape is unchanged.
-    expect(body).toMatchObject({ id: "osm:node/12345", name: adminPlace.name });
-
-    // All three mocks must have been called.
-    expect(mockFetchOsmBoundary).toHaveBeenCalled();
-    expect(mockSearchHeroPhotos).toHaveBeenCalled();
-    expect(mockFetchAggregate).toHaveBeenCalled();
-
-    // All three must have started before the shortest one (10ms) resolved.
-    // Parallel: all starts occur before any resolution — spread is near zero.
-    // Sequential: starts would be separated by at least one delay (≥10ms).
-    const spread =
-      Math.max(startTimes.boundary, startTimes.photos, startTimes.reviews) -
-      Math.min(startTimes.boundary, startTimes.photos, startTimes.reviews);
-    expect(spread).toBeLessThan(10);
+    expect(res.json()).toMatchObject({ id: "osm:node/12345", name: adminPlace.name });
   });
 });
 

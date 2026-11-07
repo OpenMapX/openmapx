@@ -286,6 +286,7 @@ describe("installIntegration (local source)", () => {
     expect(result.id).toBe("ads-b");
     expect(result.replaced).toBe(false);
     expect(existsSync(join(tmp, "custom_integrations", "ads-b", "manifest.json"))).toBe(true);
+    expect(existsSync(join(tmp, "custom_integrations", "ads-b", "dist"))).toBe(false);
   });
 
   it("copies a declared static preview without building frontend code", async () => {
@@ -359,19 +360,6 @@ describe("installIntegration (local source)", () => {
       /Executable community integration code cannot be installed without an isolation boundary/,
     );
     expect(existsSync(join(tmp, "custom_integrations", "frontend-demo"))).toBe(false);
-  });
-
-  it("installs a declarative integration without creating build output", async () => {
-    const src = join(tmp, "backend-only");
-    mkdirSync(src, { recursive: true });
-    writeFileSync(
-      join(src, "manifest.json"),
-      JSON.stringify({ ...baseManifest, id: "backend-only" }),
-      "utf-8",
-    );
-
-    await installIntegration({ source: src, rootDir: tmp });
-    expect(existsSync(join(tmp, "custom_integrations", "backend-only", "dist"))).toBe(false);
   });
 
   it("rejects community backend source instead of installing it into the API trust domain", async () => {
@@ -1298,20 +1286,6 @@ describe("installIntegration security", () => {
     await expect(
       installIntegration({ source: "https://random.example.com/repo.git", rootDir: tmp }),
     ).rejects.toThrow(/not in the repository allowlist/);
-  });
-
-  it("accepts a github:user/repo spec at allowlist validation time", async () => {
-    // Should clear URL gating; the failure that follows comes from `git clone`
-    // (which we don't run in tests). The fact that the error is NOT a
-    // URL-validation error means the allowlist accepted it.
-    await expect(
-      installIntegration({
-        source: "github:owner/repo",
-        rootDir: tmp,
-        // Suppress the actual clone by aborting before spawn fires.
-        signal: AbortSignal.abort(),
-      }),
-    ).rejects.toThrow();
   });
 
   it("rejects a local source when allowLocalSources is false", async () => {

@@ -273,9 +273,9 @@ describe("road-condition writer policy authority", () => {
   it("returns a bounded lease and stable revision for an observed policy", async () => {
     const first = await getRoadConditionsPolicySnapshot();
     expect(first.authoritative).toBe(true);
-    expect(Date.parse(first.validUntil!) - Date.parse(first.evaluatedAt)).toBeLessThanOrEqual(
-      150_000,
-    );
+    const leaseMs = Date.parse(first.validUntil!) - Date.parse(first.evaluatedAt);
+    expect(leaseMs).toBeGreaterThan(0);
+    expect(leaseMs).toBeLessThanOrEqual(150_000);
     await refreshDataUsePolicy();
     expect((await getRoadConditionsPolicySnapshot()).revision).toBe(first.revision);
   });

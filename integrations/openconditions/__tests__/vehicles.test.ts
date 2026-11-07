@@ -162,7 +162,7 @@ describe("service-vehicles-openconditions", () => {
     expect(readingToServiceVehicle({ ...record!, property: "fire.frp" })).toBeNull();
   });
 
-  test("reads every page, and says the area is partial when it stops at its cap", async () => {
+  test("reads every page and marks both the position cap and a non-progressing page partial", async () => {
     const pages = providerWith((req) => {
       const answer = body();
       return req.options?.params?.cursor === undefined
@@ -177,6 +177,24 @@ describe("service-vehicles-openconditions", () => {
     const endless = providerWith(() => ({ records: [], next: "more" }));
     const capped = await endless.provider.searchVehicles(BBOX);
     expect(capped).toEqual({ vehicles: [], partial: "area" });
+
+    const template = body().records[0]!;
+    const records = Array.from({ length: 3001 }, (_, index) => ({
+      ...template,
+      id: `position-${index}`,
+    }));
+    const limited = providerWith((req) => {
+      const offset = Number(req.options?.params?.cursor ?? 0);
+      const limit = Number(req.options?.params?.limit);
+      return {
+        records: records.slice(offset, offset + limit),
+        next: offset + limit < records.length ? String(offset + limit) : null,
+      };
+    });
+    const atLimit = await limited.provider.searchVehicles(BBOX);
+    expect(atLimit.vehicles).toHaveLength(3000);
+    expect(atLimit.partial).toBe("area");
+    expect(limited.http.calls).toHaveLength(3);
   });
 
   test("opens a position by reading the box around the place its id carries", async () => {

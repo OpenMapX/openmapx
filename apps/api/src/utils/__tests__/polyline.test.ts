@@ -22,19 +22,6 @@ describe("decodePolyline", () => {
     expect(decodePolyline("??")).toEqual([[0, 0]]);
   });
 
-  it("returns coordinates in [lng, lat] order (GeoJSON), not [lat, lng]", () => {
-    // First point of the Google example is lat=38.5, lng=-120.2
-    // In GeoJSON order the first element is lng (negative), second is lat (positive)
-    const [[lng, lat]] = decodePolyline("_p~iF~ps|U_ulLnnqC_mqNvxq`@");
-    expect(lng).toBeLessThan(0); // longitude is negative (western hemisphere)
-    expect(lat).toBeGreaterThan(0); // latitude is positive (northern hemisphere)
-  });
-
-  it("supports precision 6 (MOTIS polylines) — zero point is unaffected", () => {
-    // "??" always decodes to [0, 0] regardless of precision
-    expect(decodePolyline("??", 6)).toEqual([[0, 0]]);
-  });
-
   it("produces more precise coordinates with precision 6 vs precision 5", () => {
     // Encode the same string with both precisions — they should differ.
     // Use "_p~iF~ps|U_ulLnnqC_mqNvxq`@": with precision=5 this gives real coords,

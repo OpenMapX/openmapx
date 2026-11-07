@@ -27,37 +27,6 @@ describe("AutocompleteDropdown", () => {
     expect(container.firstChild).toBe(null);
   });
 
-  it("renders a row per suggestion with label and sublabel", () => {
-    const suggestions = [
-      makeResult({ id: "a", label: "Berlin", sublabel: "Germany", type: "region" }),
-      makeResult({ id: "b", label: "Hamburg", sublabel: "Germany", type: "region" }),
-    ];
-    render(<AutocompleteDropdown suggestions={suggestions} onSelect={vi.fn()} />);
-
-    expect(screen.queryByText("Berlin")).not.toBe(null);
-    expect(screen.queryByText("Hamburg")).not.toBe(null);
-    expect(screen.getAllByText("search.resultTypeArea · Germany").length).toBe(2);
-    expect(screen.getAllByRole("option").length).toBe(2);
-  });
-
-  it("removes repeated names and address parts from the displayed place description", () => {
-    render(
-      <AutocompleteDropdown
-        suggestions={[
-          makeResult({
-            label: "Aachen Hauptbahnhof",
-            sublabel: "Aachen Hauptbahnhof, Lagerhausstrasse, Aachen, Aachen, Germany",
-            type: "poi",
-          }),
-        ]}
-        onSelect={vi.fn()}
-      />,
-    );
-
-    screen.getByText("search.resultTypePlace · Lagerhausstrasse, Aachen, Germany");
-    expect(screen.queryByText(/Aachen Hauptbahnhof, Lagerhausstrasse/)).toBeNull();
-  });
-
   it("shows a transit type when a place has an authoritative transit category", () => {
     render(
       <AutocompleteDropdown
@@ -207,66 +176,34 @@ describe("AutocompleteDropdown", () => {
     const onSelect = vi.fn();
     const suggestion = makeResult({
       label: "Aachen Hauptbahnhof",
-      sublabel: "Aachen Hauptbahnhof, Lagerhausstrasse, Aachen, Germany",
+      sublabel: "Aachen Hauptbahnhof, Lagerhausstrasse, Aachen, Aachen, Germany",
       type: "poi",
     });
-    render(<AutocompleteDropdown suggestions={[suggestion]} onSelect={onSelect} />);
-
-    await user.click(screen.getByRole("option", { name: /Aachen Hauptbahnhof/ }));
-
-    expect(onSelect).toHaveBeenCalledWith(suggestion);
-    expect(onSelect.mock.calls[0]?.[0]).toBe(suggestion);
-    expect(suggestion.sublabel).toBe("Aachen Hauptbahnhof, Lagerhausstrasse, Aachen, Germany");
-  });
-
-  it("invokes onSelect with the clicked suggestion", async () => {
-    const user = userEvent.setup();
-    const onSelect = vi.fn();
-    const target = makeResult({ id: "poi-1", label: "Coffee Shop", type: "poi" });
-    render(
-      <AutocompleteDropdown
-        suggestions={[makeResult({ id: "other", label: "Other" }), target]}
-        onSelect={onSelect}
-      />,
-    );
-
-    await user.click(screen.getByText("Coffee Shop"));
-
-    expect(onSelect).toHaveBeenCalledTimes(1);
-    expect(onSelect).toHaveBeenCalledWith(target);
-  });
-
-  it("marks the highlighted suggestion as selected", () => {
-    const suggestions = [
-      makeResult({ id: "a", label: "First" }),
-      makeResult({ id: "b", label: "Second" }),
-    ];
-    render(
-      <AutocompleteDropdown suggestions={suggestions} onSelect={vi.fn()} highlightedIndex={1} />,
-    );
-
-    const buttons = screen.getAllByRole("option");
-    expect(buttons[1].className).toContain("Mui-selected");
-    expect(buttons[0].className).not.toContain("Mui-selected");
-  });
-
-  it("shows a compact matched-value badge and exposes it in the row name", () => {
     render(
       <AutocompleteDropdown
         suggestions={[
-          makeResult({
-            id: "oa:EDDF",
-            label: "Frankfurt am Main Airport",
-            type: "poi",
-            searchMatch: { kind: "authoritative_code", value: "FRA", normalized: "fra" },
-          }),
+          makeResult({ id: "first", label: "Berlin", sublabel: "Germany", type: "region" }),
+          suggestion,
         ]}
-        onSelect={vi.fn()}
+        onSelect={onSelect}
       />,
     );
+    expect(screen.getAllByRole("option")).toHaveLength(2);
+    expect(screen.getByText("Berlin")).toBeVisible();
+    expect(screen.getByText("search.resultTypeArea · Germany")).toBeInTheDocument();
+    expect(
+      screen.getByText("search.resultTypePlace · Lagerhausstrasse, Aachen, Germany"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Aachen Hauptbahnhof, Lagerhausstrasse/)).toBeNull();
 
-    expect(screen.getByText("FRA").className).toContain("MuiChip-label");
-    screen.getByRole("option", { name: /Frankfurt am Main Airport.*FRA/i });
+    await user.click(screen.getByRole("option", { name: /Aachen Hauptbahnhof/ }));
+
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith(suggestion);
+    expect(onSelect.mock.calls[0]?.[0]).toBe(suggestion);
+    expect(suggestion.sublabel).toBe(
+      "Aachen Hauptbahnhof, Lagerhausstrasse, Aachen, Aachen, Germany",
+    );
   });
 
   it("does not render an empty or redundant badge for an ordinary result", () => {
@@ -282,7 +219,8 @@ describe("AutocompleteDropdown", () => {
       />,
     );
 
-    expect(document.querySelector(".MuiChip-root")).toBeNull();
+    expect(screen.getAllByText("Berlin")).toHaveLength(1);
+    expect(screen.getByRole("option").textContent).toBe("Berlinsearch.resultTypeAddress");
   });
 
   it("returns the unchanged canonical label when a badge row is clicked", async () => {
@@ -296,6 +234,7 @@ describe("AutocompleteDropdown", () => {
     });
     render(<AutocompleteDropdown suggestions={[suggestion]} onSelect={onSelect} />);
 
+    expect(screen.getByText("FRA")).toBeVisible();
     await user.click(screen.getByRole("option", { name: /Frankfurt am Main Airport.*FRA/i }));
 
     const selected = onSelect.mock.calls[0]?.[0] as AutocompleteResult;

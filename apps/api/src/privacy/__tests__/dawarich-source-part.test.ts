@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readdir } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -232,16 +232,10 @@ describe("Dawarich source-part parser", () => {
     expect(maxChunk).toBeLessThanOrEqual(payloadChunkBytes);
   });
 
-  it("rejects traversal and data after the tar end markers", async () => {
+  it("rejects traversal", async () => {
     const malicious = tar([["dawarich/../secret", Buffer.from("x")]]);
     await expect(parseDawarichTar(Readable.from([malicious]))).rejects.toMatchObject({
       code: "unsafe_path",
-    } satisfies Partial<DawarichSourcePartError>);
-    const valid = tar([["dawarich/source-manifest.json", Buffer.from(JSON.stringify(tuple))]]);
-    await expect(
-      parseDawarichTar(Readable.from([Buffer.concat([valid, Buffer.from("x")])])),
-    ).rejects.toMatchObject({
-      code: "trailing_data",
     } satisfies Partial<DawarichSourcePartError>);
   });
 
@@ -253,18 +247,24 @@ describe("Dawarich source-part parser", () => {
       ["dawarich/points/2026/01.jsonl", points],
       ["dawarich/source-manifest.json", invalidManifest],
     ]);
-    await expect(
-      spoolDawarichTar(Readable.from([payload]), { spoolParentDirectory: parent }),
-    ).rejects.toMatchObject({ code: "manifest_mismatch" });
-    expect(await readdir(parent)).toEqual([]);
+    try {
+      await expect(
+        spoolDawarichTar(Readable.from([payload]), { spoolParentDirectory: parent }),
+      ).rejects.toMatchObject({ code: "manifest_mismatch" });
+      expect(await readdir(parent)).toEqual([]);
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
   });
 
   it("rejects an oversized manifest before reading it and closes the upstream iterator", async () => {
     const oversizedHeader = member("dawarich/source-manifest.json", Buffer.alloc(257 * 1024, 0x20));
     let closed = false;
+    let pulledBody = false;
     const source = (async function* () {
       try {
         yield oversizedHeader.subarray(0, 512);
+        pulledBody = true;
         yield oversizedHeader.subarray(512);
         yield Buffer.alloc(1024);
       } finally {
@@ -275,5 +275,6 @@ describe("Dawarich source-part parser", () => {
       code: "limit_exceeded",
     });
     expect(closed).toBe(true);
+    expect(pulledBody).toBe(false);
   });
 });

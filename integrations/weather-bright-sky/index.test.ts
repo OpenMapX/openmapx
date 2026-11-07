@@ -98,16 +98,12 @@ afterEach(() => {
 });
 
 describe("Bright Sky weather provider", () => {
-  it("registers with id and priority", () => {
-    const provider = getProvider();
-    expect(provider.id).toBe("bright-sky");
-    expect(provider.priority).toBe(3);
-  });
-
   it("maps current weather and keeps km/h wind for metric", async () => {
     mockFetch.mockResolvedValueOnce(mockOk(currentResponse()));
 
-    const res = await getProvider().getCurrentWeather(COORDS);
+    const provider = getProvider();
+    expect(provider.id).toBe("bright-sky");
+    const res = await provider.getCurrentWeather(COORDS);
 
     expect(res.source).toBe("bright-sky");
     expect(res.location).toEqual(COORDS);

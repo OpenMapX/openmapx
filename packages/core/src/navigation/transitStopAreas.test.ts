@@ -95,6 +95,15 @@ describe("convexHull", () => {
     ]);
     expect(hull).toHaveLength(4);
     expect(hull).not.toContainEqual([east(LNG, 50), north(LAT, 50)]);
+
+    expect(hull).toEqual(
+      expect.arrayContaining([
+        [LNG, LAT],
+        [east(LNG, 100), LAT],
+        [east(LNG, 100), north(LAT, 100)],
+        [LNG, north(LAT, 100)],
+      ]),
+    );
   });
 
   it("measures the widest span", () => {

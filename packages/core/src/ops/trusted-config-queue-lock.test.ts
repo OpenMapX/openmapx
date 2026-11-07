@@ -105,8 +105,9 @@ const publicationTransitions = [
 ] as const;
 
 describe("trusted configuration retained-budget lock", () => {
-  it("exposes the exact stable-directory crash boundary before publication is authenticated", async () => {
+  it("preserves an unbound stable crash inode and gives deterministic operator guidance", async () => {
     const root = directory();
+    const lockPath = join(root, OPS_TRUSTED_CONFIG_QUEUE_LOCK_NAME);
     let namesAtBoundary: string[] = [];
     await expect(
       acquireTrustedConfigurationQueueLock({
@@ -125,25 +126,6 @@ describe("trusted configuration retained-budget lock", () => {
     ).rejects.toThrow("Trusted configuration queue busy");
     expect(namesAtBoundary).toEqual([OPS_TRUSTED_CONFIG_QUEUE_LOCK_NAME]);
     expect(readdirSync(root)).toEqual([OPS_TRUSTED_CONFIG_QUEUE_LOCK_NAME]);
-  });
-
-  it("preserves an unbound stable crash inode and gives deterministic operator guidance", async () => {
-    const root = directory();
-    const lockPath = join(root, OPS_TRUSTED_CONFIG_QUEUE_LOCK_NAME);
-    await expect(
-      acquireTrustedConfigurationQueueLock({
-        directory: root,
-        token,
-        ownerUid: statSync(root).uid,
-        ownerGid: statSync(root).gid,
-        participant: "api",
-        operationKey: "opk1_0123456789abcdef",
-        acquireTimeoutMs: 0,
-        afterStableLockDirectoryCreate: () => {
-          throw new Error("simulated crash before authenticated publication");
-        },
-      }),
-    ).rejects.toThrow("Trusted configuration queue busy");
     const residue = statSync(lockPath);
 
     for (const attempt of [
@@ -516,7 +498,7 @@ describe("trusted configuration retained-budget lock", () => {
     recovered.release();
   });
 
-  it("does not treat a live reused PID as authority for an expired generation", async () => {
+  it("recovers an expired generation while the original process remains alive", async () => {
     const root = directory();
     const clock = leaseClock();
     const common = {

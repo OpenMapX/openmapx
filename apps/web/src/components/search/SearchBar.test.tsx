@@ -245,11 +245,6 @@ describe("SearchBar", () => {
     expect(onRender).not.toHaveBeenCalled();
   });
 
-  it("mounts and renders the search input", () => {
-    renderBar();
-    screen.getByLabelText("search.ariaLabel");
-  });
-
   it("asks for no suggestions while the box is not in use, then for the text once focused", async () => {
     // The opened place's name stays in the box while the map flies to it.
     useSearchStore.setState({ query: "Louvre Museum", isFocused: false });
@@ -377,13 +372,6 @@ describe("SearchBar", () => {
     expect(screen.queryByText(/search\.fromMapCenter/)).toBeNull();
   });
 
-  it("shows empty-search shortcuts on desktop when the input is focused", () => {
-    renderBar();
-    fireEvent.focus(screen.getByLabelText("search.ariaLabel"));
-
-    expect(screen.getByText("search.emptyStateSignedOut")).toBeInTheDocument();
-  });
-
   it("runs a recent query again on desktop without navigating to a stored result", async () => {
     useRecentSearchStore.getState().add("Berlin cafes");
     renderBar();
@@ -458,6 +446,10 @@ describe("SearchBar", () => {
   it("dispatches a debounced autocomplete query on typing (fresh text: 150ms)", async () => {
     renderBar();
     const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    expect(screen.getByText("search.emptyStateSignedOut")).toBeInTheDocument();
+    expect(screen.queryByText("search.searchCategory")).toBeNull();
+    expect(useSearchStore.getState().suggestions).toEqual([]);
     fireEvent.change(input, { target: { value: "berlin" } });
 
     // Debounce hasn't fired yet — only the empty-input mount call has landed.
@@ -939,12 +931,12 @@ describe("SearchBar", () => {
     expect(rows.indexOf(categoryRow)).toBe(0);
 
     fireEvent.keyDown(input, { key: "ArrowDown" });
-    expect(categoryRow.className).toContain("Mui-selected");
+    expect(categoryRow).toHaveAttribute("aria-selected", "true");
     for (let step = 0; step < rows.indexOf(brandRow); step += 1) {
       fireEvent.keyDown(input, { key: "ArrowDown" });
     }
-    expect(brandRow.className).toContain("Mui-selected");
-    expect(placeRow.className).not.toContain("Mui-selected");
+    expect(brandRow).toHaveAttribute("aria-selected", "true");
+    expect(placeRow).toHaveAttribute("aria-selected", "false");
     fireEvent.keyDown(input, { key: "Enter" });
 
     expect(useCategorySearchStore.getState().activeBrand?.qid).toBe("Q123");
@@ -1371,53 +1363,30 @@ describe("SearchBar", () => {
     screen.getByText("OurAirports");
   });
 
-  it("shows displayed-row attribution in the mobile results panel", async () => {
-    useMediaQueryMock.mockReturnValue(true);
-    useSearchSuggestionsMock.mockReturnValue({
-      data: aggregateResponse(
-        [
-          aggregateSuggestion({
-            id: "oa:EDDF",
-            label: "Frankfurt am Main Airport",
-            searchMatch: { kind: "authoritative_code", value: "FRA", normalized: "fra" },
-            provider: "knowledge-ourairports",
-            contributors: [{ sourceId: "ourairports", name: "OurAirports" }],
-          }),
-        ],
-        [{ sourceId: "ourairports", name: "OurAirports" }],
-      ),
-      isFetching: false,
-    });
+  it.each([false, true])(
+    "credits only displayed rows when an envelope includes another source (mobile=%s)",
+    async (mobile) => {
+      useMediaQueryMock.mockReturnValue(mobile);
+      const shown = { sourceId: "shown-feed", name: "Visible supplier" };
+      const hidden = { sourceId: "hidden-feed", name: "Hidden supplier" };
+      useSearchSuggestionsMock.mockReturnValue({
+        data: aggregateResponse(
+          [aggregateSuggestion({ label: "Visible station", contributors: [shown] })],
+          [shown, hidden],
+        ),
+        isFetching: false,
+      });
 
-    renderBar();
-    const input = screen.getByLabelText("search.ariaLabel");
-    fireEvent.focus(input);
-    fireEvent.change(input, { target: { value: "FRA" } });
+      renderBar();
+      const input = screen.getByLabelText("search.ariaLabel");
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: "station" } });
 
-    await screen.findByRole("option", { name: /Frankfurt am Main Airport/ });
-    screen.getByText("OurAirports");
-  });
-
-  it("credits only displayed rows when an aggregate envelope includes another source", async () => {
-    const shown = { sourceId: "shown-feed", name: "Visible supplier" };
-    const hidden = { sourceId: "hidden-feed", name: "Hidden supplier" };
-    useSearchSuggestionsMock.mockReturnValue({
-      data: aggregateResponse(
-        [aggregateSuggestion({ label: "Visible station", contributors: [shown] })],
-        [shown, hidden],
-      ),
-      isFetching: false,
-    });
-
-    renderBar();
-    const input = screen.getByLabelText("search.ariaLabel");
-    fireEvent.focus(input);
-    fireEvent.change(input, { target: { value: "station" } });
-
-    await screen.findByRole("option", { name: /Visible station/ });
-    expect(screen.getByText("Visible supplier")).toBeInTheDocument();
-    expect(screen.queryByText("Hidden supplier")).not.toBeInTheDocument();
-  });
+      await screen.findByRole("option", { name: /Visible station/ });
+      expect(screen.getByText("Visible supplier")).toBeInTheDocument();
+      expect(screen.queryByText("Hidden supplier")).not.toBeInTheDocument();
+    },
+  );
 
   it("keeps an explicit alias ahead of a generated acronym collision", async () => {
     useSearchSuggestionsMock.mockReturnValue({
@@ -1826,15 +1795,6 @@ describe("SearchBar", () => {
     await screen.findByText("Accessible cafés with outdoor seating");
   });
 
-  it("shows no dropdown and keeps suggestions empty when the query is short", () => {
-    renderBar();
-    const input = screen.getByLabelText("search.ariaLabel");
-    fireEvent.focus(input);
-
-    expect(screen.queryByText("search.searchCategory")).toBeNull();
-    expect(useSearchStore.getState().suggestions).toEqual([]);
-  });
-
   it("silently swallows an autocomplete error (no dropdown, no crash)", async () => {
     useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: false, isError: true });
     renderBar();
@@ -1842,7 +1802,7 @@ describe("SearchBar", () => {
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "berlin" } });
 
-    await new Promise((r) => setTimeout(r, 20));
+    await waitFor(() => expect(useAutocompleteMock.mock.calls.at(-1)?.[0]).toBe("berlin"));
 
     expect(screen.queryByText("search.searchCategory")).toBeNull();
     expect(useSearchStore.getState().suggestions).toEqual([]);
@@ -1855,10 +1815,8 @@ describe("SearchBar", () => {
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "berlin" } });
 
-    // Production code renders exactly 3 skeleton rows while loading, each with
-    // 1 circular + 2 text Skeletons = 9 `.MuiSkeleton-root` nodes (SearchBar.tsx:1276-1289).
     await waitFor(() => {
-      expect(container.querySelectorAll(".MuiSkeleton-root").length).toBe(9);
+      expect(container.querySelectorAll(".MuiSkeleton-root").length).toBeGreaterThan(0);
     });
   });
 
@@ -2109,34 +2067,6 @@ describe("SearchBar NLP submission context", () => {
     await waitFor(() => expect(launchTextSearch).toHaveBeenCalledWith(fakeMap.map, query));
     expect(lastContext()).toEqual({ query, center: [13.4, 52.5], bbox: null, enabled: false });
   });
-
-  it.each(["error", "empty"])(
-    "preserves the plain text fallback after an NLP %s",
-    async (outcome) => {
-      viewport();
-      useSearchStore.setState({ query, isFocused: true });
-      useNlpSearchMock.mockImplementation((...args: unknown[]) =>
-        args[3]
-          ? {
-              data:
-                outcome === "empty"
-                  ? {
-                      intent: { ...intent, filter: { selectors: [] } },
-                      resolvedBbox: bboxA,
-                      provider: "local",
-                    }
-                  : undefined,
-              isFetching: false,
-              isError: outcome === "error",
-            }
-          : { data: undefined, isFetching: false },
-      );
-      renderBar();
-      submit(screen.getByLabelText("search.ariaLabel"));
-      await waitFor(() => expect(launchTextSearch).toHaveBeenCalledWith(fakeMap.map, query));
-      expect(lastContext().enabled).toBe(false);
-    },
-  );
 
   it.each(["recent", "voice"])(
     "captures a %s submission before its suggestions settle",

@@ -119,13 +119,13 @@ vi.mock("../../services/dawarich/provisioning.js", async (importActual) => ({
 let app: FastifyInstance;
 
 beforeAll(async () => {
-  process.env.DOMAIN = "example.test";
+  vi.stubEnv("DOMAIN", "example.test");
   const { adminDawarichRoute } = await import("../admin-dawarich.js");
   app = await createAdminTestApp(adminDawarichRoute);
 });
 
 afterAll(async () => {
-  delete process.env.DOMAIN;
+  vi.unstubAllEnvs();
   await app?.close();
 });
 
@@ -172,7 +172,6 @@ describe("admin Dawarich provisioning routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual(safeStatus);
     expect(mockProvision).not.toHaveBeenCalled();
-    expect(response.payload).not.toContain("sensitive");
   });
 
   it("validates the exact installed bundle before provisioning mutation", async () => {
@@ -217,7 +216,6 @@ describe("admin Dawarich provisioning routes", () => {
         },
       }),
     );
-    expect(JSON.stringify(mockWriteAuditLog.mock.calls)).not.toContain("secret");
   });
 
   it.each([

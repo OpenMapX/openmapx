@@ -126,15 +126,15 @@ describe("poi-search brand routes over real HTTP (Fastify inject)", () => {
     expect(res.json()).toEqual({ matches: [] });
   });
 
-  it("GET /brand-suggest?q=aldi&limit=999 -> 200 with matches clamped to 20", async () => {
+  it("GET /brand-suggest?q=bank&limit=999 -> 200 with matches clamped to 20", async () => {
     const res = await app.inject({
       method: "GET",
-      url: "/api/integrations/poi-search/brand-suggest?q=aldi&limit=999",
+      url: "/api/integrations/poi-search/brand-suggest?q=bank&limit=999",
     });
 
     expect(res.statusCode).toBe(200);
     const body = res.json() as { matches: unknown[] };
-    expect(body.matches.length).toBeLessThanOrEqual(20);
+    expect(body.matches).toHaveLength(20);
   });
 
   it("GET /brand/Q37158 -> 200 with body.qid === 'Q37158' (Starbucks)", async () => {

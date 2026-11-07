@@ -24,10 +24,6 @@ afterAll(async () => {
 });
 
 describe("registerCoreRoutes", () => {
-  it("mounts on a bare Fastify instance with no database, cache or integration host", () => {
-    expect(routeTable.length).toBeGreaterThan(0);
-  });
-
   it.each([
     "/health",
     "/api/id-schemes",

@@ -11,9 +11,6 @@ describe("buildChipOverlapSet", () => {
 
   it("uses the same canonical form as the matcher", () => {
     const set = buildChipOverlapSet();
-    const a = canonicalTagSet({ amenity: "fuel" });
-    const b = canonicalTagSet({ amenity: "fuel" });
-    expect(a).toBe(b);
     expect(set.has(canonicalTagSet({ amenity: "fuel" }))).toBe(true);
   });
 

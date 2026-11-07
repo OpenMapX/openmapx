@@ -444,6 +444,8 @@ describe("effective raster contribution", () => {
     flush();
     expect(html()).toBe("");
     visible = ["old"];
+    flush();
+    expect(html()).toContain("successful-supplier");
     retained.delete("old");
     flush();
     expect(html()).toBe("");
@@ -468,10 +470,15 @@ describe("effective raster contribution", () => {
     fake.state.zoom = 18;
     flush();
     expect(html()).toBe("");
+    fake.state.zoom = 10;
+    flush();
+    expect(html()).toContain("successful-supplier");
     fake.state.zoom = 4;
     flush();
     expect(html()).toBe("");
     fake.state.zoom = 10;
+    flush();
+    expect(html()).toContain("successful-supplier");
     fake.map.setLayoutProperty("active", "visibility", "none");
     flush();
     expect(html()).toBe("");

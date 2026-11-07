@@ -369,6 +369,7 @@ describe("DirectionsPanelContent", () => {
     ]);
     expect(arg.mode).toBe("driving");
     expect(arg.lang).toBe("de");
+    expect(useScheduledDirectionsMock).toHaveBeenCalledWith(null);
   });
 
   it("add stop: adds an empty waypoint (suppressing the re-plan) then fills it via autocomplete selection", async () => {
@@ -989,17 +990,6 @@ describe("scheduled trips", () => {
     renderPanel();
     screen.getByText("directions.noRoutesFound");
     expect(screen.queryByRole("button", { name: "common.retry" })).toBeNull();
-  });
-
-  it("keeps using the plain directions query when nothing is constrained", () => {
-    seedOriginDestination();
-    renderPanel();
-
-    expect(lastArg<DirectionsCallArgs>(useDirectionsMock).waypoints).toEqual([
-      [13.3, 52.5],
-      [11.5, 48.1],
-    ]);
-    expect(useScheduledDirectionsMock).toHaveBeenCalledWith(null);
   });
 
   it("switches to the scheduled query as soon as a waypoint carries a schedule", () => {
@@ -1724,24 +1714,4 @@ it("opens provided provider details and keeps their origin when an earlier auto-
     id: "provider-trip",
     legs: [{ from: { platformCode: "17" } }],
   });
-});
-
-it("still fills the same empty origin from ordinary auto-location", async () => {
-  let giveFix: PositionCallback = () => {};
-  vi.stubGlobal("navigator", {
-    geolocation: {
-      getCurrentPosition: vi.fn((...args: unknown[]) => {
-        giveFix = args[0] as PositionCallback;
-      }),
-    },
-  });
-  useDirectionsStore.getState().open();
-  renderPanel();
-  await act(async () =>
-    giveFix({
-      coords: { longitude: 13, latitude: 52, accuracy: 5 },
-      timestamp: Date.now(),
-    } as GeolocationPosition),
-  );
-  expect(useDirectionsStore.getState().waypoints[0].coords).toEqual([13, 52]);
 });

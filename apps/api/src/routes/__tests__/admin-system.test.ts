@@ -117,7 +117,6 @@ describe("admin system routes", () => {
       releaseMember: true,
       status: "update-available",
     });
-    expect(response.json().release).toEqual(systemInspection.release);
     expect(executeAndWait.mock.calls.map((call) => (call[1] as { kind: string }).kind)).toEqual([
       "system.inspect",
     ]);

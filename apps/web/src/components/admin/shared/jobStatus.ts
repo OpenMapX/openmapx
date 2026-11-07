@@ -1,6 +1,6 @@
 export type JobStatusColor = "default" | "primary" | "success" | "error" | "warning" | "info";
 
-export const JOB_STATUS_COLOR: Record<string, JobStatusColor> = {
+const JOB_STATUS_COLOR: Record<string, JobStatusColor> = {
   queued: "default",
   running: "primary",
   success: "success",

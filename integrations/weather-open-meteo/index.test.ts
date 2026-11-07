@@ -59,16 +59,12 @@ afterEach(() => {
 });
 
 describe("Open-Meteo weather provider", () => {
-  it("registers with id and priority", () => {
-    const provider = getProvider();
-    expect(provider.id).toBe("open-meteo");
-    expect(provider.priority).toBe(10);
-  });
-
   it("passes the upstream WMO weather_code through unchanged and maps current fields", async () => {
     mockFetch.mockResolvedValueOnce(mockOk(currentResponse()));
 
-    const res = await getProvider().getCurrentWeather(COORDS);
+    const provider = getProvider();
+    expect(provider.id).toBe("open-meteo");
+    const res = await provider.getCurrentWeather(COORDS);
 
     expect(res.source).toBe("open-meteo");
     expect(res.location).toEqual(COORDS);

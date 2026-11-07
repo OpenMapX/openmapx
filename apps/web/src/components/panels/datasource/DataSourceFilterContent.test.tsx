@@ -82,7 +82,7 @@ beforeEach(() => {
 describe("data-source answers that lack results", () => {
   it("says a source did not answer instead of reporting none in view, and asks again", () => {
     fixture.partial = "unavailable";
-    render(view());
+    const { rerender } = render(view());
 
     expect(screen.getByRole("status").textContent).toContain("Not every source answered");
     expect(screen.queryByText("0 in view")).toBeNull();
@@ -90,23 +90,22 @@ describe("data-source answers that lack results", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(fixture.refetch).toHaveBeenCalledTimes(1);
     expect(fixture.zoomIn).not.toHaveBeenCalled();
+    fixture.partial = null;
+    rerender(view());
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByText("0 in view")).toBeTruthy();
   });
 
   it("keeps the results that did arrive beside the notice", () => {
     fixture.partial = "unavailable";
     fixture.results = [station("a", "Aral Alexanderplatz")];
-    render(view());
+    const { rerender } = render(view());
 
     expect(screen.getByText("Aral Alexanderplatz")).toBeTruthy();
     expect(screen.getByRole("status").textContent).toContain("Not every source answered");
-  });
-
-  it("shows the retry as pending while the source is asked again beside earlier results", () => {
-    fixture.partial = "unavailable";
-    fixture.results = [station("a", "Aral Alexanderplatz")];
     fixture.isFetching = true;
-    render(view());
-
+    rerender(view());
+    expect(screen.getByText("Aral Alexanderplatz")).toBeTruthy();
     expect(screen.getByRole("status").querySelector('[role="progressbar"]')).not.toBeNull();
   });
 
@@ -134,17 +133,5 @@ describe("data-source answers that lack results", () => {
 
     expect(screen.getByText("0 in view")).toBeTruthy();
     expect(screen.queryByRole("status")).toBeNull();
-  });
-
-  it("drops the notice once the answer for the new view, provider or filters is complete", () => {
-    fixture.partial = "unavailable";
-    const { rerender } = render(view());
-    expect(screen.getByRole("status")).toBeTruthy();
-
-    fixture.partial = null;
-    rerender(view());
-
-    expect(screen.queryByRole("status")).toBeNull();
-    expect(screen.getByText("0 in view")).toBeTruthy();
   });
 });

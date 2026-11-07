@@ -122,20 +122,6 @@ describe("transit polling lifecycle", () => {
       expect(useNavigationStore.getState().liveDataUnavailable).toBe(false);
     },
   );
-  it("suppresses ticks and response application while rerouting", async () => {
-    vi.useFakeTimers();
-    const flight = deferred();
-    api.refresh.mockReturnValue(flight.promise);
-    useNavigationStore.getState().startTransitNavigation(trip("initial"));
-    const initial = useNavigationStore.getState().itinerary;
-    renderHook(() => useTransitLiveRefresh(true));
-    act(() => vi.advanceTimersByTime(30_000));
-    act(() => useNavigationStore.getState().setTransitRerouteNeeded(true));
-    await act(async () => flight.resolve({ data: { itinerary: trip("obsolete") } }));
-    act(() => vi.advanceTimersByTime(90_000));
-    expect(api.refresh).toHaveBeenCalledTimes(1);
-    expect(useNavigationStore.getState().itinerary).toBe(initial);
-  });
   it("replays the token after interrupted ownership", async () => {
     vi.useFakeTimers();
     const flight = deferred();
@@ -190,10 +176,16 @@ describe("transit polling lifecycle", () => {
 it("starts a new token chain only after explicit journey replacement", async () => {
   vi.useFakeTimers();
   useNavigationStore.getState().startTransitNavigation(trip("broken"));
-  useNavigationStore.getState().setLiveDataUnavailable(true);
-  useNavigationStore.getState().replaceItinerary(trip("new"));
+  useNavigationStore
+    .getState()
+    .markTransitRefreshUnavailable(useNavigationStore.getState().transitRequestId);
+  expect(useNavigationStore.getState().transitRefreshUnavailable).toBe(true);
   api.refresh.mockResolvedValue({ data: { itinerary: trip("rotated") } });
   renderHook(() => useTransitLiveRefresh(true));
+  await act(async () => vi.advanceTimersByTime(90000));
+  expect(api.refresh).not.toHaveBeenCalled();
+  act(() => useNavigationStore.getState().replaceItinerary(trip("new")));
+  expect(useNavigationStore.getState().transitRefreshUnavailable).toBe(false);
   await act(async () => vi.advanceTimersByTime(30000));
   expect(api.refresh).toHaveBeenCalledWith("new");
   expect(useNavigationStore.getState().itinerary?.refreshToken).toBe("rotated");
@@ -246,6 +238,8 @@ it("keeps a failed token disabled after vehicle recovery, reconnect and remount"
   api.refresh.mockRejectedValue(new ApiClientError(409, null, null));
   const view = renderHook(() => useTransitLiveRefresh(true));
   await act(async () => vi.advanceTimersByTime(30000));
+  await act(async () => vi.advanceTimersByTime(90000));
+  expect(api.refresh).toHaveBeenCalledTimes(1);
   act(() => {
     useNavigationStore.getState().setConnectivity("offline");
     useNavigationStore.getState().setConnectivity("online");
@@ -262,10 +256,14 @@ it("breaks the chain when a consumed response cannot be applied during rerouting
   const flight = deferred();
   api.refresh.mockReturnValue(flight.promise);
   useNavigationStore.getState().startTransitNavigation(trip("initial"));
+  const initial = useNavigationStore.getState().itinerary;
   renderHook(() => useTransitLiveRefresh(true));
   act(() => vi.advanceTimersByTime(30000));
   act(() => useNavigationStore.getState().setTransitRerouteNeeded(true));
   await act(async () => flight.resolve({ data: { itinerary: trip("successor") } }));
+  expect(useNavigationStore.getState().itinerary).toBe(initial);
+  act(() => vi.advanceTimersByTime(90000));
+  expect(api.refresh).toHaveBeenCalledTimes(1);
   act(() => useNavigationStore.getState().setTransitRerouteNeeded(false));
   await act(async () => vi.advanceTimersByTime(30000));
   expect(api.refresh).toHaveBeenCalledTimes(1);
@@ -282,16 +280,6 @@ it("never applies a fallback train during navigation", async () => {
   await act(async () => vi.advanceTimersByTime(30_000));
   expect(useNavigationStore.getState().itinerary?.refreshToken).toBe("selected");
   expect(useNavigationStore.getState().transitRerouteNeeded).toBe(true);
-});
-it("stops retrying a server-rejected handle", async () => {
-  const { ApiClientError } = await import("@openmapx/core/navigation/api");
-  vi.useFakeTimers();
-  api.refresh.mockRejectedValue(new ApiClientError(409, null, null));
-  useNavigationStore.getState().startTransitNavigation(trip("expired"));
-  renderHook(() => useTransitLiveRefresh(true));
-  await act(async () => vi.advanceTimersByTime(30_000));
-  await act(async () => vi.advanceTimersByTime(90_000));
-  expect(api.refresh).toHaveBeenCalledTimes(1);
 });
 
 it("keeps live data unavailable when a successful refresh has no successor", async () => {

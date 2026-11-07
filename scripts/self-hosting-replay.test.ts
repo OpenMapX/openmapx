@@ -352,73 +352,48 @@ runReplayInvocation(process.argv[1], async () => { throw new Error('unexpected w
     expect(() => validateBuildReuse({}, identities, artifacts)).toThrow();
   });
 
-  it.each(["interruption", "logical difference", "provenance failure", "cleanup failure"])(
-    "keeps a rerun incomplete after %s instead of retaining prior success",
-    async (failure) => {
-      const output = mkdtempSync(join(tmpdir(), "replay-report-"));
-      roots.push(output);
-      const identities = [{ path: "/baseline", revision: "a", dirty: false }];
-      const artifacts = [{ "packages/storage/dist/index.js": "a".repeat(64) }];
-      const builds = [
-        {
-          command: ["pnpm", "exec", "turbo", "run", "build", "--force", "--concurrency=1"],
-          exitCode: 0,
-          artifacts: artifacts[0],
-        },
-      ];
-      const report = { identities, builds, results: [{ correctness: { equal: true } }] };
-      await runReplayInvocation(output, async () => ({
-        runs: report,
-        summary: { correctness: { equal: true, differences: 0 } },
-      }));
-      const prior = JSON.parse(readFileSync(join(output, "summary.json"), "utf8"));
-      expect(prior.status).toBe("COMPLETE");
-      await expect(
-        runReplayInvocation(output, async (invocation) => {
-          expect(
-            validateBuildReuse(invocation.previousReport, identities, artifacts)[0]
-              .reusedFromPreviousRun,
-          ).toBe(true);
-          invocation.writeRuns({
-            identities,
-            builds,
-            results: [{ correctness: { equal: false } }],
-          });
-          const cleanup = async () => {
-            if (failure === "cleanup failure") throw new Error(failure);
-          };
-          try {
-            if (failure === "logical difference") {
-              const arm = {
-                revision: "a",
-                fixtureHash: "f",
-                inputHash: "i",
-                logical: { revision: 1 },
-              };
-              if (!comparePair(arm, { ...arm, logical: { revision: 2 } }).equal)
-                throw new Error(failure);
-            }
-            if (failure === "provenance failure")
-              validateBuildReuse(invocation.previousReport, identities, [
-                { "packages/storage/dist/index.js": "b".repeat(64) },
-              ]);
-            if (failure === "interruption") throw new Error(failure);
-            return { runs: report, summary: { correctness: { equal: true } } };
-          } finally {
-            await cleanup();
-          }
-        }),
-      ).rejects.toThrow();
-      const summary = JSON.parse(readFileSync(join(output, "summary.json"), "utf8"));
-      const runs = JSON.parse(readFileSync(join(output, "runs.json"), "utf8"));
-      expect(summary).toMatchObject({ status: "INCOMPLETE", invocationId: runs.invocationId });
-      expect(summary.invocationId).not.toBe(prior.invocationId);
-      expect(summary.correctness?.equal).not.toBe(true);
-      expect(runs.status).toBe("INCOMPLETE");
-      expect(runs.results).toEqual([{ correctness: { equal: false } }]);
-      expect(validateBuildReuse(runs, identities, artifacts)[0].reusedFromPreviousRun).toBe(true);
-    },
-  );
+  it("keeps durable partial results incomplete when a rerun callback fails after prior success", async () => {
+    const output = mkdtempSync(join(tmpdir(), "replay-report-"));
+    roots.push(output);
+    const identities = [{ path: "/baseline", revision: "a", dirty: false }];
+    const artifacts = [{ "packages/storage/dist/index.js": "a".repeat(64) }];
+    const builds = [
+      {
+        command: ["pnpm", "exec", "turbo", "run", "build", "--force", "--concurrency=1"],
+        exitCode: 0,
+        artifacts: artifacts[0],
+      },
+    ];
+    const report = { identities, builds, results: [{ correctness: { equal: true } }] };
+    await runReplayInvocation(output, async () => ({
+      runs: report,
+      summary: { correctness: { equal: true, differences: 0 } },
+    }));
+    const prior = JSON.parse(readFileSync(join(output, "summary.json"), "utf8"));
+    expect(prior.status).toBe("COMPLETE");
+    await expect(
+      runReplayInvocation(output, async (invocation) => {
+        expect(
+          validateBuildReuse(invocation.previousReport, identities, artifacts)[0]
+            .reusedFromPreviousRun,
+        ).toBe(true);
+        invocation.writeRuns({
+          identities,
+          builds,
+          results: [{ correctness: { equal: false } }],
+        });
+        throw new Error("controlled rerun failure");
+      }),
+    ).rejects.toThrow();
+    const summary = JSON.parse(readFileSync(join(output, "summary.json"), "utf8"));
+    const runs = JSON.parse(readFileSync(join(output, "runs.json"), "utf8"));
+    expect(summary).toMatchObject({ status: "INCOMPLETE", invocationId: runs.invocationId });
+    expect(summary.invocationId).not.toBe(prior.invocationId);
+    expect(summary.correctness?.equal).not.toBe(true);
+    expect(runs.status).toBe("INCOMPLETE");
+    expect(runs.results).toEqual([{ correctness: { equal: false } }]);
+    expect(validateBuildReuse(runs, identities, artifacts)[0].reusedFromPreviousRun).toBe(true);
+  });
 
   it("publishes complete matching reports only after asynchronous cleanup settles", async () => {
     const output = mkdtempSync(join(tmpdir(), "replay-report-"));

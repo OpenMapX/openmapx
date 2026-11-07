@@ -197,7 +197,11 @@ describe("searchByFilter", () => {
     });
     if (!filter.ok) throw new Error("expected ok");
     const { results, truncated } = await searchByFilter(filter.filter, BBOX);
-    expect(results.length).toBeGreaterThanOrEqual(1);
+    const { overpassQuery } = await import("../overpass");
+    expect(overpassQuery).toHaveBeenLastCalledWith(
+      expect.stringContaining('node["amenity"="cafe"](48.85,2.33,48.87,2.37);'),
+    );
+    expect(results).toHaveLength(1);
     expect(results[0].name).toBe("Test Cafe");
     expect(truncated).toBe(false);
   });
@@ -214,7 +218,9 @@ describe("removeFilterPredicate", () => {
   };
 
   it("removes a require predicate by index and returns a new filter without it", () => {
+    const before = structuredClone(baseFilter);
     const result = removeFilterPredicate(baseFilter, "require", 0);
+    expect(baseFilter).toEqual(before);
     expect(result.require).toHaveLength(1);
     expect(result.require?.[0].key).toBe("wheelchair");
     expect(result.selectors).toEqual(baseFilter.selectors);
@@ -234,15 +240,6 @@ describe("removeFilterPredicate", () => {
     const result = removeFilterPredicate(baseFilter, "exclude", 0);
     expect(result.exclude).toBeUndefined();
     expect(result.require).toEqual(baseFilter.require);
-  });
-
-  it("does not mutate the original filter", () => {
-    const original = {
-      selectors: [{ tags: [{ key: "amenity", op: "=" as const, value: "cafe" }] }],
-      require: [{ key: "outdoor_seating", op: "=" as const, value: "yes" }],
-    };
-    removeFilterPredicate(original, "require", 0);
-    expect(original.require).toHaveLength(1);
   });
 
   it("is a no-op for an out-of-range index", () => {

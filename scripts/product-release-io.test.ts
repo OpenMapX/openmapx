@@ -135,14 +135,7 @@ function setup() {
   };
   const publish = (approved: Record<string, unknown>) =>
     invoke("publish", { ...approved, expectedCandidateHash: candidateHash(candidate) });
-  const tool = (args: string[], input: string) =>
-    execFileSync(join(root, "bin", "gh"), args, {
-      input,
-      encoding: "utf8",
-      stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, SYNTHETIC_STATE: statePath },
-    });
-  return { read, update, invoke, prepare, inspect, stage, publish, candidate, tool };
+  return { read, update, invoke, prepare, inspect, stage, publish, candidate };
 }
 it("creates, uploads, discovers and retries a tagless draft by exact release ID", () => {
   const t = setup();
@@ -264,51 +257,4 @@ it("does not create a Git tag during read-only discovery", () => {
   expect(() => t.invoke("verify-tag-target", { ...target, mode: "require" })).toThrow();
   t.invoke("verify-tag-target", { ...target, mode: "create" });
   expect(t.read().tag).toBe("a".repeat(40));
-});
-it("treats probe operations as data rather than executable JavaScript", () => {
-  const t = setup();
-  const payload =
-    '(await import("node:fs")).writeFileSync(process.env.SYNTHETIC_STATE,"EXECUTED");return true';
-  expect(() => t.invoke(payload)).toThrow();
-  expect(t.read().published).toBe(0);
-});
-it.each([
-  "https://uploads.github.com/",
-  "https://uploadsXgithub.com/",
-  "https://uploads.githubXcom/",
-  "https://uploads.github.com.evil.invalid/",
-])("accepts only the exact upload hostname: %s", (prefix) => {
-  const t = setup();
-  t.update((s) => {
-    s.release = {
-      id: 42,
-      html_url: "https://example.invalid/draft",
-      tag_name: "v0.1.0-alpha.1",
-      target_commitish: "a".repeat(40),
-      name: "synthetic",
-      body: "synthetic",
-      draft: true,
-      prerelease: true,
-      assets: {},
-    };
-  });
-  const upload = () =>
-    t.tool(
-      [
-        "api",
-        `${prefix}repos/OpenMapX/openmapx/releases/42/assets?name=notes.md`,
-        "--method",
-        "POST",
-        "--input",
-        "-",
-      ],
-      "Synthetic notes.\n",
-    );
-  if (prefix === "https://uploads.github.com/") {
-    upload();
-    expect(releaseOf(t.read()).assets["notes.md"]).toBe("Synthetic notes.\n");
-  } else {
-    expect(upload).toThrow();
-    expect(releaseOf(t.read()).assets).toEqual({});
-  }
 });

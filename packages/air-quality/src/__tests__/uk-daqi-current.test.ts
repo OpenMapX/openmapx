@@ -82,9 +82,15 @@ describe("UK DAQI 2026", () => {
       subdivisionCode: "GB-ENG",
     };
 
-    expect(ukDaqiCurrentAdapter.validatePublished?.(base, context)).toMatchObject({
-      ok: false,
-    });
+    expect(
+      ukDaqiCurrentAdapter.validatePublished?.(base, {
+        ...context,
+        validUntil: "2026-08-30T12:00:00.000Z",
+      }),
+    ).toMatchObject({ ok: false, reason: "unverified_method" });
+    expect(
+      ukDaqiCurrentAdapter.validatePublished?.({ ...base, categoryId: "moderate-4" }, context),
+    ).toMatchObject({ ok: false, reason: "invalid_time" });
   });
 
   it("matches every independently transcribed anchor", () => {

@@ -176,16 +176,6 @@ describe("assessRoadConditionForRoute", () => {
     ).toBe("shared-traffic");
   });
 
-  it("still applies an unconditional closure with valid evidence", () => {
-    const event = boundEvent();
-    expect(
-      assessRoadConditionForRoute(event, firstEffect(event), {
-        ...context,
-        sharedTrafficApplied: true,
-      }).disposition,
-    ).toBe("shared-traffic");
-  });
-
   it("judges each effect against its own evidence", () => {
     const event = boundEvent({}, effect("oc:1/closure"), { effect_id: "oc:1/other" });
     expect(

@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   codesQuery,
-  NOTABLE_EXCLUDED_CLASSES,
-  NOTABLE_MIN_SETTLEMENT_SITELINKS,
   namesQuery,
   parseEntity,
   parseKind,
@@ -30,9 +28,7 @@ describe("notable-places SPARQL", () => {
     expect(places).toContain("MINUS { ?item wdt:P1082 ?population }");
     expect(places).toContain("MINUS { ?item wdt:P31/wdt:P279* wd:Q486972 }");
     expect(places).toContain('BIND("place" AS ?kind)');
-    expect(settlements).toContain(
-      `FILTER(xsd:integer(?links) >= ${NOTABLE_MIN_SETTLEMENT_SITELINKS})`,
-    );
+    expect(settlements).toContain("FILTER(xsd:integer(?links) >= 100)");
     expect(settlements).toContain("?item wdt:P31/wdt:P279* wd:Q486972 .");
     expect(settlements).toContain('BIND("settlement" AS ?kind)');
   });
@@ -40,10 +36,18 @@ describe("notable-places SPARQL", () => {
   it("leaves out events and things that only have a coordinate, like languages", () => {
     const query = placesQuery(8);
     expect(query).toContain("MINUS { ?item wdt:P585 ?when }");
-    for (const qid of NOTABLE_EXCLUDED_CLASSES) {
+    for (const qid of [
+      "Q34770",
+      "Q3024240",
+      "Q11514315",
+      "Q27020041",
+      "Q847017",
+      "Q3305213",
+      "Q146591",
+      "Q32099",
+    ]) {
       expect(query).toContain(`MINUS { ?item wdt:P31/wdt:P279* wd:${qid} }`);
     }
-    expect(NOTABLE_EXCLUDED_CLASSES).toContain("Q34770");
   });
 
   it("uses the per-language label predicates and refuses odd languages or properties", () => {

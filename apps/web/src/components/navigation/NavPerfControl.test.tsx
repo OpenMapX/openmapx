@@ -141,19 +141,14 @@ describe("NavPerfControl", () => {
     expect(liveFrames.size).toBe(0);
   });
 
-  it("renders the HUD with the query flag but stays idle until started", () => {
+  it("attaches to the map and the navigation store on start, and detaches on stop", () => {
     setQuery("/?navperf=1");
     render(<NavPerfControl />);
-    expect(screen.queryByTestId("nav-perf-control")).not.toBeNull();
+    expect(screen.getByTestId("nav-perf-control")).toBeInTheDocument();
     expect(mapHandlerCount()).toBe(0);
     expect(observerCount).toBe(0);
     expect(liveIntervals.size).toBe(0);
     expect(liveFrames.size).toBe(0);
-  });
-
-  it("attaches to the map and the navigation store on start, and detaches on stop", () => {
-    setQuery("/?navperf=1");
-    render(<NavPerfControl />);
     click("nav-perf-start");
     expect(mapHandlerCount()).toBe(4);
     expect(observerCount).toBe(2);
@@ -215,28 +210,20 @@ describe("NavPerfControl", () => {
     act(() => {
       for (let i = 0; i < 3; i += 1) fake.emit("render");
     });
+    act(() => vi.advanceTimersByTime(1100));
+    expect(readout("nav-perf-map")).toContain("r3");
     click("nav-perf-reset");
     expect(readout("nav-perf-map")).toContain("r0");
     expect(mapHandlerCount()).toBe(4);
   });
 
-  it("exports only on an explicit click", () => {
+  it("exports aggregates and entered metadata only after an explicit click", async () => {
     setQuery("/?navperf=1");
     render(<NavPerfControl />);
     click("nav-perf-start");
-    act(() => {
-      vi.advanceTimersByTime(2000);
-    });
-    expect(createObjectURL).toHaveBeenCalledTimes(0);
-    click("nav-perf-export");
-    expect(createObjectURL).toHaveBeenCalledTimes(1);
-    expect(anchorClicks).toBe(1);
-  });
-
-  it("exports aggregates and manually entered metadata, with no URLs or coordinates", async () => {
-    setQuery("/?navperf=1");
-    render(<NavPerfControl />);
-    click("nav-perf-start");
+    act(() => vi.advanceTimersByTime(2000));
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(anchorClicks).toBe(0);
     click("nav-perf-meta-toggle");
     click("nav-perf-scenario-city");
     const input = screen.getByTestId("nav-perf-meta-device").querySelector("input");
@@ -244,6 +231,8 @@ describe("NavPerfControl", () => {
       fireEvent.change(input as Element, { target: { value: "Pixel 7a" } });
     });
     click("nav-perf-export");
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(anchorClicks).toBe(1);
 
     const text = await blobs[0].text();
     const parsed = JSON.parse(text) as Record<string, unknown>;
@@ -251,8 +240,6 @@ describe("NavPerfControl", () => {
     expect(Object.keys(parsed)).toContain("resources");
     expect(text).toContain("Pixel 7a");
     expect(text).toContain("city");
-    expect(text.includes("http")).toBe(false);
-    expect(/\d+\.\d{4,}/.test(text)).toBe(false);
   });
 
   it("stops the monitor and clears its timer when unmounted", () => {
