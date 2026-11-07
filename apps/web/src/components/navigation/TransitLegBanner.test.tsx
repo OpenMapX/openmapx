@@ -166,3 +166,16 @@ it("never sounds an alight alarm for a cancelled current service, even with ridi
   expect(playAlarmTone).not.toHaveBeenCalled();
   expect(notifyGetOff).not.toHaveBeenCalled();
 });
+
+it("qualifies a held next stop when riding without fresh GPS confidence", () => {
+  render(
+    <TransitLegBanner
+      leg={freshLeg()}
+      legIndex={0}
+      transitProgress={{ ...progressAt(0.002), confidence: "stale" }}
+    />,
+  );
+  expect(screen.getByText("lastKnownNextStopLabel")).toBeVisible();
+  expect(screen.queryByText("nextStopLabel")).not.toBeInTheDocument();
+  expect(playAlarmTone).not.toHaveBeenCalled();
+});

@@ -1,5 +1,40 @@
-import { describe, expect, it } from "vitest";
-import { liveArrivalDelayMs, transitRemainingSeconds } from "./TransitNavBottomBar";
+import type { TripItinerary } from "@openmapx/mobility-core/transit";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import {
+  liveArrivalDelayMs,
+  TransitNavBottomBar,
+  transitRemainingSeconds,
+} from "./TransitNavBottomBar";
+
+const end = vi.hoisted(() => vi.fn());
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
+vi.mock("@/lib/mobile/useNavigationMutations", () => ({
+  useNavigationMutations: () => ({ endNavigation: end }),
+}));
+vi.mock("@/lib/mobile/useMobileRuntime", () => ({
+  useMobileRuntime: () => ({ browserAuthority: false }),
+}));
+vi.mock("@/integration-api/runtime/useDateTimeFormat", () => ({
+  useDateTimeFormat: () => ({ time: () => "09:00" }),
+}));
+vi.mock("@openmapx/core", async (original) => ({
+  ...(await original<object>()),
+  useVehicleJourney: () => ({}),
+}));
+
+it("keeps a visible labeled End action outside the live arrival summary", () => {
+  render(
+    <TransitNavBottomBar
+      itinerary={{ endTime: new Date(Date.now() + 600000).toISOString() } as TripItinerary}
+    />,
+  );
+  const button = screen.getByRole("button", { name: "navigation.end" });
+  expect(button).toHaveTextContent("navigation.end");
+  expect(screen.getByRole("status").contains(button)).toBe(false);
+  fireEvent.click(button);
+  expect(end).toHaveBeenCalledTimes(1);
+});
 
 describe("transitRemainingSeconds", () => {
   const arrivalMs = new Date("2026-06-18T12:00:00.000Z").getTime();

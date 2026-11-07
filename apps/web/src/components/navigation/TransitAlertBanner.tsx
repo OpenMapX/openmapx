@@ -103,7 +103,7 @@ export function TransitAlertBanner({
       }}
     >
       {shown.map((alert) => (
-        <AlertCard key={alert.id} alert={alert} expandable={false} />
+        <AlertCard key={alert.id} alert={alert} expandable={false} accent="icon" />
       ))}
     </Box>
   );

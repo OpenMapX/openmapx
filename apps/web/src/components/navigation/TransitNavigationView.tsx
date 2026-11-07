@@ -243,6 +243,7 @@ export function TransitNavigationView() {
                   currentLegIndex={currentLegIndex}
                   transitProgress={transitProgress}
                   showQueryNotice={false}
+                  scroll={false}
                 />
                 {menu}
               </NavSwipeSheet>

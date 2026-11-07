@@ -172,6 +172,12 @@ and your location disagree, progress is marked uncertain; the connection stays
 selected. Without GPS, the last known position and current leg remain in place.
 A timetable never moves your dot, boards you, or finishes a ride.
 
+Expand the navigation sheet for the service's destination sign, vehicle and
+operator details, and stop times. Stop-count controls reveal intermediate or
+previous stops. The boarding, next and alighting stops stay listed, along with
+skipped stops and service notices. When riding progress is uncertain, upcoming
+stops remain expanded and the banner labels its next stop as last known.
+
 Confirm **I've got off** after alighting to start the next walk or boarding leg.
 You can undo the last confirmation for two minutes. Where the itinerary explicitly
 continues on the same vehicle, **Stay on board** continues to the next leg. A

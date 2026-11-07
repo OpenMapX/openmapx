@@ -13,8 +13,7 @@ import { useTransferInfo } from "@/lib/navigation/useTransferInfo";
 
 /**
  * "Change here" card shown beneath the leg banner as the rider approaches the
- * end of a transit leg that is followed by another ride. Amber (vs the red
- * final-alight card) so a transfer reads distinctly from arriving. Names the
+ * end of a transit leg that is followed by another ride. Names the
  * change stop, the line to board next (with its destination sign) and the
  * boarding platform — flagged if it changed from the scheduled track.
  */
@@ -47,9 +46,22 @@ export function TransitTransferCard({
         boxShadow: 1,
       }}
     >
-      <TransferWithinAStationIcon sx={{ fontSize: 28, flexShrink: 0, color: "primary.main" }} />
+      <Box
+        sx={{
+          display: "grid",
+          placeItems: "center",
+          width: 44,
+          height: 44,
+          flexShrink: 0,
+          borderRadius: "50%",
+          bgcolor: "primary.main",
+          color: "primary.contrastText",
+        }}
+      >
+        <TransferWithinAStationIcon />
+      </Box>
       <Box sx={{ minWidth: 0, flex: 1 }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 700 }} noWrap>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, overflowWrap: "anywhere" }}>
           {t("changeAt", { stop: fromLeg.to.name })}
         </Typography>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.5, flexWrap: "wrap" }}>
@@ -62,7 +74,7 @@ export function TransitTransferCard({
             />
           )}
           {nextHeadsign && (
-            <Typography variant="caption" sx={{ opacity: 0.95 }} noWrap>
+            <Typography variant="caption" sx={{ overflowWrap: "anywhere" }}>
               {t("towards", { headsign: nextHeadsign })}
             </Typography>
           )}

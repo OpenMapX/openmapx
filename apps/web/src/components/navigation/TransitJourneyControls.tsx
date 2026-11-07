@@ -96,7 +96,7 @@ export function TransitJourneyControls({
       component="section"
       aria-label={t("selectedConnection")}
       aria-busy={pending}
-      sx={{ px: 2, pt: 1.5, pb: 1.5, display: "flex", flexDirection: "column", gap: 1.25 }}
+      sx={{ px: 2, pt: 0.5, pb: 1.5, display: "flex", flexDirection: "column", gap: 1.5 }}
     >
       {!riding && canBoard && (
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5 }}>
@@ -237,7 +237,14 @@ export function TransitJourneyControls({
             loading={pending}
             disabled={pending || !supported}
             onClick={() => void run(riding ? "alight" : "board")}
-            sx={{ minHeight: 44, flex: "1 1 180px", minWidth: 0, lineHeight: 1.4, py: 1 }}
+            sx={{
+              minHeight: 44,
+              flex: "1 1 160px",
+              minWidth: 0,
+              lineHeight: 1.4,
+              py: 1,
+              borderRadius: 2,
+            }}
           >
             {t(riding ? "confirmAlight" : "confirmBoard")}
           </Button>
@@ -252,8 +259,7 @@ export function TransitJourneyControls({
             disabled={pending}
             sx={{
               minHeight: 44,
-              flex: "1 0 auto",
-              flexShrink: 0,
+              flex: "0 0 auto",
               px: 1.25,
             }}
           >

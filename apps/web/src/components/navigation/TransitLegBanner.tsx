@@ -30,12 +30,8 @@ import { NavBannerShell } from "./NavBannerShell";
 import { TransitTransferCard } from "./TransitTransferCard";
 
 /**
- * Transit follow-along banner for the current leg. Reuses {@link NavBannerShell}
- * so it matches the driving {@link ManeuverBanner}: a brand-coloured card with the mode
- * badge + "{line} to {destination}" + a leg counter, the live next-stop preview
- * in the darkened sub-row (the transit analogue of the driving "Then …" line),
- * and — when the alight stop is one away — a prominent "get off now" card below
- * (mirroring how the driving banner surfaces an approach alert beneath itself).
+ * Glanceable instruction for the selected ride, with an emphasized alight or
+ * transfer prompt below. Walking keeps the shared primary maneuver treatment.
  */
 export function TransitLegBanner({
   leg,
@@ -97,13 +93,6 @@ export function TransitLegBanner({
   const headsign = leg.headsign && leg.headsign !== leg.to.name ? leg.headsign : undefined;
   // Prefer the live vehicle's crowding, falling back to the planned leg value.
   const occupancy = journey?.occupancy ?? leg.occupancy;
-  // Specific vehicle identity ("RE 10123 · DB Regio") to find the right train.
-  const identity = [
-    [leg.category, leg.tripShortName].filter(Boolean).join(" ").trim(),
-    leg.operatorName,
-  ]
-    .filter(Boolean)
-    .join(" · ");
   // Bus-stop signage code, shown while boarding when there's no platform.
   const boardingStopCode = leg.from.stopCode;
   // OSM floor of the board/alight platform (0 = ground, hidden as implicit).
@@ -173,16 +162,18 @@ export function TransitLegBanner({
         ? `${leg.route?.shortName ?? leg.route?.longName ?? ""} · ${tt("canceled")}`
         : departed && nextStopName
           ? nextStopName
-          : t(departed ? "ride" : "boardSelectedLine", {
-              line: leg.route?.shortName ?? leg.route?.longName ?? "",
-              to: !departed ? (leg.headsign ?? leg.to.name) : leg.to.name,
-            });
+          : !departed && isTransitLeg
+            ? (leg.headsign ?? leg.to.name)
+            : t("ride", {
+                line: leg.route?.shortName ?? leg.route?.longName ?? "",
+                to: !departed ? (leg.headsign ?? leg.to.name) : leg.to.name,
+              });
 
   // Sub-row: the live next-stop / alight preview for transit legs. Hidden while
   // `alightSoon`, since the prominent card below carries that message instead.
   const secondary =
     isTransitLeg && !leg.cancelled && !alightSoon ? (
-      <Typography variant="body2" sx={{ opacity: 0.9, lineHeight: 1.45 }}>
+      <Typography variant="body2" sx={{ lineHeight: 1.45 }}>
         {departed && nextStopName
           ? t("stopsRemaining", { count: stopsRemaining })
           : !departed && legStops.length > 1
@@ -197,6 +188,7 @@ export function TransitLegBanner({
   return (
     <>
       <NavBannerShell
+        tone={isTransitLeg ? "surface" : "primary"}
         leading={leading}
         secondary={secondary}
         trailing={
@@ -217,9 +209,14 @@ export function TransitLegBanner({
           ) : undefined
         }
       >
+        {isTransitLeg && !departed && !leg.cancelled && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.25 }}>
+            {t("boardLabel")}
+          </Typography>
+        )}
         {departed && nextStopName && (
-          <Typography variant="caption" sx={{ opacity: 0.9, display: "block", mb: 0.25 }}>
-            {t("nextStopLabel")}
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.25 }}>
+            {t(transitProgress?.confidence === "gps" ? "nextStopLabel" : "lastKnownNextStopLabel")}
           </Typography>
         )}
         <Typography
@@ -235,42 +232,49 @@ export function TransitLegBanner({
             freshness={journeyQuery.freshness}
             source={source}
             queryFailed={journeyQuery.isError}
-            onBanner
           />
         )}
         {isTransitLeg &&
           (((departed || leg.cancelled) && headsign) ||
             (!departed && (boardingPlatform || boardingStopCode || boardingLevel != null))) && (
-            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.25, minWidth: 0 }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: 0.75,
+                mt: 0.25,
+                minWidth: 0,
+              }}
+            >
               {(departed || leg.cancelled) && headsign && (
-                <Typography variant="caption" sx={{ opacity: 0.9 }} noWrap>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ overflowWrap: "anywhere" }}
+                >
                   {t("towards", { headsign })}
                 </Typography>
               )}
               {!departed && boardingPlatform ? (
                 <PlatformBadge
                   code={boardingPlatform}
-                  tone="onBanner"
+                  tone="surface"
                   changed={boarding.changed}
                   scheduledCode={boarding.scheduledCode}
                 />
               ) : !departed && boardingStopCode ? (
-                <Typography variant="caption" sx={{ opacity: 0.9 }} noWrap>
+                <Typography variant="caption" color="text.secondary">
                   {t("stopCode", { code: boardingStopCode })}
                 </Typography>
               ) : null}
               {!departed && boardingLevel != null && (
-                <Typography variant="caption" sx={{ opacity: 0.9 }} noWrap>
+                <Typography variant="caption" color="text.secondary">
                   {t("levelShort", { level: boardingLevel })}
                 </Typography>
               )}
             </Box>
           )}
-        {isTransitLeg && identity && (
-          <Typography variant="caption" sx={{ opacity: 0.8, display: "block", mt: 0.25 }} noWrap>
-            {identity}
-          </Typography>
-        )}
       </NavBannerShell>
       {isTransitLeg && (
         <TransitQueryNotice
@@ -310,7 +314,20 @@ export function TransitLegBanner({
             boxShadow: 1,
           }}
         >
-          <NotificationImportantIcon sx={{ fontSize: 28, color: "primary.main" }} />
+          <Box
+            sx={{
+              display: "grid",
+              placeItems: "center",
+              width: 44,
+              height: 44,
+              flexShrink: 0,
+              borderRadius: "50%",
+              bgcolor: "primary.main",
+              color: "primary.contrastText",
+            }}
+          >
+            <NotificationImportantIcon />
+          </Box>
           <Box sx={{ minWidth: 0 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
               {t("alightSoon")}
@@ -322,7 +339,7 @@ export function TransitLegBanner({
               </Typography>
             )}
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
-              <Typography variant="caption" noWrap>
+              <Typography variant="caption" sx={{ overflowWrap: "anywhere" }}>
                 {t("alightAt", { place: leg.to.name })}
               </Typography>
               {alightPlatform && (
