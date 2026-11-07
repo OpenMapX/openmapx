@@ -208,9 +208,9 @@ export function assertProspectiveConfigurationMaintenanceBudget(input: {
       },
       {
         containerId: hash,
-        // The fixed inspector verifies the entire set and retains one keyed
-        // digest. Its evidence count is bounded by the rendered mounts above.
-        mountCount,
+        // Reserve the count width for all 512 supported mounts, including
+        // Compose configs not counted by the service snippet above.
+        mountCount: Math.max(mountCount, 512),
         mountsDigest: hash,
       },
       { containerId: hash, state: "running", running: false, health: "healthy" },

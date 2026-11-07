@@ -448,7 +448,7 @@ it("freezes the checked release helper graph and budgets a complete 13-service s
         return { ...original, containerId: i.toString(16).padStart(64, "0") };
       }),
     }),
-  ).toThrow(/capacity exceeded/);
+  ).toThrow("Prospective private maintenance observation capacity exceeded");
 
   const { release: _release, ...missing } = args;
   expect(() => buildFixedConfigurationMaintenancePlan(missing)).toThrow();
