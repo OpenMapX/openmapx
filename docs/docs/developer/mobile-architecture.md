@@ -126,9 +126,12 @@ After a refusal it answers `denied` without prompting again.
 
 ## The bridge protocol
 
-Both sides support protocols **v3 through v4**. The constants in
+Both sides support protocols **v3 through v5**. The constants in
 `packages/core/src/navigation/mobileProtocol.ts` and the release descriptor in
-`apps/mobile/release/version.json` agree on `min: 3, max: 4`. Protocol 3 retains navigation; protocol 4 adds the optional `nativeIntake` capability. A non-overlapping
+`apps/mobile/release/version.json` agree on `min: 3, max: 5`. Protocol 3 retains
+navigation; protocol 4 adds the optional `nativeIntake` capability. Protocol 5
+preserves transit platform evidence in captured journeys; web commands omit that
+evidence for older protocol-3/4 shells. A non-overlapping
 range leaves navigation disabled and requires an update. Protocol negotiation
 alone does not establish that a command is implemented.
 
