@@ -1,8 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  closeSync,
+  fstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   statSync,
   symlinkSync,
@@ -70,10 +73,15 @@ function treeDigest(directory: string): string {
     const { readdirSync } = require("node:fs") as typeof import("node:fs");
     for (const name of readdirSync(current).sort()) {
       const absolute = join(current, name);
-      const stats = statSync(absolute);
-      hash.update(`${prefix}${name}:${stats.isDirectory() ? "d" : stats.size}\n`);
-      if (stats.isDirectory()) walk(absolute, `${prefix}${name}/`);
-      else hash.update(readFileSync(absolute));
+      const descriptor = openSync(absolute, "r");
+      try {
+        const stats = fstatSync(descriptor);
+        hash.update(`${prefix}${name}:${stats.isDirectory() ? "d" : stats.size}\n`);
+        if (stats.isDirectory()) walk(absolute, `${prefix}${name}/`);
+        else hash.update(readFileSync(descriptor));
+      } finally {
+        closeSync(descriptor);
+      }
     }
   };
   walk(directory, "");
