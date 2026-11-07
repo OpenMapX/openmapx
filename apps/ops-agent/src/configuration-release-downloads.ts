@@ -55,14 +55,16 @@ export async function inspectConfigurationReleaseDownloads(input: {
   execFile: NonNullable<DockerRuntimeOptions["execFile"]>;
   signal: AbortSignal;
 }): Promise<ConfigurationReleaseDownloads> {
+  const controller = new AbortController();
+  const signal = AbortSignal.any([input.signal, controller.signal]);
   const run = async (args: readonly string[]) => {
-    input.signal.throwIfAborted();
+    signal.throwIfAborted();
     const result = await input.execFile("docker", args, {
-      signal: AbortSignal.any([input.signal, AbortSignal.timeout(15000)]),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
       timeout: 15000,
       maxBuffer: 1024 * 1024,
     });
-    input.signal.throwIfAborted();
+    signal.throwIfAborted();
     if (Buffer.byteLength(result.stdout) > 1024 * 1024)
       throw Error("Release metadata capacity exceeded");
     return result.stdout;
@@ -75,9 +77,10 @@ export async function inspectConfigurationReleaseDownloads(input: {
           ? "linux/arm64"
           : observed,
     ),
-    [os, architecture] = platform.split("/"),
-    images = [];
-  for (const image of CONFIGURATION_RELEASE_IMAGE_NAMES) {
+    [os, architecture] = platform.split("/");
+  // One task per fixed image, with sequential index/platform reads inside it.
+  // Promise.all retains release order regardless of registry response order.
+  const tasks = CONFIGURATION_RELEASE_IMAGE_NAMES.map(async (image) => {
     const reference = input.release.manifest.images[image];
     let body: unknown = JSON.parse(await run(["manifest", "inspect", reference])),
       platformManifestDigest = digest.parse(reference.slice(reference.lastIndexOf("@") + 1));
@@ -99,13 +102,23 @@ export async function inspectConfigurationReleaseDownloads(input: {
       declaredBytes =
         manifest.config.size + manifest.layers.reduce((sum, layer) => sum + layer.size, 0);
     if (manifest.config.size < 1) throw Error("Release image configuration is empty");
-    images.push({
+    return {
       image,
       reference,
       platformManifestDigest,
       configDigest: manifest.config.digest,
       declaredBytes,
-    });
+    };
+  });
+  let images: Awaited<(typeof tasks)[number]>[];
+  try {
+    images = await Promise.all(tasks);
+  } catch (error) {
+    controller.abort(Error("Release metadata inspection canceled"));
+    // The caller owns the release-store lock until every contained process
+    // has finished, including siblings still shutting down after cancellation.
+    await Promise.allSettled(tasks);
+    throw error;
   }
   // Declared config/layer blob bytes, not an assertion about Docker's
   // unpacked filesystem size. Actual pulled images still require verification.

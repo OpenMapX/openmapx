@@ -157,6 +157,177 @@ it.each(["single", "indexed"])(
     ).toBe(true);
   },
 );
+
+const platformManifest = JSON.stringify({
+  schemaVersion: 2,
+  config: { size: 256, digest: `sha256:${"c".repeat(64)}` },
+  layers: [{ size: 1024, digest: `sha256:${"d".repeat(64)}` }],
+});
+const platformIndex = (architecture = "amd64") =>
+  JSON.stringify({
+    schemaVersion: 2,
+    manifests: [
+      {
+        digest: `sha256:${"b".repeat(64)}`,
+        size: 512,
+        platform: { os: "linux", architecture },
+      },
+    ],
+  });
+const flushMetadata = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+/** Control only the external Docker boundary; the preflight and lock stay real.
+ * Deliberately ignore abort until released, as process-group cleanup may do. */
+function heldMetadata() {
+  type Exec = Parameters<typeof inspectConfigurationReleaseDownloads>[0]["execFile"];
+  const calls: Array<{
+    reference: string;
+    signal: AbortSignal;
+    resolve: (body: string) => void;
+  }> = [];
+  let draining = false;
+  let active = 0;
+  let peak = 0;
+  const execFile = vi.fn<Exec>(async (file, args, options) => {
+    expect(file).toBe("docker");
+    expect(options).toMatchObject({ timeout: 15000, maxBuffer: 1024 * 1024 });
+    if (args[0] === "info") {
+      expect(args).toEqual(["info", "--format", "{{.OSType}}/{{.Architecture}}"]);
+      return { stdout: "linux/amd64", stderr: "" };
+    }
+    expect(args.slice(0, 2)).toEqual(["manifest", "inspect"]);
+    if (draining) return { stdout: platformManifest, stderr: "" };
+    const pending = Promise.withResolvers<string>();
+    calls.push({ reference: args[2]!, signal: options.signal, resolve: pending.resolve });
+    peak = Math.max(peak, ++active);
+    try {
+      return { stdout: await pending.promise, stderr: "" };
+    } finally {
+      active--;
+    }
+  });
+  return {
+    execFile,
+    calls,
+    peak: () => peak,
+    drain() {
+      draining = true;
+      for (const call of calls) call.resolve(platformManifest);
+    },
+  };
+}
+
+it("inspects all seven images concurrently and retains release order under reversed completion", async () => {
+  const release = readCheckedConfigurationRelease(root, { releaseId, manifestDigest });
+  const held = heldMetadata();
+  const controller = new AbortController();
+  const result = inspectConfigurationReleaseDownloads({
+    release,
+    execFile: held.execFile,
+    signal: controller.signal,
+  });
+  // Install the rejection handler before an assertion can fail and start cleanup.
+  const settled = result.catch(() => undefined);
+  try {
+    await vi.waitFor(() => expect(held.calls).toHaveLength(7), { timeout: 2000, interval: 5 });
+    expect(held.calls.map((call) => call.reference)).toEqual(
+      Object.values(release.manifest.images),
+    );
+    for (const call of [...held.calls].reverse()) call.resolve(platformIndex());
+    await vi.waitFor(() => expect(held.calls).toHaveLength(14), { timeout: 2000, interval: 5 });
+    for (const call of held.calls.slice(7).reverse()) call.resolve(platformManifest);
+    expect(await result).toMatchObject({
+      platform: "linux/amd64",
+      declaredBytes: 8960,
+      images: [
+        { image: "api" },
+        { image: "web" },
+        { image: "data-manager" },
+        { image: "ops-agent" },
+        { image: "privacy-backup" },
+        { image: "transitous-runner" },
+        { image: "transitous-tools" },
+      ],
+    });
+    expect(held.peak()).toBe(7);
+    expect(
+      held.calls
+        .slice(7)
+        .map((call) => call.reference)
+        .sort(),
+    ).toEqual(
+      Object.values(release.manifest.images)
+        .map((reference) =>
+          reference.replace(`sha256:${"a".repeat(64)}`, `sha256:${"b".repeat(64)}`),
+        )
+        .sort(),
+    );
+  } finally {
+    controller.abort();
+    held.drain();
+    await settled;
+  }
+});
+
+it.each(["sibling failure", "caller abort"])(
+  "keeps the release lock until every metadata child settles after %s",
+  async (failure) => {
+    const { preflightConfigurationRelease } = await import("./configuration-release-preflight");
+    const held = heldMetadata();
+    const controller = new AbortController();
+    let settled = false;
+    const result = preflightConfigurationRelease({
+      infraDir: root,
+      selection: { releaseId, manifestDigest },
+      execFile: held.execFile,
+      signal: controller.signal,
+    }).then(
+      () => {
+        settled = true;
+        return undefined;
+      },
+      (error: unknown) => {
+        settled = true;
+        return error;
+      },
+    );
+    try {
+      await vi.waitFor(() => expect(held.calls).toHaveLength(7), { timeout: 2000, interval: 5 });
+      if (failure === "sibling failure") held.calls[0]!.resolve(platformIndex("arm64"));
+      else {
+        for (const call of [...held.calls]) call.resolve(platformIndex());
+        await vi.waitFor(() => expect(held.calls).toHaveLength(14), { timeout: 2000, interval: 5 });
+        controller.abort(Error("Caller canceled metadata"));
+      }
+      await vi.waitFor(() => expect(held.calls.every((call) => call.signal.aborted)).toBe(true), {
+        timeout: 2000,
+        interval: 5,
+      });
+      await flushMetadata();
+      expect(settled).toBe(false);
+      await expect(
+        services.acquireReleaseStoreLock(directory, {}, { failIfBusy: true }),
+      ).rejects.toThrow("Release store is busy");
+      // A late valid index must not launch a platform lookup after sibling failure.
+      for (const call of held.calls) call.resolve(platformIndex());
+      expect(await result).toEqual(
+        Error(
+          failure === "sibling failure"
+            ? "Release platform is unavailable or ambiguous"
+            : "Caller canceled metadata",
+        ),
+      );
+      expect(held.calls).toHaveLength(failure === "sibling failure" ? 7 : 14);
+      const lock = await services.acquireReleaseStoreLock(directory, {}, { failIfBusy: true });
+      lock.release();
+    } finally {
+      controller.abort();
+      held.drain();
+      await result;
+    }
+  },
+);
+
 it.each([
   "platform",
   "unavailable-index",
