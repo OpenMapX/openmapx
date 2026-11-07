@@ -7,7 +7,7 @@ import { NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
 import { getMapObstructionInsets } from "@/lib/mapObstructions";
 import { CHANNEL_GLOBAL } from "@/lib/mobile/mobileShellEnvironment";
 
-const calls = { engine: 0, liveRefresh: [] as boolean[], wakeLock: [] as boolean[] };
+const calls = { cueMounts: 0, engine: 0, liveRefresh: [] as boolean[], wakeLock: [] as boolean[] };
 const mapCtx = { fitBounds: vi.fn() };
 
 vi.mock("@/integration-api/map/MapContext", async () => ({
@@ -27,6 +27,18 @@ vi.mock("@/lib/navigation/useTransitLiveRefresh", () => ({
     calls.liveRefresh.push(active);
   },
 }));
+vi.mock("./TransitGuidanceCues", async () => {
+  const { useEffect } = await import("react");
+  return {
+    TransitGuidanceCues: () => {
+      useEffect(() => {
+        calls.cueMounts += 1;
+      }, []);
+      return null;
+    },
+  };
+});
+
 vi.mock("@/lib/useWakeLock", () => ({
   useWakeLock: (enabled: boolean) => {
     calls.wakeLock.push(enabled);
@@ -83,6 +95,7 @@ function mount(scope?: unknown) {
 describe("TransitNavigationView runtime ownership", () => {
   beforeEach(() => {
     calls.engine = 0;
+    calls.cueMounts = 0;
     calls.liveRefresh = [];
     calls.wakeLock = [];
     useNavigationStore.setState({
@@ -107,6 +120,14 @@ describe("TransitNavigationView runtime ownership", () => {
     expect(calls.wakeLock.length).toBeGreaterThan(0);
   });
 
+  it("keeps session cues mounted while journey details are opened and closed", () => {
+    const view = mount({});
+    expect(calls.cueMounts).toBe(1);
+    fireEvent.click(view.getByLabelText("navigation.moreOptions"));
+    fireEvent.click(view.getByLabelText("navigation.moreOptions"));
+    expect(calls.cueMounts).toBe(1);
+  });
+
   it("runs none of them inside the installed shell", () => {
     mount(shellScope());
 
@@ -114,6 +135,7 @@ describe("TransitNavigationView runtime ownership", () => {
     // owns the wake lock. A second consumer of any of the three is a second
     // answer to "when do I get off".
     expect(calls.engine).toBe(0);
+    expect(calls.cueMounts).toBe(0);
     expect(calls.liveRefresh).toEqual([]);
     expect(calls.wakeLock).toEqual([]);
   });

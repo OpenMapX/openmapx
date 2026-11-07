@@ -23,7 +23,7 @@ vi.mock("@openmapx/core", async (original) => ({
   useVehicleJourney: () => ({}),
 }));
 
-it("keeps a visible labeled End action outside the live arrival summary", () => {
+it("keeps a visible labeled End action without announcing the countdown repeatedly", () => {
   render(
     <TransitNavBottomBar
       itinerary={{ endTime: new Date(Date.now() + 600000).toISOString() } as TripItinerary}
@@ -31,7 +31,7 @@ it("keeps a visible labeled End action outside the live arrival summary", () => 
   );
   const button = screen.getByRole("button", { name: "navigation.end" });
   expect(button).toHaveTextContent("navigation.end");
-  expect(screen.getByRole("status").contains(button)).toBe(false);
+  expect(screen.queryByRole("status")).toBeNull();
   fireEvent.click(button);
   expect(end).toHaveBeenCalledTimes(1);
 });

@@ -64,16 +64,9 @@ interface AlertCardProps {
   compact?: boolean;
   /** Whether the description is expandable (default true). */
   expandable?: boolean;
-  /** Navigation uses the severity icon and surface without a decorative edge. */
-  accent?: "edge" | "icon";
 }
 
-export function AlertCard({
-  alert,
-  compact = false,
-  expandable = true,
-  accent = "edge",
-}: AlertCardProps) {
+export function AlertCard({ alert, compact = false, expandable = true }: AlertCardProps) {
   const _t = useTranslations("transit");
   const [descExpanded, setDescExpanded] = useState(false);
   const config = SEVERITY_CONFIG[alert.severity];
@@ -87,9 +80,8 @@ export function AlertCard({
         gap: compact ? 0.75 : 1,
         p: compact ? 0.75 : 1.25,
         bgcolor: config.bg,
-        ...(accent === "edge"
-          ? { borderLeft: `3px solid ${config.border}`, borderRadius: "0 6px 6px 0" }
-          : { borderRadius: 2 }),
+        borderLeft: `3px solid ${config.border}`,
+        borderRadius: "0 6px 6px 0",
       }}
     >
       <Icon

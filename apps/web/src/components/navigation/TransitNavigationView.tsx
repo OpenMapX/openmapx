@@ -1,16 +1,12 @@
 "use client";
 
-import ExpandLessIcon from "@mui/icons-material/ExpandLess";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Box from "@mui/material/Box";
 import Collapse from "@mui/material/Collapse";
-import IconButton from "@mui/material/IconButton";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { geoJsonBBox, useNavigationStore, useSettingsStore, useSidebarStore } from "@openmapx/core";
 import { nextTransferFor } from "@openmapx/core/navigation";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
-import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { NavigationSettingsDialog } from "@/components/settings/NavigationSettingsDialog";
 import { useMapOptional } from "@/integration-api/map/MapContext";
@@ -29,8 +25,10 @@ import { TransitAlertBanner } from "./TransitAlertBanner";
 import { TransitAlternativesDialog } from "./TransitAlternativesDialog";
 import { TransitArrivalCard } from "./TransitArrivalCard";
 import { TransitConnectionRisk } from "./TransitConnectionRisk";
+import { TransitGuidanceCues } from "./TransitGuidanceCues";
 import { TransitJourneyControls } from "./TransitJourneyControls";
 import { TransitJourneySheet } from "./TransitJourneySheet";
+import { TransitJourneyToolbar } from "./TransitJourneyToolbar";
 import { TransitLegBanner } from "./TransitLegBanner";
 import { TransitNavBottomBar } from "./TransitNavBottomBar";
 import { TransitNavMenu } from "./TransitNavMenu";
@@ -65,9 +63,9 @@ export function TransitNavigationView() {
   const units = useSettingsStore((s) => s.units);
 
   const mapCtx = useMapOptional();
-  const t = useTranslations("navigation");
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const active = status !== "idle" && status !== "arrived" && kind === "transit";
   const [alternativesOpen, setAlternativesOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -78,7 +76,12 @@ export function TransitNavigationView() {
   // transit trip runs, so an idle mount must not reserve the column either.
   const bannerClearance = useMapObstructionExtent("transit-nav-banner");
   const [bannerEl, setBannerEl] = useState<HTMLDivElement | null>(null);
-  useNavChromeObstructions("transit", { isMobile, arrived: !active || !itinerary, bannerEl });
+  const hasWalkBanner = itinerary?.legs[transitProgress?.currentLegIndex ?? 0]?.mode === "walking";
+  useNavChromeObstructions("transit", {
+    isMobile,
+    arrived: !active || !itinerary,
+    bannerEl: hasWalkBanner ? bannerEl : null,
+  });
 
   // Collapse the route-planning sidebar while navigating; restore on exit.
   useEffect(() => {
@@ -124,20 +127,61 @@ export function TransitNavigationView() {
     );
   };
 
-  const menu = (
-    <TransitNavMenu onOverview={handleOverview} onOpenSettings={() => setSettingsOpen(true)} />
+  const expanded = isMobile ? sheetOpen : menuOpen;
+  const toggleDetails = () => (isMobile ? setSheetOpen((o) => !o) : setMenuOpen((o) => !o));
+  const showDetails = () => (isMobile ? setSheetOpen(true) : setMenuOpen(true));
+  const toolbar = (
+    <TransitJourneyToolbar
+      legs={legs}
+      currentLegIndex={currentLegIndex}
+      expanded={expanded}
+      onToggle={toggleDetails}
+      mobile={isMobile}
+    />
   );
-  // Desktop reveals the menu with a chevron; mobile drags the sheet up.
-  const desktopMenuToggle = (
-    <IconButton
-      onClick={() => setMenuOpen((o) => !o)}
-      aria-label={t("moreOptions")}
-      aria-expanded={menuOpen}
-    >
-      {menuOpen ? <ExpandMoreIcon /> : <ExpandLessIcon />}
-    </IconButton>
+  const footer = <TransitNavBottomBar itinerary={itinerary} currentLeg={currentLeg} />;
+  const summary = (
+    <>
+      {currentLeg && currentLeg.mode !== "walking" && (
+        <TransitLegBanner
+          leg={currentLeg}
+          legIndex={currentLegIndex}
+          source={itinerary.source ?? itinerary.instance}
+          transitProgress={transitProgress}
+          transfer={transfer}
+          presentation="sheet"
+        />
+      )}
+      <TransitAlertBanner
+        itinerary={itinerary}
+        currentLegIndex={currentLegIndex}
+        transitProgress={transitProgress}
+        expanded={expanded}
+        onExpand={showDetails}
+      />
+      {currentLeg?.route && transfer && (
+        <TransitConnectionRisk leg={currentLeg} transfer={transfer} inline />
+      )}
+      <TransitJourneyControls
+        walkRepair={walkRepair}
+        showRidingDestination={false}
+        onAlternatives={() => setAlternativesOpen(true)}
+      />
+    </>
   );
-
+  const details = (
+    <Box id="transit-journey-details">
+      <TransitJourneySheet
+        itinerary={itinerary}
+        currentLegIndex={currentLegIndex}
+        transitProgress={transitProgress}
+        showQueryNotice={false}
+        showDataStatus={false}
+        scroll={false}
+      />
+      <TransitNavMenu onOverview={handleOverview} onOpenSettings={() => setSettingsOpen(true)} />
+    </Box>
+  );
   return (
     <Box
       sx={{
@@ -147,13 +191,28 @@ export function TransitNavigationView() {
         pointerEvents: "none",
         display: "flex",
         flexDirection: "column",
-        justifyContent: "space-between",
       }}
     >
-      {browserAuthority && <BrowserTransitRuntime active={active} />}
+      {browserAuthority && (
+        <>
+          <BrowserTransitRuntime active={active} />
+          <TransitGuidanceCues
+            itinerary={itinerary}
+            legIndex={currentLegIndex}
+            transitProgress={transitProgress}
+            transfer={transfer}
+            active={active}
+          />
+        </>
+      )}
       {status === "arrived" ? (
         <Box
-          sx={{ pointerEvents: "auto", m: "auto", bgcolor: "background.paper", borderRadius: 3 }}
+          sx={{
+            pointerEvents: "auto",
+            m: "auto",
+            bgcolor: "background.paper",
+            borderRadius: "28px",
+          }}
         >
           <TransitArrivalCard itinerary={itinerary} onClose={() => void completeArrival()} />
           <TransitJourneyControls
@@ -163,32 +222,23 @@ export function TransitNavigationView() {
         </Box>
       ) : (
         <>
-          <Box
-            ref={setBannerEl}
-            sx={{
-              pointerEvents: "auto",
-              display: "flex",
-              flexDirection: "column",
-              gap: 1,
-              p: 2,
-              // Same top as the driving banner.
-              pt: NAV_CHROME_TOP,
-              // On wide screens keep the chrome in a left-hand column (like the
-              // driving view) so the map stays clear on the right.
-              ...(isMobile
-                ? {}
-                : {
-                    alignSelf: "flex-start",
-                    width: 1,
-                    maxWidth: NAV_LANDSCAPE_PANEL_WIDTH + 32,
-                    // Never let the always-on instruction banner shrink; only the
-                    // expandable panel below gives up space when the column is short.
-                    flexShrink: 0,
-                  }),
-            }}
-          >
-            {currentLeg &&
-              (isGuidedWalk ? (
+          {hasWalkBanner && currentLeg && (
+            <Box
+              ref={setBannerEl}
+              sx={{
+                pointerEvents: "auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: 1,
+                p: 2,
+                pt: NAV_CHROME_TOP,
+                flexShrink: 0,
+                ...(!isMobile
+                  ? { width: 1, maxWidth: NAV_LANDSCAPE_PANEL_WIDTH + 32, alignSelf: "flex-start" }
+                  : {}),
+              }}
+            >
+              {isGuidedWalk ? (
                 <TransitWalkBanner
                   leg={currentLeg}
                   transitProgress={transitProgress}
@@ -202,25 +252,23 @@ export function TransitNavigationView() {
                   transitProgress={transitProgress}
                   transfer={transfer}
                 />
-              ))}
-            <TransitAlertBanner
-              itinerary={itinerary}
-              currentLegIndex={currentLegIndex}
-              transitProgress={transitProgress}
-            />
-            {currentLeg?.route && transfer && (
-              <TransitConnectionRisk leg={currentLeg} transfer={transfer} />
-            )}
-          </Box>
-
+              )}
+            </Box>
+          )}
           <Box
             sx={{
               display: "flex",
               flexDirection: "column",
-              // Desktop: allow this block to give up height so the panel below
-              // caps to the space left under the (non-shrinking) banner and
-              // scrolls instead of running off the bottom of the viewport.
-              ...(isMobile ? {} : { minHeight: 0 }),
+              ...(isMobile
+                ? {}
+                : {
+                    minHeight: 0,
+                    flex: 1,
+                    px: 2,
+                    pb: 2,
+                    pt: hasWalkBanner ? 0 : NAV_CHROME_TOP,
+                    alignItems: "flex-start",
+                  }),
             }}
           >
             {isMobile ? (
@@ -228,71 +276,43 @@ export function TransitNavigationView() {
                 topClearance={bannerClearance}
                 expanded={sheetOpen}
                 onExpandedChange={setSheetOpen}
-                header={
-                  <>
-                    <TransitJourneyControls
-                      walkRepair={walkRepair}
-                      onAlternatives={() => setAlternativesOpen(true)}
-                    />
-                    <TransitNavBottomBar itinerary={itinerary} currentLeg={currentLeg} />
-                  </>
-                }
+                toolbar={toolbar}
+                footer={footer}
+                header={summary}
               >
-                <TransitJourneySheet
-                  itinerary={itinerary}
-                  currentLegIndex={currentLegIndex}
-                  transitProgress={transitProgress}
-                  showQueryNotice={false}
-                  scroll={false}
-                />
-                {menu}
+                {details}
               </NavSwipeSheet>
             ) : (
               <Box
                 sx={{
                   pointerEvents: "auto",
-                  width: "100%",
+                  width: 1,
                   maxWidth: NAV_LANDSCAPE_PANEL_WIDTH,
-                  // Left-aligned (16px in, matching the banner) rather than
-                  // centered, so the map stays clear on the right.
-                  ml: 2,
-                  mb: 2,
+                  maxHeight: "100%",
                   bgcolor: "background.paper",
-                  borderRadius: 3,
+                  borderRadius: "28px",
                   boxShadow: 6,
-                  // Flex column: the header stays put and the panel shrinks to
-                  // the height the (shrinkable) column leaves it, so the menu
-                  // scrolls instead of overflowing the viewport.
                   display: "flex",
                   flexDirection: "column",
                   minHeight: 0,
                   overflow: "hidden",
                 }}
               >
-                <Box sx={{ flexShrink: 0 }}>
-                  <TransitJourneyControls
-                    walkRepair={walkRepair}
-                    onAlternatives={() => setAlternativesOpen(true)}
-                  />
-                  <TransitNavBottomBar
-                    itinerary={itinerary}
-                    currentLeg={currentLeg}
-                    menuToggle={desktopMenuToggle}
-                  />
-                </Box>
-                {/* Header stays pinned; the expanded journey + menu scroll. */}
-                <Box sx={{ minHeight: 0, overflowY: "auto", overflowX: "hidden" }}>
-                  <Collapse in={menuOpen} unmountOnExit>
-                    <TransitJourneySheet
-                      itinerary={itinerary}
-                      currentLegIndex={currentLegIndex}
-                      transitProgress={transitProgress}
-                      scroll={false}
-                      showQueryNotice={false}
-                    />
-                    {menu}
+                <Box sx={{ flexShrink: 0 }}>{toolbar}</Box>
+                <Box
+                  sx={{
+                    minHeight: 0,
+                    overflowY: "auto",
+                    overflowX: "hidden",
+                    scrollPaddingBlock: 1,
+                  }}
+                >
+                  {summary}
+                  <Collapse in={menuOpen} timeout={reduceMotion ? 0 : "auto"} unmountOnExit>
+                    {details}
                   </Collapse>
                 </Box>
+                <Box sx={{ flexShrink: 0 }}>{footer}</Box>
               </Box>
             )}
           </Box>

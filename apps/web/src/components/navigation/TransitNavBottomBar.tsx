@@ -1,6 +1,5 @@
 "use client";
 
-import CloseIcon from "@mui/icons-material/Close";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
@@ -91,19 +90,15 @@ export function TransitNavBottomBar({
       }}
     >
       <Button
-        color="inherit"
-        variant="outlined"
-        startIcon={<CloseIcon />}
+        color="error"
+        variant="contained"
+        disableElevation
         onClick={() => void endNavigation()}
-        sx={{ minHeight: 44, flexShrink: 0, borderColor: "divider", borderRadius: 2 }}
+        sx={{ minHeight: 44, flexShrink: 0, px: 2.5, borderRadius: "999px" }}
       >
         {t("end")}
       </Button>
-      <Box
-        role="status"
-        aria-live="polite"
-        sx={{ flex: 1, minWidth: 0, textAlign: "right", fontVariantNumeric: "tabular-nums" }}
-      >
+      <Box sx={{ flex: 1, minWidth: 0, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
         <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.25 }}>
           {formatDuration(durationRemaining)}
         </Typography>

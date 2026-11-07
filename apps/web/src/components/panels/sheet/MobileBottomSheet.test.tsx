@@ -479,3 +479,27 @@ describe("MobileBottomSheet swipe-down to close", () => {
     expect(host.hasAttribute("swipe-to-dismiss")).toBe(false);
   });
 });
+
+it("keeps the map footer outlet while direct header and footer slots change", () => {
+  const view = render(
+    <MobileBottomSheet
+      id="direct-chrome"
+      zIndex={1}
+      detents={TWO_SNAP}
+      header={<span>Route toolbar</span>}
+      footer={<button type="button">End trip</button>}
+    >
+      <span>Journey body</span>
+    </MobileBottomSheet>,
+  );
+  expect(view.container.querySelector('[slot="header"]')).toHaveTextContent("Route toolbar");
+  expect(view.container.querySelector('[slot="footer"]')).toHaveTextContent("End trip");
+  const outlet = view.container.querySelector('[data-map-footer-outlet="direct-chrome"]');
+  view.rerender(
+    <MobileBottomSheet id="direct-chrome" zIndex={1} detents={TWO_SNAP}>
+      <span>Journey body</span>
+    </MobileBottomSheet>,
+  );
+  expect(view.container.querySelector('[data-map-footer-outlet="direct-chrome"]')).toBe(outlet);
+  expect(view.container.querySelector('[slot="header"]')).toBeNull();
+});

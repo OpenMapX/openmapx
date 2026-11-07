@@ -33,7 +33,7 @@ export function NavBannerShell({
       sx={{
         bgcolor: tone === "surface" ? "background.paper" : "primary.main",
         color: tone === "surface" ? "text.primary" : "primary.contrastText",
-        borderRadius: 3,
+        borderRadius: "28px",
         overflow: "hidden",
         ...(tone === "surface" && { boxShadow: 2 }),
       }}

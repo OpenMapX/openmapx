@@ -21,10 +21,12 @@ export function TransitTransferCard({
   fromLeg,
   nextLeg,
   walkSeconds,
+  inline = false,
 }: {
   fromLeg: TripLeg;
   nextLeg: TripLeg;
   walkSeconds: number;
+  inline?: boolean;
 }) {
   const t = useTranslations("navigation");
   const { nextHeadsign, boardPlatform, platformChanged, levelChange, stepFree, walkMinutes } =
@@ -42,20 +44,26 @@ export function TransitTransferCard({
         py: 1.25,
         bgcolor: "background.paper",
         color: "text.primary",
-        borderRadius: 2,
-        boxShadow: 1,
+        ...(inline
+          ? {
+              borderTop: "1px solid",
+              borderBottom: "1px solid",
+              borderColor: "divider",
+              bgcolor: "action.hover",
+            }
+          : { borderRadius: "28px", boxShadow: 1 }),
       }}
     >
       <Box
         sx={{
           display: "grid",
           placeItems: "center",
-          width: 44,
-          height: 44,
+          width: inline ? 24 : 44,
+          height: inline ? 24 : 44,
           flexShrink: 0,
           borderRadius: "50%",
-          bgcolor: "primary.main",
-          color: "primary.contrastText",
+          bgcolor: inline ? "transparent" : "primary.main",
+          color: inline ? "primary.main" : "primary.contrastText",
         }}
       >
         <TransferWithinAStationIcon />

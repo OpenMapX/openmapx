@@ -12,8 +12,24 @@ vi.mock("@/lib/navigation/useTransferInfo", () => ({
   }),
 }));
 
+import type { ComponentProps } from "react";
+import { TransitGuidanceCues } from "./TransitGuidanceCues";
 import { TransitJourneySheet } from "./TransitJourneySheet";
-import { TransitLegBanner } from "./TransitLegBanner";
+import { TransitLegBanner as LegPresentation } from "./TransitLegBanner";
+
+function TransitLegBanner(props: ComponentProps<typeof LegPresentation>) {
+  return (
+    <>
+      <TransitGuidanceCues
+        itinerary={{ ...itinerary, legs: [props.leg] }}
+        legIndex={0}
+        transitProgress={props.transitProgress}
+        transfer={props.transfer}
+      />
+      <LegPresentation {...props} />
+    </>
+  );
+}
 
 const state = vi.hoisted(() => ({ browser: true, speak: vi.fn(), journey: vi.fn() }));
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
@@ -136,7 +152,8 @@ describe("journey and navigation use the same transit evidence", () => {
       />,
     );
     expect(screen.getByText("RE1 · transit.canceled")).toBeInTheDocument();
-    expect(state.speak).not.toHaveBeenCalled();
+    expect(state.speak).not.toHaveBeenCalledWith("navigation.voiceBoard");
+    expect(state.speak).not.toHaveBeenCalledWith("navigation.voiceBoardPlatform");
   });
   it("keeps browser live queries disabled in the installed shell", () => {
     state.browser = false;

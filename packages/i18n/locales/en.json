@@ -133,6 +133,8 @@
     "arriveAt": "Arrive {time}",
     "delayMinutes": "+{minutes} min",
     "overview": "Route overview",
+    "moreJourneyLegs": "+{count}",
+    "moreTransitAlerts": "{count} more alerts",
     "moreOptions": "More options",
     "resizePanel": "Resize navigation panel",
     "menu": {

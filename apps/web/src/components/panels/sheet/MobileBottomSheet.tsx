@@ -120,6 +120,9 @@ interface Props {
   ariaLabel?: string;
   /** Applied to the scrollable content, not the host. */
   contentSx?: SxProps<Theme>;
+  /** Optional pinned chrome. Descendant registrations remain the default. */
+  header?: ReactNode;
+  footer?: ReactNode;
   children: ReactNode;
 }
 
@@ -136,6 +139,8 @@ export function MobileBottomSheet({
   obscured,
   ariaLabel,
   contentSx,
+  header,
+  footer,
   children,
 }: Props) {
   const theme = useTheme();
@@ -611,12 +616,12 @@ export function MobileBottomSheet({
                 style={{ "--snap": slot.snap } as CSSProperties}
               />
             ))}
-            {chromeHeader ? <div slot="header">{chromeHeader}</div> : null}
+            {(header ?? chromeHeader) ? <div slot="header">{header ?? chromeHeader}</div> : null}
             <Box ref={setPeekEl} sx={contentSx}>
               {children}
             </Box>
             <div slot="footer">
-              {chromeFooter}
+              {footer ?? chromeFooter}
               <div ref={setFooterOutlet} data-map-footer-outlet={id} />
             </div>
           </Box>

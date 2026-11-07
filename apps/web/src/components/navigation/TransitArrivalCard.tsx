@@ -37,7 +37,11 @@ export function TransitArrivalCard({
       <Typography variant="body2" color="text.secondary">
         {formatDuration(itinerary.duration)} · {fmt.time(itinerary.endTime)}
       </Typography>
-      <Button variant="contained" onClick={onClose} sx={{ mt: 1 }}>
+      <Button
+        variant="contained"
+        onClick={onClose}
+        sx={{ mt: 1, minHeight: 44, borderRadius: "999px" }}
+      >
         {t("done")}
       </Button>
     </Box>
