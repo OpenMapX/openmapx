@@ -623,6 +623,55 @@ describe("App bridge channel", () => {
     return nonce;
   };
 
+  it.each([3, 4, MOBILE_PROTOCOL_MAX])(
+    "announces Android inbox content according to negotiated protocol %s",
+    async (version) => {
+      jest.replaceProperty(Platform, "OS", "android");
+      let activate: (() => void) | undefined;
+      jest.spyOn(AppState, "addEventListener").mockImplementation((type, handler) => {
+        if (type === "change") activate = () => handler("active");
+        return { remove: jest.fn() };
+      });
+      const alert = jest.spyOn(Alert, "alert");
+      jest.spyOn(intakeModule, "createNativeIntakePort").mockReturnValue({
+        available: async () => true,
+        list: async () => [
+          {
+            id: "f386e706-b728-40a3-9554-881d0ff0958a",
+            kind: "text",
+            name: "Shared trip",
+            createdAtMs: 1,
+            byteLength: 500,
+          },
+        ],
+        read: jest.fn(),
+        complete: jest.fn(),
+        listen: () => () => undefined,
+      });
+      try {
+        await hello(version);
+        await act(async () => activate?.());
+        expect(
+          decodedMessages().find((message) => message.type === "native.hello")?.payload
+            ?.selectedProtocolVersion,
+        ).toBe(version);
+        const announcement = decodedMessages().find((message) => message.type === "intake.changed");
+        if (version === 3) {
+          expect(announcement).toBeUndefined();
+          expect(alert).toHaveBeenCalledWith("Shared items saved", expect.any(String));
+        } else {
+          expect(announcement).toMatchObject({
+            type: "intake.changed",
+            payload: { pendingCount: 1 },
+          });
+          expect(alert).not.toHaveBeenCalled();
+        }
+      } finally {
+        await shellView?.unmount();
+      }
+    },
+  );
+
   it.each(["failed", "feasibility", "idle", "active", "storage-failed"])(
     "checks intake authority when navigation is %s",
     async (state) => {
