@@ -5,6 +5,7 @@ import type {
   DataExecutionIdentity,
   DataExecutionInput,
   DataExecutionStatus,
+  generationHardlinksNonAdmissionSchema,
   startGenerationHardlinksExecutionSchema,
 } from "@openmapx/core/data-manager-contracts";
 import type { FastifyInstance, FastifyReply } from "fastify";
@@ -14,6 +15,10 @@ import { registerDataManagerRoute } from "../../route-contract.js";
 /** The receiver performs signed admission/adoption, separately from bearer
  * authentication. A missing receiver never authorizes a compatibility worker. */
 export interface DataExecutionReceiver {
+  attestUnadoptedHardlinks?(
+    request: z.infer<typeof startGenerationHardlinksExecutionSchema>,
+    rawHeaders: readonly string[],
+  ): Promise<z.infer<typeof generationHardlinksNonAdmissionSchema>>;
   observeReviewedTransit?(request: {
     key: string;
     countries: string[];
@@ -74,6 +79,10 @@ export function registerDataExecutionApi(
     return reply
       .code(202)
       .send(await receiver.admitHardlinks(request.body, request.raw.rawHeaders));
+  });
+  registerDataManagerRoute(app, "recoverUnadmittedGenerationHardlinks", async (request, reply) => {
+    if (!receiver?.attestUnadoptedHardlinks) return unavailable(reply);
+    return receiver.attestUnadoptedHardlinks(request.body, request.raw.rawHeaders);
   });
   registerDataManagerRoute(app, "prepareDataConfigurationFence", async (request, reply) => {
     if (!receiver) return unavailable(reply);

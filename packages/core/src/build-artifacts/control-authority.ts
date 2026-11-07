@@ -47,6 +47,7 @@ import {
   closeArtifactTargetLeaseHandle,
   inspectArtifactTargetLeaseChildSettlement,
   restoreArtifactTargetLeaseForSettlement,
+  verifyFailedServiceLifecycleContainment,
   verifyRetainedArtifactTargetRootRelease,
   verifyRetainedGenerationHardlinksSettlement,
 } from "./target-lease";
@@ -1621,6 +1622,10 @@ const effectObservationSchema = z.discriminatedUnion("kind", [
   }),
   z.strictObject({ kind: z.literal("data-command"), status: dataExecutionStatusSchema }),
   z.strictObject({ kind: z.literal("ops-result"), result: z.unknown() }),
+  z.strictObject({
+    kind: z.literal("service-lifecycle-contained-failure"),
+    failedReceiptDigest: digest,
+  }),
   z.strictObject({ kind: z.literal("feed-proxy-validation-failure"), commitmentDigest: digest }),
   z.strictObject({ kind: z.literal("configuration-helper-completion"), completionDigest: digest }),
   z.strictObject({
@@ -2073,6 +2078,12 @@ export function retainControlEffectReceipt(
       )
         throw Error("Credential template file evidence changed");
       outcome = "committed";
+      publication = "committed";
+    } else if (receipt.kind === "service-lifecycle-contained-failure") {
+      const source = verifyFailedServiceLifecycleContainment(authority);
+      if (source.failedReceiptDigest !== receipt.failedReceiptDigest)
+        throw Error("Original failed lifecycle source changed");
+      outcome = "contained";
       publication = "committed";
     } else if (receipt.kind === "ops-result") {
       receipt.result = parseBoundedOpsResult(s.kind as OpsOperationKind, receipt.result);

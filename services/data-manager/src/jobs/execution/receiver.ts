@@ -47,6 +47,8 @@ export function createDataExecutionReceiver(deps: {
     return input;
   };
   return {
+    attestUnadoptedHardlinks: (request, rawHeaders) =>
+      configurationFence.attestUnadoptedGenerationHardlinks(request, rawHeaders),
     async observeReviewedTransit(request) {
       const record = await runtime.lookupLegacyTransit?.(request.key);
       if (!record) return null;

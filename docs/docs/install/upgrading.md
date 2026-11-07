@@ -293,6 +293,36 @@ A legacy transaction or unconsumed handoff must finish or recover before a new
 update. Preserve those records and inspect Activity and diagnostics; do not delete
 writer guards or reinterpret a selected overlay as proof of completion.
 
+### Recovering a refused host service update
+
+A read-only traffic inspection failure is terminal. Data Manager startup also
+repairs the exact older interrupted traffic-maintenance record with no attempted
+agent operations. Jobs with attempted operations, changed metadata or unknown
+writers remain fenced.
+
+For a standalone host `services start` or `services update` that failed at
+hardlinks after committing its configuration, retain its original operation key
+from `infra/docker/data/ops-agent/lifecycle/<operation-key>.json`. Once the
+original deadline has expired, the installation owner can run:
+
+```bash
+pnpm openmapx services recover-update --operation-key ORIGINAL_OPERATION_KEY
+```
+
+This requires the updated CLI, Data Manager and ops-agent. It verifies the original signed
+failure and asks Data Manager to attest, under its database admission lock, that
+the original child has no SQL admission or private adoption record. Only then
+can it revoke that unused grant and release the original service locks. A missing
+file or HTTP 404 alone is insufficient. Adopted or uncertain work still refuses.
+Keep all original records when it refuses; do not delete guards.
+
+Recovery preserves the failed receipt and committed configuration. It neither
+replays the child nor changes containers, and does not make a backup. After
+successful recovery, use **System → Updates** or the checked `system update`
+workflow above for the next application release. An already blocked installation
+may require a separately supervised upgrade before these fixes can run; changing
+the checkout alone does not update its running Data Manager.
+
 Rendering stops, with the reason, when:
 
 - `infra/docker/.trusted-config-current` is not the deployment user's own: inspect

@@ -1,4 +1,5 @@
 import { runOpsOperation } from "../../ops-client.js";
+import { TrafficMaintenancePreflightError } from "./preflight-error.js";
 
 /**
  * Default Valhalla container name under the default docker-compose project
@@ -104,7 +105,12 @@ export async function ensureTrafficExtract(
 export async function isTrafficExtractStale(
   _deps: EnsureTrafficExtractDeps = {},
 ): Promise<boolean> {
-  const result = await runOpsOperation({ kind: "valhalla.traffic.inspect" });
+  let result: Awaited<ReturnType<typeof runOpsOperation<"valhalla.traffic.inspect">>>;
+  try {
+    result = await runOpsOperation({ kind: "valhalla.traffic.inspect" });
+  } catch (cause) {
+    throw new TrafficMaintenancePreflightError(cause);
+  }
   // `unknown` means the agent could not read the tile directory while an
   // extract exists. Treat that as not-stale so an inconclusive probe never
   // triggers a needless rebuild-and-restart of Valhalla.

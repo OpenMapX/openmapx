@@ -11,6 +11,13 @@ import {
   executionRefSchema,
 } from "../ops/execution-identity";
 import { opsOperationFingerprint } from "../ops/fingerprint";
+import {
+  GENERATION_HARDLINKS_NON_ADMISSION_DOMAIN,
+  generationHardlinksNonAdmissionPayloadSchema,
+  generationHardlinksNonAdmissionSchema,
+} from "../services/data-manager/contracts/executions";
+// biome-ignore lint/suspicious/noImportCycles: Original receipt recovery is called after initialization, never during module evaluation.
+import { readFailedServiceHardlinksReceipt } from "../services/service-lifecycle-receipt";
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import {
   inspectControlChildPublication,
@@ -71,6 +78,7 @@ import {
   type ControlChildPhase,
   type ControlPlannedChild,
   type ControlRecipient,
+  cancelControlExecution,
   childPhaseKinds,
   childSettlementState,
   configurationMaintenanceChildState,
@@ -267,6 +275,24 @@ const childSchema = z.strictObject({
   settlement: outcomeSchema.nullable(),
 });
 type ChildRecord = z.infer<typeof childSchema>;
+const unadoptedLifecycleDomain = "openmapx-unadopted-service-hardlinks-v1";
+const unadoptedLifecycleSchema = z.strictObject({
+  version: z.literal(1),
+  origin: controlOriginSchema,
+  leaseId: uuid,
+  certificateDigest: digest,
+  delegationId: uuid,
+  grantDigest: digest,
+  parent: executionRefSchema,
+  child: executionRefSchema,
+  failedReceiptDigest: digest,
+  canceledSequence: z.number().int().positive().safe(),
+  nonAdmission: generationHardlinksNonAdmissionSchema,
+});
+type ObservedChild = ChildRecord & {
+  unadoptedRevocation?: true;
+  failedLifecycleReceiptDigest?: string;
+};
 const transitionSchema = z.strictObject({
   delegationId: uuid,
   grantDigest: digest,
@@ -487,7 +513,7 @@ function readGrant(s: State, id: string, parentKey: string): Grant {
     dir.close();
   }
 }
-function readChild(s: State, grant: Grant): ChildRecord | undefined {
+function readChild(s: State, grant: Grant): ObservedChild | undefined {
   const dir = childDirectory(s, "children");
   try {
     let raw: unknown;
@@ -496,6 +522,70 @@ function readChild(s: State, grant: Grant): ChildRecord | undefined {
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return;
       throw e;
+    }
+    if (raw && typeof raw === "object" && "unadoptedRevocation" in raw) {
+      const envelope = z.strictObject({ unadoptedRevocation: z.unknown() }).parse(raw),
+        revoked = verifyControl(
+          s.certificate.ownerPublicKey,
+          unadoptedLifecycleDomain,
+          envelope.unadoptedRevocation,
+          unadoptedLifecycleSchema,
+        ),
+        root = readRoot(s),
+        nonAdmission = verifyControl(
+          s.installation.publicKeys["data-manager"],
+          GENERATION_HARDLINKS_NON_ADMISSION_DOMAIN,
+          revoked.nonAdmission,
+          generationHardlinksNonAdmissionPayloadSchema,
+        );
+      if (
+        s.certificate.owner.executor !== "host-cli" ||
+        grant.parentNode !== null ||
+        grant.phase !== "hardlinks" ||
+        grant.childKind !== "generation-hardlinks" ||
+        grant.recipient !== "data-manager" ||
+        grant.depth !== 1 ||
+        revoked.leaseId !== s.certificate.leaseId ||
+        revoked.certificateDigest !== controlDigest(s.certificateEnvelope) ||
+        revoked.delegationId !== grant.delegationId ||
+        revoked.grantDigest !== root.grantDigests[grant.delegationId] ||
+        controlDigest(revoked.parent) !== controlDigest(s.certificate.owner) ||
+        controlDigest(revoked.child) !== controlDigest(grant.child) ||
+        !sameControlOrigin(revoked.origin, grant.origin) ||
+        root.phase === "held" ||
+        root.sequence < revoked.canceledSequence
+      )
+        throw Error("Original unadopted lifecycle revocation changed");
+      if (
+        nonAdmission.installationId !== s.certificate.installationId ||
+        nonAdmission.leaseId !== revoked.leaseId ||
+        nonAdmission.certificateDigest !== revoked.certificateDigest ||
+        nonAdmission.delegationId !== revoked.delegationId ||
+        nonAdmission.grantDigest !== revoked.grantDigest ||
+        controlDigest(nonAdmission.parent) !== controlDigest(revoked.parent) ||
+        controlDigest(nonAdmission.child) !== controlDigest(revoked.child) ||
+        controlDigest(nonAdmission.origin) !== controlDigest(revoked.origin) ||
+        nonAdmission.canceledSequence !== revoked.canceledSequence
+      )
+        throw Error("Data Manager non-admission binding changed");
+      return {
+        version: 2,
+        origin: grant.origin,
+        delegationId: grant.delegationId,
+        grantDigest: revoked.grantDigest,
+        execution: grant.child,
+        sequence: 0,
+        phase: "settled",
+        grantDigests: {},
+        unadoptedRevocation: true,
+        failedLifecycleReceiptDigest: revoked.failedReceiptDigest,
+        settlement: {
+          identity: grant.child,
+          outcome: "failed_without_effect",
+          publication: "not_started",
+          terminalReceiptDigest: controlDigest(envelope.unadoptedRevocation),
+        },
+      };
     }
     const child = verifyControl(
       grant.childPublicKey,
@@ -543,7 +633,7 @@ function highWater(s: State, nodes: Record<string, { sequence: number; digest: s
 type LeaseTree = {
   root: RootRecord;
   grants: Map<string, Grant>;
-  children: Map<string, ChildRecord>;
+  children: Map<string, ObservedChild>;
 };
 function tree(s: State): LeaseTree {
   if (!s.journalGuardHeld) return guarded(s, () => tree(s), false);
@@ -558,7 +648,7 @@ function tree(s: State): LeaseTree {
     owner: { sequence: root.sequence, digest: controlDigest(root) },
   };
   const grants = new Map<string, Grant>();
-  const children = new Map<string, ChildRecord>();
+  const children = new Map<string, ObservedChild>();
   let count = 0;
   function walk(
     parent: ExecutionRef,
@@ -1706,6 +1796,7 @@ export async function adoptArtifactTargetLease(options: {
       )
         throw Error("Wrong peer principal");
       const retained = t.children.get(grant.delegationId);
+      if (retained?.unadoptedRevocation) throw Error("Original unadopted grant was revoked");
       if (
         !retained &&
         (!forwardAncestry(t, grant.parentNode) || Date.now() >= grant.child.deadlineAt)
@@ -2845,6 +2936,228 @@ export function restoreConfigurationMaintenancePhaseIssuer(
   } catch (error) {
     closeArtifactTargetLeaseHandle(lease);
     throw error;
+  }
+}
+/** Seal only this original failed producer before asking its recipient for a
+ * non-admission certificate. This alone is not containment or lease release. */
+export async function prepareFailedServiceLifecycleRecovery(
+  authority: VerifiedExecutionAuthority,
+  lease: ArtifactTargetLease,
+) {
+  readFailedServiceHardlinksReceipt(authority);
+  const state = executionAuthorityState(authority),
+    s = stateOf(lease);
+  if (Date.now() < state.execution.deadlineAt) throw Error("Original lifecycle must be expired");
+  if (
+    s.node !== null ||
+    !s.settlementOnly ||
+    controlDigest(s.execution) !== controlDigest(state.execution)
+  )
+    throw Error("Original settlement-only host lease required");
+  await guarded(s, () => {
+    const t = tree(s);
+    if (
+      t.grants.size !== 1 ||
+      [...t.grants.values()].some(
+        (g) =>
+          g.parentNode !== null ||
+          g.phase !== "hardlinks" ||
+          g.childKind !== "generation-hardlinks" ||
+          g.recipient !== "data-manager",
+      )
+    )
+      throw Error("Original single hardlink grant required");
+    if (t.children.size) throw Error("An adopted or unresolved hardlink child remains fenced");
+    if (t.root.phase === "settled") throw Error("Original lifecycle already settled");
+    if (t.root.phase !== "cancel_pending") {
+      t.root.phase = "cancel_pending";
+      t.root.sequence++;
+      writeNode(s, t.root);
+    }
+  });
+  cancelControlExecution(authority);
+}
+/** Receiver-side observation of the original canceled, expired host grant.
+ * No peer, adoption, target handle or forward authority is returned. */
+export function observeUnadoptedServiceHardlinkGrant(
+  installation: import("./control-authority").ControlInstallation,
+  assertion: string,
+) {
+  const local = installationState(installation),
+    parsed = parseControlAssertion(assertion);
+  const grant = inspectArtifactDelegation({ dataRoot: local.dataRoot, installation, assertion });
+  if (
+    installation.role !== "data-manager" ||
+    local.fixedChildId ||
+    grant.owner.executor !== "host-cli" ||
+    grant.owner.principal !== "host-cli" ||
+    grant.kind !== "generation-hardlinks" ||
+    grant.phase !== "hardlinks" ||
+    grant.recipient !== "data-manager" ||
+    !grant.origin ||
+    controlDigest(grant.parent) !== controlDigest(grant.owner) ||
+    Date.now() < grant.owner.deadlineAt ||
+    Date.now() < grant.execution.deadlineAt
+  )
+    throw Error("Original expired host hardlink grant required");
+  const s = openState(local.dataRoot, grant.leaseId, local);
+  try {
+    return guarded(s, () => {
+      const t = tree(s),
+        witness = readControlExecutionWitness(
+          local,
+          grant.owner,
+          local.publicKeys[grant.owner.executor],
+        );
+      if (
+        !["service.start", "service.update"].includes(witness.kind) ||
+        t.root.phase !== "cancel_pending" ||
+        t.grants.size !== 1 ||
+        t.children.size ||
+        t.root.grantDigests[grant.delegationId] !== parsed.grantDigest
+      )
+        throw Error("Original canceled unadopted lifecycle grant required");
+      return generationHardlinksNonAdmissionPayloadSchema.parse({
+        version: 1,
+        kind: "generation-hardlinks-not-admitted",
+        installationId: installation.installationId,
+        origin: grant.origin,
+        leaseId: grant.leaseId,
+        certificateDigest: grant.ownerCertificateDigest,
+        delegationId: grant.delegationId,
+        grantDigest: parsed.grantDigest,
+        parent: grant.owner,
+        child: grant.execution,
+        canceledSequence: t.root.sequence,
+      });
+    });
+  } finally {
+    closeState(s);
+  }
+}
+/** Only the original failed host producer may revoke its one never-adopted
+ * hardlink grant. Adoption and revocation share the physical journal guard.
+ * No recipient key, completion, SQL terminal or successful update is invented. */
+export async function revokeUnadoptedServiceHardlinks(
+  authority: VerifiedExecutionAuthority,
+  lease: ArtifactTargetLease,
+  nonAdmission?: unknown,
+): Promise<void> {
+  if (nonAdmission === undefined) throw Error("Data Manager non-admission proof required");
+  const receipt = readFailedServiceHardlinksReceipt(authority),
+    state = executionAuthorityState(authority),
+    s = stateOf(lease);
+  if (Date.now() < state.execution.deadlineAt) throw Error("Original lifecycle must be expired");
+  if (
+    s.node !== null ||
+    controlDigest(s.execution) !== controlDigest(state.execution) ||
+    !s.settlementOnly
+  )
+    throw Error("Original settlement-only host lease required");
+  await guarded(s, () => {
+    const t = tree(s);
+    if (
+      t.grants.size !== 1 ||
+      [...t.grants.values()].some(
+        (grant) =>
+          grant.parentNode !== null ||
+          grant.childKind !== "generation-hardlinks" ||
+          grant.phase !== "hardlinks" ||
+          grant.recipient !== "data-manager",
+      )
+    )
+      throw Error("Original single hardlink grant required");
+    if ([...t.children.values()].some((child) => !child.unadoptedRevocation))
+      throw Error("An adopted hardlink child remains unresolved");
+    if (t.root.phase !== "cancel_pending") throw Error("Original lifecycle must be canceled first");
+    const proof = verifyControl(
+      s.installation.publicKeys["data-manager"],
+      GENERATION_HARDLINKS_NON_ADMISSION_DOMAIN,
+      nonAdmission,
+      generationHardlinksNonAdmissionPayloadSchema,
+    );
+    const [originalGrant] = t.grants.values();
+    if (
+      !originalGrant ||
+      proof.installationId !== s.certificate.installationId ||
+      proof.leaseId !== s.certificate.leaseId ||
+      proof.certificateDigest !== controlDigest(s.certificateEnvelope) ||
+      proof.delegationId !== originalGrant.delegationId ||
+      proof.grantDigest !== t.root.grantDigests[originalGrant.delegationId] ||
+      controlDigest(proof.parent) !== controlDigest(s.execution) ||
+      controlDigest(proof.child) !== controlDigest(originalGrant.child) ||
+      controlDigest(proof.origin) !== controlDigest(originalGrant.origin) ||
+      proof.canceledSequence !== t.root.sequence
+    )
+      throw Error("Data Manager non-admission proof does not match original grant");
+    for (const [id, grant] of t.grants) {
+      if (t.children.has(id)) {
+        if (t.children.get(id)?.failedLifecycleReceiptDigest !== controlDigest(receipt))
+          throw Error("Original failed lifecycle receipt changed");
+        continue;
+      }
+      if (!grant.origin) throw Error("Original origin-bound grant required");
+      const revoked = unadoptedLifecycleSchema.parse({
+        version: 1,
+        origin: grant.origin,
+        leaseId: s.certificate.leaseId,
+        certificateDigest: controlDigest(s.certificateEnvelope),
+        delegationId: id,
+        grantDigest: t.root.grantDigests[id],
+        parent: s.execution,
+        child: grant.child,
+        failedReceiptDigest: controlDigest(receipt),
+        canceledSequence: t.root.sequence,
+        nonAdmission,
+      });
+      writeBounded(
+        s,
+        "children",
+        `${id}.json`,
+        { unadoptedRevocation: signControl(s.key, unadoptedLifecycleDomain, revoked) },
+        true,
+      );
+    }
+    tree(s);
+  });
+}
+/** The effect producer re-reads the actual signed failure and complete shared
+ * tree; a caller-provided HTTP status or observation is never containment. */
+export function verifyFailedServiceLifecycleContainment(authority: VerifiedExecutionAuthority) {
+  const receipt = readFailedServiceHardlinksReceipt(authority),
+    state = executionAuthorityState(authority);
+  const reference = z
+    .strictObject({ leaseId: uuid, certificateDigest: digest })
+    .parse(
+      readPrivateRecord(
+        state.installation,
+        "execution-leases",
+        `${state.execution.operationKey}.json`,
+      ),
+    );
+  const s = openState(state.installation.dataRoot, reference.leaseId, state.installation, true);
+  try {
+    const t = tree(s),
+      failedReceiptDigest = controlDigest(receipt);
+    if (
+      controlDigest(s.certificateEnvelope) !== reference.certificateDigest ||
+      controlDigest(s.execution) !== controlDigest(state.execution) ||
+      t.root.phase === "held" ||
+      t.grants.size !== 1 ||
+      t.children.size !== 1 ||
+      [...t.children.values()].some(
+        (child) =>
+          !child.unadoptedRevocation || child.failedLifecycleReceiptDigest !== failedReceiptDigest,
+      )
+    )
+      throw Error("Original unadopted hardlink revocation required");
+    return {
+      failedReceiptDigest,
+      revisionId: receipt.finalRevisionId!,
+      leaseId: reference.leaseId,
+    };
+  } finally {
+    closeState(s);
   }
 }
 export async function reconcileArtifactTargetLease(options: {

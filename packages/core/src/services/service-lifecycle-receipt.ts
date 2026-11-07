@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { dirname } from "node:path";
 import { z } from "zod";
+// biome-ignore-start lint/suspicious/noImportCycles: Recovery reads original receipts only after initialization; nominal writer/lease checks already depend on this control graph.
 import {
   closeControlInstallation,
   executionAuthorityState,
@@ -20,6 +21,7 @@ import {
   assertArtifactTargetLeaseReceiptOwner,
   type TargetLeaseAuthority,
 } from "../build-artifacts/target-lease";
+// biome-ignore-end lint/suspicious/noImportCycles: Deferred original-source recovery checks.
 import { canonicalJson } from "../ops/canonical-json";
 import { type ExecutionRef, executionRefSchema } from "../ops/execution-ref";
 import {
@@ -587,4 +589,30 @@ export async function readServiceLifecycleReceipt(options: {
   execution: ExecutionRef;
 }): Promise<ServiceLifecycleReceipt> {
   return inspect(options.dataRoot, executionRefSchema.parse(options.execution), true).receipt;
+}
+
+/** Original producer evidence only; never accepts a caller-supplied receipt. */
+export function readFailedServiceHardlinksReceipt(authority: VerifiedExecutionAuthority) {
+  const owner = executionAuthorityState(authority);
+  if (
+    owner.installation.installation.role !== "host-cli" ||
+    owner.installation.fixedChildId ||
+    !["service.start", "service.update"].includes(owner.kind) ||
+    owner.execution.executor !== "host-cli"
+  )
+    throw Error("Original standalone host lifecycle required");
+  const receipt = authorities.run(
+    { authority },
+    () => inspect(owner.installation.dataRoot, owner.execution, true).receipt,
+  );
+  if (
+    receipt.phase !== "failed" ||
+    receipt.failure?.reason !== "hardlinks" ||
+    receipt.commit !== "final_committed" ||
+    !receipt.finalRevisionId ||
+    receipt.followUp !== "unknown" ||
+    receipt.hardlinks
+  )
+    throw Error("Original failure before hardlink completion required");
+  return receipt;
 }
