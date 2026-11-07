@@ -456,6 +456,17 @@ import type {
   PullOverture500,
   PullOverture503,
   PullOvertureBody,
+  RecoverUnadmittedGenerationHardlinks200,
+  RecoverUnadmittedGenerationHardlinks400,
+  RecoverUnadmittedGenerationHardlinks401,
+  RecoverUnadmittedGenerationHardlinks403,
+  RecoverUnadmittedGenerationHardlinks409,
+  RecoverUnadmittedGenerationHardlinks413,
+  RecoverUnadmittedGenerationHardlinks415,
+  RecoverUnadmittedGenerationHardlinks429,
+  RecoverUnadmittedGenerationHardlinks500,
+  RecoverUnadmittedGenerationHardlinks503,
+  RecoverUnadmittedGenerationHardlinksBody,
   ReloadDatasets200,
   ReloadDatasets400,
   ReloadDatasets401,
@@ -621,6 +632,7 @@ import {
   prepareOfflinePackageRequest,
   proposeTransitBumpRequest,
   pullOvertureRequest,
+  recoverUnadmittedGenerationHardlinksRequest,
   reloadDatasetsRequest,
   removeTransitSourceRequest,
   restartMotisRequest,
@@ -850,6 +862,116 @@ export const startGenerationHardlinksExecution = async (
       method: "POST",
       headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
       body: JSON.stringify(startGenerationHardlinksExecutionBody),
+    },
+  );
+};
+
+export type recoverUnadmittedGenerationHardlinksResponse200 = {
+  data: RecoverUnadmittedGenerationHardlinks200;
+  status: 200;
+};
+
+export type recoverUnadmittedGenerationHardlinksResponse400 = {
+  data: RecoverUnadmittedGenerationHardlinks400;
+  status: 400;
+};
+
+export type recoverUnadmittedGenerationHardlinksResponse401 = {
+  data: RecoverUnadmittedGenerationHardlinks401;
+  status: 401;
+};
+
+export type recoverUnadmittedGenerationHardlinksResponse403 = {
+  data: RecoverUnadmittedGenerationHardlinks403;
+  status: 403;
+};
+
+export type recoverUnadmittedGenerationHardlinksResponse409 = {
+  data: RecoverUnadmittedGenerationHardlinks409;
+  status: 409;
+};
+
+export type recoverUnadmittedGenerationHardlinksResponse413 = {
+  data: RecoverUnadmittedGenerationHardlinks413;
+  status: 413;
+};
+
+export type recoverUnadmittedGenerationHardlinksResponse415 = {
+  data: RecoverUnadmittedGenerationHardlinks415;
+  status: 415;
+};
+
+export type recoverUnadmittedGenerationHardlinksResponse429 = {
+  data: RecoverUnadmittedGenerationHardlinks429;
+  status: 429;
+};
+
+export type recoverUnadmittedGenerationHardlinksResponse500 = {
+  data: RecoverUnadmittedGenerationHardlinks500;
+  status: 500;
+};
+
+export type recoverUnadmittedGenerationHardlinksResponse503 = {
+  data: RecoverUnadmittedGenerationHardlinks503;
+  status: 503;
+};
+
+export type recoverUnadmittedGenerationHardlinksResponseSuccess =
+  recoverUnadmittedGenerationHardlinksResponse200 & {
+    headers: Headers;
+  };
+export type recoverUnadmittedGenerationHardlinksResponseError = (
+  | recoverUnadmittedGenerationHardlinksResponse400
+  | recoverUnadmittedGenerationHardlinksResponse401
+  | recoverUnadmittedGenerationHardlinksResponse403
+  | recoverUnadmittedGenerationHardlinksResponse409
+  | recoverUnadmittedGenerationHardlinksResponse413
+  | recoverUnadmittedGenerationHardlinksResponse415
+  | recoverUnadmittedGenerationHardlinksResponse429
+  | recoverUnadmittedGenerationHardlinksResponse500
+  | recoverUnadmittedGenerationHardlinksResponse503
+) & {
+  headers: Headers;
+};
+
+export type recoverUnadmittedGenerationHardlinksResponse =
+  | recoverUnadmittedGenerationHardlinksResponseSuccess
+  | recoverUnadmittedGenerationHardlinksResponseError;
+
+export const getRecoverUnadmittedGenerationHardlinksUrl = () => {
+  return `/executions/generation-hardlinks/recovery`;
+};
+
+export const recoverUnadmittedGenerationHardlinks = async (
+  recoverUnadmittedGenerationHardlinksBody: RecoverUnadmittedGenerationHardlinksBody,
+  options?: Parameters<typeof recoverUnadmittedGenerationHardlinksRequest>[1],
+): Promise<recoverUnadmittedGenerationHardlinksResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return recoverUnadmittedGenerationHardlinksRequest<recoverUnadmittedGenerationHardlinksResponse>(
+    getRecoverUnadmittedGenerationHardlinksUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+      body: JSON.stringify(recoverUnadmittedGenerationHardlinksBody),
     },
   );
 };

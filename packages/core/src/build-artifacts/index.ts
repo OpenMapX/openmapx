@@ -229,5 +229,9 @@ export {
   recordStagedCoordinatorRetentionCheck,
   verifyFamilyOwnedRecord,
 } from "./retention-family";
+export {
+  reconcileFailedServiceLifecycle,
+  recoverServiceLifecycleByKey,
+} from "./service-lifecycle-recovery";
 export * from "./target-lease";
 export { verifyConfigurationMaintenanceRootClosure as assertConfigurationMaintenanceRootClosure } from "./target-lease";

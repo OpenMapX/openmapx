@@ -11,6 +11,30 @@ export const dataFingerprintSchema = z.string().regex(/^[a-f0-9]{64}$/);
 export const dataEpochSchema = z.number().int().nonnegative().safe();
 export const dataRevisionSchema = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
 export const dataCoordinatorModeSchema = z.enum(["ensure-running", "require-running"]);
+export const GENERATION_HARDLINKS_NON_ADMISSION_DOMAIN =
+  "openmapx-generation-hardlinks-non-admission-v1";
+export const generationHardlinksNonAdmissionPayloadSchema = z.strictObject({
+  version: z.literal(1),
+  kind: z.literal("generation-hardlinks-not-admitted"),
+  installationId: z.uuid(),
+  origin: z.strictObject({
+    version: z.literal(1),
+    rootKey: dataOperationKeySchema,
+    issuer: z.enum(["host-cli", "data-manager", "ops-agent"]),
+    notAfter: dataEpochSchema,
+  }),
+  leaseId: z.uuid(),
+  certificateDigest: dataFingerprintSchema,
+  delegationId: z.uuid(),
+  grantDigest: dataFingerprintSchema,
+  parent: executionRefSchema,
+  child: executionRefSchema,
+  canceledSequence: z.number().int().positive().safe(),
+});
+export const generationHardlinksNonAdmissionSchema = z.strictObject({
+  payload: generationHardlinksNonAdmissionPayloadSchema,
+  signature: z.string().min(1).max(256),
+});
 const regional = <K extends string>(kind: K) =>
   z.strictObject({ kind: z.literal(kind), region: regionSchema });
 const countries = z.array(z.string().regex(/^[A-Za-z]{2,3}$/)).max(256);

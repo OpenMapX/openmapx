@@ -19,7 +19,10 @@ import {
   dataConfigurationFenceReceiptSchema,
   dataConfigurationFenceSettleSchema,
 } from "../services/data-manager/contracts/configuration-maintenance";
-import { startGenerationHardlinksExecutionSchema } from "../services/data-manager/contracts/executions";
+import {
+  GENERATION_HARDLINKS_NON_ADMISSION_DOMAIN,
+  startGenerationHardlinksExecutionSchema,
+} from "../services/data-manager/contracts/executions";
 import {
   publishedConfigurationSettlementReservationState,
   type RefusedConfigurationSettlementCapacity,
@@ -101,6 +104,7 @@ import {
   bindBorrowedControlExecution,
   closeArtifactTargetLeaseHandle,
   inspectArtifactDelegation,
+  observeUnadoptedServiceHardlinkGrant,
   retainedConfigurationFenceAdoption,
   settleArtifactTargetLeaseChild,
   verifyConfigurationFenceSettlementHeldOwner,
@@ -2142,6 +2146,52 @@ export function createDataConfigurationFenceStore(
     return { request, grant, guardDigest: controlDigest(saved) };
   }
   return {
+    /** A fixed receiver observes its own locked SQL and private admission facts.
+     * The bearer, an HTTP 404, or an owner assertion alone is never this proof. */
+    async attestUnadoptedGenerationHardlinks(value: unknown, rawHeaders: readonly string[]) {
+      const request = startGenerationHardlinksExecutionSchema.parse(value),
+        headers = controlHeaders(rawHeaders);
+      if (!headers.delegation || headers.parent)
+        throw Object.assign(Error("Original signed delegation required"), { statusCode: 403 });
+      const observe = () => observeUnadoptedServiceHardlinkGrant(installation, headers.delegation!);
+      const original = observe();
+      if (
+        request.operationKey !== original.child.operationKey ||
+        request.requestedDeadlineAt !== original.child.deadlineAt ||
+        controlDigest(request.input) !== original.child.operationFingerprint ||
+        request.input.planDigest !== controlDigest(request.plan)
+      )
+        throw Error("Original hardlink request changed");
+      return sql.transaction(async (tx) => {
+        const held = await tx.unsafe(
+          "SELECT pg_try_advisory_xact_lock($1,$2) AS held",
+          [0x4f4d58, 2],
+        );
+        if (held[0]?.held !== true) throw new DataFenceBusy();
+        const admitted = await tx.unsafe(
+          "SELECT id FROM data_manager.jobs WHERE operation_key=$1 OR id=$2 LIMIT 1",
+          [original.child.operationKey, original.child.executionId],
+        );
+        if (admitted.length)
+          throw Object.assign(Error("Original hardlink execution was already admitted"), {
+            statusCode: 409,
+          });
+        for (const [namespace, name] of [
+          ["executions", `${original.child.operationKey}.json`],
+          ["adoptions", `${original.delegationId}.json`],
+        ] as const) {
+          try {
+            readPrivateRecord(local, namespace, name);
+            throw Error("Original receiver admission or adoption requires recovery");
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          }
+        }
+        if (canonicalJson(observe()) !== canonicalJson(original))
+          throw Error("Original canceled grant changed during observation");
+        return signControl(local.privateKey, GENERATION_HARDLINKS_NON_ADMISSION_DOMAIN, original);
+      });
+    },
     async startup() {
       startup = "closed";
       mirrors.clear();

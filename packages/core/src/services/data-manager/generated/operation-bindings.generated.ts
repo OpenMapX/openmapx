@@ -353,6 +353,15 @@ export async function pullOvertureRequest<T>(
 ): Promise<T> {
   return pullOvertureBound<T>(url, options);
 }
+const recoverUnadmittedGenerationHardlinksBound = bindDataManagerOperation(
+  "recoverUnadmittedGenerationHardlinks",
+);
+export async function recoverUnadmittedGenerationHardlinksRequest<T>(
+  url: string,
+  options?: DataManagerRequestOptions,
+): Promise<T> {
+  return recoverUnadmittedGenerationHardlinksBound<T>(url, options);
+}
 const reloadDatasetsBound = bindDataManagerOperation("reloadDatasets");
 export async function reloadDatasetsRequest<T>(
   url: string,

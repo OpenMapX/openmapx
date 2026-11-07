@@ -94,6 +94,19 @@ export const dataManagerOperations = {
       503: json(httpErrorSchema),
     },
   },
+  recoverUnadmittedGenerationHardlinks: {
+    method: "POST",
+    path: "/executions/generation-hardlinks/recovery",
+    auth: service,
+    request: { body: e.startGenerationHardlinksExecutionSchema },
+    responses: {
+      ...serviceErrors,
+      200: json(e.generationHardlinksNonAdmissionSchema),
+      403: json(httpErrorSchema),
+      409: json(httpErrorSchema),
+      503: json(httpErrorSchema),
+    },
+  },
   prepareDataConfigurationFence: {
     method: "POST",
     path: "/executions/configuration-maintenance/prepare",
