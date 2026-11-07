@@ -4,7 +4,6 @@ import {
   closeSync,
   constants,
   createReadStream,
-  createWriteStream,
   existsSync,
   fstatSync,
   fsyncSync,
@@ -20,8 +19,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { pipeline } from "node:stream/promises";
-import { createGzip } from "node:zlib";
 import {
   erasureVerificationIdentifiers,
   TERMINAL_PRIVACY_REQUEST_STATES,
@@ -37,10 +34,18 @@ import { PLATFORM_VERSION } from "@openmapx/integration-framework";
 import type { Command } from "commander";
 import { execa } from "execa";
 import kleur from "kleur";
-import { cliProcessOptions } from "../lib/execution-deadline";
+import { completeCliCommand } from "../lib/control-context";
+import { assertCliExecutionAvailable, cliProcessOptions } from "../lib/execution-deadline";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { applyServiceSelection } from "../lib/service-selection";
+
+import {
+  assertBackupMountPath,
+  BackupWriterUnresolvedError,
+  pgDumpToFile,
+  tarVolumeToFile,
+} from "./backup-processes";
 
 const { ServiceRegistry, isSafePostgresIdentifier } = coreServices;
 
@@ -407,13 +412,32 @@ function ctxFromRepo(rootDir?: string): ComposeContext {
   return { composeArgs: coreServices.stackComposeArgs(paths), cwd: paths.infraDir };
 }
 
-async function dockerCompose(ctx: ComposeContext, args: string[]): Promise<string> {
+async function dockerCompose(
+  ctx: ComposeContext,
+  args: string[],
+  control: {
+    signal?: AbortSignal;
+    timeoutMs?: number;
+    killGraceMs?: number;
+    onSuccess?: () => void;
+  } = {},
+): Promise<string> {
+  control.signal?.throwIfAborted();
+  const options = cliProcessOptions(control.timeoutMs);
+  const cancelSignal = control.signal
+    ? AbortSignal.any([control.signal, ...(options.cancelSignal ? [options.cancelSignal] : [])])
+    : options.cancelSignal;
   const result = await execa("docker", [...ctx.composeArgs, ...args], {
-    ...cliProcessOptions(),
+    ...options,
+    ...(cancelSignal ? { cancelSignal } : {}),
+    ...(control.killGraceMs === undefined ? {} : { forceKillAfterDelay: control.killGraceMs }),
     cwd: ctx.cwd,
     reject: false,
   });
-  if (result.exitCode !== 0) {
+  // Keep a normal acknowledgement even if cancellation arrived while waiting.
+  if (!result.failed && result.exitCode === 0) control.onSuccess?.();
+  control.signal?.throwIfAborted();
+  if (result.failed || result.exitCode !== 0) {
     throw new Error(
       `docker compose ${args.join(" ")} failed (exit ${result.exitCode}): ${
         result.stderr || result.stdout
@@ -586,6 +610,8 @@ export interface CreateBackupResult {
   manifest: BackupManifest;
 }
 
+class BackupInterruptedError extends Error {}
+
 export async function createBackup(opts: CreateBackupOptions = {}): Promise<CreateBackupResult> {
   const name = opts.name ?? defaultBackupName();
   assertValidBackupName(name);
@@ -605,6 +631,9 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
     );
   }
 
+  if (targets.some((service) => service.volumes.some((volume) => volume.mode === "tar")))
+    assertBackupMountPath(backupDir);
+
   const ctx = ctxFromRepo(opts.rootDir);
 
   // Resolve docker-side volume names up-front so a missing compose file fails
@@ -617,33 +646,61 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
   }
   const volumeNames = await resolveVolumeNames(ctx, declaredNames);
 
+  const authoritySignal = cliProcessOptions().cancelSignal;
   mkdirSync(backupDir, { recursive: true, mode: 0o700 });
 
   const stoppedServices: string[] = [];
-  const cleanupHandlers: Array<() => Promise<void> | void> = [];
-
-  // Best-effort cleanup on Ctrl+C: restart any services we stopped, then
-  // remove the partial backup directory.
-  const onSignal = async () => {
-    log.warn("Interrupted — rolling back…");
-    for (const id of stoppedServices) {
-      try {
-        await dockerCompose(ctx, ["start", id]);
-      } catch (err) {
-        log.warn(`Failed to restart ${id}: ${(err as Error).message}`);
-      }
-    }
-    try {
-      rmSync(backupDir, { recursive: true, force: true });
-    } catch {}
-    process.exit(130);
+  const restartedServices = new Set<string>();
+  const controller = new AbortController();
+  let cancelledAt: number | undefined;
+  let activeWriter: Promise<void> | undefined;
+  let publicationAttempted = false;
+  let rollbackPromise: Promise<void> | undefined;
+  const requestAbort = (reason: unknown) => {
+    if (controller.signal.aborted) return;
+    cancelledAt = Date.now();
+    controller.abort(reason);
   };
-  process.once("SIGINT", onSignal);
-  process.once("SIGTERM", onSignal);
-  cleanupHandlers.push(() => {
-    process.removeListener("SIGINT", onSignal);
-    process.removeListener("SIGTERM", onSignal);
-  });
+  const onSignal = () => requestAbort(new BackupInterruptedError("Backup interrupted"));
+  const onDeadline = () => requestAbort(authoritySignal?.reason);
+  const assertForward = () => {
+    controller.signal.throwIfAborted();
+    assertCliExecutionAvailable();
+  };
+  const rollback = (error: unknown) => {
+    rollbackPromise ??= (async () => {
+      if (activeWriter) await Promise.allSettled([activeWriter]);
+      for (const id of [...stoppedServices].reverse()) {
+        if (restartedServices.has(id)) continue;
+        try {
+          // Restart remains subject to the original CLI authority/deadline.
+          // Only cancellation imposes the outer process-group kill window.
+          // Re-read it for each service so a later signal still tightens cleanup.
+          const remaining = cancelledAt === undefined ? undefined : cancelledAt + 2000 - Date.now();
+          if (remaining !== undefined && remaining <= 50)
+            throw Error("Backup rollback budget elapsed");
+          await dockerCompose(ctx, ["start", id], {
+            ...(remaining === undefined
+              ? { signal: controller.signal }
+              : { timeoutMs: remaining - 50, killGraceMs: 50 }),
+            onSuccess: () => restartedServices.add(id),
+          });
+        } catch (cause) {
+          log.warn(`Failed to restart ${id}: ${(cause as Error).message}`);
+        }
+      }
+      if (publicationAttempted || error instanceof BackupWriterUnresolvedError) {
+        log.warn("Backup files retained; inspect the backup and service status before cleanup");
+        return;
+      }
+      try {
+        rmSync(backupDir, { recursive: true, force: true });
+      } catch (cause) {
+        log.warn(`Failed to remove partial backup: ${(cause as Error).message}`);
+      }
+    })();
+    return rollbackPromise;
+  };
 
   const manifest: BackupManifest = {
     formatVersion: 2,
@@ -669,11 +726,17 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
   manifest.expiresAt = coreServices.backupRetentionExpiry(manifest.createdAt, retentionDays);
 
   try {
+    process.on("SIGINT", onSignal);
+    process.on("SIGTERM", onSignal);
+    authoritySignal?.addEventListener("abort", onDeadline, { once: true });
+    if (authoritySignal?.aborted) onDeadline();
     for (const svc of targets) {
+      assertForward();
       log.info(kleur.bold(`◆ ${svc.id}`));
       const serviceEntry: BackupServiceEntry = { id: svc.id, version: svc.version, volumes: [] };
 
       for (const v of svc.volumes.filter((volume) => volume.mode === "pg_dump")) {
+        assertForward();
         // Postgres: pg_dump while running. One dump file per declared volume
         // keeps the manifest schema simple even though the volume is just a
         // marker for "this service has data to back up".
@@ -687,7 +750,9 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
           );
         }
         log.dim(`  pg_dump ${db} (user=${user}) → ${file}`);
-        await pgDumpToFile(ctx, svc.id, user, db, out);
+        activeWriter = pgDumpToFile(ctx, svc.id, user, db, out, controller.signal);
+        await activeWriter;
+        assertForward();
         serviceEntry.volumes.push({
           name: v.volumeName,
           mode: "pg_dump",
@@ -702,18 +767,25 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
       }
 
       for (const v of svc.volumes.filter((volume) => volume.mode === "tar")) {
+        assertForward();
         const realVol = volumeNames.get(v.volumeName) ?? v.volumeName;
         const file = `${svc.id}__${v.volumeName}.tar.gz`;
         const out = join(backupDir, file);
 
         if (!stoppedServices.includes(svc.id)) {
           log.dim(`  stopping ${svc.id}…`);
-          await dockerCompose(ctx, ["stop", svc.id]);
+          // A refused/lost stop acknowledgement may still have stopped it.
           stoppedServices.push(svc.id);
+          await dockerCompose(ctx, ["stop", svc.id], {
+            signal: controller.signal,
+            killGraceMs: 500,
+          });
         }
 
         log.dim(`  tar ${realVol} → ${file}`);
-        await tarVolumeToFile(realVol, backupDir, file);
+        activeWriter = tarVolumeToFile(realVol, backupDir, file, controller.signal);
+        await activeWriter;
+        assertForward();
 
         serviceEntry.volumes.push({
           name: v.volumeName,
@@ -730,14 +802,24 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
       manifest.services.push(serviceEntry);
     }
 
+    // No await between this final check and publication. A post-rename error
+    // is ambiguous, so never delete the directory after attempting publication.
+    assertForward();
+    publicationAttempted = true;
     writeBackupManifestAtomically(join(backupDir, "manifest.json"), manifest);
 
     // Restart the services we stopped (in reverse order — closer to original
     // dependency direction).
     for (const id of [...stoppedServices].reverse()) {
       log.dim(`  starting ${id}…`);
-      await dockerCompose(ctx, ["start", id]);
+      assertForward();
+      await dockerCompose(ctx, ["start", id], {
+        signal: controller.signal,
+        killGraceMs: 500,
+        onSuccess: () => restartedServices.add(id),
+      });
     }
+    assertForward();
 
     const totalBytes = manifest.services
       .flatMap((s) => s.volumes.map((v) => v.sizeBytes))
@@ -760,115 +842,14 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
 
     return { name, directory: backupDir, manifest };
   } catch (err) {
-    // Roll back: restart stopped services, then remove the partial dir.
     log.err(`Backup failed: ${(err as Error).message}`);
-    for (const id of [...stoppedServices].reverse()) {
-      try {
-        await dockerCompose(ctx, ["start", id]);
-      } catch (e) {
-        log.warn(`Failed to restart ${id}: ${(e as Error).message}`);
-      }
-    }
-    try {
-      rmSync(backupDir, { recursive: true, force: true });
-    } catch {}
+    await rollback(err);
+    if (controller.signal.aborted) throw controller.signal.reason;
     throw err;
   } finally {
-    for (const h of cleanupHandlers) {
-      try {
-        await h();
-      } catch {}
-    }
-  }
-}
-
-async function pgDumpToFile(
-  ctx: ComposeContext,
-  serviceId: string,
-  user: string,
-  db: string,
-  outFile: string,
-): Promise<void> {
-  // `docker compose exec -T <svc> pg_dump -U <user> <db>` streamed
-  // through Node's zlib gzip into outFile.
-  //
-  // Earlier this used `execa(... gzip ...)` with `input: sub.stdout`, but
-  // execa v9 buffers each child's stdout into its result object by
-  // default — so even though gzip was the real consumer, the dump was
-  // also being held in memory and OOM-killed Node on multi-hundred-MB
-  // dumps. Stream directly via createGzip() + pipeline() so nothing
-  // touches the JS heap and we skip the extra `gzip` subprocess.
-  const sub = execa(
-    "docker",
-    [
-      ...ctx.composeArgs,
-      "exec",
-      "-T",
-      serviceId,
-      "pg_dump",
-      "-U",
-      user,
-      "--no-owner",
-      "--no-privileges",
-      db,
-    ],
-    {
-      ...cliProcessOptions(),
-      cwd: ctx.cwd,
-      reject: false,
-      stderr: "pipe",
-      buffer: { stdout: false },
-    },
-  );
-
-  if (!sub.stdout) {
-    throw new Error("pg_dump subprocess has no stdout stream");
-  }
-
-  const out = createWriteStream(outFile, { mode: 0o600 });
-  const gzip = createGzip();
-
-  // Run the stream pipeline and the subprocess wait in parallel; both
-  // must succeed before the dump is considered complete.
-  const pipePromise = pipeline(sub.stdout, gzip, out);
-  const [pgRes] = await Promise.all([sub, pipePromise]);
-  if (pgRes.exitCode !== 0) {
-    throw new Error(`pg_dump failed (exit ${pgRes.exitCode}): ${pgRes.stderr ?? ""}`);
-  }
-}
-
-async function tarVolumeToFile(
-  volumeName: string,
-  backupDir: string,
-  fileName: string,
-): Promise<void> {
-  const result = await execa(
-    "docker",
-    [
-      "run",
-      "--rm",
-      "-v",
-      `${volumeName}:/source:ro`,
-      "-v",
-      `${backupDir}:/backup`,
-      "alpine",
-      "tar",
-      "-czf",
-      `/backup/${fileName}`,
-      "-C",
-      "/source",
-      ".",
-    ],
-    { ...cliProcessOptions(), reject: false },
-  );
-  if (result.exitCode !== 0) {
-    throw new Error(
-      `tar of volume ${volumeName} failed (exit ${result.exitCode}): ${result.stderr ?? ""}`,
-    );
-  }
-  const output = join(backupDir, fileName);
-  if (!existsSync(output) || !lstatSync(output).isFile() || lstatSync(output).nlink !== 1) {
-    throw new Error(`tar of volume ${volumeName} did not create ${fileName}`);
+    process.removeListener("SIGINT", onSignal);
+    process.removeListener("SIGTERM", onSignal);
+    authoritySignal?.removeEventListener("abort", onDeadline);
   }
 }
 
@@ -1628,7 +1609,7 @@ export function registerBackupCommands(program: Command): void {
         await createBackup({ name: options.name });
       } catch (err) {
         log.err((err as Error).message);
-        process.exit(1);
+        completeCliCommand(err instanceof BackupInterruptedError ? 130 : 1);
       }
     });
 

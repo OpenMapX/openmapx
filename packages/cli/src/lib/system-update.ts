@@ -38,6 +38,7 @@ export interface SystemUpdateOptions {
   releaseId: string;
   manifestDigest: string;
   resume?: boolean;
+  createBackup?: boolean;
   allowLoopbackHttp?: boolean;
   timeoutMs?: number;
   pollMs?: number;
@@ -130,6 +131,7 @@ export async function runSystemUpdate(options: SystemUpdateOptions): Promise<{ j
     configurationIdentity: services.releaseConfigurationIdentity(
       services.readAppliedReleaseSelection(options.infraDir),
     ),
+    createBackup: options.createBackup !== false,
   };
   let receipt: SystemUpdateReceipt;
   if (options.resume) {
@@ -140,10 +142,11 @@ export async function runSystemUpdate(options: SystemUpdateOptions): Promise<{ j
       "release",
       "configuredSelector",
       "configurationIdentity",
+      "createBackup",
     ] as const)
       if (!equal(receipt[key], identity[key]))
         throw Error(
-          "Receipt actor, origin, release or configured selection changed; do not reuse it",
+          "Receipt actor, origin, release, configured selection or backup choice changed; do not reuse it",
         );
   } else {
     services.readCheckedConfigurationRelease(
@@ -153,6 +156,8 @@ export async function runSystemUpdate(options: SystemUpdateOptions): Promise<{ j
     );
     receipt = await store.create(identity);
   }
+  if (!receipt.createBackup && receipt.steps.backup.body !== null)
+    throw Error("Receipt contains a backup request; preserve the original backup choice");
   async function guard() {
     services.readCheckedConfigurationRelease(
       options.infraDir,
@@ -249,19 +254,19 @@ export async function runSystemUpdate(options: SystemUpdateOptions): Promise<{ j
       await pause();
     }
   }
-  if (receipt.steps.backup.body === null) {
-    await guard();
+  if (receipt.createBackup) {
+    if (receipt.steps.backup.body === null) await guard();
+    await store.freeze("backup", { name: receipt.backupName });
+    const backup = await post("backup", "/api/admin/services/backups", adminServiceAcceptedSchema);
+    const backupJob = await observe(backup.jobId, "backup.operation");
+    if (
+      !backupJob.result ||
+      typeof backupJob.result !== "object" ||
+      Array.isArray(backupJob.result) ||
+      backupJob.result.backupId !== receipt.backupName
+    )
+      throw Error("Backup completion did not identify the requested backup");
   }
-  await store.freeze("backup", { name: receipt.backupName });
-  const backup = await post("backup", "/api/admin/services/backups", adminServiceAcceptedSchema);
-  const backupJob = await observe(backup.jobId, "backup.operation");
-  if (
-    !backupJob.result ||
-    typeof backupJob.result !== "object" ||
-    Array.isArray(backupJob.result) ||
-    backupJob.result.backupId !== receipt.backupName
-  )
-    throw Error("Backup completion did not identify the requested backup");
   receipt = store.read();
   if (receipt.steps.preview.body === null) {
     const baseline = await guard();
@@ -315,7 +320,7 @@ export async function runSystemUpdate(options: SystemUpdateOptions): Promise<{ j
     );
   if (receipt.steps.apply.body === null) {
     if (Date.parse(reviewed.expiresAt) < Date.now() + 30000)
-      throw Error("Preview expired or too close to expiry; use a new receipt and backup");
+      throw Error("Preview expired or too close to expiry; use a new receipt");
     const fresh = await guard();
     if (!equal(fresh, baseline))
       throw Error("Platform configuration changed after preview; apply was not sent");

@@ -415,6 +415,12 @@ literal safe `POSTGRES_USER` and `POSTGRES_DB` identifiers in
 validation. Backup eligibility alone does not prove that an application-level
 restore has been tested.
 
+A `pg_dump` image must provide `bash` and `pg_dump` in its execution PATH.
+The CLI uses Bash job control and timed stdin reads to stop its owned dump when
+the Docker client disconnects. Missing Bash is refused, without an unsupervised
+fallback. The shipped PostGIS images provide it. `tar` backups use a separate
+helper with Docker's `--init`; the engine must provide `docker-init`.
+
 ### `bindMounts`
 
 First-party services mount files from their own directory or a small whitelist

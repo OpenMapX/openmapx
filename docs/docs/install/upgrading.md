@@ -241,12 +241,16 @@ The default API origin is `https://DOMAIN`; `--api-origin https://maps.example.o
 sets it explicitly. Credentials are sent only to that exact HTTPS origin, with
 redirects refused. `--allow-loopback-http` is only for explicit local development.
 
-The command checks for other maintenance work, creates a named backup and waits
+By default, the command checks for other maintenance work, creates a named backup and waits
 for its matching completion. It then previews a release-only change, verifies
 that configuration, origins, sources and the five application targets are exactly
 as expected, and applies through the real administrator's public API. The server's
 writer and coordinator checks remain authoritative. A refused or incomplete
 outcome is never reported as a successful update.
+
+To skip the backup, add `--no-backup`, matching the admin panel's backup choice.
+The receipt retains this choice; use the same flag when resuming that update.
+Without the flag, the command still requires a completed backup before applying.
 
 Each request's key and body are retained before sending. After a transport error,
 API restart or observation timeout, resume the original receipt:
@@ -260,7 +264,7 @@ pnpm openmapx system update \
 
 An accepted job is observed by its original ID; unknown POST outcomes replay only
 the original key and body. A definite refusal stops. An expired preview requires a
-new receipt and backup, rather than silently reviewing a different candidate.
+new receipt (and a new backup unless skipped), rather than silently reviewing a different candidate.
 Activity shows `platform.apply` for this workflow. After completion, verify the
 actual running image digests and health; selected pins alone do not prove a
 running deployment. The session file is preserved so you can decide when to

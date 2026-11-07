@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -43,4 +43,12 @@ it("requires a private receipt parent rather than silently changing permissions"
   const store = fixture();
   chmodSync(join(store.path, ".."), 0o755);
   await expect(store.create(identity)).rejects.toThrow(/private|unsafe/i);
+});
+it("keeps backups enabled when reading an older receipt without a backup choice", async () => {
+  const store = fixture();
+  await store.create(identity);
+  const original = JSON.parse(readFileSync(store.path, "utf8"));
+  delete original.createBackup;
+  writeFileSync(store.path, JSON.stringify(original));
+  expect(store.read().createBackup).toBe(true);
 });
