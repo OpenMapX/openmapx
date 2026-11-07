@@ -120,7 +120,7 @@ it("clears the warning immediately when the rider reaches the final walking leg"
   expect(useNavigationStore.getState().liveDataUnavailable).toBe(false);
 });
 
-it("stops recovery polling once the selected vehicle data is healthy", async () => {
+it("continues platform polling after the selected vehicle data recovers", async () => {
   vi.useFakeTimers();
   const get = vi.spyOn(apiClient, "get").mockResolvedValue(liveJourney());
   useNavigationStore.getState().startTransitNavigation(selectedTrip());
@@ -131,13 +131,14 @@ it("stops recovery polling once the selected vehicle data is healthy", async () 
   expect(useNavigationStore.getState().liveDataUnavailable).toBe(false);
   const requests = get.mock.calls.length;
   await act(async () => vi.advanceTimersByTimeAsync(90000));
-  expect(get.mock.calls).toHaveLength(requests);
+  expect(get.mock.calls.length).toBeGreaterThan(requests);
 });
 
 it("recovers vehicle updates after a real refresh mutation fails while retaining a last-known departure", async () => {
   vi.useFakeTimers();
-  vi.spyOn(apiClient, "get").mockResolvedValue(liveJourney());
-  const post = vi.spyOn(apiClient, "post").mockRejectedValue(new Error("HTTP 400: expired token"));
+  const get = vi.spyOn(apiClient, "get").mockResolvedValue(liveJourney());
+  const { ApiClientError } = await import("@openmapx/core/navigation/api");
+  const post = vi.spyOn(apiClient, "post").mockRejectedValue(new ApiClientError(400, null, null));
   const chosen = selectedTrip();
   chosen.refreshToken = "expired";
   chosen.legs[0].realtime = true;
@@ -151,9 +152,11 @@ it("recovers vehicle updates after a real refresh mutation fails while retaining
   render(<Runtime />, { wrapper: createQueryWrapper() });
   await act(async () => vi.advanceTimersByTimeAsync(10));
   expect(screen.queryByText("navigation.transitLiveUpdatesUnavailable")).toBeNull();
+  get.mockRejectedValue(new Error("vehicle source unavailable"));
   await act(async () => vi.advanceTimersByTimeAsync(30000));
   expect(useNavigationStore.getState().transitRefreshUnavailable).toBe(true);
   expect(screen.getByText("navigation.transitLiveUpdatesUnavailable")).toBeTruthy();
+  get.mockResolvedValue(liveJourney());
   await act(async () => vi.advanceTimersByTimeAsync(30010));
   expect(screen.queryByText("navigation.transitLiveUpdatesUnavailable")).toBeNull();
   expect(screen.getByText("navigation.departureLastKnown")).toBeTruthy();

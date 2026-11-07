@@ -54,7 +54,7 @@ it("requires explicit boarding, then provides alighting and undo", async () => {
     expect(screen.getByRole("button", { name: "navigation.confirmBoard" })).toBeTruthy(),
   );
 });
-it("does not suggest boarding while walking correctly toward a distant stop", () => {
+it("shows the captured boarding platform while walking toward a distant stop", () => {
   const itinerary = {
     legs: [
       {
@@ -73,12 +73,31 @@ it("does not suggest boarding while walking correctly toward a distant stop", ()
         mode: "bus",
         tripId: "bus",
         route: { shortName: "12" },
-        from: { name: "Stop", lat: 0, lng: 0.02 },
+        from: { name: "Stop", lat: 0, lng: 0.02, platformCode: "37" },
         to: { name: "End", lat: 0, lng: 0.03 },
       },
     ],
   } as TripItinerary;
   useNavigationStore.getState().startTransitNavigation(itinerary);
+  useNavigationStore.setState({
+    transitCaptures: [
+      {
+        legIndex: 1,
+        tripId: "bus",
+        status: "captured",
+        capturedAtMs: Date.now(),
+        stops: [
+          {
+            stopId: "board",
+            name: "Stop",
+            lat: 0,
+            lng: 0.02,
+            departurePlatform: { code: "3", kind: "correction", sourceId: "siri" },
+          },
+        ],
+      },
+    ],
+  });
   useNavigationStore.getState().applyTransitProgress({
     currentLegIndex: 0,
     phase: "walking",
@@ -91,6 +110,8 @@ it("does not suggest boarding while walking correctly toward a distant stop", ()
   });
   render(<TransitJourneyControls onAlternatives={() => {}} />);
   expect(screen.queryByText("navigation.boardPrompt")).toBeNull();
+  expect(screen.getByText("transit.platform 3")).toBeInTheDocument();
+  expect(screen.queryByText("transit.platform 37")).toBeNull();
 });
 
 it.each([

@@ -10,6 +10,7 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import { haversineDistance, useNavigationStore } from "@openmapx/core";
+import { selectLegPlatform } from "@openmapx/core/navigation";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { DepartureTime } from "@/components/panels/transit/DepartureTime";
@@ -31,6 +32,7 @@ export function TransitJourneyControls({
   const liveUnavailable = useNavigationStore((s) => s.liveDataUnavailable);
   const refreshUnavailable = useNavigationStore((s) => s.transitRefreshUnavailable);
   const itinerary = useNavigationStore((s) => s.itinerary);
+  const captures = useNavigationStore((s) => s.transitCaptures);
   const p = useNavigationStore((s) => s.transitProgress);
   const act = useTransitRiderAction();
   const runtime = useMobileRuntime();
@@ -66,6 +68,7 @@ export function TransitJourneyControls({
     }
   };
   const departureTime = ride ? legTransitTime(ride) : {};
+  const boarding = ride ? selectLegPlatform(ride, rideIndex, captures, "departure") : undefined;
   const timeChanged = (transitDelayMinutes(departureTime) ?? 0) !== 0;
   const departure = ride?.startTime ? new Date(ride.startTime).getTime() : NaN;
   const liveDeparture =
@@ -117,10 +120,11 @@ export function TransitJourneyControls({
                 <Typography variant="body2" sx={{ minWidth: 0, overflowWrap: "anywhere" }}>
                   {ride.headsign ?? ride.to.name}
                 </Typography>
-                {ride.from.platformCode && (
+                {boarding?.code && (
                   <PlatformBadge
-                    code={ride.from.platformCode}
-                    scheduledCode={ride.from.scheduledPlatformCode}
+                    code={boarding.code}
+                    scheduledCode={boarding.scheduledCode}
+                    changed={boarding.changed}
                   />
                 )}
               </Box>
