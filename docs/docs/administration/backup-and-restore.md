@@ -167,7 +167,9 @@ must include Bash, and the Docker engine must provide `docker-init`. Installatio
 paths containing commas, quotes or newlines are refused for volume backups
 because Docker's bind-mount option cannot represent them safely here.
 
-Cleanup has a bounded window. Services can remain stopped if the authority
+An ordinary failure restarts stopped services within the original CLI deadline.
+Cancellation instead limits cleanup to the process-group shutdown window.
+Services can remain stopped if the authority
 deadline expires or Docker's final SIGKILL interrupts rollback. Repeated terminal
 signals can also interrupt cleanup subprocesses. Inspect service status before
 restarting services through the normal admin or CLI workflow. If an archive

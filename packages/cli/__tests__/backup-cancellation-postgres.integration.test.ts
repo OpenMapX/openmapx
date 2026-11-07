@@ -170,8 +170,19 @@ for argument do
   esac
   previous=$argument
 done
-if [ "$1" = compose ] && [ "$2" = --project-name ] && [ "$3" = docker ]; then
+if [ "$1" = compose ]; then
+  if [ "$2" != --project-name ] || [ "$3" != docker ]; then
+    echo 'Refusing non-fixture Compose invocation' >&2
+    exit 78
+  fi
   shift 3
+  for argument do
+    case "$argument" in
+      --project-name|--project-name=*|-p|-p?*)
+        echo 'Refusing non-fixture Compose invocation' >&2
+        exit 78 ;;
+    esac
+  done
   set -- compose --project-name "$OPENMAPX_TEST_PROJECT" "$@"
 fi
 exec "$OPENMAPX_TEST_REAL_DOCKER" "$@"
@@ -205,6 +216,20 @@ exec "$OPENMAPX_TEST_REAL_DOCKER" "$@"
       if (root) rmSync(root, { recursive: true, force: true });
     }
   }, 60000);
+
+  it.each([
+    ["compose", "-p", "docker"],
+    ["compose", "--project-name", "docker", "--project-name", "docker"],
+  ])("refuses a Compose invocation outside the exact fixture namespace: %j", async (...prefix) => {
+    // Read-only even if the guard regresses: only render our synthetic file.
+    const result = await execa(
+      join(root, "bin/docker"),
+      [...prefix, ...composeArgs.slice(1), "config", "--format", "json"],
+      { reject: false },
+    );
+    expect(result.exitCode).toBe(78);
+    expect(result.stderr).toContain("Refusing non-fixture Compose invocation");
+  });
 
   it.each([
     { signal: "SIGTERM" as const, group: false },

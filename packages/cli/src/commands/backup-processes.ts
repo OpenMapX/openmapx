@@ -162,7 +162,9 @@ export async function pgDumpToFile(
     if (completions.length === 0 && [126, 127].includes(result.exitCode ?? -1))
       throw Error(`Bash unavailable in ${serviceId} image; pg_dump backups require Bash`);
     if (protocolError || completions.length !== 1)
-      throw Error(`pg_dump completion is unconfirmed for ${serviceId}`);
+      throw Error(
+        `pg_dump completion is unconfirmed for ${serviceId} (exit ${result.exitCode ?? "unknown"}): ${tail.toString("utf8")}`,
+      );
     if (result.failed || result.exitCode !== 0 || completions[0] !== 0)
       throw Error(`pg_dump failed for ${serviceId}: ${tail.toString("utf8")}`);
     effectiveSignal.throwIfAborted();
@@ -223,16 +225,21 @@ export async function tarVolumeToFile(
       cancelSignal: effectiveSignal,
       forceKillAfterDelay: 500,
       reject: false,
-      maxBuffer: 8192,
+      buffer: false,
     },
   );
+  let tail = Buffer.alloc(0);
+  sub.stdout?.resume();
+  sub.stderr?.on("data", (chunk: Buffer) => {
+    tail = Buffer.concat([tail, chunk]).subarray(-8192);
+  });
   try {
     const result = await sub;
     if (result.failed || result.exitCode !== 0 || effectiveSignal.aborted) {
       if (effectiveSignal.aborted) throw effectiveSignal.reason;
-      if (result.stderr?.includes("docker-init"))
+      if (tail.toString("utf8").includes("docker-init"))
         throw Error("Docker init is unavailable; tar backups require docker-init");
-      throw Error(`tar of volume ${volumeName} failed: ${result.stderr ?? ""}`);
+      throw Error(`tar of volume ${volumeName} failed: ${tail.toString("utf8")}`);
     }
     const output = join(backupDir, fileName);
     if (!existsSync(output) || !lstatSync(output).isFile() || lstatSync(output).nlink !== 1)

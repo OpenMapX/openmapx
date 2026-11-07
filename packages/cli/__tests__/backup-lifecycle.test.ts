@@ -117,6 +117,31 @@ it("restarts a service even when the stop acknowledgement fails", async () => {
   expect(events).toEqual(["stop:postgis", "start:postgis"]);
 });
 
+it("restarts every stopped service after an ordinary failure even when a start takes over two seconds", async () => {
+  service("tileserver");
+  vi.stubEnv("OPENMAPX_ENABLED_SERVICES", "postgis,tileserver");
+  // Fail on the second archive, after both services have been stopped.
+  vi.mocked(tarVolumeToFile).mockReset();
+  vi.mocked(tarVolumeToFile)
+    .mockImplementationOnce(async (_volume, directory, name) => {
+      writeFileSync(join(directory, name), "synthetic archive");
+    })
+    .mockRejectedValueOnce(Error("Archive disk full"));
+  const normal = vi.mocked(execa).getMockImplementation();
+  if (!normal) throw Error("Missing Docker fixture");
+  vi.mocked(execa).mockImplementation((async (command: string, args: string[]) => {
+    if (args.includes("start") && args.at(-1) === "tileserver")
+      await new Promise((resolve) => setTimeout(resolve, 2100));
+    return Reflect.apply(normal, undefined, [command, args]);
+  }) as never);
+
+  await expect(createBackup({ rootDir: root, name: "ordinary" })).rejects.toThrow(
+    "Archive disk full",
+  );
+  expect(events).toEqual(["stop:postgis", "stop:tileserver", "start:tileserver", "start:postgis"]);
+  expect(existsSync(join(root, "infra/docker/backups/ordinary"))).toBe(false);
+});
+
 it("preserves incomplete files while an archive writer remains unresolved", async () => {
   vi.mocked(tarVolumeToFile).mockImplementation(async (_volume, directory, name) => {
     writeFileSync(join(directory, name), "partial");
@@ -182,26 +207,33 @@ it("checks cancellation after the final hash before publishing", async () => {
   }
 });
 
-it("keeps a published backup when cancellation arrives during restart", async () => {
-  const registration = vi.spyOn(process, "on");
-  const forcedExit = vi.spyOn(process, "exit").mockImplementation(() => {
-    throw Error("Unexpected forced exit");
-  });
-  const normal = vi.mocked(execa).getMockImplementation();
-  if (!normal) throw Error("Missing Docker fixture");
-  let interrupted = false;
-  vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
-    const result = Reflect.apply(normal, undefined, [command, args]);
-    if (!interrupted && args.includes("start")) {
-      interrupted = true;
-      const listener = registration.mock.calls.find(([event]) => event === "SIGTERM")?.[1];
-      if (typeof listener !== "function") throw Error("Backup signal handler missing");
-      Reflect.apply(listener, process, []);
-    }
-    return result;
-  }) as never);
-  await expect(createBackup({ rootDir: root, name: "late" })).rejects.toThrow("Backup interrupted");
-  expect(existsSync(join(root, "infra/docker/backups/late/manifest.json"))).toBe(true);
-  expect(events.filter((event) => event === "start:postgis")).toHaveLength(2);
-  expect(forcedExit).not.toHaveBeenCalled();
-});
+it.each([false, true])(
+  "keeps a published backup when cancellation arrives during restart (uncertain=%s)",
+  async (uncertain) => {
+    const registration = vi.spyOn(process, "on");
+    const forcedExit = vi.spyOn(process, "exit").mockImplementation(() => {
+      throw Error("Unexpected forced exit");
+    });
+    const normal = vi.mocked(execa).getMockImplementation();
+    if (!normal) throw Error("Missing Docker fixture");
+    let interrupted = false;
+    vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+      const result = Reflect.apply(normal, undefined, [command, args]);
+      if (!interrupted && args.includes("start")) {
+        interrupted = true;
+        const listener = registration.mock.calls.find(([event]) => event === "SIGTERM")?.[1];
+        if (typeof listener !== "function") throw Error("Backup signal handler missing");
+        Reflect.apply(listener, process, []);
+      }
+      return uncertain && args.includes("start")
+        ? Promise.resolve(result).then((value) => ({ ...value, failed: true }))
+        : result;
+    }) as never);
+    await expect(createBackup({ rootDir: root, name: "late" })).rejects.toThrow(
+      "Backup interrupted",
+    );
+    expect(existsSync(join(root, "infra/docker/backups/late/manifest.json"))).toBe(true);
+    expect(events.filter((event) => event === "start:postgis")).toHaveLength(uncertain ? 2 : 1);
+    expect(forcedExit).not.toHaveBeenCalled();
+  },
+);

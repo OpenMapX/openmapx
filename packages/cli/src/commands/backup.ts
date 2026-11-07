@@ -415,7 +415,12 @@ function ctxFromRepo(rootDir?: string): ComposeContext {
 async function dockerCompose(
   ctx: ComposeContext,
   args: string[],
-  control: { signal?: AbortSignal; timeoutMs?: number; killGraceMs?: number } = {},
+  control: {
+    signal?: AbortSignal;
+    timeoutMs?: number;
+    killGraceMs?: number;
+    onSuccess?: () => void;
+  } = {},
 ): Promise<string> {
   control.signal?.throwIfAborted();
   const options = cliProcessOptions(control.timeoutMs);
@@ -429,8 +434,10 @@ async function dockerCompose(
     cwd: ctx.cwd,
     reject: false,
   });
+  // Keep a normal acknowledgement even if cancellation arrived while waiting.
+  if (!result.failed && result.exitCode === 0) control.onSuccess?.();
   control.signal?.throwIfAborted();
-  if (result.exitCode !== 0) {
+  if (result.failed || result.exitCode !== 0) {
     throw new Error(
       `docker compose ${args.join(" ")} failed (exit ${result.exitCode}): ${
         result.stderr || result.stdout
@@ -656,10 +663,6 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
   };
   const onSignal = () => requestAbort(new BackupInterruptedError("Backup interrupted"));
   const onDeadline = () => requestAbort(authoritySignal?.reason);
-  process.on("SIGINT", onSignal);
-  process.on("SIGTERM", onSignal);
-  authoritySignal?.addEventListener("abort", onDeadline, { once: true });
-  if (authoritySignal?.aborted) onDeadline();
   const assertForward = () => {
     controller.signal.throwIfAborted();
     assertCliExecutionAvailable();
@@ -667,15 +670,21 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
   const rollback = (error: unknown) => {
     rollbackPromise ??= (async () => {
       if (activeWriter) await Promise.allSettled([activeWriter]);
-      const cleanupDeadline = (cancelledAt ?? Date.now()) + 2000;
       for (const id of [...stoppedServices].reverse()) {
         if (restartedServices.has(id)) continue;
         try {
-          const remaining = cleanupDeadline - Date.now();
-          if (remaining <= 50) throw Error("Backup rollback budget elapsed");
           // Restart remains subject to the original CLI authority/deadline.
-          await dockerCompose(ctx, ["start", id], { timeoutMs: remaining - 50, killGraceMs: 50 });
-          restartedServices.add(id);
+          // Only cancellation imposes the outer process-group kill window.
+          // Re-read it for each service so a later signal still tightens cleanup.
+          const remaining = cancelledAt === undefined ? undefined : cancelledAt + 2000 - Date.now();
+          if (remaining !== undefined && remaining <= 50)
+            throw Error("Backup rollback budget elapsed");
+          await dockerCompose(ctx, ["start", id], {
+            ...(remaining === undefined
+              ? { signal: controller.signal }
+              : { timeoutMs: remaining - 50, killGraceMs: 50 }),
+            onSuccess: () => restartedServices.add(id),
+          });
         } catch (cause) {
           log.warn(`Failed to restart ${id}: ${(cause as Error).message}`);
         }
@@ -717,6 +726,10 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
   manifest.expiresAt = coreServices.backupRetentionExpiry(manifest.createdAt, retentionDays);
 
   try {
+    process.on("SIGINT", onSignal);
+    process.on("SIGTERM", onSignal);
+    authoritySignal?.addEventListener("abort", onDeadline, { once: true });
+    if (authoritySignal?.aborted) onDeadline();
     for (const svc of targets) {
       assertForward();
       log.info(kleur.bold(`◆ ${svc.id}`));
@@ -800,8 +813,11 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
     for (const id of [...stoppedServices].reverse()) {
       log.dim(`  starting ${id}…`);
       assertForward();
-      await dockerCompose(ctx, ["start", id], { signal: controller.signal, killGraceMs: 500 });
-      restartedServices.add(id);
+      await dockerCompose(ctx, ["start", id], {
+        signal: controller.signal,
+        killGraceMs: 500,
+        onSuccess: () => restartedServices.add(id),
+      });
     }
     assertForward();
 

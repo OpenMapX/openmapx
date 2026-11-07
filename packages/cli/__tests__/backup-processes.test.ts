@@ -95,9 +95,18 @@ if (args[0] === 'run') {
       process.exit(130);
     });
     setInterval(() => {},1000);
-  } else process.exit(0);
+  } else {
+    if (mode === 'tar-chatty') {
+      process.stdout.write('progress'.repeat(15000));
+      process.stderr.write('warning'.repeat(15000));
+    }
+    process.exitCode = 0;
+  }
 } else if (args[0] !== 'compose' || !args.includes('exec') || !args.includes('pg_dump')) {
   console.error('Unexpected fixture command'); process.exit(71);
+} else if (mode === 'docker-refused') {
+  process.stderr.write('service postgis is not running');
+  process.exitCode = 1;
 } else {
 const marker = args.indexOf('openmapx-backup-pg-dump');
 const token = marker >= 0 ? args[marker + 1] : 'unconfirmed';
@@ -167,6 +176,13 @@ it("reports a missing Bash prerequisite distinctly", async () => {
   vi.stubEnv("BACKUP_FIXTURE_MODE", "bash-missing");
   await expect(createBackup({ rootDir: root, name: "missing" })).rejects.toThrow(
     "Bash unavailable in postgis image",
+  );
+});
+
+it("keeps Docker diagnostics and exit status when the dump has no completion record", async () => {
+  vi.stubEnv("BACKUP_FIXTURE_MODE", "docker-refused");
+  await expect(createBackup({ rootDir: root, name: "refused" })).rejects.toThrow(
+    "pg_dump completion is unconfirmed for postgis (exit 1): service postgis is not running",
   );
 });
 
@@ -285,6 +301,12 @@ it("gives the tar writer an init process and a non-recreating backup bind", asyn
   expect(run).toContain(
     `type=bind,source=${join(root, "infra/docker/backups/archive")},target=/backup`,
   );
+});
+
+it("drains chatty archive output without terminating a successful writer", async () => {
+  vi.stubEnv("BACKUP_FIXTURE_MODE", "tar-chatty");
+  await expect(tarVolumeToFile("fixture_volume", root, "archive.gz")).resolves.toBeUndefined();
+  expect(readFileSync(join(root, "archive.gz"), "utf8")).toBe("synthetic archive");
 });
 
 it("refuses a comma in the tar bind path before stopping services", async () => {
