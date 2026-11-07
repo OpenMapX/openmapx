@@ -1,7 +1,7 @@
 {
   "revision": "42a7964f9b8eaf28a6c2749ab8608e3b1d1f8e19",
-  "explicitOperations": 61,
-  "note": "Static inventory. Expands two literal ambient actions and imported relay constant. Excludes Fastify automatic HEAD aliases; binary HEAD routes explicitly included. No route handler was invoked. Updated by explicit review for the eight previously installed durable execution/fence routes and the new reversible source-disable route; baseline revision precedes the latter. Task05.2 explicitly adds the country-only server preflight route; parser, paging and metadata changes retain existing route identities. Merge review explicitly retains the installed Overture recovery inspection and main read-only transit pin inspection; no additional mutation is admitted.",
+  "explicitOperations": 62,
+  "note": "Static inventory. Expands two literal ambient actions and imported relay constant. Excludes Fastify automatic HEAD aliases; binary HEAD routes explicitly included. No route handler was invoked. Updated by explicit review for the eight previously installed durable execution/fence routes and the new reversible source-disable route; baseline revision precedes the latter. Task05.2 explicitly adds the country-only server preflight route; parser, paging and metadata changes retain existing route identities. Merge review explicitly retains the installed Overture recovery inspection and main read-only transit pin inspection; no additional mutation is admitted. Recovery review adds the service-auth generation-hardlinks non-admission attestation route; it observes the original canceled expired grant and locked receiver state, without admitting or replaying a job.",
   "operations": [
     {
       "method": "POST",
@@ -82,6 +82,10 @@
     {
       "method": "POST",
       "path": "/executions/generation-hardlinks"
+    },
+    {
+      "method": "POST",
+      "path": "/executions/generation-hardlinks/recovery"
     },
     {
       "method": "GET",
