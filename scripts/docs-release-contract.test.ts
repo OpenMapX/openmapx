@@ -3,6 +3,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
 import { createImpactPlan, verifyResults } from "./ci-impact-plan.mjs";
 
 const workflow = readFileSync(
@@ -142,16 +143,24 @@ esac
 
   it("keeps one secret-free PR docs build in the required CI matrix", () => {
     const ci = readFileSync(resolve(import.meta.dirname, "../.github/workflows/ci.yml"), "utf8");
-    const dockerJob = ci.split("  docker-build:\n")[1].split("  # Aggregate gate.")[0];
-    expect(ci.split("concurrency:")[0]).toMatch(/pull_request:\n/);
-    expect(ci.split("concurrency:")[0]).not.toContain("paths:");
-    expect(dockerJob).toContain("context=docs");
-    expect(dockerJob).toContain("dockerfile=docs/Dockerfile");
-    expect(dockerJob).toContain("contents: read");
-    expect(dockerJob).not.toMatch(/packages: write|login-action|secrets:/);
-    expect(dockerJob).toContain("push: false");
-    expect(dockerJob).toContain("pull: $" + "{{ matrix.app == 'docs' }}");
-    expect(ci).toContain("run: node scripts/ci-impact-plan.mjs verify");
+    const definition = parse(ci);
+    const dockerJob = definition.jobs["docker-build"];
+    const context = dockerJob.steps.find((step: { id?: string }) => step.id === "context");
+    const build = dockerJob.steps.find((step: { uses?: string }) =>
+      step.uses?.startsWith("docker/build-push-action@"),
+    );
+    expect(definition.on.pull_request).toBeDefined();
+    expect(definition.on.pull_request.paths).toBeUndefined();
+    expect(context.run).toContain("context=docs");
+    expect(context.run).toContain("dockerfile=docs/Dockerfile");
+    expect(dockerJob.permissions).toEqual({ contents: "read" });
+    expect(dockerJob.secrets).toBeUndefined();
+    expect(JSON.stringify(dockerJob)).not.toMatch(/login-action|\bsecrets\s*(?:\.|\[)/);
+    expect(build.with.push).toBe(false);
+    expect(build.with.pull).toBe("$" + "{{ matrix.app == 'docs' }}");
+    expect(definition.jobs.ci.steps).toContainEqual(
+      expect.objectContaining({ run: "node scripts/ci-impact-plan.mjs verify" }),
+    );
     expect(workflow).not.toContain("pnpm -C docs typecheck");
   });
 
