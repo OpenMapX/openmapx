@@ -21,6 +21,15 @@ const BODY_LIMIT_BYTES = 64 * 1024;
 export function buildTransitousRunnerServer(options: TransitousRunnerOptions) {
   const app = Fastify({ logger: false, bodyLimit: BODY_LIMIT_BYTES });
   const runner = createTransitousRunner(options);
+  let closing = false;
+  app.addHook("preClose", async () => {
+    closing = true;
+    await runner.shutdown();
+  });
+  app.addHook("onSend", async (_request, reply, payload) => {
+    if (closing) reply.header("connection", "close");
+    return payload;
+  });
 
   app.get("/health", async () => ({ ok: true }));
 

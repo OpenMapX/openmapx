@@ -100,6 +100,7 @@ describe("Transitous runner isolation", () => {
     // nor an entrypoint, so a compose render cannot repoint it at a shell.
     expect(manifest.container.command).toBeUndefined();
     expect(manifest.container.entrypoint).toBeUndefined();
+    expect(dockerfile).toContain('ENTRYPOINT ["/usr/bin/tini", "--"]');
     expect(dockerfile).toContain('CMD ["node", "dist/index.mjs"]');
     expect(dockerfile).toMatch(/^USER transitous:transitous$/m);
   });

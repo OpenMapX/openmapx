@@ -252,8 +252,11 @@ export function createTransitousRunner(options: TransitousRunnerOptions) {
     state: "running" | "cancel_pending" | "terminal";
     result?: TransitousRunnerResult;
     finishedAt?: number;
+    completion: Promise<void>;
   };
   const retained = new Map<string, OwnedRun>();
+  let closing = false;
+  let shutdown: Promise<void> | undefined;
   const address = (request: TransitousRunnerRequest) =>
     createHash("sha256").update(request.capability).digest("hex");
   const requestDigest = (request: TransitousRunnerRequest) =>
@@ -269,7 +272,21 @@ export function createTransitousRunner(options: TransitousRunnerOptions) {
     state: row.state,
     ...(row.result ? { result: row.result } : {}),
   });
+  function cancel(row: OwnedRun) {
+    if (row.state !== "terminal") {
+      row.state = "cancel_pending";
+      row.controller.abort();
+    }
+  }
   return {
+    shutdown() {
+      if (shutdown) return shutdown;
+      closing = true;
+      const active = [...retained.values()].filter((row) => row.state !== "terminal");
+      for (const row of active) cancel(row);
+      shutdown = Promise.all(active.map((row) => row.completion)).then(() => undefined);
+      return shutdown;
+    },
     inspect(request: TransitousRunnerRequest) {
       return snapshot(find(request));
     },
@@ -281,32 +298,41 @@ export function createTransitousRunner(options: TransitousRunnerOptions) {
     },
     cancel(request: TransitousRunnerRequest) {
       const row = find(request);
-      if (row.state !== "terminal") {
-        row.state = "cancel_pending";
-        row.controller.abort();
-      }
+      cancel(row);
       return snapshot(row);
     },
     async run(request: TransitousRunnerRequest): Promise<TransitousRunnerResult> {
+      if (closing) throw Error("Runner is shutting down");
       for (const [key, row] of retained)
         if (row.finishedAt !== undefined && now() - row.finishedAt > 24 * 3600000)
           retained.delete(key);
       if (retained.size >= 256)
         throw new TransitousRunnerError("isolation", "Retained runner capacity is full");
       consumeCapability(request.capability, request.run);
+      // Nonrejecting completion exists before execute can spawn or reject.
+      // Shutdown owns containment, while the request still owns its result.
+      let complete!: () => void;
+      const completion = new Promise<void>((resolve) => {
+        complete = resolve;
+      });
       const row: OwnedRun = {
         requestDigest: requestDigest(request),
         controller: new AbortController(),
         state: "running",
+        completion,
       };
       retained.set(address(request), row);
       // The retained identity precedes the actual spawn. Disconnecting the
       // POST reader never owns this process group or its cancellation.
-      const result = await execute(request.run, row.controller.signal);
-      row.result = result;
-      row.state = "terminal";
-      row.finishedAt = now();
-      return result;
+      try {
+        const result = await execute(request.run, row.controller.signal);
+        row.result = result;
+        row.state = "terminal";
+        row.finishedAt = now();
+        return result;
+      } finally {
+        complete();
+      }
     },
   };
 }

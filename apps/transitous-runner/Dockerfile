@@ -96,7 +96,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # apt and libapt-pkg6.0 2.6.2 fix CVE-2026-109518 (Debian DLA-4880-1).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-      ca-certificates curl git python3 python3-pip python3-venv age apt libapt-pkg6.0 libpcre2-8-0 libexpat1 libssl3 openssl \
+      ca-certificates curl git python3 python3-pip python3-venv age tini apt libapt-pkg6.0 libpcre2-8-0 libexpat1 libssl3 openssl \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' apt)" ge 2.6.2 \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libapt-pkg6.0)" ge 2.6.2 \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libexpat1)" ge 2.5.0-1+deb12u5 \
@@ -139,4 +139,6 @@ USER transitous:transitous
 WORKDIR /app/apps/transitous-runner
 EXPOSE 4400
 HEALTHCHECK --interval=15s --timeout=3s --retries=5 CMD ["curl", "-fsS", "http://127.0.0.1:4400/health"]
+# Forward signals to Node and reap detached descendants adopted during shutdown.
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "dist/index.mjs"]
