@@ -17,6 +17,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
+import { hasOnlyReviewedDocumentEndScript } from "./documentEndScriptPolicy.ts";
 import { hasIosOnDeviceGuard } from "./voiceCapturePolicy.ts";
 import { hasWebViewCaptureDenial } from "./webViewCapturePolicy.ts";
 import { hasWebViewDocumentStartPolicy } from "./webViewDocumentPolicy.ts";
@@ -142,10 +143,13 @@ if (app) {
   if (!app.includes("geolocationEnabled={false}")) {
     findings.push({ file: APP, problem: "does not disable the page's own geolocation" });
   }
-  // `injectedJavaScript` (as opposed to the bootstrap-before-content-loaded
-  // script, which publishes only a nonce) would be an arbitrary script channel.
-  if (/injectedJavaScript=\{/.test(app)) {
-    findings.push({ file: APP, problem: "injects arbitrary JavaScript into the page" });
+  // Only the reviewed, bundled viewport program may run at document end.
+  // The document-start bootstrap still publishes only the channel nonce.
+  if (!hasOnlyReviewedDocumentEndScript(app, read("apps/mobile/src/bridge/viewportScript.ts"))) {
+    findings.push({
+      file: APP,
+      problem: "injects unreviewed document-end JavaScript into the page",
+    });
   }
 }
 
