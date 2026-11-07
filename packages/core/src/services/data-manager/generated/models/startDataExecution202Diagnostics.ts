@@ -6,4 +6,9 @@ export type StartDataExecution202Diagnostics = {
   /** @maxItems 256 */
   tail: StartDataExecution202DiagnosticsTailItem[];
   truncated: boolean;
+  /**
+   * @minLength 1
+   * @maxLength 4096
+   */
+  maintenanceRecovery?: string;
 };

@@ -12,6 +12,10 @@ import {
 } from "../ops/execution-identity";
 import { executionRefSchema } from "../ops/execution-ref";
 import {
+  CONFIGURATION_PREPARE_NON_ADMISSION_DOMAIN,
+  configurationPrepareNonAdmissionPayloadSchema,
+} from "../services/data-manager/contracts/configuration-maintenance";
+import {
   type ConfigurationSettlementFamilySlot,
   type ConfigurationSettlementProjection,
   type ConfigurationSettlementRecordDescriptor,
@@ -56,6 +60,7 @@ import {
   controlChildOperationKey,
   executionAuthorityState,
   installationState,
+  parseControlAssertion,
   readControlExecutionWitness,
   readPrivateRecord,
   restoreAdmittedControlExecution,
@@ -3320,15 +3325,27 @@ function executionWriterPresent(f: Family, execution: ExecutionRef): boolean {
 function configurationNoGuardFamilyClosure(
   f: Family,
   p: Progress,
-): { unusedExecutionTicketIds: string[]; unusedIntentTicketIds: string[] } | null {
-  const slot = p.configurationSettlementSlot;
+): {
+  unusedExecutionTicketIds: string[];
+  unusedIntentTicketIds: string[];
+  nonAdmittedIntentTicketIds: string[];
+  terminalAt: number;
+} | null {
+  const slot = p.configurationSettlementSlot,
+    unadmitted =
+      !slot &&
+      f.state.installation.role === "data-manager" &&
+      !Object.keys(p.executions).length &&
+      !Object.keys(p.intents).length &&
+      !Object.keys(p.leases).length;
   if (
-    !slot ||
-    slot.state !== "UNUSED" ||
-    slot.executionDigest !== null ||
-    slot.controlBindingDigest !== null ||
-    !slot.unusedIntentDigest ||
-    slot.unusedConfirmedAt === null
+    !unadmitted &&
+    (!slot ||
+      slot.state !== "UNUSED" ||
+      slot.executionDigest !== null ||
+      slot.controlBindingDigest !== null ||
+      !slot.unusedIntentDigest ||
+      slot.unusedConfirmedAt === null)
   )
     return null;
   const domains = configurationSettlementDomains,
@@ -3436,6 +3453,7 @@ function configurationNoGuardFamilyClosure(
         domains.unusedConfirmation,
         issuerConfirmation,
       );
+    if (unadmitted && evidence.kind !== "receiver_not_admitted") return null;
     need(
       projection.installationId === f.state.installation.installationId &&
         same(projection.origin, f.meta.origin) &&
@@ -3542,6 +3560,45 @@ function configurationNoGuardFamilyClosure(
         "Original NoGuard physical root membership required before family ready",
       );
       leaseId = leases[0]!.id;
+    } else if (unadmitted && evidence.kind === "receiver_not_admitted") {
+      const proof = verifyControl(
+          f.state.publicKeys["data-manager"],
+          CONFIGURATION_PREPARE_NON_ADMISSION_DOMAIN,
+          evidence.nonAdmission,
+          configurationPrepareNonAdmissionPayloadSchema,
+        ),
+        raw = localRead(
+          {
+            scope: "private",
+            namespace: "adoptions",
+            container: "",
+            name: `${proof.delegationId}.json`,
+          },
+          8192,
+        ),
+        adoption = z
+          .object({
+            state: z.literal("ready"),
+            execution: executionRefSchema,
+            grantDigest: z.string(),
+            assertion: z.string(),
+          })
+          .parse(raw),
+        assertion = parseControlAssertion(adoption.assertion);
+      need(
+        controlDigest(raw) === proof.adoptionDigest &&
+          same(adoption.execution, proof.child) &&
+          adoption.grantDigest === proof.grantDigest &&
+          assertion.installationId === identity.installationId &&
+          assertion.leaseId === proof.leaseId &&
+          assertion.delegationId === proof.delegationId &&
+          assertion.grantDigest === proof.grantDigest &&
+          assertion.ownerCertificateDigest === identity.rootCertificateDigest &&
+          assertion.ancestorDelegationIds.length === 0,
+        "Actual unadmitted receiver ready adoption changed",
+      );
+      leaseId = proof.leaseId;
+      ownAdoption = { delegationId: proof.delegationId };
     } else {
       const fact = Object.values(p.executions).find(
         (value) =>
@@ -3669,6 +3726,7 @@ function configurationNoGuardFamilyClosure(
       root.settlement.terminalReceiptDigest === controlDigest(ownReceipt),
       "Original NoGuard root effect receipt changed",
     );
+    const nonAdmittedIntentTicketIds: string[] = [];
     let prepareKey: string,
       dmSlotProof:
         | { role: "data-manager"; intentDigest: string; confirmationDigest: string }
@@ -3760,64 +3818,9 @@ function configurationNoGuardFamilyClosure(
             .passthrough(),
         );
       prepareKey = grant.child.operationKey;
-      const receiver = own(executions.directory("data-manager")),
-        compound = configurationDmCapacityCellSchema.parse(
-          readShared(receiver, `${prepareKey}.configuration-settlement-capacity.json`, 8192),
-        );
       need(
-        compound.refusal && compound.unused?.confirmation,
-        "Original receiver refusal/UNUSED compound required",
-      );
-      const receiverKey = f.state.publicKeys["data-manager"],
-        refusal = verifyControl(
-          receiverKey,
-          domains.refusal,
-          compound.refusal,
-          configurationDmNoGuardRefusalSchema,
-        ),
-        capacity =
-          compound.capacity &&
-          verifyControl(
-            receiverKey,
-            domains.capacity,
-            compound.capacity,
-            configurationSettlementCapacitySchema,
-          ),
-        refusalDigest = settlementRecordDigest(domains.refusal, refusal),
-        descriptors = configurationSettlementRecordDescriptors(projection, prepareKey).receiver;
-      dmIntent = verifyControl(
-        receiverKey,
-        domains.unusedIntent,
-        compound.unused!.intent,
-        configurationUnusedCapacityIntentSchema,
-      );
-      dmConfirmation = verifyControl(
-        receiverKey,
-        domains.unusedConfirmation,
-        compound.unused!.confirmation,
-        configurationUnusedCapacityConfirmationSchema,
-      );
-      const intentDigest = settlementRecordDigest(domains.unusedIntent, dmIntent),
-        confirmationDigest = settlementRecordDigest(domains.unusedConfirmation, dmConfirmation),
-        actualDescriptors = (capacity ? descriptors : [descriptors[0]!])
-          .map((value) => controlDigest(value))
-          .sort(),
-        safeState = {
-          executionOrdinal: capacity?.reservedExecutionOrdinal ?? null,
-          intentOrdinal: capacity?.reservedIntentOrdinal ?? null,
-          recordDescriptorsDigest: controlDigest(descriptors),
-          allocatedDescriptorDigests: actualDescriptors,
-          state: "UNUSED",
-          intentDigest,
-        };
-      const receiverWitness = readControlExecutionWitness(f.state, grant.child, receiverKey);
-      need(
-        receiverWitness.kind === "configuration-maintenance.prepare" &&
-          same(receiverWitness.origin, f.meta.origin) &&
-          receiverWitness.authorityDigest === refusal.prepareAdmissionDigest &&
-          (!ownAdoption || ownAdoption.delegationId === delegationId) &&
-          grant.ordinal === projection.reservation.ordinal - 1 &&
-          grant.child.operationKey ===
+        grant.ordinal === projection.reservation.ordinal - 1 &&
+          prepareKey ===
             controlChildOperationKey(
               projection.ownerPrepare.operationKey,
               "configuration-fence",
@@ -3842,81 +3845,212 @@ function configurationNoGuardFamilyClosure(
           same(child.execution, grant.child) &&
           same(child.settlement.identity, grant.child) &&
           Object.keys(child.grantDigests).length === 0 &&
-          refusal.installationId === identity.installationId &&
-          same(refusal.origin, f.meta.origin) &&
-          same(refusal.ownerPrepare, projection.ownerPrepare) &&
-          refusal.rootAdmissionDigest === identity.admissionDigest &&
-          refusal.rootCertificateDigest === identity.rootCertificateDigest &&
-          refusal.maintenanceId === identity.maintenanceId &&
-          refusal.candidateId === identity.candidateId &&
-          refusal.planDigest === identity.planDigest &&
-          refusal.settlementId === identity.settlementId &&
-          refusal.projectionDigest === projectionDigest &&
-          refusal.reservationDigest === projection.reservationDigest &&
-          same(refusal.prepareExecution, grant.child) &&
-          refusal.refusalReceipt.maintenanceId === identity.maintenanceId &&
-          refusal.effectReceiptDigest === controlDigest(refusal.refusalReceipt) &&
-          child.settlement.terminalReceiptDigest === refusal.effectReceiptDigest &&
-          refusal.effectSettlementDigest ===
-            controlDigest({ ...child.settlement, receipt: refusal.refusalReceipt }) &&
-          refusal.canonicalTerminalDigest ===
-            controlDigest({ version: 1, refused: refusal.refusalReceipt }) &&
-          evidence.prepareExecutionDigest === controlDigest(grant.child) &&
-          evidence.prepareAdmissionDigest === refusal.prepareAdmissionDigest &&
-          evidence.refusalProjectionDigest === refusalDigest &&
-          evidence.effectSettlementDigest === refusal.effectSettlementDigest &&
-          evidence.canonicalTerminalDigest === refusal.canonicalTerminalDigest &&
-          evidence.canonicalTerminalAt === refusal.canonicalTerminalAt &&
-          evidence.capacityReceiptDigest === refusal.capacityReceiptDigest &&
-          freeze.prepareExecutionDigest === evidence.prepareExecutionDigest &&
-          freeze.refusalProjectionDigest === refusalDigest &&
-          evidence.dmUnusedIntentDigest === intentDigest &&
-          evidence.dmUnusedConfirmationDigest === confirmationDigest &&
-          dmIntent.role === "data-manager" &&
-          dmIntent.installationId === identity.installationId &&
-          same(dmIntent.origin, f.meta.origin) &&
-          dmIntent.ownerPrepareDigest === controlDigest(projection.ownerPrepare) &&
-          dmIntent.prepareExecutionDigest === controlDigest(grant.child) &&
-          dmIntent.settlementId === identity.settlementId &&
-          dmIntent.projectionDigest === projectionDigest &&
-          dmIntent.capacityReceiptDigest === refusal.capacityReceiptDigest &&
-          dmIntent.sourceProofDigest === refusalDigest &&
-          dmIntent.executionOrdinal === safeState.executionOrdinal &&
-          dmIntent.intentOrdinal === safeState.intentOrdinal &&
-          dmIntent.recordDescriptorsDigest === safeState.recordDescriptorsDigest &&
-          same(dmIntent.allocatedDescriptorDigests, actualDescriptors) &&
-          dmConfirmation.role === "data-manager" &&
-          dmConfirmation.installationId === identity.installationId &&
-          same(dmConfirmation.origin, f.meta.origin) &&
-          dmConfirmation.ownerPrepareDigest === dmIntent.ownerPrepareDigest &&
-          dmConfirmation.settlementId === identity.settlementId &&
-          dmConfirmation.projectionDigest === projectionDigest &&
-          dmConfirmation.intentDigest === intentDigest &&
-          dmConfirmation.slotStateDigest === controlDigest(safeState) &&
-          dmConfirmation.confirmedAt >= dmIntent.createdAt,
-        "Original receiver refusal/UNUSED family preimages changed",
+          (!ownAdoption || ownAdoption.delegationId === delegationId),
+        "Original issued NoGuard grant/child identity changed",
       );
-      if (capacity)
-        need(
-          capacity.installationId === identity.installationId &&
-            same(capacity.origin, f.meta.origin) &&
-            capacity.ownerPrepareDigest === dmIntent.ownerPrepareDigest &&
-            capacity.settlementId === identity.settlementId &&
-            capacity.projectionDigest === projectionDigest &&
-            capacity.reservationDigest === projection.reservationDigest &&
-            same(capacity.proposedExecutionAddress, projection.reservation.execution) &&
-            capacity.recordDescriptorsDigest === controlDigest(descriptors) &&
-            capacity.maxBytes === descriptors.reduce((sum, value) => sum + value.cap, 0) &&
-            refusal.capacityReceiptDigest === settlementRecordDigest(domains.capacity, capacity),
-          "Original receiver capacity family source changed",
+      if (evidence.kind === "receiver_not_admitted") {
+        const proof = verifyControl(
+          f.state.publicKeys["data-manager"],
+          CONFIGURATION_PREPARE_NON_ADMISSION_DOMAIN,
+          evidence.nonAdmission,
+          configurationPrepareNonAdmissionPayloadSchema,
         );
-      else
         need(
-          refusal.capacityReceiptDigest === null && refusal.refusalReceipt.reason === "capacity",
-          "Actual capacity-null family source required",
+          proof.installationId === identity.installationId &&
+            same(proof.origin, identity.origin) &&
+            proof.leaseId === leaseId &&
+            proof.certificateDigest === identity.rootCertificateDigest &&
+            proof.delegationId === delegationId &&
+            proof.grantDigest === grantDigest &&
+            same(proof.child, grant.child) &&
+            same(proof.input.ownerPrepare, projection.ownerPrepare) &&
+            proof.input.maintenanceId === projection.maintenanceId &&
+            proof.input.candidateId === projection.candidateId &&
+            proof.input.planDigest === projection.planDigest &&
+            same(proof.input.serviceIds, grant.serviceIds) &&
+            controlDigest({ kind: grant.childKind, ...proof.input }) ===
+              grant.child.operationFingerprint &&
+            proof.observedAt > Math.max(grant.child.deadlineAt, grant.parent.deadlineAt) &&
+            proof.observedAt <= closure.closedAt &&
+            child.settlement.terminalReceiptDigest === controlDigest(proof) &&
+            freeze.prepareExecutionDigest === controlDigest(proof.child) &&
+            freeze.refusalProjectionDigest === controlDigest(proof),
+          "Original negative receiver family source changed",
         );
-      dmSlotProof = { role: "data-manager", intentDigest, confirmationDigest };
-      dmContainmentDigest = refusal.effectSettlementDigest;
+        assertNoUnissuedConfigurationReceiverPublication(f.state, prepareKey);
+        const originalIntent = readAllTickets(f, "intents", LIMITS.intentsPerFamily).filter(
+          (ticket) => ticket.id === delegationId,
+        );
+        need(
+          originalIntent.length === 1 &&
+            same(originalIntent[0], {
+              id: delegationId,
+              generation: f.meta.generation,
+              value: { childDigest: controlDigest(grant.child), recipient: "data-manager" },
+            }),
+          "Actual unadmitted child intent ticket changed",
+        );
+        nonAdmittedIntentTicketIds.push(delegationId);
+        dmContainmentDigest = controlDigest(proof);
+      } else {
+        const receiver = own(executions.directory("data-manager")),
+          compound = configurationDmCapacityCellSchema.parse(
+            readShared(receiver, `${prepareKey}.configuration-settlement-capacity.json`, 8192),
+          );
+        need(
+          compound.refusal && compound.unused?.confirmation,
+          "Original receiver refusal/UNUSED compound required",
+        );
+        const receiverKey = f.state.publicKeys["data-manager"],
+          refusal = verifyControl(
+            receiverKey,
+            domains.refusal,
+            compound.refusal,
+            configurationDmNoGuardRefusalSchema,
+          ),
+          capacity =
+            compound.capacity &&
+            verifyControl(
+              receiverKey,
+              domains.capacity,
+              compound.capacity,
+              configurationSettlementCapacitySchema,
+            ),
+          refusalDigest = settlementRecordDigest(domains.refusal, refusal),
+          descriptors = configurationSettlementRecordDescriptors(projection, prepareKey).receiver;
+        dmIntent = verifyControl(
+          receiverKey,
+          domains.unusedIntent,
+          compound.unused!.intent,
+          configurationUnusedCapacityIntentSchema,
+        );
+        dmConfirmation = verifyControl(
+          receiverKey,
+          domains.unusedConfirmation,
+          compound.unused!.confirmation,
+          configurationUnusedCapacityConfirmationSchema,
+        );
+        const intentDigest = settlementRecordDigest(domains.unusedIntent, dmIntent),
+          confirmationDigest = settlementRecordDigest(domains.unusedConfirmation, dmConfirmation),
+          actualDescriptors = (capacity ? descriptors : [descriptors[0]!])
+            .map((value) => controlDigest(value))
+            .sort(),
+          safeState = {
+            executionOrdinal: capacity?.reservedExecutionOrdinal ?? null,
+            intentOrdinal: capacity?.reservedIntentOrdinal ?? null,
+            recordDescriptorsDigest: controlDigest(descriptors),
+            allocatedDescriptorDigests: actualDescriptors,
+            state: "UNUSED",
+            intentDigest,
+          };
+        const receiverWitness = readControlExecutionWitness(f.state, grant.child, receiverKey);
+        need(
+          receiverWitness.kind === "configuration-maintenance.prepare" &&
+            same(receiverWitness.origin, f.meta.origin) &&
+            receiverWitness.authorityDigest === refusal.prepareAdmissionDigest &&
+            (!ownAdoption || ownAdoption.delegationId === delegationId) &&
+            grant.ordinal === projection.reservation.ordinal - 1 &&
+            grant.child.operationKey ===
+              controlChildOperationKey(
+                projection.ownerPrepare.operationKey,
+                "configuration-fence",
+                grant.ordinal,
+              ) &&
+            same(grant.serviceIds, projection.reservation.serviceIds) &&
+            same(grant.serviceIds, certificate.serviceIds) &&
+            grant.installationId === identity.installationId &&
+            same(grant.origin, f.meta.origin) &&
+            grant.leaseId === leaseId &&
+            grant.ownerCertificateDigest === identity.rootCertificateDigest &&
+            grant.delegationId === delegationId &&
+            grant.childPublicKey === f.state.publicKeys["data-manager"] &&
+            same(grant.parent, projection.ownerPrepare) &&
+            grantDigest === controlDigest(rawGrant.grant) &&
+            grantDigest === freeze.prepareGrantDigest &&
+            transition.delegationId === delegationId &&
+            transition.grantDigest === grantDigest &&
+            same(child.origin, f.meta.origin) &&
+            child.delegationId === delegationId &&
+            child.grantDigest === grantDigest &&
+            same(child.execution, grant.child) &&
+            same(child.settlement.identity, grant.child) &&
+            Object.keys(child.grantDigests).length === 0 &&
+            refusal.installationId === identity.installationId &&
+            same(refusal.origin, f.meta.origin) &&
+            same(refusal.ownerPrepare, projection.ownerPrepare) &&
+            refusal.rootAdmissionDigest === identity.admissionDigest &&
+            refusal.rootCertificateDigest === identity.rootCertificateDigest &&
+            refusal.maintenanceId === identity.maintenanceId &&
+            refusal.candidateId === identity.candidateId &&
+            refusal.planDigest === identity.planDigest &&
+            refusal.settlementId === identity.settlementId &&
+            refusal.projectionDigest === projectionDigest &&
+            refusal.reservationDigest === projection.reservationDigest &&
+            same(refusal.prepareExecution, grant.child) &&
+            refusal.refusalReceipt.maintenanceId === identity.maintenanceId &&
+            refusal.effectReceiptDigest === controlDigest(refusal.refusalReceipt) &&
+            child.settlement.terminalReceiptDigest === refusal.effectReceiptDigest &&
+            refusal.effectSettlementDigest ===
+              controlDigest({ ...child.settlement, receipt: refusal.refusalReceipt }) &&
+            refusal.canonicalTerminalDigest ===
+              controlDigest({ version: 1, refused: refusal.refusalReceipt }) &&
+            evidence.prepareExecutionDigest === controlDigest(grant.child) &&
+            evidence.prepareAdmissionDigest === refusal.prepareAdmissionDigest &&
+            evidence.refusalProjectionDigest === refusalDigest &&
+            evidence.effectSettlementDigest === refusal.effectSettlementDigest &&
+            evidence.canonicalTerminalDigest === refusal.canonicalTerminalDigest &&
+            evidence.canonicalTerminalAt === refusal.canonicalTerminalAt &&
+            evidence.capacityReceiptDigest === refusal.capacityReceiptDigest &&
+            freeze.prepareExecutionDigest === evidence.prepareExecutionDigest &&
+            freeze.refusalProjectionDigest === refusalDigest &&
+            evidence.dmUnusedIntentDigest === intentDigest &&
+            evidence.dmUnusedConfirmationDigest === confirmationDigest &&
+            dmIntent.role === "data-manager" &&
+            dmIntent.installationId === identity.installationId &&
+            same(dmIntent.origin, f.meta.origin) &&
+            dmIntent.ownerPrepareDigest === controlDigest(projection.ownerPrepare) &&
+            dmIntent.prepareExecutionDigest === controlDigest(grant.child) &&
+            dmIntent.settlementId === identity.settlementId &&
+            dmIntent.projectionDigest === projectionDigest &&
+            dmIntent.capacityReceiptDigest === refusal.capacityReceiptDigest &&
+            dmIntent.sourceProofDigest === refusalDigest &&
+            dmIntent.executionOrdinal === safeState.executionOrdinal &&
+            dmIntent.intentOrdinal === safeState.intentOrdinal &&
+            dmIntent.recordDescriptorsDigest === safeState.recordDescriptorsDigest &&
+            same(dmIntent.allocatedDescriptorDigests, actualDescriptors) &&
+            dmConfirmation.role === "data-manager" &&
+            dmConfirmation.installationId === identity.installationId &&
+            same(dmConfirmation.origin, f.meta.origin) &&
+            dmConfirmation.ownerPrepareDigest === dmIntent.ownerPrepareDigest &&
+            dmConfirmation.settlementId === identity.settlementId &&
+            dmConfirmation.projectionDigest === projectionDigest &&
+            dmConfirmation.intentDigest === intentDigest &&
+            dmConfirmation.slotStateDigest === controlDigest(safeState) &&
+            dmConfirmation.confirmedAt >= dmIntent.createdAt,
+          "Original receiver refusal/UNUSED family preimages changed",
+        );
+        if (capacity)
+          need(
+            capacity.installationId === identity.installationId &&
+              same(capacity.origin, f.meta.origin) &&
+              capacity.ownerPrepareDigest === dmIntent.ownerPrepareDigest &&
+              capacity.settlementId === identity.settlementId &&
+              capacity.projectionDigest === projectionDigest &&
+              capacity.reservationDigest === projection.reservationDigest &&
+              same(capacity.proposedExecutionAddress, projection.reservation.execution) &&
+              capacity.recordDescriptorsDigest === controlDigest(descriptors) &&
+              capacity.maxBytes === descriptors.reduce((sum, value) => sum + value.cap, 0) &&
+              refusal.capacityReceiptDigest === settlementRecordDigest(domains.capacity, capacity),
+            "Original receiver capacity family source changed",
+          );
+        else
+          need(
+            refusal.capacityReceiptDigest === null && refusal.refusalReceipt.reason === "capacity",
+            "Actual capacity-null family source required",
+          );
+        dmSlotProof = { role: "data-manager", intentDigest, confirmationDigest };
+        dmContainmentDigest = refusal.effectSettlementDigest;
+      }
     }
     const descriptors = configurationSettlementRecordDescriptors(projection, prepareKey),
       senderSlot = {
@@ -4046,39 +4180,63 @@ function configurationNoGuardFamilyClosure(
         f.state.installation.role === "ops-agent" ? issuerConfirmation : dmConfirmation,
       localDescriptors =
         f.state.installation.role === "ops-agent" ? descriptors.sender : descriptors.receiver;
-    need(
-      localIntent &&
-        localConfirmation &&
-        slot.role === f.state.installation.role &&
-        slot.projectionDigest === projectionDigest &&
-        slot.settlementId === identity.settlementId &&
-        slot.reservationDigest === projection.reservationDigest &&
-        slot.ownerPrepareDigest === controlDigest(projection.ownerPrepare) &&
-        same(slot.proposedExecutionAddress, projection.reservation.execution) &&
-        same(slot.descriptors, localDescriptors) &&
-        slot.recordDescriptorsDigest === localIntent!.recordDescriptorsDigest &&
-        slot.executionOrdinal === localIntent!.executionOrdinal &&
-        slot.intentOrdinal === localIntent!.intentOrdinal &&
-        same(slot.allocatedDescriptorDigests, localIntent!.allocatedDescriptorDigests) &&
-        slot.unusedIntentDigest === settlementRecordDigest(domains.unusedIntent, localIntent!) &&
-        slot.unusedConfirmedAt === localConfirmation!.confirmedAt,
-      "Actual role-private NoGuard slot differs from its published source",
-    );
-    settlementSlotTickets(f, slot, false);
-    for (const descriptor of localDescriptors.filter(
-      (value) =>
-        slot.allocatedDescriptorDigests.includes(controlDigest(value)) &&
-        (f.state.installation.role === "data-manager"
-          ? value !== descriptors.receiver[0]
-          : value.scope === "private" || value.name.endsWith("-ack.json")),
-    ))
+    if (slot) {
       need(
-        localRead(
-          { ...descriptor, container: descriptor.scope === "shared" ? descriptor.role : "" },
-          descriptor.cap,
-        ) === null,
-        "Attempted future control cannot retire as UNUSED",
+        localIntent &&
+          localConfirmation &&
+          slot.role === f.state.installation.role &&
+          slot.projectionDigest === projectionDigest &&
+          slot.settlementId === identity.settlementId &&
+          slot.reservationDigest === projection.reservationDigest &&
+          slot.ownerPrepareDigest === controlDigest(projection.ownerPrepare) &&
+          same(slot.proposedExecutionAddress, projection.reservation.execution) &&
+          same(slot.descriptors, localDescriptors) &&
+          slot.recordDescriptorsDigest === localIntent!.recordDescriptorsDigest &&
+          slot.executionOrdinal === localIntent!.executionOrdinal &&
+          slot.intentOrdinal === localIntent!.intentOrdinal &&
+          same(slot.allocatedDescriptorDigests, localIntent!.allocatedDescriptorDigests) &&
+          slot.unusedIntentDigest === settlementRecordDigest(domains.unusedIntent, localIntent!) &&
+          slot.unusedConfirmedAt === localConfirmation!.confirmedAt,
+        "Actual role-private NoGuard slot differs from its published source",
       );
+      settlementSlotTickets(f, slot, false);
+      for (const descriptor of localDescriptors.filter(
+        (value) =>
+          slot.allocatedDescriptorDigests.includes(controlDigest(value)) &&
+          (f.state.installation.role === "data-manager"
+            ? value !== descriptors.receiver[0]
+            : value.scope === "private" || value.name.endsWith("-ack.json")),
+      ))
+        need(
+          localRead(
+            { ...descriptor, container: descriptor.scope === "shared" ? descriptor.role : "" },
+            descriptor.cap,
+          ) === null,
+          "Attempted future control cannot retire as UNUSED",
+        );
+    } else {
+      need(
+        unadmitted && evidence.kind === "receiver_not_admitted" && !dmIntent && !dmSlotProof,
+        "Actual unadmitted receiver must have no settlement capacity",
+      );
+      verifyUnusedTicket("data-manager", "executions", null, "");
+      verifyUnusedTicket("data-manager", "intents", null, "");
+      for (const [namespace, name] of [
+        ["executions", `${prepareKey}.json`],
+        ["effects", `${prepareKey}.json`],
+        ["effect-started", `${prepareKey}.json`],
+        ["execution-adoptions", `${prepareKey}.json`],
+        ["observations", `terminal-${prepareKey}.json`],
+        ["configuration-maintenance", `${identity.maintenanceId}.json`],
+      ]) {
+        try {
+          readPrivateRecord(f.state, namespace!, name!);
+          throw Error("Unadmitted receiver acquired private admission/effect evidence");
+        } catch (error) {
+          if (!missing(error)) throw error;
+        }
+      }
+    }
     if (f.state.installation.role === "ops-agent") {
       const owner = verifyControl(
         senderKey,
@@ -4115,7 +4273,7 @@ function configurationNoGuardFamilyClosure(
           same(owner.noGuard.issuerUnused, bundle.issuerUnused),
         "Actual original issuer private closure changed",
       );
-    } else {
+    } else if (!unadmitted) {
       const fact = Object.values(p.executions).find(
         (value) => value.execution.operationKey === prepareKey,
       );
@@ -4136,7 +4294,12 @@ function configurationNoGuardFamilyClosure(
         "Actual original DM refusal journal containment unavailable",
       );
     }
-    return { unusedExecutionTicketIds, unusedIntentTicketIds };
+    return {
+      unusedExecutionTicketIds,
+      unusedIntentTicketIds,
+      nonAdmittedIntentTicketIds,
+      terminalAt: closure.closedAt,
+    };
   } finally {
     for (const directory of opened.reverse()) directory.close();
   }
@@ -4147,17 +4310,12 @@ function identityOfRoot(f: Family) {
 function localProof(f: Family, p: Progress): boolean {
   // A reserved logical control is a separate mandatory release/retirement
   // obligation. Ordinary terminal facts cannot stand in for its closure chain.
-  if (
-    p.configurationSettlementSlot &&
-    !preparedClosure(f, p) &&
-    !configurationNoGuardFamilyClosure(f, p)
-  )
-    return false;
-  if (
-    !Object.keys(p.executions).length ||
-    Object.values(p.executions).some((e) => !e.known || e.terminalAt === undefined)
-  )
-    return false;
+  const noExecutions = !Object.keys(p.executions).length,
+    noGuard =
+      (p.configurationSettlementSlot || noExecutions) && configurationNoGuardFamilyClosure(f, p);
+  if (p.configurationSettlementSlot && !preparedClosure(f, p) && !noGuard) return false;
+  if (noExecutions) return !!noGuard;
+  if (Object.values(p.executions).some((e) => !e.known || e.terminalAt === undefined)) return false;
   for (const fact of Object.values(p.executions)) {
     if (executionWriterPresent(f, fact.execution)) return false;
     if (
@@ -4335,7 +4493,14 @@ function publishCandidate(
   staged?: StagedCoordinatorRetirementPacket,
 ): Candidate | null {
   const prepared = preparedClosure(f, p),
-    terminalAt = Math.max(p.terminalAt, prepared?.terminalAt ?? 0);
+    noGuard =
+      (p.configurationSettlementSlot || !Object.keys(p.executions).length) &&
+      configurationNoGuardFamilyClosure(f, p),
+    terminalAt = Math.max(
+      p.terminalAt,
+      prepared?.terminalAt ?? 0,
+      noGuard ? noGuard.terminalAt : 0,
+    );
   if (
     Date.now() < f.meta.origin.notAfter ||
     Date.now() - terminalAt < LIMITS.minimumTerminalRetentionMs ||
@@ -4466,7 +4631,7 @@ function prepare(f: Family, p: Progress): boolean {
         ? noGuard.unusedExecutionTicketIds
         : (prepared?.logicalExecutionTicketIds ?? []),
       excludedIntents = noGuard
-        ? noGuard.unusedIntentTicketIds
+        ? [...noGuard.unusedIntentTicketIds, ...noGuard.nonAdmittedIntentTicketIds]
         : (prepared?.logicalIntentTicketIds ?? []);
     const executions = readAllTickets(f, "executions", LIMITS.executionsPerFamily).filter(
       (value) => !excludedExecutions.includes(value.id),
@@ -4480,10 +4645,11 @@ function prepare(f: Family, p: Progress): boolean {
       intents.some((t) => !receipts[(t.value as { childDigest: string }).childDigest])
     )
       return false;
-    const intentDigests = Object.assign({}, ...candidates.map((c) => c.intentDigests)) as Record<
-      string,
-      string
-    >;
+    const intentDigests = Object.fromEntries(
+      Object.entries(
+        Object.assign({}, ...candidates.map((c) => c.intentDigests)) as Record<string, string>,
+      ).filter(([id]) => !excludedIntents.includes(id)),
+    );
     if (
       Object.keys(intentDigests).length !== intents.length ||
       Object.values(intentDigests).some((id) => !receipts[id]) ||

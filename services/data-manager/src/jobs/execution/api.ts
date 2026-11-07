@@ -1,4 +1,5 @@
 import type {
+  configurationPrepareNonAdmissionSchema,
   DataConfigurationFencePrepare,
   DataConfigurationFenceReceipt,
   DataConfigurationFenceSettle,
@@ -15,6 +16,10 @@ import { registerDataManagerRoute } from "../../route-contract.js";
 /** The receiver performs signed admission/adoption, separately from bearer
  * authentication. A missing receiver never authorizes a compatibility worker. */
 export interface DataExecutionReceiver {
+  recoverUnadmittedPreparation?(
+    request: DataConfigurationFencePrepare,
+    rawHeaders: readonly string[],
+  ): Promise<z.infer<typeof configurationPrepareNonAdmissionSchema>>;
   attestUnadoptedHardlinks?(
     request: z.infer<typeof startGenerationHardlinksExecutionSchema>,
     rawHeaders: readonly string[],
@@ -88,6 +93,14 @@ export function registerDataExecutionApi(
     if (!receiver) return unavailable(reply);
     return receiver.prepareFence(request.body, request.raw.rawHeaders);
   });
+  registerDataManagerRoute(
+    app,
+    "recoverUnadmittedConfigurationPreparation",
+    async (request, reply) => {
+      if (!receiver?.recoverUnadmittedPreparation) return unavailable(reply);
+      return receiver.recoverUnadmittedPreparation(request.body, request.raw.rawHeaders);
+    },
+  );
   registerDataManagerRoute(app, "inspectDataConfigurationFence", async (request, reply) => {
     if (!receiver) return unavailable(reply);
     const receipt = await receiver.inspectFence(

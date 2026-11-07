@@ -989,12 +989,16 @@ class AdminJobRunner {
       }
       /* Retain intent. */
     }
-    if (outcome !== "canceled") return false;
+    if (outcome !== "canceled" && outcome !== "recovered_failure") return false;
+    const status = outcome === "recovered_failure" ? "failed" : "canceled";
     const finishedAt = new Date();
     const rows = await db
       .update(adminJob)
       .set({
-        status: "canceled",
+        status,
+        ...(outcome === "recovered_failure"
+          ? { error: "Maintenance preparation failed; original ownership was safely released." }
+          : {}),
         finishedAt,
         result: sql`coalesce(${adminJob.result}, '{}'::jsonb) - 'observation'`,
       })
@@ -1007,7 +1011,7 @@ class AdminJobRunner {
       )
       .returning({ id: adminJob.id, result: adminJob.result });
     if (rows.length === 0) return false;
-    this.announce(jobId, "canceled", {
+    this.announce(jobId, status, {
       finishedAt: finishedAt.toISOString(),
       result: publicAdminJobResult(rows[0]?.result as Record<string, unknown> | null),
     });
@@ -1576,12 +1580,19 @@ class AdminJobRunner {
             // or canceled publication. The cancel marker still blocks forward
             // admission; neither an empty projection nor this status grants it.
           }
-          if (outcome === "canceled") {
+          if (outcome === "canceled" || outcome === "recovered_failure") {
+            const status = outcome === "recovered_failure" ? "failed" : "canceled";
             const finishedAt = new Date();
             const rows = await db
               .update(adminJob)
               .set({
-                status: "canceled",
+                status,
+                ...(outcome === "recovered_failure"
+                  ? {
+                      error:
+                        "Maintenance preparation failed; original ownership was safely released.",
+                    }
+                  : {}),
                 finishedAt,
                 result: sql`coalesce(${adminJob.result}, '{}'::jsonb) - 'observation'`,
               })
@@ -1594,7 +1605,7 @@ class AdminJobRunner {
               )
               .returning({ id: adminJob.id, result: adminJob.result });
             if (rows.length)
-              this.announce(jobId, "canceled", {
+              this.announce(jobId, status, {
                 finishedAt: finishedAt.toISOString(),
                 result: publicAdminJobResult(rows[0]?.result as Record<string, unknown> | null),
               });

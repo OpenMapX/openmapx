@@ -99,6 +99,7 @@ import {
   parseOpsRequest,
   processDiagnosticsSchema,
   redactedOpsError,
+  signMaintenanceRecoveryProof,
   type VerifiedParentExecution,
   verifyApiJobParentExecution,
 } from "@openmapx/core/ops";
@@ -143,6 +144,7 @@ import {
   prepareOwnedConfigurationMaintenanceStepAdmission,
   readOwnedConfigurationMaintenance,
   recordOwnedConfigurationMaintenanceStepTerminal,
+  recoverUnadmittedConfigurationMaintenance,
   registerConfigurationMaintenanceJournal,
   restoreConfigurationMaintenanceControlJournal,
   retainConfigurationMaintenanceDecisionControl,
@@ -2388,7 +2390,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               .send(
                 opsSuccess(parsed.requestId, { execution: "sync", kind: operation.kind, value }),
               );
-          } catch {
+          } catch (error) {
             throw new RequestGuardError("recovery_required", 409);
           }
         }
@@ -3415,6 +3417,53 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     )
       return reply.code(409).send(redactedOpsError(requestId, "conflict"));
     if (job.terminalAt !== undefined) {
+      if (
+        job.operation.kind === "configurationMaintenance.prepare" &&
+        job.state === "failed" &&
+        job.errorClass === "recovery_required" &&
+        options.controlInstallation
+      ) {
+        try {
+          const source = await recoverUnadmittedConfigurationMaintenance(
+              runtime,
+              restoreAdmittedControlExecution(options.controlInstallation, executionFor(job)),
+            ),
+            status = statusFor(job, projectionVersion(request));
+          retainControlTerminalStatus(
+            options.controlInstallation,
+            executionFor(job),
+            statusFor(job, 2, true),
+            job.terminalAt,
+          );
+          const proof = signMaintenanceRecoveryProof(options.tokens.api, {
+            version: 1,
+            kind: "configuration-maintenance-contained",
+            operationId: job.operationId,
+            operationKey: job.operationKey,
+            fingerprint: job.fingerprint,
+            terminalDigest: controlTerminalReceiptDigest(statusFor(job, 2)),
+            ...source,
+          });
+          return reply.code(200).send(
+            opsSuccess(requestId, {
+              ...status,
+              ...(status.version === 2
+                ? {
+                    diagnostics: {
+                      tail: [],
+                      truncated: Boolean(
+                        status.diagnostics?.truncated || status.diagnostics?.tail.length,
+                      ),
+                      maintenanceRecovery: proof,
+                    },
+                  }
+                : {}),
+            }),
+          );
+        } catch (error) {
+          return reply.code(409).send(redactedOpsError(requestId, "recovery_required"));
+        }
+      }
       if (
         job.operation.kind === "artifactTransfer.import" &&
         job.state !== "succeeded" &&

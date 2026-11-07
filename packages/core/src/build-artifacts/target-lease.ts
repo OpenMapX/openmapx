@@ -12,6 +12,12 @@ import {
 } from "../ops/execution-identity";
 import { opsOperationFingerprint } from "../ops/fingerprint";
 import {
+  CONFIGURATION_PREPARE_NON_ADMISSION_DOMAIN,
+  configurationPrepareNonAdmissionPayloadSchema,
+  configurationPrepareNonAdmissionSchema,
+  type DataConfigurationFencePrepare,
+} from "../services/data-manager/contracts/configuration-maintenance";
+import {
   GENERATION_HARDLINKS_NON_ADMISSION_DOMAIN,
   generationHardlinksNonAdmissionPayloadSchema,
   generationHardlinksNonAdmissionSchema,
@@ -273,6 +279,7 @@ const childSchema = z.strictObject({
   phase: phaseSchema,
   grantDigests: z.record(uuid, digest),
   settlement: outcomeSchema.nullable(),
+  nonAdmission: configurationPrepareNonAdmissionSchema.optional(),
 });
 type ChildRecord = z.infer<typeof childSchema>;
 const unadoptedLifecycleDomain = "openmapx-unadopted-service-hardlinks-v1";
@@ -600,6 +607,38 @@ function readChild(s: State, grant: Grant): ObservedChild | undefined {
       controlDigest(child.execution) !== controlDigest(grant.child)
     )
       throw Error("Child durable identity mismatch");
+    if (child.nonAdmission) {
+      const proof = verifyControl(
+        grant.childPublicKey,
+        CONFIGURATION_PREPARE_NON_ADMISSION_DOMAIN,
+        child.nonAdmission,
+        configurationPrepareNonAdmissionPayloadSchema,
+      );
+      if (
+        grant.recipient !== "data-manager" ||
+        grant.childKind !== "configuration-maintenance.prepare" ||
+        grant.phase !== "configuration-fence" ||
+        grant.parentNode !== null ||
+        proof.installationId !== s.certificate.installationId ||
+        proof.leaseId !== s.certificate.leaseId ||
+        proof.certificateDigest !== controlDigest(s.certificateEnvelope) ||
+        proof.delegationId !== grant.delegationId ||
+        proof.grantDigest !== child.grantDigest ||
+        !sameControlOrigin(proof.origin, grant.origin) ||
+        controlDigest(proof.child) !== controlDigest(grant.child) ||
+        controlDigest(proof.input.ownerPrepare) !== controlDigest(grant.parent) ||
+        controlDigest({ kind: grant.childKind, ...proof.input }) !==
+          grant.child.operationFingerprint ||
+        proof.observedAt <= Math.max(grant.child.deadlineAt, grant.parent.deadlineAt) ||
+        proof.canceledSequence > readRoot(s).sequence ||
+        child.phase !== "settled" ||
+        Object.keys(child.grantDigests).length ||
+        child.settlement?.outcome !== "failed_without_effect" ||
+        child.settlement.publication !== "not_started" ||
+        child.settlement.terminalReceiptDigest !== controlDigest(proof)
+      )
+        throw Error("Original unadmitted preparation settlement changed");
+    }
     return child;
   } finally {
     dir.close();
@@ -1891,6 +1930,26 @@ export async function adoptArtifactTargetLease(options: {
     throw e;
   }
 }
+/** The fixed PREPARE receiver serializes private admission with cancellation
+ * and negative recovery under the existing physical journal guard. */
+export function withConfigurationFenceReceiverAdmission(
+  lease: BorrowedArtifactTargetLease,
+  run: () => VerifiedExecutionAuthority,
+): VerifiedExecutionAuthority {
+  const s = stateOf(lease);
+  if (!s.node || s.installation.installation.role !== "data-manager" || s.installation.fixedChildId)
+    throw Error("Original normal configuration receiver required");
+  return guarded(s, () => {
+    const grant = tree(s).grants.get(s.node!);
+    if (
+      grant?.childKind !== "configuration-maintenance.prepare" ||
+      grant.phase !== "configuration-fence"
+    )
+      throw Error("Original configuration preparation grant required");
+    return run();
+  });
+}
+
 /** A fixed receiver supplies its own durable execution authority only after adoption. */
 export function bindBorrowedControlExecution(
   lease: BorrowedArtifactTargetLease,
@@ -2938,6 +2997,176 @@ export function restoreConfigurationMaintenancePhaseIssuer(
     throw error;
   }
 }
+/** Receiver-only settlement after the fixed receiver has locked SQL and
+ * excluded both this execution and maintenance identity. No admission, effect
+ * authority or forward handle is created, including for the expired child. */
+export function settleUnadmittedConfigurationPrepare(
+  installation: import("./control-authority").ControlInstallation,
+  assertion: string,
+  input: DataConfigurationFencePrepare,
+) {
+  const local = installationState(installation),
+    parsed = parseControlAssertion(assertion),
+    inspected = inspectArtifactDelegation({ dataRoot: local.dataRoot, installation, assertion });
+  if (
+    installation.role !== "data-manager" ||
+    local.fixedChildId ||
+    inspected.owner.executor !== "ops-agent" ||
+    inspected.owner.principal !== "api" ||
+    inspected.kind !== "configuration-maintenance.prepare" ||
+    inspected.phase !== "configuration-fence" ||
+    inspected.recipient !== "data-manager" ||
+    !inspected.origin ||
+    controlDigest(inspected.parent) !== controlDigest(inspected.owner) ||
+    controlDigest(input.ownerPrepare) !== controlDigest(inspected.owner) ||
+    canonicalJson(input.serviceIds) !== canonicalJson(inspected.serviceIds) ||
+    controlDigest({ kind: inspected.kind, ...input }) !==
+      inspected.execution.operationFingerprint ||
+    Date.now() <= Math.max(inspected.execution.deadlineAt, inspected.owner.deadlineAt)
+  )
+    throw Error("Original expired configuration preparation required");
+  const s = openState(local.dataRoot, inspected.leaseId, local);
+  try {
+    return guarded(s, () => {
+      const t = tree(s),
+        grant = t.grants.get(parsed.delegationId),
+        child = t.children.get(parsed.delegationId);
+      if (
+        t.root.phase !== "cancel_pending" ||
+        t.grants.size !== 1 ||
+        t.children.size !== 1 ||
+        !grant ||
+        grant.parentNode !== null ||
+        !child ||
+        Object.keys(child.grantDigests).length ||
+        (!child.nonAdmission && (child.phase !== "held" || child.settlement !== null))
+      )
+        throw Error("Original frozen unadmitted preparation child required");
+      const name = `${grant.delegationId}.json`,
+        raw = readPrivateRecord(local, "adoptions", name, 8192),
+        adoption = z
+          .object({
+            state: z.literal("ready"),
+            execution: executionRefSchema,
+            grantDigest: digest,
+            assertion: z.string(),
+          })
+          .parse(raw);
+      if (
+        adoption.assertion !== assertion ||
+        adoption.grantDigest !== parsed.grantDigest ||
+        controlDigest(adoption.execution) !== controlDigest(grant.child)
+      )
+        throw Error("Original ready receiver adoption required");
+      verifyFamilyOwnedRecord(
+        local,
+        grant.origin!,
+        { scope: "private", namespace: "adoptions", container: "", name },
+        canonicalJson(raw),
+      );
+      // This is checked inside the physical journal guard. An admitted worker
+      // always retains its private execution BEFORE any SQL/guard/effect work.
+      for (const [namespace, file] of [
+        ["executions", `${grant.child.operationKey}.json`],
+        ["effects", `${grant.child.operationKey}.json`],
+        ["effect-started", `${grant.child.operationKey}.json`],
+        ["execution-adoptions", `${grant.child.operationKey}.json`],
+        ["observations", `terminal-${grant.child.operationKey}.json`],
+        ["configuration-maintenance", `${input.maintenanceId}.json`],
+      ]) {
+        try {
+          readPrivateRecord(local, namespace!, file!);
+          throw Error("Admitted or ambiguous receiver preparation remains fenced");
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        }
+      }
+      assertNoUnissuedConfigurationReceiverPublication(local, grant.child.operationKey);
+      if (child.nonAdmission) {
+        if (
+          child.nonAdmission.payload.adoptionDigest !== controlDigest(raw) ||
+          canonicalJson(child.nonAdmission.payload.input) !== canonicalJson(input)
+        )
+          throw Error("Original negative receiver proof changed");
+        return child.nonAdmission;
+      }
+      const proof = signControl(
+        local.privateKey,
+        CONFIGURATION_PREPARE_NON_ADMISSION_DOMAIN,
+        configurationPrepareNonAdmissionPayloadSchema.parse({
+          version: 1,
+          kind: "configuration-prepare-not-admitted",
+          installationId: installation.installationId,
+          origin: grant.origin,
+          leaseId: inspected.leaseId,
+          certificateDigest: inspected.ownerCertificateDigest,
+          delegationId: grant.delegationId,
+          grantDigest: parsed.grantDigest,
+          child: grant.child,
+          input,
+          adoptionDigest: controlDigest(raw),
+          canceledSequence: t.root.sequence,
+          observedAt: Date.now(),
+        }),
+      );
+      // Preserve the ready adoption and immutable failed agent canonical. Only
+      // this exact DM-signed child advances to a negative physical settlement.
+      writeBounded(
+        s,
+        "children",
+        `${grant.delegationId}.json`,
+        signControl(local.privateKey, "openmapx-lease-child-v2", {
+          ...child,
+          sequence: child.sequence + 1,
+          phase: "settled",
+          nonAdmission: proof,
+          settlement: {
+            identity: grant.child,
+            outcome: "failed_without_effect",
+            publication: "not_started",
+            terminalReceiptDigest: controlDigest(proof.payload),
+          },
+        }),
+      );
+      tree(s);
+      return proof;
+    });
+  } finally {
+    closeState(s);
+  }
+}
+
+/** Reads a receiver's signed negative settlement from the exact original tree;
+ * no sibling private directory, admission or parsed caller proof is trusted. */
+export function readConfigurationPrepareNonAdmission(authority: VerifiedExecutionAuthority) {
+  const owner = executionAuthorityState(authority);
+  if (
+    owner.kind !== "configurationMaintenance.prepare" ||
+    owner.installation.installation.role !== "ops-agent"
+  )
+    throw Error("Original maintenance owner required");
+  const lease = restoreArtifactTargetLeaseForSettlement(authority),
+    s = stateOf(lease);
+  try {
+    return guarded(s, () => {
+      const t = tree(s),
+        children = [...t.children.values()],
+        child = children[0];
+      if (
+        t.grants.size !== 1 ||
+        children.length !== 1 ||
+        !child?.nonAdmission ||
+        child.phase !== "settled" ||
+        child.settlement?.terminalReceiptDigest !== controlDigest(child.nonAdmission.payload)
+      )
+        throw Error("Original negative receiver settlement required");
+      return child.nonAdmission;
+    });
+  } finally {
+    closeArtifactTargetLeaseHandle(lease);
+  }
+}
+
 /** Seal only this original failed producer before asking its recipient for a
  * non-admission certificate. This alone is not containment or lease release. */
 export async function prepareFailedServiceLifecycleRecovery(
@@ -4352,7 +4581,7 @@ export function assertConfigurationMaintenanceRootClosure(
             bundle.issuerFreezeProof,
             configurationIssuedPrepareRefusedProofSchema,
           ),
-    issued = evidence.kind === "receiver_refused",
+    issued = evidence.kind !== "never_issued",
     expectedPublications = state.reservations
       .filter((value) => !issued || value !== prepare)
       .map((value) => {
@@ -4470,6 +4699,42 @@ export function assertConfigurationMaintenanceRootClosure(
         state.installation,
         prepare.execution.operationKey,
       );
+    } else if (evidence.kind === "receiver_not_admitted") {
+      const proof = verifyControl(
+          state.installation.publicKeys["data-manager"],
+          CONFIGURATION_PREPARE_NON_ADMISSION_DOMAIN,
+          evidence.nonAdmission,
+          configurationPrepareNonAdmissionPayloadSchema,
+        ),
+        publication = inspectControlChildPublication(authority, prepare),
+        child = tree.children[0];
+      need(
+        "kind" in freezeProof &&
+          tree.children.length === 1 &&
+          child &&
+          publication.publication.state === "grant_prepared" &&
+          publication.publication.grantDigest === proof.grantDigest &&
+          same(publication.binding?.child.execution, proof.child) &&
+          same(proof.input, owner.plan.dmPrepare) &&
+          proof.installationId === owner.installationId &&
+          same(proof.origin, owner.origin) &&
+          proof.certificateDigest === tree.certificateDigest &&
+          same(proof.input.ownerPrepare, state.execution) &&
+          same(child.execution, proof.child) &&
+          child.grantDigest === proof.grantDigest &&
+          child.settlement.outcome === "failed_without_effect" &&
+          child.settlement.publication === "not_started" &&
+          child.settlement.terminalReceiptDigest === controlDigest(proof) &&
+          freezeProof.prepareExecutionDigest === controlDigest(proof.child) &&
+          freezeProof.refusalProjectionDigest === controlDigest(proof) &&
+          proof.observedAt <= closure.closedAt,
+        "Original unadmitted receiver NoGuard source changed",
+      );
+      assertNoUnissuedConfigurationReceiverPublication(
+        state.installation,
+        proof.child.operationKey,
+      );
+      dmContainment = controlDigest(proof);
     } else {
       need("kind" in freezeProof, "Issued preparation cannot use NeverIssued proof");
       const root = own(new AnchoredDirectory(state.installation.dataRoot)),

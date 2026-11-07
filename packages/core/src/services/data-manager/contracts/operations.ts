@@ -120,6 +120,19 @@ export const dataManagerOperations = {
       503: json(httpErrorSchema),
     },
   },
+  recoverUnadmittedConfigurationPreparation: {
+    method: "POST",
+    path: "/executions/configuration-maintenance/recovery",
+    auth: service,
+    request: { body: cm.dataConfigurationFencePrepareSchema },
+    responses: {
+      ...serviceErrors,
+      200: json(cm.configurationPrepareNonAdmissionSchema),
+      403: json(httpErrorSchema),
+      409: json(httpErrorSchema),
+      503: json(httpErrorSchema),
+    },
+  },
   inspectDataConfigurationFence: {
     method: "GET",
     path: "/executions/configuration-maintenance/:maintenanceId",

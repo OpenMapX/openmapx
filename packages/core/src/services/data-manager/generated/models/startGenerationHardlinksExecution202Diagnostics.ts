@@ -6,4 +6,9 @@ export type StartGenerationHardlinksExecution202Diagnostics = {
   /** @maxItems 256 */
   tail: StartGenerationHardlinksExecution202DiagnosticsTailItem[];
   truncated: boolean;
+  /**
+   * @minLength 1
+   * @maxLength 4096
+   */
+  maintenanceRecovery?: string;
 };

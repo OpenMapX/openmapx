@@ -66,6 +66,7 @@ export interface ProjectedOperation {
     checkpointOwnerVersion: number;
     terminalDigest: string;
     terminalReceipt: OpsJobStatus;
+    maintenanceRecovery?: string;
   };
 }
 
@@ -247,6 +248,10 @@ export function readProjection(result: unknown): OpsProjection {
           operation.phase !== "terminal" ||
           !d ||
           !["pending", "confirmed"].includes(d.state) ||
+          (d.maintenanceRecovery !== undefined &&
+            (typeof d.maintenanceRecovery !== "string" ||
+              d.maintenanceRecovery.length < 1 ||
+              d.maintenanceRecovery.length > 4096)) ||
           !apiRetentionProofSchema.shape.terminalCopyId.safeParse(d.terminalCopyId).success ||
           !Number.isSafeInteger(d.checkpointOwnerVersion) ||
           d.checkpointOwnerVersion < 1 ||

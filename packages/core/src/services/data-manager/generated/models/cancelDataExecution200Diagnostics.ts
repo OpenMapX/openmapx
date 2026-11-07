@@ -6,4 +6,9 @@ export type CancelDataExecution200Diagnostics = {
   /** @maxItems 256 */
   tail: CancelDataExecution200DiagnosticsTailItem[];
   truncated: boolean;
+  /**
+   * @minLength 1
+   * @maxLength 4096
+   */
+  maintenanceRecovery?: string;
 };

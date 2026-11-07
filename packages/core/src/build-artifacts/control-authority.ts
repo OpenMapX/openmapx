@@ -628,6 +628,29 @@ export function acknowledgeControlRetention(
     dependency.parent.attemptId !== proof.attemptId
   )
     throw Error("Receipt parent/attempt conflict");
+  // A copied recovery-required PREPARE canonical says that the worker failed,
+  // not that its target ownership was contained. Require actual known effect
+  // and (for NoGuard) physical release before acknowledging this dependency.
+  const original = z
+      .object({ payload: z.object({ execution: executionRefSchema }) })
+      .parse(readPrivateRecord(state, "executions", `${input.operationKey}.json`, 65536)),
+    authority = restoreAdmittedControlExecution(installation, original.payload.execution),
+    admitted = executionAuthorityState(authority);
+  if (admitted.execution.operationKey !== input.operationKey)
+    throw Error("Receipt original execution changed");
+  if (admitted.kind === "configurationMaintenance.prepare") {
+    const effect = childSettlementState(
+      verifyControlEffectSettlement(installation, admitted.execution),
+    ).evidence;
+    if (effect.outcome === "unknown") throw Error("Original preparation remains uncontained");
+    const source = z
+      .object({ payload: z.object({ receipt: z.unknown() }) })
+      .parse(readPrivateRecord(state, "effects", `${input.operationKey}.json`)).payload.receipt;
+    if (controlDigest(source) !== effect.terminalReceiptDigest)
+      throw Error("Original preparation effect changed");
+    if (z.object({ kind: z.literal("configuration-no-guard") }).safeParse(source).success)
+      verifyRetainedArtifactTargetRootRelease(authority);
+  }
   acknowledgeRetentionDependency(state, origin, {
     operationKey: input.operationKey,
     fingerprint: input.fingerprint,

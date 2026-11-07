@@ -21,6 +21,7 @@ export async function ownedDataManager(options: {
   settlementSqlFault?: "update-ack-loss" | "terminate-before-commit";
   pauseSettlementBeforeCommit?: boolean;
   pausePrepareResponse?: boolean;
+  loseRecoveryResponseOnce?: boolean;
 }) {
   let settlementCommits = 0, settlementUpdates = 0, settlementRollbacks = 0, terminatedSettlementSession = false;
   const commitEntered = Promise.withResolvers<void>(), continueCommit = Promise.withResolvers<void>();
@@ -76,7 +77,7 @@ export async function ownedDataManager(options: {
   const dispatcher = createDataExecutionDispatcher({ dataDir, state: new StateStore(dataDir), sql: options.sql, singleFlight, operationsPolicy, runHardlinks: applyOwnedGenerationHardlinks });
   const runtime = createDataExecutionRuntime({ store, dispatch: dispatcher.dispatch });
   const receiver = createDataExecutionReceiver({ runtime, installation, configurationFence: fence, dispatcher, operationsPolicy });
-  const app = Fastify(); let posts = 0, preparePosts = 0, settlePosts = 0;
+  const app = Fastify(); let posts = 0, preparePosts = 0, settlePosts = 0, recoveryPosts = 0;
   const maintenanceIds = new Set<string>();
   const maintenanceReplies: { status: number; error: unknown }[] = [];
   const settlementResponseStatuses:number[]=[];
@@ -84,6 +85,10 @@ export async function ownedDataManager(options: {
   let originalInspection: { url: string; headers: Record<string, string> } | undefined;
   const keys = new Set<string>(), replies: { status: number; body: unknown }[] = [];
   app.addHook("onSend", async (request, reply, payload) => {
+    if (request.method === "POST" && request.url === "/executions/configuration-maintenance/recovery") {
+      recoveryPosts++;
+      if (options.loseRecoveryResponseOnce && recoveryPosts === 1 && reply.statusCode === 200) reply.raw.destroy();
+    }
     if (request.method === "POST" && /^\/executions\/configuration-maintenance\/[a-f0-9-]{36}\/settle$/.test(request.url)) {settlePosts++;settlementResponseStatuses.push(reply.statusCode);}
     if (request.method === "GET" && request.url.startsWith("/executions/configuration-maintenance/")) {
       fenceInspectionReplies.push({ status: reply.statusCode, body: typeof payload === "string" ? JSON.parse(payload) : null });
@@ -129,7 +134,7 @@ export async function ownedDataManager(options: {
     for (const connection of uncertainConnections) connection.release();
     uncertainConnections.clear(); journal.close(); closeControlInstallation(installation); stopped = true;
   };
-  return { baseUrl, token, store, receiver, pauseHttp, resumeHttp, get posts() { return posts; }, get preparePosts() { return preparePosts; }, get settlePosts() { return settlePosts; },
+  return { baseUrl, token, store, receiver, pauseHttp, resumeHttp, get posts() { return posts; }, get preparePosts() { return preparePosts; }, get settlePosts() { return settlePosts; }, get recoveryPosts() { return recoveryPosts; },
     prepareReplyEntered: prepareReplyEntered.promise, releasePrepareResponse: () => continuePrepareReply.resolve(),
     get settlementSqlIo() { return { commits: settlementCommits, updates: settlementUpdates }; },
     get settlementContainmentIo() { return { rollbacks: settlementRollbacks, terminated: terminatedSettlementSession }; },

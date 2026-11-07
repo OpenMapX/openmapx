@@ -5,6 +5,7 @@ import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
 import { executionRefSchema } from "../ops/execution-ref";
 import {
+  configurationPrepareNonAdmissionSchema,
   dataConfigurationFenceReceiptSchema,
   dataConfigurationFenceSettleSchema,
 } from "../services/data-manager/contracts/configuration-maintenance";
@@ -535,6 +536,11 @@ export const configurationIssuedPrepareRefusedProofSchema = z.strictObject({
 });
 export const configurationNoGuardEvidenceSchema = z.discriminatedUnion("kind", [
   z.strictObject({
+    kind: z.literal("receiver_not_admitted"),
+    issuerFreezeProofDigest: digest,
+    nonAdmission: configurationPrepareNonAdmissionSchema,
+  }),
+  z.strictObject({
     kind: z.literal("never_issued"),
     issuerFreezeProofDigest: digest,
     prepareReservationDigest: digest,
@@ -611,13 +617,20 @@ export function configurationIssuerUnusedSourceDigest(
 ): string {
   return settlementRecordDigest(
     configurationSettlementDomains.unusedIntent,
-    evidence.kind === "never_issued"
-      ? { issuerFreezeProofDigest: evidence.issuerFreezeProofDigest }
-      : {
+    evidence.kind === "receiver_not_admitted"
+      ? {
           issuerFreezeProofDigest: evidence.issuerFreezeProofDigest,
-          refusalProjectionDigest: evidence.refusalProjectionDigest,
-          dmUnusedConfirmationDigest: evidence.dmUnusedConfirmationDigest,
-        },
+          nonAdmissionDigest: createHash("sha256")
+            .update(canonicalJson(evidence.nonAdmission.payload))
+            .digest("hex"),
+        }
+      : evidence.kind === "never_issued"
+        ? { issuerFreezeProofDigest: evidence.issuerFreezeProofDigest }
+        : {
+            issuerFreezeProofDigest: evidence.issuerFreezeProofDigest,
+            refusalProjectionDigest: evidence.refusalProjectionDigest,
+            dmUnusedConfirmationDigest: evidence.dmUnusedConfirmationDigest,
+          },
   );
 }
 const pending = z.strictObject({
