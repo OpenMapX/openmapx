@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,7 +17,12 @@ const scriptPath = resolve(repositoryRoot, "apps/web/scripts/generate-license-no
 const outputPath = resolve(repositoryRoot, "apps/web/src/generated/open-source-licenses.json");
 
 it("generates the data-manager dependency and Foursquare data-source license notices", () => {
-  const original = existsSync(outputPath) ? readFileSync(outputPath, "utf8") : undefined;
+  let original: Buffer | undefined;
+  try {
+    original = readFileSync(outputPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
 
   try {
     execFileSync(
@@ -54,7 +59,7 @@ it("generates the data-manager dependency and Foursquare data-source license not
     expect(foursquare?.licenseText).toContain("Foursquare OS Places");
   } finally {
     if (original === undefined) {
-      if (existsSync(outputPath)) unlinkSync(outputPath);
-    } else writeFileSync(outputPath, original, "utf8");
+      rmSync(outputPath, { force: true });
+    } else writeFileSync(outputPath, original);
   }
 });

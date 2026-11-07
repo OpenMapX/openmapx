@@ -322,7 +322,9 @@ describe("release channel", () => {
     expect(parseReleaseManifest(JSON.stringify(forked), "registry.example.org/fork")).toEqual(
       forked,
     );
-    expect(() => parseReleaseManifest(JSON.stringify(forked))).toThrow(/ghcr\.io\/openmapx/);
+    expect(() => parseReleaseManifest(JSON.stringify(forked))).toThrow(
+      "not an approved immutable reference under ghcr.io/openmapx",
+    );
     expect(() =>
       parseReleaseManifest(JSON.stringify(manifest), "registry.example.org/fork"),
     ).toThrow(/not an approved/);

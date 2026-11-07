@@ -128,7 +128,7 @@ describe("check-data-flows", () => {
     const result = runScript("check-data-flows.ts");
     expect(result.status).toBe(1);
     expect(result.stdout).toMatch(/runtime-probe.*runtime/);
-    expect(result.stderr).toMatch(/undeclared\.org/);
+    expect(result.stderr).toContain("[undisclosed-host] undeclared.org");
   });
 
   it("checks media hosts of a runtime integration as server-only", () => {
@@ -138,7 +138,7 @@ describe("check-data-flows", () => {
       'export const photo = "https://cdn.photos.org/a.jpg";\n',
     );
     const result = runScript("check-data-flows.ts");
-    expect(result.stderr).toMatch(/media-exposure.*cdn\.photos\.org/);
+    expect(result.stderr).toContain("[media-exposure] cdn.photos.org");
   });
 });
 
