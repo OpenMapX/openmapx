@@ -503,3 +503,36 @@ it("keeps the map footer outlet while direct header and footer slots change", ()
   expect(view.container.querySelector('[data-map-footer-outlet="direct-chrome"]')).toBe(outlet);
   expect(view.container.querySelector('[slot="header"]')).toBeNull();
 });
+
+it("does not reverse an expansion when scrollend arrives before the snap observer", () => {
+  vi.stubGlobal("matchMedia", () => ({ matches: true }));
+  const onChange = vi.fn();
+  const view = (detent: "peek" | "full") => (
+    <MobileBottomSheet
+      id="late-snap"
+      zIndex={1}
+      detents={TWO_SNAP}
+      detent={detent}
+      onDetentChange={onChange}
+    >
+      <div>content</div>
+    </MobileBottomSheet>
+  );
+  const { container, rerender } = render(view("peek"));
+  const host = container.querySelector("bottom-sheet") as HTMLElement;
+  Object.defineProperties(host, {
+    clientHeight: { value: 480, configurable: true },
+    scrollHeight: { value: 960, configurable: true },
+    scrollTop: { value: 480, writable: true, configurable: true },
+    snapToPoint: { value: vi.fn(), configurable: true },
+  });
+  rerender(view("full"));
+  act(() => host.dispatchEvent(new Event("scrollend")));
+  expect(onChange).not.toHaveBeenCalled();
+  act(() =>
+    host.dispatchEvent(
+      new CustomEvent("snap-position-change", { detail: { snapIndex: 2, sheetState: "expanded" } }),
+    ),
+  );
+  expect(onChange).toHaveBeenCalledWith("full");
+});

@@ -6,7 +6,6 @@ import Typography from "@mui/material/Typography";
 import { formatDuration, useVehicleJourney } from "@openmapx/core";
 import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
-import type { ReactNode } from "react";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
@@ -55,13 +54,11 @@ export function liveArrivalDelayMs(
 export function TransitNavBottomBar({
   itinerary,
   currentLeg,
-  menuToggle,
 }: {
   itinerary: TripItinerary;
   currentLeg?: TripLeg;
   /** Trailing control that reveals the menu (a chevron on desktop; omitted on
    * mobile, where the sheet is dragged up instead). */
-  menuToggle?: ReactNode;
 }) {
   const t = useTranslations("navigation");
   const fmt = useDateTimeFormat();
@@ -116,7 +113,6 @@ export function TransitNavBottomBar({
           )}
         </Typography>
       </Box>
-      {menuToggle}
     </Box>
   );
 }

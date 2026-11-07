@@ -2,10 +2,18 @@
 
 import Box from "@mui/material/Box";
 import { useTranslations } from "next-intl";
-import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { DetentConfig } from "@/components/panels/sheet/detents";
 import { MobileBottomSheet } from "@/components/panels/sheet/MobileBottomSheet";
 import { useMapFooterBox } from "@/lib/mapFooterCenter";
+import { getMapObstructionInsets, subscribeMapObstructions } from "@/lib/mapObstructions";
 import { DEFAULT_FOLLOW_CAP_FRACTION, useWindowHeight } from "@/lib/mobilePanelHeight";
 
 /** Predict docking from the summary alone, not from the credits' current parent. */
@@ -19,6 +27,20 @@ export function navigationPeekFooterHeight(
   const followPx = Math.min(summaryPx, viewportPx * DEFAULT_FOLLOW_CAP_FRACTION);
   const mapBudget = Math.max(0, viewportPx - topClearance - followPx);
   return summaryPx > followPx + 1 || footerPx > mapBudget + 1 ? footerPx : 0;
+}
+
+const getTopInset = () => getMapObstructionInsets().top;
+const getServerTopInset = () => 0;
+
+export function navigationUsesCompactPeek(
+  requiredPx: number,
+  viewportPx: number,
+  topClearance: number,
+  safeTopPx: number,
+): boolean {
+  return (
+    viewportPx > 0 && requiredPx > Math.max(0, viewportPx - Math.max(topClearance, safeTopPx) - 8)
+  );
 }
 
 // Cap the expanded sheet so the maneuver banner up top stays visible.
@@ -61,13 +83,20 @@ export function NavSwipeSheet({
   const [chromePx, setChromePx] = useState(0);
   const safeBottomRef = useRef<HTMLDivElement | null>(null);
   const [safeBottomPx, setSafeBottomPx] = useState(0);
+  const [safeTopPx, setSafeTopPx] = useState(0);
+  const mapTop = useSyncExternalStore(subscribeMapObstructions, getTopInset, getServerTopInset);
   const mapFooter = useMapFooterBox();
   const pinned = toolbar != null || footer != null;
   useLayoutEffect(() => {
     if (!pinned) return;
     const measure = () => {
       setChromePx((toolbarRef.current?.offsetHeight ?? 0) + (footerRef.current?.offsetHeight ?? 0));
-      setSafeBottomPx(safeBottomRef.current?.offsetHeight ?? 0);
+      const probe = safeBottomRef.current;
+      if (probe) {
+        const style = getComputedStyle(probe);
+        setSafeBottomPx(Number.parseFloat(style.height) || 0);
+        setSafeTopPx(Number.parseFloat(style.paddingTop) || 0);
+      }
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -108,10 +137,21 @@ export function NavSwipeSheet({
     ? navigationPeekFooterHeight(
         headerPx + chromePx + safeBottomPx,
         viewportH,
-        topClearance,
+        Math.max(topClearance, mapTop),
         mapFooter.height,
       )
     : 0;
+  // When the whole summary cannot fit, use a compact route-strip peek.
+  // Expanding restores the summary in the scrollable body, so its actions stay reachable.
+  const compactPeek =
+    pinned &&
+    navigationUsesCompactPeek(
+      headerPx + chromePx + safeBottomPx + peekFooterPx,
+      viewportH,
+      topClearance,
+      safeTopPx,
+    );
+  const peekContentPx = compactPeek ? chromePx : headerPx + chromePx + peekFooterPx;
   const expandedContentPx = Math.min(
     headerPx + menuPx + chromePx + (pinned ? mapFooter.height : 0),
     cap,
@@ -126,9 +166,9 @@ export function NavSwipeSheet({
         : pinned
           ? `min(calc(${Math.round(expandedContentPx)}px + var(--omx-safe-bottom)), calc(100dvh - var(--omx-safe-top) - 8px))`
           : `calc(${Math.round(expandedContentPx)}px + var(--omx-safe-bottom))`;
-    const peek = `calc(${Math.round(headerPx + chromePx + peekFooterPx)}px + var(--omx-safe-bottom))`;
+    const peek = `calc(${Math.round(peekContentPx)}px + var(--omx-safe-bottom))`;
     return { peek, maxHeight, initial: "peek" };
-  }, [headerPx, chromePx, peekFooterPx, expandedContentPx, topClearance, pinned]);
+  }, [peekContentPx, expandedContentPx, topClearance, pinned]);
 
   return (
     <MobileBottomSheet
@@ -152,42 +192,50 @@ export function NavSwipeSheet({
             position: "absolute",
             width: 0,
             height: "var(--omx-safe-bottom)",
+            paddingTop: "var(--omx-safe-top)",
+            boxSizing: "content-box",
             pointerEvents: "none",
             visibility: "hidden",
           }}
         />
       )}
-      <Box ref={headerRef}>
-        {!pinned && (
-          <Box
-            component="button"
-            type="button"
-            onClick={() => onExpandedChange(!expanded)}
-            aria-label={t("resizePanel")}
-            aria-expanded={expanded}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: "100%",
-              minHeight: 44,
-              border: 0,
-              bgcolor: "transparent",
-              color: "inherit",
-              cursor: "pointer",
-              p: 0,
-              "&:focus-visible": {
-                outline: "2px solid",
-                outlineColor: "primary.main",
-                outlineOffset: -2,
-                borderRadius: 2,
-              },
-            }}
-          >
-            <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: "action.disabled" }} />
-          </Box>
-        )}
-        {header}
+      <Box
+        aria-hidden={compactPeek && !expanded ? true : undefined}
+        inert={compactPeek && !expanded ? true : undefined}
+        sx={compactPeek && !expanded ? { maxHeight: 0, overflow: "hidden" } : undefined}
+      >
+        <Box ref={headerRef}>
+          {!pinned && (
+            <Box
+              component="button"
+              type="button"
+              onClick={() => onExpandedChange(!expanded)}
+              aria-label={t("resizePanel")}
+              aria-expanded={expanded}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "100%",
+                minHeight: 44,
+                border: 0,
+                bgcolor: "transparent",
+                color: "inherit",
+                cursor: "pointer",
+                p: 0,
+                "&:focus-visible": {
+                  outline: "2px solid",
+                  outlineColor: "primary.main",
+                  outlineOffset: -2,
+                  borderRadius: 2,
+                },
+              }}
+            >
+              <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: "action.disabled" }} />
+            </Box>
+          )}
+          {header}
+        </Box>
       </Box>
       {!pinned && !expanded && (
         <Box

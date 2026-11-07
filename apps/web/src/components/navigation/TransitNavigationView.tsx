@@ -72,11 +72,18 @@ export function TransitNavigationView() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  const legs = itinerary?.legs ?? [];
+  const currentLegIndex = Math.max(
+    0,
+    Math.min(transitProgress?.currentLegIndex ?? 0, legs.length - 1),
+  );
+  const currentLeg = legs[currentLegIndex] as TripLeg | undefined;
+
   // This view is mounted for the whole session and renders nothing until a
   // transit trip runs, so an idle mount must not reserve the column either.
   const bannerClearance = useMapObstructionExtent("transit-nav-banner");
   const [bannerEl, setBannerEl] = useState<HTMLDivElement | null>(null);
-  const hasWalkBanner = itinerary?.legs[transitProgress?.currentLegIndex ?? 0]?.mode === "walking";
+  const hasWalkBanner = currentLeg?.mode === "walking";
   useNavChromeObstructions("transit", {
     isMobile,
     arrived: !active || !itinerary,
@@ -93,9 +100,6 @@ export function TransitNavigationView() {
 
   if (status === "idle" || kind !== "transit" || !itinerary) return null;
 
-  const legs = itinerary.legs;
-  const currentLegIndex = Math.min(transitProgress?.currentLegIndex ?? 0, legs.length - 1);
-  const currentLeg = legs[currentLegIndex] as TripLeg | undefined;
   const transfer = nextTransferFor(legs, currentLegIndex);
   // A walk leg with step-level directions gets turn-by-turn guidance; other legs
   // (and detail-less walks) use the standard leg banner.
@@ -170,7 +174,11 @@ export function TransitNavigationView() {
     </>
   );
   const details = (
-    <Box id="transit-journey-details">
+    <Box
+      id="transit-journey-details"
+      inert={!expanded || undefined}
+      aria-hidden={!expanded || undefined}
+    >
       <TransitJourneySheet
         itinerary={itinerary}
         currentLegIndex={currentLegIndex}
@@ -308,7 +316,7 @@ export function TransitNavigationView() {
                   }}
                 >
                   {summary}
-                  <Collapse in={menuOpen} timeout={reduceMotion ? 0 : "auto"} unmountOnExit>
+                  <Collapse in={menuOpen} timeout={reduceMotion ? 0 : "auto"}>
                     {details}
                   </Collapse>
                 </Box>

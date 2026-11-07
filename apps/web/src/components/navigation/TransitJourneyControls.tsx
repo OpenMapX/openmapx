@@ -149,32 +149,39 @@ export function TransitJourneyControls({
             >
               {ride.from.name}
             </Typography>
-            {
-              <Box
-                sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 0.5 }}
-              >
-                {ride.route ? (
-                  <RouteBadge
-                    shortName={ride.route.shortName || ride.route.longName || ""}
-                    mode={ride.mode}
-                    color={ride.route.color}
-                    textColor={ride.route.textColor}
-                  />
-                ) : (
-                  <DirectionsTransitIcon sx={{ fontSize: 20 }} />
-                )}
-                <Typography variant="body2" sx={{ minWidth: 0, overflowWrap: "anywhere" }}>
-                  {ride.headsign ?? ride.to.name}
+            <Box
+              sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 0.5 }}
+            >
+              {ride.route ? (
+                <RouteBadge
+                  shortName={ride.route.shortName || ride.route.longName || ""}
+                  mode={ride.mode}
+                  color={ride.route.color}
+                  textColor={ride.route.textColor}
+                />
+              ) : (
+                <DirectionsTransitIcon sx={{ fontSize: 20 }} />
+              )}
+              <Typography variant="body2" sx={{ minWidth: 0, overflowWrap: "anywhere" }}>
+                {ride.headsign ?? ride.to.name}
+              </Typography>
+              {boarding?.code ? (
+                <PlatformBadge
+                  code={boarding.code}
+                  scheduledCode={boarding.scheduledCode}
+                  changed={boarding.changed}
+                />
+              ) : ride.from.stopCode ? (
+                <Typography variant="caption" color="text.secondary">
+                  {t("stopCode", { code: ride.from.stopCode })}
                 </Typography>
-                {boarding?.code && (
-                  <PlatformBadge
-                    code={boarding.code}
-                    scheduledCode={boarding.scheduledCode}
-                    changed={boarding.changed}
-                  />
-                )}
-              </Box>
-            }
+              ) : null}
+              {ride.from.level != null && ride.from.level !== 0 && (
+                <Typography variant="caption" color="text.secondary">
+                  {t("levelShort", { level: ride.from.level })}
+                </Typography>
+              )}
+            </Box>
           </Box>
           <Box sx={{ textAlign: "right", flexShrink: 0, maxWidth: 120 }}>
             {Number.isFinite(departure) ? (

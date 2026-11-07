@@ -134,7 +134,7 @@
     "delayMinutes": "+{minutes} min",
     "overview": "Route overview",
     "moreJourneyLegs": "+{count}",
-    "moreTransitAlerts": "{count} more alerts",
+    "moreTransitAlerts": "{count, plural, one {# more alert} other {# more alerts}}",
     "moreOptions": "More options",
     "resizePanel": "Resize navigation panel",
     "menu": {

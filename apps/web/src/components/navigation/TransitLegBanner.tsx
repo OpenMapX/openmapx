@@ -136,7 +136,6 @@ export function TransitLegBanner({
 
   const heading = (
     <Box sx={{ minWidth: 0, flex: 1 }}>
-      {" "}
       {isTransitLeg && !departed && !leg.cancelled && (
         <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.25 }}>
           {t("boardLabel")}
@@ -252,6 +251,9 @@ export function TransitLegBanner({
         <Typography variant="body2" color="text.secondary" sx={{ px: 2, pb: 1.5 }}>
           {t("alightAtCount", { place: leg.to.name, count: stopsRemaining })}
         </Typography>
+      )}
+      {!showInstruction && trailing && (
+        <Box sx={{ px: 2, pt: 1, display: "flex", justifyContent: "flex-end" }}>{trailing}</Box>
       )}
       {!showInstruction && leg.realtime !== false && (
         <Box sx={{ px: 2, pt: 1, "&:empty": { display: "none" } }}>

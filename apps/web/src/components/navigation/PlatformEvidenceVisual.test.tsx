@@ -93,6 +93,7 @@ const itinerary: TripItinerary = {
   source: "transitous",
 };
 it("renders comparable RE1 platform states from the production banner and journey sheet", () => {
+  // biome-ignore lint/suspicious/noUndeclaredEnvVars: Optional export for direct Vitest runs, outside cached Turbo outputs.
   const visualDirectory = process.env.PLATFORM_VISUAL_DIR;
   for (const state of ["before", "after", "realtime"] as const) {
     const stops = structuredClone(base);
@@ -161,6 +162,7 @@ it("renders comparable RE1 platform states from the production banner and journe
 });
 
 it("renders captured boarding guidance while walking toward Horrem", () => {
+  // biome-ignore lint/suspicious/noUndeclaredEnvVars: Optional export for direct Vitest runs, outside cached Turbo outputs.
   const visualDirectory = process.env.PLATFORM_VISUAL_DIR;
   for (const state of ["before", "after"] as const) {
     const ride: TripLeg = {

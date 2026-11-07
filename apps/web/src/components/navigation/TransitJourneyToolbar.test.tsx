@@ -33,6 +33,9 @@ it("exposes one details control and summarizes current and remaining services", 
   );
   const button = screen.getByRole("button", { name: "navigation.resizePanel" });
   expect(button).toHaveAttribute("aria-expanded", "false");
+  expect(document.getElementById(button.getAttribute("aria-describedby") ?? "")).toHaveTextContent(
+    /21.*51/,
+  );
   expect(screen.queryByText("12")).toBeNull();
   expect(screen.getByText("21")).toBeInTheDocument();
   expect(screen.getByText("51")).toBeInTheDocument();

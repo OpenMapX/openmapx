@@ -174,7 +174,9 @@ A timetable never moves your dot, boards you, or finishes a ride.
 
 The route strip opens the journey sheet for the service's destination sign,
 vehicle and operator details, and stop times. End and the arrival summary stay
-visible while the details scroll. Stop-count controls reveal intermediate or
+visible while the details scroll. When long text leaves too little room for a
+summary, the compact route strip expands to show the boarding controls and details.
+Stop-count controls reveal intermediate or
 previous stops. The boarding, next and alighting stops stay listed, along with
 skipped stops and service notices. When riding progress is uncertain, upcoming
 stops remain expanded and the summary labels its next stop as last known.

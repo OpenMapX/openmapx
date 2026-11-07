@@ -2,7 +2,7 @@
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
-import type { TransitProgress } from "@openmapx/core";
+import { type TransitProgress, useNavigationStore } from "@openmapx/core";
 import { changedFromPlatform, collectActiveAlerts } from "@openmapx/core/navigation";
 import type { ServiceAlert, TripItinerary } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
@@ -77,18 +77,18 @@ export function TransitAlertBanner({
   onExpand?: () => void;
 }) {
   const t = useTranslations("navigation");
+  const voiceEnabled = useNavigationStore((s) => s.voiceEnabled);
   const cards = collectTransitNavigationAlerts(itinerary, currentLegIndex, transitProgress, t);
   const shown = expanded ? cards : cards.slice(0, 1);
   if (!shown.length) return null;
   return (
-    <Box>
+    <Box role={!voiceEnabled && !expanded ? "status" : undefined}>
       {shown.map((alert) => {
         const config = SEVERITY_CONFIG[alert.severity];
         const Icon = config.icon;
         return (
           <Box
             key={alert.id}
-            role="status"
             sx={{
               display: "flex",
               alignItems: "flex-start",

@@ -87,7 +87,7 @@ export function TransitGuidanceCues({
 
   // Speak the boarding cue once when a transit leg becomes current, before you've
   // boarded (it's moot once under way).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: announce once per leg (keyed on tripId).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: announce once per current leg, including rides without trip IDs.
   useEffect(() => {
     if (
       !leg ||
@@ -105,7 +105,7 @@ export function TransitGuidanceCues({
         ? t("voiceBoardPlatform", { line, destination: leg.to.name, platform: boardingPlatform })
         : t("voiceBoard", { line, destination: leg.to.name }),
     );
-  }, [leg?.tripId, active]);
+  }, [leg?.tripId, legIndex, active]);
 
   const topAlert = collectTransitNavigationAlerts(itinerary, legIndex, transitProgress, t)[0];
   // biome-ignore lint/correctness/useExhaustiveDependencies: the session ledger owns each alert identity.

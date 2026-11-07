@@ -157,3 +157,28 @@ it.each(["native", "inactive"])("leaves cues to the session owner when %s", (mod
   expect(calls.warn).not.toHaveBeenCalled();
   expect(calls.speak).not.toHaveBeenCalled();
 });
+
+it("announces boarding after a walk even when both legs have no trip ID", () => {
+  const noIds = {
+    ...itinerary,
+    legs: [
+      { ...leg, mode: "walking" as const, route: undefined, tripId: undefined },
+      { ...leg, tripId: undefined },
+    ],
+  };
+  const view = render(
+    <TransitGuidanceCues
+      itinerary={noIds}
+      legIndex={0}
+      transitProgress={{ ...riding, phase: "walking" }}
+    />,
+  );
+  view.rerender(
+    <TransitGuidanceCues
+      itinerary={noIds}
+      legIndex={1}
+      transitProgress={{ ...riding, currentLegIndex: 1, phase: "waiting-to-board" }}
+    />,
+  );
+  expect(calls.speak).toHaveBeenCalledWith("navigation.voiceBoard");
+});

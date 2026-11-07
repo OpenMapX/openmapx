@@ -10,6 +10,7 @@ import ButtonBase from "@mui/material/ButtonBase";
 import Typography from "@mui/material/Typography";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
+import { useId } from "react";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 
 /** One details control, with a bounded preview of the remaining selected journey. */
@@ -27,6 +28,7 @@ export function TransitJourneyToolbar({
   mobile?: boolean;
 }) {
   const t = useTranslations("navigation");
+  const previewId = useId();
   const remaining = legs.slice(Math.max(0, currentLegIndex));
   const preview = remaining.slice(0, 3);
   return (
@@ -34,6 +36,7 @@ export function TransitJourneyToolbar({
       type="button"
       onClick={onToggle}
       aria-label={t(mobile ? "resizePanel" : "moreOptions")}
+      aria-describedby={previewId}
       aria-expanded={expanded}
       aria-controls="transit-journey-details"
       sx={{
@@ -70,6 +73,7 @@ export function TransitJourneyToolbar({
       )}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, minHeight: 32 }}>
         <Box
+          id={previewId}
           sx={{
             display: "flex",
             alignItems: "center",

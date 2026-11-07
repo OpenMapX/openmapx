@@ -258,11 +258,22 @@ export function MobileBottomSheet({
 
   const settleControlledTransition = useCallback(() => {
     const requested = pendingDetentRef.current;
+    // Chrome can dispatch scrollend before the library's IntersectionObserver
+    // reports the full snap. Reaching the physical end is not an interruption.
+    // Keep the request until that observer catches up, rather than reversing it.
+    if (
+      requested === "full" &&
+      host &&
+      host.clientHeight > 0 &&
+      host.scrollHeight > host.clientHeight &&
+      host.scrollHeight - host.clientHeight - host.scrollTop <= 2
+    )
+      return;
     pendingDetentRef.current = null;
     if (requested != null && requested !== detentRef.current) {
       onDetentChangeRef.current?.(detentRef.current);
     }
-  }, []);
+  }, [host]);
 
   // The React wrapper only spreads props onto the custom element; it wires no
   // events, so the listener has to be attached imperatively.
