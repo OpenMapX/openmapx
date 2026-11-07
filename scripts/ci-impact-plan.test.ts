@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createImpactPlan, verifyResults } from "./ci-impact-plan.mjs";
+import { createImpactPlan, verifyMetadataResults, verifyResults } from "./ci-impact-plan.mjs";
 
 const sha = "a".repeat(40);
 const base = "b".repeat(40);
@@ -10,6 +10,15 @@ const pr = (paths: string[], extra = {}) =>
     head: sha,
     base,
     paths,
+    validationSource: {
+      version: 1,
+      head: sha,
+      runId: 100,
+      attempt: 1,
+      workflowId: 55,
+      target: "c".repeat(64),
+      pullRequest: 12,
+    },
     metadataGateReady: true,
     metadataEditKnown: true,
     approvedScopes: ["docs", "web", "mobile"],
@@ -29,6 +38,13 @@ describe("CI applicability and required result enforcement", () => {
     expect(pr(["packages/core/src/index.ts"], { action: "edited" }).code).toBe(false);
     expect(pr([], { action: "edited", metadataGateReady: false }).code).toBe(true);
     expect(pr([], { action: "edited", baseChanged: true }).code).toBe(true);
+  });
+  it("runs full validation when metadata has no successful reusable code proof", () => {
+    for (const validationSource of [null, {}, { version: 1, head: "c".repeat(40) }]) {
+      const plan = pr(["docs/docs/page.md"], { action: "edited", validationSource });
+      expect(plan.code).toBe(true);
+      expect(Object.values(plan.jobs).every(Boolean)).toBe(true);
+    }
   });
   it("selects only docs validation for ordinary site prose", () => {
     const plan = pr(["docs/docs/developer/development-setup.md"]);
@@ -155,4 +171,26 @@ it("does not let a rerun of superseded main cancel current validation", () => {
   expect(createImpactPlan({ event: "push", head: sha, paths: [], mainCurrent: false }).code).toBe(
     false,
   );
+});
+
+describe("executing metadata gate", () => {
+  it("requires valid source proof and exact skipped dependencies instead of a green no-op", () => {
+    const plan = pr(["packages/core/src/index.ts"], { action: "edited" });
+    const needs = Object.fromEntries(
+      ["select", ...Object.keys(plan.jobs), "docker-changes", "docker-build"].map((id) => [
+        id,
+        { result: id === "select" ? "success" : "skipped" },
+      ]),
+    );
+    expect(() => verifyMetadataResults(plan, needs)).not.toThrow();
+    expect(() => verifyMetadataResults({ ...plan, validationSource: null }, needs)).toThrow();
+    for (const result of ["failure", "cancelled", "success", undefined])
+      expect(() => verifyMetadataResults(plan, { ...needs, lint: { result } })).toThrow();
+    expect(() =>
+      verifyMetadataResults(plan, { ...needs, select: { result: "failure" } }),
+    ).toThrow();
+    expect(() =>
+      verifyMetadataResults(plan, { ...needs, unknown: { result: "skipped" } }),
+    ).toThrow();
+  });
 });

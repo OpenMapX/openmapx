@@ -1,8 +1,17 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { codeReceipt } from "./ci-code-evidence.mjs";
 
 const launcher = resolve(import.meta.dirname, "ci-impact-plan.mjs");
 
@@ -36,7 +45,12 @@ function fixture(approvedScopes = ["docs", "web", "mobile"]) {
   git("init", "--quiet");
   write("README.md", "fixture");
   write("scripts/ci-impact-rollout.json", JSON.stringify({ version: 1, approvedScopes }));
-  write(".gitignore", "event.json\noutput.txt\n");
+  write(".gitignore", "event.json\noutput.txt\nbin/\nprovider.json\n");
+  write(
+    "bin/gh",
+    `#!${process.execPath}\nconst fs=require('node:fs');try{const data=JSON.parse(fs.readFileSync(${JSON.stringify(join(root, "provider.json"))},'utf8'));const path=process.argv.at(-1).split('?')[0];if(!data[path])process.exit(1);process.stdout.write(JSON.stringify(process.argv.includes('--slurp')?[data[path]]:data[path]));}catch{process.exit(1)}`,
+  );
+  chmodSync(join(root, "bin/gh"), 0o755);
   const base = commit();
   git("update-ref", "refs/remotes/origin/main", base);
   const select = (
@@ -53,7 +67,11 @@ function fixture(approvedScopes = ["docs", "web", "mobile"]) {
       JSON.stringify({
         action,
         changes,
-        pull_request: { head: { sha: head }, base: { sha: requestedBase, ref: baseRef } },
+        pull_request: {
+          number: 12,
+          head: { sha: head },
+          base: { sha: requestedBase, ref: baseRef, repo: { id: 66 } },
+        },
       }),
     );
     writeFileSync(output, "");
@@ -62,6 +80,11 @@ function fixture(approvedScopes = ["docs", "web", "mobile"]) {
       encoding: "utf8",
       env: {
         ...process.env,
+        GITHUB_ACTIONS: "false",
+        GITHUB_REPOSITORY: "fixture/repo",
+        GITHUB_RUN_ID: "500",
+        GITHUB_RUN_ATTEMPT: "1",
+        PATH: `${join(root, "bin")}:${process.env.PATH}`,
         GITHUB_EVENT_NAME: "pull_request",
         GITHUB_EVENT_PATH: event,
         GITHUB_OUTPUT: output,
@@ -76,6 +99,105 @@ function fixture(approvedScopes = ["docs", "web", "mobile"]) {
     );
     return { result, plan: entries.plan ? JSON.parse(entries.plan) : null, entries };
   };
+  const provider = (head: string, extra = {}) => {
+    const run = {
+      id: 100,
+      run_number: 100,
+      run_started_at: "2026-11-07T00:00:00Z",
+      repository: { id: 66 },
+      workflow_id: 55,
+      event: "pull_request",
+      path: ".github/workflows/ci.yml",
+      head_sha: head,
+      run_attempt: 1,
+      status: "completed",
+      conclusion: "success",
+      ...extra,
+    };
+    write(
+      "provider.json",
+      JSON.stringify({
+        "repos/fixture/repo/pulls/12": {
+          number: 12,
+          state: "open",
+          head: { sha: head },
+          base: { ref: "main", repo: { id: 66 } },
+        },
+        "repos/fixture/repo/actions/runs/500": { ...run, id: 500 },
+        "repos/fixture/repo/actions/runs/100": run,
+        "repos/fixture/repo/actions/workflows/55/runs": { total_count: 1, workflow_runs: [run] },
+        "repos/fixture/repo/actions/runs/100/jobs": {
+          total_count: 3,
+          jobs: [
+            {
+              name: "select required validation",
+              run_id: 100,
+              run_attempt: 1,
+              head_sha: head,
+              status: "completed",
+              conclusion: "success",
+              steps: [
+                {
+                  name: `CI source v1 ${JSON.stringify(codeReceipt({ code: true, head, number: 12, baseRepositoryId: 66, baseRef: "main", runId: 100, attempt: 1 }))}`,
+                  status: "completed",
+                  conclusion: "success",
+                },
+              ],
+            },
+            {
+              name: "lint",
+              run_id: 100,
+              run_attempt: 1,
+              head_sha: head,
+              status: "completed",
+              conclusion: "success",
+            },
+            {
+              name: "lint / types / test",
+              run_id: 100,
+              run_attempt: 1,
+              head_sha: head,
+              status: "completed",
+              conclusion: "success",
+            },
+          ],
+        },
+      }),
+    );
+  };
+  const verify = (plan: { head: string; base: string }) =>
+    spawnSync(process.execPath, [launcher, "verify-reuse"], {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${join(root, "bin")}:${process.env.PATH}`,
+        GITHUB_EVENT_PATH: join(root, "event.json"),
+        GITHUB_REPOSITORY: "fixture/repo",
+        GITHUB_RUN_ID: "500",
+        CI_PLAN: JSON.stringify(plan),
+        CI_HEAD: plan.head,
+        CI_BASE: plan.base,
+        CI_NEEDS: JSON.stringify(
+          Object.fromEntries(
+            [
+              "select",
+              "lint",
+              "types",
+              "test-node",
+              "test-linux-user",
+              "test-agent-mounts",
+              "test-web",
+              "mobile",
+              "database",
+              "build",
+              "docker-changes",
+              "docker-build",
+            ].map((id) => [id, { result: id === "select" ? "success" : "skipped" }]),
+          ),
+        ),
+      },
+    });
   return {
     root,
     git,
@@ -83,6 +205,8 @@ function fixture(approvedScopes = ["docs", "web", "mobile"]) {
     commit,
     base,
     select,
+    provider,
+    verify,
     close: () => rmSync(root, { recursive: true, force: true }),
   };
 }
@@ -151,9 +275,36 @@ describe("complete immutable Git diff selection", () => {
       expect(f.select(head, "edited", { body: { from: "old" } }, f.base, "stack").plan.code).toBe(
         true,
       );
-      expect(f.select(head, "edited", { body: { from: "old" } }).plan.code).toBe(false);
+      expect(f.select(head, "edited", { body: { from: "old" } }).plan.code).toBe(true);
+      f.provider(head);
+      const reused = f.select(head, "edited", { body: { from: "old" } });
+      expect(reused.plan.code).toBe(false);
+      expect(f.verify(reused.plan).status).toBe(0);
+      f.provider(head, { status: "in_progress", conclusion: null });
+      expect(f.verify(reused.plan).status).toBe(1);
+      expect(f.select(head, "edited", { body: { from: "old" } }).plan.code).toBe(true);
+      f.provider(head, { conclusion: "failure" });
+      expect(f.verify(reused.plan).status).toBe(1);
+      expect(f.select(head, "edited", { body: { from: "old" } }).plan.code).toBe(true);
+      // A source can be rerun after the run inventory was read. Its fresh
+      // endpoint must override a stale successful list entry and job receipt.
+      for (const changed of [{ status: "in_progress", conclusion: null }, { run_attempt: 2 }]) {
+        f.provider(head);
+        const stale = JSON.parse(readFileSync(join(f.root, "provider.json"), "utf8"));
+        Object.assign(stale["repos/fixture/repo/actions/runs/100"], changed);
+        f.write("provider.json", JSON.stringify(stale));
+        expect(f.verify(reused.plan).status).toBe(1);
+        expect(f.select(head, "edited", { body: { from: "old" } }).plan.code).toBe(true);
+      }
+      f.provider(head);
+      const inventory = JSON.parse(readFileSync(join(f.root, "provider.json"), "utf8"));
+      inventory["repos/fixture/repo/actions/workflows/55/runs"].total_count = 2;
+      f.write("provider.json", JSON.stringify(inventory));
+      expect(f.select(head, "edited", { body: { from: "old" } }).plan.code).toBe(true);
+      expect(f.verify(reused.plan).status).toBe(1);
       f.write("docs/docs/new.md", "prose");
       const candidate = f.commit();
+      f.provider(candidate);
       expect(f.select(candidate, "edited", { body: { from: "old" } }, head).plan.code).toBe(false);
       expect(f.select(head, "edited", { base: { ref: { from: "main" } } }).plan.scope).toBe("full");
     } finally {

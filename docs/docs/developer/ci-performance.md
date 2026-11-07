@@ -302,21 +302,47 @@ Main push/schedule/manual events run the full union.
 The aggregate requires positive success for each selected job and an expected skip
 only for explicit inapplicability; malformed selection receipts cannot pass.
 
-The already-required title context also enforces current release classification.
-Its privileged workflow checks out trusted default-branch code only, disables
-install scripts, reads candidate Git objects as data and rejects head/base/body
-races. CI retains its original lint validation while old target definitions roll
-forward. A stacked PR target must have the same metadata workflow definition as
-trusted main before metadata-only skipping is allowed. Once trusted main contains
-this metadata gate, body/title events do not
-restart heavy work. Their aggregate has a different, non-required name and skips;
-it cannot replace failed code validation with a successful skipped required check.
-No new required status or live ruleset transition is needed. Base retargets and
-code updates still produce full applicable code evidence.
-Metadata CI runs do not cancel each other; the required metadata workflow is
-serialized separately so an older racing failure cannot land after its successor.
-Selector failure still fails closed under the required code context: without its
-receipt, CI cannot safely prove that the trusted metadata gate is deployed.
+The already-required title context enforces current release classification. Its
+privileged workflow executes trusted default-branch code only, disables install
+scripts, reads candidate Git objects as data and rejects metadata identity races.
+This check still runs on every body/title edit; successful code evidence never
+substitutes for metadata validation.
+
+Every PR CI suite now executes the fixed `lint / types / test` aggregate, including
+metadata-only runs. Never rename or skip it to preserve an older green result.
+PR #790 demonstrated why: code run
+[42299510168](https://github.com/OpenMapX/openmapx/actions/runs/42299510168) and metadata
+run [42301703153](https://github.com/OpenMapX/openmapx/actions/runs/42301703153) shared
+head `fbe5fcf405d3b4df0ae595d772a9b436589614ca` and workflow ID `269416138`, but used
+check suites `114612290559` and `114618154255`. The first had a successful aggregate;
+the second had only a skipped, unevaluated name expression. Rule-suite audit
+`4962325353` reported the required aggregate as expected despite the green rollup.
+The normalized API receipts are in `scripts/__fixtures__/required-check-pr790.json`.
+This establishes the failure on that revision; a green rollup alone is not a
+ruleset verdict. See GitHub's [check-suite model](https://docs.github.com/en/rest/guides/using-the-rest-api-to-interact-with-checks)
+and [required-check troubleshooting](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks).
+
+After the trusted metadata gate is deployed, a body/title edit may avoid heavy
+jobs only when GitHub's read-only Actions API proves a completed successful code
+run for the same PR, head and base repository/ref. Selection records a compact
+`CI source v1` binding in a provider-owned step name. Reuse requires the latest
+code run and its current attempt's successful aggregate; metadata gates cannot
+become transitive sources of code evidence. Complete pagination, source binding,
+workflow identity and live PR identity are checked. The aggregate independently
+rechecks evidence before reporting success, and requires every heavy job to have
+skipped. Failed, unfinished, missing, unbound legacy or ambiguous evidence selects
+full validation on an edit, never an optimistic green or a narrowed leaf class.
+Thus an edit during unfinished code validation can cost an additional full run;
+this conservative fallback avoids a long-lived polling runner or stale green gate.
+An API failure or changed evidence at final recheck fails the aggregate closed.
+
+The target binding deliberately tracks repository/ref, not the moving base tip;
+ordinary base advancement retains the repository's existing up-to-date policy.
+Base retargets and code updates still validate code. Existing runs without source
+bindings need one fresh full validation before reuse. Stacked targets must have
+the trusted metadata workflow definition, otherwise full edited-event validation
+remains. No ruleset, required context, app binding, write permission or administrator
+bypass changes are needed. Metadata CI does not cancel code work.
 
 Main runs no longer hold one workflow-wide slot through tests and publication.
 The selector first rejects a superseded main source. Only first-attempt main
@@ -327,9 +353,8 @@ PR job keys are also run/attempt-specific; only code workflow concurrency cancel
 obsolete PR code runs. Publication remains a non-cancelling serialized
 trusted `workflow_call`, admitted only after its exact source's successful gate.
 All existing source/provenance/scan/privacy/coherent-pointer guards remain.
-A superseded selection may finish its workflow without code work; its distinct
-non-required context and selection reason are not evidence of a successful code
-gate. Do not count such intermediate commits as individually validated.
+A superseded main selection may finish without code work; its selection reason
+and skipped aggregate are not evidence of successful code validation. Do not count such intermediate commits as individually validated.
 GitHub orders concurrency requests by arrival rather than commit topology. A
 delayed older first-attempt job can still supersede newer validation; the source
 guard reduces this window but does not prove scheduler ordering. Publication's

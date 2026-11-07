@@ -4,6 +4,12 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFileSync, readFileSync } from "node:fs";
 
+import {
+  codeReceipt,
+  resolveCodeEvidence,
+  sourceFromEvent,
+  targetDigest,
+} from "./ci-code-evidence.mjs";
 import { databaseMatrix } from "./database-test-shards.mjs";
 
 export const validationJobs = [
@@ -40,21 +46,24 @@ export function createImpactPlan({
   approvedScopes = [],
   closedPr = false,
   rolloutCommit = "",
+  validationSource = null,
 }) {
   if (!shaPattern.test(head) || (event === "pull_request" && !shaPattern.test(base)))
     throw new Error("CI selection requires immutable head/base commit identities");
   const jobs = full();
   // Unknown lifecycle fields run full validation, never infer a metadata edit.
-  const metadataOnly =
+  const metadataCandidate =
     event === "pull_request" &&
     action === "edited" &&
     !baseChanged &&
     metadataGateReady &&
     metadataEditKnown;
+  const metadataOnly = metadataCandidate && validCodeEvidence(validationSource, head);
   let scope = "full";
   if (
     event === "pull_request" &&
     !metadataOnly &&
+    action !== "edited" &&
     !baseChanged &&
     ["opened", "synchronize", "reopened", "edited"].includes(action) &&
     pathsComplete &&
@@ -102,9 +111,12 @@ export function createImpactPlan({
         ? "superseded-main"
         : metadataOnly
           ? "metadata-only"
-          : "code",
+          : metadataCandidate
+            ? "metadata-requires-validation"
+            : "code",
     scope,
     proposedScope,
+    validationSource: metadataOnly ? validationSource : null,
     rolloutCommit,
     changedPathCount: paths?.length ?? 0,
     changedPathDigest: createHash("sha256")
@@ -112,6 +124,34 @@ export function createImpactPlan({
       .digest("hex"),
     jobs,
   };
+}
+
+function validCodeEvidence(value, head) {
+  return (
+    value?.version === 1 &&
+    value.head === head &&
+    /^[a-f0-9]{64}$/.test(value.target) &&
+    [value.runId, value.attempt, value.workflowId, value.pullRequest].every(
+      (id) => Number.isSafeInteger(id) && id > 0,
+    )
+  );
+}
+
+export function verifyMetadataResults(plan, needs) {
+  if (
+    plan?.version !== 1 ||
+    plan.event !== "pull_request" ||
+    plan.code !== false ||
+    plan.reason !== "metadata-only" ||
+    !validCodeEvidence(plan.validationSource, plan.head) ||
+    needs.select?.result !== "success"
+  )
+    throw Error("Missing metadata validation receipt");
+  const expected = ["select", ...validationJobs, "docker-changes", "docker-build"];
+  if (JSON.stringify(Object.keys(needs).sort()) !== JSON.stringify(expected.sort()))
+    throw Error("Unknown or missing metadata gate dependency");
+  for (const id of expected.filter((id) => id !== "select"))
+    if (needs[id].result !== "skipped") throw Error(`${id}: metadata validation must be skipped`);
 }
 
 export function verifyResults(plan, needs, event) {
@@ -175,6 +215,36 @@ if (import.meta.main) {
         throw new Error("CI selection receipt belongs to different source");
       verifyResults(plan, needs, process.env.GITHUB_EVENT_NAME);
       console.log("All selected validation jobs succeeded; all inapplicable jobs skipped.");
+    } else if (process.argv[2] === "verify-reuse") {
+      const plan = JSON.parse(process.env.CI_PLAN);
+      verifyMetadataResults(plan, JSON.parse(process.env.CI_NEEDS));
+      const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
+      const source = sourceFromEvent(event);
+      if (
+        plan.head !== process.env.CI_HEAD ||
+        plan.head !== source.head ||
+        plan.base !== process.env.CI_BASE ||
+        plan.validationSource.target !== targetDigest(source) ||
+        plan.validationSource.pullRequest !== source.number
+      )
+        throw Error("Metadata validation belongs to different source");
+      const evidence = await resolveCodeEvidence({
+        repository: process.env.GITHUB_REPOSITORY,
+        runId: Number(process.env.GITHUB_RUN_ID),
+        source,
+      });
+      if (!evidence)
+        throw Error(
+          "Successful current code validation is no longer reusable; full validation is required",
+        );
+      console.log(
+        `Revalidated code run ${evidence.runId}, attempt ${evidence.attempt}, head ${evidence.head}`,
+      );
+      if (process.env.GITHUB_STEP_SUMMARY)
+        appendFileSync(
+          process.env.GITHUB_STEP_SUMMARY,
+          `### Required code gate\n\nRevalidated code run ${evidence.runId}, attempt ${evidence.attempt}, head ${evidence.head}.\n`,
+        );
     } else if (process.argv[2] === "select") {
       const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
       const pr = event.pull_request;
@@ -229,6 +299,29 @@ if (import.meta.main) {
       } catch {
         /* Old bases keep the full code gate on edits. */
       }
+      const metadataEditKnown =
+        !!event.changes &&
+        Object.keys(event.changes).length > 0 &&
+        Object.keys(event.changes).every((key) => ["body", "title"].includes(key));
+      let validationSource = null;
+      if (
+        pr?.state !== "closed" &&
+        process.env.GITHUB_EVENT_NAME === "pull_request" &&
+        event.action === "edited" &&
+        !event.changes?.base &&
+        metadataEditKnown &&
+        metadataGateReady
+      ) {
+        try {
+          validationSource = await resolveCodeEvidence({
+            repository: process.env.GITHUB_REPOSITORY,
+            runId: Number(process.env.GITHUB_RUN_ID),
+            source: sourceFromEvent(event),
+          });
+        } catch {
+          console.log("No complete provider-bound code proof; running full validation.");
+        }
+      }
       const plan = createImpactPlan({
         event: process.env.GITHUB_EVENT_NAME,
         action: event.action,
@@ -236,6 +329,7 @@ if (import.meta.main) {
         base,
         paths,
         regularFiles,
+        validationSource,
         approvedScopes,
         rolloutCommit,
         closedPr: pr?.state === "closed",
@@ -245,13 +339,25 @@ if (import.meta.main) {
           process.env.GITHUB_EVENT_NAME === "pull_request" ||
           git("rev-parse", "origin/main").trim() === head,
         metadataGateReady,
-        metadataEditKnown:
-          !!event.changes &&
-          Object.keys(event.changes).length > 0 &&
-          Object.keys(event.changes).every((key) => ["body", "title"].includes(key)),
+        metadataEditKnown,
       });
+      let receipt = null;
+      if (pr) {
+        try {
+          receipt = codeReceipt({
+            ...sourceFromEvent(event),
+            code: plan.code,
+            runId: Number(process.env.GITHUB_RUN_ID),
+            attempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+          });
+        } catch {
+          if (process.env.GITHUB_ACTIONS === "true")
+            throw Error("Missing provider source receipt binding");
+        }
+      }
       const lines = Object.entries({
         plan: JSON.stringify(plan),
+        source: JSON.stringify(receipt),
         "database-matrix": JSON.stringify({ include: databaseMatrix }),
         code: plan.code,
         ...plan.jobs,

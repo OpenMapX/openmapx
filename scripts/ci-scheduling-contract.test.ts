@@ -90,14 +90,16 @@ describe("CI scheduling and context preservation", () => {
       github: { ...context.github, event: { ...context.github.event, action: "synchronize" } },
     });
     expect(metadata).not.toBe(code);
+    expect(ci.jobs.ci.name).toBe("lint / types / test");
+    expect(ci.jobs.ci.if).toContain("github.event_name == 'pull_request'");
+    expect(ci.jobs.ci.if).toContain("github.event.pull_request.state != 'closed'");
     expect(
-      evaluate(ci.jobs.ci.name, {
-        needs: { select: { result: "success", outputs: { code: "false" } } },
-      }),
-    ).not.toBe("lint / types / test");
-    expect(evaluate(ci.jobs.ci.name, { needs: { select: { outputs: { code: "true" } } } })).toBe(
-      "lint / types / test",
-    );
+      ci.jobs.ci.steps.some(
+        (step: { run?: string }) => step.run === "node scripts/ci-impact-plan.mjs verify-reuse",
+      ),
+    ).toBe(true);
+    expect(ci.jobs.select.permissions.actions).toBe("read");
+    expect(ci.jobs.ci.permissions.actions).toBe("read");
   });
   it("checks out only trusted default-branch code for required metadata validation", () => {
     const workflow = parse(

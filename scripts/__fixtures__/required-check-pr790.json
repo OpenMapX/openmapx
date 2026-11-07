@@ -1,0 +1,446 @@
+{
+  "codeRun": {
+    "id": 42299510168,
+    "workflow_id": 269416138,
+    "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+    "event": "pull_request",
+    "path": ".github/workflows/ci.yml",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 1,
+    "run_number": 2748,
+    "run_started_at": "2026-11-06T21:46:49Z"
+  },
+  "codeJobs": [
+    {
+      "id": 128173324678,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "select required validation",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174446774,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "select Docker targets",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174447325,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "lint",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174447425,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (mobile)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174447542,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "types",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174447593,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (linux, uid 1001, umask 002, 1/2)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174447600,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (ops-agent image, both mount layouts)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174447619,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (node)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174447729,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (web)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174447943,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "build (production)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174448145,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (linux, uid 1001, umask 002, 2/2)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174448336,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (database, coordinator-recovery, 3/4)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174448339,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (database, coordinator-recovery, 1/4)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174448405,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (database, api-privacy, 1/2)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174448452,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (database, coordinator-recovery, 2/4)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174448478,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (database, coordinator-recovery, 4/4)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174448481,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (database, configuration-recovery, 1/4)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174448542,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (database, api-privacy, 2/2)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174448562,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (database, configuration-recovery, 2/4)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174448570,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (database, export-restore, 1/1)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174448599,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (database, ingestion, 2/2)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174448601,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (database, configuration-recovery, 4/4)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174448634,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (database, ingestion, 1/2)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174448664,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (database, configuration-recovery, 3/4)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174874604,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "build Docker (api)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174874671,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "build Docker (web)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174874781,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "build Docker (transitous-runner)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174874794,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "build Docker (data-manager)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128174874802,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "build Docker (ops-agent)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128191975073,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "lint / types / test",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128193213570,
+      "run_id": 42299510168,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "build, scan, and publish Docker release",
+      "status": "completed",
+      "conclusion": "skipped"
+    }
+  ],
+  "metadataRun": {
+    "id": 42301703153,
+    "workflow_id": 269416138,
+    "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+    "event": "pull_request",
+    "path": ".github/workflows/ci.yml",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 1,
+    "run_number": 2751,
+    "run_started_at": "2026-11-06T22:03:31Z"
+  },
+  "metadataJobs": [
+    {
+      "id": 128180834673,
+      "run_id": 42301703153,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "select required validation",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128188903648,
+      "run_id": 42301703153,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (node)",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 128188903757,
+      "run_id": 42301703153,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "types",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 128188903992,
+      "run_id": 42301703153,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "select Docker targets",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 128188904075,
+      "run_id": 42301703153,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "lint",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 128188904293,
+      "run_id": 42301703153,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (ops-agent image, both mount layouts)",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 128188904306,
+      "run_id": 42301703153,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (linux, uid 1001, umask 002, ${{ matrix.part }}/2)",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 128188904377,
+      "run_id": 42301703153,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "build (production)",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 128188904661,
+      "run_id": 42301703153,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (mobile)",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 128188904697,
+      "run_id": 42301703153,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (web)",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 128188905010,
+      "run_id": 42301703153,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "build Docker (${{ matrix.app }})",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 128188905388,
+      "run_id": 42301703153,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "build, scan, and publish Docker release",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 128188905689,
+      "run_id": 42301703153,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "test (database, ${{ matrix.group }}, ${{ matrix.part }}/${{ matrix.total }})",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 128188906086,
+      "run_id": 42301703153,
+      "run_attempt": 1,
+      "head_sha": "fbe5fcf405d3b4df0ae595d772a9b436589614ca",
+      "name": "needs.select.result == 'success' && needs.select.outputs.code == 'false' && 'superseded source or metadata event' || 'lint / types / test'",
+      "status": "completed",
+      "conclusion": "skipped"
+    }
+  ],
+  "requiredStatusEvaluation": {
+    "rule_source": {
+      "type": "ruleset",
+      "id": 17765533,
+      "name": "main protection"
+    },
+    "enforcement": "active",
+    "result": "fail",
+    "rule_type": "required_status_checks",
+    "details": "Required status check \"lint / types / test\" is expected."
+  }
+}
