@@ -30,6 +30,7 @@ import { buildOpsAgentServer } from "../../../../../apps/ops-agent/src/server";
 import { createFileTrustedOpsDataSource } from "../../../../../apps/ops-agent/src/trusted-config-source";
 import { registerApi } from "../../api";
 import { registerAuth } from "../../auth";
+import { DATA_MANAGER_CONTROL_SERVICE_IDS } from "../../control-targets";
 import { StateStore } from "../../state";
 import { resolveOperationsProfile } from "../transitous/operations-profile";
 import { getSingleFlightController } from "../transitous/runtime";
@@ -107,7 +108,7 @@ it.skipIf(
     const dm = control.openControlInstallation({
         infraDir: host.infraDir,
         role: "data-manager",
-        serviceIds: host.loaded.map((s) => s.manifest.id).sort(),
+        serviceIds: DATA_MANAGER_CONTROL_SERVICE_IDS,
       }),
       agentInstallation = control.openControlInstallation({
         infraDir: host.infraDir,
