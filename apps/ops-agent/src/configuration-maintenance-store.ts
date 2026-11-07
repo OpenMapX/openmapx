@@ -64,6 +64,8 @@ import {
   bindControlChildPhase,
   buildFixedConfigurationMaintenancePlan,
   type ControlInstallation,
+  cancelArtifactTargetLease,
+  cancelControlExecution,
   closeArtifactTargetLeaseHandle,
   configurationMaintenanceTargetOwner,
   consumeControlChildDispatch,
@@ -115,6 +117,7 @@ import {
   type DataManagerTransport,
   inspectDataConfigurationFence,
   prepareDataConfigurationFence,
+  recoverUnadmittedConfigurationPreparation,
   settleDataConfigurationFence,
 } from "@openmapx/core/data-manager-sdk";
 import {
@@ -225,7 +228,10 @@ import {
   verifyPublishedBoundDmConfigurationSettlementSlots,
   verifyPublishedDmConfigurationSettlementSlots,
 } from "../../../packages/core/src/build-artifacts/retention-family";
-import { observeConfigurationMaintenanceRuntimeTree } from "../../../packages/core/src/build-artifacts/target-lease";
+import {
+  observeConfigurationMaintenanceRuntimeTree,
+  readConfigurationPrepareNonAdmission,
+} from "../../../packages/core/src/build-artifacts/target-lease";
 
 import type { PersistedOpsJob } from "./journal";
 import { OpsExecutionFailure, type OpsRuntime } from "./runtime";
@@ -3326,6 +3332,113 @@ export async function releaseOwnedConfigurationMaintenanceRoot(
 
 /** Fixed NoGuard producer. All late fields come from original retained source;
  * it accepts neither a caller proof tuple nor a requested successful outcome. */
+export async function recoverUnadmittedConfigurationMaintenance(
+  runtime: OpsRuntime,
+  authority: VerifiedExecutionAuthority,
+) {
+  const state = executionAuthorityState(authority),
+    owner = read(authority);
+  if (
+    state.kind !== "configurationMaintenance.prepare" ||
+    Date.now() <= state.execution.deadlineAt ||
+    owner.guardSource ||
+    owner.receipt.dmFence ||
+    owner.receipt.generation !== "not_started" ||
+    owner.receipt.followUp !== "not_started" ||
+    owner.receipt.decision?.decision === "continue"
+  )
+    throw Error("Original expired never-applied preparation required");
+  try {
+    verifyRetainedArtifactTargetRootRelease(authority);
+    assertConfigurationMaintenanceRootClosure(authority);
+    return configurationMaintenanceRecoverySource(authority);
+  } catch {
+    /* Only original held/partially released recovery follows. */
+  }
+  await withUnconsumedMaintenanceCandidate(runtime, authority, () => {
+    for (const reservation of owner.plan.reservations.filter(
+      (value) => value.phase !== "configuration-fence",
+    ))
+      if (
+        inspectControlChildPublication(authority, reservation).publication.state !== "unissued" ||
+        lookupControlChildPhaseAttempt(authority, reservation)
+      )
+        throw Error("Another original maintenance phase was issued");
+  });
+  const lease = restoreArtifactTargetLeaseForSettlement(authority);
+  try {
+    if (owner.issuance === "closed_without_guard") {
+      if (
+        (await reconcileArtifactTargetLease({
+          dataRoot: state.installation.dataRoot,
+          leaseId: lease.leaseId,
+          authority: verifyControlRecoveryAuthority(authority),
+        })) !== "released"
+      )
+        throw Error("Original NoGuard recovery remains fenced");
+      assertConfigurationMaintenanceRootClosure(authority);
+      verifyRetainedArtifactTargetRootRelease(authority);
+      return configurationMaintenanceRecoverySource(authority);
+    }
+    const reservation = owner.plan.reservations.find(
+      (value) => value.phase === "configuration-fence",
+    );
+    if (!reservation) throw Error("Original preparation reservation required");
+    const attempt = lookupControlChildPhaseAttempt(authority, reservation);
+    if (!attempt || attempt.channel !== "delegation")
+      throw Error("Original preparation outbox required");
+    // Cancellation closes forward issuance first. A lost response can only
+    // repeat this same negative receiver observation, never PREPARE.
+    cancelControlExecution(authority);
+    let negative: ReturnType<typeof readConfigurationPrepareNonAdmission> | undefined;
+    try {
+      negative = readConfigurationPrepareNonAdmission(authority);
+    } catch {
+      /* First recovery. */
+    }
+    if (!negative) {
+      await cancelArtifactTargetLease(lease);
+      await recoverUnadmittedConfigurationPreparation(owner.plan.dmPrepare, {
+        transport: configurationDataManagerTransport(),
+        headers: { "x-openmapx-control-delegation": attempt.assertion },
+      });
+      negative = readConfigurationPrepareNonAdmission(authority);
+    }
+    if (canonicalJson(negative.payload.input) !== canonicalJson(owner.plan.dmPrepare))
+      throw Error("Original preparation recovery body changed");
+    await closeOwnedConfigurationMaintenanceWithoutGuard(runtime, authority);
+    if (
+      (await reconcileArtifactTargetLease({
+        dataRoot: state.installation.dataRoot,
+        leaseId: lease.leaseId,
+        authority: verifyControlRecoveryAuthority(authority),
+      })) !== "released"
+    )
+      throw Error("Original unadmitted maintenance remains fenced");
+    assertConfigurationMaintenanceRootClosure(authority);
+    verifyRetainedArtifactTargetRootRelease(authority);
+    return configurationMaintenanceRecoverySource(authority);
+  } finally {
+    closeArtifactTargetLeaseHandle(lease);
+  }
+}
+
+/** Fixed source AFTER full original NoGuard closure and physical release. */
+function configurationMaintenanceRecoverySource(authority: VerifiedExecutionAuthority) {
+  assertConfigurationMaintenanceRootClosure(authority);
+  const released = verifyRetainedArtifactTargetRootRelease(authority),
+    owner = read(authority);
+  if (owner.issuance !== "closed_without_guard" || !owner.noGuard?.bundle)
+    throw Error("Original NoGuard recovery completion required");
+  return {
+    maintenanceId: owner.plan.operation.maintenanceId,
+    candidateId: owner.plan.operation.candidateId,
+    closureDigest: owner.noGuard.bundle.payload.closure.payload.closureDigest,
+    receiverEvidenceDigest: controlDigest(owner.noGuard.noGuardEvidence),
+    releasedAt: released.releasedAt,
+  };
+}
+
 export async function closeOwnedConfigurationMaintenanceWithoutGuard(
   runtime: OpsRuntime,
   authority: VerifiedExecutionAuthority,
@@ -3355,12 +3468,29 @@ export async function closeOwnedConfigurationMaintenanceWithoutGuard(
       throw Error("Actual original never-applied candidate required");
     const prepareState = inspectControlChildPublication(authority, prepare),
       issued = prepareState.publication.state !== "unissued",
-      verifiedRefusal = issued ? verifyPublishedDataConfigurationFenceRefusal(authority) : null,
+      nonAdmission = issued
+        ? (() => {
+            try {
+              return readConfigurationPrepareNonAdmission(authority);
+            } catch {
+              return null;
+            }
+          })()
+        : null,
+      verifiedRefusal =
+        issued && !nonAdmission ? verifyPublishedDataConfigurationFenceRefusal(authority) : null,
       verifiedUnused = verifiedRefusal
         ? verifyPublishedUnusedConfigurationCapacity(authority, verifiedRefusal)
         : null,
       refusal = verifiedRefusal && publishedDmNoGuardRefusalState(verifiedRefusal, authority),
       dmUnused = verifiedUnused && publishedDmUnusedCapacityState(verifiedUnused, authority);
+    if (
+      nonAdmission &&
+      (canonicalJson(nonAdmission.payload.input) !== canonicalJson(owner.plan.dmPrepare) ||
+        nonAdmission.payload.certificateDigest !== owner.rootCertificateDigest ||
+        canonicalJson(nonAdmission.payload.input.ownerPrepare) !== canonicalJson(state.execution))
+    )
+      throw Error("Original unadmitted preparation owner changed");
     // Reservation/projection is the same pre-effect value even on recovery.
     const projectionDescriptor = {
       scope: "shared" as const,
@@ -3475,12 +3605,11 @@ export async function closeOwnedConfigurationMaintenanceWithoutGuard(
                   ? prepareState.publication.grantDigest
                   : "",
               prepareExecutionDigest: controlDigest(
-                refusal!.signedRefusal.payload.prepareExecution,
+                nonAdmission?.payload.child ?? refusal!.signedRefusal.payload.prepareExecution,
               ),
-              refusalProjectionDigest: settlementRecordDigest(
-                domains.refusal,
-                refusal!.signedRefusal.payload,
-              ),
+              refusalProjectionDigest: nonAdmission
+                ? controlDigest(nonAdmission.payload)
+                : settlementRecordDigest(domains.refusal, refusal!.signedRefusal.payload),
               remainingPublicationStates: publications,
               candidateClaimState: "not_consumed",
             })
@@ -3495,33 +3624,39 @@ export async function closeOwnedConfigurationMaintenanceWithoutGuard(
         issuerFreezeProof = signControl(state.installation.privateKey, freezeDomain, proof),
         issuerFreezeProofDigest = settlementRecordDigest(freezeDomain, proof),
         noGuardEvidence = configurationNoGuardEvidenceSchema.parse(
-          issued
+          nonAdmission
             ? {
-                kind: "receiver_refused",
+                kind: "receiver_not_admitted",
                 issuerFreezeProofDigest,
-                prepareExecutionDigest: controlDigest(
-                  refusal!.signedRefusal.payload.prepareExecution,
-                ),
-                prepareAdmissionDigest: refusal!.signedRefusal.payload.prepareAdmissionDigest,
-                refusalProjectionDigest: settlementRecordDigest(
-                  domains.refusal,
-                  refusal!.signedRefusal.payload,
-                ),
-                effectSettlementDigest: refusal!.signedRefusal.payload.effectSettlementDigest,
-                canonicalTerminalDigest: refusal!.signedRefusal.payload.canonicalTerminalDigest,
-                canonicalTerminalAt: refusal!.signedRefusal.payload.canonicalTerminalAt,
-                dmUnusedIntentDigest: dmUnused!.intentDigest,
-                dmUnusedConfirmationDigest: dmUnused!.confirmationDigest,
-                capacityReceiptDigest: refusal!.signedRefusal.payload.capacityReceiptDigest,
+                nonAdmission,
               }
-            : {
-                kind: "never_issued",
-                issuerFreezeProofDigest,
-                prepareReservationDigest: controlDigest(prepare),
-                publicationStatesDigest: settlementRecordDigest(domains.neverIssued, proof),
-                issuerSequence: ownerSequence,
-                frozenAt,
-              },
+            : issued
+              ? {
+                  kind: "receiver_refused",
+                  issuerFreezeProofDigest,
+                  prepareExecutionDigest: controlDigest(
+                    refusal!.signedRefusal.payload.prepareExecution,
+                  ),
+                  prepareAdmissionDigest: refusal!.signedRefusal.payload.prepareAdmissionDigest,
+                  refusalProjectionDigest: settlementRecordDigest(
+                    domains.refusal,
+                    refusal!.signedRefusal.payload,
+                  ),
+                  effectSettlementDigest: refusal!.signedRefusal.payload.effectSettlementDigest,
+                  canonicalTerminalDigest: refusal!.signedRefusal.payload.canonicalTerminalDigest,
+                  canonicalTerminalAt: refusal!.signedRefusal.payload.canonicalTerminalAt,
+                  dmUnusedIntentDigest: dmUnused!.intentDigest,
+                  dmUnusedConfirmationDigest: dmUnused!.confirmationDigest,
+                  capacityReceiptDigest: refusal!.signedRefusal.payload.capacityReceiptDigest,
+                }
+              : {
+                  kind: "never_issued",
+                  issuerFreezeProofDigest,
+                  prepareReservationDigest: controlDigest(prepare),
+                  publicationStatesDigest: settlementRecordDigest(domains.neverIssued, proof),
+                  issuerSequence: ownerSequence,
+                  frozenAt,
+                },
         ),
         slot = readConfigurationSettlementFamilySlot(state.installation, projection),
         intent = configurationUnusedCapacityIntentSchema.parse({
@@ -3537,9 +3672,8 @@ export async function closeOwnedConfigurationMaintenanceWithoutGuard(
             : null,
           settlementId: identity.settlementId,
           projectionDigest,
-          capacityReceiptDigest: issued
-            ? refusal!.signedRefusal.payload.capacityReceiptDigest
-            : null,
+          capacityReceiptDigest:
+            issued && !nonAdmission ? refusal!.signedRefusal.payload.capacityReceiptDigest : null,
           sourceProofDigest: configurationIssuerUnusedSourceDigest(noGuardEvidence),
           executionOrdinal: slot.executionOrdinal,
           intentOrdinal: slot.intentOrdinal,
@@ -3646,7 +3780,11 @@ export async function closeOwnedConfigurationMaintenanceWithoutGuard(
         ),
         containment = [
           controlDigest(effect.payload),
-          ...(refusal ? [refusal.signedRefusal.payload.effectSettlementDigest] : []),
+          ...(nonAdmission
+            ? [controlDigest(nonAdmission.payload)]
+            : refusal
+              ? [refusal.signedRefusal.payload.effectSettlementDigest]
+              : []),
         ].sort(),
         closureSource = {
           version: 2 as const,

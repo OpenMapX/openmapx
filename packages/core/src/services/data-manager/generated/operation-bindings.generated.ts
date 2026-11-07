@@ -353,6 +353,15 @@ export async function pullOvertureRequest<T>(
 ): Promise<T> {
   return pullOvertureBound<T>(url, options);
 }
+const recoverUnadmittedConfigurationPreparationBound = bindDataManagerOperation(
+  "recoverUnadmittedConfigurationPreparation",
+);
+export async function recoverUnadmittedConfigurationPreparationRequest<T>(
+  url: string,
+  options?: DataManagerRequestOptions,
+): Promise<T> {
+  return recoverUnadmittedConfigurationPreparationBound<T>(url, options);
+}
 const recoverUnadmittedGenerationHardlinksBound = bindDataManagerOperation(
   "recoverUnadmittedGenerationHardlinks",
 );

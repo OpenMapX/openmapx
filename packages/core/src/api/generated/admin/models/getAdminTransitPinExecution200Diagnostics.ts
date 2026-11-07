@@ -6,4 +6,9 @@ export type GetAdminTransitPinExecution200Diagnostics = {
   /** @maxItems 256 */
   tail: GetAdminTransitPinExecution200DiagnosticsTailItem[];
   truncated: boolean;
+  /**
+   * @minLength 1
+   * @maxLength 4096
+   */
+  maintenanceRecovery?: string;
 };

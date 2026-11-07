@@ -117,6 +117,7 @@ export function registerAuth(
           "/executions/generation-hardlinks",
           "/executions/generation-hardlinks/recovery",
           "/executions/configuration-maintenance/prepare",
+          "/executions/configuration-maintenance/recovery",
         ].includes(path) ||
           /^\/executions\/configuration-maintenance\/[a-f0-9-]{36}\/settle$/.test(path));
       if (

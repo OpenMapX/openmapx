@@ -5,6 +5,7 @@ import {
   dataEpochSchema,
   dataFingerprintSchema,
   dataRevisionSchema,
+  generationHardlinksNonAdmissionPayloadSchema,
 } from "./executions";
 
 const binding = {
@@ -23,6 +24,28 @@ export const dataConfigurationFencePrepareSchema = z.strictObject({
     .max(256)
     .refine((values) => values.every((value, i) => i === 0 || (values[i - 1] ?? value) < value)),
   coordinatorMode: dataCoordinatorModeSchema,
+});
+export const CONFIGURATION_PREPARE_NON_ADMISSION_DOMAIN =
+  "openmapx-configuration-prepare-non-admission-v1";
+/** A receiver observation, never an admission or forward execution. */
+export const configurationPrepareNonAdmissionPayloadSchema = z.strictObject({
+  version: z.literal(1),
+  kind: z.literal("configuration-prepare-not-admitted"),
+  installationId: z.uuid(),
+  origin: generationHardlinksNonAdmissionPayloadSchema.shape.origin,
+  leaseId: z.uuid(),
+  certificateDigest: dataFingerprintSchema,
+  delegationId: z.uuid(),
+  grantDigest: dataFingerprintSchema,
+  child: executionRefSchema,
+  input: dataConfigurationFencePrepareSchema,
+  adoptionDigest: dataFingerprintSchema,
+  canceledSequence: z.number().int().positive().safe(),
+  observedAt: dataEpochSchema,
+});
+export const configurationPrepareNonAdmissionSchema = z.strictObject({
+  payload: configurationPrepareNonAdmissionPayloadSchema,
+  signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/),
 });
 export const dataConfigurationFenceReceiptSchema = z.strictObject({
   ...binding,

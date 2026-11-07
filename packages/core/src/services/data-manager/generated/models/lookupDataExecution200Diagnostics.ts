@@ -6,4 +6,9 @@ export type LookupDataExecution200Diagnostics = {
   /** @maxItems 256 */
   tail: LookupDataExecution200DiagnosticsTailItem[];
   truncated: boolean;
+  /**
+   * @minLength 1
+   * @maxLength 4096
+   */
+  maintenanceRecovery?: string;
 };

@@ -13,6 +13,8 @@ export const processDiagnosticsSchema = z
       )
       .max(256),
     truncated: z.boolean(),
+    /** Noncanonical, authenticated observation of original maintenance closure. */
+    maintenanceRecovery: z.string().min(1).max(4096).optional(),
   })
   .refine((x) => new TextEncoder().encode(JSON.stringify(x)).byteLength <= 16 * 1024);
 export type ProcessDiagnostics = z.infer<typeof processDiagnosticsSchema>;

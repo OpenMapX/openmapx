@@ -107,8 +107,10 @@ import {
   observeUnadoptedServiceHardlinkGrant,
   retainedConfigurationFenceAdoption,
   settleArtifactTargetLeaseChild,
+  settleUnadmittedConfigurationPrepare,
   verifyConfigurationFenceSettlementHeldOwner,
   verifyRetainedArtifactTargetSettlement,
+  withConfigurationFenceReceiverAdmission,
 } from "./target-lease";
 export interface DataFenceSql {
   unsafe(
@@ -1802,23 +1804,32 @@ export function createDataConfigurationFenceStore(
       serviceIds: grant.serviceIds,
     });
     try {
-      const admittedAt = Date.now();
-      let authority: ReturnType<typeof restoreAdmittedControlExecution> | undefined;
-      try {
-        authority = restoreAdmittedControlExecution(installation, grant.execution);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      }
-      authority ??= retainAdmittedControlExecution(installation, {
-        execution: grant.execution,
-        kind: grant.kind,
-        operation: verified.operation,
-        admittedAt,
-        requestedDeadlineAt: grant.execution.deadlineAt,
-        parent: verified.parent,
-        serviceIds: grant.serviceIds,
-      });
-      bindBorrowedControlExecution(lease, authority);
+      const admit = () => {
+          let authority: ReturnType<typeof restoreAdmittedControlExecution> | undefined;
+          try {
+            authority = restoreAdmittedControlExecution(installation, grant.execution);
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          }
+          if (!authority) {
+            assertArtifactTargetLeaseForward(lease);
+            authority = retainAdmittedControlExecution(installation, {
+              execution: grant.execution,
+              kind: grant.kind,
+              operation: verified.operation,
+              admittedAt: Date.now(),
+              requestedDeadlineAt: grant.execution.deadlineAt,
+              parent: verified.parent,
+              serviceIds: grant.serviceIds,
+            });
+          }
+          bindBorrowedControlExecution(lease, authority);
+          return authority;
+        },
+        authority =
+          grant.kind === "configuration-maintenance.prepare"
+            ? withConfigurationFenceReceiverAdmission(lease, admit)
+            : admit();
       let priorEffect: unknown;
       try {
         priorEffect = readPrivateRecord(local, "effects", `${grant.execution.operationKey}.json`);
@@ -2146,6 +2157,37 @@ export function createDataConfigurationFenceStore(
     return { request, grant, guardDigest: controlDigest(saved) };
   }
   return {
+    /** Negative receiver observation under the SAME admission SQL lock. It
+     * cannot admit/replay the original expired preparation. */
+    async recoverUnadmittedPreparation(value: unknown, rawHeaders: readonly string[]) {
+      const input = dataConfigurationFencePrepareSchema.parse(value),
+        headers = controlHeaders(rawHeaders);
+      if (!headers.delegation || headers.parent)
+        throw Object.assign(Error("Original signed configuration delegation required"), {
+          statusCode: 403,
+        });
+      const grant = inspectArtifactDelegation({
+        dataRoot: local.dataRoot,
+        installation,
+        assertion: headers.delegation,
+      });
+      return sql.transaction(async (tx) => {
+        const held = await tx.unsafe(
+          "SELECT pg_try_advisory_xact_lock($1,$2) AS held",
+          [0x4f4d58, 2],
+        );
+        if (held[0]?.held !== true) throw new DataFenceBusy();
+        const admitted = await tx.unsafe(
+          "SELECT id FROM data_manager.jobs WHERE operation_key=$1 OR id=$2 OR (kind='configuration-maintenance' AND metadata->'configurationMaintenance'->'receipt'->>'maintenanceId'=$3) LIMIT 1",
+          [grant.execution.operationKey, grant.execution.executionId, input.maintenanceId],
+        );
+        if (admitted.length)
+          throw Object.assign(Error("Original configuration preparation was admitted"), {
+            statusCode: 409,
+          });
+        return settleUnadmittedConfigurationPrepare(installation, headers.delegation!, input);
+      });
+    },
     /** A fixed receiver observes its own locked SQL and private admission facts.
      * The bearer, an HTTP 404, or an owner assertion alone is never this proof. */
     async attestUnadoptedGenerationHardlinks(value: unknown, rawHeaders: readonly string[]) {

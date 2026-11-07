@@ -47,6 +47,8 @@ export function createDataExecutionReceiver(deps: {
     return input;
   };
   return {
+    recoverUnadmittedPreparation: (request, rawHeaders) =>
+      configurationFence.recoverUnadmittedPreparation(request, rawHeaders),
     attestUnadoptedHardlinks: (request, rawHeaders) =>
       configurationFence.attestUnadoptedGenerationHardlinks(request, rawHeaders),
     async observeReviewedTransit(request) {
