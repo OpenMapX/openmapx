@@ -1,4 +1,5 @@
 import { useDirectionsStore, useImportedGeometryStore, useNavigationStore } from "@openmapx/core";
+import { MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
 import { act, fireEvent, render as renderInDom, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { IntakeTransferError } from "@/lib/mobile/nativeIntake";
@@ -14,6 +15,8 @@ const f = vi.hoisted(() => ({
   mutating: false,
   pathname: "/",
   push: vi.fn(),
+  protocolVersion: null as number | null,
+  nativeIntake: true,
 }));
 const travel = vi.hoisted(() => ({ resolve: vi.fn() }));
 let travelResult = providerPlanSelection();
@@ -68,7 +71,10 @@ const commands = {
 vi.mock("@/lib/mobile/MobileRuntimeProvider", () => ({
   useMobileRuntimeContext: () => ({
     state: "native-compatible",
-    handshake: { selectedProtocolVersion: 4, capabilities: { nativeIntake: true } },
+    handshake: {
+      selectedProtocolVersion: f.protocolVersion,
+      capabilities: { nativeIntake: f.nativeIntake },
+    },
     client,
     commands,
   }),
@@ -98,6 +104,8 @@ beforeEach(() => {
   });
   travel.resolve.mockReset().mockResolvedValue(travelResult);
   f.mutating = false;
+  f.protocolVersion = MOBILE_PROTOCOL_MAX;
+  f.nativeIntake = true;
   f.pathname = "/";
   useNavigationStore.setState({ status: "idle", nativeSessionId: null });
   useImportedGeometryStore.getState().clearImported();
@@ -282,29 +290,45 @@ it("reports an item gone from the empty inbox as expired rather than an active t
   expect(f.complete).not.toHaveBeenCalled();
 });
 
-it("opens the normal provider trip without displaying DB text or an import summary", async () => {
-  const { dbNavigatorExamples } = await import(
-    "../../../../../packages/core/src/travel-plans/__fixtures__/dbNavigator"
-  );
-  const { useDirectionsStore } = await import("@openmapx/core");
-  f.list.mockResolvedValue({
-    items: [{ ...item, kind: "text", byteLength: 500 }],
-    canApply: true,
-    scheme: "openmapx",
-  });
-  f.text.mockResolvedValue(dbNavigatorExamples[0]);
+it.each([4, MOBILE_PROTOCOL_MAX])(
+  "opens the normal provider trip on protocol %s without displaying DB text or an import summary",
+  async (version) => {
+    f.protocolVersion = version;
+    const { dbNavigatorExamples } = await import(
+      "../../../../../packages/core/src/travel-plans/__fixtures__/dbNavigator"
+    );
+    const { useDirectionsStore } = await import("@openmapx/core");
+    f.list.mockResolvedValue({
+      items: [{ ...item, kind: "text", byteLength: 500 }],
+      canApply: true,
+      scheme: "openmapx",
+    });
+    f.text.mockResolvedValue(dbNavigatorExamples[3]);
+    render(<NativeIntakeHandler />);
+    await screen.findByText("sharedTrip");
+    expect(travel.resolve).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("open"));
+    await waitFor(() => expect(travel.resolve).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(f.complete).toHaveBeenCalledWith(item.id, "opened"));
+    expect(useDirectionsStore.getState().transitItineraries[0]).toMatchObject(
+      travelResult.plan.data.itineraries[0],
+    );
+    expect(queryClient.getQueryData(transitPlanQueryKey(travelResult.query))).toBe(
+      travelResult.plan,
+    );
+    expect(screen.queryByText("DB Navigator")).toBeNull();
+    expect(screen.queryByLabelText("tripText")).toBeNull();
+  },
+);
+it.each([3, null])("does not read the inbox on protocol %s", (version) => {
+  f.protocolVersion = version;
   render(<NativeIntakeHandler />);
-  await screen.findByText("sharedTrip");
-  expect(travel.resolve).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByText("open"));
-  await waitFor(() => expect(travel.resolve).toHaveBeenCalledTimes(1));
-  await waitFor(() => expect(f.complete).toHaveBeenCalledWith(item.id, "opened"));
-  expect(useDirectionsStore.getState().transitItineraries[0]).toMatchObject(
-    travelResult.plan.data.itineraries[0],
-  );
-  expect(queryClient.getQueryData(transitPlanQueryKey(travelResult.query))).toBe(travelResult.plan);
-  expect(screen.queryByText("DB Navigator")).toBeNull();
-  expect(screen.queryByLabelText("tripText")).toBeNull();
+  expect(f.list).not.toHaveBeenCalled();
+});
+it("does not read the inbox when native intake is unavailable", () => {
+  f.nativeIntake = false;
+  render(<NativeIntakeHandler />);
+  expect(f.list).not.toHaveBeenCalled();
 });
 it("keeps a mandatory bike-carriage session visible and retains the share before any resolution", async () => {
   const { dbNavigatorExamples } = await import(

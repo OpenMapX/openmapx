@@ -47,8 +47,8 @@ export function NativeIntakeHandler() {
   pathRef.current = pathname;
   const enabled =
     runtime.state === "native-compatible" &&
-    runtime.handshake?.selectedProtocolVersion === 4 &&
-    runtime.handshake.capabilities.nativeIntake === true;
+    (runtime.handshake?.selectedProtocolVersion ?? 0) >= 4 &&
+    runtime.handshake?.capabilities.nativeIntake === true;
   const client = useMemo(
     () => (enabled && runtime.client ? new NativeIntakeClient(runtime.client) : null),
     [enabled, runtime.client],

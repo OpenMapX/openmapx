@@ -380,7 +380,7 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
     try {
       if (!(await intakePort.available())) return;
       const items = await intakePort.list();
-      if (shell.registry.handshake()?.protocolVersion === 4) {
+      if ((shell.registry.handshake()?.protocolVersion ?? 0) >= 4) {
         shell.bridge.send("intake.changed", { pendingCount: items.length });
       } else if (items.length && visibilityRef.current === "active" && shell.registry.handshake()) {
         const key = items.map((item) => item.id).join(",");
