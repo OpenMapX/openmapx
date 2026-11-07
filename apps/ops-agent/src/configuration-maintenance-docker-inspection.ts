@@ -285,7 +285,13 @@ export async function inspectMaintenanceDockerRuntime(options: {
         expectedRevisionId: inspectedRevision,
         expectedImageId,
       });
-      details.push({ containerId: owned.containerId, mounts });
+      // Every mount and mounted-file byte comparison above still runs. Bind
+      // their complete canonical evidence without repeating it in the signed owner.
+      details.push({
+        containerId: owned.containerId,
+        mountCount: mounts.length,
+        mountsDigest: keyed(canonicalJson(mounts)),
+      });
       if (
         observed.State.Status !== "running" ||
         !observed.State.Running ||

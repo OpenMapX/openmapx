@@ -208,15 +208,10 @@ export function assertProspectiveConfigurationMaintenanceBudget(input: {
       },
       {
         containerId: hash,
-        mounts: Array.from({ length: mountCount }, () => ({
-          targetDigest: hash,
-          type: "volume",
-          sourceDigest: hash,
-          nameDigest: hash,
-          readOnly: false,
-          expectedDigest: hash,
-          actualDigest: hash,
-        })),
+        // The fixed inspector verifies the entire set and retains one keyed
+        // digest. Its evidence count is bounded by the rendered mounts above.
+        mountCount,
+        mountsDigest: hash,
       },
       { containerId: hash, state: "running", running: false, health: "healthy" },
     );
