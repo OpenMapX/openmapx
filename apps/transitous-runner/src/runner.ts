@@ -121,15 +121,19 @@ export function createTransitousRunner(options: TransitousRunnerOptions) {
     spentNonces.set(verified.nonce, at);
   }
 
-  async function execute(
-    run: TransitousRunnerScript,
-    signal: AbortSignal,
-  ): Promise<TransitousRunnerResult> {
+  function prepareRun(run: TransitousRunnerScript): readonly string[] {
     const argv = transitousRunnerArgv(run);
     if (run.script === "fetch") assertInsideCatalog(options.catalogDir, run.feedPath);
     if (run.script === "fetch-operator") {
       assertInsideCatalog(options.catalogDir, argv[1] as string, OPERATOR_METADATA_DIR);
     }
+    return argv;
+  }
+
+  async function execute(
+    argv: readonly string[],
+    signal: AbortSignal,
+  ): Promise<TransitousRunnerResult> {
     const startedAt = Date.now();
     return await new Promise<TransitousRunnerResult>((resolvePromise) => {
       // Detached so the whole process group can be signalled: upstream scripts
@@ -325,7 +329,25 @@ export function createTransitousRunner(options: TransitousRunnerOptions) {
       // The retained identity precedes the actual spawn. Disconnecting the
       // POST reader never owns this process group or its cancellation.
       try {
-        const result = await execute(request.run, row.controller.signal);
+        let argv: readonly string[];
+        try {
+          argv = prepareRun(request.run);
+        } catch (error) {
+          // Only this synchronous preparation phase proves no process ran.
+          // Preserve the original POST error while retaining its known outcome.
+          row.result = {
+            version: TRANSITOUS_RUNNER_PROTOCOL_VERSION,
+            ok: false,
+            exitCode: 1,
+            output: "",
+            truncated: false,
+            durationMs: 0,
+          };
+          row.state = "terminal";
+          row.finishedAt = now();
+          throw error;
+        }
+        const result = await execute(argv, row.controller.signal);
         row.result = result;
         row.state = "terminal";
         row.finishedAt = now();
