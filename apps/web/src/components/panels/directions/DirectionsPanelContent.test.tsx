@@ -88,6 +88,8 @@ vi.mock("@openmapx/core", async (importOriginal) => {
     useVehicleJourney: () => ({ data: transitCollection.journey }),
     useRouteAlerts: () => ({ data: transitCollection.alerts }),
     useCapabilities: () => ({ services: capabilityServices }),
+    // Keep these directions tests signed out without mounting the real auth client.
+    useSession: () => ({ data: null, isPending: false, error: null }),
     useOptimizeRoute: () => ({ mutate: vi.fn(), isPending: false }),
     useRouteInGermany: () => ({ bothInGermany: false }),
   };
