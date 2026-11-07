@@ -20,6 +20,21 @@ vi.mock("@/integration-api/map/MapContext", () => ({
   useMapOptional: () => null,
 }));
 
+// Share the signed-out boundary with hooks that import auth directly (e.g. garage).
+vi.mock("../../../../../../packages/core/src/auth/useSession", () => ({
+  useSession: () => ({ data: null, isPending: false, error: null }),
+}));
+
+// Fail immediately if any nested hook reaches the real session client.
+vi.mock("../../../../../../packages/core/src/auth/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../../../../packages/core/src/auth/client")>()),
+  authClient: {
+    useSession: () => {
+      throw new Error("Directions fixture must not mount Better Auth");
+    },
+  },
+}));
+
 const selectionCallbacks = vi.hoisted(() => ({
   select: undefined as
     | ((
@@ -88,8 +103,6 @@ vi.mock("@openmapx/core", async (importOriginal) => {
     useVehicleJourney: () => ({ data: transitCollection.journey }),
     useRouteAlerts: () => ({ data: transitCollection.alerts }),
     useCapabilities: () => ({ services: capabilityServices }),
-    // Keep these directions tests signed out without mounting the real auth client.
-    useSession: () => ({ data: null, isPending: false, error: null }),
     useOptimizeRoute: () => ({ mutate: vi.fn(), isPending: false }),
     useRouteInGermany: () => ({ bothInGermany: false }),
   };
