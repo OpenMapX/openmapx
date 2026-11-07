@@ -35,6 +35,10 @@ jobs:
     name: select required validation
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
     outputs:
       plan: ${{ steps.select.outputs['plan'] }}
       database-matrix: ${{ steps.select.outputs['database-matrix'] }}
@@ -61,7 +65,11 @@ jobs:
           package-manager-cache: false
       - name: Select checks from the complete immutable diff
         id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: node scripts/ci-impact-plan.mjs select
+      - name: CI source v1 ${{ steps.select.outputs.source }}
+        run: echo "Source binding recorded in the provider-owned step name."
 
   lint:
     needs: select
@@ -743,16 +751,18 @@ jobs:
           trivyignores: .trivyignore.yaml
           exit-code: "1"
 
-  # Aggregate gate. Keeps the required-status-check context stable at
-  # `lint / types / test` while the real work runs in parallel above.
-  # `if: always()` so it reports (red) even when a dependency fails instead of
-  # being skipped — a skipped required check would block the PR forever.
+  # Every open-PR suite executes the stable required gate, even after upstream
+  # failure. A metadata suite must recheck code evidence, never post a green skip.
   ci:
-    # A metadata event must not create a skipped check with the required code
-    # context: GitHub accepts skipped checks. Preserve the previous code result.
-    name: ${{ needs.select.result == 'success' && needs.select.outputs.code == 'false' && 'superseded source or metadata event' || 'lint / types / test' }}
+    # Every PR suite must contain an executing required gate, including edits.
+    # A skipped or dynamically renamed job cannot preserve older-suite evidence.
+    name: lint / types / test
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
     needs:
       [
         select,
@@ -768,7 +778,7 @@ jobs:
         docker-changes,
         docker-build,
       ]
-    if: always() && (needs.select.result != 'success' || needs.select.outputs.code != 'false')
+    if: always() && github.event.pull_request.state != 'closed' && (github.event_name == 'pull_request' || needs.select.result != 'success' || needs.select.outputs.code != 'false')
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -778,32 +788,43 @@ jobs:
           node-version-file: .nvmrc
           package-manager-cache: false
       - name: Collect database partition receipts
-        if: needs.select.outputs.database == 'true'
+        if: needs.select.outputs.code == 'true' && needs.select.outputs.database == 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: database-shard-*
           merge-multiple: true
           path: ${{ runner.temp }}/database-shards
       - name: Require the complete disjoint database inventory
-        if: needs.select.outputs.database == 'true'
+        if: needs.select.outputs.code == 'true' && needs.select.outputs.database == 'true'
         run: node scripts/database-test-shards.mjs verify "${{ runner.temp }}/database-shards"
       - name: Collect Linux deployment-user receipts
-        if: needs.select.outputs['test-linux-user'] == 'true'
+        if: needs.select.outputs.code == 'true' && needs.select.outputs['test-linux-user'] == 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: linux-user-shard-*
           merge-multiple: true
           path: ${{ runner.temp }}/linux-user-shards
       - name: Require the complete Linux deployment-user inventory
-        if: needs.select.outputs['test-linux-user'] == 'true'
+        if: needs.select.outputs.code == 'true' && needs.select.outputs['test-linux-user'] == 'true'
         run: node scripts/database-test-shards.mjs verify-linux "${{ runner.temp }}/linux-user-shards"
       - name: Require every selected validation result
+        if: needs.select.outputs.code != 'false' || needs.select.result != 'success'
         env:
           CI_PLAN: ${{ needs.select.outputs.plan }}
           CI_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           CI_BASE: ${{ github.event.pull_request.base.sha || '' }}
           CI_NEEDS: ${{ toJSON(needs) }}
         run: node scripts/ci-impact-plan.mjs verify
+
+      - name: Revalidate successful code evidence for metadata edits
+        if: needs.select.result == 'success' && needs.select.outputs.code == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_PLAN: ${{ needs.select.outputs.plan }}
+          CI_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          CI_BASE: ${{ github.event.pull_request.base.sha || '' }}
+          CI_NEEDS: ${{ toJSON(needs) }}
+        run: node scripts/ci-impact-plan.mjs verify-reuse
 
   release:
     name: build, scan, and publish Docker release

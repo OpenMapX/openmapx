@@ -134,14 +134,15 @@ two isolated single-worker file shards. Required failure/cancellation cannot pas
 Pull requests build and scan affected deployable images without publishing.
 Repo-wide coverage remains weekly/manual and non-gating.
 
-PR body/title edits refresh the already-required metadata/title check using only
-trusted default-branch validation code. Candidate commits are read as Git objects,
-never checked out or executed by that privileged workflow. Metadata events do not
-cancel code work or replace its required context with a skipped check. During the
-initial rollout, old trusted main definitions retain full edited-event validation;
-no branch-protection changes are needed. Code pushes and base retargets still run
-code validation. Main's obsolete validation jobs can be superseded independently;
-serialized trusted publication is never cancelled by a newer validation run.
+PR body/title edits refresh the required metadata/title check using only trusted
+default-branch validation code. Every PR CI suite also executes the stable required
+`lint / types / test` aggregate. It may reuse completed successful code evidence
+for the same PR/head/base target, independently rechecked through GitHub's API.
+Metadata gates are never code evidence. Failed, unfinished, missing or unbound
+legacy evidence runs full validation; no skipped required check can hide it.
+Candidate code never executes in the privileged metadata workflow. Code pushes and
+base retargets still validate code; no protection or bypass changes are needed.
+Main's obsolete validation can be superseded independently of atomic publication.
 
 The duplicate-code audit reports new clone regions against each PR's base commit
 in the workflow summary, with detailed reports attached as an artifact. PR reports
