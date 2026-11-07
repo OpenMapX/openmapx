@@ -7,6 +7,8 @@ FROM ghcr.io/baosystems/postgis:18-3.6@sha256:dd7515b7d8b8b8bac3516a9c3e12584df5
 # The minimum Brotli version (CVE-2026-111497) fails a stale mirror and, when
 # raised, invalidates this layer in the registry build cache.
 # apt and libapt-pkg7.0 3.0.4 fix CVE-2026-109518 (Debian DSA-6607-1).
+# zlib1g and libminizip1t64 require Debian's fixed revision for CVE-2026-76844
+# and CVE-2026-85091; these floors also invalidate previously cached upgrades.
 # PostgreSQL, PostGIS and libpq stay at the pinned image's versions: the restore
 # engine must match the deployment's, and the PostgreSQL repository can publish
 # a PostGIS release's SQL scripts before its library (3.7.0 scripts over the
@@ -21,6 +23,8 @@ RUN apt-get update && \
     dpkg --compare-versions "$(dpkg-query -W -f='${Version}' apt)" ge 3.0.4 && \
     dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libapt-pkg7.0)" ge 3.0.4 && \
     dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge 1.1.0-2+deb13u1 && \
+    dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge 1:1.3.dfsg+really1.3.1-1+deb13u1 && \
+    dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libminizip1t64)" ge 1:1.3.dfsg+really1.3.1-1+deb13u1 && \
     [ "$(dpkg-query -W -f='${Version}' postgresql-18-postgis-3)" = \
       "$(dpkg-query -W -f='${Version}' postgresql-18-postgis-3-scripts)" ] && \
     rm -rf /var/lib/apt/lists/* && \
