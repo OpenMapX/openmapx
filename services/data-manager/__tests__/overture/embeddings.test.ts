@@ -27,10 +27,6 @@ class MemoryCache implements EmbeddingCache {
   async set(hash: string, _model: string, embedding: number[]): Promise<void> {
     this.store.set(hash, embedding);
   }
-
-  size(): number {
-    return this.store.size;
-  }
 }
 
 function makeFetchImpl(embedding: number[]): typeof fetch {
@@ -91,15 +87,6 @@ describe("embed", () => {
     const result2 = await embed(["cached text"], { fetchImpl, cache });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(result2[0]).toEqual(embedding);
-  });
-
-  it("populates the cache after fetching", async () => {
-    const embedding = [0.9, 0.8];
-    const fetchImpl = makeFetchImpl(embedding);
-    const cache = new MemoryCache();
-
-    await embed(["new text"], { fetchImpl, cache });
-    expect(cache.size()).toBe(1);
   });
 
   it("only fetches cache misses on partial hit", async () => {
@@ -169,6 +156,7 @@ describe("embedUncached", () => {
     }
     expect(await work).toEqual(Array.from({ length: 12 }, (_, i) => [i]));
     expect(peak).toBe(8);
+    expect(fetchImpl).toHaveBeenCalledTimes(12);
   });
 
   it("does not check the cache and always calls fetchImpl", async () => {
@@ -181,16 +169,6 @@ describe("embedUncached", () => {
 
     await embedUncached(["text"], { fetchImpl });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
-  });
-
-  it("returns embeddings for each text", async () => {
-    const embedding = [1, 2, 3];
-    const fetchImpl = makeFetchImpl(embedding);
-
-    const result = await embedUncached(["a", "b", "c"], { fetchImpl });
-    expect(result).toHaveLength(3);
-    expect(result[0]).toEqual(embedding);
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -205,7 +183,6 @@ describe("ensureEmbeddingModel", () => {
     expect(url).toBe("http://localhost:11434/api/pull");
     const body = JSON.parse(init?.body as string);
     expect(body).toEqual({ model: "mxbai-embed-large", stream: false });
-    expect(body).not.toHaveProperty("name");
   });
 
   it("throws on non-ok response", async () => {

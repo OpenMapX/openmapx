@@ -158,11 +158,6 @@ describe("directionsQueryKey", () => {
     expect(key[3]).toBe(false);
     expect(key[4]).toBe(false);
   });
-
-  it("produces identical keys for identical params", () => {
-    const p = { waypoints, mode: "driving" as const, avoidClosures: true, lang: "de" };
-    expect(directionsQueryKey(p)).toEqual(directionsQueryKey(p));
-  });
 });
 
 describe("directionsRequestFor", () => {
@@ -191,17 +186,5 @@ describe("directionsRequestFor", () => {
       departAt: "2026-11-04T08:00",
       arriveBy: undefined,
     });
-  });
-
-  it("keeps highway and toll avoidance for driving", () => {
-    expect(
-      directionsRequestFor({
-        waypoints,
-        mode: "driving",
-        avoidHighways: true,
-        avoidTolls: true,
-        lang: "en",
-      }),
-    ).toMatchObject({ mode: "driving", avoidHighways: true, avoidTolls: true, lang: "en" });
   });
 });

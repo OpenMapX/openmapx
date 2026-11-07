@@ -4,6 +4,7 @@ import type { Route } from "@integrations/routing/types";
 import {
   type BoundingBox,
   type LngLat,
+  PROGRESS_BUCKET_METERS,
   progressBucket,
   progressBucketStartMeters,
   type RoadAlert,
@@ -215,19 +216,31 @@ describe("useNavAlerts — bounded ahead window", () => {
     await flush();
 
     const routeB = makeRoute({ distance: 3000 });
-    fetchRoadAlerts.mockResolvedValue([onRoad("route-b-alert", 0.01)]);
+    fetchRoadAlerts.mockResolvedValue([onRoad("route-b-alert", 0.0009)]);
     act(() => {
       useNavigationStore.getState().applyReroute(routeB);
+      // Rerouting clears old progress, so provide the new route's first accepted fix.
+      useNavigationStore.getState().applyProgress({
+        snapped: geometry[0],
+        alongMeters: 0,
+        deviationMeters: 0,
+        segmentIndex: 0,
+        etaEpochMs: Date.now() + 60_000,
+        bearing: 90,
+        speedMps: 20,
+      } as never);
     });
     rerender();
     await flush();
 
+    expect(result.current?.alert.id).toBe("route-b-alert");
+
     // Route A's stale response arrives after route B's fetch has already
     // resolved; it must not overwrite route B's data.
-    act(() => releaseA([onRoad("route-a-alert", 0.01)]));
+    act(() => releaseA([onRoad("route-a-alert", 0.0009)]));
     await flush();
 
-    expect(result.current?.alert.id).not.toBe("route-a-alert");
+    expect(result.current?.alert.id).toBe("route-b-alert");
   });
 });
 
@@ -361,40 +374,30 @@ describe("useNavAlerts — speed-camera country gate", () => {
   });
 });
 
-describe("useNavAlerts — approach-window constant tracks the real maximum", () => {
-  // Must mirror `MAX_APPROACH_M` in useNavAlerts.ts. `APPROACH` in
-  // packages/core/src/navigation/alerts.ts is private, so it can't be
-  // imported directly; probing `selectActiveAlert`'s own public behaviour
-  // is the only way to observe its real numbers without duplicating them.
-  const MAX_APPROACH_M = 500;
-  // Every type the OSM alert endpoint can actually emit — see
-  // `mapAlertElements` in integrations/routing/navigation-alerts.ts. `traffic_incident`
-  // is excluded: it never comes from this endpoint (it arrives via the
-  // road-conditions capability instead), and `pedestrian_crossing`/`tunnel`
-  // are part of the shared `RoadAlertType` union but are never produced
-  // here either.
-  const OSM_ALERT_TYPES: RoadAlertType[] = [
+describe("useNavAlerts — acquisition covers the selector's approach windows", () => {
+  const upstreamTypes: RoadAlertType[] = [
     "speed_camera",
     "railway_crossing",
     "stop",
     "traffic_calming",
   ];
-  // Large enough that `min(max(speed * leadSec, minM), maxM)` clamps to
-  // `maxM` for every type in the table, regardless of `leadSec`.
-  const HUGE_SPEED_MPS = 100_000;
-
-  it("never lets a real approach window exceed the hook's fetch-window constant", () => {
-    for (const type of OSM_ALERT_TYPES) {
-      const alert: RoadAlert = {
-        id: `probe-${type}`,
-        type,
-        coord: [0, 0],
-        alongMeters: MAX_APPROACH_M + 1,
-      };
-      // If `alerts.ts` ever widens this type's `maxM` past the constant,
-      // this starts resolving to the probe alert instead of null.
-      const result = selectActiveAlert([alert], 0, HUGE_SPEED_MPS, []);
-      expect(result).toBeNull();
+  it("fetches far enough beyond a progress bucket for every upstream alert approach window", async () => {
+    const longGeometry: [number, number][] = [
+      [0, 0],
+      [0.4, 0],
+    ];
+    start(makeRoute({ distance: 44500, geometry: longGeometry }), 12000, 100000);
+    renderHook(() => useNavAlerts(noIncidents));
+    await flush();
+    const window = paddedRouteAheadBoundsSpy.mock.calls.find(
+      (args) => args[0] === longGeometry && Number(args[1]) > 0,
+    );
+    expect(window).toBeDefined();
+    const horizon = Number(window?.[2]) - PROGRESS_BUCKET_METERS;
+    expect(horizon).toBeGreaterThanOrEqual(0);
+    for (const type of upstreamTypes) {
+      const beyond: RoadAlert = { id: type, type, coord: [0, 0], alongMeters: horizon + 1 };
+      expect(selectActiveAlert([beyond], 0, 100000, [])).toBeNull();
     }
   });
 });

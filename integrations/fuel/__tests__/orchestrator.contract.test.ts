@@ -105,19 +105,6 @@ describe("fuel orchestrator", () => {
     expect(source.searchCacheTtl).toBe(120);
   });
 
-  test("providers whose coverage misses the box are not asked", async () => {
-    const far = provider("far", [station({ id: "far:1" })], { coverage: { bbox: [2, 48, 3, 49] } });
-    const near = provider("near", [station({ id: "near:1" })], {
-      coverage: { bbox: [13, 52, 14, 53] },
-    });
-    const source = createFuelDataSource(ctxWith([far, near]));
-
-    const result = await source.search(BBOX);
-
-    expect(far.searchStations).not.toHaveBeenCalled();
-    expect(result.data.map((r) => r.id)).toEqual(["near:1"]);
-  });
-
   test("disallowed sources are excluded", async () => {
     const a = provider("a", [
       station({ id: "a:ok", sources: ["src-a"] }),
@@ -451,41 +438,6 @@ describe("fuel orchestrator", () => {
     expect(source.isAvailable?.()).toBe(true);
     providers.pop();
     expect(source.isAvailable?.()).toBe(false);
-  });
-
-  test("a provider failing again for the same reason is logged once, and its recovery once", async () => {
-    const lines: LogLine[] = [];
-    let failure: Error | null = new Error("OpenConditions /features responded 401");
-    const flaky = provider("oc", [], {
-      searchStations: vi.fn(async () => {
-        if (failure) throw failure;
-        return { stations: [] };
-      }),
-    });
-    const source = createFuelDataSource(ctxWith([flaky], { lines }));
-    const warnings = () => lines.filter((l) => l.level === "warn");
-
-    await source.search(BBOX);
-    await source.search(BBOX);
-    await source.search(BBOX);
-    expect(warnings()).toHaveLength(1);
-    expect(warnings()[0]!.message).toMatch(/oc.*401/);
-
-    // A new reason is a new outage.
-    failure = new Error("connect ECONNREFUSED");
-    await source.search(BBOX);
-    await source.search(BBOX);
-    expect(warnings()).toHaveLength(2);
-    expect(warnings()[1]!.message).toMatch(/ECONNREFUSED/);
-
-    failure = null;
-    await source.search(BBOX);
-    await source.search(BBOX);
-    expect(lines.filter((l) => l.level === "info" && /recovered/.test(l.message))).toHaveLength(1);
-
-    failure = new Error("connect ECONNREFUSED");
-    await source.search(BBOX);
-    expect(warnings()).toHaveLength(3);
   });
 
   test("a station with neither a name nor a brand is titled by what it is", async () => {

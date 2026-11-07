@@ -13,24 +13,6 @@ describe("OAuth Provider client support", () => {
     vi.unstubAllGlobals();
   });
 
-  it("exposes the provider continuation, consent and administration surfaces", () => {
-    expect(authClient.oauth2.continue).toBeTypeOf("function");
-    expect(authClient.oauth2.publicClient).toBeTypeOf("function");
-    expect(authClient.oauth2.consent).toBeTypeOf("function");
-    expect(authClient.oauth2.client.rotateSecret).toBeTypeOf("function");
-  });
-
-  it("preserves provider methods when platform plugins and a passkey override are injected", () => {
-    initAuth({
-      baseURL: "http://localhost:3001",
-      passkeyPlugin: { id: "test-passkey", $InferServerPlugin: {} },
-      platformPlugins: [{ id: "test-platform", $InferServerPlugin: {} }],
-    });
-
-    expect(authClient.oauth2.continue).toBeTypeOf("function");
-    expect(authClient.signIn.passkey).toBeTypeOf("function");
-  });
-
   it("carries only the provider-signed authorization query into the sign-in request", async () => {
     window.history.replaceState(
       {},

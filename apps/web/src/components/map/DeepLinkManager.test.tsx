@@ -171,8 +171,10 @@ describe("DeepLinkManager overlay application", () => {
       ...NATURAL_EVENT_CATEGORIES,
     ]);
 
-    window.history.replaceState(null, "", "/?neCat=snow,floods");
-    render(<DeepLinkManager />);
+    act(() => {
+      window.history.replaceState(null, "", "/?neCat=snow,floods");
+      window.dispatchEvent(new Event(DEEPLINK_OPEN_EVENT));
+    });
     expect([...useNaturalEventStore.getState().activeCategories]).toEqual(["floods"]);
   });
 
@@ -183,12 +185,16 @@ describe("DeepLinkManager overlay application", () => {
     render(<DeepLinkManager />);
     expect(useWildfireStore.getState()).toMatchObject({ dayRange: 2, source: "modis" });
 
-    window.history.replaceState(null, "", "/?fire=1,VIIRS_SNPP_NRT,0");
-    render(<DeepLinkManager />);
+    act(() => {
+      window.history.replaceState(null, "", "/?fire=1,VIIRS_SNPP_NRT,0");
+      window.dispatchEvent(new Event(DEEPLINK_OPEN_EVENT));
+    });
     expect(useWildfireStore.getState()).toMatchObject({ dayRange: 1, source: "modis" });
 
-    window.history.replaceState(null, "", "/?fire=3,slstr,0");
-    render(<DeepLinkManager />);
+    act(() => {
+      window.history.replaceState(null, "", "/?fire=3,slstr,0");
+      window.dispatchEvent(new Event(DEEPLINK_OPEN_EVENT));
+    });
     expect(useWildfireStore.getState()).toMatchObject({ dayRange: 3, source: "slstr" });
   });
 

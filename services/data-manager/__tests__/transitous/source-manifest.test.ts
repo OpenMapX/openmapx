@@ -195,7 +195,7 @@ afterEach(() => {
 });
 
 describe("transit acquisition manifest", () => {
-  it("is produced for every profile, omits operator relay URLs, and hashes each artifact", async () => {
+  it("records regional profile evidence, omits operator relay URLs, and hashes the artifact", async () => {
     const ctx = makeCtx([
       {
         name: "BVG",

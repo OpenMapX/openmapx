@@ -63,17 +63,21 @@ describe("buildDiagnosticExport", () => {
     expect(document.schemaVersion).toBe(DIAGNOSTIC_EXPORT_SCHEMA_VERSION);
     expect(document.environment).toEqual(ENVIRONMENT);
     expect(document.createdAtMs).toBe(NOW);
-  });
-
-  it("identifies the export and nothing else", () => {
-    const document = buildDiagnosticExport([row()], ENVIRONMENT, "abc123", NOW);
-    const serialised = JSON.stringify(document);
 
     expect(document.exportId).toBe("abc123");
-    // No device, install or session identity travels with the file.
-    for (const forbidden of ["deviceId", "installId", "sessionId", "advertisingId", "udid"]) {
+    const serialised = JSON.stringify(document);
+    for (const forbidden of [
+      "deviceId",
+      "installId",
+      "sessionId",
+      "advertisingId",
+      "udid",
+      "openmapx-navigation.db",
+      "/var/",
+      "/data/",
+      "file://",
+    ])
       expect(serialised).not.toContain(forbidden);
-    }
   });
 
   it("drops a row whose type is no longer declared", () => {
@@ -113,33 +117,24 @@ describe("buildDiagnosticExport", () => {
 
     expect(document.events[0].fields).toEqual({ accepted: 1, droppedFieldCount: 2 });
   });
-
-  it("contains no database path or file location", () => {
-    const serialised = JSON.stringify(buildDiagnosticExport([row()], ENVIRONMENT, "abc123", NOW));
-
-    for (const forbidden of ["openmapx-navigation.db", "/var/", "/data/", "file://"]) {
-      expect(serialised).not.toContain(forbidden);
-    }
-  });
 });
 
 describe("exportDiagnostics", () => {
   it("writes a temporary file and shares it", async () => {
-    const { ports: p, written, shared } = ports();
+    const { ports: p, written, shared, deleted } = ports();
 
     const result = await exportDiagnostics(p);
 
     expect(result).toEqual({ ok: true, eventCount: 1 });
     expect(written[0].name).toBe("openmapx-diagnostics-abc123.json");
     expect(shared).toEqual(["file:///cache/openmapx-diagnostics-abc123.json"]);
-  });
 
-  it("deletes the temporary file after a successful share", async () => {
-    const { ports: p, deleted } = ports();
-
-    await exportDiagnostics(p);
-
-    expect(deleted).toEqual(["file:///cache/openmapx-diagnostics-abc123.json"]);
+    expect(deleted).toEqual(shared);
+    expect(written[0].contents).toContain("\n");
+    expect(JSON.parse(written[0].contents)).toMatchObject({
+      exportId: "abc123",
+      events: [{ type: "location.batch", fields: { accepted: 3, rejected: 1 } }],
+    });
   });
 
   it("deletes the temporary file after a cancelled or failed share", async () => {
@@ -195,22 +190,5 @@ describe("exportDiagnostics", () => {
     expect(JSON.parse(written[0].contents).exportId).not.toBe(
       JSON.parse(written[1].contents).exportId,
     );
-  });
-
-  it("writes a file a person can actually read", async () => {
-    const { ports: p, written } = ports();
-
-    await exportDiagnostics(p);
-
-    expect(written[0].contents).toContain("\n");
-    expect(() => JSON.parse(written[0].contents)).not.toThrow();
-  });
-
-  it("shares only after the caller asked, never on its own", async () => {
-    const { ports: p, shared } = ports();
-
-    expect(shared).toEqual([]);
-    await exportDiagnostics(p);
-    expect(shared).toHaveLength(1);
   });
 });

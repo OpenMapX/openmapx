@@ -703,18 +703,6 @@ describe("MapCanvas", () => {
     expect(mapContextTest.notifyMapReady).toHaveBeenCalledTimes(1);
   });
 
-  it("publishes map readiness for a parsed initial style with pending tiles", async () => {
-    maplibreTest.reset();
-    mapStyleTest.reset();
-    maplibreTest.deferInitialStyle(true);
-    vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
-    render(<MapCanvas />);
-    await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
-    expect(maplibreTest.instances[0]?.isStyleLoaded()).toBe(false);
-    expect(mapContextTest.notifyMapReady).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("status")).toBeNull();
-  });
-
   it("keeps the initial map usable when a tile fails before style readiness", async () => {
     maplibreTest.reset();
     mapStyleTest.reset();
@@ -725,6 +713,9 @@ describe("MapCanvas", () => {
     render(<MapCanvas />);
     await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
     const map = maplibreTest.instances[0];
+    expect(map.isStyleLoaded()).toBe(false);
+    expect(mapContextTest.notifyMapReady).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("status")).toBeNull();
     act(() =>
       map?.emitError(new Error("Tile unavailable"), { sourceId: "openmaptiles", tile: {} }),
     );
@@ -783,21 +774,6 @@ describe("MapCanvas", () => {
     expect(maplibreTest.options[1]).toMatchObject({ center: [11, 22], zoom: 7 });
   });
 
-  it("persists the viewport for a user-originated move", async () => {
-    const { map, moveEnd } = await renderWithMoveEnd();
-    const readsBefore = map.cameraReads;
-
-    act(() => moveEnd({}));
-
-    expect(map.cameraReads).toBe(readsBefore + 1);
-    expect(useMapStore.getState()).toMatchObject({
-      bearing: 33,
-      center: [1.5, 2.5],
-      pitch: 44,
-      zoom: 12,
-    });
-  });
-
   it("persists the viewport for a programmatic move outside navigation", async () => {
     const { moveEnd } = await renderWithMoveEnd();
 
@@ -854,9 +830,17 @@ describe("MapCanvas", () => {
 
     it("saves the camera position on every move", async () => {
       const values = useMemoryStorage();
-      const { moveEnd } = await renderWithMoveEnd();
+      const { map, moveEnd } = await renderWithMoveEnd();
+      const readsBefore = map.cameraReads;
 
       act(() => moveEnd({}));
+      expect(map.cameraReads).toBe(readsBefore + 1);
+      expect(useMapStore.getState()).toMatchObject({
+        bearing: 33,
+        center: [1.5, 2.5],
+        pitch: 44,
+        zoom: 12,
+      });
 
       expect(JSON.parse(values.get("openmapx:lastMapView") ?? "null")).toEqual({
         center: [1.5, 2.5],

@@ -99,7 +99,9 @@ describe("qualified package batch planning", () => {
         ],
       },
     });
-    expect(batch.selected).toHaveLength(2);
+    expect(batch.selected.map((pkg: { name: string }) => pkg.name).sort()).toEqual(
+      [...names].sort(),
+    );
     expect(batch.operation).toBe("qualify");
   });
   it.each([

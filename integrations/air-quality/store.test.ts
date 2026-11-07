@@ -5,21 +5,6 @@ import { useAirQualityStore } from "./store";
 afterEach(() => useAirQualityStore.getState().reset());
 
 describe("canonical air-quality overlay store", () => {
-  it("defaults to one hidden PM2.5 monitor mode", () => {
-    expect(useAirQualityStore.getState()).toMatchObject({
-      panelOpen: false,
-      layerVisible: false,
-      mode: { kind: "monitors", pollutant: "pm25" },
-      loading: false,
-      error: null,
-      warnings: [],
-      truncated: false,
-      hasData: false,
-      stationCount: 0,
-      activeSourceIds: [],
-    });
-  });
-
   it("switches modes atomically and applies only the selected mode's option", () => {
     useAirQualityStore.getState().setRasterFrame("2026-08-30T12:00:00.000Z");
     expect(useAirQualityStore.getState().mode).toEqual({

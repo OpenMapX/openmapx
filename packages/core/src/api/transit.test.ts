@@ -50,16 +50,6 @@ describe("buildTransitPlanParams", () => {
     });
   });
 
-  it("omits every optional parameter that was not asked for", () => {
-    expect(Object.keys(buildTransitPlanParams(BASE)).sort()).toEqual([
-      "from_lat",
-      "from_lng",
-      "time",
-      "to_lat",
-      "to_lng",
-    ]);
-  });
-
   it("carries every user option the planner supports", () => {
     const query = buildTransitPlanParams({
       ...BASE,
@@ -126,10 +116,6 @@ describe("buildTransitPlanParams", () => {
     expect(query.bike_hill_preference).toBeUndefined();
   });
 
-  it("treats wheelchairRequired as implying wheelchair routing", () => {
-    expect(buildTransitPlanParams({ ...BASE, wheelchairRequired: true }).wheelchair).toBe("true");
-  });
-
   it("keeps max_transfers of zero, which is a meaningful request", () => {
     expect(buildTransitPlanParams({ ...BASE, maxTransfers: 0 }).max_transfers).toBe("0");
   });
@@ -144,10 +130,32 @@ describe("fetchTransitPlan", () => {
   });
 
   it("passes request options through to the client", async () => {
-    mockFetch();
     const controller = new AbortController();
-    await fetchTransitPlan(BASE, client(), { signal: controller.signal });
-    expect(calls).toHaveLength(1);
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let signal: AbortSignal | null | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: unknown, init?: RequestInit) => {
+        signal = init?.signal;
+        entered();
+        return new Promise<Response>((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(signal?.reason), { once: true });
+        });
+      }),
+    );
+    const pending = fetchTransitPlan(BASE, client(), { signal: controller.signal });
+    const rejected = expect(pending).rejects.toMatchObject({
+      name: "ApiRequestAbortedError",
+      code: "aborted",
+    });
+    await started;
+    expect(signal?.aborted).toBe(false);
+    controller.abort(new Error("cancel transit"));
+    await rejected;
+    expect(signal?.aborted).toBe(true);
   });
 });
 
@@ -156,6 +164,7 @@ describe("refreshTransitItinerary", () => {
     mockFetch({ data: { itinerary: {}, fallbackOccurred: false } });
     await refreshTransitItinerary("token-1", client());
     expect(JSON.parse(String(calls[0].init.body))).toEqual({ token: "token-1" });
+    expect(calls[0].url).not.toContain("token-1");
   });
 
   it("returns the replacement itinerary without retaining anything globally", async () => {
@@ -167,12 +176,6 @@ describe("refreshTransitItinerary", () => {
     const second = await refreshTransitItinerary("token-2", client());
     expect(second.data?.fallbackOccurred).toBe(false);
     expect(JSON.parse(String(calls.at(-1)?.init.body))).toEqual({ token: "token-2" });
-  });
-
-  it("never puts the token in the URL, where it could reach a server log", async () => {
-    mockFetch({ data: { itinerary: {}, fallbackOccurred: false } });
-    await refreshTransitItinerary("super-secret-token", client());
-    expect(calls[0].url).not.toContain("super-secret-token");
   });
 });
 

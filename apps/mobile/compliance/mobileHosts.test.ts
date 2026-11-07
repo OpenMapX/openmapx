@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -63,7 +64,17 @@ function sourceFiles(directory: string): string[] {
 
 /** Strips comments, where documentation links legitimately live. */
 function withoutComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.JSX, source);
+  const code: string[] = [];
+  for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
+    if (
+      token !== ts.SyntaxKind.SingleLineCommentTrivia &&
+      token !== ts.SyntaxKind.MultiLineCommentTrivia
+    ) {
+      code.push(scanner.getTokenText());
+    }
+  }
+  return code.join("");
 }
 
 function hostsIn(source: string): string[] {
@@ -77,20 +88,13 @@ function hostsIn(source: string): string[] {
 const files = [...sourceFiles(mobileSrc), ...sourceFiles(mobileConfig)];
 
 describe("the installed app's reachable hosts", () => {
-  it("finds source files to scan at all", () => {
-    // A scan of nothing passes trivially, which would be the worst outcome here.
-    expect(files.length).toBeGreaterThan(20);
-  });
-
-  it.each(files.map((file) => [file.replace(`${resolve(import.meta.dirname, "..")}/`, ""), file]))(
-    "%s names no undeclared host",
-    (_label, file) => {
+  it("names no undeclared host in native source or configuration", () => {
+    expect(files).toContain(join(mobileSrc, "App.tsx"));
+    for (const file of files) {
       const undeclared = hostsIn(readFileSync(file, "utf8")).filter((host) => !ALLOWED.has(host));
-
-      // A host no data-practice row covers is a transmission nobody reviewed.
-      expect(undeclared).toEqual([]);
-    },
-  );
+      expect(undeclared, file).toEqual([]);
+    }
+  });
 
   it("contains no analytics, crash-reporting or push endpoint", () => {
     const forbidden = [

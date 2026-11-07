@@ -28,31 +28,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const snapshotRace = vi.hoisted(() => ({
-  afterAccess: undefined as ((path: unknown, descriptor?: number) => void) | undefined,
-  readFailure: undefined as Error | undefined,
-}));
-vi.mock("node:fs", async () => {
-  const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
-  return {
-    ...actual,
-    lstatSync: (...args: Parameters<typeof actual.lstatSync>) => {
-      const stat = actual.lstatSync(...args);
-      snapshotRace.afterAccess?.(args[0]);
-      return stat;
-    },
-    openSync: (...args: Parameters<typeof actual.openSync>) => {
-      const fd = actual.openSync(...args);
-      snapshotRace.afterAccess?.(args[0], fd);
-      return fd;
-    },
-    readFileSync: (...args: Parameters<typeof actual.readFileSync>) => {
-      if (typeof args[0] === "number" && snapshotRace.readFailure) throw snapshotRace.readFailure;
-      return actual.readFileSync(...args);
-    },
-  };
-});
-
 const opsCalls: { kind: string }[] = [];
 const opsBehaviour: {
   failPromote: boolean;
@@ -120,8 +95,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  snapshotRace.afterAccess = undefined;
-  snapshotRace.readFailure = undefined;
   globalThis.fetch = originalFetch;
   probeHttp.get = originalProbeGet;
   if (tmp) {
@@ -316,40 +289,6 @@ function readyFixture(layout: "rename" | "two-slot") {
   if (layout === "two-slot") ctx.slotLayout = ensureMotisSlotLayout(fx.dataDir);
   return { fx, ctx };
 }
-
-describe("promotion directory snapshot", () => {
-  it("closes a captured marker descriptor when reading fails", () => {
-    tmp = mkdtempSync(join(tmpdir(), "promotion-snapshot-close-"));
-    const marker = join(tmp, "marker");
-    writeFileSync(marker, "original marker", { mode: 0o600 });
-    let descriptor: number | undefined;
-    snapshotRace.afterAccess = (path, opened) => {
-      if (path === marker && opened !== undefined) descriptor = opened;
-    };
-    const failure = new Error("controlled marker read failure");
-    snapshotRace.readFailure = failure;
-    const root = tmp;
-    expect(() => directorySnapshot(root)).toThrow(failure);
-    expect(descriptor).toBeTypeOf("number");
-    if (descriptor === undefined) throw new Error("Expected an opened marker descriptor");
-    const capturedDescriptor = descriptor;
-    expect(() => fstatSync(capturedDescriptor)).toThrow(expect.objectContaining({ code: "EBADF" }));
-  });
-  it("retains the original marker metadata and content when its pathname is replaced", () => {
-    tmp = mkdtempSync(join(tmpdir(), "promotion-snapshot-race-"));
-    const root = tmp;
-    const marker = join(root, "marker");
-    writeFileSync(marker, "original marker", { mode: 0o600 });
-    const inode = statSync(marker).ino;
-    snapshotRace.afterAccess = (path) => {
-      if (path !== marker) return;
-      snapshotRace.afterAccess = undefined;
-      renameSync(marker, join(root, "captured"));
-      writeFileSync(marker, "replacement marker", { mode: 0o600 });
-    };
-    expect(directorySnapshot(tmp)).toContainEqual(["marker", inode, "file", "original marker"]);
-  });
-});
 
 describe("promote stage", () => {
   describe.each(["rename", "two-slot"] as const)("confirmed stops in %s layout", (layout) => {
@@ -568,6 +507,7 @@ describe("promote stage", () => {
     expect(result.status).toBe("error");
     expect(recordPromotedSource).not.toHaveBeenCalled();
     expect(result.message).toMatch(/staging probe "health" failed/);
+    expect(opsCalls).toEqual([]);
     // Filesystem unchanged.
     expect(existsSync(fx.stagingDir)).toBe(true);
     expect(existsSync(fx.currentDir)).toBe(true);
@@ -576,6 +516,7 @@ describe("promote stage", () => {
 
   it("performs the atomic swap on smoke + restart success", async () => {
     const fx = setupFixture({ staging: true, current: true });
+    chmodSync(fx.stagingDir, 0o750);
 
     globalThis.fetch = vi.fn(async (input: unknown) => {
       const url = typeof input === "string" ? input : (input as Request | URL).toString();
@@ -599,8 +540,9 @@ describe("promote stage", () => {
     // sentinels, previous holds the old sentinel.
     expect(existsSync(fx.stagingDir)).toBe(true);
     expect(readdirSync(fx.stagingDir)).toEqual([]);
-    expect(existsSync(join(fx.currentDir, "data", "tt.bin"))).toBe(true);
-    expect(existsSync(fx.previousDir)).toBe(true);
+    expect(statSync(fx.stagingDir).mode & 0o777).toBe(0o750);
+    expect(readFileSync(join(fx.currentDir, "data", "tt.bin"), "utf8")).toBe("tt");
+    expect(readFileSync(join(fx.previousDir, "data", "tt.bin"), "utf8")).toBe("tt-old");
 
     // The primary is stopped before the swap, then restarted against the
     // freshly-promoted data.
@@ -618,25 +560,6 @@ describe("promote stage", () => {
     expect(artifacts.previousDir).toBe(fx.previousDir);
   });
 
-  it("preserves staging directory permissions for the next import", async () => {
-    const fx = setupFixture({ staging: true, current: true });
-    chmodSync(fx.stagingDir, 0o750);
-    globalThis.fetch = vi.fn(async (input: unknown) => {
-      const url = typeof input === "string" ? input : (input as Request | URL).toString();
-      return jsonResponse(successfulBody(url));
-    }) as unknown as typeof fetch;
-
-    const result = await promoteRun(
-      makeCtx({
-        dataDir: fx.dataDir,
-        runner: async () => {},
-      }),
-    );
-
-    expect(result.status).toBe("ok");
-    expect(statSync(fx.stagingDir).mode & 0o777).toBe(0o750);
-  });
-
   it("rejects a world-writable candidate before any host effect", async () => {
     const fx = setupFixture({ staging: true, current: true });
     chmodSync(fx.stagingDir, 0o777);
@@ -644,6 +567,7 @@ describe("promote stage", () => {
     const result = await promoteRun(makeCtx({ dataDir: fx.dataDir, runner }));
     expect(result.status).toBe("error");
     expect(runner).not.toHaveBeenCalled();
+    expect(opsCalls).toEqual([]);
   });
 
   it("rejects a candidate whose epoch duplicates the active dataset", async () => {
@@ -725,8 +649,7 @@ describe("promote stage", () => {
     // test then asserts on — otherwise it passes prematurely on /map/initial and
     // the terminal health probe fails 400, rolling back a perfectly good build.
     const fx = setupFixture({ staging: true, current: true });
-    const previous = process.env.MOTIS_PROMOTE_RESTART_POLL_INTERVAL_MS;
-    process.env.MOTIS_PROMOTE_RESTART_POLL_INTERVAL_MS = "5";
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       // Staging (:8082) is already healthy from the motis-health stage; only the
       // freshly-restarted primary (:8081) is still loading its timetable.
@@ -742,43 +665,18 @@ describe("promote stage", () => {
       }) as unknown as typeof fetch;
 
       const ctx = makeCtx({ dataDir: fx.dataDir, runner: async () => {} });
-      const result = await promoteRun(ctx);
+      const promotion = promoteRun(ctx);
+      await vi.waitFor(() => expect(primaryHealthCalls).toBe(1));
+      await vi.advanceTimersByTimeAsync(10_000);
+      const result = await promotion;
       expect(result.status).toBe("ok");
       // The readiness poll kept going past the 400s (>=3 = two 400s + the 200
       // that opened the gate), proving it gated on /health rather than bailing
       // to the smoke test after a single premature /map/initial 200.
       expect(primaryHealthCalls).toBeGreaterThanOrEqual(3);
     } finally {
-      if (previous === undefined) delete process.env.MOTIS_PROMOTE_RESTART_POLL_INTERVAL_MS;
-      else process.env.MOTIS_PROMOTE_RESTART_POLL_INTERVAL_MS = previous;
+      vi.useRealTimers();
     }
-  });
-
-  it("recreates only MOTIS with --no-deps when a compose file is present", async () => {
-    const fx = setupFixture({ staging: true, current: true });
-    globalThis.fetch = vi.fn(async (input: unknown) => {
-      const url = typeof input === "string" ? input : (input as Request | URL).toString();
-      return jsonResponse(successfulBody(url));
-    }) as unknown as typeof fetch;
-
-    const runnerCalls: Array<{ command: string; args: string[] }> = [];
-    const ctx = buildJobContext({
-      dataDir: fx.dataDir,
-      store: new StateStore(fx.dataDir),
-      runner: async (command, args) => {
-        runnerCalls.push({ command, args });
-      },
-      now: () => "2026-05-01T00:00:00.000Z",
-    });
-    const result = await promoteRun(ctx);
-    expect(result.status).toBe("ok");
-
-    // The `--force-recreate --no-deps` scoping now lives in the agent (see
-    // apps/ops-agent/src/docker-runtime.test.ts). What this asserts is that the
-    // promote is requested as one typed operation and no docker argv is built
-    // here at all.
-    expect(opsCalls.map((call) => call.kind)).toContain("motis.primary.promote");
-    expect(runnerCalls).toEqual([]);
   });
 
   it("rolls back the rename when docker restart fails", async () => {

@@ -442,14 +442,6 @@ describe("conflate — scored global assignment", () => {
   });
 });
 
-describe("DEFAULT_CONFLATION_THRESHOLDS", () => {
-  it("exports the provisional default thresholds", () => {
-    expect(DEFAULT_CONFLATION_THRESHOLDS.alwaysMergeM).toBe(25);
-    expect(DEFAULT_CONFLATION_THRESHOLDS.softWindowM).toBe(120);
-    expect(DEFAULT_CONFLATION_THRESHOLDS.nameDiceFloor).toBe(0.8);
-  });
-});
-
 function makePoi(
   id: string,
   name: string,
@@ -684,7 +676,7 @@ describe("fusePoiResults — link-first pass", () => {
     expect(fused.osmTags?.["brand:wikidata"]).toBe("Q524757");
   });
 
-  it("absent-link fallback: 3-arg, 4-arg-undefined, and 4-arg-empty-map produce deep-equal output", () => {
+  it("an empty link map preserves residual matching and gap filling", () => {
     const osm: PoiSearchResult[] = [
       makePoi("osm:node/1", "Starbucks Coffee", 52.52, 13.4, {
         category: "cafes",
@@ -705,15 +697,8 @@ describe("fusePoiResults — link-first pass", () => {
     ];
 
     const threeArg = fusePoiResults(osm, overture, DEFAULT_CONFLATION_THRESHOLDS);
-    const fourArgUndefined = fusePoiResults(
-      osm,
-      overture,
-      DEFAULT_CONFLATION_THRESHOLDS,
-      undefined,
-    );
     const fourArgEmpty = fusePoiResults(osm, overture, DEFAULT_CONFLATION_THRESHOLDS, new Map());
 
-    expect(fourArgUndefined).toStrictEqual(threeArg);
     expect(fourArgEmpty).toStrictEqual(threeArg);
   });
 

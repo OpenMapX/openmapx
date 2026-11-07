@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { shareLink, user } from "../../db/schema";
 import { buildTestApp } from "../../test/app";
 import { createMigratedPostgresFixture } from "../../test/postgres-fixture";
@@ -46,10 +46,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       }
     }, 60_000);
 
-    it("admits only one simultaneous creation into the last share slot", async () => {
+    beforeEach(async () => {
+      await fixture.db.delete(user).where(eq(user.id, "share-cap-user"));
       await fixture.db
         .insert(user)
         .values({ id: "share-cap-user", name: "Share", email: "share@example.test" });
+    });
+
+    it("admits only one simultaneous creation into the last share slot", async () => {
       await fixture.db.insert(shareLink).values(
         Array.from({ length: 99 }, (_, i) => ({
           id: `existing-${i}`,
@@ -75,17 +79,21 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           ],
         },
       };
-      const responses = await Promise.all(
-        [1, 2].map(() => app.inject({ method: "POST", url: "/api/shares", payload })),
-      );
-      expect(responses.map((response) => response.statusCode).sort()).toEqual([201, 409]);
-      expect(
-        await fixture.db.select().from(shareLink).where(eq(shareLink.userId, "share-cap-user")),
-      ).toHaveLength(100);
+      try {
+        const responses = await Promise.all(
+          [1, 2].map(() => app.inject({ method: "POST", url: "/api/shares", payload })),
+        );
+        expect(responses.map((response) => response.statusCode).sort()).toEqual([201, 409]);
+        expect(
+          await fixture.db.select().from(shareLink).where(eq(shareLink.userId, "share-cap-user")),
+        ).toHaveLength(100);
+      } finally {
+        await fixture.sql`DROP TRIGGER IF EXISTS share_test_insert_delay ON share_link`;
+        await fixture.sql`DROP FUNCTION IF EXISTS share_test_insert_delay()`;
+      }
     });
 
     it("persists acquired fields, isolates edits, and exposes frozen/public/export receipts after generated migrations", async () => {
-      await fixture.db.delete(shareLink).where(eq(shareLink.userId, "share-cap-user"));
       const source = {
         sourceId: "provider",
         name: "Original publisher",
@@ -201,6 +209,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           .set({ expiresAt: new Date(0) })
           .where(eq(shareLink.id, created.id));
         expect((await sdk.resolvePublicShare(rotated.token, { client })).status).toBe(404);
+        await fixture.db
+          .update(shareLink)
+          .set({ expiresAt: new Date(Date.now() + 3_600_000) })
+          .where(eq(shareLink.id, created.id));
+        expect((await sdk.resolvePublicShare(rotated.token, { client })).status).toBe(200);
         expect((await sdk.revokeShare(created.id, { client })).status).toBe(200);
         expect((await sdk.resolvePublicShare(rotated.token, { client })).status).toBe(404);
         await fixture.db.insert(user).values({

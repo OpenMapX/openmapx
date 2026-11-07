@@ -73,10 +73,12 @@ function fakeService(overrides: Partial<OsmContributionService> = {}): OsmContri
 
 let app: FastifyInstance;
 let service: OsmContributionService;
+const applications: FastifyInstance[] = [];
 
 async function boot(overrides: Partial<OsmContributionService> = {}) {
   service = fakeService(overrides);
   app = await buildTestApp(osmContributionsRoute({ service }), { prefix: "/api" });
+  applications.push(app);
 }
 
 function previewBody(extra: Record<string, unknown> = {}) {
@@ -111,7 +113,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await app?.close();
+  await Promise.all(applications.splice(0).map((application) => application.close()));
 });
 
 describe("authentication", () => {
@@ -260,7 +262,7 @@ describe("request validation", () => {
     expect(service.publish).not.toHaveBeenCalled();
   });
 
-  it("validates and clamps the category query", async () => {
+  it("validates and bounds the category query", async () => {
     const bad = await app.inject({
       method: "GET",
       url: "/api/osm/contributions/categories?type=node&id=12&geometry=unknown&locale=en&q=cafe",

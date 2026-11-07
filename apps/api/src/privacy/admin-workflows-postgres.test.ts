@@ -243,7 +243,7 @@ suite("owned privacy case transaction boundaries", () => {
       await app.close();
     }
   });
-  it("exposes a guarded rights-review route with real same-case checks", async () => {
+  it("rejects attachment rights review for an unknown case", async () => {
     const app = Fastify();
     await app.register(privacyAdminRoute, { database: fixture.db });
     try {
@@ -453,7 +453,8 @@ suite("owned privacy case transaction boundaries", () => {
           beforeSecondPass: async () => {
             await fixture.db
               .update(dataSubjectRequestAttachment)
-              .set({ expiresAt: new Date(Date.now() - 1) })
+              // PostgreSQL now() is fixed at transaction start; avoid a race with that clock.
+              .set({ expiresAt: new Date(0) })
               .where(eq(dataSubjectRequestAttachment.id, upload.attachment.id));
             await options?.beforeSecondPass?.();
           },

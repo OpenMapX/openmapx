@@ -221,14 +221,14 @@ export function corsOptions(trustedWebOrigins: readonly string[] = configuredTru
 // Tile-ish routes get their own tier because a single viewport change can
 // fan out 30-60 requests; sharing a bucket with the rest of the API would
 // let map panning starve unrelated traffic (autocomplete, place lookups).
-export const TILE_PUBLIC_PATTERNS = [
+const TILE_PUBLIC_PATTERNS = [
   /^\/api\/maptiler\//,
   /^\/api\/tiles\//,
   /^\/api\/traffic\//,
   /^\/api\/offline\/packages\/glyphs\//,
 ];
 
-export const EXPENSIVE_PUBLIC_PATTERNS = [
+const EXPENSIVE_PUBLIC_PATTERNS = [
   /^\/api\/isochrone(\/|$|\?)/,
   /^\/api\/elevation(\/|$|\?)/,
   /^\/api\/motis(\/|$)/,

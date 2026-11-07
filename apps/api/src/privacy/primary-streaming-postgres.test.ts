@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, readdir } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq, inArray, sql } from "drizzle-orm";
@@ -28,6 +28,7 @@ describe.skipIf(!enabled)("primary OpenMapX streaming snapshot", () => {
   it("pages real projections into replayable encrypted members with decoded field names", async () => {
     if (!database) throw new Error("database fixture is unavailable");
     const suffix = randomUUID();
+    const cleanup: Array<() => Promise<void> | void> = [];
     const subjectId = `primary-stream-${suffix}`;
     const foreignId = `primary-foreign-${suffix}`;
     const cutoffAt = new Date("2026-01-01T00:00:00.000Z");
@@ -123,6 +124,7 @@ describe.skipIf(!enabled)("primary OpenMapX streaming snapshot", () => {
         database: database as never,
         offlinePrincipalKey: Buffer.alloc(32, 7),
       });
+      cleanup.push(() => snapshot.disposeSources?.());
       const savedPart = snapshot.parts.find((part) => part.registrationId === "saved-lists");
       const accountPart = snapshot.parts.find((part) => part.registrationId === "auth-accounts");
       expect(savedPart).toMatchObject({ recordCount: 300, outcome: "included", records: [] });
@@ -188,6 +190,7 @@ describe.skipIf(!enabled)("primary OpenMapX streaming snapshot", () => {
         offlinePrincipalKey: Buffer.alloc(32, 7),
         excludedRegistrationIds: new Set(["account-profile"]),
       });
+      cleanup.push(() => withoutProfile.disposeSources?.());
       const withoutProfileEntries = withoutProfile.entries;
       expect(withoutProfileEntries.some((entry) => entry.logicalId === "account")).toBe(false);
       expect(withoutProfileEntries.some((entry) => entry.logicalId === "authentication")).toBe(
@@ -203,12 +206,14 @@ describe.skipIf(!enabled)("primary OpenMapX streaming snapshot", () => {
         offlinePrincipalKey: Buffer.alloc(32, 7),
         excludedRegistrationIds: new Set(["saved-lists"]),
       });
+      cleanup.push(() => withoutSaved.disposeSources?.());
       const withoutSavedEntries = withoutSaved.entries;
       expect(withoutSavedEntries.some((entry) => entry.logicalId === "saved-content")).toBe(false);
       expect(withoutSavedEntries.some((entry) => entry.logicalId === "portable-lists")).toBe(false);
       await withoutSaved.disposeSources?.();
 
       const spoolParent = await mkdtemp(join(tmpdir(), "openmapx-primary-limit-test-"));
+      cleanup.push(() => rm(spoolParent, { recursive: true, force: true }));
       await expect(
         collectOpenMapxDataSnapshot({
           userId: subjectId,
@@ -220,7 +225,11 @@ describe.skipIf(!enabled)("primary OpenMapX streaming snapshot", () => {
       ).rejects.toThrow("record limit");
       expect(await readdir(spoolParent)).toEqual([]);
     } finally {
-      await database.delete(user).where(inArray(user.id, [subjectId, foreignId]));
+      try {
+        await Promise.all(cleanup.map((dispose) => dispose()));
+      } finally {
+        await database.delete(user).where(inArray(user.id, [subjectId, foreignId]));
+      }
     }
   }, 30_000);
 });

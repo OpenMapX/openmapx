@@ -65,15 +65,6 @@ describe("composeSchedule forward", () => {
     expect(schedule.totalWaitSeconds).toBe(0);
     expect(schedule.violations).toEqual([]);
     expect(schedule.multiDay).toBe(false);
-  });
-
-  it("aligns legs with the waypoints they connect", () => {
-    const schedule = composeSchedule({
-      stops: [stop({ index: 0 }), stop({ index: 1 }), stop({ index: 2 })],
-      legSeconds: [HOUR, HOUR],
-      anchorMs: NINE_AM_BERLIN,
-      direction: "forward",
-    });
     expect(schedule.legs).toEqual([
       {
         fromIndex: 0,
@@ -85,28 +76,11 @@ describe("composeSchedule forward", () => {
       {
         fromIndex: 1,
         toIndex: 2,
-        departure: "2026-09-01T10:00:00+02:00",
-        arrival: "2026-09-01T11:00:00+02:00",
-        travelSeconds: HOUR,
+        departure: "2026-09-01T10:30:00+02:00",
+        arrival: "2026-09-01T12:30:00+02:00",
+        travelSeconds: 2 * HOUR,
       },
     ]);
-  });
-
-  it("treats zero dwell exactly like no dwell", () => {
-    const withZero = composeSchedule({
-      stops: [stop({ index: 0 }), stop({ index: 1, dwellSeconds: 0 }), stop({ index: 2 })],
-      legSeconds: [HOUR, HOUR],
-      anchorMs: NINE_AM_BERLIN,
-      direction: "forward",
-    });
-    const without = composeSchedule({
-      stops: [stop({ index: 0 }), stop({ index: 1 }), stop({ index: 2 })],
-      legSeconds: [HOUR, HOUR],
-      anchorMs: NINE_AM_BERLIN,
-      direction: "forward",
-    });
-    expect(withZero.arrival).toBe(without.arrival);
-    expect(withZero.totalDwellSeconds).toBe(0);
   });
 
   it("records wait when an earliest departure binds", () => {

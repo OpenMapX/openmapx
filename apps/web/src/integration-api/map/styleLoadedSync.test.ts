@@ -139,22 +139,6 @@ describe("subscribeStyleLoaded", () => {
     expect(fake.state.handlers.get("idle")?.size).toBe(0);
   });
 
-  it("is the lifecycle boundary used by every multi-layer style effect", () => {
-    const files = [
-      "apps/web/src/components/map/layers/DataSourceLayer.tsx",
-      "apps/web/src/components/map/CategoryResultMarkers.tsx",
-      "apps/web/src/components/map/layers/RasterBaseLayer.tsx",
-      "apps/web/src/components/map/layers/ImportedGeometryLayer.tsx",
-      "apps/web/src/integration-api/components/StreetLevelCoverageLayer.tsx",
-    ];
-
-    for (const file of files) {
-      const source = readFileSync(resolve(process.cwd(), file), "utf8");
-      expect(source).toContain("subscribeStyleLoaded(map");
-      expect(source).not.toContain('once("idle"');
-    }
-  });
-
   it("is not bypassed by tile-gated or hand-rolled style listeners", () => {
     const root = resolve(process.cwd());
     const sources = (dir: string): string[] =>

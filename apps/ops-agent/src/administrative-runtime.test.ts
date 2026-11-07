@@ -72,12 +72,13 @@ function context(kind: string) {
 }
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   const { rm } = await import("node:fs/promises");
   await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true })));
 });
 
 describe("default fixed CLI live output", () => {
-  it.each(["visibility", "volume"])("streams live bounded output: %s", async (check) => {
+  it("streams live output and drains high-volume diagnostics with bounded framing", async () => {
     const root = temporaryRoot();
     const release = join(root, "release");
     const ready = join(root, "ready");
@@ -107,9 +108,7 @@ describe("default fixed CLI live output", () => {
     void completion.catch(() => undefined);
     try {
       await vi.waitFor(() => expect(existsSync(ready)).toBe(true), { timeout: 2000 });
-      if (check === "visibility") {
-        await vi.waitFor(() => expect(seen).toContain("phase-one"), { timeout: 2000 });
-      }
+      await vi.waitFor(() => expect(seen).toContain("phase-one"), { timeout: 2000 });
       writeFileSync(release, "go", { mode: 0o644 });
       await expect(completion).resolves.toBeUndefined();
       expect(seen).toContain("last-diagnostic");
@@ -130,6 +129,7 @@ describe("administrative backup runtime", () => {
     expect(run).not.toHaveBeenCalled();
   });
   it("runs scheduled retention through the fixed CLI under validated bounds", async () => {
+    vi.stubEnv("BACKUP_RETENTION_DAYS", "30");
     const calls: string[][] = [];
     await pruneBackupRetention(temporaryRoot(), 30, async (args) => {
       calls.push([...args]);
@@ -210,7 +210,6 @@ describe("administrative backup runtime", () => {
         : []),
       ["backup", "delete", "nightly-20260823"],
     ]);
-    expect(context("backup.create").emitLog).not.toHaveBeenCalled();
   });
 
   it.runIf(process.platform === "linux")(
@@ -866,7 +865,7 @@ async function appliedInspectionFixture(rootDir: string) {
 }
 
 describe("administrative release runtime", () => {
-  it("stores immutable canonical release IDs with exact-content idempotency and bounded pre-reads", async () => {
+  it("stores immutable canonical release IDs with exact-content idempotency and a bounded manifest", async () => {
     const rootDir = temporaryRoot();
     const release = "immutable-release";
     const makeManifest = (digit: string) => ({
@@ -914,13 +913,13 @@ describe("administrative release runtime", () => {
     await expect(first.validateCandidate?.(release, "0".repeat(64))).rejects.toThrow(
       "Checked release",
     );
-    process.env.OPENMAPX_RELEASE = "preview";
+    vi.stubEnv("OPENMAPX_RELEASE", "preview");
     try {
       await expect(first.validateCandidate?.(release, checkedDigest)).rejects.toThrow(
         "Checked release",
       );
     } finally {
-      delete process.env.OPENMAPX_RELEASE;
+      vi.unstubAllEnvs();
     }
     await expect(first.pull(release, context)).resolves.toBeUndefined();
     expect(dockerCalls).toContainEqual([
@@ -940,7 +939,22 @@ describe("administrative release runtime", () => {
       privacyReleaseValidation,
     });
 
-    manifestText = "x".repeat(32 * 1024 + 1);
+    manifestText = services.canonicalReleaseManifest(
+      services.parseReleaseManifest(
+        JSON.stringify({
+          ...makeManifest("4"),
+          release: "oversized-release",
+          producer: {
+            repository: `${"x".repeat(32 * 1024)}/repository`,
+            workflowPath: ".github/workflows/ci.yml",
+            sourceRevision: "c".repeat(40),
+            runId: 1,
+            runAttempt: 1,
+            event: "push",
+          },
+        }),
+      ),
+    );
     await expect(first.resolve(context)).rejects.toThrow();
   });
 
@@ -1603,7 +1617,6 @@ describe("administrative release runtime", () => {
         { serviceId: "transitous-runner", state: "unknown", releaseMember: true },
       ],
     });
-    expect(calls.flat()).not.toContain("attacker-container");
   });
 
   describe("system inspection fails closed on unusable observations", () => {

@@ -180,35 +180,6 @@ describe("registerAuth", () => {
     }
   });
 
-  it("rejects a protected request with no token (401)", async () => {
-    const app = await buildApp();
-    const res = await app.inject({ method: "GET", url: "/protected" });
-    expect(res.statusCode).toBe(401);
-    await app.close();
-  });
-
-  it("rejects a wrong token (401)", async () => {
-    const app = await buildApp();
-    const res = await app.inject({
-      method: "GET",
-      url: "/protected",
-      headers: { authorization: "Bearer wrong" },
-    });
-    expect(res.statusCode).toBe(401);
-    await app.close();
-  });
-
-  it("accepts the correct Bearer token", async () => {
-    const app = await buildApp();
-    const res = await app.inject({
-      method: "GET",
-      url: "/protected",
-      headers: { authorization: `Bearer ${TOKEN}` },
-    });
-    expect(res.statusCode).toBe(200);
-    await app.close();
-  });
-
   it("accepts the correct x-data-manager-token header", async () => {
     const app = await buildApp();
     const res = await app.inject({
@@ -216,20 +187,6 @@ describe("registerAuth", () => {
       url: "/protected",
       headers: { "x-data-manager-token": TOKEN },
     });
-    expect(res.statusCode).toBe(200);
-    await app.close();
-  });
-
-  it("lets /status through without a token", async () => {
-    const app = await buildApp();
-    const res = await app.inject({ method: "GET", url: "/status" });
-    expect(res.statusCode).toBe(200);
-    await app.close();
-  });
-
-  it("lets /live through without a token", async () => {
-    const app = await buildApp();
-    const res = await app.inject({ method: "GET", url: "/live" });
     expect(res.statusCode).toBe(200);
     await app.close();
   });

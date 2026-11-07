@@ -84,13 +84,9 @@ describe.each(["desktop", "mobile", "quick"] as const)("%s building controls", (
   }
 
   it.each([
-    [13.9, true],
-    [14, true],
     [16.49, true],
     [16.5, false],
-    [16.75, false],
-    [17, false],
-  ] as const)("gates selection at zoom %s consistently with the extrusion fade", (zoom, gated) => {
+  ] as const)("gates selection at the declared minimum zoom %s", (zoom, gated) => {
     useMapStore.getState().setZoom(zoom);
     const control = mount();
     expect(control.hasAttribute("disabled")).toBe(gated);

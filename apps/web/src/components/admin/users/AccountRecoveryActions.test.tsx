@@ -301,13 +301,35 @@ it("does not clear a newly selected account's password when the old account fini
   ).not.toBeInTheDocument();
 });
 it("retries a rejected create with the same key until its intent is edited", async () => {
-  mocks.provision.mockResolvedValue({ status: 503, data: { error: "ACCOUNT_ACTION_UNAVAILABLE" } });
-  mount(<CreateUserDialog open onClose={vi.fn()} />);
-  fill();
-  fireEvent.click(screen.getByRole("button", { name: "Create" }));
-  await waitFor(() => expect(mocks.provision).toHaveBeenCalledTimes(1));
-  await waitFor(() => expect(screen.getByRole("button", { name: "Create" })).not.toBeDisabled());
-  fireEvent.click(screen.getByRole("button", { name: "Create" }));
-  await waitFor(() => expect(mocks.provision).toHaveBeenCalledTimes(2));
-  expect(mocks.provision.mock.calls[0]?.[1]).toEqual(mocks.provision.mock.calls[1]?.[1]);
+  const first = "11111111-1111-4111-8111-111111111111";
+  const second = "22222222-2222-4222-8222-222222222222";
+  let generated = 0;
+  const uuid = vi
+    .spyOn(crypto, "randomUUID")
+    .mockImplementation(() => (generated++ === 0 ? first : second));
+  try {
+    mocks.provision.mockResolvedValue({
+      status: 503,
+      data: { error: "ACCOUNT_ACTION_UNAVAILABLE" },
+    });
+    mount(<CreateUserDialog open onClose={vi.fn()} />);
+    fill();
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(mocks.provision).toHaveBeenCalledTimes(1));
+    expect(mocks.provision.mock.calls[0]?.[1]).toEqual({ "idempotency-key": first });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Create" })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(mocks.provision).toHaveBeenCalledTimes(2));
+    expect(mocks.provision.mock.calls[1]?.[1]).toEqual({ "idempotency-key": first });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Create" })).not.toBeDisabled());
+    fireEvent.change(screen.getByLabelText("Full Name"), {
+      target: { value: "Edited synthetic subject" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(mocks.provision).toHaveBeenCalledTimes(3));
+    expect(mocks.provision.mock.calls[2]?.[0]).toMatchObject({ name: "Edited synthetic subject" });
+    expect(mocks.provision.mock.calls[2]?.[1]).toEqual({ "idempotency-key": second });
+  } finally {
+    uuid.mockRestore();
+  }
 });

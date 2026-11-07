@@ -237,24 +237,6 @@ describe("projectFlowToRoute", () => {
     expect(spans.some((s) => s.startMeters <= 600 && s.endMeters >= 600)).toBe(false);
   });
 
-  it("returns a free-flow span rather than filtering it out", () => {
-    const route = northRoute(2000);
-    const spans = projectFlowToRoute(
-      [
-        segment(
-          [
-            [8, 50 + 300 * M],
-            [8, 50 + 600 * M],
-          ],
-          { los: "free_flow", speedRatio: 1 },
-        ),
-      ],
-      route,
-    );
-    expect(spans).toHaveLength(1);
-    expect(spans[0].los).toBe("free_flow");
-  });
-
   it("lets a free-flow observation lose to an overlapping jam but survive outside it", () => {
     const route = northRoute(2000);
     const spans = projectFlowToRoute(
@@ -361,36 +343,6 @@ describe("projectFlowToRoute", () => {
     expect(spans[0].endMeters).toBeLessThan(1550);
   });
 
-  it("stays fast on a long route with a busy corridor", () => {
-    // Matching used to rescan the whole polyline once per sample, which is
-    // quadratic in the route: this shape took ~50 s of uninterruptible work on
-    // the API's shared event loop, and the endpoint accepts routes four times
-    // this size. It now runs in a fraction of a second. The bound is a
-    // tripwire for that scan coming back — generous enough for a loaded CI
-    // machine, orders of magnitude under the unindexed cost.
-    const points = 5000;
-    const meters = 500_000;
-    const route: [number, number][] = Array.from(
-      { length: points },
-      (_, i) => [8, 50 + meters * (i / (points - 1)) * M] as [number, number],
-    );
-    const segments = Array.from({ length: 150 }, (_, s) =>
-      segment(
-        Array.from({ length: 30 }, (_, i) => {
-          const start = (meters * s) / 150;
-          return [8, 50 + (start + (i * meters) / 150 / 60) * M] as [number, number];
-        }),
-        { id: `s${s}` },
-      ),
-    );
-
-    const started = performance.now();
-    const spans = projectFlowToRoute(segments, route);
-    const elapsed = performance.now() - started;
-    expect(spans.length).toBeGreaterThan(100);
-    expect(elapsed).toBeLessThan(2500);
-  });
-
   it("does not let a straight chord across a route detour claim the whole loop", () => {
     // The segment's two points sit 120 m apart in a straight line, but the
     // route between where they snap loops out and back for ~420 m (a service
@@ -439,14 +391,6 @@ describe("routeFingerprint", () => {
       [8.002, 50.0005],
     ]);
     expect(movedMidpoint).not.toBe(base);
-  });
-
-  it("is a pure function of the geometry — same input, same output", () => {
-    const geometry: [number, number][] = [
-      [8, 50],
-      [8.01, 50.01],
-    ];
-    expect(routeFingerprint(geometry)).toBe(routeFingerprint([...geometry]));
   });
 });
 
@@ -1035,10 +979,10 @@ describe("route flow scaling", () => {
       { length: points },
       (_, i) => [8, 50 + meters * (i / (points - 1)) * M] as LngLat,
     );
-    const segments = Array.from({ length: 100 }, (_, s) =>
+    const segments = Array.from({ length: 150 }, (_, s) =>
       segment(
-        Array.from({ length: 20 }, (_, i) => {
-          const start = (meters * s) / 100;
+        Array.from({ length: 30 }, (_, i) => {
+          const start = (meters * s) / 150;
           return [8, 50 + (start + i * 100) * M] as LngLat;
         }),
         { id: `s${s}` },
@@ -1049,10 +993,10 @@ describe("route flow scaling", () => {
     setRouteMatcherCounting(true);
     try {
       const spans = projectFlowToRoute(segments, route);
-      expect(spans.length).toBeGreaterThan(50);
+      expect(spans.length).toBeGreaterThan(100);
       const taken = readRouteMatcherCounters();
       expect(taken.preparations).toBe(1);
-      expect(taken.snaps).toBe(100 * 20);
+      expect(taken.snaps).toBe(150 * 24);
       // A whole-route scan would be 4,999 edges per sample.
       expect(taken.evaluatedEdges / taken.snaps).toBeLessThan(64);
     } finally {
@@ -1072,11 +1016,13 @@ describe("captured flow attribution boundaries", () => {
         [8, 50 + 500 * M],
         [8, 50 + 1000 * M],
       ],
-      { fieldContributors: { ratio: [a], los: [b] } },
+      { fieldContributors: { ratio: [{ ...a }], los: [{ ...b }] } },
     );
     const [span] = projectFlowToRoute([input], route);
     expect(span.fieldContributors).toEqual({ ratio: [a], los: [b] });
     expect(span.fieldContributors).not.toBe(input.fieldContributors);
+    input.fieldContributors!.ratio![0].name = "Changed after projection";
+    expect(span.fieldContributors?.ratio?.[0].name).toBe("A");
   });
   it("does not join equal-looking intervals supplied by different sources", () => {
     const spans = resolveFlowOverlaps(

@@ -71,16 +71,6 @@ describe("live-transit-db-ris setup", () => {
     expect(provider.capabilities.vehiclePositions).toBe(true);
     expect(provider.capabilities.alerts).toMatchObject({ byBbox: false });
   });
-
-  it("registers no provider when credentials are absent (still wires the provider)", () => {
-    const ctx = createMockIntegrationContext({
-      id: "live-transit-db-ris",
-      manifest: { dataSources: [] } as never,
-    });
-    setup(ctx);
-    // The provider is always registered; without credentials it yields no data.
-    expect(ctx.registered.realtime).toHaveLength(1);
-  });
 });
 
 describe("getVehiclePositions", () => {

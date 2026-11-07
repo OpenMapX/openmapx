@@ -43,7 +43,7 @@ class IntakeInboxTest {
     val store = inbox(); val item = store.putText("Station")
     failure("unreadable") { store.readChunk("../private", 0) }
     failure("unreadable") { store.readChunk(item.id, 1) }
-    clock += IntakePolicy.TTL_MS + 1
+    clock += 86_400_001L
     assertTrue(store.list().isEmpty())
     failure("expired") { store.readChunk(item.id, 0) }
   }

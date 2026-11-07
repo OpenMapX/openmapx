@@ -23,7 +23,7 @@ final class IntakeInboxTests: XCTestCase {
     XCTAssertThrowsError(try store.putText("Paris"))
     for _ in 0..<3 { try store.recordError("inbox-full") }
     XCTAssertEqual(try store.list().count, 10)
-    time += IntakePolicy.ttlMs
+    time += 86_400_000
     XCTAssertTrue(try store.list().isEmpty)
   }
   func testDocumentAuthorityAndDeleteAfterCopy() throws {

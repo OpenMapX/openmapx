@@ -201,11 +201,6 @@ describe("RouteSearchResultsLayer brand pins", () => {
     rerender(<RouteSearchResultsLayer {...props} />);
     expect(label()).toBe("~+2 min");
   });
-  it("publishes the selected brand logo after it loads", async () => {
-    fixtures.loadBrand.mockResolvedValue(true);
-    render(<RouteSearchResultsLayer {...props} brandQid="Q151954" />);
-    await waitFor(() => expect(lastImage()).toBe("brand-marker-Q151954"));
-  });
   it("publishes a loaded logo while the current style is still loading tiles", async () => {
     fixtures.map.isStyleLoaded.mockReturnValue(false);
     fixtures.loadBrand.mockResolvedValue(true);

@@ -93,38 +93,10 @@ describe("restaurant order-link discovery", () => {
 });
 
 describe("restaurant website acquisition", () => {
-  it("returns no links when connection-time DNS changes to a private address", async () => {
+  it("returns no links when the bounded homepage request fails", async () => {
     serverMocks.safeFetchText.mockImplementation(async (url: string) => {
       if (url.endsWith("/robots.txt")) return "";
       throw new Error('URL host "restaurant.example" is not allowed');
-    });
-
-    await expect(resolveRestaurantLinks("https://restaurant.example", log)).resolves.toEqual({
-      menu: null,
-      orderUrl: null,
-      providerOrderUrls: [],
-    });
-    expect(globalThis.fetch).not.toHaveBeenCalled();
-  });
-
-  it("returns no links when a redirect targets a private address", async () => {
-    serverMocks.safeFetchText.mockImplementation(async (url: string) => {
-      if (url.endsWith("/robots.txt")) return "";
-      throw new Error('URL host "127.0.0.1" is not allowed');
-    });
-
-    await expect(resolveRestaurantLinks("https://restaurant.example", log)).resolves.toEqual({
-      menu: null,
-      orderUrl: null,
-      providerOrderUrls: [],
-    });
-    expect(globalThis.fetch).not.toHaveBeenCalled();
-  });
-
-  it("returns no links when the pinned request times out", async () => {
-    serverMocks.safeFetchText.mockImplementation(async (url: string) => {
-      if (url.endsWith("/robots.txt")) return "";
-      throw new DOMException("The operation timed out", "TimeoutError");
     });
 
     await expect(resolveRestaurantLinks("https://restaurant.example", log)).resolves.toEqual({

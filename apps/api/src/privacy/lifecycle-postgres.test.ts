@@ -216,6 +216,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .select()
         .from(dataExportArtifact)
         .where(eq(dataExportArtifact.requestId, request.id));
+      expect(artifacts.map((artifact) => artifact.id).sort()).toEqual(
+        generations.map((generation) => generation.artifact.id).sort(),
+      );
+      expect(artifacts).toHaveLength(2);
       expect(artifacts.every((a) => a.state === "deleted" && a.wrappedDek === null)).toBe(true);
       expect(await readdir(join(store.root, "objects")).catch(() => [])).toEqual([]);
     });
@@ -611,7 +615,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         { now: () => at, maxAttempts: 2, deferDelayMs: 1 },
       );
       for (let attempt = 0; attempt < 5; attempt++) {
-        await runner.runOnce();
+        expect(await runner.runOnce()).toBe(true);
         at = new Date(at.getTime() + 1000);
       }
       const tasks = await db

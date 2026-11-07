@@ -89,13 +89,6 @@ describe("AttributionStrip", () => {
     expect(markup).toContain("/licenses#source-tfl");
   });
 
-  it("renders the label when variant is panel-header", () => {
-    const markup = renderToStaticMarkup(
-      <AttributionStrip attributions={[delfi]} variant="panel-header" label="Data sources:" />,
-    );
-    expect(markup).toContain("Data sources:");
-  });
-
   it("renders plain source credits as linked text with an accessible localized label", () => {
     const markup = renderToStaticMarkup(
       <AttributionStrip attributions={[delfi, delfi, tfl]} variant="plain" label="Datenquellen" />,
@@ -106,13 +99,6 @@ describe("AttributionStrip", () => {
     expect(markup).toContain('href="/licenses#source-tfl"');
     expect(markup).toContain("CC-BY-4.0");
     expect(markup).not.toContain("Datenquellen<");
-  });
-
-  it("does not render the label for variants other than panel-header", () => {
-    const inline = renderToStaticMarkup(
-      <AttributionStrip attributions={[delfi]} variant="inline" label="Data:" />,
-    );
-    expect(inline).not.toContain("Data:");
   });
 
   it("renders chips without anchors when navigable=false", () => {
@@ -207,6 +193,7 @@ describe("AttributionStrip", () => {
   it("renders no toggle when item count is within maxVisible", () => {
     const { container } = render(<AttributionStrip attributions={[delfi, tfl]} maxVisible={3} />);
     expect(screen.getByRole("button", { name: "attributions" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
     expect(container.querySelectorAll("[data-source-id]").length).toBe(2);
   });
 });

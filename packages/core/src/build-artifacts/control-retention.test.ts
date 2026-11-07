@@ -311,15 +311,10 @@ it("renews ordinary capacity from an eligible terminal family instead of exhaust
   writeFileSync(count, JSON.stringify(full));
   writeFileSync(count.replace(".retention-count", ".retention-highwater"), JSON.stringify(full)); // Consumed creation reservations at ordinary capacity.
   const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 96 * 3600_000);
-  const api = await import("./index");
-  // Before implementation, no collector runs and real fresh admission still
-  // fails the old lifetime counter. Do not use a missing export as the RED.
-  if ("reconcileControlRetention" in api) {
-    let retired = 0;
-    for (let n = 0; n < 32 && !retired; n++)
-      retired += (await api.reconcileControlRetention(f.installation, { maxFamilies: 1 })).retired;
-    expect(retired).toBe(1);
-  }
+  let retired = 0;
+  for (let n = 0; n < 32 && !retired; n++)
+    retired += (await c.reconcileControlRetention(f.installation, { maxFamilies: 1 })).retired;
+  expect(retired).toBe(1);
   expect(() => owner()).not.toThrow();
   expect(
     existsSync(join(root, `control-private/host-cli/executions/${f.execution.operationKey}.json`)),

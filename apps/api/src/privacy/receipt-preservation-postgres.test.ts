@@ -377,10 +377,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         "auth-oauth-resources",
         "offline-package-ownership",
       ]);
+      const databaseOutcomes = outcomes.filter((row) =>
+        receiptDatabaseRegistrations.has(row.registrationId),
+      );
+      expect(databaseOutcomes.map((row) => row.registrationId).sort()).toEqual(
+        [...receiptDatabaseRegistrations].sort(),
+      );
       expect(
-        outcomes
-          .filter((row) => receiptDatabaseRegistrations.has(row.registrationId))
-          .every((row) => row.status === "capture_failed" && row.releasedAt),
+        databaseOutcomes.every((row) => row.status === "capture_failed" && row.releasedAt),
       ).toBe(true);
     });
 

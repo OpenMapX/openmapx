@@ -113,9 +113,18 @@ describe("buildPopupCreditsHtml", () => {
           {
             scope: "data",
             subject: "Data",
+            attribution: {
+              placement: "visible",
+              surfaces: ["content"],
+              basis: "provider-terms",
+              reviewedAt: "2026-10-14",
+              evidenceUrls: ["https://city.example/terms"],
+              reason: "Required visible source notice",
+              compactText: '<a href="https://city.example/terms">Required City feed notice</a>',
+            },
             license: {
               kind: "custom",
-              id: "city-terms",
+              id: "LicenseRef-city-terms",
               namespace: "city.example",
               name: "City terms",
               url: "https://city.example/terms",
@@ -125,8 +134,8 @@ describe("buildPopupCreditsHtml", () => {
       },
     };
     const { text, links } = read(buildPopupCreditsHtml([required], { labels }));
-    expect(text).toContain("City feed");
-    expect(links.map(([href]) => href)).toContain("https://city.example/");
+    expect(text).toContain("Required City feed notice");
+    expect(links.map(([href]) => href)).toContain("https://city.example/terms");
   });
 
   it("names a source credited twice once, and nothing without credits", () => {

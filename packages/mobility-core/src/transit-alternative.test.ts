@@ -13,7 +13,7 @@ const leg = (mode: TripLeg["mode"], start: string, end: string, distanceMeters =
   geometry: { type: "LineString", coordinates: [[6, 50]] },
   ...(mode === "rail" ? { route: { shortName: "RE1", longName: "" }, tripId: "mo:re1" } : {}),
 });
-export const replacement = [
+const replacement = [
   leg("walking", "20:50", "20:51", 10),
   leg("rail", "20:51", "21:44", 70000),
   leg("walking", "21:44", "21:45", 15),
@@ -91,17 +91,34 @@ describe("composeTransitAlternative", () => {
       { ...replacement[2], startTime: "2026-11-06T21:43:00Z" },
     ];
     expect(composeTransitAlternative(p, 1, 0)).toBeNull();
+    const disconnected = parent();
+    disconnected.legs[1].alternatives![0].legs = replacement.map((l, index) =>
+      index === 1 ? { ...l, from: { ...l.from, stopId: "mo:another-station" } } : l,
+    );
+    expect(composeTransitAlternative(disconnected, 1, 0)).toBeNull();
   });
   it("strips fare indices and alternative trees from retained legs and credits only chosen legs", () => {
     const p = parent();
-    replacement[1].contributors = [
+    const selected = replacement.map((l) => ({
+      ...l,
+      fareTransferIndex: 0,
+      effectiveFareLegIndex: 0,
+      alternatives: [],
+    }));
+    p.legs[1].alternatives![0].legs = selected;
+    selected[1].contributors = [
       { sourceId: "regional", name: "Regional", url: "https://example.com" },
     ];
     p.contributors = [{ sourceId: "eurostar", name: "Eurostar", url: "https://example.com" }];
     const result = composeTransitAlternative(p, 1, 0)!;
     expect(result.contributors?.map((a) => a.sourceId)).toEqual(["regional"]);
-    expect(result.legs.every((l) => !l.alternatives && l.fareTransferIndex === undefined)).toBe(
-      true,
-    );
+    expect(
+      result.legs.every(
+        (l) =>
+          !l.alternatives &&
+          l.fareTransferIndex === undefined &&
+          l.effectiveFareLegIndex === undefined,
+      ),
+    ).toBe(true);
   });
 });

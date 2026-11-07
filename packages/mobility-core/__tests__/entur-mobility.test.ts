@@ -11,21 +11,9 @@ vi.mock("../src/cache.js", () => ({
   ),
 }));
 
-vi.mock("../src/gbfs-catalog.js", () => ({
+vi.mock("../src/gbfs-catalog.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/gbfs-catalog.js")>()),
   filterCatalogByBbox: vi.fn((entries: unknown[]) => entries),
-  normalizeFormFactor: vi.fn((value: string | undefined) => {
-    switch (value) {
-      case "bicycle":
-      case "cargo_bicycle":
-      case "scooter_standing":
-      case "scooter_seated":
-      case "car":
-      case "moped":
-        return value;
-      default:
-        return "other";
-    }
-  }),
 }));
 
 import type { CacheClient } from "../src/cache.js";

@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { COMPACT_ALERT_SX, CompactAlert } from "../CompactAlert";
+
 import { CompactAlertList, type CompactAlertListItem } from "../CompactAlertList";
 
 const items: CompactAlertListItem[] = [
@@ -35,21 +35,6 @@ const items: CompactAlertListItem[] = [
 ];
 
 describe("CompactAlertList", () => {
-  it("keeps standalone information notices compact", () => {
-    const markup = renderToStaticMarkup(
-      <CompactAlert severity="info" variant="outlined">
-        Configuration is managed externally.
-      </CompactAlert>,
-    );
-
-    expect(markup).toContain("Configuration is managed externally.");
-    expect(COMPACT_ALERT_SX).toMatchObject({ py: 0 });
-    expect(COMPACT_ALERT_SX["& .MuiAlert-action"]).toMatchObject({
-      alignItems: "center",
-      pt: 0,
-    });
-  });
-
   it("uses the same compact rows and collapse control for every item set", () => {
     const markup = renderToStaticMarkup(
       <CompactAlertList items={items} expanded={false} onExpandedChange={() => undefined} />,

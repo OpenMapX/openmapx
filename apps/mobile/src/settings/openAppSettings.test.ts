@@ -40,13 +40,4 @@ describe("openAppSettings", () => {
 
     await expect(openAppSettings("application", value)).resolves.toBe("unavailable");
   });
-
-  it("takes no URI to open", () => {
-    // Compile-time by construction: the only parameter is a closed enum. An
-    // arbitrary intent URI reachable from the WebView would be a way out of the
-    // app, which the fixed-origin design exists to rule out.
-    const accepted: SettingsTarget[] = ["location", "notifications", "application"];
-
-    expect(accepted).toHaveLength(3);
-  });
 });

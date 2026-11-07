@@ -53,6 +53,9 @@ describe("operator task actions", () => {
     renderPrivacyComponent(detail, (client) => (
       <PrivacyTaskActions detail={detail} client={client} />
     ));
+    fireEvent.change(screen.getByLabelText("privacyAdmin.workflows.reasonCode"), {
+      target: { value: "scope-reviewed" },
+    });
     expect(
       screen.getByRole("button", { name: "privacyAdmin.workflows.recordTaskDecision" }),
     ).toBeDisabled();

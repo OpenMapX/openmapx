@@ -233,11 +233,7 @@ describe("road-conditions provider and the live source list", () => {
 });
 
 describe("road-conditions provider", () => {
-  it("has the provider id the road-conditions orchestrator knows", () => {
-    expect(provider().id).toBe("road-conditions-openconditions");
-  });
-
-  it("getEvents maps each situation of every page to one event", async () => {
+  it("getEvents maps returned situations to events", async () => {
     const records = Array.from({ length: 3 }, (_, i) => situation(`s${i}`));
     const events = await provider({ serve: api(records) }).getEvents([4, 51, 6, 53]);
     expect(events.map((e) => e.id)).toEqual(records.map((r) => r.id));
@@ -259,7 +255,7 @@ describe("road-conditions provider", () => {
     const records = Array.from({ length: 1500 }, (_, i) =>
       situation(`s${String(i).padStart(4, "0")}`),
     );
-    await provider({
+    const events = await provider({
       serve: api(records),
       capture: (url, params) => url.endsWith("/situations") && calls.push(params),
     }).getEvents([4, 51, 6, 53], {
@@ -269,6 +265,9 @@ describe("road-conditions provider", () => {
       minSeverity: "major",
       horizonDays: 7,
     });
+    expect(events).toHaveLength(1500);
+    expect(events[0]?.id).toBe("oc:situation:nl-ndw-events:s0000");
+    expect(events.at(-1)?.id).toBe("oc:situation:nl-ndw-events:s1499");
     expect(calls).toEqual([
       {
         bbox: "4,51,6,53",
@@ -535,30 +534,7 @@ describe("road-conditions provider", () => {
   });
 
   it("getFlow fetches /segments.geojson at OPENCONDITIONS_URL with the bbox as a comma-joined param", async () => {
-    const fakeFc = {
-      type: "FeatureCollection",
-      features: [
-        {
-          type: "Feature",
-          geometry: {
-            type: "LineString",
-            coordinates: [
-              [5, 52],
-              [5.1, 52.1],
-            ],
-          },
-          properties: {
-            segment_id: "500:f",
-            dir: "f",
-            speed_ratio: 0.5,
-            los: "heavy",
-            confidence: "measured",
-            current_kph: 50,
-            free_flow_kph: 100,
-          },
-        },
-      ],
-    };
+    const fakeFc = flowFc;
     let capturedUrl = "";
     let capturedParams: Params;
     const segments = await provider({
@@ -571,7 +547,7 @@ describe("road-conditions provider", () => {
 
     expect(capturedUrl).toBe(`${BASE_URL}/segments.geojson`);
     expect(capturedParams).toEqual({ bbox: "4,51,6,53" });
-    expect(segments).toHaveLength(1);
+    expect(segments).toHaveLength(2);
     expect(segments[0]).toMatchObject({
       id: "500:f",
       direction: "f",
@@ -582,29 +558,6 @@ describe("road-conditions provider", () => {
       freeFlowSpeedKph: 100,
       source: "road-conditions-openconditions",
     });
-  });
-
-  it("getFlow maps a speed-less base feature to los:unknown, confidence:typical", async () => {
-    const fakeFc = {
-      type: "FeatureCollection",
-      features: [
-        {
-          type: "Feature",
-          geometry: {
-            type: "LineString",
-            coordinates: [
-              [6, 53],
-              [6.1, 53.1],
-            ],
-          },
-          properties: { segment_id: "700:f", dir: "f" },
-        },
-      ],
-    };
-    const segments = await provider({ serve: () => fakeFc }).getFlow!([4, 51, 6, 53]);
-    expect(segments).toHaveLength(1);
-    expect(segments[0]).toMatchObject({ id: "700:f", los: "unknown", confidence: "typical" });
-    expect(segments[0]!.speedRatio).toBeUndefined();
   });
 });
 
@@ -909,14 +862,10 @@ describe("situationToRoadConditionEvent", () => {
     });
   });
 
-  it("shows a LicenseRef- licence by its listed name; an SPDX id stays as it is", () => {
+  it("shows a captured custom licence by its name and preserves an SPDX id", () => {
     const LICENSE = "LicenseRef-TfL-Transport-Data-Service";
     const NAME = "TfL Transport Data Service licence (OGL v2.0 with TfL amendments)";
     const TERMS = "https://tfl.gov.uk/corporate/terms-and-conditions/transport-data-service";
-    const _names: Record<string, string> = {
-      [LICENSE]: NAME,
-      "CC-BY-4.0": "Creative Commons Attribution 4.0",
-    };
     const tfl = record({
       provenance: {
         origin: "feed",
@@ -954,7 +903,6 @@ describe("situationToRoadConditionEvent", () => {
     expect(situationToRoadConditionEvent(record())!.attribution).toMatchObject({
       licensing: { bindings: [{ license: { kind: "spdx", expression: "CC-BY-4.0" } }] },
     });
-    // Without names (before the first list) the id stays as it is.
     expect(formatLicensing(situationToRoadConditionEvent(tfl)!.attribution.licensing!)).toBe(NAME);
   });
 

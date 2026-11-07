@@ -1,11 +1,6 @@
 import type { StreetLevelCapabilities } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
-import {
-  coverageLayerIds,
-  coverageSourceId,
-  pictureLayerIds,
-  providerIdByLayer,
-} from "./StreetLevelCoverageLayer";
+import { pictureLayerIds, providerIdByLayer } from "./StreetLevelCoverageLayer";
 
 const capability = (id: string): StreetLevelCapabilities => ({
   id,
@@ -22,28 +17,6 @@ const capability = (id: string): StreetLevelCapabilities => ({
     layers: { sequences: "sequences", pictures: "pictures" },
     props: { id: "id" },
   },
-});
-
-describe("coverage layer identifiers", () => {
-  it("namespaces the source per provider", () => {
-    expect(coverageSourceId("panoramax")).toBe("sli-panoramax");
-    expect(coverageSourceId("mapillary")).toBe("sli-mapillary");
-  });
-
-  it("derives all four layer ids per provider", () => {
-    expect(coverageLayerIds("panoramax")).toEqual({
-      sequences: "sli-panoramax-sequences",
-      pictures: "sli-panoramax-pictures",
-      picturesPano: "sli-panoramax-pictures-pano",
-      grid: "sli-panoramax-grid",
-    });
-  });
-
-  it("never collides between providers", () => {
-    const a = Object.values(coverageLayerIds("panoramax"));
-    const b = Object.values(coverageLayerIds("mapillary"));
-    expect(a.filter((id) => b.includes(id))).toEqual([]);
-  });
 });
 
 describe("pictureLayerIds", () => {

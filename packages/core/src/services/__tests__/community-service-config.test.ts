@@ -77,12 +77,6 @@ describe("OpenConditions ingest rendered as a community service", () => {
     for (const key of secretKeys) expect(properties[key]?.["x-openmapx-secret"], key).toBe(true);
   });
 
-  it("puts no compose interpolation in its environment", () => {
-    for (const [key, value] of Object.entries(manifest.container.environment ?? {})) {
-      expect(value, key).not.toContain("$");
-    }
-  });
-
   it("delivers every configured key to the environment unescaped", () => {
     const prefix = serviceConfigEnvPrefix(manifest.id);
     expect(prefix).toBe("SERVICE_OPENCONDITIONS_INGEST_");

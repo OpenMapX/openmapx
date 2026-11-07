@@ -105,21 +105,10 @@ beforeEach(() => {
 });
 
 describe("ArrivalCard", () => {
-  it("offers Save parking after a drive", () => {
-    render(<ArrivalCard onClose={() => {}} />);
-    expect(screen.getByRole("button", { name: /parking.saveParking/ })).toBeInTheDocument();
-  });
-
   it("offers it after a motorcycle trip", () => {
     useNavigationStore.setState({ kind: "ground", mode: "motorcycle" });
     render(<ArrivalCard onClose={() => {}} />);
     expect(screen.getByRole("button", { name: /parking.saveParking/ })).toBeInTheDocument();
-  });
-
-  it("hides it after a walk", () => {
-    useNavigationStore.setState({ kind: "ground", mode: "walking" });
-    render(<ArrivalCard onClose={() => {}} />);
-    expect(screen.queryByRole("button", { name: /parking.saveParking/ })).toBeNull();
   });
 
   it("hides it for a transit arrival", () => {
@@ -142,62 +131,21 @@ describe("ArrivalCard", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("renders WalkingHandoffCard when walking route is available", async () => {
-    setPendingArrivalHandoff({
-      parkingCoords: [10.01, 50.01],
-      destinationCoords: [10.012, 50.012],
-      destinationName: null,
-    });
-    mockFetchDirections.mockResolvedValue({ routes: [mockWalkingRoute] });
-    render(<ArrivalCard onClose={() => {}} />);
-
-    await waitFor(() => {
-      expect(screen.getByText("navigation.walkToDestination")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "navigation.startWalking" })).toBeInTheDocument();
-    });
-  });
-
-  it("renders the destination name when provided", async () => {
-    setPendingArrivalHandoff({
-      parkingCoords: [10.01, 50.01],
-      destinationCoords: [10.012, 50.012],
-      destinationName: "City Museum",
-    });
-    mockFetchDirections.mockResolvedValue({ routes: [mockWalkingRoute] });
-    render(<ArrivalCard onClose={() => {}} destinationName="City Museum" />);
-
-    expect(screen.getByText("City Museum")).toBeInTheDocument();
-    await waitFor(() =>
-      expect(screen.getByText("navigation.walkToDestination")).toBeInTheDocument(),
-    );
-  });
-
-  it("renders NearbyParkingCarousel when parking options are returned", () => {
-    mockUseCategorySearch.mockReturnValue({
-      data: { results: sampleParkingPlaces },
-      isLoading: false,
-    });
-    render(<ArrivalCard onClose={() => {}} />);
-
-    expect(screen.getByText(/navigation.nearbyParking/)).toBeInTheDocument();
-    expect(screen.getByText("Garage Central")).toBeInTheDocument();
-    expect(screen.getByText("Street Parking")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "navigation.driveHere" })).toHaveLength(2);
-  });
-
   it("starts walking navigation when clicking Start walking", async () => {
     const startGroundNav = vi.fn();
     useNavigationStore.setState({ startGroundNavigation: startGroundNav });
     setPendingArrivalHandoff({
       parkingCoords: [10.01, 50.01],
       destinationCoords: [10.012, 50.012],
-      destinationName: null,
+      destinationName: "City Museum",
     });
     mockFetchDirections.mockResolvedValue({ routes: [mockWalkingRoute] });
 
-    render(<ArrivalCard onClose={() => {}} />);
+    render(<ArrivalCard onClose={() => {}} destinationName="City Museum" />);
 
     const startWalkBtn = await screen.findByRole("button", { name: "navigation.startWalking" });
+    expect(screen.getByText("navigation.walkToDestination")).toBeInTheDocument();
+    expect(screen.getByText("City Museum")).toBeInTheDocument();
     await userEvent.click(startWalkBtn);
 
     expect(startGroundNav).toHaveBeenCalledWith(
@@ -237,7 +185,11 @@ describe("ArrivalCard", () => {
 
     render(<ArrivalCard onClose={() => {}} />);
 
+    expect(screen.getByText(/navigation.nearbyParking/)).toBeInTheDocument();
+    expect(screen.getByText("Garage Central")).toBeInTheDocument();
+    expect(screen.getByText("Street Parking")).toBeInTheDocument();
     const driveHereBtns = screen.getAllByRole("button", { name: "navigation.driveHere" });
+    expect(driveHereBtns).toHaveLength(2);
     await userEvent.click(driveHereBtns[0]);
 
     await waitFor(() => {
@@ -282,6 +234,7 @@ describe("ArrivalCard", () => {
 
     render(<ArrivalCard onClose={() => {}} />);
 
+    expect(screen.queryByRole("button", { name: /parking.saveParking/ })).toBeNull();
     expect(screen.queryByText(/navigation.nearbyParking/)).toBeNull();
     expect(screen.queryByText("navigation.startWalking")).toBeNull();
   });

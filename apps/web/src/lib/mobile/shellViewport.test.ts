@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { lockedViewportContent, lockShellViewport } from "./shellViewport";
+import { lockShellViewport } from "./shellViewport";
 
 const LOCKED = "initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no";
 
@@ -19,20 +19,6 @@ function setViewport(content: string) {
 
 /** MutationObserver callbacks run as microtasks. */
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-
-describe("lockedViewportContent", () => {
-  it("keeps the page's other keys and fixes the scale", () => {
-    expect(
-      lockedViewportContent(
-        "width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover",
-      ),
-    ).toBe(`width=device-width,viewport-fit=cover,${LOCKED}`);
-  });
-
-  it("falls back to the device width when nothing else is declared", () => {
-    expect(lockedViewportContent(null)).toBe(`width=device-width,${LOCKED}`);
-  });
-});
 
 describe("lockShellViewport", () => {
   let stop: (() => void) | undefined;

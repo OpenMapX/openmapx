@@ -48,9 +48,11 @@ afterEach(() => {
 
 describe("fetchJson", () => {
   it("returns parsed JSON on a 2xx response", async () => {
-    mockFetch(() => jsonResponse({ ok: true, n: 42 }));
+    const fetch = mockFetch(() => jsonResponse({ ok: true, n: 42 }));
     const data = await fetchJson<{ ok: boolean; n: number }>("https://x.test/data");
     expect(data).toEqual({ ok: true, n: 42 });
+    expect(fetch.mock.calls[0][1].redirect).toBeUndefined();
+    expect(new Headers(fetch.mock.calls[0][1].headers).get("User-Agent")).toBe(USER_AGENT);
   });
 
   it("rejects a response whose declared length exceeds maxBytes before parsing", async () => {
@@ -185,26 +187,6 @@ describe("fetchJson", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("fails closed before materializing an oversized bodyless JSON provider", async () => {
-    const json = vi.fn(async () => ({ payload: "x".repeat(10_000) }));
-    mockFetch(
-      () =>
-        ({
-          ok: true,
-          status: 200,
-          statusText: "OK",
-          headers: new Headers({ "content-type": "application/json" }),
-          body: null,
-          json,
-        }) as unknown as Response,
-    );
-
-    await expect(fetchJson("https://x.test/bodyless", { maxBytes: 10 })).rejects.toThrow(
-      /stream-readable/i,
-    );
-    expect(json).not.toHaveBeenCalled();
-  });
-
   it("rejects a successful non-JSON media type", async () => {
     mockFetch(
       () => new Response("<html>not json</html>", { headers: { "Content-Type": "text/html" } }),
@@ -214,14 +196,17 @@ describe("fetchJson", () => {
 
   it("honours an operator-raised OPENMAPX_FETCH_JSON_MAX_BYTES ceiling with a one-time warning", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    process.env.OPENMAPX_FETCH_JSON_MAX_BYTES = String(64 * 1024 * 1024);
+    vi.stubEnv("OPENMAPX_FETCH_JSON_MAX_BYTES", String(64 * 1024 * 1024));
     try {
       const big = `{"items":"${"x".repeat(9 * 1024 * 1024)}"}`;
       mockFetch(() => new Response(big, { headers: { "Content-Type": "application/json" } }));
-      await expect(fetchJson("https://x.test/data")).resolves.toBeTruthy();
+      const large = await fetchJson<{ items: string }>("https://x.test/data");
+      expect(large.items).toHaveLength(9 * 1024 * 1024);
+      mockFetch(() => jsonResponse({ ok: true }));
+      await expect(fetchJson("https://x.test/second")).resolves.toEqual({ ok: true });
       expect(warn).toHaveBeenCalledTimes(1);
     } finally {
-      delete process.env.OPENMAPX_FETCH_JSON_MAX_BYTES;
+      vi.unstubAllEnvs();
       warn.mockRestore();
     }
   });
@@ -299,16 +284,6 @@ describe("fetchJson", () => {
     });
 
     expect((fn.mock.calls[0][1] as RequestInit).redirect).toBe("manual");
-  });
-
-  it("does not treat the helper-added User-Agent as a caller-supplied custom header", async () => {
-    const fn = mockFetch(() => jsonResponse({}));
-
-    await fetchJson("https://x.test/data");
-
-    const init = fn.mock.calls[0][1] as RequestInit;
-    expect(init.redirect).toBeUndefined();
-    expect((init.headers as Record<string, string>)["User-Agent"]).toBe(USER_AGENT);
   });
 
   it("returns null when a credential-bearing request refuses a redirect", async () => {

@@ -91,20 +91,6 @@ describe("FeedsTable", () => {
     expect(markup).toContain("warning");
   });
 
-  it("surfaces the region + status filter dropdowns from the state summary", async () => {
-    useTransitFeedsMock.mockReturnValue({ data: sampleFeeds, isLoading: false, isError: false });
-    const { FeedsTable } = await import("../FeedsTable");
-    const markup = renderToStaticMarkup(<FeedsTable state={baseState} />);
-
-    // MUI's Select uses a portal-backed Menu, so the option items don't show
-    // up in static markup. The filter labels themselves, though, do — and the
-    // rendered table header reflects the per-row column set.
-    expect(markup).toContain("Region");
-    expect(markup).toContain("Status");
-    expect(markup).toContain("Validation");
-    expect(markup).toContain("Last fetched");
-  });
-
   it("shows a friendly empty state when no feeds come back", async () => {
     useTransitFeedsMock.mockReturnValue({
       data: { feeds: [], total: 0, limit: 50, offset: 0 },

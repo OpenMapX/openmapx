@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collectOpenMapxRegistration, streamDrizzleRows } from "./openmapx-collectors.js";
+import { streamDrizzleRows, streamOpenMapxRegistrationRecords } from "./openmapx-collectors.js";
 
 describe("OpenMapX subject collectors", () => {
   it("reads database projections through bounded cursor pages and closes on cancellation", async () => {
@@ -53,59 +53,55 @@ describe("OpenMapX subject collectors", () => {
   });
 
   it("projects profile and account-state fields without credential material", async () => {
-    const part = await collectOpenMapxRegistration("account-profile", {
+    let selectedFields: string[] = [];
+
+    const records = [];
+    for await (const record of streamOpenMapxRegistrationRecords("account-profile", {
       userId: "u1",
       cutoffAt: new Date("2024-01-01T00:00:00Z"),
       database: {
-        select: () => ({
-          from: () => ({
-            where: () => ({
-              orderBy: async () => [
-                {
-                  id: "u1",
-                  name: "Ada",
-                  email: "ada@example.test",
-                  emailVerified: true,
-                  image: null,
-                  createdAt: new Date("2020-01-01"),
-                  updatedAt: new Date("2023-01-01"),
-                  role: "admin",
-                },
-              ],
+        select: (fields: Record<string, unknown>) => {
+          selectedFields = Object.keys(fields).sort();
+          return {
+            from: () => ({
+              where: () => ({
+                orderBy: async () => [
+                  {
+                    id: "u1",
+                    name: "Ada",
+                    email: "ada@example.test",
+                    emailVerified: true,
+                    image: null,
+                    createdAt: new Date("2020-01-01"),
+                    updatedAt: new Date("2023-01-01"),
+                    role: "admin",
+                  },
+                ],
+              }),
             }),
-          }),
-        }),
+          };
+        },
       } as never,
-    });
-    expect(part.records[0].data).toEqual(
+    }))
+      records.push(record);
+    expect(selectedFields).toEqual([
+      "banExpires",
+      "banReason",
+      "banned",
+      "createdAt",
+      "email",
+      "emailVerified",
+      "id",
+      "image",
+      "name",
+      "normalizedEmail",
+      "role",
+      "twoFactorEnabled",
+      "updatedAt",
+    ]);
+    expect(records[0].data).toEqual(
       expect.objectContaining({ id: "u1", email: "ada@example.test" }),
     );
-    expect(part.records[0].data).toHaveProperty("role", "admin");
-  });
-
-  it("bounds the projection materialization helper used by focused tests", async () => {
-    const row = {
-      id: "u1",
-      name: "Ada",
-      email: "ada@example.test",
-      emailVerified: true,
-      image: null,
-      createdAt: new Date("2020-01-01"),
-      updatedAt: new Date("2023-01-01"),
-      role: "user",
-    };
-    await expect(
-      collectOpenMapxRegistration("account-profile", {
-        userId: "u1",
-        cutoffAt: new Date("2024-01-01T00:00:00Z"),
-        database: {
-          select: () => ({
-            from: () => ({
-              where: () => ({ orderBy: async () => Array.from({ length: 10_001 }, () => row) }),
-            }),
-          }),
-        } as never,
-      }),
-    ).rejects.toThrow("materialization limit");
+    expect(records[0].data).toHaveProperty("role", "admin");
   });
 });

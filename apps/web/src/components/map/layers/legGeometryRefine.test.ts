@@ -23,7 +23,7 @@ function leg(overrides: Partial<TripLeg>): TripLeg {
 
 describe("shouldRefineLegGeometry", () => {
   it("skips walking legs", () => {
-    expect(shouldRefineLegGeometry(leg({ mode: "walking", tripId: undefined }))).toBe(false);
+    expect(shouldRefineLegGeometry(leg({ mode: "walking" }))).toBe(false);
   });
 
   it("skips legs without a tripId", () => {

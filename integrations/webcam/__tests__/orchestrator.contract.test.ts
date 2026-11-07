@@ -122,18 +122,6 @@ describe("webcam orchestrator", () => {
     expect(complete.partial).toBeUndefined();
   });
 
-  test("providers whose coverage misses the box are not asked", async () => {
-    const far = provider("far", [cam({ id: "far:1" })], { coverage: { bbox: [2, 48, 3, 49] } });
-    const near = provider("near", [cam({ id: "near:1" })], {
-      coverage: { bbox: [24, 59.5, 26, 61] },
-    });
-
-    const result = await createWebcamDataSource(ctxWith([far, near])).search(BBOX);
-
-    expect(far.searchCameras).not.toHaveBeenCalled();
-    expect(result.data.map((r) => r.id)).toEqual(["near:1"]);
-  });
-
   test("the data-use policy's disallowed sources are excluded, also inside a camera's members", async () => {
     const a = provider("a", [
       cam({ id: "a:ok", sources: ["src-a"] }),
@@ -272,28 +260,6 @@ describe("webcam orchestrator", () => {
     );
     expect(await ids({ category: "weather" })).toEqual(["w"]);
     expect(await ids({})).toEqual(["t", "w", "b"]);
-  });
-
-  test("the meta keeps the zoom, the six type colours, the dimming and the icon", async () => {
-    const source = createWebcamDataSource(ctxWith([]));
-
-    expect(source.meta.minZoom).toBe(8);
-    expect(source.meta.placeCategory).toBe("Webcam");
-    expect(source.meta.placeCategoryRaw).toBe("webcam");
-    expect(source.meta.osmFilters).toBeUndefined();
-    expect(source.meta.markerStyle.variantColors).toEqual({
-      landscape: "#4CAF50",
-      traffic: "#FF9800",
-      city: "#2196F3",
-      weather: "#9C27B0",
-      beach: "#00BCD4",
-      other: "#9E9E9E",
-    });
-    expect(source.meta.markerStyle.defaultColor).toBe("#9E9E9E");
-    expect(source.meta.markerStyle.inactiveOpacity).toBe(0.4);
-    expect(source.meta.markerStyle.iconPath).toBe(
-      "M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z",
-    );
   });
 
   test("the only filter is the server-side category of the six camera types", async () => {

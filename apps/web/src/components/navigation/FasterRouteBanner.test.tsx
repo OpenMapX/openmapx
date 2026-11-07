@@ -60,14 +60,6 @@ describe("FasterRouteBanner", () => {
     expect(screen.queryByTestId("faster-route-banner")).toBeNull();
   });
 
-  it("shows the saving and the road", () => {
-    propose();
-    renderBanner();
-    const el = screen.getByTestId("faster-route-banner");
-    expect(el.textContent).toContain("12 min");
-    expect(el.textContent).toContain("A61");
-  });
-
   it("announces once, not on every render", () => {
     propose();
     const { rerender } = renderBanner();
@@ -113,6 +105,7 @@ describe("FasterRouteBanner", () => {
   });
 
   it("dismissing cancels the auto-accept", () => {
+    useSettingsStore.setState({ autoSwitchFasterRoutes: true });
     propose();
     renderBanner();
     act(() => {
@@ -127,6 +120,9 @@ describe("FasterRouteBanner", () => {
   it("accepting immediately switches", () => {
     propose();
     renderBanner();
+    const banner = screen.getByTestId("faster-route-banner");
+    expect(banner.textContent).toContain("12 min");
+    expect(banner.textContent).toContain("A61");
     act(() => {
       screen.getByTestId("faster-route-accept").click();
     });

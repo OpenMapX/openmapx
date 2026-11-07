@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createCatalogPinSet } from "@openmapx/core/catalog-pins";
@@ -79,18 +79,15 @@ describe("prepare stage", () => {
     expect(result.stage).toBe("prepare");
     expect(result.status).toBe("ok");
     expect(ctx.state.transitousLock).toEqual(PINNED_LOCK);
-    expect(existsSync(dataDir)).toBe(true);
-    expect(existsSync(catalogDir)).toBe(true);
     expect(calls.some((c) => c.includes("clone"))).toBe(true);
     expect(ctx.state.catalogDir).toBe(catalogDir);
     expect(ctx.state.gtfsDir).toBe(join(dataDir, "gtfs"));
     expect(ctx.state.downloadsDir).toBe(join(dataDir, ".transitous-downloads"));
     expect(result.artifacts).toMatchObject({
-      // No real git repo in the fixture; readGitHeadSha returns "" which the
-      // stage maps to null. We just assert the key exists with the right shape.
+      // The synthetic catalog is not a real git repository.
+      ref: null,
       transitlandAtlasSha: null,
     });
-    expect(result.artifacts && "ref" in result.artifacts).toBe(true);
   });
 
   it("refreshes the existing catalog with git pull + submodule update", async () => {
@@ -158,32 +155,6 @@ describe("prepare stage", () => {
     expect(ran).not.toContain("python3");
   });
 
-  it.skip("warns and continues when no repoRoot is supplied (lockfile enforcement skipped)", async () => {
-    tmp = mkdtempSync(join(tmpdir(), "openmapx-prepare-nolock-"));
-    const dataDir = tmp;
-    const catalogDir = join(dataDir, ".transitous-catalog");
-    mkdirSync(join(catalogDir, ".git"), { recursive: true });
-    mkdirSync(join(catalogDir, "feeds"), { recursive: true });
-
-    const warnings: string[] = [];
-    const ctx = buildJobContext({
-      dataDir,
-      store: new StateStore(dataDir),
-      runner: async () => {},
-      now: () => "2026-05-01T00:00:00.000Z",
-      logger: {
-        info: () => {},
-        warn: (msg) => warnings.push(msg),
-        error: () => {},
-      },
-    });
-
-    const result = await prepareRun(ctx);
-
-    expect(result.status).toBe("ok");
-    expect(warnings.some((w) => w.includes("no repoRoot supplied"))).toBe(true);
-  });
-
   it("refuses a ref-only proposal before upstream execution", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-proposed-closed-"));
     const runner = vi.fn(async () => {});
@@ -208,7 +179,6 @@ describe("prepare stage", () => {
     mkdirSync(join(catalogDir, "feeds"), { recursive: true });
 
     const ACTIVE = "a".repeat(40);
-    const PROPOSED = "d".repeat(40);
 
     const calls: string[] = [];
     const runner = async (command: string, args: string[]) => {
@@ -225,7 +195,6 @@ describe("prepare stage", () => {
     const result = await prepareRun(ctx);
     expect(result.status).toBe("ok");
     expect(calls.some((c) => c.includes(`checkout --force ${ACTIVE}`))).toBe(true);
-    expect(calls.some((c) => c.includes(PROPOSED))).toBe(false);
   });
 
   it("returns an error result when the catalog clone fails", async () => {

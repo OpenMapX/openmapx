@@ -50,12 +50,6 @@ describe("distinctBrandQids", () => {
   });
 });
 
-describe("brandImageId", () => {
-  it("namespaces the id so it cannot collide with a category image", () => {
-    expect(brandImageId("Q1")).toBe("brand-marker-Q1");
-  });
-});
-
 describe("textResultImageId", () => {
   it("gives a text-search result the pin of its own category", () => {
     expect(textResultImageId({ ...place("a"), category: "restaurant" })).toBe(
@@ -151,12 +145,13 @@ describe("loadBrandMarkerImage", () => {
 
   it("does not trust an already registered image without captured file credit", async () => {
     hasImage.mockReturnValue(true);
-    const spy = vi.spyOn(apiClient, "get").mockRejectedValue(new Error("unknown metadata"));
+    const spy = vi.spyOn(apiClient, "get").mockResolvedValue({ qid: "Q1", logoFile: "Logo.svg" });
 
     const ok = await loadBrandMarkerImage(map, "Q1");
 
     expect(ok).toBe(false);
     expect(spy).toHaveBeenCalled();
+    expect(addImage).not.toHaveBeenCalled();
   });
 
   it("resolves false without registering an image when the brand-detail fetch throws", async () => {

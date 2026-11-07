@@ -163,10 +163,6 @@ async function fixture() {
 }
 it("validates prepared upload under its actual retained execution and returns the same ready stage on replay", async () => {
   const f = await fixture();
-  expect(
-    f.store.validatePreparedArtifact,
-    "prepared artifact consumer is not installed",
-  ).toBeTypeOf("function");
   const ctx = f.context();
   const result = await f.store.validatePreparedArtifact(ctx);
   expect(result).toMatchObject({
@@ -178,7 +174,6 @@ it("validates prepared upload under its actual retained execution and returns th
 });
 it("refuses a different owner before claiming prepared bytes", async () => {
   const f = await fixture();
-  expect(f.store.validatePreparedArtifact).toBeTypeOf("function");
   await expect(f.store.validatePreparedArtifact(f.context("foreign-admin"))).rejects.toThrow();
   expect(
     (
@@ -192,7 +187,6 @@ it("refuses a different owner before claiming prepared bytes", async () => {
 });
 it("refuses exact manifest capacity before extracting payload and retains conservative stage accounting", async () => {
   const f = await fixture();
-  expect(f.store.validatePreparedArtifact).toBeTypeOf("function");
   f.setCapacity(1024);
   await expect(f.store.validatePreparedArtifact(f.context())).rejects.toThrow(/capacity/);
   const names = readdirSync(join(f.root, "stages", f.stage.stageId)).filter((name) =>

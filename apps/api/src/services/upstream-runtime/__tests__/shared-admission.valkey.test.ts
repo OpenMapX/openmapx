@@ -25,7 +25,10 @@ describe.skipIf(!url)("shared admission with actual Valkey Lua", () => {
   });
   afterAll(async () => {
     if (!redis) return;
-    const keys = await redis.keys(`upstream-shared:${namespace}*`);
+    const keys = [
+      ...(await redis.keys(`upstream-shared:${namespace}*`)),
+      ...(await redis.keys(`upstream:${namespace}:*`)),
+    ];
     if (keys.length) await redis.del(...keys);
     redis.disconnect();
   });
@@ -227,5 +230,46 @@ describe.skipIf(!url)("shared admission with actual Valkey Lua", () => {
     const keys = await redis.keys(`upstream-shared:${dedicated}:*`);
     expect(keys).toHaveLength(1);
     expect(await redis.pttl(keys[0] as string)).toBeGreaterThan(50_000);
+  });
+
+  it("releases a generic refresh lease only for its owning token across runtimes", async () => {
+    const first = runtime("generic-leases");
+    const second = runtime("generic-leases");
+    const lease = await first.acquireLease("refresh", 60_000);
+    expect(lease).not.toBeNull();
+    expect(await second.acquireLease("refresh", 60_000)).toBeNull();
+    await second.releaseLease("refresh", "not-owner");
+    expect(await first.acquireLease("refresh", 60_000)).toBeNull();
+    await first.releaseLease("refresh", lease?.token ?? "");
+    expect(await second.acquireLease("refresh", 60_000)).not.toBeNull();
+  });
+
+  it("atomically consumes all generic quota windows without debiting a denial", async () => {
+    let now = 10_000;
+    const subject = createRedisUpstreamRuntime(redis as unknown as UpstreamRedisClient, {
+      namespace,
+      integrationId: "generic-quota",
+      now: () => now,
+    });
+    const windows = [
+      { id: "minute", limit: 50, durationMs: 60_000 },
+      { id: "hour", limit: 1_800, durationMs: 3_600_000 },
+    ] as const;
+    expect(await subject.consumeQuota({ bucket: "openaq", cost: 49, windows })).toEqual({
+      allowed: true,
+      remaining: { minute: 1, hour: 1_751 },
+      retryAt: null,
+    });
+    expect(await subject.consumeQuota({ bucket: "openaq", cost: 2, windows })).toEqual({
+      allowed: false,
+      remaining: { minute: 1, hour: 1_751 },
+      retryAt: 60_000,
+    });
+    now = 60_001;
+    expect(await subject.consumeQuota({ bucket: "openaq", cost: 2, windows })).toEqual({
+      allowed: true,
+      remaining: { minute: 48, hour: 1_749 },
+      retryAt: null,
+    });
   });
 });

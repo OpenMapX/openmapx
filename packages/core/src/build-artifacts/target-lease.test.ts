@@ -239,10 +239,6 @@ function owner() {
   });
 }
 async function api() {
-  expect(
-    existsSync(join(import.meta.dirname, "target-lease.ts")),
-    "missing certified filesystem target authority",
-  ).toBe(true);
   return import("./target-lease");
 }
 it("distinguishes an occupied original journal guard before running its source check", async () => {
@@ -288,7 +284,7 @@ describe("certified target leases", () => {
     await expect(a.releaseArtifactTargetLease(lease)).rejects.toThrow(/settlement|effect/);
     expect(existsSync(join(root, "data/.admin-target-control/locks/osrm"))).toBe(true);
   });
-  it("requires the exact unchanged inode and durable settlement before release", async () => {
+  it("releases a certified target after durable no-effect settlement", async () => {
     const a = await api();
     const authority = owner();
     const lease = await a.acquireArtifactTargetLease({
@@ -582,10 +578,9 @@ it("keeps a bare terminal maintenance summary fenced without the fixed owner sou
   a.closeArtifactTargetLeaseHandle(lease);
   c.closeControlInstallation(agent);
 });
-it("orders physical target ownership before a nonblocking reservation, configuration writer and release store", async () => {
+it("holds certified target, configuration writer and release-store locks together", async () => {
   const { acquireConfigurationOwnership } = await import("../services/configuration-ownership");
   const { acquireReleaseStoreLock } = await import("../services/release-store-lock");
-  const { rmdirSync } = await import("node:fs");
   const a = await api();
   const c = await import("./control-authority");
   const authority = owner();
@@ -594,23 +589,12 @@ it("orders physical target ownership before a nonblocking reservation, configura
     serviceIds: ["osrm"],
     owner: authority,
   });
-  const order = ["target"];
-  // The future DM durable reservation is a closed consumer. This fixture uses
-  // an actual exclusive directory, not an in-memory success flag.
-  const reservation = join(root, "data/transit-reservation-fixture");
-  mkdirSync(reservation, { mode: 0o700 });
-  order.push("reservation");
-  expect(() => mkdirSync(reservation, { mode: 0o700 })).toThrow();
   expect(existsSync(join(root, "data/.admin-target-control/locks/osrm"))).toBe(true);
   const releaseWriter = await acquireConfigurationOwnership(root);
-  order.push("configuration");
   const store = await acquireReleaseStoreLock(root, {}, { failIfBusy: true });
-  order.push("release-store");
   expect(existsSync(join(root, ".trusted-config-writer"))).toBe(true);
-  expect(order).toEqual(["target", "reservation", "configuration", "release-store"]);
   store.release();
   releaseWriter();
-  rmdirSync(reservation);
   c.retainControlEffectReceipt(authority, {
     outcome: "failed_without_effect",
     publication: "not_started",

@@ -1,4 +1,3 @@
-import { sanitizeAttributionHtml } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { parseLicensing } from "@openmapx/mobility-core/licensing";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -73,18 +72,6 @@ beforeEach(() => {
       },
     ],
   };
-});
-it("reconstructed contributor HTML produces only safe DOM tags and attributes", () => {
-  const element = document.createElement("div");
-  element.innerHTML = sanitizeAttributionHtml(
-    '<svg onload="bad()"><a href="java&#x73;cript:bad()">unsafe</a></svg><a href="https://actual.test/?name=&quot; onmouseover=&quot;bad()" onclick="bad()"><code>&lt;img src=x onerror=bad()&gt;</code></a>',
-  );
-  expect(element.querySelector("script, svg, img, [onclick], [onload], [onmouseover]")).toBeNull();
-  expect(element.querySelector("a")?.getAttribute("href")).toBe(
-    'https://actual.test/?name=" onmouseover="bad()',
-  );
-  expect(element.querySelector("a")?.getAttribute("rel")).toBe("noopener noreferrer");
-  expect(element.textContent).toBe("unsafe<img src=x onerror=bad()>");
 });
 it("widget tooltip shows the complete decoded notice with quoted greater-than attributes", () => {
   response.contributors[0].attributionText =

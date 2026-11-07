@@ -49,15 +49,6 @@ function orchestratorOver(providers: HazardsProvider[], disallowed?: string[]) {
   );
 }
 
-describe("registerHazardsProvider", () => {
-  test("stores the provider under hazards", () => {
-    const ctx = createMockIntegrationContext();
-    const registered = provider();
-    ctx.registerHazardsProvider(registered);
-    expect(ctx.registered.hazards).toEqual([registered]);
-  });
-});
-
 describe("hazards orchestrator", () => {
   test("splits a view across the antimeridian and returns one copy of an item both halves answered", async () => {
     const getAlerts = vi.fn<HazardsProvider["getAlerts"]>(async () => ({

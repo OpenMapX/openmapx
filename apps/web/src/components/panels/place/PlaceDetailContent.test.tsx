@@ -95,15 +95,20 @@ const place = {
 
 function renderAtDetent(detent: "peek" | "mid" | "full", selectedPlace = place) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const tree = (next: "peek" | "mid" | "full") => (
     <QueryClientProvider client={client}>
       <MobileSheetContext.Provider
-        value={{ detent, isExpanded: detent === "full", inSheet: true, snapTo: () => {} }}
+        value={{ detent: next, isExpanded: next === "full", inSheet: true, snapTo: () => {} }}
       >
         <PlaceDetailContent place={selectedPlace} isLoading={false} />
       </MobileSheetContext.Provider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const view = render(tree(detent));
+  return {
+    ...view,
+    rerenderAtDetent: (next: "peek" | "mid" | "full") => view.rerender(tree(next)),
+  };
 }
 
 describe("selected detail enrichment", () => {
@@ -161,21 +166,13 @@ describe("selected detail enrichment", () => {
 });
 
 describe("PlaceDetailContent per detent", () => {
-  it("keeps the title at peek", () => {
-    renderAtDetent("peek");
-    expect(screen.getByText("Test Place")).toBeDefined();
-  });
-
-  it("drops the rating row at peek", () => {
-    renderAtDetent("peek", { ...place, rating: 4.5, reviewCount: 12 } as Place);
-    expect(screen.queryByTestId("place-rating-row")).toBeNull();
-  });
-
   it("keeps one category and known opening summary before actions at peek", () => {
     const { container } = renderAtDetent("peek", {
       ...place,
       name: "A very long restaurant name that must leave room for the close button",
       category: "A very long restaurant category that needs truncation",
+      rating: 4.5,
+      reviewCount: 12,
       openingHoursInfo: {
         status: {
           isOpen: true,
@@ -184,6 +181,7 @@ describe("PlaceDetailContent per detent", () => {
       },
     } as Place);
     const peek = container.querySelector("[data-omx-peek]") as HTMLElement;
+    expect(screen.queryByTestId("place-rating-row")).toBeNull();
     const summary = within(peek).getByTestId("place-peek-summary");
     expect(summary.textContent).toBe(
       "A very long restaurant category that needs truncation · open · closesAt",
@@ -216,21 +214,6 @@ describe("PlaceDetailContent per detent", () => {
     expect(screen.getByTestId("place-peek-summary").textContent).toBe("Cafe");
   });
 
-  it("keeps the compact line out of the expanded view", () => {
-    renderAtDetent("mid", {
-      ...place,
-      category: "Restaurant",
-      openingHoursInfo: { status: { isOpen: true } },
-    } as Place);
-    expect(screen.queryByTestId("place-peek-summary")).toBeNull();
-    expect(screen.getByText("Restaurant")).toBeVisible();
-  });
-
-  it("restores the rating row at mid", () => {
-    renderAtDetent("mid", { ...place, rating: 4.5, reviewCount: 12 } as Place);
-    expect(within(screen.getByTestId("place-rating-row")).getByText("4.5")).toBeVisible();
-  });
-
   it("shows a known opening state beside category below the title and before actions", () => {
     renderAtDetent("mid", {
       ...place,
@@ -240,6 +223,8 @@ describe("PlaceDetailContent per detent", () => {
       openingHoursInfo: { status: { isOpen: true } },
     } as Place);
     const meta = screen.getByTestId("place-rating-row");
+    expect(within(meta).getByText("4.5")).toBeVisible();
+    expect(screen.queryByTestId("place-peek-summary")).toBeNull();
     const category = screen.getByText("Restaurant");
     expect(category).toBeVisible();
     expect(
@@ -286,29 +271,13 @@ const placeWithPhoto = {
   photos: [{ url: "https://example.com/photo.jpg", source: "test-photos" } satisfies PlacePhoto],
 } as unknown as Place;
 
-function renderPhotoPlaceAtDetent(detent: "peek" | "mid" | "full") {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <MobileSheetContext.Provider
-        value={{ detent, isExpanded: detent === "full", inSheet: true, snapTo: () => {} }}
-      >
-        <PlaceDetailContent place={placeWithPhoto} isLoading={false} />
-      </MobileSheetContext.Provider>
-    </QueryClientProvider>,
-  );
-}
-
 describe("PlaceDetailContent photo hero per detent", () => {
-  it("hides the photo hero at peek so the title/chips stay visible", () => {
-    renderPhotoPlaceAtDetent("peek");
+  it("shows the photo hero when the same place expands from peek to mid", () => {
+    const view = renderAtDetent("peek", placeWithPhoto);
     expect(screen.queryByTestId("place-photo-hero")).toBeNull();
-    expect(screen.getByText("Photo Place")).toBeDefined();
-  });
-
-  it("shows the photo hero at mid", () => {
-    renderPhotoPlaceAtDetent("mid");
-    expect(screen.getByTestId("place-photo-hero")).toBeDefined();
+    expect(screen.getByText("Photo Place")).toBeVisible();
+    view.rerenderAtDetent("mid");
+    expect(screen.getByTestId("place-photo-hero")).toBeVisible();
   });
 });
 
@@ -357,65 +326,39 @@ function renderChrome(detent: "peek" | "mid" | "full", isExpanded: boolean) {
 }
 
 describe("PlaceDetailContent mobile-sheet chrome bridge", () => {
-  it("does not register a pinned header while the sheet is not expanded", () => {
-    renderChrome("mid", false);
-    expect(within(screen.getByTestId("chrome-header")).queryByText("Test Place")).toBeNull();
-  });
-
-  // Expansion alone is not enough: at the top of an expanded sheet the real
-  // title is still on screen, so a pinned copy would repeat the name and its
-  // band would push the photo hero off the sheet's top edge.
-  it("does not register a pinned header while the real title is still visible", () => {
-    sentinelState.passed = false;
-    renderChrome("full", true);
-    expect(within(screen.getByTestId("chrome-header")).queryByText("Test Place")).toBeNull();
-  });
-
-  it("registers a pinned header once the real title has scrolled away", () => {
+  it("keeps pinned chrome and action accessibility in sync with expansion and scroll", () => {
     sentinelState.passed = true;
-    renderChrome("full", true);
-    expect(within(screen.getByTestId("chrome-header")).getByText("Test Place")).toBeDefined();
-    sentinelState.passed = false;
-  });
-
-  it("unregisters the pinned header when the sheet collapses back", () => {
-    sentinelState.passed = true;
-    const { rerenderWith } = renderChrome("full", true);
-    expect(within(screen.getByTestId("chrome-header")).getByText("Test Place")).toBeDefined();
-
-    rerenderWith("mid", false);
-    expect(within(screen.getByTestId("chrome-header")).queryByText("Test Place")).toBeNull();
-    sentinelState.passed = false;
-  });
-
-  it("keeps the docked footer empty while the inline chips are still visible", () => {
-    sentinelState.passed = false;
-    renderChrome("full", true);
-    expect(within(screen.getByTestId("chrome-footer")).queryByText("directions")).toBeNull();
-  });
-
-  it("docks the action bar once the sentinel reports the chips scrolled away", () => {
-    sentinelState.passed = true;
-    renderChrome("full", true);
-    expect(within(screen.getByTestId("chrome-footer")).getByText("directions")).toBeDefined();
-    sentinelState.passed = false;
-  });
-
-  // The inline row stays mounted behind the docked copy, so without `inert`
-  // every action would be announced and tabbed to twice.
-  it("takes the inline chips out of the tree while the docked copy is up", () => {
-    sentinelState.passed = true;
-    const { container } = renderChrome("full", true);
-    const inline = container.querySelector("[inert]");
-    expect(inline).toBeDefined();
-    expect(within(inline as HTMLElement).getByText("directions")).toBeDefined();
-    sentinelState.passed = false;
-  });
-
-  it("leaves the inline chips reachable while the docked copy is absent", () => {
-    sentinelState.passed = false;
-    const { container } = renderChrome("full", true);
-    expect(container.querySelector("[inert]")).toBeNull();
+    const view = renderChrome("mid", false);
+    const header = () => within(screen.getByTestId("chrome-header"));
+    const footer = () => within(screen.getByTestId("chrome-footer"));
+    const absent = () => {
+      expect(header().queryByText("Test Place")).toBeNull();
+      expect(footer().queryByText("directions")).toBeNull();
+      expect(view.container.querySelector("[inert]")).toBeNull();
+    };
+    const docked = () => {
+      expect(header().getByText("Test Place")).toBeVisible();
+      expect(footer().getByText("directions")).toBeVisible();
+      const inline = view.container.querySelector("[inert]");
+      expect(inline).not.toBeNull();
+      expect(within(inline as HTMLElement).getByText("directions")).toBeInTheDocument();
+    };
+    try {
+      absent();
+      view.rerenderWith("full", true);
+      docked();
+      sentinelState.passed = false;
+      view.rerenderWith("full", true);
+      absent();
+      sentinelState.passed = true;
+      view.rerenderWith("full", true);
+      docked();
+      view.rerenderWith("mid", false);
+      absent();
+    } finally {
+      view.unmount();
+      sentinelState.passed = false;
+    }
   });
 });
 

@@ -231,8 +231,6 @@ describe("GET /events horizonDays", () => {
     await h.get({ bbox: BBOX, horizonDays: "0" });
     await h.get({ bbox: BBOX, horizonDays: "7" });
     expect(new Set(h.cacheKeys).size).toBe(3);
-    expect(h.cacheKeys[1]).toMatch(/:0$/);
-    expect(h.cacheKeys[2]).toMatch(/:7$/);
   });
 
   it("treats a non-integer or negative horizon as absent, not as 0", async () => {
@@ -419,6 +417,7 @@ describe("POST /flow-along-route", () => {
     // cache backend error) for r0's cache key specifically, so a pass on r1
     // in the same request proves the failure is scoped to one route.
     const failingKey = `conditions:query:flowroute:v2:${routeFingerprint(r0Geometry)}`;
+    let failuresInjected = 0;
     const harness = flowRouteHarness({
       providers: [
         flowProvider("congestion", async (bbox) => {
@@ -435,7 +434,10 @@ describe("POST /flow-along-route", () => {
         }),
       ],
       withCache: async (key, _ttl, fn) => {
-        if (key === failingKey) throw new Error("cache backend down");
+        if (key === failingKey) {
+          failuresInjected += 1;
+          throw new Error("cache backend down");
+        }
         return fn();
       },
     });
@@ -451,6 +453,7 @@ describe("POST /flow-along-route", () => {
     };
 
     expect(status).toBe(200);
+    expect(failuresInjected).toBe(1);
     expect(body.routes.find((r) => r.id === "r0")).toEqual({ id: "r0", spans: [] });
     const r1 = body.routes.find((r) => r.id === "r1");
     expect(r1).toBeDefined();

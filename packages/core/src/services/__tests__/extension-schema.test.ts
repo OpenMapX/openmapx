@@ -232,8 +232,11 @@ describe("verifiedCatalogEntrySchema", () => {
     platform: "1.0",
   };
 
-  it("accepts a digest-pinned entry", () => {
-    expect(verifiedCatalogEntrySchema.safeParse(entry).success).toBe(true);
+  it.each([
+    "https://example.test/extension.json",
+    "https://EXAMPLE.test:443/releases/../extension.json",
+  ])("accepts a digest-pinned HTTPS locator: %s", (manifest) => {
+    expect(verifiedCatalogEntrySchema.safeParse({ ...entry, manifest }).success).toBe(true);
   });
 
   it("requires a manifest digest", () => {
@@ -267,11 +270,5 @@ describe("verifiedCatalogEntrySchema", () => {
     "https://example.test/extension.json#secret",
   ])("rejects a non-portable verified manifest locator: %s", (manifest) => {
     expect(verifiedCatalogEntrySchema.safeParse({ ...entry, manifest }).success).toBe(false);
-  });
-
-  it("canonicalizes an accepted verified manifest locator", () => {
-    expect(canonicalExtensionLocator("https://EXAMPLE.test:443/releases/../extension.json")).toBe(
-      "https://example.test/extension.json",
-    );
   });
 });

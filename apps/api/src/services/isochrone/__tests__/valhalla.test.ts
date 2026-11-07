@@ -125,65 +125,32 @@ describe("valhallaIsochroneProvider", () => {
       ).rejects.toThrow("Valhalla supports a maximum of 4 contours per request");
     });
 
-    it("uses costing 'auto' for driving", async () => {
-      mockFetch.mockResolvedValueOnce(mockOk(makeIsochroneResponse([makePolygonFeature(10)])));
-
-      const { valhallaIsochroneProvider } = await import("../valhalla.js");
-      await valhallaIsochroneProvider.isochrone(origin, "driving", [10]);
-
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
-      expect(body.costing).toBe("auto");
-    });
-
-    it("uses costing 'pedestrian' for walking", async () => {
-      mockFetch.mockResolvedValueOnce(mockOk(makeIsochroneResponse([makePolygonFeature(10)])));
-
-      const { valhallaIsochroneProvider } = await import("../valhalla.js");
-      await valhallaIsochroneProvider.isochrone(origin, "walking", [10]);
-
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
-      expect(body.costing).toBe("pedestrian");
-    });
-
-    it("uses costing 'bicycle' for cycling", async () => {
-      mockFetch.mockResolvedValueOnce(mockOk(makeIsochroneResponse([makePolygonFeature(10)])));
-
-      const { valhallaIsochroneProvider } = await import("../valhalla.js");
-      await valhallaIsochroneProvider.isochrone(origin, "cycling", [10]);
-
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
-      expect(body.costing).toBe("bicycle");
-    });
-
-    it("sets generalize to 50 for ≤15 min contours", async () => {
-      mockFetch.mockResolvedValueOnce(mockOk(makeIsochroneResponse([makePolygonFeature(10)])));
-
-      const { valhallaIsochroneProvider } = await import("../valhalla.js");
-      await valhallaIsochroneProvider.isochrone(origin, "driving", [5, 10, 15]);
-
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
-      expect(body.generalize).toBe(50);
-    });
-
-    it("sets generalize to 100 for ≤30 min contours", async () => {
-      mockFetch.mockResolvedValueOnce(mockOk(makeIsochroneResponse([makePolygonFeature(25)])));
-
-      const { valhallaIsochroneProvider } = await import("../valhalla.js");
-      await valhallaIsochroneProvider.isochrone(origin, "driving", [25]);
-
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
-      expect(body.generalize).toBe(100);
-    });
-
-    it("sets generalize to 200 for >30 min contours", async () => {
-      mockFetch.mockResolvedValueOnce(mockOk(makeIsochroneResponse([makePolygonFeature(60)])));
-
-      const { valhallaIsochroneProvider } = await import("../valhalla.js");
-      await valhallaIsochroneProvider.isochrone(origin, "driving", [60]);
-
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
-      expect(body.generalize).toBe(200);
-    });
+    it.each([
+      ["driving", "auto", 15, 50],
+      ["walking", "pedestrian", 30, 100],
+      ["cycling", "bicycle", 31, 200],
+    ] as const)(
+      "serializes %s contours using %s costing",
+      async (mode, costing, minutes, generalize) => {
+        mockFetch.mockResolvedValueOnce(mockOk(makeIsochroneResponse([makePolygonFeature(10)])));
+        const { valhallaIsochroneProvider } = await import("../valhalla.js");
+        const result = await valhallaIsochroneProvider.isochrone(origin, mode, [minutes]);
+        const [url, options] = mockFetch.mock.calls[0];
+        expect(url).toContain("/isochrone");
+        expect(options.method).toBe("POST");
+        expect(options.headers["Content-Type"]).toBe("application/json");
+        expect(JSON.parse(options.body)).toMatchObject({
+          locations: [{ lon: 13.388, lat: 52.517 }],
+          costing,
+          contours: [{ time: minutes }],
+          polygons: true,
+          denoise: 1,
+          generalize,
+        });
+        expect(result.origin).toEqual(origin);
+        expect(result.mode).toBe(mode);
+      },
+    );
 
     it("sorts contours by time ascending in output", async () => {
       const features = [makePolygonFeature(30), makePolygonFeature(10), makePolygonFeature(20)];
@@ -192,28 +159,15 @@ describe("valhallaIsochroneProvider", () => {
       const { valhallaIsochroneProvider } = await import("../valhalla.js");
       const result = await valhallaIsochroneProvider.isochrone(origin, "driving", [30, 10, 20]);
 
+      expect(JSON.parse(mockFetch.mock.calls[0][1].body).contours).toEqual([
+        { time: 10 },
+        { time: 20 },
+        { time: 30 },
+      ]);
       expect(result.contours).toHaveLength(3);
       expect(result.contours[0].time).toBe(10);
       expect(result.contours[1].time).toBe(20);
       expect(result.contours[2].time).toBe(30);
-    });
-
-    it("sorts contour minutes ascending in request body", async () => {
-      mockFetch.mockResolvedValueOnce(
-        mockOk(
-          makeIsochroneResponse([
-            makePolygonFeature(5),
-            makePolygonFeature(15),
-            makePolygonFeature(10),
-          ]),
-        ),
-      );
-
-      const { valhallaIsochroneProvider } = await import("../valhalla.js");
-      await valhallaIsochroneProvider.isochrone(origin, "driving", [15, 5, 10]);
-
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
-      expect(body.contours).toEqual([{ time: 5 }, { time: 10 }, { time: 15 }]);
     });
 
     it("filters features by metric === 'time' (ignores distance features)", async () => {
@@ -264,20 +218,6 @@ describe("valhallaIsochroneProvider", () => {
       );
     });
 
-    it("sends POST to VALHALLA_URL/isochrone", async () => {
-      mockFetch.mockResolvedValueOnce(mockOk(makeIsochroneResponse([makePolygonFeature(10)])));
-
-      const { valhallaIsochroneProvider } = await import("../valhalla.js");
-      await valhallaIsochroneProvider.isochrone(origin, "driving", [10]);
-
-      const url = mockFetch.mock.calls[0][0] as string;
-      expect(url).toContain("/isochrone");
-
-      const options = mockFetch.mock.calls[0][1] as RequestInit;
-      expect(options.method).toBe("POST");
-      expect((options.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
-    });
-
     it("appends api_key to the URL when VALHALLA_API_KEY is set", async () => {
       const prev = process.env.VALHALLA_API_KEY;
       process.env.VALHALLA_API_KEY = "test-stadia-key";
@@ -291,37 +231,6 @@ describe("valhallaIsochroneProvider", () => {
         if (prev === undefined) delete process.env.VALHALLA_API_KEY;
         else process.env.VALHALLA_API_KEY = prev;
       }
-    });
-
-    it("includes polygons=true and denoise=1 in request body", async () => {
-      mockFetch.mockResolvedValueOnce(mockOk(makeIsochroneResponse([makePolygonFeature(10)])));
-
-      const { valhallaIsochroneProvider } = await import("../valhalla.js");
-      await valhallaIsochroneProvider.isochrone(origin, "driving", [10]);
-
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
-      expect(body.polygons).toBe(true);
-      expect(body.denoise).toBe(1);
-    });
-
-    it("sets location with lon/lat from origin", async () => {
-      mockFetch.mockResolvedValueOnce(mockOk(makeIsochroneResponse([makePolygonFeature(10)])));
-
-      const { valhallaIsochroneProvider } = await import("../valhalla.js");
-      await valhallaIsochroneProvider.isochrone(origin, "driving", [10]);
-
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
-      expect(body.locations).toEqual([{ lon: 13.388, lat: 52.517 }]);
-    });
-
-    it("returns origin and mode in result", async () => {
-      mockFetch.mockResolvedValueOnce(mockOk(makeIsochroneResponse([makePolygonFeature(10)])));
-
-      const { valhallaIsochroneProvider } = await import("../valhalla.js");
-      const result = await valhallaIsochroneProvider.isochrone(origin, "walking", [10]);
-
-      expect(result.origin).toEqual(origin);
-      expect(result.mode).toBe("walking");
     });
 
     it("handles error in res.text() gracefully during error path", async () => {

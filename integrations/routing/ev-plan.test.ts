@@ -135,7 +135,7 @@ describe("runEvPlan", () => {
     });
   });
 
-  it("produces a route with a charging stop and threads closures into both routing calls", async () => {
+  it("produces a route with a charging stop, availability and acquisition credits", async () => {
     const ctx = fakeCtx();
     const getProviders = (): ResolvedRoutingProvider[] => [
       { integrationId: "valhalla", provider: ctx._valhalla },
@@ -166,11 +166,6 @@ describe("runEvPlan", () => {
     expect(ctx._valhalla.getRoute).toHaveBeenCalledTimes(2);
     const rerouteWps = ctx._valhalla.getRoute.mock.calls[1][0];
     expect(rerouteWps.length).toBe(3); // origin + charger + dest
-    // both routing calls receive IDENTICAL routing options (avoid flags +
-    // closure exclusions threaded the same way into base route and re-route).
-    expect(ctx._valhalla.getRoute.mock.calls[1][2]).toEqual(
-      ctx._valhalla.getRoute.mock.calls[0][2],
-    );
   });
 
   it("threads real closure exclusions into both routing calls", async () => {
@@ -367,7 +362,11 @@ describe("runEvPlan", () => {
   });
 
   it("omits trip cost when no home price is given", async () => {
-    const ctx = fakeCtx();
+    const ctx = fakeCtx({
+      getIntegrationsByDomain: chargingDomain(
+        sitesProvider([chargingSite({ tariffs: [energyTariff("public", 0.55)] })]),
+      ),
+    });
     const getProviders = (): ResolvedRoutingProvider[] => [
       { integrationId: "valhalla", provider: ctx._valhalla },
     ];
@@ -381,6 +380,8 @@ describe("runEvPlan", () => {
       ambientTempC: 20,
       avoidClosures: false,
     });
+    expect(result.stops.length).toBeGreaterThan(0);
+    expect(result.stops.every((stop) => stop.estimatedCost?.currency === "EUR")).toBe(true);
     expect(result.totals.estimatedCost).toBeUndefined();
     expect(result.totals.energyKwh).toBeGreaterThan(0); // energy still shown
   });

@@ -322,6 +322,8 @@ describe("offline package public API", () => {
       retryAfterSeconds: 599,
     });
     expect(options.prepareLimiter.consume).toHaveBeenCalledTimes(3);
+    const principalKeys = options.prepareLimiter.consume.mock.calls.map(([key]) => key);
+    expect(principalKeys).toEqual([principalKeys[0], principalKeys[0], principalKeys[0]]);
     auth.userId = "user-b";
     const independent = await app.inject({
       method: "POST",
@@ -332,12 +334,12 @@ describe("offline package public API", () => {
     expect(independent.statusCode).toBe(202);
     expect(options.prepareLimiter.consume).toHaveBeenCalledTimes(4);
     expect(options.prepareLimiter.consume.mock.calls[3]?.[0]).not.toBe(
-      options.prepareLimiter.consume.mock.calls[0]?.[0],
+      options.prepareLimiter.consume.mock.calls[2]?.[0],
     );
     await app.close();
   });
 
-  it("charges authenticated duplicates and rejected request bodies before allocation", async () => {
+  it("charges rejected authenticated request bodies before allocation", async () => {
     const options = routeOptions();
     options.prepareLimiter.consume
       .mockResolvedValueOnce({ allowed: true, retryAfterSeconds: 0 })
@@ -458,7 +460,7 @@ describe("offline package public API", () => {
     await app.close();
   });
 
-  it("forwards archive range responses without buffering them", async () => {
+  it("forwards archive range headers and bytes", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
       expect(new Headers(init?.headers).get("range")).toBe("bytes=2-");
       return new Response(

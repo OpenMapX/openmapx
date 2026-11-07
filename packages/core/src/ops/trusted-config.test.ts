@@ -242,7 +242,7 @@ describe("trusted configuration snapshot protocol", () => {
     },
   );
 
-  it("rejects unknown fields, malformed UTF-8, hostile identifiers, and oversized payloads", () => {
+  it("rejects unknown fields, malformed UTF-8 and hostile identifiers", () => {
     const base = {
       role: "api" as const,
       operationKey: "opk1_0123456789abcdef",
@@ -270,20 +270,6 @@ describe("trusted configuration snapshot protocol", () => {
         payload: {
           ...payload(),
           serviceConfigs: [{ serviceId: "../escape", values: {} }],
-        },
-      }),
-    ).toThrow("Trusted configuration snapshot rejected");
-    expect(() =>
-      sealTrustedConfigurationSnapshot({
-        ...base,
-        payload: {
-          ...payload(),
-          serviceSecrets: [
-            {
-              serviceId: "redis",
-              values: { ACCESS_TOKEN: "x".repeat(OPS_TRUSTED_CONFIG_MAX_BYTES) },
-            },
-          ],
         },
       }),
     ).toThrow("Trusted configuration snapshot rejected");

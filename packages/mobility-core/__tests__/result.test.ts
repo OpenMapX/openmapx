@@ -28,10 +28,6 @@ describe("withAttribution", () => {
     expect(result.data).toBe("payload");
     expect(result.attributions).toBe(attributions);
     expect(result.freshness).toBe(freshness);
-  });
-
-  it("returns attributions as an array with the expected Attribution fields", () => {
-    const result = withAttribution("x", attributions, freshness);
     expect(Array.isArray(result.attributions)).toBe(true);
     expect(result.attributions).toHaveLength(1);
     const [first] = result.attributions;
@@ -42,17 +38,9 @@ describe("withAttribution", () => {
       kind: "spdx",
       expression: "CC-BY-4.0",
     });
-  });
-
-  it("preserves freshness.fetchedAt verbatim", () => {
-    const result = withAttribution({ count: 3 }, attributions, freshness);
     expect(result.freshness.fetchedAt).toBe("2026-05-21T12:00:00Z");
     expect(result.freshness.hasRealtimeData).toBe(false);
     expect(result.freshness.isStale).toBe(false);
-  });
-
-  it("leaves trace undefined when not provided", () => {
-    const result = withAttribution("payload", attributions, freshness);
     expect(result.trace).toBeUndefined();
   });
 });

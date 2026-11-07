@@ -42,7 +42,6 @@ describe("runtime recovery journal", () => {
     expect(journal.record()).toBeNull();
     await journal.replace(record);
     expect((await openRuntimeRecoveryJournal(path)).record()).toEqual(record);
-    expect(readFileSync(path, "utf8")).not.toContain("docker");
     await journal.replace({ ...record, orphanedServiceIds: [] });
     expect((await openRuntimeRecoveryJournal(path)).record()?.orphanedServiceIds).toEqual([]);
     await journal.clear();
@@ -52,7 +51,7 @@ describe("runtime recovery journal", () => {
   it("fails closed for malformed, symlinked, hardlinked, and oversized records", async () => {
     const base = root();
     const target = join(base, "target");
-    writeFileSync(target, JSON.stringify(record), { mode: 0o600 });
+    writeFileSync(target, JSON.stringify({ version: 1, recovery: record }), { mode: 0o600 });
     const invalid: string[] = [];
     for (const name of ["malformed", "symlink", "hardlink", "oversized"]) {
       const directory = join(base, name);
@@ -61,8 +60,16 @@ describe("runtime recovery journal", () => {
     }
     writeFileSync(invalid[0], "not-json", { mode: 0o600 });
     symlinkSync(target, invalid[1]);
-    linkSync(target, invalid[2]);
-    writeFileSync(invalid[3], "x".repeat(65 * 1024), { mode: 0o600 });
+    const hardlinkTarget = join(base, "hardlink-target");
+    writeFileSync(hardlinkTarget, JSON.stringify({ version: 1, recovery: record }), {
+      mode: 0o600,
+    });
+    linkSync(hardlinkTarget, invalid[2]);
+    writeFileSync(
+      invalid[3],
+      JSON.stringify({ version: 1, recovery: record }) + " ".repeat(65 * 1024),
+      { mode: 0o600 },
+    );
     for (const path of invalid) {
       await expect(openRuntimeRecoveryJournal(path)).rejects.toThrow(
         "Runtime recovery journal is unavailable",

@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { services } from "@openmapx/core/server";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { scaffoldIntegration, scaffoldService } from "../commands/scaffold.js";
 import { runValidate } from "../commands/validate.js";
 
@@ -137,11 +137,14 @@ describe("validate", () => {
 });
 
 describe("CLI binary (integration + validate + package)", () => {
-  it("package help does not offer forbidden pre-built runtime bundles", () => {
+  beforeAll(() => {
     execFileSync("pnpm", ["run", "build"], {
       cwd: resolve(__dirname, "../.."),
       encoding: "utf-8",
     });
+  });
+
+  it("package help does not offer forbidden pre-built runtime bundles", () => {
     const output = execFileSync("node", [CLI, "package", "--help"], {
       encoding: "utf-8",
     });
@@ -182,7 +185,7 @@ describe("CLI binary (integration + validate + package)", () => {
     );
   });
 
-  it.skipIf(!existsSync(CLI))("scaffold integration via CLI", () => {
+  it("scaffold integration via CLI", () => {
     const output = execFileSync(
       "node",
       [CLI, "scaffold", "integration", "cli-demo", "--domain", "weather", "--out", tmp],
@@ -194,7 +197,7 @@ describe("CLI binary (integration + validate + package)", () => {
     expect(existsSync(join(tmp, "cli-demo", "manifest.json"))).toBe(true);
   });
 
-  it.skipIf(!existsSync(CLI))("validate passes on a scaffolded integration", () => {
+  it("validate passes on a scaffolded integration", () => {
     execFileSync(
       "node",
       [CLI, "scaffold", "integration", "valid-demo", "--domain", "knowledge", "--out", tmp],
@@ -208,28 +211,25 @@ describe("CLI binary (integration + validate + package)", () => {
     expect(output).toContain("valid");
   });
 
-  it.skipIf(!existsSync(CLI))(
-    "package produces a declarative .tar.gz artifact without runtime bundles",
-    () => {
-      execFileSync(
-        "node",
-        [CLI, "scaffold", "integration", "pack-demo", "--domain", "knowledge", "--out", tmp],
-        {
-          encoding: "utf-8",
-        },
-      );
-      const outFile = join(tmp, "pack-demo.tar.gz");
-      execFileSync("node", [CLI, "package", join(tmp, "pack-demo"), "--out", outFile], {
+  it("package produces a declarative .tar.gz artifact without runtime bundles", () => {
+    execFileSync(
+      "node",
+      [CLI, "scaffold", "integration", "pack-demo", "--domain", "knowledge", "--out", tmp],
+      {
         encoding: "utf-8",
-        cwd: tmp,
-      });
-      expect(existsSync(outFile)).toBe(true);
+      },
+    );
+    const outFile = join(tmp, "pack-demo.tar.gz");
+    execFileSync("node", [CLI, "package", join(tmp, "pack-demo"), "--out", outFile], {
+      encoding: "utf-8",
+      cwd: tmp,
+    });
+    expect(existsSync(outFile)).toBe(true);
 
-      const tarContents = execFileSync("tar", ["-tzf", outFile], { encoding: "utf-8" });
-      expect(tarContents).not.toContain("dist/frontend/index.js");
-      expect(tarContents).not.toContain("dist/backend/index.mjs");
-      expect(tarContents).not.toContain("companion-response.example.json");
-      expect(tarContents).not.toContain("CONTRIBUTOR-CONTRACT.md");
-    },
-  );
+    const tarContents = execFileSync("tar", ["-tzf", outFile], { encoding: "utf-8" });
+    expect(tarContents).not.toContain("dist/frontend/index.js");
+    expect(tarContents).not.toContain("dist/backend/index.mjs");
+    expect(tarContents).not.toContain("companion-response.example.json");
+    expect(tarContents).not.toContain("CONTRIBUTOR-CONTRACT.md");
+  });
 });

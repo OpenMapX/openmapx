@@ -73,6 +73,7 @@ function treeDigest(directory: string): string {
       const stats = statSync(absolute);
       hash.update(`${prefix}${name}:${stats.isDirectory() ? "d" : stats.size}\n`);
       if (stats.isDirectory()) walk(absolute, `${prefix}${name}/`);
+      else hash.update(readFileSync(absolute));
     }
   };
   walk(directory, "");

@@ -241,6 +241,10 @@ describe("alerts", () => {
       alert!.contributors!.filter(
         (c) => c.sourceId === METEOALARM && !c.attributionText?.startsWith("Contains"),
       );
+    expect(meteoalarm(croatia).some((c) => c.name !== NOTICE && c.licensing !== undefined)).toBe(
+      true,
+    );
+    expect(meteoalarm(croatia)).toContainEqual(expect.objectContaining({ name: NOTICE }));
     expect(meteoalarm(croatia).every((c) => c.modified === undefined)).toBe(true);
     // Austria's area is unioned and simplified from MeteoAlarm's own region shapes.
     expect(meteoalarm(austria).some((c) => c.modified === true)).toBe(true);
@@ -892,6 +896,7 @@ describe("captured hazard contributor receipts", () => {
       },
       { point: [12.5, 47.5], sources: ["parent-b"], contributors: [b], lineageComplete: false },
     ]);
+    expect(result.sources).toEqual([VIIRS, MODIS]);
     a.name = "Changed upstream";
     expect((result.cells[0] as { contributors?: { name: string }[] }).contributors?.[0]?.name).toBe(
       "Publisher A",

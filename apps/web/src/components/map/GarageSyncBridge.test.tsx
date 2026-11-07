@@ -114,7 +114,9 @@ describe("GarageSyncBridge", () => {
   it("does nothing while signed out", async () => {
     const post = vi.spyOn(boundary, "post");
     render(<GarageSyncBridge />, { wrapper });
-    await waitFor(() => expect(post).not.toHaveBeenCalled());
+    await act(async () => {});
+    expect(post).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
     expect(storage.map.get("openmapx:garage:vehicles")).toBeTruthy();
   });
 
@@ -135,15 +137,27 @@ describe("GarageSyncBridge", () => {
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
   });
 
-  it("keeps the local rows when the upload fails, so the next mount retries", async () => {
+  it("keeps local rows after a failed upload and retries on the next mount", async () => {
     session.value = { user: { id: "user-1" } };
-    vi.spyOn(boundary, "post").mockRejectedValue(new Error("offline"));
-    vi.spyOn(boundary, "get").mockResolvedValue({ vehicles: [], parked: [] } as never);
-
-    render(<GarageSyncBridge />, { wrapper });
-
-    await waitFor(() => expect(storage.map.get("openmapx:garage:vehicles")).toBeTruthy());
+    const post = vi
+      .spyOn(boundary, "post")
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue({ id: "v-server" });
+    const put = vi.spyOn(boundary, "put").mockResolvedValue({ id: "p-server" });
+    vi.spyOn(boundary, "get").mockResolvedValue({ vehicles: [], parked: [] });
+    const view = render(<GarageSyncBridge />, { wrapper });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    await act(async () => {});
+    expect(storage.map.get("openmapx:garage:vehicles")).toBeTruthy();
+    expect(storage.map.get("openmapx:garage:parked")).toBeTruthy();
     expect(storage.map.get("openmapx:garage:importedFor")).toBeUndefined();
+    view.unmount();
+    render(<GarageSyncBridge />, { wrapper });
+    await waitFor(() => expect(storage.map.get("openmapx:garage:importedFor")).toContain("user-1"));
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(put).toHaveBeenCalledTimes(1);
+    expect(storage.map.get("openmapx:garage:vehicles")).toBeUndefined();
+    expect(storage.map.get("openmapx:garage:parked")).toBeUndefined();
   });
 
   it("does not overwrite a server vehicle with the same name", async () => {

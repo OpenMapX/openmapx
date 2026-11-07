@@ -110,44 +110,17 @@ describe("NavigationView — wake lock follows live navigation status", () => {
     useNavigationStore.getState().stopNavigation();
   });
 
-  it("does not request a wake lock before navigation starts", () => {
-    renderNavigationView();
-    expect(wakeLockHeld()).toBe(false);
-  });
-
-  it("requests a wake lock while navigating", () => {
-    renderNavigationView();
-    act(() => {
-      useNavigationStore.getState().startGroundNavigation(route, "driving", [
-        [0, 0],
-        [0.01, 0],
-      ]);
-    });
-    expect(wakeLockHeld()).toBe(true);
-  });
-
-  it("holds the wake lock through a reroute", () => {
-    renderNavigationView();
-    act(() => {
-      useNavigationStore.getState().startGroundNavigation(route, "driving", [
-        [0, 0],
-        [0.01, 0],
-      ]);
-    });
-    act(() => {
-      useNavigationStore.getState().beginReroute();
-    });
-    expect(wakeLockHeld()).toBe(true);
-  });
-
   it("releases the wake lock on arrival — the arrival card stays, but live sensors and rendering are done", () => {
     renderNavigationView();
+    expect(wakeLockHeld()).toBe(false);
     act(() => {
       useNavigationStore.getState().startGroundNavigation(route, "driving", [
         [0, 0],
         [0.01, 0],
       ]);
     });
+    expect(wakeLockHeld()).toBe(true);
+    act(() => useNavigationStore.getState().beginReroute());
     expect(wakeLockHeld()).toBe(true);
     act(() => {
       useNavigationStore.getState().completeArrival();

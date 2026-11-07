@@ -42,14 +42,28 @@ it("rejects malformed bodies and missing confidentiality headers", async () => {
 });
 it("propagates cancellation to fetch", async () => {
   const controller = new AbortController();
-  const fetcher = vi.fn(async (_input: unknown, init?: RequestInit) => {
-    expect(init?.signal).toBeInstanceOf(AbortSignal);
-    controller.abort();
-    throw new DOMException("Aborted", "AbortError");
+  let received: AbortSignal | null | undefined;
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const fetcher = vi.fn((_input: unknown, init?: RequestInit) => {
+    received = init?.signal;
+    entered();
+    return new Promise<Response>((_resolve, reject) => {
+      received?.addEventListener("abort", () => reject(received?.reason), { once: true });
+    });
   });
   vi.stubGlobal("fetch", fetcher);
-  await expect(
-    resolvePublicShare("A".repeat(43), { client, signal: controller.signal }),
-  ).rejects.toThrow();
+  const result = resolvePublicShare("A".repeat(43), { client, signal: controller.signal });
+  const rejected = expect(result).rejects.toMatchObject({
+    name: "ApiRequestAbortedError",
+    code: "aborted",
+  });
+  await started;
+  expect(received?.aborted).toBe(false);
+  controller.abort(new Error("cancel sharing"));
+  await rejected;
+  expect(received?.aborted).toBe(true);
   expect(fetcher).toHaveBeenCalledOnce();
 });

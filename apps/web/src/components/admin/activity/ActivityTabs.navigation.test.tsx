@@ -1,51 +1,12 @@
-import { useSyncExternalStore } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@/test";
+import { adminTestHistory as history } from "@/test/adminNavigation";
 import { ActivityTabs } from "./ActivityTabs";
 
-const history = vi.hoisted(() => {
-  let entries = ["/admin/activity?tab=audit&status=failed"],
-    index = 0;
-  const listeners = new Set<() => void>();
-  return {
-    read: () => entries[index],
-    subscribe: (fn: () => void) => {
-      listeners.add(fn);
-      return () => {
-        listeners.delete(fn);
-      };
-    },
-    push: (url: string) => {
-      entries = [...entries.slice(0, index + 1), url];
-      index++;
-      listeners.forEach((fn) => {
-        fn();
-      });
-    },
-    replace: (url: string) => {
-      entries[index] = url;
-      listeners.forEach((fn) => {
-        fn();
-      });
-    },
-    back: () => {
-      index = Math.max(0, index - 1);
-      listeners.forEach((fn) => {
-        fn();
-      });
-    },
-    reset: (url: string) => {
-      entries = [url];
-      index = 0;
-    },
-  };
-});
-vi.mock("next/navigation", () => ({
-  usePathname: () => new URL(history.read(), "http://test").pathname,
-  useSearchParams: () =>
-    new URLSearchParams(useSyncExternalStore(history.subscribe, history.read).split("?")[1]),
-  useRouter: () => ({ push: history.push, replace: history.replace }),
-}));
+vi.mock(
+  "next/navigation",
+  async () => (await import("@/test/adminNavigation")).adminNavigationMock,
+);
 vi.mock("./JobList", () => ({ JobList: () => <div>Job inventory</div> }));
 vi.mock("./AuditLog", () => ({ AuditLog: () => <div>Audit inventory</div> }));
 vi.mock("./AppLogViewer", () => ({ AppLogViewer: () => <div>Application stream</div> }));

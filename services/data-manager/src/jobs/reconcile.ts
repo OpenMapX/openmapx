@@ -24,8 +24,6 @@ export type JobReconcileWriter = {
 export interface ReconcileOrphanedJobsOptions {
   /** Drizzle handle; defaults to the package-wide singleton. */
   db?: JobReconcileWriter;
-  /** Test seam: override the wall clock. */
-  now?: () => Date;
 }
 
 /** Startup marks legacy workers interrupted without asserting process/child

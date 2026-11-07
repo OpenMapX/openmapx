@@ -52,13 +52,4 @@ describe("DataManagerJobStages", () => {
     expect(html).toContain("de_VBB: missing feed_info.txt");
     expect(html).toContain("de_VBN: missing feed_info.txt");
   });
-
-  it("uses a context-specific empty state", () => {
-    const html = renderToStaticMarkup(
-      <DataManagerJobStages stages={[]} emptyMessage="Waiting for the first stage..." />,
-    );
-
-    expect(html).toContain("Stages (0)");
-    expect(html).toContain("Waiting for the first stage...");
-  });
 });

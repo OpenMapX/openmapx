@@ -280,6 +280,8 @@ describeDatabase("privacy email challenge on PostgreSQL", () => {
     const service = new PrivacyEmailChallengeService(db, ringV1, "test");
     const challenge = await service.issue({ requestId: request.id, party: "subject" });
     await service.dispatchPending({ sender, limit: 1 });
+    const issuedCode = codeFrom(required(sender.mock.calls[0])[0]);
+    const wrongCode = issuedCode === "000000" ? "000001" : "000000";
 
     for (let attempt = 1; attempt <= 5; attempt += 1) {
       await expect(
@@ -287,7 +289,7 @@ describeDatabase("privacy email challenge on PostgreSQL", () => {
           challengeId: challenge.challengeId,
           requestId: request.id,
           party: "subject",
-          code: "999999",
+          code: wrongCode,
         }),
       ).rejects.toMatchObject({
         code: attempt === 5 ? "CHALLENGE_ATTEMPTS_EXCEEDED" : "CHALLENGE_INVALID",

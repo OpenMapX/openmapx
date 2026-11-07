@@ -43,9 +43,15 @@ describe("native intake transfer", () => {
     }));
     const client = new NativeIntakeClient({ request } as never);
     await expect(client.text(item, new AbortController().signal)).rejects.toThrow();
+    request.mockResolvedValue({
+      type: "intake.chunk",
+      payload: { id, offset: 0, data: btoa("Berlin"), byteLength: 6, eof: true },
+    });
+    request.mockClear();
     const abort = new AbortController();
     abort.abort();
     await expect(client.text(item, abort.signal)).rejects.toThrow();
+    expect(request).not.toHaveBeenCalled();
   });
 });
 
@@ -59,8 +65,15 @@ it("validates metadata before allocating and enforces the total transfer deadlin
     client.text({ ...item, byteLength: 999999999 }, new AbortController().signal),
   ).rejects.toThrow();
   expect(request).not.toHaveBeenCalled();
-  let calls = 0;
-  const clock = vi.spyOn(Date, "now").mockImplementation(() => (++calls < 4 ? 1000 : 62000));
+  let now = 1000;
+  const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+  request.mockImplementation(async () => {
+    now = 62000;
+    return {
+      type: "intake.chunk",
+      payload: { id, offset: 0, data: btoa("Berlin"), byteLength: 6, eof: true },
+    };
+  });
   try {
     await expect(client.text(item, new AbortController().signal)).rejects.toThrow();
   } finally {

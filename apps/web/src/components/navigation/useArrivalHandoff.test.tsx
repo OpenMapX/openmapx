@@ -7,7 +7,7 @@ import {
 } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@/test";
-import { setPendingArrivalHandoff } from "./arrivalHandoffState";
+import { getPendingArrivalHandoff, setPendingArrivalHandoff } from "./arrivalHandoffState";
 
 const state = vi.hoisted(() => ({
   saveHere: vi.fn(async () => "saved" as const),
@@ -159,6 +159,7 @@ describe("useArrivalHandoff", () => {
   it("saves parking only after the user asks", async () => {
     const { result } = renderHook(() => useArrivalHandoff({ onClose: vi.fn() }));
     expect(state.saveHere).not.toHaveBeenCalled();
+    expect(fetchDirections).not.toHaveBeenCalled();
     await act(() => result.current.handleSaveParking());
     expect(state.saveHere).toHaveBeenCalledWith({ source: "arrival" });
     expect(result.current.isParkingSaved).toBe(true);
@@ -172,18 +173,13 @@ describe("useArrivalHandoff", () => {
     }));
     useCategorySearch.mockReturnValue({ data: { results: places }, isLoading: false });
     const { result } = renderHook(() => useArrivalHandoff({ onClose: vi.fn() }));
+    expect(useDataSourceSearch).toHaveBeenCalledWith(null, AREA, { open_now: true });
     expect(useCategorySearch).toHaveBeenCalledWith(
       "parking",
       expect.objectContaining({ west: expect.any(Number), east: expect.any(Number) }),
       "en",
     );
     expect(result.current.nearbyParking.map((place) => place.id)).toEqual(["p1", "p2", "p3", "p4"]);
-  });
-
-  it("searches places for parking while no parking source is offered", () => {
-    renderHook(() => useArrivalHandoff({ onClose: vi.fn() }));
-    expect(useDataSourceSearch).toHaveBeenCalledWith(null, AREA, { open_now: true });
-    expect(useCategorySearch).toHaveBeenCalledWith("parking", AREA, "en");
   });
 
   it("waits for the source list before choosing where to search", () => {
@@ -399,21 +395,31 @@ describe("useArrivalHandoff", () => {
     expect(result.current.nearbyParking.map((place) => place.id)).toEqual(["poi"]);
   });
 
-  it("does not request a zero-length walk at the original destination", () => {
-    renderHook(() => useArrivalHandoff({ onClose: vi.fn() }));
-    expect(fetchDirections).not.toHaveBeenCalled();
+  it("rejects and clears a pending handoff for a different parking destination", () => {
+    setPendingArrivalHandoff({
+      parkingCoords: [10.02, 50.02],
+      destinationCoords: [10.03, 50.03],
+      destinationName: "Wrong session",
+    });
+
+    const { result } = renderHook(() => useArrivalHandoff({ onClose: vi.fn() }));
+
+    expect(getPendingArrivalHandoff()).toBeNull();
+    expect(result.current.destinationName).toBeNull();
+    expect(result.current.showParkingOptions).toBe(true);
   });
 
-  it("restores the original destination after arriving at selected parking", async () => {
+  it("starts the walking leg through the authority-aware navigation adapter", async () => {
     setPendingArrivalHandoff({
       parkingCoords: [10.01, 50.01],
       destinationCoords: [10.02, 50.02],
       destinationName: "Museum",
     });
-    fetchDirections.mockResolvedValue({ routes: [walkingRoute] });
+    fetchDirections.mockResolvedValue({ routes: [walkingRoute], provider: "openroute" });
     const { result } = renderHook(() => useArrivalHandoff({ onClose: vi.fn() }));
     await waitFor(() => expect(result.current.walkingRoute).toEqual(walkingRoute));
     expect(result.current.destinationCoords).toEqual([10.02, 50.02]);
+    expect(result.current.destinationName).toBe("Museum");
     expect(result.current.showParkingOptions).toBe(false);
     expect(fetchDirections).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -424,58 +430,18 @@ describe("useArrivalHandoff", () => {
         mode: "walking",
       }),
     );
-  });
-
-  it("rejects and clears a pending handoff for a different parking destination", () => {
-    setPendingArrivalHandoff({
-      parkingCoords: [10.02, 50.02],
-      destinationCoords: [10.03, 50.03],
-      destinationName: "Wrong session",
-    });
-
-    const { result } = renderHook(() => useArrivalHandoff({ onClose: vi.fn() }));
-
-    expect(result.current.destinationName).toBeNull();
-    expect(result.current.showParkingOptions).toBe(true);
-  });
-
-  it("starts the walking leg through the authority-aware navigation adapter", async () => {
-    setPendingArrivalHandoff({
-      parkingCoords: [10.01, 50.01],
-      destinationCoords: [10.02, 50.02],
-      destinationName: null,
-    });
-    fetchDirections.mockResolvedValue({ routes: [walkingRoute] });
-    const { result } = renderHook(() => useArrivalHandoff({ onClose: vi.fn() }));
-    await waitFor(() => expect(result.current.walkingRoute).toEqual(walkingRoute));
     await act(() => result.current.handleStartWalking());
     expect(state.completeArrival).toHaveBeenCalledTimes(1);
     expect(state.startGround).toHaveBeenCalledWith(
       expect.objectContaining({
         route: walkingRoute,
+        routeProvider: "openroute",
         mode: "walking",
         destinationWaypoints: [
           [10.01, 50.01],
           [10.02, 50.02],
         ],
       }),
-    );
-  });
-
-  it("preserves the provider returned with a planned walking route", async () => {
-    setPendingArrivalHandoff({
-      parkingCoords: [10.01, 50.01],
-      destinationCoords: [10.02, 50.02],
-      destinationName: null,
-    });
-    fetchDirections.mockResolvedValue({ routes: [walkingRoute], provider: "openroute" });
-    const { result } = renderHook(() => useArrivalHandoff({ onClose: vi.fn() }));
-    await waitFor(() => expect(result.current.walkingRoute).toEqual(walkingRoute));
-
-    await act(() => result.current.handleStartWalking());
-
-    expect(state.startGround).toHaveBeenCalledWith(
-      expect.objectContaining({ routeProvider: "openroute" }),
     );
   });
 
@@ -539,7 +505,27 @@ describe("useArrivalHandoff", () => {
 
   it("routes motorcycles to parking as motorcycles and preserves the final destination", async () => {
     act(() => useNavigationStore.setState({ mode: "motorcycle" }));
-    const parkingRoute = { ...drivingRoute, mode: "motorcycle" as const };
+    const parkingRoute = {
+      ...drivingRoute,
+      mode: "motorcycle" as const,
+      geometry: [
+        [10.01, 50.01],
+        [10.015, 50.015],
+      ] as LngLat[],
+    };
+    state.startGround.mockImplementationOnce(async () => {
+      useNavigationStore.getState().startGroundNavigation(
+        parkingRoute,
+        "motorcycle",
+        [
+          [10.01, 50.01],
+          [10.015, 50.015],
+        ],
+        [],
+        "valhalla",
+      );
+      return { ok: true };
+    });
     fetchDirections.mockResolvedValue({ routes: [parkingRoute], provider: "valhalla" });
     const parking: CategoryPlace = {
       id: "p1",
@@ -552,6 +538,11 @@ describe("useArrivalHandoff", () => {
     await act(() => result.current.handleDriveToParking(parking));
     expect(fetchDirections).toHaveBeenCalledWith(expect.objectContaining({ mode: "motorcycle" }));
     expect(state.completeArrival).toHaveBeenCalledTimes(1);
+    expect(getPendingArrivalHandoff()).toEqual({
+      parkingCoords: [10.015, 50.015],
+      destinationCoords: [10.01, 50.01],
+      destinationName: "Museum",
+    });
     expect(state.startGround).toHaveBeenCalledWith(
       expect.objectContaining({ mode: "motorcycle", route: parkingRoute }),
     );
@@ -566,6 +557,7 @@ describe("useArrivalHandoff", () => {
     });
     const { result } = renderHook(() => useArrivalHandoff({ onClose }));
     act(() => result.current.handleDone());
+    expect(getPendingArrivalHandoff()).toBeNull();
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

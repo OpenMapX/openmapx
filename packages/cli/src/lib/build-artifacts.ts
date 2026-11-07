@@ -134,17 +134,11 @@ export async function currentRevision(rootDir?: string): Promise<string | undefi
   return (await buildProvenance(rootDir)).revision;
 }
 
-/** @deprecated Archive subprocesses are no longer used; kept for source compatibility. */
-export type BundleCommandRunner = (
-  args: string[],
-  opts: { cwd?: string; stdin?: "inherit"; stdout?: "inherit" },
-) => Promise<void>;
 export interface ExportBuildBundleOptions {
   runningServices?: (ids: string[]) => Promise<string[]>;
   serviceId: string;
   bundle: string;
   rootDir?: string;
-  tar?: BundleCommandRunner;
 }
 export async function exportBuildBundle(opts: ExportBuildBundleOptions): Promise<BundleManifest> {
   const dataRoot = dataRootFor(opts.rootDir);
@@ -249,7 +243,6 @@ export async function runtimeImageMismatches(images: Record<string, string>, roo
 export interface ImportBuildBundleOptions {
   bundle: string;
   rootDir?: string;
-  tar?: BundleCommandRunner;
   runningServices: (ids: string[]) => Promise<string[]>;
 }
 export class ArtifactImportCommittedError extends Error {

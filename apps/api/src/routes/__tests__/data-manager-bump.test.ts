@@ -1,5 +1,5 @@
 import Fastify, { type FastifyInstance } from "fastify";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../db/index.js", () => {
   const builder: Record<string, unknown> = {};
@@ -35,12 +35,17 @@ vi.mock("../../utils/rate-limit.js", () => ({
 }));
 
 beforeAll(() => {
-  process.env.DATA_MANAGER_AUTH_TOKEN = "service-token";
-  process.env.DATA_MANAGER_URL = "https://data-manager.test:4000";
+  vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "service-token");
+  vi.stubEnv("DATA_MANAGER_URL", "https://data-manager.test:4000");
   vi.stubGlobal("fetch", fetchMock);
 });
 
 let app: FastifyInstance;
+afterAll(async () => {
+  await app?.close();
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
 
 beforeAll(async () => {
   const { dataManagerRoute } = await import("../data-manager.js");
@@ -101,16 +106,20 @@ describe("POST /data-manager/transit/bump-transitous-ref", () => {
     );
   });
 
-  it("rejects flag-shaped and traversal-like branch names", async () => {
-    tryAdminSessionMock.mockResolvedValue({ user: { id: "admin-1", role: "admin" } });
-    const res = await app.inject({
-      method: "POST",
-      url: "/data-manager/transit/bump-transitous-ref",
-      payload: { branch: "--upload-pack=evil" },
-    });
-    expect(res.statusCode).toBe(400);
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
+  it.each(["--upload-pack=evil", "feature/../main"])(
+    "rejects unsafe branch %s before proxying",
+    async (branch) => {
+      tryAdminSessionMock.mockResolvedValue({ user: { id: "admin-1", role: "admin" } });
+      const res = await app.inject({
+        method: "POST",
+        url: "/data-manager/transit/bump-transitous-ref",
+        payload: { branch },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe("Invalid Transitous branch name");
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
 
   it("returns 403 when caller authenticates with only a bearer token", async () => {
     tryAdminSessionMock.mockResolvedValue(null);

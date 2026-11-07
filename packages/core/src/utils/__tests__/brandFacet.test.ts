@@ -51,6 +51,6 @@ describe("brand facet filtering", () => {
 
   it("is inactive when nothing is selected", () => {
     const results = [place("a", "Aldi", "Q1"), place("b")];
-    expect(applyFacetFilters(results, {})).toHaveLength(2);
+    expect(applyFacetFilters(results, {})).toEqual(results);
   });
 });

@@ -225,14 +225,6 @@ describe("activeClosuresForBbox", () => {
     expect(result.points).toEqual([[0.5, 51.5]]);
   });
 
-  it("treats an absent getDisallowedSourceIds method as no sources disallowed", async () => {
-    const getEvents = vi.fn().mockResolvedValue([closureAt(point(0.5, 51.5))]);
-    const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
-    expect(ctx.getDisallowedSourceIds).toBeUndefined();
-    const result = await activeClosuresForBbox(ctx, TEST_BBOX);
-    expect(result.points).toEqual([[0.5, 51.5]]);
-  });
-
   it("handles MultiLineString geometry by densifying all lines into points", async () => {
     // Each line has vertices ~14 m apart (below the 45 m threshold), so no
     // intermediate points are inserted and the result covers both lines.

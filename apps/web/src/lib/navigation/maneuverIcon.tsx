@@ -13,14 +13,7 @@ import TurnSharpRight from "@mui/icons-material/TurnSharpRight";
 import TurnSlightLeft from "@mui/icons-material/TurnSlightLeft";
 import TurnSlightRight from "@mui/icons-material/TurnSlightRight";
 import UTurnLeft from "@mui/icons-material/UTurnLeft";
-import {
-  type GuidanceIconName,
-  laneArrowStemShift,
-  laneIndicationIconName,
-  maneuverIconName,
-  normalizeLaneToken,
-  unmarkedLaneIconName,
-} from "@openmapx/core/navigation";
+import { type GuidanceIconName, maneuverIconName } from "@openmapx/core/navigation";
 
 export interface Maneuver {
   type: string;
@@ -61,26 +54,7 @@ export function guidanceIconComponent(name: GuidanceIconName): SvgIconComponent 
   return ICONS[name];
 }
 
-export { normalizeLaneToken };
-
-/** Horizontal stem shift, in `em` (icon glyphs scale with font-size). */
-export function laneArrowStemShiftEm(iconName: string): number {
-  return laneArrowStemShift(iconName as GuidanceIconName);
-}
-
 /** Resolve a normalized maneuver to an MUI icon component. Falls back to Straight. */
 export function maneuverIconFor(maneuver: Maneuver | undefined): ResolvedIcon {
   return resolved(maneuverIconName(maneuver));
-}
-
-/** The arrow for an unmarked lane the engine says serves the maneuver, if any. */
-export function unmarkedLaneIcon(maneuver: Maneuver | undefined): ResolvedIcon | null {
-  const name = unmarkedLaneIconName(maneuver);
-  return name ? resolved(name) : null;
-}
-
-/** A lane indication token's icon; `null` for an empty `none` lane. */
-export function laneIndicationIcon(indication: string): ResolvedIcon | null {
-  const name = laneIndicationIconName(indication);
-  return name ? resolved(name) : null;
 }

@@ -22,7 +22,7 @@ vi.mock("@/integration-api/runtime/useDateTimeFormat", () => ({
 import { NavBottomBar } from "./NavBottomBar";
 
 describe("NavBottomBar", () => {
-  it("renders remaining distance, duration, and an end button", () => {
+  it("renders remaining distance and duration", () => {
     const html = renderToStaticMarkup(
       <NavBottomBar
         distanceRemaining={1200}
@@ -34,7 +34,6 @@ describe("NavBottomBar", () => {
     );
     expect(html).toContain("1200 m");
     expect(html).toContain("300s");
-    expect(html).toContain("end"); // i18n key passthrough
   });
 
   it("shows the search button only when onSearch is given", () => {

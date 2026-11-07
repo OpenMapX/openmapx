@@ -63,6 +63,7 @@ interface Harness {
   repository: SessionRepository;
   sent: Array<{ type: string; payload: unknown; options: Record<string, unknown> }>;
   effectLog: string[];
+  observedAtStart: Array<MobileNavigationSession | null>;
   deps: CoordinatorDeps;
   close: () => Promise<void>;
 }
@@ -85,7 +86,9 @@ async function harness(
 
   const sent: Array<{ type: string; payload: unknown; options: Record<string, unknown> }> = [];
   const effectLog: string[] = [];
+  const observedAtStart: Array<MobileNavigationSession | null> = [];
   const fail = (label: string) => async () => {
+    if (label === "driver.start") observedAtStart.push(await repository.loadActive(NOW));
     effectLog.push(label);
     if (overrides.failEffect === label) throw new Error(`${label} failed`);
   };
@@ -134,6 +137,7 @@ async function harness(
     repository,
     sent,
     effectLog,
+    observedAtStart,
     deps,
     close: () => database.closeAsync(),
   };
@@ -217,22 +221,16 @@ describe("NavigationCoordinator commands", () => {
   });
 
   it("starts only after consent, and persists before the driver runs", async () => {
-    const context = await harness();
+    const context = await harness({ permission: "foreground-only" });
 
     const { started } = await running(context);
 
     expect(code(started)).toBe("session.started");
+    expect(context.observedAtStart).toEqual([
+      expect.objectContaining({ status: "active", revision: 2, permissionMode: "foreground-only" }),
+    ]);
     expect((await context.repository.loadActive(NOW))?.status).toBe("active");
     expect(context.effectLog).toEqual(["driver.start", "publish.snapshot"]);
-    await context.close();
-  });
-
-  it("records the permission mode the user actually chose", async () => {
-    const context = await harness({ permission: "foreground-only" });
-
-    await running(context);
-
-    expect((await context.repository.loadActive(NOW))?.permissionMode).toBe("foreground-only");
     await context.close();
   });
 
@@ -303,6 +301,7 @@ describe("NavigationCoordinator commands", () => {
 
     expect(code(response)).toBe("session.replaced");
     expect(response?.revision).toBe(3);
+    expect((await context.repository.loadActive(NOW))?.revision).toBe(3);
     await context.close();
   });
 
@@ -331,6 +330,9 @@ describe("NavigationCoordinator commands", () => {
     const context = await harness();
     const { sessionId } = await running(context);
 
+    await context.coordinator.handleLocationBatch({
+      locations: [{ timestamp: NOW, coords: { latitude: 50.11, longitude: 8.68, accuracy: 5 } }],
+    });
     const first = await context.coordinator.dispatch(cmd("session.stop", {}, { sessionId }));
     const second = await context.coordinator.dispatch(cmd("session.stop", {}, { sessionId }));
 
@@ -338,16 +340,7 @@ describe("NavigationCoordinator commands", () => {
     expect(code(second)).toBe("session.stopped");
     expect(await context.repository.loadActive(NOW)).toBeNull();
     expect(context.effectLog.filter((entry) => entry === "driver.stop")).toHaveLength(1);
-    await context.close();
-  });
-
-  it("reports arrival as the final status for complete", async () => {
-    const context = await harness();
-    const { sessionId } = await running(context);
-
-    await context.coordinator.dispatch(cmd("session.complete", {}, { sessionId }));
-
-    expect((await context.repository.readTerminalAck(sessionId))?.finalStatus).toBe("arrived");
+    expect(context.effectLog.filter((entry) => entry === "driver.start")).toHaveLength(1);
     await context.close();
   });
 
@@ -501,11 +494,28 @@ describe("NavigationCoordinator location batches", () => {
     });
     await context.repository.terminate(sessionId, "stopped", NOW);
     await context.repository.createPreparing(stale as MobileNavigationSession);
+    await context.repository.enqueueEvent({
+      eventId: "expired-event",
+      sessionId,
+      critical: true,
+      createdAtMs: NOW - 10,
+      payload: { coords: [8.68, 50.11] },
+    });
+    await context.repository.replaceScheduledAlerts(
+      sessionId,
+      [{ alertId: "expired-alert", legIndex: 0, triggerAtMs: NOW + 1000 }],
+      NOW,
+    );
 
     await context.coordinator.handleLocationBatch({ locations: [fix(NOW)] });
 
     expect(await context.repository.loadActive(NOW)).toBeNull();
     expect((await context.repository.readTerminalAck(sessionId))?.finalStatus).toBe("expired");
+    const rows = Object.fromEntries(
+      (await context.repository.describeContents()).map((row) => [row.table, row.rows]),
+    );
+    expect(rows.navigation_events).toBe(0);
+    expect(rows.scheduled_alerts).toBe(0);
     await context.close();
   });
 
@@ -537,7 +547,6 @@ describe("NavigationCoordinator serialization", () => {
     ]);
 
     expect((await context.repository.loadActive(NOW))?.revision).toBe(5);
-    expect(sessionId).toBeTruthy();
     await context.close();
   });
 
@@ -613,17 +622,6 @@ describe("NavigationCoordinator serialization", () => {
     expect((await context.repository.loadActive(NOW))?.lastAcceptedFix).toBeUndefined();
     await context.close();
   });
-
-  it("issues exactly one start and one stop across a whole session", async () => {
-    const context = await harness();
-    const { sessionId } = await running(context);
-    await context.coordinator.handleLocationBatch({ locations: [fix(NOW)] });
-    await context.coordinator.dispatch(cmd("session.stop", {}, { sessionId }));
-
-    expect(context.effectLog.filter((entry) => entry === "driver.start")).toHaveLength(1);
-    expect(context.effectLog.filter((entry) => entry === "driver.stop")).toHaveLength(1);
-    await context.close();
-  });
 });
 
 describe("NavigationCoordinator storage cleanup", () => {
@@ -664,6 +662,14 @@ describe("NavigationCoordinator storage cleanup", () => {
       expect(rows.scheduled_alerts).toBe(0);
       // The acknowledgement survives, because a reloaded page needs an outcome.
       expect(rows.terminal_ack).toBe(1);
+      const ack = await context.repository.readTerminalAck(sessionId);
+      expect(ack).toEqual({
+        sessionId,
+        kind: "ground",
+        finalStatus: command === "session.complete" ? "arrived" : "stopped",
+        finalRevision: expect.any(Number),
+        completedAtMs: NOW,
+      });
 
       // One command response also survives: the stop's own, written after the
       // cleanup so a retried stop returns the same answer instead of running
@@ -696,59 +702,6 @@ describe("NavigationCoordinator storage cleanup", () => {
     }
     await context.close();
   });
-
-  it("leaves an acknowledgement that carries no route, fix, stop or token", async () => {
-    const context = await harness();
-    const { sessionId } = await running(context);
-    await context.coordinator.handleLocationBatch({ locations: [fix(NOW)] });
-
-    await context.coordinator.dispatch(cmd("session.stop", {}, { sessionId }));
-
-    const ack = await context.repository.readTerminalAck(sessionId);
-    expect(Object.keys(ack ?? {}).sort()).toEqual([
-      "completedAtMs",
-      "finalRevision",
-      "finalStatus",
-      "kind",
-      "sessionId",
-    ]);
-    await context.close();
-  });
-
-  it("clears location-bearing rows when a session expires unattended", async () => {
-    const context = await harness();
-    const { sessionId } = await running(context);
-    await context.repository.terminate(sessionId, "stopped", NOW);
-    await context.repository.createPreparing(
-      groundSessionFixture({
-        sessionId,
-        status: "active",
-        startedAtMs: NOW - 60_000,
-        updatedAtMs: NOW - 60_000,
-        expiresAtMs: NOW - 1,
-      }) as MobileNavigationSession,
-    );
-
-    await context.coordinator.handleLocationBatch({ locations: [fix(NOW)] });
-
-    const rows = Object.fromEntries((await dump(context)).map((e) => [e.table, e.rows]));
-    expect(rows.active_navigation).toBe(0);
-    expect(rows.navigation_events).toBe(0);
-    await context.close();
-  });
-
-  it("reports column names without any stored value", async () => {
-    const context = await harness();
-    await running(context);
-    await context.coordinator.handleLocationBatch({ locations: [fix(NOW)] });
-
-    const serialised = JSON.stringify(await dump(context));
-
-    expect(serialised).toContain("session_json");
-    expect(serialised).not.toContain("50.11");
-    expect(serialised).not.toContain("8.68");
-    await context.close();
-  });
 });
 
 describe("NavigationCoordinator effects", () => {
@@ -768,24 +721,20 @@ describe("NavigationCoordinator effects", () => {
     await context.close();
   });
 
-  it("strips the transit refresh token from every snapshot", async () => {
+  it("strips captured transit refresh material from the requested snapshot", async () => {
     const context = await harness();
-    await running(context);
+    const { transitSessionFixture } = require("./transit/testing/transitFixture");
+    const transit = transitSessionFixture();
+    transit.payload.refreshToken = "private-refresh-material";
+    await context.repository.createPreparing(transit);
 
     const response = await context.coordinator.dispatch(cmd("snapshot.request", {}));
 
+    expect(response?.payload).toMatchObject({
+      snapshot: { kind: "transit", sessionId: transit.sessionId, type: "full" },
+    });
+    expect(JSON.stringify(response?.payload)).not.toContain("private-refresh-material");
     expect(JSON.stringify(response?.payload)).not.toContain("refreshToken");
-    await context.close();
-  });
-
-  it("sends every response through the bridge", async () => {
-    const context = await harness();
-    await running(context);
-
-    expect(context.sent.map((entry) => entry.type)).toEqual([
-      "session.prepared",
-      "session.started",
-    ]);
     await context.close();
   });
 
@@ -806,6 +755,10 @@ describe("NavigationCoordinator effects", () => {
       ),
     );
 
+    expect(context.sent.map((entry) => entry.type)).toEqual([
+      "session.prepared",
+      "session.started",
+    ]);
     expect(context.sent.map((entry) => entry.options.forMessageId)).toEqual([
       "prepare-command",
       "start-command",

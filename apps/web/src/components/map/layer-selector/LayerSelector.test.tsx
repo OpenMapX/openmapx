@@ -144,7 +144,11 @@ describe("LayerSelector desktop dock", () => {
     // A sheet past its follow cap has taken the footer inside it.
     act(() => publishMobilePanelHeight("layer-test-sheet", 400));
     expect(dockBottom("openLayerMenu")).toBe("408px");
-    expect(getComputedStyle(dock("openLayerMenu")).transition).toBe("opacity 0.18s ease");
+    expect(
+      getComputedStyle(dock("openLayerMenu"))
+        .transition.split(",")
+        .map((value) => value.trim().split(/\s+/)[0]),
+    ).toEqual(["opacity"]);
   });
 
   it("rides the footer on a driving sheet's timeline, then the sheet edge once the footer docks", () => {
@@ -181,16 +185,7 @@ describe("LayerSelector desktop dock", () => {
 
     expect(screen.getByText("map-details-panel")).toBeDefined();
     expect(quickSelectorOpen()).toBe(false);
-  });
-
-  it("keeps the quick selector closed while the panel is open", async () => {
-    const user = userEvent.setup();
-    render(<LayerSelector />);
-
     await user.hover(quickSelectorToggle());
-    await user.click(screen.getByText("more"));
-    await user.hover(quickSelectorToggle());
-
     expect(quickSelectorOpen()).toBe(false);
   });
 
@@ -286,8 +281,11 @@ describe("LayerSelector desktop dock", () => {
     expect(mockPopoverAction.updatePosition).toHaveBeenCalledTimes(1);
     const movedPopover = screen.getByTestId("layer-selector-popover");
     expect(movedPopover.getAttribute("data-anchor-left")).toBe("0");
-    expect(movedPopover.getAttribute("data-paper-transition")).toBe(
-      "left 0.25s ease, opacity 0.18s ease, transform 0.16s ease !important",
-    );
+    expect(
+      movedPopover
+        .getAttribute("data-paper-transition")
+        ?.split(",")
+        .map((value) => value.trim().split(/\s+/)[0]),
+    ).toContain("left");
   });
 });

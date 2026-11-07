@@ -231,11 +231,6 @@ describe("the command surface", () => {
     }
   });
 
-  it("accepts a valid ground preparation", () => {
-    const result = parse(message());
-    expect(result.ok).toBe(true);
-  });
-
   it("accepts a valid transit preparation", () => {
     const result = parse(message({ payload: { startPackage: transitPackage() } }));
     expect(result.ok).toBe(true);
@@ -366,15 +361,10 @@ describe("error hygiene", () => {
     const result = parse(message({ payload: { startPackage: bad } }));
     expect(result.ok).toBe(false);
     const serialized = JSON.stringify(result);
+    if (result.ok) throw new Error("Expected refusal");
+    expect(Object.keys(result.error)).toEqual(["code"]);
     expect(serialized).not.toContain(secret);
     expect(serialized).not.toContain("8.6");
-  });
-
-  it("returns only a stable code", () => {
-    const result = parse(message({ type: "nope" }));
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("expected failure");
-    expect(Object.keys(result.error)).toEqual(["code"]);
   });
 });
 

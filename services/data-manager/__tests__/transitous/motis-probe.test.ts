@@ -51,12 +51,14 @@ describe("fetchWithTimeout (node:http, bypassing undici)", () => {
   });
 
   it("times out (and does not retry) when the server never responds", async () => {
+    let requests = 0;
     const base = await listen(() => {
-      /* intentionally never responds */
+      requests++; // Intentionally never respond.
     });
     await expect(fetchWithTimeout(`${base}/plan`, 300, { retries: 3 })).rejects.toThrow(
       /timed out/,
     );
+    expect(requests).toBe(1);
   });
 
   it("sends the given request headers", async () => {

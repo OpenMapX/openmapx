@@ -89,7 +89,7 @@ function input(): Parameters<typeof buildFixedConfigurationMaintenancePlan>[0] {
     },
   };
 }
-it("freezes generation, real middle-owner intent and recreation with one immutable fixed-reference settlement", () => {
+it("freezes generation, declared middle-owner intent and recreation with one immutable fixed-reference settlement", () => {
   const source = input(),
     plan = buildFixedConfigurationMaintenancePlan(source);
   expect(plan.steps.map((value) => [value.ordinal, value.phase, value.prerequisites])).toEqual([
@@ -138,7 +138,10 @@ it.each(["body", "source", "parent", "foreign-target", "protected-target", "capa
       source.recreateServiceIds = ["app-api"];
     }
     if (reason === "capacity") {
-      source.serviceIds = Array.from({ length: 31 }, (_, i) => `svc-${String(i).padStart(2, "0")}`);
+      source.serviceIds = [
+        ...source.serviceIds,
+        ...Array.from({ length: 29 }, (_, i) => `svc-${String(i).padStart(2, "0")}`),
+      ].sort();
       source.recreateServiceIds = [...source.serviceIds];
     }
     expect(() => buildFixedConfigurationMaintenancePlan(source)).toThrow();

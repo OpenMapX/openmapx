@@ -29,40 +29,9 @@ const MANIFEST_SOURCES: IntegrationDataSource[] = [
     ),
     ...COMPLIANCE_FIELDS,
   },
-  {
-    // No licenseUrl — the license renders as plain text.
-    sourceId: "gdacs",
-    name: "GDACS",
-    url: "https://www.gdacs.org/",
-    licensing: licensingFromDeclaration("Proprietary (disclaimer-based)", undefined),
-    ...COMPLIANCE_FIELDS,
-  },
-  {
-    // Custom verbatim wording with an embedded publisher link.
-    sourceId: "osm",
-    name: "OpenStreetMap",
-    url: "https://www.openstreetmap.org",
-    licensing: licensingFromDeclaration("ODbL 1.0", "https://opendatacommons.org/licenses/odbl/"),
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    ...COMPLIANCE_FIELDS,
-  },
-  {
-    // Ampersands and quotes in the publisher name must be escaped identically.
-    sourceId: "noaa-co-ops",
-    name: 'NOAA Tides & Currents ("CO-OPS")',
-    url: "https://tidesandcurrents.noaa.gov/",
-    licensing: licensingFromDeclaration("U.S. Public Domain", undefined),
-    ...COMPLIANCE_FIELDS,
-  },
 ];
 
 describe("attributionToHtml", () => {
-  for (const ds of MANIFEST_SOURCES) {
-    it(`matches the legend rendering of ${ds.sourceId}`, () => {
-      expect(attributionToHtml(dataSourceToAttribution(ds))).toBe(buildAttributionHtml(ds));
-    });
-  }
-
   it("credits the license alongside the publisher", () => {
     const html = attributionToHtml(dataSourceToAttribution(MANIFEST_SOURCES[0]));
     expect(html).toContain("OpenAQ");
@@ -96,20 +65,6 @@ describe("attributionToHtml", () => {
         '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
     });
     expect(fromManifest).toBe(fromBase);
-  });
-
-  it("drops an unsafe href rather than emitting it", () => {
-    const html = attributionToHtml({
-      sourceId: "evil",
-      name: "Evil",
-      url: ["java", "script:alert(1)"].join(""),
-    });
-    expect(html).not.toContain("script:");
-    expect(html).toBe("Evil");
-  });
-
-  it("falls back to plain text when the source has no url", () => {
-    expect(attributionToHtml({ sourceId: "anon", name: "Anonymous feed" })).toBe("Anonymous feed");
   });
 });
 

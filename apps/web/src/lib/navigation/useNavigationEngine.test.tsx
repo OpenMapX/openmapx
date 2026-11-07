@@ -179,16 +179,6 @@ describe("useNavigationEngine", () => {
     },
   );
 
-  it("writes progress to the store on each on-route fix", () => {
-    useNavigationStore.getState().startGroundNavigation(route, "driving", [
-      [0, 0],
-      [0.004, 0],
-    ]);
-    renderHook(() => useNavigationEngine(disabledResource));
-    act(() => fixHandler?.({ coords: [0.001, 0], accuracy: 5, timestampMs: 1000 }));
-    expect(useNavigationStore.getState().progress?.currentStepIndex).toBe(0);
-  });
-
   it("requests a reroute and applies the new route when off-route", async () => {
     useNavigationStore.getState().startGroundNavigation(route, "driving", [
       [0, 0],
@@ -666,24 +656,6 @@ describe("useNavigationEngine incident-resource baseline", () => {
 
   afterEach(() => {
     useSettingsStore.setState({ incidentAlerts: false, avoidIncidents: false });
-  });
-
-  it("arms the baseline on the first fresh revision without rerouting for closures already present", () => {
-    useNavigationStore.getState().startGroundNavigation(route, "driving", waypoints);
-    const { rerender } = renderHook(({ resource }) => useNavigationEngine(resource), {
-      initialProps: { resource: resourceWith({ status: "loading" }) },
-    });
-    act(() => fixHandler?.({ coords: [0.001, 0], accuracy: 5, speed: 10, timestampMs: 1000 }));
-
-    rerender({
-      resource: resourceWith({
-        status: "fresh",
-        successfulRevision: 1,
-        incidents: [closureIncident("c1")],
-      }),
-    });
-
-    expect(fetchDirections).not.toHaveBeenCalled();
   });
 
   it("reroutes once a later fresh revision reveals a genuinely new closure", () => {

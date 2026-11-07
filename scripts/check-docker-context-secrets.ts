@@ -7,7 +7,7 @@ import { lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, posix, relative, resolve, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const REQUIRED_DOCKERIGNORE_RULES = [
+const REQUIRED_DOCKERIGNORE_RULES = [
   "infra/docker/secrets/",
   "**/.generated-secrets/",
   "**/*.key",

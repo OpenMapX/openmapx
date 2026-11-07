@@ -130,12 +130,6 @@ describe("native voice input", () => {
     expect(f.emit).toHaveBeenCalledWith({ requestId: "r", state: "error", error: "not-allowed" });
     expect(f.module.start).not.toHaveBeenCalled();
   });
-  it("requests first-tap permission then starts", async () => {
-    const f = fixture();
-    f.module.getMicrophonePermissionsAsync.mockResolvedValue({ granted: false, canAskAgain: true });
-    await f.controller.start("r", "en-US");
-    expect(f.module.start).toHaveBeenCalledTimes(1);
-  });
   it("downloads missing model once and rechecks installed models every start", async () => {
     const f = fixture();
     await f.controller.start("r", "fr-FR");

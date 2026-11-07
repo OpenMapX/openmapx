@@ -114,19 +114,15 @@ describe("shellReducer", () => {
   });
 
   it("offers only settings and end after permission loss", () => {
-    const { state } = drive([...LOADED, { type: "session-started" }, { type: "permission-lost" }]);
-
-    expect(actionsFor(state)).toEqual(["open-app-settings", "end"]);
-    // Re-prompting is the one thing this state must never do.
-    expect(actionsFor(state)).not.toContain("retry");
-  });
-
-  it("marks a session as no longer running when permission is lost", () => {
-    const { context } = drive([
+    const { state, context } = drive([
       ...LOADED,
       { type: "session-started" },
       { type: "permission-lost" },
     ]);
+
+    expect(actionsFor(state)).toEqual(["open-app-settings", "end"]);
+    // Re-prompting is the one thing this state must never do.
+    expect(actionsFor(state)).not.toContain("retry");
 
     expect(context.navigating).toBe(false);
   });
@@ -185,21 +181,6 @@ describe("shellReducer", () => {
 
     for (const actions of Object.values(SHELL_ACTIONS)) {
       for (const action of actions) expect(forbidden).not.toContain(action);
-    }
-  });
-
-  it("keeps every state's action list within the declared vocabulary", () => {
-    const allowed = new Set([
-      "retry",
-      "open-network-settings",
-      "resume",
-      "end",
-      "dismiss",
-      "open-app-settings",
-    ]);
-
-    for (const actions of Object.values(SHELL_ACTIONS)) {
-      for (const action of actions) expect(allowed.has(action)).toBe(true);
     }
   });
 });

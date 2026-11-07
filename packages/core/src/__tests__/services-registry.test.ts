@@ -41,6 +41,7 @@ describe("ServiceRegistry.load", () => {
         .map((s) => s.manifest.id)
         .sort(),
     ).toEqual(["alpha", "beta"]);
+    expect(registry.get("unknown")).toBeUndefined();
   });
 
   it("skips directories without service.json", async () => {
@@ -168,12 +169,6 @@ describe("ServiceRegistry.load", () => {
     await registry.load();
 
     expect(registry.get("nested-svc")?.isBuiltIn).toBe(false);
-  });
-
-  it("returns undefined for unknown id", async () => {
-    const registry = new ServiceRegistry({ rootDir: tmp });
-    await registry.load();
-    expect(registry.get("nope")).toBeUndefined();
   });
 
   it("can apply an enabled id set after loading installed services", async () => {

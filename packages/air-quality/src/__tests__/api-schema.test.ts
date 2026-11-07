@@ -101,7 +101,9 @@ describe("canonical air-quality API schemas", () => {
 
   it("enforces current and forecast evidence bounds", () => {
     const oversizedCurrent = { ...current, evidence: Array.from({ length: 33 }, () => ({})) };
-    expect(() => airQualityCurrentResponseSchema.parse(oversizedCurrent)).toThrow();
+    expect(
+      airQualityCurrentResponseSchema.safeParse(oversizedCurrent).error?.issues,
+    ).toContainEqual(expect.objectContaining({ code: "too_big", path: ["evidence"], maximum: 32 }));
 
     const forecast = {
       status: "unavailable",
@@ -117,7 +119,9 @@ describe("canonical air-quality API schemas", () => {
       frames: [],
       meta,
     };
-    expect(() => airQualityForecastResponseSchema.parse(forecast)).toThrow();
+    expect(airQualityForecastResponseSchema.safeParse(forecast).error?.issues).toContainEqual(
+      expect.objectContaining({ code: "too_big", path: ["evidence"], maximum: 1_024 }),
+    );
   });
 
   it("enforces 500 station features and opaque station IDs", () => {

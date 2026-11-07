@@ -24,11 +24,11 @@ import { useStreetLevelProviders } from "./useStreetLevelProviders";
 
 type MvtCoverage = Extract<StreetLevelCapabilities["coverage"], { kind: "mvt" }>;
 
-export function coverageSourceId(providerId: string): string {
+function coverageSourceId(providerId: string): string {
   return `sli-${providerId}`;
 }
 
-export function coverageLayerIds(providerId: string): {
+function coverageLayerIds(providerId: string): {
   sequences: string;
   pictures: string;
   picturesPano: string;

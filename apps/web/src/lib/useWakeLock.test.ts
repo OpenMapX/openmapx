@@ -56,18 +56,6 @@ afterEach(() => {
 });
 
 describe("useWakeLock", () => {
-  it("requests a screen wake lock when active", async () => {
-    const sentinel = makeSentinel();
-    const request = vi.fn().mockResolvedValue(sentinel);
-    vi.stubGlobal("navigator", { wakeLock: { request } });
-    // jsdom's real `document` defaults to visibilityState "visible"; keep it so
-    // testing-library can mount the hook host element.
-
-    renderHook(() => useWakeLock(true));
-    await flush();
-    expect(request).toHaveBeenCalledWith("screen");
-  });
-
   it("is a no-op without wakeLock support", () => {
     vi.stubGlobal("navigator", {});
     // Leave jsdom's real `document` in place so testing-library can mount; the
@@ -166,6 +154,7 @@ describe("useWakeLock", () => {
       initialProps: { active: true },
     });
     await flush();
+    expect(request).toHaveBeenCalledWith("screen");
 
     rerender({ active: false });
     expect(sentinel.release).toHaveBeenCalledTimes(1);

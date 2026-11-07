@@ -46,6 +46,21 @@ function evaluateColor(
   return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255), a];
 }
 
+function evaluateNumber(
+  expression: maplibregl.ExpressionSpecification,
+  properties: Record<string, unknown>,
+): number {
+  const parsed = createExpression(expression, {
+    type: "number",
+    "property-type": "data-driven",
+    expression: { interpolated: true, parameters: ["zoom", "feature"] },
+  });
+  if (parsed.result !== "success") throw new Error(JSON.stringify(parsed.value));
+  return (
+    parsed.value as { evaluate: (globals: { zoom: number }, feature: unknown) => number }
+  ).evaluate({ zoom: 17 }, { type: "Polygon", properties });
+}
+
 function mapWithStyle(style: maplibregl.StyleSpecification): maplibregl.Map {
   return { getStyle: () => style } as unknown as maplibregl.Map;
 }
@@ -148,16 +163,23 @@ describe("3D building style compatibility", () => {
     expect(findBuildingSourceReference(unrelatedMap)).toBeNull();
   });
 
-  it("includes OpenMapTiles, common height fields, level fallbacks, and safe defaults", () => {
-    expect(JSON.stringify(EXTRUSION_HEIGHT)).toContain("render_height");
-    expect(JSON.stringify(EXTRUSION_HEIGHT)).toContain('"height"');
-    expect(JSON.stringify(EXTRUSION_HEIGHT)).toContain("building:levels");
-    expect(EXTRUSION_HEIGHT.at(-1)).toBe(3);
-
-    expect(JSON.stringify(EXTRUSION_BASE)).toContain("render_min_height");
-    expect(JSON.stringify(EXTRUSION_BASE)).toContain("min_height");
-    expect(JSON.stringify(EXTRUSION_BASE)).toContain("building:min_level");
-    expect(EXTRUSION_BASE.at(-1)).toBe(0);
+  it.each([
+    ["OpenMapTiles", { render_height: 18 }, { render_min_height: 6 }, 18, 6],
+    ["common metre fields", { height: "12" }, { min_height: "4" }, 12, 4],
+    ["OSM level fields", { "building:levels": 5 }, { "building:min_level": 2 }, 15, 6],
+    ["short level fields", { levels: 4 }, { min_level: 1 }, 12, 3],
+    ["missing fields", {}, {}, 3, 0],
+    ["invalid fields", { height: "unknown" }, { min_height: "unknown" }, 3, 0],
+    [
+      "provider precedence",
+      { render_height: 18, height: 30, "building:levels": 20 },
+      { render_min_height: 6, min_height: 9, "building:min_level": 5 },
+      18,
+      6,
+    ],
+  ] as const)("evaluates %s as compatible height and base metres", (_name, height, base, h, b) => {
+    expect(evaluateNumber(EXTRUSION_HEIGHT, height)).toBe(h);
+    expect(evaluateNumber(EXTRUSION_BASE, base)).toBe(b);
   });
 
   it("uses the top building fill color for the active vector source", () => {

@@ -34,10 +34,6 @@ describe("groundFullSnapshot", () => {
     expect(snapshot.route).toBeTruthy();
     expect(snapshot.routeFingerprint).toEqual(expect.any(String));
     expect(snapshot.routeSelectionIntent).toBe("automatic");
-  });
-
-  it("carries the read model the UI shows", () => {
-    const snapshot = groundFullSnapshot(session());
 
     expect(snapshot).toMatchObject({
       weakGps: false,
@@ -124,13 +120,6 @@ describe("groundProgressSnapshot", () => {
     ]);
   });
 
-  it("never carries the route", () => {
-    const snapshot = groundProgressSnapshot(session()) as unknown as Record<string, unknown>;
-
-    expect(snapshot.route).toBeUndefined();
-    expect(snapshot.alternatives).toBeUndefined();
-  });
-
   it("never carries the raw last fix", () => {
     const serialised = JSON.stringify(groundProgressSnapshot(session()));
 
@@ -149,20 +138,18 @@ describe("applyGroundSnapshot", () => {
   });
 
   it("applies a newer delta for the same route", () => {
-    const delta = groundProgressSnapshot(session({ revision: 5, offRoute: true } as never));
+    const delta = groundProgressSnapshot({
+      ...session({ revision: 5 }),
+      payload: { ...session().payload, offRoute: true },
+    });
 
     const result = applyGroundSnapshot(view, { ...delta, revision: 5 });
 
     expect(result.ok).toBe(true);
     expect((result as { view: SnapshotView }).view.revision).toBe(5);
-  });
 
-  it("keeps the route a delta does not carry", () => {
-    const delta = groundProgressSnapshot(session({ revision: 5 }));
-
-    const result = applyGroundSnapshot(view, delta) as { view: SnapshotView };
-
-    expect(result.view.full.route).toEqual(full.route);
+    expect((result as { view: SnapshotView }).view.full.route).toEqual(full.route);
+    expect((result as { view: SnapshotView }).view.full.offRoute).toBe(true);
   });
 
   it("asks for a full snapshot when there is nothing to apply a delta to", () => {

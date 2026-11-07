@@ -139,16 +139,22 @@ describe("rendered map attribution lifecycle", () => {
     fake.setRenderedFeatures(LAYERS[0]!, [feature(["visible"])]);
     renderHook(() => useRenderedMapAttributions("area", LAYERS, true));
     flush();
+    expect(html()).toContain("visible");
     fake.state.zoom = 6;
     act(() => fake.emit("move"));
     flush();
     expect(html()).toBe("");
+    fake.state.zoom = 7;
+    flush();
+    expect(html()).toContain("visible");
     fake.state.zoom = 10;
     fake.state.layers.get(LAYERS[0]!)!.maxzoom = 10;
     act(() => fake.emit("styledata"));
     flush();
     expect(html()).toBe("");
     fake.state.layers.get(LAYERS[0]!)!.maxzoom = 11;
+    flush();
+    expect(html()).toContain("visible");
     fake.map.setLayoutProperty(LAYERS[0]!, "visibility", "none");
     act(() => fake.emit("styledata"));
     flush();
@@ -234,6 +240,7 @@ describe("rendered map attribution lifecycle", () => {
     renderHook(() => useRenderedMapAttributions("area", LAYERS, true));
     flush();
     expect(html()).toContain("valid");
+    expect(html()).toContain("Publisher");
     expect(html()).not.toContain("<script");
     expect(html()).not.toContain("javascript:");
   });
@@ -481,12 +488,15 @@ describe("evaluated channels and captured receipts", () => {
     renderHook(() => useRenderedMapAttributions("second", ["other"], true));
     flush();
     const byLayer = useMapAttributionStore.getState().byLayer;
+    const owners = Object.values(byLayer).map((entries) =>
+      entries.map((entry) => entry.fullHtml).join(" "),
+    );
+    expect(owners).toHaveLength(2);
+    expect(owners.filter((owner) => owner.includes("incident-credit"))).toHaveLength(1);
+    expect(owners.filter((owner) => owner.includes("other-credit"))).toHaveLength(1);
     expect(
-      Object.entries(byLayer)
-        .find(([key]) => key.startsWith("rendered:first::"))?.[1]
-        .map((entry) => entry.fullHtml)
-        .join(" ") ?? "",
-    ).not.toContain("other-credit");
+      owners.some((owner) => owner.includes("incident-credit") && owner.includes("other-credit")),
+    ).toBe(false);
     first.rerender({ active: false });
     expect(html()).not.toContain("incident-credit");
     expect(html()).toContain("other-credit");

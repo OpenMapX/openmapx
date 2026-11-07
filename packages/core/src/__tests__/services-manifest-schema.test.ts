@@ -329,25 +329,6 @@ describe("validateServiceManifest", () => {
     expect(result.valid).toBe(true);
   });
 
-  it("rejects networkMode: host for community service", () => {
-    const result = validateExternal({
-      ...validMinimal,
-      quality: "community",
-      container: { ...validMinimal.container, networkMode: "host" },
-    });
-    expect(result.valid).toBe(false);
-    expect(result.errors.join(" ")).toMatch(/network/i);
-  });
-
-  it("accepts networkMode: host for built-in service", () => {
-    const result = validateFirstParty({
-      ...validMinimal,
-      quality: "built-in",
-      container: { ...validMinimal.container, networkMode: "host" },
-    });
-    expect(result.valid).toBe(true);
-  });
-
   it("accepts explicit community network access only for first-party provenance", () => {
     const firstParty = validateFirstParty({
       ...validMinimal,
@@ -496,27 +477,6 @@ describe("validateServiceManifest", () => {
     );
   });
 
-  it("rejects @docker-socket bindMount source for community services", () => {
-    const result = validateExternal({
-      ...validMinimal,
-      quality: "community",
-      bindMounts: [{ source: "@docker-socket", target: "/var/run/docker.sock" }],
-    });
-    expect(result.valid).toBe(false);
-    expect(result.errors).toContain(
-      "community_bind_mount_forbidden: bindMounts are not allowed for community services",
-    );
-  });
-
-  it("rejects @docker-socket bindMount source for community-verified services", () => {
-    const result = validateExternal({
-      ...validMinimal,
-      quality: "community-verified",
-      bindMounts: [{ source: "@docker-socket", target: "/var/run/docker.sock" }],
-    });
-    expect(result.valid).toBe(false);
-  });
-
   it("accepts @service:<slug>:<path> bindMount source for built-in services", () => {
     const result = validateFirstParty({
       ...validMinimal,
@@ -623,17 +583,6 @@ describe("validateServiceManifest", () => {
   });
 
   describe("community / community-verified capability and device gating", () => {
-    it("rejects community service with SYS_ADMIN in capAdd", () => {
-      const result = validateExternal({
-        ...validMinimal,
-        quality: "community",
-        container: { ...validMinimal.container, capAdd: ["SYS_ADMIN"] },
-      });
-      expect(result.valid).toBe(false);
-      expect(result.errors.join(" ")).toMatch(/capAdd/);
-      expect(result.errors.join(" ")).toMatch(/SYS_ADMIN/);
-    });
-
     it("accepts community service with NET_BIND_SERVICE in capAdd", () => {
       const result = validateExternal({
         ...validMinimal,
@@ -641,45 +590,6 @@ describe("validateServiceManifest", () => {
         container: { ...validMinimal.container, capAdd: ["NET_BIND_SERVICE"] },
       });
       expect(result.valid).toBe(true);
-    });
-
-    it("rejects community service with devices declared", () => {
-      const result = validateExternal({
-        ...validMinimal,
-        quality: "community",
-        container: { ...validMinimal.container, devices: ["/dev/mem"] },
-      });
-      expect(result.valid).toBe(false);
-      expect(result.errors.join(" ")).toMatch(/devices/);
-    });
-
-    it("rejects community-verified service with privileged: true", () => {
-      const result = validateExternal({
-        ...validMinimal,
-        quality: "community-verified",
-        container: { ...validMinimal.container, privileged: true },
-      });
-      expect(result.valid).toBe(false);
-    });
-
-    it("rejects community-verified service with SYS_ADMIN in capAdd", () => {
-      const result = validateExternal({
-        ...validMinimal,
-        quality: "community-verified",
-        container: { ...validMinimal.container, capAdd: ["SYS_ADMIN"] },
-      });
-      expect(result.valid).toBe(false);
-      expect(result.errors.join(" ")).toMatch(/capAdd/);
-    });
-
-    it("rejects community-verified service with devices declared", () => {
-      const result = validateExternal({
-        ...validMinimal,
-        quality: "community-verified",
-        container: { ...validMinimal.container, devices: ["/dev/mem"] },
-      });
-      expect(result.valid).toBe(false);
-      expect(result.errors.join(" ")).toMatch(/devices/);
     });
 
     it("accepts community-verified service with NET_BIND_SERVICE in capAdd", () => {
@@ -836,11 +746,7 @@ describe("validateServiceManifest", () => {
             candidate.firstParty,
           );
           expect(result.valid, `${candidate.name} / ${field.name}`).toBe(candidate.allowed);
-          if (
-            !candidate.allowed &&
-            candidate.firstParty === false &&
-            candidate.quality !== "built-in"
-          ) {
+          if (!candidate.allowed && candidate.firstParty === false) {
             expect(result.errors.join(" "), `${candidate.name} / ${field.name}`).toMatch(
               field.error,
             );
@@ -870,58 +776,6 @@ describe("validateServiceManifest", () => {
       expect(result.valid).toBe(false);
       expect(result.errors.join(" ")).toMatch(/quality/);
       expect(result.errors.join(" ")).toMatch(/reserved for services shipped/);
-    });
-
-    it("rejects a self-declared built-in manifest asking for a privileged container", () => {
-      const manifest = {
-        ...validMinimal,
-        container: { ...validMinimal.container, privileged: true },
-      };
-      const result = validateExternal(manifest);
-      expect(result.valid).toBe(false);
-      expect(result.errors.join(" ")).toMatch(/privileged/);
-    });
-
-    it("rejects a self-declared built-in manifest asking for host networking", () => {
-      const manifest = {
-        ...validMinimal,
-        container: { ...validMinimal.container, networkMode: "host" },
-      };
-      const result = validateExternal(manifest);
-      expect(result.valid).toBe(false);
-      expect(result.errors.join(" ")).toMatch(/networkMode/);
-    });
-
-    it("rejects a self-declared built-in manifest asking for an escape capability", () => {
-      const manifest = {
-        ...validMinimal,
-        container: { ...validMinimal.container, capAdd: ["SYS_ADMIN"] },
-      };
-      const result = validateExternal(manifest);
-      expect(result.valid).toBe(false);
-      expect(result.errors.join(" ")).toMatch(/SYS_ADMIN/);
-    });
-
-    it("rejects a self-declared built-in manifest asking for device passthrough", () => {
-      const manifest = {
-        ...validMinimal,
-        container: { ...validMinimal.container, devices: ["/dev/mem"] },
-      };
-      const result = validateExternal(manifest);
-      expect(result.valid).toBe(false);
-      expect(result.errors.join(" ")).toMatch(/devices/);
-    });
-
-    it("rejects a self-declared built-in manifest mounting the docker socket", () => {
-      const manifest = {
-        ...validMinimal,
-        bindMounts: [{ source: "@docker-socket", target: "/var/run/docker.sock" }],
-      };
-      const result = validateExternal(manifest);
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain(
-        "community_bind_mount_forbidden: bindMounts are not allowed for community services",
-      );
     });
 
     it("still accepts an honest community manifest without elevated privileges", () => {

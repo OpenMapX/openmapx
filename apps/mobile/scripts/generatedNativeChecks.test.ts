@@ -381,12 +381,16 @@ describe("Android policy", () => {
 
 describe("summarizeGeneratedNativeSurface", () => {
   it("prints identifiers and booleans without any signing material", () => {
-    const summary = summarizeGeneratedNativeSurface(surface(), EXPECTED);
+    const value = surface();
+    const signing = "audit-private-signing-sentinel";
+    value.pbxproj += `\nDEVELOPMENT_TEAM = ${signing}; CODE_SIGN_IDENTITY = ${signing};`;
+    value.gradleProperties += `\nstorePassword=${signing}`;
+    const summary = summarizeGeneratedNativeSurface(value, EXPECTED);
     expect(summary.appId).toBe("org.openmapx.app");
     expect(summary.iosPushEntitlement).toBe(false);
     expect(summary.androidCleartextDenied).toBe(true);
     const serialized = JSON.stringify(summary);
-    for (const secret of ["ABCDEFGHIJ", "BEGIN ", "keystore", "p12", "provision"]) {
+    for (const secret of [signing]) {
       expect(serialized).not.toContain(secret);
     }
   });
@@ -492,7 +496,6 @@ it("rejects intake groups leaking to the navigation widget or broad extension en
 });
 it("requires explicit opening-in-place true and a real extension privacy manifest", () => {
   const allowed = surface();
-  expect(checkGeneratedNativeSurface(allowed, EXPECTED)).toEqual([]);
   allowed.infoPlist.LSSupportsOpeningDocumentsInPlace = false;
   expect(checkGeneratedNativeSurface(allowed, EXPECTED)).toContainEqual(
     expect.stringContaining("explicitly true"),

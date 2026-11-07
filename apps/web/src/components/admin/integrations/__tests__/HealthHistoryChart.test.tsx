@@ -65,20 +65,6 @@ afterEach(() => {
 });
 
 describe("HealthHistoryChart", () => {
-  it("renders the chart for a populated timeline", async () => {
-    fetchMock.mockImplementation((...args: unknown[]) =>
-      Promise.resolve(Response.json(bodyFor(String(args[0])))),
-    );
-
-    render(<HealthHistoryChart integrationId="demo" />, { wrapper: createQueryWrapper() });
-
-    // The chart container mounts once data arrives (no skeleton, no empty state).
-    await screen.findByTestId("chart-container");
-    expect(screen.queryByText("No health history yet")).toBeNull();
-    // Default window queries 24 hours.
-    expect(requestedHours()).toContain("24");
-  });
-
   it("re-queries with hours=168 when the 7d toggle is clicked", async () => {
     const user = userEvent.setup();
     fetchMock.mockImplementation((...args: unknown[]) =>
@@ -87,6 +73,8 @@ describe("HealthHistoryChart", () => {
 
     render(<HealthHistoryChart integrationId="demo" />, { wrapper: createQueryWrapper() });
     await screen.findByTestId("chart-container");
+    expect(requestedHours()).toContain("24");
+    expect(screen.queryByText("No health history yet")).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Last 7 days" }));
 

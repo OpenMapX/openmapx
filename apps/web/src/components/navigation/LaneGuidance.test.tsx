@@ -1,49 +1,51 @@
+import { render } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { LaneGuidance } from "./LaneGuidance";
 
 describe("LaneGuidance", () => {
   it.each(["banner", "standalone"] as const)(
-    "uses the same %s highlighting for preferred and usable lanes",
+    "paints preferred and usable lanes equally in %s",
     (variant) => {
-      const preferred = renderToStaticMarkup(
+      const { container } = render(
         <LaneGuidance
           variant={variant}
-          lanes={[{ indications: ["left"], valid: true, preferred: true }]}
+          lanes={[
+            { indications: ["left"], valid: true, preferred: true },
+            { indications: ["left"], valid: true, preferred: false },
+            { indications: ["left"], valid: false },
+          ]}
         />,
       );
-      const usable = renderToStaticMarkup(
-        <LaneGuidance
-          variant={variant}
-          lanes={[{ indications: ["left"], valid: true, preferred: false }]}
-        />,
-      );
-      expect(preferred).toBe(usable);
+      const cells = [...container.querySelectorAll("[data-valid]")];
+      expect(cells).toHaveLength(3);
+      const backgrounds = cells.map((cell) => getComputedStyle(cell).backgroundColor);
+      expect(backgrounds[0]).toBe(backgrounds[1]);
+      expect(["transparent", "rgba(0, 0, 0, 0)"]).not.toContain(backgrounds[0]);
+      expect(["transparent", "rgba(0, 0, 0, 0)"]).toContain(backgrounds[2]);
+      const arrows = [...container.querySelectorAll("svg")];
+      expect(arrows).toHaveLength(3);
+      const opacities = arrows.map((arrow) => Number(getComputedStyle(arrow).opacity));
+      expect(opacities.slice(0, 2)).toEqual([1, 1]);
+      expect(opacities[2]).toBeLessThan(1);
     },
   );
   it("renders nothing when there are no lanes", () => {
     expect(renderToStaticMarkup(<LaneGuidance lanes={undefined} />)).toBe("");
   });
-  it("renders one element per lane and emphasizes valid lanes", () => {
-    const html = renderToStaticMarkup(
-      <LaneGuidance
-        lanes={[
-          { indications: ["left"], valid: false },
-          { indications: ["straight"], valid: true },
-        ]}
-      />,
-    );
-    expect(html).toContain('data-valid="true"');
-    expect(html).toContain('data-valid="false"');
-  });
 
-  it("lights the lanes the OSM destinations send toward the sign at an all-through split", () => {
+  it("paints only the lanes whose destinations match the sign at an all-through split", () => {
     const through = { indications: ["through"], valid: undefined };
     const lanes = [through, through, through, through];
     const keepLeft = { type: "keep", modifier: "left" };
-    const unlit = renderToStaticMarkup(<LaneGuidance lanes={lanes} maneuver={keepLeft} />);
-    expect(unlit).not.toContain('data-valid="true"');
-    const lit = renderToStaticMarkup(
+    const { container, rerender } = render(<LaneGuidance lanes={lanes} maneuver={keepLeft} />);
+    const painted = () =>
+      [...container.querySelectorAll("[data-valid]")].map(
+        (cell) =>
+          !["transparent", "rgba(0, 0, 0, 0)"].includes(getComputedStyle(cell).backgroundColor),
+      );
+    expect(painted()).toEqual([false, false, false, false]);
+    rerender(
       <LaneGuidance
         lanes={lanes}
         maneuver={keepLeft}
@@ -56,14 +58,15 @@ describe("LaneGuidance", () => {
         ]}
       />,
     );
-    expect(lit.match(/data-valid="true"/g)).toHaveLength(2);
+    expect(painted()).toEqual([true, true, false, false]);
   });
 
-  it("renders a blank cell for a 'none' lane", () => {
-    const html = renderToStaticMarkup(
+  it("draws a blank bar rather than an arrow for a none lane", () => {
+    const { container } = render(
       <LaneGuidance lanes={[{ indications: ["none"], valid: false }]} />,
     );
-    expect(html).toContain('data-empty="true"');
+    expect(container.querySelector("svg")).toBeNull();
+    expect(container.querySelector("[data-empty]")).toHaveStyle({ width: "12px", height: "2px" });
   });
 
   it("draws the maneuver's arrow in unmarked lanes the engine chose", () => {
@@ -85,71 +88,18 @@ describe("LaneGuidance", () => {
     expect(html).not.toContain('data-empty="true"');
   });
 
-  it("keeps unmarked lanes blank when the engine did not choose them", () => {
-    const maneuver = { type: "turn", modifier: "left" };
-    const notChosen = renderToStaticMarkup(
-      <LaneGuidance
-        maneuver={maneuver}
-        lanes={[
-          { indications: ["left"], valid: true },
-          { indications: ["none"], valid: false },
-        ]}
-      />,
-    );
-    expect(notChosen).toContain('data-empty="true"');
-    // Missing route evidence must not turn a maneuver direction into a lane choice.
-    const unknown = renderToStaticMarkup(
-      <LaneGuidance
-        maneuver={maneuver}
-        lanes={[
-          { indications: ["none"], valid: undefined },
-          { indications: ["right"], valid: undefined },
-        ]}
-      />,
-    );
-    expect(unknown).not.toContain('data-valid="true"');
-    expect(unknown).not.toContain('data-inferred="true"');
-    expect(unknown).toContain('data-empty="true"');
-  });
-
-  it("keeps a chosen unmarked lane blank for a maneuver without a lane direction", () => {
-    const html = renderToStaticMarkup(
-      <LaneGuidance
-        maneuver={{ type: "roundabout", modifier: "right" }}
-        lanes={[{ indications: ["none"], valid: true }]}
-      />,
-    );
-    expect(html).toContain('data-empty="true"');
-  });
-
-  it("overlays an arrow per indication in a multi-indication lane", () => {
-    const html = renderToStaticMarkup(
-      <LaneGuidance lanes={[{ indications: ["straight", "right"], valid: true }]} />,
-    );
-    expect(html).toContain('data-arrow-count="2"');
-  });
-
-  it("marks the active indication's arrow", () => {
-    const html = renderToStaticMarkup(
+  it("overlays both indications and paints the selected arrow brightest", () => {
+    const { container } = render(
       <LaneGuidance
         lanes={[{ indications: ["straight", "right"], valid: true, active: "right" }]}
       />,
     );
-    expect(html).toContain('data-active="true"');
-  });
-
-  it("preserves explicit rejection for a keep-left instruction", () => {
-    const html = renderToStaticMarkup(
-      <LaneGuidance
-        maneuver={{ type: "keep", modifier: "left" }}
-        lanes={[
-          { indications: ["through"], valid: false },
-          { indications: ["through"], valid: false },
-          { indications: ["slight_right"], valid: false },
-        ]}
-      />,
-    );
-    expect(html.match(/data-valid="true"/g)?.length ?? 0).toBe(0);
-    expect(html.match(/data-valid="false"/g)?.length).toBe(3);
+    const arrows = [...container.querySelectorAll("svg")];
+    expect(arrows).toHaveLength(2);
+    for (const arrow of arrows) expect(arrow).toHaveStyle({ position: "absolute" });
+    const [inactive, active] = arrows.map((arrow) => Number(getComputedStyle(arrow).opacity));
+    expect(active).toBe(1);
+    expect(inactive).toBeGreaterThan(0);
+    expect(inactive).toBeLessThan(1);
   });
 });

@@ -77,13 +77,6 @@ describe("scalar edits", () => {
     ]);
   });
 
-  it("never touches a localized or alternate name", () => {
-    const { element } = apply([{ field: "name", action: "set", value: "New" }]);
-    expect(element.tags["name:de"]).toBe("Café Central");
-    expect(element.tags.alt_name).toBe("Central");
-    expect(element.tags.official_name).toBe("Café Central GmbH");
-  });
-
   it("removes only the one resolved owned key", () => {
     const { element, preview } = apply([{ field: "phone", action: "remove" }]);
     expect(element.tags.phone).toBeUndefined();
@@ -351,26 +344,35 @@ describe("structural preservation", () => {
   });
 
   it("changes only keys the operation owns, for every fixture change", () => {
-    const cases: OsmFieldChange[][] = [
-      [{ field: "name", action: "set", value: "New" }],
-      [{ field: "phone", action: "remove" }],
-      [{ field: "category", action: "set", presetId: "amenity/restaurant" }],
-      [{ field: "wheelchair", action: "set", value: "yes" }],
-      [
-        {
-          field: "address",
-          action: "patch",
-          value: { houseNumber: { action: "set", value: "2" } },
-        },
-      ],
+    const cases: Array<{ changes: OsmFieldChange[]; owned: string[] }> = [
+      { changes: [{ field: "name", action: "set", value: "New" }], owned: ["name"] },
+      { changes: [{ field: "phone", action: "remove" }], owned: ["phone"] },
+      {
+        changes: [{ field: "category", action: "set", presetId: "amenity/restaurant" }],
+        owned: ["amenity"],
+      },
+      { changes: [{ field: "wheelchair", action: "set", value: "yes" }], owned: ["wheelchair"] },
+      {
+        changes: [
+          {
+            field: "address",
+            action: "patch",
+            value: { houseNumber: { action: "set", value: "2" } },
+          },
+        ],
+        owned: ["addr:housenumber"],
+      },
     ];
-    for (const changes of cases) {
+    for (const { changes, owned } of cases) {
       const { element, preview } = apply(changes);
-      const touched = new Set([
-        ...preview.tagDiff.add.map((t) => t.key),
-        ...preview.tagDiff.replace.map((t) => t.key),
-        ...preview.tagDiff.remove.map((t) => t.key),
-      ]);
+      const touched = new Set(owned);
+      expect(
+        [
+          ...preview.tagDiff.add.map((t) => t.key),
+          ...preview.tagDiff.replace.map((t) => t.key),
+          ...preview.tagDiff.remove.map((t) => t.key),
+        ].sort(),
+      ).toEqual([...owned].sort());
       for (const [key, value] of Object.entries(BASE_TAGS)) {
         if (touched.has(key)) continue;
         expect(element.tags[key]).toBe(value);

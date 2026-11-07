@@ -195,17 +195,6 @@ describe("ManeuverBanner", () => {
     );
     expect(html).toContain("Turn right onto Main St");
     expect(html).toContain("300 m");
-  });
-
-  it("omits the next-step preview when no next step is given", () => {
-    const html = renderToStaticMarkup(
-      <ManeuverBanner
-        instruction="Turn right onto Main St"
-        distanceToManeuver={300}
-        maneuver={{ type: "turn", modifier: "right" }}
-        units="metric"
-      />,
-    );
     expect(html).not.toContain("Then ");
   });
 

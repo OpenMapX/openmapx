@@ -16,7 +16,7 @@ import {
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
-import { mapMotisAlert, mapMotisAlertSeverity } from "@openmapx/mobility-core/motis-alerts";
+import { mapMotisAlert } from "@openmapx/mobility-core/motis-alerts";
 import { createMotisInstance, type MotisInstance } from "@openmapx/mobility-core/motis-client";
 import { wrapMotisWithFeedAttribution } from "@openmapx/mobility-core/motis-contributors";
 import { getMotisVehicleRadar } from "@openmapx/mobility-core/motis-radar";
@@ -265,14 +265,3 @@ export function setup(ctx: IntegrationContext): void {
 
   ctx.registerRealtimeProvider(provider);
 }
-
-export const __testing = {
-  deltaFromItinerary,
-  findPlaceForStop,
-  mapMotisAlert,
-  mapMotisAlertSeverity,
-  createLiveTransitMotisInstances,
-  routeForId,
-  vehicleSource,
-  stripPrefix,
-};

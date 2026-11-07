@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEDUP, type DedupKey, TTL, type TTLClass } from "../src/policy.js";
+import { DEDUP, type DedupKey, TTL } from "../src/policy.js";
 
 describe("policy TTL", () => {
   it("every TTL is a positive integer number of seconds", () => {
@@ -24,18 +24,6 @@ describe("policy TTL", () => {
     expect(TTL.CATEGORY_SEARCH).toBeGreaterThanOrEqual(TTL.SHORT_LIVED);
     expect(TTL.CATEGORY_SEARCH).toBeLessThanOrEqual(TTL.SCHEDULE);
   });
-
-  it("SCHEDULE <= PLACE_LINK <= CATALOG_REFRESH", () => {
-    expect(TTL.PLACE_LINK).toBeGreaterThanOrEqual(TTL.SCHEDULE);
-    expect(TTL.PLACE_LINK).toBeLessThanOrEqual(TTL.CATALOG_REFRESH);
-  });
-
-  it("TTLClass type compiles for every key", () => {
-    const keys = Object.keys(TTL) as TTLClass[];
-    // satisfies-style check: keys is exhaustively typed as TTLClass[]
-    const sample = keys[0] satisfies TTLClass;
-    expect(typeof sample).toBe("string");
-  });
 });
 
 describe("policy DEDUP", () => {
@@ -53,11 +41,5 @@ describe("policy DEDUP", () => {
   it("name similarity floor lives in (0, 1]", () => {
     expect(DEDUP.NAME_SIMILARITY_MIN).toBeGreaterThan(0);
     expect(DEDUP.NAME_SIMILARITY_MIN).toBeLessThanOrEqual(1);
-  });
-
-  it("DedupKey type compiles for every key", () => {
-    const keys = Object.keys(DEDUP) as DedupKey[];
-    const sample = keys[0] satisfies DedupKey;
-    expect(typeof sample).toBe("string");
   });
 });

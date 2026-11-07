@@ -116,7 +116,7 @@ it("keeps an accessibility requirement rather than querying a provider without t
 it("drops a walking repair once the rider has boarded", async () => {
   const original = start();
   let finish: (v: unknown) => void = () => {};
-  vi.spyOn(apiClient, "get").mockImplementation(
+  const get = vi.spyOn(apiClient, "get").mockImplementation(
     () =>
       new Promise((r) => {
         finish = r;
@@ -124,6 +124,7 @@ it("drops a walking repair once the rider has boarded", async () => {
   );
   renderHook(() => useTransitWalkRepair());
   nextFix();
+  await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
   act(() => useNavigationStore.getState().applyTransitAction({ type: "board", legIndex: 1 }));
   await act(async () =>
     finish({

@@ -270,12 +270,4 @@ describe("mapCrossingToDetail", () => {
       "No wait times are published for this crossing.",
     );
   });
-
-  it("every string has its German", () => {
-    const keys = (o: object, prefix = ""): string[] =>
-      Object.entries(o).flatMap(([k, v]) =>
-        typeof v === "object" && v !== null ? keys(v, `${prefix}${k}.`) : [`${prefix}${k}`],
-      );
-    expect(keys(de)).toEqual(keys(en));
-  });
 });

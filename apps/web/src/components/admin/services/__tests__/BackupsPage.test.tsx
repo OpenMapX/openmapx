@@ -43,34 +43,6 @@ describe("BackupsPage pagination", () => {
     );
   });
 
-  it("renders at most rowsPerPage rows for an oversized dataset", async () => {
-    render(
-      <AdminJobEffectsProvider>
-        <BackupsPage />
-      </AdminJobEffectsProvider>,
-      { wrapper: createQueryWrapper() },
-    );
-
-    // Wait for the rows to appear, then count the data rows in the table body.
-    await screen.findByText("backup-059");
-    const rows = screen.getAllByText(/^backup-\d{3}$/);
-    expect(rows.length).toBe(25); // default rowsPerPage
-  });
-
-  it("sorts newest-first then slices (page 1 shows the newest 25)", async () => {
-    render(
-      <AdminJobEffectsProvider>
-        <BackupsPage />
-      </AdminJobEffectsProvider>,
-      { wrapper: createQueryWrapper() },
-    );
-
-    // Newest is backup-059 (highest createdAt); it must be on page 1.
-    await screen.findByText("backup-059");
-    // The 35th-oldest (backup-034) is on page 2, so it must NOT be visible yet.
-    expect(screen.queryByText("backup-034")).toBeNull();
-  });
-
   it("shows the next slice when paging forward", async () => {
     const user = userEvent.setup();
     render(
@@ -81,6 +53,9 @@ describe("BackupsPage pagination", () => {
     );
 
     await screen.findByText("backup-059");
+    expect(screen.getAllByText(/^backup-\d{3}$/)).toHaveLength(25);
+    expect(screen.queryByText("backup-034")).toBeNull();
+    await screen.findByText(/of 60/);
     const nextButton = await screen.findByRole("button", { name: /next page/i });
     await user.click(nextButton);
 
@@ -88,17 +63,5 @@ describe("BackupsPage pagination", () => {
     // backup-059 gone.
     await screen.findByText("backup-034");
     expect(screen.queryByText("backup-059")).toBeNull();
-  });
-
-  it("reports the full count in the pager, not the page size", async () => {
-    render(
-      <AdminJobEffectsProvider>
-        <BackupsPage />
-      </AdminJobEffectsProvider>,
-      { wrapper: createQueryWrapper() },
-    );
-    await screen.findByText("backup-059");
-    // The pager shows the full filtered count (60), not the 25 rendered rows.
-    await screen.findByText(/of 60/);
   });
 });

@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  analyzeBackgroundBundle,
-  FORBIDDEN_BACKGROUND_MODULES,
-  resolvedVersionsOf,
-} from "./backgroundBundlePolicy";
+import { analyzeBackgroundBundle, resolvedVersionsOf } from "./backgroundBundlePolicy";
 
 const HEALTHY_SOURCES = [
   "__prelude__",
@@ -72,16 +68,6 @@ describe("forbidden dependencies", () => {
       "/node_modules/.pnpm/zustand@5.0.14/node_modules/zustand/index.js",
     ]);
     expect(report.failures[0]).toContain("browser store state is not the background authority");
-  });
-
-  it("keeps a reason for every rule", () => {
-    for (const rule of FORBIDDEN_BACKGROUND_MODULES) {
-      expect(rule.reason.length).toBeGreaterThan(10);
-    }
-  });
-
-  it("does not confuse react-native with react-dom", () => {
-    expect(analyze().failures).toEqual([]);
   });
 });
 

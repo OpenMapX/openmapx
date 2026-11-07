@@ -307,6 +307,7 @@ describe("the stop a merged row leaves from", () => {
       { "ms:hbf": "Frankfurt(Main)Hbf", "mo:hbf": "Frankfurt Hauptbahnhof" },
       "Frankfurt (Main) Hauptbahnhof",
     );
+    expect(rows.map((row) => row.tripId)).toEqual(["ms:t1", "mo:x1"]);
     expect(rows.some((row) => row.atOtherStop)).toBe(false);
   });
 

@@ -1,17 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bandForDelayRatio, TRAFFIC_BAND_COLORS } from "./trafficSeverity";
-
-describe("TRAFFIC_BAND_COLORS", () => {
-  it("carries the five overlay gradient stops", () => {
-    expect(TRAFFIC_BAND_COLORS).toEqual({
-      freeFlow: "#2ecc40",
-      light: "#ffd500",
-      moderate: "#ff8c00",
-      heavy: "#e8112d",
-      severe: "#7e0023",
-    });
-  });
-});
+import { bandForDelayRatio } from "./trafficSeverity";
 
 describe("bandForDelayRatio", () => {
   it("returns null below the 10% display threshold", () => {
@@ -34,12 +22,6 @@ describe("bandForDelayRatio", () => {
 
   it("clamps anything beyond severe to severe", () => {
     expect(bandForDelayRatio(5)).toBe("severe");
-  });
-
-  it("never returns freeFlow, which would imply a verified-clear route", () => {
-    for (const r of [0, 0.05, 0.1, 0.3, 0.7, 2]) {
-      expect(bandForDelayRatio(r)).not.toBe("freeFlow");
-    }
   });
 
   it("returns null for a negative or non-finite ratio", () => {

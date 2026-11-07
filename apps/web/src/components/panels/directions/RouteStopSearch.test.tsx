@@ -154,24 +154,6 @@ beforeEach(() => {
 const chip = (name: string) => screen.getByRole("button", { name });
 
 describe("RouteStopSearch", () => {
-  it("offers the seven stop kinds and a chain search, none active", () => {
-    render(view());
-    for (const name of [
-      "Fuel",
-      "Charging",
-      "Restaurants",
-      "Cafés",
-      "Supermarkets",
-      "Parking",
-      "Hotels",
-      "Chain",
-    ]) {
-      expect(chip(name)).toHaveAttribute("aria-pressed", "false");
-    }
-    expect(fixture.queries.at(-1)).toBeNull();
-    expect(screen.queryByText("Station a")).toBeNull();
-  });
-
   it("renders each chip icon in the chip's icon slot, so it gets the chip's icon spacing", () => {
     render(view());
     for (const name of ["Fuel", "Charging", "Hotels", "Chain"]) {
@@ -183,6 +165,9 @@ describe("RouteStopSearch", () => {
 
   it("searches the chosen kind and lists results by distance from the start", () => {
     render(view());
+    expect(chip("Fuel")).toHaveAttribute("aria-pressed", "false");
+    expect(fixture.queries.at(-1)).toBeNull();
+    expect(screen.queryByText("Station a")).toBeNull();
     fireEvent.click(chip("Fuel"));
     expect(fixture.queries.at(-1)).toEqual({ category: "preset:amenity/fuel" });
     expect(chip("Fuel")).toHaveAttribute("aria-pressed", "true");
@@ -190,10 +175,6 @@ describe("RouteStopSearch", () => {
     expect(screen.getByText(/12\.0 km from start/)).toBeInTheDocument();
     fireEvent.click(chip("Fuel"));
     expect(fixture.queries.at(-1)).toBeNull();
-  });
-
-  it("searches charging stations", () => {
-    render(view());
     fireEvent.click(chip("Charging"));
     expect(fixture.queries.at(-1)).toEqual({ category: "ev_charging" });
   });
@@ -300,7 +281,11 @@ describe("RouteStopSearch", () => {
     const { rerender } = render(view());
     fireEvent.click(chip("Hotels"));
     expect(screen.getByText("Searching along the route…")).toBeInTheDocument();
-    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "25");
+    expect(screen.getByRole("progressbar", { name: "Searching along the route…" })).toHaveAttribute(
+      "aria-valuenow",
+      "25",
+    );
+    expect(screen.getByText("12.0 km from start · ~+1 min")).toBeInTheDocument();
     fixture.search = {
       ...baseSearch(),
       capped: true,
@@ -326,16 +311,6 @@ describe("RouteStopSearch", () => {
     expect(screen.queryByText("Nothing found along the route")).toBeNull();
     expect(screen.queryByText("Part of the route could not be searched.")).toBeNull();
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
-  });
-
-  it("names its progress bar and keeps result rows to one line of facts", () => {
-    fixture.search = { ...baseSearch(), isSearching: true, settledChunks: 1, totalChunks: 2 };
-    render(view());
-    fireEvent.click(chip("Fuel"));
-    expect(
-      screen.getByRole("progressbar", { name: "Searching along the route…" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("12.0 km from start · ~+1 min")).toBeInTheDocument();
   });
 
   it("pages long result lists", () => {

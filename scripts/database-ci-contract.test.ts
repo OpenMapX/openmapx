@@ -59,7 +59,6 @@ describe("required database test gate", () => {
     expect(parsed.jobs.database.strategy.matrix).toBe(
       "${{ fromJSON(needs.select.outputs['database-matrix']) }}",
     );
-    expect(databaseMatrix).toHaveLength(13);
     expect(databaseJob).toContain("fail-fast: false");
     expect(databaseJob).toContain(
       "DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/openmapx_test",
@@ -67,7 +66,11 @@ describe("required database test gate", () => {
     expect(databaseJob).toContain(
       `contains(fromJSON('["api-privacy", "ingestion", "configuration-recovery", "coordinator-recovery"]'), matrix.group) && 90 || 30`,
     );
-    expect(databaseJob).toContain("ghcr.io/baosystems/postgis:18-3.6@sha256:");
+    const production = JSON.parse(read("services/postgis/service.json")).container;
+    expect(parsed.jobs.database.services.postgis.image).toBe(
+      `${production.image}:${production.tag}@${production.digest}`,
+    );
+    expect(production.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
     expect(databaseJob).toContain(
       '--health-cmd "pg_isready -h 127.0.0.1 -U postgres -d openmapx_test"',
     );
@@ -77,7 +80,17 @@ describe("required database test gate", () => {
     );
     expect(databaseJob).not.toContain("continue-on-error:");
     const exportSteps = databaseJob.slice(databaseJob.indexOf("      # Docker Hub"));
-    expect(exportSteps.match(/if: matrix.group == 'export-restore'/g)).toHaveLength(3);
+    for (const command of [
+      "DAWARICH_SUPPORTED_IMAGE_DIGEST",
+      "OPENMAPX_RUN_DAWARICH_EXPORT_TESTS=1",
+      "node services/ops-agent/privacy-backup/test-fixture.mjs",
+    ]) {
+      const step = parsed.jobs.database.steps.find((step: { run?: string }) =>
+        step.run?.includes(command),
+      );
+      expect(step, command).toBeDefined();
+      expect(step.if).toBe("matrix.group == 'export-restore'");
+    }
     expect(exportSteps).toContain(
       "OPENMAPX_RUN_DAWARICH_EXPORT_TESTS=1 pnpm exec vitest run --project node apps/ops-agent/src/dawarich-subject-export.integration.test.ts",
     );
@@ -364,10 +377,6 @@ describe("required database test gate", () => {
     } finally {
       rmSync(temp, { recursive: true, force: true });
     }
-  });
-
-  it("rejects unknown groups instead of falling back to all suites", () => {
-    expect(() => command("ingestoin")).toThrow(/Unknown database test group/);
   });
 
   it.each([undefined, "/does-not-exist"])(

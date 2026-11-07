@@ -25,6 +25,13 @@ describe("cycling preferences across client sessions", () => {
     s.setBikePreferSmoothSurfaces(true);
     s.setBikeSpeedKmh(19.5);
     s.close();
+    useDirectionsStore.setState({
+      bikeProfile: "trekking",
+      bikeHillPreference: "default",
+      bikePreferQuietRoads: false,
+      bikePreferSmoothSurfaces: false,
+      bikeSpeedKmh: undefined,
+    });
     s.hydrateRoutePrefs();
     expect(useDirectionsStore.getState()).toMatchObject({
       bikeProfile: "gravel",

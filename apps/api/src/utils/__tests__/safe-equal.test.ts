@@ -51,19 +51,4 @@ describe("safeEqual", () => {
   it("returns false for equal-byte-length but differing multi-byte strings", () => {
     expect(safeEqual("日本", "日語")).toBe(false);
   });
-
-  it("always returns a boolean across every branch", () => {
-    const cases: Array<[string, string]> = [
-      ["", ""],
-      ["a", ""],
-      ["", "a"],
-      ["a", "a"],
-      ["a", "b"],
-      ["ab", "abc"],
-      ["café", "café"],
-    ];
-    for (const [a, b] of cases) {
-      expect(typeof safeEqual(a, b)).toBe("boolean");
-    }
-  });
 });

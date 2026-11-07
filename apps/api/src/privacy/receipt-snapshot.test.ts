@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { collectOpenMapxRegistration } from "./openmapx-collectors.js";
+import { streamOpenMapxRegistrationRecords } from "./openmapx-collectors.js";
 import { captureRedisSubjectControl, receiptSnapshotExpiresAt } from "./receipt-snapshot.js";
 
 describe("receipt source snapshots", () => {
@@ -65,7 +65,9 @@ describe("receipt source snapshots", () => {
       portable: false,
       policyCodes: ["session-token-redacted"],
     };
-    const part = await collectOpenMapxRegistration("auth-sessions", {
+
+    const records = [];
+    for await (const record of streamOpenMapxRegistrationRecords("auth-sessions", {
       userId: "subject",
       cutoffAt: new Date("2026-09-05T00:00:00Z"),
       database: {
@@ -81,8 +83,9 @@ describe("receipt source snapshots", () => {
           })(),
         ],
       ]),
-    });
+    }))
+      records.push(record);
 
-    expect(part.records).toEqual([preserved]);
+    expect(records).toEqual([preserved]);
   });
 });

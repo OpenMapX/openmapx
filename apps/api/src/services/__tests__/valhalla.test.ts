@@ -1,18 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emptyResponse, streamedJsonResponse } from "../../test/streamed-response.js";
 
-vi.mock("@openmapx/core", async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>;
-  return {
-    ...actual,
-    decodePolyline: vi.fn(() => [
-      [13.388, 52.517],
-      [13.392, 52.521],
-      [13.397, 52.529],
-      [13.405, 52.535],
-    ]),
-  };
-});
+// Literal Google polyline fixture at precision 6; fixed coordinate oracles below.
+const ENCODED_SHAPE = "ogkdcB_mcpX_yF_yF_sNowH_vJ_sN";
 
 let mockFetch: ReturnType<typeof vi.fn>;
 
@@ -48,7 +38,7 @@ function makeManeuver(overrides: Record<string, unknown> = {}) {
 
 function makeLeg(overrides: Record<string, unknown> = {}) {
   return {
-    shape: "encoded_polyline_data",
+    shape: ENCODED_SHAPE,
     summary: { length: 1.2, time: 900 },
     maneuvers: [
       makeManeuver(),
@@ -677,7 +667,7 @@ describe("valhallaService", () => {
 
     function makeTraceResponse(overrides: Record<string, unknown> = {}) {
       return {
-        shape: "encoded_polyline_data",
+        shape: ENCODED_SHAPE,
         edges: [
           {
             way_id: 12345,
@@ -812,7 +802,6 @@ describe("valhallaService", () => {
       const result = await valhallaService.getMatch?.(trace, "cycling");
 
       expect(result?.mode).toBe("cycling");
-      // decodePolyline is module-mocked at the top of the file to a fixed shape.
       expect(result?.geometry).toEqual([
         [13.388, 52.517],
         [13.392, 52.521],

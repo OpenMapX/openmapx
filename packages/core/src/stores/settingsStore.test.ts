@@ -21,29 +21,15 @@ describe("useSettingsStore", () => {
     useSettingsStore.setState({ units: "metric" });
   });
 
-  it("defaults to metric", () => {
-    expect(useSettingsStore.getState().units).toBe("metric");
-  });
-
   it("setUnits persists and reads back imperial", () => {
     const storage = makeMemoryStorage();
     configureStorage(storage);
     useSettingsStore.getState().setUnits("imperial");
     expect(useSettingsStore.getState().units).toBe("imperial");
     expect(storage.getString("openmapx:unitSystem")).toBe("imperial");
-  });
-
-  it("setUnits switches back to metric", () => {
-    useSettingsStore.getState().setUnits("imperial");
     useSettingsStore.getState().setUnits("metric");
     expect(useSettingsStore.getState().units).toBe("metric");
-  });
-
-  it("AI search defaults to enabled", () => {
-    const storage = makeMemoryStorage();
-    configureStorage(storage);
-    useSettingsStore.getState().hydrate();
-    expect(useSettingsStore.getState().aiSearchEnabled).toBe(true);
+    expect(storage.getString("openmapx:unitSystem")).toBe("metric");
   });
 
   it("setAiSearchEnabled(false) persists and hydrates back as disabled", () => {
@@ -55,11 +41,6 @@ describe("useSettingsStore", () => {
     useSettingsStore.setState({ aiSearchEnabled: true });
     useSettingsStore.getState().hydrate();
     expect(useSettingsStore.getState().aiSearchEnabled).toBe(false);
-  });
-
-  it("search history defaults to enabled", () => {
-    useSettingsStore.getState().hydrate();
-    expect(useSettingsStore.getState().searchHistoryEnabled).toBe(true);
   });
 
   it("turning search history off persists the preference and removes saved queries", () => {
@@ -93,6 +74,9 @@ describe("useSettingsStore", () => {
     useSettingsStore.setState({ avoidIncidents: true });
     useSettingsStore.getState().hydrate();
     expect(useSettingsStore.getState().avoidIncidents).toBe(false);
+    useSettingsStore.getState().setAvoidIncidents(true);
+    expect(useSettingsStore.getState().avoidIncidents).toBe(true);
+    expect(storage.getString("openmapx:avoidIncidents")).toBe("true");
   });
 
   it("setIncidentAlerts(false) persists and hydrates back as disabled", () => {
@@ -104,20 +88,6 @@ describe("useSettingsStore", () => {
     useSettingsStore.setState({ incidentAlerts: true });
     useSettingsStore.getState().hydrate();
     expect(useSettingsStore.getState().incidentAlerts).toBe(false);
-  });
-
-  it("setAvoidIncidents(true) persists and reads back", () => {
-    const storage = makeMemoryStorage();
-    configureStorage(storage);
-    useSettingsStore.getState().setAvoidIncidents(true);
-    expect(useSettingsStore.getState().avoidIncidents).toBe(true);
-    expect(storage.getString("openmapx:avoidIncidents")).toBe("true");
-  });
-
-  it("touch zoom buttons default off", () => {
-    configureStorage(makeMemoryStorage());
-    useSettingsStore.getState().hydrate();
-    expect(useSettingsStore.getState().touchZoomButtons).toBe(false);
   });
 
   it("setTouchZoomButtons(true) persists and hydrates back as enabled", () => {

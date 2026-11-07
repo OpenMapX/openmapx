@@ -2,7 +2,6 @@ import type { FixInput, GroundMobileSession } from "@openmapx/core/navigation";
 import { groundSessionFixture } from "../../storage/testing/sessionFixture";
 import {
   anchorFor,
-  COAST_PERSIST_MS,
   COAST_START_DELAY_MS,
   COAST_TICK_MS,
   canCoast,
@@ -91,22 +90,11 @@ describe("coastFixAt", () => {
 
   it("produces nothing before the start delay", () => {
     expect(coastFixAt(session(), anchor, NOW + COAST_START_DELAY_MS - 1)).toBeNull();
-  });
-
-  it("produces a synthetic fix once the delay has passed", () => {
-    const fix = coastFixAt(session(), anchor, NOW + COAST_START_DELAY_MS);
-
-    expect(fix?.coasted).toBe(true);
-    expect(fix?.timestampMs).toBe(NOW + COAST_START_DELAY_MS);
-  });
-
-  it("marks the position as exactly on route rather than reporting a measurement", () => {
-    const fix = coastFixAt(session(), anchor, NOW + 5_000);
-
-    // Accuracy 1 is an internal on-route marker; it is not a GPS reading, and
-    // the coasted flag is what stops it being treated as one.
-    expect(fix?.accuracy).toBe(1);
-    expect(fix?.coasted).toBe(true);
+    expect(coastFixAt(session(), anchor, NOW + COAST_START_DELAY_MS)).toMatchObject({
+      coasted: true,
+      timestampMs: NOW + COAST_START_DELAY_MS,
+      accuracy: 1,
+    });
   });
 
   it("moves further along the route as time passes", () => {
@@ -114,13 +102,8 @@ describe("coastFixAt", () => {
     const later = coastFixAt(session(), anchor, NOW + 20_000);
 
     expect(later?.coords[0]).toBeGreaterThan(early?.coords[0] ?? 0);
-  });
-
-  it("slows down rather than continuing at the anchored speed", () => {
-    const early = coastFixAt(session(), anchor, NOW + 4_000);
-    const later = coastFixAt(session(), anchor, NOW + 60_000);
-
-    expect(later?.speed).toBeLessThan(early?.speed ?? 0);
+    const slow = coastFixAt(session(), anchor, NOW + 60_000);
+    expect(slow?.speed).toBeLessThan(early?.speed ?? 0);
   });
 
   it("stops entirely past the coast limit", () => {
@@ -144,18 +127,11 @@ describe("catchUpFixes", () => {
     const points = catchUpFixes(session(), realFix(NOW + 20_000));
 
     expect(points.length).toBeGreaterThan(10);
+    for (let index = 1; index < points.length; index++)
+      expect(points[index].timestampMs - points[index - 1].timestampMs).toBe(1000);
     for (const point of points) {
       expect(point.coasted).toBe(true);
       expect(point.timestampMs).toBeLessThan(NOW + 20_000);
-    }
-  });
-
-  it("produces strictly increasing timestamps", () => {
-    const points = catchUpFixes(session(), realFix(NOW + 30_000));
-
-    for (let index = 1; index < points.length; index += 1) {
-      expect(points[index].timestampMs).toBeGreaterThan(points[index - 1].timestampMs);
-      expect(points[index].timestampMs - points[index - 1].timestampMs).toBe(COAST_PERSIST_MS);
     }
   });
 
@@ -167,12 +143,6 @@ describe("catchUpFixes", () => {
     expect(points.length).toBeLessThanOrEqual(MAX_CATCH_UP_POINTS);
     const last = points[points.length - 1];
     expect(last.timestampMs).toBeLessThanOrEqual(NOW + MAX_COAST_MS);
-  });
-
-  it("stays within the bounded point count", () => {
-    expect(catchUpFixes(session(), realFix(NOW + 60 * 60_000)).length).toBeLessThanOrEqual(
-      MAX_CATCH_UP_POINTS,
-    );
   });
 
   it.each([
@@ -246,41 +216,20 @@ describe("GroundCoastingScheduler", () => {
     expect(scheduler.running).toBe(false);
   });
 
-  it("starts for an active, visible, moving session", () => {
-    const { scheduler } = harness();
-
+  it("starts after the delay and dispatches synthetic fixes at most once per second", () => {
+    const { scheduler, dispatched, advance } = harness();
     scheduler.sync(session(), "active");
-
     expect(scheduler.running).toBe(true);
-  });
-
-  it("dispatches nothing before the start delay", () => {
-    const { scheduler, dispatched, advance } = harness();
-    scheduler.sync(session(), "active");
-
     advance(COAST_START_DELAY_MS - COAST_TICK_MS);
-
     expect(dispatched).toEqual([]);
-  });
-
-  it("dispatches synthetic fixes once coasting begins", () => {
-    const { scheduler, dispatched, advance } = harness();
-    scheduler.sync(session(), "active");
-
-    advance(10_000);
+    advance(10_000 - (COAST_START_DELAY_MS - COAST_TICK_MS));
 
     expect(dispatched.length).toBeGreaterThan(0);
     for (const fix of dispatched) expect(fix.coasted).toBe(true);
-  });
-
-  it("persists at most one synthetic fix per second despite a faster redraw", () => {
-    const { scheduler, dispatched, advance } = harness();
-    scheduler.sync(session(), "active");
-
-    advance(10_000);
-
-    // Ten seconds of coasting, ticking four times a second.
-    expect(dispatched.length).toBeLessThanOrEqual(9);
+    for (let index = 1; index < dispatched.length; index++)
+      expect(
+        dispatched[index].timestampMs - dispatched[index - 1].timestampMs,
+      ).toBeGreaterThanOrEqual(1000);
   });
 
   it("stops itself when the coast runs out", () => {
@@ -293,17 +242,21 @@ describe("GroundCoastingScheduler", () => {
   });
 
   it.each(["inactive", "background"] as const)("cancels when the app becomes %s", (visibility) => {
-    const { scheduler, advance } = harness();
+    const { scheduler, advance, dispatched, timerCount } = harness();
     scheduler.sync(session(), "active");
     advance(5_000);
 
     scheduler.sync(session(), visibility);
 
     expect(scheduler.running).toBe(false);
+    expect(timerCount()).toBe(0);
+    const count = dispatched.length;
+    advance(30_000);
+    expect(dispatched).toHaveLength(count);
   });
 
   it("cancels when the session goes off route", () => {
-    const { scheduler, advance } = harness();
+    const { scheduler, advance, dispatched, timerCount } = harness();
     scheduler.sync(session(), "active");
     advance(5_000);
 
@@ -312,16 +265,24 @@ describe("GroundCoastingScheduler", () => {
     scheduler.sync(offRoute, "active");
 
     expect(scheduler.running).toBe(false);
+    expect(timerCount()).toBe(0);
+    const count = dispatched.length;
+    advance(30_000);
+    expect(dispatched).toHaveLength(count);
   });
 
   it("cancels when the session ends", () => {
-    const { scheduler, advance } = harness();
+    const { scheduler, advance, dispatched, timerCount } = harness();
     scheduler.sync(session(), "active");
     advance(5_000);
 
     scheduler.sync(null, "active");
 
     expect(scheduler.running).toBe(false);
+    expect(timerCount()).toBe(0);
+    const count = dispatched.length;
+    advance(30_000);
+    expect(dispatched).toHaveLength(count);
   });
 
   it("leaves no timer behind after stopping", () => {

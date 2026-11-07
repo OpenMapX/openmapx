@@ -67,7 +67,14 @@ describe("applyHardlinkPlan", () => {
     writeFileSync(join(root, "src", "b.txt"), "B");
 
     const result = applyHardlinkPlan(
-      [{ source: "src", target: "tgt", consumerService: "svc", dataType: "data" }],
+      [
+        {
+          source: join(root, "src"),
+          target: join(root, "tgt"),
+          consumerService: "svc",
+          dataType: "data",
+        },
+      ],
       { rootDir: root },
     );
 
@@ -76,6 +83,7 @@ describe("applyHardlinkPlan", () => {
     expect(result.pruned).toBe(0);
     expect(readFileSync(join(root, "tgt", "a.txt"), "utf-8")).toBe("A");
     expect(readFileSync(join(root, "tgt", "b.txt"), "utf-8")).toBe("B");
+    expect(statSync(join(root, "tgt", "a.txt")).ino).toBe(statSync(join(root, "src", "a.txt")).ino);
 
     const sentinelPath = join(root, DEFAULT_SENTINEL_DIR, "svc-data.json");
     expect(existsSync(sentinelPath)).toBe(true);
@@ -159,12 +167,18 @@ describe("applyHardlinkPlan", () => {
     mkdirSync(join(root, "src", "sub"), { recursive: true });
     writeFileSync(join(root, "src", "top.txt"), "top");
     writeFileSync(join(root, "src", "sub", "inner.txt"), "inner");
+    mkdirSync(join(root, "src", "Noto Sans Regular"), { recursive: true });
+    writeFileSync(join(root, "src", "Noto Sans Regular", "inner.txt"), "glyph");
 
     const plan = [{ source: "src", target: "tgt", consumerService: "svc", dataType: "data" }];
     const result = applyHardlinkPlan(plan, { rootDir: root });
 
-    expect(result.linked).toBe(2);
-    expect(existsSync(join(root, "tgt", "sub", "inner.txt"))).toBe(true);
+    expect(result.linked).toBe(3);
+    expect(result.pruned).toBe(0);
+    expect(readFileSync(join(root, "tgt", "sub", "inner.txt"), "utf-8")).toBe("inner");
+    expect(readFileSync(join(root, "tgt", "Noto Sans Regular", "inner.txt"), "utf-8")).toBe(
+      "glyph",
+    );
   });
 
   it("links a single file under a stable filename when targetFilename is set", () => {
@@ -183,7 +197,11 @@ describe("applyHardlinkPlan", () => {
     const result = applyHardlinkPlan(plan, { rootDir: root });
 
     expect(result.linked).toBe(1);
-    expect(existsSync(join(root, "tgt", "data.osm.pbf"))).toBe(true);
+    expect(result.pruned).toBe(0);
+    expect(readFileSync(join(root, "tgt", "data.osm.pbf"), "utf-8")).toBe("pbf");
+    expect(statSync(join(root, "tgt", "data.osm.pbf")).ino).toBe(
+      statSync(join(root, "src", "germany-latest.osm.pbf")).ino,
+    );
   });
 
   it("rejects plans whose target is nested inside source", () => {
@@ -214,6 +232,24 @@ describe("applyHardlinkPlan", () => {
     expect(() =>
       applyHardlinkPlan(
         [{ source: "../escape", target: "tgt", consumerService: "svc", dataType: "data" }],
+        { rootDir: root },
+      ),
+    ).toThrow(/escapes the data root/);
+  });
+
+  it("rejects plans whose absolute target escapes the root", () => {
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "source.pbf"), "pbf");
+    expect(() =>
+      applyHardlinkPlan(
+        [
+          {
+            source: "src",
+            target: join(root, "..", "outside-target"),
+            consumerService: "svc",
+            dataType: "data",
+          },
+        ],
         { rootDir: root },
       ),
     ).toThrow(/escapes the data root/);
@@ -375,7 +411,9 @@ describe("applyHardlinkPlan", () => {
     );
 
     expect(result.linked).toBe(1);
-    expect(existsSync(join(root, "valhalla", "osm-input", "germany.pbf"))).toBe(true);
+    expect(statSync(join(root, "valhalla", "osm-input", "germany.pbf")).ino).toBe(
+      statSync(join(root, "osm", "germany.pbf")).ino,
+    );
   });
 
   it("still applies a renderer-shaped plan unchanged", () => {

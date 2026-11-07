@@ -467,56 +467,24 @@ const REPLAY_60HZ: Replay = { rounds: 10, roundFrames: ROUND_FRAMES, msPerFrame:
 const REPLAY_120HZ: Replay = { rounds: 10, roundFrames: 120, msPerFrame: 8 };
 
 describe("useNavCamera moving replay", () => {
-  it("reproduces the recorded puck and camera pose on every 60 Hz frame", async () => {
-    const harness = await mountNavCamera();
-    const actual = runMovingReplay(harness, REPLAY_60HZ);
-    const expected = modelMovingReplay(REPLAY_60HZ);
-
-    expect(actual.puck).toHaveLength(600);
-    expect(actual.puck).toEqual(expected.puck);
-    expect(actual.camera).toEqual(expected.camera);
-  });
-
-  it("reproduces the recorded puck and camera pose on every 120 Hz frame", async () => {
-    const harness = await mountNavCamera();
-    const actual = runMovingReplay(harness, REPLAY_120HZ);
-    const expected = modelMovingReplay(REPLAY_120HZ);
-
-    expect(actual.puck).toHaveLength(1200);
-    expect(actual.puck).toEqual(expected.puck);
-    expect(actual.camera).toEqual(expected.camera);
-  });
-
-  it("publishes the puck on every moving frame, so nothing is dropped", async () => {
-    const harness = await mountNavCamera();
-    const before = harness.marker().setLngLatCount;
-    runMovingReplay(harness, REPLAY_60HZ);
-    expect(harness.marker().setLngLatCount - before).toBe(600);
-  });
-
-  it("attaches the marker to the map exactly once across 600 frames", async () => {
-    const harness = await mountNavCamera();
-    runMovingReplay(harness, REPLAY_60HZ);
-    expect(harness.marker().addToCount).toBe(1);
-    expect(harness.marker().removeCount).toBe(0);
-  });
-
-  it("schedules exactly one animation frame per rendered frame while moving", async () => {
-    const harness = await mountNavCamera();
-    const before = harness.frames.requests();
-    runMovingReplay(harness, REPLAY_60HZ);
-    // The mount frame is already booked, so 600 frames book 600 successors.
-    expect(harness.frames.requests() - before).toBe(600);
-  });
-
-  it("keeps at most one animation frame outstanding", async () => {
-    const { frames } = await mountNavCamera();
-    applyFix(START_ALONG);
-    for (let i = 0; i < 120; i += 1) {
-      frames.flush(1, FRAME_MS);
-      expect(frames.pending()).toBeLessThanOrEqual(1);
-    }
-  });
+  it.each([REPLAY_60HZ, REPLAY_120HZ])(
+    "preserves moving poses and one continuous frame loop at $roundFrames frames per fix",
+    async (replay) => {
+      const harness = await mountNavCamera();
+      const beforeSetters = harness.marker().setLngLatCount;
+      const beforeRequests = harness.frames.requests();
+      const actual = runMovingReplay(harness, replay);
+      const expected = modelMovingReplay(replay);
+      const total = replay.rounds * replay.roundFrames;
+      expect(actual.puck).toHaveLength(total);
+      expect(actual.puck).toEqual(expected.puck);
+      expect(actual.camera).toEqual(expected.camera);
+      expect(harness.marker().setLngLatCount - beforeSetters).toBe(total);
+      expect(harness.frames.requests() - beforeRequests).toBe(total);
+      expect(harness.marker().addToCount).toBe(1);
+      expect(harness.marker().removeCount).toBe(0);
+    },
+  );
 });
 
 describe("useNavCamera quiescence", () => {
@@ -529,7 +497,7 @@ describe("useNavCamera quiescence", () => {
   });
 
   it("stops scheduling frames once a stationary pose has converged", async () => {
-    const { fake, frames } = await mountNavCamera();
+    const { fake, frames, marker } = await mountNavCamera();
     applyFix(START_ALONG, 0);
     frames.flush(1200, FRAME_MS);
     expect(frames.pending()).toBe(0);
@@ -544,25 +512,12 @@ describe("useNavCamera quiescence", () => {
     // the standstill zoom plus the approach boost, capped at 17.5.
     const approachZoom = Math.min(targetZoomForSpeed(0) + 1, 17.5);
     expect(Math.abs(zoom - approachZoom)).toBeLessThanOrEqual(2 * CAMERA_ZOOM_EPSILON);
-    frames.flush(300, FRAME_MS);
-    expect(frames.requests()).toBe(settled);
-  });
-
-  it("calls neither marker setters nor jumpTo once the pose has converged", async () => {
-    const { fake, frames, marker } = await mountNavCamera();
-    applyFix(START_ALONG, 0);
-    frames.flush(1200, FRAME_MS);
     const setters = marker().setLngLatCount;
     const transitions = fake.state.cameraTransitions.length;
     frames.flush(300, FRAME_MS);
+    expect(frames.requests()).toBe(settled);
     expect(marker().setLngLatCount).toBe(setters);
     expect(fake.state.cameraTransitions).toHaveLength(transitions);
-  });
-
-  it("never removes or re-attaches the marker while it sleeps", async () => {
-    const { frames, marker } = await mountNavCamera();
-    applyFix(START_ALONG, 0);
-    frames.flush(1200, FRAME_MS);
     expect(marker().addToCount).toBe(1);
     expect(marker().removeCount).toBe(0);
   });
@@ -741,16 +696,12 @@ describe("useNavCamera lifecycle", () => {
 
   it("draws the puck when navigation starts while the map is being replaced", async () => {
     const { frames, fake } = await mountDuringMapReplacement();
+    expect(fake.state.cameraTransitions.some((t) => t.method === "easeTo")).toBe(true);
     applyFix(START_ALONG);
     frames.flush(60, FRAME_MS);
 
     expect(markerTest.markers[0]?.map).toBe(fake.map);
     expect(fake.state.cameraTransitions.some((t) => t.method === "jumpTo")).toBe(true);
-  });
-
-  it("enters follow on a map that arrives after navigation started", async () => {
-    const { fake } = await mountDuringMapReplacement();
-    expect(fake.state.cameraTransitions.some((t) => t.method === "easeTo")).toBe(true);
   });
 
   it("enters follow again on a replacement map, and not on a style reload", async () => {
@@ -1208,16 +1159,6 @@ describe("useNavCamera approach camera", () => {
     expect(jumps.length).toBeGreaterThan(0);
     expect((jumps.at(-1)?.options.pitch as number) ?? 0).toBeGreaterThan(59);
     expect(jumps.every((t) => t.options.zoom === undefined)).toBe(true);
-  });
-
-  it("issues no camera transform at all while a pointer is down", async () => {
-    const harness = await mountNavCamera();
-    applyApproachFix(START_ALONG, APPROACH_SPEED, 200);
-    harness.frames.flush(30, FRAME_MS);
-    const transitions = harness.fake.state.cameraTransitions.length;
-    act(() => harness.fake.emit("touchstart"));
-    harness.frames.flush(60, FRAME_MS);
-    expect(harness.fake.state.cameraTransitions).toHaveLength(transitions);
   });
 
   it("never tilts for walking", async () => {

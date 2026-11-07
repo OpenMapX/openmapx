@@ -38,14 +38,6 @@ describe("configSchemaKeys", () => {
     expect(configSchemaKeys({ foo: { default: "x" }, bar: {} })).toEqual([]);
   });
 
-  it("skips reserved `type` and `properties` keys at the outer level", () => {
-    const result = configSchemaKeys({
-      type: "object",
-      properties: { real: { default: 1 } },
-    });
-    expect(result.map((k) => k.key)).toEqual(["real"]);
-  });
-
   it("skips `x-openmapx-secret` fields — secrets are delivered as files, never via the env map", () => {
     const result = configSchemaKeys({
       properties: {

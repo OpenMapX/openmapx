@@ -1,12 +1,26 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { assembleSubjectArchive, renderReadmeHtml } from "./archive-assembler.js";
 import { EncryptedBlobStore } from "./artifact-storage.js";
 import { archivePathForLogicalId, PrivacyArchiveWriter } from "./artifact-writer.js";
 import { loadMasterKeyRing } from "./crypto.js";
 import type { PrivacyResponseContext } from "./response-report.js";
+
+const temporaryDirectories: string[] = [];
+async function temporaryDirectory(prefix: string): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), prefix));
+  temporaryDirectories.push(directory);
+  return directory;
+}
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
+});
 
 const responseContext: PrivacyResponseContext = {
   request: {
@@ -105,7 +119,7 @@ describe("subject archive assembler", () => {
   });
 
   it("keeps Article 15 and portable projections separate and emits a static README", async () => {
-    const root = await mkdtemp(join(tmpdir(), "openmapx-assemble-test-"));
+    const root = await temporaryDirectory("openmapx-assemble-test-");
     const ring = loadMasterKeyRing({
       env: {
         NODE_ENV: "development",
@@ -136,6 +150,11 @@ describe("subject archive assembler", () => {
     await store.decryptTo(archive, (chunk) => {
       chunks.push(Buffer.from(chunk));
     });
+    const zip = Buffer.concat(chunks);
+    expect(zip.includes(Buffer.from("openmapx-data-export/README.html"))).toBe(true);
+    expect(zip.includes(Buffer.from("openmapx-data-export/portable/saved-places.geojson"))).toBe(
+      true,
+    );
     expect(renderReadmeHtml("en")).toContain("default-src 'none'");
     expect(renderReadmeHtml("en")).not.toContain("<script");
     expect((await readFile(archive.path)).toString()).not.toContain("Home");

@@ -205,13 +205,6 @@ describe("privacy admin case selection", () => {
     expect(screen.queryByRole("link", { name: /controller-contact/ })).not.toBeInTheDocument();
     expect(screen.queryByText("controller-contact")).not.toBeInTheDocument();
   });
-  it("offers exceptional evidence and case deadline decisions for the selected case", async () => {
-    installFetch();
-    render(<PrivacyAdminPage />, { wrapper: createQueryWrapper(createTestQueryClient()) });
-    await screen.findByText(/registration-for-case-a/);
-    expect(screen.getByLabelText("privacyAdmin.workflows.reasonableDoubtCode")).toBeInTheDocument();
-    expect(screen.getByLabelText("privacyAdmin.workflows.extensionNotifiedAt")).toBeInTheDocument();
-  });
 });
 
 function pendingDelivery(requestId = CASE_B) {

@@ -142,6 +142,13 @@ describe("displayed review receipts", () => {
         .getAll()
         .filter((query) => query.state.status === "error"),
     ).toHaveLength(2);
+    const menu = screen.getByTestId("MoreVertIcon").closest("button");
+    if (!menu) throw new Error("Missing review menu button");
+    fireEvent.click(menu);
+    expect(await screen.findByRole("menuitem", { name: /CC-BY-SA-4.0/ })).toHaveAttribute(
+      "href",
+      "https://creativecommons.org/licenses/by-sa/4.0/",
+    );
   });
 
   it("does not credit a hidden zero-count aggregate", async () => {
@@ -210,18 +217,6 @@ describe("displayed review receipts", () => {
     expect(credits.getByRole("link", { name: "CC-BY-4.0" })).toHaveAttribute(
       "href",
       "https://creativecommons.org/licenses/by/4.0/",
-    );
-  });
-
-  it("retains the individual review content licence menu", async () => {
-    renderTab([review], aggregate);
-    await screen.findByText("Retained opinion");
-    const menu = screen.getByTestId("MoreVertIcon").closest("button");
-    if (!menu) throw new Error("Missing review menu button");
-    fireEvent.click(menu);
-    expect(await screen.findByRole("menuitem", { name: /CC-BY-SA-4.0/ })).toHaveAttribute(
-      "href",
-      "https://creativecommons.org/licenses/by-sa/4.0/",
     );
   });
 });

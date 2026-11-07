@@ -38,8 +38,15 @@ it.each(["admin", "privacy_admin"])(
         <AdminSidebar open={true} onClose={() => {}} selfHosted={false} role={role} />
       </NextIntlClientProvider>,
     );
-    expect(screen.queryByText("Services")).not.toBeInTheDocument();
-    expect(screen.queryByText("Maintenance")).not.toBeInTheDocument();
+    expect(document.querySelector('a[href="/admin/system/services"]')).toBeNull();
+    if (role === "admin") {
+      expect(screen.getAllByRole("link", { name: "System" })[0]).toHaveAttribute(
+        "href",
+        "/admin/system/cache",
+      );
+    } else {
+      expect(screen.queryByRole("link", { name: "System" })).toBeNull();
+    }
   },
 );
 it("keeps privacy-admin access restricted during unknown deployment", () => {
@@ -53,11 +60,14 @@ it("keeps privacy-admin access restricted during unknown deployment", () => {
       />
     </NextIntlClientProvider>,
   );
-  expect(screen.queryByText("Services")).not.toBeInTheDocument();
-  expect(screen.queryByText("Maintenance")).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "System" })).toBeNull();
+  expect(screen.getAllByRole("link", { name: "Privacy" })[0]).toHaveAttribute(
+    "href",
+    "/admin/privacy",
+  );
 });
 
-it("shows privacy setup to full administrators", () => {
+it("shows privacy casework to full administrators", () => {
   render(
     <NextIntlClientProvider locale="en" messages={en}>
       <AdminSidebar open={true} onClose={() => {}} {...{ role: "admin" }} />
@@ -67,14 +77,6 @@ it("shows privacy setup to full administrators", () => {
     "href",
     "/admin/privacy",
   );
-});
-it("does not offer privacy setup to privacy administrators", () => {
-  render(
-    <NextIntlClientProvider locale="en" messages={en}>
-      <AdminSidebar open={true} onClose={() => {}} {...{ role: "privacy_admin" }} />
-    </NextIntlClientProvider>,
-  );
-  expect(screen.queryByRole("link", { name: "Privacy setup" })).toBeNull();
 });
 
 it("closes mobile navigation on an ordinary destination selection", () => {

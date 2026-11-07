@@ -327,16 +327,6 @@ describe("host and dispatcher request tier ownership", () => {
 // ---------------------------------------------------------------------------
 
 describe("initIntegrations — loader", () => {
-  it("loads alpha and beta from the fixtures directory", async () => {
-    const app = makeApp();
-    await initIntegrations(app, [FIXTURES_DIR]);
-
-    const all = getAllIntegrations();
-    const ids = all.map((i) => i.id);
-    expect(ids).toContain("alpha");
-    expect(ids).toContain("beta");
-  });
-
   it.each(["built-in-first", "community-first"] as const)(
     "prefers a built-in integration over a colliding community integration (%s)",
     async (order) => {
@@ -561,166 +551,55 @@ describe("initIntegrations — loader", () => {
     }
   });
 
-  it("stores parking site providers under the parking-sites key", async () => {
-    const parent = mkdtempSync(join(tmpdir(), "omx-parking-site-provider-"));
-    const directory = join(parent, "parking-site-probe");
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(
-      join(directory, "manifest.json"),
-      JSON.stringify({
-        id: "parking-site-probe",
-        version: "1.0.0",
-        author: "Test",
-        licensing: licensingFromDeclaration("MIT", undefined),
-        domains: ["data-source"],
-        quality: "built-in",
-      }),
-    );
-    writeFileSync(
-      join(directory, "index.js"),
-      [
-        "export function setup(ctx) {",
-        "  ctx.registerParkingSiteProvider({",
-        "    id: 'probe', coverage: { all: true },",
-        "    searchSites: async () => ({ sites: [] }), getSite: async () => null,",
-        "  });",
-        "}",
-      ].join("\n"),
-    );
-    const app = makeApp();
-    try {
-      await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
-      expect(
-        getIntegrationProviders<{ id: string }>("parking-site-probe", "parking-sites"),
-      ).toMatchObject([{ id: "probe" }]);
-    } finally {
-      rmSync(parent, { recursive: true, force: true });
-    }
-  });
-
-  it("stores charging site providers under the charging-sites key", async () => {
-    const parent = mkdtempSync(join(tmpdir(), "omx-charging-site-provider-"));
-    const directory = join(parent, "charging-site-probe");
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(
-      join(directory, "manifest.json"),
-      JSON.stringify({
-        id: "charging-site-probe",
-        version: "1.0.0",
-        author: "Test",
-        licensing: licensingFromDeclaration("MIT", undefined),
-        domains: ["data-source"],
-        quality: "built-in",
-      }),
-    );
-    writeFileSync(
-      join(directory, "index.js"),
-      [
-        "export function setup(ctx) {",
-        "  ctx.registerChargingSiteProvider({",
-        "    id: 'probe', coverage: { all: true },",
-        "    searchSites: async () => ({ sites: [] }), getSite: async () => null,",
-        "  });",
-        "}",
-      ].join("\n"),
-    );
-    const app = makeApp();
-    try {
-      await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
-      expect(
-        getIntegrationProviders<{ id: string }>("charging-site-probe", "charging-sites"),
-      ).toMatchObject([{ id: "probe" }]);
-    } finally {
-      rmSync(parent, { recursive: true, force: true });
-    }
-  });
-
-  it("stores camera providers under the cameras key", async () => {
-    const parent = mkdtempSync(join(tmpdir(), "omx-camera-provider-"));
-    const directory = join(parent, "camera-probe");
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(
-      join(directory, "manifest.json"),
-      JSON.stringify({
-        id: "camera-probe",
-        version: "1.0.0",
-        author: "Test",
-        licensing: licensingFromDeclaration("MIT", undefined),
-        domains: ["data-source"],
-        quality: "built-in",
-      }),
-    );
-    writeFileSync(
-      join(directory, "index.js"),
-      [
-        "export function setup(ctx) {",
-        "  ctx.registerCameraProvider({",
-        "    id: 'probe', coverage: { all: true },",
-        "    searchCameras: async () => ({ cameras: [] }), getCamera: async () => null,",
-        "  });",
-        "}",
-      ].join("\n"),
-    );
-    const app = makeApp();
-    try {
-      await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
-      expect(getIntegrationProviders<{ id: string }>("camera-probe", "cameras")).toMatchObject([
-        { id: "probe" },
-      ]);
-    } finally {
-      rmSync(parent, { recursive: true, force: true });
-    }
-  });
-
-  it("stores message-sign providers under the message-signs key", async () => {
-    const parent = mkdtempSync(join(tmpdir(), "omx-sign-provider-"));
-    const directory = join(parent, "sign-probe");
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(
-      join(directory, "manifest.json"),
-      JSON.stringify({
-        id: "sign-probe",
-        version: "1.0.0",
-        author: "Test",
-        licensing: licensingFromDeclaration("MIT", undefined),
-        domains: ["data-source"],
-        quality: "built-in",
-      }),
-    );
-    writeFileSync(
-      join(directory, "index.js"),
-      [
-        "export function setup(ctx) {",
-        "  ctx.registerMessageSignProvider({",
-        "    id: 'probe', coverage: { all: true },",
-        "    searchSigns: async () => ({ signs: [] }), getSign: async () => null,",
-        "  });",
-        "}",
-      ].join("\n"),
-    );
-    const app = makeApp();
-    try {
-      await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
-      expect(getIntegrationProviders<{ id: string }>("sign-probe", "message-signs")).toMatchObject([
-        { id: "probe" },
-      ]);
-    } finally {
-      rmSync(parent, { recursive: true, force: true });
-    }
-  });
-
   it.each([
-    ["registerRoadWeatherProvider", "road-weather", "searchStations", "getStation"],
-    ["registerServiceVehicleProvider", "service-vehicles", "searchVehicles", "getVehicle"],
-    ["registerBorderCrossingProvider", "border-crossings", "searchCrossings", "getCrossing"],
-  ])("%s stores its providers under the %s key", async (registrar, key, search, get) => {
-    const parent = mkdtempSync(join(tmpdir(), "omx-conditions-provider-"));
-    const directory = join(parent, "conditions-probe");
+    [
+      "registerParkingSiteProvider",
+      "parking-sites",
+      "searchSites: async () => ({ sites: [] }), getSite: async () => null",
+    ],
+    [
+      "registerChargingSiteProvider",
+      "charging-sites",
+      "searchSites: async () => ({ sites: [] }), getSite: async () => null",
+    ],
+    [
+      "registerCameraProvider",
+      "cameras",
+      "searchCameras: async () => ({ cameras: [] }), getCamera: async () => null",
+    ],
+    [
+      "registerMessageSignProvider",
+      "message-signs",
+      "searchSigns: async () => ({ signs: [] }), getSign: async () => null",
+    ],
+    [
+      "registerRoadWeatherProvider",
+      "road-weather",
+      "searchStations: async () => ({}), getStation: async () => null",
+    ],
+    [
+      "registerServiceVehicleProvider",
+      "service-vehicles",
+      "searchVehicles: async () => ({}), getVehicle: async () => null",
+    ],
+    [
+      "registerBorderCrossingProvider",
+      "border-crossings",
+      "searchCrossings: async () => ({}), getCrossing: async () => null",
+    ],
+    [
+      "registerHazardsProvider",
+      "hazards",
+      "getAlerts: async () => ({ alerts: [] }), getNaturalHazards: async () => ({ hazards: [] }), getFirePixels: async () => ({ pixels: [] }), getFireDensity: async () => ({ cells: [], sources: [] })",
+    ],
+  ])("%s stores its providers under the %s key", async (registrar, key, methods) => {
+    const parent = mkdtempSync(join(tmpdir(), "omx-domain-provider-"));
+    const directory = join(parent, "domain-probe");
     mkdirSync(directory, { recursive: true });
     writeFileSync(
       join(directory, "manifest.json"),
       JSON.stringify({
-        id: "conditions-probe",
+        id: "domain-probe",
         version: "1.0.0",
         author: "Test",
         licensing: licensingFromDeclaration("MIT", undefined),
@@ -730,59 +609,14 @@ describe("initIntegrations — loader", () => {
     );
     writeFileSync(
       join(directory, "index.js"),
-      [
-        "export function setup(ctx) {",
-        `  ctx.${registrar}({`,
-        "    id: 'probe', coverage: { all: true },",
-        `    ${search}: async () => ({}), ${get}: async () => null,`,
-        "  });",
-        "}",
-      ].join("\n"),
+      `export function setup(ctx) {
+      ctx.${registrar}({ id: 'probe', coverage: { all: true }, ${methods} });
+    }`,
     );
     const app = makeApp();
     try {
       await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
-      expect(getIntegrationProviders<{ id: string }>("conditions-probe", key)).toMatchObject([
-        { id: "probe" },
-      ]);
-    } finally {
-      rmSync(parent, { recursive: true, force: true });
-    }
-  });
-
-  it("stores hazards providers under the hazards key", async () => {
-    const parent = mkdtempSync(join(tmpdir(), "omx-hazards-provider-"));
-    const directory = join(parent, "hazards-probe");
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(
-      join(directory, "manifest.json"),
-      JSON.stringify({
-        id: "hazards-probe",
-        version: "1.0.0",
-        author: "Test",
-        licensing: licensingFromDeclaration("MIT", undefined),
-        domains: ["data-source"],
-        quality: "built-in",
-      }),
-    );
-    writeFileSync(
-      join(directory, "index.js"),
-      [
-        "export function setup(ctx) {",
-        "  ctx.registerHazardsProvider({",
-        "    id: 'probe', coverage: { all: true },",
-        "    getAlerts: async () => ({ alerts: [] }),",
-        "    getNaturalHazards: async () => ({ hazards: [] }),",
-        "    getFirePixels: async () => ({ pixels: [] }),",
-        "    getFireDensity: async () => ({ cells: [], sources: [] }),",
-        "  });",
-        "}",
-      ].join("\n"),
-    );
-    const app = makeApp();
-    try {
-      await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
-      expect(getIntegrationProviders<{ id: string }>("hazards-probe", "hazards")).toMatchObject([
+      expect(getIntegrationProviders<{ id: string }>("domain-probe", key)).toMatchObject([
         { id: "probe" },
       ]);
     } finally {
@@ -838,16 +672,6 @@ describe("initIntegrations — loader", () => {
       delete g.__untrustedBackendExecuted;
       rmSync(parent, { recursive: true, force: true });
     }
-  });
-
-  it("getIntegration returns the loaded alpha integration", async () => {
-    const app = makeApp();
-    await initIntegrations(app, [FIXTURES_DIR]);
-
-    const alpha = getIntegration("alpha");
-    expect(alpha).toBeDefined();
-    expect(alpha?.id).toBe("alpha");
-    expect(alpha?.enabled).toBe(true);
   });
 
   it("respects topological order: alpha setup ran before beta", async () => {
@@ -1130,43 +954,7 @@ describe("resolved service cache identity", () => {
   });
 });
 
-describe("reloadIntegrations", () => {
-  it("after reload getAllIntegrations still returns both fixtures", async () => {
-    const app = makeApp();
-    await initIntegrations(app, [FIXTURES_DIR]);
-
-    const result = await reloadIntegrations();
-    expect(result.message).toBe("Integrations reloaded");
-
-    const ids = getAllIntegrations().map((i) => i.id);
-    expect(ids).toContain("alpha");
-    expect(ids).toContain("beta");
-  });
-
-  it("after reload routes still dispatch correctly (idempotence)", async () => {
-    const app = makeApp();
-    await initIntegrations(app, [FIXTURES_DIR]);
-
-    await reloadIntegrations();
-
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/integrations/alpha/hello",
-    });
-
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ integration: "alpha" });
-  });
-});
-
 describe("shutdownIntegrations", () => {
-  it("completes without throwing", async () => {
-    const app = makeApp();
-    await initIntegrations(app, [FIXTURES_DIR]);
-
-    await expect(shutdownIntegrations()).resolves.toBeUndefined();
-  });
-
   it("after shutdown getAllIntegrations returns an empty array", async () => {
     const app = makeApp();
     await initIntegrations(app, [FIXTURES_DIR]);
@@ -1393,7 +1181,10 @@ describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
       delete g.__omxGateRelease;
       release();
       const results = await Promise.all([p1, p2, p3]);
-      for (const r of results) expect(r.message).toBe("Integrations reloaded");
+      for (const r of results) {
+        expect(r.message).toBe("Integrations reloaded");
+        expect(r.reloaded).toBeGreaterThanOrEqual(2);
+      }
 
       // init(1) + in-flight reload(1) + exactly one shared trailing pass(1).
       // A naive per-caller queue would give 4; pure coalescing would give 2.
@@ -1403,6 +1194,9 @@ describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
       expect(finalIds).toContain("alpha");
       expect(finalIds).toContain("beta");
       expect(finalIds).toContain("gate-probe");
+      const response = await app.inject({ method: "GET", url: "/api/integrations/alpha/hello" });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ integration: "alpha" });
     } finally {
       if (typeof g.__omxGateRelease === "function") {
         (g.__omxGateRelease as () => void)();
@@ -1640,21 +1434,5 @@ describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
     } finally {
       rmSync(parent, { recursive: true, force: true });
     }
-  });
-
-  it("runs two overlapping gateless reloads and keeps routes dispatching", async () => {
-    const app = makeApp();
-    await initIntegrations(app, [FIXTURES_DIR]);
-
-    const [r1, r2] = await Promise.all([reloadIntegrations(), reloadIntegrations()]);
-    expect(r1.reloaded).toBeGreaterThanOrEqual(2);
-    expect(r2.reloaded).toBeGreaterThanOrEqual(2);
-
-    const ids = getAllIntegrations().map((i) => i.id);
-    expect(ids).toContain("alpha");
-    expect(ids).toContain("beta");
-
-    const res = await app.inject({ method: "GET", url: "/api/integrations/alpha/hello" });
-    expect(res.statusCode).toBe(200);
   });
 });

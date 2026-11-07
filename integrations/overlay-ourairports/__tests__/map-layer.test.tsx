@@ -72,7 +72,7 @@ describe("AirportsOverlay zoom gate", () => {
   it("fetches viewport airports at or above the manifest minZoom", () => {
     render(<AirportsOverlay />, { wrapper });
 
-    expect(fetchMock).toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0][0])).toContain(
       "/api/integrations/overlay-ourairports/airports",
     );
@@ -97,12 +97,6 @@ describe("AirportsOverlay zoom gate", () => {
     });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(fake.state.layers.get(CIRCLE_LAYER_ID)?.minzoom).toBe(MIN_ZOOM);
-  });
-
-  it("fetches the viewport once when shown", () => {
-    render(<AirportsOverlay />, { wrapper });
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("applies a changed manifest minZoom to the installed layer", () => {

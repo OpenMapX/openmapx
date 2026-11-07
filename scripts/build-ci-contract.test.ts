@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import nextConfig from "../apps/web/next.config";
 
 const root = resolve(import.meta.dirname, "..");
 
@@ -9,6 +10,29 @@ function read(relativePath: string): string {
 }
 
 describe("required production build gate", () => {
+  it.each([
+    { alias: { retained: "/retained" } },
+    { alias: [{ name: "retained", alias: "/retained" }] },
+  ])("resolves integration contexts through the supported webpack fallback (%j)", ({ alias }) => {
+    const configure = nextConfig.webpack;
+    if (!configure) throw new Error("Missing supported webpack fallback");
+    const config = { context: resolve(root, "apps/web"), resolve: { alias } };
+    // Neither the next-intl wrapper nor this callback reads the compilation context.
+    const rendered = configure(config, {} as Parameters<typeof configure>[1]);
+    const integrations = resolve(root, "integrations");
+    if (Array.isArray(alias)) {
+      expect(rendered.resolve.alias).toEqual(
+        expect.arrayContaining([
+          { name: "retained", alias: "/retained" },
+          { name: "@integrations", alias: integrations },
+        ]),
+      );
+    } else
+      expect(rendered.resolve.alias).toMatchObject({
+        retained: "/retained",
+        "@integrations": integrations,
+      });
+  });
   it("builds production outputs, checks packed packages, and aggregates the result", () => {
     const workflow = read(".github/workflows/ci.yml");
     const rootPackage = JSON.parse(read("package.json")) as {
@@ -42,28 +66,5 @@ describe("required production build gate", () => {
     expect(buildJob).toContain("needs.select.outputs['build'] == 'true'");
     expect(workflow).toMatch(/needs:\s*\[[^\]]*\bbuild\b[^\]]*\]/);
     expect(workflow).toContain("run: node scripts/ci-impact-plan.mjs verify");
-  });
-
-  it("does not make a production build depend on downloading a Google font", () => {
-    const layout = read("apps/web/src/app/layout.tsx");
-    const webPackage = JSON.parse(read("apps/web/package.json")) as {
-      dependencies: Record<string, string>;
-    };
-
-    expect(layout).not.toContain('from "next/font/google"');
-    expect(layout).toContain('import "@fontsource-variable/plus-jakarta-sans"');
-    expect(webPackage.dependencies["@fontsource-variable/plus-jakarta-sans"]).toBeDefined();
-  });
-
-  it("keeps the supported webpack fallback aware of integration contexts", () => {
-    const nextConfig = read("apps/web/next.config.ts");
-
-    expect(nextConfig).toContain("webpack(config)");
-    expect(nextConfig).toContain('"@integrations": integrations');
-  });
-
-  it("does not publish the retired in-process community runtime SDK", () => {
-    expect(existsSync(resolve(root, "packages/extension-sdk/package.json"))).toBe(false);
-    expect(read("scripts/check-packed-packages.mjs")).not.toContain("extension-sdk");
   });
 });

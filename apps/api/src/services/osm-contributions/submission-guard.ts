@@ -67,9 +67,6 @@ export interface SubmissionGuard {
     input: SubmissionIdentity & { idempotencyKey: string; outcome: StoredOutcome },
   ): Promise<void>;
   release(input: SubmissionIdentity & { idempotencyKey: string; lease: string }): Promise<void>;
-  /** Test/diagnostic only. */
-  debugLockKey(identity: SubmissionIdentity): string;
-  debugSize(): number;
 }
 
 /**
@@ -93,7 +90,6 @@ interface Store {
   get(key: string): Promise<string | null>;
   set(key: string, value: string, ttlSeconds: number): Promise<void>;
   deleteIfMatches(key: string, value: string): Promise<void>;
-  size(): number;
 }
 
 function createMemoryStore(now: () => number): Store {
@@ -138,9 +134,6 @@ function createMemoryStore(now: () => number): Store {
     async deleteIfMatches(key, value) {
       if (read(key) === value) entries.delete(key);
     },
-    size() {
-      return entries.size;
-    },
   };
 }
 
@@ -173,9 +166,6 @@ function createRedisStore(redis: SubmissionGuardRedis, fallback: Store): Store {
       } catch {
         await fallback.deleteIfMatches(key, value);
       }
-    },
-    size() {
-      return fallback.size();
     },
   };
 }
@@ -247,14 +237,6 @@ export function createSubmissionGuard(deps: SubmissionGuardDeps): SubmissionGuar
 
     async release(input) {
       await store.deleteIfMatches(lockKey(input), input.lease);
-    },
-
-    debugLockKey(identity) {
-      return lockKey(identity);
-    },
-
-    debugSize() {
-      return memory.size();
     },
   };
 }

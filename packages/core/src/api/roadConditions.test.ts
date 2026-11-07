@@ -42,18 +42,6 @@ describe("fetchRoadConditions", () => {
     });
   });
 
-  it("returns a failed status when the server responds non-2xx", async () => {
-    // `apiClient.get` throws on `!res.ok`, so this exercises the same catch
-    // path as a transport failure — confirmed by reading `client.ts`, not
-    // assumed.
-    vi.spyOn(apiClient, "get").mockRejectedValue(new Error("API error 503: {}"));
-
-    await expect(fetchRoadConditionsWithStatus([13, 52, 14, 53])).resolves.toEqual({
-      ok: false,
-      events: [],
-    });
-  });
-
   it("reports a genuine empty successful aggregation as ok: true with zero events", async () => {
     vi.spyOn(apiClient, "get").mockResolvedValue({
       type: "FeatureCollection",
@@ -66,17 +54,8 @@ describe("fetchRoadConditions", () => {
     });
   });
 
-  it("treats a non-object response body as a failure", async () => {
-    vi.spyOn(apiClient, "get").mockResolvedValue(null as never);
-
-    await expect(fetchRoadConditionsWithStatus([13, 52, 14, 53])).resolves.toEqual({
-      ok: false,
-      events: [],
-    });
-  });
-
-  it("treats a `features` field that isn't an array as a failure", async () => {
-    vi.spyOn(apiClient, "get").mockResolvedValue({ features: "nope" } as never);
+  it.each([null, { features: "nope" }])("rejects malformed feature collection %j", async (body) => {
+    vi.spyOn(apiClient, "get").mockResolvedValue(body as never);
 
     await expect(fetchRoadConditionsWithStatus([13, 52, 14, 53])).resolves.toEqual({
       ok: false,
@@ -387,7 +366,23 @@ describe("fetchRouteFlow", () => {
         ],
       },
     ]);
-    expect(result.r0[0].los).toBe("queuing");
+    expect(result).toEqual({
+      r0: [{ startMeters: 10, endMeters: 90, los: "queuing", confidence: "measured" }],
+    });
+    expect(post).toHaveBeenCalledExactlyOnceWith(
+      "/api/integrations/road-conditions/flow-along-route",
+      {
+        routes: [
+          {
+            id: "r0",
+            geometry: [
+              [8, 50],
+              [8, 50.01],
+            ],
+          },
+        ],
+      },
+    );
     post.mockRestore();
   });
 

@@ -98,7 +98,16 @@ it.each(["foreign", "tag", "oversized", "privacy", "local"])(
     if (kind === "tag") manifest.images.api = "ghcr.io/openmapx/api:latest";
     if (kind === "privacy") manifest.privacyReleaseValidation.checks.policyConsistent = false;
     if (kind === "local") vi.stubEnv("OPENMAPX_RELEASE", "local");
-    const modified = JSON.stringify(manifest) + (kind === "oversized" ? " ".repeat(32768) : "");
+    if (kind === "oversized")
+      manifest.producer = {
+        repository: `${"x".repeat(32768)}/repository`,
+        workflowPath: ".github/workflows/ci.yml",
+        sourceRevision: "c".repeat(40),
+        runId: 1,
+        runAttempt: 1,
+        event: "push",
+      };
+    const modified = services.canonicalReleaseManifest(manifest);
     writeFileSync(join(directory, `${releaseId}.json`), modified);
     const digest = createHash("sha256").update(modified).digest("hex");
     expect(() =>

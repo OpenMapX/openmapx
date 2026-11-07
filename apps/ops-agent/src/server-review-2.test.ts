@@ -85,6 +85,7 @@ describe("reviewed durable admission boundary", () => {
   it("rolls back an authenticated late claim after the claim timeout without admitting a job", async () => {
     let finish!: () => void;
     let rollbacks = 0;
+    const dispatch = vi.fn();
     const operation = {
       expectedSourceRevision: "00000000-0000-4000-8000-000000000000",
       coordinatorMode: "require-running" as const,
@@ -116,7 +117,7 @@ describe("reviewed durable admission boundary", () => {
         },
       },
       now: () => new Date(baseTime),
-      dispatch: vi.fn(),
+      dispatch,
     });
     const response = await app.inject({
       method: "POST",
@@ -130,6 +131,7 @@ describe("reviewed durable admission boundary", () => {
       await new Promise((resolve) => setTimeout(resolve, 1));
     }
     expect(rollbacks).toBe(1);
+    expect(dispatch).not.toHaveBeenCalled();
     await app.close();
   });
 
@@ -138,6 +140,10 @@ describe("reviewed durable admission boundary", () => {
     async (outcome) => {
       let retained = true;
       let committed = false;
+      let records: readonly PersistedOpsJob[] = [];
+      let terminalWriteEntered = false;
+      let terminalDurableAtRelease = false;
+      const allowTerminalWrite = Promise.withResolvers<void>();
       const operation = {
         expectedSourceRevision: "00000000-0000-4000-8000-000000000000",
         coordinatorMode: "require-running" as const,
@@ -147,6 +153,16 @@ describe("reviewed durable admission boundary", () => {
       };
       const app = await buildOpsAgentServer({
         tokens: { api: apiToken, "data-manager": dataManagerToken },
+        journal: {
+          records: () => records,
+          replace: async (next) => {
+            if (next.some((record) => record.state === outcome)) {
+              terminalWriteEntered = true;
+              await allowTerminalWrite.promise;
+            }
+            records = structuredClone(next);
+          },
+        },
         resourceClaimer: {
           claim: async (_operation, fingerprint) => ({
             operation,
@@ -160,6 +176,7 @@ describe("reviewed durable admission boundary", () => {
               },
               release: async () => {
                 if (!committed) throw new Error("released before durable admission");
+                terminalDurableAtRelease = records.some((record) => record.state === outcome);
                 retained = false;
               },
             },
@@ -178,35 +195,43 @@ describe("reviewed durable admission boundary", () => {
           };
         },
       });
-      const admitted = await app.inject({
-        method: "POST",
-        url: "/v1/operations",
-        headers: auth(),
-        payload: request(
-          operation,
-          `ops1_terminalRelease${outcome}0`,
-          key(`opk1_terminalRelease${outcome}0`),
-        ),
-      });
-      expect(admitted.statusCode).toBe(202);
-      const operationId = admitted.json().result.operationId as string;
-      let status = admitted.json().result.state as string;
-      for (
-        let attempt = 0;
-        attempt < 100 && (!["succeeded", "failed"].includes(status) || retained);
-        attempt += 1
-      ) {
-        await new Promise((resolve) => setTimeout(resolve, 1));
-        const response = await app.inject({
-          method: "GET",
-          url: `/v1/operations/${operationId}`,
-          headers: { ...auth(), "x-ops-request-id": `ops1_terminalStatus${outcome}0` },
+      try {
+        const admitted = await app.inject({
+          method: "POST",
+          url: "/v1/operations",
+          headers: auth(),
+          payload: request(
+            operation,
+            `ops1_terminalRelease${outcome}0`,
+            key(`opk1_terminalRelease${outcome}0`),
+          ),
         });
-        status = response.json().result.state as string;
+        expect(admitted.statusCode).toBe(202);
+        const operationId = admitted.json().result.operationId as string;
+        await vi.waitFor(() => expect(terminalWriteEntered).toBe(true));
+        expect(retained).toBe(true);
+        allowTerminalWrite.resolve();
+        let status = admitted.json().result.state as string;
+        for (
+          let attempt = 0;
+          attempt < 100 && (!["succeeded", "failed"].includes(status) || retained);
+          attempt += 1
+        ) {
+          await new Promise((resolve) => setTimeout(resolve, 1));
+          const response = await app.inject({
+            method: "GET",
+            url: `/v1/operations/${operationId}`,
+            headers: { ...auth(), "x-ops-request-id": `ops1_terminalStatus${outcome}0` },
+          });
+          status = response.json().result.state as string;
+        }
+        expect(status).toBe(outcome);
+        expect(retained).toBe(false);
+        expect(terminalDurableAtRelease).toBe(true);
+      } finally {
+        allowTerminalWrite.resolve();
+        await app.close();
       }
-      expect(status).toBe(outcome);
-      expect(retained).toBe(false);
-      await app.close();
     },
   );
 
@@ -441,10 +466,6 @@ describe("reviewed durable admission boundary", () => {
           entered();
           await admissionBlocked;
         }
-        console.error(
-          "INTERLEAVE write",
-          records.map((r) => [r.operation.kind, r.state]),
-        );
         await durable.replace(records);
       },
     };
@@ -460,58 +481,77 @@ describe("reviewed durable admission boundary", () => {
         return operation.kind === "service.pull" ? pullResult : { changed: true };
       },
     });
-    const first = await app.inject({
-      method: "POST",
-      url: "/v1/operations",
-      headers: auth(),
-      payload: request(
-        {
-          kind: "service.pull",
-          serviceId: "redis",
-          expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
-        },
-        "ops1_interleaveFirst00",
-        key("opk1_interleaveFirst00"),
-      ),
-    });
-    expect(first.statusCode).toBe(202);
-    blockAdmission = true;
-    const secondPromise = app
-      .inject({
+    let admissionTimer: ReturnType<typeof setTimeout> | undefined;
+    let settleSecond = Promise.resolve();
+    try {
+      const first = await app.inject({
         method: "POST",
         url: "/v1/operations",
         headers: auth(),
         payload: request(
-          { kind: "service.stop", serviceId: "motis" },
-          "ops1_interleaveSecond0",
-          key("opk1_interleaveSecond0"),
+          {
+            kind: "service.pull",
+            serviceId: "redis",
+            expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+          },
+          "ops1_interleaveFirst00",
+          key("opk1_interleaveFirst00"),
         ),
-      })
-      .then((response) => response);
-    await Promise.race([
-      admissionEntered,
-      secondPromise.then((response) => {
-        throw Error(`Second admission completed before journal hold: ${response.body}`);
-      }),
-    ]);
-    releaseFirst();
-    unblock();
-    expect((await secondPromise).statusCode).toBe(202);
-    await expect
-      .poll(
-        () =>
-          durable.records().map(({ operation, state, errorClass }) => ({
-            kind: operation.kind,
-            state,
-            errorClass,
-          })),
-        { timeout: 3000 },
-      )
-      .toEqual([
-        { kind: "service.pull", state: "succeeded", errorClass: undefined },
-        { kind: "service.stop", state: "succeeded", errorClass: undefined },
+      });
+      expect(first.statusCode).toBe(202);
+      blockAdmission = true;
+      const secondPromise = app
+        .inject({
+          method: "POST",
+          url: "/v1/operations",
+          headers: auth(),
+          payload: request(
+            { kind: "service.stop", serviceId: "motis" },
+            "ops1_interleaveSecond0",
+            key("opk1_interleaveSecond0"),
+          ),
+        })
+        .then((response) => response);
+      settleSecond = secondPromise.then(
+        () => undefined,
+        () => undefined,
+      );
+      await Promise.race([
+        admissionEntered,
+        new Promise<never>((_resolve, reject) => {
+          admissionTimer = setTimeout(() => {
+            reject(Error("Second admission did not reach the held journal write"));
+          }, 3000);
+        }),
+        secondPromise.then((response) => {
+          throw Error(`Second admission completed before journal hold: ${response.body}`);
+        }),
       ]);
-    await app.close();
+      if (admissionTimer !== undefined) clearTimeout(admissionTimer);
+      releaseFirst();
+      unblock();
+      expect((await secondPromise).statusCode).toBe(202);
+      await expect
+        .poll(
+          () =>
+            durable.records().map(({ operation, state, errorClass }) => ({
+              kind: operation.kind,
+              state,
+              errorClass,
+            })),
+          { timeout: 3000 },
+        )
+        .toEqual([
+          { kind: "service.pull", state: "succeeded", errorClass: undefined },
+          { kind: "service.stop", state: "succeeded", errorClass: undefined },
+        ]);
+    } finally {
+      if (admissionTimer !== undefined) clearTimeout(admissionTimer);
+      releaseFirst();
+      unblock();
+      await settleSecond;
+      await app.close();
+    }
     const reopened = await openOpsJobJournal(path);
     expect(reopened.records()).toHaveLength(2);
     expect(new Set(reopened.records().map((record) => record.operationKey))).toEqual(

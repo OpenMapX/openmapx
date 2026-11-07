@@ -244,7 +244,7 @@ describe("image-proxy route", () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
-    process.env.CORS_ORIGIN = "http://localhost:3000";
+    vi.stubEnv("CORS_ORIGIN", "http://localhost:3000");
     mockFetchWithRedirects.mockReset();
     mockResolveGooglePhotosLink.mockReset();
     app = await buildTestApp(imageProxyRoute);

@@ -4,6 +4,7 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  rm,
   stat,
   symlink,
   writeFile,
@@ -11,13 +12,27 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { startArtifactStream } from "./artifact-download.js";
 import { EncryptedBlobStore } from "./artifact-storage.js";
 import { loadMasterKeyRing } from "./crypto.js";
 
+const temporaryDirectories: string[] = [];
+async function temporaryDirectory(prefix: string): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), prefix));
+  temporaryDirectories.push(directory);
+  return directory;
+}
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
+});
+
 async function storeFixture() {
-  const root = await mkdtemp(join(tmpdir(), "openmapx-export-test-"));
+  const root = await temporaryDirectory("openmapx-export-test-");
   const ring = loadMasterKeyRing({
     env: {
       NODE_ENV: "development",
@@ -71,7 +86,7 @@ describe("EncryptedBlobStore", () => {
     ).rejects.toThrow("storage key");
     const outside = join(root, "outside");
     await writeFile(outside, "x");
-    await symlink(outside, join(root, "link")).catch(() => {});
+    await symlink(outside, join(root, "link"));
     await expect(store.assertSafePath("link")).rejects.toThrow();
     const hard = join(root, "hard");
     await link(outside, hard);

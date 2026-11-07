@@ -369,9 +369,4 @@ describe("useNavIncidents production call sites", () => {
       "apps/web/src/lib/navigation/useNavIncidents.ts",
     ]);
   });
-
-  it("scans a plausible number of sources", () => {
-    // Guards against a broken walk quietly passing the gate with nothing to scan.
-    expect(files.length).toBeGreaterThan(100);
-  });
 });

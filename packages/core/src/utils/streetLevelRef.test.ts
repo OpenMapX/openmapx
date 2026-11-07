@@ -31,9 +31,4 @@ describe("streetLevelRef", () => {
     expect(parseStreetLevelRef(":abc")).toBeNull();
     expect(parseStreetLevelRef("panoramax:")).toBeNull();
   });
-
-  it("round-trips", () => {
-    const ref = { providerId: "mapillary", imageId: "999" };
-    expect(parseStreetLevelRef(formatStreetLevelRef(ref))).toEqual(ref);
-  });
 });

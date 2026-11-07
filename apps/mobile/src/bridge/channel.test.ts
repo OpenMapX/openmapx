@@ -47,8 +47,8 @@ describe("createBridgeChannel", () => {
   });
 
   it("uses real randomness by default", () => {
-    const first = createBridgeChannel(1_000, defaultRandomSource);
-    const second = createBridgeChannel(1_000, defaultRandomSource);
+    const first = createBridgeChannel(1_000);
+    const second = createBridgeChannel(1_000);
 
     expect(first.nonce).not.toBe(second.nonce);
   });
@@ -91,6 +91,11 @@ describe("ChannelRegistry", () => {
       webBuildId: "build-a",
       protocolVersion: MOBILE_PROTOCOL_MAX,
     });
+    expect(registry.handshake()).toEqual({
+      webBuildId: "build-a",
+      protocolVersion: MOBILE_PROTOCOL_MAX,
+    });
+    expect(registry.isCurrent(first.nonce)).toBe(true);
     registry.rememberMessage(first.nonce, "m1");
 
     registry.beginDocumentLoad(2_000);
@@ -98,23 +103,6 @@ describe("ChannelRegistry", () => {
     expect(registry.handshake()).toBeNull();
     // The same message ID is new again, because it belongs to a new document.
     expect(registry.rememberMessage(registry.current()?.nonce ?? "", "m1")).toBe(true);
-  });
-
-  it("keeps the channel when no document load occurs", () => {
-    const registry = new ChannelRegistry(countingRandom());
-    const channel = registry.beginDocumentLoad(1_000);
-    registry.completeHandshake(channel.nonce, {
-      webBuildId: "build-a",
-      protocolVersion: MOBILE_PROTOCOL_MAX,
-    });
-
-    // An in-document history navigation never reaches `beginDocumentLoad`, so
-    // the page keeps talking on the channel it already negotiated.
-    expect(registry.handshake()).toEqual({
-      webBuildId: "build-a",
-      protocolVersion: MOBILE_PROTOCOL_MAX,
-    });
-    expect(registry.isCurrent(channel.nonce)).toBe(true);
   });
 
   it("invalidates the channel outright", () => {

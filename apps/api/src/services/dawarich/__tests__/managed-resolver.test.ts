@@ -182,16 +182,21 @@ describe("ManagedDawarichServiceResolver", () => {
     expect(harness.fetchHealth).not.toHaveBeenCalled();
   });
 
-  it("marks partial or conflicting file secrets unprovisioned", async () => {
-    const harness = createHarness({
-      secrets: {
-        "dawarich-postgis:POSTGRES_PASSWORD": "db-a",
-        "dawarich-app:DATABASE_PASSWORD": "db-a",
-        "dawarich-sidekiq:DATABASE_PASSWORD": "db-b",
-      },
-    });
+  it.each(["missing", "conflicting"])("marks %s file secrets unprovisioned", async (fault) => {
+    const harness = createHarness();
+    const getSecret = harness.dependencies.getSecret;
+    harness.dependencies.getSecret = async (serviceId: string, key: string) => {
+      if (fault === "missing" && serviceId === "dawarich-app" && key === "SECRET_KEY_BASE")
+        return null;
+      if (
+        fault === "conflicting" &&
+        serviceId === "dawarich-sidekiq" &&
+        key === "DATABASE_PASSWORD"
+      )
+        return "other-db";
+      return getSecret(serviceId, key);
+    };
     const resolver = new ManagedDawarichServiceResolver(harness.dependencies);
-
     await expect(resolver.resolve()).resolves.toMatchObject({ provisioned: false, healthy: false });
     expect(harness.fetchHealth).not.toHaveBeenCalled();
   });

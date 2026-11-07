@@ -1,3 +1,4 @@
+import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { adminJob } from "../../db/schema";
 import { createDbMock, type DbMock } from "../../test/db.js";
@@ -82,8 +83,16 @@ describe("pruneAuditLog / pruneCompletedJobs retention guard", () => {
       dbMock.queueDelete([]);
       await fn(happyDays);
       const where = dbMock.db.delete.mock.results.at(-1)?.value.where;
-      expect(where).toHaveBeenCalledWith(
-        expect.objectContaining({ queryChunks: expect.any(Array) }),
+      const query = new PgDialect().sqlToQuery(where.mock.calls[0][0]);
+      expect(query.sql).toContain("not exists");
+      expect(query.sql).toContain("data_subject_request_preservation");
+      expect(query.sql).toContain("preservation_request.user_id");
+      expect(query.params).toContain(
+        fn === pruneAuditLog
+          ? "admin-audit-attribution"
+          : fn === pruneCompletedJobs
+            ? "admin-jobs-attribution"
+            : "application-logs",
       );
     });
   });

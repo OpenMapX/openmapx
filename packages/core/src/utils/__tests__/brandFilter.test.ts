@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { BRAND_QID_KEYS, brandToFilter, commonsLogoUrl, gapFillBranding } from "../brandFilter";
+import { brandToFilter, gapFillBranding } from "../brandFilter";
 import { validateOverpassFilter } from "../overpassFilter";
 
 describe("brandToFilter", () => {
@@ -32,28 +32,6 @@ describe("brandToFilter", () => {
     expect(brandToFilter({ qid: "Q1", kind: [] }).selectors).toEqual([
       { tags: [{ key: "brand:wikidata", op: "=", value: "Q1" }] },
     ]);
-  });
-});
-
-describe("BRAND_QID_KEYS", () => {
-  it("lists the QID keys in precedence order", () => {
-    expect(BRAND_QID_KEYS).toEqual(["brand:wikidata", "network:wikidata", "operator:wikidata"]);
-  });
-});
-
-describe("commonsLogoUrl", () => {
-  it("builds a Special:FilePath URL at the requested width", () => {
-    expect(commonsLogoUrl("Starbucks Corporation Logo.svg", 64)).toBe(
-      "https://commons.wikimedia.org/wiki/Special:FilePath/Starbucks%20Corporation%20Logo.svg?width=64",
-    );
-  });
-
-  it("encodes characters that would otherwise break the path", () => {
-    expect(commonsLogoUrl("A&W logo.svg", 64)).toContain("A%26W");
-  });
-
-  it("defaults to a 64px render", () => {
-    expect(commonsLogoUrl("x.svg")).toContain("width=64");
   });
 });
 

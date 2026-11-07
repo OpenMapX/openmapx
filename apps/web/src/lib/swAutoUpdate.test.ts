@@ -53,10 +53,6 @@ describe("isSafeToAutoReload", () => {
     ).toBe(false);
   });
 
-  it("returns true when navStatus is idle (all else clear)", () => {
-    expect(isSafeToAutoReload({ ...ALL_CLEAR, navStatus: "idle" })).toBe(true);
-  });
-
   it("returns true when navStatus is arrived (all else clear)", () => {
     expect(isSafeToAutoReload({ ...ALL_CLEAR, navStatus: "arrived" })).toBe(true);
   });

@@ -1,7 +1,15 @@
-import { chmodSync, linkSync, mkdtempSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  linkSync,
+  mkdtempSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   decryptEnvelope,
   encryptEnvelope,
@@ -13,6 +21,17 @@ import {
   unwrapDataKey,
   wrapDataKey,
 } from "./crypto.js";
+
+const temporaryDirectories: string[] = [];
+function temporaryDirectory(prefix: string): string {
+  const directory = mkdtempSync(join(tmpdir(), prefix));
+  temporaryDirectories.push(directory);
+  return directory;
+}
+afterEach(() => {
+  for (const directory of temporaryDirectories.splice(0))
+    rmSync(directory, { recursive: true, force: true });
+});
 
 describe("privacy crypto", () => {
   const ring = {
@@ -188,7 +207,7 @@ describe("privacy crypto", () => {
   });
 
   it("loads a managed key through a descriptor and enforces file boundaries", async () => {
-    const root = mkdtempSync(join(tmpdir(), "openmapx-privacy-key-"));
+    const root = temporaryDirectory("openmapx-privacy-key-");
     const path = join(root, "subject-exports-master-key");
     const encoded = Buffer.alloc(32, 0x27).toString("base64url");
     const persisted = JSON.stringify({
@@ -236,7 +255,7 @@ describe("privacy crypto", () => {
   });
 
   it("rejects a managed key file that changes while its descriptor is read", async () => {
-    const root = mkdtempSync(join(tmpdir(), "openmapx-privacy-key-change-"));
+    const root = temporaryDirectory("openmapx-privacy-key-change-");
     const path = join(root, "subject-exports-master-key");
     const encoded = Buffer.alloc(32, 0x29).toString("base64url");
     writeFileSync(
@@ -271,7 +290,7 @@ describe("privacy crypto", () => {
   });
 
   it("detects managed ring replacement against the exact in-memory startup ring", async () => {
-    const root = mkdtempSync(join(tmpdir(), "openmapx-privacy-key-health-"));
+    const root = temporaryDirectory("openmapx-privacy-key-health-");
     const path = join(root, "subject-exports-master-key");
     const oldKey = Buffer.alloc(32, 0x35).toString("base64url");
     const newKey = Buffer.alloc(32, 0x36).toString("base64url");
@@ -311,7 +330,7 @@ describe("privacy crypto", () => {
   });
 
   it("rejects symlinked and hardlinked managed key files", async () => {
-    const root = mkdtempSync(join(tmpdir(), "openmapx-privacy-key-links-"));
+    const root = temporaryDirectory("openmapx-privacy-key-links-");
     const encoded = Buffer.alloc(32, 0x28).toString("base64url");
     const real = join(root, "real");
     const symlink = join(root, "symlink");

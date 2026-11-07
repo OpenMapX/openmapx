@@ -10,21 +10,7 @@ const require = createRequire(import.meta.resolve("maplibre-gl/package.json"));
 const { createExpression, latest } = require("@maplibre/maplibre-gl-style-spec");
 
 describe.each([streets, dark])("ambient native POI badges in $name", (style) => {
-  it.each([
-    ["association", "poi-office"],
-    ["company", "poi-office-company"],
-    ["government", "poi-office-government"],
-    ["hairdressers", "poi-hairdresser"],
-    ["bars", "poi-bar"],
-    ["dental_clinic", "poi-dentist"],
-    ["fashion_and_apparel_store", "poi-clothing_store"],
-    ["attorney_or_law_firm", "poi-office"],
-    ["financial_service", "poi-office"],
-    ["diagnostics_imaging_or_lab_service", "poi-doctors"],
-    ["private_lodging", "poi-lodging"],
-    ["unmapped_destination", "poi-place"],
-    ["multi", "poi-multi"],
-  ])("renders %s with the active style's POI badge", (category, expected) => {
+  it("renders publication categories with the active style badges", () => {
     const result = ambientPlaceStyle(style.layers as SymbolLayerSpecification[], false, false);
     const expression = createExpression(
       result.layout?.["icon-image"],
@@ -32,15 +18,31 @@ describe.each([streets, dark])("ambient native POI badges in $name", (style) => 
       latest.layout_symbol["icon-image"],
     );
     expect(expression.result).toBe("success");
-    expect(
-      expression.value.evaluate(
-        { zoom: 16 },
-        { type: "Point", properties: { category } },
-        undefined,
-        undefined,
-        Object.keys(sprites),
-      ).name,
-    ).toBe(expected);
+    for (const [category, expected] of [
+      ["association", "poi-office"],
+      ["company", "poi-office-company"],
+      ["government", "poi-office-government"],
+      ["hairdressers", "poi-hairdresser"],
+      ["bars", "poi-bar"],
+      ["dental_clinic", "poi-dentist"],
+      ["fashion_and_apparel_store", "poi-clothing_store"],
+      ["attorney_or_law_firm", "poi-office"],
+      ["financial_service", "poi-office"],
+      ["diagnostics_imaging_or_lab_service", "poi-doctors"],
+      ["private_lodging", "poi-lodging"],
+      ["unmapped_destination", "poi-place"],
+      ["multi", "poi-multi"],
+    ]) {
+      expect(
+        expression.value.evaluate(
+          { zoom: 16 },
+          { type: "Point", properties: { category } },
+          undefined,
+          undefined,
+          Object.keys(sprites),
+        ).name,
+      ).toBe(expected);
+    }
   });
 
   it("uses standard native badge sizing and requires the landmark badge and label together", () => {

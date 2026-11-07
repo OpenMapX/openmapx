@@ -15,6 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { load } from "js-yaml";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   appliedServiceFile,
@@ -102,8 +103,8 @@ function composeOf(infraDir: string): string {
 /** The host path of the volume line mounting `target` in `service`. */
 function mountOf(infraDir: string, service: string, target: string): string {
   const compose = composeOf(infraDir);
-  const block = compose.slice(compose.indexOf(`\n  ${service}:\n`));
-  const line = block.split("\n").find((entry) => entry.includes(`:${target}`));
+  const model = load(compose) as { services: Record<string, { volumes?: string[] }> };
+  const line = model.services[service]?.volumes?.find((entry) => entry.split(":")[1] === target);
   if (!line) throw new Error(`${service} does not mount ${target}`);
   const source = line.trim().replace(/^- /, "").split(":")[0] as string;
   return join(infraDir, CURRENT_CONFIGURATION, source);
@@ -423,7 +424,6 @@ describe("the runtime bundle's service files", () => {
       return { ...base, files };
     };
     const original = digest(base);
-    expect(digest(base)).toBe(original);
     expect(digest(variant({ sha256: sha256(Buffer.from("x")) }))).not.toBe(original);
     expect(digest(variant({ executable: false }))).not.toBe(original);
     expect(digest(variant({ path: "scripts/renamed.sh" }))).not.toBe(original);

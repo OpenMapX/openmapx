@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseAllDocuments } from "yaml";
+import { parse, parseAllDocuments } from "yaml";
 import { computePrivacySourceFingerprint } from "../apps/api/privacy-source-fingerprint.mjs";
 import { dockerStages, stageInputs } from "./docker-inputs.mjs";
 import {
@@ -80,9 +80,9 @@ describe("Dockerfile build input coverage", () => {
     const readDockerfile = (path: string) =>
       readFileSync(resolve(import.meta.dirname, "..", path), "utf8");
     for (const [path, expected] of [
-      [".github/workflows/docker.yml", 7],
-      ["scripts/docker-release-plan.mjs", 7],
-      ["scripts/docker-inputs.mjs", 7],
+      [".github/workflows/docker.yml", targets.length],
+      ["scripts/docker-release-plan.mjs", targets.length],
+      ["scripts/docker-inputs.mjs", targets.length],
       [".github/workflows/ci.yml", 0],
     ] as const) {
       const selected = selectChangedTargets({
@@ -179,7 +179,10 @@ describe("docs PR validation input coverage", () => {
 });
 
 describe("selective release planning", () => {
-  it("bootstraps all seven builds without a previous release or legacy build metadata", () => {
+  it("bootstraps every published image without a previous release or legacy build metadata", () => {
+    expect(createReleasePlan(options).images.map((image: { app: string }) => image.app)).toEqual(
+      targets.map((target: { app: string }) => target.app),
+    );
     expect(
       createReleasePlan(options).images.every((image: { rebuild: boolean }) => image.rebuild),
     ).toBe(true);
@@ -206,7 +209,7 @@ describe("selective release planning", () => {
     const previous = baseline();
     const plan = createReleasePlan({ ...options, revision: "c".repeat(40), previous });
     expect(plan.images.map((image: { rebuild: boolean }) => image.rebuild)).toEqual(
-      Array(7).fill(false),
+      Array(targets.length).fill(false),
     );
     expect(plan.buildMetadata).toEqual(previous.buildMetadata);
     expect(plan.images.find((image: { app: string }) => image.app === "api").digest).toBe(
@@ -401,9 +404,14 @@ describe("selective release planning", () => {
       resolve(import.meta.dirname, "../.github/workflows/docker.yml"),
       "utf8",
     );
-    const matrix = [
-      ...workflow.matchAll(/ {10}- app: (.+)\n {12}context: (.+)\n {12}dockerfile: (.+)/g),
-    ].map((match) => ({ app: match[1], context: match[2], dockerfile: match[3] }));
+    const jobs = Object.values(parse(workflow).jobs) as Array<{
+      strategy?: {
+        matrix?: { include?: Array<{ app: string; context: string; dockerfile: string }> };
+      };
+    }>;
+    const matrix = jobs
+      .flatMap((job) => job.strategy?.matrix?.include ?? [])
+      .filter((entry) => entry.dockerfile);
     expect(targets).toEqual(matrix);
   });
   it("covers the actual repository's copied inputs and privacy coupling", async () => {
@@ -415,7 +423,9 @@ describe("selective release planning", () => {
       privacyFingerprint: await computePrivacySourceFingerprint(root),
     };
     const plan = createReleasePlan(actual);
-    expect(plan.images).toHaveLength(7);
+    expect(plan.images.map((image: { app: string }) => image.app)).toEqual(
+      targets.map((target: { app: string }) => target.app),
+    );
     const changedTree = actual.tree.map((entry: { path: string; oid: string; mode: string }) =>
       entry.path === "docs/docs/install/upgrading.md" ? { ...entry, oid: "0".repeat(40) } : entry,
     );

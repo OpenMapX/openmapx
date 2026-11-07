@@ -2,9 +2,10 @@ import { Writable } from "node:stream";
 import pino from "pino";
 import { describe, expect, it, vi } from "vitest";
 import { createIntegrationLogger } from "./integration-logger.js";
-import * as safeLogFields from "./safe-log-fields.js";
 import {
   createSafePinoOptions,
+  createSafePinoRecordStream,
+  protectPinoLogger,
   safeErrorClass,
   sanitizeLogMetadata,
   sanitizeLogString,
@@ -48,26 +49,6 @@ function capturePino() {
 }
 
 type WritableTarget = Pick<Writable, "write">;
-
-function createBoundary(destinations: WritableTarget[]): WritableTarget {
-  const factory = (
-    safeLogFields as unknown as {
-      createSafePinoRecordStream?: (targets: WritableTarget[]) => WritableTarget;
-    }
-  ).createSafePinoRecordStream;
-  return factory
-    ? factory(destinations)
-    : (pino.multistream(destinations.map((stream) => ({ stream }))) as unknown as WritableTarget);
-}
-
-function protectLogger<T>(logger: T): T {
-  const protect = (
-    safeLogFields as unknown as {
-      protectPinoLogger?: <LoggerType>(value: LoggerType) => LoggerType;
-    }
-  ).protectPinoLogger;
-  return protect ? protect(logger) : logger;
-}
 
 async function writeChunk(stream: WritableTarget, value: string): Promise<void> {
   stream.write(value);
@@ -631,7 +612,7 @@ describe("Pino defense-in-depth", () => {
         },
       },
     );
-    const logger = protectLogger(pino(createSafePinoOptions("info"), capture.stream));
+    const logger = protectPinoLogger(pino(createSafePinoOptions("info"), capture.stream));
 
     logger.child({ safeChild: PRIVATE_URL, hostile }).info("ordinary child");
     logger.child({ correlationId: "kept" }).child(proxy).warn("nested proxy child");
@@ -661,10 +642,12 @@ describe("Pino defense-in-depth", () => {
 
   it("bounds cumulative nested child metadata before Pino and at the complete-record boundary", () => {
     const capture = captureStream();
-    const destination = createBoundary([capture.stream]);
-    let logger = protectLogger(pino(createSafePinoOptions("info"), destination as never)).child({
-      correlationId: "kept-correlation",
-    });
+    const destination = createSafePinoRecordStream([capture.stream]);
+    let logger = protectPinoLogger(pino(createSafePinoOptions("info"), destination as never)).child(
+      {
+        correlationId: "kept-correlation",
+      },
+    );
     for (let index = 0; index < 20; index += 1) {
       logger = logger.child({ [`safeField${index}`]: "x".repeat(2_048) });
     }
@@ -690,7 +673,7 @@ describe("complete Pino record boundary", () => {
   it("frames partial and multiple lines and sends identical sanitized records to both sinks", async () => {
     const first = captureStream();
     const second = captureStream();
-    const destination = createBoundary([first.stream, second.stream]);
+    const destination = createSafePinoRecordStream([first.stream, second.stream]);
     const privateMessage = JSON.stringify({
       level: 40,
       time: 123,
@@ -726,7 +709,7 @@ describe("complete Pino record boundary", () => {
 
   it("emits one static safe fallback for a malformed record and resumes framing", async () => {
     const capture = captureStream();
-    const destination = createBoundary([capture.stream]);
+    const destination = createSafePinoRecordStream([capture.stream]);
     const malformed = `{"msg":"${PRIVATE_URL}" BROKEN}\n`;
 
     await writeChunk(destination, `${malformed}{"level":30,"time":125,"msg":"safe"}\n`);
@@ -751,7 +734,7 @@ describe("complete Pino record boundary", () => {
 
   it("caps partial buffering, emits one fallback, discards the oversized tail, and resumes", async () => {
     const capture = captureStream();
-    const destination = createBoundary([capture.stream]);
+    const destination = createSafePinoRecordStream([capture.stream]);
 
     await writeChunk(destination, `{"msg":"${PRIVATE_URL}${"x".repeat(70_000)}`);
     expect(capture.chunks.join("")).not.toContain(PRIVATE_URL);

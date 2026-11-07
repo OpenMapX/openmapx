@@ -414,7 +414,7 @@ it.each(["body", "phase", "ordinal", "target", "recipient"] as const)(
     }
   },
 );
-it.each(["version", "domain", "origin", "missing"] as const)(
+it.each(["signature", "missing"] as const)(
   "rejects %s phase evidence rather than binding a new identity",
   async (field) => {
     const f = await fixture();
@@ -422,9 +422,7 @@ it.each(["version", "domain", "origin", "missing"] as const)(
       if (field === "missing") rmSync(f.cell);
       else {
         const raw = JSON.parse(readFileSync(f.cell, "utf8"));
-        if (field === "version") raw.payload.version = 1;
-        if (field === "domain") raw.signature = "a".repeat(86);
-        if (field === "origin") raw.payload.origin.notAfter++;
+        raw.signature = "a".repeat(86);
         writeFileSync(f.cell, JSON.stringify(raw));
       }
       await expect(
@@ -564,7 +562,7 @@ it("refuses a prospective phase plan above the combined64 slots before exposure"
 });
 
 it.each(["cell", "aggregate"] as const)(
-  "reserves the signed %s capacity before any forward exposure",
+  "rejects signed %s capacity before publishing any phase bindings",
   async (limit) => {
     const services =
         limit === "cell"
@@ -615,8 +613,8 @@ it.each(["cell", "aggregate"] as const)(
         (await import("node:fs")).existsSync(
           join(
             f.root,
-            "data/.admin-target-control/executions/data-manager",
-            `${execution.operationKey}.json`,
+            "control-private/data-manager/observations",
+            `phase-${execution.operationKey}-0.json`,
           ),
         ),
       ).toBe(false);

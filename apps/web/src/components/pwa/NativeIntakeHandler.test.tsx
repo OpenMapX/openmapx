@@ -113,13 +113,6 @@ beforeEach(() => {
   f.text.mockResolvedValue('{"type":"Point","coordinates":[8,50]}');
   f.complete.mockResolvedValue(undefined);
 });
-it("previews without applying, Later retains content", async () => {
-  render(<NativeIntakeHandler />);
-  await screen.findByText("features");
-  expect(useImportedGeometryStore.getState().imported).toBeNull();
-  fireEvent.click(screen.getByText("later"));
-  expect(f.complete).not.toHaveBeenCalled();
-});
 it("imports only on confirmation and acknowledges the exact item", async () => {
   render(<NativeIntakeHandler />);
   await screen.findByText("features");
@@ -207,7 +200,9 @@ it("does not restart a file read on a metadata refresh", async () => {
 it("offers postponed items again on a later foreground", async () => {
   render(<NativeIntakeHandler />);
   await screen.findByText("features");
+  expect(useImportedGeometryStore.getState().imported).toBeNull();
   fireEvent.click(screen.getByText("later"));
+  expect(f.complete).not.toHaveBeenCalled();
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   const previous = Object.getOwnPropertyDescriptor(document, "visibilityState");
   try {
@@ -431,17 +426,21 @@ it("unmount aborts a lookup and prevents later publication or acknowledgement", 
   });
   f.text.mockResolvedValue(dbNavigatorExamples[0]);
   let finish: (value: typeof travelResult) => void = () => {};
-  travel.resolve.mockImplementation(
-    () =>
-      new Promise((resolve) => {
-        finish = resolve;
-      }),
-  );
+  let signal: AbortSignal | undefined;
+  travel.resolve.mockImplementation((...args: unknown[]) => {
+    signal = args[2] as AbortSignal;
+    return new Promise((resolve) => {
+      finish = resolve;
+    });
+  });
   const view = render(<NativeIntakeHandler />);
   await screen.findByText("sharedTrip");
   fireEvent.click(screen.getByText("open"));
   await screen.findByText("loading");
+  expect(signal).toBeDefined();
+  expect(signal?.aborted).toBe(false);
   view.unmount();
+  expect(signal?.aborted).toBe(true);
   await act(async () => finish(travelResult));
   expect(useDirectionsStore.getState().transitItineraries).toEqual([]);
   expect(f.complete).not.toHaveBeenCalled();

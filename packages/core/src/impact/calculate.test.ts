@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Route, RouteStep } from "../types/routing";
 import type { PersonalVehicle } from "../vehicles/types";
-import { calculateRouteImpact, compareRouteAlternatives, tempDerate } from "./calculate";
+import { calculateRouteImpact, compareRouteAlternatives } from "./calculate";
 
 function makeRoute(options: {
   distance?: number;
@@ -181,6 +181,10 @@ describe("calculateRouteImpact", () => {
       // 100 km * 6.8 L / 100 km = 6.8 L
       expect(impact.energy.fuelLiters).toBeCloseTo(6.8, 2);
       expect(impact.energy.provenance.kind).toBe("defaulted");
+      expect(impact.energy.provenance.assumptions[0]).toEqual({
+        kind: "base_fuel_consumption",
+        litersPer100Km: 6.8,
+      });
 
       // GLEC v3 European gasoline factors converted from g/MJ with
       // 42.5 MJ/kg lower heating value and 0.74 kg/L density.
@@ -254,8 +258,6 @@ describe("calculateRouteImpact", () => {
         ambientTempC: -10,
         countryCode: "DE",
       });
-      expect(tempDerate(20)).toBe(1.0);
-      expect(tempDerate(-10)).toBeCloseTo(1.36, 2);
       expect(impactCold.energy.electricityKwh).toBeCloseTo((15 * 1.36) / 0.9, 1);
     });
 
@@ -698,24 +700,6 @@ describe("compareRouteAlternatives (Eco Choice quality gate)", () => {
     expect(impacts[0].comparison?.isLowestCost).toBe(false);
     expect(impacts[1].comparison?.isLowestCost).toBe(true);
     expect(impacts[1].cost.knownCost).toBeLessThan(impacts[0].cost.knownCost ?? Infinity);
-  });
-
-  it("keeps comparison reasons and model assumptions locale-neutral", () => {
-    const routeFast = makeRoute({ distance: 50_000, duration: 1800 });
-    const routeEco = makeRoute({ distance: 45_000, duration: 2000 });
-
-    const impacts = compareRouteAlternatives([routeFast, routeEco], petrolCar, {
-      countryCode: "DE",
-    });
-
-    expect(impacts[1].comparison?.isLowestEmissions).toBe(true);
-    expect(impacts[1].comparison?.reason).toEqual({ kind: "shorter", distanceMeters: 5000 });
-    const singleImpact = calculateRouteImpact(routeFast, null);
-    expect(singleImpact.vehicleName).toBe("Default Car");
-    expect(singleImpact.energy.provenance.assumptions[0]).toEqual({
-      kind: "base_fuel_consumption",
-      litersPer100Km: 6.8,
-    });
   });
 
   it("finds the fastest route instead of assuming the first route is fastest", () => {

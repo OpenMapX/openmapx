@@ -255,10 +255,9 @@ describe("runTransitousPipeline orchestrator", () => {
     expect(persisted[1]?.status).toBe("error");
   });
 
-  it("runs end-to-end on a seeded 3-feed catalog within a 60s wall-clock budget", async () => {
+  it("runs preparation through fetching on a seeded 3-feed catalog within a 60s wall-clock budget", async () => {
     // A seeded fake transitous-catalog with multiple feeds across two regions;
-    // the pipeline runs every stage in order (stubs included) and finishes
-    // under 60s.
+    // the pipeline runs preparation through fetching and finishes under 60s.
     //
     // A "real MOTIS container in CI" variant (where motis-import / motis-health
     // / promote actually run against a running staging container with a tiny
@@ -321,6 +320,11 @@ describe("runTransitousPipeline orchestrator", () => {
       "fetch",
     ]);
     expect(finalStatus).toBe("ok");
+    expect(results.at(-1)).toMatchObject({
+      stage: "fetch",
+      status: "ok",
+      artifacts: { fetched: 3, failed: [] },
+    });
     expect(elapsedMs).toBeLessThan(60_000);
   });
 

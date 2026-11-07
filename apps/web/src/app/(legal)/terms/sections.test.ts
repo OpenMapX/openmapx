@@ -1,31 +1,38 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import TermsContentDe from "./content.de";
+import TermsContent from "./content.en";
 // @vitest-environment node
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 import { TERMS_SECTION_KEYS, termsIds, termsNav, termsSectionId, termsTitles } from "./sections";
 
 const LOCALES = ["en", "de"] as const;
-
+const contentByLocale = new Map<string, string>();
 function content(locale: (typeof LOCALES)[number]): string {
-  return readFileSync(fileURLToPath(new URL(`./content.${locale}.tsx`, import.meta.url)), "utf8");
+  let markup = contentByLocale.get(locale);
+  if (markup === undefined) {
+    markup = renderToStaticMarkup(
+      createElement(locale === "en" ? TermsContent : TermsContentDe, {
+        disclosures: [
+          {
+            type: "ai-search",
+            integrationId: "synthetic-ai",
+            aiActive: true,
+            localActive: true,
+            cloudActive: false,
+            cloudProcessors: [],
+            cloudAvailable: false,
+            cloudConsentRequired: false,
+            cloudProviderLabels: [],
+          },
+        ],
+      }),
+    );
+    contentByLocale.set(locale, markup);
+  }
+  return markup;
 }
-
-describe("key ordering", () => {
-  it("keeps a single ordered key list shared by both locales", () => {
-    expect(TERMS_SECTION_KEYS.length).toBeGreaterThan(0);
-    expect(new Set(TERMS_SECTION_KEYS).size).toBe(TERMS_SECTION_KEYS.length);
-    for (const locale of LOCALES) {
-      expect(Object.keys(termsTitles(locale))).toEqual([...TERMS_SECTION_KEYS]);
-      expect(termsNav(locale)).toHaveLength(TERMS_SECTION_KEYS.length);
-    }
-  });
-
-  it("places OpenStreetMap contributions directly after reviews", () => {
-    const keys = [...TERMS_SECTION_KEYS];
-    expect(keys.indexOf("osmContributions")).toBe(keys.indexOf("reviews") + 1);
-    expect(keys.indexOf("dataSources")).toBe(keys.indexOf("osmContributions") + 1);
-  });
-});
 
 describe("numbering", () => {
   it("numbers every numbered section sequentially from 1", () => {
@@ -65,46 +72,20 @@ describe("anchors", () => {
 
   it("gives the sidebar the same anchors the content renders", () => {
     for (const locale of LOCALES) {
-      const nav = termsNav(locale).map((section) => section.id);
-      const rendered = TERMS_SECTION_KEYS.map((key) => termsSectionId(locale, key));
-      expect(nav).toEqual(rendered);
+      const rendered = [...content(locale).matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
+      expect(rendered).toEqual(termsNav(locale).map((section) => section.id));
     }
   });
 });
 
 describe("content wiring", () => {
-  it("renders every section from the shared titles", () => {
-    for (const locale of LOCALES) {
-      const source = content(locale);
-      for (const key of TERMS_SECTION_KEYS) {
-        expect(source).toContain(`title={T.${key}}`);
-      }
-    }
-  });
-
-  it("hardcodes no numbered heading of its own", () => {
-    for (const locale of LOCALES) {
-      // A literal `<Section title="7. …">` is exactly the drift this replaced.
-      expect(/<Section\s+title="\d+\./.test(content(locale))).toBe(false);
-    }
-  });
-
   it("covers the OpenStreetMap contribution obligations", () => {
     for (const locale of LOCALES) {
-      const source = content(locale);
-      for (const marker of locale === "en"
-        ? [
-            "Contributor Terms",
-            "osmfoundation.org/wiki/Licence/Contributor_Terms",
-            "own linked OpenStreetMap account",
-          ]
-        : [
-            "Mitwirkendenbedingungen",
-            "osmfoundation.org/wiki/Licence/Contributor_Terms",
-            "verkn&uuml;pften OpenStreetMap-Konto",
-          ]) {
-        expect(source).toContain(marker);
-      }
+      const markup = content(locale);
+      expect(markup).toContain('href="https://osmfoundation.org/wiki/Licence/Contributor_Terms"');
+      expect(markup).toContain(
+        locale === "en" ? "own linked OpenStreetMap account" : "verknüpften OpenStreetMap-Konto",
+      );
     }
   });
 });

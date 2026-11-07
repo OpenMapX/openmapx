@@ -123,22 +123,22 @@ describe("CategoryChips discovery order", () => {
     ];
 
     render(<CategoryChips />);
-    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "Restaurants",
-      "Hotels",
-      "Transit",
-      "Activities",
+    const labels = screen.getAllByRole("button").map((button) => button.textContent);
+    const transport = [
       "Bike Sharing",
       "E-Scooters",
       "Car Sharing",
       "Parking",
       "EV Charging",
       "Gas Stations",
-      "Museums",
-      "Pharmacies",
-      "ATMs",
-      "Webcams",
-    ]);
+    ];
+    const transportStart = labels.indexOf("Bike Sharing");
+    for (const label of ["Restaurants", "Hotels", "Transit", "Activities"]) {
+      expect(labels.indexOf(label)).toBeGreaterThanOrEqual(0);
+      expect(labels.indexOf(label)).toBeLessThan(transportStart);
+    }
+    expect(labels.filter((label) => transport.includes(label ?? ""))).toEqual(transport);
+    expect(labels.indexOf("Webcams")).toBeGreaterThan(labels.indexOf("Gas Stations"));
   });
 
   it("leaves out sources whose manifest keeps them out of the chip bar", () => {
@@ -168,16 +168,9 @@ describe("CategoryChips discovery order", () => {
     ];
 
     const { unmount } = render(<CategoryChips />);
-    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "Restaurants",
-      "Hotels",
-      "Transit",
-      "Activities",
-      "Museums",
-      "Pharmacies",
-      "ATMs",
-      "Transit source",
-    ]);
+    expect(screen.getAllByRole("button", { name: "Transit source" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Parking" })).toBeNull();
+
     fireEvent.click(screen.getByRole("button", { name: "Transit source" }));
     expect(useDataSourceStore.getState().activeSource).toBe("transit");
 
@@ -228,6 +221,7 @@ describe("CategoryChips scroll arrows", () => {
     const row = scrollableRow(800, 1600);
     expect(screen.queryByLabelText(LEFT)).toBeNull();
 
+    expect(screen.getByLabelText(RIGHT)).toHaveAttribute("tabindex", "-1");
     fireEvent.click(screen.getByLabelText(RIGHT));
     expect(row.scrollLeft).toBe(640);
     expect(screen.getByLabelText(LEFT)).toBeTruthy();
@@ -245,11 +239,5 @@ describe("CategoryChips scroll arrows", () => {
     fireEvent.click(screen.getByLabelText(LEFT));
     expect(row.scrollLeft).toBe(0);
     expect(screen.queryByLabelText(LEFT)).toBeNull();
-  });
-
-  it("keeps the arrows out of the tab order, which already reaches every chip", () => {
-    render(<CategoryChips />);
-    scrollableRow(800, 1600);
-    expect(screen.getByLabelText(RIGHT).getAttribute("tabindex")).toBe("-1");
   });
 });

@@ -152,7 +152,16 @@ describe("data-manager producer contract metadata", () => {
     await instance.ready();
     const document = instance.swagger();
     const responses = document.paths?.["/offline/packages/{packageId}/archive"]?.head?.responses;
-    expect(responses).toBeDefined();
+    expect(Object.keys(responses ?? {}).sort()).toEqual([
+      "200",
+      "206",
+      "400",
+      "401",
+      "404",
+      "416",
+      "429",
+      "500",
+    ]);
     for (const response of Object.values(responses ?? {}))
       expect(response).not.toHaveProperty("content");
   });

@@ -9,11 +9,6 @@ vi.mock("@openmapx/core", async (importOriginal) => {
 });
 
 describe("overpassProvider", () => {
-  it("exposes searchByFilter as a function", async () => {
-    const { overpassProvider } = await import("../index");
-    expect(typeof overpassProvider.searchByFilter).toBe("function");
-  });
-
   it("delegates searchByFilter to core searchByFilter", async () => {
     const mockResults = [{ id: "n1", name: "Café Test", coordinates: { lng: 13.4, lat: 52.5 } }];
     const coreMod = await import("@openmapx/core");

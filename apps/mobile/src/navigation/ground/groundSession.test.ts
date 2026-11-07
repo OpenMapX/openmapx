@@ -5,7 +5,6 @@ import {
   createGroundPreparingSession,
   GROUND_MODES,
   type GroundMode,
-  groundRouteFingerprint,
   locationProfileForMode,
   validateGroundStartPackage,
 } from "./groundSession";
@@ -139,7 +138,8 @@ describe("validateGroundStartPackage", () => {
 
 describe("createGroundPreparingSession", () => {
   it("starts at revision 1, preparing, with a deterministic engine state", () => {
-    const session = createGroundPreparingSession(startPackage(), IDENTITY, NOW);
+    const source = startPackage();
+    const session = createGroundPreparingSession(source, IDENTITY, NOW);
 
     expect(session.revision).toBe(1);
     expect(session.status).toBe("preparing");
@@ -150,10 +150,6 @@ describe("createGroundPreparingSession", () => {
       rerouteBackoffMs: 0,
       spokenCues: [],
     });
-  });
-
-  it("has no progress, no last fix and no pending reroute", () => {
-    const session = createGroundPreparingSession(startPackage(), IDENTITY, NOW);
 
     expect(session.payload.progress).toBeNull();
     expect(session.lastAcceptedFix).toBeUndefined();
@@ -162,19 +158,15 @@ describe("createGroundPreparingSession", () => {
     expect(session.payload.offRoute).toBe(false);
     expect(session.payload.weakGps).toBe(false);
     expect(session.payload.currentSpeedLimit).toBeNull();
-  });
-
-  it("has empty cue and event ledgers", () => {
-    const session = createGroundPreparingSession(startPackage(), IDENTITY, NOW);
 
     expect(session.cueLedger).toEqual({ spoken: [], events: [] });
-  });
-
-  it("expires exactly at the shared maximum age", () => {
-    const session = createGroundPreparingSession(startPackage(), IDENTITY, NOW);
 
     expect(session.startedAtMs).toBe(NOW);
     expect(session.expiresAtMs - session.startedAtMs).toBe(24 * 60 * 60 * 1000);
+    source.route.geometry.push([9.99, 49.99]);
+    source.destinationWaypoints.push([9.99, 49.99]);
+    expect(session.payload.startPackage.route.geometry).toHaveLength(2);
+    expect(session.payload.startPackage.destinationWaypoints).toHaveLength(1);
   });
 
   it("carries the identity it was given", () => {
@@ -188,36 +180,14 @@ describe("createGroundPreparingSession", () => {
     expect(session.units).toBe("imperial");
     expect(session.permissionMode).toBe("foreground-only");
   });
-
-  it("identifies the route it is following", () => {
-    const session = createGroundPreparingSession(startPackage(), IDENTITY, NOW);
-
-    expect(groundRouteFingerprint(session)).toEqual(expect.any(String));
-    expect(groundRouteFingerprint(session).length).toBeGreaterThan(0);
-  });
-
-  it("does not share mutable state with the package it was built from", () => {
-    const source = startPackage();
-    const session = createGroundPreparingSession(source, IDENTITY, NOW);
-
-    source.route.geometry.push([9.99, 49.99]);
-    source.destinationWaypoints.push([9.99, 49.99]);
-
-    expect(session.payload.startPackage.route.geometry).toHaveLength(2);
-    expect(session.payload.startPackage.destinationWaypoints).toHaveLength(1);
-  });
 });
 
 describe("announceMultiplierFor", () => {
-  it("maps each setting to a pinned multiplier", () => {
-    expect(announceMultiplierFor("early")).toBe(1.35);
-    expect(announceMultiplierFor("normal")).toBe(1);
-    expect(announceMultiplierFor("late")).toBe(0.75);
-  });
-
   it("puts early cues before normal, and normal before late", () => {
     expect(announceMultiplierFor("early")).toBeGreaterThan(announceMultiplierFor("normal"));
     expect(announceMultiplierFor("normal")).toBeGreaterThan(announceMultiplierFor("late"));
+
+    expect(announceMultiplierFor("normal")).toBe(1);
   });
 });
 
@@ -229,9 +199,5 @@ describe("locationProfileForMode", () => {
     ["walking", "walking"],
   ] as Array<[GroundMode, string]>)("asks for the %s cadence", (mode, expected) => {
     expect(locationProfileForMode(mode)).toBe(expected);
-  });
-
-  it("covers every ground mode", () => {
-    for (const mode of GROUND_MODES) expect(locationProfileForMode(mode)).toBeTruthy();
   });
 });

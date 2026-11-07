@@ -226,9 +226,10 @@ it("preserves overflow after actual group EPERM with a retained writer zombie", 
     expect(events.find((event) => event.event === "formatter-returned").error.code).toBe(
       "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
     );
-    expect(
-      events.findIndex((event) => event.event === "stable-before-scratch-cleanup"),
-    ).toBeLessThan(events.findIndex((event) => event.event === "scratch-removed"));
+    const stable = events.findIndex((event) => event.event === "stable-before-scratch-cleanup");
+    const removed = events.findIndex((event) => event.event === "scratch-removed");
+    expect(stable).toBeGreaterThanOrEqual(0);
+    expect(removed).toBeGreaterThan(stable);
     if (process.platform === "darwin") {
       for (const signal of ["SIGKILL", 0])
         expect(
@@ -238,7 +239,6 @@ it("preserves overflow after actual group EPERM with a retained writer zombie", 
           ),
         ).toBe(true);
     }
-    console.log(JSON.stringify(events));
   } finally {
     clearTimeout(watchdog);
     await writeFile(`${marker}.release`, "release");
@@ -379,7 +379,6 @@ it.each(["timeout", "stdout", "stderr", "wrapper-exit"])(
     }, 10_000);
     try {
       expect(await finished, output).toBe(0);
-      console.log(output.trim());
       expect(output).toContain('"nativeAliveBeforeCleanup":false');
       expect(output).toContain("caller scratch cleanup completed after descendant termination");
       expect(output).toContain("fixture process cleanup complete");

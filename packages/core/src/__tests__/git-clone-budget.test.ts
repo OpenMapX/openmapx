@@ -49,18 +49,12 @@ describe("assertCloneWithinBudget", () => {
     expect(() => assertCloneWithinBudget(directory)).toThrow(/path longer than/i);
   });
 
-  it("rejects a checkout with too many entries", () => {
-    const directory = root();
-    // Cheap proof of the counter without creating 25k real files: nest a
-    // directory chain deeper than the limit.
-    let current = directory;
-    for (let index = 0; index <= 30; index += 1) {
-      current = join(current, "d");
-      mkdirSync(current);
-    }
-    expect(GIT_CLONE_MAX_ENTRIES).toBe(25_000);
-    // Under the limit, this is fine.
-    expect(() => assertCloneWithinBudget(directory)).not.toThrow();
+  it("rejects too many tree entries before checkout", () => {
+    const entries = Array.from(
+      { length: GIT_CLONE_MAX_ENTRIES + 1 },
+      (_, index) => `100644 blob ${"a".repeat(40)} 1\tfile-${index}`,
+    );
+    expect(() => assertGitTreeMetadataWithinBudget(entries)).toThrow(/entry limit/);
   });
 });
 

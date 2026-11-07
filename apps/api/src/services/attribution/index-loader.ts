@@ -122,9 +122,3 @@ export async function loadAttributionIndex(opts: LoadAttributionIndexOpts): Prom
     motisLicenseMtime,
   };
 }
-
-export const __testing = {
-  feedTagFromFilename,
-  resolveMotisEntry,
-  resolveManifestEntry,
-};

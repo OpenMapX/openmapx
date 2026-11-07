@@ -146,7 +146,7 @@ describe("transit itinerary page merge", () => {
     (preference) => {
       const preferred = itinerary("preferred", {
         transfers: 0,
-        walkDistance: 50,
+        walkDistance: 200,
         contributors: [{ sourceId: "supplier", name: "Synthetic supplier" }],
         instance: "instance",
         datasetEpoch: "epoch",
@@ -158,9 +158,10 @@ describe("transit itinerary page merge", () => {
         page: "initial",
         preference,
       });
-      expect(merged).toEqual([preferred, a]);
-      expect(merged[0]).toBe(preferred);
-      expect(merged[0].contributors).toBe(preferred.contributors);
+      expect(merged).toEqual(preference === "fewerTransfers" ? [preferred, a] : [a, preferred]);
+      const preferredIndex = preference === "fewerTransfers" ? 0 : 1;
+      expect(merged[preferredIndex]).toBe(preferred);
+      expect(merged[preferredIndex].contributors).toBe(preferred.contributors);
       expect(incoming).toEqual([a, preferred]);
     },
   );

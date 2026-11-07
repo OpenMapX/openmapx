@@ -105,7 +105,10 @@ describe("trusted configuration snapshot publisher", () => {
     });
     expect(readdirSync(root)).toEqual([`${published.revisionId}.json`]);
     expect(readFileSync(join(root, `${published.revisionId}.json`))).toEqual(published.bytes);
-    expect(published.mode).toBe(0o600);
+    const finalStat = statSync(join(root, `${published.revisionId}.json`));
+    expect(finalStat.mode & 0o777).toBe(0o600);
+    expect(finalStat.uid).toBe(statSync(root).uid);
+    expect(finalStat.gid).toBe(statSync(root).gid);
     expect(published.operation).toEqual({
       expectedCurrentRevisionId: null,
       expectedSourceRevision: "11111111-1111-4111-8111-111111111111",

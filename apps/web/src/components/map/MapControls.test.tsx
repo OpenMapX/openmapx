@@ -98,7 +98,7 @@ describe("MapControls align to streets", () => {
       fireEvent.click(screen.getByLabelText(ALIGN_LABEL));
     });
     expect(compute).toHaveBeenCalledTimes(2); // background probe, then the explicit click
-    expect(screen.getAllByText("map.alignNoGrid").length).toBeGreaterThan(0);
+    expect(screen.getByRole("status").textContent).toBe("map.alignNoGrid");
     // The polite live region owns the announcement; the toast must not repeat it
     // through its default alert role.
     expect(screen.queryAllByRole("alert")).toHaveLength(0);
@@ -126,7 +126,6 @@ describe("MapControls align to streets", () => {
   });
 
   it.each([
-    ["no-grid", "map.alignNoGrid"],
     ["zoomed-out", "map.alignZoomIn"],
     ["aligned", "map.alignAlready"],
   ] as const)("announces a distinct message for %s", (status, message) => {
@@ -176,13 +175,7 @@ describe("MapControls align to streets", () => {
     expect(tilt()).toBe("rotate(30 12 12)");
     act(() => useMapStore.setState({ bearing: 20 }));
     expect(tilt()).toBe("rotate(10 12 12)");
-  });
-
-  it("keeps the compass alongside it as the way back to north", () => {
-    renderControls();
-    act(() => useMapStore.setState({ bearing: 45 }));
-    expect(screen.getByLabelText("map.resetBearingAriaLabel")).toBeTruthy();
-    expect(screen.getByLabelText(ALIGN_LABEL)).toBeTruthy();
+    expect(screen.getByLabelText("map.resetBearingAriaLabel")).toBeInTheDocument();
   });
 
   it("keeps conditional actions mounted while switching between a measured grid and column", async () => {

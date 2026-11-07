@@ -506,9 +506,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(response.statusCode).toBe(409);
       const retained = await fixture.db.select().from(schema.integrationConfig);
       expect(retained.map((row) => row.integrationId)).toEqual(["unrelated"]);
-      expect(retained[0]?.config === null ? 0 : JSON.stringify(retained[0]?.config).length).toBe(
-        JSON.stringify(config).length,
-      );
+      expect(retained[0]?.config).toEqual(config);
       expect(services.currentConfigurationGeneration(host.infraDir)).toBe(host.initial.revisionId);
       expect(readdirSync(host.queue).filter((name) => name.startsWith("cfg1_"))).toEqual([]);
       expect(host.calls.some((args) => args.includes("up") || args.includes("pull"))).toBe(false);

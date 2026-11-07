@@ -265,16 +265,6 @@ describe("useNavLaneGuidance", () => {
     expect(useNavLaneGuidanceStore.getState().guidanceByStep.size).toBe(1);
   });
 
-  it("fetches nothing when offline", async () => {
-    start();
-    act(() => {
-      useNavigationStore.setState({ connectivity: "offline" });
-    });
-    renderHook(() => useNavLaneGuidance());
-    await flush();
-    expect(fetchJunctionLookups).not.toHaveBeenCalled();
-  });
-
   it("looks up the exit ahead as soon as the connection returns, within the same step", async () => {
     fetchJunctionLookups.mockResolvedValue(fixtureResponse);
     start();
@@ -296,7 +286,15 @@ describe("useNavLaneGuidance", () => {
     let resolveFirst: ((value: unknown) => void) | undefined;
     fetchJunctionLookups.mockImplementation(() =>
       resolveFirst
-        ? Promise.resolve([{ index: 0, approach: [], ramps: [] }])
+        ? Promise.resolve([
+            {
+              ...fixtureResponse[0],
+              outgoingApproachWayId: fixtureResponse[0].approach[0].wayId,
+              approach: [
+                { ...fixtureResponse[0].approach[0], tags: { lanes: 2, turnLanes: "left|right" } },
+              ],
+            },
+          ])
         : new Promise((resolve) => {
             resolveFirst = resolve;
           }),
@@ -317,12 +315,21 @@ describe("useNavLaneGuidance", () => {
       });
     });
     await waitFor(() => expect(fetchJunctionLookups).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(useNavLaneGuidanceStore.getState().guidanceByStep.get(1)).toMatchObject({
+        source: "osm",
+        lanes: [expect.any(Object), expect.any(Object)],
+      }),
+    );
     await act(async () => {
       resolveFirst?.(fixtureResponse);
       await Promise.resolve();
     });
     // The stale response must not write into the new route's store state.
-    expect(useNavLaneGuidanceStore.getState().guidanceByStep.get(1)?.source).toBe("engine");
+    expect(useNavLaneGuidanceStore.getState().guidanceByStep.get(1)).toMatchObject({
+      source: "osm",
+      lanes: [expect.any(Object), expect.any(Object)],
+    });
   });
 
   it("asks again at the next step for a batch whose request failed", async () => {

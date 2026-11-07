@@ -42,7 +42,7 @@ describe("MapCredits", () => {
         <MapCredits attributions={CREDITS} />
       </div>,
     );
-    fireEvent.click(screen.getByTestId("map-credits"));
+    fireEvent.click(screen.getByRole("link", { name: "OpenMapTiles" }));
     expect(onMapClick).not.toHaveBeenCalled();
   });
 });

@@ -116,7 +116,7 @@ describe("buildPopupCard", () => {
     );
     expect(html).toContain("omx-overlay-popup__block");
     expect(html).toContain("Details");
-    expect(html).toContain("line1");
+    expect(html).toContain("line1\nline2");
   });
 
   it("omits object/array values instead of rendering [object Object]", () => {
@@ -172,6 +172,16 @@ describe("buildPopupCard", () => {
     expect(html).toContain("Source details (6 records)");
     expect(html).toContain("record &lt;1&gt;");
     expect(html).not.toContain("<details open");
+    const root = document.createElement("div");
+    root.innerHTML = html;
+    const cards = root.querySelectorAll(".omx-overlay-popup__section");
+    expect(cards).toHaveLength(2);
+    const details = cards[0]?.querySelector("details");
+    expect(details?.open).toBe(false);
+    expect(details?.querySelector("summary")?.textContent).toBe("Source details (6 records)");
+    expect(details?.textContent).toContain("record <1>");
+    expect(details?.textContent).toContain("record <2>");
+    expect(cards[1]?.querySelector("details")).toBeNull();
   });
 
   it("renders a single item with details without turning it into a stack", () => {

@@ -285,7 +285,16 @@ it("offers the privacy role for an existing administrator through the same canon
   mount(<UserDetail userId={subject.id} />);
   await screen.findByText(subject.email);
   fireEvent.mouseDown(screen.getByRole("combobox", { name: "Role" }));
-  expect(screen.getByRole("option", { name: "Privacy admin" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("option", { name: "Privacy admin" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+  await waitFor(() => expect(mocks.role).toHaveBeenCalledTimes(1));
+  expect(mocks.role).toHaveBeenCalledWith(
+    subject.id,
+    { role: "privacy_admin", expectedRole: "admin" },
+    { "idempotency-key": expect.any(String) },
+    expect.objectContaining({ client: expect.any(Object) }),
+  );
+  expect(mocks.update).not.toHaveBeenCalled();
 });
 
 function DirtyControl() {

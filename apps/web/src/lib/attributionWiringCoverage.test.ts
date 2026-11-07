@@ -142,11 +142,9 @@ function collectCandidates(): Candidate[] {
 
 describe("attribution-display coverage", () => {
   const candidates = collectCandidates();
-  it("finds declared and borrowed-source renderers", () => {
+  it("every non-exempt map renderer uses captured rendered geometry/raster/DOM ownership", () => {
     expect(candidates.some((c) => c.hasDataSources)).toBe(true);
     expect(candidates.some((c) => !c.hasDataSources)).toBe(true);
-  });
-  it("every non-exempt map renderer uses captured rendered geometry/raster/DOM ownership", () => {
     const unwired = candidates
       .filter((c) => c.mapLayer && !(c.id in NO_CREDIT_OWED))
       .filter((c) => !wiresAttribution(path.join(INTEGRATIONS_DIR, c.id)))
@@ -167,19 +165,6 @@ describe("attribution-display coverage", () => {
       ),
     ).toEqual([]);
   });
-});
-
-describe("navigation host attribution wiring", () => {
-  it.each(["RouteSearchResultsLayer.tsx", "ArrivalParkingMarkers.tsx"])(
-    "owns displayed receipts in %s",
-    (filename) => {
-      const source = fs.readFileSync(
-        path.join(WEB_SRC_DIR, "components/navigation", filename),
-        "utf8",
-      );
-      expect(mentionsWire(source)).toBe(true);
-    },
-  );
 });
 
 describe("attribution wiring guard conformance", () => {
@@ -213,14 +198,12 @@ describe("attribution wiring guard conformance", () => {
       ),
     ).toBe(true);
   });
-  it.each([
-    'useIntegrationAttribution("supplier", enabled);',
-    'useIntegrationDomainAttribution("transit", enabled);',
-    'useSourceAttributions("overlay", sourceIds);',
-    'useMapAttributions("overlay", enabled ? manifestCredits : []);',
-    "useAttributionFromHooks(hooks, enabled);",
-  ])("does not accept toggle/catalogue-only map wiring: %s", (source) => {
-    expect(mentionsWire(source)).toBe(false);
+  it("rejects an imported toggle or catalogue-only map registration", () => {
+    expect(
+      mentionsWire(
+        'import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions"; useMapAttributions("overlay", manifestCredits);',
+      ),
+    ).toBe(false);
   });
 
   it.each([

@@ -237,7 +237,6 @@ function response(
 
 describe("canonical complete service administration contracts", () => {
   it("binds the complete approved identities, methods, paths and admin auth", () => {
-    expect(contracts).toHaveProperty("serviceAdminOperations");
     expect(
       Object.entries(contracts.serviceAdminOperations)
         .map(([id, op]) => [id, op.method, op.path, op.auth])
@@ -247,11 +246,6 @@ describe("canonical complete service administration contracts", () => {
     );
   });
   it("retains full raw manifests including unknown nested JSON, structured capabilities and omitted defaults", () => {
-    expect(serviceManifestSchema.parse(raw).container.gpu).toEqual({
-      driver: "nvidia",
-      count: "all",
-      capabilities: ["gpu"],
-    });
     expect(contracts.adminServiceManifestSchema.parse(raw)).toEqual(raw);
     const detail = {
       acquisition,
@@ -384,9 +378,6 @@ describe("canonical complete service administration contracts", () => {
       ...data,
       fetchedAt: at,
     });
-    expect(contracts.adminServiceDataSchema.shape.motisTransitous).toBe(
-      OPS_RESULT_SCHEMAS["data.inspect"].shape.motisTransitous,
-    );
     expect(
       contracts.adminServiceDataSchema.safeParse({
         ...data,

@@ -30,15 +30,7 @@ class CueLedgerTest {
     assertEquals(3, ledger.count)
     assertFalse(ledger.contains("cue-0"))
     assertTrue(ledger.contains("cue-3"))
-  }
-
-  @Test
-  fun anEvictedCueCanBeSpokenAgain() {
-    val ledger = CueLedger(capacity = 2)
-    ledger.record("a")
-    ledger.record("b")
-    ledger.record("c")
-    assertTrue(ledger.record("a"))
+    assertTrue(ledger.record("cue-0"))
   }
 
   @Test
@@ -54,27 +46,25 @@ class CueLedgerTest {
   fun capacityIsNeverLessThanOne() {
     val ledger = CueLedger(capacity = 0)
     assertTrue(ledger.record("a"))
+    assertTrue(ledger.record("b"))
     assertEquals(1, ledger.count)
+    assertFalse(ledger.contains("a"))
+    assertTrue(ledger.contains("b"))
   }
 }
 
 class AudioFocusPolicyTest {
   @Test
-  fun requestsFocusOnlyForTheFirstQueuedUtterance() {
+  fun holdsFocusForTheQueueLifetimeWithoutUnderflow() {
     val policy = AudioFocusPolicy()
     assertTrue(policy.willEnqueue())
     assertFalse(policy.willEnqueue())
     assertTrue(policy.holdsFocus)
-  }
-
-  @Test
-  fun abandonsFocusOnlyWhenTheQueueDrains() {
-    val policy = AudioFocusPolicy()
-    policy.willEnqueue()
-    policy.willEnqueue()
     assertFalse(policy.didFinishUtterance())
     assertTrue(policy.didFinishUtterance())
     assertFalse(policy.holdsFocus)
+    assertFalse(policy.didFinishUtterance())
+    assertEquals(0, policy.pendingUtterances)
   }
 
   @Test
@@ -85,20 +75,7 @@ class AudioFocusPolicyTest {
     assertTrue(policy.didStop())
     assertEquals(0, policy.pendingUtterances)
     assertFalse(policy.holdsFocus)
-  }
-
-  @Test
-  fun stopOnAnIdlePolicyDoesNotRequestAbandon() {
-    assertFalse(AudioFocusPolicy().didStop())
-  }
-
-  @Test
-  fun finishingMoreUtterancesThanQueuedDoesNotUnderflow() {
-    val policy = AudioFocusPolicy()
-    policy.willEnqueue()
-    assertTrue(policy.didFinishUtterance())
-    assertFalse(policy.didFinishUtterance())
-    assertEquals(0, policy.pendingUtterances)
+    assertFalse(policy.didStop())
   }
 
   @Test
@@ -109,28 +86,19 @@ class AudioFocusPolicyTest {
     assertFalse(policy.acceptsSpeech)
     assertFalse(policy.holdsFocus)
     assertEquals(0, policy.pendingUtterances)
-  }
-
-  @Test
-  fun acceptsSpeechAgainAfterRegainingFocus() {
-    val policy = AudioFocusPolicy()
-    policy.didLoseFocus()
     policy.didRegainFocus()
     assertTrue(policy.acceptsSpeech)
     assertTrue(policy.willEnqueue())
   }
+
 }
 
 class SpeechLocaleTest {
   @Test
   fun mapsSupportedLocales() {
-    assertEquals(SpeechLocale.EN, SpeechLocale.parse("en"))
-    assertEquals(SpeechLocale.DE, SpeechLocale.parse("de"))
-  }
-
-  @Test
-  fun isCaseInsensitive() {
-    assertEquals(SpeechLocale.DE, SpeechLocale.parse("DE"))
+    assertEquals("en-US", SpeechLocale.parse("en")?.locale?.toLanguageTag())
+    assertEquals("de-DE", SpeechLocale.parse("de")?.locale?.toLanguageTag())
+    assertEquals("de-DE", SpeechLocale.parse("DE")?.locale?.toLanguageTag())
   }
 
   @Test
@@ -144,32 +112,23 @@ class SpeechLocaleTest {
 
 class SpeechRateTest {
   @Test
-  fun defaultsToNormalRate() {
-    assertEquals(1.0f, speechRate(null), 0.0001f)
+  fun mapsAndBoundsRates() {
+    val cases = listOf(
+      null to 1.0f, 1.5 to 1.5f, 9.0 to 2.0f, 0.1 to 0.5f,
+      Double.NaN to 1.0f, Double.POSITIVE_INFINITY to 1.0f,
+    )
+    for ((multiplier, expected) in cases) {
+      assertEquals(expected, speechRate(multiplier), 0.0001f)
+    }
   }
 
-  @Test
-  fun passesAnInRangeMultiplierThrough() {
-    assertEquals(1.5f, speechRate(1.5), 0.0001f)
-  }
-
-  @Test
-  fun clampsAnOutOfContractMultiplier() {
-    assertEquals(2.0f, speechRate(9.0), 0.0001f)
-    assertEquals(0.5f, speechRate(0.1), 0.0001f)
-  }
-
-  @Test
-  fun fallsBackForANonFiniteMultiplier() {
-    assertEquals(1.0f, speechRate(Double.NaN), 0.0001f)
-    assertEquals(1.0f, speechRate(Double.POSITIVE_INFINITY), 0.0001f)
-  }
 }
 
 class SpeechValidationTest {
   @Test
   fun acceptsOrdinaryGuidance() {
     assertTrue(validateSpeechText("In 200 metres, turn right onto Hauptstraße."))
+    assertTrue(validateSpeechText("Turn right.\nThen continue straight."))
   }
 
   @Test
@@ -185,11 +144,6 @@ class SpeechValidationTest {
     assertFalse(validateSpeechText("Turn\u0000left"))
     assertFalse(validateSpeechText("Turn\u001Bleft"))
     assertFalse(validateSpeechText("Turn\u007Fleft"))
-  }
-
-  @Test
-  fun allowsANewlineBetweenSentences() {
-    assertTrue(validateSpeechText("Turn right.\nThen continue straight."))
   }
 
   @Test

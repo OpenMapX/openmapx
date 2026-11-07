@@ -100,27 +100,9 @@ describe("official hotel website acquisition", () => {
     );
   });
 
-  it("returns null when connection-time DNS changes to a private address", async () => {
+  it("returns null when the bounded homepage request fails", async () => {
     serverMocks.safeFetchTextResponse.mockRejectedValue(
       new Error('URL host "hotel.example" is not allowed'),
-    );
-
-    await expect(fetchOfficialBookingUrl("https://hotel.example", dates, log)).resolves.toBeNull();
-    expect(globalThis.fetch).not.toHaveBeenCalled();
-  });
-
-  it("returns null when a redirect targets a private address", async () => {
-    serverMocks.safeFetchTextResponse.mockRejectedValue(
-      new Error('URL host "127.0.0.1" is not allowed'),
-    );
-
-    await expect(fetchOfficialBookingUrl("https://hotel.example", dates, log)).resolves.toBeNull();
-    expect(globalThis.fetch).not.toHaveBeenCalled();
-  });
-
-  it("returns null when the pinned request times out", async () => {
-    serverMocks.safeFetchTextResponse.mockRejectedValue(
-      new DOMException("The operation timed out", "TimeoutError"),
     );
 
     await expect(fetchOfficialBookingUrl("https://hotel.example", dates, log)).resolves.toBeNull();

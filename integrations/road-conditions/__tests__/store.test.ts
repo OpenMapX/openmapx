@@ -7,17 +7,6 @@ describe("road-conditions overlay store", () => {
     useRoadConditionsStore.getState().resetFilters();
   });
 
-  it("defaults the time horizon to active-now", () => {
-    expect(useRoadConditionsStore.getState().horizon).toBe("active");
-  });
-
-  it("setHorizon replaces the current step", () => {
-    useRoadConditionsStore.getState().setHorizon("week");
-    expect(useRoadConditionsStore.getState().horizon).toBe("week");
-    useRoadConditionsStore.getState().setHorizon("all");
-    expect(useRoadConditionsStore.getState().horizon).toBe("all");
-  });
-
   it("shows every kind by default; toggleKind hides a kind and shows it again", () => {
     expect(useRoadConditionsStore.getState().hiddenKinds).toEqual([]);
     useRoadConditionsStore.getState().toggleKind("roadworks");

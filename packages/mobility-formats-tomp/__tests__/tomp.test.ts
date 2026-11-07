@@ -105,7 +105,9 @@ components:
     expect(bundled.openapi).toBe("3.1.0");
     expect(listTompModules(bundled)).toEqual(["core", "offers"]);
     expect(listTompExternalRefs(bundled)).toEqual([]);
-    expect(resolveTompRef("#/components/responses/packageResponse", bundled)).toBeDefined();
+    expect(resolveTompRef("#/components/responses/packageResponse", bundled)).toEqual({
+      description: "Package details",
+    });
     expect(listTompOperations(bundled).map((operation) => operation.operationId)).toEqual([
       "getPackage",
       "requestOffer",

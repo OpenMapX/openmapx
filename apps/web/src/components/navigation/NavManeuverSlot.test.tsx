@@ -104,8 +104,11 @@ describe("NavManeuverSlot", () => {
       ]),
     });
     const view = mount();
-    expect(view.container.querySelector('[data-inferred="true"]')).toBeNull();
-    expect(view.container.querySelector('[data-empty="true"]')).not.toBeNull();
+    expect(view.container.querySelectorAll("[data-valid] svg")).toHaveLength(1);
+    expect(view.container.querySelector('[data-empty="true"]')).toHaveStyle({
+      width: "12px",
+      height: "2px",
+    });
   });
   it("credits displayed OSM lane evidence and releases that credit on unmount", () => {
     useMapAttributionStore.setState({ byLayer: {} });
@@ -165,11 +168,11 @@ describe("NavManeuverSlot", () => {
       },
     });
     const view = mount();
-    expect(
-      [...view.container.querySelectorAll("[data-valid]")].map((cell) =>
-        cell.getAttribute("data-valid"),
-      ),
-    ).toEqual(["false", "true"]);
+    const painted = [...view.container.querySelectorAll("[data-valid]")].map(
+      (cell) =>
+        !["transparent", "rgba(0, 0, 0, 0)"].includes(getComputedStyle(cell).backgroundColor),
+    );
+    expect(painted).toEqual([false, true]);
   });
 
   it("colours the sign by the country the exit stands in, not the origin's", () => {
@@ -182,14 +185,14 @@ describe("NavManeuverSlot", () => {
       ],
     });
     const view = mount();
-    expect(view.getByTestId("exit-number-badge").getAttribute("data-bg")).toBe("#006b3f");
+    expect(view.getByTestId("exit-number-badge")).toHaveStyle({ backgroundColor: "#006b3f" });
   });
 
   it("falls back to the origin's colours where the route's countries are not known", () => {
     // Only a stretch past the exit is matched so far.
     useNavigationStore.setState({ routeCountries: [{ fromMeters: 5000, countryCode: "CH" }] });
     const view = mount();
-    expect(view.getByTestId("exit-number-badge").getAttribute("data-bg")).toBe("#154889");
+    expect(view.getByTestId("exit-number-badge")).toHaveStyle({ backgroundColor: "#154889" });
   });
 
   it("renders no sign strip for a step without signage", () => {

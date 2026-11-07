@@ -1,13 +1,23 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readdir, readFile, utimes, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { EncryptedSourceSpool, janitorEncryptedSourceSpools } from "./encrypted-source-spool.js";
+
+const parents: string[] = [];
+afterEach(async () => {
+  for (const parent of parents.splice(0)) await rm(parent, { recursive: true, force: true });
+});
+async function parentDirectory(): Promise<string> {
+  const parent = await mkdtemp(join(tmpdir(), "openmapx-source-spool-test-"));
+  parents.push(parent);
+  return parent;
+}
 
 describe("EncryptedSourceSpool", () => {
   it("bounds plaintext chunks, persists only ciphertext and removes its directory", async () => {
-    const parent = await mkdtemp(join(tmpdir(), "openmapx-source-spool-test-"));
+    const parent = await parentDirectory();
     const plaintext = Buffer.alloc(32 * 1024 * 1024, 0x5a);
     let yielded = 0;
     const spool = await EncryptedSourceSpool.create({ parentDirectory: parent });
@@ -44,7 +54,7 @@ describe("EncryptedSourceSpool", () => {
   });
 
   it("removes partial ciphertext when the source fails", async () => {
-    const parent = await mkdtemp(join(tmpdir(), "openmapx-source-spool-test-"));
+    const parent = await parentDirectory();
     const spool = await EncryptedSourceSpool.create({ parentDirectory: parent });
     await expect(
       spool.write({
@@ -62,7 +72,7 @@ describe("EncryptedSourceSpool", () => {
   });
 
   it("accepts a streamed member whose final byte count is not known up front", async () => {
-    const parent = await mkdtemp(join(tmpdir(), "openmapx-source-spool-test-"));
+    const parent = await parentDirectory();
     const spool = await EncryptedSourceSpool.create({ parentDirectory: parent });
     const entry = await spool.write({
       logicalId: "saved-content",
@@ -77,7 +87,7 @@ describe("EncryptedSourceSpool", () => {
   });
 
   it("uses unique files for concurrent writes and propagates missing ciphertext", async () => {
-    const parent = await mkdtemp(join(tmpdir(), "openmapx-source-spool-test-"));
+    const parent = await parentDirectory();
     const spool = await EncryptedSourceSpool.create({ parentDirectory: parent });
     const [first, second] = await Promise.all(
       ["first", "second"].map((value, index) =>
@@ -104,8 +114,8 @@ describe("EncryptedSourceSpool", () => {
     await spool.dispose();
   });
 
-  it("janitors only old owned cases from dead processes", async () => {
-    const parent = await mkdtemp(join(tmpdir(), "openmapx-source-spool-test-"));
+  it("janitors an old owned case from a dead process", async () => {
+    const parent = await parentDirectory();
     const spool = await EncryptedSourceSpool.create({ parentDirectory: parent });
     await spool.write({
       logicalId: "dawarich-test",
@@ -134,7 +144,7 @@ describe("EncryptedSourceSpool", () => {
   });
 
   it("janitors an old case when its PID was reused by another process instance", async () => {
-    const parent = await mkdtemp(join(tmpdir(), "openmapx-source-spool-test-"));
+    const parent = await parentDirectory();
     const spool = await EncryptedSourceSpool.create({ parentDirectory: parent });
     await spool.write({
       logicalId: "saved-content",
@@ -162,7 +172,7 @@ describe("EncryptedSourceSpool", () => {
   });
 
   it("enforces member, total, and file limits while removing failed ciphertext", async () => {
-    const parent = await mkdtemp(join(tmpdir(), "openmapx-source-spool-test-"));
+    const parent = await parentDirectory();
     const spool = await EncryptedSourceSpool.create({
       parentDirectory: parent,
       maxMemberBytes: 4,

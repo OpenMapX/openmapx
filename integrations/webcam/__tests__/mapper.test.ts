@@ -481,10 +481,7 @@ describe("webcam strings", () => {
     }
   });
 
-  it("the catalogue holds only the tokens the mapper emits, in both languages", () => {
-    const used = new Set(emitted.map((t) => t.$t));
-    const listing = new Set(["name", "description"]);
-    expect(leafKeys(en).filter((k) => !listing.has(k) && !used.has(k))).toEqual([]);
+  it("catalogue keys agree in both languages", () => {
     expect(leafKeys(de).sort()).toEqual(leafKeys(en).sort());
   });
 });

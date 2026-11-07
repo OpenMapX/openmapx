@@ -1,6 +1,6 @@
 import { useDirectionsStore, useFlightStore } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, createFakeMap, expectStyleSwapIsLossless, type FakeMap, render } from "@/test";
+import { act, createFakeMap, type FakeMap, render } from "@/test";
 
 let fake: FakeMap;
 const fitBounds = vi.fn();
@@ -26,25 +26,6 @@ beforeEach(() => {
 });
 
 describe("FlightArcLayer", () => {
-  it("registers the geojson source plus line/point/label layers on the map", () => {
-    render(<FlightArcLayer />);
-
-    expect(fake.state.sources.has("flight-arc-source")).toBe(true);
-    expect(fake.state.sources.get("flight-arc-source")?.type).toBe("geojson");
-    expect(fake.state.layers.has("flight-arc-line")).toBe(true);
-    expect(fake.state.layers.has("flight-arc-points")).toBe(true);
-    expect(fake.state.layers.has("flight-arc-labels")).toBe(true);
-  });
-
-  it("does not register layers twice when the source already exists", () => {
-    render(<FlightArcLayer />);
-    const firstLine = fake.state.layers.get("flight-arc-line");
-    fake.emit("styledata");
-    // setup() bails early when the source is present, so the layer object is the
-    // same reference (it was never re-added).
-    expect(fake.state.layers.get("flight-arc-line")).toBe(firstLine);
-  });
-
   it("draws the great-circle arc and fits bounds when flying with both airports", () => {
     render(<FlightArcLayer />);
 
@@ -61,32 +42,25 @@ describe("FlightArcLayer", () => {
     };
     expect(data.features.length).toBe(3);
     expect(data.features.map((f) => f.properties.kind)).toEqual(["line", "point", "point"]);
+    const layers = [...fake.state.layers.values()].filter(
+      (layer) => "source" in layer && layer.source === "flight-arc-source",
+    );
+    expect(layers.map((layer) => layer.type).sort()).toEqual(["circle", "line", "symbol"]);
+    for (const layer of layers) {
+      expect(layer).toMatchObject({
+        filter: ["==", ["get", "kind"], layer.type === "line" ? "line" : "point"],
+      });
+    }
+    expect(layers.find((layer) => layer.type === "symbol")).toMatchObject({
+      layout: { "text-field": ["get", "label"] },
+    });
     expect(fitBounds).toHaveBeenCalled();
-  });
-
-  it("clears the arc geometry when not in flying mode", () => {
-    render(<FlightArcLayer />);
-
+    const fitCallCount = fitBounds.mock.calls.length;
     act(() => {
       useDirectionsStore.setState({ mode: "walking" });
     });
-
-    const data = fake.state.sources.get("flight-arc-source")?.data as { features: unknown[] };
-    expect(data.features).toEqual([]);
-    expect(fitBounds).not.toHaveBeenCalled();
-  });
-
-  it("keeps the arc across a style change", () => {
-    act(() => {
-      useFlightStore.setState({
-        from: { iata: "BER", name: "Berlin", coordinates: [13.5, 52.36] },
-        to: { iata: "JFK", name: "New York", coordinates: [-73.78, 40.64] },
-      });
-      useDirectionsStore.setState({ mode: "flying" });
-    });
-    render(<FlightArcLayer />);
-    const before = fake.state.sources.get("flight-arc-source")?.data as { features: unknown[] };
-    expect(before.features.length).toBeGreaterThan(0);
-    expectStyleSwapIsLossless(fake);
+    const cleared = fake.state.sources.get("flight-arc-source")?.data as { features: unknown[] };
+    expect(cleared.features).toEqual([]);
+    expect(fitBounds).toHaveBeenCalledTimes(fitCallCount);
   });
 });

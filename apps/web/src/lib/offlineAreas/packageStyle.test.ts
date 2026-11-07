@@ -133,6 +133,7 @@ describe("offline package styles", () => {
     const secondManifest = {
       ...manifest,
       packageId: secondPackageId,
+      coverage: { ...manifest.coverage, maxZoom: 12 },
       archive: {
         ...manifest.archive,
         url: `/api/offline/packages/${secondPackageId}/archive`,
@@ -149,28 +150,8 @@ describe("offline package styles", () => {
       `pmtiles://offline/${packageId},${secondPackageId}/{z}/{x}/{y}`,
     ]);
     expect(sources.openmaptiles.url).toBeUndefined();
+    expect(sources.openmaptiles.maxzoom).toBe(12);
     expect(layers).toEqual(onlineStyle().layers);
-  });
-
-  it("advertises only the maximum zoom shared by every package", () => {
-    const lowerZoomPackageId = `omp2-${"e".repeat(64)}`;
-    const lowerZoomManifest: OfflineMapPackageManifest = {
-      ...manifest,
-      packageId: lowerZoomPackageId,
-      coverage: { ...manifest.coverage, maxZoom: 12 },
-      archive: {
-        ...manifest.archive,
-        url: `/api/offline/packages/${lowerZoomPackageId}/archive`,
-      },
-    };
-
-    const style = resolveOfflinePackageStyle(onlineStyle(), [
-      { packageId, manifest },
-      { packageId: lowerZoomPackageId, manifest: lowerZoomManifest },
-    ]);
-    const source = (style.sources as Record<string, Record<string, unknown>>).openmaptiles;
-
-    expect(source.maxzoom).toBe(12);
   });
 
   it("resolves package glyphs through the runtime API origin", () => {

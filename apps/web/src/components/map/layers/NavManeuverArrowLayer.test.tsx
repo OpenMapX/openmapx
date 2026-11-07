@@ -1,7 +1,7 @@
 import { cumulativeDistances, haversineDistance, positionAt } from "@openmapx/core";
 import { render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createFakeMap, expectStyleSwapIsLossless } from "@/test";
+import { createFakeMap } from "@/test";
 
 const fake = createFakeMap({
   styleLoaded: true,
@@ -76,31 +76,6 @@ afterEach(() => {
 });
 
 describe("NavManeuverArrowLayer", () => {
-  it("draws casing, body and arrowhead above the basemap labels inside the approach window", () => {
-    render(<NavManeuverArrowLayer />);
-    const ids = [...fake.state.layers.keys()];
-    for (const id of [
-      "nav-maneuver-arrow-casing",
-      "nav-maneuver-arrow",
-      "nav-maneuver-arrow-head",
-    ]) {
-      expect(ids).toContain(id);
-      expect(ids.indexOf(id)).toBeGreaterThan(ids.indexOf("place-labels"));
-    }
-  });
-
-  it("publishes one LineString and one Point feature, both carrying a bearing", () => {
-    render(<NavManeuverArrowLayer />);
-    const feats = features();
-    expect(feats).toHaveLength(2);
-    const line = feats.find((f) => f.geometry.type === "LineString");
-    const point = feats.find((f) => f.geometry.type === "Point");
-    expect(line).toBeTruthy();
-    expect(point).toBeTruthy();
-    expect(typeof line?.properties?.bearing).toBe("number");
-    expect(typeof point?.properties?.bearing).toBe("number");
-  });
-
   it("centres the map arrow on the same physical maneuver as the countdown", () => {
     navState.route = {
       ...route,
@@ -114,20 +89,34 @@ describe("NavManeuverArrowLayer", () => {
               : [geometry[2]],
       })),
     };
-    render(<NavManeuverArrowLayer />);
+    const view = render(<NavManeuverArrowLayer />);
+    const ids = [...fake.state.layers.keys()];
+    for (const id of [
+      "nav-maneuver-arrow-casing",
+      "nav-maneuver-arrow",
+      "nav-maneuver-arrow-head",
+    ]) {
+      expect(ids).toContain(id);
+      expect(ids.indexOf(id)).toBeGreaterThan(ids.indexOf("place-labels"));
+    }
+    const feats = features();
+    expect(feats).toHaveLength(2);
+    const point = feats.find((f) => f.geometry.type === "Point");
+    expect(point).toBeTruthy();
+    expect(typeof point?.properties?.bearing).toBe("number");
     const line = features().find(
       (feature) => feature.geometry.type === "LineString",
     ) as GeoJSON.Feature<GeoJSON.LineString>;
+    expect(line).toBeTruthy();
+    expect(typeof line.properties?.bearing).toBe("number");
     expect(line.geometry.coordinates.some(([lng, lat]) => lng === 8 && lat === 50.01)).toBe(true);
-  });
-  it("empties the source outside the approach window", () => {
     navState.progress = {
       currentStepIndex: 0,
       distanceToNextManeuver: 5000,
       speedMps: 30,
       alongMeters: 700,
     };
-    render(<NavManeuverArrowLayer />);
+    view.rerender(<NavManeuverArrowLayer />);
     expect(features()).toHaveLength(0);
   });
 
@@ -159,7 +148,7 @@ describe("NavManeuverArrowLayer", () => {
   });
 
   it("republishes the source zero times across 100 progress updates in the same window", () => {
-    render(<NavManeuverArrowLayer />);
+    const view = render(<NavManeuverArrowLayer />);
     fake.state.counts.setData.delete(SOURCE);
     for (let i = 0; i < 100; i += 1) {
       navState.progress = {
@@ -170,14 +159,9 @@ describe("NavManeuverArrowLayer", () => {
       };
       // The features memo keys on route, upcoming index and approaching only —
       // a re-render with new progress but the same window must not touch data.
-      render(<NavManeuverArrowLayer />);
+      view.rerender(<NavManeuverArrowLayer />);
     }
     expect(fake.state.counts.setData.get(SOURCE)).toBeUndefined();
-  });
-
-  it("loses nothing across a style change", () => {
-    render(<NavManeuverArrowLayer />);
-    expectStyleSwapIsLossless(fake);
   });
 });
 

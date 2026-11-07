@@ -36,16 +36,6 @@ beforeEach(() => {
 });
 
 describe("faster-route proposal", () => {
-  it("holds one pending proposal", () => {
-    useNavigationStore.getState().proposeFasterRoute({
-      route: faster,
-      alternatives: [fasterAlt],
-      savedSeconds: 900,
-      proposedAtMs: 1000,
-    });
-    expect(useNavigationStore.getState().fasterRoute?.savedSeconds).toBe(900);
-  });
-
   it("accepting swaps the route and replaces the stale alternatives", () => {
     useNavigationStore.getState().proposeFasterRoute({
       route: faster,
@@ -53,6 +43,7 @@ describe("faster-route proposal", () => {
       savedSeconds: 900,
       proposedAtMs: 1000,
     });
+    expect(useNavigationStore.getState().fasterRoute?.savedSeconds).toBe(900);
     useNavigationStore.getState().acceptFasterRoute();
     const s = useNavigationStore.getState();
     expect(s.route).toBe(faster);

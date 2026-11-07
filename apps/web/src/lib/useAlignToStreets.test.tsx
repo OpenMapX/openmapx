@@ -187,7 +187,10 @@ describe("useAlignToStreets", () => {
 
   it("eases to the computed bearing programmatically and memoises per camera key", () => {
     compute.mockReturnValue({ status: "ok", bearing: 30 });
-    const { result } = renderHook(() => useAlignToStreets());
+    const { result } = renderHook(() => ({
+      ...useAlignToStreets(),
+      announcement: useAlignAnnouncement(),
+    }));
     act(() => {
       result.current.align();
     });
@@ -200,6 +203,7 @@ describe("useAlignToStreets", () => {
       result.current.align();
     });
     expect(compute).toHaveBeenCalledTimes(1);
+    expect(result.current.announcement).toBeNull();
   });
 
   it("expires the memo a fixed window after the computation, not after the last tap", () => {
@@ -283,17 +287,5 @@ describe("useAlignToStreets", () => {
       method: "jumpTo",
       options: { bearing: 30 },
     });
-  });
-
-  it("stays silent when the map rotates", () => {
-    compute.mockReturnValue({ status: "ok", bearing: 30 });
-    const { result } = renderHook(() => ({
-      align: useAlignToStreets().align,
-      announcement: useAlignAnnouncement(),
-    }));
-    act(() => {
-      result.current.align();
-    });
-    expect(result.current.announcement).toBeNull();
   });
 });

@@ -27,7 +27,7 @@ describe("buildScheduleRequest", () => {
     expect(
       buildScheduleRequest({
         ...BASE,
-        waypoints: [waypoint("a", [0, 0]), waypoint("b", null)],
+        waypoints: [waypoint("a", [0, 0], { dwellSeconds: 600 }), waypoint("b", null)],
       }),
     ).toBeNull();
   });

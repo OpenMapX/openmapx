@@ -63,50 +63,14 @@ describe("listMirrorArchives", () => {
     expect(listMirrorArchives(catalog, ["de"])).toEqual([{ region: "de", name: "Good" }]);
   });
 
-  it("keeps the pinned catalog's real schedule source names", () => {
-    const catalog = catalogWithFeeds({
-      "de.json": {
-        sources: [
-          { name: "DELFI" },
-          { name: "VBB" },
-          { name: "VBN" },
-          { name: "AVV-Aachen" },
-          { name: "amarillo-bw" },
-          { name: "pollo" },
-          { name: "esel.ac" },
-        ],
-      },
-      "at.json": {
-        sources: [
-          { name: "PTA-Styria-Flex-2026" },
-          { name: "Linz-AG-2026" },
-          { name: "Railway-Current-Reference-Data-2026" },
-          { name: "WienMobil-Rad" },
-        ],
-      },
-    });
-    expect(listMirrorArchives(catalog)).toEqual(
-      expect.arrayContaining([
-        { region: "de", name: "DELFI" },
-        { region: "de", name: "VBB" },
-        { region: "de", name: "VBN" },
-        { region: "de", name: "AVV-Aachen" },
-        { region: "de", name: "amarillo-bw" },
-        { region: "de", name: "pollo" },
-        { region: "de", name: "esel.ac" },
-        { region: "at", name: "PTA-Styria-Flex-2026" },
-        { region: "at", name: "Linz-AG-2026" },
-        { region: "at", name: "Railway-Current-Reference-Data-2026" },
-        { region: "at", name: "WienMobil-Rad" },
-      ]),
-    );
-  });
-
   it("skips unsafe source names while keeping safe siblings", () => {
     const catalog = catalogWithFeeds({
       "de.json": {
         sources: [
           { name: "Good" },
+          { name: "AVV-Aachen" },
+          { name: "esel.ac" },
+          { name: "PTA-Styria-Flex-2026" },
           { name: "../../../evil" },
           { name: "a/b" },
           { name: ".hidden" },
@@ -115,7 +79,12 @@ describe("listMirrorArchives", () => {
         ],
       },
     });
-    expect(listMirrorArchives(catalog)).toEqual([{ region: "de", name: "Good" }]);
+    expect(listMirrorArchives(catalog)).toEqual([
+      { region: "de", name: "Good" },
+      { region: "de", name: "AVV-Aachen" },
+      { region: "de", name: "esel.ac" },
+      { region: "de", name: "PTA-Styria-Flex-2026" },
+    ]);
   });
 
   it("returns every region when no countries are given", () => {

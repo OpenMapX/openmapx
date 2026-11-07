@@ -75,15 +75,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("live-transit-entur setup", () => {
-  it("registers a realtime provider with vehiclePositions and bbox alerts", () => {
-    const provider = registerProvider();
-    expect(provider.id).toBe("live-transit-entur");
-    expect(provider.capabilities.vehiclePositions).toBe(true);
-    expect(provider.capabilities.alerts).toMatchObject({ byBbox: true, byStop: false });
-  });
-});
-
 describe("getVehiclePositions", () => {
   it("maps an Entur vehicle into a LiveTransitVehicle with mode, ids and speed", async () => {
     mockFetch.mockResolvedValueOnce(
@@ -106,7 +97,11 @@ describe("getVehiclePositions", () => {
       }),
     );
 
-    const result = await registerProvider().getVehiclePositions([4, 57, 32, 71.5]);
+    const provider = registerProvider();
+    expect(provider.id).toBe("live-transit-entur");
+    expect(provider.capabilities.vehiclePositions).toBe(true);
+    expect(provider.capabilities.alerts).toMatchObject({ byBbox: true, byStop: false });
+    const result = await provider.getVehiclePositions([4, 57, 32, 71.5]);
 
     expect(result.data).toEqual([
       {

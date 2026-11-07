@@ -47,12 +47,12 @@ describe("parseRefShaPair", () => {
 });
 
 describe("readTransitousLock / writeTransitousLock", () => {
-  it("returns null when the file is absent", () => {
+  it("rejects active authority when paired catalog pins are absent", () => {
     const root = makeRepoRoot();
     expect(() => readTransitousLock(root)).toThrow(/not initialized/);
   });
 
-  it("roundtrips a lockfile through write + read", () => {
+  it("writes a compatibility lock without granting active authority", () => {
     const root = makeRepoRoot();
     const lock: TransitousLock = {
       ref: "main@099af198526dc192dd294a100ca4db29477e9133",
@@ -68,7 +68,7 @@ describe("readTransitousLock / writeTransitousLock", () => {
     const onDisk = JSON.parse(
       readFileSync(join(root, TRANSITOUS_LOCK_RELATIVE_PATH), "utf-8"),
     ) as Record<string, unknown>;
-    expect(onDisk.$schema).toBe("./transitous.lock.schema.json");
+    expect(onDisk).toEqual({ $schema: "./transitous.lock.schema.json", ...lock });
   });
 
   it("writes a proposal without mutating the active lock", () => {
@@ -85,7 +85,9 @@ describe("readTransitousLock / writeTransitousLock", () => {
       lockedBy: "reviewer@example.test",
     };
     writeTransitousLock(root, active);
+    const activeBytes = readFileSync(join(root, TRANSITOUS_LOCK_RELATIVE_PATH), "utf-8");
     writeTransitousLockProposal(root, proposed);
+    expect(readFileSync(join(root, TRANSITOUS_LOCK_RELATIVE_PATH), "utf-8")).toBe(activeBytes);
     expect(() => readTransitousLock(root)).toThrow(/not initialized/);
     expect(readTransitousLockProposal(root)).toEqual(proposed);
     expect(readFileSync(join(root, TRANSITOUS_PROPOSED_LOCK_RELATIVE_PATH), "utf-8")).toContain(
@@ -93,17 +95,19 @@ describe("readTransitousLock / writeTransitousLock", () => {
     );
   });
 
-  it("throws on a malformed lockfile", () => {
+  it("throws on a malformed proposed lockfile", () => {
     const root = makeRepoRoot();
-    writeFileSync(join(root, TRANSITOUS_LOCK_RELATIVE_PATH), "not json", { mode: 0o600 });
-    expect(() => readTransitousLock(root)).toThrow(/not initialized/);
+    writeFileSync(join(root, TRANSITOUS_PROPOSED_LOCK_RELATIVE_PATH), "not json", { mode: 0o600 });
+    expect(() => readTransitousLockProposal(root)).toThrow(/Failed to parse Transitous lockfile/);
   });
 
-  it("throws when required fields are missing", () => {
+  it("throws when a proposed lockfile omits required fields", () => {
     const root = makeRepoRoot();
-    writeFileSync(join(root, TRANSITOUS_LOCK_RELATIVE_PATH), JSON.stringify({ submodules: {} }), {
-      mode: 0o600,
-    });
-    expect(() => readTransitousLock(root)).toThrow(/not initialized/);
+    writeFileSync(
+      join(root, TRANSITOUS_PROPOSED_LOCK_RELATIVE_PATH),
+      JSON.stringify({ submodules: {} }),
+      { mode: 0o600 },
+    );
+    expect(() => readTransitousLockProposal(root)).toThrow(/missing required field "ref"/);
   });
 });

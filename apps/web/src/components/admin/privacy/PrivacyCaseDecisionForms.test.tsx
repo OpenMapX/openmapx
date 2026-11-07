@@ -14,10 +14,22 @@ describe("case decisions", () => {
     expect(
       screen.getByText(/privacyAdmin.workflows.originalDueAt.*2026-10-01/),
     ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("privacyAdmin.workflows.extendedUntil"), {
+      target: { value: "2026-11-01T10:00" },
+    });
+    fireEvent.change(screen.getByLabelText("privacyAdmin.workflows.extensionReason"), {
+      target: { value: "documented-reason" },
+    });
     expect(
       screen.getByRole("button", { name: "privacyAdmin.workflows.recordExtension" }),
     ).toBeDisabled();
     expect(screen.getByLabelText("privacyAdmin.workflows.extensionNotifiedAt")).toHaveValue("");
+    fireEvent.change(screen.getByLabelText("privacyAdmin.workflows.extensionNotifiedAt"), {
+      target: { value: "2026-10-01T10:00" },
+    });
+    expect(
+      screen.getByRole("button", { name: "privacyAdmin.workflows.recordExtension" }),
+    ).not.toBeDisabled();
   });
   it("requires explicit refusal confirmation and cancel does not mutate", async () => {
     const fetch = vi.fn();

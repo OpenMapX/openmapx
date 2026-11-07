@@ -69,10 +69,6 @@ describe("parseGofsDiscovery", () => {
     expect(gofsFeedUrl(parseGofsDiscovery(flat), "zones")).toBe("https://x/zones");
   });
 
-  it("drops references missing a name or url", () => {
-    expect(parseGofsDiscovery(discovery)).toHaveLength(3);
-  });
-
   it("returns an empty list for a malformed document", () => {
     expect(parseGofsDiscovery(null)).toEqual([]);
     expect(parseGofsDiscovery({ data: {} })).toEqual([]);

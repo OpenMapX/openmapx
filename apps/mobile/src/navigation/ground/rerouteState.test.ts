@@ -93,14 +93,6 @@ describe("retryDelayMs", () => {
     },
   );
 
-  it("grows with each attempt", () => {
-    const delays = RETRY_DELAYS_MS.map((_, index) => retryDelayMs(index + 1, 0));
-
-    for (let index = 1; index < delays.length; index += 1) {
-      expect(delays[index]).toBeGreaterThan(delays[index - 1]);
-    }
-  });
-
   it("repeats the longest delay rather than growing without bound", () => {
     const longest = RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1];
 

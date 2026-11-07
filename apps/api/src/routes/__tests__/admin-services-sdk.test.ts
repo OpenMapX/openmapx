@@ -103,15 +103,7 @@ vi.mock("../../services/trusted-config-operations", () => ({
   buildConfigurationInput: async () => ({}),
   integrationSchemas: () => new Map(),
 }));
-let storedConfig: Record<string, unknown> | null = null;
 const merge = vi.fn();
-const restore = vi.fn().mockResolvedValue(true);
-const persist = vi.fn<(...args: unknown[]) => Promise<{ restore(): Promise<boolean> }>>(
-  async (...args) => {
-    await merge(...args);
-    return { restore };
-  },
-);
 const internalFailures: unknown[] = [];
 vi.mock("../admin-service-contract", async (actual) => {
   const real = await actual<typeof import("../admin-service-contract")>();
@@ -133,7 +125,7 @@ vi.mock("../admin-service-contract", async (actual) => {
   };
 });
 vi.mock("../../services/service-config-writer", () => ({
-  persistServiceConfigPatch: (...args: unknown[]) => persist(...args),
+  mergeServiceConfig: (...args: unknown[]) => merge(...args),
 }));
 vi.mock("../../services/service-config-resolver", () => ({
   resolveServiceConfigWithSources: async () => ({
@@ -352,11 +344,6 @@ beforeEach(() => {
     .mockResolvedValue({ ok: true, stdout: "", hardlinks: serviceHardlinksFixture });
   dockerAvailable.mockReset().mockResolvedValue(true);
   internalFailures.length = 0;
-  restore.mockReset().mockResolvedValue(true);
-  persist.mockReset().mockImplementation(async (...args: unknown[]) => {
-    await merge(...args);
-    return { restore };
-  });
   serviceActionLimit.reset();
   registry.mockReset().mockImplementation(() => ({ list: () => [service], get: getService }));
   requireAdmin.mockResolvedValue(session);
@@ -428,82 +415,55 @@ describe("actual service producers through final exported SDK", () => {
     }
   });
 
-  it.each([null, { count: 1 }])(
-    "forwards overlapping intents without route-local desired writes or inverse compensation (prior %j)",
-    async (prior) => {
-      storedConfig = prior;
-      let version = 0;
-      merge.mockImplementation(async (_id: string, updates: Record<string, unknown>) => {
-        storedConfig = { ...storedConfig, ...updates };
-        version++;
+  it("forwards overlapping intents without route-local desired writes", async () => {
+    const resume = Promise.withResolvers<void>();
+    apply.mockImplementationOnce(async () => {
+      await resume.promise;
+      throw new TrustedConfigurationApplyError({
+        outcome: "not_committed",
+        reason: "failed",
+        cleanupFailed: false,
+        publisherCleanupFailed: false,
+        registryUpdateFailed: false,
       });
-      persist.mockImplementation(async (...args: unknown[]) => {
-        const previous = structuredClone(storedConfig);
-        await merge(...args);
-        const owned = version;
-        return {
-          restore: async () => {
-            if (version !== owned) return false;
-            storedConfig = previous;
-            version++;
-            return true;
+    });
+    const { options, close } = await wire();
+    const older = sdk.updateAdminServiceConfig(
+      "motis",
+      { config: { count: 3 } },
+      { "idempotency-key": crypto.randomUUID() },
+      options,
+    );
+    try {
+      await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1), { timeout: 2000 });
+      expect(
+        (
+          await sdk.updateAdminServiceConfig(
+            "motis",
+            { config: { count: 4 } },
+            { "idempotency-key": crypto.randomUUID() },
+            options,
+          )
+        ).status,
+      ).toBe(200);
+      resume.resolve();
+      expect((await older).status).toBe(500);
+      expect(merge).not.toHaveBeenCalled();
+      expect(apply).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          overlay: {
+            purpose: "service-config",
+            coordinatorMode: "ensure-running",
+            changes: [{ kind: "service-config", serviceId: "motis", set: { count: 4 }, unset: [] }],
           },
-        };
-      });
-      const resume = Promise.withResolvers<void>();
-      apply.mockImplementationOnce(async () => {
-        await resume.promise;
-        throw new TrustedConfigurationApplyError({
-          outcome: "not_committed",
-          reason: "failed",
-          cleanupFailed: false,
-          publisherCleanupFailed: false,
-          registryUpdateFailed: false,
-        });
-      });
-      const { options, close } = await wire();
-      const older = sdk.updateAdminServiceConfig(
-        "motis",
-        { config: { count: 3 } },
-        { "idempotency-key": crypto.randomUUID() },
-        options,
+        }),
       );
-      try {
-        await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1), { timeout: 2000 });
-        expect(
-          (
-            await sdk.updateAdminServiceConfig(
-              "motis",
-              { config: { count: 4 } },
-              { "idempotency-key": crypto.randomUUID() },
-              options,
-            )
-          ).status,
-        ).toBe(200);
-        resume.resolve();
-        expect((await older).status).toBe(500);
-        expect(storedConfig).toEqual(prior);
-        expect(persist).not.toHaveBeenCalled();
-        expect(restore).not.toHaveBeenCalled();
-        expect(apply).toHaveBeenLastCalledWith(
-          expect.objectContaining({
-            overlay: {
-              purpose: "service-config",
-              coordinatorMode: "ensure-running",
-              changes: [
-                { kind: "service-config", serviceId: "motis", set: { count: 4 }, unset: [] },
-              ],
-            },
-          }),
-        );
-      } finally {
-        resume.resolve();
-        await older;
-        await close();
-        merge.mockReset();
-      }
-    },
-  );
+    } finally {
+      resume.resolve();
+      await older;
+      await close();
+    }
+  });
 
   it.each(["not_committed", "committed", "unknown"] as const)(
     "keeps %s apply failure through serialized SDK without an unproven inverse",
@@ -524,7 +484,6 @@ describe("actual service producers through final exported SDK", () => {
         registryUpdateFailed: false,
       });
       apply.mockRejectedValueOnce(failure);
-      restore.mockResolvedValueOnce(false);
       const { options, close } = await wire();
       try {
         const response = await sdk.updateAdminServiceConfig(
@@ -535,8 +494,7 @@ describe("actual service producers through final exported SDK", () => {
         );
         expect(response.status).toBe(500);
         expect(response.data).toEqual({ error: "Service administration failed" });
-        expect(persist).not.toHaveBeenCalled();
-        expect(restore).not.toHaveBeenCalled();
+        expect(merge).not.toHaveBeenCalled();
         expect(internalFailures).toEqual([failure]);
         expect(writeAuditLog).not.toHaveBeenCalled();
       } finally {
@@ -554,9 +512,7 @@ describe("actual service producers through final exported SDK", () => {
       registryUpdateFailed: false,
     });
     failure.message = "synthetic-secret-apply";
-    const inverseFailure = new Error("synthetic-secret-inverse");
     apply.mockRejectedValueOnce(failure);
-    restore.mockRejectedValueOnce(inverseFailure);
     const { options, close } = await wire();
     try {
       const response = await sdk.updateAdminServiceConfig(
@@ -568,7 +524,7 @@ describe("actual service producers through final exported SDK", () => {
       expect(response.status).toBe(500);
       expect(response.data).toEqual({ error: "Service administration failed" });
       expect(internalFailures[0]).toBe(failure);
-      expect(restore).not.toHaveBeenCalled();
+      expect(merge).not.toHaveBeenCalled();
     } finally {
       await close();
     }

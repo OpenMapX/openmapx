@@ -14,8 +14,8 @@ const fetchMock = vi.hoisted(() => vi.fn());
 let app: FastifyInstance;
 
 beforeAll(async () => {
-  process.env.DATA_MANAGER_AUTH_TOKEN = "service-token";
-  process.env.DATA_MANAGER_URL = "https://data-manager.test:4000";
+  vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "service-token");
+  vi.stubEnv("DATA_MANAGER_URL", "https://data-manager.test:4000");
   vi.stubGlobal("fetch", fetchMock);
   const { dataManagerRoute } = await import("../data-manager.js");
   app = Fastify({ logger: false });
@@ -25,6 +25,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   await app?.close();
 });
 

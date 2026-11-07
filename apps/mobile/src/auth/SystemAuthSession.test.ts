@@ -73,21 +73,13 @@ describe("SystemAuthSession.open", () => {
       state: STATE,
       codeVerifier: VERIFIER,
     });
+    expect(session.hasAttemptInFlight).toBe(false);
   });
 
   it("reports a dismissed browser as cancelled", async () => {
     const { session } = harness(async () => null);
 
     await expect(session.open("sign-in")).resolves.toEqual({ status: "cancelled" });
-  });
-
-  it("keeps nothing in memory once it has answered", async () => {
-    const { session } = harness(async () => successCallback());
-
-    await session.open("sign-in");
-
-    // A copy left behind is a copy that can outlive the attempt.
-    expect(session.hasAttemptInFlight).toBe(false);
   });
 
   it("keeps nothing in memory after a failure", async () => {

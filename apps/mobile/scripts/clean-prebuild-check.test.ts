@@ -69,10 +69,6 @@ const hashOf = (mutate: (value: GeneratedNativeSurface) => void = () => {}) => {
 };
 
 describe("normalizeGeneratedNativeSurface stability", () => {
-  it("produces the same hash for an identical regeneration", () => {
-    expect(hashOf()).toBe(hashOf());
-  });
-
   it("ignores Xcode object UUID churn", () => {
     expect(
       hashOf((value) => {
@@ -92,9 +88,13 @@ describe("normalizeGeneratedNativeSurface stability", () => {
   it("ignores background-mode ordering", () => {
     expect(
       hashOf((value) => {
-        value.infoPlist.UIBackgroundModes = ["location"];
+        value.infoPlist.UIBackgroundModes = ["location", "audio"];
       }),
-    ).toBe(hashOf());
+    ).toBe(
+      hashOf((value) => {
+        value.infoPlist.UIBackgroundModes = ["audio", "location"];
+      }),
+    );
   });
 
   it("ignores an unrelated application attribute", () => {

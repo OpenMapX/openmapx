@@ -1,15 +1,16 @@
 import {
   chmodSync,
   linkSync,
+  mkdtempSync as makeTemp,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   appendErasureCompleted,
   appendErasureRequest,
@@ -20,6 +21,17 @@ import {
   readErasureJournal,
   readErasureJournalKeyFile,
 } from "./erasure-journal";
+
+const temporaryDirectories: string[] = [];
+function mkdtempSync(prefix: string) {
+  const directory = makeTemp(prefix);
+  temporaryDirectories.push(directory);
+  return directory;
+}
+afterEach(() => {
+  for (const directory of temporaryDirectories.splice(0))
+    rmSync(directory, { recursive: true, force: true });
+});
 
 const KEY = Buffer.from("0123456789abcdef0123456789abcdef");
 const WRONG_KEY = Buffer.from("abcdef0123456789abcdef0123456789");
@@ -50,15 +62,17 @@ describe("erasure journal", () => {
     expect(isErasedSubject(journal, KEY, "different-user")).toBe(false);
   });
 
-  it("rejects records before a coverage marker and malformed digests", () => {
+  it("rejects an otherwise valid request before coverage, and a malformed digest after valid coverage", async () => {
     const directory = mkdtempSync(join(tmpdir(), "openmapx-erasure-"));
     const path = join(directory, "journal.jsonl");
-    writeFileSync(
-      path,
-      `${JSON.stringify({ version: 2, phase: "requested", receiptId: "6ee7f3f2-cde2-4ad8-8ebf-72dba5915b51", subjectDigest: "bad", at: "2026-08-03T00:00:00.000Z" })}\n`,
-      { mode: 0o600 },
-    );
-    expect(() => readErasureJournal(path, KEY)).toThrow(/coverage|digest/i);
+    initializeErasureJournal(path, KEY);
+    await appendErasureRequest(path, KEY, "subject");
+    const [coverage, requested] = readFileSync(path, "utf8").trim().split("\n");
+    writeFileSync(path, requested + "\n", { mode: 0o600 });
+    expect(() => readErasureJournal(path, KEY)).toThrow(/coverage/i);
+    const malformed = { ...JSON.parse(requested), subjectDigest: "bad" };
+    writeFileSync(path, coverage + "\n" + JSON.stringify(malformed) + "\n", { mode: 0o600 });
+    expect(() => readErasureJournal(path, KEY)).toThrow(/digest|Invalid erasure journal record/i);
   });
 
   it("rejects a valid but different key before replay, even with no requests", async () => {

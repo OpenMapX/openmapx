@@ -16,16 +16,6 @@ vi.mock("@openmapx/mangrove-react", () => ({
 import { MangroveConnectDialog } from "./MangroveConnectDialog";
 
 describe("Mangrove connection choices", () => {
-  it("offers the three shared login choices and explicit local signing", () => {
-    render(<MangroveConnectDialog open onClose={() => {}} onLocal={() => {}} />);
-    for (const key of [
-      "mangroveLoginPasskey",
-      "mangroveLoginOsm",
-      "mangroveLoginBluesky",
-      "mangroveUseLocal",
-    ])
-      expect(screen.getByRole("button", { name: `account.${key}` })).toBeTruthy();
-  });
   it("shows unavailable registration while retaining the local choice", async () => {
     state.config = { configured: false };
     render(<MangroveConnectDialog open onClose={() => {}} onLocal={() => {}} />);

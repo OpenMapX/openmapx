@@ -110,10 +110,9 @@ describe("road-weather-openconditions", () => {
     ]);
   });
 
-  test("a sensor slot the station lacks adds no sensor; a salted surface keeps its own state", async () => {
+  test("a salted surface keeps its own state", async () => {
     const { provider } = providerWith(body());
     const { stations } = await provider.searchStations(BBOX);
-    expect(stations[0]!.surface.some((s) => s.index > 2)).toBe(false);
     expect(stations[3]!.surface[0]).toMatchObject({
       state: { value: "chemically_wet" },
       saltKgM3: { value: 7.3 },

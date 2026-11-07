@@ -4,7 +4,6 @@ import {
   buildReleaseManifest,
   findSecretsInManifest,
   inputsMatch,
-  sha256,
 } from "./release-manifest";
 
 const INPUT: BuildManifestInput = {
@@ -29,18 +28,15 @@ const INPUT: BuildManifestInput = {
 
 describe("buildReleaseManifest", () => {
   it("records the commit that describes what was built", () => {
-    expect(buildReleaseManifest(INPUT).git.commit).toBe("abc123def456");
-  });
-
-  it("hashes the surfaces rather than embedding them", () => {
     const manifest = buildReleaseManifest(INPUT);
-
-    expect(manifest.surfaces.permissionsSha256).toBe(sha256("permissions"));
-    expect(manifest.surfaces.dataPracticesSha256).toBe(sha256("practices"));
-  });
-
-  it("records artifact hashes", () => {
-    expect(buildReleaseManifest(INPUT).artifacts[0].sha256).toBe("b".repeat(64));
+    expect(manifest.git.commit).toBe("abc123def456");
+    expect(manifest.artifacts).toEqual(INPUT.artifacts);
+    expect(manifest.surfaces.permissionsSha256).toBe(
+      "4fe3cdd404ea0290bad96d3e1ccd92979d33ac63c4c18ad80e94d0452ce43391",
+    );
+    expect(manifest.surfaces.dataPracticesSha256).toBe(
+      "097323b87e6ee43b6c04469270cd1ebe5a526519bd56af62e53567121fca2f90",
+    );
   });
 });
 

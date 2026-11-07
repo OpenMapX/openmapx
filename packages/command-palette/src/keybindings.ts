@@ -22,11 +22,6 @@ export function getPlatform(): Platform {
   return cachedPlatform;
 }
 
-/** Test seam: reset detection (used in unit tests). */
-export function _resetPlatformCacheForTests(): void {
-  cachedPlatform = null;
-}
-
 /**
  * Parse a shortcut string like "Mod+K", "g s", "?".
  * - "Mod" → cross-platform primary modifier (Cmd on mac, Ctrl elsewhere).

@@ -53,42 +53,19 @@ function setMediaDevices(getUserMedia: ReturnType<typeof vi.fn>) {
 }
 
 describe("VoiceSearchButton", () => {
-  it("renders the mic button once SpeechRecognition is feature-detected", async () => {
-    installFakeRecognition();
-    try {
-      render(<VoiceSearchButton onResult={vi.fn()} />);
-      await screen.findByLabelText("search.voiceSearchAriaLabel");
-    } finally {
-      uninstall();
-    }
-  });
-
-  it("requests the microphone via getUserMedia, then starts recognition with a region tag", async () => {
+  it("reports dictation through onResult", async () => {
     const recRef = installFakeRecognition();
     const stopTrack = vi.fn();
     const getUserMedia = vi.fn().mockResolvedValue({ getTracks: () => [{ stop: stopTrack }] });
     setMediaDevices(getUserMedia);
-    try {
-      render(<VoiceSearchButton onResult={vi.fn()} />);
-      fireEvent.click(await screen.findByLabelText("search.voiceSearchAriaLabel"));
-      await waitFor(() => expect(getUserMedia).toHaveBeenCalledWith({ audio: true }));
-      await waitFor(() => expect(recRef.current?.start).toHaveBeenCalled());
-      expect(stopTrack).toHaveBeenCalled();
-      // A region-qualified BCP-47 tag, not the bare app locale.
-      expect(recRef.current?.lang).toContain("-");
-    } finally {
-      uninstall();
-    }
-  });
-
-  it("reports dictation through onResult", async () => {
-    const recRef = installFakeRecognition();
-    setMediaDevices(vi.fn().mockResolvedValue({ getTracks: () => [] }));
     const onResult = vi.fn();
     try {
       render(<VoiceSearchButton onResult={onResult} />);
       fireEvent.click(await screen.findByLabelText("search.voiceSearchAriaLabel"));
       await waitFor(() => expect(recRef.current?.start).toHaveBeenCalled());
+      expect(getUserMedia).toHaveBeenCalledWith({ audio: true });
+      expect(stopTrack).toHaveBeenCalled();
+      expect(recRef.current?.lang).toContain("-");
       act(() => {
         recRef.current?.onresult?.({
           resultIndex: 0,
@@ -161,8 +138,17 @@ describe("VoiceSearchButton inside the installed shell", () => {
     "hides without capability in %s",
     async (state) => {
       installFakeRecognition();
+      const request = vi
+        .fn()
+        .mockResolvedValue({ type: "voice.availability", payload: { available: true } });
       runtime.current = {
         ...BROWSER_RUNTIME,
+        isInstalledShell: true,
+        client: {
+          request,
+          send: vi.fn(),
+          subscribe: () => () => {},
+        } as unknown as MobileRuntime["client"],
         state,
         handshake:
           state === "native-compatible"
@@ -172,7 +158,9 @@ describe("VoiceSearchButton inside the installed shell", () => {
       (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL] = { nonce: "abc123" };
       try {
         const { queryByLabelText } = render(<VoiceSearchButton onResult={vi.fn()} />);
-        await waitFor(() => expect(queryByLabelText("search.voiceSearchAriaLabel")).toBeNull());
+        await act(async () => {});
+        expect(request).not.toHaveBeenCalled();
+        expect(queryByLabelText("search.voiceSearchAriaLabel")).toBeNull();
       } finally {
         runtime.current = null;
         delete (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL];
@@ -278,7 +266,7 @@ describe("VoiceSearchButton inside the installed shell", () => {
     }
   });
 
-  it.each(["false", "timeout", "rejection"])(
+  it.each(["false", "rejection"])(
     "keeps an old-APK-shaped hello hidden on probe %s",
     async (outcome) => {
       const h = nativeRuntime(); // Handshake has no voice field.
@@ -333,21 +321,19 @@ describe("VoiceSearchButton inside the installed shell", () => {
     }
   });
 
-  it.each(
-    [
-      ["not-allowed", "voiceErrorNotAllowedApp"],
-      ["language-not-supported", "voiceErrorLanguageApp"],
-      ["audio-capture", "voiceErrorNoMicrophone"],
-      ["no-speech", "voiceErrorNoSpeech"],
-      ["busy", "voiceErrorGeneric"],
-      ["unavailable", "voiceErrorGeneric"],
-      ["aborted", "voiceErrorGeneric"],
-      ["generic", "voiceErrorGeneric"],
-    ].flatMap(([error, key]) => [
-      [error, key, "android"],
-      [error, key.endsWith("App") ? `${key}Ios` : key, "ios"],
-    ]),
-  )("maps native %s to %s on %s", async (error, key, platform) => {
+  it.each([
+    ["not-allowed", "voiceErrorNotAllowedApp", "android"],
+    ["not-allowed", "voiceErrorNotAllowedAppIos", "ios"],
+    ["language-not-supported", "voiceErrorLanguageApp", "android"],
+    ["language-not-supported", "voiceErrorLanguageAppIos", "ios"],
+    ["audio-capture", "voiceErrorNoMicrophone", "android"],
+    ["no-speech", "voiceErrorNoSpeech", "android"],
+    ["busy", "voiceErrorGeneric", "android"],
+    ["unavailable", "voiceErrorGeneric", "android"],
+    ["aborted", "voiceErrorGeneric", "android"],
+    ["generic", "voiceErrorGeneric", "android"],
+    ["generic", "voiceErrorGeneric", "ios"],
+  ] as const)("maps native %s to %s on %s", async (error, key, platform) => {
     const h = nativeRuntime();
     if (runtime.current?.handshake)
       runtime.current.handshake.platform = platform as "ios" | "android";

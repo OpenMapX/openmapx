@@ -46,14 +46,6 @@ afterEach(() => {
 });
 
 describe("MangroveUnlockDialog", () => {
-  it("shows the passphrase field for a passphrase-only envelope and no passkey button", () => {
-    keypairState.current = readyEnvelope(["passphrase"]);
-    render(<MangroveUnlockDialog open onClose={vi.fn()} />);
-
-    expect(screen.queryByLabelText("account.mangrovePassphraseLabel")).not.toBe(null);
-    expect(screen.queryByRole("button", { name: "account.mangroveUnlockWithPasskey" })).toBe(null);
-  });
-
   it("shows the passkey button for a webauthn-only envelope and no passphrase field", () => {
     keypairState.current = readyEnvelope(["webauthn"]);
     render(<MangroveUnlockDialog open onClose={vi.fn()} />);
@@ -75,18 +67,6 @@ describe("MangroveUnlockDialog", () => {
     expect(screen.queryByText("common.or")).not.toBe(null);
   });
 
-  it("disables the unlock CTA until a passphrase is entered", async () => {
-    const user = userEvent.setup();
-    keypairState.current = readyEnvelope(["passphrase"]);
-    render(<MangroveUnlockDialog open onClose={vi.fn()} />);
-
-    const cta = screen.getByRole("button", { name: "account.mangroveUnlockCta" });
-    expect((cta as HTMLButtonElement).disabled).toBe(true);
-
-    await user.type(screen.getByLabelText("account.mangrovePassphraseLabel"), "hunter2");
-    expect((cta as HTMLButtonElement).disabled).toBe(false);
-  });
-
   it("unlocks via passphrase and closes on success", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
@@ -95,7 +75,11 @@ describe("MangroveUnlockDialog", () => {
     keypairState.current = readyEnvelope(["passphrase"]);
     render(<MangroveUnlockDialog open onClose={onClose} onUnlocked={onUnlocked} />);
 
+    const cta = screen.getByRole("button", { name: "account.mangroveUnlockCta" });
+    expect(cta).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "account.mangroveUnlockWithPasskey" })).toBeNull();
     await user.type(screen.getByLabelText("account.mangrovePassphraseLabel"), "hunter2");
+    expect(cta).not.toBeDisabled();
     await user.click(screen.getByRole("button", { name: "account.mangroveUnlockCta" }));
 
     expect(mutateAsync).toHaveBeenCalledWith({ method: "passphrase", passphrase: "hunter2" });

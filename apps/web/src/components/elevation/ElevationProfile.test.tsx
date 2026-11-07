@@ -1,5 +1,5 @@
 import type { ElevationProfile as Profile, Route } from "@openmapx/core";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { ElevationProfile } from "./ElevationProfile";
 
@@ -50,11 +50,10 @@ function profile(count: number): Profile {
     contributors: [receipt],
   };
 }
-it("credits the profile's captured input receipt when compact stats or expanded chart are visible", async () => {
+it("credits the profile's captured input receipt when compact stats or expanded chart are visible", () => {
   state.profile = profile(2);
   render(<ElevationProfile route={route} units="metric" />);
   expect(screen.getByText("Captured mandatory notice")).toBeInTheDocument();
-  await waitFor(() => expect(screen.getByText("Captured mandatory notice")).toBeInTheDocument());
   expect(screen.queryByText("Unused route height")).toBeNull();
   fireEvent.click(screen.getByText("title"));
   expect(screen.getByText("Chart")).toBeInTheDocument();
@@ -63,6 +62,6 @@ it("credits the profile's captured input receipt when compact stats or expanded 
 it("has no receipt for an undisplayed single-point profile", () => {
   state.profile = profile(1);
   render(<ElevationProfile route={route} units="metric" />);
-  expect(screen.queryByText("Captured height")).toBeNull();
+  expect(screen.queryByText("Captured mandatory notice")).toBeNull();
   expect(screen.queryByText("Profile statistics")).toBeNull();
 });

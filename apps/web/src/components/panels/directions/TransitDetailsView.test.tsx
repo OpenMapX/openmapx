@@ -225,7 +225,7 @@ describe("TransitDetailsView destination time zone", () => {
 describe("TransitDetailsView per-leg attribution", () => {
   it("renders an inline AttributionStrip when the leg's attribution differs from the trip union", () => {
     const itinerary = makeItinerary([[ATTR_DELFI], [ATTR_SBB]]);
-    const markup = renderToStaticMarkup(
+    render(
       <TransitDetailsView
         itinerary={itinerary}
         originLabel="A"
@@ -234,10 +234,9 @@ describe("TransitDetailsView per-leg attribution", () => {
         onBack={() => {}}
       />,
     );
-    // Both per-leg strips render with their distinct source ids.
-    expect(markup).toContain('data-testid="attribution-strip-inline"');
-    expect(markup).toContain("de_DELFI");
-    expect(markup).toContain("ch_SBB");
+    expect(
+      screen.getAllByTestId("attribution-strip-inline").map((strip) => strip.textContent),
+    ).toEqual(["de_DELFI", "ch_SBB"]);
   });
 
   it("hides the per-leg strip when the leg's attribution equals the trip union", () => {

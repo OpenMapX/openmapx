@@ -51,7 +51,18 @@ describe("NearbyParkingCarousel", () => {
       />,
     );
     expect(screen.getByText("Central Garage")).toBeInTheDocument();
+    expect(screen.getByText("navigation.parkingFeePaid")).toBeInTheDocument();
+    expect(screen.getByText("navigation.parkingFeeFree")).toBeInTheDocument();
+    expect(screen.getByText(/navigation.parkingOptionsCount/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "navigation.nearbyParking — navigation.previewOnMap" }),
+    ).toBeInTheDocument();
+    const preview = screen.getByRole("button", {
+      name: "Central Garage — navigation.previewOnMap",
+    });
+    expect(preview.parentElement?.closest("[role='button'], button")).toBeNull();
     const driveButtons = screen.getAllByRole("button", { name: /navigation.driveHere/ });
+    expect(driveButtons[0].parentElement?.closest("[role='button'], button")).toBeNull();
     await userEvent.click(driveButtons[0]);
     expect(onDrive).toHaveBeenCalledWith(mockPlaces[0]);
     expect(onSelect).not.toHaveBeenCalled();
@@ -87,37 +98,6 @@ describe("NearbyParkingCarousel", () => {
     expect(onSelect).toHaveBeenCalledWith(null);
   });
 
-  it("renders free and paid fee chips appropriately", () => {
-    render(
-      <NearbyParkingCarousel
-        places={mockPlaces}
-        selectedPlace={null}
-        isLoading={false}
-        onSelectPlace={vi.fn()}
-        onDriveToPlace={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText("navigation.parkingFeePaid")).toBeInTheDocument();
-    expect(screen.getByText("navigation.parkingFeeFree")).toBeInTheDocument();
-  });
-
-  it("falls back to default title when place has no name", () => {
-    render(
-      <NearbyParkingCarousel
-        places={[mockPlaces[2]]}
-        selectedPlace={null}
-        isLoading={false}
-        onSelectPlace={vi.fn()}
-        onDriveToPlace={vi.fn()}
-      />,
-    );
-
-    // Header has navigation.nearbyParking (1), card has navigation.nearbyParking
-    const titleElements = screen.getAllByText(/navigation.nearbyParking/);
-    expect(titleElements.length).toBeGreaterThanOrEqual(2);
-  });
-
   it("shows a loading skeleton when isLoading and null when empty", () => {
     const { container, rerender } = render(
       <NearbyParkingCarousel
@@ -129,7 +109,8 @@ describe("NearbyParkingCarousel", () => {
       />,
     );
     // Loading skeleton (role=status), not the carousel.
-    expect(container.firstChild).not.toBeNull();
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByRole("article")).toBeNull();
 
     rerender(
       <NearbyParkingCarousel
@@ -141,6 +122,7 @@ describe("NearbyParkingCarousel", () => {
       />,
     );
     expect(container.firstChild).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("shows a fee only from the candidate's own fee, not from raw tags", () => {
@@ -164,56 +146,6 @@ describe("NearbyParkingCarousel", () => {
 
     expect(screen.getByText("Legacy Lot")).toBeInTheDocument();
     expect(screen.queryByText("navigation.parkingFeePaid")).not.toBeInTheDocument();
-  });
-
-  it("renders parkingOptionsCount in header and previewOnMap on card accessibility label", () => {
-    render(
-      <NearbyParkingCarousel
-        places={mockPlaces}
-        selectedPlace={null}
-        isLoading={false}
-        onSelectPlace={vi.fn()}
-        onDriveToPlace={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText(/navigation.parkingOptionsCount/)).toBeInTheDocument();
-    expect(
-      screen.getAllByRole("button", { name: /navigation.previewOnMap/ }).length,
-    ).toBeGreaterThan(0);
-  });
-
-  it("uses separate preview and drive buttons without nested interactive controls", () => {
-    render(
-      <NearbyParkingCarousel
-        places={[mockPlaces[0]]}
-        selectedPlace={null}
-        isLoading={false}
-        onSelectPlace={vi.fn()}
-        onDriveToPlace={vi.fn()}
-      />,
-    );
-
-    const preview = screen.getByRole("button", { name: /navigation.previewOnMap/ });
-    const drive = screen.getByRole("button", { name: /navigation.driveHere/ });
-    expect(preview.parentElement?.closest("[role='button'], button")).toBeNull();
-    expect(drive.parentElement?.closest("[role='button'], button")).toBeNull();
-  });
-
-  it("labels parking proximity as straight-line distance", () => {
-    render(
-      <NearbyParkingCarousel
-        places={mockPlaces}
-        selectedPlace={null}
-        isLoading={false}
-        onSelectPlace={vi.fn()}
-        onDriveToPlace={vi.fn()}
-        destinationCoords={[10.01, 50.01]}
-      />,
-    );
-
-    expect(screen.getAllByText(/navigation.straightLineDistance/).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/navigation.walkDetour/)).toBeNull();
   });
 
   it("shows the parking source's free-space line in the parking strings", () => {

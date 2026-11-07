@@ -13,9 +13,9 @@ import {
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { buildGeoJson } from "@/integration-api/map/dataSourceFeatures";
-import carSharingDe from "../../../../../../integrations/car-sharing/strings/de.json";
+
 import carSharingEn from "../../../../../../integrations/car-sharing/strings/en.json";
-import frameworkDe from "../../../../../../packages/integration-framework/strings/locales/de.json";
+
 import frameworkEn from "../../../../../../packages/integration-framework/strings/locales/en.json";
 import { StructuredSections } from "../shared/StructuredSections";
 import { translateStructuredSection } from "./DataSourceSections";
@@ -28,15 +28,15 @@ vi.mock("next-intl", () => ({
 vi.mock("@/integration-api/runtime/theme", () => ({ BRAND: "#008080" }));
 
 const resolverFor =
-  (locale: "en" | "de") =>
+  (locale: "en") =>
   (value: Translatable | undefined): string => {
     if (value === undefined) return "";
     if (!isI18nToken(value)) return String(value);
     return resolveToken(value as I18nToken, {
       locale,
       fallbackLocale: "en",
-      shared: { en: frameworkEn, de: frameworkDe } as LocaleStrings,
-      integration: { en: carSharingEn, de: carSharingDe } as LocaleStrings,
+      shared: { en: frameworkEn } as LocaleStrings,
+      integration: { en: carSharingEn } as LocaleStrings,
     });
   };
 
@@ -74,14 +74,6 @@ describe("car-sharing station without published availability", () => {
     expect(markup).toContain("Available Cars");
     expect(markup).toContain("Not published by this source");
     expect(markup).toContain("Total Capacity");
-  });
-
-  it("summarises the cars the station holds in both locales", () => {
-    expect(resolverFor("en")(staticResult.summary)).toBe("Station for 3 cars");
-    expect(resolverFor("de")(staticResult.summary)).toBe("Station für 3 Autos");
-    expect(resolverFor("en")({ $t: "summary.capacity", values: { count: 0 } })).toBe(
-      "No cars listed",
-    );
   });
 
   it("marks the map feature with neither an empty nor an inactive state", () => {

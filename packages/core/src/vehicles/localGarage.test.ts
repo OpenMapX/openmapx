@@ -46,7 +46,7 @@ describe("localGarage", () => {
   it("round-trips a vehicle", () => {
     const [saved] = writeLocalVehicles([VEHICLE]);
     expect(saved.name).toBe("Blue Golf");
-    expect(readLocalVehicles()).toHaveLength(1);
+    expect(readLocalVehicles()).toEqual([saved]);
   });
 
   it("drops a corrupt row instead of throwing", () => {

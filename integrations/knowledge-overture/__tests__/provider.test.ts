@@ -93,20 +93,19 @@ describe("knowledge-overture setup", () => {
     expect(ctx.log.warn).toHaveBeenCalledWith(expect.stringContaining("[knowledge-overture]"));
   });
 
-  it("registers a knowledge provider when ctx.db is present", async () => {
+  it("reports storage availability through the registered health check", async () => {
     const db = makeDb();
     const ctx = makeCtx(db);
     const { setup } = await import("../index.js");
     setup(ctx);
-    expect(ctx.registerKnowledgeProvider).toHaveBeenCalledTimes(1);
-  });
-
-  it("registers a health check when ctx.db is present", async () => {
-    const db = makeDb();
-    const ctx = makeCtx(db);
-    const { setup } = await import("../index.js");
-    setup(ctx);
-    expect(ctx.registerHealthCheck).toHaveBeenCalledTimes(1);
+    const check = vi.mocked(ctx.registerHealthCheck).mock.calls[0]?.[0];
+    if (!check) throw new Error("Health check not registered");
+    await expect(check()).resolves.toEqual({ status: "up" });
+    db.execute.mockRejectedValueOnce(new Error("missing relation"));
+    await expect(check()).resolves.toEqual({
+      status: "down",
+      error: "overture_places not ingested",
+    });
   });
 });
 
@@ -161,14 +160,16 @@ describe("knowledge-overture provider lookup", () => {
 
   it("returns normalized brand, names, address, wikidata, and contacts from the Overture row", async () => {
     const ctx = makeCtx(detailRowDb(makeOvertureDetailRow()));
-    const { setup, overtureKnowledgeSource } = await import("../index.js");
+    const { setup } = await import("../index.js");
     setup(ctx);
+    const registered = vi.mocked(ctx.registerKnowledgeProvider).mock.calls[0]?.[0];
+    if (!registered) throw new Error("Knowledge provider not registered");
 
-    const result = await overtureKnowledgeSource.lookup(
-      { amenity: "cafe", category: "coffee" },
-      "en",
-      { coordinates: [13.4, 52.5], name: "Starbucks", ids: { osm: "node/123456789" } },
-    );
+    const result = await registered.lookup({ amenity: "cafe", category: "coffee" }, "en", {
+      coordinates: [13.4, 52.5],
+      name: "Starbucks",
+      ids: { osm: "node/123456789" },
+    });
 
     expect(result).not.toBeNull();
     // Brand name comes from the NESTED brand.names.primary, not brand.name.
@@ -309,7 +310,7 @@ describe("knowledge-overture provider lookup", () => {
         coordinates: [13.4, 52.5],
         name: "Starbucks",
       }),
-    ).resolves.not.toThrow();
+    ).resolves.toMatchObject({ externalIds: { gers: "overture-abc-123" } });
   });
 
   it("bounds a stalled detail lookup after resolving the identity", async () => {

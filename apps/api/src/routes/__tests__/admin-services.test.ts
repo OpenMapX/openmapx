@@ -117,13 +117,9 @@ vi.mock("../../services/configuration-ownership-view.js", async (importActual) =
   }),
 }));
 
-const mockRestoreServiceConfig = vi.fn().mockResolvedValue(true);
 const mockMergeServiceConfig = vi.fn().mockResolvedValue(undefined);
 vi.mock("../../services/service-config-writer.js", () => ({
-  persistServiceConfigPatch: async (...args: unknown[]) => {
-    await mockMergeServiceConfig(...args);
-    return { restore: mockRestoreServiceConfig };
-  },
+  mergeServiceConfig: (...args: unknown[]) => mockMergeServiceConfig(...args),
 }));
 vi.mock("../../services/trusted-config-operations.js", () => ({
   applyTrustedConfiguration: vi.fn().mockResolvedValue({ revisionId: "revision_1" }),
@@ -765,7 +761,7 @@ describe("service credentials", () => {
           payload: { config: {} },
         });
         expect(res.statusCode).toBe(500);
-        expect(mockRestoreServiceConfig).not.toHaveBeenCalled();
+        expect(mockMergeServiceConfig).not.toHaveBeenCalled();
         expect(applyTrustedConfiguration).toHaveBeenCalledWith(
           expect.objectContaining({
             kind: "serviceConfig.apply",
@@ -795,7 +791,6 @@ describe("service credentials", () => {
       });
       expect(res.statusCode).toBe(409);
       expect(res.json()).toEqual({ error: problem });
-      expect(mockRestoreServiceConfig).not.toHaveBeenCalled();
       expect(mockMergeServiceConfig).not.toHaveBeenCalled();
     });
     it("persists only the route-validated update through the atomic writer", async () => {

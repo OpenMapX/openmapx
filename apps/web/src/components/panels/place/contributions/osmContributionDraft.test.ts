@@ -1,7 +1,6 @@
 import type { OsmContributionContext, OsmContributionPreview } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
 import {
-  type CompleteOsmDraft,
   emptyDraft,
   initialOsmContributionState,
   isDraftComplete,
@@ -132,7 +131,7 @@ describe("opening and resetting", () => {
 });
 
 describe("field selection", () => {
-  it("selects unique fields up to the submission limit", () => {
+  it("selects offered fields once even when selected twice", () => {
     let state = reduce(
       initialOsmContributionState,
       { type: "open", intent: "edit" },
@@ -305,7 +304,6 @@ describe("explicit values and removal", () => {
     expect(selectedChanges(state.draft)).toEqual([
       { field: "category", action: "set", presetId: "amenity/restaurant" },
     ]);
-    expect(JSON.stringify(state.draft)).not.toContain('amenity":');
   });
 
   it("ignores a no-op set that matches the live value", () => {
@@ -316,13 +314,6 @@ describe("explicit values and removal", () => {
 });
 
 describe("evidence, comment and review request", () => {
-  it("starts with no evidence, an empty comment and no review request", () => {
-    const draft = emptyDraft();
-    expect(draft.evidence).toBeUndefined();
-    expect(draft.comment).toBe("");
-    expect(draft.reviewRequested).toBe(false);
-  });
-
   it("records each evidence variant, including a compatible-source detail", () => {
     let state = reduce(edited(), { type: "setEvidence", evidence: { kind: "survey" } });
     if (state.step !== "edit") throw new Error("expected edit");
@@ -336,13 +327,11 @@ describe("evidence, comment and review request", () => {
     expect(state.draft.evidence).toEqual({ kind: "otherCompatible", detail: "City open data" });
   });
 
-  it("keeps the comment exactly as typed", () => {
-    const state = reduce(edited(), { type: "setComment", comment: COMMENT });
-    if (state.step !== "edit") throw new Error("expected edit");
-    expect(state.draft.comment).toBe(COMMENT);
-  });
-
   it("is complete only with a change, evidence and a long-enough comment", () => {
+    const defaults = emptyDraft();
+    expect(defaults.evidence).toBeUndefined();
+    expect(defaults.comment).toBe("");
+    expect(defaults.reviewRequested).toBe(false);
     let state = edited();
     if (state.step !== "edit") throw new Error("expected edit");
     expect(isDraftComplete(state.draft)).toBe(false);
@@ -355,8 +344,10 @@ describe("evidence, comment and review request", () => {
     if (state.step !== "edit") throw new Error("expected edit");
     expect(isDraftComplete(state.draft)).toBe(false);
 
-    state = reduce(state, { type: "setComment", comment: COMMENT });
+    const typedComment = "  " + COMMENT + "  ";
+    state = reduce(state, { type: "setComment", comment: typedComment });
     if (state.step !== "edit") throw new Error("expected edit");
+    expect(state.draft.comment).toBe(typedComment);
     expect(isDraftComplete(state.draft)).toBe(true);
   });
 
@@ -384,10 +375,13 @@ describe("submission identity", () => {
       edited(),
       { type: "requestReview", submissionId: UUID_A },
       { type: "previewLoaded", preview: PREVIEW },
-      { type: "backToEdit" },
       { type: "setText", field: "name", value: "Café Nord" },
     );
     expect(reviewed.step).toBe("edit");
+    if (reviewed.step !== "edit") throw new Error("expected edited draft");
+    expect(selectedChanges(reviewed.draft)).toEqual([
+      { field: "name", action: "set", value: "Café Nord" },
+    ]);
     const again = reduce(reviewed, { type: "requestReview", submissionId: UUID_B });
     expect(again).toMatchObject({ submissionId: UUID_B });
   });
@@ -544,13 +538,18 @@ describe("conflict", () => {
 
 describe("notes", () => {
   it("keeps note state separate with its own identity", () => {
-    const state = reduce(
+    const initial = reduce(
       initialOsmContributionState,
       { type: "open", intent: "note" },
       { type: "contextLoaded", context: CONTEXT },
       { type: "openNote" },
-      { type: "setNoteText", text: "The entrance is on the other side." },
     );
+    if (initial.step !== "note") throw new Error("expected empty note");
+    expect(initial.note.text).toBe("");
+    const state = reduce(initial, {
+      type: "setNoteText",
+      text: "The entrance is on the other side.",
+    });
     expect(state.step).toBe("note");
     if (state.step !== "note") return;
     expect(state.note.text).toBe("The entrance is on the other side.");
@@ -563,30 +562,6 @@ describe("notes", () => {
     expect(submitting.note.submitting).toBe(true);
     // A second click cannot start another submission.
     expect(reduce(submitting, { type: "submitNote", submissionId: UUID_B })).toBe(submitting);
-  });
-
-  it("starts with empty text and never generates a correction", () => {
-    const state = reduce(
-      initialOsmContributionState,
-      { type: "open", intent: "note" },
-      { type: "contextLoaded", context: CONTEXT },
-      { type: "openNote" },
-    );
-    if (state.step !== "note") throw new Error("expected note");
-    expect(state.note.text).toBe("");
-  });
-
-  it("has no event that turns a failed edit into a note", () => {
-    const failed = reduce(
-      edited(),
-      { type: "setEvidence", evidence: { kind: "survey" } },
-      { type: "setComment", comment: COMMENT },
-      { type: "requestReview", submissionId: UUID_A },
-      { type: "previewLoaded", preview: PREVIEW },
-      { type: "publish" },
-      { type: "publishFailed" },
-    );
-    expect(failed.step).toBe("review");
   });
 });
 
@@ -622,19 +597,5 @@ describe("dirty close", () => {
       },
     };
     expect(reduce(success, { type: "requestClose" })).toEqual({ step: "closed" });
-  });
-});
-
-describe("CompleteOsmDraft", () => {
-  it("narrows only when evidence and a valid comment are present", () => {
-    const state = reduce(
-      edited(),
-      { type: "setEvidence", evidence: { kind: "survey" } },
-      { type: "setComment", comment: COMMENT },
-    );
-    if (state.step !== "edit") throw new Error("expected edit");
-    expect(isDraftComplete(state.draft)).toBe(true);
-    const complete: CompleteOsmDraft = state.draft as CompleteOsmDraft;
-    expect(complete.evidence).toEqual({ kind: "survey" });
   });
 });

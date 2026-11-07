@@ -307,37 +307,6 @@ describe("useViewportWildfireSource", () => {
     expect(params.publish).toHaveBeenCalledWith(newest);
   });
 
-  it("keeps cancellation source-local across two hook instances", async () => {
-    vi.useFakeTimers();
-    const signals: AbortSignal[] = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((_url: string, init?: RequestInit) => {
-        signals.push(init?.signal as AbortSignal);
-        return new Promise<Response>(() => {});
-      }),
-    );
-    mountSource();
-    mountSource({
-      sourceId: "effis",
-      endpoint: "https://api.test/api/integrations/overlay-wildfires/burned-areas/effis",
-      refreshMs: 1_800_000,
-    });
-    await act(async () => {});
-
-    fake.state.zoom = 2;
-    act(() => fake.emit("moveend"));
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(250);
-    });
-
-    expect(signals).toHaveLength(2);
-    expect(signals[0]?.aborted).toBe(true);
-    expect(signals[1]?.aborted).toBe(true);
-    expect(useWildfireStore.getState().statuses.nifc.loading).toBe(false);
-    expect(useWildfireStore.getState().statuses.effis.loading).toBe(false);
-  });
-
   it.each([
     ["nifc" as const, 300_000],
     ["effis" as const, 1_800_000],
@@ -576,38 +545,44 @@ describe("useViewportWildfireSource", () => {
     });
   });
 
-  it("rejects a non-canonical timestamp refresh and retains the last valid collection", async () => {
-    vi.useFakeTimers();
-    const good = { ...EMPTY_COLLECTION, features: [NIFC_FEATURE] };
-    const malformed = {
-      ...good,
-      fetchedAt: "0",
-      features: [
-        {
-          ...NIFC_FEATURE,
-          properties: { ...NIFC_FEATURE.properties, observedAt: "2026-02-30T12:00:00.000Z" },
-        },
-      ],
-    };
-    const fetchMock = vi
-      .fn<() => Promise<Response>>()
-      .mockResolvedValueOnce(response(good))
-      .mockResolvedValueOnce(response(malformed));
-    vi.stubGlobal("fetch", fetchMock);
-    const { params } = mountSource();
-    await act(async () => {});
+  it.each(["acquisition", "observation"])(
+    "rejects an invalid %s timestamp refresh and retains the last valid collection",
+    async (timestamp) => {
+      vi.useFakeTimers();
+      const good = { ...EMPTY_COLLECTION, features: [NIFC_FEATURE] };
+      const malformed = {
+        ...good,
+        ...(timestamp === "acquisition" ? { fetchedAt: "0" } : {}),
+        features: [
+          {
+            ...NIFC_FEATURE,
+            properties: {
+              ...NIFC_FEATURE.properties,
+              ...(timestamp === "observation" ? { observedAt: "2026-02-30T12:00:00.000Z" } : {}),
+            },
+          },
+        ],
+      };
+      const fetchMock = vi
+        .fn<() => Promise<Response>>()
+        .mockResolvedValueOnce(response(good))
+        .mockResolvedValueOnce(response(malformed));
+      vi.stubGlobal("fetch", fetchMock);
+      const { params } = mountSource();
+      await act(async () => {});
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(300_000);
-    });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300_000);
+      });
 
-    expect(params.publish).toHaveBeenCalledTimes(1);
-    expect(params.publish).toHaveBeenCalledWith(good);
-    expect(useWildfireStore.getState().statuses.nifc).toMatchObject({
-      error: "unavailable",
-      featureCount: 1,
-    });
-  });
+      expect(params.publish).toHaveBeenCalledTimes(1);
+      expect(params.publish).toHaveBeenCalledWith(good);
+      expect(useWildfireStore.getState().statuses.nifc).toMatchObject({
+        error: "unavailable",
+        featureCount: 1,
+      });
+    },
+  );
 
   it("invalid replacement bounds supersede and abort the active request", async () => {
     vi.useFakeTimers();

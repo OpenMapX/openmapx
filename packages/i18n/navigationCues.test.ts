@@ -170,8 +170,7 @@ describe("interpolation safety", () => {
     const text = formatNavigationCue({ kind: "walk", action: "Turn left", street }, "en");
     // The value must survive as text; what matters is that no tag or nested
     // placeholder is interpreted, and nothing is dropped silently.
-    expect(text.startsWith("Turn left onto ")).toBe(true);
-    expect(text.length).toBeGreaterThan("Turn left onto ".length);
+    expect(text).toBe(`Turn left onto ${street}`);
   });
 
   it("does not resolve a placeholder smuggled inside a value", () => {

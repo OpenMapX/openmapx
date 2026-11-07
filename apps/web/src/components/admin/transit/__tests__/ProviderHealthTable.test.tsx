@@ -90,13 +90,4 @@ describe("ProviderHealthTable", () => {
     // The disabled provider's chip prefixes with "disabled until".
     expect(markup).toContain("disabled until");
   });
-
-  it("renders the Reset button per row", async () => {
-    const { ProviderHealthTable } = await import("../ProviderHealthTable");
-    const markup = renderToStaticMarkup(<ProviderHealthTable />);
-    // Each row carries a Reset button; we expect at least two.
-    const matches = markup.match(/Reset/g) ?? [];
-    expect(matches.length).toBeDefined();
-    expect((matches.length ?? 0) >= 2).toBe(true);
-  });
 });

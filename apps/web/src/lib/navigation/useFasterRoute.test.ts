@@ -138,28 +138,6 @@ describe("useFasterRoute", () => {
     expect(fetchDirections).not.toHaveBeenCalled();
   });
 
-  it("proposes a qualifying candidate", async () => {
-    // Diverges roughly 1 km north well ahead of the driver and saves 900 s.
-    fetchDirections.mockResolvedValue({
-      routes: [
-        {
-          ...routeOf(2700, 0),
-          geometry: [
-            [0.045, 0],
-            [0.09, 0],
-            [0.11, 0.009],
-            [0.18, 0],
-          ],
-        },
-      ],
-      waypoints: [],
-      activeRouteIndex: 0,
-    });
-    renderHook(() => useFasterRoute());
-    await act(async () => vi.advanceTimersByTimeAsync(301_000));
-    expect(useNavigationStore.getState().fasterRoute?.savedSeconds).toBeGreaterThanOrEqual(300);
-  });
-
   it.each([true, false])(
     "keeps the captured remaining itinerary until acceptance=%s",
     async (accept) => {
@@ -196,6 +174,7 @@ describe("useFasterRoute", () => {
         expect.objectContaining({ waypoints: captured }),
       );
       expect(useNavigationStore.getState().fasterRoute).not.toBeNull();
+      expect(useNavigationStore.getState().fasterRoute?.savedSeconds).toBeGreaterThanOrEqual(300);
       expect(useNavigationStore.getState().destinationWaypoints).toEqual(original);
       act(() => {
         if (accept) useNavigationStore.getState().acceptFasterRoute();

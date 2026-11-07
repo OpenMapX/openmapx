@@ -197,7 +197,7 @@ describe("isCurrentGeneration", () => {
   });
 
   it("rejects a reply from a generation a replan superseded", () => {
-    expect(isCurrentGeneration(inFlight, { generation: 3, requestId: "r3" })).toBe(false);
+    expect(isCurrentGeneration(inFlight, { generation: 3, requestId: "r4" })).toBe(false);
   });
 
   it("rejects a reply whose request the session never made", () => {

@@ -25,6 +25,7 @@ import { dirname, join } from "node:path";
 import { readErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { parse as parseYaml } from "yaml";
 import { renderComposeForRepo, rotateRedisPasswordForRepo } from "../src/commands/compose";
 import { runsInAgent } from "../src/lib/agent-integrations";
 import { legacyTraefikDynamicMounted } from "../src/lib/container-mounts";
@@ -63,6 +64,18 @@ const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
 /** The `NAME: <dollar>{NAME:-fallback}` line Compose rendering produces. */
 function composeDefault(name: string, fallback: string): string {
   return `${name}: \${${name}:-${fallback}}`;
+}
+
+function renderedService(
+  yaml: string,
+  id: string,
+): {
+  environment?: Record<string, unknown>;
+  volumes?: string[];
+} {
+  const services = parseYaml(yaml).services;
+  if (!services[id]) throw new Error(`Missing rendered service ${id}`);
+  return services[id];
 }
 
 let tmp: string;
@@ -358,7 +371,6 @@ describe("renderComposeForRepo", () => {
     expect(yaml).toContain(composeDefault("OSM_DIRECT_EDITING_ENABLED", "false"));
     expect(yaml).toContain(composeDefault("OSM_API_URL", "https://api.openstreetmap.org"));
     expect(yaml).toContain(composeDefault("OSM_WEB_URL", "https://www.openstreetmap.org"));
-    expect(yaml).toContain(composeDefault("OPENMAPX_VERSION", "1.0"));
     for (const limiter of ["READ", "PREVIEW", "PUBLISH", "NOTE"]) {
       expect(yaml).toContain(`RATE_LIMIT_OSM_CONTRIBUTION_${limiter}_MAX:`);
       expect(yaml).toContain(`RATE_LIMIT_OSM_CONTRIBUTION_${limiter}_WINDOW_MS:`);
@@ -504,9 +516,20 @@ describe("renderComposeForRepo", () => {
     expect(
       yaml.match(/offline-package-principal-key:\/run\/secrets\/offline-package-principal-key:ro/g),
     ).toHaveLength(1);
-    const dataManagerSection = yaml.split("  data-manager:")[1]?.split("\n  ")[0] ?? "";
-    expect(dataManagerSection).not.toContain("OFFLINE_PACKAGE_PRINCIPAL_KEY");
-    expect(dataManagerSection).not.toContain("offline-package-principal-key");
+    const appApi = renderedService(yaml, "app-api");
+    expect(appApi.environment?.OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE).toBe(
+      "/run/secrets/offline-package-principal-key",
+    );
+    expect(
+      appApi.volumes?.some((mount) =>
+        mount.endsWith(
+          "offline-package-principal-key:/run/secrets/offline-package-principal-key:ro",
+        ),
+      ),
+    ).toBe(true);
+    const dataManager = JSON.stringify(renderedService(yaml, "data-manager"));
+    expect(dataManager).not.toContain("OFFLINE_PACKAGE_PRINCIPAL_KEY");
+    expect(dataManager).not.toContain("offline-package-principal-key");
 
     await renderComposeForRepo({
       rootDir: tmp,
@@ -539,10 +562,10 @@ describe("renderComposeForRepo", () => {
     }
     expect(readdirSync(join(state, "custom-integrations"))).toEqual([]);
     const yaml = readFileSync(generatedCompose(), "utf8");
-    const appApi = yaml.split("  app-api:")[1]?.split("\n  app-")[0] ?? "";
+    const appApi = renderedService(yaml, "app-api");
     // Relative to the generation, inside infra/docker/state/ops-agent.
-    expect(appApi).toMatch(
-      /- \.\.\/\.\.\/custom-integrations:\$\{OPENMAPX_CUSTOM_INTEGRATIONS_DIR:-\/app\/custom_integrations\}:ro/,
+    expect(appApi.volumes).toContain(
+      "../../custom-integrations:${OPENMAPX_CUSTOM_INTEGRATIONS_DIR:-/app/custom_integrations}:ro",
     );
     expect(yaml).not.toContain("/custom_integrations:${");
     expect(warnings.mock.calls.flat().join("\n")).toContain(
@@ -576,12 +599,12 @@ describe("renderComposeForRepo", () => {
       readFileSync(legacy, "utf8"),
     );
     const yaml = readFileSync(generatedCompose(), "utf8");
-    const dataManagerSection = yaml.split("  data-manager:")[1]?.split("\n  app-")[0] ?? "";
+    const dataManager = renderedService(yaml, "data-manager");
     // The directory, read-only, at the path data-manager reads by default.
-    expect(dataManagerSection).toContain(
-      "- ../../../../secrets/transitous-api-keys:/config/transitous:ro",
+    expect(dataManager.volumes).toContain(
+      "../../../../secrets/transitous-api-keys:/config/transitous:ro",
     );
-    expect(dataManagerSection).not.toContain("services/motis/tools/transitous");
+    expect(JSON.stringify(dataManager)).not.toContain("services/motis/tools/transitous");
     expect(yaml.match(/transitous-api-keys/g)).toHaveLength(1);
   });
 

@@ -22,13 +22,6 @@ afterEach(() => {
   vi.restoreAllMocks();
   for (const close of cleanup.reverse().splice(0)) close();
 });
-async function api() {
-  expect(
-    existsSync(join(import.meta.dirname, "publication.ts")),
-    "journaled artifact publication is missing",
-  ).toBe(true);
-  return import("./publication");
-}
 async function fixture() {
   const root = mkdtempSync(join(tmpdir(), "omx-artifact-publication-"));
   cleanup.push(() => rmSync(root, { recursive: true, force: true }));
@@ -123,7 +116,7 @@ async function fixture() {
   return { root, dataRoot, stagingRoot, stageId, bundle, authority, lease, oldRecord };
 }
 it("publishes dirs and build evidence under the original physical lease with a retained replay", async () => {
-  const mod = await api(),
+  const mod = await import("./publication"),
     f = await fixture(),
     expectedFingerprint = await mod.artifactPublicationFingerprint(f.dataRoot, "osrm");
   const input = { ...f, expectedFingerprint, signal: new AbortController().signal };
@@ -142,7 +135,7 @@ it("publishes dirs and build evidence under the original physical lease with a r
   expect(await mod.publishValidatedBuild(input)).toEqual(result);
 }, 60000);
 it("refuses a changed target before any rename or record write", async () => {
-  const mod = await api(),
+  const mod = await import("./publication"),
     f = await fixture(),
     expectedFingerprint = await mod.artifactPublicationFingerprint(f.dataRoot, "osrm");
   writeFileSync(join(f.dataRoot, "osrm-graph/old"), "changed old graph", { mode: 0o644 });
@@ -157,7 +150,7 @@ it("refuses a changed target before any rename or record write", async () => {
   expect(existsSync(join(f.stagingRoot, "osrm-graph"))).toBe(true);
 }, 60000);
 it("restores the old complete set after a native new-directory rename failure", async () => {
-  const mod = await api(),
+  const mod = await import("./publication"),
     f = await fixture(),
     expectedFingerprint = await mod.artifactPublicationFingerprint(f.dataRoot, "osrm"),
     newInode = fs.statSync(join(f.stagingRoot, "osrm-graph")).ino,
@@ -178,7 +171,7 @@ it("restores the old complete set after a native new-directory rename failure", 
 }, 60000);
 
 it("rejects undeclared staged files before beginning publication", async () => {
-  const mod = await api(),
+  const mod = await import("./publication"),
     f = await fixture();
   const expectedFingerprint = await mod.artifactPublicationFingerprint(f.dataRoot, "osrm");
   writeFileSync(join(f.stagingRoot, "osrm-graph/undeclared"), "extra", { mode: 0o644 });
@@ -197,7 +190,7 @@ it("rejects undeclared staged files before beginning publication", async () => {
 }, 60000);
 
 it("restores directories and old metadata when build-record publication fails", async () => {
-  const mod = await api(),
+  const mod = await import("./publication"),
     f = await fixture(),
     expectedFingerprint = await mod.artifactPublicationFingerprint(f.dataRoot, "osrm"),
     native = await vi.importActual<typeof import("node:fs")>("node:fs");
@@ -216,7 +209,7 @@ it("restores directories and old metadata when build-record publication fails", 
 }, 60000);
 
 it("keeps uncertain replacement fenced instead of overwriting a foreign inode during restoration", async () => {
-  const mod = await api(),
+  const mod = await import("./publication"),
     f = await fixture(),
     expectedFingerprint = await mod.artifactPublicationFingerprint(f.dataRoot, "osrm"),
     newInode = fs.statSync(join(f.stagingRoot, "osrm-graph")).ino,
@@ -241,7 +234,7 @@ it("keeps uncertain replacement fenced instead of overwriting a foreign inode du
 }, 60000);
 
 it("rechecks the original configuration revision inside the publication writer", async () => {
-  const mod = await api(),
+  const mod = await import("./publication"),
     f = await fixture(),
     expectedFingerprint = await mod.artifactPublicationFingerprint(f.dataRoot, "osrm");
   const { commitConfigurationGeneration } = await import("../services/configuration-generation");
@@ -264,7 +257,7 @@ it("rechecks the original configuration revision inside the publication writer",
 }, 60000);
 
 it("rejects same-size staged mutation after hashing instead of recording the previous hash as current", async () => {
-  const mod = await api(),
+  const mod = await import("./publication"),
     f = await fixture(),
     expectedFingerprint = await mod.artifactPublicationFingerprint(f.dataRoot, "osrm");
   expect(

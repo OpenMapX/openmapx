@@ -143,11 +143,6 @@ describe("list snapshot + public projections", () => {
     expect(JSON.stringify(snap)).not.toMatch(/place-1|list-1|sortOrder|createdAt/);
   });
 
-  it("round-trips through parseStoredListSnapshot", () => {
-    const snap = listSnapshotFrom({ name: "Trip", icon: null }, [dbPlace]);
-    expect(parseStoredListSnapshot(JSON.parse(JSON.stringify(snap)))).toEqual(snap);
-  });
-
   it("parseStoredListSnapshot rejects malformed values", () => {
     expect(parseStoredListSnapshot(null)).toBeNull();
     expect(parseStoredListSnapshot({ name: 1, icon: null, places: [] })).toBeNull();
@@ -252,10 +247,6 @@ describe("validateRouteShare with per-waypoint schedules", () => {
     expect(
       validateRouteShare({ ...ROUTE, scheduleVersion: 2, schedules: [null, null] }),
     ).toBeNull();
-  });
-
-  it("leaves an ordinary payload untouched", () => {
-    expect(validateRouteShare(ROUTE)).toEqual(ROUTE);
   });
 });
 

@@ -202,6 +202,16 @@ describe("ArrivalParkingMarkers", () => {
     );
     fireEvent.click(mapContainer.querySelector(".omx-arrival-parking-marker") as HTMLElement);
     expect(onSelectPlace).toHaveBeenCalledWith(samplePlaces[0]);
+    rerender(
+      <ArrivalParkingMarkers
+        places={samplePlaces}
+        selectedPlace={samplePlaces[0]}
+        onSelectPlace={onSelectPlace}
+      />,
+    );
+    fireEvent.click(mapContainer.querySelector(".omx-arrival-parking-marker") as HTMLElement);
+    expect(onSelectPlace).toHaveBeenLastCalledWith(null);
+    expect(onSelectPlace).toHaveBeenCalledTimes(2);
 
     rerender(
       <ArrivalParkingMarkers
@@ -212,57 +222,22 @@ describe("ArrivalParkingMarkers", () => {
       />,
     );
     fireEvent.click(mapContainer.querySelector(".omx-arrival-parking-marker") as HTMLElement);
-    expect(onSelectPlace).toHaveBeenCalledTimes(1);
-    expect(mapClickOwners).toEqual(["marker", "marker"]);
+    expect(onSelectPlace).toHaveBeenCalledTimes(2);
+    expect(mapClickOwners).toEqual(["marker", "marker", "marker"]);
     mapContainer.removeEventListener("click", mapClick);
   });
 
-  it("renders without crashing when map context is null", () => {
-    const { container } = render(
-      <ArrivalParkingMarkers places={[]} selectedPlace={null} onSelectPlace={vi.fn()} />,
-    );
-    expect(container.firstChild).toBeNull();
-  });
-
-  it("renders nothing into the React DOM container even with places and map", () => {
-    mockMapContext.current = {
-      mapRef: { current: { container: mapContainer } },
-    };
-    const { container } = render(
-      <ArrivalParkingMarkers places={samplePlaces} selectedPlace={null} onSelectPlace={vi.fn()} />,
-    );
-    expect(container.firstChild).toBeNull();
-  });
-
-  it("adds markers to the map container via mapRef.current", () => {
-    mockMapContext.current = {
-      mapRef: { current: { container: mapContainer } },
-    };
-
+  it.each([
+    { label: "no map context", value: null },
+    { label: "no ready map", value: { mapRef: { current: null } } },
+  ])("creates no marker resources with $label", ({ value }) => {
+    mockMapContext.current = value;
     render(
       <ArrivalParkingMarkers places={samplePlaces} selectedPlace={null} onSelectPlace={vi.fn()} />,
     );
-
-    const markers = mapContainer.querySelectorAll(".omx-arrival-parking-marker");
-    expect(markers).toHaveLength(2);
-    expect(markers[0].textContent).toBe("P");
-    expect(markers[1].textContent).toBe("P");
-    expect(createdMarkers).toHaveLength(2);
-    expect(createdMarkers[0].lngLat).toEqual([13.405, 52.52]);
-    expect(createdMarkers[1].lngLat).toEqual([13.408, 52.522]);
-  });
-
-  it("renders no markers when the map is not ready yet", () => {
-    mockMapContext.current = {
-      mapRef: { current: null },
-    };
-
-    render(
-      <ArrivalParkingMarkers places={samplePlaces} selectedPlace={null} onSelectPlace={vi.fn()} />,
-    );
-
-    const markers = mapContainer.querySelectorAll(".omx-arrival-parking-marker");
-    expect(markers).toHaveLength(0);
+    expect(createdMarkers).toHaveLength(0);
+    expect(receipts.subscribe).not.toHaveBeenCalled();
+    expect(mapContainer.querySelectorAll(".omx-arrival-parking-marker")).toHaveLength(0);
   });
 
   it("highlights the selected marker with active styles", () => {
@@ -281,36 +256,11 @@ describe("ArrivalParkingMarkers", () => {
     const markers = mapContainer.querySelectorAll<HTMLElement>(".omx-arrival-parking-marker");
     expect(markers).toHaveLength(2);
 
-    // Selected marker: background #1A73E8, color #ffffff
-    expect(markers[0].style.backgroundColor).toBe("rgb(26, 115, 232)");
-    expect(markers[0].style.color).toBe("rgb(255, 255, 255)");
-    expect(markers[0].style.border).toBe("2px solid rgb(26, 115, 232)");
-
-    // Unselected marker: background #ffffff, color #1A73E8
-    expect(markers[1].style.backgroundColor).toBe("rgb(255, 255, 255)");
-    expect(markers[1].style.color).toBe("rgb(26, 115, 232)");
-    expect(markers[1].style.border).toBe("2px solid rgb(26, 115, 232)");
-  });
-
-  it("calls onSelectPlace with place when clicking an unselected marker", () => {
-    mockMapContext.current = {
-      mapRef: { current: { container: mapContainer } },
-    };
-    const onSelectPlace = vi.fn();
-
-    render(
-      <ArrivalParkingMarkers
-        places={samplePlaces}
-        selectedPlace={null}
-        onSelectPlace={onSelectPlace}
-      />,
-    );
-
-    const markers = mapContainer.querySelectorAll<HTMLElement>(".omx-arrival-parking-marker");
-    fireEvent.click(markers[0]);
-
-    expect(onSelectPlace).toHaveBeenCalledTimes(1);
-    expect(onSelectPlace).toHaveBeenCalledWith(samplePlaces[0]);
+    expect(markers[0]).toHaveAttribute("aria-pressed", "true");
+    expect(markers[1]).toHaveAttribute("aria-pressed", "false");
+    expect(markers[0].style.backgroundColor).toBe(markers[1].style.color);
+    expect(markers[0].style.color).toBe(markers[1].style.backgroundColor);
+    expect(markers[0].style.backgroundColor).not.toBe(markers[1].style.backgroundColor);
   });
 
   it("disables marker interaction while a handoff is starting", () => {
@@ -335,27 +285,6 @@ describe("ArrivalParkingMarkers", () => {
     fireEvent.click(marker as HTMLElement);
     fireEvent.keyDown(marker as HTMLElement, { key: "Enter" });
     expect(onSelectPlace).not.toHaveBeenCalled();
-  });
-
-  it("calls onSelectPlace with null when clicking an already selected marker (toggle)", () => {
-    mockMapContext.current = {
-      mapRef: { current: { container: mapContainer } },
-    };
-    const onSelectPlace = vi.fn();
-
-    render(
-      <ArrivalParkingMarkers
-        places={samplePlaces}
-        selectedPlace={samplePlaces[0]}
-        onSelectPlace={onSelectPlace}
-      />,
-    );
-
-    const markers = mapContainer.querySelectorAll<HTMLElement>(".omx-arrival-parking-marker");
-    fireEvent.click(markers[0]);
-
-    expect(onSelectPlace).toHaveBeenCalledTimes(1);
-    expect(onSelectPlace).toHaveBeenCalledWith(null);
   });
 
   it("handles keyboard events (Enter and Space) on markers", () => {
@@ -383,31 +312,12 @@ describe("ArrivalParkingMarkers", () => {
     expect(onSelectPlace).toHaveBeenLastCalledWith(null);
   });
 
-  it("cleans up markers on unmount", () => {
-    mockMapContext.current = {
-      mapRef: { current: { container: mapContainer } },
-    };
-
-    const { unmount } = render(
-      <ArrivalParkingMarkers places={samplePlaces} selectedPlace={null} onSelectPlace={vi.fn()} />,
-    );
-
-    expect(mapContainer.querySelectorAll(".omx-arrival-parking-marker")).toHaveLength(2);
-
-    unmount();
-
-    expect(mapContainer.querySelectorAll(".omx-arrival-parking-marker")).toHaveLength(0);
-    for (const marker of createdMarkers) {
-      expect(marker.remove).toHaveBeenCalled();
-    }
-  });
-
   it("updates markers when places or selectedPlace change", () => {
     mockMapContext.current = {
       mapRef: { current: { container: mapContainer } },
     };
 
-    const { rerender } = render(
+    const { rerender, unmount } = render(
       <ArrivalParkingMarkers
         places={[samplePlaces[0]]}
         selectedPlace={null}
@@ -427,7 +337,16 @@ describe("ArrivalParkingMarkers", () => {
 
     const markers = mapContainer.querySelectorAll<HTMLElement>(".omx-arrival-parking-marker");
     expect(markers).toHaveLength(2);
-    expect(markers[1].style.backgroundColor).toBe("rgb(26, 115, 232)");
+    expect(markers[1]).toHaveAttribute("aria-pressed", "true");
+    expect(markers[1].style.backgroundColor).not.toBe(markers[0].style.backgroundColor);
+    expect([...markers].map((marker) => marker.textContent)).toEqual(["P", "P"]);
+    expect(createdMarkers.slice(-2).map((marker) => marker.lngLat)).toEqual([
+      [13.405, 52.52],
+      [13.408, 52.522],
+    ]);
+    unmount();
+    expect(mapContainer.querySelectorAll(".omx-arrival-parking-marker")).toHaveLength(0);
+    for (const marker of createdMarkers) expect(marker.remove).toHaveBeenCalled();
   });
 
   it("skips places that violate the canonical coordinates contract", () => {

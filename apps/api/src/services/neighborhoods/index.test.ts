@@ -21,7 +21,7 @@ beforeEach(() => {
 });
 
 describe("fetchNeighborhoods", () => {
-  it("parses nodes/relations, dedupes by name and resolves centers", async () => {
+  it("parses node and way centers and dedupes repeated names", async () => {
     overpassQuery.mockResolvedValue({
       elements: [
         { type: "node", id: 1, lat: 51.2, lon: 6.8, tags: { name: "Altstadt", place: "suburb" } },
@@ -48,7 +48,10 @@ describe("fetchNeighborhoods", () => {
     expect(neighborhoods).toHaveLength(2);
     const altstadt = neighborhoods.find((n) => n.name === "Altstadt");
     expect(altstadt?.coordinates).toEqual([6.8, 51.2]);
-    expect(neighborhoods.map((n) => n.name)).toContain("Oberkassel");
+    expect(neighborhoods.find((n) => n.name === "Oberkassel")).toMatchObject({
+      id: "way/3",
+      coordinates: [6.9, 51.3],
+    });
   });
 
   it("enriches wiki-tagged entries with a first-sentence blurb and photo", async () => {
@@ -79,24 +82,21 @@ describe("fetchNeighborhoods", () => {
     });
   });
 
-  it("ranks encyclopaedically-referenced neighbourhoods first", async () => {
+  it("ranks encyclopaedically-referenced neighbourhoods before alphabetically earlier names", async () => {
     overpassQuery.mockResolvedValue({
       elements: [
-        { type: "node", id: 1, lat: 51.2, lon: 6.8, tags: { name: "Zzz", place: "suburb" } },
+        { type: "node", id: 1, lat: 51.2, lon: 6.8, tags: { name: "Aaa", place: "suburb" } },
         {
           type: "node",
           id: 2,
           lat: 51.3,
           lon: 6.9,
-          tags: { name: "Aaa", place: "suburb", wikipedia: "de:Aaa" },
+          tags: { name: "Zzz", place: "suburb", wikipedia: "de:Zzz" },
         },
       ],
     });
-
     const { neighborhoods } = await fetchNeighborhoods(51, 6, 52, 7);
-
-    expect(neighborhoods[0].name).toBe("Aaa");
-    expect(neighborhoods[1].name).toBe("Zzz");
+    expect(neighborhoods.map((n) => n.name)).toEqual(["Zzz", "Aaa"]);
   });
 
   it("leaves non-wiki entries un-enriched (no knowledge lookup)", async () => {

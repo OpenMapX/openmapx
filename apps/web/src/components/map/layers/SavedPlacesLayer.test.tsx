@@ -189,6 +189,8 @@ function paintMarker() {
 
 it("opens the saved place from a marker and filters its selected symbol", () => {
   render(<SavedPlacesLayer />);
+  expect(fake.state.layers.get("saved-places-layer")?.type).toBe("symbol");
+  expect(fake.state.layout.get("saved-places-layer")?.["icon-allow-overlap"]).toBe(false);
   paintMarker();
   act(() =>
     fake.emit("click", { point: { x: 20, y: 20 }, originalEvent: new MouseEvent("click") }),
@@ -271,41 +273,6 @@ it("removes list markers and hover pins when the saved panel closes", () => {
   expect(pin.mock.calls.at(-1)?.[0]).toBeNull();
 });
 
-it("rebuilds the shared symbols and populated source after a style change", () => {
-  const view = render(<SavedPlacesLayer />);
-  act(() => fake.map.setStyle({ version: 8, sources: {}, layers: [] }));
-  expect(fake.state.layers.get("saved-places-layer")?.type).toBe("symbol");
-  const data = fake.state.sources.get("saved-places-source")?.data as GeoJSON.FeatureCollection;
-  expect(data.features[0].properties?.imageId).toBe("saved-list-marker-heart");
-  expect(fake.state.layout.get("saved-places-layer")?.["icon-allow-overlap"]).toBe(false);
-  view.unmount();
-});
-
-it("rasterizes complete emoji over the shared marker before registering a retina sprite", () => {
-  let image: HTMLImageElement | undefined;
-  vi.stubGlobal(
-    "Image",
-    class {
-      onload?: () => void;
-      constructor() {
-        image = this as unknown as HTMLImageElement;
-      }
-    },
-  );
-  const pixels = { width: 64, height: 64, data: new Uint8ClampedArray(64 * 64 * 4) };
-  const context = { drawImage: vi.fn(), fillText: vi.fn(), getImageData: vi.fn(() => pixels) };
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
-    context as unknown as CanvasRenderingContext2D,
-  );
-  const addImage = vi.spyOn(fake.map, "addImage");
-  loadListMarkerImage(fake.map, "emoji", "👩🏽‍🚀", () => true);
-  image?.onload?.(new Event("load"));
-  expect(context.drawImage).toHaveBeenCalledWith(image, 0, 0);
-  expect(context.fillText).toHaveBeenCalledWith("👩🏽‍🚀", 32, 34, 40);
-  expect(addImage).toHaveBeenCalledWith("emoji", pixels, { pixelRatio: 2 });
-  vi.unstubAllGlobals();
-});
-
 it("ignores a sprite load that finishes after its list or style is replaced", () => {
   let image: HTMLImageElement | undefined;
   vi.stubGlobal(
@@ -371,18 +338,43 @@ it.each(["osm:node/123", "invalid-place-id", null])(
   },
 );
 
-it.each([
-  ["Favorites", "heart"],
-  ["Want to go", "flag"],
-  ["Starred", "star"],
-  ["custom symbol", "bookmark"],
-  ["custom emoji", "🏕️"],
-  ["default", null],
-])("uses the opened list's %s icon for every map place", (_label, icon) => {
-  listIcon = icon;
-  render(<SavedPlacesLayer />);
-  const data = fake.state.sources.get("saved-places-source")?.data as GeoJSON.FeatureCollection;
-  expect(data.features[0].properties?.imageId).toBe(
-    `saved-list-marker-${encodeURIComponent(icon ?? "bookmark")}`,
+it("replaces the opened list marker image with its complete emoji", () => {
+  const images: HTMLImageElement[] = [];
+  vi.stubGlobal(
+    "Image",
+    class {
+      onload?: () => void;
+      constructor() {
+        images.push(this as unknown as HTMLImageElement);
+      }
+    },
   );
+  const pixels = { width: 64, height: 64, data: new Uint8ClampedArray(64 * 64 * 4) };
+  const context = { drawImage: vi.fn(), fillText: vi.fn(), getImageData: vi.fn(() => pixels) };
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+    context as unknown as CanvasRenderingContext2D,
+  );
+  const addImage = vi.spyOn(fake.map, "addImage");
+  places = [originalPlaces[0], { ...originalPlaces[0], id: "second", lng: 9 }];
+  const view = render(<SavedPlacesLayer />);
+  try {
+    const original = fake.state.sources.get("saved-places-source")
+      ?.data as GeoJSON.FeatureCollection;
+    const originalImage = original.features[0].properties?.imageId;
+    listIcon = "🏕️";
+    view.rerender(<SavedPlacesLayer />);
+    const data = fake.state.sources.get("saved-places-source")?.data as GeoJSON.FeatureCollection;
+    const imageId = data.features[0].properties?.imageId;
+    expect(imageId).not.toBe(originalImage);
+    expect(data.features).toHaveLength(2);
+    expect(data.features.every((feature) => feature.properties?.imageId === imageId)).toBe(true);
+    expect(images).toHaveLength(1);
+    images[0].onload?.(new Event("load"));
+    expect(context.drawImage).toHaveBeenCalledWith(images[0], 0, 0);
+    expect(context.fillText).toHaveBeenCalledWith("🏕️", 32, 34, 40);
+    expect(addImage).toHaveBeenCalledWith(imageId, pixels, { pixelRatio: 2 });
+  } finally {
+    view.unmount();
+    vi.unstubAllGlobals();
+  }
 });

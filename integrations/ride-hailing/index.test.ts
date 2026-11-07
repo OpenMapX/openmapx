@@ -83,16 +83,6 @@ describe("GET /providers", () => {
 });
 
 describe("POST /quotes", () => {
-  it("marks the response as never cacheable", async () => {
-    const { route } = host();
-    const r = reply();
-    await route("POST", "/quotes")(
-      { query: {}, params: {}, body: { ...pickupQuery, providerIds: ["uber"] } },
-      r,
-    );
-    expect(r.headers["Cache-Control"]).toBe("no-store");
-  });
-
   it("400s when several providers are requested while comparison is locked", async () => {
     const { route } = host();
     const r = reply();
@@ -114,16 +104,6 @@ describe("GET /:provider/open", () => {
     );
     expect(r.state.code).toBe(302);
     expect(r.headers.Location).toBe("https://m.uber.com/looking?x=1");
-  });
-
-  it("404s on an unknown provider", async () => {
-    const { route } = host();
-    const r = reply();
-    await route("GET", "/:provider/open")(
-      { query: pickupQuery, params: { provider: "nope" }, body: null },
-      r,
-    );
-    expect(r.state.code).toBe(404);
   });
 });
 

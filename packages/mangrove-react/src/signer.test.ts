@@ -204,15 +204,16 @@ describe("Mangrove signer authority", () => {
   it("rejects expired login state without contacting the account endpoint", async () => {
     const f = fixture();
     const login = new URL(await f.controller.beginLogin("passkey", "/"));
+    const getAccount = vi.fn(async () => {
+      throw new Error("must not contact account");
+    });
     const later = createMangroveSigner({
       owner: "owner-a",
       origin: "https://maps.test",
       storage: f.storage,
       transport: {
         ...f.transport,
-        getAccount: async () => {
-          throw new Error("must not contact account");
-        },
+        getAccount,
       },
       now: () => 601001,
     });
@@ -223,6 +224,7 @@ describe("Mangrove signer authority", () => {
       ),
     ).rejects.toThrow("Mangrove connection unavailable");
     expect(later.getSnapshot().account).toBeNull();
+    expect(getAccount).not.toHaveBeenCalled();
   });
   it("keeps a valid session across temporary configuration unavailability", async () => {
     const f = fixture();

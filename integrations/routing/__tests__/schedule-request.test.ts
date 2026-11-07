@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createScheduleCacheIdentity,
   MAX_SCHEDULE_WAYPOINTS,
@@ -123,12 +123,6 @@ describe("createScheduleCacheIdentity", () => {
     schedules: [null, { arriveBy: "2026-09-01T14:00", timeZone: "Europe/Paris" }],
   };
 
-  it("is stable for identical inputs", () => {
-    const a = createScheduleCacheIdentity(parseScheduleRequest(base), null);
-    const b = createScheduleCacheIdentity(parseScheduleRequest(base), null);
-    expect(a).toEqual(b);
-  });
-
   it("changes when a schedule field changes", () => {
     const a = createScheduleCacheIdentity(parseScheduleRequest(base), null);
     const b = createScheduleCacheIdentity(
@@ -166,14 +160,20 @@ describe("createScheduleCacheIdentity", () => {
   });
 
   it("does not drift with the wall clock", () => {
-    const first = createScheduleCacheIdentity(
-      parseScheduleRequest({ waypoints: [COLOGNE, PARIS] }),
-      null,
-    );
-    const second = createScheduleCacheIdentity(
-      parseScheduleRequest({ waypoints: [COLOGNE, PARIS] }),
-      null,
-    );
-    expect(first).toEqual(second);
+    vi.useFakeTimers({ now: Date.parse("2026-09-01T08:00:00Z") });
+    try {
+      const first = createScheduleCacheIdentity(
+        parseScheduleRequest({ waypoints: [COLOGNE, PARIS] }),
+        null,
+      );
+      vi.advanceTimersByTime(24 * 60 * 60_000);
+      const second = createScheduleCacheIdentity(
+        parseScheduleRequest({ waypoints: [COLOGNE, PARIS] }),
+        null,
+      );
+      expect(first).toEqual(second);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -145,7 +145,8 @@ describe("paddedRouteAheadBounds", () => {
     const [box] = boxes ?? [];
     expect(Number.isFinite(box.west)).toBe(true);
     expect(Number.isFinite(box.east)).toBe(true);
-    expect(box.west).toBeLessThanOrEqual(box.east);
+    expect(box.west * metersPerDegLon(50)).toBeCloseTo(250, -1);
+    expect(box.east * metersPerDegLon(50)).toBeCloseTo(1250, -1);
   });
 
   it("stays finite at high latitude (~78°) instead of blowing up the longitude padding", () => {
@@ -242,13 +243,7 @@ describe("progressBucket", () => {
     expect(progressBucket(4999)).toBe(0);
     expect(progressBucket(5000)).toBe(1);
     expect(progressBucket(5001)).toBe(1);
-    expect(progressBucket(12_345)).toBe(2);
-  });
-
-  it("is not churned by a few metres of GPS noise moving the position back and forth", () => {
-    const base = 12_345;
-    expect(progressBucket(base)).toBe(progressBucket(base + 3));
-    expect(progressBucket(base)).toBe(progressBucket(base - 3));
+    for (const distance of [12_342, 12_345, 12_348]) expect(progressBucket(distance)).toBe(2);
   });
 
   it("recovers the bucket's start distance", () => {

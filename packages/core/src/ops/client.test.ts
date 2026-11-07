@@ -214,7 +214,9 @@ describe("ops client", () => {
     const target = join(root, "target");
     writeFileSync(target, token);
     const symlink = join(root, "symlink");
-    symlinkSync(target, symlink);
+    const symlinkTarget = join(root, "symlink-target");
+    writeFileSync(symlinkTarget, token);
+    symlinkSync(symlinkTarget, symlink);
     const hardlink = join(root, "hardlink");
     linkSync(target, hardlink);
     const fifo = join(root, "fifo");
@@ -345,7 +347,6 @@ describe("ops client", () => {
     const token = Buffer.alloc(32, 17).toString("base64url");
     const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       expect(String(input)).toBe(`http://ops-agent:4300/v1/operations/${operationId}`);
-      expect(["GET", "DELETE"]).toContain(init?.method);
       expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${token}`);
       const requestId = new Headers(init?.headers).get("x-ops-request-id");
       return new Response(
@@ -376,6 +377,7 @@ describe("ops client", () => {
       operationId,
       state: "termination_pending",
     });
+    expect(fetch.mock.calls.map(([, init]) => init?.method)).toEqual(["GET", "DELETE"]);
   });
 
   it("looks up an owner-bound admission by the exact reusable operation key", async () => {
@@ -430,12 +432,14 @@ describe("ops client", () => {
 
   it("preserves caller AbortError for an in-flight event request", async () => {
     const controller = new AbortController();
+    let requested = false;
     const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(),
       requestTimeoutMs: 500,
       fetch: async (_input, init) =>
         new Promise<Response>((_resolve, reject) => {
+          requested = true;
           if (init?.signal?.aborted) {
             reject(init.signal.reason);
             return;
@@ -445,9 +449,12 @@ describe("ops client", () => {
           });
         }),
     });
-    const pending = client.events("job1_abortEvents00000", { signal: controller.signal });
+    const pending = client
+      .events("job1_abortEvents00000", { signal: controller.signal })
+      .catch((error) => error);
+    await vi.waitFor(() => expect(requested).toBe(true));
     controller.abort();
-    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(await pending).toMatchObject({ name: "AbortError" });
   });
 
   it("carries caller AbortSignal through admission and retained status requests", async () => {
@@ -588,6 +595,8 @@ describe("ops client", () => {
   });
 
   it("rejects retained responses for another operation and incoherent event cursors", async () => {
+    let eventId = "job1_anotherOperation00",
+      nextCursor = 3;
     const client = new ProtocolTestClient({
       baseUrl: "http://ops-agent:4300",
       tokenFile: tokenFile(),
@@ -597,8 +606,8 @@ describe("ops client", () => {
         const result = String(input).includes("/events?")
           ? {
               version: 1,
-              operationId: "job1_anotherOperation00",
-              nextCursor: 4,
+              operationId: eventId,
+              nextCursor,
               terminal: false,
               truncated: false,
               events: [{ cursor: 3, type: "state", state: "running" }],
@@ -619,6 +628,11 @@ describe("ops client", () => {
     await expect(client.status("service.pull", "job1_retainedOperation0")).rejects.toMatchObject({
       errorClass: "runtime",
     });
+    await expect(
+      client.events("job1_retainedOperation0", { after: 2, limit: 10 }),
+    ).rejects.toMatchObject({ errorClass: "runtime" });
+    eventId = "job1_retainedOperation0";
+    nextCursor = 4;
     await expect(
       client.events("job1_retainedOperation0", { after: 2, limit: 10 }),
     ).rejects.toMatchObject({ errorClass: "runtime" });

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { job } from "@/components/admin/activity/__tests__/fixtures";
 import { AdminJobEffectsProvider } from "@/lib/admin/adminJobEffects";
 import { act, cleanup, createTestQueryClient, renderHook, waitFor } from "@/test";
-import { deferred } from "@/test/extensionAdmin";
+import { deferred, installed } from "@/test/extensionAdmin";
 import {
   useAddExtensionSource,
   useExtensionCatalog,
@@ -88,14 +88,16 @@ describe("extension browser acquisition through the real generated SDK", () => {
     "rejects malformed %s success instead of rendering empty success",
     async (kind) => {
       vi.stubGlobal("fetch", () => Response.json({ error: "not a list" }));
-      const { result } = mount(
-        () =>
-          ({
-            catalog: useExtensionCatalog({}),
-            installed: useInstalledExtensions(),
-            sources: useExtensionSources(),
-          })[kind],
-      );
+      const useRead = {
+        catalog: () => useExtensionCatalog({}),
+        installed: useInstalledExtensions,
+        sources: useExtensionSources,
+      }[kind];
+      const { result } = mount<
+        | ReturnType<typeof useExtensionCatalog>
+        | ReturnType<typeof useInstalledExtensions>
+        | ReturnType<typeof useExtensionSources>
+      >(useRead);
       await waitFor(() => expect(result.current.isError).toBe(true));
       expect(result.current.data).toBeUndefined();
     },
@@ -251,17 +253,25 @@ describe("extension browser acquisition through the real generated SDK", () => {
   it.each(["installed", "sources"] as const)(
     "isolates %s snapshots on origin replacement",
     async (kind) => {
-      vi.stubGlobal("fetch", () =>
-        Response.json(kind === "installed" ? { extensions: [] } : { sources: [] }),
-      );
+      vi.stubGlobal("fetch", (input: string) => {
+        const origin = new URL(input).origin;
+        return Response.json(
+          kind === "installed"
+            ? { extensions: [installed({ name: origin })] }
+            : { sources: [{ url: origin + "/index.json", label: origin, isDefault: false }] },
+        );
+      });
       const useRead = kind === "installed" ? useInstalledExtensions : useExtensionSources;
       const { qc, rerender, result } = mount<
         ReturnType<typeof useInstalledExtensions> | ReturnType<typeof useExtensionSources>
       >(useRead);
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(JSON.stringify(result.current.data)).toContain("http://admin.test");
       apiUrl = "https://remote.test/";
       rerender();
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(JSON.stringify(result.current.data)).toContain("https://remote.test");
+      expect(JSON.stringify(result.current.data)).not.toContain("http://admin.test");
       expect(
         qc
           .getQueryCache()

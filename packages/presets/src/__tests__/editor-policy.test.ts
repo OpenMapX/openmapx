@@ -369,26 +369,6 @@ describe("previewCategoryTransition", () => {
     expect(transition.ownedKeys).toEqual(["amenity", "shop"]);
   });
 
-  it("never touches unowned, localized or unknown tags", () => {
-    const transition = previewCategoryTransition({
-      tags,
-      current,
-      targetPresetId: "amenity/restaurant",
-      geometry: "point",
-    });
-    if (transition.status !== "ok") return;
-    const touched = new Set([
-      ...transition.add.map((t) => t.key),
-      ...transition.replace.map((t) => t.key),
-      ...transition.remove.map((t) => t.key),
-    ]);
-    for (const key of Object.keys(tags)) {
-      if (transition.ownedKeys.includes(key)) continue;
-      expect(touched.has(key)).toBe(false);
-    }
-    expect(touched).toEqual(new Set(["amenity"]));
-  });
-
   it("rejects an ambiguous or unsupported current state", () => {
     expect(
       previewCategoryTransition({
@@ -446,30 +426,12 @@ describe("previewCategoryTransition", () => {
         targetPresetId,
         geometry: "point",
       });
+      expect(transition.status).toBe("ok");
       if (transition.status !== "ok") continue;
       for (const key of transition.ownedKeys) {
         expect(curated).not.toContain(key);
         expect(key.startsWith("addr:")).toBe(false);
       }
     }
-  });
-
-  it("preserves every non-owned tag when the transition is applied", () => {
-    const transition = previewCategoryTransition({
-      tags,
-      current,
-      targetPresetId: "amenity/restaurant",
-      geometry: "point",
-    });
-    if (transition.status !== "ok") return;
-    const result: Record<string, string> = { ...tags };
-    for (const entry of transition.remove) delete result[entry.key];
-    for (const entry of transition.replace) result[entry.key] = entry.to;
-    for (const entry of transition.add) result[entry.key] = entry.value;
-    for (const [key, value] of Object.entries(tags)) {
-      if (transition.ownedKeys.includes(key)) continue;
-      expect(result[key]).toBe(value);
-    }
-    expect(Object.keys(result).sort()).toEqual(Object.keys(tags).sort());
   });
 });

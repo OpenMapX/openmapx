@@ -36,7 +36,7 @@ it.each(["geojson", "gpx", "kml"] as const)(
   },
 );
 
-it("does not trust imported map-owner metadata or malformed capture and never executes supplied HTML", () => {
+it("does not trust imported map-owner metadata or malformed capture", () => {
   const features = parseGeoFile(
     "untrusted.geojson",
     JSON.stringify({
@@ -52,7 +52,6 @@ it("does not trust imported map-owner metadata or malformed capture and never ex
   if (!features) throw new Error("File rejected");
   expect(features[0].properties?._mapAttributions).toBe("[]");
   expect(features[0].properties?.fieldContributors).toBeUndefined();
-  expect(document.querySelector("img")).toBeNull();
 });
 
 it("keeps duplicate waypoint receipts matched independently in GPX", () => {

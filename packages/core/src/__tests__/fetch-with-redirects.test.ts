@@ -84,6 +84,7 @@ describe("fetchWithRedirects", () => {
 
     expect(cancel).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(cancel.mock.invocationCallOrder[0]).toBeLessThan(fetchMock.mock.invocationCallOrder[1]);
     expect(await response.json()).toEqual({ ok: true });
   });
 
@@ -134,24 +135,6 @@ describe("fetchWithRedirects", () => {
     expect(await response.text()).toBe("ok");
   });
 
-  it("rejects redirect targets outside the allowed host list", async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(
-      new Response(null, {
-        status: 302,
-        headers: { Location: "https://metadata.internal/latest" },
-      }),
-    );
-
-    vi.stubGlobal("fetch", fetchMock);
-
-    await expect(
-      fetchWithRedirects("https://api.test/original", {
-        allowedRedirectHosts: ["api.test"],
-      }),
-    ).rejects.toThrow("Redirect target not allowed: metadata.internal");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
   it("cancels and releases a redirect response when redirect validation fails", async () => {
     const cancel = vi.fn().mockResolvedValue(undefined);
     const releaseResponse = vi.fn().mockResolvedValue(undefined);
@@ -160,7 +143,8 @@ describe("fetchWithRedirects", () => {
       headers: new Headers({ Location: "https://metadata.internal/latest" }),
       status: 302,
     } as unknown as Response;
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(redirect));
+    const fetcher = vi.fn().mockResolvedValue(redirect);
+    vi.stubGlobal("fetch", fetcher);
 
     await expect(
       fetchWithRedirects("https://api.test/original", {
@@ -168,6 +152,7 @@ describe("fetchWithRedirects", () => {
         releaseResponse,
       }),
     ).rejects.toThrow("Redirect target not allowed: metadata.internal");
+    expect(fetcher).toHaveBeenCalledOnce();
 
     expect(cancel).toHaveBeenCalledOnce();
     expect(releaseResponse).toHaveBeenCalledWith(

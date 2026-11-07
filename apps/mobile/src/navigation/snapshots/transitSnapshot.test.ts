@@ -26,11 +26,6 @@ describe("transitFullSnapshot", () => {
     expect(snapshot.itineraryFingerprint).toBe(FIXTURE_FINGERPRINT);
     expect(snapshot.itinerary).toBeTruthy();
     expect(snapshot.captures).toBeTruthy();
-  });
-
-  it("carries the leg, phase and confidence the banner shows", () => {
-    const snapshot = transitFullSnapshot(session());
-
     expect(snapshot.currentLegIndex).toBe(0);
     expect(snapshot.currentWalkStepIndex).toBe(0);
     expect(snapshot.phase).toBe("walking");
@@ -147,12 +142,5 @@ describe("transitProgressSnapshot", () => {
       "type",
       "version",
     ]);
-  });
-
-  it("never carries the itinerary or the captures", () => {
-    const snapshot = transitProgressSnapshot(session()) as unknown as Record<string, unknown>;
-
-    expect(snapshot.itinerary).toBeUndefined();
-    expect(snapshot.captures).toBeUndefined();
   });
 });

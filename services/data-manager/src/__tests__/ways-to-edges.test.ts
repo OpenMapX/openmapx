@@ -1,6 +1,6 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const opsCalls: unknown[] = [];
@@ -17,10 +17,6 @@ import {
   refreshWaysToEdges,
   type WayEdge,
 } from "../jobs/traffic/ways-to-edges.js";
-
-async function* linesOf(lines: string[]): AsyncGenerator<string> {
-  for (const line of lines) yield line;
-}
 
 describe("decodeGraphId", () => {
   it("decodes a hand-packed GraphId (level=2, tile=818660, index=5)", () => {
@@ -46,34 +42,29 @@ describe("decodeGraphId", () => {
 describe("refreshWaysToEdges / loadWaysToEdges", () => {
   let dataDir: string;
   let outputPath: string;
-
+  const writeEdges = async (path: string, lines: string[]) => {
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, lines.join("\n") + "\n");
+  };
   beforeEach(async () => {
     dataDir = await mkdtemp(join(tmpdir(), "ways-to-edges-"));
     outputPath = join(dataDir, "traffic", "ways_to_edges.json");
+    vi.stubEnv("DATA_DIR", dataDir);
+    vi.stubEnv("TRAFFIC_TAR_PATH", "");
+    opsCalls.length = 0;
   });
-
   afterEach(async () => {
+    vi.unstubAllEnvs();
     await rm(dataDir, { recursive: true, force: true });
   });
-
-  it("runs valhalla_ways_to_edges, then keeps only covered way ids with decoded f/b edges", async () => {
-    opsCalls.length = 0;
-    const sampleLines = ["123,1,73160266,0,110268746", "999,1,555"];
-
-    const result = await refreshWaysToEdges(new Set([123]), {
-      wayEdgesPath: "/data/valhalla/osm-pbf/valhalla_tiles/way_edges.txt",
-      readWayEdgesLines: async function* (path) {
-        // Read from the shared mount, not out of the container.
-        expect(path).toBe("/data/valhalla/osm-pbf/valhalla_tiles/way_edges.txt");
-        yield* linesOf(sampleLines);
-      },
-      outputPath,
-    });
-
-    // Producing the file is a typed agent operation, not a docker exec here.
+  it("runs the typed agent operation and streams only covered forward/back edges into the map", async () => {
+    await writeEdges(join(dataDir, "valhalla", "osm-pbf", "valhalla_tiles", "way_edges.txt"), [
+      "123,1,73160266,0,110268746",
+      "999,1,555",
+    ]);
+    const result = await refreshWaysToEdges(new Set([123]));
     expect(opsCalls).toEqual([{ kind: "valhalla.traffic.refreshWaysToEdges" }]);
     expect(result).toEqual({ wayCount: 1, edgeCount: 2 });
-
     const written = JSON.parse(await readFile(outputPath, "utf8"));
     expect(written).toEqual({
       "123": [
@@ -81,11 +72,7 @@ describe("refreshWaysToEdges / loadWaysToEdges", () => {
         { forward: false, level: 2, tile: 1200681, index: 3 },
       ],
     });
-    // 999 was not in coveredWayIds and must not appear.
-    expect(written["999"]).toBeUndefined();
-
     const loaded = await loadWaysToEdges({ path: outputPath });
-    expect(loaded).toBeInstanceOf(Map);
     const expected: Map<number, WayEdge[]> = new Map([
       [
         123,
@@ -96,55 +83,33 @@ describe("refreshWaysToEdges / loadWaysToEdges", () => {
       ],
     ]);
     expect(loaded).toEqual(expected);
-    expect(loaded.has(999)).toBe(false);
   });
-
-  it("reads way_edges.txt from Valhalla's tile directory beside traffic.tar", async () => {
-    const read = async (): Promise<string> => {
-      let seen = "";
-      await refreshWaysToEdges(new Set(), {
-        readWayEdgesLines: (path) => {
-          seen = path;
-          return linesOf([]);
-        },
-        outputPath,
-      });
-      return seen;
-    };
-    vi.stubEnv("DATA_DIR", "/data");
-    vi.stubEnv("TRAFFIC_TAR_PATH", "");
-    try {
-      expect(await read()).toBe("/data/valhalla/osm-pbf/valhalla_tiles/way_edges.txt");
-      vi.stubEnv("TRAFFIC_TAR_PATH", "/srv/valhalla/traffic.tar");
-      expect(await read()).toBe("/srv/valhalla/valhalla_tiles/way_edges.txt");
-    } finally {
-      vi.unstubAllEnvs();
-    }
+  it("reads the real default tile directory and the tile directory beside an overridden traffic.tar", async () => {
+    await writeEdges(join(dataDir, "valhalla", "osm-pbf", "valhalla_tiles", "way_edges.txt"), [
+      "1,1,73160266",
+    ]);
+    await refreshWaysToEdges(new Set([1]));
+    expect(Object.keys(JSON.parse(await readFile(outputPath, "utf8")))).toEqual(["1"]);
+    vi.stubEnv("TRAFFIC_TAR_PATH", join(dataDir, "alternate", "traffic.tar"));
+    await writeEdges(join(dataDir, "alternate", "valhalla_tiles", "way_edges.txt"), [
+      "2,0,110268746",
+    ]);
+    await refreshWaysToEdges(new Set([2]));
+    expect(Object.keys(JSON.parse(await readFile(outputPath, "utf8")))).toEqual(["2"]);
   });
-
-  it("propagates a failed agent operation instead of writing a map", async () => {
+  it("propagates a failed agent operation instead of reading or writing a map", async () => {
     const { runOpsOperation } = await import("../ops-client.js");
     vi.mocked(runOpsOperation).mockRejectedValueOnce(
       new Error("Operation valhalla.traffic.refreshWaysToEdges did not succeed (runtime)"),
     );
-    await expect(
-      refreshWaysToEdges(new Set([123]), {
-        readWayEdgesLines: async function* () {},
-        outputPath,
-      }),
-    ).rejects.toThrow(/did not succeed/);
+    await expect(refreshWaysToEdges(new Set([123]))).rejects.toThrow(/did not succeed/);
+    await expect(readFile(outputPath)).rejects.toMatchObject({ code: "ENOENT" });
   });
-
   it("writes an empty map when coveredWayIds matches nothing", async () => {
-    const result = await refreshWaysToEdges(new Set([1]), {
-      readWayEdgesLines: async function* () {
-        yield* linesOf(["999,1,555"]);
-      },
-      outputPath,
-    });
-
-    expect(result).toEqual({ wayCount: 0, edgeCount: 0 });
-    const written = JSON.parse(await readFile(outputPath, "utf8"));
-    expect(written).toEqual({});
+    await writeEdges(join(dataDir, "valhalla", "osm-pbf", "valhalla_tiles", "way_edges.txt"), [
+      "999,1,555",
+    ]);
+    expect(await refreshWaysToEdges(new Set([1]))).toEqual({ wayCount: 0, edgeCount: 0 });
+    expect(JSON.parse(await readFile(outputPath, "utf8"))).toEqual({});
   });
 });

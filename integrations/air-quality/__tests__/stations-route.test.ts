@@ -95,19 +95,25 @@ describe("canonical station route", () => {
         attributionText: "Fixture authority",
       },
     ]);
-    const firstBody = first.payload as { features: Array<{ id: string }>; nextCursor: string };
+    const firstBody = first.payload as {
+      features: Array<{ id: string; properties: { name: string } }>;
+      nextCursor: string;
+    };
     upstream = [evidence({ at: now, spatialId: "changed", longitude: 14.8 })];
     const second = await invoke(ctx, { ...query, cursor: firstBody.nextCursor });
     const secondBody = second.payload as {
       features: Array<{
         id: string;
-        properties: { contributors?: { sourceId: string; name: string }[] };
+        properties: { name: string; contributors?: { sourceId: string; name: string }[] };
       }>;
       nextCursor: null;
     };
     expect(secondBody.features).toHaveLength(1);
     expect(secondBody.features[0]?.id).not.toBe(firstBody.features[0]?.id);
     expect(secondBody.nextCursor).toBeNull();
+    expect(
+      [firstBody.features[0]?.properties.name, secondBody.features[0]?.properties.name].sort(),
+    ).toEqual(["station-a", "station-b"]);
     expect(secondBody.features[0]?.properties.contributors).toMatchObject([
       { sourceId: "fixture-source", name: "Fixture source" },
     ]);

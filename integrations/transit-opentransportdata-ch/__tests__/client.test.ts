@@ -261,7 +261,7 @@ describe("Swiss client generation and acquisition boundaries", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("rechecks source policy for cached values and on late completion", async () => {
+  it("rechecks source policy before returning cached values", async () => {
     let allowed = true;
     const value = make("A", { isSourceAllowed: async () => allowed });
     await value.fetchSwissFormationJourney(request);

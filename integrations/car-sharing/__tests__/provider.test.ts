@@ -138,13 +138,6 @@ describe("carSharingProvider.search", () => {
 sharedMobilityProviderContract({
   name: "car sharing",
   provider: carSharingProvider,
-  fixtures,
   formFactors: ["car"],
   mapContextOptions: { systemIds: ["bilkollektivet"], vehicleTypeIds: ["car"] },
-  arrangeInventory({ station, vehicle }) {
-    vi.mocked(searchRegionalClients).mockResolvedValue([]);
-    vi.mocked(mergeRegionalStations).mockReturnValue([]);
-    vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [station], vehicles: [vehicle] });
-    vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
-  },
 });

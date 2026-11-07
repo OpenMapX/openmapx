@@ -58,11 +58,8 @@ function trackedTextFiles(): string[] {
 describe("tracked text sources", () => {
   const files = trackedTextFiles();
 
-  it("finds the source tree", () => {
-    expect(files.length).toBeGreaterThan(500);
-  });
-
   it("contain no NUL bytes, so git never treats them as binary", () => {
+    expect(files).toContain("packages/core/src/index.ts");
     const offenders: string[] = [];
     for (const file of files) {
       const contents = readFileSync(resolve(REPO_ROOT, file));

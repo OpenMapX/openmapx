@@ -7,17 +7,8 @@ import {
 import { createHttpClient } from "../../integration-clients";
 import { streamedJsonResponse } from "../../test/streamed-response.js";
 
-vi.mock("@openmapx/core", async () => {
-  const actual = await vi.importActual<Record<string, unknown>>("@openmapx/core");
-  return {
-    ...actual,
-    decodePolyline: (_encoded: string) => [
-      [10.728, 59.915],
-      [10.753, 59.911],
-      [10.77, 59.905],
-    ],
-  };
-});
+// Literal Google polyline fixture at precision 5; fixed coordinate oracles below.
+const ENCODED_SHAPE = "wculJ_in`A~Wg{Cnd@giB";
 
 let mockFetch: ReturnType<typeof vi.fn>;
 
@@ -345,7 +336,7 @@ describe("Entur boards and trip planning", () => {
                       id: "VYG:ServiceJourney:1669_443361-R",
                       publicCode: null,
                     },
-                    pointsOnLink: { points: "encoded" },
+                    pointsOnLink: { points: ENCODED_SHAPE },
                     intermediateEstimatedCalls: [],
                   },
                 ],
@@ -464,7 +455,7 @@ describe("Entur route, vehicles, journey, and facilities", () => {
                 id: "VYG:JourneyPattern:R14-1061",
                 name: "ASR-KVG",
                 directionType: "unknown",
-                pointsOnLink: { points: "encoded" },
+                pointsOnLink: { points: ENCODED_SHAPE },
                 quays: [],
               },
             ],
@@ -512,7 +503,7 @@ describe("Entur route, vehicles, journey, and facilities", () => {
                 id: "VYG:JourneyPattern:R14-1061",
                 name: "ASR-KVG",
                 directionType: "unknown",
-                pointsOnLink: { points: "encoded" },
+                pointsOnLink: { points: ENCODED_SHAPE },
                 quays: [
                   {
                     id: "NSR:Quay:477",
@@ -637,7 +628,7 @@ describe("Entur route, vehicles, journey, and facilities", () => {
             publicCode: null,
             transportMode: "rail",
             transportSubmode: "local",
-            pointsOnLink: { points: "encoded" },
+            pointsOnLink: { points: ENCODED_SHAPE },
             situations: [],
             line: {
               id: "VYG:Line:R14",
@@ -652,7 +643,7 @@ describe("Entur route, vehicles, journey, and facilities", () => {
             journeyPattern: {
               id: "VYG:JourneyPattern:R14-1061",
               name: "ASR-KVG",
-              pointsOnLink: { points: "encoded" },
+              pointsOnLink: { points: ENCODED_SHAPE },
               quays: [],
             },
             quays: [],
@@ -1519,7 +1510,7 @@ describe("Entur generated-operation behavior", () => {
         data: {
           serviceJourney: {
             id: "VYG:ServiceJourney:night",
-            pointsOnLink: { points: "encoded" },
+            pointsOnLink: { points: ENCODED_SHAPE },
             estimatedCalls: [
               {
                 quay: {

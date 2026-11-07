@@ -62,7 +62,6 @@ export function LaneGuidance({
             // biome-ignore lint/suspicious/noArrayIndexKey: lanes have no stable id
             key={i}
             data-valid={String(lane.valid)}
-            data-arrow-count={String(arrows.length)}
             data-inferred={lane.inferred ? "true" : undefined}
             sx={{
               position: "relative",

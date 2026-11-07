@@ -1,9 +1,4 @@
-import type {
-  AirQualityProgramId,
-  AirQualityStandardId,
-  AirQualityWarningCode,
-  Pollutant,
-} from "@openmapx/core";
+import type { AirQualityWarningCode, Pollutant } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -69,26 +64,7 @@ describe("air-quality presentation", () => {
     expect(freshnessPresentation(freshness)).toEqual({ labelKey, diagnostic: null });
   });
 
-  it("has static labels for every standard and program", () => {
-    const standards: AirQualityStandardId[] = [
-      "us-epa-2024",
-      "eu-eea-current",
-      "uk-daqi-current",
-      "in-naqi-current",
-      "cn-hj633-2026",
-      "ca-aqhi-current",
-    ];
-    const programs: AirQualityProgramId[] = [
-      "us-epa-aqi",
-      "eea-european-aqi",
-      "uk-daqi",
-      "in-naqi",
-      "cn-hj633",
-      "ca-aqhi",
-      "ca-qc-info-smog",
-    ];
-    expect(standards.map(standardLabelKey)).toHaveLength(standards.length);
-    expect(programs.map(programLabelKey)).toHaveLength(programs.length);
+  it("uses unresolved labels when no standard or program is supplied", () => {
     expect(standardLabelKey(null)).toBe("airQuality.standard.unresolved");
     expect(programLabelKey(null)).toBe("airQuality.program.unresolved");
   });

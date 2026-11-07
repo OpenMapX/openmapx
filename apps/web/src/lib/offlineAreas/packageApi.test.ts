@@ -209,21 +209,30 @@ describe("offline package API client", () => {
     },
   );
 
-  it("sends credentials explicitly only for authenticated preparation and job status", async () => {
-    const fetchMock = vi.fn(async () => Response.json(preparing, { status: 202 }));
-    vi.stubGlobal("fetch", fetchMock);
-    const api = createOfflinePackageApi("https://api.example.test");
-
-    await api.prepare({
-      bbox: { west: 1, south: 1, east: 2, north: 2 },
-      minZoom: 8,
-      maxZoom: 14,
-      provider: "openmapx",
+  it("uses the configured API origin and explicit credentials only for authenticated package methods", async () => {
+    const fetchMock = vi.fn(async (...args: unknown[]) => {
+      const url = String(args[0]);
+      return Response.json(
+        url.endsWith("/capability") ? available : url.endsWith("/manifest") ? manifest : preparing,
+      );
     });
+    vi.stubGlobal("fetch", fetchMock);
+    const api = createOfflinePackageApi("https://api.example.test/");
+    await api.capability();
+    await api.prepare(request);
     await api.getJob("job-a");
-
-    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ credentials: "include" });
-    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ credentials: "include" });
+    await api.getManifest(packageId);
+    await api.openArchive(packageId);
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "https://api.example.test/api/offline/packages/capability",
+      "https://api.example.test/api/offline/packages/prepare",
+      "https://api.example.test/api/offline/packages/jobs/job-a",
+      `https://api.example.test/api/offline/packages/${packageId}/manifest`,
+      `https://api.example.test/api/offline/packages/${packageId}/archive`,
+    ]);
+    expect(
+      fetchMock.mock.calls.map((call) => (call[1] as RequestInit | undefined)?.credentials),
+    ).toEqual([undefined, "include", "include", undefined, undefined]);
   });
 
   it.each([401, 403])(
@@ -290,17 +299,6 @@ describe("offline package API client", () => {
       },
       signal: undefined,
     });
-  });
-
-  it("uses the runtime API origin for every package request", async () => {
-    const fetchMock = vi.fn(async () => new Response(null, { status: 206 }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    await createOfflinePackageApi("https://api.example.test/").openArchive(packageId);
-
-    expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      `https://api.example.test/api/offline/packages/${packageId}/archive`,
-    );
   });
 
   it("accepts a typed unavailable capability from a failed public proxy", async () => {

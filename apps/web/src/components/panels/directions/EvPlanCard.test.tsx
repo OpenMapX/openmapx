@@ -54,12 +54,9 @@ describe("EvPlanCard", () => {
     render(<EvPlanCard result={baseResult} />, { wrapper: createQueryWrapper() });
     screen.getByText(/Ionity Aachen/);
     screen.getByText(/150 kW/);
-    expect(screen.getAllByText(/25 min/).length).toBeGreaterThan(0); // 1500s charge
-  });
-
-  it("shows the preferred-network chip for a stop on the user's network", () => {
-    render(<EvPlanCard result={baseResult} />, { wrapper: createQueryWrapper() });
+    screen.getByText("55.0 kWh");
     screen.getByText("directions.ev.onYourNetwork");
+    expect(screen.getAllByText(/25 min/).length).toBeGreaterThan(0); // 1500s charge
   });
 
   it("opens the charger in the floating place card when a stop is clicked", () => {

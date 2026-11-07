@@ -60,7 +60,7 @@ describe("offline-package principal secret", () => {
 });
 
 describe("distributed rolling prepare limit", () => {
-  it("consumes every call and permits exactly two timestamps in any rolling ten minutes", async () => {
+  it("forwards every consumption to Redis and maps its admission decisions", async () => {
     const evalsha = vi
       .fn()
       .mockResolvedValueOnce([1, 0])
@@ -87,10 +87,12 @@ describe("distributed rolling prepare limit", () => {
       retryAfterSeconds: 0,
     });
 
-    expect(evalsha).toHaveBeenCalledTimes(4);
-    expect(
-      evalsha.mock.calls.every((call) => call[2] === `offline-package:prepare:${principal}`),
-    ).toBe(true);
+    expect(evalsha.mock.calls.map((call) => call.slice(1))).toEqual([
+      [1, `offline-package:prepare:${principal}`, "600000", "2", "request-1"],
+      [1, `offline-package:prepare:${principal}`, "600000", "2", "request-2"],
+      [1, `offline-package:prepare:${principal}`, "600000", "2", "duplicate-request"],
+      [1, `offline-package:prepare:${principal}`, "600000", "2", "after-boundary"],
+    ]);
     expect(JSON.stringify(evalsha.mock.calls)).not.toContain("database-user-id");
   });
 

@@ -18,34 +18,7 @@ function htmlResponse(imageUrl: string): Response {
 describe("resolveGooglePhotosLink trust boundaries", () => {
   it("publishes direct and provider photos before a slow share preview settles", async () => {
     const response = Promise.withResolvers<Response>();
-    vi.spyOn(globalThis, "fetch").mockImplementation((url) =>
-      String(url).includes("commons.wikimedia.org/w/api.php")
-        ? Promise.resolve(
-            new Response(
-              JSON.stringify({
-                query: {
-                  pages: {
-                    1: {
-                      title: "File:Ready.jpg",
-                      imageinfo: [
-                        {
-                          url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Ready.jpg",
-                          mime: "image/jpeg",
-                          extmetadata: {
-                            Artist: { value: "Creator" },
-                            LicenseShortName: { value: "CC BY 4.0" },
-                            LicenseUrl: { value: "https://creativecommons.org/licenses/by/4.0/" },
-                          },
-                        },
-                      ],
-                    },
-                  },
-                },
-              }),
-            ),
-          )
-        : response.promise,
-    );
+    vi.spyOn(globalThis, "fetch").mockReturnValue(response.promise);
     const direct = "https://upload.wikimedia.org/wikipedia/commons/a/ab/Ready.jpg";
     const providerPhoto = {
       url: "https://upload.wikimedia.org/provider.jpg",

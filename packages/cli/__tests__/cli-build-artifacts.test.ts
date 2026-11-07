@@ -5,6 +5,7 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -558,19 +559,19 @@ describe("build bundles", () => {
   });
 });
 
-it("validates the manifest before invoking any legacy extraction hook", async () => {
+it("rejects a missing manifest without changing live artifacts or retaining staging", async () => {
   const bundle = join(tmp, "invalid.tar");
   writeFileSync(bundle, Buffer.alloc(1024));
-  let extracted = false;
+  const liveGraph = join(dataDir(serveHost), "osrm-graph");
+  mkdirSync(liveGraph);
+  writeFileSync(join(liveGraph, "region.osrm"), "OLD");
   await expect(
     importBuildBundle({
       bundle,
       rootDir: serveHost,
       runningServices: noneRunning,
-      tar: async () => {
-        extracted = true;
-      },
     }),
-  ).rejects.toThrow();
-  expect(extracted, "untrusted archive reached extract-first tar hook").toBe(false);
+  ).rejects.toThrow("Bundle has no manifest");
+  expect(readFileSync(join(liveGraph, "region.osrm"), "utf8")).toBe("OLD");
+  expect(readdirSync(dataDir(serveHost))).toEqual(["osrm-graph"]);
 });

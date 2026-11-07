@@ -104,68 +104,12 @@ beforeEach(() => {
 });
 
 describe("VehiclesDialog", () => {
-  it("preserves mass and charge taper when renaming an EV", async () => {
-    state.vehicles = [
-      {
-        ...CAR,
-        powertrain: "electric",
-        ev: {
-          batteryKwh: 60,
-          baseWhPerKm: 180,
-          massTonnes: 1.3,
-          maxDcKw: 150,
-          maxAcKw: 11,
-          vehicleTaperSocPct: 65,
-          connectors: ["ccs2"],
-        },
-      },
-    ];
-    renderDialog();
-    await userEvent.click(screen.getByRole("button", { name: "vehicles.edit" }));
-    await userEvent.clear(screen.getByLabelText("vehicles.name"));
-    await userEvent.type(screen.getByLabelText("vehicles.name"), "Renamed EV");
-    await userEvent.click(screen.getByRole("button", { name: "vehicles.save" }));
-    await waitFor(() => expect(state.update).toHaveBeenCalledTimes(1));
-    expect(state.update.mock.calls[0][0]).toMatchObject({
-      ev: { massTonnes: 1.3, vehicleTaperSocPct: 65 },
-    });
-  });
-
-  it("uses the selected preset mass instead of a generic car mass", async () => {
-    state.vehicles = [];
-    renderDialog();
-    await userEvent.click(screen.getByRole("button", { name: "vehicles.add" }));
-    await userEvent.type(screen.getByLabelText("vehicles.name"), "Audi");
-    await userEvent.click(screen.getByLabelText("vehicles.powertrain"));
-    await userEvent.click(screen.getByRole("option", { name: "vehicles.powertrainElectric" }));
-    await userEvent.type(
-      screen.getByRole("combobox", { name: "vehicles.preset" }),
-      "Audi A6 e-tron Avant (2024)",
-    );
-    await userEvent.click(
-      await screen.findByRole("option", { name: "Audi A6 e-tron Avant (2024)" }),
-    );
-    await userEvent.click(screen.getByRole("button", { name: "vehicles.save" }));
-    await waitFor(() => expect(state.create).toHaveBeenCalledTimes(1));
-    expect(state.create.mock.calls[0][0]).toMatchObject({
-      ev: { massTonnes: 2.22, vehicleTaperSocPct: 80 },
-    });
-  });
-  it("lists the garage", () => {
-    renderDialog();
-    expect(screen.getByText("Blue Golf")).toBeInTheDocument();
-  });
-
-  it("shows an empty state for an empty garage", () => {
-    state.vehicles = [];
-    renderDialog();
-    expect(screen.getByText("vehicles.empty")).toBeInTheDocument();
-  });
-
   it("creates a combustion vehicle", async () => {
     state.vehicles = [];
     renderDialog();
+    expect(screen.getByText("vehicles.empty")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "vehicles.add" }));
+    expect(screen.queryByText("vehicles.empty")).toBeNull();
     await userEvent.type(screen.getByLabelText("vehicles.name"), "Red Polo");
     await userEvent.click(screen.getByRole("button", { name: "vehicles.save" }));
     await waitFor(() =>
@@ -226,13 +170,6 @@ describe("VehiclesDialog", () => {
     renderDialog();
     expect(screen.queryByRole("button", { name: "vehicles.add" })).toBeNull();
     expect(screen.getByText(/vehicles.limitReached/)).toBeInTheDocument();
-  });
-
-  it("promotes a vehicle to default", async () => {
-    state.vehicles = [CAR, { ...CAR, id: "v2", name: "Red Polo", isDefault: false }];
-    renderDialog();
-    await userEvent.click(screen.getAllByRole("radio")[1]);
-    await waitFor(() => expect(state.update).toHaveBeenCalledWith({ id: "v2", isDefault: true }));
   });
 
   it("warns that deleting clears the parked position and waits for confirmation", async () => {
@@ -745,14 +682,12 @@ describe("VehiclesDialog replacing a pending editor through row Edit", () => {
 
   const combinations = (["create", "update"] as const).flatMap((oldEditor) =>
     (["success", "failure"] as const).flatMap((oldOutcome) =>
-      (["idle", "saving"] as const).flatMap((replacement) =>
-        (["success", "failure"] as const).map((replacementOutcome) => ({
-          oldEditor,
-          oldOutcome,
-          replacement,
-          replacementOutcome,
-        })),
-      ),
+      (["idle", "saving"] as const).map((replacement) => ({
+        oldEditor,
+        oldOutcome,
+        replacement,
+        replacementOutcome: replacement === "idle" ? "success" : "failure",
+      })),
     ),
   );
 

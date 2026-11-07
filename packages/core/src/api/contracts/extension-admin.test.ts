@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import type { ListAdminInstalledExtensions200ExtensionsItem } from "../generated/admin/extension-models/listAdminInstalledExtensions200ExtensionsItem";
 import { routeJsonSchema } from "../schema";
 import type { AdminOperation } from "./admin";
@@ -93,7 +93,6 @@ const preview = {
 };
 
 describe("complete extension administration contracts", () => {
-  beforeEach(() => expect(contracts).toHaveProperty("extensionAdminOperations"));
   it("allows unknown installed comparisons while keeping catalog comparisons boolean", () => {
     expectTypeOf<contracts.AdminInstalledExtension["hasUpdate"]>().toEqualTypeOf<boolean | null>();
     expectTypeOf<ListAdminInstalledExtensions200ExtensionsItem["hasUpdate"]>().toEqualTypeOf<
@@ -107,7 +106,6 @@ describe("complete extension administration contracts", () => {
     ).toBe(false);
   });
   it("exports exactly the eleven literal method/path/auth/status contracts", () => {
-    expect(contracts).toHaveProperty("extensionAdminOperations");
     const operations = contracts.extensionAdminOperations;
     expect(Object.keys(operations).sort()).toEqual(inventory.map(([id]) => id).sort());
     for (const [id, method, path, success, notFound] of inventory) {

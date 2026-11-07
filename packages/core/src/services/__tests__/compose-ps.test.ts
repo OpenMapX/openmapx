@@ -27,10 +27,6 @@ describe("parseComposePsJson", () => {
     },
   );
 
-  it("holds line-delimited output that one JSON.parse of the whole refuses", () => {
-    expect(() => JSON.parse(captured("compose-5.6.1.stdout"))).toThrow(SyntaxError);
-  });
-
   it.each([
     ["compose-5.6.1-empty.stdout", ""],
     ["compose-2.20.3-empty.stdout", "[]\n"],

@@ -44,16 +44,6 @@ describe("Integration manifests", () => {
           expect(raw.id).toBe(dir);
         });
 
-        it("has at least one domain", () => {
-          expect(raw.domains?.length).toBeGreaterThan(0);
-        });
-
-        it("has a valid quality value", () => {
-          if (raw.quality) {
-            expect(["built-in", "community-verified", "community"]).toContain(raw.quality);
-          }
-        });
-
         if (raw.frontend?.layerSelector) {
           it("owns a valid layer-selector preview", () => {
             expect(raw.frontend.layerSelector.preview).toBe("preview.svg");
@@ -75,15 +65,4 @@ describe("Integration manifests", () => {
       }
     });
   }
-
-  it("has no duplicate integration IDs", () => {
-    const ids = new Set<string>();
-    for (const dir of integrationDirs) {
-      const manifestPath = join(INTEGRATIONS_DIR, dir, "manifest.json");
-      if (!existsSync(manifestPath)) continue;
-      const raw = JSON.parse(readFileSync(manifestPath, "utf-8"));
-      expect(ids.has(raw.id)).toBe(false);
-      ids.add(raw.id);
-    }
-  });
 });

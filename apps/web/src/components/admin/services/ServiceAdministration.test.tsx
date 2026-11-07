@@ -1111,11 +1111,6 @@ it.each(["file", "env"])(
   },
 );
 
-vi.mock(
-  "next/navigation",
-  async () => (await import("@/test/adminNavigation")).adminNavigationMock,
-);
-
 it("applies the saved service configuration without posting another save and links its exact job", async () => {
   const requests = setup();
   mount(<ServiceDetail id="demo" />);

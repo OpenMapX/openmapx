@@ -13,16 +13,12 @@ const { requireAdmin, tryAdminSession } = await import("../require-admin");
 
 beforeEach(() => {
   mockGetSession.mockReset();
-  delete process.env.OPENMAPX_DISABLE_LOCALHOST_AUTH;
-  delete process.env.OPENMAPX_LOCAL_ADMIN_TOKEN;
-  delete process.env.NODE_ENV;
+  vi.stubEnv("OPENMAPX_DISABLE_LOCALHOST_AUTH", undefined);
+  vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", undefined);
+  vi.stubEnv("NODE_ENV", undefined);
 });
 
-afterEach(() => {
-  delete process.env.OPENMAPX_DISABLE_LOCALHOST_AUTH;
-  delete process.env.OPENMAPX_LOCAL_ADMIN_TOKEN;
-  delete process.env.NODE_ENV;
-});
+afterEach(() => vi.unstubAllEnvs());
 
 function makeApp() {
   const app = Fastify();
@@ -62,7 +58,7 @@ describe("requireAdmin loopback short-circuit", () => {
   });
 
   it("respects OPENMAPX_DISABLE_LOCALHOST_AUTH=1 (no short-circuit)", async () => {
-    process.env.OPENMAPX_DISABLE_LOCALHOST_AUTH = "1";
+    vi.stubEnv("OPENMAPX_DISABLE_LOCALHOST_AUTH", "1");
     mockGetSession.mockResolvedValue(null); // no cookies, no session
     const app = makeApp();
     const res = await app.inject({ method: "GET", url: "/protected" });
@@ -72,7 +68,7 @@ describe("requireAdmin loopback short-circuit", () => {
   });
 
   it("rejects 403 for an authed non-admin user when loopback short-circuit is disabled", async () => {
-    process.env.OPENMAPX_DISABLE_LOCALHOST_AUTH = "1";
+    vi.stubEnv("OPENMAPX_DISABLE_LOCALHOST_AUTH", "1");
     mockGetSession.mockResolvedValue({
       user: { id: "u1", role: "user" },
       session: { id: "s1" },
@@ -84,7 +80,7 @@ describe("requireAdmin loopback short-circuit", () => {
   });
 
   it("admits an authed admin user when loopback short-circuit is disabled", async () => {
-    process.env.OPENMAPX_DISABLE_LOCALHOST_AUTH = "1";
+    vi.stubEnv("OPENMAPX_DISABLE_LOCALHOST_AUTH", "1");
     mockGetSession.mockResolvedValue({
       user: { id: "admin1", role: "admin" },
       session: { id: "s1" },
@@ -97,7 +93,7 @@ describe("requireAdmin loopback short-circuit", () => {
   });
 
   it("requires the local admin token when OPENMAPX_LOCAL_ADMIN_TOKEN is set", async () => {
-    process.env.OPENMAPX_LOCAL_ADMIN_TOKEN = "s3cret";
+    vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "s3cret");
     mockGetSession.mockResolvedValue(null);
     const app = makeApp();
     // No token header → loopback short-circuit must NOT admit, and no better-auth session exists.
@@ -107,7 +103,7 @@ describe("requireAdmin loopback short-circuit", () => {
   });
 
   it("admits a loopback request that presents the correct local admin token", async () => {
-    process.env.OPENMAPX_LOCAL_ADMIN_TOKEN = "s3cret";
+    vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "s3cret");
     const app = makeApp();
     const res = await app.inject({
       method: "GET",
@@ -121,7 +117,7 @@ describe("requireAdmin loopback short-circuit", () => {
   });
 
   it("rejects a loopback request with a wrong token", async () => {
-    process.env.OPENMAPX_LOCAL_ADMIN_TOKEN = "s3cret";
+    vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "s3cret");
     mockGetSession.mockResolvedValue(null);
     const app = makeApp();
     const res = await app.inject({
@@ -134,10 +130,14 @@ describe("requireAdmin loopback short-circuit", () => {
   });
 
   it("denies loopback bypass entirely in production when no token is configured", async () => {
-    process.env.NODE_ENV = "production";
+    vi.stubEnv("NODE_ENV", "production");
     mockGetSession.mockResolvedValue(null);
     const app = makeApp();
-    const res = await app.inject({ method: "GET", url: "/protected" });
+    const res = await app.inject({
+      method: "GET",
+      url: "/protected",
+      headers: { "x-openmapx-local-admin": "" },
+    });
     await app.close();
     expect(res.statusCode).toBe(401);
   });
@@ -148,7 +148,7 @@ describe("requireAdmin loopback short-circuit", () => {
     // `X-Forwarded-For: 127.0.0.1` to try to claim the loopback short-circuit.
     // The check uses `request.socket.remoteAddress` (the actual TCP peer), so
     // the forgery must be rejected.
-    process.env.OPENMAPX_LOCAL_ADMIN_TOKEN = "s3cret";
+    vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "s3cret");
     mockGetSession.mockResolvedValue(null);
     const app = Fastify({ trustProxy: "uniquelocal" });
     app.get("/protected", async (request) => {
@@ -174,7 +174,7 @@ describe("requireAdmin loopback short-circuit", () => {
 
 describe("requireAdmin throws (no manual reply)", () => {
   beforeEach(() => {
-    process.env.OPENMAPX_DISABLE_LOCALHOST_AUTH = "1"; // skip loopback short-circuit
+    vi.stubEnv("OPENMAPX_DISABLE_LOCALHOST_AUTH", "1"); // skip loopback short-circuit
   });
 
   it("throws a 401 when there is no session", async () => {
@@ -194,7 +194,7 @@ describe("requireAdmin throws (no manual reply)", () => {
 
 describe("tryAdminSession (non-throwing)", () => {
   beforeEach(() => {
-    process.env.OPENMAPX_DISABLE_LOCALHOST_AUTH = "1";
+    vi.stubEnv("OPENMAPX_DISABLE_LOCALHOST_AUTH", "1");
   });
 
   it("returns null instead of throwing when unauthorized", async () => {

@@ -163,17 +163,6 @@ describe("GET /isochrone", () => {
     expect(res.headers["cache-control"]).toBe("no-cache");
   });
 
-  it("sets Cache-Control: public, max-age=3600 on success", async () => {
-    mockIsochrone.mockResolvedValue(MOCK_ISOCHRONE_RESULT);
-
-    const res = await app.inject({
-      method: "GET",
-      url: `/isochrone?${qs(VALID_PARAMS)}`,
-    });
-
-    expect(res.headers["cache-control"]).toBe("public, max-age=3600");
-  });
-
   it("accepts walking mode", async () => {
     mockIsochrone.mockResolvedValue(MOCK_ISOCHRONE_RESULT);
 

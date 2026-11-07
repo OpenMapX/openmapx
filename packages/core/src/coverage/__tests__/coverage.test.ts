@@ -215,7 +215,7 @@ describe("coverage capability and rights precedence", () => {
 
 describe("coverage wire schema", () => {
   it("rejects unbounded/unknown stream fields at the process boundary", () => {
-    const result = streamEvidenceSchema.safeParse({
+    const input = {
       key: "key",
       owner: { kind: "service", id: "search" },
       sourceId: "osm",
@@ -235,8 +235,14 @@ describe("coverage wire schema", () => {
       freshness: "unknown",
       reasons: [],
       unexpected: true,
-    });
+    };
+    const { unexpected: _unexpected, ...valid } = input;
+    expect(streamEvidenceSchema.safeParse(valid).success).toBe(true);
+    const result = streamEvidenceSchema.safeParse(input);
     expect(result.success).toBe(false);
+    expect(result.error?.issues).toContainEqual(
+      expect.objectContaining({ code: "unrecognized_keys", keys: ["unexpected"] }),
+    );
   });
 
   it("accepts only credential-free HTTP(S) rights links", () => {

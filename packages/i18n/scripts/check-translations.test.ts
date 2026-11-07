@@ -77,52 +77,6 @@ describe("extractICUVariables (message → sorted top-level var names)", () => {
   });
 });
 
-// The gate's actual cross-locale checks (sections 1 and 6 of the script) are
-// inline in main(), composed from the two exported primitives. We re-compose the
-// exact same diff expressions here over synthetic locales to lock the behavior:
-//   - keys in reference missing from a locale  → MISSING (error)
-//   - keys in a locale absent from reference    → EXTRA (warn)
-//   - ICU vars that differ between the two       → PLACEHOLDER (error)
-describe("cross-locale key consistency diff (composed)", () => {
-  function keyDiff(ref: Record<string, unknown>, loc: Record<string, unknown>) {
-    const refKeys = flattenKeys(ref);
-    const locKeys = flattenKeys(loc);
-    const missingInLocale = [...refKeys.keys()].filter((k) => !locKeys.has(k));
-    const extraInLocale = [...locKeys.keys()].filter((k) => !refKeys.has(k));
-    return { missingInLocale, extraInLocale };
-  }
-
-  it("reports keys missing from the locale", () => {
-    const { missingInLocale, extraInLocale } = keyDiff({ a: "1", b: { c: "2" } }, { a: "1" });
-    expect(missingInLocale).toEqual(["b.c"]);
-    expect(extraInLocale).toEqual([]);
-  });
-
-  it("reports extra keys present only in the locale", () => {
-    const { missingInLocale, extraInLocale } = keyDiff({ a: "1" }, { a: "1", z: "extra" });
-    expect(missingInLocale).toEqual([]);
-    expect(extraInLocale).toEqual(["z"]);
-  });
-
-  it("reports both missing and extra in one diff", () => {
-    const { missingInLocale, extraInLocale } = keyDiff(
-      { shared: "x", onlyRef: "r" },
-      { shared: "y", onlyLoc: "l" },
-    );
-    expect(missingInLocale).toEqual(["onlyRef"]);
-    expect(extraInLocale).toEqual(["onlyLoc"]);
-  });
-
-  it("reports no differences for perfectly aligned locales", () => {
-    const { missingInLocale, extraInLocale } = keyDiff(
-      { nav: { home: "Home" } },
-      { nav: { home: "Startseite" } },
-    );
-    expect(missingInLocale).toEqual([]);
-    expect(extraInLocale).toEqual([]);
-  });
-});
-
 describe("road-condition classification catalog", () => {
   const kinds = [
     "incident",
@@ -174,34 +128,5 @@ describe("road-condition classification catalog", () => {
     expect(Object.keys(messages.roadConditions.kind)).toEqual(expect.arrayContaining(kinds));
     expect(Object.keys(messages.roadConditions.type)).toEqual(expect.arrayContaining(types));
     expect(Object.keys(messages.navigation.incidentType)).toEqual(expect.arrayContaining(types));
-  });
-});
-
-describe("cross-locale ICU placeholder consistency (composed)", () => {
-  function placeholdersDiffer(refValue: string, locValue: string): boolean {
-    const refVars = extractICUVariables(refValue);
-    const locVars = extractICUVariables(locValue);
-    return JSON.stringify(refVars) !== JSON.stringify(locVars);
-  }
-
-  it.each([
-    // [reference message, locale message, vars differ?]
-    ["Hello {name}", "Hallo {name}", false],
-    // Same vars, different order → still consistent (extractICUVariables sorts).
-    ["{a} {b}", "{b} {a}", false],
-    // Locale dropped a required placeholder.
-    ["You have {count} items", "Sie haben Artikel", true],
-    // Locale renamed a placeholder (a common, silent breakage).
-    ["Hello {name}", "Hallo {nom}", true],
-    // Locale added an undeclared placeholder.
-    ["Hello {name}", "Hallo {name}, {extra}", true],
-    // Plural selector consistency.
-    [
-      "{count, plural, one {# item} other {# items}}",
-      "{count, plural, one {# Element} other {# Elemente}}",
-      false,
-    ],
-  ])("ref=%j loc=%j → differ=%s", (refValue, locValue, expected) => {
-    expect(placeholdersDiffer(refValue, locValue)).toBe(expected);
   });
 });

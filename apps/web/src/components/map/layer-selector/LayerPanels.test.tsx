@@ -55,30 +55,6 @@ afterEach(() => {
 });
 
 describe("layer panels", () => {
-  it.each([
-    ["desktop", <DesktopMorePanel key="desktop" onClose={() => undefined} />],
-    ["mobile", <MobileLayerPanel key="mobile" />],
-  ])("keeps map types, purpose groups and tools distinct on %s", (_name, panel) => {
-    render(panel);
-    for (const heading of ["mapType", "transport", "outdoors", "weatherEnvironment", "mapTools"]) {
-      expect(screen.getByText(heading)).toBeTruthy();
-    }
-    for (const detail of ["traffic-flow", "hiking", "weather"]) {
-      expect(screen.getAllByText(detail)).toHaveLength(1);
-    }
-    expect(screen.getAllByText("measurement")).toHaveLength(1);
-    expect(screen.getAllByText("travel-time")).toHaveLength(1);
-  });
-
-  it.each([
-    ["desktop", <DesktopMorePanel key="desktop" onClose={() => undefined} />],
-    ["mobile", <MobileLayerPanel key="mobile" />],
-  ])("keeps the traffic choice without a visible description on %s", (_name, panel) => {
-    render(panel);
-    expect(screen.getByText("traffic-flow")).toBeTruthy();
-    expect(screen.queryByText("trafficFlowDescription")).toBeNull();
-  });
-
   it("lets mobile users operate both tools and select one basemap", () => {
     render(<MobileLayerPanel />);
     act(() => fireEvent.click(screen.getByRole("switch", { name: "measurement" })));

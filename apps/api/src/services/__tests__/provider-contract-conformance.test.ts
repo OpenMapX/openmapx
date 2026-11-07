@@ -1,6 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import type { TemporalCapabilities, TemporalSupport } from "@openmapx/core";
 import {
   assertRealtimeProviderContract,
   assertRideProviderContract,
@@ -22,6 +23,38 @@ function backendIntegrationDirs(): string[] {
     .filter((name) => existsSync(join(INTEGRATIONS_DIR, name, "index.ts")));
 }
 
+const SEMANTICS: (keyof TemporalCapabilities)[] = [
+  "tripDepartAt",
+  "tripArriveBy",
+  "dwell",
+  "waypointDepartAfter",
+  "waypointArriveBy",
+  "timeDependentTravel",
+];
+const LEVELS: TemporalSupport[] = ["native", "emulated", "approximate", "unsupported"];
+
+function assertComplete(label: string, temporal: Partial<TemporalCapabilities>): void {
+  for (const semantic of SEMANTICS) {
+    const level = temporal[semantic];
+    expect(
+      LEVELS.includes(level as TemporalSupport),
+      `${label}: temporal.${semantic} must be one of ${LEVELS.join(", ")}`,
+    ).toBe(true);
+  }
+  // Claiming a time-dependent semantic while admitting travel time is not
+  // time-dependent is self-contradictory, and would label estimated wall clocks
+  // as "exact" fidelity.
+  if (temporal.timeDependentTravel === "unsupported") {
+    for (const semantic of SEMANTICS) {
+      if (semantic === "timeDependentTravel") continue;
+      expect(
+        temporal[semantic],
+        `${label}: temporal.${semantic} cannot be "native" while travel time ignores the departure instant`,
+      ).not.toBe("native");
+    }
+  }
+}
+
 /**
  * Every transit/realtime provider an integration registers must implement the
  * methods its declared `capabilities` promise. The framework ships
@@ -35,7 +68,7 @@ function backendIntegrationDirs(): string[] {
  * required service); we still check whatever registered before it bailed, since
  * the capability/method shape is fixed at registration regardless of config.
  */
-describe("Provider contract conformance", () => {
+describe("Provider contract and temporal capability conformance", () => {
   const dirs = backendIntegrationDirs();
 
   // Some integrations (e.g. transit-dynamic-registry) fetch a live catalog in
@@ -58,8 +91,20 @@ describe("Provider contract conformance", () => {
     expect(dirs.length).toBeGreaterThan(0);
   });
 
+  it("checks at least one real declaration", async () => {
+    const ctx = createMockIntegrationContext({ id: "routing-valhalla" });
+    const mod = await import(
+      pathToFileURL(join(INTEGRATIONS_DIR, "routing-valhalla", "index.ts")).href
+    );
+    await mod.setup?.(ctx);
+    const declared = ctx.registered.routing.filter(
+      (provider) => (provider as { temporal?: TemporalCapabilities }).temporal !== undefined,
+    );
+    expect(declared.length).toBeGreaterThan(0);
+  });
+
   for (const dir of dirs) {
-    it(`${dir}: transit/realtime/ride providers satisfy their capability contracts`, async () => {
+    it(`${dir}: registered providers satisfy capability and temporal contracts`, async () => {
       const ctx = createMockIntegrationContext({ id: dir });
       const mod = await import(pathToFileURL(join(INTEGRATIONS_DIR, dir, "index.ts")).href);
       if (typeof mod.setup !== "function") return;
@@ -89,6 +134,18 @@ describe("Provider contract conformance", () => {
         expect(provider.book).toBeUndefined();
         expect(provider.getBooking).toBeUndefined();
         expect(provider.cancelBooking).toBeUndefined();
+      }
+
+      for (const provider of ctx.registered.routing) {
+        const temporal = (provider as { temporal?: Partial<TemporalCapabilities> }).temporal;
+        if (!temporal) continue;
+        assertComplete(`${dir}/${(provider as { id?: string }).id ?? "routing"}`, temporal);
+      }
+
+      for (const provider of ctx.registered.transit) {
+        const temporal = provider.capabilities.planningFeatures?.temporal;
+        if (!temporal) continue;
+        assertComplete(`${dir}/${provider.id}`, temporal);
       }
     });
   }

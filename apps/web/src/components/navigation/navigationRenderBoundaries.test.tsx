@@ -1,18 +1,12 @@
 // @vitest-environment jsdom
 
-// Characterizes NavigationView's current render behavior before it is split by
-// update cadence: everything below documents what happens TODAY, including the
-// parts that are the target of the coming refactor. The cold-rerender
-// assertions are written against the desired end state and are expected to
-// fail against the current, undivided component — that failure is the point of
-// this file, not a bug to chase here.
+// Accepted fixes update hot readouts while cold controls and unrelated roots stay stable.
 
 import type { Route } from "@integrations/routing/types";
 import {
   createNavigationSessionSnapshot,
   type NavigationSessionSnapshot,
   type NavProgress,
-  upcomingManeuverIndex,
   useNavigationStore,
   useSettingsStore,
 } from "@openmapx/core";
@@ -424,8 +418,6 @@ describe("navigation render boundaries — cold components do not rerender per f
 
     runHundredProgressOnlyFixes();
 
-    // EXPECTED TO FAIL today: NavigationView is one undivided component, so
-    // every progress-only fix re-renders the whole tree, including these four.
     expect(renderCount("RouteSearchControl")).toBe(0);
     expect(renderCount("NavMenu")).toBe(0);
     expect(renderCount("NavDirectionsDialog")).toBe(0);
@@ -442,7 +434,8 @@ describe("navigation render boundaries — ARIA live warnings are immediate", ()
       useNavigationStore.setState({ progress: buildProgress(0), coasting: true, weakGps: false });
     });
 
-    expect(screen.getByText("navigation.estimatedPosition")).toBeDefined();
+    const notice = screen.getByText("navigation.estimatedPosition").closest('[role="status"]');
+    expect(notice).toHaveAttribute("aria-live", "polite");
   });
 
   it("announces the weak-GPS text in the same act() as the state change", () => {
@@ -453,7 +446,8 @@ describe("navigation render boundaries — ARIA live warnings are immediate", ()
       useNavigationStore.setState({ progress: buildProgress(0), weakGps: true, coasting: false });
     });
 
-    expect(screen.getByText("navigation.weakGps")).toBeDefined();
+    const notice = screen.getByText("navigation.weakGps").closest('[role="status"]');
+    expect(notice).toHaveAttribute("aria-live", "polite");
   });
 
   it("announces the rerouting text in the same act() as the status change", () => {
@@ -464,7 +458,8 @@ describe("navigation render boundaries — ARIA live warnings are immediate", ()
       useNavigationStore.getState().beginReroute();
     });
 
-    expect(screen.getByText("navigation.rerouting")).toBeDefined();
+    const notice = screen.getByText("navigation.rerouting").closest('[role="status"]');
+    expect(notice).toHaveAttribute("aria-live", "polite");
   });
 });
 
@@ -494,7 +489,7 @@ describe("navigation render boundaries — static-route fallback before the firs
 
     expect(useNavigationStore.getState().progress).toBeNull();
 
-    const expectedStep = route.steps[upcomingManeuverIndex(0, route.steps.length)];
+    const expectedStep = route.steps[1];
     const maneuverProps = lastManeuverBannerProps;
     if (!maneuverProps) throw new Error("ManeuverBanner never rendered");
     expect(maneuverProps.distanceToManeuver).toBe(expectedStep.distance);
@@ -541,12 +536,10 @@ describe("navigation render boundaries — arrival and resume roots", () => {
       useNavigationStore.getState().completeArrival();
     });
 
-    // Two passes, not one: the guidance banner carries the callback ref that
-    // holds the measured map obstruction, so unmounting it commits a second
-    // pass over the arrival branch. Arrival happens once per trip; what this
-    // guards is that no *fix* reaches the arrival root, which the two zeroes
-    // below still pin.
-    expect(renderCount("ArrivalCard")).toBe(2);
+    expect(renderCount("ArrivalCard")).toBeGreaterThan(0);
+    const arrivedRenders = renderCount("ArrivalCard");
+    runHundredProgressOnlyFixes();
+    expect(renderCount("ArrivalCard")).toBe(arrivedRenders);
     expect(renderCount("ManeuverBanner")).toBe(0);
     expect(renderCount("NavBottomBar")).toBe(0);
   });

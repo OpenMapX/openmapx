@@ -7,7 +7,6 @@ import {
   maskSecretConfigRecord,
   maskSecretConfigValues,
   SENSITIVE_KEY_NAME_RE,
-  secretConfigKeys,
 } from "../mask-config.js";
 
 const PLACEHOLDER = "placeholder-not-a-real-value";
@@ -49,26 +48,22 @@ function configSchemaFromManifest(path: string): Record<string, unknown> | undef
   return manifest.configSchema;
 }
 
+function declaredSecretKeys(schema: Record<string, unknown> | undefined): string[] {
+  const fields = schema?.properties ?? schema ?? {};
+  return Object.entries(fields).flatMap(([key, value]) =>
+    value !== null &&
+    typeof value === "object" &&
+    (value as Record<string, unknown>)["x-openmapx-secret"] === true
+      ? [key]
+      : [],
+  );
+}
+
 describe("maskSecretConfigValues", () => {
-  it("masks a declared secret even when its name looks innocuous", () => {
-    const schema = {
-      properties: {
-        clientId: { type: "string", "x-openmapx-secret": true },
-      },
-    };
-
-    const masked = maskSecretConfigValues(
-      { clientId: { value: PLACEHOLDER, source: "vault" } },
-      schema,
-    );
-
-    expect(masked.clientId).toMatchObject({ value: "***", source: "vault" });
-  });
-
   it.each(["vault", "env", "database", "config.json", "default"])(
     "masks a declared secret from %s",
     (source) => {
-      const schema = { properties: { clientId: { "x-openmapx-secret": true } } };
+      const schema = { properties: { clientId: { type: "string", "x-openmapx-secret": true } } };
       const masked = maskSecretConfigValues({ clientId: { value: PLACEHOLDER, source } }, schema);
 
       expect(masked.clientId).toMatchObject({ value: "***", source });
@@ -131,9 +126,9 @@ describe("repo-wide declared-secret masking guard", () => {
 
     for (const manifestPath of manifestPaths()) {
       const configSchema = configSchemaFromManifest(manifestPath);
-      const keys = [...secretConfigKeys(configSchema)];
+      const keys = declaredSecretKeys(configSchema);
       const resolvedConfig: Record<string, { value: unknown; source: string }> = Object.fromEntries(
-        keys.map((key) => [key, { value: PLACEHOLDER, source: "vault" }]),
+        keys.map((key) => [key, { value: PLACEHOLDER, source: "default" }]),
       );
       const masked = maskSecretConfigValues(resolvedConfig, configSchema);
 
@@ -150,7 +145,7 @@ describe("repo-wide declared-secret masking guard", () => {
     expect(paths.length).toBeGreaterThan(20);
 
     const secretCount = paths.reduce(
-      (count, path) => count + secretConfigKeys(configSchemaFromManifest(path)).size,
+      (count, path) => count + declaredSecretKeys(configSchemaFromManifest(path)).length,
       0,
     );
     expect(secretCount).toBeGreaterThan(40);

@@ -83,6 +83,9 @@ it("removes a prior successful claim on failed assessment", () => {
   expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
     "Road updates couldn’t be checked.",
   );
+  expect(screen.getByRole("dialog", { name: "About traffic" })).not.toHaveTextContent(
+    "Available road updates were used",
+  );
 });
 
 it("rearms expiry when a clock correction makes the first callback early", () => {
@@ -108,9 +111,13 @@ it("rearms expiry when a clock correction makes the first callback early", () =>
 
 it("keeps provider and application details out of the default summary", () => {
   render(view());
+  expect(screen.queryByText("Traffic data unavailable")).toBeNull();
   expect(screen.queryByText(/Self-hosted Valhalla/)).toBeNull();
   expect(screen.queryByText("Available road updates were used for this route.")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
+  expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
+    "Traffic data unavailable",
+  );
   expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
     "Available road updates were used for this route.",
   );
@@ -131,14 +138,5 @@ it("updates the explanation when a new route has no estimate", () => {
   rendered.rerender(view(route));
   expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
     "This travel time may not include current traffic delays.",
-  );
-});
-
-it("states that traffic data is unavailable inside the optional explanation", () => {
-  render(view());
-  expect(screen.queryByText("Traffic data unavailable")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
-  expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
-    "Traffic data unavailable",
   );
 });

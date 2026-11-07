@@ -62,6 +62,10 @@ describe("computeMetrics", () => {
 describe("SWEEP_GRID", () => {
   it("has exactly 54 cells (3 × 3 × 3 × 2)", () => {
     expect(SWEEP_GRID.length).toBe(54);
+    const tuples = SWEEP_GRID.map((cell) =>
+      [cell.alwaysMergeM, cell.softWindowM, cell.nameDiceFloor, cell.confidenceFloor].join(":"),
+    );
+    expect(new Set(tuples).size).toBe(54);
   });
 
   it("contains all expected alwaysMergeM values", () => {
@@ -82,14 +86,5 @@ describe("SWEEP_GRID", () => {
   it("contains all expected confidenceFloor values", () => {
     const values = new Set(SWEEP_GRID.map((c) => c.confidenceFloor));
     expect([...values].sort((a, b) => a - b)).toEqual([0.5, 0.7]);
-  });
-
-  it("every cell has the required shape", () => {
-    for (const cell of SWEEP_GRID) {
-      expect(typeof cell.alwaysMergeM).toBe("number");
-      expect(typeof cell.softWindowM).toBe("number");
-      expect(typeof cell.nameDiceFloor).toBe("number");
-      expect(typeof cell.confidenceFloor).toBe("number");
-    }
   });
 });

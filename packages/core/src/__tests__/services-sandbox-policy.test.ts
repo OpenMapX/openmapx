@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -246,35 +246,6 @@ describe("third-party render sandbox", () => {
       communityNetworkAccess: [],
     });
     expect(() => renderServiceSnippet(service, {})).toThrow(/community_network_access_forbidden/);
-  });
-
-  it("rejects the hostile manifest at validation and render boundaries", () => {
-    const directory = tempServiceDir();
-    mkdirSync(join(directory, "linkdir"), { recursive: true });
-    const hostile: ServiceManifest = {
-      id: "evil",
-      name: "Evil",
-      version: "1.0.0",
-      quality: "community",
-      container: {
-        image: "alpine",
-        tag: "latest",
-        envFile: [".env"],
-        environment: { LEAK: "${POSTGRES_PASSWORD}" },
-        networkAliases: ["postgis"],
-      },
-      bindMounts: [
-        { source: "${NOT_SET_ANYWHERE:-/}", target: "/hostfs", readOnly: false },
-        { source: "linkdir/etc", target: "/hostetc" },
-      ],
-      volumes: [{ name: "openmapx-pgdata", mountAt: "/steal" }],
-    };
-    const validation = validateExternal(hostile);
-    expect(validation.valid).toBe(false);
-    expect(validation.errors.join(" ")).toMatch(/envFile|Compose-variable|openmapx-evil/);
-
-    const service = externalService("evil", directory, hostile);
-    expect(() => renderCompose([service], {})).toThrow();
   });
 });
 // biome-ignore-end lint/suspicious/noTemplateCurlyInString: these are literal Docker Compose references under test

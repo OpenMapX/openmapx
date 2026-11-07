@@ -42,17 +42,6 @@ describe("matchSpeedLimitsByPoint", () => {
     });
     expect(matchSpeedLimitsByPoint(res)).toEqual([null, null, null]);
   });
-
-  it("returns one entry per trace point", () => {
-    const res = match({
-      edges: [{ length: 100, speedLimit: 50, beginShapeIndex: 0, endShapeIndex: 1 }],
-      points: [
-        { lat: 0, lng: 0, type: "matched", edgeIndex: 0 },
-        { lat: 0, lng: 0, type: "matched", edgeIndex: 0 },
-      ],
-    });
-    expect(matchSpeedLimitsByPoint(res)).toHaveLength(2);
-  });
 });
 
 describe("pickSpeedLimit", () => {

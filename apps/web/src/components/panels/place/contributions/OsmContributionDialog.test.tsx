@@ -3,7 +3,7 @@ import type {
   OsmContributionContext,
   OsmContributionPreview,
 } from "@openmapx/core";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createQueryWrapper } from "@/test/query";
@@ -157,22 +157,17 @@ beforeEach(() => {
 });
 
 describe("shell", () => {
-  it("titles itself from the live context, not from a place record", async () => {
-    renderDialog();
-    expect(await screen.findByText("osmContributions.dialogTitleNamed")).not.toBeNull();
-  });
-
-  it("goes full screen on mobile", () => {
+  it("labels the fullscreen dialog and closes it through its named control", async () => {
     fullScreen.mockReturnValue(true);
-    renderDialog();
-    expect(fullScreen).toHaveBeenCalled();
-  });
-
-  it("labels the dialog and its close control", async () => {
-    renderDialog();
+    const close = renderDialog();
     const dialog = await screen.findByRole("dialog");
-    expect(dialog.getAttribute("aria-labelledby")).toBe("osm-contribution-title");
-    expect(screen.getByLabelText("osmContributions.close")).not.toBeNull();
+    expect(dialog).toHaveAccessibleName(/osmContributions.dialogTitleNamed/);
+    const paper = getComputedStyle(dialog);
+    expect(paper.width).toBe("100%");
+    expect(paper.height).toBe("100%");
+    expect(paper.margin).toBe("0px");
+    await userEvent.click(screen.getByRole("button", { name: "osmContributions.close" }));
+    expect(close).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -197,12 +192,19 @@ describe("chooser", () => {
 
 describe("review and publish", () => {
   it("renders the server preview, not a client-computed diff", async () => {
+    state.previewMutate.mockResolvedValueOnce({
+      ...PREVIEW,
+      tagDiff: {
+        ...PREVIEW.tagDiff,
+        replace: [{ key: "name", from: "Server prior", to: "Server accepted" }],
+      },
+    });
     renderDialog();
     await editName();
     await userEvent.click(screen.getByText("osmContributions.reviewAction"));
 
     expect(await screen.findByText("osmContributions.reviewChanges")).not.toBeNull();
-    expect(screen.getByText("name: Café Central → Café Zentral")).not.toBeNull();
+    expect(screen.getByText("name: Server prior → Server accepted")).not.toBeNull();
     expect(state.previewMutate).toHaveBeenCalledWith(
       expect.objectContaining({
         ref: REF,
@@ -217,6 +219,7 @@ describe("review and publish", () => {
     await editName();
     await userEvent.click(screen.getByText("osmContributions.reviewAction"));
     const publish = await screen.findByText("osmContributions.publish");
+    expect(screen.getByText("osmContributions.publicNotice")).toBeInTheDocument();
     expect((publish.closest("button") as HTMLButtonElement | null)?.disabled).toBe(true);
 
     await userEvent.click(screen.getByText("osmContributions.evidenceSurvey"));
@@ -231,14 +234,22 @@ describe("review and publish", () => {
     );
   });
 
-  it("shows the public attribution notice with the linked account", async () => {
-    renderDialog();
-    await editName();
-    await userEvent.click(screen.getByText("osmContributions.reviewAction"));
-    expect(await screen.findByText("osmContributions.publicNotice")).not.toBeNull();
-  });
-
   it("publishes once for two rapid clicks and reuses the same identity", async () => {
+    let completePublish!: () => void;
+    state.publishMutate.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          completePublish = () =>
+            resolve({
+              ref: REF,
+              version: 5,
+              changesetId: 77,
+              changesetUrl: "https://www.openstreetmap.org/changeset/77",
+              elementUrl: "https://www.openstreetmap.org/node/12",
+              publishedAt: "2026-08-10T09:00:00.000Z",
+            });
+        }),
+    );
     renderDialog();
     await editName();
     await userEvent.click(screen.getByText("osmContributions.reviewAction"));
@@ -251,31 +262,19 @@ describe("review and publish", () => {
     if (!publish) throw new Error("publish button missing");
     const locked = userEvent.setup({ pointerEventsCheck: 0 });
     await locked.click(publish);
+    expect(publish).toBeDisabled();
     // The second click must be a no-op: the action is already locked.
     await locked.click(publish);
 
     await waitFor(() => expect(state.publishMutate).toHaveBeenCalledTimes(1));
     const previewId = state.previewMutate.mock.calls[0]?.[0] as { idempotencyKey: string };
     const publishId = state.publishMutate.mock.calls[0]?.[0] as { idempotencyKey: string };
-    expect(publishId.idempotencyKey).toBe(previewId.idempotencyKey);
-  });
-
-  it("shows the success links and the propagation notice", async () => {
-    renderDialog();
-    await editName();
-    await userEvent.click(screen.getByText("osmContributions.reviewAction"));
-    await userEvent.click(await screen.findByText("osmContributions.evidenceSurvey"));
-    await userEvent.type(
-      screen.getByLabelText("osmContributions.reviewCommentLabel"),
-      "Corrected the name from the sign",
+    expect(previewId.idempotencyKey).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
     );
-    await userEvent.click(screen.getByText("osmContributions.publish"));
-
-    expect(await screen.findByText("osmContributions.successEditTitle")).not.toBeNull();
-    expect(
-      screen.getByText("osmContributions.successChangeset").closest("a")?.getAttribute("href"),
-    ).toBe("https://www.openstreetmap.org/changeset/77");
-    expect(screen.getByText("osmContributions.successLag")).not.toBeNull();
+    expect(publishId.idempotencyKey).toBe(previewId.idempotencyKey);
+    await act(async () => completePublish());
+    await screen.findByText("osmContributions.successEditTitle");
   });
 
   it("invalidates the place only when the success view is closed", async () => {
@@ -289,6 +288,11 @@ describe("review and publish", () => {
     );
     await userEvent.click(screen.getByText("osmContributions.publish"));
     await screen.findByText("osmContributions.successEditTitle");
+    expect(screen.getByText("osmContributions.successChangeset").closest("a")).toHaveAttribute(
+      "href",
+      "https://www.openstreetmap.org/changeset/77",
+    );
+    expect(screen.getByText("osmContributions.successLag")).toBeInTheDocument();
     expect(state.invalidate).not.toHaveBeenCalled();
 
     await userEvent.click(screen.getByText("osmContributions.successDone"));
@@ -331,20 +335,6 @@ describe("retry after a failed publish", () => {
     // Reusing the failed id would make the server replay it instead of publishing.
     expect(second.idempotencyKey).not.toBe(first.idempotencyKey);
     expect(await screen.findByText("osmContributions.successEditTitle")).not.toBeNull();
-  });
-
-  it("stops showing the failure once the retry succeeds", async () => {
-    const { OsmContributionRequestError } = await import("@openmapx/core");
-    state.nextPublishError = new OsmContributionRequestError(502, {
-      code: "OSM_UNAVAILABLE",
-      message: "Unavailable.",
-    });
-    const button = await reachPublish();
-    await userEvent.click(button);
-    await waitFor(() => expect(state.publishMutate).toHaveBeenCalledTimes(1));
-    await userEvent.click(button);
-    await screen.findByText("osmContributions.successEditTitle");
-    // The mutation object still holds the old error; the success view must not.
     expect(screen.queryByText("osmContributions.errorOsmUnavailable")).toBeNull();
   });
 });
@@ -400,8 +390,6 @@ describe("notes", () => {
     expect((screen.getByLabelText("osmContributions.noteLabel") as HTMLTextAreaElement).value).toBe(
       "",
     );
-    // The note form carries its own submit button, so no empty footer.
-    expect(document.querySelector(".MuiDialogActions-root")).toBeNull();
   });
 
   it("requires enough text and submits exactly once", async () => {
@@ -474,7 +462,6 @@ describe("notes-only permission", () => {
     renderDialog();
     expect(await screen.findByText("osmContributions.gateScopeAction")).not.toBeNull();
     expect(screen.queryByText("osmContributions.noteDisclosure")).toBeNull();
-    expect(document.querySelector(".MuiDialogActions-root")).toBeNull();
   });
 
   it("asks for the notes permission when direct editing is off and nothing is granted", async () => {
@@ -524,7 +511,7 @@ describe("errors", () => {
     expect(screen.queryByText(leaked)).toBeNull();
   });
 
-  it("offers only trusted inspection links for an ambiguous result", async () => {
+  it("keeps a safe inspection link and refuses an executable element URL", async () => {
     const { OsmContributionRequestError } = await import("@openmapx/core");
     state.context = {
       data: undefined,
@@ -532,11 +519,17 @@ describe("errors", () => {
       error: new OsmContributionRequestError(502, {
         code: "AMBIGUOUS_RESULT",
         message: "Unknown.",
-        inspect: { changesetUrl: "https://www.openstreetmap.org/changeset/77" },
+        inspect: {
+          changesetUrl: "https://www.openstreetmap.org/changeset/77",
+          elementUrl: "javascript:alert(1)",
+        },
       }),
     };
     renderDialog();
     const alert = await screen.findByRole("alert");
-    expect(within(alert).getByText("https://www.openstreetmap.org/changeset/77")).not.toBeNull();
+    expect(
+      within(alert).getByRole("link", { name: "https://www.openstreetmap.org/changeset/77" }),
+    ).toHaveAttribute("href", "https://www.openstreetmap.org/changeset/77");
+    expect(within(alert).getByText("javascript:alert(1)").closest("a")).not.toHaveAttribute("href");
   });
 });

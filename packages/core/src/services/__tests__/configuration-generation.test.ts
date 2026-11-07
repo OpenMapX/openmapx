@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { parse as parseYaml } from "yaml";
 import { composePathHost, installedCompose } from "../__fixtures__/compose-path-host";
 import {
   type ConfigurationInput,
@@ -83,6 +84,12 @@ function input(overrides: Partial<ConfigurationInput> = {}): ConfigurationInput 
 describe("configuration generations", () => {
   it("carries opaque managed credential revision through unrelated CLI renders", async () => {
     const { infraDir } = checkout();
+    expect(readAppliedServiceIds(infraDir, services)).toBeNull();
+    expect(readAppliedConfiguration(infraDir)).toEqual({
+      serviceConfigs: [],
+      integrationConfigs: [],
+      serviceSecrets: [],
+    });
     const revision = "b".repeat(64);
     await commitConfigurationGeneration({
       infraDir,
@@ -157,6 +164,10 @@ describe("configuration generations", () => {
       },
     }).catch((error) => error);
     expect(error.result).toMatchObject({ outcome: "not_committed" });
+    expect(existsSync(join(infraDir, CURRENT_CONFIGURATION))).toBe(false);
+    expect(() => readAppliedServiceIds(infraDir, services)).toThrow(
+      /generations but none is current/,
+    );
   });
 
   it("keeps what was saved for services that are not enabled, for a later render", async () => {
@@ -206,9 +217,14 @@ describe("configuration generations", () => {
         serviceConfigs: [{ serviceId: "alpha", values: { CACHE: "large" }, envKeys: ["MODE"] }],
       }),
     });
-    expect(rendered.composeYaml).toContain("THREADS: '2'");
-    expect(rendered.composeYaml).toContain("CACHE: large");
-    expect(rendered.composeYaml).toContain(`MODE: \${SERVICE_ALPHA_MODE:-}`);
+    const document = parseYaml(rendered.composeYaml) as {
+      services: { alpha: { environment: Record<string, string> } };
+    };
+    expect(document.services.alpha.environment).toMatchObject({
+      THREADS: "2",
+      CACHE: "large",
+      MODE: "${SERVICE_ALPHA_MODE:-}",
+    });
   });
 
   it("refuses configuration of a service it does not know", async () => {
@@ -221,16 +237,6 @@ describe("configuration generations", () => {
       }),
     ).rejects.toThrow(/unknown service: gamma/);
     expect(readAppliedServiceIds(infraDir, services)).toBeNull();
-  });
-
-  it("reads nothing applied before the first render", () => {
-    const { infraDir } = checkout();
-    expect(readAppliedServiceIds(infraDir, services)).toBeNull();
-    expect(readAppliedConfiguration(infraDir)).toEqual({
-      serviceConfigs: [],
-      integrationConfigs: [],
-      serviceSecrets: [],
-    });
   });
 });
 

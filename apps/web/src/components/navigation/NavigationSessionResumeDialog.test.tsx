@@ -28,7 +28,8 @@ function renderDialog(onResume = vi.fn(), onDiscard = vi.fn()) {
 
 describe("NavigationSessionResumeDialog", () => {
   it("requires explicit confirmation before resuming", () => {
-    renderDialog();
+    const { onResume } = renderDialog();
+    expect(onResume).not.toHaveBeenCalled();
     expect(screen.getByTestId("navigation-session-resume-dialog")).toBeDefined();
     expect(screen.getByTestId("navigation-session-resume-dialog").textContent).toContain(
       "The route line is available, but the local map is not covered here.",

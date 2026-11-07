@@ -641,7 +641,11 @@ describe("semantic evaluator", () => {
         { name: "gemma3:4b-it-qat", digest: "gemma-digest", sizeBytes: 3_000_000_000 },
       ],
     };
-    const evidence = { ...base, evidenceChecksum: computeResidencyEvidenceChecksum(base) };
+    const signed = (patch: Partial<typeof base>) => {
+      const value = { ...base, ...patch };
+      return { ...value, evidenceChecksum: computeResidencyEvidenceChecksum(value) };
+    };
+    const evidence = signed({});
     const expected = {
       endpoint: base.endpoint,
       referenceLabel: base.referenceLabel,
@@ -650,20 +654,23 @@ describe("semantic evaluator", () => {
     };
     expect(validateSemanticResidencyEvidence(evidence, expected)).toEqual(evidence);
     expect(() =>
-      validateSemanticResidencyEvidence({ ...evidence, concurrentInferenceRounds: 4 }, expected),
-    ).toThrow();
-    expect(() =>
-      validateSemanticResidencyEvidence({ ...evidence, headroomBytes: 1 }, expected),
+      validateSemanticResidencyEvidence(signed({ concurrentInferenceRounds: 4 }), expected),
     ).toThrow();
     expect(() =>
       validateSemanticResidencyEvidence(
-        { ...evidence, activeConcurrentSamples: evidence.samples + 1 },
+        signed({ headroomBytes: 1, peakWorkingSetBytes: base.containerLimitBytes - 1 }),
         expected,
       ),
     ).toThrow();
     expect(() =>
       validateSemanticResidencyEvidence(
-        { ...evidence, peakWorkingSetBytes: base.peakWorkingSetBytes - 1 },
+        signed({ activeConcurrentSamples: evidence.samples + 1 }),
+        expected,
+      ),
+    ).toThrow();
+    expect(() =>
+      validateSemanticResidencyEvidence(
+        signed({ peakWorkingSetBytes: base.peakWorkingSetBytes - 1 }),
         expected,
       ),
     ).toThrow();

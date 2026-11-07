@@ -97,16 +97,6 @@ describe("shared release manifest", () => {
     ).toThrow(/images\.privacy-backup/);
   });
 
-  it("round-trips the transitous-tools pin through the rendered overlay", () => {
-    const overlay = renderReleaseCompose(manifest, INFRA);
-    expect(transitousToolsImageFromReleaseCompose(overlay)).toBe(
-      manifest.images["transitous-tools"],
-    );
-    expect(transitousToolsImageFromReleaseCompose("services: {}\n")).toBeNull();
-    expect(overlay).toContain(`image: ${manifest.images["ops-agent"]}`);
-    expect(overlay).toContain(`image: ${manifest.images["transitous-runner"]}`);
-  });
-
   it("rejects missing or unvalidated privacy release evidence", () => {
     const { privacyReleaseValidation: _missing, ...withoutEvidence } = manifest;
     expect(() => parseReleaseManifest(JSON.stringify(withoutEvidence))).toThrow(
@@ -172,7 +162,7 @@ describe("shared release manifest", () => {
     });
   });
 
-  it("publishes content-addressed evidence before an atomic release overlay", () => {
+  it("writes content-addressed validation evidence and a private release overlay", () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-release-artifacts-"));
     try {
       const overlayPath = join(
@@ -354,6 +344,8 @@ describe("release lockfile image contract and selection", () => {
     const images = manifest.images;
     const rendered = renderReleaseCompose(selected, INFRA);
     expect(parseReleaseComposeSelection(rendered)).toEqual({ release: selected.release, images });
+    expect(transitousToolsImageFromReleaseCompose(rendered)).toBe(images["transitous-tools"]);
+    expect(transitousToolsImageFromReleaseCompose("services: {}\n")).toBeNull();
     expect(rendered).not.toContain("ghcr.io/openmapx/docs");
   });
 

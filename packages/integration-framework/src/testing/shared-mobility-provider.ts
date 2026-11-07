@@ -154,47 +154,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-interface SharedMobilityInventoryFixture {
-  station: SharedMobilityStation;
-  vehicle: SharedMobilityVehicle;
-}
-
 export interface SharedMobilityProviderContractOptions {
   name: string;
   provider: MobilityDataSourceProvider;
-  fixtures: SharedMobilityProviderFixtures;
   formFactors: readonly VehicleFormFactor[];
   mapContextOptions: DataSourceMapContextSelection;
-  arrangeInventory(fixture: SharedMobilityInventoryFixture): void | Promise<void>;
 }
 
 export function sharedMobilityProviderContract(
   options: SharedMobilityProviderContractOptions,
 ): void {
   describe(`${options.name} shared-mobility provider contract`, () => {
-    it("enriches and maps the assembled inventory", async () => {
-      const station = options.fixtures.makeStation("contract-station", "contract");
-      const vehicle = options.fixtures.makeVehicle("contract-vehicle", "contract");
-      vi.mocked(mapStationToResult).mockImplementation((item) =>
-        options.fixtures.makeResult(item.id),
-      );
-      vi.mocked(mapVehicleToResult).mockImplementation((item) =>
-        options.fixtures.makeResult(item.id),
-      );
-      await options.arrangeInventory({ station, vehicle });
-
-      const result = await options.provider.search(createSharedMobilityBbox());
-
-      expect(enrichEnturMobilityItems).toHaveBeenCalledWith(
-        [expect.objectContaining(station)],
-        [expect.objectContaining(vehicle)],
-        expect.objectContaining({ transport: expect.any(Object), scope: "map" }),
-      );
-      expect(mapStationToResult).toHaveBeenCalledWith(expect.objectContaining(station));
-      expect(mapVehicleToResult).toHaveBeenCalledWith(expect.objectContaining(vehicle));
-      expect(result.data.map((item) => item.id)).toEqual([station.id, vehicle.id]);
-    });
-
     it("delegates map context with its declared form factors", async () => {
       const bbox = createSharedMobilityBbox();
 

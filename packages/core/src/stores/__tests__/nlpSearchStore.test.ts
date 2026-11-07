@@ -3,7 +3,7 @@ import type { BoundingBox } from "../../types/geometry";
 import type { SearchIntent } from "../../types/search";
 import type { OverpassFilter } from "../../utils/overpassFilter";
 import { useCategoryFacetStore } from "../categoryFacetStore";
-import { AD_HOC_CATEGORY_ID, useCategorySearchStore } from "../categorySearchStore";
+import { useCategorySearchStore } from "../categorySearchStore";
 import { useNlpSearchStore } from "../nlpSearchStore";
 import { useOpeningHoursStore } from "../openingHoursStore";
 
@@ -47,18 +47,6 @@ describe("useNlpSearchStore", () => {
       expect(s.resolvedBbox).toBe(bbox);
       expect(s.provider).toBe("openai");
       expect(s.error).toBeNull();
-    });
-
-    it("stores intent.filter", () => {
-      const filter = makeFilter({
-        selectors: [
-          { tags: [{ key: "amenity", op: "=", value: "cafe" }] },
-          { tags: [{ key: "amenity", op: "=", value: "restaurant" }] },
-        ],
-      });
-      const intent = makeIntent({ filter });
-      useNlpSearchStore.getState().activate(intent, bbox, "openai");
-      expect(useNlpSearchStore.getState().intent?.filter).toBe(filter);
     });
 
     describe("time_constraint population", () => {
@@ -218,8 +206,12 @@ describe("useNlpSearchStore", () => {
 
   describe("clear", () => {
     it("resets own state", () => {
-      const intent = makeIntent({ time_constraint: { type: "open_now" } });
+      const intent = makeIntent({
+        time_constraint: { type: "open_now" },
+        filter: makeFilter({ require: [{ key: "wheelchair", op: "=", value: "yes" }] }),
+      });
       useNlpSearchStore.getState().activate(intent, bbox, "openai");
+      useNlpSearchStore.getState().setError("unavailable");
       useNlpSearchStore.getState().clear();
       const s = useNlpSearchStore.getState();
       expect(s.isNlpActive).toBe(false);
@@ -227,39 +219,9 @@ describe("useNlpSearchStore", () => {
       expect(s.resolvedBbox).toBeNull();
       expect(s.provider).toBeNull();
       expect(s.error).toBeNull();
-    });
 
-    it("resets opening hours store to 'any'", () => {
-      const intent = makeIntent({ time_constraint: { type: "open_now" } });
-      useNlpSearchStore.getState().activate(intent, bbox, "openai");
-      useNlpSearchStore.getState().clear();
       expect(useOpeningHoursStore.getState().openingHoursFilter).toBe("any");
+      expect(useCategoryFacetStore.getState().selections).toEqual({});
     });
-
-    it("resets facet store selections", () => {
-      const intent = makeIntent({
-        filter: makeFilter({ require: [{ key: "wheelchair", op: "=", value: "yes" }] }),
-      });
-      useNlpSearchStore.getState().activate(intent, bbox, "openai");
-      useNlpSearchStore.getState().clear();
-      expect(Object.keys(useCategoryFacetStore.getState().selections)).toHaveLength(0);
-    });
-  });
-});
-
-describe("activate→setAdHocFilter store seam", () => {
-  beforeEach(() => {
-    useCategorySearchStore.getState().clearCategory();
-  });
-
-  it("setAdHocFilter stores the filter and sets activeCategory to AD_HOC_CATEGORY_ID", () => {
-    const filter = makeFilter({
-      selectors: [{ tags: [{ key: "amenity", op: "=", value: "cafe" }] }],
-    });
-    useCategorySearchStore.getState().setAdHocFilter(filter, "Cafes near me");
-    const s = useCategorySearchStore.getState();
-    expect(s.adHocFilter).toBe(filter);
-    expect(s.adHocLabel).toBe("Cafes near me");
-    expect(s.activeCategory).toBe(AD_HOC_CATEGORY_ID);
   });
 });

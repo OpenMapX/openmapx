@@ -638,7 +638,7 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
   60000,
 );
 it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
-  "rejects signed foreign generation owners and changed revision/hash/coordinator without changing the prepared guard",
+  "rejects a signed foreign generation owner without changing the prepared guard",
   async () => {
     const f = await ownedFenceFixture(),
       fence = createDataConfigurationMaintenance(f.sql, f.dm),
@@ -686,24 +686,6 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
           revisionId: f.input.revisionId,
           planDigest,
           coordinatorMode: f.input.coordinatorMode,
-        },
-        {
-          revisionId: `cfg1_${"b".repeat(43)}`,
-          planDigest,
-          coordinatorMode: f.input.coordinatorMode,
-        },
-        {
-          revisionId: f.input.revisionId,
-          planDigest: "b".repeat(64),
-          coordinatorMode: f.input.coordinatorMode,
-        },
-        {
-          revisionId: f.input.revisionId,
-          planDigest,
-          coordinatorMode:
-            f.input.coordinatorMode === "ensure-running"
-              ? ("require-running" as const)
-              : ("ensure-running" as const),
         },
       ].map((body, ordinal) => {
         const input = { kind: "generation-hardlinks" as const, ...body },

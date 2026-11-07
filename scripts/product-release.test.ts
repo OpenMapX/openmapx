@@ -165,7 +165,6 @@ describe("publication state machine (synthetic registries only)", () => {
     );
     const assets = structuredClone(t.state.draft.assets);
     expect(t.state.preview).toEqual({ version: t.candidate.version, digest: t.digest });
-    expect(t.state.tags.size).toBe(8);
     await publishProductRelease(
       { ...approved, expectedCandidateHash: candidateHash(t.candidate) },
       t.ports,

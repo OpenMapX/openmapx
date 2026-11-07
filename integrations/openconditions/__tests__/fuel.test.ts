@@ -871,7 +871,7 @@ describe("recordToFuelStation", () => {
   test("any other unlisted contributor still drops the fused reading", () => {
     const fused: LatestReading = {
       ...price("diesel", 1.55, "2026-10-04T10:00:00Z", "@fused"),
-      contributors: [SURVIVOR, "peer-fuel", "crowd"],
+      contributors: [SURVIVOR, "peer-fuel"],
     };
     const station = recordToFuelStation(
       canonical([fuelProduct("diesel")]),

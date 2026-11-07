@@ -80,22 +80,17 @@ describe("createTransitPreparingSession", () => {
     expect(session.kind).toBe("transit");
     expect(session.payload.tickState.currentLegIndex).toBe(0);
     expect(session.payload.tickState.phase).toBe("walking");
-  });
-
-  it("has no progress, no alerts and a fresh tick state", () => {
-    const session = build();
 
     expect(session.payload.progress).toBeNull();
     expect(session.payload.scheduledAlerts).toEqual([]);
     expect(session.payload.tickState.spokenCueIds).toEqual([]);
     expect(session.payload.tickState.emittedEventIds).toEqual([]);
-  });
-
-  it("takes the rotating token into native authority", () => {
-    const session = build();
 
     expect(session.payload.refreshToken).toBe(FIXTURE_TOKEN);
     expect(session.payload.refresh.status).toBe("ready");
+
+    expect(session.payload.startPackage.captures).toEqual(transitStartPackageFixture().captures);
+    expect(session.expiresAtMs - session.startedAtMs).toBe(24 * 60 * 60 * 1000);
   });
 
   it("keeps hosted capture refreshing available without an itinerary token", () => {
@@ -107,14 +102,6 @@ describe("createTransitPreparingSession", () => {
 
     expect(session.payload.refreshToken).toBeNull();
     expect(session.payload.refresh.status).toBe("ready");
-  });
-
-  it("keeps the captures the package was built with", () => {
-    expect(build().payload.startPackage.captures).toHaveLength(1);
-  });
-
-  it("expires at the shared maximum age", () => {
-    expect(build().expiresAtMs - build().startedAtMs).toBe(24 * 60 * 60 * 1000);
   });
 
   it("does not share mutable state with the package it was built from", () => {

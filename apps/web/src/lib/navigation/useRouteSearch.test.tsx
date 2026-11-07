@@ -443,12 +443,6 @@ describe("useRouteSearch route index ownership", () => {
     expect(filterResult.current.results.map((r) => r.place.id).sort()).toEqual(["x", "y"]);
     expect(filterResult.current.isLoading).toBe(false);
     expect(filterResult.current.isError).toBe(false);
-
-    // The two paths still produce the same AlongRoutePoi *shape* — same field
-    // set per result — even though the underlying places differ.
-    expect(Object.keys(filterResult.current.results[0]).sort()).toEqual(
-      Object.keys(categoryResult.current.results[0]).sort(),
-    );
   });
 
   it("indexes the route once and reuses it for progress-only refreshes", () => {

@@ -463,3 +463,18 @@ it.each(["photo", "receipt"] as const)(
     expect(view.container.textContent).toContain("Required German-port notice");
   },
 );
+
+it("keeps visible creator text while refusing an executable author URL", () => {
+  const photo = {
+    ...commons("CC BY 4.0"),
+    author: "Untrusted artist",
+    authorUrl: "javascript:alert(1)",
+    contributors: undefined,
+  };
+  const { container } = caption(photo);
+  expect(container.textContent).toContain("Untrusted artist");
+  expect(container.textContent).toContain("CC-BY-4.0");
+  expect(screen.queryByRole("link", { name: "Untrusted artist" })).toBeNull();
+  for (const anchor of container.querySelectorAll("a"))
+    expect(anchor.getAttribute("href")).not.toMatch(/^javascript:/i);
+});

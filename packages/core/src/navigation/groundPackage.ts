@@ -98,32 +98,6 @@ function projectRoute(route: Route): Record<string, unknown> {
 }
 
 /**
- * A structural identity for the route.
- *
- * Used to tell "the same route, one revision later" from "a different route" —
- * which is the difference between applying a progress delta and drawing a puck
- * on a line that is no longer there. Built over geometry and distance, both of
- * which change whenever the followed line does.
- */
-export function groundRouteFingerprint(route: Route): string {
-  const geometry = route.geometry ?? [];
-  let hash = 0x811c9dc5 >>> 0;
-  const mix = (value: number) => {
-    hash ^= value >>> 0;
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  };
-  mix(Math.round(route.distance ?? 0));
-  mix(Math.round(route.duration ?? 0));
-  for (const point of geometry) {
-    // Rounded to about a centimetre: enough that a genuinely different line
-    // differs, without making float noise look like a reroute.
-    mix(Math.round((point?.[0] ?? 0) * 1e7));
-    mix(Math.round((point?.[1] ?? 0) * 1e7));
-  }
-  return `rt-${hash.toString(36)}-${geometry.length}`;
-}
-
-/**
  * Builds the package, or explains why it cannot.
  *
  * Every failure is a named code rather than a thrown error: the caller has to

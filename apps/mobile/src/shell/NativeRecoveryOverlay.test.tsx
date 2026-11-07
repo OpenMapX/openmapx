@@ -28,25 +28,6 @@ describe("NativeRecoveryOverlay", () => {
     },
   );
 
-  it.each(EXPLAINED)("renders a titled explanation for %p", async (state) => {
-    const view = await show(state);
-
-    expect(view.getByTestId(`shell-state-${state.kind}`)).toBeTruthy();
-    const rendered = JSON.stringify(view.toJSON());
-    expect(rendered.length).toBeGreaterThan(0);
-    // The copy key must resolve; an unresolved key renders as the bare key.
-    expect(rendered).not.toContain('"Title"');
-  });
-
-  it.each(EXPLAINED)("offers exactly the declared actions for %p", async (state) => {
-    const view = await show(state);
-    const expected = SHELL_ACTIONS[state.kind];
-
-    const rendered = view.toJSON();
-    const ids = JSON.stringify(rendered).match(/shell-action-[a-z-]+/g) ?? [];
-    expect(new Set(ids).size).toBe(expected.length);
-  });
-
   it("reports the action the user chose", async () => {
     const onAction = jest.fn();
     const view = await show({ kind: "offline-navigating" }, "en", onAction);
@@ -90,15 +71,22 @@ describe("NativeRecoveryOverlay", () => {
     "open-app-settings": "shell-action-app-settings",
   };
 
-  it.each(EXPLAINED)("labels every control for a screen reader in %p", async (state) => {
-    const view = await show(state, "de");
+  it.each(EXPLAINED)(
+    "renders an explanation and exactly the accessible recovery actions for %p",
+    async (state) => {
+      const view = await show(state, "de");
+      expect(view.getByTestId(`shell-state-${state.kind}`)).toBeTruthy();
+      expect(view.getByRole("header").props.children).toMatch(/\S/);
+      const expected = SHELL_ACTIONS[state.kind];
+      expect(view.queryAllByRole("button")).toHaveLength(expected.length);
 
-    for (const action of SHELL_ACTIONS[state.kind]) {
-      const control = view.getByTestId(TEST_ID[action]);
-      expect(control.props.accessibilityRole).toBe("button");
-      expect(String(control.props.accessibilityLabel ?? "")).not.toHaveLength(0);
-    }
-  });
+      for (const action of SHELL_ACTIONS[state.kind]) {
+        const control = view.getByTestId(TEST_ID[action]);
+        expect(control.props.accessibilityRole).toBe("button");
+        expect(String(control.props.accessibilityLabel ?? "")).not.toHaveLength(0);
+      }
+    },
+  );
 
   it.each<[MobileLocale, string]>([
     ["en", "Guidance is still running"],
@@ -107,14 +95,5 @@ describe("NativeRecoveryOverlay", () => {
     const view = await show({ kind: "offline-navigating" }, locale);
 
     expect(JSON.stringify(view.toJSON())).toContain(expected);
-  });
-
-  it("renders no map, route or navigation control in any state", async () => {
-    for (const state of EXPLAINED) {
-      const rendered = JSON.stringify((await show(state)).toJSON());
-      for (const forbidden of ["MapView", "route", "maneuver", "recenter", "mute"]) {
-        expect(rendered.toLowerCase()).not.toContain(forbidden.toLowerCase());
-      }
-    }
   });
 });

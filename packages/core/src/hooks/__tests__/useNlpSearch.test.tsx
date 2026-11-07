@@ -70,46 +70,6 @@ describe("useNlpSearch", () => {
       };
     }
 
-    it.each([
-      ["in", zoomedBbox],
-      ["out", { west: 12.4, south: 51.5, east: 14.4, north: 53.5 }],
-    ])(
-      "searches the new visible area when zooming %s with the same center",
-      async (_direction, changedBbox) => {
-        const post = vi
-          .spyOn(apiClient, "post")
-          .mockImplementation(
-            async (_url, body) =>
-              ({ intent: {}, resolvedBbox: (body as { mapBbox: BoundingBox }).mapBbox }) as never,
-          );
-
-        const { result, rerender } = renderNlp({ bbox }, post);
-        await waitFor(() => expect(result.current.data?.resolvedBbox).toEqual(bbox));
-
-        rerender({ bbox: changedBbox });
-
-        await waitFor(() => expect(result.current.data?.resolvedBbox).toEqual(changedBbox));
-        expect(post).toHaveBeenCalledTimes(2);
-        expect(post).toHaveBeenLastCalledWith(
-          API_ENDPOINTS.nlpParse,
-          expect.objectContaining({ mapBbox: changedBbox }),
-          expect.anything(),
-        );
-      },
-    );
-
-    it("reuses the cached result for an equal bounds value in a new object", async () => {
-      const post = vi.spyOn(apiClient, "post").mockResolvedValue({ resolvedBbox: bbox } as never);
-
-      const { result, rerender } = renderNlp({ bbox }, post);
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      rerender({ bbox: { ...bbox } });
-
-      expect(result.current.isSuccess).toBe(true);
-      expect(post).toHaveBeenCalledTimes(1);
-    });
-
     it("restores the earlier result when the bounds return to a cached value", async () => {
       const post = vi
         .spyOn(apiClient, "post")
@@ -120,6 +80,9 @@ describe("useNlpSearch", () => {
 
       const { result, rerender } = renderNlp({ bbox }, post);
       await waitFor(() => expect(result.current.data?.resolvedBbox).toEqual(bbox));
+      rerender({ bbox: { ...bbox } });
+      expect(result.current.isSuccess).toBe(true);
+      expect(post).toHaveBeenCalledTimes(1);
       rerender({ bbox: zoomedBbox });
       await waitFor(() => expect(result.current.data?.resolvedBbox).toEqual(zoomedBbox));
 
@@ -212,23 +175,14 @@ describe("useNlpSearch", () => {
     });
   });
 
-  it("does not fire when disabled", () => {
-    const spy = vi.spyOn(apiClient, "post").mockResolvedValue({} as never);
-
-    const { result } = renderHook(() => useNlpSearch("coffee shops", center, bbox, false), {
-      wrapper: createQueryWrapper(),
-    });
-
-    expect(result.current.fetchStatus).toBe("idle");
-    expect(spy).not.toHaveBeenCalled();
-  });
-
   it("does not parse changed bounds while disabled", () => {
     const post = vi.spyOn(apiClient, "post").mockResolvedValue({} as never);
     const { result, rerender } = renderHook(
       ({ bounds }) => useNlpSearch("coffee shops", center, bounds, false),
       { initialProps: { bounds: bbox }, wrapper: createQueryWrapper() },
     );
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(post).not.toHaveBeenCalled();
     rerender({ bounds: { west: 12.4, south: 51.5, east: 14.4, north: 53.5 } });
     expect(result.current.fetchStatus).toBe("idle");
     expect(post).not.toHaveBeenCalled();

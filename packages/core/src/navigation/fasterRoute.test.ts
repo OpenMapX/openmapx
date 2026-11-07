@@ -67,8 +67,8 @@ describe("evaluateFasterRoute", () => {
   });
 
   it("rejects a saving under the absolute floor", () => {
-    // 240 s saved on a 3000 s remainder: 8% and under 300 s.
-    const r = evaluateFasterRoute(current, 5_000, 3000, [divergent(2760, 2_000)], opts(30));
+    // 240 s saved on a 1000 s remainder: clears the 15% ratio floor, but not 300 s.
+    const r = evaluateFasterRoute(current, 5_000, 1000, [divergent(760, 2_000)], opts(30));
     expect(r.faster).toBeNull();
   });
 
@@ -127,16 +127,6 @@ describe("evaluateFasterRoute", () => {
       evaluateFasterRoute(degenerate, 0, 100, [sameCorridor(90)], opts(10)),
     ).not.toThrow();
   });
-
-  it("anchors the corridor at the driver's interpolated position, not the next vertex", () => {
-    // 5 km is halfway through the first 10 km segment. The candidate starts at
-    // that interpolated point, so it must match the corridor from the driver;
-    // starting the corridor at the next vertex would falsely report a 5 km
-    // divergence at candidate distance zero.
-    const r = evaluateFasterRoute(current, 5_000, 1500, [sameCorridor(1400)], opts(30));
-    expect(r.faster).toBeNull();
-    expect(r.refreshedRemainingSeconds).toBe(1400);
-  });
 });
 
 describe("evaluateFasterRoute — shortcuts that hug the corridor", () => {
@@ -166,13 +156,6 @@ describe("evaluateFasterRoute — shortcuts that hug the corridor", () => {
       duration,
     );
 
-  it("does not mistake a shortcut for the corridor it skips", () => {
-    const r = evaluateFasterRoute(doublesBack, 0, 3600, [shortcut(2400)], opts(30));
-    // Adopting 2400 as a "fresh baseline" would be the real damage: it lowers
-    // the bar every other candidate is measured against.
-    expect(r.refreshedRemainingSeconds).toBeNull();
-  });
-
   it("offers the shortcut, branching where the skip begins", () => {
     const r = evaluateFasterRoute(doublesBack, 0, 3600, [shortcut(2400)], opts(30));
     expect(r.faster).not.toBeNull();
@@ -184,6 +167,8 @@ describe("evaluateFasterRoute — shortcuts that hug the corridor", () => {
     // stricter, never propose a turn the driver has already passed.
     expect(r.faster?.divergenceMeters).toBeCloseTo(8_000, -2);
     expect(r.faster?.divergenceMeters ?? 0).toBeLessThan(12_000);
+
+    expect(r.refreshedRemainingSeconds).toBeNull();
   });
 
   it("still treats a genuinely coincident candidate as the same corridor", () => {

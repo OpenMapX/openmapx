@@ -236,10 +236,4 @@ describe("grouped content credits", () => {
       within(screen.getByRole("dialog")).getByRole("img", { name: "OpenWeather" }),
     ).toBeTruthy();
   });
-
-  it("preserves standalone actions outside a group", () => {
-    render(intl(<AttributionStrip attributions={[source]} />));
-    fireEvent.click(screen.getByRole("button", { name: "Credits" }));
-    expect(within(screen.getByRole("dialog")).getByText("Required adjacent notice")).toBeTruthy();
-  });
 });

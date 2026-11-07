@@ -146,7 +146,7 @@ it("checks the exact completed pull independently before moving to another image
   expect(result).toEqual([
     {
       image: "ops-agent",
-      reference: input.downloads.images[3]!.reference,
+      reference: `ghcr.io/openmapx/ops-agent@sha256:${"a".repeat(64)}`,
       imageId: `sha256:${"d".repeat(64)}`,
     },
   ]);

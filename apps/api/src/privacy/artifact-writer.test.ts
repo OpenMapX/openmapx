@@ -1,11 +1,25 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { EncryptedBlobStore } from "./artifact-storage.js";
 import { archivePathForLogicalId, PrivacyArchiveWriter } from "./artifact-writer.js";
 import { loadMasterKeyRing } from "./crypto.js";
+
+const temporaryDirectories: string[] = [];
+async function temporaryDirectory(prefix: string): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), prefix));
+  temporaryDirectories.push(directory);
+  return directory;
+}
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
+});
 
 describe("PrivacyArchiveWriter", () => {
   it("maps only registered historical OpenMapX backup members", () => {
@@ -27,7 +41,7 @@ describe("PrivacyArchiveWriter", () => {
   });
 
   it("uses the pinned ZipArchive and streams a bounded ZIP64 archive", async () => {
-    const root = await mkdtemp(join(tmpdir(), "openmapx-archive-test-"));
+    const root = await temporaryDirectory("openmapx-archive-test-");
     const ring = loadMasterKeyRing({
       env: {
         NODE_ENV: "development",
@@ -63,7 +77,7 @@ describe("PrivacyArchiveWriter", () => {
   });
 
   it("maps only registered logical IDs and rejects duplicates", async () => {
-    const root = await mkdtemp(join(tmpdir(), "openmapx-archive-test-"));
+    const root = await temporaryDirectory("openmapx-archive-test-");
     const ring = loadMasterKeyRing({
       env: {
         NODE_ENV: "development",
@@ -102,13 +116,18 @@ describe("PrivacyArchiveWriter", () => {
     expect(archivePathForLogicalId("dawarich-import-file-../secret.bin")).toBeNull();
   });
   it("aborts backpressured source streams when storage fails", async () => {
+    let sourceReads = 0;
     const source = new Readable({
       read() {
+        sourceReads += 1;
         this.push(Buffer.alloc(64 * 1024));
       },
     });
+    const diskFull = new Error("disk-full");
     const store = {
-      write: vi.fn().mockRejectedValue(new Error("disk-full")),
+      write: vi.fn(async ({ source: archive }: { source: AsyncIterable<Uint8Array> }) => {
+        for await (const _chunk of archive) throw diskFull;
+      }),
     } as unknown as EncryptedBlobStore;
     await expect(
       new PrivacyArchiveWriter(store).writeArchive({
@@ -116,7 +135,8 @@ describe("PrivacyArchiveWriter", () => {
         artifactId: "a",
         entries: [{ logicalId: "other", source }],
       }),
-    ).rejects.toThrow("disk-full");
+    ).rejects.toBe(diskFull);
+    expect(sourceReads).toBeGreaterThan(0);
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect(source.destroyed).toBe(true);
   });

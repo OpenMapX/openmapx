@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  formatStageError,
-  JOB_STATUS_COLOR,
-  jobStatusColor,
-  jobStatusDescription,
-} from "../jobStatus";
+import { formatStageError, jobStatusColor, jobStatusDescription } from "../jobStatus";
 
 describe("jobStatusColor", () => {
   it("maps each known status to its color", () => {
@@ -24,11 +19,6 @@ describe("jobStatusColor", () => {
   it("falls back to default for an unknown status", () => {
     expect(jobStatusColor("nonsense")).toBe("default");
     expect(jobStatusColor("")).toBe("default");
-  });
-
-  it("exposes the underlying color map", () => {
-    expect(JOB_STATUS_COLOR.success).toBe("success");
-    expect(Object.keys(JOB_STATUS_COLOR)).toContain("running");
   });
 });
 

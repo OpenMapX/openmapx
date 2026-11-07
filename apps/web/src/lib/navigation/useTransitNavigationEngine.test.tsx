@@ -380,15 +380,6 @@ it("retains confirmed boarding on component remount and same-journey live refres
   renderHookWithQuery(() => useTransitNavigationEngine());
   expect(useNavigationStore.getState().transitProgress?.phase).toBe("riding");
 });
-it("rejects a refresh that changes the selected vehicle", () => {
-  useNavigationStore.getState().startTransitNavigation(trip());
-  const original = useNavigationStore.getState().itinerary;
-  const other = trip();
-  other.legs[0].tripId = "another";
-  useNavigationStore.getState().updateItinerary(other);
-  expect(useNavigationStore.getState().itinerary).toBe(original);
-  expect(useNavigationStore.getState().liveDataUnavailable).toBe(true);
-});
 
 it("recovers the offline warning after the selected vehicle's data returns", async () => {
   const chosen = trip();

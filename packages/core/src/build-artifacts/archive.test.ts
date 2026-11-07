@@ -1,13 +1,5 @@
 import { createHash } from "node:crypto";
-import {
-  existsSync,
-  linkSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -65,8 +57,6 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 async function validate(bytes: Buffer, overrides = {}) {
-  const sourcePath = join(import.meta.dirname, "archive.ts");
-  expect(existsSync(sourcePath), "missing shared bounded archive validation").toBe(true);
   const api = await import("./archive");
   const stagingRoot = join(root, "stage");
   rmSync(stagingRoot, { recursive: true, force: true });

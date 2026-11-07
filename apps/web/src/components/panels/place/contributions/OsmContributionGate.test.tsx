@@ -53,12 +53,6 @@ describe("linkScopesFor", () => {
     expect(linkScopesFor("edit")).toEqual(["openid", "read_prefs", "write_api"]);
     expect(linkScopesFor("note")).toEqual(["openid", "read_prefs", "write_notes"]);
   });
-
-  it("is deterministic and de-duplicated", () => {
-    const scopes = linkScopesFor("edit");
-    expect(scopes).toEqual(["openid", "read_prefs", "write_api"]);
-    expect(new Set(scopes).size).toBe(scopes.length);
-  });
 });
 
 describe("callbackUrlFor", () => {
@@ -68,11 +62,6 @@ describe("callbackUrlFor", () => {
     expect(url.searchParams.get("osm-contribute")).toBe("1");
     expect(url.searchParams.get("tab")).toBe("overview");
     expect([...url.searchParams.keys()].sort()).toEqual(["osm-contribute", "tab"]);
-  });
-
-  it("never carries a draft, element reference or comment", () => {
-    const url = callbackUrlFor("https://maps.example/");
-    expect(/comment|source|node|way|relation|tag/i.test(url)).toBe(false);
   });
 });
 
@@ -148,18 +137,6 @@ describe("gate states", () => {
     });
     expect(screen.getByText("osmContributions.gateScopeAction")).not.toBeNull();
     expect(screen.queryByText("osmContributions.gateTermsTitle")).toBeNull();
-  });
-
-  it("still shows the terms panel when OpenStreetMap actually reported them", () => {
-    renderGate({
-      ...BASE,
-      contributorTermsAgreed: false,
-      actions: {
-        reauthorize: true,
-        contributorTermsUrl: "https://www.openstreetmap.org/user/terms",
-      },
-    });
-    expect(screen.getByText("osmContributions.gateTermsTitle")).not.toBeNull();
   });
 
   it("explains the direct-editing kill switch without offering an edit", () => {

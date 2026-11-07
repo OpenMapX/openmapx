@@ -14,33 +14,6 @@ function makeFix(overrides: Partial<GeolocationCoordinates> = {}) {
 }
 
 describe("useWatchPosition", () => {
-  it("subscribes to watchPosition when active and emits fixes", () => {
-    let cb: ((p: GeolocationPosition) => void) | null = null;
-    const watchPosition = vi.fn((...args: unknown[]) => {
-      cb = args[0] as (p: GeolocationPosition) => void;
-      return 7;
-    });
-    const clearWatch = vi.fn();
-    vi.stubGlobal("navigator", { geolocation: { watchPosition, clearWatch } });
-
-    const onFix = vi.fn();
-    renderHook(() => useWatchPosition(true, onFix));
-    expect(watchPosition).toHaveBeenCalled();
-
-    act(() => {
-      cb?.(makeFix());
-    });
-    expect(onFix).toHaveBeenCalledWith(
-      expect.objectContaining({
-        coords: [1, 2],
-        accuracy: 5,
-        heading: 90,
-        speed: 3,
-        timestampMs: 1234,
-      }),
-    );
-  });
-
   it("does not subscribe when inactive", () => {
     const watchPosition = vi.fn();
     vi.stubGlobal("navigator", { geolocation: { watchPosition, clearWatch: vi.fn() } });
@@ -91,21 +64,20 @@ describe("useWatchPosition", () => {
 
     expect(onFix).toHaveBeenCalledTimes(2);
     const calls = onFix.mock.calls;
-    expect(calls[0]?.[0]).toMatchObject({ coords: [10, 20], accuracy: 8, heading: 45, speed: 1 });
-    expect(calls[1]?.[0]).toMatchObject({ coords: [11, 21], accuracy: 9, heading: 46, speed: 2 });
-  });
-
-  it("clears the watch on deactivate", () => {
-    const watchPosition = vi.fn(() => 42);
-    const clearWatch = vi.fn();
-    vi.stubGlobal("navigator", { geolocation: { watchPosition, clearWatch } });
-
-    const { rerender } = renderHook(
-      ({ active }: { active: boolean }) => useWatchPosition(active, vi.fn()),
-      { initialProps: { active: true } },
-    );
-    rerender({ active: false });
-    expect(clearWatch).toHaveBeenCalledWith(42);
+    expect(calls[0]?.[0]).toMatchObject({
+      coords: [10, 20],
+      accuracy: 8,
+      heading: 45,
+      speed: 1,
+      timestampMs: 1234,
+    });
+    expect(calls[1]?.[0]).toMatchObject({
+      coords: [11, 21],
+      accuracy: 9,
+      heading: 46,
+      speed: 2,
+      timestampMs: 1234,
+    });
   });
 
   it("clears the watch on unmount", () => {

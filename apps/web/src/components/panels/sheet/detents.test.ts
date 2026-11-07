@@ -18,23 +18,8 @@ describe("snapSlots", () => {
     ]);
   });
 
-  it("always marks the first snap as the top snap", () => {
-    for (const px of [null, 0, 240]) {
-      expect(snapSlots(PLACE_DETENTS, px)[0]).toEqual({
-        snap: "100%",
-        className: "top",
-        detent: "top",
-      });
-    }
-  });
-
   it("falls back to a fixed peek before the content has been measured", () => {
     expect(snapSlots(PLACE_DETENTS, null).at(-1)).toEqual({ snap: "180px", detent: "peek" });
-  });
-
-  it("marks exactly one snap as the initial one", () => {
-    const initial = snapSlots(PLACE_DETENTS, 180).filter((s) => s.className === "initial");
-    expect(initial).toEqual([{ snap: "52dvh", className: "initial", detent: "mid" }]);
   });
 
   // The ceiling is the surface's own mid detent, so peek can never meet or

@@ -2,7 +2,6 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -99,14 +98,6 @@ describe("parseConfigInputs", () => {
     expect(result.gtfs).toHaveLength(2);
     expect(result.gtfs).toContain("dup.gtfs.zip");
     expect(result.gtfs).toContain("other.gtfs.zip");
-  });
-
-  it("matches path: entries with deep indentation (the regex uses \\s* anchor)", () => {
-    // The real config indents `path:` 6 spaces deep — assert the regex handles it.
-    const config =
-      "timetable:\n  datasets:\n    deeply-nested:\n      path: indented-feed.gtfs.zip\n";
-    const result = parseConfigInputs(config);
-    expect(result.gtfs).toContain("indented-feed.gtfs.zip");
   });
 });
 
@@ -244,23 +235,29 @@ describe("assemble-staging run()", () => {
       feeds,
       osmInLive: "germany.osm.pbf",
     });
+    expect(existsSync(fx.stagingDir)).toBe(false);
     const result = await run(makeCtx(fx.dataDir));
     expect(result.status).toBe("ok");
+    expect(statSync(fx.stagingDir).mode & 0o777).toBe(0o700);
 
     // config.yml in staging
-    expect(existsSync(join(fx.stagingDir, "config.yml"))).toBe(true);
+    expect(readFileSync(join(fx.stagingDir, "config.yml"), "utf-8")).toBe(
+      buildConfig(feeds, "germany.osm.pbf"),
+    );
 
     // both feed archives present
     for (const feed of feeds) {
-      expect(existsSync(join(fx.stagingDir, feed))).toBe(true);
+      expect(readFileSync(join(fx.stagingDir, feed), "utf-8")).toBe(`fake-gtfs-data-${feed}`);
     }
 
     // OSM extract carried from live dir
-    expect(existsSync(join(fx.stagingDir, "germany.osm.pbf"))).toBe(true);
+    expect(readFileSync(join(fx.stagingDir, "germany.osm.pbf"), "utf-8")).toBe("fake-osm-data");
 
     // scripts/ and license.json
-    expect(existsSync(join(fx.stagingDir, "scripts", "coloring.lua"))).toBe(true);
-    expect(existsSync(join(fx.stagingDir, "license.json"))).toBe(true);
+    expect(readFileSync(join(fx.stagingDir, "scripts", "coloring.lua"), "utf-8")).toBe(
+      "-- lua script\n",
+    );
+    expect(readFileSync(join(fx.stagingDir, "license.json"), "utf-8")).toBe('{"licenses":[]}');
 
     // artifacts
     const artifacts = result.artifacts as Record<string, unknown>;
@@ -344,18 +341,6 @@ describe("assemble-staging run()", () => {
     expect(readFileSync(join(fx.stagingDir, "data", "tt.bin"), "utf-8")).toBe("compiled-timetable");
   });
 
-  it("assembled archive has same content as source (hardlink or copy both work)", async () => {
-    const feeds = ["content-check.gtfs.zip"];
-    const fx = setupFixture({ withConfig: true, feeds });
-
-    const result = await run(makeCtx(fx.dataDir));
-    expect(result.status).toBe("ok");
-
-    const src = readFileSync(join(fx.outDir, "content-check.gtfs.zip"), "utf-8");
-    const dst = readFileSync(join(fx.stagingDir, "content-check.gtfs.zip"), "utf-8");
-    expect(src).toBe(dst);
-  });
-
   it("returns status 'partial' when osm is referenced but absent from both outDir and liveDir", async () => {
     const fx = setupFixture({
       withConfig: true,
@@ -383,63 +368,5 @@ describe("assemble-staging run()", () => {
     const artifacts = result.artifacts as Record<string, unknown>;
     expect(artifacts.osmSource).toBe("out");
     expect(existsSync(join(fx.stagingDir, "local.osm.pbf"))).toBe(true);
-  });
-
-  it("does not invoke the runner (no shell-out / Docker dependency)", async () => {
-    let runnerInvoked = false;
-    tmp = mkdtempSync(join(tmpdir(), "openmapx-assemble-staging-runner-"));
-    const dataDir = tmp;
-
-    const outDir = join(dataDir, "gtfs");
-    const liveDir = join(dataDir, "motis", "live");
-    mkdirSync(outDir, { mode: 0o700, recursive: true });
-    mkdirSync(liveDir, { mode: 0o700, recursive: true });
-    writeFileSync(join(outDir, "config.yml"), buildConfig(["feed.gtfs.zip"]), { mode: 0o600 });
-    writeFileSync(join(outDir, "feed.gtfs.zip"), "feed-content", { mode: 0o600 });
-    writeFileSync(join(outDir, "license.json"), "[]\n", { mode: 0o600 });
-    writeFileSync(join(outDir, TRANSIT_SOURCE_MANIFEST_FILENAME), '{"version":1,"sources":[]}\n', {
-      mode: 0o600,
-    });
-    const proxyDir = join(outDir, CANDIDATE_PROXY_DIRNAME);
-    mkdirSync(join(proxyDir, "conf"), { mode: 0o700, recursive: true });
-    writeFileSync(join(proxyDir, "conf", "default.conf"), "server { listen 80; }\n", {
-      mode: 0o600,
-    });
-    writeFileSync(join(proxyDir, "feed-proxy-vars.json"), "{}\n", { mode: 0o600 });
-
-    const ctx = buildJobContext({
-      dataDir,
-      store: new StateStore(dataDir),
-      runner: async () => {
-        runnerInvoked = true;
-        throw new Error("runner invoked unexpectedly");
-      },
-      now: () => "2026-05-01T00:00:00.000Z",
-    });
-
-    const result = await run(ctx);
-    expect(result.status).toBe("ok");
-    expect(runnerInvoked).toBe(false);
-  });
-});
-
-describe("assemble-staging run() — directory structure", () => {
-  it("creates stagingDir when it does not pre-exist, with all expected entries", async () => {
-    const feeds = ["new-feed.gtfs.zip"];
-    const fx = setupFixture({ withConfig: true, feeds });
-
-    // staging dir does not yet exist before run
-    expect(existsSync(fx.stagingDir)).toBe(false);
-
-    const result = await run(makeCtx(fx.dataDir));
-    expect(result.status).toBe("ok");
-    expect(existsSync(fx.stagingDir)).toBe(true);
-    expect(statSync(fx.stagingDir).mode & 0o777).toBe(0o700);
-
-    const entries = readdirSync(fx.stagingDir);
-    expect(entries).toContain("config.yml");
-    expect(entries).toContain("new-feed.gtfs.zip");
-    expect(entries).toContain("scripts");
-    expect(entries).toContain("license.json");
   });
 });

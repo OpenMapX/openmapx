@@ -19,6 +19,7 @@ describe("mapMotisAlertSeverity", () => {
     expect(mapMotisAlertSeverity("WARNING")).toBe("warning");
     expect(mapMotisAlertSeverity("INFO")).toBe("info");
     expect(mapMotisAlertSeverity(undefined)).toBe("info");
+    expect(mapMotisAlertSeverity("UNKNOWN_SEVERITY")).toBe("info");
   });
 });
 

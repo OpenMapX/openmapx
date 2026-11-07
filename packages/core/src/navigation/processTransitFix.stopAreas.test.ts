@@ -138,13 +138,10 @@ describe("processTransitFix with stop areas", () => {
     const result = tick(freshTransitTickState(NOW), xy(-150, -4), NOW + 60_000);
     expect(result.state.currentLegIndex).toBe(1);
     expect(result.state.phase).toBe("waiting-to-board");
-  });
-
-  it("without the platform's shape, the same spot is still the walk", () => {
-    const result = tick(freshTransitTickState(NOW), xy(-150, -4), NOW + 60_000, {
-      stopAreas: {},
-    });
-    expect(result.state.currentLegIndex).toBe(0);
+    expect(
+      tick(freshTransitTickState(NOW), xy(-150, -4), NOW + 60_000, { stopAreas: {} }).state
+        .currentLegIndex,
+    ).toBe(0);
   });
 
   it("keeps waiting while the rider walks the length of the platform", () => {

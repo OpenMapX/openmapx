@@ -287,8 +287,10 @@ describe("operations agent update", () => {
   it("passes the agent's count of other running operations to the update", async () => {
     const updateAgent = vi.fn(async () => ({ handoffId: "handoff-1", replaced: false }));
     const runtime = createUnavailableRuntime();
+    const rootDir = mkdtempSync(join(tmpdir(), "openmapx-agent-update-"));
+    roots.push(rootDir);
     createAdministrativeRuntime(runtime, {
-      rootDir: mkdtempSync(join(tmpdir(), "openmapx-agent-update-")),
+      rootDir,
       releaseEffects: {
         resolve: async () => release,
         pull: async () => undefined,

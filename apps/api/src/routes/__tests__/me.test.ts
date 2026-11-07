@@ -74,27 +74,7 @@ describe("GET /api/me", () => {
     });
     expect(body.session).toEqual({ expiresAt: "2030-01-01T00:00:00.000Z" });
     expect(res.headers["cache-control"]).toBe("no-store");
-  });
-
-  it("does not return the session token", async () => {
-    mockGetSession.mockResolvedValue(fullSession as never);
-
-    const res = await injectMe();
-    const body = JSON.parse(res.body);
-
-    expect(body.session).not.toHaveProperty("token");
     expect(res.body).not.toContain("fixture-not-a-real-token");
-  });
-
-  it("does not return stored client or impersonation metadata", async () => {
-    mockGetSession.mockResolvedValue(fullSession as never);
-
-    const res = await injectMe();
-    const body = JSON.parse(res.body);
-
-    expect(body.session).not.toHaveProperty("ipAddress");
-    expect(body.session).not.toHaveProperty("userAgent");
-    expect(body.session).not.toHaveProperty("impersonatedBy");
     expect(res.body).not.toContain("203.0.113.7");
   });
 

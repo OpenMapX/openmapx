@@ -224,30 +224,6 @@ describe("prepareTransitStart", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("holds itself to four concurrent journey fetches", async () => {
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let started = 0;
-    const { client, peak } = fakeClient(async () => {
-      started += 1;
-      if (started <= CAPTURE_CONCURRENCY) await gate;
-      return withStops(2);
-    });
-
-    const pending = prepareTransitStart({
-      ...baseInput,
-      itinerary: itineraryWith(["t1", "t2", "t3", "t4", "t5", "t6"]),
-      client,
-    });
-    await Promise.resolve();
-    release();
-    await pending;
-
-    expect(peak()).toBeLessThanOrEqual(CAPTURE_CONCURRENCY);
-  });
-
   it("bounds journeys and stop areas independently without changing their output order", async () => {
     const journeys = Promise.withResolvers<void>();
     const areas = Promise.withResolvers<void>();

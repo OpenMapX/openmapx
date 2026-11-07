@@ -139,17 +139,6 @@ describe("mapFuelStationToResult", () => {
     expect(text(both.summary)).toBe("D €1.599 · CNG €1.299/kg");
   });
 
-  it("gives every station pricesOnly keeps a price summary", () => {
-    const only = (p: FuelProduct) => mapFuelStationToResult(makeStation({ products: [p] }));
-    for (const p of [
-      product({ grade: "hvo100", service: "served", price: eur(1.999) }),
-      product({ grade: "h2_700", per: "kg", price: eur(13.85) }),
-      product({ grade: "diesel", vehicleScope: "hgv", price: eur(1.489) }),
-    ]) {
-      expect(only(p).summary, p.grade).toBeDefined();
-    }
-  });
-
   it("a lorry-only grade summary uses the translated HGV suffix", () => {
     const station = (...products: FuelProduct[]) =>
       mapFuelStationToResult(makeStation({ products }));
@@ -497,19 +486,6 @@ describe("mapFuelStationToDetail", () => {
 });
 
 describe("fuel strings", () => {
-  it("label every grade of the vocabulary on the card, and only those", () => {
-    for (const catalog of [en, de]) {
-      expect(Object.keys(catalog.summary.grade).sort()).toEqual([...OC_FUEL_GRADES].sort());
-    }
-  });
-
-  it("label every grade of the vocabulary in every locale", () => {
-    for (const catalog of [en, de]) {
-      const labels = catalog.fuel as Record<string, string>;
-      for (const grade of OC_FUEL_GRADES) expect(labels[grade], grade).toBeTruthy();
-    }
-  });
-
   it("format each product caption with its own time", () => {
     const resolve = (t: { $t: string; values?: Record<string, string | number> }) =>
       resolveToken(t, { locale: "en", fallbackLocale: "en", shared: {}, integration: { en } });

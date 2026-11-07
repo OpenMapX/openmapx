@@ -62,19 +62,6 @@ export function brandToFilter(brand: Pick<BrandSummary, "qid" | "kind">): Overpa
 }
 
 /**
- * Builds a Wikimedia Commons render URL for a logo filename.
- *
- * `Special:FilePath` rasterizes SVGs when `width` is set, so callers get a
- * bitmap they can hand to MapLibre's `addImage` without rasterizing SVG
- * themselves. Always proxy the result before it reaches a browser — see
- * `proxyImageUrl`.
- */
-export function commonsLogoUrl(logoFile: string, width = 64): string {
-  const encoded = encodeURIComponent(logoFile.replace(/ /g, "_")).replace(/_/g, "%20");
-  return `https://commons.wikimedia.org/wiki/Special:FilePath/${encoded}?width=${width}`;
-}
-
-/**
  * Gap-fills a data-source result/detail's branding from the brand catalog.
  *
  * Gap-fill only: an upstream feed's own mark is authoritative, so this never

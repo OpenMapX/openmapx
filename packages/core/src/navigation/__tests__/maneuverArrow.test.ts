@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
 import { haversineDistance } from "../../utils/coordinates";
 import { cumulativeDistances, positionAt } from "../deadReckon";
-import { maneuverArrowLine, maneuverArrowSpans, maneuverArrowTipBearing } from "../maneuverArrow";
+import { maneuverArrowLine, maneuverArrowTipBearing } from "../maneuverArrow";
 
 // ~1.1 km straight east, so every distance check is against a known geometry.
 const geometry: LngLat[] = [
@@ -11,18 +11,6 @@ const geometry: LngLat[] = [
 ];
 const cum = cumulativeDistances(geometry);
 const alongMeters = 550;
-
-describe("maneuverArrowSpans", () => {
-  it("uses the long spans for driving and motorcycle", () => {
-    expect(maneuverArrowSpans("driving")).toEqual({ before: 60, after: 40 });
-    expect(maneuverArrowSpans("motorcycle")).toEqual({ before: 60, after: 40 });
-  });
-
-  it("uses the short spans for walking and cycling", () => {
-    expect(maneuverArrowSpans("walking")).toEqual({ before: 30, after: 20 });
-    expect(maneuverArrowSpans("cycling")).toEqual({ before: 30, after: 20 });
-  });
-});
 
 describe("maneuverArrowLine", () => {
   it("starts before and ends after the maneuver point by the requested spans", () => {

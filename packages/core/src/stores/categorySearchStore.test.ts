@@ -95,14 +95,10 @@ describe("categorySearchStore explore state", () => {
     expect(useCategorySearchStore.getState().textQuery).toBe("");
   });
 
-  it("setAutoRefresh toggles autoRefresh", () => {
+  it("enables auto refresh and clears it with the category", () => {
     expect(useCategorySearchStore.getState().autoRefresh).toBe(false);
     useCategorySearchStore.getState().setAutoRefresh(true);
     expect(useCategorySearchStore.getState().autoRefresh).toBe(true);
-  });
-
-  it("clearCategory resets autoRefresh to false", () => {
-    useCategorySearchStore.getState().setAutoRefresh(true);
     useCategorySearchStore.getState().clearCategory();
     expect(useCategorySearchStore.getState().autoRefresh).toBe(false);
   });

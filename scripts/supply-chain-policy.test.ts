@@ -107,7 +107,23 @@ describe("production supply-chain policy", () => {
         );
       },
     );
-    expect(managedServices).toHaveLength(25);
+    expect(managedServices.map((entry) => entry.name).sort()).toEqual(
+      readdirSync(join(root, "services"), { withFileTypes: true })
+        .filter((entry) => {
+          if (!entry.isDirectory()) return false;
+          try {
+            const manifest = JSON.parse(read(`services/${entry.name}/service.json`));
+            return (
+              manifest.container?.digest &&
+              !manifest.container.image.startsWith("ghcr.io/openmapx/")
+            );
+          } catch {
+            return false;
+          }
+        })
+        .map((entry) => entry.name)
+        .sort(),
+    );
     expect(managedServices.map((entry) => entry.name)).toContain("brouter");
 
     const globalMatcher = new RegExp(manager?.matchStrings?.[0] ?? "(?!x)x", "g");
@@ -194,13 +210,11 @@ describe("production supply-chain policy", () => {
 
     // DuckDB is the image's one downloaded executable.
     expect(dataManagerDockerfile.match(/sha256sum -c -/g)).toHaveLength(1);
-    expect(dataManagerDockerfile).toContain("ARG DUCKDB_VERSION=2.0.0");
-    expect(dataManagerDockerfile).toContain(
-      "ARG DUCKDB_SHA256_AMD64=c6507206baf7793c6013dbd82368469a45f20dc0e17a6f92f204602f652ed2bc",
-    );
-    expect(dataManagerDockerfile).toContain(
-      "ARG DUCKDB_SHA256_ARM64=859e1875d2a9515fbb4bf8871061437a14af82320da68c753f094c4b776348fe",
-    );
+    for (const architecture of ["AMD64", "ARM64"]) {
+      expect(dataManagerDockerfile).toMatch(
+        new RegExp(`^ARG DUCKDB_SHA256_${architecture}=[a-f0-9]{64}$`, "m"),
+      );
+    }
     expect(dataManagerDockerfile).not.toMatch(/download\.docker\.com|docker\/compose\/releases/);
     expect(dataManagerDockerfile).toMatch(/pip3 install[^\n]*--require-hashes/);
     expect(transitousDockerfile).not.toContain('MOTIS_SHA256_AMD64=""');

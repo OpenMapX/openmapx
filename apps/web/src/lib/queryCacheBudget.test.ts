@@ -22,6 +22,13 @@ describe("high-cardinality query cache budget", () => {
     expect(result.after.inactiveCount).toBe(3);
     expect(client.getQueryData(["autocomplete", "query-0"])).toBeUndefined();
     expect(client.getQueryData(["autocomplete", "query-5"])).toBeDefined();
+    const bytesOnly = pruneHighCardinalityQueryCache(client, {
+      maxInactiveEntries: 100,
+      maxEstimatedBytes: 1,
+    });
+    expect(bytesOnly.removed).toBe(3);
+    expect(bytesOnly.after.inactiveCount).toBe(0);
+    expect(bytesOnly.after.estimatedBytes).toBe(0);
   });
 
   it("never evicts active queries and reports estimated payload bytes", () => {

@@ -56,7 +56,10 @@ describe("buildFeedProxyConfig", () => {
     expect(written).not.toContain("/feed/");
   });
 
-  it("rejects non-http(s) upstream URLs", async () => {
+  it("rejects malformed and non-http(s) upstream URLs", async () => {
+    expect(() => renderFeedProxyNginxConfig({ bad: { url: "not-a-url" } })).toThrow(
+      /Invalid feed-proxy source URL/,
+    );
     const outputPath = join(workDir, "feed-proxy.conf");
     await expect(
       buildFeedProxyConfig({

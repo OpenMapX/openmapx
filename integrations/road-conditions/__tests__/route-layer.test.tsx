@@ -249,13 +249,6 @@ describe("RouteConditionsLayer", () => {
     expect(fake.state.layers.get("omx-road-conditions-route-line")?.maxzoom).toBe(7);
   });
 
-  it("keeps only the conditions that project onto the route", async () => {
-    render(<RouteConditionsLayer />);
-    await waitFor(() => {
-      expect(sourceFeatures("Point")).toHaveLength(1);
-    });
-  });
-
   it("uses the shared upcoming style for route markers and lines", async () => {
     fetchMock.mockResolvedValueOnce([
       situation({

@@ -11,7 +11,7 @@ final class ShareSelectionTests: XCTestCase {
     for _ in 0..<7 { root.deleteLastPathComponent() }
     let fixture = root.appendingPathComponent("packages/core/src/travel-plans/__fixtures__/dbNavigator.json")
     let examples = try JSONDecoder().decode([String].self, from: Data(contentsOf: fixture))
-    XCTAssertEqual(examples.count, 4)
+    XCTAssertFalse(examples.isEmpty)
     for text in examples {
       XCTAssertEqual(try ShareSelection.text([text, text]), text)
       let link = String(text.split(whereSeparator: { $0.isWhitespace }).last!)

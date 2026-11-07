@@ -68,20 +68,6 @@ describe("normalizeDawarichDay", () => {
     expect(parsed.map.tracks.features[0].geometry.coordinates[1]).toEqual([12.5, 45.8, 4, 5]);
   });
 
-  it("accepts a complete empty normalized day", () => {
-    const output = normalizeDawarichDay({
-      day: { ...timelineDayFixture, entries: [], bounds: null },
-      selectedDate: "2026-01-02",
-      timeZone: "Etc/UTC",
-      distanceUnit: "km",
-    });
-    expect(personalTimelineDayV1Schema.parse(output)).toEqual(output);
-    expect(output.map).toEqual({
-      tracks: { type: "FeatureCollection", features: [] },
-      visits: { type: "FeatureCollection", features: [] },
-    });
-  });
-
   it("keeps visit minutes and journey seconds distinct while sorting chronologically", () => {
     const dayWithAdditiveField = { ...timelineDayFixture, future_entry_field: true };
     const result = normalizeDawarichDay({
@@ -92,6 +78,7 @@ describe("normalizeDawarichDay", () => {
       tracks: tracksPageFixture,
     });
 
+    expect(result.bounds).toEqual([12.3, 45.6, 12.5, 45.8]);
     expect(result.entries.map((entry) => entry.type)).toEqual(["visit", "journey"]);
     expect(result.entries[0]).toMatchObject({
       type: "visit",
@@ -165,7 +152,7 @@ describe("normalizeDawarichDay", () => {
     expect(normalizedJourney).not.toHaveProperty("dayDurationSeconds");
   });
 
-  it("normalizes an empty day and upstream bounds into the public tuple", () => {
+  it("normalizes an empty day with null bounds and no geometry", () => {
     const result = normalizeDawarichDay({
       day: { ...timelineDayFixture, entries: [], bounds: null },
       selectedDate: "2026-01-02",
@@ -174,6 +161,11 @@ describe("normalizeDawarichDay", () => {
       tracks: { type: "FeatureCollection", features: [] },
     });
 
+    expect(personalTimelineDayV1Schema.parse(result)).toEqual(result);
+    expect(result.map).toEqual({
+      tracks: { type: "FeatureCollection", features: [] },
+      visits: { type: "FeatureCollection", features: [] },
+    });
     expect(result.entries).toEqual([]);
     expect(result.bounds).toBeNull();
     expect(result.summary).toEqual({

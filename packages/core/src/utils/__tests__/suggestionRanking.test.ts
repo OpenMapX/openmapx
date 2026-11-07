@@ -97,10 +97,10 @@ describe("rankAutocompleteRows", () => {
   );
 
   it.each([
-    ["Kentucky Fried Chicken", 1.3, "open"],
-    ["Kentucky", 0.8, "open"],
-    ["Fried", 0.7, "search"],
-  ])("uses the full brand alias without inflating %s confidence", (query, score, action) => {
+    ["Kentucky Fried Chicken", "open"],
+    ["Kentucky", "open"],
+    ["Fried", "search"],
+  ])("uses the full brand alias without inflating %s confidence", (query, action) => {
     const rows = rankAutocompleteRows(
       {
         brands: brandSuggestionRows(
@@ -121,37 +121,36 @@ describe("rankAutocompleteRows", () => {
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].label).toBe("KFC");
-    expect(textMatchScore(rows[0], query)).toBe(score);
+    expect(rows[0].searchMatch?.value).toBe("kentucky fried chicken");
     expect(enterAction(rows, { query }).kind).toBe(action);
   });
 
-  it.each([
-    ["frozen dessert", 0.7],
-    ["frozen", 0.5],
-    ["rozen", 0.3],
-  ])("keeps a preset term visible with weak %s confidence", (query, score) => {
-    const rows = rankAutocompleteRows(
-      {
-        presets: presetSuggestionRows(
-          [
-            {
-              id: "shop/sweets",
-              name: "Sweet Store",
-              tags: { shop: "confectionery" },
-              matchedOn: "term",
-              matchedValue: "frozen dessert",
-            },
-          ],
-          "",
-        ),
-      },
-      { query },
-    );
-    expect(rows).toHaveLength(1);
-    expect(textMatchScore(rows[0], query)).toBe(score);
-    expect(textMatchScore(rows[0], query)).toBeLessThan(CONFIDENT_TEXT_SCORE);
-    expect(enterAction(rows, { query }).kind).toBe("search");
-  });
+  it.each(["frozen dessert", "frozen", "rozen"])(
+    "keeps a preset term visible with weak %s confidence",
+    (query) => {
+      const rows = rankAutocompleteRows(
+        {
+          presets: presetSuggestionRows(
+            [
+              {
+                id: "shop/sweets",
+                name: "Sweet Store",
+                tags: { shop: "confectionery" },
+                matchedOn: "term",
+                matchedValue: "frozen dessert",
+              },
+            ],
+            "",
+          ),
+        },
+        { query },
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].searchMatch?.value).toBe("frozen dessert");
+      expect(textMatchScore(rows[0], query)).toBeLessThan(CONFIDENT_TEXT_SCORE);
+      expect(enterAction(rows, { query }).kind).toBe("search");
+    },
+  );
 
   it("retains canonical scoring when legacy responses omit evidence", () => {
     const rows = rankAutocompleteRows(
@@ -164,7 +163,10 @@ describe("rankAutocompleteRows", () => {
       { query: "KFC" },
     );
     expect(rows[0].searchMatch).toBeUndefined();
-    expect(textMatchScore(rows[0], "KFC")).toBe(1);
+    expect(enterAction(rows, { query: "KFC" })).toMatchObject({
+      kind: "open",
+      row: { label: "KFC" },
+    });
   });
 
   it("normalizes curated alias case and diacritics using the client text rules", () => {
@@ -181,7 +183,10 @@ describe("rankAutocompleteRows", () => {
       ],
       "",
     );
-    expect(textMatchScore(row, "CAFÉ DU MONDE")).toBe(1.3);
+    expect(enterAction([row], { query: "CAFÉ DU MONDE" })).toMatchObject({
+      kind: "open",
+      row: { label: "CDM" },
+    });
     expect(row.searchMatch?.value).toBe("cafe du monde");
   });
 
@@ -189,7 +194,7 @@ describe("rankAutocompleteRows", () => {
     const row = place("p1", "Sweet Store", BERLIN, {
       searchMatch: { kind: "keyword", value: "frozen dessert", normalized: "frozen dessert" },
     });
-    expect(textMatchScore(row, "rozen")).toBe(0.15);
+    expect(enterAction([row], { query: "rozen" })).toEqual({ kind: "search", weak: true });
   });
   it("orders the coffee search from Berlin: category, nearby cafés, then capped chains", () => {
     const rows = rankAutocompleteRows(

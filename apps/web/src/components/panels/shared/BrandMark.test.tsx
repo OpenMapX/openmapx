@@ -2,30 +2,12 @@ import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+
+import { expect, it, vi } from "vitest";
 import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup";
 import { apiClient } from "../../../../../../packages/core/src/api/client";
 import en from "../../../../../../packages/i18n/locales/en.json";
 import { BrandMark } from "./BrandMark";
-
-describe("BrandMark", () => {
-  it("routes external brand images through the backend image proxy", () => {
-    const markup = renderToStaticMarkup(
-      <BrandMark
-        branding={{
-          name: "Entur Mobility",
-          logoUrl: "https://api.entur.io/mobility/assets/operator.svg",
-        }}
-      />,
-    );
-
-    expect(markup).toContain(
-      "http://localhost:3001/api/image-proxy?url=https%3A%2F%2Fapi.entur.io%2Fmobility%2Fassets%2Foperator.svg",
-    );
-    expect(markup).not.toContain('src="https://api.entur.io');
-  });
-});
 
 it("credits a catalogue-derived initial without borrowing the hidden logo receipt", () => {
   const name = { sourceId: "name-suggestion-index", name: "Captured catalogue name" };
@@ -91,7 +73,12 @@ it("shares catalogue details across fuel rows and retains only displayed fields 
     </NextIntlClientProvider>,
   );
   expect(screen.getAllByRole("button", { name: /credits/i })).toHaveLength(1);
-  for (const img of screen.getAllByRole("img")) fireEvent.error(img);
+  for (const img of screen.getAllByRole("img")) {
+    const src = new URL(img.getAttribute("src")!, window.location.href);
+    expect(src.pathname).toBe("/api/image-proxy");
+    expect(src.searchParams.get("url")).toBe("https://example.com/brand.png");
+    fireEvent.error(img);
+  }
   expect(screen.getByRole("heading", { name: "Shell" })).toBeVisible();
   expect(screen.getByText("S")).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: /credits/i }));

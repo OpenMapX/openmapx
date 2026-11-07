@@ -55,7 +55,7 @@ function findRoute(routes: RouteRegistration[], path: string): RouteRegistration
 
 describe("street-level-imagery-mapillary setup", () => {
   it("registers the uniform street-level-imagery route surface", () => {
-    const { ctx, routes } = buildCtx();
+    const { ctx, routes, registerStreetLevelProvider } = buildCtx();
     setup(ctx);
     expect(routes.map((r) => r.path).sort()).toEqual([
       "/capabilities",
@@ -65,11 +65,6 @@ describe("street-level-imagery-mapillary setup", () => {
       "/search",
       "/tiles/:z/:x/:y",
     ]);
-  });
-
-  it("registers a street-level-imagery provider", () => {
-    const { ctx, registerStreetLevelProvider } = buildCtx();
-    setup(ctx);
     expect(registerStreetLevelProvider).toHaveBeenCalledOnce();
   });
 
@@ -78,18 +73,11 @@ describe("street-level-imagery-mapillary setup", () => {
     setup(ctx);
     const reply = makeReply();
     void findRoute(routes, "/capabilities").handler(makeRequest({}), reply);
-    const sent = reply.send.mock.calls[0]?.[0] as { id: string; coverage: { kind: string } };
-    expect(sent.id).toBe("mapillary");
-    expect(sent.coverage.kind).toBe("mvt");
-  });
-
-  it("declares that its terms rule out use during navigation", () => {
-    const { ctx, routes } = buildCtx({ accessToken: "" });
-    setup(ctx);
-    const reply = makeReply();
-    void findRoute(routes, "/capabilities").handler(makeRequest({}), reply);
-    const sent = reply.send.mock.calls[0]?.[0] as { allowsNavigationUse: boolean };
-    expect(sent.allowsNavigationUse).toBe(false);
+    expect(reply.send.mock.calls[0]?.[0]).toMatchObject({
+      id: "mapillary",
+      coverage: { kind: "mvt" },
+      allowsNavigationUse: false,
+    });
   });
 });
 
@@ -204,19 +192,6 @@ describe("street-level-imagery-mapillary /search", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
-  });
-
-  it("registers the search route in the sorted path list", () => {
-    const { ctx, routes } = buildCtx();
-    setup(ctx);
-    expect(routes.map((r) => r.path).sort()).toEqual([
-      "/capabilities",
-      "/images/:id",
-      "/images/:id/links",
-      "/nearest",
-      "/search",
-      "/tiles/:z/:x/:y",
-    ]);
   });
 
   it("rejects invalid input with 400", async () => {

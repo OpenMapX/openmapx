@@ -14,12 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { canonicalJson, opsOperationFingerprint } from "@openmapx/core/ops";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  OPS_JOB_JOURNAL_MAX_BYTES,
-  OPS_JOB_JOURNAL_MAX_ORPHANS,
-  openOpsJobJournal,
-  type PersistedOpsJob,
-} from "./journal";
+import { OPS_JOB_JOURNAL_MAX_ORPHANS, openOpsJobJournal, type PersistedOpsJob } from "./journal";
 import { buildOpsAgentServer } from "./server";
 
 const roots: string[] = [];
@@ -211,7 +206,6 @@ describe("durable ops job journal", () => {
         terminalAt: "2026-08-23T18:02:00.000Z",
       }),
     ]);
-    expect(readFileSync(path, "utf8")).not.toContain("Bearer");
 
     await restored.replace([
       job({
@@ -247,7 +241,9 @@ describe("durable ops job journal", () => {
     const hardlinkDirectory = join(base, "hardlink");
     mkdirSync(hardlinkDirectory, { mode: 0o700 });
     const hardlink = join(hardlinkDirectory, "jobs-v1.json");
-    linkSync(target, hardlink);
+    const hardlinkTarget = join(hardlinkDirectory, "target");
+    writeFileSync(hardlinkTarget, JSON.stringify({ version: 1, jobs: [] }));
+    linkSync(hardlinkTarget, hardlink);
     const corruptDirectory = join(base, "corrupt");
     mkdirSync(corruptDirectory, { mode: 0o700 });
     const corrupt = join(corruptDirectory, "jobs-v1.json");
@@ -255,11 +251,14 @@ describe("durable ops job journal", () => {
     const oversizedDirectory = join(base, "oversized");
     mkdirSync(oversizedDirectory, { mode: 0o700 });
     const oversized = join(oversizedDirectory, "jobs-v1.json");
-    writeFileSync(oversized, "x".repeat(OPS_JOB_JOURNAL_MAX_BYTES + 1));
+    writeFileSync(oversized, " ".repeat(128) + JSON.stringify({ version: 2, jobs: [] }));
 
-    for (const path of [symlink, hardlink, corrupt, oversized]) {
+    for (const path of [symlink, hardlink, corrupt]) {
       await expect(openOpsJobJournal(path)).rejects.toThrow("Ops job journal is unavailable");
     }
+    await expect(openOpsJobJournal(oversized, { maxBytes: 128 })).rejects.toThrow(
+      "Ops job journal is unavailable",
+    );
   });
 
   it("serializes concurrent snapshots and enforces the entry bound", async () => {

@@ -60,30 +60,6 @@ function routeAnswer() {
 }
 
 describe("rerouteWaypoints", () => {
-  it("starts from the raw fix, not the position snapped to the old route", () => {
-    const waypoints = rerouteWaypoints({ requestId: "r1", session: session(), origin: ORIGIN });
-
-    // Snapping first is exactly how a reroute sends someone back to the turn
-    // they just missed.
-    expect(waypoints[0]).toEqual(ORIGIN);
-  });
-
-  it("always keeps the destination", () => {
-    const waypoints = rerouteWaypoints({ requestId: "r1", session: session(), origin: ORIGIN });
-
-    expect(waypoints[waypoints.length - 1]).toEqual([8.727, 50.11]);
-  });
-
-  it("prunes an intermediate stop the user has already passed", () => {
-    const far = session();
-    far.payload.progress = { alongMeters: 4_000 } as never;
-
-    const waypoints = rerouteWaypoints({ requestId: "r1", session: far, origin: ORIGIN });
-
-    expect(waypoints.length).toBeLessThanOrEqual(3);
-    expect(waypoints[0]).toEqual(ORIGIN);
-  });
-
   it("keeps an origin-to-destination pair intact", () => {
     const simple = session();
     simple.payload.startPackage.destinationWaypoints = [
@@ -123,19 +99,28 @@ describe("GroundRerouteService", () => {
   const service = (client: ApiClient) =>
     new GroundRerouteService({ apiOrigin: "https://openmapx.com", client, now: () => NOW });
 
-  it("returns a validated replacement route", async () => {
-    const { client } = fakeClient(routeAnswer());
+  it("returns a bound replacement and forwards captured preferences with a bounded request", async () => {
+    const { client, calls } = fakeClient(routeAnswer());
 
     const outcome = await service(client).request({
       requestId: "r1",
-      session: session(),
+      session: session({ revision: 42 }),
       origin: ORIGIN,
     });
 
     expect(outcome.ok).toBe(true);
     expect(outcome.requestId).toBe("r1");
     expect(outcome.sessionId).toBe("session-1");
-    expect(outcome.baseRevision).toBe(7);
+    expect(outcome.baseRevision).toBe(42);
+    expect(calls[0].params).toMatchObject({
+      avoidTolls: "true",
+      avoidFerries: "true",
+      avoidHighways: "false",
+      mode: "driving",
+      units: "metric",
+      lang: "en",
+    });
+    expect(calls[0].options).toMatchObject({ timeoutMs: 15_000, signal: expect.any(AbortSignal) });
   });
 
   it("pairs a successful replacement with the requested itinerary", async () => {
@@ -199,37 +184,6 @@ describe("GroundRerouteService", () => {
     expect(current.payload.startPackage.destinationWaypoints).toEqual([origin, a, b, destination]);
   });
 
-  it("carries the captured avoid flags forward", async () => {
-    const { client, calls } = fakeClient(routeAnswer());
-
-    await service(client).request({ requestId: "r1", session: session(), origin: ORIGIN });
-
-    // Dropping one would silently route the user onto a road they excluded.
-    expect(calls[0].params.avoidTolls).toBe("true");
-    expect(calls[0].params.avoidFerries).toBe("true");
-    expect(calls[0].params.avoidHighways).toBe("false");
-  });
-
-  it("carries the captured mode, units and locale", async () => {
-    const { client, calls } = fakeClient(routeAnswer());
-
-    await service(client).request({ requestId: "r1", session: session(), origin: ORIGIN });
-
-    expect(calls[0].params.mode).toBe("driving");
-    expect(calls[0].params.units).toBe("metric");
-    expect(calls[0].params.lang).toBe("en");
-  });
-
-  it("bounds the request with a timeout and an abort signal", async () => {
-    const { client, calls } = fakeClient(routeAnswer());
-
-    await service(client).request({ requestId: "r1", session: session(), origin: ORIGIN });
-
-    const options = calls[0].options as { timeoutMs?: number; signal?: AbortSignal };
-    expect(options.timeoutMs).toBe(15_000);
-    expect(options.signal).toBeInstanceOf(AbortSignal);
-  });
-
   it("reports a route-less answer rather than replacing anything", async () => {
     const { client } = fakeClient({ routes: [] });
 
@@ -290,26 +244,8 @@ describe("GroundRerouteService", () => {
     expect(JSON.stringify(outcome)).not.toContain("50.15");
   });
 
-  it("binds every result to the session and revision it was computed from", async () => {
-    const { client } = fakeClient(routeAnswer());
-
-    const outcome = await service(client).request({
-      requestId: "r1",
-      session: session({ revision: 42 }),
-      origin: ORIGIN,
-    });
-
-    // A result whose base revision no longer matches is discarded rather than
-    // applied to a session that has moved on.
-    expect(outcome.baseRevision).toBe(42);
-  });
-
   it("aborts a request whose session has ended", async () => {
     let observed: AbortSignal | undefined;
-    const { client } = fakeClient(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      return routeAnswer();
-    });
     const instance = service({
       get: async (_path: string, _params: unknown, options: { signal?: AbortSignal }) => {
         observed = options.signal;
@@ -325,7 +261,6 @@ describe("GroundRerouteService", () => {
 
     expect(observed?.aborted).toBe(true);
     expect(outcome.ok).toBe(false);
-    expect(client).toBeTruthy();
   });
 
   it("aborts everything in flight at once", async () => {

@@ -48,3 +48,33 @@ describe("uniqueModes", () => {
     expect(uniqueModes(["BIKE", "RENTAL", "WALK"])).toEqual(["cycling", "walking"]);
   });
 });
+
+describe("MOTIS public-transport mode mapping", () => {
+  it.each([
+    ["TRAM", "tram"],
+    ["SUBWAY", "subway"],
+    ["RAIL", "rail"],
+    ["HIGHSPEED_RAIL", "rail"],
+    ["LONG_DISTANCE", "rail"],
+    ["NIGHT_RAIL", "rail"],
+    ["REGIONAL_FAST_RAIL", "rail"],
+    ["REGIONAL_RAIL", "rail"],
+    ["SUBURBAN", "rail"],
+    ["FERRY", "ferry"],
+    ["AERIAL_LIFT", "gondola"],
+    ["FUNICULAR", "funicular"],
+    ["MONORAIL", "monorail"],
+    ["BUS", "bus"],
+    ["COACH", "bus"],
+    ["OTHER", "bus"],
+  ])("maps %s to %s", (input, expected) => {
+    expect(motisMode(input)).toBe(expected);
+  });
+});
+
+it("deduplicates equivalent rail modes and repeated bus modes in input order", () => {
+  expect(uniqueModes(["RAIL", "HIGHSPEED_RAIL", "BUS", "BUS"])).toEqual(["rail", "bus"]);
+});
+it("returns no modes for empty input", () => {
+  expect(uniqueModes([])).toEqual([]);
+});

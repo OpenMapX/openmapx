@@ -39,18 +39,10 @@ describe("handleFeasibilityBatch ordering and deduplication", () => {
       },
       { repository, nowMs: NOW },
     );
+    expect(repository.commits).toBe(1);
     expect(repository.state.acceptedFixCount).toBe(3);
     expect(repository.state.rejectedFixCount).toBe(0);
     expect(repository.state.lastTimestampMs).toBe(NOW - 1_000);
-  });
-
-  it("commits exactly once per callback, not once per fix", async () => {
-    const repository = fakeRepository();
-    await handleFeasibilityBatch(
-      { locations: [fix(NOW - 3_000), fix(NOW - 2_000), fix(NOW - 1_000)] },
-      { repository, nowMs: NOW },
-    );
-    expect(repository.commits).toBe(1);
   });
 });
 
@@ -155,10 +147,32 @@ describe("handleFeasibilityBatch failure handling", () => {
 describe("handleFeasibilityBatch audio probe", () => {
   it("returns a speak intent only after the probe is armed and the state is committed", async () => {
     const repository = fakeRepository({ pendingAudioProbe: true });
-    const effects = await handleFeasibilityBatch(
+    let release!: () => void;
+    const committed = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const commit = repository.commit;
+    const delayed = {
+      ...repository,
+      commit: async (mutate: Parameters<typeof commit>[0]) => {
+        await committed;
+        return commit(mutate);
+      },
+    };
+    let settled = false;
+    const pending = handleFeasibilityBatch(
       { locations: [fix(NOW - 1_000)] },
-      { repository, nowMs: NOW },
-    );
+      { repository: delayed, nowMs: NOW },
+    ).then((effects) => {
+      settled = true;
+      return effects;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(repository.state.pendingAudioProbe).toBe(true);
+    release();
+    const effects = await pending;
     expect(effects).toHaveLength(1);
     expect(effects[0]).toMatchObject({ kind: "speak", locale: "en" });
     // Cleared in the same transaction, so a crash before speaking loses the

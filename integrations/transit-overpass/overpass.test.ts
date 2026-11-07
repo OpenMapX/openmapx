@@ -52,84 +52,25 @@ describe("overpass provider", () => {
       expect(stops[0].provider).toBe("overpass");
     });
 
-    it("maps train tag to rail mode", async () => {
+    it.each([
+      ["train", "rail", { train: "yes" }],
+      ["subway", "subway", { subway: "yes" }],
+      ["bus", "bus", { bus: "yes" }],
+      ["aerialway gondola", "gondola", { aerialway: "gondola" }],
+      ["aerialway cable_car", "cable_car", { aerialway: "cable_car" }],
+      ["unknown", "bus", {}],
+      ["railway stop", "rail", { railway: "stop" }],
+      ["light rail", "rail", { light_rail: "yes" }],
+      ["ferry", "ferry", { ferry: "yes" }],
+      ["monorail", "monorail", { monorail: "yes" }],
+      ["funicular", "funicular", { funicular: "yes" }],
+    ] as const)("maps %s tags to %s mode", async (_label, mode, tags) => {
       mockFetch.mockResolvedValueOnce(
-        mockOk({
-          elements: [{ id: 1, lat: 0, lon: 0, tags: { name: "S1", train: "yes" } }],
-        }),
+        mockOk({ elements: [{ id: 1, lat: 0, lon: 0, tags: { name: "Stop", ...tags } }] }),
       );
-
       const { getStops } = await loadModule();
       const stops = await getStops([0, 0, 1, 1]);
-
-      expect(stops[0].modes).toContain("rail");
-    });
-
-    it("maps subway tag to subway mode", async () => {
-      mockFetch.mockResolvedValueOnce(
-        mockOk({
-          elements: [{ id: 2, lat: 0, lon: 0, tags: { name: "U1", subway: "yes" } }],
-        }),
-      );
-
-      const { getStops } = await loadModule();
-      const stops = await getStops([0, 0, 1, 1]);
-
-      expect(stops[0].modes).toContain("subway");
-    });
-
-    it("maps bus tag to bus mode", async () => {
-      mockFetch.mockResolvedValueOnce(
-        mockOk({
-          elements: [{ id: 3, lat: 0, lon: 0, tags: { name: "Bus Stop", bus: "yes" } }],
-        }),
-      );
-
-      const { getStops } = await loadModule();
-      const stops = await getStops([0, 0, 1, 1]);
-
-      expect(stops[0].modes).toContain("bus");
-    });
-
-    it("maps aerialway=gondola to gondola mode", async () => {
-      mockFetch.mockResolvedValueOnce(
-        mockOk({
-          elements: [{ id: 4, lat: 0, lon: 0, tags: { name: "Gondola", aerialway: "gondola" } }],
-        }),
-      );
-
-      const { getStops } = await loadModule();
-      const stops = await getStops([0, 0, 1, 1]);
-
-      expect(stops[0].modes).toContain("gondola");
-    });
-
-    it("maps aerialway=cable_car to cable_car mode", async () => {
-      mockFetch.mockResolvedValueOnce(
-        mockOk({
-          elements: [
-            { id: 5, lat: 0, lon: 0, tags: { name: "Cable Car", aerialway: "cable_car" } },
-          ],
-        }),
-      );
-
-      const { getStops } = await loadModule();
-      const stops = await getStops([0, 0, 1, 1]);
-
-      expect(stops[0].modes).toContain("cable_car");
-    });
-
-    it("defaults to bus mode for unknown tags", async () => {
-      mockFetch.mockResolvedValueOnce(
-        mockOk({
-          elements: [{ id: 6, lat: 0, lon: 0, tags: { name: "Unknown Stop" } }],
-        }),
-      );
-
-      const { getStops } = await loadModule();
-      const stops = await getStops([0, 0, 1, 1]);
-
-      expect(stops[0].modes).toEqual(["bus"]);
+      expect(stops[0].modes).toEqual([mode]);
     });
 
     it("maps multiple modes from combined tags", async () => {
@@ -213,71 +154,6 @@ describe("overpass provider", () => {
       const stops = await getStops([0, 0, 1, 1]);
 
       expect(stops[0].platformCode).toBe("3A");
-    });
-
-    it("maps railway=stop to rail mode", async () => {
-      mockFetch.mockResolvedValueOnce(
-        mockOk({
-          elements: [{ id: 10, lat: 0, lon: 0, tags: { name: "Railway Stop", railway: "stop" } }],
-        }),
-      );
-
-      const { getStops } = await loadModule();
-      const stops = await getStops([0, 0, 1, 1]);
-
-      expect(stops[0].modes).toContain("rail");
-    });
-
-    it("maps light_rail=yes to rail mode", async () => {
-      mockFetch.mockResolvedValueOnce(
-        mockOk({
-          elements: [{ id: 11, lat: 0, lon: 0, tags: { name: "Light Rail", light_rail: "yes" } }],
-        }),
-      );
-
-      const { getStops } = await loadModule();
-      const stops = await getStops([0, 0, 1, 1]);
-
-      expect(stops[0].modes).toContain("rail");
-    });
-
-    it("maps ferry=yes to ferry mode", async () => {
-      mockFetch.mockResolvedValueOnce(
-        mockOk({
-          elements: [{ id: 12, lat: 0, lon: 0, tags: { name: "Ferry", ferry: "yes" } }],
-        }),
-      );
-
-      const { getStops } = await loadModule();
-      const stops = await getStops([0, 0, 1, 1]);
-
-      expect(stops[0].modes).toContain("ferry");
-    });
-
-    it("maps monorail=yes to monorail mode", async () => {
-      mockFetch.mockResolvedValueOnce(
-        mockOk({
-          elements: [{ id: 13, lat: 0, lon: 0, tags: { name: "Monorail", monorail: "yes" } }],
-        }),
-      );
-
-      const { getStops } = await loadModule();
-      const stops = await getStops([0, 0, 1, 1]);
-
-      expect(stops[0].modes).toContain("monorail");
-    });
-
-    it("maps funicular=yes to funicular mode", async () => {
-      mockFetch.mockResolvedValueOnce(
-        mockOk({
-          elements: [{ id: 14, lat: 0, lon: 0, tags: { name: "Funicular", funicular: "yes" } }],
-        }),
-      );
-
-      const { getStops } = await loadModule();
-      const stops = await getStops([0, 0, 1, 1]);
-
-      expect(stops[0].modes).toContain("funicular");
     });
   });
 });

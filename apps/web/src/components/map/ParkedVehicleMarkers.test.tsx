@@ -80,35 +80,6 @@ async function settle() {
 }
 
 describe("ParkedVehicleMarkers", () => {
-  it("does not open a parked record while picking a replacement point", async () => {
-    render(<ParkedVehicleMarkers />);
-    await waitFor(() => expect(container.children).toHaveLength(1));
-    useParkingStore.getState().setPicking(true);
-    (container.firstElementChild as HTMLElement).click();
-    expect(useParkingStore.getState().selectedParkedId).toBeNull();
-    expect(useSidebarStore.getState().activeSidebarId).toBeNull();
-    fireEvent.keyDown(container.firstElementChild as HTMLElement, { key: "Enter" });
-    expect(useParkingStore.getState().selectedParkedId).toBe("p1");
-  });
-  it("claims its click from the map, but leaves a picker's click to it", async () => {
-    const mapClickOwners: unknown[] = [];
-    container.addEventListener("click", (event) => mapClickOwners.push(getMapClickOwner(event)));
-    render(<ParkedVehicleMarkers />);
-    await waitFor(() => expect(container.children).toHaveLength(1));
-
-    (container.firstElementChild as HTMLElement).click();
-    expect(useParkingStore.getState().selectedParkedId).toBe("p1");
-
-    useParkingStore.getState().setPicking(true);
-    (container.firstElementChild as HTMLElement).click();
-    expect(mapClickOwners).toEqual(["marker", "parking"]);
-  });
-
-  it("renders one marker per parked record", async () => {
-    render(<ParkedVehicleMarkers />);
-    await waitFor(() => expect(container.children).toHaveLength(1));
-  });
-
   it("renders nothing when there is no parked record", async () => {
     state.parked = [];
     render(<ParkedVehicleMarkers />);
@@ -116,14 +87,23 @@ describe("ParkedVehicleMarkers", () => {
     expect(container.children).toHaveLength(0);
   });
 
-  it("opens the parking panel for the clicked record", async () => {
+  it("routes parked marker, picker and keyboard actions to their actual owners", async () => {
+    const mapClickOwners: unknown[] = [];
+    container.addEventListener("click", (event) => mapClickOwners.push(getMapClickOwner(event)));
     render(<ParkedVehicleMarkers />);
     await waitFor(() => expect(container.children).toHaveLength(1));
-
     (container.firstElementChild as HTMLElement).click();
-
     expect(useParkingStore.getState().selectedParkedId).toBe("p1");
     expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.PARKING);
+    useParkingStore.getState().reset();
+    useSidebarStore.getState().closeAll();
+    useParkingStore.getState().setPicking(true);
+    (container.firstElementChild as HTMLElement).click();
+    expect(useParkingStore.getState().selectedParkedId).toBeNull();
+    expect(useSidebarStore.getState().activeSidebarId).toBeNull();
+    expect(mapClickOwners).toEqual(["marker", "parking"]);
+    fireEvent.keyDown(container.firstElementChild as HTMLElement, { key: "Enter" });
+    expect(useParkingStore.getState().selectedParkedId).toBe("p1");
   });
 
   it("labels the marker with the vehicle name when one is assigned", async () => {

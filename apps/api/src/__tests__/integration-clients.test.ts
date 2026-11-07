@@ -241,11 +241,12 @@ describe("createHttpClient", () => {
     expect(fetchSignal?.aborted).toBe(true);
   });
 
-  it("always attaches a default abort signal on GET", async () => {
-    const fn = vi.fn((_url: string, _init?: RequestInit) => jsonResponse({ ok: true }));
+  it("GET returns parsed JSON with a default abort signal", async () => {
+    const fn = vi.fn((_url: string, _init?: RequestInit) => jsonResponse({ ok: true, n: 42 }));
     vi.stubGlobal("fetch", fn);
     const client = createHttpClient(createNoopLogger());
-    await client.get("https://x.test/data");
+    const data = await client.get("https://x.test/data");
+    expect(data).toEqual({ ok: true, n: 42 });
     const init = fn.mock.calls[0][1] as RequestInit;
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });
@@ -283,23 +284,14 @@ describe("createHttpClient", () => {
     await expect(client.get("https://x.test/data")).rejects.toThrow(/content type/i);
   });
 
-  it("always attaches a default abort signal on POST", async () => {
+  it("POST returns parsed JSON with a default abort signal", async () => {
     const fn = vi.fn((_url: string, _init?: RequestInit) => jsonResponse({ ok: true }));
     vi.stubGlobal("fetch", fn);
     const client = createHttpClient(createNoopLogger());
-    await client.post("https://x.test/data", { a: 1 });
+    const data = await client.post("https://x.test/data", { a: 1 });
+    expect(data).toEqual({ ok: true });
     const init = fn.mock.calls[0][1] as RequestInit;
     expect(init.signal).toBeInstanceOf(AbortSignal);
-  });
-
-  it("GET resolves parsed JSON on success", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() => jsonResponse({ ok: true, n: 42 })),
-    );
-    const client = createHttpClient(createNoopLogger());
-    const data = await client.get<{ ok: boolean; n: number }>("https://x.test/data");
-    expect(data).toEqual({ ok: true, n: 42 });
   });
 
   it("GET throws the preserved HTTP <status> <statusText> message on non-2xx", async () => {
@@ -309,16 +301,6 @@ describe("createHttpClient", () => {
     );
     const client = createHttpClient(createNoopLogger());
     await expect(client.get("https://x.test/data")).rejects.toThrow("HTTP 503 Service Unavailable");
-  });
-
-  it("POST resolves parsed JSON on success", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() => jsonResponse({ ok: true })),
-    );
-    const client = createHttpClient(createNoopLogger());
-    const data = await client.post<{ ok: boolean }>("https://x.test/data", { a: 1 });
-    expect(data).toEqual({ ok: true });
   });
 
   it("POST throws the preserved HTTP <status> <statusText> message on non-2xx", async () => {

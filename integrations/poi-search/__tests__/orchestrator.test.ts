@@ -68,6 +68,7 @@ describe("orchestrator searchByFilter", () => {
     const result = await orch.searchByFilter(validFilter, bbox);
     expect(provider.searchByFilter).toHaveBeenCalledWith(validFilter, bbox, { lang: undefined });
     expect(result.results).toHaveLength(1);
+    expect(result.results[0].openingHours).toBe("Mo-Su 00:00-24:00");
     expect(result.results[0].openingHoursInfo).toBeUndefined();
     expect(result.partial).toBe(false);
   });

@@ -1,4 +1,4 @@
-import { MAX_POI_SEARCH_RESULTS, OverpassTimeoutError } from "@openmapx/core";
+import { OverpassTimeoutError } from "@openmapx/core";
 import { describe, expect, it, vi } from "vitest";
 import { createPoiSearchOrchestrator } from "../orchestrator";
 import type { PoiSearchProvider, PoiSearchResult } from "../types";
@@ -99,6 +99,7 @@ describe("(B) Both registered — fusion", () => {
       const result = await pending;
       expect(result.results).toHaveLength(3);
       expect(result.partial).toBe(false);
+      expect(execute).toHaveBeenCalledTimes(1);
     } finally {
       base.resolve([]);
       augment.resolve([]);
@@ -106,91 +107,23 @@ describe("(B) Both registered — fusion", () => {
     }
   });
 
-  it("fused result carries gersId from the matched Overture entry", async () => {
+  it("fuses matching entries, preserves brand data and ranks gap fills", async () => {
     const orch = createPoiSearchOrchestrator(makeCtx([overpassProvider, overtureProvider]));
     const result = await orch.search("cafes", BBOX);
     const fused = result.results.find((r) => r.id === "osm:node/1");
-    expect(fused).toBeDefined();
-    expect(fused?.gersId).toBe("gers-starbucks-001");
-  });
-
-  it("Overture-only result appears as gap-fill", async () => {
-    const orch = createPoiSearchOrchestrator(makeCtx([overpassProvider, overtureProvider]));
-    const result = await orch.search("cafes", BBOX);
-    const gapFill = result.results.find((r) => r.id === "overture:gers-new-venue-999");
-    expect(gapFill).toBeDefined();
-  });
-
-  it("total result count equals osm count + overture-only count", async () => {
-    const orch = createPoiSearchOrchestrator(makeCtx([overpassProvider, overtureProvider]));
-    const result = await orch.search("cafes", BBOX);
-    expect(result.results).toHaveLength(3);
-  });
-
-  it("brand osmTags from Overture are merged onto the fused OSM result", async () => {
-    const orch = createPoiSearchOrchestrator(makeCtx([overpassProvider, overtureProvider]));
-    const result = await orch.search("cafes", BBOX);
-    const fused = result.results.find((r) => r.id === "osm:node/1");
-    expect(fused?.osmTags?.brand).toBe("Starbucks");
-    expect(fused?.osmTags?.["brand:wikidata"]).toBe("Q37158");
-  });
-});
-
-describe("(B2) Result quality", () => {
-  it("ranks the fused set around the requested map centre", async () => {
-    const orch = createPoiSearchOrchestrator(makeCtx([overpassProvider, overtureProvider]));
-    const result = await orch.search("cafes", BBOX);
     expect(result.results.map((entry) => entry.id)).toEqual([
       "osm:node/1",
       "overture:gers-new-venue-999",
       "osm:node/2",
     ]);
-  });
-
-  it("caps even a single provider at the public result limit", async () => {
-    const provider: PoiSearchProvider = {
-      id: "overpass",
-      categories: ["cafes"],
-      async search() {
-        return Array.from({ length: MAX_POI_SEARCH_RESULTS + 25 }, (_, index) => ({
-          id: `osm:node/${index}`,
-          name: `Cafe ${index}`,
-          coordinates: [13.4 + index / 100_000, 52.51] as [number, number],
-          category: "cafes",
-        }));
-      },
-    };
-    const result = await createPoiSearchOrchestrator(makeCtx([provider])).search("cafes", BBOX);
-    expect(result.results).toHaveLength(MAX_POI_SEARCH_RESULTS);
+    expect(fused).toMatchObject({
+      gersId: "gers-starbucks-001",
+      osmTags: { brand: "Starbucks", "brand:wikidata": "Q37158" },
+    });
   });
 });
 
 describe("(C) Category routing", () => {
-  it("a commercial category fans out to 2 providers when both are registered", async () => {
-    let overpassCallCount = 0;
-    let overtureCallCount = 0;
-    const trackingOverpass: PoiSearchProvider = {
-      id: "overpass",
-      categories: ["cafes"],
-      async search() {
-        overpassCallCount++;
-        return [];
-      },
-    };
-    const trackingOverture: PoiSearchProvider = {
-      id: "overture",
-      categories: ["cafes"],
-      async search() {
-        overtureCallCount++;
-        return [];
-      },
-    };
-    const orch = createPoiSearchOrchestrator(makeCtx([trackingOverpass, trackingOverture]));
-    await orch.search("cafes", BBOX);
-    expect(overpassCallCount).toBe(1);
-    expect(overtureCallCount).toBe(1);
-  });
-
   it("'viewpoints' stays single-provider (only overpass covers it)", async () => {
     let overpassCallCount = 0;
     let overtureCallCount = 0;
@@ -236,25 +169,6 @@ describe("(C2) OverpassTimeoutError propagates from fused search", () => {
       // A later optional failure is already handled, even after the request rejected.
       augment.reject(new Error("augment unavailable"));
     }
-  });
-
-  it("search() rejects with OverpassTimeoutError when overpass throws it (not swallowed)", async () => {
-    const timeoutOverpass: PoiSearchProvider = {
-      id: "overpass",
-      categories: ["cafes"],
-      async search() {
-        throw new OverpassTimeoutError("area_too_large");
-      },
-    };
-    const silentOverture: PoiSearchProvider = {
-      id: "overture",
-      categories: ["cafes"],
-      async search() {
-        return [];
-      },
-    };
-    const orch = createPoiSearchOrchestrator(makeCtx([timeoutOverpass, silentOverture]));
-    await expect(orch.search("cafes", BBOX)).rejects.toBeInstanceOf(OverpassTimeoutError);
   });
 });
 
@@ -338,6 +252,7 @@ describe("(D) Link-table wiring — ctx.db integration", () => {
     );
     const result = await orchNoDb.search("cafes", BBOX);
     const entry = result.results.find((r) => r.id === "osm:node/1");
+    expect(entry).toBeDefined();
     expect(entry?.gersId).toBeUndefined();
   });
 
@@ -354,33 +269,5 @@ describe("(D) Link-table wiring — ctx.db integration", () => {
     expect(fused).toBeDefined();
     expect(fused?.gersId).toBe("gers-starbucks-001");
     expect(fused?.osmTags?.brand).toBe("Starbucks");
-  });
-
-  it("without ctx.db falls back to scored spatial matching only", async () => {
-    const orchWithoutDb = createPoiSearchOrchestrator(
-      makeCtx([overpassProvider, overtureProvider]),
-    );
-    const orchWithUndefinedDb = createPoiSearchOrchestrator(
-      makeCtx([overpassProvider, overtureProvider], undefined),
-    );
-    const [resultA, resultB] = await Promise.all([
-      orchWithoutDb.search("cafes", BBOX),
-      orchWithUndefinedDb.search("cafes", BBOX),
-    ]);
-    expect(resultB.results).toStrictEqual(resultA.results);
-    expect(resultB.partial).toStrictEqual(resultA.partial);
-  });
-
-  it("issues exactly one batched db query per search call (no N+1)", async () => {
-    let queryCount = 0;
-    const db = {
-      execute: async () => {
-        queryCount++;
-        return [] as unknown[];
-      },
-    };
-    const orch = createPoiSearchOrchestrator(makeCtx([overpassProvider, overtureProvider], db));
-    await orch.search("cafes", BBOX);
-    expect(queryCount).toBe(1);
   });
 });

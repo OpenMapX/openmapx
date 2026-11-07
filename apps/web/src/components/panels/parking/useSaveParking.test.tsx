@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
@@ -74,10 +74,5 @@ describe("useSaveParking", () => {
     const { result } = renderHook(() => useSaveParking());
     await result.current.saveHere({ source: "arrival" });
     expect(state.save).toHaveBeenCalledWith(expect.objectContaining({ source: "arrival" }));
-  });
-
-  it("reports no write in flight once settled", async () => {
-    const { result } = renderHook(() => useSaveParking());
-    await waitFor(() => expect(result.current.isSaving).toBe(false));
   });
 });

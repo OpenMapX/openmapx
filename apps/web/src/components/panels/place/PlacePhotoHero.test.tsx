@@ -127,13 +127,6 @@ describe("PlacePhotoHero", () => {
     expect(onViewPhotos).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the action when a later URL is unusable", () => {
-    renderHero([firstPhoto, { ...secondPhoto, url: "javascript:bad" }]);
-    expect(screen.getByRole("button", { name: "View photos of Test Place" })).toHaveTextContent(
-      "View photos",
-    );
-  });
-
   it("keeps a one-photo gallery action and attribution link separate", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();

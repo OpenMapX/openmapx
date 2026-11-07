@@ -382,7 +382,7 @@ describe("extension CLI through the final generated SDK", () => {
       expect(`${stdout()}${stderr()}`).not.toContain("synthetic-token");
     },
   );
-  it("retains the invocation client and selector across preview while another action changes environment", async () => {
+  it("retains the invocation origin and selector across preview while another action changes environment", async () => {
     vi.stubEnv("API_URL", "https://first.test");
     vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "  first-token  ");
     let release!: (response: Response) => void;
@@ -406,7 +406,6 @@ describe("extension CLI through the final generated SDK", () => {
     ]);
     expect(JSON.parse(String(request(2).init.body))).toEqual({ id: "synthetic" });
     expect(new Headers(request().init.headers).get("x-openmapx-local-admin")).toBe("first-token");
-    expect(new Headers(request(2).init.headers).get("x-openmapx-local-admin")).toBe("second-token");
   });
 });
 

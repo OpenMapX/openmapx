@@ -4,11 +4,6 @@ import { loadPresetIndex } from "./loader";
 describe("loadPresetIndex", () => {
   const index = loadPresetIndex(["en", "de"]);
 
-  it("loads both requested languages", () => {
-    expect(index.has("en")).toBe(true);
-    expect(index.has("de")).toBe(true);
-  });
-
   it("indexes more than 1000 presets per language (sanity)", () => {
     expect(index.get("en")?.length).toBeGreaterThan(1000);
     expect(index.get("de")?.length).toBeGreaterThan(1000);
@@ -34,8 +29,7 @@ describe("loadPresetIndex", () => {
 
   it("falls back to English when a translation file is missing", () => {
     const fallback = loadPresetIndex(["zz"]);
-    const enLen = index.get("en")?.length;
-    expect(fallback.get("zz")?.length).toBe(enLen);
+    expect(fallback.get("zz")).toEqual(index.get("en"));
   });
 
   it("preserves OSM tags from the base preset file", () => {

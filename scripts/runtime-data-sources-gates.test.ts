@@ -88,6 +88,37 @@ describe("check-credential-keys", () => {
 });
 
 describe("check-data-flows", () => {
+  it("accepts declared URL siblings, explicit API hosts, public suffixes, allowlisted domains and internal services through the actual CLI", () => {
+    const fixtures = [
+      {
+        id: "url-sibling",
+        source: { url: "https://developer.actual-provider.org" },
+        host: "api.actual-provider.org",
+      },
+      {
+        id: "api-host",
+        source: { url: "https://vendor-information.org", apiHosts: ["api.actual-service.net"] },
+        host: "data.actual-service.net",
+      },
+      {
+        id: "public-suffix",
+        source: { url: "https://developer.provider.co.uk" },
+        host: "api.provider.co.uk",
+      },
+      { id: "allowlisted", source: {}, host: "tiles.openstreetmap.org" },
+      { id: "internal", source: {}, host: "app-api" },
+    ];
+    for (const fixture of fixtures) {
+      writeManifest(fixture.id, { dataSources: [fixture.source] });
+      writeFileSync(
+        join(root, "integrations", fixture.id, "index.ts"),
+        `export const upstream = "https://${fixture.host}/data";\n`,
+      );
+    }
+    const result = runScript("check-data-flows.ts");
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    expect(result.stdout).toContain("every contacted host is declared or allowlisted");
+  });
   it("names a runtime integration and still fails an undeclared host in its code", () => {
     writeManifest("runtime-probe", { runtimeDataSources: true });
     writeFileSync(

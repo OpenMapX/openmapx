@@ -612,8 +612,13 @@ describe("configuration outcome evidence", () => {
           state: "queued",
         }),
         status: vi.fn().mockResolvedValue({
-          state,
+          version: 1,
+          operationId: "job",
           operationKey: "opk1_configOutcome123",
+          kind: operation.kind,
+          state,
+          submittedAt: "2026-08-23T10:00:00.000Z",
+          updatedAt: "2026-08-23T10:00:01.000Z",
           errorClass: "runtime",
         }),
       });

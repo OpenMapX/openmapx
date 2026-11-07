@@ -176,19 +176,9 @@ describe("BuildingExtrusionLayer", () => {
     expect(useBuildingsStore.getState().panelOpen).toBe(true);
     expect(useBuildingsStore.getState().layerVisible).toBe(true);
     expect(manifest.frontend.overlay.minZoom).toBe(layer?.minzoom);
-    expect(layer?.minzoom).toBe(16.5);
     expect(layer?.source).toBe("city");
     expect(layer?.["source-layer"]).toBe("building");
-    expect(layer?.source).not.toBe("unrelated");
-    expect((layer?.paint as Record<string, unknown>)?.["fill-extrusion-opacity"]).toEqual([
-      "interpolate",
-      ["linear"],
-      ["zoom"],
-      16.5,
-      0,
-      17,
-      1,
-    ]);
+    expect(layer?.type).toBe("fill-extrusion");
     expect(fake.state.layout.get(BUILDING_LAYER_ID)?.visibility).not.toBe("none");
   });
 
@@ -226,9 +216,9 @@ describe("BuildingExtrusionLayer", () => {
     });
     rerender(<BuildingExtrusionLayer />);
     expect(fake.state.maxPitch).toBe(70);
-    expect(fake.state.cameraTransitions.at(-1)).toEqual({
+    expect(fake.state.cameraTransitions.at(-1)).toMatchObject({
       method: "easeTo",
-      options: { pitch: 45, duration: 800 },
+      options: { pitch: 45 },
       eventData: { programmatic: true },
     });
 

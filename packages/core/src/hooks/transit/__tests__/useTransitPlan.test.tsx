@@ -75,24 +75,11 @@ describe("useTransitPlan paging time", () => {
     });
     // Query identity and the wire request carry the same retained time.
     expect(cachedKeyTimes()).toEqual(Array(3).fill("2026-10-23T05:20:00Z"));
-  });
-
-  it("starts a fresh query at the current minute once the token is cleared", async () => {
-    const view = setup({ origin: ORIGIN, destination: DESTINATION });
-    await settled(1);
-    vi.setSystemTime("2026-10-23T05:21:30Z");
-    view.rerender({ origin: ORIGIN, destination: DESTINATION, pageToken: "next-token" });
-    await settled(2);
-
-    vi.setSystemTime("2026-10-23T05:22:30Z");
+    vi.setSystemTime("2026-10-23T05:23:30Z");
     view.rerender({ origin: ORIGIN, destination: DESTINATION });
-    await settled(3);
-    expect(wireTimes()).toEqual([
-      "2026-10-23T05:20:00Z",
-      "2026-10-23T05:20:00Z",
-      "2026-10-23T05:22:00Z",
-    ]);
-    expect(wireParams(2).page_token).toBeUndefined();
+    await settled(4);
+    expect(wireParams(3)).toMatchObject({ time: "2026-10-23T05:23:00Z" });
+    expect(wireParams(3).page_token).toBeUndefined();
   });
 
   it("does not freeze ordinary unpaged queries at the first render", async () => {

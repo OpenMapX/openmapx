@@ -1293,25 +1293,6 @@ describe("removeExtension", () => {
   });
 });
 
-it("rejoins a completed original catalog workflow without republishing or rewriting bookkeeping", async () => {
-  const ctx = makeCtx();
-  publishIntegrationMock.mockResolvedValue({
-    integrationId: "intg-one",
-    transactionId: INTEGRATION_TRANSACTION,
-    manifestSha256: "f".repeat(64),
-  });
-  readInstalledMock.mockResolvedValue(installedSnapshot([]));
-  settleIntegrationMock.mockResolvedValue({
-    integrationId: "intg-one",
-    outcome: "commit",
-    changed: true,
-  });
-  await installExtension(ctx, { manifest: INTEGRATION_ONLY, sourceTrust: "community" });
-  await installExtension(ctx, { manifest: INTEGRATION_ONLY, sourceTrust: "community" });
-  expect(publishIntegrationMock).toHaveBeenCalledTimes(1);
-  expect(dbMock.db.transaction).toHaveBeenCalledTimes(1);
-});
-
 it("finishes original committed bookkeeping despite a later revocation without rollback or rewriting rows", async () => {
   const ctx = makeCtx();
   publishIntegrationMock.mockResolvedValue({

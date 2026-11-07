@@ -224,14 +224,7 @@ describe("cameras-openconditions", () => {
         licensing: licensingFromDeclaration("CC-BY-4.0", undefined),
       },
     ];
-    const _names: Record<string, string> = {
-      [TFL_LICENSE]: TFL_LICENSE_NAME,
-      "CC-BY-4.0": "Creative Commons Attribution 4.0",
-      "ODbL-1.0": "Open Data Commons Open Database License v1.0",
-    };
-    const named: MediaSources = EVERY_SOURCE;
-
-    const { attributions } = mapped(answer, named)!;
+    const { attributions } = mapped(answer)!;
 
     expect(attributions[0]).toEqual({
       sourceId: DIGITRAFFIC,
@@ -256,12 +249,7 @@ describe("cameras-openconditions", () => {
       } as const,
     });
 
-    // Without names (before the first list) every id stays as it is.
-    const unnamed = mapped(answer)!.attributions;
-    expect(formatLicensing(unnamed[0]!.licensing!)).toBe(TFL_LICENSE_NAME);
-    expect(
-      formatLicensing(unnamed.find((a) => a.publisher?.name === "Borough A")!.licensing!),
-    ).toBe(TFL_LICENSE_NAME);
+    expect(formatLicensing(attributions[0]!.licensing!)).toBe(TFL_LICENSE_NAME);
   });
 
   test("an image whose host its source does not declare becomes its view's link", () => {

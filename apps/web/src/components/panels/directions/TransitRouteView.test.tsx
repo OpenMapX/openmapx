@@ -258,41 +258,40 @@ describe("TransitItineraryCard", () => {
     expect(indicator.parentElement?.textContent).toContain("250 m walk");
   });
 
-  it.each(["{Enter}", " "])(
-    "opens accessibility on focus, %s and tap without selecting the itinerary",
-    async (key) => {
-      const onSelect = vi.fn();
-      render(
-        <TransitItineraryCard
-          itinerary={{
-            ...itineraryWith([{ ...railLeg, wheelchairAccessible: false }]),
-            instance: "ms",
-          }}
-          active={false}
-          onSelect={onSelect}
-          onDetails={() => {}}
-        />,
-      );
-      const indicator = screen.getByRole("button", {
-        name: "Wheelchair accessibility not confirmed for 1 leg",
-      });
-      await userEvent.tab();
-      expect(document.activeElement).toBe(indicator);
-      expect((await screen.findByRole("tooltip")).textContent).toContain("not confirmed");
-      await userEvent.keyboard("{Escape}");
-      await waitForElementToBeRemoved(() => screen.queryByRole("tooltip"));
+  it("opens accessibility on focus, Enter, Space and tap without selecting the itinerary", async () => {
+    const onSelect = vi.fn();
+    render(
+      <TransitItineraryCard
+        itinerary={{
+          ...itineraryWith([{ ...railLeg, wheelchairAccessible: false }]),
+          instance: "ms",
+        }}
+        active={false}
+        onSelect={onSelect}
+        onDetails={() => {}}
+      />,
+    );
+    const indicator = screen.getByRole("button", {
+      name: "Wheelchair accessibility not confirmed for 1 leg",
+    });
+    await userEvent.tab();
+    expect(document.activeElement).toBe(indicator);
+    expect((await screen.findByRole("tooltip")).textContent).toContain("not confirmed");
+    await userEvent.keyboard("{Escape}");
+    await waitForElementToBeRemoved(() => screen.queryByRole("tooltip"));
+    for (const key of ["{Enter}", " "]) {
       await userEvent.keyboard(key);
       expect((await screen.findByRole("tooltip")).textContent).toContain("not confirmed");
       expect(onSelect).not.toHaveBeenCalled();
       await userEvent.keyboard("{Escape}");
       await waitForElementToBeRemoved(() => screen.queryByRole("tooltip"));
-      fireEvent.click(indicator);
-      expect((await screen.findByRole("tooltip")).textContent).toContain("not confirmed");
-      expect(onSelect).not.toHaveBeenCalled();
-      await userEvent.click(document.body);
-      await waitForElementToBeRemoved(() => screen.queryByRole("tooltip"));
-    },
-  );
+    }
+    fireEvent.click(indicator);
+    expect((await screen.findByRole("tooltip")).textContent).toContain("not confirmed");
+    expect(onSelect).not.toHaveBeenCalled();
+    await userEvent.click(document.body);
+    await waitForElementToBeRemoved(() => screen.queryByRole("tooltip"));
+  });
 
   it("does not infer cancellation from a severe alert or unknown accessibility", () => {
     const markup = renderToStaticMarkup(

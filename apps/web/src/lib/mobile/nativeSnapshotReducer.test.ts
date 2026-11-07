@@ -96,15 +96,8 @@ describe("applyNativeSnapshot", () => {
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;
     expect(outcome.model.revision).toBe(5);
+    expect(outcome.model.snapshot.route).toEqual({ geometry: [[8.68, 50.11]] });
     expect((outcome.model.snapshot.progress as { alongMeters: number }).alongMeters).toBe(200);
-  });
-
-  it("keeps the route a delta does not carry", () => {
-    const outcome = applyNativeSnapshot(seeded(), envelope(progressSnapshot()));
-
-    expect(outcome.ok).toBe(true);
-    if (!outcome.ok) return;
-    expect(outcome.model.snapshot.route).toBeTruthy();
   });
 
   it("asks for a full snapshot when there is nothing to apply a delta to", () => {
@@ -165,6 +158,7 @@ describe("applyNativeSnapshot", () => {
     // A delta rewriting the route would be a route change with no fingerprint
     // change, which is exactly what the fingerprint check exists to catch.
     expect(outcome.model.snapshot.route).toEqual({ geometry: [[8.68, 50.11]] });
+    expect(outcome.model.snapshot).not.toHaveProperty("settings");
   });
 
   it("keeps pending events across a delta", () => {
@@ -194,7 +188,7 @@ describe("applyNativeSnapshot", () => {
   it("reports an unchanged full snapshot as unchanged", () => {
     const outcome = applyNativeSnapshot(seeded(), envelope(fullSnapshot()));
 
-    expect(outcome.ok && outcome.changed).toBe(false);
+    expect(outcome).toMatchObject({ ok: true, changed: false });
   });
 });
 
@@ -208,13 +202,8 @@ describe("event acknowledgement", () => {
   it("forgets acknowledged events", () => {
     const model = rememberEvent(rememberEvent(seeded(), "e1"), "e2");
 
+    expect(forgetEvents(model, ["somewhere-else"]).pendingEventIds).toEqual(["e1", "e2"]);
     expect(forgetEvents(model, ["e1"]).pendingEventIds).toEqual(["e2"]);
-  });
-
-  it("ignores an acknowledgement for an event it never had", () => {
-    const model = rememberEvent(seeded(), "e1");
-
-    expect(forgetEvents(model, ["somewhere-else"]).pendingEventIds).toEqual(["e1"]);
   });
 });
 

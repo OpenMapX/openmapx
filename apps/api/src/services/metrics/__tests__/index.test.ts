@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { internalMetricsRoute } from "../../../routes/internal-metrics.js";
 import {
   getMetrics,
-  initMetrics,
   recordAirQuality,
   recordAirQualityProviderCall,
   recordCardEnrichment,
@@ -40,19 +39,6 @@ describe("metrics service", () => {
       /card_enrichment_fields_total\{[^}]*field="photo"[^}]*status="failed"[^}]*\} 2/,
     );
     expect(text).not.toContain("place_id");
-  });
-  it("registers the provider-call counter and histogram with stable names", () => {
-    const handle = initMetrics();
-    expect(handle.providerCallCounter).toBeDefined();
-    expect(handle.providerCallLatency).toBeDefined();
-    // Snapshot-style assertion that the instruments still exist; the actual
-    // names are validated downstream via the Prometheus serializer test.
-  });
-
-  it("returns the same handle from initMetrics and getMetrics", () => {
-    const a = initMetrics();
-    const b = getMetrics();
-    expect(a).toBe(b);
   });
 
   it("exports bounded cleanup backlog counts by resource kind", async () => {
@@ -263,10 +249,17 @@ describe("metrics service", () => {
 
   it("never serializes user, credential, host, date or coordinate-shaped input", async () => {
     const sensitive = "OMX-SENSITIVE-user@example.test-2026-03-29-52.5-13.4";
-    recordPersonalTimelineRequest(
-      { mode: "external", operation: "connect", outcome: "invalid_credential" },
-      4,
-    );
+    const labels = {
+      mode: "external" as const,
+      operation: "connect" as const,
+      outcome: "invalid_credential" as const,
+      userId: sensitive,
+      credential: sensitive,
+      hostname: sensitive,
+      date: sensitive,
+      coordinates: [52.5, 13.4],
+    };
+    recordPersonalTimelineRequest(labels, 4);
     const text = await getMetrics().renderPrometheus();
     expect(text).not.toContain(sensitive);
     expect(text).not.toContain("user_id");
@@ -296,23 +289,10 @@ describe("internal-metrics route", () => {
 
 /**
  * OSM contribution telemetry is deliberately content-free: two instruments,
- * two closed low-cardinality labels, and nothing else. These cases push
- * sentinel tokens, names, coordinates, tags, comments, note text and source
- * detail through the recording boundary and prove none of it can be exposed.
+ * two closed application labels plus the exporter's fixed scope metadata. Assert the actual
+ * exposed label keys, values and bounded latency recording.
  */
 describe("OSM contribution metrics", () => {
-  const SENTINELS = [
-    "osm-token-sentinel",
-    "Café Central",
-    "human comment sentinel",
-    "note text sentinel",
-    "amenity=cafe",
-    "52.5162746",
-    "13.3777041",
-    "mapper",
-    "official website",
-  ];
-
   it("registers both instruments with stable names", async () => {
     recordOsmContributionOperation("publish", "success", 12);
     const exposition = await getMetrics().renderPrometheus();
@@ -371,48 +351,19 @@ describe("OSM contribution metrics", () => {
     }
   });
 
-  it("exposes only the two closed labels", async () => {
+  it("exposes only the two application labels and exporter scope", async () => {
     recordOsmContributionOperation("publish", "success", 3);
     const exposition = await getMetrics().renderPrometheus();
-    const line = exposition
-      .split("\n")
-      .find((row) => row.startsWith("osm_contribution_operations_total{"));
-    const labels = (line ?? "").slice(line?.indexOf("{"), line?.indexOf("}"));
-    for (const forbidden of [
-      "user",
-      "account",
-      "element",
-      "field",
-      "preset",
-      "locale",
-      "evidence",
-      "source",
-      "changeset",
-      "note_id",
-      "request_id",
-      "url",
-      "status_code",
+    for (const prefix of [
+      "osm_contribution_operations_total{",
+      "osm_contribution_operation_duration_ms_sum{",
     ]) {
-      expect(labels).not.toContain(forbidden);
-    }
-  });
-
-  it("cannot carry contribution content into the exposition", async () => {
-    for (const operation of [
-      "capabilities",
-      "context",
-      "categories",
-      "preview",
-      "publish",
-      "note",
-      "reconcile",
-      "close_changeset",
-    ] as const) {
-      recordOsmContributionOperation(operation, "success", 1);
-    }
-    const exposition = await getMetrics().renderPrometheus();
-    for (const sentinel of SENTINELS) {
-      expect(exposition).not.toContain(sentinel);
+      const line = exposition.split("\n").find((row) => row.startsWith(prefix));
+      expect(line).toBeDefined();
+      const labels = line!.slice(line!.indexOf("{"), line!.indexOf("}"));
+      expect(
+        [...labels.matchAll(/([A-Za-z_][A-Za-z0-9_]*)="/g)].map((match) => match[1]).sort(),
+      ).toEqual(["operation", "otel_scope_name", "outcome"]);
     }
   });
 });

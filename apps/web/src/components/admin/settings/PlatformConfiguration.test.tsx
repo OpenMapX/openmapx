@@ -194,6 +194,10 @@ it("reuses the same apply intent after an unconfirmed transport outcome", async 
   await screen.findByText(/Apply was not confirmed/);
   fireEvent.click(screen.getByRole("button", { name: "Apply reviewed changes" }));
   await waitFor(() => expect(mocks.apply).toHaveBeenCalledTimes(2));
+  const headers = mocks.apply.mock.calls[0][1] as Record<string, unknown>;
+  expect(headers["idempotency-key"]).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  );
   expect(mocks.apply.mock.calls[0][1]).toEqual(mocks.apply.mock.calls[1][1]);
 });
 it("copies the fresh full baseline before overlaying a retention edit", async () => {

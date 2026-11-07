@@ -334,8 +334,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         operationKey: createDurableOpsKey("migration.test.stale", randomUUID()),
         document: document("stale-write"),
       });
-      await state.fixture
-        .sql`update integration_config set config = '{"VALUE":"external-race"}'::jsonb where integration_id='beta'`;
+      await state.fixture.sql`INSERT INTO integration_config(id,integration_id,config)
+             VALUES (${randomUUID()},'beta','{"VALUE":"external-race"}'::jsonb)
+             ON CONFLICT (integration_id) DO UPDATE SET config=excluded.config`;
       const beforeApply = await state.fixture.db
         .select()
         .from(integrationConfig)
@@ -584,11 +585,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       } finally {
         vi.mocked(fsPromises.unlink).mockImplementation(originalUnlink);
       }
-      expect(
-        (await state.fixture.db.select().from(schema.adminActionReauthentication))
-          .filter((p) => [exportProof, previewProof, importProof].includes(p.id))
-          .every((p) => p.state === "consumed"),
-      ).toBe(true);
+      const proofs = (
+        await state.fixture.db.select().from(schema.adminActionReauthentication)
+      ).filter((p) => [exportProof, previewProof, importProof].includes(p.id));
+      expect(proofs.map((proof) => proof.id).sort()).toEqual(
+        [exportProof, previewProof, importProof].sort(),
+      );
+      expect(proofs.every((proof) => proof.state === "consumed")).toBe(true);
     }, 90000);
   },
 );

@@ -36,7 +36,7 @@ function withSlot(
  * paint expression over the shared sources, so a day never creates a layer per
  * entry and the highlight survives the normal style-rebuild lifecycle.
  */
-export function buildTimelineLayerGroup(
+function buildTimelineLayerGroup(
   day: PersonalTimelineDayV1,
   selectedEntryId: string | null,
 ): MapLayerGroup {
