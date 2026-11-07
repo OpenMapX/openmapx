@@ -25,6 +25,7 @@ it("keeps observation and mutation routes closed without a durable receiver", as
       url: "/executions/generation-hardlinks/recovery",
       payload: {
         operationKey: "opk1_abcdefghijklmnop",
+        requestedDeadlineAt: Date.now() + 60000,
         input: {
           kind: "generation-hardlinks",
           revisionId: `cfg1_${"a".repeat(43)}`,
