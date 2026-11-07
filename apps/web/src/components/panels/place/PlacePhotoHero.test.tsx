@@ -226,7 +226,9 @@ it.each([false, true])("keeps one visible creator link with custom attribution=%
   if (!photo) throw new Error("complete file should parse");
   const { container } = renderHero([photo]);
   expect(container.querySelectorAll('a[href="https://creator.example/profile"]')).toHaveLength(1);
-  expect(screen.getByRole("link", { name: custom ? "Creator profile" : "Creator" })).toBeVisible();
+  expect(
+    screen.getByRole("link", { name: custom ? "Required credit: Creator profile" : "Creator" }),
+  ).toBeVisible();
   if (custom) expect(container.textContent).toContain("Required credit: Creator profile");
   fireEvent.click(screen.getByRole("button", { name: "Photo credits" }));
   expect(screen.getByRole("link", { name: "permission record" })).toHaveAttribute(

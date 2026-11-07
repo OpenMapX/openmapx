@@ -48,6 +48,9 @@ function photoCreditPresentation(photo: PlacePhoto) {
   // This does not override stricter provider placement or unknown grants.
   // https://creativecommons.org/licenses/by-sa/3.0/legalcode#section4
   // https://creativecommons.org/licenses/by-sa/2.0/legalcode#section4
+  // The German 3.0 port has the same reasonable-placement/equal-prominence
+  // principle in §4(c). Review exact ports, never assume every suffix is equivalent.
+  // https://creativecommons.org/licenses/by-sa/3.0/de/legalcode
   const placementBindings = [
     ...fileBindings,
     ...(captured?.licensing?.bindings.filter((binding) => binding.scope !== "service") ?? []),
@@ -59,16 +62,20 @@ function photoCreditPresentation(photo: PlacePhoto) {
         resolveBindingPlacement(binding, "image").placement === "details" ||
         (binding.attribution === undefined &&
           binding.license.kind === "spdx" &&
-          /^CC-BY(?:-SA)?-(?:2\.0|2\.5|3\.0)$/.test(binding.license.expression)),
+          (/^CC-BY(?:-SA)?-(?:2\.0|2\.5|3\.0)$/.test(binding.license.expression) ||
+            binding.license.expression === "CC-BY-SA-3.0-DE")),
     );
-  const customLink = photo.attributionLinks?.find(
-    (link) => link.label === photo.attributionOverride,
-  );
+  const customLink =
+    photo.attributionLinks?.find((link) => link.label === photo.attributionOverride) ??
+    photo.attributionLinks?.find(
+      (link) => link.label.trim() && photo.attributionOverride?.includes(link.label),
+    );
   const captionNotice =
     !photo.attributionOverride && !detailsAllowed ? photo.attributionText : undefined;
   const captionLinks = (photo.attributionLinks ?? []).filter(
     (link) =>
-      link !== customLink &&
+      link.label.trim().length > 0 &&
+      link.url !== customLink?.url &&
       (!detailsAllowed || (photo.attributionOverride?.includes(link.label) ?? false)),
   );
   const linkHtml = (name: string, url?: string) =>

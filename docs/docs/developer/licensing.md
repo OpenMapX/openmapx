@@ -272,6 +272,15 @@ an explicitly empty list. A hover
 hint or global `/licenses` page is not a replacement for the current, one-action
 full attribution dialog. Do not implement source-name checks in view components.
 
+Full photo captions also recognize the reviewed `CC-BY-SA-3.0-DE` port's
+reasonable-placement/equal-prominence rule in
+[§4(c)](https://creativecommons.org/licenses/by-sa/3.0/de/legalcode).
+Keep the linked creator and exact licence visible; put complete reuse instructions
+and secondary links in the associated file-credit dialog. The
+[Berlin Cathedral photographer's published instructions](https://commons.wikimedia.org/wiki/File:Berliner_Dom_Herbst.jpg)
+explicitly permit a clearly associated credits list. Do not treat all jurisdiction
+suffixes as reviewed or override an explicit producer placement policy.
+
 Gallery thumbnails are navigational previews. `PhotoAttribution`'s `thumbnail`
 mode uses a directly associated, keyboard-accessible file-credits button for
 reviewed grants, including ordinary CC BY/BY-SA 2.x–4.0, CC0 and declared public
