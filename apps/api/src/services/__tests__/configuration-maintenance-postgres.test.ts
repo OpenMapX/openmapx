@@ -124,6 +124,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         );
       host = await ownedServiceHost({
         schemas,
+        ...(context.task.name.includes("future private mount inspection (oversized)")
+          ? { extraServiceIds: Array.from({ length: 40 }, (_, index) => `capacity-${index}`) }
+          : {}),
         actualComposeConfig:
           context.task.name.includes("applied final") ||
           context.task.name.includes("contained final") ||
@@ -2175,37 +2178,39 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       },
       60000,
     );
-    it("refuses an actual durable nonempty candidate whose future private mount inspection exceeds capacity before any root or DM guard", async () => {
-      for (let index = 0; index < 80; index++) {
-        const key = `P${String(index).padStart(3, "0")}_${"K".repeat(85)}`;
-        await fixture.db.insert(schema.serviceSecret).values({
-          id: randomUUID(),
-          serviceId: "data-manager",
-          key,
-          ...encrypt("synthetic-retained-secret"),
+    it.each(["bounded", "oversized"])(
+      "budgets an actual durable nonempty candidate's future private mount inspection (%s)",
+      async (mode) => {
+        for (let index = 0; index < 80; index++) {
+          const key = `P${String(index).padStart(3, "0")}_${"K".repeat(85)}`;
+          await fixture.db.insert(schema.serviceSecret).values({
+            id: randomUUID(),
+            serviceId: "data-manager",
+            key,
+            ...encrypt("synthetic-retained-secret"),
+          });
+        }
+        dm = await ownedDataManager({
+          sql: fixture.sql,
+          infraDir: host.infraDir,
+          serviceIds: host.loaded.map((value) => value.manifest.id),
         });
-      }
-      dm = await ownedDataManager({
-        sql: fixture.sql,
-        infraDir: host.infraDir,
-        serviceIds: host.loaded.map((value) => value.manifest.id),
-      });
-      vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-      vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
-      host.setRows([
-        host.row,
-        {
-          ...host.row,
-          Id: "c".repeat(64),
-          State: "running",
-          ConfigImage: "example/data-manager:1",
-          Labels: { ...host.row.Labels, "com.docker.compose.service": "data-manager" },
-        },
-      ]);
-      const ctx = await job();
-      await owned(ctx, async () => {
-        await expect(
-          prospective.prepareProspectiveConfiguration({
+        vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
+        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        host.setRows(
+          host.loaded.map((service, index) => ({
+            ...host.row,
+            Id: index.toString(16).padStart(64, "0"),
+            State: "running",
+            ConfigImage: services.serviceContainerImageReference(service.manifest.container),
+            Labels: { ...host.row.Labels, "com.docker.compose.service": service.manifest.id },
+          })),
+        );
+        const ctx = await job();
+        await owned(ctx, async () => {
+          const containers = await host.owned.inspectOwnedServices(new AbortController().signal);
+          expect(containers.length).toBeGreaterThan(mode === "oversized" ? 32 : 1);
+          const preparation = prospective.prepareProspectiveConfiguration({
             actorId: ctx.jobId,
             operationKey: `opk1_${ctx.jobId.replaceAll("-", "")}`,
             expectedCurrentRevisionId: host.initial.revisionId,
@@ -2223,28 +2228,43 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 },
               ],
             },
-          }),
-        ).rejects.toMatchObject({
-          result: {
-            errorCode: "configuration_preflight_failed",
-            configurationPreflight: { stage: "preview", errorClass: "runtime" },
-          },
+          });
+          if (mode === "oversized") {
+            // The larger stack still exceeds the unchanged evidence limits;
+            // compacting mount evidence must not admit it.
+            await expect(preparation).rejects.toMatchObject({
+              result: {
+                errorCode: "configuration_preflight_failed",
+                configurationPreflight: { stage: "preview", errorClass: "runtime" },
+              },
+            });
+          } else {
+            // Evidence for eighty future secret mounts now fits in the budget.
+            const candidate = await preparation;
+            expect(candidate).toMatchObject({
+              affectedServiceIds: ["data-manager"],
+              expectedCurrentRevisionId: host.initial.revisionId,
+            });
+            expect(candidate.revisionId).not.toBe(host.initial.revisionId);
+          }
+          expect(dm!.preparePosts).toBe(0);
+          expect(actualPosts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
+          expect(
+            existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
+          ).toBe(false);
+          expect(await fixture.db.select().from(schema.serviceSecret)).toHaveLength(80);
+          expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
+            host.initial.revisionId,
+          );
+          expect(
+            host.calls.some(
+              (args) => args.includes("up") || args.includes("pull") || args.includes("restart"),
+            ),
+          ).toBe(false);
         });
-        expect(dm!.preparePosts).toBe(0);
-        expect(
-          existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-        ).toBe(false);
-        expect(await fixture.db.select().from(schema.serviceSecret)).toHaveLength(80);
-        expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
-          host.initial.revisionId,
-        );
-        expect(
-          host.calls.some(
-            (args) => args.includes("up") || args.includes("pull") || args.includes("restart"),
-          ),
-        ).toBe(false);
-      });
-    }, 60000);
+      },
+      60000,
+    );
     it("uses one ownership-only maintenance decision before a durable nonempty coordinator credential continuation", async () => {
       // Synthetic example/* images intentionally have no published release overlay.
       vi.stubEnv("OPENMAPX_RELEASE", "local");
