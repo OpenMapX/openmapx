@@ -1029,14 +1029,17 @@ class AdminJobRunner {
       if (current && (await needsRecoveredCandidateCleanup(current))) {
         // Keep the original cancel marker. It prevents forward admission while
         // the existing fixed producer observes closure and discards its packet.
-        await db
+        const accepted = await db
           .update(adminJob)
           .set({
             status: "running",
             result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || jsonb_build_object('observation', jsonb_build_object('state','unknown','reason','recovery_required','nextCheckAt',${new Date().toISOString()}::text),'_observationLeaseUntil',null)`,
           })
-          .where(jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]));
-        return false;
+          .where(jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]))
+          .returning({ id: adminJob.id });
+        // Acknowledge the retained cancellation request, not a terminal
+        // canceled outcome. The original failed canonical remains unchanged.
+        return accepted.length > 0;
       }
     }
     const status = outcome === "recovered_failure" ? "failed" : "canceled";
@@ -1671,7 +1674,8 @@ class AdminJobRunner {
               });
             return;
           }
-          // Containment was not performed. Observe the original outcome under this claim.
+          // Observe the original outcome, including recovered ownership whose
+          // verified local candidate cleanup has not finished yet.
           const rows = await db
             .update(adminJob)
             .set({ status: "running" })
@@ -1762,7 +1766,7 @@ class AdminJobRunner {
       const historical = job.status === "failed";
       const claimed = await claimAdminJob(
         job,
-        historical ? { status: "running" } : {},
+        historical ? { status: "running", finishedAt: null } : {},
         !historical,
       );
       if (claimed) await this.launchJob(claimed, true, signal);

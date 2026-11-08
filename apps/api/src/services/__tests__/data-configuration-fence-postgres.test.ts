@@ -13,6 +13,7 @@ import {
   signMaintenanceRecoveryProof,
   verifyMaintenanceRecoveryProof,
 } from "@openmapx/core/ops";
+import { services } from "@openmapx/core/server";
 import {
   feedState,
   jobStages,
@@ -79,15 +80,23 @@ describe.skipIf(
   !process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL &&
     process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1",
 )("configuration fence real PostgreSQL and retained grants", () => {
-  it.each([false, true, "unlink"] as const)(
-    "discards the recovered original candidate before admitting a subsequent writer (already failed=%s)",
-    async (alreadyFailed) => {
+  it.each([
+    { producer: "immediate", alreadyFailed: false },
+    { producer: "immediate", alreadyFailed: true },
+    { producer: "immediate", alreadyFailed: "unlink" },
+    { producer: "guarded", alreadyFailed: true },
+    { producer: "guarded", alreadyFailed: "unlink" },
+  ] as const)(
+    "discards the recovered original candidate before admitting a subsequent writer ($producer, already failed=$alreadyFailed)",
+    async ({ producer, alreadyFailed }) => {
       const f = await ownedFenceFixture({
         productionRegistration: true,
         legacyRegistration: true,
-        immediateRecovery: true,
+        immediateRecovery: producer === "immediate",
+        guardedRecovery: producer === "guarded",
       });
-      let fault: ReturnType<typeof vi.spyOn> | undefined;
+      let fault: ReturnType<typeof vi.spyOn> | undefined,
+        faulted = false;
       try {
         const fence = createDataConfigurationMaintenance(f.sql, f.dm);
         await fence.startup();
@@ -144,11 +153,37 @@ describe.skipIf(
             ).toBe(true);
             await f.sql`UPDATE admin_job SET result=${JSON.stringify(historical!.result)}::jsonb WHERE id=${f.ctx.jobId}`;
           }
-        } else await jobRunner.cancel(f.ctx.jobId);
+          const agentUrl = process.env.OPS_AGENT_URL;
+          vi.stubEnv("OPS_AGENT_URL", "http://127.0.0.1:0");
+          vi.setSystemTime(f.owner.deadlineAt + 120001);
+          await jobRunner.reconcile({ limit: 32 });
+          const [reclaimed] =
+            await f.sql`SELECT status,finished_at FROM admin_job WHERE id=${f.ctx.jobId}`;
+          expect(reclaimed?.status).toBe("running");
+          expect(reclaimed?.finished_at).toBeNull();
+          vi.stubEnv("OPS_AGENT_URL", agentUrl);
+        } else {
+          if (alreadyFailed === "unlink") {
+            // Make the recovered-failure branch conclusive before checking
+            // that public cancellation accepts its pending local cleanup.
+            await vi.waitFor(
+              async () => {
+                expect(
+                  await cancelAdminJobOperations(f.ctx.checkpointResult, undefined, {
+                    context: f.ctx,
+                    jobId: f.ctx.jobId,
+                    pollIntervalMs: 1,
+                  }),
+                ).toBe("recovered_failure");
+              },
+              { timeout: 15000, interval: 100 },
+            );
+            expect(await jobRunner.cancel(f.ctx.jobId)).toBe(true);
+          } else await jobRunner.cancel(f.ctx.jobId);
+        }
         if (alreadyFailed === "unlink") {
           const promises = await import("node:fs/promises"),
             actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
-          let faulted = false;
           fault = vi.spyOn(promises, "unlink").mockImplementation(async (path) => {
             await actual.unlink(path);
             if (
@@ -160,9 +195,23 @@ describe.skipIf(
             }
           });
         }
-        vi.setSystemTime(f.owner.deadlineAt + 120001);
+        vi.setSystemTime(f.owner.deadlineAt + 240001);
         await jobRunner.reconcile({ limit: 32 });
         if (alreadyFailed === "unlink") {
+          // Cancellation/recovery is asynchronous. Reach the injected real
+          // unlink boundary before testing its lost response and later resume.
+          let observationTime = Date.now();
+          await vi.waitFor(
+            async () => {
+              if (!faulted) {
+                observationTime += 120000;
+                vi.setSystemTime(observationTime);
+                await jobRunner.reconcile({ limit: 32 });
+              }
+              expect(faulted).toBe(true);
+            },
+            { timeout: 15000, interval: 100 },
+          );
           expect(
             existsSync(join(f.host.queue, ".candidates", `${candidate.sealedOperationKey}.json`)),
           ).toBe(false);
@@ -174,8 +223,9 @@ describe.skipIf(
             ),
           ).toBe(true);
           const agentUrl = process.env.OPS_AGENT_URL;
+          const afterUnlink = Date.now();
           vi.stubEnv("OPS_AGENT_URL", "http://127.0.0.1:0");
-          vi.setSystemTime(f.owner.deadlineAt + 240001);
+          vi.setSystemTime(afterUnlink + 120000);
           await jobRunner.reconcile({ limit: 32 });
           const [unavailable] =
             await f.sql`SELECT status,result FROM admin_job WHERE id=${f.ctx.jobId}`;
@@ -184,7 +234,7 @@ describe.skipIf(
             "discarding_without_guard",
           );
           vi.stubEnv("OPS_AGENT_URL", agentUrl);
-          vi.setSystemTime(f.owner.deadlineAt + 360001);
+          vi.setSystemTime(afterUnlink + 240000);
           await jobRunner.reconcile({ limit: 32 });
         }
         const [finished] = await f.sql`SELECT status,result FROM admin_job WHERE id=${f.ctx.jobId}`;
@@ -995,12 +1045,18 @@ async function ownedFenceFixture(
     legacyRegistration?: boolean;
     loseRecoveryResponseOnce?: boolean;
     immediateRecovery?: boolean;
+    guardedRecovery?: boolean;
   } = {},
 ) {
-  const fixture = await createConfigurationPostgresFixture();
+  const fixture = await createConfigurationPostgresFixture({
+    withAccountAdministration: options.guardedRecovery,
+    withConfigurationMigration: options.guardedRecovery,
+  });
   apiState.fixture = fixture;
   const host = await ownedServiceHost({
     withCoordinator: true,
+    configurationReleaseMetadata: options.guardedRecovery,
+    configurationHelperVersion: options.guardedRecovery ? "1" : undefined,
     selectedRoots: options.productionRegistration
       ? ["app-api", "data-manager", "motis", "ops-agent"]
       : ["data-manager", "motis"],
@@ -1076,30 +1132,89 @@ async function ownedFenceFixture(
     "../../../../../apps/api/src/services/service-registry"
   );
   await initServiceRegistry({ strict: true });
+  let checkedRelease: { releaseId: string; manifestDigest: string } | undefined;
+  if (options.guardedRecovery) {
+    vi.stubEnv("OPENMAPX_RELEASE", "main");
+    const manifest = services.parseReleaseManifest(
+      JSON.stringify({
+        schemaVersion: 1,
+        release: "checked-recovered-release-01",
+        images: Object.fromEntries(
+          services.RELEASE_IMAGE_NAMES.map((image) => [
+            image,
+            `ghcr.io/openmapx/${image}@sha256:${"9".repeat(64)}`,
+          ]),
+        ),
+        privacyReleaseValidation: {
+          version: 1,
+          sourceBuildFingerprint: "f".repeat(64),
+          validatedAt: "2026-10-30T00:00:00.000Z",
+          checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
+        },
+      }),
+    );
+    const raw = services.canonicalReleaseManifest(manifest);
+    checkedRelease = {
+      releaseId: manifest.release,
+      manifestDigest: createHash("sha256").update(raw).digest("hex"),
+    };
+    mkdirSync(services.releaseStatePaths(host.infraDir).store, { recursive: true, mode: 0o700 });
+    writeFileSync(
+      join(services.releaseStatePaths(host.infraDir).store, `${manifest.release}.json`),
+      raw,
+      { mode: 0o600 },
+    );
+  }
   const jobId = randomUUID(),
+    actorId = options.guardedRecovery ? randomUUID() : jobId,
     execution = { owner: randomUUID(), version: 1 },
-    operationKey = `opk1_${jobId.replaceAll("-", "")}`,
-    payload = options.immediateRecovery ? { operationKey } : {},
+    operationKey = options.guardedRecovery
+      ? (await import("../ops-client")).createDurableOpsKey("admin-job.guarded-release", jobId)
+      : `opk1_${jobId.replaceAll("-", "")}`,
+    jobType = options.guardedRecovery ? "system.update" : "service.apply",
+    payload = checkedRelease
+      ? {
+          operation: "apply",
+          workflow: "guarded-release",
+          createBackup: false,
+          releaseId: checkedRelease.releaseId,
+          expectedDigest: checkedRelease.manifestDigest,
+        }
+      : options.immediateRecovery
+        ? { operationKey }
+        : {},
     initialResult = {
       _execution: execution,
       ...(options.immediateRecovery
         ? {
             _immediateJobId: jobId,
-            _immediateActorId: jobId,
+            _immediateActorId: actorId,
             _immediateIntentDigest: "a".repeat(64),
           }
         : {}),
     };
+  if (options.guardedRecovery) {
+    await fixture.db.insert(apiSchema.user).values({
+      id: actorId,
+      name: "Synthetic release administrator",
+      email: `${actorId}@example.test`,
+      role: "admin",
+    });
+    const { jobRunner } = await import("../job-runner"),
+      { handleSystemUpdateJob } = await import("../system-maintenance");
+    jobRunner.register("system.update", handleSystemUpdateJob);
+  }
   await fixture.db.insert(apiSchema.adminJob).values({
     id: jobId,
-    type: "service.apply",
+    type: jobType,
+    ...(options.guardedRecovery ? { createdBy: actorId } : {}),
     payload,
     status: "running",
     result: initialResult,
   });
   const ctx: JobContext = {
     jobId,
-    jobType: "service.apply",
+    jobType,
     execution,
     payload,
     signal: new AbortController().signal,
@@ -1156,36 +1271,38 @@ async function ownedFenceFixture(
       "../../../../../apps/api/src/services/administrative-configuration-writer"
     ),
     prospective = await import("../../../../../apps/api/src/services/prospective-configuration");
-  const preparation = writer.withAdministrativeConfigurationJob(ctx, () =>
-    writer.withAdministrativeConfigurationWriter(
-      { actorId: jobId, operationKey, integrationIds: [] },
-      async () => {
-        const candidate = await prospective.prepareProspectiveConfiguration({
-          actorId: jobId,
-          operationKey,
-          expectedCurrentRevisionId: host.initial.revisionId,
-          followUp: "service-apply",
-          overlay: {
-            purpose: "service-secret",
-            coordinatorMode: "ensure-running",
-            changes: [
-              {
-                kind: "service-secret",
-                serviceId: "data-manager",
-                key: "TOKEN",
-                action: "set",
-                value: "synthetic-guard-credential",
+  const preparation = options.guardedRecovery
+    ? (await import("../system-release-application")).runGuardedSystemRelease(ctx)
+    : writer.withAdministrativeConfigurationJob(ctx, () =>
+        writer.withAdministrativeConfigurationWriter(
+          { actorId: jobId, operationKey, integrationIds: [] },
+          async () => {
+            const candidate = await prospective.prepareProspectiveConfiguration({
+              actorId: jobId,
+              operationKey,
+              expectedCurrentRevisionId: host.initial.revisionId,
+              followUp: "service-apply",
+              overlay: {
+                purpose: "service-secret",
+                coordinatorMode: "ensure-running",
+                changes: [
+                  {
+                    kind: "service-secret",
+                    serviceId: "data-manager",
+                    key: "TOKEN",
+                    action: "set",
+                    value: "synthetic-guard-credential",
+                  },
+                ],
               },
-            ],
+            });
+            await prospective.stageProspectiveConfigurationMaintenance(candidate);
+            return (
+              await import("../../../../../apps/api/src/services/configuration-maintenance")
+            ).prepareConfigurationMaintenance(candidate);
           },
-        });
-        await prospective.stageProspectiveConfigurationMaintenance(candidate);
-        return (
-          await import("../../../../../apps/api/src/services/configuration-maintenance")
-        ).prepareConfigurationMaintenance(candidate);
-      },
-    ),
-  );
+        ),
+      );
   const pending = preparation.then(
     () => {
       throw Error("Preparation completed before receiver delivery");

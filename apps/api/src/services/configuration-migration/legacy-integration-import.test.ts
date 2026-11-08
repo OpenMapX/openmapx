@@ -15,7 +15,7 @@ import { setTimeout as nativeDelay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
 import { services } from "@openmapx/core/server";
-import Fastify from "fastify";
+import Fastify, { type onSendAsyncHookHandler } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
 import { openOpsJobJournal } from "../../../../ops-agent/src/journal";
@@ -55,6 +55,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     let driftRegistryAfterApply = false;
     let renderPosts = 0;
     let driftRowAfterPreview = false;
+    let varySdkResponseDate = false;
+    let sdkResponses = 0;
     const configSchema = {
       properties: {
         VALUE: { type: "string", default: "default" },
@@ -154,6 +156,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       }))
         vi.stubEnv(key, value);
       api = Fastify({ logger: false });
+      varySdkResponseDate = false;
+      sdkResponses = 0;
+      const varyResponseDate: onSendAsyncHookHandler = async (_request, reply, payload) => {
+        if (varySdkResponseDate)
+          reply.header("date", new Date(Date.UTC(2025, 0, 1, 0, 0, sdkResponses++)).toUTCString());
+        return payload;
+      };
+      api.addHook("onSend", varyResponseDate);
       const { initIntegrations } = await import("../../integration-host");
       await initIntegrations(api, [{ directory: integrationRoot, isBuiltIn: true }]);
       const { requireAdmin } = await import("../../utils/require-admin");
@@ -693,6 +703,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     it("returns only the declared import DTO through the generated SDK and actual loopback HTTP", async () => {
       const { createApiClient } = await import("@openmapx/core");
       const sdk = await import("@openmapx/core/api-admin-sdk");
+      // Idempotent application data does not freeze per-request HTTP metadata.
+      varySdkResponseDate = true;
       const baseUrl = await api.listen({ host: "127.0.0.1", port: 0 });
       const client = createApiClient({ baseUrl }),
         headers = { "idempotency-key": `ordinary-sdk-${randomUUID()}` };
@@ -722,7 +734,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         "reloaded",
         "skipped",
       ]);
-      expect(await sdk.importAdminIntegrationConfigs(body, headers, options)).toEqual(response);
+      const repeated = await sdk.importAdminIntegrationConfigs(body, headers, options);
+      expect(repeated.status).toBe(response.status);
+      expect(repeated.data).toEqual(response.data);
+      expect(repeated.headers.get("date")).not.toBe(response.headers.get("date"));
       const jobs = await fixture.db.select().from(schema.adminJob);
       expect(jobs).toHaveLength(1);
       expect(JSON.stringify(jobs)).not.toContain("stripped-before-retention");
