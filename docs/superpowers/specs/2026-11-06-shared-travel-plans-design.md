@@ -14,8 +14,9 @@ provider through the normal OpenMapX mapping path. An instance using Transitous
 uses Transitous data; a local MOTIS instance uses that instance's data and policy.
 
 There is no import detail screen, source banner, snapshot mode, schematic-route
-notice or special alternatives action. The existing native intake confirmation,
-progress/error feedback and ordinary directions controls are sufficient. Do not
+notice or special alternatives action. Recognized shared travel plans resolve and
+open automatically, without an intake confirmation. Existing error/retry feedback
+and ordinary directions controls are sufficient. File imports retain their review step. Do not
 render the DB text as trip detail data. No automatic navigation start.
 
 The user's Bahn-App example is a behavioral reference. Its internal implementation
@@ -88,11 +89,16 @@ hand-assembled itinerary. All acquisition uses the configured OpenMapX API clien
    reject substitutions, changed scheduled identity and missing trip IDs. Return
    only the complete normal provider result, or keep the share unopened.
 
-The 60-second overall deadline, cancellation, sequential bounded calls, fresh and
+The 60-second overall deadline, cancellation, bounded calls, fresh and
 complete exact evidence, and authority/lifetime fences remain. Search discovery
 may be partial; a matched itinerary and identity evidence must not be partial or
 stale. No cross-provider concatenation, invented walks, fares, refresh handles or
 geometry.
+
+Discover at most three independent stations concurrently so slow name/nearby
+lookups cannot consume the entire deadline before exact train verification.
+Cancel outstanding discovery when resolution fails. Verification of the ordered
+train sequence and its scheduled identity remains unchanged.
 
 ## MOTIS / Transitous reconstruction
 
@@ -129,7 +135,7 @@ Primary contract/source evidence:
 
 ## Normal directions publication
 
-Publish only after the existing Open confirmation, final native inbox/authority
+Publish automatically after recognition and resolution, final native inbox/authority
 check, current document/item checks and abort checks. No await between the final
 check and synchronous publication; acknowledge only afterward.
 
@@ -208,9 +214,13 @@ OpenAPI and inspect client-visible fields for response serialization losses.
 
 ## Minimal intake presentation
 
-Reuse the existing confirmation dialog, Open/Later/error controls and generic
-loading feedback. Later/dismissal can cancel resolution without adding a button. A recognized
-travel plan can use a generic shared-trip label. Do not add a DB train summary or
+Bypass the existing confirmation dialog and shared-items button while a recognized
+travel plan is opening automatically. Reuse Open/Later/error controls only for
+failures and deferred cases. Leaving the map or starting navigation cancels the
+lookup. Newly received items take priority over older pending reviews; older files
+remain available for manual review without being applied or consumed, including
+after foregrounding. A failed travel plan can use a
+generic shared-trip label. Do not add a DB train summary or
 render raw DB text as trip details. Existing unsupported/missing-text error feedback
 may explain that the full share is required. No new success surface or persistent
 source styling. Existing map/file sharing and native navigation authority remain.

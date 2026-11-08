@@ -240,6 +240,69 @@ it("settles the overall deadline even if an acquisition ignores its abort signal
   }
 });
 
+it("resolves an overnight trip within its deadline despite slow independent station lookups", async () => {
+  vi.useFakeTimers();
+  try {
+    const f = fixture(dbNavigatorExamples[3]);
+    const search = f.port.searchStops;
+    const plan = f.port.plan;
+    f.port.searchStops = vi.fn(async (...args: Parameters<TravelPlanPort["searchStops"]>) => {
+      await new Promise((resolve) => setTimeout(resolve, 18000));
+      return search(...args);
+    });
+    f.port.plan = vi.fn(async (...args: Parameters<TravelPlanPort["plan"]>) => {
+      await new Promise((resolve) => setTimeout(resolve, 8000));
+      return plan(...args);
+    });
+    let outcome: unknown;
+    const pending = resolveSharedTravelPlan(f.plan, f.port, new AbortController().signal).then(
+      (value) => {
+        outcome = value;
+      },
+      (error) => {
+        outcome = error;
+      },
+    );
+    await vi.advanceTimersByTimeAsync(65000);
+    await pending;
+    expect(outcome).toMatchObject({ plan: { data: { provider: "ms" } } });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("bounds concurrent station discovery to three requests", async () => {
+  vi.useFakeTimers();
+  try {
+    const f = fixture();
+    f.plan.legs = Array.from({ length: 8 }, (_, i) => ({
+      ...f.plan.legs[0],
+      from: `Station ${i}`,
+      to: `Station ${i + 1}`,
+      departure: `2026-11-07T${String(i * 2).padStart(2, "0")}:00`,
+      arrival: `2026-11-07T${String(i * 2 + 1).padStart(2, "0")}:00`,
+    }));
+    let active = 0;
+    let peak = 0;
+    f.port.searchStops = vi.fn(async (name: string) => {
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      active--;
+      return [{ ...f.stop("Aachen Hbf"), id: `ms:${name}`, name }];
+    });
+    const pending = resolveSharedTravelPlan(f.plan, f.port, new AbortController().signal).catch(
+      (e: unknown) => e,
+    );
+    await vi.advanceTimersByTimeAsync(100);
+    expect(await pending).toMatchObject({ code: "not-found" });
+    expect(f.port.searchStops).toHaveBeenCalledTimes(9);
+    expect(peak).toBeLessThanOrEqual(3);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it("queries a parent station once even when discovery returns more than four platform children", async () => {
   const f = fixture();
   f.port.searchStops = vi.fn(async (name) => [

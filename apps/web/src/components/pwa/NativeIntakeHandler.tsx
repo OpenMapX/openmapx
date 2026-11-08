@@ -36,7 +36,7 @@ import { useMobileRuntimeContext } from "@/lib/mobile/MobileRuntimeProvider";
 import { applyNativeDeepLink } from "@/lib/mobile/nativeDeepLink";
 import { IntakeTransferError, NativeIntakeClient } from "@/lib/mobile/nativeIntake";
 
-/** User confirmation is the only path from owned inbox bytes to map state. */
+/** Travel plans open directly; files and other shared content retain their review step. */
 export function NativeIntakeHandler() {
   const t = useTranslations("pwa.intake");
   const queryClient = useQueryClient();
@@ -74,6 +74,10 @@ export function NativeIntakeHandler() {
     [error, setError] = useState("");
   const [draft, setDraft] = useState(""),
     [scheme, setScheme] = useState("openmapx");
+  const [readyItemId, setReadyItemId] = useState("");
+  const automaticAttempts = useRef(new Set<string>());
+  const observedItems = useRef(new Set<string>());
+  const manualOnly = useRef(new Set<string>());
   const [geometry, setGeometry] = useState<GeoJSON.FeatureCollection | null>(null);
   const textIntent = useMemo(
     () =>
@@ -91,14 +95,18 @@ export function NativeIntakeHandler() {
     [],
   );
   useEffect(() => {
-    if (nativeSessionId !== null || !["idle", "planning", "preview"].includes(navStatus))
+    if (
+      pathname !== "/" ||
+      nativeSessionId !== null ||
+      !["idle", "planning", "preview"].includes(navStatus)
+    )
       applyAbort.current?.abort();
-  }, [navStatus, nativeSessionId]);
-  function cancelApply() {
+  }, [navStatus, nativeSessionId, pathname]);
+  const cancelApply = useCallback(() => {
     applyAbort.current?.abort();
     applyAbort.current = null;
     setBusy(false);
-  }
+  }, []);
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
   const later = useRef(new Set<string>()),
@@ -120,13 +128,30 @@ export function NativeIntakeHandler() {
       setItems(result.items);
       setScheme(result.scheme);
       setBlocked(!result.canApply);
+      const pending = result.items.filter((item) => !later.current.has(item.id));
+      const received = pending.filter((item) => !observedItems.current.has(item.id));
+      observedItems.current = new Set(result.items.map((item) => item.id));
+      for (const id of automaticAttempts.current)
+        if (!observedItems.current.has(id)) automaticAttempts.current.delete(id);
+      for (const id of manualOnly.current)
+        if (!observedItems.current.has(id)) manualOnly.current.delete(id);
+      const newest = received.reduce<IntakeItem | undefined>(
+        (latest, item) => (!latest || item.createdAtMs > latest.createdAtMs ? item : latest),
+        undefined,
+      );
+      if (newest) {
+        manualOnly.current.delete(newest.id);
+        for (const item of pending) if (item.id !== newest.id) manualOnly.current.add(item.id);
+      }
+      const next = newest ?? pending.find((item) => !manualOnly.current.has(item.id));
       if (
         result.canApply &&
         !localBlocked() &&
-        result.items.some((item) => !later.current.has(item.id)) &&
-        !visibleRef.current
+        next &&
+        (!visibleRef.current || (received.length > 0 && next.id !== selectedItemRef.current?.id))
       ) {
-        setSelected(result.items.find((item) => !later.current.has(item.id))?.id ?? "");
+        if (next.id !== selectedItemRef.current?.id) cancelApply();
+        setSelected(next.id);
         setVisible(true);
       }
     } catch (error) {
@@ -141,7 +166,7 @@ export function NativeIntakeHandler() {
       );
       // Owned items and edited drafts survive a failed authority check.
     }
-  }, [client, localBlocked]);
+  }, [client, localBlocked, cancelApply]);
   useEffect(() => {
     if (pathname !== "/") setVisible(false);
     generation.current++;
@@ -158,6 +183,7 @@ export function NativeIntakeHandler() {
     document.addEventListener("visibilitychange", foreground);
     return () => {
       generation.current++;
+      applyAbort.current?.abort();
       stop?.();
       document.removeEventListener("visibilitychange", foreground);
     };
@@ -176,6 +202,7 @@ export function NativeIntakeHandler() {
     )
       return;
     const abort = new AbortController();
+    setReadyItemId("");
     setDraft("");
     setGeometry(null);
     setError("");
@@ -200,7 +227,10 @@ export function NativeIntakeHandler() {
           setError(error instanceof IntakeTransferError ? error.code : "unreadable");
       })
       .finally(() => {
-        if (!abort.signal.aborted) setLoading(false);
+        if (!abort.signal.aborted) {
+          setReadyItemId(selectedItem.id);
+          setLoading(false);
+        }
       });
     return () => abort.abort();
   }, [visible, selectedId, selectedKind, client]);
@@ -227,7 +257,7 @@ export function NativeIntakeHandler() {
       setBusy(false);
     }
   }
-  async function apply() {
+  const apply = useCallback(async () => {
     if (!client || !selectedItem || busy) return;
     const abort = new AbortController();
     applyAbort.current = abort;
@@ -247,6 +277,7 @@ export function NativeIntakeHandler() {
         return;
       }
       if (!current.canApply || localBlocked()) {
+        automaticAttempts.current.delete(itemId);
         setBlocked(true);
         return;
       }
@@ -288,6 +319,7 @@ export function NativeIntakeHandler() {
           return;
         }
         if (!current.canApply || localBlocked()) {
+          automaticAttempts.current.delete(itemId);
           setBlocked(true);
           return;
         }
@@ -332,7 +364,9 @@ export function NativeIntakeHandler() {
             ? "trip-ambiguous"
             : error.code === "invalid"
               ? "trip-invalid"
-              : "trip-unavailable",
+              : error.code === "not-found"
+                ? "trip-unavailable"
+                : "unavailable",
         );
       else if (error instanceof IntakeTransferError && error.code === "navigation-active")
         setBlocked(true);
@@ -341,12 +375,42 @@ export function NativeIntakeHandler() {
         setListingUnavailable(error.code);
       } else setError(error instanceof IntakeTransferError ? error.code : "unavailable");
     } finally {
+      if (abort.signal.aborted) automaticAttempts.current.delete(itemId);
       if (applyAbort.current === abort) {
         applyAbort.current = null;
         setBusy(false);
       }
     }
-  }
+  }, [client, selectedItem, busy, localBlocked, textIntent, queryClient, geometry, refresh]);
+  useEffect(() => {
+    if (
+      !visible ||
+      !selectedId ||
+      readyItemId !== selectedId ||
+      selectedKind !== "text" ||
+      textIntent.kind !== "travel-plan" ||
+      busy ||
+      error ||
+      blocked ||
+      localBlocked() ||
+      manualOnly.current.has(selectedId) ||
+      automaticAttempts.current.has(selectedId)
+    )
+      return;
+    automaticAttempts.current.add(selectedId);
+    void apply();
+  }, [
+    visible,
+    selectedId,
+    selectedKind,
+    readyItemId,
+    textIntent,
+    busy,
+    error,
+    blocked,
+    localBlocked,
+    apply,
+  ]);
   if (!client) return null;
   if (listingUnavailable)
     return (
@@ -375,30 +439,40 @@ export function NativeIntakeHandler() {
   const invalidText =
     selectedItem?.kind === "text" && textIntent.kind !== "map" && textIntent.kind !== "travel-plan";
   const code = selectedItem?.kind === "error" ? selectedItem.errorCode : error;
+  const openingDirectly =
+    visible &&
+    selectedKind === "text" &&
+    !manualOnly.current.has(selectedId ?? "") &&
+    (busy || !automaticAttempts.current.has(selectedId ?? "")) &&
+    !waiting &&
+    !code &&
+    (readyItemId !== selectedId || textIntent.kind === "travel-plan");
   return (
     <>
-      <Button
-        variant="contained"
-        onClick={() => {
-          if (pathRef.current !== "/") {
-            router.push("/");
-            return;
-          }
-          setVisible(true);
-          void refresh();
-        }}
-        sx={{
-          position: "fixed",
-          left: "50%",
-          transform: "translateX(-50%)",
-          top: "calc(128px + var(--omx-safe-top, 0px))",
-          zIndex: 1100,
-        }}
-      >
-        {t("pending", { count: items.length })}
-      </Button>
+      {!openingDirectly && (
+        <Button
+          variant="contained"
+          onClick={() => {
+            if (pathRef.current !== "/") {
+              router.push("/");
+              return;
+            }
+            setVisible(true);
+            void refresh();
+          }}
+          sx={{
+            position: "fixed",
+            left: "50%",
+            transform: "translateX(-50%)",
+            top: "calc(128px + var(--omx-safe-top, 0px))",
+            zIndex: 1100,
+          }}
+        >
+          {t("pending", { count: items.length })}
+        </Button>
+      )}
       <Dialog
-        open={visible}
+        open={visible && !openingDirectly}
         onClose={busy && textIntent.kind !== "travel-plan" ? undefined : postpone}
         fullWidth
         maxWidth="sm"

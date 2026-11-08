@@ -35,7 +35,7 @@ and a source-neutral provider reconstruction fallback.
 - [x] Seed the complete provider envelope under its truthful query key and atomically publish matching route inputs/selection. Preserve wheelchair/mandatory requirements and persisted hill preference.
 - [x] Open ordinary details after matching-key publication and ranking. Keep existing normal refetch behavior; reference refetch re-resolves the same trip, without paging.
 - [x] Test mounted-panel/debounce/stale-query/capability and geolocation races.
-- [x] Keep the existing confirmation/authority/acknowledgement contract and generic errors.
+- [x] Open recognized travel plans automatically; preserve authority/acknowledgement checks, file confirmation and generic error/retry feedback.
 
 ## 4. Verify and review
 
