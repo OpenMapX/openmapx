@@ -859,6 +859,62 @@ async function verifiedOriginalMaintenanceRecovery(
   }
 }
 
+/** Routing only: a completed negative recovery does not itself discard the
+ * API's sealed candidate. Only the fixed original producer may authenticate
+ * that packet and finish its NoGuard cleanup under a replacement owner. */
+export async function hasRecoveredMaintenanceCandidate(
+  result: unknown,
+  jobId: string,
+): Promise<boolean> {
+  try {
+    const saved = result as Record<string, unknown> | null,
+      candidate = saved?._configurationCandidate as Record<string, unknown> | undefined;
+    if (
+      !candidate ||
+      !["prepared", "discarding_without_guard", "discarded"].includes(String(candidate.phase)) ||
+      candidate.rowVersions !== undefined ||
+      typeof saved?._cancelRequestedAt !== "string" ||
+      !Number.isFinite(Date.parse(saved._cancelRequestedAt)) ||
+      saved._configurationMaintenanceDecision !== undefined ||
+      saved._configurationMaintenanceSettle !== undefined
+    )
+      return false;
+    const operation = readProjection(saved).operations[String(candidate.prepareOperationKey)],
+      delivery = operation?.receiptDelivery,
+      terminal = delivery?.terminalReceipt,
+      body = operation?.operation;
+    if (
+      !operation?.terminal ||
+      operation.attempt?.apiJobId !== jobId ||
+      operation.phase !== "terminal" ||
+      delivery?.state !== "confirmed" ||
+      !terminal ||
+      terminal.errorClass !== "recovery_required" ||
+      !["failed", "timed_out"].includes(terminal.state) ||
+      body?.kind !== "configurationMaintenance.prepare" ||
+      body.candidateId !== candidate.candidateId ||
+      body.maintenanceId !== candidate.maintenanceId ||
+      body.revisionId !== candidate.revisionId ||
+      body.applyOperationKey !== candidate.sealedOperationKey ||
+      delivery.terminalDigest !== controlTerminalReceiptDigest(terminal)
+    )
+      return false;
+    return verifiedOriginalMaintenanceRecovery(
+      {
+        ...terminal,
+        diagnostics: {
+          tail: [],
+          truncated: false,
+          maintenanceRecovery: delivery.maintenanceRecovery,
+        },
+      },
+      operation,
+    );
+  } catch {
+    return false;
+  }
+}
+
 export async function cancelAdminJobOperations(
   result: unknown,
   client: Pick<ApiOpsClient, "cancel" | "status" | "lookup"> = createApiOpsClient(),

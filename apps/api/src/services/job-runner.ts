@@ -18,7 +18,11 @@ import {
   JobObservationPending,
   publicAdminJobResult,
 } from "./admin-job-failure";
-import { cancelAdminJobOperations, resumeAdminJobObservation } from "./admin-job-ops";
+import {
+  cancelAdminJobOperations,
+  hasRecoveredMaintenanceCandidate,
+  resumeAdminJobObservation,
+} from "./admin-job-ops";
 import { readProjection } from "./admin-job-projection";
 import {
   adminJobObservationDue,
@@ -237,6 +241,33 @@ function hasRetainedQueuedCoordinator(job: {
         : -1;
   return (
     ordinal !== -1 && candidate.operationKey === coordinatorLifecycleOperationKey(job.id, ordinal)
+  );
+}
+
+function canResumeConfigurationCandidate(job: {
+  id: string;
+  type: string;
+  payload: unknown;
+  result: unknown;
+}) {
+  return (
+    hasRetainedImmediateConfiguration(job) ||
+    hasRetainedQueuedCoordinator(job) ||
+    retainedMaintenanceJob(job)
+  );
+}
+
+async function needsRecoveredCandidateCleanup(job: {
+  id: string;
+  type: string;
+  payload: unknown;
+  result: unknown;
+}) {
+  return (
+    canResumeConfigurationCandidate(job) &&
+    (job.result as { _configurationCandidate?: { phase?: string } } | null)?._configurationCandidate
+      ?.phase !== "discarded" &&
+    (await hasRecoveredMaintenanceCandidate(job.result, job.id))
   );
 }
 export class RetainedJobConflict extends Error {}
@@ -990,6 +1021,27 @@ class AdminJobRunner {
       /* Retain intent. */
     }
     if (outcome !== "canceled" && outcome !== "recovered_failure") return false;
+    if (outcome === "recovered_failure") {
+      const [current] = await db
+        .select()
+        .from(adminJob)
+        .where(jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]));
+      if (current && (await needsRecoveredCandidateCleanup(current))) {
+        // Keep the original cancel marker. It prevents forward admission while
+        // the existing fixed producer observes closure and discards its packet.
+        const accepted = await db
+          .update(adminJob)
+          .set({
+            status: "running",
+            result: sql`coalesce(${adminJob.result}, '{}'::jsonb) || jsonb_build_object('observation', jsonb_build_object('state','unknown','reason','recovery_required','nextCheckAt',${new Date().toISOString()}::text),'_observationLeaseUntil',null)`,
+          })
+          .where(jobOwnership(jobId, readJobExecution(job.result), ["cancel_pending"]))
+          .returning({ id: adminJob.id });
+        // Acknowledge the retained cancellation request, not a terminal
+        // canceled outcome. The original failed canonical remains unchanged.
+        return accepted.length > 0;
+      }
+    }
     const status = outcome === "recovered_failure" ? "failed" : "canceled";
     const finishedAt = new Date();
     const rows = await db
@@ -1580,7 +1632,18 @@ class AdminJobRunner {
             // or canceled publication. The cancel marker still blocks forward
             // admission; neither an empty projection nor this status grants it.
           }
-          if (outcome === "canceled" || outcome === "recovered_failure") {
+          if (
+            (outcome === "canceled" || outcome === "recovered_failure") &&
+            !(
+              outcome === "recovered_failure" &&
+              (await needsRecoveredCandidateCleanup({
+                id: jobId,
+                type,
+                payload,
+                result: ctx.checkpointResult,
+              }))
+            )
+          ) {
             const status = outcome === "recovered_failure" ? "failed" : "canceled";
             const finishedAt = new Date();
             const rows = await db
@@ -1611,7 +1674,8 @@ class AdminJobRunner {
               });
             return;
           }
-          // Containment was not performed. Observe the original outcome under this claim.
+          // Observe the original outcome, including recovered ownership whose
+          // verified local candidate cleanup has not finished yet.
           const rows = await db
             .update(adminJob)
             .set({ status: "running" })
@@ -1675,10 +1739,36 @@ class AdminJobRunner {
       )
       .orderBy(asc(adminJob.createdAt))
       .limit(limit);
+    if (due.length < limit) {
+      // Prior releases published FAILED immediately after negative recovery,
+      // before discarding the inert candidate. Select only those historical
+      // packets for verification; neither this query nor a flag grants cleanup.
+      const historical = await db
+        .select()
+        .from(adminJob)
+        .where(
+          and(
+            eq(adminJob.status, "failed"),
+            inArray(adminJob.type, [...AGENT_RECOVERABLE_ADMIN_JOB_TYPES]),
+            sql`${adminJob.result}->'_configurationCandidate'->>'phase' IN ('prepared','discarding_without_guard')`,
+            sql`${adminJob.result}->>'_cancelRequestedAt' IS NOT NULL`,
+            noPendingReceiptDelivery(),
+            noUnsettledManagedOperation(),
+          ),
+        )
+        .orderBy(asc(adminJob.createdAt))
+        .limit(limit - due.length);
+      for (const job of historical) if (await needsRecoveredCandidateCleanup(job)) due.push(job);
+    }
     for (const job of due) {
       if (signal?.aborted) break;
       if (this.active.has(job.id)) continue;
-      const claimed = await claimAdminJob(job, {}, true);
+      const historical = job.status === "failed";
+      const claimed = await claimAdminJob(
+        job,
+        historical ? { status: "running", finishedAt: null } : {},
+        !historical,
+      );
       if (claimed) await this.launchJob(claimed, true, signal);
     }
   }
