@@ -9,9 +9,9 @@ const turbo = resolve(
   dirname(createRequire(import.meta.url).resolve("turbo/package.json")),
   "bin/turbo",
 );
-function graph(id: string) {
+function graph(id: string, tasks: string[] = ["build", "build:deploy"]) {
   const result = JSON.parse(
-    execFileSync(process.execPath, [turbo, "run", "build", "build:deploy", "--dry=json"], {
+    execFileSync(process.execPath, [turbo, "run", ...tasks, "--dry=json"], {
       cwd: root,
       env: { ...process.env, SW_BUILD_ID: id, TURBO_TELEMETRY_DISABLED: "1" },
       encoding: "utf8",
@@ -47,5 +47,22 @@ describe("service-worker identity cache isolation", () => {
     );
     expect(others.length).toBeGreaterThan(0);
     for (const key of others) expect(first.get(key), key).toBe(second.get(key));
+  });
+});
+
+describe("web type-check cache inputs", () => {
+  it("invalidates the web type check for integration sources it compiles from outside the workspace", () => {
+    const probe = resolve(root, "integrations/ci-cache-input-probe.tsx");
+    const hash = () =>
+      graph("same-deployment", ["check-types", "--filter=web"]).get("web#check-types");
+    try {
+      writeFileSync(probe, "export const value = 1;\n");
+      const first = hash();
+      writeFileSync(probe, "export const value = 2;\n");
+      expect(first).toBeTruthy();
+      expect(hash()).not.toBe(first);
+    } finally {
+      rmSync(probe, { force: true });
+    }
   });
 });
