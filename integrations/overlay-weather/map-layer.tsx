@@ -224,9 +224,12 @@ export function WeatherLayer() {
     allFrames,
     radarFrameIndex,
     radarPlaying,
+    env.apiUrl,
+    resolve,
   ]);
 
   // Manage OWM tile layer
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `resolve` only supplies attribution for the source. A new resolver must not tear down and re-add the tile source, so attribution is captured when the source is installed.
   useEffect(() => {
     void styleVersion;
     const map = currentMap;

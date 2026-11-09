@@ -285,7 +285,7 @@ export function WinterSportsLayer() {
             tileSize: 256,
             maxzoom: 16,
           },
-          rasterCredits,
+          resolve({ sourceIds: ["opensnowmap"] }),
         );
       }
 
@@ -433,7 +433,7 @@ export function WinterSportsLayer() {
     };
 
     return subscribeStyleLoaded(map, syncLayers);
-  }, [mapReady, styleVersion, mapRef, layerVisible, fetchFeatures, resolve]);
+  }, [mapReady, styleVersion, mapRef, layerVisible, fetchFeatures, resolve, env.apiUrl]);
 
   // Refetch on move
   const debouncedFetch = useDebouncedCallback(() => fetchFeatures(), 800);
