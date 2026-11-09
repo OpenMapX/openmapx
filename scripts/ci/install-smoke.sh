@@ -25,7 +25,7 @@ infra="infra/docker"
 env_file="$infra/.env"
 project="docker"
 timeout_seconds="${INSTALL_SMOKE_TIMEOUT_SECONDS:-600}"
-work="$(mktemp -d)"
+work=""
 blocker="openmapx-install-smoke-port-80-$$"
 current_step="starting"
 
@@ -107,13 +107,9 @@ on_exit() {
     print_diagnostics
   fi
   reset_project
-  rm -rf "$work"
+  [[ -z "$work" ]] || rm -rf "$work"
   exit "$status"
 }
-trap on_exit EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
-
 openmapx() {
   pnpm --silent openmapx "$@"
 }
@@ -163,12 +159,14 @@ set_env() {
   mv "$tmp" "$env_file"
 }
 
-random_secret() {
+# Writes a fresh random secret to KEY. A hosted run masks the value first, in
+# the caller: the mask command must reach the runner's log, and a command
+# substitution would swallow it and put it in the value.
+set_env_secret() {
   local secret
   secret="$(openssl rand -hex 32)"
-  # A hosted run masks the value in case something prints it by accident.
   [[ -z "${GITHUB_ACTIONS:-}" ]] || echo "::add-mask::$secret"
-  printf '%s' "$secret"
+  set_env "$1" "$secret"
 }
 
 docker_socket_gid() {
@@ -208,11 +206,11 @@ configure_environment() {
   chmod 600 "$env_file"
   set_env DOMAIN localhost
   set_env ACME_EMAIL install-smoke@openmapx.org
-  set_env POSTGRES_PASSWORD "$(random_secret)"
-  set_env BETTER_AUTH_SECRET "$(random_secret)"
-  set_env OPENMAPX_SECRETS_KEY "$(random_secret)"
-  set_env DATA_MANAGER_AUTH_TOKEN "$(random_secret)"
-  set_env OPENMAPX_LOCAL_ADMIN_TOKEN "$(random_secret)"
+  set_env_secret POSTGRES_PASSWORD
+  set_env_secret BETTER_AUTH_SECRET
+  set_env_secret OPENMAPX_SECRETS_KEY
+  set_env_secret DATA_MANAGER_AUTH_TOKEN
+  set_env_secret OPENMAPX_LOCAL_ADMIN_TOKEN
   set_env OPENMAPX_HOST_DIR "$root"
   set_env DOCKER_GID "$(docker_socket_gid)"
   set_env TRANSITOUS_COUNTRIES de
@@ -331,19 +329,35 @@ case_retry_after_failed_start() {
   assert_check_clean
 }
 
-step "Check preconditions"
-[[ ! -e "$env_file" ]] || fail "$env_file already exists; this check only runs on a fresh checkout"
-[[ -z "$(project_containers)" ]] || fail "the compose project '$project' already has containers"
-[[ -z "$(docker volume ls --quiet --filter "label=com.docker.compose.project=$project")" ]] ||
-  fail "the compose project '$project' already has volumes; the check would delete them"
-for tool in docker node openssl pnpm curl awk; do
-  command -v "$tool" >/dev/null || fail "$tool is required"
-done
+# Nothing is cleaned up until the preconditions pass: they exist to keep this
+# script away from a deployment it did not create, so a refusal must not run
+# the cleanup that deletes one.
+main() {
+  step "Check preconditions"
+  local tool
+  for tool in docker node openssl pnpm curl awk; do
+    command -v "$tool" >/dev/null || fail "$tool is required"
+  done
+  [[ ! -e "$env_file" ]] || fail "$env_file already exists; this check only runs on a fresh checkout"
+  [[ -z "$(project_containers)" ]] || fail "the compose project '$project' already has containers"
+  [[ -z "$(docker volume ls --quiet --filter "label=com.docker.compose.project=$project")" ]] ||
+    fail "the compose project '$project' already has volumes; the check would delete them"
 
-build_images
-pull_third_party_images
-case_install
-case_retry_after_failed_start
+  work="$(mktemp -d)"
+  trap on_exit EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
 
-step "Done"
-echo "Install smoke check passed"
+  build_images
+  pull_third_party_images
+  case_install
+  case_retry_after_failed_start
+
+  step "Done"
+  echo "Install smoke check passed"
+}
+
+# Sourcing the file defines the functions without running anything.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

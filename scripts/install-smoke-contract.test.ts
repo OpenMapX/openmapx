@@ -1,6 +1,17 @@
-import { readFileSync, statSync } from "node:fs";
-import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
 const root = resolve(import.meta.dirname, "..");
@@ -124,16 +135,157 @@ describe("install smoke script", () => {
       "DATA_MANAGER_AUTH_TOKEN",
       "OPENMAPX_LOCAL_ADMIN_TOKEN",
     ])
-      expect(script).toContain(`set_env ${key} "$(random_secret)"`);
+      expect(script).toContain(`set_env_secret ${key}\n`);
     expect(script).toContain("openssl rand -hex 32");
     expect(script).not.toMatch(
       /\bcat\b[^\n]*\.env|docker inspect[^\n]*\.Config\.Env|docker compose[^\n]* config\b/,
     );
   });
+});
 
-  it("refuses to run beside an existing deployment", () => {
-    expect(script).toContain("already exists; this check only runs on a fresh checkout");
-    expect(script).toContain("already has containers");
-    expect(script).toContain("already has volumes");
+describe("install smoke script behaviour", () => {
+  const scratch: string[] = [];
+  afterEach(() => {
+    for (const dir of scratch.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
+  function tree(): string {
+    const dir = mkdtempSync(join(tmpdir(), "install-smoke-test-"));
+    scratch.push(dir);
+    mkdirSync(join(dir, "scripts/ci"), { recursive: true });
+    mkdirSync(join(dir, "infra/docker"), { recursive: true });
+    copyFileSync(
+      resolve(root, "scripts/ci/install-smoke.sh"),
+      join(dir, "scripts/ci/install-smoke.sh"),
+    );
+    copyFileSync(
+      resolve(root, "infra/docker/.env.example"),
+      join(dir, "infra/docker/.env.example"),
+    );
+    return dir;
+  }
+
+  /** Stubs for the tools the script needs; docker records every call and answers as configured. */
+  function stubs(dir: string, answers: { containers?: string; volumes?: string }): string {
+    const bin = join(dir, "bin");
+    mkdirSync(bin);
+    const log = join(dir, "docker-calls.log");
+    writeFileSync(
+      join(bin, "docker"),
+      `#!/bin/sh
+echo "$*" >> "${log}"
+case "$1 $2" in
+  "ps --all") printf '%s' "${answers.containers ?? ""}" ;;
+  "volume ls") printf '%s' "${answers.volumes ?? ""}" ;;
+esac
+exit 0
+`,
+      { mode: 0o755 },
+    );
+    for (const tool of ["node", "openssl", "pnpm", "curl", "awk"])
+      writeFileSync(join(bin, tool), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    return bin;
+  }
+
+  function runScript(dir: string, bin: string) {
+    return spawnSync("bash", [join(dir, "scripts/ci/install-smoke.sh")], {
+      cwd: dir,
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, INSTALL_SMOKE_SKIP_BUILD: "1" },
+    });
+  }
+
+  const dockerCalls = (dir: string) =>
+    existsSync(join(dir, "docker-calls.log"))
+      ? readFileSync(join(dir, "docker-calls.log"), "utf8").trim().split("\n")
+      : [];
+
+  it("refuses beside an existing .env and removes nothing", () => {
+    const dir = tree();
+    const bin = stubs(dir, {});
+    writeFileSync(join(dir, "infra/docker/.env"), "POSTGRES_PASSWORD=keep-me\n");
+    mkdirSync(join(dir, "infra/docker/data"));
+    writeFileSync(join(dir, "infra/docker/data/file"), "data");
+
+    const result = runScript(dir, bin);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("already exists; this check only runs on a fresh checkout");
+    expect(readFileSync(join(dir, "infra/docker/.env"), "utf8")).toBe(
+      "POSTGRES_PASSWORD=keep-me\n",
+    );
+    expect(existsSync(join(dir, "infra/docker/data/file"))).toBe(true);
+    expect(dockerCalls(dir).filter((call) => /^(rm|network rm|volume rm)\b/.test(call))).toEqual(
+      [],
+    );
+  });
+
+  it.each([
+    ["containers", { containers: "abc123" }, "already has containers"],
+    ["volumes", { volumes: "docker_openmapx-pgdata" }, "already has volumes"],
+  ])("refuses when the project already has %s and removes nothing", (_name, answers, message) => {
+    const dir = tree();
+    const bin = stubs(dir, answers);
+    mkdirSync(join(dir, "infra/docker/state"));
+    writeFileSync(join(dir, "infra/docker/state/record"), "state");
+
+    const result = runScript(dir, bin);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(message);
+    expect(existsSync(join(dir, "infra/docker/state/record"))).toBe(true);
+    expect(dockerCalls(dir).filter((call) => /^(rm|network rm|volume rm)\b/.test(call))).toEqual(
+      [],
+    );
+    expect(result.stderr).not.toContain("container states");
+  });
+
+  /** Runs set_env_secret from the sourced script against a copy of the env template. */
+  function writeSecret(githubActions: boolean) {
+    const dir = tree();
+    const envFile = join(dir, "infra/docker/.env");
+    copyFileSync(join(dir, "infra/docker/.env.example"), envFile);
+    const result = spawnSync(
+      "bash",
+      [
+        "-c",
+        'source "$1"; env_file="$2"; set_env_secret POSTGRES_PASSWORD',
+        "bash",
+        join(dir, "scripts/ci/install-smoke.sh"),
+        envFile,
+      ],
+      {
+        cwd: dir,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          GITHUB_ACTIONS: githubActions ? "1" : "",
+        },
+      },
+    );
+    return {
+      result,
+      env: readFileSync(envFile, "utf8"),
+      template: readFileSync(join(dir, "infra/docker/.env.example"), "utf8"),
+    };
+  }
+
+  it("writes a clean 64-hex secret and masks it on stdout under GitHub Actions", () => {
+    const { result, env, template } = writeSecret(true);
+
+    expect(result.status, result.stderr).toBe(0);
+    const value = env.match(/^POSTGRES_PASSWORD=(.*)$/m)?.[1];
+    expect(value).toMatch(/^[0-9a-f]{64}$/);
+    expect(env).not.toContain("add-mask");
+    expect(env.split("\n").length).toBe(template.split("\n").length);
+    expect(result.stdout.trim()).toBe(`::add-mask::${value}`);
+  });
+
+  it("prints no mask command outside GitHub Actions", () => {
+    const { result, env } = writeSecret(false);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(env.match(/^POSTGRES_PASSWORD=(.*)$/m)?.[1]).toMatch(/^[0-9a-f]{64}$/);
+    expect(result.stdout).toBe("");
   });
 });
