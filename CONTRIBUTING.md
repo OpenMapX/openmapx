@@ -96,6 +96,29 @@ run it without other full suites running; the command prints a warning.
 Database, mobile, production builds and native-device checks remain separate;
 choose those when the changed behavior requires them.
 
+### Running the full test suite on a Mac
+
+Control-plane and filesystem-heavy tests (durable writes, fsync, lock files) are
+much slower on macOS than on Linux and can time out there, especially when many
+test files run in parallel. Such a timeout is not evidence of a defect. For a
+reliable full-suite result on a Mac, run the tests in a Linux container that
+matches CI. Use the Node version from `.nvmrc`, a non-root user and a copy of
+the repository, and install `node_modules` inside the container; never reuse
+the Mac's `node_modules`, which holds macOS native binaries.
+
+```bash
+docker run --rm --user node -v "$PWD":/src:ro "node:$(cat .nvmrc)-bookworm" bash -c '
+  set -e
+  umask 022
+  mkdir ~/repo ~/bin && cd ~/repo
+  tar -C /src --exclude=node_modules --exclude=.git --exclude=.turbo -cf - . | tar -xf -
+  corepack enable --install-directory ~/bin
+  export PATH=~/bin:$PATH
+  pnpm install --frozen-lockfile
+  npx vitest run --project node   # or a focused path, e.g. cd packages/core && npx vitest run src/build-artifacts
+'
+```
+
 Git hooks keep everyday commits and pushes inexpensive:
 
 - **pre-commit** checks staged code with Biome and staged Markdown/YAML with
