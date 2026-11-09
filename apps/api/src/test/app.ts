@@ -15,7 +15,7 @@ export interface BuildTestAppOptions {
  *
  * Route tests historically hand-built a bare `Fastify()` with no error handler,
  * so a thrown `httpError(401, …)` surfaced as a 500 instead of the real status.
- * This installs the exact `uniformErrorHandler` that `server.ts` uses — a
+ * This installs the exact `uniformErrorHandler` that `app.ts` uses — a
  * thrown error with `statusCode` becomes `status + { error: message }`, and 5xx
  * is masked to "Internal Server Error" — so tests exercise the controlled error
  * path that production auth guards and handlers rely on.

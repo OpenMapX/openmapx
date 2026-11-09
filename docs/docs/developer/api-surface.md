@@ -52,7 +52,7 @@ through `@fastify/swagger`. Nothing listens on a port; the database and cache
 clients are lazy and never connect.
 
 **If you add a core route, register it through `registerCoreRoutes`.** A route
-declared directly on the server instance in `server.ts` would be served but
+declared directly on the server instance in `app.ts` would be served but
 absent from the document. This is why `/health`, `/api/id-schemes` and
 `/api/transit/registry` live in `routes/meta.ts` rather than inline.
 

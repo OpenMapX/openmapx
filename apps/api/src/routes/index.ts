@@ -72,7 +72,7 @@ export interface CoreRouteOptions {
 /**
  * Registers every route the API serves that is not contributed by an
  * integration. This is the single source of truth for the core HTTP surface:
- * `server.ts` mounts it on the real server, and the OpenAPI generator mounts it
+ * `app.ts` mounts it on the real server, and the OpenAPI generator mounts it
  * on a bare Fastify instance with no database, cache, or integration host.
  *
  * Registering a core route anywhere else makes it invisible to the generated

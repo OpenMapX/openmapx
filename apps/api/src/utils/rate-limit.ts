@@ -51,7 +51,7 @@ export class RateLimiter {
   private readonly windowMs: number;
   private readonly keyFn: (request: FastifyRequest) => string;
   private readonly errorBody: (retryAfterSeconds: number) => unknown;
-  private cleanupTimer: ReturnType<typeof setInterval>;
+  private cleanupTimer: ReturnType<typeof setInterval> | undefined;
 
   constructor(options: RateLimiterOptions) {
     this.max = options.max;
@@ -59,10 +59,6 @@ export class RateLimiter {
     this.keyFn = options.keyFn ?? requestNetworkKey;
     this.errorBody =
       options.errorBody ?? ((retryAfter: number) => ({ error: "Too many requests", retryAfter }));
-
-    // Periodically clean stale buckets every 5 minutes
-    this.cleanupTimer = setInterval(() => this.cleanup(), 5 * 60_000);
-    this.cleanupTimer.unref();
   }
 
   /**
@@ -77,6 +73,7 @@ export class RateLimiter {
       if (!bucket) {
         bucket = { tokens: this.max, lastRefill: now };
         this.buckets.set(key, bucket);
+        this.scheduleCleanup();
       }
 
       // Refill tokens based on elapsed time
@@ -99,6 +96,14 @@ export class RateLimiter {
     };
   }
 
+  // Limiters are module singletons, so the timer waits for the first bucket
+  // rather than starting when the module is imported.
+  private scheduleCleanup(): void {
+    if (this.cleanupTimer) return;
+    this.cleanupTimer = setInterval(() => this.cleanup(), 5 * 60_000);
+    this.cleanupTimer.unref();
+  }
+
   private cleanup(): void {
     const now = Date.now();
     for (const [key, bucket] of this.buckets) {
@@ -115,6 +120,7 @@ export class RateLimiter {
 
   destroy(): void {
     clearInterval(this.cleanupTimer);
+    this.cleanupTimer = undefined;
     this.buckets.clear();
   }
 }

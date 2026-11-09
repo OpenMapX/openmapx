@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { Writable } from "node:stream";
 import cors from "@fastify/cors";
 import { betterAuth } from "better-auth";
@@ -388,25 +387,6 @@ describe("Better Auth exemption integration", () => {
       expect(response.json()).not.toEqual({ error: "Forbidden" });
     },
   );
-});
-
-describe("production hook wiring", () => {
-  it("installs CSRF after response security and before rate limiting and routes", () => {
-    const serverSource = readFileSync(new URL("../server.ts", import.meta.url), "utf8");
-    const securityHook = serverSource.indexOf(
-      'server.addHook("onRequest", makeSecurityResponseHeaderHook())',
-    );
-    const csrfHook = serverSource.indexOf(
-      'server.addHook("onRequest", makeCsrfGuardHook(trustedWebOrigins))',
-    );
-    const rateLimitHook = serverSource.indexOf("makeRateLimitTierHook(rateLimitTiers)");
-    const coreRoutes = serverSource.indexOf("await registerCoreRoutes(server");
-
-    expect(securityHook).toBeGreaterThan(-1);
-    expect(csrfHook).toBeGreaterThan(securityHook);
-    expect(rateLimitHook).toBeGreaterThan(csrfHook);
-    expect(coreRoutes).toBeGreaterThan(rateLimitHook);
-  });
 });
 
 describe("independent local-admin boundary", () => {

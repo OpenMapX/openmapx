@@ -1290,7 +1290,7 @@ async function removeExtensionNow(
   return { id, removed: components.length };
 }
 
-// Job handlers (wired in server.ts).
+// Job handlers (wired in app.ts).
 
 export async function handleExtensionInstallJob(ctx: JobContext): Promise<Record<string, unknown>> {
   const payload = normalizeExtensionInstallPayload(ctx.payload);

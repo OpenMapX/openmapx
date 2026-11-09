@@ -18,7 +18,7 @@ import { describe, expect, it } from "vitest";
 
 const HERE = import.meta.dirname;
 const ROUTES_DIR = resolve(HERE, "../routes");
-const SERVER_FILE = resolve(HERE, "../server.ts");
+const APP_FILES = [resolve(HERE, "../app.ts"), resolve(HERE, "../server.ts")];
 // Handler reply parameter names used across the codebase.
 const REPLY_IDENTIFIERS = new Set(["reply", "res"]);
 
@@ -75,7 +75,7 @@ function findUnreturnedSends(file: string): { line: number; snippet: string }[] 
 }
 
 describe("no unreturned reply.send() in the route surface", () => {
-  const files = [...collectTsFiles(ROUTES_DIR), SERVER_FILE];
+  const files = [...collectTsFiles(ROUTES_DIR), ...APP_FILES];
 
   it("scans the route files", () => {
     expect(files.length).toBeGreaterThan(5);

@@ -258,7 +258,7 @@ async function deletePrivacyCiphertext(storageKey: string): Promise<void> {
   const configuredRoot =
     process.env.OPENMAPX_EXPORT_STORAGE_DIR?.trim() || "/var/lib/openmapx/subject-exports";
   if (!isAbsolute(configuredRoot)) throw new Error("Privacy export storage root is unavailable");
-  // The same directory the export store uses (see server.ts).
+  // The same directory the export store uses (see app.ts).
   const rootValue = privateVolumeDirectory(configuredRoot, API_VOLUMES.subjectExports);
   if (
     !storageKey ||

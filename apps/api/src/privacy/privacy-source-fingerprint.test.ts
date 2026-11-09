@@ -27,6 +27,7 @@ describe("privacy source fingerprint", () => {
       "packages/core/package.json",
       "packages/i18n/package.json",
       "apps/api/src/privacy/readiness.ts",
+      "apps/api/src/app.ts",
       "apps/api/src/server.ts",
       "apps/api/src/auth.ts",
       "apps/api/src/db/privacy-auth-schema.ts",
