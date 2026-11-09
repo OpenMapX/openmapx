@@ -77,6 +77,16 @@ Hosted backends can reduce local engine costs. They still need appropriate
 credentials, permitted usage, connectivity, and a review of which requests leave
 your infrastructure. See [Cost optimization](../guides/cost-optimization.md).
 
+### Building the images from source
+
+Deployments pull release images and need none of this. Building the API and web
+images from a checkout with `docker build` runs the type-check, bundle and
+Next.js build inside Docker, with Node's heap capped at 5632 MiB in those
+builder stages. Memory outside the heap comes on top, so give the Docker daemon
+at least 8 GiB, and on Docker Desktop raise the VM's memory in its settings
+first. With less, the build can run out of memory. Other builds running at the
+same time count against the same budget.
+
 ### Engine sizing
 
 Current defaults in `services/<id>/service.json`:
