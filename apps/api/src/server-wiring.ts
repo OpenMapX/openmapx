@@ -1,4 +1,4 @@
-import { isIP } from "node:net";
+import { isIP, type Socket } from "node:net";
 import type {
   FastifyBaseLogger,
   FastifyError,
@@ -181,16 +181,33 @@ export function registerBodyReadDeadline(
     }, options.ms);
     timer.unref();
     armed.add(timer);
+    let watchedSocket: Socket | undefined;
     const stop = () => {
       clearTimeout(timer);
       armed.delete(timer);
+      watchedSocket?.off("close", stop);
     };
-    // The body finished, or the socket went away. A response that is out while
-    // the body is still arriving does not stop the clock.
+    // The body finished, or the request was destroyed with its socket.
     raw.once("end", stop);
     raw.once("close", stop);
+    // Once a response has gone out, Node stops tracking its request, so the
+    // request is no longer destroyed with the socket and emits neither event
+    // when the client leaves. A response sent while the body is still arriving
+    // (a rejected credential, a 413) therefore does not stop the clock, but the
+    // socket closing does. The listener comes off again in `stop`, so a
+    // keep-alive socket does not collect one per request.
     reply.raw.once("close", () => {
-      if (raw.complete) stop();
+      if (raw.complete) {
+        stop();
+        return;
+      }
+      const socket = raw.socket;
+      if (socket.destroyed) {
+        stop();
+        return;
+      }
+      watchedSocket = socket;
+      socket.once("close", stop);
     });
     done();
   });

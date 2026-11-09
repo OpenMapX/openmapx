@@ -7,7 +7,7 @@ import { getApiDataManagerTransitState, unwrapAdminResponse } from "@openmapx/co
 import { exportSavedList, unwrapSavedResponse } from "@openmapx/core/saved-places-sdk";
 import Fastify, { type FastifyInstance } from "fastify";
 import pino from "pino";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerSavedRoute } from "./routes/saved-contract";
 import {
   controlledRequestLoggingOptions,
@@ -803,9 +803,10 @@ describe("registerBodyReadDeadline", () => {
   const headers = (path: string) =>
     `POST ${path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 64\r\n\r\n`;
 
-  async function listening() {
+  async function listening(ms = DEADLINE_MS) {
     const app = Fastify();
-    registerBodyReadDeadline(app, { ms: DEADLINE_MS, exemptRoutePrefixes: ["/transfers"] });
+    registerBodyReadDeadline(app, { ms, exemptRoutePrefixes: ["/transfers"] });
+    app.post("/limited", { bodyLimit: 10 }, async () => ({ ok: true }));
     app.post("/stalled", async () => ({ ok: true }));
     app.post("/transfers/content", async () => ({ ok: true }));
     // Outlast the deadline without a body to read, as an administrator
@@ -936,6 +937,106 @@ describe("registerBodyReadDeadline", () => {
     } finally {
       await app.close();
     }
+  });
+
+  describe("when the connection goes away before the deadline", () => {
+    // A deadline far past the test, so a timer that is gone within a moment was
+    // stopped by the disconnect and not by expiring.
+    const LONG_DEADLINE_MS = 29_999;
+    const armed: unknown[] = [];
+    const cleared = new Set<unknown>();
+
+    beforeEach(() => {
+      armed.length = 0;
+      cleared.clear();
+      const realSetTimeout = globalThis.setTimeout;
+      const realClearTimeout = globalThis.clearTimeout;
+      vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+        callback: () => void,
+        ms?: number,
+        ...args: unknown[]
+      ) => {
+        const handle = realSetTimeout(callback, ms, ...args);
+        if (ms === LONG_DEADLINE_MS) armed.push(handle);
+        return handle;
+      }) as typeof setTimeout);
+      vi.spyOn(globalThis, "clearTimeout").mockImplementation(((handle: never) => {
+        cleared.add(handle);
+        realClearTimeout(handle);
+      }) as typeof clearTimeout);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    async function clearedWithin(ms: number): Promise<boolean> {
+      for (let waited = 0; waited < ms; waited += 20) {
+        if (armed.length > 0 && armed.every((handle) => cleared.has(handle))) return true;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      return false;
+    }
+
+    it("clears the timer of a request rejected with 401 while its body was arriving", async () => {
+      const { app, port } = await listening(LONG_DEADLINE_MS);
+      try {
+        const socket = connect(port, "127.0.0.1");
+        let answered: () => void = () => {};
+        const answer = new Promise<void>((resolve) => {
+          answered = resolve;
+        });
+        socket.on("data", () => answered());
+        socket.on("error", () => {});
+        socket.write(`${headers("/private")}{"a":`);
+        await answer;
+        expect(armed).toHaveLength(1);
+
+        socket.destroy();
+
+        expect(await clearedWithin(2000)).toBe(true);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it("clears the timer of a request rejected with 413 while its body was arriving", async () => {
+      const { app, port } = await listening(LONG_DEADLINE_MS);
+      try {
+        const socket = connect(port, "127.0.0.1");
+        let received = "";
+        const closed = new Promise<void>((resolve) => socket.on("close", () => resolve()));
+        socket.on("data", (chunk) => {
+          received += chunk;
+        });
+        socket.on("error", () => {});
+        socket.write(`${headers("/limited")}{"a":`);
+        await closed;
+
+        expect(received).toContain("413");
+        expect(armed).toHaveLength(1);
+        expect(await clearedWithin(2000)).toBe(true);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it("clears the timer of a request that stalls without an answer when the client leaves", async () => {
+      const { app, port } = await listening(LONG_DEADLINE_MS);
+      try {
+        const socket = connect(port, "127.0.0.1");
+        socket.on("error", () => {});
+        socket.write(`${headers("/stalled")}{"a":`);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        expect(armed).toHaveLength(1);
+
+        socket.destroy();
+
+        expect(await clearedWithin(2000)).toBe(true);
+      } finally {
+        await app.close();
+      }
+    });
   });
 
   it("serves a body that trickles in but finishes before the deadline", async () => {
