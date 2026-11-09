@@ -77,27 +77,6 @@ export async function rejectLegacyMissingCatalog(catalogDir: string): Promise<vo
 export function markLegacyCatalogFetchAttempt(): Promise<void> {
   return catalogPhase("git-fetch-attempted");
 }
-/** The fixed missing-catalog producer recorded no-command/no-proposal before
- * throwing. Only that exact unattempted fact may repair startup finality. */
-export async function reconcileLegacyCatalogPreflightRejections(
-  database: postgres.Sql = rawSql,
-): Promise<void> {
-  await database`UPDATE data_manager.jobs SET status='error',finished_at=coalesce(finished_at,now()),ownership_version=ownership_version+1
-    WHERE execution_version IS NULL AND kind='transit-proposal' AND status IN ('running','interrupted') AND finished_at IS NULL
-      AND metadata->'retainedOps'='[]'::jsonb
-      AND metadata->'catalogPreflight'=${JSON.stringify({ version: 1, state: "missing", reason: "catalog-not-cloned", effects: "not_started" })}::text::jsonb`;
-}
-/** The old traffic producer caught a failure before its first retained agent
- * dispatch. Its fixed traffic paths perform only reads before that checkpoint.
- * Running/orphaned jobs, attempted children and unknown metadata are not proof. */
-export async function reconcileLegacyUnattemptedTraffic(
-  database: postgres.Sql = rawSql,
-): Promise<void> {
-  await database`UPDATE data_manager.jobs SET status='error',finished_at=now(),ownership_version=ownership_version+1
-    WHERE execution_version IS NULL AND kind='traffic-maintenance' AND status='interrupted'
-      AND finished_at IS NULL AND ownership_version=0
-      AND metadata=${JSON.stringify({ version: 1, retainedOps: [], recoveryRequired: true })}::text::jsonb`;
-}
 /** Admission is awaited before returning202; completion retains its own actual
  * SQL owner and every nested host-operation checkpoint until containment. */
 export async function startLegacyDataMutation<T>(
@@ -142,6 +121,8 @@ export async function startLegacyDataMutation<T>(
         await finish("error");
         throw error;
       }
+      // The failure is unclassified, so the row keeps blocking admission until
+      // the interrupted-job reconciler observes every operation it recorded.
       await database`UPDATE data_manager.jobs SET status='interrupted',finished_at=NULL,metadata=jsonb_set(coalesce(metadata,'{}'::jsonb),'{recoveryRequired}','true'::jsonb) WHERE id=${id} AND finished_at IS NULL`;
       throw error;
     }

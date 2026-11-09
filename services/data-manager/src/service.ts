@@ -18,10 +18,6 @@ import type { DataExecutionReceiver } from "./jobs/execution/api.js";
 import { createDataConfigurationMaintenance } from "./jobs/execution/configuration-maintenance.js";
 import { createDataExecutionDispatcher } from "./jobs/execution/dispatch.js";
 import { applyOwnedGenerationHardlinks } from "./jobs/execution/hardlinks.js";
-import {
-  reconcileLegacyCatalogPreflightRejections,
-  reconcileLegacyUnattemptedTraffic,
-} from "./jobs/execution/legacy-mutation.js";
 import { createDataExecutionReceiver } from "./jobs/execution/receiver.js";
 import { createDataExecutionRuntime } from "./jobs/execution/runtime.js";
 import { createPostgresDataExecutionStore } from "./jobs/execution/store.js";
@@ -30,7 +26,11 @@ import {
   scheduleNotablePlaces,
 } from "./jobs/notable-places/schedule.js";
 import { createNotablePlacesRuntimeState } from "./jobs/notable-places/state.js";
-import { reconcileOrphanedJobs } from "./jobs/reconcile.js";
+import {
+  type InterruptedLegacyJobReconciler,
+  reconcileOrphanedJobs,
+  startInterruptedLegacyJobReconciler,
+} from "./jobs/reconcile.js";
 import { createNotablePlacesOperationLock } from "./jobs/search-index/operation-lock.js";
 import { bakePredicted } from "./jobs/traffic/bake-predicted.js";
 import { fetchCoveredWayIds } from "./jobs/traffic/covered-ways.js";
@@ -45,6 +45,7 @@ import { OfflinePackageGenerator } from "./offline-packages/generator.js";
 import { PostgresOfflinePackageAccountingStore } from "./offline-packages/postgres-accounting.js";
 import { createOpenMapxPackageSourceFactory } from "./offline-packages/source-catalog.js";
 import { OfflinePackageStorage } from "./offline-packages/storage.js";
+import { observeRetainedHostOperation } from "./ops-client.js";
 import { DataManagerReadiness } from "./readiness.js";
 import { initializeRequiredSubsystems } from "./startup.js";
 import { StateStore } from "./state.js";
@@ -52,6 +53,7 @@ import { StateStore } from "./state.js";
 const app = Fastify({ loggerInstance: rootLogger });
 let executionReceiver: DataExecutionReceiver | undefined;
 let stopControlRetention: (() => Promise<void>) | undefined;
+let interruptedJobReconciler: InterruptedLegacyJobReconciler | undefined;
 let shuttingDown = false;
 app.addHook("onClose", async () => {
   await stopControlRetention?.();
@@ -209,8 +211,6 @@ let notablePlacesSchedule: NotablePlacesSchedule | null = null;
 async function start(): Promise<void> {
   const store = dataState;
   try {
-    await reconcileLegacyCatalogPreflightRejections();
-    await reconcileLegacyUnattemptedTraffic();
     await configurationFence?.startup();
     await executionRuntime.reconcile();
   } catch (err) {
@@ -262,6 +262,27 @@ async function start(): Promise<void> {
   });
   cronHandles = initialized.cronHandles;
   stopControlRetention = initialized.stopControlRetention;
+  // Orphans were just marked interrupted, so the first pass has work to settle.
+  // It observes the ops agent and must not delay listening when that is down.
+  interruptedJobReconciler = startInterruptedLegacyJobReconciler({
+    database: rawSql,
+    observe: observeRetainedHostOperation,
+    onResult: ({ resolved, held }) => {
+      if (resolved.length > 0)
+        app.log.warn(
+          { jobIds: resolved },
+          "data-manager: settled interrupted legacy jobs after observing their host operations",
+        );
+      if (held.length > 0)
+        app.log.info(
+          { jobIds: held },
+          "data-manager: interrupted legacy jobs wait for their host operations to be observed",
+        );
+    },
+    onError: (err, jobId) =>
+      app.log.warn({ err, jobId }, "data-manager: interrupted legacy job reconciliation failed"),
+  });
+  if (shuttingDown) await interruptedJobReconciler.stop();
   if (initialized.interruptedJobIds.length > 0) {
     app.log.warn(
       {
@@ -313,6 +334,7 @@ void start().catch(async (err) => {
   readiness.markFailed();
   app.log.error({ err, readiness: readiness.snapshot() }, "data-manager startup failed");
   cronHandles?.stop();
+  await interruptedJobReconciler?.stop();
   await app.close().catch(() => {});
   process.exit(1);
 });
@@ -330,6 +352,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   app.log.info({ signal }, "data-manager: shutdown requested");
   cronHandles?.stop();
   notablePlacesSchedule?.stop();
+  await interruptedJobReconciler?.stop();
   await stopControlRetention?.();
   await offlinePackages.close();
   await executionRuntime.close();
