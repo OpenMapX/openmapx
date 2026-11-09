@@ -3,6 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { currentConfigurationGeneration } from "../services/configuration-generation";
+import {
+  lifecycleFailureHasNoSurvivor,
+  type ServiceLifecycleReceipt,
+} from "../services/service-lifecycle-receipt";
 import * as c from "./control-authority";
 import { AnchoredDirectory } from "./filesystem";
 import { inspectDataExecutionAdmission } from "./peer-admission";
@@ -23,8 +27,8 @@ afterEach(() => {
   for (const installation of installations.splice(0)) c.closeControlInstallation(installation);
   rmSync(root, { recursive: true, force: true });
 });
-async function failedLifecycle(adopt: boolean | "after-failure" = false) {
-  const fixture = await failedServiceLifecycle(root, adopt);
+async function failedLifecycle(adopt: boolean | "after-failure" = false, issueChild = true) {
+  const fixture = await failedServiceLifecycle(root, adopt, issueChild);
   installations.push(...fixture.installations);
   return fixture;
 }
@@ -205,4 +209,56 @@ it("requires the recipient's exact signed non-admission proof before revocation"
   } finally {
     leases.closeArtifactTargetLeaseHandle(lease);
   }
+});
+it("accepts a failure with no issued child while its root is still held", async () => {
+  const f = await failedLifecycle(false, false);
+  const source = leases.verifyFailedServiceLifecycleContainment(f.authority);
+  expect(source.failedReceiptDigest).toBe(
+    c.controlDigest(JSON.parse(readFileSync(f.path, "utf8")).current.payload.receipt),
+  );
+  c.retainControlEffectReceipt(f.authority, {
+    outcome: "contained",
+    publication: "committed",
+    receipt: {
+      kind: "service-lifecycle-contained-failure",
+      failedReceiptDigest: source.failedReceiptDigest,
+    },
+  });
+});
+it("still requires the unadopted revocation once a child was issued", async () => {
+  const f = await failedLifecycle();
+  expect(() => leases.verifyFailedServiceLifecycleContainment(f.authority)).toThrow(
+    "Original unadopted hardlink revocation required",
+  );
+});
+it("recovers a no-child failure whose process stopped before releasing", async () => {
+  const f = await failedLifecycle(false, false);
+  await expect(
+    reconcileFailedServiceLifecycle({
+      infraDir: root,
+      authority: f.authority,
+      transport: f.transport,
+    }),
+  ).rejects.toThrow(/expired/);
+  vi.spyOn(Date, "now").mockReturnValue(f.execution.deadlineAt + 1);
+  await reconcileFailedServiceLifecycle({
+    infraDir: root,
+    authority: f.authority,
+    transport: f.transport,
+  });
+  expect(existsSync(join(root, "data/.admin-target-control/locks/alpha"))).toBe(false);
+  expect(readFileSync(f.path)).toEqual(f.receiptBytes);
+  expect(f.recoveryRequests).toEqual([]);
+});
+it.each([
+  ["failed", null, true],
+  ["unknown", null, true],
+  ["failed", { assertion: "issued" }, false],
+  ["unknown", new Error("unreadable attempt"), false],
+  ["recreated", null, false],
+  ["complete", null, false],
+] as const)("a %s receipt with attempt %j has no survivor: %s", (phase, attempt, expected) => {
+  expect(
+    lifecycleFailureHasNoSurvivor({ phase } as unknown as ServiceLifecycleReceipt, attempt),
+  ).toBe(expected);
 });

@@ -7,6 +7,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
@@ -104,16 +105,72 @@ function command(action: "start" | "update", args: string[] = [], target = "alph
       );
     });
 }
+function lifecycleEnvelope(name: string) {
+  return JSON.parse(
+    readFileSync(join(root, "infra/docker/data/ops-agent/lifecycle", name), "utf8"),
+  );
+}
+function lifecycleOperationKeys() {
+  return readdirSync(join(root, "infra/docker/data/ops-agent/lifecycle")).map((name) =>
+    name.replace(/\.json$/, ""),
+  );
+}
+function retainedReceipts() {
+  const dataRoot = join(root, "infra/docker/data");
+  return Promise.all(
+    lifecycleOperationKeys().map((key) =>
+      services.readServiceLifecycleReceipt({
+        dataRoot,
+        execution: lifecycleEnvelope(`${key}.json`).seed.payload.execution,
+      }),
+    ),
+  );
+}
 async function retainedReceipt() {
-  const dataRoot = join(root, "infra/docker/data"),
-    directory = join(dataRoot, "ops-agent/lifecycle");
-  const names = readdirSync(directory);
-  expect(names).toHaveLength(1);
-  const envelope = JSON.parse(readFileSync(join(directory, names[0]!), "utf8"));
-  return services.readServiceLifecycleReceipt({
-    dataRoot,
-    execution: envelope.seed.payload.execution,
+  const receipts = await retainedReceipts();
+  expect(receipts).toHaveLength(1);
+  return receipts[0]!;
+}
+function targetLocks() {
+  const directory = join(root, "infra/docker/data/.admin-target-control/locks");
+  return existsSync(directory) ? readdirSync(directory).sort() : [];
+}
+/** A selection whose rendered hardlink plan has one entry, so a Start issues a child to data-manager. */
+async function renderWithHardlinkPlan() {
+  const edit = (id: string, change: (manifest: Record<string, unknown>) => void) => {
+    const path = join(root, "services", id, "service.json"),
+      manifest = JSON.parse(readFileSync(path, "utf8"));
+    change(manifest);
+    writeFileSync(path, JSON.stringify(manifest));
+  };
+  edit("alpha", (manifest) => {
+    manifest.produces = [{ type: "fixture-data", sourceDir: "data/fixture" }];
   });
+  edit("beta", (manifest) => {
+    manifest.consumes = [
+      { type: "fixture-data", mountAt: "/data", readOnly: true, required: false },
+    ];
+  });
+  await renderComposeForRepo({ rootDir: root, domain: "example.test" });
+}
+/** Reports data-manager as ready and refuses everything else, so an issued child never completes. */
+async function unreachableHardlinkExecutor() {
+  const server: Server = createServer((request, response) => {
+    const ready = request.method === "GET" && request.url?.endsWith("/status");
+    response.writeHead(ready ? 200 : 503, { "content-type": "application/json" });
+    response.end(
+      JSON.stringify(
+        ready
+          ? { ok: true, status: "ready", phase: "complete", uptime: 1, dataDir: "/data" }
+          : { error: "unavailable" },
+      ),
+    );
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw Error("Fixture server has no port");
+  vi.stubEnv("DATA_MANAGER_URL", `http://127.0.0.1:${address.port}`);
+  return () => new Promise((resolve) => server.close(resolve));
 }
 describe("actual CLI service lifecycle preparation", () => {
   it.each(["data-manager", "alpha"])(
@@ -205,7 +262,9 @@ describe("actual CLI service lifecycle preparation", () => {
       phase: "failed",
       finalRevisionId: null,
       commit: "not_committed",
+      failure: { reason: "revision_conflict", failedServiceIds: ["alpha"] },
     });
+    expect(targetLocks()).toEqual([]);
   });
   it("refuses recreation when the generation moves after its pre-commit checks", async () => {
     let final: string | undefined;
@@ -222,9 +281,10 @@ describe("actual CLI service lifecycle preparation", () => {
       commit: "final_committed",
       followUp: "unknown",
       finalRevisionId: final,
-      failure: { reason: "recreate", failedServiceIds: ["alpha"] },
+      failure: { reason: "revision_conflict", failedServiceIds: ["alpha"] },
     });
     expect(services.currentConfigurationGeneration(join(root, "infra/docker"))).not.toBe(final);
+    expect(targetLocks()).toEqual([]);
   });
   it("refuses to record Start when the generation moves while compose runs", async () => {
     let competing: string | undefined;
@@ -239,7 +299,9 @@ describe("actual CLI service lifecycle preparation", () => {
       phase: "failed",
       commit: "final_committed",
       followUp: "unknown",
+      failure: { reason: "revision_conflict", failedServiceIds: ["alpha"] },
     });
+    expect(targetLocks()).toEqual([]);
   });
   it("holds physical target ownership through target-only Start after full-selection preparation", async () => {
     vi.mocked(dockerComposeStream).mockImplementation(async (args) => {
@@ -378,7 +440,7 @@ describe("actual CLI service lifecycle preparation", () => {
       commit: "not_committed",
     });
   });
-  it("retains the original fence and signed last phase when canceled after pull before generation commit", async () => {
+  it("records the signed last phase and releases targets when canceled after pull before generation commit", async () => {
     vi.mocked(dockerComposeStream).mockImplementation(async (args) => {
       expect(args).toEqual(["pull", "alpha"]);
       const control = await import("@openmapx/core/build-artifacts"),
@@ -411,9 +473,7 @@ describe("actual CLI service lifecycle preparation", () => {
       followUp: "not_started",
       failure: { reason: "pull", failedServiceIds: ["alpha"] },
     });
-    expect(existsSync(join(root, "infra/docker/data/.admin-target-control/locks/alpha"))).toBe(
-      true,
-    );
+    expect(targetLocks()).toEqual([]);
     expect(existsSync(join(root, "infra/docker/.trusted-config-writer"))).toBe(false);
   });
   it("records failure when the execution deadline passes during pull", async () => {
@@ -448,8 +508,9 @@ describe("actual CLI service lifecycle preparation", () => {
       phase: "pins_validated",
       finalRevisionId: null,
     });
+    expect(targetLocks()).toEqual(["alpha", "beta"]);
   });
-  it("retains its signed final revision and target fence when recreation fails after commit", async () => {
+  it("records its signed final revision and releases targets when recreation fails after commit", async () => {
     vi.mocked(dockerComposeStream).mockImplementation(async (args) => (args[0] === "pull" ? 0 : 9));
     await expect(command("update")).rejects.toThrow("exit:9");
     const receipt = await retainedReceipt();
@@ -464,9 +525,136 @@ describe("actual CLI service lifecycle preparation", () => {
       services.currentConfigurationGeneration(join(root, "infra/docker")),
     );
     expect(receipt.finalRevisionId).not.toBe(seed);
-    expect(existsSync(join(root, "infra/docker/data/.admin-target-control/locks/alpha"))).toBe(
-      true,
-    );
+    expect(targetLocks()).toEqual([]);
     expect(existsSync(join(root, "infra/docker/.trusted-config-writer"))).toBe(false);
+  });
+  it("a failed compose up releases every target and the next start succeeds", async () => {
+    vi.mocked(dockerComposeStream).mockResolvedValueOnce(1);
+    await expect(command("start")).rejects.toThrow("exit:1");
+    expect(await retainedReceipt()).toMatchObject({
+      phase: "failed",
+      failure: { reason: "recreate", failedServiceIds: ["alpha"] },
+    });
+    await expect(command("start")).rejects.toThrow("exit:0");
+    expect(dockerComposeStream).toHaveBeenCalledTimes(2);
+    expect(targetLocks()).toEqual([]);
+  });
+  it("a retry after a partial start converges when some containers are already up", async () => {
+    const running = new Set<string>();
+    vi.mocked(dockerComposeStream).mockImplementation(async (args) => {
+      // Compose leaves running containers alone, so a retry must not ask it to recreate them.
+      expect(args.slice(0, 2)).toEqual(["up", "-d"]);
+      expect(args).not.toContain("--force-recreate");
+      if (running.size === 0) {
+        running.add("alpha");
+        return 1;
+      }
+      for (const id of args.slice(2)) running.add(id);
+      return 0;
+    });
+    await expect(command("start", ["beta"])).rejects.toThrow("exit:1");
+    expect([...running]).toEqual(["alpha"]);
+    await expect(command("start", ["beta"])).rejects.toThrow("exit:0");
+    expect([...running].sort()).toEqual(["alpha", "beta"]);
+    expect(vi.mocked(dockerComposeStream).mock.calls.map((call) => call[0])).toEqual([
+      ["up", "-d", "alpha", "beta"],
+      ["up", "-d", "alpha", "beta"],
+    ]);
+    expect((await retainedReceipts()).map((receipt) => receipt.phase).sort()).toEqual([
+      "complete",
+      "failed",
+    ]);
+    expect(targetLocks()).toEqual([]);
+  });
+  it("a failure after an issued hardlink child keeps the lease", async () => {
+    await renderWithHardlinkPlan();
+    const stop = await unreachableHardlinkExecutor();
+    try {
+      await expect(command("start")).rejects.toThrow("exit:1");
+    } finally {
+      await stop();
+    }
+    expect(dockerComposeStream).not.toHaveBeenCalled();
+    expect(targetLocks()).toEqual(["alpha", "beta"]);
+    const receipt = await retainedReceipt();
+    expect(receipt).toMatchObject({
+      phase: "failed",
+      commit: "final_committed",
+      followUp: "unknown",
+      failure: { reason: "hardlinks", failedServiceIds: ["alpha"] },
+    });
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).toContain(
+      `recover-update --operation-key ${receipt.execution.operationKey}`,
+    );
+  });
+  it("a lease held by a live operation still refuses a second start", async () => {
+    let refusal: unknown;
+    let holder = "";
+    vi.mocked(dockerComposeStream).mockImplementationOnce(async () => {
+      holder = lifecycleOperationKeys()[0]!;
+      refusal = await command("start").catch((error) => error);
+      expect(targetLocks()).toEqual(["alpha", "beta"]);
+      return 0;
+    });
+    await expect(command("start")).rejects.toThrow("exit:0");
+    expect(String(refusal)).toContain("exit:1");
+    expect(String(refusal)).toContain(`operation ${holder}`);
+    expect(String(refusal)).toContain(`ops-agent/lifecycle/${holder}.json`);
+    expect(dockerComposeStream).toHaveBeenCalledTimes(1);
+    expect(targetLocks()).toEqual([]);
+  });
+  it("releases every target when the lifecycle fails before its receipt opens", async () => {
+    const paths = services.releaseStatePaths(join(root, "infra/docker"));
+    services.ensureReleaseStateDirectory(paths.directory);
+    services.ensureReleaseStateDirectory(paths.store);
+    const lock = await services.acquireReleaseStoreLock(paths.store, {}, { failIfBusy: true });
+    try {
+      await expect(command("start")).rejects.toThrow("Release store is busy");
+    } finally {
+      lock.release();
+    }
+    expect(dockerComposeStream).not.toHaveBeenCalled();
+    expect(targetLocks()).toEqual([]);
+    await expect(command("start")).rejects.toThrow("exit:0");
+  });
+  it("waits for a momentary release-store holder once containers have started", async () => {
+    vi.mocked(dockerComposeStream).mockImplementationOnce(async () => {
+      const paths = services.releaseStatePaths(join(root, "infra/docker"));
+      const lock = await services.acquireReleaseStoreLock(paths.store, {}, { failIfBusy: true });
+      setTimeout(() => lock.release(), 300);
+      return 0;
+    });
+    await expect(command("start")).rejects.toThrow("exit:0");
+    expect(await retainedReceipt()).toMatchObject({ phase: "complete", followUp: "complete" });
+  });
+  it("refuses to replace services when the generation moves during the migration", async () => {
+    const directory = join(root, "services/app-api");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(
+      join(directory, "service.json"),
+      JSON.stringify({
+        id: "app-api",
+        name: "app-api",
+        version: "1.0.0",
+        quality: "built-in",
+        container: { image: "fixture/app-api", tag: "1" },
+      }),
+    );
+    services.writeServiceSelectionFile(join(root, "infra/docker"), ["alpha", "app-api", "beta"]);
+    await renderComposeForRepo({ rootDir: root, domain: "example.test" });
+    vi.mocked(migrateBeforeApiUpdate).mockImplementation(async () => {
+      await commitCompetingGeneration();
+      return 0;
+    });
+    await expect(command("update", [], "app-api")).rejects.toThrow("exit:1");
+    expect(vi.mocked(dockerComposeStream).mock.calls.map((call) => call[0])).toEqual([
+      ["pull", "app-api"],
+    ]);
+    expect(await retainedReceipt()).toMatchObject({
+      phase: "failed",
+      commit: "final_committed",
+      failure: { reason: "revision_conflict", failedServiceIds: ["app-api"] },
+    });
+    expect(targetLocks()).toEqual([]);
   });
 });

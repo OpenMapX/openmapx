@@ -622,8 +622,21 @@ export async function readServiceLifecycleReceipt(options: {
   return inspect(options.dataRoot, executionRefSchema.parse(options.execution), true).receipt;
 }
 
-/** Original producer evidence only; never accepts a caller-supplied receipt. */
-export function readFailedServiceHardlinksReceipt(authority: VerifiedExecutionAuthority) {
+/**
+ * Whether a recorded failure can be released by the process that recorded it.
+ * Docker effects are awaited children, so once one has exited no writer of ours
+ * survives; only a hardlink child issued to data-manager can outlive this process.
+ * `hardlinkAttempt` is null only when the child was provably never issued. Anything
+ * else, including an attempt that could not be read, keeps the fence.
+ */
+export function lifecycleFailureHasNoSurvivor(
+  receipt: ServiceLifecycleReceipt,
+  hardlinkAttempt: unknown,
+): boolean {
+  return (receipt.phase === "failed" || receipt.phase === "unknown") && hardlinkAttempt === null;
+}
+
+function readOriginalStandaloneReceipt(authority: VerifiedExecutionAuthority) {
   const owner = executionAuthorityState(authority);
   if (
     owner.installation.installation.role !== "host-cli" ||
@@ -632,10 +645,23 @@ export function readFailedServiceHardlinksReceipt(authority: VerifiedExecutionAu
     owner.execution.executor !== "host-cli"
   )
     throw Error("Original standalone host lifecycle required");
-  const receipt = authorities.run(
+  return authorities.run(
     { authority },
     () => inspect(owner.installation.dataRoot, owner.execution, true).receipt,
   );
+}
+
+/** The original producer's durable failure or unknown outcome, at any phase it stopped. */
+export function readFailedServiceLifecycleReceipt(authority: VerifiedExecutionAuthority) {
+  const receipt = readOriginalStandaloneReceipt(authority);
+  if (!lifecycleFailureHasNoSurvivor(receipt, null))
+    throw Error("Original failed lifecycle required");
+  return receipt;
+}
+
+/** Original producer evidence only; never accepts a caller-supplied receipt. */
+export function readFailedServiceHardlinksReceipt(authority: VerifiedExecutionAuthority) {
+  const receipt = readOriginalStandaloneReceipt(authority);
   if (
     receipt.phase !== "failed" ||
     receipt.failure?.reason !== "hardlinks" ||
