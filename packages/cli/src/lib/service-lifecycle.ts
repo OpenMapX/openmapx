@@ -87,6 +87,7 @@ export async function runCliServiceLifecycle(options: {
   const { join } = await import("node:path");
   const control = await import("@openmapx/core/build-artifacts");
   const ops = await import("@openmapx/core/ops");
+  const { log } = await import("./output");
   const { repoPaths } = await import("./paths");
   const { cliControlContext, collectHostControlRetention } = await import("./control-context");
   const { assertCliDeploymentSecrets } = await import("./deployment-secret-policy");
@@ -248,18 +249,31 @@ export async function runCliServiceLifecycle(options: {
     assertControlExecutionForward(authority);
     assertArtifactTargetLeaseForward(lease);
   };
-  const withWriterOwnership = async <T>(
-    run: (owned: services.VerifiedLifecycleOwnership) => Promise<T>,
-    signal?: AbortSignal,
-  ) => {
-    const held = lease;
-    if (!held) throw Error("Lifecycle target lease unavailable");
-    return services.withConfigurationGenerationWriter(
-      paths.infraDir,
-      (writer) => services.withVerifiedLifecycleOwnership({ writer, lease: held, authority }, run),
-      signal,
-    );
-  };
+  const failureEvidence = (
+    last: services.ServiceLifecycleReceipt,
+    committed: typeof finalCommit,
+  ): Partial<services.ServiceLifecycleReceipt> => ({
+    phase: committed && !last.finalRevisionId ? "unknown" : "failed",
+    ...(committed ? { commit: "final_committed", finalRevisionId: committed.revisionId } : {}),
+    followUp: committed ? "unknown" : last.finalRevisionId ? "failed" : "not_started",
+    failure: {
+      reason:
+        last.phase === "prepared"
+          ? "pins"
+          : last.phase === "pins_validated"
+            ? "pull"
+            : last.phase === "pulled"
+              ? "receipt_io"
+              : last.phase === "generation_committed"
+                ? "hardlinks"
+                : "recreate",
+      failedServiceIds: ids,
+    },
+  });
+  // The caller rethrows the original failure. An unflushed receipt remains unknown;
+  // no competing pointer substitutes for it, and the target fence stays in place.
+  const warnFailureNotRecorded = () =>
+    log.warn("The lifecycle failure was not recorded; its targets stay fenced until reconciled.");
   // The receipt only accepts a newly recorded final revision from the writer that
   // committed it, so a step that commits and then fails records its failure itself.
   const recordFailure = async (owned: services.VerifiedLifecycleOwnership) => {
@@ -267,55 +281,72 @@ export async function runCliServiceLifecycle(options: {
     failureAttempted = true;
     const committed = services.configurationGenerationWriterCommit(owned.writer) ?? finalCommit;
     try {
-      await checkpoint(owned, {
-        phase: committed && !receipt.finalRevisionId ? "unknown" : "failed",
-        ...(committed ? { commit: "final_committed", finalRevisionId: committed.revisionId } : {}),
-        followUp: committed ? "unknown" : receipt.finalRevisionId ? "failed" : "not_started",
-        failure: {
-          reason:
-            receipt.phase === "prepared"
-              ? "pins"
-              : receipt.phase === "pins_validated"
-                ? "pull"
-                : receipt.phase === "pulled"
-                  ? "receipt_io"
-                  : receipt.phase === "generation_committed"
-                    ? "hardlinks"
-                    : "recreate",
-          failedServiceIds: ids,
-        },
+      await checkpoint(owned, failureEvidence(receipt, committed));
+    } catch {
+      warnFailureNotRecorded();
+    }
+  };
+  // Runs outside every step. Cancellation or expiry can have ended forward ownership,
+  // so this takes a fresh writer and records through the receipt-only entry.
+  const recordContainedFailure = async () => {
+    if (failureAttempted || !store || !receipt || !lease) return;
+    failureAttempted = true;
+    const opened = store,
+      last = receipt,
+      held = lease;
+    try {
+      await services.withConfigurationGenerationWriter(paths.infraDir, async (writer) => {
+        const next = {
+          ...last,
+          ...failureEvidence(last, finalCommit),
+          sequence: last.sequence + 1,
+        };
+        await opened.recordContainment(last.sequence, next, { writer, lease: held, authority });
+        receipt = next;
       });
     } catch {
-      /* An unflushed receipt remains unknown; no competing pointer substitutes for it. */
+      warnFailureNotRecorded();
     }
   };
   /** Holds the writer and release-store lock only for `run`, which must not start a container. */
-  const withWriterStep = <T>(
+  const withWriterStep = async <T>(
     run: (owned: services.VerifiedLifecycleOwnership) => Promise<T>,
     signal?: AbortSignal,
-  ): Promise<T> =>
-    withWriterOwnership(async (owned) => {
-      assertForward(signal);
-      const releasePaths = services.releaseStatePaths(paths.infraDir);
-      services.ensureReleaseStateDirectory(releasePaths.directory);
-      services.ensureReleaseStateDirectory(releasePaths.store);
-      const lock = await services.acquireReleaseStoreLock(
-        releasePaths.store,
-        {},
-        { failIfBusy: true },
-      );
-      releaseStoreLock = lock;
-      try {
-        return await run(owned);
-      } catch (error) {
-        await recordFailure(owned);
-        throw error;
-      } finally {
-        finalCommit = services.configurationGenerationWriterCommit(owned.writer) ?? finalCommit;
-        releaseStoreLock = undefined;
-        lock.release();
-      }
-    }, signal);
+  ): Promise<T> => {
+    const held = lease;
+    if (!held) throw Error("Lifecycle target lease unavailable");
+    return services.withConfigurationGenerationWriter(
+      paths.infraDir,
+      (writer) =>
+        services.withVerifiedLifecycleOwnership(
+          { writer, lease: held, authority },
+          async (owned) => {
+            assertForward(signal);
+            const releasePaths = services.releaseStatePaths(paths.infraDir);
+            services.ensureReleaseStateDirectory(releasePaths.directory);
+            services.ensureReleaseStateDirectory(releasePaths.store);
+            const lock = await services.acquireReleaseStoreLock(
+              releasePaths.store,
+              {},
+              { failIfBusy: true },
+            );
+            releaseStoreLock = lock;
+            try {
+              return await run(owned);
+            } catch (error) {
+              await recordFailure(owned);
+              throw error;
+            } finally {
+              finalCommit =
+                services.configurationGenerationWriterCommit(owned.writer) ?? finalCommit;
+              releaseStoreLock = undefined;
+              lock.release();
+            }
+          },
+        ),
+      signal,
+    );
+  };
   const readReleaseSelection = () =>
     services.readReleaseOverlayFile(services.releaseStatePaths(paths.infraDir).overlay);
   // Selecting a release rewrites the overlay without moving the generation.
@@ -390,11 +421,7 @@ export async function runCliServiceLifecycle(options: {
         );
         return result;
       } catch (error) {
-        // A cancelled or expired lease cannot open another writer step, so an effect
-        // interrupted between steps keeps its last signed phase. Callers treat any
-        // nonterminal receipt as unresolved and the target fence stays in place.
-        if (!failureAttempted && receipt)
-          await withWriterOwnership(recordFailure).catch(() => undefined);
+        await recordContainedFailure();
         throw error;
       } finally {
         owning = false;

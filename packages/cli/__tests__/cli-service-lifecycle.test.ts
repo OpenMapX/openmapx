@@ -404,17 +404,50 @@ describe("actual CLI service lifecycle preparation", () => {
       ["pull", "alpha"],
     ]);
     expect(services.currentConfigurationGeneration(join(root, "infra/docker"))).toBe(seed);
-    // A cancelled lease cannot open another writer step, so the receipt stays unresolved.
     expect(await retainedReceipt()).toMatchObject({
-      phase: "pins_validated",
+      phase: "failed",
       finalRevisionId: null,
       commit: "not_committed",
       followUp: "not_started",
+      failure: { reason: "pull", failedServiceIds: ["alpha"] },
     });
     expect(existsSync(join(root, "infra/docker/data/.admin-target-control/locks/alpha"))).toBe(
       true,
     );
     expect(existsSync(join(root, "infra/docker/.trusted-config-writer"))).toBe(false);
+  });
+  it("records failure when the execution deadline passes during pull", async () => {
+    vi.mocked(dockerComposeStream).mockImplementation(async () => {
+      const directory = join(root, "infra/docker/data/ops-agent/lifecycle"),
+        envelope = JSON.parse(readFileSync(join(directory, readdirSync(directory)[0]!), "utf8"));
+      vi.spyOn(Date, "now").mockReturnValue(envelope.seed.payload.execution.deadlineAt + 1);
+      return 0;
+    });
+    await expect(command("update")).rejects.toThrow("exit:1");
+    expect(vi.mocked(dockerComposeStream).mock.calls.map((call) => call[0])).toEqual([
+      ["pull", "alpha"],
+    ]);
+    expect(await retainedReceipt()).toMatchObject({
+      phase: "failed",
+      finalRevisionId: null,
+      commit: "not_committed",
+      followUp: "not_started",
+      failure: { reason: "pull", failedServiceIds: ["alpha"] },
+    });
+  });
+  it("keeps the original failure and warns when its receipt cannot be recorded", async () => {
+    vi.mocked(dockerComposeStream).mockImplementation(async () => {
+      mkdirSync(join(root, "infra/docker/state/ops-agent/configuration/.writer"), { mode: 0o700 });
+      return 7;
+    });
+    await expect(command("update")).rejects.toThrow("exit:7");
+    expect(
+      vi.mocked(console.error).mock.calls.some((call) => String(call[0]).includes("not recorded")),
+    ).toBe(true);
+    expect(await retainedReceipt()).toMatchObject({
+      phase: "pins_validated",
+      finalRevisionId: null,
+    });
   });
   it("retains its signed final revision and target fence when recreation fails after commit", async () => {
     vi.mocked(dockerComposeStream).mockImplementation(async (args) => (args[0] === "pull" ? 0 : 9));

@@ -3822,6 +3822,15 @@ export function assertArtifactTargetLeaseReceiptOwner(
   if (!node || node.phase === "settled") throw Error("Receipt owner is already settled");
 }
 
+/** The physical owner that ran the effects; a lease restored for settlement never records them. */
+export function assertArtifactTargetLeaseContainmentOwner(
+  lease: TargetLeaseAuthority,
+  execution: ExecutionRef,
+): void {
+  assertArtifactTargetLeaseReceiptOwner(lease, execution);
+  if (stateOf(lease).settlementOnly) throw Error("Recovered lease permits settlement only");
+}
+
 /** Drop local descriptors only. Durable locks, ownership and all unknown fences remain untouched. */
 export function closeArtifactTargetLeaseHandle(lease: TargetLeaseAuthority): void {
   const s = handles.get(lease);
