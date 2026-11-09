@@ -147,6 +147,7 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
   const imageIdentities = new Map<string,string>();
   // References that are not on the host until a pull of them succeeds.
   const unpulledImages = new Set<string>();
+  let registryDown = false;
   const optionsForHelperLaunchResponseLoss = options.configurationHelperLaunchResponseLoss;
   const helperContainers = new Map<string, unknown>();
   const releaseMetadata = options.configurationReleaseMetadata;
@@ -201,6 +202,7 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
         ),
       });
     else if (releaseMetadata && args[0] === "info") stdout="linux/amd64";
+    else if (registryDown && ((args[0] === "manifest" && args[1] === "inspect") || (args[0] === "image" && args[1] === "pull"))) throw Error("registry unavailable");
     else if (releaseMetadata && args[0] === "manifest" && args[1] === "inspect") stdout=JSON.stringify({schemaVersion:2,config:{digest:`sha256:${"c".repeat(64)}`,size:128},layers:[{digest:`sha256:${"d".repeat(64)}`,size:512}]});
     else if (args[0] === "image" && args[1] === "inspect" && unpulledImages.has(args.at(-1)!)) throw Error("No such image");
     else if (releaseMetadata && args[0] === "image" && args[1] === "inspect" && args[3] === "{{json .}}") stdout=JSON.stringify({Id:imageIdentities.get(args.at(-1)!)??imageId,RepoDigests:[args.at(-1)],Os:"linux",Architecture:"amd64"});
@@ -397,6 +399,7 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
     },
     setImagePullProcess(value:typeof imagePullProcess) {imagePullProcess=value;},
     setImageIdentity(reference:string,value:string) {imageIdentities.set(reference,value);},
+    setRegistryDown(value:boolean) {registryDown=value;},
     setUnpulledImages(references:readonly string[]) {for(const reference of references)unpulledImages.add(reference);},
     setRows(value: typeof rows) {
       rows = value;

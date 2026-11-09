@@ -13,6 +13,7 @@ import { coordinatorPullSubmissionDigest, parseOpsJobStatus } from "@openmapx/co
 import { services } from "@openmapx/core/server";
 import { assertProspectiveConfigurationSettlementPacketBudget } from "../../../packages/core/src/build-artifacts/configuration-fence-settlement-budget";
 import { assertProspectiveConfigurationMaintenanceBudget } from "../../../packages/core/src/build-artifacts/configuration-maintenance-budget";
+import type { ConfigurationReleaseSnapshot } from "../../../packages/core/src/build-artifacts/configuration-release-snapshot";
 import {
   readConfigurationHandoffReleaseOverlay,
   readConfigurationHandoffReleaseState,
@@ -37,7 +38,10 @@ import {
   configurationDataManagerTransport,
 } from "./configuration-hardlinks-runtime";
 import { inspectMaintenanceDockerRuntime } from "./configuration-maintenance-docker-inspection";
-import { preflightConfigurationRelease } from "./configuration-release-preflight";
+import {
+  preflightConfigurationRelease,
+  verifyFrozenConfigurationRelease,
+} from "./configuration-release-preflight";
 import type { DockerRuntimeOptions } from "./docker-runtime";
 import type { OpsJobJournal } from "./journal";
 import {
@@ -479,6 +483,27 @@ export function readOwnedConfigurationMaintenance(
   authority: VerifiedExecutionAuthority,
 ): ConfigurationMaintenanceOwnerRecord {
   return read(authority);
+}
+/** The release a maintenance froze, once its data fence is prepared. Callers use
+ * it to re-check from the snapshot and local images instead of the registry.
+ * Returns nothing while the maintenance has no prepared fence. */
+export function readPreparedMaintenanceRelease(
+  installation: ControlInstallation,
+  maintenanceId: string,
+): ConfigurationReleaseSnapshot | undefined {
+  let raw: unknown;
+  try {
+    raw = readPrivateRecord(
+      installationState(installation),
+      "configuration-maintenance",
+      `${maintenanceId}.json`,
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+  const owner = verifyControl(installation.publicKey, domain, raw, ownerSchema);
+  return owner.receipt.dmFence ? owner.plan.release : undefined;
 }
 /** Observation-only completion of the original prepared handoff. All sources
  * and physical descendants must already be settled; this runs no Docker I/O. */
@@ -4139,6 +4164,7 @@ export async function prepareMaintenanceContinueObservation(
       operation: owner.plan.operation,
       apiParent: owner.plan.apiParent,
       signal,
+      ...(owner.plan.release ? { frozenRelease: owner.plan.release } : {}),
     }),
   );
   if (
@@ -4230,6 +4256,7 @@ export async function verifyFrozenMaintenanceGenerationSource(
       operation: owner.plan.operation,
       apiParent: owner.plan.apiParent,
       signal,
+      ...(owner.plan.release ? { frozenRelease: owner.plan.release } : {}),
     }),
   );
   if (
@@ -5139,6 +5166,9 @@ export function registerConfigurationMaintenanceSource(runtime: OpsRuntime, sour
           operation: owner.plan.operation,
           apiParent: owner.plan.apiParent,
           signal: context.signal,
+          ...(owner.receipt.dmFence && owner.plan.release
+            ? { frozenRelease: owner.plan.release }
+            : {}),
         }),
       );
       preflight =
@@ -5272,6 +5302,10 @@ export async function prepareConfigurationMaintenanceAdmission(
     operation: ConfigurationMaintenancePrepare;
     apiParent: RetainedParentExecution;
     signal: AbortSignal;
+    /** Once maintenance holds the data fence, the release was already resolved
+     * and downloaded. Re-checks then use the frozen snapshot and local images
+     * only, never the registry. */
+    frozenRelease?: ConfigurationReleaseSnapshot;
   },
 ): Promise<ConfigurationMaintenanceAdmission> {
   const source = sources.get(runtime);
@@ -5326,12 +5360,20 @@ export async function prepareConfigurationMaintenanceAdmission(
   )
     throw Error("Original platform candidate binding conflict");
   const release = platform?.release
-    ? await preflightConfigurationRelease({
-        infraDir: source.infraDir,
-        selection: platform.release,
-        execFile: source.execFile,
-        signal: input.signal,
-      })
+    ? input.frozenRelease
+      ? await verifyFrozenConfigurationRelease({
+          infraDir: source.infraDir,
+          selection: platform.release,
+          frozen: input.frozenRelease,
+          execFile: source.execFile,
+          signal: input.signal,
+        })
+      : await preflightConfigurationRelease({
+          infraDir: source.infraDir,
+          selection: platform.release,
+          execFile: source.execFile,
+          signal: input.signal,
+        })
     : undefined;
   const recreateServiceIds = release
     ? []

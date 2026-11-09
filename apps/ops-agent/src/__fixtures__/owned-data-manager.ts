@@ -21,6 +21,8 @@ export async function ownedDataManager(options: {
   settlementSqlFault?: "update-ack-loss" | "terminate-before-commit";
   pauseSettlementBeforeCommit?: boolean;
   pausePrepareResponse?: boolean;
+  /** Called once the fence has been prepared successfully. */
+  onPrepared?: () => void;
   loseRecoveryResponseOnce?: boolean;
 }) {
   let settlementCommits = 0, settlementUpdates = 0, settlementRollbacks = 0, terminatedSettlementSession = false;
@@ -99,6 +101,7 @@ export async function ownedDataManager(options: {
       if (id) maintenanceIds.add(id);
       preparePosts++;
       maintenanceReplies.push({ status: reply.statusCode, error: typeof payload === "string" ? JSON.parse(payload).error : null });
+      if (reply.statusCode === 200) options.onPrepared?.();
       if (options.pausePrepareResponse && reply.statusCode === 200) { prepareReplyEntered.resolve(); await continuePrepareReply.promise; }
       if (options.losePrepareResponse) reply.raw.destroy();
     }

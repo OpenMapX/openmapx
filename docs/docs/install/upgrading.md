@@ -248,13 +248,17 @@ as expected, and applies through the real administrator's public API. The server
 writer and coordinator checks remain authoritative. A refused or incomplete
 outcome is never reported as a successful update.
 
-The release's images are downloaded after the backup and before the preview,
-before the instance enters maintenance. Images already on the host with the
-pinned digest are not downloaded again. If the registry is unreachable or an
-image cannot be verified, the update fails at that point: every service keeps
-running the old release and no maintenance state is held, so you can retry once
-the registry is back. Once maintenance begins, the update only checks that the
-pinned images are present and never contacts the registry.
+The release's images are downloaded before the instance enters maintenance,
+and images already on the host with the pinned digest are not downloaded again.
+In the admin panel's guarded update they are downloaded after the backup and
+before the preview. In the CLI workflow above they are downloaded when the apply
+job starts, after the preview; the preview is judged at the moment you apply, so
+a slow download does not expire it. If the registry is unreachable or an image
+cannot be verified, the update fails at that point: every service keeps running
+the old release and no maintenance state is held, so you can retry once the
+registry is back. Once maintenance begins, the update only checks the frozen
+release and the pinned images already on the host and never contacts the
+registry.
 
 To skip the backup, add `--no-backup`, matching the admin panel's backup choice.
 The receipt retains this choice; use the same flag when resuming that update.

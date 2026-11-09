@@ -41,6 +41,9 @@ interface State {
   preview: AdminPlatformPreview;
   sourceSnapshot: ConfigurationSourcesInspection;
   expectedDesiredRowVersion: string | null;
+  /** The instant the apply job found the preview still valid. A release download
+   * between that check and the first effect must not expire the preview. */
+  previewCheckedAt?: Date;
   handoffId: string;
   authorization?: ReturnType<typeof encrypt>;
   overlay: ProspectiveConfigurationOverlay;
@@ -163,7 +166,7 @@ export async function preparePlatformConfigurationChange(
   input: Pick<
     PlatformConfigurationCommitInput,
     "previewFingerprint" | "expectedCurrentRevisionId" | "confirmations" | "proof"
-  >,
+  > & { previewCheckedAt?: Date },
   writer: AdministrativeConfigurationWriter,
   migration?: {
     stage: import("./configuration-migration/staging").MigrationStage;
@@ -191,7 +194,11 @@ export async function preparePlatformConfigurationChange(
     throw new PlatformPreviewConflict();
   const owner = active(writer),
     retained = await readPlatformPreview(
-      { actorId: writer.actorId, previewFingerprint: input.previewFingerprint },
+      {
+        actorId: writer.actorId,
+        previewFingerprint: input.previewFingerprint,
+        ...(input.previewCheckedAt ? { now: input.previewCheckedAt } : {}),
+      },
       owner.connection,
     ),
     preview = immutable(retained.preview);
@@ -286,7 +293,11 @@ export async function preparePlatformConfigurationChange(
         // delayed first effect under a changed policy or expired preview.
         // Attempted work remains lookup-only and never consumes another proof.
         const original = await readPlatformPreview(
-          { actorId: writer.actorId, previewFingerprint: preview.previewFingerprint },
+          {
+            actorId: writer.actorId,
+            previewFingerprint: preview.previewFingerprint,
+            ...(state.previewCheckedAt ? { now: state.previewCheckedAt } : {}),
+          },
           current.connection,
         );
         if (
@@ -298,7 +309,11 @@ export async function preparePlatformConfigurationChange(
       return;
     }
     const stored = await readPlatformPreview(
-      { actorId: writer.actorId, previewFingerprint: preview.previewFingerprint },
+      {
+        actorId: writer.actorId,
+        previewFingerprint: preview.previewFingerprint,
+        ...(state.previewCheckedAt ? { now: state.previewCheckedAt } : {}),
+      },
       current.connection,
     );
     if (
@@ -389,6 +404,7 @@ export async function preparePlatformConfigurationChange(
     preview,
     sourceSnapshot: immutable(retained.sourceSnapshot!),
     expectedDesiredRowVersion: desired?.version ?? null,
+    ...(input.previewCheckedAt ? { previewCheckedAt: input.previewCheckedAt } : {}),
     handoffId: randomUUID(),
     ...(migration
       ? {

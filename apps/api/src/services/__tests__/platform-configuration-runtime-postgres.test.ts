@@ -487,6 +487,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       "launch-native-system-release-api-after-save",
       "launch-native-system-release-late-cancel",
       "launch-native-system-release-pull-failure",
+      "launch-native-system-release-image-missing",
+      "launch-native-system-release-registry-outage",
     ])(
       "guards and retains helper mode %s through original ownership",
       async (mode) => {
@@ -557,6 +559,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             "launch-native-system-release-api-after-save",
             "launch-native-system-release-late-cancel",
             "launch-native-system-release-pull-failure",
+            "launch-native-system-release-image-missing",
+            "launch-native-system-release-registry-outage",
           ].includes(version)
         ) {
           state.registry = new services.ServiceRegistry({
@@ -574,6 +578,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         }));
         host.setRows(rows);
         let checkedRelease: { releaseId: string; manifestDigest: string } | undefined;
+        let releaseReferences: string[] = [];
         if (version.startsWith("launch-native-release") || systemRelease) {
           vi.stubEnv("OPENMAPX_RELEASE", "main");
           vi.stubEnv("OPENMAPX_RELEASE_MANIFEST_REPOSITORY", "ghcr.io/openmapx/release-manifest");
@@ -613,7 +618,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             raw,
             { mode: 0o600 },
           );
-          const releaseReferences = Object.values(manifest.images) as string[];
+          releaseReferences = Object.values(manifest.images) as string[];
           // The images reach the host only through the pre-maintenance pull.
           host.setUnpulledImages(releaseReferences);
           host.setImagePullProcess(async (reference) => {
@@ -744,6 +749,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           infraDir: host.infraDir,
           serviceIds: ids,
           pausePrepareResponse: version.endsWith("-api-before-save"),
+          // The registry goes away once the data fence is held. Everything that
+          // follows must rely on the frozen release and local images.
+          ...(version === "launch-native-system-release-registry-outage"
+            ? { onPrepared: () => host.setRegistryDown(true) }
+            : {}),
         });
         const journal = await openOpsJobJournal(
           join(host.infraDir, "state/ops-agent/jobs-v1.json"),
@@ -858,6 +868,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               "launch-native-system-release-api-after-save",
               "launch-native-system-release-late-cancel",
               "launch-native-system-release-pull-failure",
+              "launch-native-system-release-image-missing",
+              "launch-native-system-release-registry-outage",
             ].includes(version)
           ) {
             const { adminPlatformRoute } = await import("../../routes/admin-platform"),
@@ -893,6 +905,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                           "launch-native-system-release-api-after-save",
                           "launch-native-system-release-late-cancel",
                           "launch-native-system-release-pull-failure",
+                          "launch-native-system-release-image-missing",
+                          "launch-native-system-release-registry-outage",
                         ].includes(version)
                           ? { version: 1 as const }
                           : {
@@ -1152,6 +1166,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             }
             const env = (name: string) =>
               args!.find((value) => value.startsWith(`${name}=`))!.slice(name.length + 1);
+            // The images were on the host when maintenance began. One disappears
+            // before the helper runs, which must stop it before any recreate.
+            if (version === "launch-native-system-release-image-missing")
+              host.setUnpulledImages(releaseReferences);
             await nativeHelper(
               host,
               {
@@ -1160,7 +1178,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 OPENMAPX_CONTROL_DELEGATION: env("OPENMAPX_CONTROL_DELEGATION"),
                 OPENMAPX_CONTROL_EXECUTION: env("OPENMAPX_CONTROL_EXECUTION"),
               },
-              version === "launch-native-release-wrong-config"
+              version === "launch-native-release-wrong-config" ||
+                version === "launch-native-system-release-image-missing"
                 ? { failureStage: "application" }
                 : version === "launch-native-system-release-killed"
                   ? {
@@ -1171,6 +1190,47 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                     }
                   : {},
             );
+            if (version === "launch-native-system-release-image-missing") {
+              const file = join(
+                  host.infraDir,
+                  "control-private/ops-agent/observations",
+                  `configuration-handoff-${env("OPS_CONFIGURATION_HANDOFF_ID")}.completion.json`,
+                ),
+                original = readFileSync(file);
+              expect(JSON.parse(String(original)).payload).toMatchObject({
+                phase: "recovery_required",
+                completedAt: null,
+              });
+              await nativeHelper(
+                host,
+                {
+                  OPENMAPX_ROOT_DIR: host.root,
+                  OPS_CONFIGURATION_HANDOFF_ID: env("OPS_CONFIGURATION_HANDOFF_ID"),
+                  OPENMAPX_CONTROL_DELEGATION: env("OPENMAPX_CONTROL_DELEGATION"),
+                  OPENMAPX_CONTROL_EXECUTION: env("OPENMAPX_CONTROL_EXECUTION"),
+                },
+                { failureStage: "adoption" },
+              );
+              expect(readFileSync(file)).toEqual(original);
+              await jobRunner.reconcile();
+              const pending = await readJob();
+              expect(pending.status).toBe("running");
+              expect(pending.finishedAt).toBeNull();
+              expect(dm.settlePosts).toBe(0);
+              await expect(dm.assertDataAdmission()).rejects.toThrow();
+              // Only the download before maintenance pulled; the helper pulled nothing.
+              expect(
+                host.calls.filter((args) => args[0] === "image" && args[1] === "pull"),
+              ).toHaveLength(releaseReferences.length);
+              // No service was recreated and no release became current.
+              expect(host.calls.some((args) => args[0] === "compose" && args.includes("up"))).toBe(
+                false,
+              );
+              expect(
+                existsSync(join(services.releaseStatePaths(host.infraDir).store, "current.json")),
+              ).toBe(false);
+              return;
+            }
             if (version === "launch-native-system-release-agent-restart") {
               expect(nativeAgentExited).toBe(true);
               nativeAgents.push(

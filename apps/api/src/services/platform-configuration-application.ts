@@ -24,7 +24,11 @@ import {
 export type PlatformConfigurationApplicationInput = Pick<
   PlatformConfigurationCommitInput,
   "actorId" | "previewFingerprint" | "expectedCurrentRevisionId" | "confirmations" | "proof"
-> & { operationKey: string };
+> & {
+  operationKey: string;
+  /** When the preview was last found valid; see the participant state. */
+  previewCheckedAt?: Date;
+};
 
 export async function applyPlatformConfigurationIntent(
   input: PlatformConfigurationApplicationInput,
@@ -50,14 +54,20 @@ export async function runPlatformConfigurationChange(
   ctx: JobContext,
   input: PlatformConfigurationApplicationInput,
 ) {
+  let applied = input;
   // A release selection is downloaded before anything is committed, so a
   // registry outage fails the change while every service still runs as before.
+  // The preview is judged at the moment the job starts: the download may take
+  // longer than the preview's lifetime, and the apply request already held a
+  // valid preview.
   if (!ctx.checkpointResult?._configurationCandidate) {
+    const previewCheckedAt = new Date();
     const { preview } = await readPlatformPreview({
       actorId: input.actorId,
       previewFingerprint: input.previewFingerprint,
+      now: previewCheckedAt,
     });
-    if (preview.release)
+    if (preview.release) {
       await executeAdminJobOperation(
         ctx,
         {
@@ -67,6 +77,8 @@ export async function runPlatformConfigurationChange(
         },
         "admin-job.release.images",
       );
+      applied = { ...input, previewCheckedAt };
+    }
   }
   return withAdministrativeConfigurationJob(ctx, () =>
     withAdministrativeConfigurationWriter(
@@ -76,7 +88,7 @@ export async function runPlatformConfigurationChange(
         signal: ctx.signal,
         integrationIds: getAllIntegrations().map((integration) => integration.id),
       },
-      () => applyPlatformConfigurationIntent(input),
+      () => applyPlatformConfigurationIntent(applied),
     ),
   );
 }
