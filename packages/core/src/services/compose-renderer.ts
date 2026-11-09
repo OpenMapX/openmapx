@@ -862,12 +862,12 @@ export function renderServiceSnippet(
     // readOnly defaults to true for bind mounts (config files, docker socket)
     const readOnly = bm.readOnly !== false;
     volumes.push(`${resolved.src}:${bm.target}${readOnly ? ":ro" : ""}`);
-    // A writable `@infra:data/...` source is a data dir the container (and the
-    // data-manager pipeline) writes into. Record it so the deploy step can
-    // pre-create it owned by the data UID before compose up; otherwise docker
-    // auto-creates it as root and the non-root container can't write.
+    // An `@infra:data/...` source is a data dir the data-manager pipeline (or
+    // the container itself) writes into, including one a service only reads.
+    // Record it so the deploy step can pre-create it owned by the data UID
+    // before compose up; otherwise docker auto-creates it as root and the
+    // non-root writers can't write.
     if (
-      !readOnly &&
       resolved.absoluteHostPath &&
       !bm.writableCopy &&
       bm.source.startsWith(`${INFRA_BIND_PREFIX}data/`)
