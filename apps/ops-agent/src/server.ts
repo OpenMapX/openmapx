@@ -1644,65 +1644,72 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               audit(job.role, job.operation.kind, job.resourceId, "error", startedAt, "runtime");
             }
           } finally {
-            if (configurationResultsSettling.delete(job.operationId) && job.state === "succeeded") {
-              job.cursor += 1;
-              pushEvent(job, { cursor: job.cursor, type: "state", state: "succeeded" });
-            }
-            if (terminalDurable && !claimReleased && !configurationEvidence) {
-              await claimAdmission
-                ?.release()
-                .then(() => {
-                  claimReleased = true;
-                })
-                .catch(async () => {
-                  stickyRecoveryRequired.add(job.operationId);
-                  await transition(job, "failed", {
-                    result: undefined,
-                    errorClass: "recovery_required",
-                    terminalAt: now().getTime(),
-                  }).catch(() => forceRecoveryRequired(job));
-                });
-            }
-            const authority = controlAuthorities.get(job.operationId);
-            if (terminalDurable && authority && options.controlInstallation)
-              retainControlTerminalStatus(
-                options.controlInstallation,
-                authority.execution,
-                statusFor(job, 2),
-                job.terminalAt,
-              );
-            if (terminalDurable && claimReleased && authority)
-              completeControlJournalExecution(authority);
-            if (
-              terminalDurable &&
-              claimReleased &&
-              authority &&
-              options.controlInstallation &&
-              job.terminalAt !== undefined &&
-              job.state === "succeeded" &&
-              (isTrustedConfigurationApplyOperation(job.operation) ||
-                job.operation.kind === "configuration.hardlinks.apply" ||
-                job.operation.kind === "configurationHandoff.prepare" ||
-                job.operation.kind === "service.recreate" ||
-                job.operation.kind === "service.recreateIsolated") &&
-              job.operation.maintenanceId
-            ) {
-              try {
-                recordOwnedConfigurationMaintenanceStepTerminal(
+            try {
+              if (
+                configurationResultsSettling.delete(job.operationId) &&
+                job.state === "succeeded"
+              ) {
+                job.cursor += 1;
+                pushEvent(job, { cursor: job.cursor, type: "state", state: "succeeded" });
+              }
+              if (terminalDurable && !claimReleased && !configurationEvidence) {
+                await claimAdmission
+                  ?.release()
+                  .then(() => {
+                    claimReleased = true;
+                  })
+                  .catch(async () => {
+                    stickyRecoveryRequired.add(job.operationId);
+                    await transition(job, "failed", {
+                      result: undefined,
+                      errorClass: "recovery_required",
+                      terminalAt: now().getTime(),
+                    }).catch(() => forceRecoveryRequired(job));
+                  });
+              }
+              const authority = controlAuthorities.get(job.operationId);
+              if (terminalDurable && authority && options.controlInstallation)
+                retainControlTerminalStatus(
                   options.controlInstallation,
-                  job.operation,
-                  executionFor(job),
+                  authority.execution,
                   statusFor(job, 2),
                   job.terminalAt,
                 );
-              } catch {
-                stickyRecoveryRequired.add(
-                  job.operationId,
-                ); /* Exact ACK publication may repair this committed source; no target replay. */
+              if (terminalDurable && claimReleased && authority)
+                completeControlJournalExecution(authority);
+              if (
+                terminalDurable &&
+                claimReleased &&
+                authority &&
+                options.controlInstallation &&
+                job.terminalAt !== undefined &&
+                job.state === "succeeded" &&
+                (isTrustedConfigurationApplyOperation(job.operation) ||
+                  job.operation.kind === "configuration.hardlinks.apply" ||
+                  job.operation.kind === "configurationHandoff.prepare" ||
+                  job.operation.kind === "service.recreate" ||
+                  job.operation.kind === "service.recreateIsolated") &&
+                job.operation.maintenanceId
+              ) {
+                try {
+                  recordOwnedConfigurationMaintenanceStepTerminal(
+                    options.controlInstallation,
+                    job.operation,
+                    executionFor(job),
+                    statusFor(job, 2),
+                    job.terminalAt,
+                  );
+                } catch {
+                  stickyRecoveryRequired.add(
+                    job.operationId,
+                  ); /* Exact ACK publication may repair this committed source; no target replay. */
+                }
               }
+            } finally {
+              // The slot is returned even when terminal bookkeeping throws.
+              activeControllers.delete(job.operationId);
+              active -= 1;
             }
-            activeControllers.delete(job.operationId);
-            active -= 1;
           }
         },
         async (error) => {
@@ -1774,33 +1781,37 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               })
               .catch(() => forceRecoveryRequired(job));
           } finally {
-            if (terminalDurable && !claimReleased) {
-              await claimAdmission
-                ?.release()
-                .then(() => {
-                  claimReleased = true;
-                })
-                .catch(async () => {
-                  stickyRecoveryRequired.add(job.operationId);
-                  await transition(job, "failed", {
-                    result: undefined,
-                    errorClass: "recovery_required",
-                    terminalAt: now().getTime(),
-                  }).catch(() => forceRecoveryRequired(job));
-                });
+            try {
+              if (terminalDurable && !claimReleased) {
+                await claimAdmission
+                  ?.release()
+                  .then(() => {
+                    claimReleased = true;
+                  })
+                  .catch(async () => {
+                    stickyRecoveryRequired.add(job.operationId);
+                    await transition(job, "failed", {
+                      result: undefined,
+                      errorClass: "recovery_required",
+                      terminalAt: now().getTime(),
+                    }).catch(() => forceRecoveryRequired(job));
+                  });
+              }
+              const authority = controlAuthorities.get(job.operationId);
+              if (terminalDurable && authority && options.controlInstallation)
+                retainControlTerminalStatus(
+                  options.controlInstallation,
+                  authority.execution,
+                  statusFor(job, 2),
+                  job.terminalAt,
+                );
+              if (terminalDurable && claimReleased && authority)
+                completeControlJournalExecution(authority);
+            } finally {
+              // The slot is returned even when terminal bookkeeping throws.
+              activeControllers.delete(job.operationId);
+              active -= 1;
             }
-            const authority = controlAuthorities.get(job.operationId);
-            if (terminalDurable && authority && options.controlInstallation)
-              retainControlTerminalStatus(
-                options.controlInstallation,
-                authority.execution,
-                statusFor(job, 2),
-                job.terminalAt,
-              );
-            if (terminalDurable && claimReleased && authority)
-              completeControlJournalExecution(authority);
-            activeControllers.delete(job.operationId);
-            active -= 1;
           }
         },
       );

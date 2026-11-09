@@ -967,6 +967,99 @@ describe("reviewed durable admission boundary", () => {
   });
 });
 
+describe("asynchronous operation slots", () => {
+  const pullOperation = {
+    kind: "service.pull",
+    serviceId: "redis",
+    expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+  } as const;
+  const releasingClaimer = (release: () => Promise<void>): OpsResourceClaimer => ({
+    claim: async (operation, fingerprint) => ({
+      operation,
+      fingerprint,
+      source: "trusted-data" as const,
+      capability: { revisionId: "registry-v1", values: {} },
+      admission: {
+        rollback: async () => undefined,
+        commit: async () => undefined,
+        release,
+      },
+    }),
+  });
+  const submit = (app: Awaited<ReturnType<typeof buildOpsAgentServer>>, label: string) =>
+    app.inject({
+      method: "POST",
+      url: "/v1/operations",
+      headers: auth(),
+      payload: request(pullOperation, `ops1_${label}`, key(`opk1_${label}`)),
+    });
+  const untilTerminal = async (
+    app: Awaited<ReturnType<typeof buildOpsAgentServer>>,
+    admitted: Awaited<ReturnType<typeof submit>>,
+  ) => {
+    const operationId = admitted.json().result.operationId as string;
+    for (let attempt = 0; attempt < 500; attempt += 1) {
+      const status = await app.inject({
+        method: "GET",
+        url: `/v1/operations/${operationId}`,
+        headers: auth(),
+      });
+      if (["succeeded", "failed", "timed_out"].includes(status.json().result.state)) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+  };
+
+  it("a throw during terminal bookkeeping releases the concurrency slot", async () => {
+    const app = await buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      resourceClaimer: releasingClaimer(() => {
+        throw new Error("release failed synchronously");
+      }),
+      maxConcurrency: 4,
+      now: () => new Date(baseTime),
+      dispatch: async () => pullResult,
+    });
+    for (const label of [
+      "slotLeak0000000000a",
+      "slotLeak0000000000b",
+      "slotLeak0000000000c",
+      "slotLeak0000000000d",
+    ]) {
+      const admitted = await submit(app, label);
+      expect(admitted.statusCode).toBe(202);
+      await untilTerminal(app, admitted);
+    }
+    expect((await submit(app, "slotLeak0000000000e")).statusCode).toBe(202);
+    await app.close();
+  }, 120_000);
+
+  it("releases the slot exactly once when terminal bookkeeping succeeds", async () => {
+    let unblock!: () => void;
+    const blocked = new Promise<void>((resolve) => (unblock = resolve));
+    let calls = 0;
+    const app = await buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      resourceClaimer: allow,
+      maxConcurrency: 2,
+      now: () => new Date(baseTime),
+      dispatch: async () => {
+        calls += 1;
+        if (calls > 1) await blocked;
+        return pullResult;
+      },
+    });
+    const first = await submit(app, "slotOnce0000000000a");
+    expect(first.statusCode).toBe(202);
+    await untilTerminal(app, first);
+    expect((await submit(app, "slotOnce0000000000b")).statusCode).toBe(202);
+    expect((await submit(app, "slotOnce0000000000c")).statusCode).toBe(202);
+    expect((await submit(app, "slotOnce0000000000d")).statusCode).toBe(429);
+    unblock();
+    await app.close();
+  }, 120_000);
+});
+
 describe("operation context for agent replacement", () => {
   it("counts the other unfinished operations the agent is running", async () => {
     let releaseFirst: () => void = () => {};
