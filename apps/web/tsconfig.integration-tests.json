@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.integrations.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./integration-tests.tsbuildinfo",
+    // Backend tests exercise the same ES2024 library surface as the backends
+    // themselves (see apps/api/tsconfig.integrations.json); the frontend tests
+    // in this project need the DOM declarations.
+    "lib": ["dom", "dom.iterable", "ES2024"],
+    "allowArbitraryExtensions": true
+  },
+  // The test files the two integration projects leave out: backend `.test.ts`,
+  // component `.test.tsx` and everything under `__tests__`. One project covers
+  // both because the web app's alias set resolves every import either kind uses.
+  "include": [
+    "next-env.d.ts",
+    // Ambient module declarations that sit beside an integration's sources.
+    "../../integrations/**/*.d.ts",
+    "../../integrations/**/*.test.ts",
+    "../../integrations/**/*.test.tsx",
+    "../../integrations/**/__tests__/**/*.ts",
+    "../../integrations/**/__tests__/**/*.tsx"
+  ],
+  "exclude": ["../../integrations/**/node_modules/**", "../../integrations/**/dist/**"]
+}

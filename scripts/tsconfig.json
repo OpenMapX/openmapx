@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    // Scripts run under Node's type stripping, which needs the `.ts` suffix on
+    // relative imports of other TypeScript files.
+    "allowImportingTsExtensions": true,
+    // Several TypeScript scripts import sibling `.mjs` modules that carry no
+    // declaration file; reading their JavaScript infers the types instead of
+    // reporting each import as implicitly `any`. The JavaScript is not checked.
+    "allowJs": true
+  },
+  "include": ["**/*.ts", "**/*.mts"],
+  // The discovery evaluation keeps its own project (`discovery-eval:check-types`).
+  "exclude": ["node_modules", "discovery-eval"]
+}

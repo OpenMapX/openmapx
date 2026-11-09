@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    // The sources use the global `GeoJSON` namespace from @types/geojson.
+    "types": ["node", "geojson"]
+  },
+  "include": ["src/**/*.ts", "__tests__/**/*.ts"]
+}
