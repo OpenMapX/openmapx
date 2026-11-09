@@ -303,6 +303,9 @@ async function observeExtensionJob(ctx: JobContext): Promise<Record<string, unkn
   throw new JobObservationPending("recovery_required");
 }
 
+const PUMP_RETRY_BASE_MS = 1_000;
+const PUMP_RETRY_MAX_MS = 30_000;
+
 class AdminJobRunner {
   private readonly handlers = new Map<string, JobHandler>();
   private readonly active = new Map<string, AbortController>();
@@ -334,7 +337,7 @@ class AdminJobRunner {
       if (isActiveMaintenanceViolation(error)) throw new ActiveMaintenanceConflict();
       throw error;
     }
-    setTimeout(() => void this.pump(), 0);
+    this.schedulePump();
     return id;
   }
 
@@ -346,7 +349,7 @@ class AdminJobRunner {
     intent?: Record<string, unknown>,
   ): Promise<string> {
     const id = await retainMaintenanceJob(type, payload, actorId, key, intent);
-    setTimeout(() => void this.pump(), 0);
+    this.schedulePump();
     return id;
   }
 
@@ -408,7 +411,7 @@ class AdminJobRunner {
       });
       return { jobId, operationId };
     });
-    setTimeout(() => void this.pump(), 0);
+    this.schedulePump();
     return accepted;
   }
 
@@ -1185,11 +1188,42 @@ class AdminJobRunner {
           sql`${adminJob.result}->'observation' IS NULL`,
         ),
       );
+    this.pumpStopped = false;
     void this.pump();
   }
 
   private pumping = false;
   private pumpAgain = false;
+  private pumpTimer: ReturnType<typeof setTimeout> | undefined;
+  private pumpDueAt = 0;
+  private pumpFailures = 0;
+  private pumpStopped = false;
+
+  /**
+   * Keeps at most one pump pending. An earlier request replaces a later one so
+   * new work is not held behind a failure backoff; a later request is ignored.
+   */
+  private schedulePump(delayMs = 0): void {
+    if (this.pumpStopped) return;
+    const dueAt = Date.now() + delayMs;
+    if (this.pumpTimer) {
+      if (this.pumpDueAt <= dueAt) return;
+      clearTimeout(this.pumpTimer);
+    }
+    this.pumpDueAt = dueAt;
+    this.pumpTimer = setTimeout(() => {
+      this.pumpTimer = undefined;
+      void this.pump();
+    }, delayMs);
+    this.pumpTimer.unref?.();
+  }
+
+  /** Cancels any pending pump and refuses new ones until the runner is initialized again. */
+  stopPumping(): void {
+    this.pumpStopped = true;
+    if (this.pumpTimer) clearTimeout(this.pumpTimer);
+    this.pumpTimer = undefined;
+  }
 
   private async pump(): Promise<void> {
     if (this.pumping) {
@@ -1200,7 +1234,7 @@ class AdminJobRunner {
     try {
       do {
         this.pumpAgain = false;
-        while (this.active.size < this.maxConcurrent) {
+        while (!this.pumpStopped && this.active.size < this.maxConcurrent) {
           const [candidate] = await db
             .select()
             .from(adminJob)
@@ -1213,6 +1247,18 @@ class AdminJobRunner {
           void this.launchJob(job);
         }
       } while (this.pumpAgain && this.active.size < this.maxConcurrent);
+      this.pumpFailures = 0;
+    } catch (error) {
+      this.pumpFailures += 1;
+      const delayMs = Math.min(
+        PUMP_RETRY_BASE_MS * 2 ** (this.pumpFailures - 1),
+        PUMP_RETRY_MAX_MS,
+      );
+      console.error(
+        `[job-runner] Could not read or claim queued jobs; retrying in ${delayMs}ms:`,
+        error instanceof Error ? error.message : error,
+      );
+      this.schedulePump(delayMs);
     } finally {
       this.pumping = false;
     }
@@ -1272,7 +1318,7 @@ class AdminJobRunner {
         clearTimeout(heartbeat);
         this.active.delete(job.id);
         this.logSeq.delete(job.id);
-        setTimeout(() => void this.pump(), 0);
+        this.schedulePump();
       })
       .catch((err) => {
         console.error(

@@ -1,6 +1,6 @@
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AdminJobFailure } from "../admin-job-failure";
 import { claimAdminJob, jobOwnership } from "../admin-job-state";
 import { coordinatorLifecycleOperationKey } from "../coordinator-lifecycle";
@@ -12,6 +12,8 @@ const store = vi.hoisted(() => ({
   accept: true,
   status: "running",
   rows: [] as unknown[],
+  selectError: undefined as Error | undefined,
+  selects: 0,
 }));
 vi.mock("../../db", () => ({
   db: {
@@ -30,7 +32,13 @@ vi.mock("../../db", () => ({
       from: () => ({
         where: () => ({
           limit: async () => store.rows,
-          orderBy: () => ({ limit: async () => store.rows }),
+          orderBy: () => ({
+            limit: async () => {
+              store.selects += 1;
+              if (store.selectError) throw store.selectError;
+              return store.rows;
+            },
+          }),
         }),
       }),
     }),
@@ -52,6 +60,15 @@ beforeEach(() => {
   store.accept = true;
   store.status = "running";
   store.rows = [];
+  store.selectError = undefined;
+  store.selects = 0;
+});
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  const runner = jobRunner as unknown as { pumpStopped: boolean };
+  jobRunner.stopPumping();
+  runner.pumpStopped = false;
 });
 
 it("merges AdminJobFailure evidence into DB/SSE without publishing ownership or admission proofs", async () => {
@@ -242,3 +259,70 @@ it.each([false, true])(
     expect(handler).toHaveBeenCalledTimes(extra ? 0 : 1);
   },
 );
+
+it("a database error at pump time backs off and does not exit the process", async () => {
+  vi.useFakeTimers();
+  const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const unhandled = vi.fn();
+  process.on("unhandledRejection", unhandled);
+  const runner = jobRunner as unknown as {
+    pump(): Promise<void>;
+    schedulePump(delayMs?: number): void;
+  };
+  try {
+    store.selectError = new Error("connection terminated");
+    await expect(runner.pump()).resolves.toBeUndefined();
+    expect(store.selects).toBe(1);
+    expect(logged).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(1);
+
+    const delays: number[] = [];
+    const schedule = vi.spyOn(globalThis, "setTimeout");
+    for (let retry = 0; retry < 8; retry += 1) {
+      await vi.advanceTimersToNextTimerAsync();
+      expect(vi.getTimerCount()).toBe(1);
+    }
+    for (const call of schedule.mock.calls) delays.push(Number(call[1]));
+    expect(store.selects).toBe(9);
+    expect(delays).toEqual([2_000, 4_000, 8_000, 16_000, 30_000, 30_000, 30_000, 30_000]);
+
+    store.selectError = undefined;
+    await vi.advanceTimersToNextTimerAsync();
+    expect(vi.getTimerCount()).toBe(0);
+    const recovered = store.selects;
+    store.selectError = new Error("connection terminated");
+    await runner.pump();
+    await vi.advanceTimersByTimeAsync(999);
+    expect(store.selects).toBe(recovered + 1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(store.selects).toBe(recovered + 2);
+    expect(unhandled).not.toHaveBeenCalled();
+  } finally {
+    process.off("unhandledRejection", unhandled);
+  }
+});
+
+it("keeps one pump pending and drops it on shutdown", async () => {
+  vi.useFakeTimers();
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const runner = jobRunner as unknown as {
+    pump(): Promise<void>;
+    schedulePump(delayMs?: number): void;
+  };
+  store.selectError = new Error("connection terminated");
+  await runner.pump();
+  for (let request = 0; request < 5; request += 1) runner.schedulePump();
+  expect(vi.getTimerCount()).toBe(1);
+
+  await vi.advanceTimersByTimeAsync(0);
+  const afterImmediate = store.selects;
+  expect(afterImmediate).toBe(2);
+  expect(vi.getTimerCount()).toBe(1);
+
+  jobRunner.stopPumping();
+  expect(vi.getTimerCount()).toBe(0);
+  runner.schedulePump();
+  expect(vi.getTimerCount()).toBe(0);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(store.selects).toBe(afterImmediate);
+});

@@ -805,6 +805,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
 
   let stopAccountMailWorker: (() => Promise<void>) | undefined;
   server.addHook("onClose", stopAdminJobReconciliation);
+  server.addHook("onClose", async () => jobRunner.stopPumping());
   server.addHook("onClose", async () => {
     await stopAccountMailWorker?.();
   });
