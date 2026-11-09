@@ -9,7 +9,9 @@
         "$TURBO_ROOT$/integrations/**/*.ts",
         "$TURBO_ROOT$/integrations/**/*.tsx",
         "$TURBO_ROOT$/integrations/**/*.json",
-        "$TURBO_ROOT$/packages/mobility-core/src/**"
+        "$TURBO_ROOT$/packages/**/*.ts",
+        "$TURBO_ROOT$/packages/**/*.tsx",
+        "$TURBO_ROOT$/packages/**/*.json"
       ]
     }
   }
