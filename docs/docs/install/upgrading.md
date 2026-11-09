@@ -309,10 +309,17 @@ writer guards or reinterpret a selected overlay as proof of completion.
 
 ### Recovering a refused host service update
 
-A read-only traffic inspection failure is terminal. Data Manager startup also
-repairs the exact older interrupted traffic-maintenance record with no attempted
-agent operations. Jobs with attempted operations, changed metadata or unknown
-writers remain fenced.
+A read-only traffic inspection failure is terminal. Data Manager also settles an
+interrupted legacy data job by observation, at startup and then every minute. It
+looks up each host operation the job recorded by its operation key, and it never
+resubmits or cancels one. A job that recorded no operation, or whose recorded
+operations have all finished, becomes `error` and stops blocking later data jobs.
+A job with an operation that is still running stays interrupted. So does a job
+whose operations the ops-agent cannot answer for, for example while the agent is
+down; it clears on the first pass after the agent answers. When the agent
+restarted mid-operation it reports the operation as failed with a
+recovery-required outcome, which does not prove the host effect ended, so the job
+stays interrupted until the operation's deadline plus 30 seconds has passed.
 
 For a standalone host `services start` or `services update` that failed at
 hardlinks after committing its configuration, retain its original operation key

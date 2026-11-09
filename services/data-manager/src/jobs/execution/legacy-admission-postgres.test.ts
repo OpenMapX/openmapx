@@ -12,17 +12,14 @@ import { setupCron } from "../../cron";
 import { db, rawSql } from "../../db";
 import { resetOpsClient, runOpsOperation } from "../../ops-client";
 import { StateStore } from "../../state";
+import { reconcileInterruptedLegacyJobs } from "../reconcile";
 import { bakePredicted } from "../traffic/bake-predicted";
 import { ensureTrafficExtract } from "../traffic/ensure-extract";
 import { resolveCatalogBumpCandidate } from "../transitous/catalog-bump";
 import { createSingleFlightController } from "../transitous/single-flight";
 import { installDataMutationAdmission } from "./admission";
 import { createDataConfigurationMaintenance } from "./configuration-maintenance";
-import {
-  reconcileLegacyCatalogPreflightRejections,
-  reconcileLegacyUnattemptedTraffic,
-  withLegacyDataMutation,
-} from "./legacy-mutation";
+import { withLegacyDataMutation } from "./legacy-mutation";
 
 vi.mock("node:fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs")>();
@@ -101,82 +98,211 @@ it.skipIf(!enabled)(
     }
   },
 );
+const attemptedKey = (suffix: string) => `opk1_${suffix.padEnd(24, "x")}`;
+const retainedOperation = (suffix: string, state: string) => ({
+  operationKey: attemptedKey(suffix),
+  state,
+});
+async function insertLegacyJob(
+  owned: string[],
+  fixture: { kind: string; status: string; metadata: unknown; version?: number },
+): Promise<string> {
+  const [row] =
+    await rawSql`INSERT INTO data_manager.jobs(kind,status,ownership_version,metadata) VALUES(${fixture.kind},${fixture.status},${fixture.version ?? 0},${JSON.stringify(fixture.metadata)}::text::jsonb) RETURNING id`;
+  owned.push(String(row!.id));
+  return String(row!.id);
+}
+const admissionBlocked = () =>
+  expect(fence.withAdmission(async () => "must not admit")).rejects.toMatchObject({
+    statusCode: 409,
+  });
+
 it.skipIf(!enabled)(
-  "repairs only the exact caught legacy traffic failure with no attempted operations",
+  "a crashed legacy row with no recorded agent operation becomes error and admission reopens",
   async () => {
-    const original = { version: 1, retainedOps: [], recoveryRequired: true };
-    const fixtures = [
-      {
-        kind: "traffic-maintenance",
-        status: "interrupted",
-        metadata: original,
-        version: 0,
-        repair: true,
-      },
-      {
-        kind: "traffic-maintenance",
-        status: "running",
-        metadata: original,
-        version: 0,
-        repair: false,
-      },
-      {
-        kind: "traffic-maintenance",
-        status: "interrupted",
-        metadata: { ...original, retainedOps: [{ operationKey: "attempted" }] },
-        version: 1,
-        repair: false,
-      },
-      {
-        kind: "traffic-maintenance",
-        status: "interrupted",
-        metadata: { version: 1, retainedOps: [] },
-        version: 0,
-        repair: false,
-      },
-      {
-        kind: "traffic-live",
-        status: "interrupted",
-        metadata: original,
-        version: 0,
-        repair: false,
-      },
-      {
-        kind: "traffic-maintenance",
-        status: "interrupted",
-        metadata: { ...original, unknown: true },
-        version: 0,
-        repair: false,
-      },
-      {
-        kind: "traffic-maintenance",
-        status: "interrupted",
-        metadata: original,
-        version: 1,
-        repair: false,
-      },
-    ];
     const owned: string[] = [];
     try {
-      for (const fixture of fixtures) {
-        const [row] =
-          await rawSql`INSERT INTO data_manager.jobs(kind,status,ownership_version,metadata) VALUES(${fixture.kind},${fixture.status},${fixture.version},${JSON.stringify(fixture.metadata)}::text::jsonb) RETURNING id`;
-        owned.push(String(row!.id));
-      }
-      await reconcileLegacyUnattemptedTraffic(rawSql);
-      await reconcileLegacyUnattemptedTraffic(rawSql);
-      for (const [index, fixture] of fixtures.entries()) {
-        const [row] =
-          await rawSql`SELECT status,finished_at,metadata FROM data_manager.jobs WHERE id=${owned[index]!}`;
-        expect(row?.status).toBe(fixture.repair ? "error" : fixture.status);
-        expect(row?.finished_at === null).toBe(!fixture.repair);
-        expect(row?.metadata).toEqual(fixture.metadata);
-      }
+      await expect(
+        withLegacyDataMutation(
+          "traffic-live",
+          async () => {
+            throw Error("Synthetic worker crash");
+          },
+          rawSql,
+        ),
+      ).rejects.toThrow("Synthetic worker crash");
+      const [crashed] =
+        await rawSql`SELECT id,status,finished_at,metadata FROM data_manager.jobs WHERE status='interrupted' AND finished_at IS NULL AND kind='traffic-live'`;
+      owned.push(String(crashed!.id));
+      expect(crashed?.metadata).toEqual({ version: 1, retainedOps: [], recoveryRequired: true });
+      await admissionBlocked();
+
+      const observe = vi.fn(async () => "unknown" as const);
+      const result = await reconcileInterruptedLegacyJobs({ database: rawSql, observe });
+
+      expect(result.resolved).toEqual([String(crashed!.id)]);
+      expect(result.held).toEqual([]);
+      expect(observe).not.toHaveBeenCalled();
+      const [after] =
+        await rawSql`SELECT status,finished_at FROM data_manager.jobs WHERE id=${crashed!.id}`;
+      expect(after?.status).toBe("error");
+      expect(after?.finished_at).not.toBeNull();
+      await expect(fence.withAdmission(async () => "next job may admit")).resolves.toBe(
+        "next job may admit",
+      );
     } finally {
       for (const id of owned) await rawSql`DELETE FROM data_manager.jobs WHERE id=${id}`;
     }
   },
 );
+it.skipIf(!enabled)("a row whose recorded operations are all terminal becomes error", async () => {
+  const owned: string[] = [];
+  try {
+    const id = await insertLegacyJob(owned, {
+      kind: "traffic-maintenance",
+      status: "interrupted",
+      version: 3,
+      metadata: {
+        version: 1,
+        recoveryRequired: true,
+        retainedOps: [
+          retainedOperation("recorded", "terminal"),
+          retainedOperation("observed", "observing"),
+        ],
+      },
+    });
+    await admissionBlocked();
+    const observe = vi.fn(async (_key: string) => "terminal" as const);
+    const result = await reconcileInterruptedLegacyJobs({ database: rawSql, observe });
+    expect(result).toEqual({ resolved: [id], held: [] });
+    expect(observe.mock.calls.map(([key]) => key)).toEqual([attemptedKey("observed")]);
+    const [after] =
+      await rawSql`SELECT status,finished_at,ownership_version FROM data_manager.jobs WHERE id=${id}`;
+    expect(after?.status).toBe("error");
+    expect(after?.finished_at).not.toBeNull();
+    expect(after?.ownership_version).toBe(4);
+    await expect(fence.withAdmission(async () => "admitted")).resolves.toBe("admitted");
+  } finally {
+    for (const id of owned) await rawSql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+  }
+});
+it.skipIf(!enabled)("a row with an active operation stays interrupted", async () => {
+  const owned: string[] = [];
+  try {
+    const metadata = {
+      version: 1,
+      recoveryRequired: true,
+      retainedOps: [
+        retainedOperation("finished", "terminal"),
+        retainedOperation("running", "observing"),
+      ],
+    };
+    const id = await insertLegacyJob(owned, {
+      kind: "traffic-maintenance",
+      status: "interrupted",
+      metadata,
+    });
+    const result = await reconcileInterruptedLegacyJobs({
+      database: rawSql,
+      observe: async () => "active",
+    });
+    expect(result).toEqual({ resolved: [], held: [id] });
+    const [after] =
+      await rawSql`SELECT status,finished_at,metadata,ownership_version FROM data_manager.jobs WHERE id=${id}`;
+    expect(after?.status).toBe("interrupted");
+    expect(after?.finished_at).toBeNull();
+    expect(after?.metadata).toEqual(metadata);
+    expect(after?.ownership_version).toBe(0);
+    await admissionBlocked();
+  } finally {
+    for (const id of owned) await rawSql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+  }
+});
+it.skipIf(!enabled)(
+  "a row stays interrupted while the agent is unreachable and clears on the next pass once it answers",
+  async () => {
+    const owned: string[] = [];
+    try {
+      const blocked = await insertLegacyJob(owned, {
+        kind: "traffic-maintenance",
+        status: "interrupted",
+        metadata: { version: 1, retainedOps: [retainedOperation("blocked", "attempted")] },
+      });
+      const alsoBlocked = await insertLegacyJob(owned, {
+        kind: "data-reload",
+        status: "interrupted",
+        metadata: { version: 1, retainedOps: [retainedOperation("malformed", "attempted")] },
+      });
+      const settled = await insertLegacyJob(owned, {
+        kind: "traffic-live",
+        status: "interrupted",
+        metadata: { version: 1, retainedOps: [] },
+      });
+      const other = await insertLegacyJob(owned, {
+        kind: "transit-proposal",
+        status: "interrupted",
+        metadata: { version: 1, retainedOps: [retainedOperation("answered", "attempted")] },
+      });
+      let agentUp = false;
+      const observe = vi.fn(async (key: string) => {
+        if (key === attemptedKey("malformed")) throw Error("Synthetic observation fault");
+        if (key === attemptedKey("blocked"))
+          if (!agentUp) throw Error("Synthetic ops agent unreachable");
+        return "terminal" as const;
+      });
+
+      const first = await reconcileInterruptedLegacyJobs({ database: rawSql, observe });
+      expect(new Set(first.resolved)).toEqual(new Set([settled, other]));
+      expect(new Set(first.held)).toEqual(new Set([blocked, alsoBlocked]));
+      const rows =
+        await rawSql`SELECT id,status,finished_at FROM data_manager.jobs WHERE id IN ${rawSql(owned)}`;
+      const byId = new Map(rows.map((row) => [String(row.id), row]));
+      for (const id of [blocked, alsoBlocked]) {
+        expect(byId.get(id)?.status).toBe("interrupted");
+        expect(byId.get(id)?.finished_at).toBeNull();
+      }
+      for (const id of [settled, other]) expect(byId.get(id)?.status).toBe("error");
+      await admissionBlocked();
+
+      agentUp = true;
+      await rawSql`UPDATE data_manager.jobs SET metadata=jsonb_set(metadata,'{retainedOps,0,state}','"terminal"'::jsonb) WHERE id=${alsoBlocked}`;
+      const second = await reconcileInterruptedLegacyJobs({ database: rawSql, observe });
+      expect(new Set(second.resolved)).toEqual(new Set([blocked, alsoBlocked]));
+      expect(second.held).toEqual([]);
+      await expect(fence.withAdmission(async () => "agent answered")).resolves.toBe(
+        "agent answered",
+      );
+    } finally {
+      for (const id of owned) await rawSql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+    }
+  },
+);
+it.skipIf(!enabled)("leaves rows that carry no operation ledger or are still running", async () => {
+  const owned: string[] = [];
+  try {
+    const untouched = [
+      await insertLegacyJob(owned, {
+        kind: "traffic-maintenance",
+        status: "running",
+        metadata: { version: 1, retainedOps: [] },
+      }),
+      await insertLegacyJob(owned, {
+        kind: "transitous-sync",
+        status: "interrupted",
+        metadata: { version: 1 },
+      }),
+    ];
+    const observe = vi.fn(async () => "terminal" as const);
+    const result = await reconcileInterruptedLegacyJobs({ database: rawSql, observe });
+    for (const id of untouched) expect(result.resolved).not.toContain(id);
+    const rows =
+      await rawSql`SELECT status,finished_at FROM data_manager.jobs WHERE id IN ${rawSql(untouched)} ORDER BY started_at`;
+    expect(rows.map((row) => row.status).sort()).toEqual(["interrupted", "running"]);
+    expect(rows.every((row) => row.finished_at === null)).toBe(true);
+  } finally {
+    for (const id of owned) await rawSql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+  }
+});
 it.skipIf(!enabled)(
   "attests non-admission from the original canceled grant and actual locked SQL, never from a missing shared file alone",
   async () => {
@@ -299,7 +425,13 @@ it.skipIf(!enabled)(
       );
       // Crash after the fixed no-effect fact, before terminal SQL publication.
       await rawSql`UPDATE data_manager.jobs SET status='interrupted',finished_at=NULL WHERE id=${rows[0]!.id}`;
-      await reconcileLegacyCatalogPreflightRejections(rawSql);
+      const repair = await reconcileInterruptedLegacyJobs({
+        database: rawSql,
+        observe: async () => {
+          throw Error("A preflight rejection recorded no agent operation");
+        },
+      });
+      expect(repair.resolved).toEqual([String(rows[0]!.id)]);
       const [repaired] =
         await rawSql`SELECT status,finished_at FROM data_manager.jobs WHERE id=${rows[0]!.id}`;
       expect(repaired?.status).toBe("error");
@@ -338,7 +470,7 @@ it.skipIf(!enabled)(
 );
 
 it.skipIf(!enabled).each(["git", "proposal"] as const)(
-  "I4 retains the original %s attempt as unknown and blocks admission after recovery",
+  "I4 %s attempt blocks admission until a reconciliation pass settles it by its recorded operations",
   async (phase) => {
     const before = new Set(
       (await rawSql`SELECT id FROM data_manager.jobs`).map((row) => String(row.id)),
@@ -425,13 +557,39 @@ it.skipIf(!enabled).each(["git", "proposal"] as const)(
         expect(row.metadata.retainedOps[0].operationKey).toMatch(/^opk1_/);
         expect(row.metadata.retainedOps[0].fingerprint).toMatch(/^[a-f0-9]{64}$/);
       }
-      await reconcileLegacyCatalogPreflightRejections(rawSql);
-      const [after] = await rawSql`SELECT * FROM data_manager.jobs WHERE id=${row.id}`;
-      expect(after?.metadata).toEqual(row.metadata);
-      expect(after?.finished_at).toBeNull();
       await expect(fence.withAdmission(async () => "must not admit")).rejects.toMatchObject({
         statusCode: 409,
       });
+      if (phase === "git") {
+        // The fetch was an awaited local child and recorded no agent operation,
+        // so a failed fetch must not block later jobs once a pass runs.
+        const settled = await reconcileInterruptedLegacyJobs({
+          database: rawSql,
+          observe: async () => {
+            throw Error("A catalog fetch records no agent operation");
+          },
+        });
+        expect(settled.resolved).toEqual([String(row.id)]);
+        const [after] =
+          await rawSql`SELECT status,finished_at FROM data_manager.jobs WHERE id=${row.id}`;
+        expect(after?.status).toBe("error");
+        expect(after?.finished_at).not.toBeNull();
+        await expect(fence.withAdmission(async () => "next job may admit")).resolves.toBe(
+          "next job may admit",
+        );
+      } else {
+        const unresolved = await reconcileInterruptedLegacyJobs({
+          database: rawSql,
+          observe: async () => "unknown",
+        });
+        expect(unresolved.resolved).toEqual([]);
+        const [after] = await rawSql`SELECT * FROM data_manager.jobs WHERE id=${row.id}`;
+        expect(after?.metadata).toEqual(row.metadata);
+        expect(after?.finished_at).toBeNull();
+        await expect(fence.withAdmission(async () => "must not admit")).rejects.toMatchObject({
+          statusCode: 409,
+        });
+      }
     } finally {
       resetOpsClient();
       rmSync(catalog, { recursive: true, force: true });
@@ -620,6 +778,16 @@ it.skipIf(!enabled).each([
         await expect(
           withLegacyDataMutation("traffic-maintenance", async () => "next", rawSql),
         ).rejects.toThrow();
+        // The uncertain write recorded no agent operation, so the next
+        // reconciliation pass settles it instead of blocking every later job.
+        const settled = await reconcileInterruptedLegacyJobs({
+          database: rawSql,
+          observe: async () => "unknown",
+        });
+        expect(settled.resolved).toHaveLength(1);
+        await expect(
+          withLegacyDataMutation("traffic-maintenance", async () => "next", rawSql),
+        ).resolves.toBe("next");
       } else {
         expect(fs.existsSync(marker)).toBe(false);
         expect(row!.finished_at).not.toBeNull();

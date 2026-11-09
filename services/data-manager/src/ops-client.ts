@@ -6,6 +6,7 @@ import {
   normalizeExecutionAdmission,
   OPS_KIND_POLICIES,
   OpsClient,
+  OpsClientError,
   type OpsOperation,
   type OpsOperationKind,
   type OpsResultFor,
@@ -17,6 +18,7 @@ import {
   checkpointLegacyDataOperation,
   legacyDataMutation,
 } from "./jobs/execution/legacy-mutation.js";
+import type { LegacyOperationObservation } from "./jobs/reconcile.js";
 
 /**
  * Data-manager's client for the private operations agent.
@@ -183,5 +185,56 @@ export async function runOpsOperation<K extends OpsOperationKind>(
         /* Lost cancel response is observation-only. */
       }
     await waitForOpsStatus(options.pollIntervalMs ?? 1000, undefined, { signal });
+  }
+}
+
+/** Allowance after an operation's deadline for the agent to contain it, and
+ * after an attempt for an unadmitted request (valid for 20 seconds) to lapse. */
+const SETTLEMENT_BUDGET_MS = 30_000;
+
+/**
+ * Reads the agent's current record of a host operation a legacy job retained.
+ * It only looks the operation up by its key: it never submits or cancels work.
+ * Anything short of a clear answer is `unknown` so the caller keeps waiting.
+ */
+export async function observeRetainedHostOperation(
+  operationKey: string,
+  retained: Record<string, unknown>,
+  context: { signal?: AbortSignal } = {},
+): Promise<LegacyOperationObservation> {
+  const { operation, fingerprint, admittedAt } = retained;
+  try {
+    const kind = (operation as { kind?: unknown } | null | undefined)?.kind;
+    if (typeof kind !== "string" || !Object.hasOwn(OPS_KIND_POLICIES, kind)) return "unknown";
+    if (typeof fingerprint !== "string" || typeof admittedAt !== "number") return "unknown";
+    let requestedDeadlineAt: number;
+    try {
+      requestedDeadlineAt = parseControlRootOperationKey(operationKey).notAfter;
+    } catch {
+      requestedDeadlineAt = admittedAt + OPS_KIND_POLICIES[kind as OpsOperationKind].timeoutMs;
+    }
+    const status = await opsClient().lookup(operation as OpsOperation, operationKey, {
+      fingerprint,
+      execution: { requestedDeadlineAt },
+      signal: context.signal,
+    });
+    if (!["succeeded", "failed", "timed_out"].includes(status.state)) return "active";
+    if (status.errorClass !== "recovery_required") return "terminal";
+    // An agent restart rewrites every unfinished job to this outcome without
+    // proving its effect ended, so wait out the retained budget and the
+    // settlement allowance before trusting it.
+    const deadlineAt =
+      typeof retained.deadlineAt === "number" ? retained.deadlineAt : status.deadlineAt;
+    if (typeof deadlineAt !== "number") return "unknown";
+    return Date.now() > deadlineAt + SETTLEMENT_BUDGET_MS ? "terminal" : "active";
+  } catch (error) {
+    if (
+      error instanceof OpsClientError &&
+      error.errorClass === "not_found" &&
+      typeof admittedAt === "number" &&
+      Date.now() > admittedAt + SETTLEMENT_BUDGET_MS
+    )
+      return "terminal";
+    return "unknown";
   }
 }
