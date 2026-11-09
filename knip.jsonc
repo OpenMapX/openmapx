@@ -8,49 +8,51 @@
   ],
   "workspaces": {
     ".": {
+      "entry": [
+        // The CI privacy-backup fixture spawns this file by path.
+        "services/ops-agent/privacy-backup/verify-output.ts"
+      ],
+      "ignoreFiles": ["docs/**"]
+    },
+    "scripts": {
       // Discover dynamically loaded GraphQL Code Generator plugins from their real config.
-      "graphql-codegen": { "config": ["scripts/entur/codegen.config.mjs"] },
+      "graphql-codegen": { "config": ["entur/codegen.config.mjs"] },
       "entry": [
         // The Git pre-commit hook invokes this script directly.
-        "scripts/check-staged.mjs",
+        "check-staged.mjs",
         // The scoped unused-export audit loads this Knip postprocessor by path.
-        "scripts/knip-service-exports.mjs",
+        "knip-service-exports.mjs",
         // Nested workspace commands and an explicitly selected Vitest config.
-        "scripts/discovery-eval/run.ts",
-        "scripts/record-search-eval.mts",
-        "scripts/self-hosting-replay-vitest.config.ts",
+        "discovery-eval/run.ts",
+        "record-search-eval.mts",
+        "self-hosting-replay-vitest.config.ts",
         // Docker-context scanner tests spawn this deadline-isolated fixture by path.
-        "scripts/fixtures/docker-context-redirection-probe.ts",
+        "fixtures/docker-context-redirection-probe.ts",
         // Codegen artifact tests spawn these lifetime and zombie-process fixtures by path.
-        "scripts/codegen/fixtures/*.mjs",
+        "codegen/fixtures/*.mjs",
         // Release IO tests copy this executable into fake gh/docker/trivy subprocess paths.
-        "scripts/fixtures/product-release-command.mjs",
+        "fixtures/product-release-command.mjs",
         // Release IO tests invoke this fixed JSON-input Node subprocess entry point.
-        "scripts/fixtures/product-release-probe.mjs",
+        "fixtures/product-release-probe.mjs",
         // Exact native package candidates and synthetic publish handoff probe.
-        "scripts/fixtures/package-release-probe.mjs",
+        "fixtures/package-release-probe.mjs",
         // Bounded candidate IO race and adversarial tar-path subprocess.
-        "scripts/fixtures/package-release-io-probe.mjs",
-        // The CI privacy-backup fixture spawns this file by path.
-        "services/ops-agent/privacy-backup/verify-output.ts",
-        "scripts/discovery-eval/business-name-address/replay.ts",
-        "scripts/check-dockerfile-workspace-sync.ts",
-        "scripts/check-credential-keys.ts",
-        "scripts/check-feed-ids.ts",
-        "scripts/check-legal-tables.ts",
-        "scripts/check-legal-updated.ts",
-        "scripts/check-legal-urls.ts",
-        "scripts/check-license-metadata.ts",
-        "scripts/check-toolchain-pins.ts",
-        "scripts/bench-air-quality.ts",
-        "scripts/benchmark-motis-reachability.ts",
-        "scripts/ev-vehicles/generate.ts"
+        "fixtures/package-release-io-probe.mjs",
+        "discovery-eval/business-name-address/replay.ts",
+        "check-dockerfile-workspace-sync.ts",
+        "check-credential-keys.ts",
+        "check-feed-ids.ts",
+        "check-legal-tables.ts",
+        "check-legal-updated.ts",
+        "check-legal-urls.ts",
+        "check-license-metadata.ts",
+        "check-toolchain-pins.ts",
+        "bench-air-quality.ts",
+        "benchmark-motis-reachability.ts",
+        "ev-vehicles/generate.ts"
       ],
-      "ignoreFiles": [
-        "docs/**",
-        // TypeScript resolves the .mjs validator import to this typed companion.
-        "scripts/validate-privacy-release.d.mts"
-      ]
+      // TypeScript resolves the .mjs validator import to this typed companion.
+      "ignoreFiles": ["validate-privacy-release.d.mts"]
     },
     "apps/api": {
       "entry": [

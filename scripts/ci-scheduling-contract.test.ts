@@ -101,6 +101,21 @@ describe("CI scheduling and context preservation", () => {
     expect(ci.jobs.select.permissions.actions).toBe("read");
     expect(ci.jobs.ci.permissions.actions).toBe("read");
   });
+  it("keeps the unenforced type report out of the required aggregate", () => {
+    const job = ci.jobs["types-unenforced"];
+    expect(ci.jobs.ci.needs).not.toContain("types-unenforced");
+    expect(validationJobs).not.toContain("types-unenforced");
+    expect(job.needs).toBe("select");
+    expect(job.if).toContain("needs.select.outputs.code == 'true'");
+    expect(job["timeout-minutes"]).toBeGreaterThan(0);
+    expect(job["continue-on-error"]).toBeUndefined();
+    const run = job.steps.map((step: { run?: string }) => step.run ?? "").join("\n");
+    expect(run).toContain('pnpm check-types:unenforced --summary "$GITHUB_STEP_SUMMARY"');
+    // The required type check must never run the projects that still fail.
+    expect(
+      ci.jobs.types.steps.some((step: { run?: string }) => step.run?.includes("unenforced")),
+    ).toBe(false);
+  });
   it("checks out only trusted default-branch code for required metadata validation", () => {
     const workflow = parse(
       readFileSync(new URL("../.github/workflows/pr-title.yml", import.meta.url), "utf8"),
