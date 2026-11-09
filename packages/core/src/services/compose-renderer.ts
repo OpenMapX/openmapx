@@ -499,28 +499,30 @@ export function escapeComposeInterpolation(value: string): string {
   return value.replaceAll("$", () => "$$");
 }
 
-function escapeComposeScalar(value: string | string[]): string | string[] {
-  return Array.isArray(value)
-    ? value.map(escapeComposeInterpolation)
-    : escapeComposeInterpolation(value);
-}
-
-function escapeCommunityComposeInterpolation(snippet: ComposeServiceSnippet): void {
-  if (snippet.command !== undefined) snippet.command = escapeComposeScalar(snippet.command);
-  if (snippet.entrypoint !== undefined)
-    snippet.entrypoint = escapeComposeScalar(snippet.entrypoint);
-  if (snippet.environment) {
-    snippet.environment = Object.fromEntries(
-      Object.entries(snippet.environment).map(([key, value]) => [
+function escapeComposeValue(value: unknown): unknown {
+  if (typeof value === "string") return escapeComposeInterpolation(value);
+  if (Array.isArray(value)) return value.map(escapeComposeValue);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [
         escapeComposeInterpolation(key),
-        escapeComposeInterpolation(value),
+        escapeComposeValue(child),
       ]),
     );
   }
-  const healthcheck = snippet.healthcheck;
-  const test = healthcheck?.test;
-  if (healthcheck && (typeof test === "string" || Array.isArray(test))) {
-    healthcheck.test = escapeComposeScalar(test as string | string[]);
+  return value;
+}
+
+/**
+ * Escape every string and every object key of a community service's snippet,
+ * so Compose reads it back as the literal text and never substitutes a host
+ * variable. The walk covers the whole snippet rather than a list of fields, so
+ * a field added later is escaped too. Call it once the snippet is complete,
+ * before the platform's own service-config references are written.
+ */
+export function deepEscapeCommunitySnippet(snippet: ComposeServiceSnippet): void {
+  for (const [key, value] of Object.entries(snippet)) {
+    Object.assign(snippet, { [key]: escapeComposeValue(value) });
   }
 }
 
@@ -604,8 +606,12 @@ export function renderServiceSnippet(
       // that opt-in behavior for audited first-party manifests, but make the
       // safe default for community services explicit and local-only.
       const bindAddress = p.bindAddress ?? (service.isBuiltIn ? undefined : "127.0.0.1");
-      const bind = bindAddress ? `${bindAddress}:` : "";
-      // Community ports stay literal: their interpolation is escaped below.
+      // Compose's short port syntax needs an IPv6 address in brackets.
+      const bind = bindAddress
+        ? `${bindAddress.includes(":") ? `[${bindAddress}]` : bindAddress}:`
+        : "";
+      // Only a first-party port can take a host-port variable. A community
+      // port is literal text, whatever its manifest string contains.
       const variable = service.isBuiltIn ? hostPortVariable(m, p.container) : undefined;
       const host = variable ? `\${${variable}:-${p.host}}` : String(p.host);
       return `${bind}${host}:${p.container}${proto}`;
@@ -811,7 +817,10 @@ export function renderServiceSnippet(
   for (const cs of m.consumes ?? []) {
     const sourcePath = ctx.consumesPaths?.get(consumesKey(cs));
     if (sourcePath) {
-      volumes.push(`${sourcePath}:${cs.mountAt}${cs.readOnly ? ":ro" : ""}`);
+      // Consumed data is shared through hardlinks with the platform's data
+      // pipeline, so a community service always gets it read-only.
+      const readOnly = cs.readOnly || !service.isBuiltIn;
+      volumes.push(`${sourcePath}:${cs.mountAt}${readOnly ? ":ro" : ""}`);
     }
   }
   const exists = ctx.existsSync ?? existsSync;
@@ -891,11 +900,6 @@ export function renderServiceSnippet(
     snippet.healthcheck = renderHealthcheck(c.healthcheck, c);
   }
 
-  if (!service.isBuiltIn) {
-    escapeCommunityComposeInterpolation(snippet);
-  }
-  writeServiceConfigEnvReferences(snippet, m, ctx.serviceConfigEnvKeys?.get(m.id) ?? []);
-
   if (c.dependsOn?.length) {
     snippet.depends_on = Object.fromEntries(
       c.dependsOn.map((d) => [d.service, { condition: d.condition ?? "service_started" }]),
@@ -914,6 +918,9 @@ export function renderServiceSnippet(
     }
     snippet.deploy = { resources };
   }
+
+  if (!service.isBuiltIn) deepEscapeCommunitySnippet(snippet);
+  writeServiceConfigEnvReferences(snippet, m, ctx.serviceConfigEnvKeys?.get(m.id) ?? []);
 
   return snippet;
 }

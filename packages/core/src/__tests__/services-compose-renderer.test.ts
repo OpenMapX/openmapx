@@ -100,6 +100,197 @@ describe("renderServiceSnippet", () => {
     expect(snippet.environment).toEqual({ "${NAME}": "${NAME}" });
     expect(snippet.healthcheck?.test).toEqual(["CMD", "echo", "${NAME}"]);
   });
+
+  /** Every string and every object key reachable from a rendered snippet. */
+  function stringLeaves(value: unknown): string[] {
+    if (typeof value === "string") return [value];
+    if (Array.isArray(value)) return value.flatMap(stringLeaves);
+    if (value && typeof value === "object") {
+      return Object.entries(value).flatMap(([key, child]) => [key, ...stringLeaves(child)]);
+    }
+    return [];
+  }
+
+  /** A community service with the marker in every manifest string that reaches the snippet. */
+  function everyStringFieldWith(marker: string): LoadedService {
+    const path = `/mnt/${marker}`;
+    return communitySvc("probe", {
+      container: {
+        image: "t/probe",
+        tag: "latest",
+        expose: [80],
+        command: [marker, `--flag=${marker}`],
+        entrypoint: [marker],
+        environment: { [marker]: marker, PLAIN_KEY: `a-${marker}-b` },
+        workingDir: path,
+        user: marker,
+        shmSize: marker,
+        memory: marker,
+        healthcheck: {
+          type: "exec",
+          command: ["sh", "-c", marker],
+          interval: marker,
+          timeout: marker,
+          startPeriod: marker,
+        },
+        dependsOn: [{ service: marker, condition: "service_started" }],
+        gpu: { driver: marker, count: "all", capabilities: [marker] },
+      },
+      volumes: [{ name: "openmapx-probe-data", mountAt: path }],
+      consumes: [{ type: "osm-pbf", mountAt: path, readOnly: true }],
+      exposure: { hostPorts: [{ container: 80, host: 8080, bindAddress: marker }] },
+    } as never);
+  }
+
+  it("leaves no single $ in any string or key of a community snippet", () => {
+    const snippet = renderServiceSnippet(everyStringFieldWith("${POSTGRES_PASSWORD}"), {
+      consumesPaths: new Map([["osm-pbf", "./data/probe"]]),
+    });
+
+    // Each field is present, so an unrendered field cannot pass vacuously.
+    expect(snippet.working_dir).toBe("/mnt/$${POSTGRES_PASSWORD}");
+    expect(snippet.user).toBe("$${POSTGRES_PASSWORD}");
+    expect(snippet.shm_size).toBe("$${POSTGRES_PASSWORD}");
+    expect(snippet.ports).toEqual(["$${POSTGRES_PASSWORD}:8080:80"]);
+    expect(snippet.volumes).toEqual([
+      "openmapx-probe-data:/mnt/$${POSTGRES_PASSWORD}",
+      "./data/probe:/mnt/$${POSTGRES_PASSWORD}:ro",
+    ]);
+    expect(snippet.command).toEqual(["$${POSTGRES_PASSWORD}", "--flag=$${POSTGRES_PASSWORD}"]);
+    expect(snippet.entrypoint).toEqual(["$${POSTGRES_PASSWORD}"]);
+    expect(snippet.environment).toEqual({
+      "$${POSTGRES_PASSWORD}": "$${POSTGRES_PASSWORD}",
+      PLAIN_KEY: "a-$${POSTGRES_PASSWORD}-b",
+    });
+    expect(snippet.healthcheck).toMatchObject({
+      test: ["CMD", "sh", "-c", "$${POSTGRES_PASSWORD}"],
+      interval: "$${POSTGRES_PASSWORD}",
+      timeout: "$${POSTGRES_PASSWORD}",
+      start_period: "$${POSTGRES_PASSWORD}",
+    });
+    expect(snippet.depends_on).toEqual({
+      "$${POSTGRES_PASSWORD}": { condition: "service_started" },
+    });
+    expect(snippet.deploy?.resources?.limits?.memory).toBe("$${POSTGRES_PASSWORD}");
+    expect(snippet.deploy?.resources?.reservations?.devices).toEqual([
+      { driver: "$${POSTGRES_PASSWORD}", count: "all", capabilities: ["$${POSTGRES_PASSWORD}"] },
+    ]);
+
+    for (const value of stringLeaves(snippet)) {
+      expect(value.replaceAll("$$", ""), value).not.toContain("$");
+    }
+  });
+
+  it("does not double-escape $$ authored in a community value", () => {
+    const snippet = renderServiceSnippet(
+      communitySvc("probe", {
+        container: { image: "t/probe", tag: "latest", command: ["echo", "$$X"] },
+      }),
+      {},
+    );
+
+    // Compose reads `$$$$X` back as the literal text `$$X`.
+    expect(snippet.command).toEqual(["echo", "$$$$X"]);
+  });
+
+  it("keeps interpolation in built-in services", () => {
+    const marker = "${POSTGRES_PASSWORD}";
+    const snippet = renderServiceSnippet(
+      svc("probe", {
+        container: {
+          image: "t/probe",
+          tag: "latest",
+          command: [marker],
+          environment: { PLAIN_KEY: marker },
+          workingDir: `/mnt/${marker}`,
+          dependsOn: [{ service: "db", condition: "service_started" }],
+        },
+      } as never),
+      {},
+    );
+
+    expect(snippet.command).toEqual([marker]);
+    expect(snippet.environment).toEqual({ PLAIN_KEY: marker });
+    expect(snippet.working_dir).toBe(`/mnt/${marker}`);
+  });
+
+  it("keeps platform service-config references for community services", () => {
+    const snippet = renderServiceSnippet(
+      communitySvc("probe", {
+        container: {
+          image: "t/probe",
+          tag: "latest",
+          environment: { PLAIN_KEY: "${POSTGRES_PASSWORD}" },
+        },
+        configSchema: {
+          type: "object",
+          properties: { REGION: { type: "string" }, "bad-key": { type: "string" } },
+        },
+      }),
+      { serviceConfigEnvKeys: new Map([["probe", ["REGION", "bad-key"]]]) },
+    );
+
+    expect(snippet.environment).toEqual({
+      PLAIN_KEY: "$${POSTGRES_PASSWORD}",
+      REGION: "${SERVICE_PROBE_REGION:-}",
+      // `SERVICE_PROBE_BAD-KEY` is not a name Compose can interpolate.
+      "bad-key": "$${SERVICE_PROBE_BAD-KEY:-}",
+    });
+  });
+
+  it("mounts every community consumes entry read-only, including one that omits readOnly", () => {
+    const snippet = renderServiceSnippet(
+      communitySvc("probe", {
+        consumes: [{ type: "osm-pbf", mountAt: "/custom_files" }],
+      }),
+      { consumesPaths: new Map([["osm-pbf", "./data/probe"]]) },
+    );
+
+    expect(snippet.volumes).toEqual(["./data/probe:/custom_files:ro"]);
+  });
+
+  it("rejects a hand-built community service that asks for a writable consumes mount or logging", () => {
+    expect(() =>
+      renderServiceSnippet(
+        communitySvc("probe", {
+          consumes: [{ type: "osm-pbf", mountAt: "/custom_files", readOnly: false }],
+        }),
+        { consumesPaths: new Map([["osm-pbf", "./data/probe"]]) },
+      ),
+    ).toThrow(/failed sandbox validation.*consumes/);
+    expect(() =>
+      renderServiceSnippet(
+        communitySvc("probe", {
+          container: { image: "t/probe", tag: "latest", logging: { driver: "syslog" } },
+        }),
+        {},
+      ),
+    ).toThrow(/failed sandbox validation.*logging/);
+  });
+
+  it("keeps logging and writable consumes mounts for built-in services", () => {
+    const snippet = renderServiceSnippet(
+      svc("probe", {
+        container: { image: "t/probe", tag: "latest", logging: { driver: "local" } },
+        consumes: [{ type: "osm-pbf", mountAt: "/custom_files", readOnly: false }],
+      }),
+      { consumesPaths: new Map([["osm-pbf", "./data/probe"]]) },
+    );
+
+    expect(snippet.logging).toEqual({ driver: "local" });
+    expect(snippet.volumes).toEqual(["./data/probe:/custom_files"]);
+  });
+
+  it("brackets an IPv6 community bind address in the published port", () => {
+    const snippet = renderServiceSnippet(
+      communitySvc("probe", {
+        exposure: { hostPorts: [{ container: 80, host: 8080, bindAddress: "::1" }] },
+      }),
+      {},
+    );
+
+    expect(snippet.ports).toEqual(["[::1]:8080:80"]);
+  });
   // biome-ignore-end lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation under test
 
   it("routes a custom host by itself or with an explicit path and reuses it for additional routes", () => {

@@ -189,6 +189,75 @@ describe("third-party static sandbox policy", () => {
     });
     expect(namespaced.valid).toBe(true);
   });
+
+  it("rejects a Compose logging block for third-party services but keeps it for first-party ones", () => {
+    const manifest = (quality: string) => ({
+      id: "chatty",
+      name: "Chatty",
+      version: "1.0.0",
+      quality,
+      container: {
+        image: "alpine",
+        tag: "latest",
+        logging: { driver: "syslog", options: { "syslog-address": "tcp://203.0.113.5:514" } },
+      },
+    });
+
+    const community = validateExternal(manifest("community"));
+    expect(community.valid).toBe(false);
+    expect(community.errors.join(" ")).toMatch(/container\.logging/);
+    expect(validateFirstParty(manifest("built-in")).valid).toBe(true);
+  });
+
+  it("rejects an explicitly writable consumes mount for third-party services", () => {
+    const manifest = (readOnly: boolean | undefined, quality: string) => ({
+      id: "reader",
+      name: "Reader",
+      version: "1.0.0",
+      quality,
+      container: { image: "alpine", tag: "latest" },
+      consumes: [
+        {
+          type: "osm-pbf",
+          mountAt: "/data",
+          ...(readOnly === undefined ? {} : { readOnly }),
+        },
+      ],
+    });
+
+    const writable = validateExternal(manifest(false, "community"));
+    expect(writable.valid).toBe(false);
+    expect(writable.errors.join(" ")).toMatch(/consumes.*readOnly/);
+    expect(validateExternal(manifest(true, "community")).valid).toBe(true);
+    expect(validateExternal(manifest(undefined, "community")).valid).toBe(true);
+    expect(validateFirstParty(manifest(false, "built-in")).valid).toBe(true);
+  });
+
+  it("accepts only an IP address as a host-port bind address", () => {
+    const manifest = (bindAddress: string) => ({
+      id: "listener",
+      name: "Listener",
+      version: "1.0.0",
+      quality: "community",
+      container: { image: "alpine", tag: "latest" },
+      exposure: { hostPorts: [{ container: 80, host: 8080, bindAddress }] },
+    });
+
+    for (const ok of ["127.0.0.1", "0.0.0.0", "192.168.1.10", "::1", "fd00::1"]) {
+      expect(validateExternal(manifest(ok)).valid, ok).toBe(true);
+    }
+    for (const bad of [
+      "${POSTGRES_PASSWORD}",
+      "$HOST",
+      "localhost",
+      "127.0.0.1:8080",
+      "[::1]",
+      "999.0.0.1",
+      "",
+    ]) {
+      expect(validateExternal(manifest(bad)).valid, bad).toBe(false);
+    }
+  });
 });
 
 describe("third-party render sandbox", () => {

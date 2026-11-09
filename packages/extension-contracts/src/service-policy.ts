@@ -102,6 +102,20 @@ export function checkManifestSandbox(m: ServiceManifest, provenance: ManifestPro
         "community_proxy_forbidden: exposure.proxy.enabled is not allowed for community services",
       );
     }
+    // A logging driver is chosen by the host operator: a community manifest
+    // could ship container output to a destination of its own.
+    if (m.container.logging) {
+      errors.push("container.logging is not allowed for community services");
+    }
+    // Consumed data is shared with the platform's data pipeline through
+    // hardlinks, so a community service may read it but never write to it.
+    for (const consumed of m.consumes ?? []) {
+      if (consumed.readOnly === false) {
+        errors.push(
+          `consumes: "${consumed.type}" cannot set readOnly: false for a community service; its data mounts are always read-only`,
+        );
+      }
+    }
   }
   if (m.exposure?.proxy?.enabled && !m.container.expose?.length) {
     errors.push(
