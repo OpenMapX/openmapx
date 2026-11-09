@@ -209,6 +209,19 @@ const MOCK_COMMUNITY_RUNNING = {
   isBuiltIn: false,
 };
 
+const MOCK_COMMUNITY_WITH_PORTS = {
+  ...MOCK_COMMUNITY_RUNNING,
+  manifest: {
+    ...MOCK_COMMUNITY_RUNNING.manifest,
+    exposure: {
+      hostPorts: [
+        { container: 80, host: 8080, protocol: "tcp", bindAddress: "127.0.0.1" },
+        { container: 53, host: 5353, protocol: "udp", bindAddress: "::1" },
+      ],
+    },
+  },
+};
+
 let app: FastifyInstance;
 
 beforeAll(async () => {
@@ -254,6 +267,18 @@ describe("GET /admin/services", () => {
     expect(motis).toMatchObject({ id: "motis", status: "running", enabled: true });
     const valhalla = body.services.find((s: { id: string }) => s.id === "valhalla");
     expect(valhalla).toMatchObject({ id: "valhalla", status: "not-running" });
+  });
+
+  it("serializes each host-port bind address through the response schema", async () => {
+    mockRegistryList.mockReturnValueOnce([MOCK_COMMUNITY_WITH_PORTS]);
+    mockExecuteAndWait.mockResolvedValueOnce({ services: [] });
+
+    const res = await app.inject({ method: "GET", url: "/admin/services" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().services[0].exposure.hostPorts).toEqual(
+      MOCK_COMMUNITY_WITH_PORTS.manifest.exposure.hostPorts,
+    );
   });
 
   it("returns empty summary when registry has no services", async () => {
@@ -425,6 +450,19 @@ describe("GET /admin/services/:id", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body).toMatchObject({ manifest: { id: "motis" }, status: "running" });
+  });
+
+  it("serializes each host-port bind address through the response schema", async () => {
+    mockRegistryGet.mockReturnValueOnce(MOCK_COMMUNITY_WITH_PORTS);
+    mockRegistryList.mockReturnValueOnce([MOCK_COMMUNITY_WITH_PORTS]);
+    mockExecuteAndWait.mockResolvedValueOnce({ services: [] });
+
+    const res = await app.inject({ method: "GET", url: "/admin/services/community-weather" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().manifest.exposure.hostPorts).toEqual(
+      MOCK_COMMUNITY_WITH_PORTS.manifest.exposure.hostPorts,
+    );
   });
 });
 

@@ -176,7 +176,7 @@ service keys; the renderer copies them through.
 | `privileged`      | boolean                | Run privileged. **Forbidden for third-party services.**                                                                                                                                                                                                                                                                                                                                            |
 | `networkMode`     | enum                   | `bridge` or `host`. `host` is **forbidden for third-party services.**                                                                                                                                                                                                                                                                                                                              |
 | `dependsOn`       | array                  | Start-order dependencies: `{ "service": "<id>", "condition": "service_started" \| "service_healthy" }`.                                                                                                                                                                                                                                                                                            |
-| `logging`         | object                 | Compose logging: `{ "driver": "...", "options": { ... } }`.                                                                                                                                                                                                                                                                                                                                        |
+| `logging`         | object                 | Compose logging: `{ "driver": "...", "options": { ... } }`. **Forbidden for third-party services.**                                                                                                                                                                                                                                                                                                |
 | `healthcheck`     | object                 | See below.                                                                                                                                                                                                                                                                                                                                                                                         |
 
 ### Network isolation
@@ -355,7 +355,7 @@ with a producer's `produces` entry of the same `type`.
 | `mountAt`        | string  | **Required.** Absolute container path; no `..`.                                                                                                                               |
 | `instance`       | string  | Optional producer-instance id for multi-instance types (e.g. one OSM extract per region). Omit to bind the default/only instance.                                             |
 | `targetFilename` | string  | Optional fixed filename to expose inside the mount, for services with a hard-coded input name (Nominatim's `data.osm.pbf`). The producer dir must then hold exactly one file. |
-| `readOnly`       | boolean | Defaults to `false`.                                                                                                                                                          |
+| `readOnly`       | boolean | Defaults to `false`. Third-party services always receive a read-only mount, and `readOnly: false` is rejected for them.                                                       |
 | `required`       | boolean | When `true`, a missing producer makes the render fail. When absent/`false`, a missing producer just omits the mount.                                                          |
 
 ### `produces`
@@ -492,12 +492,12 @@ the internet unless the manifest opts in, in one of two ways.
 
 Publishes a container port on the host.
 
-| Field         | Type   | Notes                                                                                                                                  |
-| :------------ | :----- | :------------------------------------------------------------------------------------------------------------------------------------- |
-| `container`   | number | **Required.** Port inside the container.                                                                                               |
-| `host`        | number | **Required.** Port on the host.                                                                                                        |
-| `protocol`    | enum   | `tcp` (default) or `udp`.                                                                                                              |
-| `bindAddress` | string | Recommended `127.0.0.1` (loopback). The admin install preview flags a non-loopback bind as **publicly accessible** before you confirm. |
+| Field         | Type       | Notes                                                                                                                                                           |
+| :------------ | :--------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `container`   | number     | **Required.** Port inside the container.                                                                                                                        |
+| `host`        | number     | **Required.** Port on the host.                                                                                                                                 |
+| `protocol`    | enum       | `tcp` (default) or `udp`.                                                                                                                                       |
+| `bindAddress` | IP address | An IPv4 or IPv6 address; recommended `127.0.0.1` (loopback). The admin install preview flags a non-loopback bind as **publicly accessible** before you confirm. |
 
 ### `exposure.proxy`
 
@@ -732,9 +732,12 @@ network-alias collisions.
 Community services retain namespaced named-volume persistence and outbound
 internet access through their isolated bridge network. They cannot reach the
 private `openmapx` network, claim platform routes through Traefik, or interpolate
-deployment environment variables: every `$` in community `command`,
-`entrypoint`, environment keys or values, and exec health-check commands is
-rendered literally.
+deployment environment variables: every `$` in every string and object key of a
+community service's rendered Compose entry (command, entrypoint, environment,
+working directory, user, shared-memory size, published ports, mount paths,
+health-check fields and dependencies) is rendered literally. The renderer
+escapes the finished entry rather than a list of fields, so a field added later
+is covered too.
 
 ## Validation at a glance
 
@@ -750,7 +753,8 @@ The schema enforces, among other rules:
 - Duplicate `(type, instance)` pairs in `produces` are rejected.
 - `communityNetworkAccess` is first-party-only and names community service ids (uninstalled or disabled targets are skipped); community services never join `openmapx`, including when a manifest is handed directly to the renderer.
 - `privateNetworks` and `platformNetwork` are first-party-only and cannot be combined with host networking. Private network names are DNS-label-shaped; `platformNetwork: false` requires at least one private network.
-- Third-party services may not use bind mounts, host networking, privileged mode, host device pass-through, escape-class capabilities, deployment `envFile`, Compose-variable bind paths, platform proxy routes, or deployment-variable interpolation in Compose command, entrypoint, environment, and exec health-check fields. Their volume names and network aliases are isolated from platform-owned names.
+- `exposure.hostPorts[].bindAddress` is an IPv4 or IPv6 address (no hostnames, ports or Compose references). Community ports without one bind to `127.0.0.1`.
+- Third-party services may not use bind mounts, host networking, privileged mode, host device pass-through, escape-class capabilities, deployment `envFile`, a `logging` block, a writable `consumes` mount (`readOnly: false`), Compose-variable bind paths, platform proxy routes, or deployment-variable interpolation anywhere in their rendered Compose entry. Their `consumes` mounts are always read-only, and their volume names and network aliases are isolated from platform-owned names.
 
 Capability and data-type strings that are neither well-known nor namespaced
 produce warnings rather than errors, so the manifest still loads.

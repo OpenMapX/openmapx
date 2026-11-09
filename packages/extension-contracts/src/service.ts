@@ -136,7 +136,8 @@ const portMappingSchema = z.object({
   container: z.number().int().min(1).max(65535),
   host: z.number().int().min(1).max(65535),
   protocol: z.enum(["tcp", "udp"]).optional(),
-  bindAddress: z.string().optional(),
+  // A literal IP address: the renderer places it in a Compose short-syntax port.
+  bindAddress: z.union([z.ipv4(), z.ipv6()]).optional(),
 });
 
 const additionalRouteSchema = z
