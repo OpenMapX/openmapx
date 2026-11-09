@@ -3,6 +3,7 @@ packages:
   - "packages/*"
   - "integrations/*"
   - "services/data-manager"
+  - "scripts"
 
 # Hoist packages that integration frontend files import from the web app.
 # Without this, Turbopack can't resolve them when bundling files in integrations/*/.

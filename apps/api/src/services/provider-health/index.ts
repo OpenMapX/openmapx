@@ -207,6 +207,16 @@ function emptySnapshot(diagnostic?: ProviderHealthSnapshot["diagnostic"]): Provi
 function parseState(raw: string): ProviderHealthState | null {
   try {
     const state = JSON.parse(raw) as ProviderHealthState;
+    // The Lua transition round-trips state through cjson, which encodes an empty
+    // table as {} rather than []. Treat only that exact shape as an empty window.
+    const window: unknown = state.window;
+    if (
+      typeof window === "object" &&
+      window !== null &&
+      !Array.isArray(window) &&
+      Object.keys(window).length === 0
+    )
+      state.window = [];
     return state.schema === 2 && Array.isArray(state.window) ? state : null;
   } catch {
     return null;

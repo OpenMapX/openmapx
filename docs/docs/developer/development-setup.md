@@ -243,6 +243,7 @@ lint, formatting, and Vitest run through their own root scripts.
 ```bash
 pnpm build         # build every app and package
 pnpm check-types   # type-check with tsc, no emit
+pnpm check-types:unenforced  # count type errors in code check-types skips
 pnpm lint          # Biome, Markdown/YAML formatting, and translations
 pnpm format        # Biome + Markdown/YAML formatting (writes in place)
 pnpm test          # run the Vitest suite once
@@ -274,6 +275,18 @@ Tooling notes:
 - **Type-checking** is per-package via `pnpm check-types`. The API and web both
   type-check their integration and service-worker configs in addition to the
   main project.
+
+  Three TypeScript projects are not part of that run yet because they still
+  have errors: the repository scripts (`scripts/tsconfig.json`), the
+  integration test files (`apps/web/tsconfig.integration-tests.json`) and
+  `packages/mobility-core` (`packages/mobility-core/tsconfig.json`).
+  `pnpm check-types:unenforced` type-checks them and prints the error count for
+  each project and a total. It exits 0 however many errors there are, and fails
+  only when a project cannot be checked at all, such as a missing configuration
+  or a type library that cannot be resolved. A CI job named "types (not yet
+  enforced)" runs it and writes the counts to the job summary; it is not a
+  required check. List a project's errors with
+  `pnpm exec tsc --noEmit -p <configuration>`.
 
 ## Native mobile development
 

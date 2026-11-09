@@ -89,6 +89,49 @@ describe("ProviderHealth", () => {
     expect(redis.store).toEqual(before);
   });
 
+  it("accepts the empty-object window that Lua encodes but rejects other non-array windows", async () => {
+    const redis = new FakeRedis();
+    const stored = {
+      schema: 2,
+      state: "healthy",
+      successCount: 0,
+      failureCount: 1,
+      countedFailureCount: 0,
+      consecutiveSuccesses: 0,
+      consecutiveFailures: 0,
+      reopenCount: 0,
+      emaLatencyMs: 0,
+      lastSuccessAt: null,
+      lastFailureAt: null,
+      lastFailureOutcome: "caller_cancelled",
+      lastOperatorMessage: "cancelled by caller",
+      retryAt: null,
+    };
+    redis.store.set("provider:health:empty", JSON.stringify({ ...stored, window: {} }));
+    redis.store.set(
+      "provider:health:keyed",
+      JSON.stringify({ ...stored, window: { 0: { outcome: "error" } } }),
+    );
+    redis.store.set("provider:health:text", JSON.stringify({ ...stored, window: "none" }));
+    redis.store.set("provider:health:null", JSON.stringify({ ...stored, window: null }));
+    const health = await ProviderHealth.init({ redis: asRedis(redis) });
+
+    const peeked = await health.peekMany(["empty", "keyed", "text", "null"]);
+    expect(peeked.get("empty")).toMatchObject({
+      status: "observed",
+      snapshot: { state: "healthy", failureCount: 1, windowFailureRate: null },
+    });
+    for (const id of ["keyed", "text", "null"])
+      expect(peeked.get(id)).toEqual({ providerId: id, status: "invalid-record" });
+    await expect(health.getSnapshot("keyed")).resolves.toMatchObject({
+      diagnostic: "invalid_record",
+    });
+    await expect(health.getSnapshot("empty")).resolves.toMatchObject({
+      failureCount: 1,
+      lastOperatorMessage: "cancelled by caller",
+    });
+  });
+
   it("distinguishes invalid and unavailable provider-health records", async () => {
     const redis = new FakeRedis();
     redis.store.set("provider:health:bad", "not-json");
