@@ -10,6 +10,7 @@ import {
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as control from "@openmapx/core/build-artifacts";
 import { services } from "@openmapx/core/server";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,6 +25,13 @@ import { selectRelease } from "../src/lib/release";
 vi.setConfig({ testTimeout: 60000 });
 
 // Named external Docker process edge; real manifests, renderer, files and command entry remain.
+vi.mock("@openmapx/core/build-artifacts", async (original) => {
+  const actual = await original<typeof import("@openmapx/core/build-artifacts")>();
+  return {
+    ...actual,
+    executeOwnedGenerationHardlinks: vi.fn(actual.executeOwnedGenerationHardlinks),
+  };
+});
 vi.mock("../src/lib/docker", async (original) => ({
   ...(await original<typeof import("../src/lib/docker")>()),
   dockerComposeStream: vi.fn(),
@@ -583,9 +591,49 @@ describe("actual CLI service lifecycle preparation", () => {
       followUp: "unknown",
       failure: { reason: "hardlinks", failedServiceIds: ["alpha"] },
     });
-    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).toContain(
+    const diagnostics = JSON.stringify(vi.mocked(console.error).mock.calls);
+    expect(diagnostics).toContain(
       `recover-update --operation-key ${receipt.execution.operationKey}`,
     );
+    expect(diagnostics).not.toContain("No automated release exists");
+  });
+  it("does not offer recover-update when Start fails after its hardlink child committed", async () => {
+    await renderWithHardlinkPlan();
+    const stop = await unreachableHardlinkExecutor();
+    vi.mocked(control.executeOwnedGenerationHardlinks).mockImplementationOnce(
+      async ({ authority, lease }) => {
+        const installation = control.executionAuthorityState(authority).installation.installation,
+          { reservation } = control.readGenerationHardlinksOwnerPlan(authority);
+        if (!reservation) throw Error("Fixture plan has no hardlink reservation");
+        await control.bindControlChildPhase(authority, reservation);
+        await control.issueControlChildPhase(authority, {
+          phase: "hardlinks",
+          ordinal: reservation.ordinal,
+          childPublicKey: control.controlRolePublicKey(installation, "data-manager"),
+          lease,
+        });
+        return { applied: true, entries: 1, linked: 1, skipped: 0, pruned: 0, via: "data-manager" };
+      },
+    );
+    vi.mocked(dockerComposeStream).mockResolvedValueOnce(1);
+    try {
+      await expect(command("start")).rejects.toThrow("exit:1");
+    } finally {
+      await stop();
+    }
+    expect(targetLocks()).toEqual(["alpha", "beta"]);
+    const receipt = await retainedReceipt();
+    expect(receipt).toMatchObject({
+      phase: "failed",
+      hardlinks: { applied: true },
+      failure: { reason: "recreate", failedServiceIds: ["alpha"] },
+    });
+    const diagnostics = JSON.stringify(vi.mocked(console.error).mock.calls);
+    expect(diagnostics).toContain(`Operation ${receipt.execution.operationKey} keeps`);
+    expect(diagnostics).toContain("a hardlink child was issued to data-manager");
+    expect(diagnostics).toContain("No automated release exists yet");
+    expect(diagnostics).not.toContain("recover-update --operation-key");
+    expect(diagnostics).not.toContain("may still be running");
   });
   it("a lease held by a live operation still refuses a second start", async () => {
     let refusal: unknown;

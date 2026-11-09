@@ -586,9 +586,12 @@ export async function runCliServiceLifecycle(options: {
           attempt = lookupError;
         }
         if (!services.lifecycleFailureHasNoSurvivor(failed, attempt)) {
+          // Recovery accepts only a failure at the hardlink step itself.
           if (attempt !== null)
             log.warn(
-              `Operation ${key} keeps its service locks because a hardlink request issued to data-manager may still be running. Inspect infra/docker/data/ops-agent/lifecycle/${key}.json; after its deadline, \`pnpm openmapx services recover-update --operation-key ${key}\` can release an unadopted request.`,
+              failed.failure?.reason === "hardlinks" && !failed.hardlinks
+                ? `Operation ${key} keeps its service locks because a hardlink request issued to data-manager may still be running. Inspect infra/docker/data/ops-agent/lifecycle/${key}.json; after its deadline, \`pnpm openmapx services recover-update --operation-key ${key}\` can release an unadopted request.`
+                : `Operation ${key} keeps its service locks because a hardlink child was issued to data-manager. No automated release exists yet for this case, and \`services recover-update\` does not apply. Its record is infra/docker/data/ops-agent/lifecycle/${key}.json.`,
             );
           return;
         }
