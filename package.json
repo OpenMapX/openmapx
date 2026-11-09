@@ -9,6 +9,7 @@
     "format": "biome format --write . && prettier --write \"**/*.{md,yml,yaml}\"",
     "clean": "turbo clean && rm -rf node_modules",
     "check-types": "turbo run check-types && pnpm discovery-eval:check-types",
+    "check-types:unenforced": "node scripts/check-types-unenforced.mjs",
     "check-dead-code": "knip --no-progress --reporter compact && pnpm check-unused-exports",
     "check-unused-exports": "knip --no-progress --reporter compact --include exports,types --exclude files,dependencies --preprocessor ./scripts/knip-service-exports.mjs",
     "check-duplicates": "jscpd --config .jscpd.json --cross-formats js-ts --no-tips apps packages integrations services scripts",

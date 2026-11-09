@@ -96,6 +96,11 @@ run it without other full suites running; the command prints a warning.
 Database, mobile, production builds and native-device checks remain separate;
 choose those when the changed behavior requires them.
 
+`pnpm verify:full` does not cover the repository scripts, the integration test
+files or `packages/mobility-core`, which still have type errors.
+`pnpm check-types:unenforced` reports their error counts without failing; when
+you change those files, check that your change does not add errors.
+
 Git hooks keep everyday commits and pushes inexpensive:
 
 - **pre-commit** checks staged code with Biome and staged Markdown/YAML with
