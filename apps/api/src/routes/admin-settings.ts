@@ -21,7 +21,7 @@ import { resolveSettingPrecedence } from "../utils/settings-resolution";
 export async function adminSettingsRoute(app: FastifyInstance) {
   declareRouteAuth(app, "admin");
 
-  app.addHook("preHandler", async (request, _reply) => {
+  app.addHook("onRequest", async (request, _reply) => {
     request.adminSession = await requireAdmin(request);
   });
 

@@ -114,7 +114,7 @@ function extensionStatus(entry: ExtensionCatalogEntry, kill: KillSwitch): Extens
 export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> {
   declareRouteAuth(app, "admin");
 
-  app.addHook("preHandler", async (request, _reply) => {
+  app.addHook("onRequest", async (request, _reply) => {
     request.adminSession = await requireAdmin(request);
   });
 

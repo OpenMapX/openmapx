@@ -198,7 +198,7 @@ const encryptedFields = ["passphraseCiphertext", "recipientsCiphertext", "wraps"
 
 export const reviewsKeypairRoute: FastifyPluginAsync = async (fastify) => {
   declareRouteAuth(fastify, "session");
-  fastify.addHook("preHandler", requireAuthHook);
+  fastify.addHook("onRequest", requireAuthHook);
   fastify.addHook("onSend", async (_request, reply, payload) => {
     reply.header("Cache-Control", "no-store");
     return payload;

@@ -13,12 +13,12 @@ declare module "fastify" {
 }
 
 /**
- * Returns the adminSession set by the preHandler hook.
- * Throws if it's missing (should never happen if requireAdmin preHandler is wired).
+ * Returns the adminSession set by the onRequest hook.
+ * Throws if it's missing (should never happen if the requireAdmin hook is wired).
  */
 export function getAdminSession(request: FastifyRequest): AdminSession {
   const s = request.adminSession;
-  if (!s) throw new Error("adminSession not set — missing requireAdmin preHandler?");
+  if (!s) throw new Error("adminSession not set — missing requireAdmin onRequest hook?");
   return s;
 }
 

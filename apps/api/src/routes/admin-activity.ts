@@ -21,7 +21,7 @@ const activityCancellationLimit = new RateLimiter({ max: 20, windowMs: 60000 });
 
 export async function adminActivityRoute(app: FastifyInstance): Promise<void> {
   declareRouteAuth(app, "admin");
-  app.addHook("preHandler", async (request) => {
+  app.addHook("onRequest", async (request) => {
     request.adminSession = await requireAdmin(request);
   });
   registerActivityAdminRoute(app, "listAdminActivityJobs", async (request) =>

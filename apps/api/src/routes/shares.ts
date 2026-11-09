@@ -95,7 +95,7 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
       reply.header("Pragma", "no-cache");
       reply.header("Vary", "Cookie");
     });
-    authenticated.addHook("preHandler", requireAuthHook);
+    authenticated.addHook("onRequest", requireAuthHook);
 
     registerSharingRoute(
       authenticated,

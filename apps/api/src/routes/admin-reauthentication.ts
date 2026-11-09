@@ -27,7 +27,7 @@ const register = createAdminRouteRegistrar(adminReauthOperations, {
 });
 export async function adminReauthenticationRoute(app: FastifyInstance) {
   declareRouteAuth(app, "admin");
-  app.addHook("preHandler", async (request, reply) => {
+  app.addHook("onRequest", async (request, reply) => {
     request.adminSession = await requireAdmin(request);
     const actor = getAdminSession(request);
     if (actor.user.id === "loopback" || actor.session.impersonatedBy)

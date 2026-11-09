@@ -197,6 +197,12 @@ export interface RouteOptions {
   requireAuth?: boolean;
   /** Host-owned limiter bucket. Every integration route uses exactly one tier. */
   rateLimitTier?: "public" | "expensive" | "tile";
+  /**
+   * Largest request body the route accepts, in bytes. The host answers 413 to
+   * anything larger, and also caps this value at 8 MiB. Routes that do not
+   * declare it accept up to 1 MiB.
+   */
+  bodyLimit?: number;
 }
 
 export interface HealthCheckResult {

@@ -6,7 +6,7 @@ import { declareRouteAuth } from "../utils/route-auth";
 import { registerIntegrationAdminRoute } from "./admin-integration-contract";
 export async function adminStandaloneIntegrationsRoute(app: FastifyInstance): Promise<void> {
   declareRouteAuth(app, "admin");
-  app.addHook("preHandler", async (request) => {
+  app.addHook("onRequest", async (request) => {
     request.adminSession = await requireAdmin(request);
   });
   registerIntegrationAdminRoute(app, "listAdminStandaloneIntegrations", async () =>

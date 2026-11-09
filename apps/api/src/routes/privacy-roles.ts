@@ -26,7 +26,7 @@ export const privacyRolesRoute: FastifyPluginAsync<PrivacyRolesRouteOptions> = a
   options,
 ) => {
   declareRouteAuth(fastify, "admin");
-  fastify.addHook("preHandler", async (request, reply) => {
+  fastify.addHook("onRequest", async (request, reply) => {
     const actor = await requireAdmin(request);
     if (actor.user.id === "loopback" || actor.user.role !== "admin")
       return reply.status(403).send({ code: "FULL_ADMIN_REQUIRED" });

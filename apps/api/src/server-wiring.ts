@@ -122,6 +122,59 @@ export function registerControlledRequestLogging(
   });
 }
 
+/**
+ * Closes the connection of a request whose body is still unread `ms` after the
+ * request began, so a client that trickles bytes cannot hold a socket and the
+ * memory buffered for its body. Requests whose body has already arrived are not
+ * timed, and neither are routes under an exempt path prefix (large streamed
+ * uploads, which are bounded by their own transfer limits).
+ *
+ * This is deliberately not Fastify's `requestTimeout`: that bounds the whole
+ * request and would cut a long, healthy upload.
+ */
+export function registerBodyReadDeadline(
+  server: FastifyInstance,
+  options: { ms: number; exemptRoutePrefixes: string[] },
+): void {
+  const exempt = (url: string): boolean => {
+    const query = url.indexOf("?");
+    const path = query === -1 ? url : url.slice(0, query);
+    return options.exemptRoutePrefixes.some(
+      (prefix) => path === prefix || path.startsWith(`${prefix}/`),
+    );
+  };
+
+  server.addHook("onRequest", (request, reply, done) => {
+    const raw = request.raw;
+    if (raw.complete || exempt(request.url)) {
+      done();
+      return;
+    }
+    const timer = setTimeout(() => {
+      request.log.warn(
+        {
+          event: "request.body-deadline",
+          requestId: controlledRequestId(request),
+          method: controlledMethod(request),
+          route: matchedRoutePattern(request),
+          deadlineMs: options.ms,
+        },
+        "Closed a request whose body did not arrive in time",
+      );
+      raw.destroy();
+    }, options.ms);
+    timer.unref();
+    // A request answered before its body was read (a rejected credential, say)
+    // never reads the rest; once the response is out the server only discards
+    // what remains, within the runtime's own request timeout.
+    const stop = () => clearTimeout(timer);
+    raw.once("end", stop);
+    raw.once("close", stop);
+    reply.raw.once("close", stop);
+    done();
+  });
+}
+
 const TRUST_PROXY_ALIASES = new Set(["loopback", "linklocal", "uniquelocal"]);
 
 function validateProxyRange(value: string): void {

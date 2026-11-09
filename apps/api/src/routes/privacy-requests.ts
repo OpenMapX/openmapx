@@ -134,7 +134,7 @@ export const privacyRequestsRoute: FastifyPluginAsync<PrivacyRequestsRouteOption
   options,
 ) => {
   declareRouteAuth(fastify, "session");
-  fastify.addHook("preHandler", requireAuthHook);
+  fastify.addHook("onRequest", requireAuthHook);
   fastify.addHook("onSend", async (_request, reply, payload) => {
     reply.header("Cache-Control", "private, no-store");
     reply.header("Pragma", "no-cache");

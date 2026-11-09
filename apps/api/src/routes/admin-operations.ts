@@ -19,7 +19,7 @@ import { registerServiceAdminRoute } from "./admin-service-contract";
 export async function adminOperationsRoute(app: FastifyInstance): Promise<void> {
   declareRouteAuth(app, "admin");
 
-  app.addHook("preHandler", async (request, _reply) => {
+  app.addHook("onRequest", async (request, _reply) => {
     request.adminSession = await requireAdmin(request);
   });
 

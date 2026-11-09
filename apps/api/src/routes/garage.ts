@@ -22,7 +22,7 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
 
   // Every route here is per-user; authenticate once so no handler can forget
   // the check and serve another user's garage.
-  fastify.addHook("preHandler", requireAuthHook);
+  fastify.addHook("onRequest", requireAuthHook);
   // A parked position is precise personal location, so no shared cache may hold
   // one. Set on the hook rather than per handler: a missed header would be a
   // silent leak into an intermediary, with nothing failing to reveal it.

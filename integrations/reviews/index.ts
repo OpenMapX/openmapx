@@ -177,6 +177,7 @@ export function setup(ctx: IntegrationContext): void {
         reply.status(502).send({ error: message });
       }
     },
-    { requireAuth: true },
+    // The largest accepted photo (5 MiB) as a base64 data URL inside JSON.
+    { requireAuth: true, bodyLimit: 7 * 1024 * 1024 },
   );
 }

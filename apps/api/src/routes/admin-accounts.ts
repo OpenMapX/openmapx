@@ -13,7 +13,7 @@ const register = createAdminRouteRegistrar(accountAdminOperations, {
 });
 export async function adminAccountsRoute(app: FastifyInstance) {
   declareRouteAuth(app, "admin");
-  app.addHook("preHandler", async (request, reply) => {
+  app.addHook("onRequest", async (request, reply) => {
     request.adminSession = await requireAdmin(request);
     if (getAdminSession(request).user.id === "loopback")
       return reply.code(403).send({ error: "A full administrator account session is required" });

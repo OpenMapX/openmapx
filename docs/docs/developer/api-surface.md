@@ -101,7 +101,7 @@ computed property names, prototype assignments, duplicate auth declarations and
 nonliteral auth values with the source file and route in its diagnostic. Keep
 these declarations literal rather than executing integration code during
 generation. Core routes need authentication stated,
-because guards run inside handlers or in a plugin `preHandler` hook and nothing
+because guards run inside handlers or in a plugin `onRequest` hook and nothing
 about them is introspectable.
 
 `declareRouteAuth` records metadata only. State the classification once per
@@ -113,7 +113,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
 
   // Every /saved route is per-user; authenticate once here so no handler can
   // forget the check.
-  fastify.addHook("preHandler", requireAuthHook);
+  fastify.addHook("onRequest", requireAuthHook);
 
   fastify.get("/saved/lists", async (req) => {
     /* ... */
@@ -139,6 +139,28 @@ fastify.post("/mobile-auth/issue", { config: { auth: "session" } }, handler);
 
 `unspecified` is deliberately distinct from `public`: an unclassified route must
 never be documented as open.
+
+### Authentication and request bodies
+
+Authenticate in an `onRequest` hook. Fastify reads and parses a request body
+before `preValidation` and `preHandler` run, so a guard placed there lets a
+caller who has no credentials make the server buffer a body first. An `onRequest`
+guard answers 401 or 403 without reading it. Register it after the plugin's
+`Cache-Control` hook so the rejection carries the same headers, and after the
+host's CSRF and rate-limit hooks, which run first for every route. Keep a guard
+in `preHandler` only when it needs the parsed body.
+
+The API accepts request bodies of at most 1 MiB. A route that needs more
+declares its own limit, and the declaration should state why: the saved-places
+import accepts 8 MiB, and an integration route sets `bodyLimit` in its
+`registerRoute` options (the review photo upload accepts 7 MiB). The host holds
+an integration route to 1 MiB unless it declares more, and never allows more
+than 8 MiB.
+
+A request whose body has not arrived 60 seconds after it began has its
+connection closed. Admin artifact transfers, which stream for as long as the
+transfer takes, are exempt. Do not use Fastify's `requestTimeout` for this: it
+bounds the whole request and would cut a long, healthy upload.
 
 ### Status and mobile-auth request boundaries
 

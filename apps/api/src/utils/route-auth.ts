@@ -40,7 +40,7 @@ function key(method: string, url: string): string {
 /**
  * Declares the auth level shared by every route in a plugin, so the generated
  * OpenAPI document can report it. Guards run inside handlers or in a plugin
- * `preHandler` hook and are not introspectable, so they have to be stated.
+ * `onRequest` hook and are not introspectable, so they have to be stated.
  *
  * Call it next to the guard it describes. A route may override the plugin-wide
  * level with its own `config: { auth: "..." }`.

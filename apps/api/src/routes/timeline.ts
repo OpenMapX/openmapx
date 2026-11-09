@@ -134,7 +134,7 @@ export const timelineRoute: FastifyPluginAsync = async (fastify) => {
   fastify.addHook("onRequest", async (_request, reply) => {
     applyTimelinePrivacyHeaders(reply);
   });
-  fastify.addHook("preHandler", async (request, reply) => {
+  fastify.addHook("onRequest", async (request, reply) => {
     try {
       await requireAuthHook(request);
     } catch (error) {

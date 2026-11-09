@@ -22,10 +22,11 @@ export async function requireAuth(request: FastifyRequest): Promise<string> {
 }
 
 /**
- * preHandler that authenticates the request and stashes the user id, so the
+ * onRequest hook that authenticates the request and stashes the user id, so the
  * routes in a plugin can't individually forget the check (a missed opener would
- * otherwise serve another user's data with no compile error). Mirrors the admin
- * routes' requireAdmin preHandler + getAdminSession accessor.
+ * otherwise serve another user's data with no compile error). It runs before the
+ * body is read, so a caller without a session never has one buffered. Mirrors
+ * the admin routes' requireAdmin hook + getAdminSession accessor.
  */
 export async function requireAuthHook(request: FastifyRequest): Promise<void> {
   request.userId = await requireAuth(request);
@@ -33,6 +34,6 @@ export async function requireAuthHook(request: FastifyRequest): Promise<void> {
 
 /** Read the user id set by {@link requireAuthHook}. Throws if the hook is unwired. */
 export function getUserId(request: FastifyRequest): string {
-  if (!request.userId) throw new Error("userId not set — missing requireAuth preHandler?");
+  if (!request.userId) throw new Error("userId not set — missing requireAuth onRequest hook?");
   return request.userId;
 }

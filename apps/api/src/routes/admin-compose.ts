@@ -23,7 +23,7 @@ export async function registerAdminComposeRoutes(
   app: FastifyInstance<any, any, any, any>,
 ): Promise<void> {
   declareRouteAuth(app, "admin");
-  app.addHook("preHandler", async (request) => {
+  app.addHook("onRequest", async (request) => {
     request.adminSession = await requireAdmin(request);
   });
 

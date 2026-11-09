@@ -27,6 +27,9 @@ export async function registerCapabilityBindingRoutes(app: FastifyInstance): Pro
   await app.register(
     async (child) => {
       declareRouteAuth(child, "admin");
+      child.addHook("onRequest", async (request) => {
+        request.adminSession = await requireAdmin(request);
+      });
       child.addHook("preValidation", async (request, reply) => {
         const schema =
           request.method === "POST"
@@ -42,38 +45,29 @@ export async function registerCapabilityBindingRoutes(app: FastifyInstance): Pro
           request: Parameters<typeof requireAdmin>[0],
           reply: Parameters<ReturnType<typeof serviceActionLimit.preHandler>>[1],
         ) => {
-          request.adminSession = await requireAdmin(request);
           await serviceActionLimit.preHandler()(request, reply);
         },
       };
-      registerIntegrationAdminRoute(
-        child,
-        "listAdminIntegrationBindings",
-        async (req) =>
-          withAdministrativeConfigurationRead({}, async (read) => {
-            const desired = capturedBindingState(read, req.params.integrationId),
-              [last] = await db
-                .select({ result: integrationApplicationReceipt.result })
-                .from(integrationApplicationReceipt)
-                .where(eq(integrationApplicationReceipt.integrationId, req.params.integrationId))
-                .orderBy(desc(integrationApplicationReceipt.createdAt))
-                .limit(1);
-            return {
-              bindings: Object.entries(desired.bindings).map(([capability, serviceId]) => ({
-                capability,
-                serviceId,
-              })),
-              revision: desired.revision,
-              desiredRevision: desired.desiredRevision,
-              runtime: inspectIntegrationRuntime(req.params.integrationId),
-              lastApplication: last?.result ?? null,
-            };
-          }),
-        {
-          beforeValidation: async (request) => {
-            request.adminSession = await requireAdmin(request);
-          },
-        },
+      registerIntegrationAdminRoute(child, "listAdminIntegrationBindings", async (req) =>
+        withAdministrativeConfigurationRead({}, async (read) => {
+          const desired = capturedBindingState(read, req.params.integrationId),
+            [last] = await db
+              .select({ result: integrationApplicationReceipt.result })
+              .from(integrationApplicationReceipt)
+              .where(eq(integrationApplicationReceipt.integrationId, req.params.integrationId))
+              .orderBy(desc(integrationApplicationReceipt.createdAt))
+              .limit(1);
+          return {
+            bindings: Object.entries(desired.bindings).map(([capability, serviceId]) => ({
+              capability,
+              serviceId,
+            })),
+            revision: desired.revision,
+            desiredRevision: desired.desiredRevision,
+            runtime: inspectIntegrationRuntime(req.params.integrationId),
+            lastApplication: last?.result ?? null,
+          };
+        }),
       );
       const apply = async (
         req: {

@@ -1,5 +1,5 @@
 import { get as httpGet } from "node:http";
-import type { AddressInfo } from "node:net";
+import { type AddressInfo, connect } from "node:net";
 import { Writable } from "node:stream";
 import cors from "@fastify/cors";
 import { ApiClientError, createApiClient } from "@openmapx/core";
@@ -17,6 +17,7 @@ import {
   makeStatusAwareRateLimit,
   makeTimelineAwareRateLimit,
   type RateLimitTiers,
+  registerBodyReadDeadline,
   registerControlledRequestLogging,
   trustProxyConfig,
   uniformErrorHandler,
@@ -794,5 +795,95 @@ describe("controlled request lifecycle logging", () => {
       statusCode: 404,
     });
     expect(capture.chunks.join("")).not.toMatch(/private-value|fixture-query-token/);
+  });
+});
+
+describe("registerBodyReadDeadline", () => {
+  const DEADLINE_MS = 150;
+  const headers = (path: string) =>
+    `POST ${path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 64\r\n\r\n`;
+
+  async function listening() {
+    const app = Fastify();
+    registerBodyReadDeadline(app, { ms: DEADLINE_MS, exemptRoutePrefixes: ["/transfers"] });
+    app.post("/stalled", async () => ({ ok: true }));
+    app.post("/transfers/content", async () => ({ ok: true }));
+    app.get("/read", async () => ({ ok: true }));
+    await app.listen({ port: 0, host: "127.0.0.1" });
+    return { app, port: (app.server.address() as AddressInfo).port };
+  }
+
+  /** Sends request headers and the first bytes of a body, then stalls. */
+  function stall(port: number, path: string) {
+    const socket = connect(port, "127.0.0.1");
+    const closedAt = new Promise<number>((resolve) => {
+      const startedAt = Date.now();
+      socket.on("close", () => resolve(Date.now() - startedAt));
+      socket.on("error", () => {});
+    });
+    socket.write(`${headers(path)}{"a":`);
+    return { socket, closedAt };
+  }
+
+  it("closes the socket of a request whose body does not arrive in time", async () => {
+    const { app, port } = await listening();
+    try {
+      const { closedAt } = stall(port, "/stalled");
+      const elapsed = await closedAt;
+      expect(elapsed).toBeGreaterThanOrEqual(DEADLINE_MS - 20);
+      expect(elapsed).toBeLessThan(DEADLINE_MS + 1500);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("leaves the routes it exempts to read as slowly as they need", async () => {
+    const { app, port } = await listening();
+    try {
+      const { socket, closedAt } = stall(port, "/transfers/content");
+      const state = await Promise.race([
+        closedAt.then(() => "closed"),
+        new Promise((resolve) => setTimeout(() => resolve("open"), DEADLINE_MS * 4)),
+      ]);
+      expect(state).toBe("open");
+      socket.destroy();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("does not disturb a request whose body arrives in time", async () => {
+    const { app, port } = await listening();
+    try {
+      const post = () =>
+        fetch(`http://127.0.0.1:${port}/stalled`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ a: 1 }),
+        });
+      expect((await post()).status).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, DEADLINE_MS * 2));
+      expect((await post()).status).toBe(200);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("does not time a request that has no body to read", async () => {
+    const { app, port } = await listening();
+    try {
+      const socket = connect(port, "127.0.0.1");
+      let closed = false;
+      socket.on("close", () => {
+        closed = true;
+      });
+      socket.on("error", () => {});
+      socket.write("GET /read HTTP/1.1\r\nHost: localhost\r\n\r\n");
+      await new Promise((resolve) => setTimeout(resolve, DEADLINE_MS * 3));
+      expect(closed).toBe(false);
+      socket.destroy();
+    } finally {
+      await app.close();
+    }
   });
 });

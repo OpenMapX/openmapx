@@ -945,7 +945,7 @@ interface IntegrationContext {
   registerBorderCrossingProvider(p: BorderCrossingProvider): void; // → "border-crossings"
   registerHazardsProvider(p: HazardsProvider): void; // → "hazards"
 
-  registerRoute(method, path, handler, options?): void; // options.rateLimitTier
+  registerRoute(method, path, handler, options?): void; // options.rateLimitTier, requireAuth, bodyLimit
   registerHealthCheck(fn: CustomHealthCheckFn): void; // overrides manifest probe
   registerDisclosure(d: Disclosure): void; // surfaces a capability note
   setDataSources(list: IntegrationDataSource[]): IntegrationDataSource[]; // runtimeDataSources only; returns the accepted list
@@ -956,7 +956,9 @@ The typed registrars enforce the contract shape at compile time, so the
 orchestrator can dispatch on a declared capability rather than reflecting over
 the object. `registerRoute` mounts a route under the integration's prefix; passing
 `{ requireAuth: true }` makes the host reject unauthenticated callers with 401
-before the handler runs. Every matched route consumes exactly one operation-tier
+before the handler runs, and before the request body is read. A route accepts a
+body of up to 1 MiB; declare `bodyLimit` (in bytes, at most 8 MiB) in the options
+of a route that needs more. Every matched route consumes exactly one operation-tier
 bucket: `rateLimitTier` defaults to `public`, upstream-heavy point/list routes use
 `expensive`, and tile fan-out uses `tile`. In addition, `POST`, `PUT`, `PATCH`, and
 `DELETE` requests consume a separate per-client integration-ingress bucket before
