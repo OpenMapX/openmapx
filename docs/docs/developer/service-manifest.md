@@ -295,7 +295,8 @@ the CLI has data-manager apply the plan; it never links in the data root
 itself. When data-manager is not reachable and the plan has links to make or
 prune, `data link`, builds and `data update` refuse with the reason, and
 `compose up`, `services start` and `services update` go ahead with a warning
-to run `data link` once data-manager runs. Before starting or recreating a service, the admin
+to apply the plan once data-manager runs, with `services start` as the path
+that applies a plan with links to make or prune. Before starting or recreating a service, the admin
 panel reads the plan of the configuration it just applied from the operations
 agent (`configuration.hardlinks.inspect`), since it lives in the host's
 configuration generation, and has data-manager apply it. Data-manager mounts
