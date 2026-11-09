@@ -193,8 +193,16 @@ describe("required database test gate", () => {
   });
 
   it("requires the extension-store fixture in api-privacy with production-pinned image preparation", () => {
-    expect(groups["api-privacy"]).toContain(
-      "apps/api/src/services/__tests__/extension-store-valkey.test.ts",
+    expect(groups["api-privacy"]).toEqual(
+      expect.arrayContaining([
+        "apps/api/src/services/__tests__/extension-store-valkey.test.ts",
+        "apps/api/src/services/__tests__/cache-invalidation.valkey.test.ts",
+        "apps/api/src/services/provider-health/__tests__/index.valkey.test.ts",
+        "apps/api/src/routes/__tests__/admin-cache.valkey.test.ts",
+        "apps/api/src/services/upstream-runtime/__tests__/otp.valkey.test.ts",
+        "apps/api/src/services/upstream-runtime/__tests__/mbta.valkey.test.ts",
+        "apps/api/src/services/upstream-runtime/__tests__/shared-admission.valkey.test.ts",
+      ]),
     );
     const workflow = read(".github/workflows/ci.yml");
     const step = workflow

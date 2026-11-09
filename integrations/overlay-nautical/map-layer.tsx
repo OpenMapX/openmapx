@@ -436,6 +436,7 @@ export function NauticalLayer() {
     setLoading,
   ]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `resolve` only supplies attribution for the chart sources. A new resolver must not rebuild every chart source and layer, so attribution is captured when each source is added.
   useEffect(() => {
     void styleVersion;
     const map = mapRef.current;
@@ -729,6 +730,7 @@ export function NauticalLayer() {
   }, [mapReady, mapRef, layerVisible, showTideStations, fetchStations]);
 
   // Refetch when the type filter changes (force-bust the cache key)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the filter is the trigger for this refetch, even though `fetchStations` also changes with it
   useEffect(() => {
     if (!layerVisible || !showTideStations) return;
     stationsFetchKeyRef.current = null;

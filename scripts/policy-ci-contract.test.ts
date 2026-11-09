@@ -27,6 +27,7 @@ describe("repository policy gate", () => {
       "pnpm check-dockerfile-sync",
       "pnpm check-image-size-dos",
       "pnpm check-docker-context-secrets",
+      "pnpm check-migration-order",
       "pnpm check-ops-authority",
       "pnpm check-entur-graphql",
       "pnpm check-entur-geocoder",

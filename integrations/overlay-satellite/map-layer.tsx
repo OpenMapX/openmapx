@@ -134,7 +134,7 @@ export function SatelliteLayer() {
             tileSize: 256,
             maxzoom: def.maxZoom,
           },
-          credits,
+          resolve({ sourceIds: ["nasa-gibs"] }),
         );
       }
 

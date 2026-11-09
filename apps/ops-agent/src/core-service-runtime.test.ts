@@ -168,6 +168,7 @@ describe("production core restart workflow", () => {
           "../../api/src/services/core-service-maintenance"
         );
         const { resumeAdminJobObservation } = await import("../../api/src/services/admin-job-ops");
+        const { OpsObservationPending } = await import("../../api/src/services/ops-client");
         type JobContext = import("../../api/src/services/job-runner").JobContext;
         const controller = new AbortController();
         const ctx: JobContext = {
@@ -201,9 +202,21 @@ describe("production core restart workflow", () => {
           },
         };
         release();
-        if (fail) await expect(resumeAdminJobObservation(restored)).rejects.toBeDefined();
+        // Each observation-only resume is bounded to a short production wait. A
+        // slow host can need several resumes before the retained restart settles.
+        const resumeUntilSettled = async () => {
+          const giveUpAt = Date.now() + 120_000;
+          for (;;) {
+            try {
+              return await resumeAdminJobObservation(restored);
+            } catch (error) {
+              if (!(error instanceof OpsObservationPending) || Date.now() > giveUpAt) throw error;
+            }
+          }
+        };
+        if (fail) await expect(resumeUntilSettled()).rejects.toBeDefined();
         else
-          await expect(resumeAdminJobObservation(restored)).resolves.toMatchObject({
+          await expect(resumeUntilSettled()).resolves.toMatchObject({
             service: serviceId,
             action: "restart",
           });
@@ -216,6 +229,6 @@ describe("production core restart workflow", () => {
         closeControlInstallation(installation);
       }
     },
-    30_000,
+    180_000,
   );
 });

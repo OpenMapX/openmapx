@@ -70,9 +70,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(snapshot.lastOperatorMessage).toBe("operator detail");
     });
 
-    // Known production defect: Lua cjson encodes an empty window as {}, while
-    // parseState accepts only arrays. Keep the intended contract visible until fixed.
-    it.fails("retains a provider's first non-counted outcome without an invalid-record fallback", async () => {
+    it("retains a provider's first non-counted outcome without an invalid-record fallback", async () => {
       const health = await ProviderHealth.init({ redis: fixture.client });
       await health.recordFailure("fresh", 10, "caller_cancelled", "cancelled by caller");
       expect(await health.getSnapshot("fresh")).toMatchObject({
