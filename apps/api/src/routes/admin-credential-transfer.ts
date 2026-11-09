@@ -26,14 +26,14 @@ const register = createAdminRouteRegistrar(credentialTransferOperations, {
 });
 export async function adminCredentialTransferRoute(app: FastifyInstance) {
   declareRouteAuth(app, "admin");
-  app.addHook("preHandler", async (request, reply) => {
+  app.addHook("onRequest", async (_request, reply) => {
+    reply.header("Cache-Control", "private, no-store");
+  });
+  app.addHook("onRequest", async (request, reply) => {
     request.adminSession = await requireAdmin(request);
     const actor = getAdminSession(request);
     if (actor.user.id === "loopback" || actor.session.impersonatedBy)
       return reply.code(403).send({ error: "A real full administrator session is required" });
-  });
-  app.addHook("onRequest", async (_request, reply) => {
-    reply.header("Cache-Control", "private, no-store");
   });
   app.addHook("onRoute", (route) => {
     if (route.method === "POST") route.bodyLimit = 1048576 + 8192;

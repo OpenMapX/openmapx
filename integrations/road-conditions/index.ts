@@ -20,6 +20,9 @@ const ROAD_EVENT_CACHE_MAX_AGE_S = 60;
  */
 const BINDABLE_SITUATION_ID = /^oc:situation:[^/\\?#]+$/;
 
+/** The most `/flow-along-route` validation admits: four routes of 20,000 points at full precision. */
+const FLOW_ALONG_ROUTE_BODY_LIMIT_BYTES = 4 * 1024 * 1024;
+
 /** What `/bindings` caches for a situation without bindings: a cache keeps no bare null. */
 const NO_BINDINGS = { none: true } as const;
 
@@ -227,20 +230,25 @@ export function setup(ctx: IntegrationContext): void {
   // returned as along-route metre spans, so the client can paint the route
   // itself instead of the road segments beside it. POST because a long route's
   // geometry is far past any URL length limit.
-  ctx.registerRoute("POST", "/flow-along-route", async (req, reply) => {
-    const routes = parseRouteFlowBody(req.body);
-    if (!routes) {
-      reply.status(400).send({ error: "routes required: [{ id, geometry: [[lng,lat], …] }]" });
-      return;
-    }
-    try {
-      const result = await flowSpansForRoutes(ctx, routes);
-      reply.header("Cache-Control", "no-store");
-      reply.send(result);
-    } catch (err) {
-      ctx.log.error("road-conditions route flow failed", err);
-      reply.header("Cache-Control", "no-cache");
-      reply.send({ routes: routes.map((r) => ({ id: r.id, spans: [] })) });
-    }
-  });
+  ctx.registerRoute(
+    "POST",
+    "/flow-along-route",
+    async (req, reply) => {
+      const routes = parseRouteFlowBody(req.body);
+      if (!routes) {
+        reply.status(400).send({ error: "routes required: [{ id, geometry: [[lng,lat], …] }]" });
+        return;
+      }
+      try {
+        const result = await flowSpansForRoutes(ctx, routes);
+        reply.header("Cache-Control", "no-store");
+        reply.send(result);
+      } catch (err) {
+        ctx.log.error("road-conditions route flow failed", err);
+        reply.header("Cache-Control", "no-cache");
+        reply.send({ routes: routes.map((r) => ({ id: r.id, spans: [] })) });
+      }
+    },
+    { bodyLimit: FLOW_ALONG_ROUTE_BODY_LIMIT_BYTES },
+  );
 }

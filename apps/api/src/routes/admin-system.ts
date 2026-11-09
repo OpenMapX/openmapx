@@ -144,7 +144,7 @@ async function enqueueMaintenance(
 export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
   declareRouteAuth(app, "admin");
 
-  app.addHook("preHandler", async (request) => {
+  app.addHook("onRequest", async (request) => {
     request.adminSession = await requireAdmin(request);
   });
 

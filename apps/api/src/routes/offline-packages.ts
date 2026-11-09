@@ -193,7 +193,7 @@ export function createOfflinePackagesRoute(
         reply.header("Referrer-Policy", "no-referrer");
         reply.header("Vary", "Cookie");
       });
-      authenticated.addHook("preHandler", requireAuthHook);
+      authenticated.addHook("onRequest", requireAuthHook);
 
       authenticated.post("/offline/packages/prepare", async (request, reply) => {
         let principalKey: Buffer;

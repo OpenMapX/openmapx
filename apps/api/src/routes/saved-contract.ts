@@ -22,5 +22,5 @@ export const registerSavedImportRoute = createContractRouteRegistrar(savedOperat
   reuseSchemas: true,
   label: "saved",
   validationPhase: "preHandler",
-  bodyLimit: 40 * 1024 * 1024,
+  bodyLimit: 8 * 1024 * 1024,
 });

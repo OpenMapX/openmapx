@@ -1,11 +1,47 @@
-import type {
-  LoadedIntegration,
-  RouteHandler,
-  RouteOptions,
+import { Transform } from "node:stream";
+import {
+  httpError,
+  type LoadedIntegration,
+  type RouteHandler,
+  type RouteOptions,
 } from "@openmapx/integration-framework";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { RateLimitTiers } from "./server-wiring";
 import { requireAuth } from "./utils/require-auth";
+
+/** The request body an integration route accepts unless it declares a larger limit. */
+const INTEGRATION_ROUTE_BODY_LIMIT = 1024 * 1024;
+/** No integration route may accept a larger body, whatever it declares. */
+const INTEGRATION_ROUTE_BODY_CEILING = 8 * 1024 * 1024;
+
+function bodyLimitOf(route: RegisteredIntegrationRoute | undefined): number {
+  const declared = route?.options?.bodyLimit;
+  return typeof declared === "number" && Number.isFinite(declared) && declared > 0
+    ? Math.min(declared, INTEGRATION_ROUTE_BODY_CEILING)
+    : INTEGRATION_ROUTE_BODY_LIMIT;
+}
+
+/**
+ * Fails a body stream with 413 once more than `limit` bytes have passed through
+ * it. The request is drained, not destroyed, as Fastify's own limit does:
+ * dropping the connection would lose the 413 on its way to the client.
+ */
+function limitedBody(payload: NodeJS.ReadableStream, limit: number): NodeJS.ReadableStream {
+  let received = 0;
+  const limited = new Transform({
+    transform(chunk: Buffer, _encoding, done) {
+      received += chunk.length;
+      done(received > limit ? httpError(413, "Request body too large") : null, chunk);
+    },
+  });
+  payload.once("error", (error) => limited.destroy(error));
+  limited.once("error", () => {
+    payload.unpipe(limited);
+    payload.resume();
+  });
+  payload.pipe(limited);
+  return limited;
+}
 
 export type RegisteredIntegrationRoute = {
   integrationId: string;
@@ -220,16 +256,28 @@ export function registerIntegrationRouteDispatcher(
   assertRawPathMatchesRouter(fastify);
   _routeDispatcherFastify = fastify;
 
-  const dispatch = async (request: FastifyRequest, reply: FastifyReply) => {
+  // What the request was admitted as, before its body is read. A request that
+  // matched no enabled integration route has no entry and is answered 404.
+  const admissions = new WeakMap<
+    FastifyRequest,
+    {
+      integrationId: string;
+      route: RegisteredIntegrationRoute;
+      params: Record<string, string>;
+      routePath: string;
+      userId: string | undefined;
+    }
+  >();
+
+  // Admission runs ahead of body parsing: the route's rate-limit tier, then
+  // authentication, so an anonymous caller never has a body read for them.
+  const admit = async (request: FastifyRequest, reply: FastifyReply) => {
     const id = (request.params as { id?: string }).id;
-    if (!id) return reply.status(404).send({ error: "Not found" });
-    const integration = integrations.get(id);
-    if (!integration?.enabled) return reply.status(404).send({ error: "Not found" });
+    if (!id || !integrations.get(id)?.enabled) return;
 
     const routePath = rawIntegrationPath(request);
     const matched = findIntegrationRoute(id, request.method, routePath);
-    if (!matched) return reply.status(404).send({ error: "Not found" });
-    const routeParams = decodeParams(matched.params);
+    if (!matched) return;
 
     const rateLimitTier = matched.route.options?.rateLimitTier ?? "public";
     const limiter = routeRateLimits?.[rateLimitTier];
@@ -242,6 +290,34 @@ export function registerIntegrationRouteDispatcher(
     if (matched.route.options?.requireAuth === true) {
       userId = await requireAuth(request);
     }
+    admissions.set(request, {
+      integrationId: id,
+      route: matched.route,
+      params: matched.params,
+      routePath,
+      userId,
+    });
+  };
+
+  // The Fastify routes below accept the largest body any integration route may
+  // declare; each route is held to its own limit here, as the body streams in.
+  const limitBody = async (
+    request: FastifyRequest,
+    _reply: FastifyReply,
+    payload: NodeJS.ReadableStream,
+  ) => {
+    const limit = bodyLimitOf(admissions.get(request)?.route);
+    if (Number(request.headers["content-length"]) > limit) {
+      throw httpError(413, "Request body too large");
+    }
+    return limitedBody(payload, limit);
+  };
+
+  const dispatch = async (request: FastifyRequest, reply: FastifyReply) => {
+    const admission = admissions.get(request);
+    if (!admission) return reply.status(404).send({ error: "Not found" });
+    const { integrationId: id, route, routePath, userId } = admission;
+    const routeParams = decodeParams(admission.params);
 
     let didSend = false;
     const requestController = new AbortController();
@@ -252,7 +328,7 @@ export function registerIntegrationRouteDispatcher(
     request.raw.once("aborted", abortRequest);
     reply.raw.once("close", abortDisconnectedReply);
     try {
-      await matched.route.handler(
+      await route.handler(
         {
           query: request.query as Record<string, string | string[] | undefined>,
           params: routeParams,
@@ -305,10 +381,13 @@ export function registerIntegrationRouteDispatcher(
     return reply;
   };
 
-  fastify.route({ method: [...ROUTE_METHODS], url: "/api/integrations/:id", handler: dispatch });
-  fastify.route({
+  const routeOptions = {
     method: [...ROUTE_METHODS],
-    url: "/api/integrations/:id/*",
+    bodyLimit: INTEGRATION_ROUTE_BODY_CEILING,
+    onRequest: admit,
+    preParsing: limitBody,
     handler: dispatch,
-  });
+  };
+  fastify.route({ ...routeOptions, url: "/api/integrations/:id" });
+  fastify.route({ ...routeOptions, url: "/api/integrations/:id/*" });
 }

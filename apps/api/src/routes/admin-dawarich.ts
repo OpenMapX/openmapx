@@ -109,7 +109,7 @@ export async function adminDawarichRoute(app: FastifyInstance): Promise<void> {
   declareRouteAuth(app, "admin");
   const actionLimit = serviceActionLimit.preHandler();
 
-  app.addHook("preHandler", async (request) => {
+  app.addHook("onRequest", async (request) => {
     request.adminSession = await requireAdmin(request);
   });
 

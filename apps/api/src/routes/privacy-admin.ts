@@ -229,7 +229,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
       route.bodyLimit = ATTACHMENT_BODY_LIMIT;
   });
   declareRouteAuth(fastify, "privacy_admin");
-  fastify.addHook("preHandler", async (request) => {
+  fastify.addHook("onRequest", async (request) => {
     request.privacyAdminSession = await requirePrivacyAdmin(request);
   });
   fastify.addHook("onSend", async (_request, reply, payload) => {

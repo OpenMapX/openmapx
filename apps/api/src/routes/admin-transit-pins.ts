@@ -96,11 +96,11 @@ async function submit(
 }
 export async function adminTransitPinsRoute(app: FastifyInstance): Promise<void> {
   declareRouteAuth(app, "admin");
-  app.addHook("preHandler", async (request) => {
-    request.adminSession = await requireAdmin(request);
-  });
   app.addHook("onRequest", async (_request, reply) => {
     reply.header("Cache-Control", "private, no-store");
+  });
+  app.addHook("onRequest", async (request) => {
+    request.adminSession = await requireAdmin(request);
   });
   const limits = new RateLimiter({
     max: 12,

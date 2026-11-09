@@ -148,6 +148,26 @@ describe("saved list imports", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ imported: 2000, skippedDuplicates: 0 });
   });
+  it("accepts 2000 realistic rows", async () => {
+    state.queue.push([{ id: "list-1", name: "Trip" }], [], [], []);
+    const places = Array.from({ length: 2000 }, (_, index) => ({
+      name: `Cafe ${index}`,
+      address: `${index} Example Street, Berlin`,
+      lat: 52 + index / 10_000,
+      lng: 13 + index / 10_000,
+      note: "Imported from a takeout file.",
+    }));
+    const response = await request({ listId: "list-1" }, places);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ imported: 2000, skippedDuplicates: 0 });
+  });
+  it("answers 413 to a body above 8 MiB", async () => {
+    const response = await request({ name: "Trip" }, [
+      { ...point, note: "a".repeat(9 * 1024 * 1024) },
+    ]);
+    expect(response.statusCode).toBe(413);
+    expect(state.transactions).toBe(0);
+  });
   it("does not report success when a transactional insert fails", async () => {
     state.queue.push([{ id: "list-1", name: "Trip" }], []);
     state.failInsert = true;

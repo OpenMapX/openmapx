@@ -395,8 +395,10 @@ services:
 
 - **`ctx.registerRoute(method, path, handler, options?)`** mounts the route under
   the integration prefix. Pass `{ requireAuth: true }` to make the host reject
-  unauthenticated callers with 401 before your handler runs; the authenticated
-  user id is then available as `req.userId`. The incoming request's headers are
+  unauthenticated callers with 401 before your handler runs and before the
+  request body is read; the authenticated user id is then available as
+  `req.userId`. A route accepts a request body of up to 1 MiB; pass
+  `{ bodyLimit }` (bytes, capped at 8 MiB) to accept more. The incoming request's headers are
   forwarded as `req.headers` (`Record<string, string | string[] | undefined>`);
   Node lowercases every header name when parsing the request, so read
   `req.headers["if-none-match"]`, not `req.headers["If-None-Match"]`.

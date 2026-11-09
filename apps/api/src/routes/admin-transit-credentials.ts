@@ -22,11 +22,11 @@ const register = createAdminRouteRegistrar(transitCredentialOperations, {
 });
 export async function adminTransitCredentialsRoute(app: FastifyInstance) {
   declareRouteAuth(app, "admin");
-  app.addHook("preHandler", async (request) => {
-    request.adminSession = await requireAdmin(request);
-  });
   app.addHook("onRequest", async (_request, reply) => {
     reply.header("Cache-Control", "private, no-store");
+  });
+  app.addHook("onRequest", async (request) => {
+    request.adminSession = await requireAdmin(request);
   });
   app.addHook("onRoute", (route) => {
     if (route.method === "POST" || route.method === "PATCH") route.bodyLimit = 1024 * 1024;

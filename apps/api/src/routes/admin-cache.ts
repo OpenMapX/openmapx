@@ -28,7 +28,7 @@ async function scanPattern(client: RedisClient, match: string, remove: boolean):
 }
 export async function adminCacheRoute(app: FastifyInstance): Promise<void> {
   declareRouteAuth(app, "admin");
-  app.addHook("preHandler", async (request) => {
+  app.addHook("onRequest", async (request) => {
     request.adminSession = await requireAdmin(request);
   });
   registerServiceAdminRoute(app, "listAdminCacheNamespaces", async () => {

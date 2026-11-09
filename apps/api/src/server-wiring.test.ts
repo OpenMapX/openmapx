@@ -1,5 +1,5 @@
 import { get as httpGet } from "node:http";
-import type { AddressInfo } from "node:net";
+import { type AddressInfo, connect } from "node:net";
 import { Writable } from "node:stream";
 import cors from "@fastify/cors";
 import { ApiClientError, createApiClient } from "@openmapx/core";
@@ -7,7 +7,7 @@ import { getApiDataManagerTransitState, unwrapAdminResponse } from "@openmapx/co
 import { exportSavedList, unwrapSavedResponse } from "@openmapx/core/saved-places-sdk";
 import Fastify, { type FastifyInstance } from "fastify";
 import pino from "pino";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerSavedRoute } from "./routes/saved-contract";
 import {
   controlledRequestLoggingOptions,
@@ -17,6 +17,7 @@ import {
   makeStatusAwareRateLimit,
   makeTimelineAwareRateLimit,
   type RateLimitTiers,
+  registerBodyReadDeadline,
   registerControlledRequestLogging,
   trustProxyConfig,
   uniformErrorHandler,
@@ -794,5 +795,273 @@ describe("controlled request lifecycle logging", () => {
       statusCode: 404,
     });
     expect(capture.chunks.join("")).not.toMatch(/private-value|fixture-query-token/);
+  });
+});
+
+describe("registerBodyReadDeadline", () => {
+  const DEADLINE_MS = 150;
+  const headers = (path: string) =>
+    `POST ${path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 64\r\n\r\n`;
+
+  async function listening(ms = DEADLINE_MS) {
+    const app = Fastify();
+    registerBodyReadDeadline(app, { ms, exemptRoutePrefixes: ["/transfers"] });
+    app.post("/limited", { bodyLimit: 10 }, async () => ({ ok: true }));
+    app.post("/stalled", async () => ({ ok: true }));
+    app.post("/transfers/content", async () => ({ ok: true }));
+    // Outlast the deadline without a body to read, as an administrator
+    // operation waiting on a job or a log stream does.
+    const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    app.route({
+      method: ["GET", "POST", "DELETE"],
+      url: "/slow",
+      handler: async () => {
+        await pause(DEADLINE_MS * 3);
+        return { done: true };
+      },
+    });
+    app.get("/stream", async (_request, reply) => {
+      reply.raw.writeHead(200, { "content-type": "text/event-stream" });
+      for (let tick = 0; tick < 3; tick += 1) {
+        reply.raw.write(`data: ${tick}\n\n`);
+        await pause(DEADLINE_MS);
+      }
+      reply.raw.end("data: done\n\n");
+      return reply;
+    });
+    // A guard that rejects in onRequest, before any body is read.
+    app.post(
+      "/private",
+      {
+        onRequest: async (_request, reply) =>
+          reply.code(401).send({ error: "Authentication required" }),
+      },
+      async () => ({ ok: true }),
+    );
+    await app.listen({ port: 0, host: "127.0.0.1" });
+    return { app, port: (app.server.address() as AddressInfo).port };
+  }
+
+  /** Sends request headers and the first bytes of a body, then stalls. */
+  function stall(port: number, path: string) {
+    const socket = connect(port, "127.0.0.1");
+    const closedAt = new Promise<number>((resolve) => {
+      const startedAt = Date.now();
+      socket.on("close", () => resolve(Date.now() - startedAt));
+      socket.on("error", () => {});
+    });
+    socket.write(`${headers(path)}{"a":`);
+    return { socket, closedAt };
+  }
+
+  it("closes the socket of a request whose body does not arrive in time", async () => {
+    const { app, port } = await listening();
+    try {
+      const { closedAt } = stall(port, "/stalled");
+      const elapsed = await closedAt;
+      expect(elapsed).toBeGreaterThanOrEqual(DEADLINE_MS - 20);
+      expect(elapsed).toBeLessThan(DEADLINE_MS + 1500);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("leaves the routes it exempts to read as slowly as they need", async () => {
+    const { app, port } = await listening();
+    try {
+      const { socket, closedAt } = stall(port, "/transfers/content");
+      const state = await Promise.race([
+        closedAt.then(() => "closed"),
+        new Promise((resolve) => setTimeout(() => resolve("open"), DEADLINE_MS * 4)),
+      ]);
+      expect(state).toBe("open");
+      socket.destroy();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("does not disturb a request whose body arrives in time", async () => {
+    const { app, port } = await listening();
+    try {
+      const post = () =>
+        fetch(`http://127.0.0.1:${port}/stalled`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ a: 1 }),
+        });
+      expect((await post()).status).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, DEADLINE_MS * 2));
+      expect((await post()).status).toBe(200);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it.each([
+    ["a no-body POST", "POST", "/slow"],
+    ["a no-body DELETE", "DELETE", "/slow"],
+    ["a slow GET", "GET", "/slow"],
+    ["a streaming GET", "GET", "/stream"],
+  ])("does not cut %s that outlasts the deadline", async (_name, method, path) => {
+    const { app, port } = await listening();
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}${path}`, { method });
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain("done");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("closes a stalled body after the request was rejected before it was read", async () => {
+    const { app, port } = await listening();
+    try {
+      const socket = connect(port, "127.0.0.1");
+      let answer = "";
+      const closedAt = new Promise<number>((resolve) => {
+        const startedAt = Date.now();
+        socket.on("data", (chunk) => {
+          answer += chunk;
+        });
+        socket.on("close", () => resolve(Date.now() - startedAt));
+        socket.on("error", () => {});
+      });
+      socket.write(`${headers("/private")}{"a":`);
+
+      const elapsed = await closedAt;
+
+      expect(answer).toContain("401 Unauthorized");
+      expect(elapsed).toBeGreaterThanOrEqual(DEADLINE_MS - 20);
+      expect(elapsed).toBeLessThan(DEADLINE_MS + 1500);
+    } finally {
+      await app.close();
+    }
+  });
+
+  describe("when the connection goes away before the deadline", () => {
+    // A deadline far past the test, so a timer that is gone within a moment was
+    // stopped by the disconnect and not by expiring.
+    const LONG_DEADLINE_MS = 29_999;
+    const armed: unknown[] = [];
+    const cleared = new Set<unknown>();
+
+    beforeEach(() => {
+      armed.length = 0;
+      cleared.clear();
+      const realSetTimeout = globalThis.setTimeout;
+      const realClearTimeout = globalThis.clearTimeout;
+      vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+        callback: () => void,
+        ms?: number,
+        ...args: unknown[]
+      ) => {
+        const handle = realSetTimeout(callback, ms, ...args);
+        if (ms === LONG_DEADLINE_MS) armed.push(handle);
+        return handle;
+      }) as typeof setTimeout);
+      vi.spyOn(globalThis, "clearTimeout").mockImplementation(((handle: never) => {
+        cleared.add(handle);
+        realClearTimeout(handle);
+      }) as typeof clearTimeout);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    async function clearedWithin(ms: number): Promise<boolean> {
+      for (let waited = 0; waited < ms; waited += 20) {
+        if (armed.length > 0 && armed.every((handle) => cleared.has(handle))) return true;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      return false;
+    }
+
+    it("clears the timer of a request rejected with 401 while its body was arriving", async () => {
+      const { app, port } = await listening(LONG_DEADLINE_MS);
+      try {
+        const socket = connect(port, "127.0.0.1");
+        let answered: () => void = () => {};
+        const answer = new Promise<void>((resolve) => {
+          answered = resolve;
+        });
+        socket.on("data", () => answered());
+        socket.on("error", () => {});
+        socket.write(`${headers("/private")}{"a":`);
+        await answer;
+        expect(armed).toHaveLength(1);
+
+        socket.destroy();
+
+        expect(await clearedWithin(2000)).toBe(true);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it("clears the timer of a request rejected with 413 while its body was arriving", async () => {
+      const { app, port } = await listening(LONG_DEADLINE_MS);
+      try {
+        const socket = connect(port, "127.0.0.1");
+        let received = "";
+        const closed = new Promise<void>((resolve) => socket.on("close", () => resolve()));
+        socket.on("data", (chunk) => {
+          received += chunk;
+        });
+        socket.on("error", () => {});
+        socket.write(`${headers("/limited")}{"a":`);
+        await closed;
+
+        expect(received).toContain("413");
+        expect(armed).toHaveLength(1);
+        expect(await clearedWithin(2000)).toBe(true);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it("clears the timer of a request that stalls without an answer when the client leaves", async () => {
+      const { app, port } = await listening(LONG_DEADLINE_MS);
+      try {
+        const socket = connect(port, "127.0.0.1");
+        socket.on("error", () => {});
+        socket.write(`${headers("/stalled")}{"a":`);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        expect(armed).toHaveLength(1);
+
+        socket.destroy();
+
+        expect(await clearedWithin(2000)).toBe(true);
+      } finally {
+        await app.close();
+      }
+    });
+  });
+
+  it("serves a body that trickles in but finishes before the deadline", async () => {
+    const { app, port } = await listening();
+    try {
+      const socket = connect(port, "127.0.0.1");
+      let answer = "";
+      const answered = new Promise<void>((resolve) => {
+        socket.on("data", (chunk) => {
+          answer += chunk;
+          if (answer.includes("\r\n\r\n")) resolve();
+        });
+        socket.on("error", () => {});
+      });
+      const body = JSON.stringify({ a: 1 });
+      socket.write(
+        `POST /stalled HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: ${body.length}\r\n\r\n${body.slice(0, 3)}`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, DEADLINE_MS / 2));
+      socket.write(body.slice(3));
+      await answered;
+      expect(answer).toContain("200 OK");
+      socket.destroy();
+    } finally {
+      await app.close();
+    }
   });
 });

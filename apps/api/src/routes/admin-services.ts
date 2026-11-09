@@ -96,7 +96,7 @@ function presentBackupInventory(inventory: BackupInventory) {
 export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   declareRouteAuth(app, "admin");
 
-  app.addHook("preHandler", async (request, _reply) => {
+  app.addHook("onRequest", async (request, _reply) => {
     request.adminSession = await requireAdmin(request);
   });
 

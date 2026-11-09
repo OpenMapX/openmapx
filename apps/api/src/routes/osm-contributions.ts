@@ -94,7 +94,7 @@ export function osmContributionsRoute(
     // so no handler can forget it, and register the user-keyed limiters after
     // that hook so `request.userId` is already set when they derive a bucket.
     declareRouteAuth(fastify, "session");
-    fastify.addHook("preHandler", requireAuthHook);
+    fastify.addHook("onRequest", requireAuthHook);
 
     fastify.get(
       "/osm/contributions/capabilities",

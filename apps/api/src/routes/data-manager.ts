@@ -119,9 +119,10 @@ async function readLockSummary(): Promise<LockSummary> {
 
 export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
   declareRouteAuth(app, "service");
-  // Preserve authentication before the canonical shape validator and before
-  // DB, proxy or job work. Handler guards consume this same cached result.
-  app.addHook("preValidation", async (request, reply) => {
+  // Authenticate before the body is read, before the canonical shape validator
+  // and before DB, proxy or job work. Handler guards consume this same cached
+  // result.
+  app.addHook("onRequest", async (request, reply) => {
     if ((await authenticateDataManager(request)).kind === "denied")
       return reply.code(401).send({ error: "Authentication required" });
   });

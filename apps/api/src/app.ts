@@ -82,6 +82,7 @@ import {
   makeSecurityResponseHeaderHook,
   makeStatusAwareRateLimit,
   makeTimelineAwareRateLimit,
+  registerBodyReadDeadline,
   registerControlledRequestLogging,
   trustProxyConfig,
   uniformErrorHandler,
@@ -198,12 +199,20 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
       // DB HAFAS trip IDs can be ~300 chars when URL-encoded (default is 100)
       maxParamLength: 500,
     },
-    // Review image uploads post base64 data URLs up to ~6.7 MB for a 5 MB photo
-    // (4/3 base64 inflation). The orchestrator clamps the decoded size at 5 MB.
-    bodyLimit: 10 * 1024 * 1024,
+    // Anything larger declares its own limit on the route (the saved import and
+    // the review image upload do), so a route that never asked cannot be handed
+    // a large body.
+    bodyLimit: 1024 * 1024,
   });
 
   registerControlledRequestLogging(server);
+  // Registered before every other request hook so a request that is rejected
+  // early is still held to the deadline. Artifact uploads stream for as long as
+  // the transfer takes, so they are exempt.
+  registerBodyReadDeadline(server, {
+    ms: 60_000,
+    exemptRoutePrefixes: ["/api/admin/artifact-transfers"],
+  });
 
   server.setErrorHandler(uniformErrorHandler);
 

@@ -1426,6 +1426,17 @@ it("keeps parser 413/415 and forbidden malformed JSON envelopes serialized befor
   const { app, close } = await wire();
   try {
     const headers = { "content-type": "application/json" };
+    requireAdmin.mockRejectedValueOnce(
+      Object.assign(Error("Authentication required"), { statusCode: 401 }),
+    );
+    const anonymous = await app.inject({
+      method: "POST",
+      url: "/api/admin/services/backups",
+      headers,
+      payload: JSON.stringify({ name: "x".repeat(9000) }),
+    });
+    expect(anonymous.statusCode).toBe(401);
+    requireAdmin.mockClear();
     const oversized = await app.inject({
       method: "POST",
       url: "/api/admin/services/backups",
@@ -1449,7 +1460,9 @@ it("keeps parser 413/415 and forbidden malformed JSON envelopes serialized befor
     });
     expect(forbidden.statusCode).toBe(403);
     expect(forbidden.json()).toEqual({ error: "Forbidden" });
-    expect(requireAdmin).not.toHaveBeenCalled();
+    // The authenticated parser failures reached the administrator check; the
+    // cross-site request never did.
+    expect(requireAdmin).toHaveBeenCalledTimes(2);
     expect(enqueue).not.toHaveBeenCalled();
   } finally {
     await close();

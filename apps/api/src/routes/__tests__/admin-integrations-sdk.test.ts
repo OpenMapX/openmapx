@@ -609,7 +609,7 @@ describe("actual integration producers through generated SDK", () => {
       }
     },
   );
-  it("keeps binding body-before-auth, rejects failed writes and never leaks backend errors", async () => {
+  it("authenticates bindings before their body, rejects failed writes and never leaks backend errors", async () => {
     const sdk = await import("@openmapx/core/api-admin-sdk");
     const { app, client } = await wire();
     try {
@@ -622,8 +622,8 @@ describe("actual integration producers through generated SDK", () => {
             payload: {},
           })
         ).statusCode,
-      ).toBe(400);
-      expect(mockRequireAdmin).not.toHaveBeenCalled();
+      ).toBe(403);
+      expect(mockRequireAdmin).toHaveBeenCalledTimes(1);
       expect(
         (
           await sdk.setAdminIntegrationBinding(

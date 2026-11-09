@@ -31,7 +31,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
 
   // Every /saved route is per-user; authenticate once here so no handler can
   // forget the check (which would silently expose another user's data).
-  fastify.addHook("preHandler", requireAuthHook);
+  fastify.addHook("onRequest", requireAuthHook);
 
   registerSavedRoute(fastify, "listSavedLists", async (req, _reply) => {
     const userId = getUserId(req);

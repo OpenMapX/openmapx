@@ -10,7 +10,7 @@ import { declareRouteAuth } from "../utils/route-auth";
 import { registerServiceAdminRoute } from "./admin-service-contract";
 export async function adminReleaseControlsRoute(app: FastifyInstance) {
   declareRouteAuth(app, "admin");
-  app.addHook("preHandler", async (request) => {
+  app.addHook("onRequest", async (request) => {
     request.adminSession = await requireAdmin(request);
   });
   const limit = new RateLimiter({
