@@ -277,48 +277,32 @@ it.skipIf(!enabled)(
     }
   },
 );
-it.skipIf(!enabled)(
-  "leaves rows that carry no operation ledger, are still running, or hold an unattempted catalog fetch",
-  async () => {
-    const owned: string[] = [];
-    try {
-      const untouched = [
-        await insertLegacyJob(owned, {
-          kind: "traffic-maintenance",
-          status: "running",
-          metadata: { version: 1, retainedOps: [] },
-        }),
-        await insertLegacyJob(owned, {
-          kind: "transitous-sync",
-          status: "interrupted",
-          metadata: { version: 1 },
-        }),
-        await insertLegacyJob(owned, {
-          kind: "transit-proposal",
-          status: "interrupted",
-          metadata: {
-            version: 1,
-            retainedOps: [],
-            catalogPreflight: { version: 1, state: "git-fetch-attempted" },
-          },
-        }),
-      ];
-      const observe = vi.fn(async () => "terminal" as const);
-      const result = await reconcileInterruptedLegacyJobs({ database: rawSql, observe });
-      for (const id of untouched) expect(result.resolved).not.toContain(id);
-      const rows =
-        await rawSql`SELECT status,finished_at FROM data_manager.jobs WHERE id IN ${rawSql(untouched)} ORDER BY started_at`;
-      expect(rows.map((row) => row.status).sort()).toEqual([
-        "interrupted",
-        "interrupted",
-        "running",
-      ]);
-      expect(rows.every((row) => row.finished_at === null)).toBe(true);
-    } finally {
-      for (const id of owned) await rawSql`DELETE FROM data_manager.jobs WHERE id=${id}`;
-    }
-  },
-);
+it.skipIf(!enabled)("leaves rows that carry no operation ledger or are still running", async () => {
+  const owned: string[] = [];
+  try {
+    const untouched = [
+      await insertLegacyJob(owned, {
+        kind: "traffic-maintenance",
+        status: "running",
+        metadata: { version: 1, retainedOps: [] },
+      }),
+      await insertLegacyJob(owned, {
+        kind: "transitous-sync",
+        status: "interrupted",
+        metadata: { version: 1 },
+      }),
+    ];
+    const observe = vi.fn(async () => "terminal" as const);
+    const result = await reconcileInterruptedLegacyJobs({ database: rawSql, observe });
+    for (const id of untouched) expect(result.resolved).not.toContain(id);
+    const rows =
+      await rawSql`SELECT status,finished_at FROM data_manager.jobs WHERE id IN ${rawSql(untouched)} ORDER BY started_at`;
+    expect(rows.map((row) => row.status).sort()).toEqual(["interrupted", "running"]);
+    expect(rows.every((row) => row.finished_at === null)).toBe(true);
+  } finally {
+    for (const id of owned) await rawSql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+  }
+});
 it.skipIf(!enabled)(
   "attests non-admission from the original canceled grant and actual locked SQL, never from a missing shared file alone",
   async () => {
@@ -486,7 +470,7 @@ it.skipIf(!enabled)(
 );
 
 it.skipIf(!enabled).each(["git", "proposal"] as const)(
-  "I4 retains the original %s attempt as unknown and blocks admission after recovery",
+  "I4 %s attempt blocks admission until a reconciliation pass settles it by its recorded operations",
   async (phase) => {
     const before = new Set(
       (await rawSql`SELECT id FROM data_manager.jobs`).map((row) => String(row.id)),
@@ -573,17 +557,39 @@ it.skipIf(!enabled).each(["git", "proposal"] as const)(
         expect(row.metadata.retainedOps[0].operationKey).toMatch(/^opk1_/);
         expect(row.metadata.retainedOps[0].fingerprint).toMatch(/^[a-f0-9]{64}$/);
       }
-      const unresolved = await reconcileInterruptedLegacyJobs({
-        database: rawSql,
-        observe: async () => "unknown",
-      });
-      expect(unresolved.resolved).toEqual([]);
-      const [after] = await rawSql`SELECT * FROM data_manager.jobs WHERE id=${row.id}`;
-      expect(after?.metadata).toEqual(row.metadata);
-      expect(after?.finished_at).toBeNull();
       await expect(fence.withAdmission(async () => "must not admit")).rejects.toMatchObject({
         statusCode: 409,
       });
+      if (phase === "git") {
+        // The fetch was an awaited local child and recorded no agent operation,
+        // so a failed fetch must not block later jobs once a pass runs.
+        const settled = await reconcileInterruptedLegacyJobs({
+          database: rawSql,
+          observe: async () => {
+            throw Error("A catalog fetch records no agent operation");
+          },
+        });
+        expect(settled.resolved).toEqual([String(row.id)]);
+        const [after] =
+          await rawSql`SELECT status,finished_at FROM data_manager.jobs WHERE id=${row.id}`;
+        expect(after?.status).toBe("error");
+        expect(after?.finished_at).not.toBeNull();
+        await expect(fence.withAdmission(async () => "next job may admit")).resolves.toBe(
+          "next job may admit",
+        );
+      } else {
+        const unresolved = await reconcileInterruptedLegacyJobs({
+          database: rawSql,
+          observe: async () => "unknown",
+        });
+        expect(unresolved.resolved).toEqual([]);
+        const [after] = await rawSql`SELECT * FROM data_manager.jobs WHERE id=${row.id}`;
+        expect(after?.metadata).toEqual(row.metadata);
+        expect(after?.finished_at).toBeNull();
+        await expect(fence.withAdmission(async () => "must not admit")).rejects.toMatchObject({
+          statusCode: 409,
+        });
+      }
     } finally {
       resetOpsClient();
       rmSync(catalog, { recursive: true, force: true });

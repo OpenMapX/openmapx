@@ -113,8 +113,6 @@ async function operationsAreSettled(
  * It becomes `error` once it recorded no operation or every recorded one is
  * terminal. This only observes: it never submits or cancels an operation, and
  * an unreachable agent or a failed observation holds the row for the next pass.
- * A row whose catalog fetch was attempted stays held because no agent
- * operation can vouch for that local effect.
  */
 export async function reconcileInterruptedLegacyJobs(
   options: InterruptedLegacyJobOptions,
@@ -126,7 +124,6 @@ export async function reconcileInterruptedLegacyJobs(
     WHERE execution_version IS NULL AND finished_at IS NULL AND status='interrupted'
       AND kind <> 'configuration-maintenance'
       AND jsonb_typeof(metadata->'retainedOps')='array'
-      AND coalesce(metadata->'catalogPreflight'->>'state','') <> 'git-fetch-attempted'
     ORDER BY started_at,id`;
   const resolved: string[] = [];
   const held: string[] = [];

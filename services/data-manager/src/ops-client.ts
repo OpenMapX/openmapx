@@ -188,9 +188,9 @@ export async function runOpsOperation<K extends OpsOperationKind>(
   }
 }
 
-/** An admission request expires 20 seconds after it was issued, so an agent
- * that has no record of a key this long after the attempt never will. */
-const UNADMITTED_REQUEST_GRACE_MS = 30_000;
+/** Allowance after an operation's deadline for the agent to contain it, and
+ * after an attempt for an unadmitted request (valid for 20 seconds) to lapse. */
+const SETTLEMENT_BUDGET_MS = 30_000;
 
 /**
  * Reads the agent's current record of a host operation a legacy job retained.
@@ -218,13 +218,21 @@ export async function observeRetainedHostOperation(
       execution: { requestedDeadlineAt },
       signal: context.signal,
     });
-    return ["succeeded", "failed", "timed_out"].includes(status.state) ? "terminal" : "active";
+    if (!["succeeded", "failed", "timed_out"].includes(status.state)) return "active";
+    if (status.errorClass !== "recovery_required") return "terminal";
+    // An agent restart rewrites every unfinished job to this outcome without
+    // proving its effect ended, so wait out the retained budget and the
+    // settlement allowance before trusting it.
+    const deadlineAt =
+      typeof retained.deadlineAt === "number" ? retained.deadlineAt : status.deadlineAt;
+    if (typeof deadlineAt !== "number") return "unknown";
+    return Date.now() > deadlineAt + SETTLEMENT_BUDGET_MS ? "terminal" : "active";
   } catch (error) {
     if (
       error instanceof OpsClientError &&
       error.errorClass === "not_found" &&
       typeof admittedAt === "number" &&
-      Date.now() > admittedAt + UNADMITTED_REQUEST_GRACE_MS
+      Date.now() > admittedAt + SETTLEMENT_BUDGET_MS
     )
       return "terminal";
     return "unknown";

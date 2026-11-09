@@ -302,8 +302,10 @@ resubmits or cancels one. A job that recorded no operation, or whose recorded
 operations have all finished, becomes `error` and stops blocking later data jobs.
 A job with an operation that is still running stays interrupted. So does a job
 whose operations the ops-agent cannot answer for, for example while the agent is
-down; it clears on the first pass after the agent answers. A job that attempted a
-catalog fetch remains fenced.
+down; it clears on the first pass after the agent answers. When the agent
+restarted mid-operation it reports the operation as failed with a
+recovery-required outcome, which does not prove the host effect ended, so the job
+stays interrupted until the operation's deadline plus 30 seconds has passed.
 
 For a standalone host `services start` or `services update` that failed at
 hardlinks after committing its configuration, retain its original operation key

@@ -19,8 +19,9 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-function retained(admittedAt = Date.now() - 120_000) {
+function retained(admittedAt = Date.now() - 120_000, deadlineAt?: number) {
   return {
+    ...(deadlineAt === undefined ? {} : { deadlineAt }),
     operationKey,
     operation,
     fingerprint: opsOperationFingerprint(operation),
@@ -83,6 +84,30 @@ describe("observeRetainedHostOperation", () => {
   it.each(["failed", "timed_out"])("reports a %s operation as terminal", async (state) => {
     agent(status(state, { errorClass: "runtime" }));
     await expect(observeRetainedHostOperation(operationKey, retained())).resolves.toBe("terminal");
+  });
+
+  it("trusts a failure the agent attributes to the operation itself at once", async () => {
+    agent(status("failed", { errorClass: "runtime" }));
+    await expect(
+      observeRetainedHostOperation(operationKey, retained(Date.now() - 1000, Date.now() + 600_000)),
+    ).resolves.toBe("terminal");
+  });
+
+  it("does not trust an agent restart's recovery-required failure until the deadline and settlement allowance pass", async () => {
+    agent(status("failed", { errorClass: "recovery_required" }));
+    const now = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(now);
+    const at = (deadlineAt: number) =>
+      observeRetainedHostOperation(operationKey, retained(now - 600_000, deadlineAt));
+    await expect(at(now + 1)).resolves.toBe("active");
+    await expect(at(now - 29_999)).resolves.toBe("active");
+    await expect(at(now - 30_000)).resolves.toBe("active");
+    await expect(at(now - 30_001)).resolves.toBe("terminal");
+  });
+
+  it("holds a recovery-required failure when no deadline is recorded anywhere", async () => {
+    agent(status("timed_out", { errorClass: "recovery_required" }));
+    await expect(observeRetainedHostOperation(operationKey, retained())).resolves.toBe("unknown");
   });
 
   it("only reads: every request is a lookup by operation key", async () => {
