@@ -11,6 +11,10 @@ import { db } from "../db";
 import { adminJob } from "../db/schema";
 import { dbActorId } from "../utils/actor";
 import { sanitizeExtensionOutputString, sanitizeLogMetadata } from "../utils/safe-log-fields";
+import {
+  ActiveMaintenanceConflict,
+  isActiveMaintenanceViolation,
+} from "./active-maintenance-conflict";
 import { checkpointOwnedAdminJob } from "./admin-job-checkpoint";
 import {
   AdminJobFailure,
@@ -317,14 +321,19 @@ class AdminJobRunner {
     const durablePayload =
       type === "extension.install" ? normalizeExtensionInstallPayload(payload) : payload;
     const id = randomUUID();
-    await db.insert(adminJob).values({
-      id,
-      type,
-      status: "queued",
-      payload: durablePayload,
-      // Synthetic (loopback) actors have no user row → store null, not a FK violation.
-      createdBy: dbActorId(createdBy),
-    });
+    try {
+      await db.insert(adminJob).values({
+        id,
+        type,
+        status: "queued",
+        payload: durablePayload,
+        // Synthetic (loopback) actors have no user row → store null, not a FK violation.
+        createdBy: dbActorId(createdBy),
+      });
+    } catch (error) {
+      if (isActiveMaintenanceViolation(error)) throw new ActiveMaintenanceConflict();
+      throw error;
+    }
     setTimeout(() => void this.pump(), 0);
     return id;
   }

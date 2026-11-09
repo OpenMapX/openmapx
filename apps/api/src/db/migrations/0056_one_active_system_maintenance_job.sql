@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "adminJob_one_active_system_maintenance_uq" ON "admin_job" USING btree ((true)) WHERE "admin_job"."type" IN ('system.update', 'system.diagnostics') AND "admin_job"."status" IN ('queued', 'running', 'cancel_pending');

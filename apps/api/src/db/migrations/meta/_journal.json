@@ -393,6 +393,13 @@
       "when": 1793453255113,
       "tag": "0052_admin_configuration_migration",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1794248922830,
+      "tag": "0056_one_active_system_maintenance_job",
+      "breakpoints": true
     }
   ]
 }

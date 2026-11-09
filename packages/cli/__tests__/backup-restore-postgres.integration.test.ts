@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, join, relative, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { createGzip } from "node:zlib";
+import { isDataExecutionTerminal } from "@openmapx/core/data-manager-contracts";
 import {
   appendErasureCompleted,
   appendErasureRequest,
@@ -243,6 +244,13 @@ async function psql(input: string, database = DATABASE): Promise<string> {
     );
   }
   return (result.stdout ?? "").trim();
+}
+
+/** The published port changes whenever a restore restarts the database container. */
+async function livePostgresUrl(): Promise<string> {
+  const port = (await compose(["port", "postgis", "5432"])).split(":").at(-1)?.trim();
+  if (!port || !/^\d+$/.test(port)) throw new Error("fixture PostgreSQL port is unavailable");
+  return `postgresql://${POSTGRES_USER}:restore-fixture-password@127.0.0.1:${port}/${DATABASE}`;
 }
 
 async function resetMigratedDatabase(): Promise<void> {
@@ -506,9 +514,7 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
     await installPrivateDockerProjectTransport(root, project);
     await compose(["up", "-d", "--wait"]);
     await waitForPostgresInitialization();
-    const port = (await compose(["port", "postgis", "5432"])).split(":").at(-1)?.trim();
-    if (!port || !/^\d+$/.test(port)) throw new Error("fixture PostgreSQL port is unavailable");
-    fixture.databaseUrl = `postgresql://${POSTGRES_USER}:restore-fixture-password@127.0.0.1:${port}/${DATABASE}`;
+    fixture.databaseUrl = await livePostgresUrl();
     process.env.DATABASE_URL = fixture.databaseUrl;
     process.env.NODE_ENV = "test";
     const [{ EncryptedBlobStore }, { loadMasterKeyRing }, databaseModule, cleanupModule] =
@@ -755,6 +761,165 @@ VALUES ('${DELETED_USER_ID}', 'Mixed Restore User', '${DELETED_EMAIL}', true, no
     const events = await waitForSentinelEvent();
     expect(events).toContain("safe");
     expect(events).not.toContain("exposed");
+    expect(await isServiceRunning("app-api")).toBe(true);
+  }, 120_000);
+
+  it("fails every job that was in progress when the backup was taken", async () => {
+    await resetMigratedDatabase();
+    const hex = (digit: string) => digit.repeat(64);
+    const v2 = (
+      id: string,
+      key: string,
+      status: string,
+      publication: string,
+      finished: string,
+      children = "[]",
+    ) =>
+      `('${id}', 'full-update', '${status}', ${finished}, 2, 'opk1_${key.repeat(20)}', '${hex("a")}', '${hex("b")}', 1, 100, '{}', '{"cancellationRequestedAt":null,"progress":null,"diagnostics":{"tail":[],"truncated":false},"publication":"${publication}"}', '${children}')`;
+    await psql(`
+INSERT INTO admin_job (id, type, status, finished_at)
+VALUES
+  ('job-queued', 'system.update', 'queued', NULL),
+  ('job-running', 'service.start', 'running', NULL),
+  ('job-cancel-pending', 'backup.operation', 'cancel_pending', NULL),
+  ('job-success', 'system.update', 'success', now()),
+  ('job-failed', 'system.update', 'failed', now()),
+  ('job-canceled', 'system.diagnostics', 'canceled', now());
+UPDATE admin_job SET error = 'original failure' WHERE id = 'job-failed';
+INSERT INTO data_manager.jobs (id, kind, status, finished_at, metadata)
+VALUES
+  ('00000000-0000-4000-8000-000000000001', 'transitous-sync', 'running', NULL, '{"region":"de"}'),
+  ('00000000-0000-4000-8000-000000000002', 'transitous-sync', 'ok', now(), NULL),
+  ('00000000-0000-4000-8000-000000000003', 'transitous-sync', 'partial', now(), NULL),
+  ('00000000-0000-4000-8000-000000000004', 'transitous-sync', 'error', now(), NULL),
+  ('00000000-0000-4000-8000-000000000005', 'transitous-sync', 'canceled', now(), NULL),
+  ('00000000-0000-4000-8000-000000000006', 'transitous-sync', 'interrupted', NULL, NULL);
+INSERT INTO data_manager.jobs
+  (id, kind, status, finished_at, execution_version, operation_key, operation_fingerprint, execution_fingerprint, admitted_at, deadline_at, execution_input, execution_state, execution_children)
+VALUES
+  ${v2("00000000-0000-4000-8000-000000000007", "a", "queued", "not_started", "NULL")},
+  ${v2("00000000-0000-4000-8000-000000000008", "b", "running", "unknown", "NULL", '[{"state":"attempted"}]')},
+  ${v2("00000000-0000-4000-8000-000000000009", "c", "cancel_pending", "not_started", "NULL", '[{"state":"observing"}]')},
+  ${v2("00000000-0000-4000-8000-00000000000a", "d", "interrupted", "unknown", "NULL")},
+  ${v2("00000000-0000-4000-8000-00000000000b", "e", "interrupted", "not_started", "now()")},
+  ${v2("00000000-0000-4000-8000-00000000000c", "f", "error", "unknown", "now()")},
+  ${v2("00000000-0000-4000-8000-00000000000d", "g", "ok", "not_started", "now()", '[{"state":"observing"}]')},
+  ${v2("00000000-0000-4000-8000-00000000000e", "h", "ok", "committed", "now()", '[{"state":"terminal"}]')};
+INSERT INTO data_manager.offline_package_jobs (id, request_key, package_id, request, status, created_at, updated_at, lease_owner, lease_expires_at)
+VALUES
+  ('00000000-0000-4000-8000-000000000011', 'request-preparing', 'package-preparing', '{}', 'preparing', now(), now(), 'worker', now() + interval '1 hour'),
+  ('00000000-0000-4000-8000-000000000012', 'request-ready', 'package-ready', '{}', 'ready-to-download', now(), now(), NULL, NULL),
+  ('00000000-0000-4000-8000-000000000013', 'request-failed', 'package-failed', '{}', 'failed', now(), now(), NULL, NULL);
+`);
+    await createDatabaseBackup("in-progress-jobs");
+    await resetJournal(GOOD_KEY);
+
+    await restoreBackup({ rootDir: fixture.root, name: "in-progress-jobs", stopRunning: true });
+
+    expect(await psql("SELECT id || '=' || status FROM admin_job ORDER BY id COLLATE \"C\";")).toBe(
+      [
+        "job-cancel-pending=failed",
+        "job-canceled=canceled",
+        "job-failed=failed",
+        "job-queued=failed",
+        "job-running=failed",
+        "job-success=success",
+      ].join("\n"),
+    );
+    expect(
+      await psql(
+        "SELECT id || '|' || error FROM admin_job WHERE status = 'failed' AND error IS NOT NULL ORDER BY id COLLATE \"C\";",
+      ),
+    ).toBe(
+      [
+        "job-cancel-pending|restored from backup",
+        "job-failed|original failure",
+        "job-queued|restored from backup",
+        "job-running|restored from backup",
+      ].join("\n"),
+    );
+    expect(
+      await psql(
+        "SELECT count(*) FROM admin_job WHERE status IN ('queued','running','cancel_pending') OR (status IN ('failed','canceled','success') AND finished_at IS NULL);",
+      ),
+    ).toBe("0");
+    expect(
+      await psql("SELECT right(id::text, 2) || '=' || status FROM data_manager.jobs ORDER BY id;"),
+    ).toBe(
+      [
+        "01=error",
+        "02=ok",
+        "03=partial",
+        "04=error",
+        "05=canceled",
+        "06=error",
+        "07=error",
+        "08=error",
+        "09=error",
+        "0a=error",
+        "0b=interrupted",
+        "0c=error",
+        "0d=ok",
+        "0e=ok",
+      ].join("\n"),
+    );
+    expect(
+      await psql(
+        "SELECT count(*) FROM data_manager.jobs WHERE right(id::text, 2) IN ('01','06','07','08','09','0a','0c') AND (finished_at IS NULL OR metadata->>'failureReason' IS DISTINCT FROM 'restored from backup');",
+      ),
+    ).toBe("0");
+    expect(
+      await psql(
+        "SELECT metadata->>'region' FROM data_manager.jobs WHERE right(id::text, 2) = '01';",
+      ),
+    ).toBe("de");
+    expect(
+      await psql(
+        "SELECT count(*) FROM data_manager.jobs WHERE right(id::text, 2) IN ('02','03','04','05','0b','0e') AND metadata IS NOT NULL;",
+      ),
+    ).toBe("0");
+    const executions = JSON.parse(
+      await psql(
+        "SELECT json_agg(json_build_object('id', right(id::text, 2), 'status', status, 'publication', execution_state->>'publication') ORDER BY id) FROM data_manager.jobs WHERE execution_version = 2;",
+      ),
+    ) as Array<{ id: string; status: string; publication: string }>;
+    expect(executions).toHaveLength(8);
+    for (const execution of executions)
+      expect(isDataExecutionTerminal(execution as never), `execution ${execution.id}`).toBe(true);
+    expect(
+      await psql(
+        "SELECT count(*) FROM data_manager.jobs WHERE kind <> 'configuration-maintenance' AND (finished_at IS NULL OR execution_state->>'publication' = 'unknown' OR (execution_version IS NULL AND finished_at IS NULL AND status = 'interrupted'));",
+      ),
+    ).toBe("0");
+    expect(
+      await psql(
+        "SELECT right(id::text, 2) || '=' || jsonb_array_length(execution_children) FROM data_manager.jobs WHERE execution_version = 2 AND right(id::text, 2) IN ('08', '09', '0d', '0e') ORDER BY id;",
+      ),
+    ).toBe(["08=0", "09=0", "0d=0", "0e=1"].join("\n"));
+    const dataJobs = "SELECT md5(string_agg(j::text, '|' ORDER BY id)) FROM data_manager.jobs j;";
+    const closed = await psql(dataJobs);
+    // The data manager opens its client when first imported, so point it at the
+    // address the restored database has now rather than the one from setup.
+    process.env.DATABASE_URL = await livePostgresUrl();
+    const { reconcileOrphanedJobs } = await import(
+      "../../../services/data-manager/src/jobs/reconcile"
+    );
+    const dataManagerDatabase = await import("../../../services/data-manager/src/db/index");
+    try {
+      expect(await reconcileOrphanedJobs()).toEqual([]);
+    } finally {
+      await dataManagerDatabase.rawSql.end({ timeout: 2 });
+    }
+    expect(await psql(dataJobs)).toBe(closed);
+    expect(
+      await psql(
+        "SELECT right(id::text, 2) || '=' || status || '|' || coalesce(error_message, '') || '|' || (lease_owner IS NULL)::text FROM data_manager.offline_package_jobs ORDER BY id;",
+      ),
+    ).toBe(
+      ["11=failed|restored from backup|true", "12=ready-to-download||true", "13=failed||true"].join(
+        "\n",
+      ),
+    );
     expect(await isServiceRunning("app-api")).toBe(true);
   }, 120_000);
 

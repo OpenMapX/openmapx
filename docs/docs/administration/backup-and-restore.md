@@ -239,6 +239,17 @@ stops `app-api` before the database is replaced and restarts it only after the
 erasure journal has been replayed. If restore or replay fails, the API remains
 stopped so it cannot expose resurrected account data.
 
+When it restores the OpenMapX database, the CLI also closes every job the
+snapshot still shows as in progress, before the API restarts. That covers queued,
+running and cancel-pending admin jobs; data-manager executions that are queued,
+running, cancel-pending, interrupted without finishing, of unknown publication
+outcome or holding unsettled child operations; and offline packages still being
+prepared. They become failed with the reason "restored from backup", because the
+process that owned them no longer exists and resuming them could repeat host
+changes. An unknown publication is recorded as not started and the unsettled
+child records are dropped, so the data manager's recovery pass cannot reopen the
+job. Finished jobs are untouched. If this step fails, the API stays stopped.
+
 After the selected data has been restored and before restarting the API, the
 CLI revalidates the journal/key pair and HMAC-matches restored
 user IDs against `infra/docker/data/erasure/journal.jsonl` and removes every

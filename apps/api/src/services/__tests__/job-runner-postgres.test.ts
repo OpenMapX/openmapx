@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { OpsJobStatus, OpsOperation } from "@openmapx/core/ops";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -104,6 +104,68 @@ describe.skipIf(
     (await state.db.select().from(adminJob).where(eq(adminJob.id, id)))[0];
   const run = (job: typeof adminJob.$inferSelect, observe = false) =>
     runner.executeJob(job.id, job.type, {}, job.result, new AbortController().signal, observe);
+  const holdPump = () =>
+    vi.spyOn(jobRunner as unknown as { pump(): Promise<void> }, "pump").mockResolvedValue();
+  const jobsMarked = async (marker: string) => {
+    const found = await state.db
+      .select()
+      .from(adminJob)
+      .where(sql`${adminJob.payload}->>'admissionMarker' = ${marker}`);
+    ids.push(...found.map((job) => job.id));
+    return found;
+  };
+
+  it("two concurrent update requests create exactly one job", async () => {
+    holdPump();
+    const admissionMarker = randomUUID();
+    const outcomes = await Promise.allSettled([
+      jobRunner.enqueue("system.update", { operation: "check", admissionMarker }, null),
+      jobRunner.enqueue("system.update", { operation: "check", admissionMarker }, null),
+    ]);
+    expect(await jobsMarked(admissionMarker)).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+    const rejected = outcomes.find((outcome) => outcome.status === "rejected");
+    const { ActiveMaintenanceConflict } = await import("../active-maintenance-conflict");
+    expect(rejected?.status === "rejected" && rejected.reason).toBeInstanceOf(
+      ActiveMaintenanceConflict,
+    );
+  });
+
+  it("serializes an update against diagnostics but admits it once the active job is terminal", async () => {
+    holdPump();
+    const admissionMarker = randomUUID();
+    const first = await jobRunner.enqueue("system.diagnostics", { admissionMarker }, null);
+    await expect(
+      jobRunner.enqueue("system.update", { operation: "check", admissionMarker }, null),
+    ).rejects.toThrow(/already active/);
+    await state.db.update(adminJob).set({ status: "cancel_pending" }).where(eq(adminJob.id, first));
+    await expect(
+      jobRunner.enqueue("system.update", { operation: "check", admissionMarker }, null),
+    ).rejects.toThrow(/already active/);
+    for (const terminal of ["success", "failed", "canceled"]) {
+      await state.db.update(adminJob).set({ status: terminal }).where(eq(adminJob.id, first));
+      const next = await jobRunner.enqueue(
+        "system.update",
+        { operation: "check", admissionMarker },
+        null,
+      );
+      await state.db.update(adminJob).set({ status: terminal }).where(eq(adminJob.id, next));
+    }
+    expect((await jobsMarked(admissionMarker)).length).toBe(4);
+  });
+
+  it("does not serialize other job types behind an active update", async () => {
+    holdPump();
+    const admissionMarker = randomUUID();
+    await jobRunner.enqueue("system.update", { operation: "check", admissionMarker }, null);
+    const others = await Promise.all([
+      jobRunner.enqueue("service.start", { admissionMarker }, null),
+      jobRunner.enqueue("service.start", { admissionMarker }, null),
+      jobRunner.enqueue("data.operation", { admissionMarker }, null),
+    ]);
+    expect(new Set(others).size).toBe(3);
+    expect(await jobsMarked(admissionMarker)).toHaveLength(4);
+  });
 
   it("rejects a resumed old owner's log before insert/publication and stops forward work", async () => {
     const job = await seed("test.stale-log");
