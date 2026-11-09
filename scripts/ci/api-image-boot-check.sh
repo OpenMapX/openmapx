@@ -29,12 +29,16 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+print_container_logs() {
+  docker container inspect "$2" >/dev/null 2>&1 || return 0
+  echo "--- $1 container logs ---" >&2
+  docker logs "$2" >&2 || true
+}
+
 fail() {
   echo "API image boot check failed: $1" >&2
-  if docker container inspect "$api" >/dev/null 2>&1; then
-    echo "--- API container logs ---" >&2
-    docker logs "$api" >&2 || true
-  fi
+  print_container_logs PostGIS "$postgis"
+  print_container_logs API "$api"
   exit 1
 }
 
