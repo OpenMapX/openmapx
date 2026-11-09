@@ -12,7 +12,6 @@ import {
   exportCredentialSelection,
   previewCredentialTransfer,
 } from "../services/configuration-migration/credential-preview";
-import { pruneMigrationStages } from "../services/configuration-migration/staging";
 import { jobRunner } from "../services/job-runner";
 import { createDurableOpsKey } from "../services/ops-client";
 import { RateLimiter } from "../utils/rate-limit";
@@ -26,11 +25,6 @@ const register = createAdminRouteRegistrar(credentialTransferOperations, {
   validationPhase: "preHandler",
 });
 export async function adminCredentialTransferRoute(app: FastifyInstance) {
-  const cleanup = setInterval(() => {
-    void pruneMigrationStages().catch(() => {});
-  }, 60000);
-  cleanup.unref();
-  app.addHook("onClose", async () => clearInterval(cleanup));
   declareRouteAuth(app, "admin");
   app.addHook("preHandler", async (request, reply) => {
     request.adminSession = await requireAdmin(request);

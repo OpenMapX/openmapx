@@ -17,6 +17,7 @@ const TARGETS = [
   "apps/api/tsconfig.json",
   "apps/api/tsconfig.build.json",
   "apps/api/openapi.json",
+  "apps/api/src/app.ts",
   "apps/api/src/server.ts",
   "apps/api/src/auth.ts",
   "apps/api/src/privacy",

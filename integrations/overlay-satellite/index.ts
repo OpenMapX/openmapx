@@ -28,8 +28,7 @@ async function fetchAndParseCapabilities(): Promise<Capabilities> {
   const res = await fetch(CAPABILITIES_URL, {
     headers: { "User-Agent": USER_AGENT },
     signal: controller.signal,
-  });
-  clearTimeout(timer);
+  }).finally(() => clearTimeout(timer));
 
   if (!res.ok) throw new Error(`GetCapabilities fetch failed: ${res.status}`);
 

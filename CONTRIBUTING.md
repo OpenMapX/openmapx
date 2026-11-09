@@ -94,7 +94,9 @@ reports the wait, and runs tests with half the workers. If another run holds
 the lock longer, retry when it finishes. On systems without `flock` or `lockf`,
 run it without other full suites running; the command prints a warning.
 Database, mobile, production builds and native-device checks remain separate;
-choose those when the changed behavior requires them.
+choose those when the changed behavior requires them. To confirm that a built
+API image starts, run `scripts/ci/api-image-boot-check.sh <image>`, which CI also
+runs on pull requests that rebuild the image.
 
 `pnpm verify:full` does not cover the repository scripts, the integration test
 files or `packages/mobility-core`, which still have type errors.

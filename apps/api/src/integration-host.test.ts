@@ -48,6 +48,8 @@ import {
   initIntegrations,
   reloadIntegrations,
   shutdownIntegrations,
+  startIntegrationHealthRefresh,
+  stopIntegrationHealthRefresh,
 } from "./integration-host.js";
 import { registerIntegrationRoute, setIntegrationRouteRateLimits } from "./integration-routes.js";
 import { makeRateLimitTierHook, type RateLimitTiers } from "./server-wiring.js";
@@ -962,6 +964,48 @@ describe("shutdownIntegrations", () => {
     await shutdownIntegrations();
 
     expect(getAllIntegrations()).toHaveLength(0);
+  });
+});
+
+describe("integration health refresh", () => {
+  afterEach(() => {
+    stopIntegrationHealthRefresh();
+    vi.useRealTimers();
+  });
+
+  it("is not scheduled by loading integrations", async () => {
+    const intervals = vi.spyOn(globalThis, "setInterval");
+    const timeouts = vi.spyOn(globalThis, "setTimeout");
+    try {
+      await initIntegrations(makeApp(), [FIXTURES_DIR]);
+
+      expect(intervals.mock.calls.filter(([, delay]) => delay === 60_000)).toEqual([]);
+      expect(timeouts.mock.calls.filter(([, delay]) => delay === 5_000)).toEqual([]);
+    } finally {
+      intervals.mockRestore();
+      timeouts.mockRestore();
+    }
+  });
+
+  it("seeds after five seconds, refreshes each minute, and stops when asked", async () => {
+    await initIntegrations(makeApp(), [FIXTURES_DIR]);
+    vi.useFakeTimers();
+    const checks = integrationHealthMocks.executeAllIntegrationHealthChecks;
+    checks.mockClear();
+
+    startIntegrationHealthRefresh();
+    startIntegrationHealthRefresh();
+    expect(vi.getTimerCount()).toBe(2);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(checks).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(55_000);
+    expect(checks).toHaveBeenCalledTimes(2);
+
+    stopIntegrationHealthRefresh();
+
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(checks).toHaveBeenCalledTimes(2);
   });
 });
 

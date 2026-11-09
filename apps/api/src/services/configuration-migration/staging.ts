@@ -67,6 +67,22 @@ export async function pruneMigrationStages() {
     )
     .returning({ id: configurationMigrationPreview.id });
 }
+
+let stagePruneTimer: ReturnType<typeof setInterval> | undefined;
+
+export function startMigrationStagePruning(): void {
+  if (stagePruneTimer) return;
+  stagePruneTimer = setInterval(() => {
+    void pruneMigrationStages().catch(() => {});
+  }, 60000);
+  stagePruneTimer.unref();
+}
+
+export function stopMigrationStagePruning(): void {
+  clearInterval(stagePruneTimer);
+  stagePruneTimer = undefined;
+}
+
 export async function retainMigrationStage(input: {
   actorId: string;
   kind: MigrationStage["kind"];

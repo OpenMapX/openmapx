@@ -158,6 +158,11 @@ export async function startDataUsePolicyRefresh(): Promise<void> {
   refreshTimer.unref?.();
 }
 
+export function stopDataUsePolicyRefresh(): void {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = null;
+}
+
 /**
  * Mark the cached policy stale so the next async read reloads it. The
  * last-computed gated sets are deliberately KEPT for the synchronous getters

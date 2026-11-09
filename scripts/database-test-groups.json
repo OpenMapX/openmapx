@@ -1,5 +1,6 @@
 {
   "api-privacy": [
+    "apps/api/src/app-postgres.test.ts",
     "apps/api/src/auth-postgres.test.ts",
     "apps/api/src/db/__tests__/drop-poi-ingest.migration.test.ts",
     "apps/api/src/db/__tests__/extension-component-ownership-migration.test.ts",

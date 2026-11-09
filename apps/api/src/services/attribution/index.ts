@@ -189,7 +189,8 @@ export class AttributionIndex {
     };
   }
 
-  private startMtimePoller(): void {
+  startMtimePoller(): void {
+    if (this.mtimePollHandle) return;
     this.mtimePollHandle = setInterval(() => {
       if (!this.motisLicenseFile) return;
       try {

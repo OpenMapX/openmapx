@@ -765,6 +765,10 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=${{ matrix.app == 'api' && 'min' || 'max' }},scope=${{ matrix.app }}
 
+      - name: Boot the built API image
+        if: matrix.app == 'api'
+        run: bash scripts/ci/api-image-boot-check.sh openmapx-ci:api
+
       # Scan the image just built on this runner; PRs never need registry
       # credentials. Main independently rescans exact digests before promotion.
       - name: Gate built PR image with Trivy

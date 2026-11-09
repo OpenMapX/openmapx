@@ -125,7 +125,7 @@ export interface AgentInstalledIntegration {
 
 /**
  * The installed integrations the operations agent reports loadable, injected
- * by server.ts. It resolves to null when no agent is configured (host
+ * by app.ts. It resolves to null when no agent is configured (host
  * development); the custom directories are then scanned as they are.
  */
 let installedIntegrationResolver:
@@ -468,7 +468,7 @@ function buildIntegrationDb(manifest: IntegrationManifest): IntegrationContext["
  */
 /**
  * Resolver for the data-use policy's disallowed source set, injected by the host
- * app (server.ts) to avoid a static import cycle with the policy service. The
+ * app (app.ts) to avoid a static import cycle with the policy service. The
  * IntegrationContext exposes it to orchestrators via `getDisallowedSourceIds`.
  */
 let disallowedSourceResolver: (() => Promise<Set<string>>) | null = null;
@@ -490,7 +490,7 @@ export function setRoadConditionsPolicyResolver(
 
 /**
  * Resolver for the data-use policy's disallowed *integration* set (every data
- * source fully gated), injected by server.ts alongside the source resolver. The
+ * source fully gated), injected by app.ts alongside the source resolver. The
  * IntegrationContext exposes it via `getDisallowedIntegrationIds` for transit /
  * knowledge orchestrators that key on the integration rather than a `source` field.
  */
@@ -503,7 +503,7 @@ export function setDisallowedIntegrationResolver(fn: () => Promise<Set<string>>)
 /**
  * Hook run whenever the live registry's data sources change — after
  * `reloadIntegrations` rebuilds the registry and after a live integration's
- * `ctx.setDataSources()`. Injected by server.ts to drop caches derived from
+ * `ctx.setDataSources()`. Injected by app.ts to drop caches derived from
  * the source set — chiefly the data-use policy's memoized gated
  * source/integration sets, which are computed from `getAllIntegrations()` and
  * would otherwise stay stale until their own TTL. Injected (not imported) to
@@ -955,6 +955,7 @@ export async function initIntegrations(
       log: attributionLog,
       motisLicenseFile: defaultMotisLicenseFile(),
       integrationManifests: manifestDataSources,
+      enableMtimePoller: false,
     });
     setAttributionIndex(idx);
   } catch (err) {
@@ -1175,19 +1176,37 @@ export async function initIntegrations(
   fastify.log.info(
     `Loaded ${integrations.size} integrations (${Array.from(integrations.values()).filter((i) => i.enabled).length} enabled)`,
   );
+}
 
-  // Run initial health check to seed the cache, then periodically refresh
+let healthRefreshSeed: ReturnType<typeof setTimeout> | undefined;
+let healthRefreshInterval: ReturnType<typeof setInterval> | undefined;
+
+/** Starts watching the MOTIS licence file; `shutdownIntegrations` stops it. */
+export function startAttributionLicenseWatch(): void {
+  getAttributionIndex()?.startMtimePoller();
+}
+
+/** Seeds the integration health cache shortly after startup, then keeps it fresh. */
+export function startIntegrationHealthRefresh(): void {
+  if (healthRefreshInterval) return;
   const runHealthRefresh = () => {
     const enabled = Array.from(integrations.values()).filter((i) => i.enabled);
     executeAllIntegrationHealthChecks(enabled, { scheduled: true }).catch((err) =>
-      fastify.log.warn(err, "Health cache refresh failed"),
+      _fastify?.log.warn(err, "Health cache refresh failed"),
     );
   };
   // Seed asynchronously (don't block startup)
-  setTimeout(runHealthRefresh, 5_000);
+  healthRefreshSeed = setTimeout(runHealthRefresh, 5_000);
   // Refresh every 60 seconds
-  const healthInterval = setInterval(runHealthRefresh, 60_000);
-  healthInterval.unref();
+  healthRefreshInterval = setInterval(runHealthRefresh, 60_000);
+  healthRefreshInterval.unref();
+}
+
+export function stopIntegrationHealthRefresh(): void {
+  clearTimeout(healthRefreshSeed);
+  clearInterval(healthRefreshInterval);
+  healthRefreshSeed = undefined;
+  healthRefreshInterval = undefined;
 }
 
 /** Whether `initIntegrations` has run, so `reloadIntegrations` can. */

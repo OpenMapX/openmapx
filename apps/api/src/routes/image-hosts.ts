@@ -79,7 +79,7 @@ export interface CameraMediaSource {
 
 /**
  * The live data sources that declare camera image hosts. Nothing else ever
- * enters the camera allowlist: server.ts replaces this from the integration
+ * enters the camera allowlist: app.ts replaces this from the integration
  * registry whenever the source set changes, and until then it is empty.
  */
 let cameraMediaSources: readonly CameraMediaSource[] = [];
@@ -89,7 +89,7 @@ const NO_GATED_SOURCES: ReadonlySet<string> = new Set();
 /**
  * Source ids the operator's data-use policy disallows. Read on every check,
  * so a policy change takes effect with the policy's own refresh. Injected by
- * server.ts to keep this module free of the policy service and its database.
+ * app.ts to keep this module free of the policy service and its database.
  */
 let gatedSourceIds: () => ReadonlySet<string> = () => NO_GATED_SOURCES;
 
