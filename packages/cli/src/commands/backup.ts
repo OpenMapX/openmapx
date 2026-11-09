@@ -38,6 +38,7 @@ import { completeCliCommand } from "../lib/control-context";
 import { assertCliExecutionAvailable, cliProcessOptions } from "../lib/execution-deadline";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
+import { failRestoredJobsSql } from "../lib/restored-job-cleanup";
 import { applyServiceSelection } from "../lib/service-selection";
 
 import {
@@ -1223,6 +1224,34 @@ COMMIT;
   }
 }
 
+async function failRestoredJobs(
+  ctx: ComposeContext,
+  serviceId: string,
+  postgresUser: string,
+  database: string,
+): Promise<void> {
+  const result = await execa(
+    "docker",
+    [
+      ...ctx.composeArgs,
+      "exec",
+      "-T",
+      serviceId,
+      "psql",
+      "-U",
+      postgresUser,
+      "-d",
+      database,
+      "-v",
+      "ON_ERROR_STOP=1",
+    ],
+    { ...cliProcessOptions(), cwd: ctx.cwd, reject: false, input: failRestoredJobsSql() },
+  );
+  if (result.exitCode !== 0) {
+    throw new Error(`Unable to close jobs restored as in progress (psql exit ${result.exitCode})`);
+  }
+}
+
 function postgresCopyTextField(value: string): string {
   if (value.includes("\0")) throw new Error("Restored user query returned invalid data");
   return value
@@ -1436,6 +1465,8 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
         target.database,
       );
       log.dim(`  replayed ${erased} retained user-erasure request(s)`);
+      await failRestoredJobs(ctx, target.serviceId, target.postgresUser, target.database);
+      log.dim("  closed jobs that were in progress when the backup was taken");
       if (startedForRestore.has(target.serviceId)) {
         log.dim(`  stopping ${target.serviceId} after erasure replay…`);
         await dockerCompose(ctx, ["stop", target.serviceId]);
