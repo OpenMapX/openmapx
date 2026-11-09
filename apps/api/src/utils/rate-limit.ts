@@ -51,7 +51,7 @@ export class RateLimiter {
   private readonly windowMs: number;
   private readonly keyFn: (request: FastifyRequest) => string;
   private readonly errorBody: (retryAfterSeconds: number) => unknown;
-  private cleanupTimer: ReturnType<typeof setInterval> | undefined;
+  private lastCleanup = Date.now();
 
   constructor(options: RateLimiterOptions) {
     this.max = options.max;
@@ -73,7 +73,7 @@ export class RateLimiter {
       if (!bucket) {
         bucket = { tokens: this.max, lastRefill: now };
         this.buckets.set(key, bucket);
-        this.scheduleCleanup();
+        this.cleanupIfDue(now);
       }
 
       // Refill tokens based on elapsed time
@@ -96,16 +96,12 @@ export class RateLimiter {
     };
   }
 
-  // Limiters are module singletons, so the timer waits for the first bucket
-  // rather than starting when the module is imported.
-  private scheduleCleanup(): void {
-    if (this.cleanupTimer) return;
-    this.cleanupTimer = setInterval(() => this.cleanup(), 5 * 60_000);
-    this.cleanupTimer.unref();
-  }
-
-  private cleanup(): void {
-    const now = Date.now();
+  // Limiters are module singletons that outlive any one application, so stale
+  // buckets are swept when a new one is added instead of on a timer. The map
+  // only grows at that moment, which keeps it bounded.
+  private cleanupIfDue(now: number): void {
+    if (now - this.lastCleanup < 5 * 60_000) return;
+    this.lastCleanup = now;
     for (const [key, bucket] of this.buckets) {
       if (now - bucket.lastRefill > this.windowMs * 2) {
         this.buckets.delete(key);
@@ -113,14 +109,12 @@ export class RateLimiter {
     }
   }
 
-  /** Drop every bucket without stopping the cleanup timer. Used by tests. */
+  /** Drop every bucket. Used by tests. */
   reset(): void {
     this.buckets.clear();
   }
 
   destroy(): void {
-    clearInterval(this.cleanupTimer);
-    this.cleanupTimer = undefined;
     this.buckets.clear();
   }
 }

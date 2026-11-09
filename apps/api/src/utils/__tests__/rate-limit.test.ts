@@ -1,6 +1,10 @@
 import Fastify from "fastify";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { RateLimiter, statusPublicApiLimit } from "../rate-limit";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 function buildApp(limiter: RateLimiter, opts: { trustProxy?: boolean | string | string[] } = {}) {
   const app = Fastify({ trustProxy: opts.trustProxy ?? false });
@@ -9,6 +13,29 @@ function buildApp(limiter: RateLimiter, opts: { trustProxy?: boolean | string | 
 }
 
 describe("RateLimiter", () => {
+  it("sweeps stale buckets when a new bucket arrives, without a timer", async () => {
+    vi.useFakeTimers();
+    const limiter = new RateLimiter({
+      max: 5,
+      windowMs: 1_000,
+      keyFn: (request) => String(request.headers["x-key"]),
+    });
+    const hook = limiter.preHandler();
+    const hit = (key: string) => hook({ headers: { "x-key": key } } as never, {} as never);
+    const bucketCount = () =>
+      (limiter as unknown as { buckets: Map<string, unknown> }).buckets.size;
+
+    expect(vi.getTimerCount()).toBe(0);
+    await hit("stale");
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(5 * 60_000 + 1);
+    expect(bucketCount()).toBe(1);
+
+    await hit("fresh");
+
+    expect(bucketCount()).toBe(1);
+  });
+
   it("admits requests up to `max` then rejects with 429", async () => {
     const limiter = new RateLimiter({ max: 3, windowMs: 60_000 });
     const app = buildApp(limiter);

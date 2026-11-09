@@ -37,6 +37,9 @@ import {
   setIntegrationSourcesChangedHook,
   setRoadConditionsPolicyResolver,
   shutdownIntegrations,
+  startAttributionLicenseWatch,
+  startIntegrationHealthRefresh,
+  stopIntegrationHealthRefresh,
 } from "./integration-host";
 import { setIntegrationRouteRateLimits } from "./integration-routes";
 import { EncryptedBlobStore } from "./privacy/artifact-storage.js";
@@ -101,6 +104,10 @@ import { serviceApply, serviceRestart, serviceStart, serviceStop } from "./servi
 import { readLoadableIntegrations } from "./services/agent-integrations";
 import { appLogger } from "./services/app-logger";
 import { cacheInvalidation } from "./services/cache-invalidation";
+import {
+  startMigrationStagePruning,
+  stopMigrationStagePruning,
+} from "./services/configuration-migration/staging";
 import {
   filterGatedSources,
   getGatedIntegrationIds,
@@ -174,7 +181,13 @@ export async function createApiLogger(): Promise<FastifyBaseLogger> {
 
 /**
  * Builds the complete application: schema, security hooks, routes, integrations
- * and job handlers. Nothing listens and no background work runs until `start()`.
+ * and job handlers. Listening, workers and timers belong to `start()`, with these
+ * exceptions. Cache invalidation starts here because integrations need it before
+ * they load; with Redis configured it holds a subscriber and a heartbeat until
+ * `stop()`. Importing this module builds the auth singleton, whose OAuth plugin
+ * requests OpenStreetMap's discovery document straight away. And integrations
+ * run their `setup()` here, so any requests or timers they begin at setup start
+ * too; `stop()` releases those timers through their shutdown handlers.
  */
 export async function createApp(options: CreateAppOptions = {}): Promise<App> {
   const loggerInstance = options.logger ?? (await createApiLogger());
@@ -805,6 +818,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
     // spools as well. Active or ambiguous directories are never removed.
     await janitorEncryptedSourceSpools();
 
+    startMigrationStagePruning();
     runPrivacyRetention();
     privacyNotificationWorker.start();
     privacyEmailChallengeWorker?.start();
@@ -814,6 +828,9 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
     const privacyEscalationTimer = setInterval(runPrivacyEscalations, privacyEscalationIntervalMs);
     privacyEscalationTimer.unref?.();
     intervals.push(privacyEscalationTimer);
+
+    startAttributionLicenseWatch();
+    startIntegrationHealthRefresh();
 
     intervals.push(
       setInterval(
@@ -872,6 +889,8 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
       privacyNotificationWorker.stop();
       privacyEmailChallengeWorker?.stop();
       for (const interval of intervals) clearInterval(interval);
+      stopMigrationStagePruning();
+      stopIntegrationHealthRefresh();
       stopDataUsePolicyRefresh();
       await shutdownIntegrations();
       await server.close();

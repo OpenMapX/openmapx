@@ -12,6 +12,7 @@ const TRUSTED_ORIGIN = "https://web.example.test";
 const PUBLIC_RATE_LIMIT = 3;
 const CLOSED_LOCAL_URL = "http://127.0.0.1:9";
 const PROBE_PATH = "/api/hook-order-probe";
+const ADMIN_PLATFORM_PATH = "/api/admin/platform/configuration";
 const PROCESS_LIFECYCLE_EVENTS = new Set([
   "uncaughtException",
   "unhandledRejection",
@@ -19,27 +20,57 @@ const PROCESS_LIFECYCLE_EVENTS = new Set([
   "SIGINT",
 ]);
 
-type IntervalHandle = ReturnType<typeof setInterval>;
+// Refresh timers these integrations begin in setup(), which createApp() has to
+// run. Their shutdown handlers release them, so none may survive stop().
+const INTEGRATION_SETUP_TIMER_ORIGINS = [
+  "packages/ourairports-data/loader.ts",
+  "integrations/transit-dynamic-registry/registry.ts",
+];
 
-function calledFromApiSource(): boolean {
-  return (new Error().stack ?? "")
+interface TrackedTimer {
+  kind: "interval" | "timeout";
+  delay: number | undefined;
+  origin: string;
+  settled: boolean;
+}
+
+/** The first application frame that created a timer, or null for library and test timers. */
+function applicationOrigin(): string | null {
+  const frame = (new Error().stack ?? "")
     .split("\n")
-    .some((frame) => frame.includes("/apps/api/src/") && !frame.includes("app-postgres.test"));
+    .find(
+      (line) =>
+        /\/(apps\/api\/src|integrations|packages)\//.test(line) &&
+        !line.includes("node_modules") &&
+        !line.includes("app-postgres.test"),
+    );
+  return frame ? frame.trim() : null;
 }
 
 describeDatabase("the real application from createApp()", () => {
   const realSetInterval = globalThis.setInterval;
+  const realSetTimeout = globalThis.setTimeout;
   const realClearInterval = globalThis.clearInterval;
+  const realClearTimeout = globalThis.clearTimeout;
   const realProcessOn = process.on.bind(process);
-  const intervals: IntervalHandle[] = [];
-  const clearedIntervals = new Set<unknown>();
+  const timers = new Map<unknown, TrackedTimer>();
   const processHandlers: string[] = [];
   const originalStackTraceLimit = Error.stackTraceLimit;
   let fixture: Awaited<ReturnType<typeof createMigratedPostgresFixture>>;
   let customIntegrations: string;
   let app: App;
-  let intervalsAfterImport: number;
+  let pendingAfterImport: TrackedTimer[];
+  let pendingAfterCreateApp: TrackedTimer[];
   let probeCalls = 0;
+
+  function pendingTimers(): TrackedTimer[] {
+    return [...timers.values()].filter((timer) => !timer.settled);
+  }
+
+  function settleTimer(handle: unknown): void {
+    const timer = timers.get(handle);
+    if (timer) timer.settled = true;
+  }
 
   beforeAll(async () => {
     Error.stackTraceLimit = 40;
@@ -62,13 +93,41 @@ describeDatabase("the real application from createApp()", () => {
 
     vi.stubGlobal("setInterval", ((...args: Parameters<typeof setInterval>) => {
       const handle = realSetInterval(...args);
-      if (calledFromApiSource()) intervals.push(handle);
+      const origin = applicationOrigin();
+      if (origin) {
+        timers.set(handle, { kind: "interval", delay: args[1], origin, settled: false });
+      }
       return handle;
     }) as typeof setInterval);
-    vi.stubGlobal("clearInterval", ((handle: IntervalHandle | undefined) => {
-      clearedIntervals.add(handle);
+    vi.stubGlobal(
+      "setTimeout",
+      Object.assign(
+        ((callback: (...values: unknown[]) => void, delay?: number, ...args: unknown[]) => {
+          const origin = applicationOrigin();
+          if (!origin) return realSetTimeout(callback, delay, ...args);
+          const timer: TrackedTimer = { kind: "timeout", delay, origin, settled: false };
+          const handle = realSetTimeout(
+            (...values: unknown[]) => {
+              timer.settled = true;
+              callback(...values);
+            },
+            delay,
+            ...args,
+          );
+          timers.set(handle, timer);
+          return handle;
+        }) as typeof setTimeout,
+        realSetTimeout,
+      ),
+    );
+    vi.stubGlobal("clearInterval", ((handle: Parameters<typeof clearInterval>[0]) => {
+      settleTimer(handle);
       realClearInterval(handle);
     }) as typeof clearInterval);
+    vi.stubGlobal("clearTimeout", ((handle: Parameters<typeof clearTimeout>[0]) => {
+      settleTimer(handle);
+      realClearTimeout(handle);
+    }) as typeof clearTimeout);
     vi.spyOn(process, "on").mockImplementation(((
       event: string,
       listener: (...args: unknown[]) => void,
@@ -78,8 +137,16 @@ describeDatabase("the real application from createApp()", () => {
     }) as typeof process.on);
 
     const { createApp } = await import("./app");
-    intervalsAfterImport = intervals.length;
+    pendingAfterImport = pendingTimers();
+    // Integration setup may request its upstreams; keep this suite off the network.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("External network forbidden in the application fixture");
+      }),
+    );
     app = await createApp();
+    pendingAfterCreateApp = pendingTimers();
     app.server.post(PROBE_PATH, async () => {
       probeCalls += 1;
       return { reached: true };
@@ -111,8 +178,13 @@ describeDatabase("the real application from createApp()", () => {
     });
   }
 
-  it("does not start anything when imported or built", () => {
-    expect(intervalsAfterImport).toBe(0);
+  it("leaves no timers, process handlers or listener after import and createApp()", () => {
+    expect(pendingAfterImport).toEqual([]);
+    const remaining = pendingAfterCreateApp.map((timer) => {
+      const known = INTEGRATION_SETUP_TIMER_ORIGINS.find((path) => timer.origin.includes(path));
+      return known ?? timer.origin;
+    });
+    expect(remaining.sort()).toEqual([...INTEGRATION_SETUP_TIMER_ORIGINS].sort());
     expect(processHandlers).toEqual([]);
     expect(app.server.server.listening).toBe(false);
   });
@@ -161,6 +233,25 @@ describeDatabase("the real application from createApp()", () => {
     expect(probeCalls).toBe(PUBLIC_RATE_LIMIT);
   });
 
+  it("limits a core route before that route's own onRequest hook runs", async () => {
+    const request = () =>
+      app.server.inject({
+        method: "GET",
+        url: ADMIN_PLATFORM_PATH,
+        remoteAddress: "203.0.113.30",
+      });
+
+    for (let attempt = 0; attempt < PUBLIC_RATE_LIMIT; attempt += 1) {
+      const admitted = await request();
+      expect(admitted.statusCode).toBe(401);
+      expect(admitted.headers["cache-control"]).toBe("private, no-store");
+    }
+
+    const limited = await request();
+    expect(limited.statusCode).toBe(429);
+    expect(limited.headers["cache-control"]).toBeUndefined();
+  });
+
   // Runs last: stop() closes the server every other case injects into.
   it("stops cleanly after a start that could not bind its port", async () => {
     const blocker = createServer();
@@ -169,7 +260,6 @@ describeDatabase("the real application from createApp()", () => {
     if (!address || typeof address === "string") throw new Error("Blocker has no port");
     vi.stubEnv("HOST", "127.0.0.1");
     vi.stubEnv("PORT", String(address.port));
-    const firstStartInterval = intervals.length;
 
     try {
       await expect(app.start()).rejects.toThrow(/EADDRINUSE/);
@@ -179,8 +269,11 @@ describeDatabase("the real application from createApp()", () => {
     await app.stop();
     await expect(app.stop()).resolves.toBeUndefined();
 
-    const startedIntervals = intervals.slice(firstStartInterval);
-    expect(startedIntervals.length).toBeGreaterThan(0);
-    expect(startedIntervals.filter((handle) => !clearedIntervals.has(handle))).toEqual([]);
+    const healthRefreshes = [...timers.values()].filter(
+      (timer) =>
+        timer.origin.includes("integration-host") && [5_000, 60_000].includes(timer.delay ?? 0),
+    );
+    expect(healthRefreshes.map((timer) => timer.kind).sort()).toEqual(["interval", "timeout"]);
+    expect(pendingTimers()).toEqual([]);
   }, 60_000);
 });

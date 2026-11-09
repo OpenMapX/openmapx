@@ -955,6 +955,7 @@ export async function initIntegrations(
       log: attributionLog,
       motisLicenseFile: defaultMotisLicenseFile(),
       integrationManifests: manifestDataSources,
+      enableMtimePoller: false,
     });
     setAttributionIndex(idx);
   } catch (err) {
@@ -1175,19 +1176,37 @@ export async function initIntegrations(
   fastify.log.info(
     `Loaded ${integrations.size} integrations (${Array.from(integrations.values()).filter((i) => i.enabled).length} enabled)`,
   );
+}
 
-  // Run initial health check to seed the cache, then periodically refresh
+let healthRefreshSeed: ReturnType<typeof setTimeout> | undefined;
+let healthRefreshInterval: ReturnType<typeof setInterval> | undefined;
+
+/** Starts watching the MOTIS licence file; `shutdownIntegrations` stops it. */
+export function startAttributionLicenseWatch(): void {
+  getAttributionIndex()?.startMtimePoller();
+}
+
+/** Seeds the integration health cache shortly after startup, then keeps it fresh. */
+export function startIntegrationHealthRefresh(): void {
+  if (healthRefreshInterval) return;
   const runHealthRefresh = () => {
     const enabled = Array.from(integrations.values()).filter((i) => i.enabled);
     executeAllIntegrationHealthChecks(enabled, { scheduled: true }).catch((err) =>
-      fastify.log.warn(err, "Health cache refresh failed"),
+      _fastify?.log.warn(err, "Health cache refresh failed"),
     );
   };
   // Seed asynchronously (don't block startup)
-  setTimeout(runHealthRefresh, 5_000);
+  healthRefreshSeed = setTimeout(runHealthRefresh, 5_000);
   // Refresh every 60 seconds
-  const healthInterval = setInterval(runHealthRefresh, 60_000);
-  healthInterval.unref();
+  healthRefreshInterval = setInterval(runHealthRefresh, 60_000);
+  healthRefreshInterval.unref();
+}
+
+export function stopIntegrationHealthRefresh(): void {
+  clearTimeout(healthRefreshSeed);
+  clearInterval(healthRefreshInterval);
+  healthRefreshSeed = undefined;
+  healthRefreshInterval = undefined;
 }
 
 /** Whether `initIntegrations` has run, so `reloadIntegrations` can. */
