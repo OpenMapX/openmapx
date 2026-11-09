@@ -2,7 +2,10 @@ import type {
   BorrowedArtifactTargetLease,
   TargetLeaseAuthority,
 } from "@openmapx/core/build-artifacts";
-import { assertControlExecutionForward } from "@openmapx/core/build-artifacts";
+import {
+  assertArtifactTargetLeaseForward,
+  assertControlExecutionForward,
+} from "@openmapx/core/build-artifacts";
 import type { CoordinatorMode, ExecutionRef, ServicePreparationResult } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 
@@ -14,32 +17,24 @@ export type LifecycleOwnershipRequest = {
   signal?: AbortSignal;
 };
 export type ServiceLifecycleEffects = {
-  withOwnership<T>(
-    request: LifecycleOwnershipRequest,
-    run: (ownership: services.VerifiedLifecycleOwnership) => Promise<T>,
-  ): Promise<T>;
-  validatePins(ids: readonly string[]): Promise<void>;
+  withOwnership<T>(request: LifecycleOwnershipRequest, run: () => Promise<T>): Promise<T>;
+  assertForward(signal?: AbortSignal): void;
+  validatePins(ids: readonly string[], signal?: AbortSignal): Promise<void>;
   pull(ids: readonly string[], signal?: AbortSignal): Promise<void>;
   prepare(options: {
-    ownership: services.VerifiedLifecycleOwnership;
     coordinatorMode: CoordinatorMode;
     signal?: AbortSignal;
   }): Promise<ServicePreparationResult>;
   recreate(ids: readonly string[], noDeps: boolean, signal?: AbortSignal): Promise<void>;
 };
-function forward(ownership: services.VerifiedLifecycleOwnership, signal?: AbortSignal) {
-  signal?.throwIfAborted();
-  assertControlExecutionForward(services.assertVerifiedLifecycleOwnership(ownership));
-}
-/** The supplied adapter owns the one writer and target lease; inner preparation never reacquires. */
+/** The adapter holds the target lease throughout and the writer only inside each of its steps. */
 export function prepareServiceLifecycle(
   request: LifecycleOwnershipRequest & { coordinatorMode: CoordinatorMode },
   effects: ServiceLifecycleEffects,
 ): Promise<ServicePreparationResult> {
-  return effects.withOwnership(request, async (ownership) => {
-    forward(ownership, request.signal);
+  return effects.withOwnership(request, async () => {
+    effects.assertForward(request.signal);
     return effects.prepare({
-      ownership,
       coordinatorMode: request.coordinatorMode,
       signal: request.signal,
     });
@@ -49,24 +44,25 @@ export function runServiceUpdate(
   request: LifecycleOwnershipRequest & { noDeps?: boolean },
   effects: ServiceLifecycleEffects,
 ): Promise<{ changed: true; revisionId: string }> {
-  return effects.withOwnership(request, async (ownership) => {
-    forward(ownership, request.signal);
-    await effects.validatePins(request.serviceIds);
-    forward(ownership, request.signal);
+  return effects.withOwnership(request, async () => {
+    effects.assertForward(request.signal);
+    await effects.validatePins(request.serviceIds, request.signal);
+    effects.assertForward(request.signal);
     await effects.pull(request.serviceIds, request.signal);
-    forward(ownership, request.signal);
+    effects.assertForward(request.signal);
     const prepared = await prepareServiceLifecycle(
       { ...request, coordinatorMode: "ensure-running" },
       effects,
     );
-    forward(ownership, request.signal);
+    effects.assertForward(request.signal);
     await effects.recreate(request.serviceIds, request.noDeps ?? false, request.signal);
     return { changed: true, revisionId: prepared.revisionId };
   });
 }
 
 // The concrete CLI adapter is kept here so ordinary and delegated commands enter
-// the same nominal writer/target/receipt scope.
+// the same nominal writer/target/receipt scope. Containers started by these Docker
+// effects take the configuration writer themselves, so it is never held across one.
 export class ServiceLifecycleCommandError extends Error {
   constructor(
     readonly exitCode: number,
@@ -229,16 +225,119 @@ export async function runCliServiceLifecycle(options: {
   });
   if (inherited && !inherited.lease)
     throw Error("Delegated lifecycle requires its original borrowed lease");
-  let ownership: services.VerifiedLifecycleOwnership | undefined;
+  let owning = false;
   let releaseStoreLock: services.ReleaseStoreLock | undefined;
   let store: services.ServiceLifecycleReceiptStore | undefined;
   let receipt: services.ServiceLifecycleReceipt | undefined;
   let lease: TargetLeaseAuthority | undefined;
-  const checkpoint = async (patch: Partial<services.ServiceLifecycleReceipt>) => {
-    if (!store || !receipt || !ownership) throw Error("Lifecycle receipt owner unavailable");
+  let finalCommit: ReturnType<typeof services.configurationGenerationWriterCommit>;
+  let failureAttempted = false;
+  let releaseSelection: string | null | undefined;
+  const checkpoint = async (
+    owned: services.VerifiedLifecycleOwnership,
+    patch: Partial<services.ServiceLifecycleReceipt>,
+  ) => {
+    if (!store || !receipt) throw Error("Lifecycle receipt owner unavailable");
     const next = { ...receipt, ...patch, sequence: receipt.sequence + 1 };
-    await store.checkpoint(receipt.sequence, next, ownership);
+    await store.checkpoint(receipt.sequence, next, owned);
     receipt = next;
+  };
+  const assertForward = (signal?: AbortSignal) => {
+    signal?.throwIfAborted();
+    if (!lease) throw Error("Lifecycle target lease unavailable");
+    assertControlExecutionForward(authority);
+    assertArtifactTargetLeaseForward(lease);
+  };
+  const withWriterOwnership = async <T>(
+    run: (owned: services.VerifiedLifecycleOwnership) => Promise<T>,
+    signal?: AbortSignal,
+  ) => {
+    const held = lease;
+    if (!held) throw Error("Lifecycle target lease unavailable");
+    return services.withConfigurationGenerationWriter(
+      paths.infraDir,
+      (writer) => services.withVerifiedLifecycleOwnership({ writer, lease: held, authority }, run),
+      signal,
+    );
+  };
+  // The receipt only accepts a newly recorded final revision from the writer that
+  // committed it, so a step that commits and then fails records its failure itself.
+  const recordFailure = async (owned: services.VerifiedLifecycleOwnership) => {
+    if (failureAttempted || !receipt) return;
+    failureAttempted = true;
+    const committed = services.configurationGenerationWriterCommit(owned.writer) ?? finalCommit;
+    try {
+      await checkpoint(owned, {
+        phase: committed && !receipt.finalRevisionId ? "unknown" : "failed",
+        ...(committed ? { commit: "final_committed", finalRevisionId: committed.revisionId } : {}),
+        followUp: committed ? "unknown" : receipt.finalRevisionId ? "failed" : "not_started",
+        failure: {
+          reason:
+            receipt.phase === "prepared"
+              ? "pins"
+              : receipt.phase === "pins_validated"
+                ? "pull"
+                : receipt.phase === "pulled"
+                  ? "receipt_io"
+                  : receipt.phase === "generation_committed"
+                    ? "hardlinks"
+                    : "recreate",
+          failedServiceIds: ids,
+        },
+      });
+    } catch {
+      /* An unflushed receipt remains unknown; no competing pointer substitutes for it. */
+    }
+  };
+  /** Holds the writer and release-store lock only for `run`, which must not start a container. */
+  const withWriterStep = <T>(
+    run: (owned: services.VerifiedLifecycleOwnership) => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> =>
+    withWriterOwnership(async (owned) => {
+      assertForward(signal);
+      const releasePaths = services.releaseStatePaths(paths.infraDir);
+      services.ensureReleaseStateDirectory(releasePaths.directory);
+      services.ensureReleaseStateDirectory(releasePaths.store);
+      const lock = await services.acquireReleaseStoreLock(
+        releasePaths.store,
+        {},
+        { failIfBusy: true },
+      );
+      releaseStoreLock = lock;
+      try {
+        return await run(owned);
+      } catch (error) {
+        await recordFailure(owned);
+        throw error;
+      } finally {
+        finalCommit = services.configurationGenerationWriterCommit(owned.writer) ?? finalCommit;
+        releaseStoreLock = undefined;
+        lock.release();
+      }
+    }, signal);
+  const readReleaseSelection = () =>
+    services.readReleaseOverlayFile(services.releaseStatePaths(paths.infraDir).overlay);
+  // Selecting a release rewrites the overlay without moving the generation.
+  const assertConfigurationUnchanged = (revisionId: string, conflict: string) => {
+    if (services.currentConfigurationGeneration(paths.infraDir) !== revisionId)
+      throw Error(conflict);
+    if (releaseSelection !== undefined && readReleaseSelection() !== releaseSelection)
+      throw Error("Lifecycle release selection changed");
+  };
+  /**
+   * Refuses the Docker effect that follows unless the configuration is still the
+   * one this lifecycle expects. Releasing the writer leaves a short window before
+   * Compose resolves the current generation; the writer step after the effect
+   * re-checks both and fails the lifecycle if anything moved inside it.
+   */
+  const beforeDockerEffect = async (revisionId: string, conflict: string, signal?: AbortSignal) => {
+    await withWriterStep(async () => assertConfigurationUnchanged(revisionId, conflict), signal);
+    assertForward(signal);
+  };
+  const committedRevisionId = () => {
+    if (!receipt?.finalRevisionId) throw Error("Lifecycle generation is not committed");
+    return receipt.finalRevisionId;
   };
   const request: LifecycleOwnershipRequest = {
     execution,
@@ -247,15 +346,16 @@ export async function runCliServiceLifecycle(options: {
     ...(inherited?.lease ? { inheritedLease: inherited.lease } : {}),
   };
   const effects: ServiceLifecycleEffects = {
+    assertForward,
     async withOwnership(inner, run) {
-      if (ownership) {
-        forward(ownership, inner.signal);
+      if (owning) {
+        assertForward(inner.signal);
         if (
           ops.canonicalJson(inner.execution) !== ops.canonicalJson(execution) ||
           inner.serviceIds.some((id) => !ids.includes(id))
         )
           throw Error("Lifecycle ownership cannot expand");
-        return run(ownership);
+        return run();
       }
       lease =
         inherited?.lease ??
@@ -265,120 +365,90 @@ export async function runCliServiceLifecycle(options: {
           serviceIds: targets,
           signal: inner.signal,
         }));
-      return services.withConfigurationGenerationWriter(
-        paths.infraDir,
-        (writer) =>
-          services.withVerifiedLifecycleOwnership(
-            { writer, lease: lease!, authority },
-            async (verified) => {
-              ownership = verified;
-              const current = services.currentConfigurationGeneration(paths.infraDir);
-              if (current !== expected) throw Error("Lifecycle configuration revision conflict");
-              const releasePaths = services.releaseStatePaths(paths.infraDir);
-              services.ensureReleaseStateDirectory(releasePaths.directory);
-              services.ensureReleaseStateDirectory(releasePaths.store);
-              const directory = releasePaths.store;
-              const lock = await services.acquireReleaseStoreLock(
-                directory,
-                {},
-                { failIfBusy: true },
-              );
-              releaseStoreLock = lock;
-              try {
-                store = await services.openServiceLifecycleReceipt({
-                  dataRoot: join(paths.infraDir, "data"),
-                  execution,
-                  serviceIds: ids,
-                  action: options.action,
-                  noDeps: options.noDeps ?? false,
-                  coordinatorMode: "ensure-running",
-                  expectedRevisionId: expected,
-                  seedRevisionId: seed?.seedRevisionId ?? null,
-                });
-                receipt = await store.read();
-                if (receipt.phase !== "prepared")
-                  throw Error("Retained lifecycle can only be observed");
-                try {
-                  const result = await run(verified);
-                  await checkpoint({ phase: "complete", followUp: "complete" });
-                  return result;
-                } catch (error) {
-                  const committed = services.configurationGenerationWriterCommit(writer);
-                  try {
-                    await checkpoint({
-                      phase: committed && !receipt!.finalRevisionId ? "unknown" : "failed",
-                      ...(committed
-                        ? { commit: "final_committed", finalRevisionId: committed.revisionId }
-                        : {}),
-                      followUp: committed
-                        ? "unknown"
-                        : receipt!.finalRevisionId
-                          ? "failed"
-                          : "not_started",
-                      failure: {
-                        reason:
-                          receipt!.phase === "prepared"
-                            ? "pins"
-                            : receipt!.phase === "pins_validated"
-                              ? "pull"
-                              : receipt!.phase === "pulled"
-                                ? "receipt_io"
-                                : receipt!.phase === "generation_committed"
-                                  ? "hardlinks"
-                                  : "recreate",
-                        failedServiceIds: ids,
-                      },
-                    });
-                  } catch {
-                    /* An unflushed receipt remains unknown; no competing pointer substitutes for it. */
-                  }
-                  throw error;
-                }
-              } finally {
-                releaseStoreLock = undefined;
-                lock.release();
-                ownership = undefined;
-              }
-            },
-          ),
-        inner.signal,
-      );
-    },
-    async validatePins(selected) {
-      if (release.touchesReleasePinnedServices(selected)) {
-        if (!releaseStoreLock) throw Error("Lifecycle release-store ownership unavailable");
-        const overlay = await release.ensureReleaseOverlay({ releaseStoreLock });
-        if (overlay.status === "held") throw new ServiceLifecycleCommandError(1, overlay.reason);
-        if (overlay.status === "unpinned")
-          throw new ServiceLifecycleCommandError(1, "Release selection unavailable");
+      owning = true;
+      try {
+        await withWriterStep(async () => {
+          assertConfigurationUnchanged(expected, "Lifecycle configuration revision conflict");
+          store = await services.openServiceLifecycleReceipt({
+            dataRoot: join(paths.infraDir, "data"),
+            execution,
+            serviceIds: ids,
+            action: options.action,
+            noDeps: options.noDeps ?? false,
+            coordinatorMode: "ensure-running",
+            expectedRevisionId: expected,
+            seedRevisionId: seed?.seedRevisionId ?? null,
+          });
+          const opened = await store.read();
+          if (opened.phase !== "prepared") throw Error("Retained lifecycle can only be observed");
+          receipt = opened;
+        }, inner.signal);
+        const result = await run();
+        await withWriterStep(
+          (owned) => checkpoint(owned, { phase: "complete", followUp: "complete" }),
+          inner.signal,
+        );
+        return result;
+      } catch (error) {
+        // A cancelled or expired lease cannot open another writer step, so an effect
+        // interrupted between steps keeps its last signed phase. Callers treat any
+        // nonterminal receipt as unresolved and the target fence stays in place.
+        if (!failureAttempted && receipt)
+          await withWriterOwnership(recordFailure).catch(() => undefined);
+        throw error;
+      } finally {
+        owning = false;
       }
-      await assertNativeCreation();
-      await checkpoint({ phase: "pins_validated" });
     },
-    async pull(selected) {
+    async validatePins(selected, signal) {
+      await withWriterStep(async (owned) => {
+        assertConfigurationUnchanged(expected, "Lifecycle configuration revision conflict");
+        if (release.touchesReleasePinnedServices(selected)) {
+          if (!releaseStoreLock) throw Error("Lifecycle release-store ownership unavailable");
+          const overlay = await release.ensureReleaseOverlay({ releaseStoreLock });
+          if (overlay.status === "held") throw new ServiceLifecycleCommandError(1, overlay.reason);
+          if (overlay.status === "unpinned")
+            throw new ServiceLifecycleCommandError(1, "Release selection unavailable");
+        }
+        await assertNativeCreation();
+        releaseSelection = readReleaseSelection();
+        await checkpoint(owned, { phase: "pins_validated" });
+      }, signal);
+    },
+    async pull(selected, signal) {
+      const conflict = "Lifecycle configuration revision conflict";
+      await beforeDockerEffect(expected, conflict, signal);
       const code = await dockerComposeStream(["pull", ...selected]);
       if (code !== 0)
         throw new ServiceLifecycleCommandError(
           code,
           "Image pull failed; refusing to recreate services",
         );
-      await checkpoint({ phase: "pulled" });
+      await withWriterStep(async (owned) => {
+        assertConfigurationUnchanged(expected, conflict);
+        await checkpoint(owned, { phase: "pulled" });
+      }, signal);
     },
-    async prepare({ ownership: owned, coordinatorMode }) {
-      const rendered = await renderComposeWithWriter(
-        {
-          expectedCurrentRevisionId: expected,
-          revisionId: finalRevisionId,
-        },
-        owned.writer,
-      );
-      await checkpoint({
-        phase: "generation_committed",
-        finalRevisionId: rendered.revisionId,
-        commit: "final_committed",
-      });
-      if (ops.canonicalJson(readGeneratedHardlinkPlan().plan) !== ops.canonicalJson(plan))
-        throw Error("Hardlink intent changed");
+    async prepare({ coordinatorMode, signal }) {
+      const rendered = await withWriterStep(async (owned) => {
+        assertConfigurationUnchanged(expected, "Lifecycle configuration revision conflict");
+        const committed = await renderComposeWithWriter(
+          {
+            expectedCurrentRevisionId: expected,
+            revisionId: finalRevisionId,
+          },
+          owned.writer,
+        );
+        await checkpoint(owned, {
+          phase: "generation_committed",
+          finalRevisionId: committed.revisionId,
+          commit: "final_committed",
+        });
+        if (ops.canonicalJson(readGeneratedHardlinkPlan().plan) !== ops.canonicalJson(plan))
+          throw Error("Hardlink intent changed");
+        return committed;
+      }, signal);
+      const conflict = "Lifecycle generation changed before hardlinks";
       const sdk = await import("@openmapx/core/data-manager-sdk"),
         { dataManagerUrl } = await import("./data-manager-url");
       const transport = sdk.createDataManagerTransport({
@@ -398,6 +468,7 @@ export async function runCliServiceLifecycle(options: {
         if (!(await ready())) {
           if (coordinatorMode !== "ensure-running")
             throw Error("Configuration coordinator unavailable");
+          await beforeDockerEffect(rendered.revisionId, conflict, signal);
           const code = await dockerComposeStream(["up", "-d", "--no-recreate", "data-manager"]);
           if (code !== 0)
             throw new ServiceLifecycleCommandError(code, "Configuration coordinator Start failed");
@@ -408,31 +479,33 @@ export async function runCliServiceLifecycle(options: {
           }
         }
       }
-      const hardlinks = await control.executeOwnedGenerationHardlinks({
-        authority,
-        lease: owned.lease,
-        infraDir: paths.infraDir,
-        transport,
-      });
-      await checkpoint({ phase: "hardlinks_applied", hardlinks });
-      return { revisionId: rendered.revisionId, coordinatorMode, hardlinks };
+      return withWriterStep(async (owned) => {
+        assertConfigurationUnchanged(rendered.revisionId, conflict);
+        const hardlinks = await control.executeOwnedGenerationHardlinks({
+          authority,
+          lease: owned.lease,
+          infraDir: paths.infraDir,
+          transport,
+        });
+        await checkpoint(owned, { phase: "hardlinks_applied", hardlinks });
+        return { revisionId: rendered.revisionId, coordinatorMode, hardlinks };
+      }, signal);
     },
-    async recreate(selected, noDeps) {
-      if (services.currentConfigurationGeneration(paths.infraDir) !== receipt?.finalRevisionId)
-        throw Error("Lifecycle generation changed before recreation");
+    async recreate(selected, noDeps, signal) {
+      const revisionId = committedRevisionId();
+      const conflict = "Lifecycle generation changed before recreation";
       await assertNativeCreation();
       await refuseAgentSwitchOrExit(noDeps ? [...selected] : "all");
       if (selected.includes(API_SERVICE_ID)) {
-        if (!ownership) throw Error("Lifecycle receipt owner unavailable");
-        forward(ownership);
+        await beforeDockerEffect(revisionId, conflict, signal);
         const migrationCode = await migrateBeforeApiUpdate({ deps: !noDeps });
         if (migrationCode !== 0)
           throw new ServiceLifecycleCommandError(
             migrationCode,
             "Database migration failed; services were not replaced",
           );
-        forward(ownership);
       }
+      await beforeDockerEffect(revisionId, conflict, signal);
       const code = await dockerComposeStream([
         "up",
         "-d",
@@ -441,7 +514,10 @@ export async function runCliServiceLifecycle(options: {
         ...selected,
       ]);
       if (code !== 0) throw new ServiceLifecycleCommandError(code, "Service recreation failed");
-      await checkpoint({ phase: "recreated", followUp: "complete" });
+      await withWriterStep(async (owned) => {
+        assertConfigurationUnchanged(revisionId, "Lifecycle generation changed during recreation");
+        await checkpoint(owned, { phase: "recreated", followUp: "complete" });
+      }, signal);
     },
   };
   try {
@@ -451,10 +527,10 @@ export async function runCliServiceLifecycle(options: {
       else {
         await effects.validatePins(ids);
         await prepareServiceLifecycle({ ...request, coordinatorMode: "ensure-running" }, effects);
-        if (services.currentConfigurationGeneration(paths.infraDir) !== receipt?.finalRevisionId)
-          throw Error("Lifecycle generation changed before Start");
+        const revisionId = committedRevisionId();
         await assertNativeCreation();
         await refuseAgentSwitchOrExit([...ids]);
+        await beforeDockerEffect(revisionId, "Lifecycle generation changed before Start");
         const code = await dockerComposeStream([
           "up",
           "-d",
@@ -462,7 +538,10 @@ export async function runCliServiceLifecycle(options: {
           ...ids,
         ]);
         if (code !== 0) throw new ServiceLifecycleCommandError(code, "Service Start failed");
-        await checkpoint({ phase: "recreated", followUp: "complete" });
+        await withWriterStep(async (owned) => {
+          assertConfigurationUnchanged(revisionId, "Lifecycle generation changed during Start");
+          await checkpoint(owned, { phase: "recreated", followUp: "complete" });
+        });
       }
     });
     if (!inherited && lease?.mode === "owner") {
