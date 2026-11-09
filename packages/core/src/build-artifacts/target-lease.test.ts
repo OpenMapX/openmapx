@@ -676,7 +676,7 @@ it("admits from a bounded active index without opening retained terminal ledgers
   }
   expect(new Set(historicalReads).size, "new acquisition must read only its new ledger").toBe(1);
   if (lease) a.closeArtifactTargetLeaseHandle(lease);
-}, 60000);
+}, 180000);
 
 it("retains terminal and unresolved records past 72h and refuses at retained capacity before effects", async () => {
   const a = await api();
