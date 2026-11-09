@@ -338,6 +338,7 @@ main() {
   for tool in docker node openssl pnpm curl awk; do
     command -v "$tool" >/dev/null || fail "$tool is required"
   done
+  docker info >/dev/null 2>&1 || fail "the Docker daemon is not reachable"
   [[ ! -e "$env_file" ]] || fail "$env_file already exists; this check only runs on a fresh checkout"
   [[ -z "$(project_containers)" ]] || fail "the compose project '$project' already has containers"
   [[ -z "$(docker volume ls --quiet --filter "label=com.docker.compose.project=$project")" ]] ||
