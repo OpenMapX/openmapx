@@ -250,14 +250,16 @@ outcome is never reported as a successful update.
 
 The release's images are downloaded before the instance enters maintenance,
 and images already on the host with the pinned digest are not downloaded again.
-In the admin panel's guarded update they are downloaded after the backup and
-before the preview. In the CLI workflow above they are downloaded when the apply
-job starts, after the preview; the preview is judged at the moment you apply, so
-a slow download does not expire it. If the registry is unreachable or an image
-cannot be verified, the update fails at that point: every service keeps running
-the old release and no maintenance state is held, so you can retry once the
-registry is back. Once maintenance begins, the update only checks the frozen
-release and the pinned images already on the host and never contacts the
+The admin panel's guarded update downloads them after the backup and before it
+creates the preview. The CLI workflow above creates the preview first and
+downloads when the apply job starts. A preview stays valid for ten minutes and
+that lifetime is not extended: if the download takes longer, the job fails right
+after the download, before maintenance begins, and tells you to create a new
+preview and apply again; with the CLI that means a new receipt, as described
+below. Rerunning is quick because the images are already on the host. If the registry is unreachable or an image cannot be verified, the
+update also fails at this point: every service keeps running the old release and
+no maintenance state is held. Once maintenance begins, the update only checks the
+frozen release and the pinned images already on the host and never contacts the
 registry.
 
 To skip the backup, add `--no-backup`, matching the admin panel's backup choice.

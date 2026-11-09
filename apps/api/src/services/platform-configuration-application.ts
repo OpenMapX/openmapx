@@ -2,6 +2,7 @@
  * Purpose proofs are transient until encrypted inside the bounded candidate. */
 
 import { getAllIntegrations } from "../integration-host";
+import { AdminJobFailure } from "./admin-job-failure";
 import { executeAdminJobOperation } from "./admin-job-ops";
 import {
   currentAdministrativeConfigurationWriter,
@@ -15,7 +16,7 @@ import {
   platformConfigurationParticipation,
   preparePlatformConfigurationChange,
 } from "./platform-configuration-participant";
-import { readPlatformPreview } from "./platform-preview-store";
+import { PlatformPreviewConflict, readPlatformPreview } from "./platform-preview-store";
 import {
   persistAndApplyProspectiveConfiguration,
   prepareProspectiveConfiguration,
@@ -24,11 +25,7 @@ import {
 export type PlatformConfigurationApplicationInput = Pick<
   PlatformConfigurationCommitInput,
   "actorId" | "previewFingerprint" | "expectedCurrentRevisionId" | "confirmations" | "proof"
-> & {
-  operationKey: string;
-  /** When the preview was last found valid; see the participant state. */
-  previewCheckedAt?: Date;
-};
+> & { operationKey: string };
 
 export async function applyPlatformConfigurationIntent(
   input: PlatformConfigurationApplicationInput,
@@ -54,19 +51,15 @@ export async function runPlatformConfigurationChange(
   ctx: JobContext,
   input: PlatformConfigurationApplicationInput,
 ) {
-  let applied = input;
   // A release selection is downloaded before anything is committed, so a
   // registry outage fails the change while every service still runs as before.
-  // The preview is judged at the moment the job starts: the download may take
-  // longer than the preview's lifetime, and the apply request already held a
-  // valid preview.
   if (!ctx.checkpointResult?._configurationCandidate) {
-    const previewCheckedAt = new Date();
-    const { preview } = await readPlatformPreview({
-      actorId: input.actorId,
-      previewFingerprint: input.previewFingerprint,
-      now: previewCheckedAt,
-    });
+    const readPreview = () =>
+      readPlatformPreview({
+        actorId: input.actorId,
+        previewFingerprint: input.previewFingerprint,
+      });
+    const { preview } = await readPreview();
     if (preview.release) {
       await executeAdminJobOperation(
         ctx,
@@ -77,7 +70,19 @@ export async function runPlatformConfigurationChange(
         },
         "admin-job.release.images",
       );
-      applied = { ...input, previewCheckedAt };
+      // The preview keeps its original lifetime. A download that outlasts it
+      // fails here, before maintenance or any other host effect, and a new
+      // preview applies quickly because the images are already on the host.
+      try {
+        await readPreview();
+      } catch (error) {
+        if (error instanceof PlatformPreviewConflict)
+          throw new AdminJobFailure(
+            "The release images were downloaded, but the preview expired during the download. Create a new preview and apply again.",
+            { errorCode: "conflict" },
+          );
+        throw error;
+      }
     }
   }
   return withAdministrativeConfigurationJob(ctx, () =>
@@ -88,7 +93,7 @@ export async function runPlatformConfigurationChange(
         signal: ctx.signal,
         integrationIds: getAllIntegrations().map((integration) => integration.id),
       },
-      () => applyPlatformConfigurationIntent(applied),
+      () => applyPlatformConfigurationIntent(input),
     ),
   );
 }

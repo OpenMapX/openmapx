@@ -477,6 +477,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       "launch-native-resource-inspection-loss",
       "launch-native-release",
       "launch-native-release-wrong-config",
+      "launch-native-release-slow-pull",
       "launch-native-release-api-before-save",
       "launch-native-release-api-after-save",
       "launch-native-system-release",
@@ -549,6 +550,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             "launch-native-resource",
             "launch-native-release",
             "launch-native-release-wrong-config",
+            "launch-native-release-slow-pull",
             "launch-native-release-api-before-save",
             "launch-native-release-api-after-save",
             "launch-native-system-release",
@@ -624,6 +626,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           host.setImagePullProcess(async (reference) => {
             if (version === "launch-native-system-release-pull-failure")
               throw Error("Named release pull process failure");
+            if (version === "launch-native-release-slow-pull" && !vi.isFakeTimers()) {
+              // The download takes longer than the preview's lifetime.
+              vi.useFakeTimers({ toFake: ["Date"] });
+              vi.setSystemTime(Date.now() + 11 * 60_000);
+            }
             host.setImageIdentity(reference, `sha256:${"e".repeat(64)}`);
           });
         }
@@ -838,8 +845,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         try {
           const actorId = randomUUID(),
             jobId = randomUUID(),
-            execution = { owner: randomUUID(), version: 1 },
-            operationKey = `opk1_${randomUUID().replaceAll("-", "")}`;
+            execution = { owner: randomUUID(), version: 1 };
+          let operationKey = `opk1_${randomUUID().replaceAll("-", "")}`;
           await state.fixture.db.insert(schema.user).values({
             id: actorId,
             name: "Synthetic admin",
@@ -858,6 +865,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               "launch-native-resource",
               "launch-native-release",
               "launch-native-release-wrong-config",
+              "launch-native-release-slow-pull",
               "launch-native-release-api-before-save",
               "launch-native-release-api-after-save",
               "launch-native-system-release",
@@ -884,51 +892,58 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             await publicApi.register(adminSystemRoute, { prefix: "/api" });
             const publicUrl = await publicApi.listen({ host: "127.0.0.1", port: 0 }),
               client = createApiClient({ baseUrl: publicUrl }),
-              headers = { "idempotency-key": operationKey },
-              reviewed = systemRelease
-                ? undefined
-                : unwrapAdminResponse(
-                    await previewAdminPlatformConfiguration(
-                      {
-                        expectedCurrentRevisionId: host.initial.revisionId,
-                        changes: [
-                          "launch-native-resource",
-                          "launch-native-release",
-                          "launch-native-release-wrong-config",
-                          "launch-native-release-api-before-save",
-                          "launch-native-release-api-after-save",
-                          "launch-native-system-release",
-                          "launch-native-system-release-ack-loss",
-                          "launch-native-system-release-killed",
-                          "launch-native-system-release-agent-restart",
-                          "launch-native-system-release-api-before-save",
-                          "launch-native-system-release-api-after-save",
-                          "launch-native-system-release-late-cancel",
-                          "launch-native-system-release-pull-failure",
-                          "launch-native-system-release-image-missing",
-                          "launch-native-system-release-registry-outage",
-                        ].includes(version)
-                          ? { version: 1 as const }
-                          : {
-                              version: 1 as const,
-                              backupRetentionDays: { source: "database", value: 14 },
-                            },
-                        ...(version === "launch-native-resource"
-                          ? { reconcileServiceIds: ["ops-agent" as const] }
-                          : {}),
-                        ...(checkedRelease ? { release: checkedRelease } : {}),
-                      },
-                      headers,
-                      { client },
-                    ),
+              headers = {
+                get "idempotency-key"() {
+                  return operationKey;
+                },
+              },
+              previewPlatform = async () =>
+                unwrapAdminResponse(
+                  await previewAdminPlatformConfiguration(
+                    {
+                      expectedCurrentRevisionId: host.initial.revisionId,
+                      changes: [
+                        "launch-native-resource",
+                        "launch-native-release",
+                        "launch-native-release-wrong-config",
+                        "launch-native-release-slow-pull",
+                        "launch-native-release-api-before-save",
+                        "launch-native-release-api-after-save",
+                        "launch-native-system-release",
+                        "launch-native-system-release-ack-loss",
+                        "launch-native-system-release-killed",
+                        "launch-native-system-release-agent-restart",
+                        "launch-native-system-release-api-before-save",
+                        "launch-native-system-release-api-after-save",
+                        "launch-native-system-release-late-cancel",
+                        "launch-native-system-release-pull-failure",
+                        "launch-native-system-release-image-missing",
+                        "launch-native-system-release-registry-outage",
+                      ].includes(version)
+                        ? { version: 1 as const }
+                        : {
+                            version: 1 as const,
+                            backupRetentionDays: { source: "database", value: 14 },
+                          },
+                      ...(version === "launch-native-resource"
+                        ? { reconcileServiceIds: ["ops-agent" as const] }
+                        : {}),
+                      ...(checkedRelease ? { release: checkedRelease } : {}),
+                    },
+                    headers,
+                    { client },
                   ),
-              input = reviewed
-                ? {
-                    expectedCurrentRevisionId: reviewed.preview.expectedCurrentRevisionId,
-                    previewFingerprint: reviewed.preview.previewFingerprint,
-                    confirmations: reviewed.preview.requiredConfirmation,
-                  }
-                : undefined;
+                ),
+              reviewed = systemRelease ? undefined : await previewPlatform(),
+              applyInputFor = (value: typeof reviewed) =>
+                value
+                  ? {
+                      expectedCurrentRevisionId: value.preview.expectedCurrentRevisionId,
+                      previewFingerprint: value.preview.previewFingerprint,
+                      confirmations: value.preview.requiredConfirmation,
+                    }
+                  : undefined;
+            let input = applyInputFor(reviewed);
             if (systemRelease) {
               const { handleSystemUpdateJob } = await import("../system-maintenance");
               jobRunner.register("system.update", handleSystemUpdateJob);
@@ -976,7 +991,58 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 await applyAdminPlatformConfiguration(input!, headers, { client }),
               );
             };
-            const accepted = await apply();
+            let accepted = await apply();
+            if (version === "launch-native-release-slow-pull") {
+              // The download outlasted the preview. The job fails after the pull,
+              // before maintenance or any other host effect.
+              // The clock is faked here, so poll by attempts rather than by time.
+              let failed = (
+                await state.fixture.db
+                  .select()
+                  .from(schema.adminJob)
+                  .where(eq(schema.adminJob.id, accepted.jobId))
+              )[0]!;
+              for (let attempt = 0; failed.status !== "failed" && attempt < 600; attempt++) {
+                await new Promise((resolve) => setTimeout(resolve, 100));
+                failed = (
+                  await state.fixture.db
+                    .select()
+                    .from(schema.adminJob)
+                    .where(eq(schema.adminJob.id, accepted.jobId))
+                )[0]!;
+              }
+              expect(failed.status).toBe("failed");
+              expect(failed.error).toContain("Create a new preview and apply again");
+              expect(dm.preparePosts).toBe(0);
+              expect(dm.settlePosts).toBe(0);
+              await dm.assertDataAdmission();
+              expect(
+                journal
+                  .records()
+                  .some((record) => record.operation.kind.startsWith("configurationMaintenance")),
+              ).toBe(false);
+              expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
+                host.initial.revisionId,
+              );
+              expect(
+                host.calls.filter((args) => args[0] === "image" && args[1] === "pull"),
+              ).toHaveLength(releaseReferences.length);
+              expect(
+                host.calls.some(
+                  (args) =>
+                    args[0] === "run" ||
+                    args.includes("up") ||
+                    args.includes("stop") ||
+                    args.includes("--force-recreate"),
+                ),
+              ).toBe(false);
+              vi.useRealTimers();
+              // A new preview applies without downloading again: the images are
+              // already on the host, and the pull count is asserted at the end.
+              operationKey = `opk1_${randomUUID().replaceAll("-", "")}`;
+              input = applyInputFor(await previewPlatform());
+              accepted = await apply();
+            }
             if (version === "launch-native-resource") {
               expect(reviewed!.preview.configuration).toEqual({ version: 1 });
               expect(reviewed!.preview.affectedServiceIds).toEqual(["ops-agent"]);
