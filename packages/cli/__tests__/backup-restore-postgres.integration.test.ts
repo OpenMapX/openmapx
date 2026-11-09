@@ -246,6 +246,13 @@ async function psql(input: string, database = DATABASE): Promise<string> {
   return (result.stdout ?? "").trim();
 }
 
+/** The published port changes whenever a restore restarts the database container. */
+async function livePostgresUrl(): Promise<string> {
+  const port = (await compose(["port", "postgis", "5432"])).split(":").at(-1)?.trim();
+  if (!port || !/^\d+$/.test(port)) throw new Error("fixture PostgreSQL port is unavailable");
+  return `postgresql://${POSTGRES_USER}:restore-fixture-password@127.0.0.1:${port}/${DATABASE}`;
+}
+
 async function resetMigratedDatabase(): Promise<void> {
   await psql(
     `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${DATABASE}' AND pid <> pg_backend_pid();\nDROP DATABASE IF EXISTS ${DATABASE};\nCREATE DATABASE ${DATABASE};\n`,
@@ -507,9 +514,7 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
     await installPrivateDockerProjectTransport(root, project);
     await compose(["up", "-d", "--wait"]);
     await waitForPostgresInitialization();
-    const port = (await compose(["port", "postgis", "5432"])).split(":").at(-1)?.trim();
-    if (!port || !/^\d+$/.test(port)) throw new Error("fixture PostgreSQL port is unavailable");
-    fixture.databaseUrl = `postgresql://${POSTGRES_USER}:restore-fixture-password@127.0.0.1:${port}/${DATABASE}`;
+    fixture.databaseUrl = await livePostgresUrl();
     process.env.DATABASE_URL = fixture.databaseUrl;
     process.env.NODE_ENV = "test";
     const [{ EncryptedBlobStore }, { loadMasterKeyRing }, databaseModule, cleanupModule] =
@@ -893,7 +898,9 @@ VALUES
     ).toBe(["08=0", "09=0", "0d=0", "0e=1"].join("\n"));
     const dataJobs = "SELECT md5(string_agg(j::text, '|' ORDER BY id)) FROM data_manager.jobs j;";
     const closed = await psql(dataJobs);
-    process.env.DATABASE_URL = fixture.databaseUrl;
+    // The data manager opens its client when first imported, so point it at the
+    // address the restored database has now rather than the one from setup.
+    process.env.DATABASE_URL = await livePostgresUrl();
     const { reconcileOrphanedJobs } = await import(
       "../../../services/data-manager/src/jobs/reconcile"
     );

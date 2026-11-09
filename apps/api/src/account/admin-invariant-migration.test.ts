@@ -21,7 +21,7 @@ dbDescribe("last-admin migration of historical roles", () => {
       expect(columns).toHaveLength(3);
       expect((await fixture.db.select().from(accountAdminGuard))[0]?.activeCount).toBe(1);
       const count = await fixture.sql`SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations`;
-      expect(count[0]?.n).toBe(56);
+      expect(count[0]?.n).toBe(57);
     } finally {
       await fixture.stop();
     }
