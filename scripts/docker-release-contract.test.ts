@@ -207,6 +207,26 @@ describe("Docker release trust gate", () => {
     expect(workflow.jobs.ci.needs).toContain("docker-build");
   });
 
+  it("boots the API image the pull request already built, on a private network", () => {
+    const job = load(ci).jobs["docker-build"];
+    const builds = job.steps.filter((step) => step.uses?.startsWith("docker/build-push-action@"));
+    const boots = job.steps.filter((step) => step.run?.includes("api-image-boot-check.sh"));
+    expect(builds).toHaveLength(1);
+    expect(boots).toHaveLength(1);
+    expect(boots[0].if).toBe("matrix.app == 'api'");
+    expect(boots[0].run).toContain("openmapx-ci:api");
+    expect(boots[0]["continue-on-error"]).not.toBe(true);
+    expect(job.steps.indexOf(boots[0])).toBeGreaterThan(job.steps.indexOf(builds[0]));
+
+    const script = readFileSync(resolve(root, "scripts/ci/api-image-boot-check.sh"), "utf8");
+    expect(script).toContain("docker network create --internal");
+    expect(script).toContain("pinned_image postgis");
+    expect(script).toContain("pinned_image redis");
+    expect(script).toContain("trap cleanup EXIT");
+    expect(script).toContain("/api/status");
+    expect(script).not.toMatch(/docker\s+(login|pull)|ghcr\.io/);
+  });
+
   it("keeps the release layer cache in the registry, outside the evicting Actions cache", () => {
     const build = load(release).jobs.build.steps.find((step) =>
       step.uses?.startsWith("docker/build-push-action@"),
