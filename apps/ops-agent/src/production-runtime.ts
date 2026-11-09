@@ -26,6 +26,7 @@ import {
   assertOwnedMaintenanceRecreateRuntime,
   assertStagedCoordinatorReleaseWrite,
 } from "./configuration-maintenance-store";
+import { installConfigurationReleaseImagesRuntime } from "./configuration-release-images-pull";
 import { installCoreServiceRuntime } from "./core-service-runtime";
 import {
   createDockerRuntime,
@@ -358,6 +359,10 @@ export async function createProductionOpsRuntime(
   });
   installCatalogApprovalRuntime(runtime, { rootDir: options.rootDir });
   installPlatformConfigurationRuntime(runtime, { infraDir: options.stack.infraDir });
+  installConfigurationReleaseImagesRuntime(runtime, {
+    infraDir: options.stack.infraDir,
+    execFile: options.docker?.execFile ?? runContainedProcess,
+  });
   createAdministrativeRuntime(runtime, {
     rootDir: options.rootDir,
     runFixedCli,

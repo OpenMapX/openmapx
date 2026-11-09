@@ -2,6 +2,8 @@
  * Purpose proofs are transient until encrypted inside the bounded candidate. */
 
 import { getAllIntegrations } from "../integration-host";
+import { AdminJobFailure } from "./admin-job-failure";
+import { executeAdminJobOperation } from "./admin-job-ops";
 import {
   currentAdministrativeConfigurationWriter,
   withAdministrativeConfigurationJob,
@@ -14,6 +16,7 @@ import {
   platformConfigurationParticipation,
   preparePlatformConfigurationChange,
 } from "./platform-configuration-participant";
+import { PlatformPreviewConflict, readPlatformPreview } from "./platform-preview-store";
 import {
   persistAndApplyProspectiveConfiguration,
   prepareProspectiveConfiguration,
@@ -48,6 +51,40 @@ export async function runPlatformConfigurationChange(
   ctx: JobContext,
   input: PlatformConfigurationApplicationInput,
 ) {
+  // A release selection is downloaded before anything is committed, so a
+  // registry outage fails the change while every service still runs as before.
+  if (!ctx.checkpointResult?._configurationCandidate) {
+    const readPreview = () =>
+      readPlatformPreview({
+        actorId: input.actorId,
+        previewFingerprint: input.previewFingerprint,
+      });
+    const { preview } = await readPreview();
+    if (preview.release) {
+      await executeAdminJobOperation(
+        ctx,
+        {
+          kind: "release.images.pull",
+          releaseId: preview.release.releaseId,
+          manifestDigest: preview.release.manifestDigest,
+        },
+        "admin-job.release.images",
+      );
+      // The preview keeps its original lifetime. A download that outlasts it
+      // fails here, before maintenance or any other host effect, and a new
+      // preview applies quickly because the images are already on the host.
+      try {
+        await readPreview();
+      } catch (error) {
+        if (error instanceof PlatformPreviewConflict)
+          throw new AdminJobFailure(
+            "The release images were downloaded, but the preview expired during the download. Create a new preview and apply again.",
+            { errorCode: "conflict" },
+          );
+        throw error;
+      }
+    }
+  }
   return withAdministrativeConfigurationJob(ctx, () =>
     withAdministrativeConfigurationWriter(
       {

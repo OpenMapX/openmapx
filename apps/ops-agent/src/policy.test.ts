@@ -208,6 +208,7 @@ describe("operation-specific authority policy", () => {
     const signal = new AbortController().signal;
     for (const operation of [
       { kind: "release.pull", releaseId: "release-123" },
+      { kind: "release.images.pull", releaseId: "release-123", manifestDigest: "a".repeat(64) },
       { kind: "release.apply", releaseId: "release-123" },
       { kind: "appApi.replace", releaseId: "release-123", updateJobId: "job-1" },
       {

@@ -39,6 +39,10 @@ import {
   stackRenderOperationSchema,
   vaultApplyOperationSchema,
 } from "./configuration-operation-records";
+import {
+  CONFIGURATION_RELEASE_IMAGE_NAMES,
+  configurationReleaseSelectionSchema,
+} from "./configuration-release-downloads";
 import { configurationApplyResultSchema } from "./configuration-result-records";
 import { dataInspectionResultSchema } from "./data-inventory-records";
 import { dataWorkflowReceiptSchema } from "./job-evidence";
@@ -141,6 +145,7 @@ export const OPS_OPERATION_KINDS = [
   "dawarich.provisioning.inspect",
   "release.resolve",
   "release.pull",
+  "release.images.pull",
   "release.inspect",
   "release.clear",
   "release.apply",
@@ -305,6 +310,7 @@ export const OPS_KIND_POLICIES = {
   "dawarich.provisioning.inspect": sync("api", 30_000),
   "release.resolve": asyncEffect("api", 2 * 60_000),
   "release.pull": asyncEffect("api", 15 * 60_000),
+  "release.images.pull": asyncEffect("api", 30 * 60_000),
   "release.inspect": sync("api", 30_000, 256 * 1024),
   "release.clear": asyncEffect("api", 30_000),
   "release.apply": asyncEffect("api", 30 * 60_000),
@@ -584,6 +590,13 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   kindOnly("dawarich.provisioning.inspect"),
   kindOnly("release.resolve"),
   z.strictObject({ kind: z.literal("release.pull"), releaseId: stableIdSchema }),
+  // Downloads the checked release's images ahead of any maintenance, so a registry
+  // outage fails an update before it has stopped or changed anything.
+  z.strictObject({
+    kind: z.literal("release.images.pull"),
+    releaseId: configurationReleaseSelectionSchema.shape.releaseId,
+    manifestDigest: configurationReleaseSelectionSchema.shape.manifestDigest,
+  }),
   kindOnly("release.inspect"),
   z.strictObject({ kind: z.literal("release.clear"), releaseId: stableIdSchema }),
   z.strictObject({ kind: z.literal("release.apply"), releaseId: stableIdSchema }),
@@ -894,7 +907,13 @@ export interface OpsResourcePolicy {
   allowPreparedRun?: (preparedRunId: string) => PolicyResult;
   allowCandidate?: (candidateId: string) => PolicyResult;
   allowRelease?: (
-    kind: "release.pull" | "release.apply" | "appApi.replace" | "agent.update" | "system.update",
+    kind:
+      | "release.pull"
+      | "release.images.pull"
+      | "release.apply"
+      | "appApi.replace"
+      | "agent.update"
+      | "system.update",
     releaseId: string,
   ) => PolicyResult;
   allowUpdateJobId?: (updateJobId: string) => PolicyResult;
@@ -946,6 +965,7 @@ export async function authorizeOpsResources(
     case "feedProxy.validateAndReload":
       return allowed(policy.allowCandidate?.(operation.candidateId));
     case "release.pull":
+    case "release.images.pull":
     case "release.apply":
     case "agent.update":
       return allowed(policy.allowRelease?.(operation.kind, operation.releaseId));
@@ -1246,6 +1266,16 @@ export const OPS_RESULT_SCHEMAS = {
   }),
   "release.resolve": release,
   "release.pull": release,
+  "release.images.pull": z.strictObject({
+    images: z
+      .array(
+        z.strictObject({
+          image: z.enum(CONFIGURATION_RELEASE_IMAGE_NAMES),
+          imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+        }),
+      )
+      .max(CONFIGURATION_RELEASE_IMAGE_NAMES.length),
+  }),
   "release.inspect": z.strictObject({
     currentReleaseId: stableIdSchema.optional(),
     selectedReleaseId: stableIdSchema.optional(),

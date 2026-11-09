@@ -504,3 +504,103 @@ it.each(["transaction", "active-handoff", "consumed-handoff"])(
     expect(readFileSync(legacy)).toEqual(before);
   },
 );
+
+function frozenIo(options: { missing?: boolean } = {}) {
+  const calls: string[][] = [];
+  const execFile = vi.fn(async (_file: string, args: readonly string[]) => {
+    calls.push([...args]);
+    if (args[0] === "info") return { stdout: "linux/amd64", stderr: "" };
+    if (args[0] === "manifest") {
+      if (frozenIo.registryDown) throw Error("registry unavailable");
+      return {
+        stdout: JSON.stringify({
+          schemaVersion: 2,
+          config: { digest: `sha256:${"c".repeat(64)}`, size: 32 },
+          layers: [{ digest: `sha256:${"d".repeat(64)}`, size: 64 }],
+        }),
+        stderr: "",
+      };
+    }
+    if (args[0] === "image" && args[1] === "inspect") {
+      if (options.missing) throw Error("No such image");
+      return {
+        stdout: JSON.stringify({
+          Id: `sha256:${"e".repeat(64)}`,
+          RepoDigests: [args[4]],
+          Os: "linux",
+          Architecture: "amd64",
+        }),
+        stderr: "",
+      };
+    }
+    throw Error(`Unexpected Docker call: ${args.join(" ")}`);
+  });
+  return { execFile, calls };
+}
+frozenIo.registryDown = false;
+
+it("re-checks a frozen release from local state only, so a registry outage cannot fail it", async () => {
+  const { preflightConfigurationRelease, verifyFrozenConfigurationRelease } = await import(
+    "./configuration-release-preflight"
+  );
+  const selection = { releaseId, manifestDigest };
+  frozenIo.registryDown = false;
+  const frozen = await preflightConfigurationRelease({
+    infraDir: root,
+    selection,
+    execFile: frozenIo().execFile,
+    signal: new AbortController().signal,
+  });
+  frozenIo.registryDown = true;
+  const outage = frozenIo();
+  await expect(
+    preflightConfigurationRelease({
+      infraDir: root,
+      selection,
+      execFile: outage.execFile,
+      signal: new AbortController().signal,
+    }),
+  ).rejects.toThrow("registry unavailable");
+  const local = frozenIo();
+
+  expect(
+    await verifyFrozenConfigurationRelease({
+      infraDir: root,
+      selection,
+      frozen,
+      execFile: local.execFile,
+      signal: new AbortController().signal,
+    }),
+  ).toEqual(frozen);
+  expect(local.calls.every((args) => args[0] === "image" && args[1] === "inspect")).toBe(true);
+  expect(local.calls).toHaveLength(CONFIGURATION_RELEASE_IMAGE_NAMES.length);
+  frozenIo.registryDown = false;
+});
+
+it.each(["a missing image", "a changed checked release"])(
+  "refuses a frozen release when %s",
+  async (problem) => {
+    const { preflightConfigurationRelease, verifyFrozenConfigurationRelease } = await import(
+      "./configuration-release-preflight"
+    );
+    const selection = { releaseId, manifestDigest };
+    const frozen = await preflightConfigurationRelease({
+      infraDir: root,
+      selection,
+      execFile: frozenIo().execFile,
+      signal: new AbortController().signal,
+    });
+    if (problem === "a changed checked release")
+      writeFileSync(join(directory, `${releaseId}.json`), `${raw}\n`, { mode: 0o600 });
+
+    await expect(
+      verifyFrozenConfigurationRelease({
+        infraDir: root,
+        selection,
+        frozen,
+        execFile: frozenIo({ missing: problem === "a missing image" }).execFile,
+        signal: new AbortController().signal,
+      }),
+    ).rejects.toThrow();
+  },
+);

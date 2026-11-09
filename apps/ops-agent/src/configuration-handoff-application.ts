@@ -16,7 +16,7 @@ import {
   verifyFamilyOwnedRecord,
   writePrivateRecord,
 } from "@openmapx/core/build-artifacts";
-import { canonicalJson } from "@openmapx/core/ops";
+import { type ConfigurationReleaseDownloads, canonicalJson } from "@openmapx/core/ops";
 import { atomicWrite } from "@openmapx/core/release-files";
 import { repoPaths, services } from "@openmapx/core/server";
 import {
@@ -48,6 +48,20 @@ import { createOwnedServiceResolver } from "./owned-services";
 import { createTrustedConfigurationAuthorityLoader } from "./trusted-configuration-authority";
 
 const running = new WeakSet<ConfigurationHandoffChild>();
+
+/** Observes one pinned release image that is already on the host. Nothing is
+ * downloaded: a missing image, or one that differs from its pin, fails before
+ * any service is replaced. */
+export async function observeConfigurationHandoffReleaseImage(input: {
+  downloads: ConfigurationReleaseDownloads;
+  image: ConfigurationReleaseDownloads["images"][number]["image"];
+  execFile: NonNullable<DockerRuntimeOptions["execFile"]>;
+  signal: AbortSignal;
+}) {
+  const [observed] = await inspectConfigurationReleaseImages(input);
+  if (!observed) throw Error("Pinned release image is not available locally");
+  return { imageId: observed.imageId };
+}
 function ownerFor(child: ConfigurationHandoffChild) {
   const state = configurationHandoffChildState(child),
     local = installationState(state.installation),
@@ -215,49 +229,25 @@ export async function runConfigurationHandoffApplication(input: {
                 releaseId: release.releaseId,
                 manifestDigest: release.manifestDigest,
               });
-              const current = worker!;
               if (
-                current.release!.images.find((value) => value.image === image.image)?.phase !==
+                worker!.release!.images.find((value) => value.image === image.image)?.phase !==
                 "pending"
               )
-                throw Error("Original attempted release pull requires observation");
-              save({
-                ...current,
-                sequence: current.sequence + 1,
-                release: {
-                  ...current.release!,
-                  images: current.release!.images.map((value) =>
-                    value.image === image.image ? { ...value, phase: "attempted" } : value,
-                  ),
-                },
-                updatedAt: Date.now(),
-              });
+                throw Error("Original release image observation requires a pending image");
             } finally {
               lock.release();
             }
           },
           signal,
         );
-        // No writer lock spans external pull/recreation. The original target
-        // closure and deadline survive this fixed awaited process.
-        assertArtifactTargetLeaseForward(state.lease);
-        assertConfigurationHandoffHostSources(child);
-        await execFile(
-          "docker",
-          ["image", "pull", "--platform", release.downloads.platform, image.reference],
-          {
-            signal,
-            timeout: Math.max(1, intent.helper.deadlineAt - Date.now()),
-            maxBuffer: 1024 * 1024,
-          },
-        );
-        const [observed] = await inspectConfigurationReleaseImages({
+        // The images were downloaded before maintenance began. Maintenance only
+        // observes them, so a registry outage cannot strand the instance here.
+        const observed = await observeConfigurationHandoffReleaseImage({
           downloads: release.downloads,
           image: image.image,
           execFile,
           signal,
         });
-        if (!observed) throw Error("Original completed release pull unavailable");
         const current = worker!;
         save({
           ...current,

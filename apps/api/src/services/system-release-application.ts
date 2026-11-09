@@ -73,6 +73,17 @@ export async function runGuardedSystemRelease(ctx: JobContext): Promise<Record<s
         "admin-job.guarded-release.backup",
       );
     }
+    // Download the release before anything is committed. A registry outage then
+    // fails the update while every service still runs the old release.
+    await executeAdminJobOperation(
+      ctx,
+      {
+        kind: "release.images.pull",
+        releaseId: payload.releaseId,
+        manifestDigest: payload.expectedDigest,
+      },
+      "admin-job.release.images",
+    );
     if (!fixed) {
       const current = await inspectPlatformConfiguration(),
         reviewed = await previewPlatformConfiguration({

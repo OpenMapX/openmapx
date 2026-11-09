@@ -306,6 +306,11 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   "dawarich.provisioning.inspect": { kind: "dawarich.provisioning.inspect" },
   "release.resolve": { kind: "release.resolve" },
   "release.pull": { kind: "release.pull", releaseId: "2026.08.23" },
+  "release.images.pull": {
+    kind: "release.images.pull",
+    releaseId: "2026.08.23",
+    manifestDigest: "a".repeat(64),
+  },
   "release.inspect": { kind: "release.inspect" },
   "release.clear": { kind: "release.clear", releaseId: "checked-release" },
   "release.apply": { kind: "release.apply", releaseId: "2026.08.23" },

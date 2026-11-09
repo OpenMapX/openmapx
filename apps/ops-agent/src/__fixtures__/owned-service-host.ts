@@ -30,7 +30,7 @@ import { createTrustedConfigurationAuthorityLoader } from "../trusted-configurat
 import { createFileTrustedOpsDataSource } from "../trusted-config-source";
 import { dispatchOpsOperation, type OpsRuntime } from "../runtime";
 import { testExecution } from "./execution";
-import { createDefaultFixedCli } from "../administrative-runtime";
+import { createDefaultFixedCli, inspectReleaseAuthority } from "../administrative-runtime";
 import { runContainedProcess } from "../docker-runtime";
 
 export async function ownedServiceHost(options: { configurationReleaseMetadata?:boolean; configurationHelperReleaseInventory?:boolean; configurationHelperLaunchResponseLoss?:boolean; selectedRoots?:string[]; configurationHelperVersion?:string; environment?:Record<string,Record<string,string>>; resources?:Record<string,{memory?:string;cpus?:string}>; capabilities?:Record<string,string[]>; extraServiceIds?:string[]; coordinatorDependency?:boolean; oversizedMaintenancePlan?:boolean; nestedRootSegments?:number; imageReferences?:Record<string,{image:string;tag:string;digest?:string}>; schemas?: Record<string, Record<string, unknown>>; withHardlinks?: boolean; withCoordinator?: boolean; defaultCliEntry?: string; competeAfterDefaultCli?: boolean; actualComposeConfig?: boolean; composeConfigIO?: DockerRuntimeOptions["execFile"] } = {}) {
@@ -145,6 +145,9 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
   let removingProcess: ((args: readonly string[]) => Promise<void>) | undefined;
   let imagePullProcess: ((reference:string,signal:AbortSignal)=>Promise<void>) | undefined;
   const imageIdentities = new Map<string,string>();
+  // References that are not on the host until a pull of them succeeds.
+  const unpulledImages = new Set<string>();
+  let registryDown = false;
   const optionsForHelperLaunchResponseLoss = options.configurationHelperLaunchResponseLoss;
   const helperContainers = new Map<string, unknown>();
   const releaseMetadata = options.configurationReleaseMetadata;
@@ -199,10 +202,15 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
         ),
       });
     else if (releaseMetadata && args[0] === "info") stdout="linux/amd64";
+    else if (registryDown && ((args[0] === "manifest" && args[1] === "inspect") || (args[0] === "image" && args[1] === "pull"))) throw Error("registry unavailable");
     else if (releaseMetadata && args[0] === "manifest" && args[1] === "inspect") stdout=JSON.stringify({schemaVersion:2,config:{digest:`sha256:${"c".repeat(64)}`,size:128},layers:[{digest:`sha256:${"d".repeat(64)}`,size:512}]});
+    else if (args[0] === "image" && args[1] === "inspect" && unpulledImages.has(args.at(-1)!)) throw Error("No such image");
     else if (releaseMetadata && args[0] === "image" && args[1] === "inspect" && args[3] === "{{json .}}") stdout=JSON.stringify({Id:imageIdentities.get(args.at(-1)!)??imageId,RepoDigests:[args.at(-1)],Os:"linux",Architecture:"amd64"});
     else if (args[0] === "image" && args[1] === "inspect") stdout = imageIdentities.get(args.at(-1)!) ?? imageId;
-    else if (args[0] === "image" && args[1] === "pull") await imagePullProcess?.(args.at(-1)!,options.signal);
+    else if (args[0] === "image" && args[1] === "pull") {
+      await imagePullProcess?.(args.at(-1)!,options.signal);
+      unpulledImages.delete(args.at(-1)!);
+    }
     else if (args[0] === "compose" && args.includes("up"))
       await creatingProcess?.(args, options.signal);
     else if (args[0] === "compose" && args.includes("rm"))
@@ -303,6 +311,10 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
         authorityServices.map((service) => service.selectionAuthority),
       ) ?? new Set(),
     trustedData,
+    resourceAuthority: {
+      allowRelease: (kind, releaseId) =>
+        kind === "release.images.pull" && inspectReleaseAuthority(root, releaseId),
+    },
     ownedServices: productionOwnedServices(ownerRuntime),
     serviceMetadata: (ss) => ss.map((s) => ({ ...s, buildable: false,
       creationDependencies:services.serviceCreationDependencyIds(ss.map(value=>value.selectionAuthority),[s.serviceId]) })),
@@ -387,6 +399,8 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
     },
     setImagePullProcess(value:typeof imagePullProcess) {imagePullProcess=value;},
     setImageIdentity(reference:string,value:string) {imageIdentities.set(reference,value);},
+    setRegistryDown(value:boolean) {registryDown=value;},
+    setUnpulledImages(references:readonly string[]) {for(const reference of references)unpulledImages.add(reference);},
     setRows(value: typeof rows) {
       rows = value;
     },

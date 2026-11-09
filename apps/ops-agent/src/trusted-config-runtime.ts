@@ -18,6 +18,7 @@ import {
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import { assertProspectiveConfigurationMaintenancePreludeBudget } from "../../../packages/core/src/build-artifacts/configuration-maintenance-budget";
+import type { ConfigurationReleaseSnapshot } from "../../../packages/core/src/build-artifacts/configuration-release-snapshot";
 import {
   readConfigurationHandoffReleaseOverlay,
   readConfigurationHandoffReleaseState,
@@ -36,8 +37,12 @@ import { assertConfigurationCoordinatorReady } from "./configuration-hardlinks-r
 import {
   assertStagedCoordinatorConfigurationWrite,
   inspectOwnedMaintenanceGenerationRuntime,
+  readPreparedMaintenanceRelease,
 } from "./configuration-maintenance-store";
-import { preflightConfigurationRelease } from "./configuration-release-preflight";
+import {
+  preflightConfigurationRelease,
+  verifyFrozenConfigurationRelease,
+} from "./configuration-release-preflight";
 import { configurationPolicyRevision } from "./configured-resource-authority";
 import { type DockerRuntimeOptions, runContainedProcess } from "./docker-runtime";
 import type { OwnedServiceResolver } from "./owned-services";
@@ -482,13 +487,37 @@ export function installTrustedConfigurationRuntime(
         });
       }
       const releaseSelection = candidate.record.privatePlatformIntent?.release;
+      // Once the maintenance holds its data fence the release is frozen and
+      // already on the host, so this re-check never contacts the registry.
+      let frozenRelease: ConfigurationReleaseSnapshot | undefined;
+      if (releaseSelection) {
+        const reading = openControlInstallation({
+          infraDir: options.infraDir,
+          role: "ops-agent",
+          serviceIds: services.map((service) => service.manifest.id),
+          container: existsSync("/run/secrets/openmapx-control-verifiers"),
+        });
+        try {
+          frozenRelease = readPreparedMaintenanceRelease(reading, candidate.record.maintenanceId);
+        } finally {
+          closeControlInstallation(reading);
+        }
+      }
       const release = releaseSelection
-        ? await preflightConfigurationRelease({
-            infraDir: options.infraDir,
-            selection: releaseSelection,
-            execFile: options.execFile ?? runContainedProcess,
-            signal: context.signal,
-          })
+        ? frozenRelease
+          ? await verifyFrozenConfigurationRelease({
+              infraDir: options.infraDir,
+              selection: releaseSelection,
+              frozen: frozenRelease,
+              execFile: options.execFile ?? runContainedProcess,
+              signal: context.signal,
+            })
+          : await preflightConfigurationRelease({
+              infraDir: options.infraDir,
+              selection: releaseSelection,
+              execFile: options.execFile ?? runContainedProcess,
+              signal: context.signal,
+            })
         : undefined;
       assertProspectiveConfigurationMaintenancePreludeBudget({
         ...(release

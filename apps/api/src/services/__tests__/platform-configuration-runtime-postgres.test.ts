@@ -477,6 +477,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       "launch-native-resource-inspection-loss",
       "launch-native-release",
       "launch-native-release-wrong-config",
+      "launch-native-release-slow-pull",
       "launch-native-release-api-before-save",
       "launch-native-release-api-after-save",
       "launch-native-system-release",
@@ -487,6 +488,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       "launch-native-system-release-api-after-save",
       "launch-native-system-release-late-cancel",
       "launch-native-system-release-pull-failure",
+      "launch-native-system-release-image-missing",
+      "launch-native-system-release-registry-outage",
     ])(
       "guards and retains helper mode %s through original ownership",
       async (mode) => {
@@ -547,6 +550,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             "launch-native-resource",
             "launch-native-release",
             "launch-native-release-wrong-config",
+            "launch-native-release-slow-pull",
             "launch-native-release-api-before-save",
             "launch-native-release-api-after-save",
             "launch-native-system-release",
@@ -557,6 +561,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             "launch-native-system-release-api-after-save",
             "launch-native-system-release-late-cancel",
             "launch-native-system-release-pull-failure",
+            "launch-native-system-release-image-missing",
+            "launch-native-system-release-registry-outage",
           ].includes(version)
         ) {
           state.registry = new services.ServiceRegistry({
@@ -574,6 +580,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         }));
         host.setRows(rows);
         let checkedRelease: { releaseId: string; manifestDigest: string } | undefined;
+        let releaseReferences: string[] = [];
         if (version.startsWith("launch-native-release") || systemRelease) {
           vi.stubEnv("OPENMAPX_RELEASE", "main");
           vi.stubEnv("OPENMAPX_RELEASE_MANIFEST_REPOSITORY", "ghcr.io/openmapx/release-manifest");
@@ -613,9 +620,17 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             raw,
             { mode: 0o600 },
           );
+          releaseReferences = Object.values(manifest.images) as string[];
+          // The images reach the host only through the pre-maintenance pull.
+          host.setUnpulledImages(releaseReferences);
           host.setImagePullProcess(async (reference) => {
             if (version === "launch-native-system-release-pull-failure")
               throw Error("Named release pull process failure");
+            if (version === "launch-native-release-slow-pull" && !vi.isFakeTimers()) {
+              // The download takes longer than the preview's lifetime.
+              vi.useFakeTimers({ toFake: ["Date"] });
+              vi.setSystemTime(Date.now() + 11 * 60_000);
+            }
             host.setImageIdentity(reference, `sha256:${"e".repeat(64)}`);
           });
         }
@@ -741,6 +756,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           infraDir: host.infraDir,
           serviceIds: ids,
           pausePrepareResponse: version.endsWith("-api-before-save"),
+          // The registry goes away once the data fence is held. Everything that
+          // follows must rely on the frozen release and local images.
+          ...(version === "launch-native-system-release-registry-outage"
+            ? { onPrepared: () => host.setRegistryDown(true) }
+            : {}),
         });
         const journal = await openOpsJobJournal(
           join(host.infraDir, "state/ops-agent/jobs-v1.json"),
@@ -825,8 +845,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         try {
           const actorId = randomUUID(),
             jobId = randomUUID(),
-            execution = { owner: randomUUID(), version: 1 },
-            operationKey = `opk1_${randomUUID().replaceAll("-", "")}`;
+            execution = { owner: randomUUID(), version: 1 };
+          let operationKey = `opk1_${randomUUID().replaceAll("-", "")}`;
           await state.fixture.db.insert(schema.user).values({
             id: actorId,
             name: "Synthetic admin",
@@ -845,6 +865,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               "launch-native-resource",
               "launch-native-release",
               "launch-native-release-wrong-config",
+              "launch-native-release-slow-pull",
               "launch-native-release-api-before-save",
               "launch-native-release-api-after-save",
               "launch-native-system-release",
@@ -855,6 +876,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               "launch-native-system-release-api-after-save",
               "launch-native-system-release-late-cancel",
               "launch-native-system-release-pull-failure",
+              "launch-native-system-release-image-missing",
+              "launch-native-system-release-registry-outage",
             ].includes(version)
           ) {
             const { adminPlatformRoute } = await import("../../routes/admin-platform"),
@@ -869,49 +892,58 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             await publicApi.register(adminSystemRoute, { prefix: "/api" });
             const publicUrl = await publicApi.listen({ host: "127.0.0.1", port: 0 }),
               client = createApiClient({ baseUrl: publicUrl }),
-              headers = { "idempotency-key": operationKey },
-              reviewed = systemRelease
-                ? undefined
-                : unwrapAdminResponse(
-                    await previewAdminPlatformConfiguration(
-                      {
-                        expectedCurrentRevisionId: host.initial.revisionId,
-                        changes: [
-                          "launch-native-resource",
-                          "launch-native-release",
-                          "launch-native-release-wrong-config",
-                          "launch-native-release-api-before-save",
-                          "launch-native-release-api-after-save",
-                          "launch-native-system-release",
-                          "launch-native-system-release-ack-loss",
-                          "launch-native-system-release-killed",
-                          "launch-native-system-release-agent-restart",
-                          "launch-native-system-release-api-before-save",
-                          "launch-native-system-release-api-after-save",
-                          "launch-native-system-release-late-cancel",
-                          "launch-native-system-release-pull-failure",
-                        ].includes(version)
-                          ? { version: 1 as const }
-                          : {
-                              version: 1 as const,
-                              backupRetentionDays: { source: "database", value: 14 },
-                            },
-                        ...(version === "launch-native-resource"
-                          ? { reconcileServiceIds: ["ops-agent" as const] }
-                          : {}),
-                        ...(checkedRelease ? { release: checkedRelease } : {}),
-                      },
-                      headers,
-                      { client },
-                    ),
+              headers = {
+                get "idempotency-key"() {
+                  return operationKey;
+                },
+              },
+              previewPlatform = async () =>
+                unwrapAdminResponse(
+                  await previewAdminPlatformConfiguration(
+                    {
+                      expectedCurrentRevisionId: host.initial.revisionId,
+                      changes: [
+                        "launch-native-resource",
+                        "launch-native-release",
+                        "launch-native-release-wrong-config",
+                        "launch-native-release-slow-pull",
+                        "launch-native-release-api-before-save",
+                        "launch-native-release-api-after-save",
+                        "launch-native-system-release",
+                        "launch-native-system-release-ack-loss",
+                        "launch-native-system-release-killed",
+                        "launch-native-system-release-agent-restart",
+                        "launch-native-system-release-api-before-save",
+                        "launch-native-system-release-api-after-save",
+                        "launch-native-system-release-late-cancel",
+                        "launch-native-system-release-pull-failure",
+                        "launch-native-system-release-image-missing",
+                        "launch-native-system-release-registry-outage",
+                      ].includes(version)
+                        ? { version: 1 as const }
+                        : {
+                            version: 1 as const,
+                            backupRetentionDays: { source: "database", value: 14 },
+                          },
+                      ...(version === "launch-native-resource"
+                        ? { reconcileServiceIds: ["ops-agent" as const] }
+                        : {}),
+                      ...(checkedRelease ? { release: checkedRelease } : {}),
+                    },
+                    headers,
+                    { client },
                   ),
-              input = reviewed
-                ? {
-                    expectedCurrentRevisionId: reviewed.preview.expectedCurrentRevisionId,
-                    previewFingerprint: reviewed.preview.previewFingerprint,
-                    confirmations: reviewed.preview.requiredConfirmation,
-                  }
-                : undefined;
+                ),
+              reviewed = systemRelease ? undefined : await previewPlatform(),
+              applyInputFor = (value: typeof reviewed) =>
+                value
+                  ? {
+                      expectedCurrentRevisionId: value.preview.expectedCurrentRevisionId,
+                      previewFingerprint: value.preview.previewFingerprint,
+                      confirmations: value.preview.requiredConfirmation,
+                    }
+                  : undefined;
+            let input = applyInputFor(reviewed);
             if (systemRelease) {
               const { handleSystemUpdateJob } = await import("../system-maintenance");
               jobRunner.register("system.update", handleSystemUpdateJob);
@@ -959,7 +991,58 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 await applyAdminPlatformConfiguration(input!, headers, { client }),
               );
             };
-            const accepted = await apply();
+            let accepted = await apply();
+            if (version === "launch-native-release-slow-pull") {
+              // The download outlasted the preview. The job fails after the pull,
+              // before maintenance or any other host effect.
+              // The clock is faked here, so poll by attempts rather than by time.
+              let failed = (
+                await state.fixture.db
+                  .select()
+                  .from(schema.adminJob)
+                  .where(eq(schema.adminJob.id, accepted.jobId))
+              )[0]!;
+              for (let attempt = 0; failed.status !== "failed" && attempt < 600; attempt++) {
+                await new Promise((resolve) => setTimeout(resolve, 100));
+                failed = (
+                  await state.fixture.db
+                    .select()
+                    .from(schema.adminJob)
+                    .where(eq(schema.adminJob.id, accepted.jobId))
+                )[0]!;
+              }
+              expect(failed.status).toBe("failed");
+              expect(failed.error).toContain("Create a new preview and apply again");
+              expect(dm.preparePosts).toBe(0);
+              expect(dm.settlePosts).toBe(0);
+              await dm.assertDataAdmission();
+              expect(
+                journal
+                  .records()
+                  .some((record) => record.operation.kind.startsWith("configurationMaintenance")),
+              ).toBe(false);
+              expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
+                host.initial.revisionId,
+              );
+              expect(
+                host.calls.filter((args) => args[0] === "image" && args[1] === "pull"),
+              ).toHaveLength(releaseReferences.length);
+              expect(
+                host.calls.some(
+                  (args) =>
+                    args[0] === "run" ||
+                    args.includes("up") ||
+                    args.includes("stop") ||
+                    args.includes("--force-recreate"),
+                ),
+              ).toBe(false);
+              vi.useRealTimers();
+              // A new preview applies without downloading again: the images are
+              // already on the host, and the pull count is asserted at the end.
+              operationKey = `opk1_${randomUUID().replaceAll("-", "")}`;
+              input = applyInputFor(await previewPlatform());
+              accepted = await apply();
+            }
             if (version === "launch-native-resource") {
               expect(reviewed!.preview.configuration).toEqual({ version: 1 });
               expect(reviewed!.preview.affectedServiceIds).toEqual(["ops-agent"]);
@@ -992,6 +1075,40 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 .from(schema.systemSettings)
                 .where(eq(schema.systemSettings.key, PLATFORM_CONFIGURATION_SETTING));
             };
+            if (version === "launch-native-system-release-pull-failure") {
+              // The registry is unreachable. Images are downloaded before any
+              // maintenance, so the job fails with the instance untouched.
+              const until = Date.now() + 60000;
+              let row = await readJob();
+              while (row.status !== "failed" && Date.now() < until) {
+                await new Promise((resolve) => setTimeout(resolve, 100));
+                row = await readJob();
+              }
+              expect(row.status).toBe("failed");
+              expect(dm.preparePosts).toBe(0);
+              expect(dm.settlePosts).toBe(0);
+              await dm.assertDataAdmission();
+              expect(await readDesiredPlatform()).toEqual([]);
+              expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
+                host.initial.revisionId,
+              );
+              expect(
+                host.calls.filter((args) => args[0] === "image" && args[1] === "pull"),
+              ).toHaveLength(1);
+              expect(
+                host.calls.some(
+                  (args) =>
+                    args[0] === "run" ||
+                    args.includes("up") ||
+                    args.includes("stop") ||
+                    args.includes("--force-recreate"),
+                ),
+              ).toBe(false);
+              expect(
+                existsSync(join(services.releaseStatePaths(host.infraDir).store, "current.json")),
+              ).toBe(false);
+              return;
+            }
             if (version.endsWith("-api-before-save")) {
               await Promise.race([
                 dm.prepareReplyEntered,
@@ -1035,8 +1152,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   (args) =>
                     args[0] === "run" ||
                     args.includes("up") ||
-                    args[0] === "pull" ||
-                    (args[0] === "image" && args[1] === "pull"),
+                    args.includes("stop") ||
+                    args.includes("--force-recreate"),
                 ),
               ).toBe(false);
               return;
@@ -1115,6 +1232,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             }
             const env = (name: string) =>
               args!.find((value) => value.startsWith(`${name}=`))!.slice(name.length + 1);
+            // The images were on the host when maintenance began. One disappears
+            // before the helper runs, which must stop it before any recreate.
+            if (version === "launch-native-system-release-image-missing")
+              host.setUnpulledImages(releaseReferences);
             await nativeHelper(
               host,
               {
@@ -1124,7 +1245,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 OPENMAPX_CONTROL_EXECUTION: env("OPENMAPX_CONTROL_EXECUTION"),
               },
               version === "launch-native-release-wrong-config" ||
-                version === "launch-native-system-release-pull-failure"
+                version === "launch-native-system-release-image-missing"
                 ? { failureStage: "application" }
                 : version === "launch-native-system-release-killed"
                   ? {
@@ -1135,7 +1256,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                     }
                   : {},
             );
-            if (version === "launch-native-system-release-pull-failure") {
+            if (version === "launch-native-system-release-image-missing") {
               const file = join(
                   host.infraDir,
                   "control-private/ops-agent/observations",
@@ -1163,9 +1284,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               expect(pending.finishedAt).toBeNull();
               expect(dm.settlePosts).toBe(0);
               await expect(dm.assertDataAdmission()).rejects.toThrow();
+              // Only the download before maintenance pulled; the helper pulled nothing.
               expect(
                 host.calls.filter((args) => args[0] === "image" && args[1] === "pull"),
-              ).toHaveLength(1);
+              ).toHaveLength(releaseReferences.length);
+              // No service was recreated and no release became current.
               expect(host.calls.some((args) => args[0] === "compose" && args.includes("up"))).toBe(
                 false,
               );

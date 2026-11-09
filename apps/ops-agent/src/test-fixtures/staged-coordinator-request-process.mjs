@@ -5,6 +5,7 @@ import { syncBuiltinESMExports } from "node:module";
 import { dirname, join } from "node:path";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
 import { services } from "@openmapx/core/server";
+import { inspectReleaseAuthority } from "../administrative-runtime.ts";
 import { CommunityRepositoryStore } from "../community-repositories.ts";
 import { configurationPolicyRevision } from "../configured-resource-authority.ts";
 import { createDataTransitTrustedOpsDataSource } from "../data-transit-resource-source.ts";
@@ -220,6 +221,10 @@ const app = buildOpsAgentServer({
         expectedGid: fs.statSync(input.queue).gid,
       }),
     ),
+    resourceAuthority: {
+      allowRelease: (kind, releaseId) =>
+        kind === "release.images.pull" && inspectReleaseAuthority(input.root, releaseId),
+    },
     ownedServices: productionOwnedServices(runtime),
     enabledServiceIds: (ss) =>
       services.readAppliedServiceIds(

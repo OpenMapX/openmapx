@@ -1,9 +1,11 @@
-import { expect, it } from "vitest";
+import { CONFIGURATION_RELEASE_IMAGE_NAMES } from "@openmapx/core/ops";
+import { expect, it, vi } from "vitest";
 import {
   configurationHandoffRunArgs,
   configurationHandoffServiceOrder,
   inspectConfigurationHandoffPrerequisite,
 } from "./configuration-handoff";
+import { observeConfigurationHandoffReleaseImage } from "./configuration-handoff-application";
 
 const handoffId = "11111111-1111-4111-8111-111111111111",
   image = `sha256:${"a".repeat(64)}`;
@@ -194,4 +196,60 @@ it("rejects a handoff DTO without the actual borrowed original owner", async () 
       },
     }),
   ).rejects.toThrow("Actual original borrowed maintenance handoff required");
+});
+
+const pinnedDigest = `sha256:${"a".repeat(64)}`,
+  localImageId = `sha256:${"d".repeat(64)}`;
+const releaseDownloads = {
+  version: 1 as const,
+  platform: "linux/amd64" as const,
+  declaredBytes: CONFIGURATION_RELEASE_IMAGE_NAMES.length,
+  images: CONFIGURATION_RELEASE_IMAGE_NAMES.map((name) => ({
+    image: name,
+    reference: `ghcr.io/openmapx/${name}@${pinnedDigest}`,
+    platformManifestDigest: `sha256:${"b".repeat(64)}`,
+    configDigest: `sha256:${"c".repeat(64)}`,
+    declaredBytes: 1,
+  })),
+};
+function localDocker(image: Record<string, unknown> | "missing") {
+  return vi.fn(async (_file: string, args: readonly string[]) => {
+    if (args[0] === "image" && args[1] === "inspect") {
+      if (image === "missing") throw Error("No such image");
+      return {
+        stdout: JSON.stringify({
+          Id: localImageId,
+          RepoDigests: [args[4]],
+          Os: "linux",
+          Architecture: "amd64",
+          ...image,
+        }),
+        stderr: "",
+      };
+    }
+    throw Error(`Unexpected Docker call: ${args.join(" ")}`);
+  });
+}
+const observe = (execFile: ReturnType<typeof localDocker>) =>
+  observeConfigurationHandoffReleaseImage({
+    downloads: releaseDownloads,
+    image: "api",
+    execFile,
+    signal: new AbortController().signal,
+  });
+it("the helper does not pull an image already present with the expected id", async () => {
+  const execFile = localDocker({});
+  await expect(observe(execFile)).resolves.toEqual({ imageId: localImageId });
+  expect(execFile.mock.calls.map(([, args]) => args.slice(0, 2))).toEqual([["image", "inspect"]]);
+});
+it.each([
+  ["missing", "missing" as const],
+  ["a different digest", { RepoDigests: [`ghcr.io/openmapx/api@sha256:${"e".repeat(64)}`] }],
+  ["a different platform", { Architecture: "arm64" }],
+])("the helper fails before recreate if an image is %s", async (_label, local) => {
+  const execFile = localDocker(local);
+  await expect(observe(execFile)).rejects.toThrow();
+  // Nothing is downloaded once maintenance has begun, so a registry outage can
+  // no longer strand the instance.
+  expect(execFile.mock.calls.some(([, args]) => args.includes("pull"))).toBe(false);
 });
