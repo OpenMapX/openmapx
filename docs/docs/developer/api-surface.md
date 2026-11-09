@@ -157,10 +157,14 @@ import accepts 8 MiB, and an integration route sets `bodyLimit` in its
 an integration route to 1 MiB unless it declares more, and never allows more
 than 8 MiB.
 
-A request whose body has not arrived 60 seconds after it began has its
-connection closed. Admin artifact transfers, which stream for as long as the
-transfer takes, are exempt. Do not use Fastify's `requestTimeout` for this: it
-bounds the whole request and would cut a long, healthy upload.
+A request whose body has still not fully arrived 60 seconds after it began has
+its connection closed, including one the server already answered without reading
+its body, such as a rejected credential. A request with no body, or whose body
+arrived in time, is never cut however long its response takes, so event streams,
+log streams and job waits are unaffected. Admin artifact transfers, which stream
+for as long as the transfer takes, are exempt. Do not use Fastify's
+`requestTimeout` for this: it bounds the whole request and would cut a long,
+healthy upload or stream.
 
 ### Status and mobile-auth request boundaries
 

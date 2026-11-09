@@ -808,7 +808,35 @@ describe("registerBodyReadDeadline", () => {
     registerBodyReadDeadline(app, { ms: DEADLINE_MS, exemptRoutePrefixes: ["/transfers"] });
     app.post("/stalled", async () => ({ ok: true }));
     app.post("/transfers/content", async () => ({ ok: true }));
-    app.get("/read", async () => ({ ok: true }));
+    // Outlast the deadline without a body to read, as an administrator
+    // operation waiting on a job or a log stream does.
+    const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    app.route({
+      method: ["GET", "POST", "DELETE"],
+      url: "/slow",
+      handler: async () => {
+        await pause(DEADLINE_MS * 3);
+        return { done: true };
+      },
+    });
+    app.get("/stream", async (_request, reply) => {
+      reply.raw.writeHead(200, { "content-type": "text/event-stream" });
+      for (let tick = 0; tick < 3; tick += 1) {
+        reply.raw.write(`data: ${tick}\n\n`);
+        await pause(DEADLINE_MS);
+      }
+      reply.raw.end("data: done\n\n");
+      return reply;
+    });
+    // A guard that rejects in onRequest, before any body is read.
+    app.post(
+      "/private",
+      {
+        onRequest: async (_request, reply) =>
+          reply.code(401).send({ error: "Authentication required" }),
+      },
+      async () => ({ ok: true }),
+    );
     await app.listen({ port: 0, host: "127.0.0.1" });
     return { app, port: (app.server.address() as AddressInfo).port };
   }
@@ -869,18 +897,67 @@ describe("registerBodyReadDeadline", () => {
     }
   });
 
-  it("does not time a request that has no body to read", async () => {
+  it.each([
+    ["a no-body POST", "POST", "/slow"],
+    ["a no-body DELETE", "DELETE", "/slow"],
+    ["a slow GET", "GET", "/slow"],
+    ["a streaming GET", "GET", "/stream"],
+  ])("does not cut %s that outlasts the deadline", async (_name, method, path) => {
+    const { app, port } = await listening();
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}${path}`, { method });
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain("done");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("closes a stalled body after the request was rejected before it was read", async () => {
     const { app, port } = await listening();
     try {
       const socket = connect(port, "127.0.0.1");
-      let closed = false;
-      socket.on("close", () => {
-        closed = true;
+      let answer = "";
+      const closedAt = new Promise<number>((resolve) => {
+        const startedAt = Date.now();
+        socket.on("data", (chunk) => {
+          answer += chunk;
+        });
+        socket.on("close", () => resolve(Date.now() - startedAt));
+        socket.on("error", () => {});
       });
-      socket.on("error", () => {});
-      socket.write("GET /read HTTP/1.1\r\nHost: localhost\r\n\r\n");
-      await new Promise((resolve) => setTimeout(resolve, DEADLINE_MS * 3));
-      expect(closed).toBe(false);
+      socket.write(`${headers("/private")}{"a":`);
+
+      const elapsed = await closedAt;
+
+      expect(answer).toContain("401 Unauthorized");
+      expect(elapsed).toBeGreaterThanOrEqual(DEADLINE_MS - 20);
+      expect(elapsed).toBeLessThan(DEADLINE_MS + 1500);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("serves a body that trickles in but finishes before the deadline", async () => {
+    const { app, port } = await listening();
+    try {
+      const socket = connect(port, "127.0.0.1");
+      let answer = "";
+      const answered = new Promise<void>((resolve) => {
+        socket.on("data", (chunk) => {
+          answer += chunk;
+          if (answer.includes("\r\n\r\n")) resolve();
+        });
+        socket.on("error", () => {});
+      });
+      const body = JSON.stringify({ a: 1 });
+      socket.write(
+        `POST /stalled HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: ${body.length}\r\n\r\n${body.slice(0, 3)}`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, DEADLINE_MS / 2));
+      socket.write(body.slice(3));
+      await answered;
+      expect(answer).toContain("200 OK");
       socket.destroy();
     } finally {
       await app.close();

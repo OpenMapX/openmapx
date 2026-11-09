@@ -123,19 +123,32 @@ export function registerControlledRequestLogging(
 }
 
 /**
- * Closes the connection of a request whose body is still unread `ms` after the
- * request began, so a client that trickles bytes cannot hold a socket and the
- * memory buffered for its body. Requests whose body has already arrived are not
- * timed, and neither are routes under an exempt path prefix (large streamed
- * uploads, which are bounded by their own transfer limits).
+ * Closes the connection of a request whose body has still not fully arrived
+ * `ms` after the request began, so a client that trickles bytes cannot hold a
+ * socket and the memory buffered for its body. That covers a request the server
+ * has already answered without reading its body, such as a rejected credential:
+ * the rest of the body is discarded, but only the deadline ends a sender that
+ * never finishes it. Routes under an exempt path prefix are not timed (large
+ * streamed uploads, bounded by their own transfer limits).
+ *
+ * A request with no body, or whose body has arrived, is never cut, however long
+ * its response takes: an event stream or a job wait outlasts the deadline.
  *
  * This is deliberately not Fastify's `requestTimeout`: that bounds the whole
- * request and would cut a long, healthy upload.
+ * request and would cut a long, healthy upload or stream.
  */
 export function registerBodyReadDeadline(
   server: FastifyInstance,
   options: { ms: number; exemptRoutePrefixes: string[] },
 ): void {
+  // No deadline outlives the server, whatever state its request was left in.
+  const armed = new Set<ReturnType<typeof setTimeout>>();
+  server.addHook("onClose", (_instance, done) => {
+    for (const timer of armed) clearTimeout(timer);
+    armed.clear();
+    done();
+  });
+
   const exempt = (url: string): boolean => {
     const query = url.indexOf("?");
     const path = query === -1 ? url : url.slice(0, query);
@@ -146,11 +159,14 @@ export function registerBodyReadDeadline(
 
   server.addHook("onRequest", (request, reply, done) => {
     const raw = request.raw;
-    if (raw.complete || exempt(request.url)) {
+    if (exempt(request.url)) {
       done();
       return;
     }
+    // Node dispatches the request once the headers are in, so whether a body is
+    // still outstanding can only be known when the deadline expires.
     const timer = setTimeout(() => {
+      if (raw.complete) return;
       request.log.warn(
         {
           event: "request.body-deadline",
@@ -164,13 +180,18 @@ export function registerBodyReadDeadline(
       raw.destroy();
     }, options.ms);
     timer.unref();
-    // A request answered before its body was read (a rejected credential, say)
-    // never reads the rest; once the response is out the server only discards
-    // what remains, within the runtime's own request timeout.
-    const stop = () => clearTimeout(timer);
+    armed.add(timer);
+    const stop = () => {
+      clearTimeout(timer);
+      armed.delete(timer);
+    };
+    // The body finished, or the socket went away. A response that is out while
+    // the body is still arriving does not stop the clock.
     raw.once("end", stop);
     raw.once("close", stop);
-    reply.raw.once("close", stop);
+    reply.raw.once("close", () => {
+      if (raw.complete) stop();
+    });
     done();
   });
 }
