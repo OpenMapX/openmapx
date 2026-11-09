@@ -14,6 +14,7 @@ import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderComposeForRepo } from "../src/commands/compose";
 import { registerServicesCommands } from "../src/commands/services";
+import { migrateBeforeApiUpdate } from "../src/lib/api-migrations";
 import { dockerComposeStream } from "../src/lib/docker";
 import { selectRelease } from "../src/lib/release";
 
@@ -25,6 +26,10 @@ vi.setConfig({ testTimeout: 60000 });
 vi.mock("../src/lib/docker", async (original) => ({
   ...(await original<typeof import("../src/lib/docker")>()),
   dockerComposeStream: vi.fn(),
+}));
+vi.mock("../src/lib/api-migrations", async (original) => ({
+  ...(await original<typeof import("../src/lib/api-migrations")>()),
+  migrateBeforeApiUpdate: vi.fn(),
 }));
 let root: string;
 let seed: string;
@@ -59,6 +64,7 @@ beforeEach(async () => {
   services.writeServiceSelectionFile(join(root, "infra/docker"), ["alpha", "beta"]);
   seed = (await renderComposeForRepo({ rootDir: root, domain: "example.test" })).revisionId;
   vi.mocked(dockerComposeStream).mockReset().mockResolvedValue(0);
+  vi.mocked(migrateBeforeApiUpdate).mockReset().mockResolvedValue(0);
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(process, "exit").mockImplementation((code) => {
@@ -70,11 +76,27 @@ afterEach(() => {
   vi.unstubAllEnvs();
   if (root) rmSync(root, { recursive: true, force: true });
 });
-function command(action: "start" | "update", args: string[] = []) {
+function expectConfigurationWriterFree() {
+  for (const lock of ["state/ops-agent/configuration/.writer", ".trusted-config-writer"])
+    expect(existsSync(join(root, "infra/docker", lock))).toBe(false);
+  expect(
+    existsSync(
+      join(
+        services.releaseStatePaths(join(root, "infra/docker")).store,
+        services.RELEASE_STORE_LOCK_NAME,
+      ),
+    ),
+  ).toBe(false);
+}
+async function commitCompetingGeneration() {
+  services.writeServiceSelectionFile(join(root, "infra/docker"), ["alpha"]);
+  return (await renderComposeForRepo({ rootDir: root, domain: "example.test" })).revisionId;
+}
+function command(action: "start" | "update", args: string[] = [], target = "alpha") {
   const program = new Command();
   registerServicesCommands(program);
   return program
-    .parseAsync(["services", action, "alpha", ...args], { from: "user" })
+    .parseAsync(["services", action, target, ...args], { from: "user" })
     .catch((error) => {
       if (String(error).includes("exit:0")) throw error;
       throw Error(
@@ -130,10 +152,98 @@ describe("actual CLI service lifecycle preparation", () => {
       expect(services.currentConfigurationGeneration(join(root, "infra/docker"))).toBe(seed);
     },
   );
-  it("holds writer and physical target ownership through target-only Start after full-selection preparation", async () => {
+  it("does not hold the configuration writer while docker compose runs for Start", async () => {
+    vi.mocked(dockerComposeStream).mockImplementation(async () => {
+      expectConfigurationWriterFree();
+      return 0;
+    });
+    await expect(command("start")).rejects.toThrow("exit:0");
+    expect(dockerComposeStream).toHaveBeenCalledTimes(1);
+  });
+  it("does not hold the configuration writer across Update pull, migration and recreation", async () => {
+    const directory = join(root, "services/app-api");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(
+      join(directory, "service.json"),
+      JSON.stringify({
+        id: "app-api",
+        name: "app-api",
+        version: "1.0.0",
+        quality: "built-in",
+        container: { image: "fixture/app-api", tag: "1" },
+      }),
+    );
+    services.writeServiceSelectionFile(join(root, "infra/docker"), ["alpha", "app-api", "beta"]);
+    await renderComposeForRepo({ rootDir: root, domain: "example.test" });
+    const order: string[] = [];
+    vi.mocked(dockerComposeStream).mockImplementation(async (args) => {
+      expectConfigurationWriterFree();
+      order.push(args[0]!);
+      return 0;
+    });
+    vi.mocked(migrateBeforeApiUpdate).mockImplementation(async () => {
+      expectConfigurationWriterFree();
+      order.push("migrate");
+      return 0;
+    });
+    await expect(command("update", [], "app-api")).rejects.toThrow("exit:0");
+    expect(order).toEqual(["pull", "migrate", "up"]);
+    expect(await retainedReceipt()).toMatchObject({ phase: "complete", followUp: "complete" });
+  });
+  it("refuses to commit or recreate when another writer moves the generation during pull", async () => {
+    let competing: string | undefined;
+    vi.mocked(dockerComposeStream).mockImplementation(async () => {
+      competing = await commitCompetingGeneration();
+      return 0;
+    });
+    await expect(command("update")).rejects.toThrow("exit:1");
+    expect(vi.mocked(dockerComposeStream).mock.calls.map((call) => call[0])).toEqual([
+      ["pull", "alpha"],
+    ]);
+    expect(services.currentConfigurationGeneration(join(root, "infra/docker"))).toBe(competing);
+    expect(await retainedReceipt()).toMatchObject({
+      phase: "failed",
+      finalRevisionId: null,
+      commit: "not_committed",
+    });
+  });
+  it("refuses recreation when the generation moves after its pre-commit checks", async () => {
+    let final: string | undefined;
+    vi.mocked(dockerComposeStream).mockImplementation(async (args) => {
+      if (args[0] !== "up") return 0;
+      final = services.currentConfigurationGeneration(join(root, "infra/docker")) ?? undefined;
+      await commitCompetingGeneration();
+      return 0;
+    });
+    await expect(command("update")).rejects.toThrow("exit:1");
+    const receipt = await retainedReceipt();
+    expect(receipt).toMatchObject({
+      phase: "failed",
+      commit: "final_committed",
+      followUp: "unknown",
+      finalRevisionId: final,
+      failure: { reason: "recreate", failedServiceIds: ["alpha"] },
+    });
+    expect(services.currentConfigurationGeneration(join(root, "infra/docker"))).not.toBe(final);
+  });
+  it("refuses to record Start when the generation moves while compose runs", async () => {
+    let competing: string | undefined;
+    vi.mocked(dockerComposeStream).mockImplementation(async () => {
+      competing = await commitCompetingGeneration();
+      return 0;
+    });
+    await expect(command("start")).rejects.toThrow("exit:1");
+    expect(dockerComposeStream).toHaveBeenCalledTimes(1);
+    expect(services.currentConfigurationGeneration(join(root, "infra/docker"))).toBe(competing);
+    expect(await retainedReceipt()).toMatchObject({
+      phase: "failed",
+      commit: "final_committed",
+      followUp: "unknown",
+    });
+  });
+  it("holds physical target ownership through target-only Start after full-selection preparation", async () => {
     vi.mocked(dockerComposeStream).mockImplementation(async (args) => {
       expect(args).toEqual(["up", "-d", "alpha"]);
-      expect(existsSync(join(root, "infra/docker/.trusted-config-writer"))).toBe(true);
       expect(existsSync(join(root, "infra/docker/data/.admin-target-control/locks/alpha"))).toBe(
         true,
       );
@@ -158,7 +268,9 @@ describe("actual CLI service lifecycle preparation", () => {
     const calls: string[][] = [];
     vi.mocked(dockerComposeStream).mockImplementation(async (args) => {
       calls.push([...args]);
-      expect(existsSync(join(root, "infra/docker/.trusted-config-writer"))).toBe(true);
+      expect(existsSync(join(root, "infra/docker/data/.admin-target-control/locks/alpha"))).toBe(
+        true,
+      );
       if (args[0] === "pull")
         expect(services.currentConfigurationGeneration(join(root, "infra/docker"))).toBe(seed);
       else {
@@ -224,7 +336,7 @@ describe("actual CLI service lifecycle preparation", () => {
       failure: { reason: "pull", failedServiceIds: ["alpha"] },
     });
   });
-  it("excludes actual release reselection throughout Update pull and recreation", async () => {
+  it("refuses recreation when the release selection changes during pull", async () => {
     const manifest = services.parseReleaseManifest(
       JSON.stringify({
         schemaVersion: 1,
@@ -247,23 +359,23 @@ describe("actual CLI service lifecycle preparation", () => {
     const infraDir = join(root, "infra/docker");
     const path = services.releaseStatePaths(infraDir).overlay;
     vi.mocked(dockerComposeStream).mockImplementation(async () => {
-      await expect(
-        selectRelease({
-          infraDir,
-          resolve: async () => manifest,
-          docker: async () => {
-            throw Error("Release inspection must not start without the lock");
-          },
-        }),
-      ).rejects.toThrow("Release store is busy");
-      expect(existsSync(path)).toBe(false);
+      await selectRelease({
+        infraDir,
+        resolve: async () => manifest,
+        docker: async () => ({ stdout: "", stderr: "", exitCode: 0 }),
+      });
       return 0;
     });
-    await expect(command("update")).rejects.toThrow("exit:0");
+    await expect(command("update")).rejects.toThrow("exit:1");
+    expect(existsSync(path)).toBe(true);
+    expect(vi.mocked(dockerComposeStream).mock.calls.map((call) => call[0])).toEqual([
+      ["pull", "alpha"],
+    ]);
+    expect(services.currentConfigurationGeneration(join(root, "infra/docker"))).toBe(seed);
     expect(await retainedReceipt()).toMatchObject({
-      phase: "complete",
-      commit: "final_committed",
-      followUp: "complete",
+      phase: "failed",
+      finalRevisionId: null,
+      commit: "not_committed",
     });
   });
   it("retains the original fence and signed last phase when canceled after pull before generation commit", async () => {
@@ -297,11 +409,45 @@ describe("actual CLI service lifecycle preparation", () => {
       finalRevisionId: null,
       commit: "not_committed",
       followUp: "not_started",
+      failure: { reason: "pull", failedServiceIds: ["alpha"] },
     });
     expect(existsSync(join(root, "infra/docker/data/.admin-target-control/locks/alpha"))).toBe(
       true,
     );
     expect(existsSync(join(root, "infra/docker/.trusted-config-writer"))).toBe(false);
+  });
+  it("records failure when the execution deadline passes during pull", async () => {
+    vi.mocked(dockerComposeStream).mockImplementation(async () => {
+      const directory = join(root, "infra/docker/data/ops-agent/lifecycle"),
+        envelope = JSON.parse(readFileSync(join(directory, readdirSync(directory)[0]!), "utf8"));
+      vi.spyOn(Date, "now").mockReturnValue(envelope.seed.payload.execution.deadlineAt + 1);
+      return 0;
+    });
+    await expect(command("update")).rejects.toThrow("exit:1");
+    expect(vi.mocked(dockerComposeStream).mock.calls.map((call) => call[0])).toEqual([
+      ["pull", "alpha"],
+    ]);
+    expect(await retainedReceipt()).toMatchObject({
+      phase: "failed",
+      finalRevisionId: null,
+      commit: "not_committed",
+      followUp: "not_started",
+      failure: { reason: "pull", failedServiceIds: ["alpha"] },
+    });
+  });
+  it("keeps the original failure and warns when its receipt cannot be recorded", async () => {
+    vi.mocked(dockerComposeStream).mockImplementation(async () => {
+      mkdirSync(join(root, "infra/docker/state/ops-agent/configuration/.writer"), { mode: 0o700 });
+      return 7;
+    });
+    await expect(command("update")).rejects.toThrow("exit:7");
+    expect(
+      vi.mocked(console.error).mock.calls.some((call) => String(call[0]).includes("not recorded")),
+    ).toBe(true);
+    expect(await retainedReceipt()).toMatchObject({
+      phase: "pins_validated",
+      finalRevisionId: null,
+    });
   });
   it("retains its signed final revision and target fence when recreation fails after commit", async () => {
     vi.mocked(dockerComposeStream).mockImplementation(async (args) => (args[0] === "pull" ? 0 : 9));

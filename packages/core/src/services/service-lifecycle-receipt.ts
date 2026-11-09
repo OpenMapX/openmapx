@@ -17,6 +17,7 @@ import { controlDigest, signControl, verifyControl } from "../build-artifacts/co
 import { AnchoredDirectory, identity, sameInode } from "../build-artifacts/filesystem";
 import { familyRecordWrite } from "../build-artifacts/retention-family";
 import {
+  assertArtifactTargetLeaseContainmentOwner,
   assertArtifactTargetLeaseExecution,
   assertArtifactTargetLeaseReceiptOwner,
   type TargetLeaseAuthority,
@@ -328,6 +329,19 @@ export interface ServiceLifecycleReceiptStore {
     receipt: ServiceLifecycleReceipt,
     ownership: VerifiedLifecycleOwnership,
   ): Promise<void>;
+  /**
+   * Records why a lifecycle stopped when its lease can no longer take ownership,
+   * as after cancellation or expiry. Accepts only the failed and unknown phases.
+   */
+  recordContainment(
+    expectedSequence: number,
+    receipt: ServiceLifecycleReceipt,
+    owner: {
+      writer: ConfigurationGenerationWriter;
+      lease: TargetLeaseAuthority;
+      authority: VerifiedExecutionAuthority;
+    },
+  ): Promise<void>;
 }
 export async function openServiceLifecycleReceipt(options: {
   dataRoot: string;
@@ -469,118 +483,135 @@ export async function openServiceLifecycleReceipt(options: {
     existing.seedRevisionId !== options.seedRevisionId
   )
     throw Error("Lifecycle receipt identity conflict");
+  const write = (
+    expectedSequence: number,
+    next: ServiceLifecycleReceipt,
+    writer: ConfigurationGenerationWriter,
+    lease: TargetLeaseAuthority,
+    authority: VerifiedExecutionAuthority,
+  ) => {
+    const owner = executionAuthorityState(authority);
+    return withPrivateEffectWriter(owner, () => {
+      const current = inspect(options.dataRoot, options.execution);
+      const receipt = serviceLifecycleReceiptSchema.parse(next);
+      const transitions: Record<
+        ServiceLifecycleReceipt["phase"],
+        readonly ServiceLifecycleReceipt["phase"][]
+      > = {
+        prepared: ["pins_validated"],
+        pins_validated: [receipt.action === "update" ? "pulled" : "generation_committed"],
+        pulled: ["generation_committed"],
+        generation_committed: ["hardlinks_applied"],
+        hardlinks_applied: ["recreated"],
+        recreated: ["complete"],
+        complete: [],
+        failed: [],
+        unknown: [],
+      };
+      if (
+        !["failed", "unknown"].includes(receipt.phase) &&
+        !transitions[current.receipt.phase].includes(receipt.phase)
+      )
+        throw Error("Lifecycle phase transition conflict");
+      if (
+        receipt.finalRevisionId !== null &&
+        current.receipt.finalRevisionId === null &&
+        configurationGenerationWriterCommit(writer)?.revisionId !== receipt.finalRevisionId
+      )
+        throw Error("Lifecycle revision was not committed by its writer");
+      if (current.receipt.commit === "final_committed" && receipt.commit !== "final_committed")
+        throw Error("Lifecycle commit evidence cannot regress");
+      if (!["failed", "unknown"].includes(receipt.phase))
+        assertArtifactTargetLeaseExecution(lease, authority.execution);
+      if (
+        !same(authority.execution, receipt.execution) ||
+        owner.installation.installation.publicKey !== current.seed.childPublicKey ||
+        expectedSequence !== current.receipt.sequence ||
+        receipt.sequence !== expectedSequence + 1 ||
+        ["complete", "failed", "unknown"].includes(current.receipt.phase) ||
+        !same(receipt.execution, current.receipt.execution) ||
+        !same(receipt.serviceIds, current.receipt.serviceIds) ||
+        receipt.action !== current.receipt.action ||
+        receipt.noDeps !== current.receipt.noDeps ||
+        receipt.coordinatorMode !== current.receipt.coordinatorMode ||
+        receipt.expectedRevisionId !== current.receipt.expectedRevisionId ||
+        receipt.seedRevisionId !== current.receipt.seedRevisionId ||
+        (current.receipt.finalRevisionId !== null &&
+          current.receipt.finalRevisionId !== receipt.finalRevisionId)
+      )
+        throw Error("Lifecycle receipt checkpoint conflict");
+      const signed = signControl(owner.installation.privateKey, receiptDomain, {
+        seedDigest: controlDigest(current.envelope.seed),
+        receipt,
+      });
+      const envelope = { seed: current.envelope.seed, current: signed },
+        bytes = canonicalJson(envelope);
+      if (Buffer.byteLength(bytes) > 65536) throw Error("Lifecycle receipt budget exceeded");
+      const directory = directories(options.dataRoot);
+      try {
+        const before = directory.directory.fileIdentity(name);
+        const pending = {
+          ...current.water,
+          signer: "child" as const,
+          pending: { sequence: receipt.sequence, receiptDigest: controlDigest(signed) },
+        };
+        writePrivateRecord(
+          owner.installation,
+          "observations",
+          highWaterName(options.execution),
+          signControl(owner.installation.privateKey, highWaterDomain, pending),
+          false,
+          owner.origin,
+        );
+        if (!owner.origin) throw Error("Original lifecycle retention family required");
+        familyRecordWrite(
+          owner.installation,
+          owner.origin,
+          { scope: "shared", namespace: "service-lifecycle", container: "", name },
+          bytes,
+          (track) =>
+            directory.directory.write(name, bytes, false, (inode) => {
+              // Physical ownership was checked above, before entering the family writer.
+              assertConfigurationGenerationWriter(writer);
+              if (!sameInode(before, directory.directory.fileIdentity(name)))
+                throw Error("Lifecycle receipt inode changed");
+              track(inode);
+            }),
+        );
+        writePrivateRecord(
+          owner.installation,
+          "observations",
+          highWaterName(options.execution),
+          signControl(owner.installation.privateKey, highWaterDomain, {
+            ...pending,
+            sequence: receipt.sequence,
+            receiptDigest: controlDigest(signed),
+            pending: null,
+          }),
+          false,
+          owner.origin,
+        );
+      } finally {
+        directory.close();
+      }
+    });
+  };
   return {
     async read() {
       return readServiceLifecycleReceipt(options);
     },
     async checkpoint(expectedSequence, next, ownership) {
       const authority = assertVerifiedLifecycleOwnership(ownership);
-      const owner = executionAuthorityState(authority);
-      return withPrivateEffectWriter(owner, () => {
-        const current = inspect(options.dataRoot, options.execution);
-        const receipt = serviceLifecycleReceiptSchema.parse(next);
-        const transitions: Record<
-          ServiceLifecycleReceipt["phase"],
-          readonly ServiceLifecycleReceipt["phase"][]
-        > = {
-          prepared: ["pins_validated"],
-          pins_validated: [receipt.action === "update" ? "pulled" : "generation_committed"],
-          pulled: ["generation_committed"],
-          generation_committed: ["hardlinks_applied"],
-          hardlinks_applied: ["recreated"],
-          recreated: ["complete"],
-          complete: [],
-          failed: [],
-          unknown: [],
-        };
-        if (
-          !["failed", "unknown"].includes(receipt.phase) &&
-          !transitions[current.receipt.phase].includes(receipt.phase)
-        )
-          throw Error("Lifecycle phase transition conflict");
-        if (
-          receipt.finalRevisionId !== null &&
-          current.receipt.finalRevisionId === null &&
-          configurationGenerationWriterCommit(ownership.writer)?.revisionId !==
-            receipt.finalRevisionId
-        )
-          throw Error("Lifecycle revision was not committed by its writer");
-        if (current.receipt.commit === "final_committed" && receipt.commit !== "final_committed")
-          throw Error("Lifecycle commit evidence cannot regress");
-        if (!["failed", "unknown"].includes(receipt.phase))
-          assertArtifactTargetLeaseExecution(ownership.lease, authority.execution);
-        if (
-          !same(authority.execution, receipt.execution) ||
-          owner.installation.installation.publicKey !== current.seed.childPublicKey ||
-          expectedSequence !== current.receipt.sequence ||
-          receipt.sequence !== expectedSequence + 1 ||
-          ["complete", "failed", "unknown"].includes(current.receipt.phase) ||
-          !same(receipt.execution, current.receipt.execution) ||
-          !same(receipt.serviceIds, current.receipt.serviceIds) ||
-          receipt.action !== current.receipt.action ||
-          receipt.noDeps !== current.receipt.noDeps ||
-          receipt.coordinatorMode !== current.receipt.coordinatorMode ||
-          receipt.expectedRevisionId !== current.receipt.expectedRevisionId ||
-          receipt.seedRevisionId !== current.receipt.seedRevisionId ||
-          (current.receipt.finalRevisionId !== null &&
-            current.receipt.finalRevisionId !== receipt.finalRevisionId)
-        )
-          throw Error("Lifecycle receipt checkpoint conflict");
-        const signed = signControl(owner.installation.privateKey, receiptDomain, {
-          seedDigest: controlDigest(current.envelope.seed),
-          receipt,
-        });
-        const envelope = { seed: current.envelope.seed, current: signed },
-          bytes = canonicalJson(envelope);
-        if (Buffer.byteLength(bytes) > 65536) throw Error("Lifecycle receipt budget exceeded");
-        const directory = directories(options.dataRoot);
-        try {
-          const before = directory.directory.fileIdentity(name);
-          const pending = {
-            ...current.water,
-            signer: "child" as const,
-            pending: { sequence: receipt.sequence, receiptDigest: controlDigest(signed) },
-          };
-          writePrivateRecord(
-            owner.installation,
-            "observations",
-            highWaterName(options.execution),
-            signControl(owner.installation.privateKey, highWaterDomain, pending),
-            false,
-            owner.origin,
-          );
-          if (!owner.origin) throw Error("Original lifecycle retention family required");
-          familyRecordWrite(
-            owner.installation,
-            owner.origin,
-            { scope: "shared", namespace: "service-lifecycle", container: "", name },
-            bytes,
-            (track) =>
-              directory.directory.write(name, bytes, false, (inode) => {
-                // Physical ownership was checked above, before entering the family writer.
-                assertConfigurationGenerationWriter(ownership.writer);
-                if (!sameInode(before, directory.directory.fileIdentity(name)))
-                  throw Error("Lifecycle receipt inode changed");
-                track(inode);
-              }),
-          );
-          writePrivateRecord(
-            owner.installation,
-            "observations",
-            highWaterName(options.execution),
-            signControl(owner.installation.privateKey, highWaterDomain, {
-              ...pending,
-              sequence: receipt.sequence,
-              receiptDigest: controlDigest(signed),
-              pending: null,
-            }),
-            false,
-            owner.origin,
-          );
-        } finally {
-          directory.close();
-        }
-      });
+      return write(expectedSequence, next, ownership.writer, ownership.lease, authority);
+    },
+    async recordContainment(expectedSequence, next, { writer, lease, authority }) {
+      if (!["failed", "unknown"].includes(next.phase))
+        throw Error("Lifecycle containment records only failed or unknown phases");
+      assertConfigurationGenerationWriter(writer);
+      assertArtifactTargetLeaseContainmentOwner(lease, authority.execution);
+      await withServiceLifecycleReceiptAuthority(authority, async () =>
+        write(expectedSequence, next, writer, lease, authority),
+      );
     },
   };
 }

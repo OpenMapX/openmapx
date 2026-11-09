@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
+  cancelControlExecution,
   closeControlInstallation,
   openControlInstallation,
   provisionControlInstallation,
@@ -14,6 +15,7 @@ import { AnchoredDirectory } from "../build-artifacts/filesystem";
 import {
   acquireArtifactTargetLease,
   closeArtifactTargetLeaseHandle,
+  restoreArtifactTargetLeaseForSettlement,
 } from "../build-artifacts/target-lease";
 import {
   createControlRootOperationKey,
@@ -24,6 +26,7 @@ import { withConfigurationGenerationWriter } from "./configuration-generation";
 import {
   openServiceLifecycleReceipt,
   readServiceLifecycleReceipt,
+  type ServiceLifecycleReceipt,
   withServiceLifecycleReceiptAuthority,
   withVerifiedLifecycleOwnership,
 } from "./service-lifecycle-receipt";
@@ -186,6 +189,150 @@ it("refuses a final revision that the owned writer did not commit", async () => 
     if (lease) closeArtifactTargetLeaseHandle(lease);
     closeControlInstallation(o.installation);
   }
+});
+async function withPinsValidatedReceipt(
+  run: (context: {
+    o: ReturnType<typeof owner>;
+    lease: Awaited<ReturnType<typeof acquireArtifactTargetLease>>;
+    store: Awaited<ReturnType<typeof openServiceLifecycleReceipt>>;
+    receipt: ServiceLifecycleReceipt;
+  }) => Promise<void>,
+) {
+  const o = owner();
+  let lease: Awaited<ReturnType<typeof acquireArtifactTargetLease>> | undefined;
+  try {
+    const held = await acquireArtifactTargetLease({
+      dataRoot: join(root, "data"),
+      owner: o.authority,
+      serviceIds: ["alpha", "beta"],
+    });
+    lease = held;
+    const store = await withServiceLifecycleReceiptAuthority(o.authority, () =>
+      openServiceLifecycleReceipt(options(o.execution)),
+    );
+    const receipt = await withConfigurationGenerationWriter(root, (writer) =>
+      withVerifiedLifecycleOwnership(
+        { writer, lease: held, authority: o.authority },
+        async (ownership) => {
+          const seed = await store.read();
+          const next = { ...seed, sequence: 1, phase: "pins_validated" as const };
+          await store.checkpoint(0, next, ownership);
+          return next;
+        },
+      ),
+    );
+    await run({ o, lease: held, store, receipt });
+  } finally {
+    if (lease) closeArtifactTargetLeaseHandle(lease);
+    closeControlInstallation(o.installation);
+  }
+}
+function failedReceipt(receipt: ServiceLifecycleReceipt): ServiceLifecycleReceipt {
+  return {
+    ...receipt,
+    sequence: receipt.sequence + 1,
+    phase: "failed",
+    failure: { reason: "pull", failedServiceIds: ["alpha"] },
+  };
+}
+it("records containment for a cancelled lease that can no longer take ownership", async () => {
+  await withPinsValidatedReceipt(async ({ o, lease, store, receipt }) => {
+    cancelControlExecution(o.authority);
+    await withConfigurationGenerationWriter(root, async (writer) => {
+      await expect(
+        withVerifiedLifecycleOwnership(
+          { writer, lease, authority: o.authority },
+          async () => undefined,
+        ),
+      ).rejects.toThrow();
+      await store.recordContainment(receipt.sequence, failedReceipt(receipt), {
+        writer,
+        lease,
+        authority: o.authority,
+      });
+    });
+    await expect(
+      withServiceLifecycleReceiptAuthority(o.authority, () => store.read()),
+    ).resolves.toMatchObject({ phase: "failed", failure: { reason: "pull" } });
+  });
+});
+it("records containment for a lease past its deadline", async () => {
+  await withPinsValidatedReceipt(async ({ o, lease, store, receipt }) => {
+    vi.spyOn(Date, "now").mockReturnValue(o.execution.deadlineAt + 1);
+    await withConfigurationGenerationWriter(root, async (writer) => {
+      await expect(
+        withVerifiedLifecycleOwnership(
+          { writer, lease, authority: o.authority },
+          async () => undefined,
+        ),
+      ).rejects.toThrow();
+      await store.recordContainment(
+        receipt.sequence,
+        { ...failedReceipt(receipt), phase: "unknown", followUp: "unknown" },
+        { writer, lease, authority: o.authority },
+      );
+    });
+    await expect(
+      withServiceLifecycleReceiptAuthority(o.authority, () => store.read()),
+    ).resolves.toMatchObject({ phase: "unknown" });
+  });
+});
+it("refuses containment from a lease restored for settlement", async () => {
+  await withPinsValidatedReceipt(async ({ o, store, receipt }) => {
+    const settlement = restoreArtifactTargetLeaseForSettlement(o.authority);
+    try {
+      await withConfigurationGenerationWriter(root, (writer) =>
+        expect(
+          store.recordContainment(receipt.sequence, failedReceipt(receipt), {
+            writer,
+            lease: settlement,
+            authority: o.authority,
+          }),
+        ).rejects.toThrow("Recovered lease permits settlement only"),
+      );
+    } finally {
+      closeArtifactTargetLeaseHandle(settlement);
+    }
+    await expect(
+      withServiceLifecycleReceiptAuthority(o.authority, () => store.read()),
+    ).resolves.toMatchObject({ phase: "pins_validated", sequence: receipt.sequence });
+  });
+});
+it.each([
+  "prepared",
+  "pins_validated",
+  "pulled",
+  "generation_committed",
+  "hardlinks_applied",
+  "recreated",
+  "complete",
+] as const)("refuses to record phase %s as containment", async (phase) => {
+  await withPinsValidatedReceipt(async ({ o, lease, store, receipt }) => {
+    await withConfigurationGenerationWriter(root, (writer) =>
+      expect(
+        store.recordContainment(
+          receipt.sequence,
+          { ...receipt, sequence: receipt.sequence + 1, phase },
+          { writer, lease, authority: o.authority },
+        ),
+      ).rejects.toThrow("Lifecycle containment records only failed or unknown phases"),
+    );
+    await expect(
+      withServiceLifecycleReceiptAuthority(o.authority, () => store.read()),
+    ).resolves.toMatchObject({ phase: "pins_validated", sequence: receipt.sequence });
+  });
+});
+it("refuses containment from a writer that is no longer live", async () => {
+  await withPinsValidatedReceipt(async ({ o, lease, store, receipt }) => {
+    const released = await withConfigurationGenerationWriter(root, async (writer) => writer);
+    await expect(
+      store.recordContainment(receipt.sequence, failedReceipt(receipt), {
+        writer: released,
+        lease,
+        authority: o.authority,
+      }),
+    ).rejects.toThrow("Configuration writer is not available");
+  });
 });
 it.each([false, true])(
   "repairs only the original signed lifecycle publication after restart with shared commit=%s",
