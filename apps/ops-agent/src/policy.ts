@@ -194,6 +194,7 @@ function claimedResourcePolicy(
       operation.kind === "feedProxy.validateAndReload" && id === operation.candidateId,
     allowRelease: (kind, id) =>
       (operation.kind === "release.pull" ||
+        operation.kind === "release.images.pull" ||
         operation.kind === "release.apply" ||
         operation.kind === "appApi.replace" ||
         operation.kind === "agent.update" ||

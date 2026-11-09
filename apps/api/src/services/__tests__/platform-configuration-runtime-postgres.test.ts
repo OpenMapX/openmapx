@@ -613,6 +613,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             raw,
             { mode: 0o600 },
           );
+          const releaseReferences = Object.values(manifest.images) as string[];
+          // The images reach the host only through the pre-maintenance pull.
+          host.setUnpulledImages(releaseReferences);
           host.setImagePullProcess(async (reference) => {
             if (version === "launch-native-system-release-pull-failure")
               throw Error("Named release pull process failure");
@@ -992,6 +995,40 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 .from(schema.systemSettings)
                 .where(eq(schema.systemSettings.key, PLATFORM_CONFIGURATION_SETTING));
             };
+            if (version === "launch-native-system-release-pull-failure") {
+              // The registry is unreachable. Images are downloaded before any
+              // maintenance, so the job fails with the instance untouched.
+              const until = Date.now() + 60000;
+              let row = await readJob();
+              while (row.status !== "failed" && Date.now() < until) {
+                await new Promise((resolve) => setTimeout(resolve, 100));
+                row = await readJob();
+              }
+              expect(row.status).toBe("failed");
+              expect(dm.preparePosts).toBe(0);
+              expect(dm.settlePosts).toBe(0);
+              await dm.assertDataAdmission();
+              expect(await readDesiredPlatform()).toEqual([]);
+              expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
+                host.initial.revisionId,
+              );
+              expect(
+                host.calls.filter((args) => args[0] === "image" && args[1] === "pull"),
+              ).toHaveLength(1);
+              expect(
+                host.calls.some(
+                  (args) =>
+                    args[0] === "run" ||
+                    args.includes("up") ||
+                    args.includes("stop") ||
+                    args.includes("--force-recreate"),
+                ),
+              ).toBe(false);
+              expect(
+                existsSync(join(services.releaseStatePaths(host.infraDir).store, "current.json")),
+              ).toBe(false);
+              return;
+            }
             if (version.endsWith("-api-before-save")) {
               await Promise.race([
                 dm.prepareReplyEntered,
@@ -1035,8 +1072,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   (args) =>
                     args[0] === "run" ||
                     args.includes("up") ||
-                    args[0] === "pull" ||
-                    (args[0] === "image" && args[1] === "pull"),
+                    args.includes("stop") ||
+                    args.includes("--force-recreate"),
                 ),
               ).toBe(false);
               return;
@@ -1123,8 +1160,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 OPENMAPX_CONTROL_DELEGATION: env("OPENMAPX_CONTROL_DELEGATION"),
                 OPENMAPX_CONTROL_EXECUTION: env("OPENMAPX_CONTROL_EXECUTION"),
               },
-              version === "launch-native-release-wrong-config" ||
-                version === "launch-native-system-release-pull-failure"
+              version === "launch-native-release-wrong-config"
                 ? { failureStage: "application" }
                 : version === "launch-native-system-release-killed"
                   ? {
@@ -1135,45 +1171,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                     }
                   : {},
             );
-            if (version === "launch-native-system-release-pull-failure") {
-              const file = join(
-                  host.infraDir,
-                  "control-private/ops-agent/observations",
-                  `configuration-handoff-${env("OPS_CONFIGURATION_HANDOFF_ID")}.completion.json`,
-                ),
-                original = readFileSync(file);
-              expect(JSON.parse(String(original)).payload).toMatchObject({
-                phase: "recovery_required",
-                completedAt: null,
-              });
-              await nativeHelper(
-                host,
-                {
-                  OPENMAPX_ROOT_DIR: host.root,
-                  OPS_CONFIGURATION_HANDOFF_ID: env("OPS_CONFIGURATION_HANDOFF_ID"),
-                  OPENMAPX_CONTROL_DELEGATION: env("OPENMAPX_CONTROL_DELEGATION"),
-                  OPENMAPX_CONTROL_EXECUTION: env("OPENMAPX_CONTROL_EXECUTION"),
-                },
-                { failureStage: "adoption" },
-              );
-              expect(readFileSync(file)).toEqual(original);
-              await jobRunner.reconcile();
-              const pending = await readJob();
-              expect(pending.status).toBe("running");
-              expect(pending.finishedAt).toBeNull();
-              expect(dm.settlePosts).toBe(0);
-              await expect(dm.assertDataAdmission()).rejects.toThrow();
-              expect(
-                host.calls.filter((args) => args[0] === "image" && args[1] === "pull"),
-              ).toHaveLength(1);
-              expect(host.calls.some((args) => args[0] === "compose" && args.includes("up"))).toBe(
-                false,
-              );
-              expect(
-                existsSync(join(services.releaseStatePaths(host.infraDir).store, "current.json")),
-              ).toBe(false);
-              return;
-            }
             if (version === "launch-native-system-release-agent-restart") {
               expect(nativeAgentExited).toBe(true);
               nativeAgents.push(
