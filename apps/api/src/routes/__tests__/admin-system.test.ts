@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { ActiveMaintenanceConflict } from "../../services/active-maintenance-conflict";
 import { mockAdminSession } from "../../test/auth.js";
 
 const session = mockAdminSession();
@@ -249,6 +250,41 @@ describe("admin system routes", () => {
     });
     expect(response.statusCode).toBe(409);
     expect(response.json().jobId).toBe("already-running");
+  });
+
+  it.each([
+    ["/admin/system/updates/check", undefined],
+    ["/admin/system/diagnostics", undefined],
+    [
+      "/admin/system/updates/apply",
+      {
+        confirmation: "UPDATE OPENMAPX",
+        createBackup: false,
+        releaseId: "release-123",
+        expectedDigest: "a".repeat(64),
+      },
+    ],
+  ])("answers 409 on %s when a concurrent request wins admission", async (url, payload) => {
+    let lost = false;
+    findActive.mockImplementation(async () => (lost ? { id: "winner", status: "queued" } : null));
+    enqueue.mockImplementationOnce(async () => {
+      lost = true;
+      throw new ActiveMaintenanceConflict();
+    });
+    const response = await app.inject({ method: "POST", url, payload });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "A maintenance operation is already active",
+      jobId: "winner",
+    });
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("does not hide other enqueue failures behind a conflict answer", async () => {
+    enqueue.mockRejectedValueOnce(new Error("database unavailable"));
+    const response = await app.inject({ method: "POST", url: "/admin/system/diagnostics" });
+    expect(response.statusCode).toBe(500);
+    expect(audit).not.toHaveBeenCalled();
   });
 
   it("rejects updates while another host-mutating job is active", async () => {

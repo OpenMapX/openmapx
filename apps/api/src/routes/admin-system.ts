@@ -1,5 +1,6 @@
 import { HOST_MUTATING_JOB_TYPES } from "@openmapx/core/api-contracts";
 import type { FastifyInstance, FastifyReply } from "fastify";
+import { ActiveMaintenanceConflict } from "../services/active-maintenance-conflict";
 import { hostControlConfigured } from "../services/deployment-mode";
 import { jobRunner } from "../services/job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../services/ops-client";
@@ -119,6 +120,27 @@ async function activeMaintenanceJob() {
   return active.find((job) => job !== null) ?? null;
 }
 
+function maintenanceConflict(reply: FastifyReply, active: { id: string } | null) {
+  reply.status(409);
+  return { error: "A maintenance operation is already active", jobId: active?.id };
+}
+
+/** The pre-check gives the common case a precise answer; the job table's
+ * unique active-maintenance index decides concurrent requests. */
+async function enqueueMaintenance(
+  reply: FastifyReply,
+  type: "system.update" | "system.diagnostics",
+  payload: Record<string, unknown>,
+  actorId: string,
+): Promise<{ jobId: string } | { conflict: ReturnType<typeof maintenanceConflict> }> {
+  try {
+    return { jobId: await jobRunner.enqueue(type, payload, actorId) };
+  } catch (error) {
+    if (!(error instanceof ActiveMaintenanceConflict)) throw error;
+    return { conflict: maintenanceConflict(reply, await activeMaintenanceJob()) };
+  }
+}
+
 export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
   declareRouteAuth(app, "admin");
 
@@ -176,12 +198,15 @@ export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
       const unavailable = await rejectUnavailable(request, reply);
       if (unavailable) return unavailable;
       const active = await activeMaintenanceJob();
-      if (active) {
-        reply.status(409);
-        return { error: "A maintenance operation is already active", jobId: active.id };
-      }
+      if (active) return maintenanceConflict(reply, active);
       const admin = getAdminSession(request);
-      const jobId = await jobRunner.enqueue("system.update", { operation: "check" }, admin.user.id);
+      const admitted = await enqueueMaintenance(
+        reply,
+        "system.update",
+        { operation: "check" },
+        admin.user.id,
+      );
+      if ("conflict" in admitted) return admitted.conflict;
       await writeAuditLog({
         actorId: admin.user.id,
         targetType: "system",
@@ -189,7 +214,7 @@ export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
         action: "system.update.check",
         request,
       });
-      return { ok: true, jobId };
+      return { ok: true, jobId: admitted.jobId };
     },
   );
 
@@ -260,15 +285,13 @@ export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
       const unavailable = await rejectUnavailable(request, reply);
       if (unavailable) return unavailable;
       const active = await activeMaintenanceJob();
-      if (active) {
-        reply.status(409);
-        return { error: "A maintenance operation is already active", jobId: active.id };
-      }
+      if (active) return maintenanceConflict(reply, active);
       const admin = getAdminSession(request);
       if (admin.user.id === "loopback" || admin.session.impersonatedBy)
         return reply.code(403).send({ error: "A real full administrator session is required" });
       const createBackup = request.body?.createBackup !== false;
-      const jobId = await jobRunner.enqueue(
+      const admitted = await enqueueMaintenance(
+        reply,
         "system.update",
         {
           operation: "apply",
@@ -279,6 +302,7 @@ export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
         },
         admin.user.id,
       );
+      if ("conflict" in admitted) return admitted.conflict;
       await writeAuditLog({
         actorId: admin.user.id,
         targetType: "system",
@@ -291,7 +315,7 @@ export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
         },
         request,
       });
-      return { ok: true, jobId };
+      return { ok: true, jobId: admitted.jobId };
     },
   );
 
@@ -306,12 +330,10 @@ export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
       const unavailable = await rejectUnavailable(request, reply);
       if (unavailable) return unavailable;
       const active = await activeMaintenanceJob();
-      if (active) {
-        reply.status(409);
-        return { error: "A maintenance operation is already active", jobId: active.id };
-      }
+      if (active) return maintenanceConflict(reply, active);
       const admin = getAdminSession(request);
-      const jobId = await jobRunner.enqueue("system.diagnostics", {}, admin.user.id);
+      const admitted = await enqueueMaintenance(reply, "system.diagnostics", {}, admin.user.id);
+      if ("conflict" in admitted) return admitted.conflict;
       await writeAuditLog({
         actorId: admin.user.id,
         targetType: "system",
@@ -319,7 +341,7 @@ export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
         action: "system.diagnostics.run",
         request,
       });
-      return { ok: true, jobId };
+      return { ok: true, jobId: admitted.jobId };
     },
   );
 }

@@ -1,5 +1,9 @@
-import { index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
+
+/** Admission is arbitrated by this index; it must stay in step with the system routes. */
+export const ACTIVE_SYSTEM_MAINTENANCE_INDEX = "adminJob_one_active_system_maintenance_uq";
 
 export const adminJob = pgTable(
   "admin_job",
@@ -20,6 +24,13 @@ export const adminJob = pgTable(
     index("adminJob_status_idx").on(table.status),
     index("adminJob_type_idx").on(table.type),
     index("adminJob_createdAt_idx").on(table.createdAt),
+    // The update-check, update-apply and diagnostics requests share one host
+    // writer slot. The constant key makes the whole active set a single entry.
+    uniqueIndex(ACTIVE_SYSTEM_MAINTENANCE_INDEX)
+      .on(sql`(true)`)
+      .where(
+        sql`${table.type} IN ('system.update', 'system.diagnostics') AND ${table.status} IN ('queued', 'running', 'cancel_pending')`,
+      ),
   ],
 );
 

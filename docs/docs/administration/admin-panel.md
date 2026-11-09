@@ -94,7 +94,7 @@ System groups operational topics without mixing them into application Settings:
 
 Services, Deployment, Updates, Backups and Diagnostics require self-hosted control. Cache and Configuration transfer remain available to hosted administrators.
 
-Release checks do not download application images. Updates can create a pre-update database backup, replace the operations agent and checkpoint progress before replacing the API. Updates and diagnostics share admission state; inspect the original job before retrying an interrupted or unknown outcome. Check and update throttles remain distinct. See [Upgrading](../install/upgrading.md).
+Release checks do not download application images. Updates can create a pre-update database backup, replace the operations agent and checkpoint progress before replacing the API. Updates and diagnostics share admission state: the job table admits only one queued or running release check, update or diagnostics job, so two requests sent at the same moment create one job and the other receives a conflict naming it. Inspect the original job before retrying an interrupted or unknown outcome. Check and update throttles remain distinct. See [Upgrading](../install/upgrading.md).
 
 Platform previews preserve the fresh configuration owned by other topics. Applying an expired or conflicting preview requires a new review. Domain changes retain DNS/TLS, alternate-login, OAuth and passkey recovery checks. See [Services administration](./services-administration.md).
 
