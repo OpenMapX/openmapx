@@ -233,6 +233,7 @@
     "voiceDistanceMiles": "{miles} Meilen",
     "startFailed": "Die Navigation konnte nicht gestartet werden. Bitte versuche es erneut.",
     "endFailed": "Die Navigation konnte nicht beendet werden und läuft weiter. Bitte versuche es erneut.",
+    "endUnconfirmed": "OpenMapX konnte nicht bestätigen, dass die Navigation beendet wurde. Prüfe die Fahrt und beende sie erneut, falls sie noch läuft.",
     "startUpdateRequired": "Aktualisiere die App, um zu navigieren.",
     "walkToDestination": "Zu Fuß zum Ziel",
     "startWalking": "Fußweg starten",

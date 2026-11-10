@@ -3,8 +3,9 @@
 import { useNavigationStore, useSettingsStore, type VoiceGuidanceTiming } from "@openmapx/core";
 import { useCallback } from "react";
 import { useMobileRuntimeContext } from "./MobileRuntimeProvider";
-import { useNativeEndFailure } from "./nativeEndFailure";
+import { type NativeEndFailureKind, useNativeEndFailure } from "./nativeEndFailure";
 import type { NavigationSettingsPatch } from "./navigationCommands";
+import { CommandError } from "./navigationCommands";
 
 /**
  * Ending a trip and changing its settings, under whichever authority owns it.
@@ -18,6 +19,16 @@ import type { NavigationSettingsPatch } from "./navigationCommands";
  * snapshot instead of guessing. A refused or unanswered End is reported to the
  * user, because the trip they asked to end is still running.
  */
+/**
+ * A refusal means the trip is still running. No answer (a timeout, or a lost
+ * channel) means native may or may not have ended it, and the user is told so.
+ */
+function endFailureKind(error: unknown): NativeEndFailureKind {
+  return error instanceof CommandError && (error.code === "timeout" || error.code === "unavailable")
+    ? "unconfirmed"
+    : "refused";
+}
+
 export function useNavigationMutations() {
   const runtime = useMobileRuntimeContext();
   const browserAuthority = runtime.browserAuthority;
@@ -34,10 +45,10 @@ export function useNavigationMutations() {
       await commands.stop();
       // Released only once native has agreed the trip is over.
       store.clearNativeReadModel();
-    } catch {
+    } catch (error) {
       // Native may well still be guiding. Ask what is actually true rather than
       // pretend the trip ended.
-      useNativeEndFailure.getState().report();
+      useNativeEndFailure.getState().report(endFailureKind(error));
       void commands.requestSnapshot();
     }
   }, [browserAuthority, commands]);
@@ -53,8 +64,8 @@ export function useNavigationMutations() {
       await commands.stop(true);
       store.clearNativeReadModel();
       return true;
-    } catch {
-      useNativeEndFailure.getState().report();
+    } catch (error) {
+      useNativeEndFailure.getState().report(endFailureKind(error));
       void commands.requestSnapshot();
       return false;
     }

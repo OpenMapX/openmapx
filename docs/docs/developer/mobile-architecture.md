@@ -266,8 +266,11 @@ reply the command expected. A refusal that arrives after the page's deadline
 finds no pending request and is ignored. The navigation commands treat
 `no-session` as done for End and for a settings change, because there is
 nothing left to end and the next start reads the stored preference. Every
-other refusal fails the command. A refused or unanswered End shows the user
-that navigation is still running and asks for a fresh snapshot. A stop that
+other refusal fails the command. A failed End asks for a fresh snapshot and
+shows a notice, a fresh one for each failure. A refusal says navigation is
+still running. No answer (a timeout or a lost channel) says the end could not
+be confirmed and asks the user to check the trip, because native may have
+ended it. A stop that
 names no session, sent when there is none, is answered with `no-session`.
 
 Every native send reports `sent`, `queued`, `dropped` or `invalid`. A message

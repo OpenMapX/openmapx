@@ -16,6 +16,7 @@ vi.mock("./MobileRuntimeProvider", () => ({
 }));
 
 import { useNativeEndFailure } from "./nativeEndFailure";
+import { CommandError } from "./navigationCommands";
 import { useNavigationMutations } from "./useNavigationMutations";
 
 describe("useNavigationMutations.endNavigation", () => {
@@ -37,10 +38,25 @@ describe("useNavigationMutations.endNavigation", () => {
 
     await act(() => result.current.endNavigation());
 
-    expect(useNativeEndFailure.getState().failed).toBe(true);
+    expect(useNativeEndFailure.getState().failure).toMatchObject({ kind: "refused" });
     expect(requestSnapshot).toHaveBeenCalledTimes(1);
     expect(clear).not.toHaveBeenCalled();
     clear.mockRestore();
+  });
+
+  it("says the end is unconfirmed, not refused, when native did not answer", async () => {
+    runtime.commands = {
+      stop: vi.fn(async () => {
+        throw new CommandError("timeout");
+      }),
+      requestSnapshot: vi.fn(async () => undefined),
+    };
+    const { result } = renderHook(() => useNavigationMutations());
+
+    await act(() => result.current.endNavigation());
+    await act(() => result.current.endNavigation());
+
+    expect(useNativeEndFailure.getState().failure).toEqual({ id: 2, kind: "unconfirmed" });
   });
 
   it("clears the page's copy once native has ended the trip, reporting nothing", async () => {
@@ -51,7 +67,7 @@ describe("useNavigationMutations.endNavigation", () => {
     await act(() => result.current.endNavigation());
 
     expect(clear).toHaveBeenCalledTimes(1);
-    expect(useNativeEndFailure.getState().failed).toBe(false);
+    expect(useNativeEndFailure.getState().failure).toBeNull();
     clear.mockRestore();
   });
 });

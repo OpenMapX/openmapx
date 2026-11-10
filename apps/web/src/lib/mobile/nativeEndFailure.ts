@@ -1,20 +1,24 @@
 import { create } from "zustand";
 
 /**
- * Whether the user's last attempt to end a native trip failed.
+ * How the user's last attempt to end a native trip failed, if it did.
  *
- * The trip is then still running natively, with location and voice, so the
- * user has to be told rather than left looking at guidance that did not go
- * away. Every End control reports here and one notice shows it.
+ * `refused`: native answered that it did not end the trip, so it is still
+ * running with location and voice. `unconfirmed`: native did not answer in
+ * time, so it may or may not have ended. Every End control reports here, and
+ * each failure gets its own `id`, so a second failure while the first notice
+ * is still showing is shown again rather than lost.
  */
+export type NativeEndFailureKind = "refused" | "unconfirmed";
+
 interface NativeEndFailureState {
-  failed: boolean;
-  report(): void;
+  failure: { id: number; kind: NativeEndFailureKind } | null;
+  report(kind: NativeEndFailureKind): void;
   dismiss(): void;
 }
 
 export const useNativeEndFailure = create<NativeEndFailureState>((set) => ({
-  failed: false,
-  report: () => set({ failed: true }),
-  dismiss: () => set({ failed: false }),
+  failure: null,
+  report: (kind) => set((state) => ({ failure: { id: (state.failure?.id ?? 0) + 1, kind } })),
+  dismiss: () => set({ failure: null }),
 }));
