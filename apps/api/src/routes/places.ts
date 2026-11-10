@@ -47,21 +47,27 @@ import {
   type PlaceResolverContext,
 } from "@openmapx/place-ids";
 import type { FastifyPluginAsync } from "fastify";
-import pLimit from "p-limit";
 import { sql } from "../db/index.js";
 import { getAllIntegrations, isEnabledIntegrationScheme } from "../integration-host.js";
 import { getPlaceKnowledge } from "../services/knowledge/index";
 import { recordCardEnrichment } from "../services/metrics/index";
 import { buildReviewLinks } from "../services/review-links";
-import { hashKey, TTL, withCache } from "../utils/cache.js";
+import {
+  BoundedWorkQueue,
+  isWorkAdmissionError,
+  type WorkAdmissionError,
+} from "../utils/bounded-work-queue.js";
+import { cacheGet, hashKey, TTL, withCache } from "../utils/cache.js";
+import { requestNetworkKey } from "../utils/rate-limit.js";
+import { bindRequestAbort, withDeadline } from "../utils/request-abort.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 import { isStaticImageHost } from "./image-hosts.js";
 
 // Bound concurrent place enrichments. Each enrichPlace runs a heavy fan-out
 // (knowledge sources, photo + review providers, and sometimes multi-MB OSM
 // boundary polygons); a burst of DISTINCT place opens would otherwise run N of
-// them at once and OOM the process. Identical requests already coalesce in
-// withCache, so this caps only the distinct ones. Tunable for high-memory hosts.
+// them at once and OOM the process. Identical requests coalesce onto one
+// execution, so this caps only the distinct ones. Tunable for high-memory hosts.
 const ENRICH_CONCURRENCY = Math.max(
   1,
   Math.trunc(Number(process.env.OPENMAPX_PLACE_ENRICH_CONCURRENCY)) || 8,
@@ -69,8 +75,28 @@ const ENRICH_CONCURRENCY = Math.max(
 if (!Number.isFinite(ENRICH_CONCURRENCY)) {
   throw new Error("OPENMAPX_PLACE_ENRICH_CONCURRENCY must be finite");
 }
-const enrichLimit = pLimit(ENRICH_CONCURRENCY);
-const cardEnrichLimit = pLimit(4);
+/** The place client stops waiting after 20 seconds, so queue time and work share this budget. */
+const PLACE_DETAIL_DEADLINE_MS = 20_000;
+// Full enrichment shares request-local JSON between its providers, which a
+// cancellation signal would bypass. Running work therefore finishes and fills
+// the cache even after its callers leave; queued work is still dropped.
+const placeEnrichQueue = new BoundedWorkQueue({
+  concurrency: ENRICH_CONCURRENCY,
+  maxQueued: ENRICH_CONCURRENCY * 4,
+  maxPerClient: 16,
+  cancelAbandoned: false,
+});
+/** Card photo budget measured from admission; queue time counts toward it. */
+const CARD_DEADLINE_MS = 5_500;
+const CARD_RATING_TIMEOUT_MS = 1_500;
+const cardQueueOptions = {
+  concurrency: 4,
+  maxQueued: 32,
+  maxPerClient: 16,
+  cancelAbandoned: true,
+} as const;
+const cardPhotoQueue = new BoundedWorkQueue(cardQueueOptions);
+const cardRatingQueue = new BoundedWorkQueue(cardQueueOptions);
 const pendingCardRating = new Map<string, Promise<unknown>>();
 const pendingCardPhoto = new Map<string, Promise<unknown>>();
 const cardFailureCooldown = new Map<string, { error: unknown; until: number }>();
@@ -98,23 +124,60 @@ function validWikipediaTag(tag: string): boolean {
 type CardInput = CategoryCardEnrichmentRequest["places"][number];
 type CardResult = CategoryCardEnrichmentResponse["results"][number];
 
-async function withCardCache<T>(key: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T> {
+/** One card-enrichment HTTP request: who is charged, when it gives up, and its disconnect. */
+interface CardRequest {
+  client: string;
+  deadlineAt: number;
+  signal: AbortSignal;
+}
+
+function throwIfCoolingDown(key: string): void {
   const cooldown = cardFailureCooldown.get(key);
-  if (cooldown) {
-    const remaining = cooldown.until - Date.now();
-    if (remaining > 0) {
-      const previous = cooldown.error as { status?: number; message?: string };
-      throw Object.assign(new Error(previous?.message ?? "Card provider cooling down"), {
-        status: previous?.status,
-        retryAfterMs: remaining,
-      });
-    }
-    cardFailureCooldown.delete(key);
+  if (!cooldown) return;
+  const remaining = cooldown.until - Date.now();
+  if (remaining > 0) {
+    const previous = cooldown.error as { status?: number; message?: string };
+    throw Object.assign(new Error(previous?.message ?? "Card provider cooling down"), {
+      status: previous?.status,
+      retryAfterMs: remaining,
+    });
   }
+  cardFailureCooldown.delete(key);
+}
+
+/**
+ * Cached and cooling-down fields answer without using the queue. Everything
+ * else is admitted against the global and per-network budget first, and
+ * shares one execution with other callers asking for the same field.
+ */
+async function admitCardWork<T>(
+  queue: BoundedWorkQueue,
+  key: string,
+  ttlSeconds: number,
+  request: CardRequest,
+  fetch: (signal: AbortSignal, deadlineAt: number) => Promise<T>,
+): Promise<T> {
+  throwIfCoolingDown(key);
+  const cached = await cacheGet<T>(key);
+  if (cached !== null) return cached;
+  return queue.run(
+    { key, client: request.client, deadlineAt: request.deadlineAt, signal: request.signal },
+    (signal, deadlineAt) => withCardCache(key, ttlSeconds, signal, () => fetch(signal, deadlineAt)),
+  );
+}
+
+async function withCardCache<T>(
+  key: string,
+  ttlSeconds: number,
+  signal: AbortSignal,
+  fn: () => Promise<T>,
+): Promise<T> {
+  throwIfCoolingDown(key);
   try {
     return await withCache(key, ttlSeconds, fn);
   } catch (error) {
-    const delay = failureOutcome(error).retryAfterMs;
+    // Work cancelled because every caller left says nothing about the provider.
+    const delay = signal.aborted ? undefined : failureOutcome(error).retryAfterMs;
     if (delay) {
       cardFailureCooldown.set(key, { error, until: Date.now() + delay });
       if (cardFailureCooldown.size > 1024)
@@ -235,7 +298,19 @@ function proxyablePhoto(photo: PlacePhoto): boolean {
   );
 }
 
-async function cardPhoto(input: CardInput, lang: string | undefined): Promise<PlacePhoto | null> {
+/** Rejects once `signal` aborts, so abandoned work stops holding its queue slot. */
+function abandonment(signal: AbortSignal): Promise<never> {
+  return new Promise((_resolve, reject) => {
+    if (signal.aborted) reject(signal.reason);
+    else signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+  });
+}
+
+async function cardPhoto(
+  input: CardInput,
+  lang: string | undefined,
+  request: CardRequest,
+): Promise<PlacePhoto | null> {
   const tags = Object.fromEntries(
     Object.entries(input.photoTags ?? {}).sort(([left], [right]) => left.localeCompare(right)),
   ) as Record<string, string>;
@@ -247,92 +322,110 @@ async function cardPhoto(input: CardInput, lang: string | undefined): Promise<Pl
     lang,
     tags,
   });
-  const { photo } = await withCardCache(key, TTL.photos, async () => {
-    if (pendingCardPhoto.has(key)) throw new Error("Previous photo request is still settling");
-    if (pendingCardPhoto.size >= 4) throw new Error("Photo providers are still settling");
-    const controller = new AbortController();
-    const failures: unknown[] = [];
-    let completedHeroes: PlacePhoto[] = [];
-    let completedKnowledge: PlacePhoto[] = [];
-    const work = Promise.allSettled([
-      searchHeroPhotos(tags, getPhotoProviders(getAllIntegrations()), {
-        strict: true,
-        signal: controller.signal,
-        onError: (error) => failures.push(error),
-        onPhotos: (photos) => completedHeroes.push(...photos),
-      }).then((photos) => {
-        completedHeroes = photos;
-        return photos;
-      }),
-      tags.wikidata || tags.wikipedia
-        ? getPlaceKnowledge(categoryPlaceToPlace({ ...input, osmTags: tags }), lang, {
-            cardPhoto: true,
-            signal: controller.signal,
-            onError: (error) => failures.push(error),
-            onPhotos: (photos) => completedKnowledge.push(...photos),
-          }).then((result) => {
-            completedKnowledge = result.photos ?? [];
-            return result;
-          })
-        : Promise.resolve({ photos: [] }),
-    ]);
-    pendingCardPhoto.set(key, work);
-    void work.then(() => {
-      if (pendingCardPhoto.get(key) === work) pendingCardPhoto.delete(key);
-    });
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      const deadline = Symbol("photo deadline");
-      const settled = await Promise.race([
-        work,
-        new Promise<typeof deadline>((resolve) => {
-          timer = setTimeout(() => {
-            const error = new Error("Photo deadline exceeded");
-            controller.abort(error);
-            resolve(deadline);
-          }, 5500);
+  const { photo } = await admitCardWork(
+    cardPhotoQueue,
+    key,
+    TTL.photos,
+    request,
+    async (abandoned, deadlineAt) => {
+      if (pendingCardPhoto.has(key)) throw new Error("Previous photo request is still settling");
+      if (pendingCardPhoto.size >= 4) throw new Error("Photo providers are still settling");
+      const controller = new AbortController();
+      abandoned.addEventListener("abort", () => controller.abort(abandoned.reason), { once: true });
+      const failures: unknown[] = [];
+      let completedHeroes: PlacePhoto[] = [];
+      let completedKnowledge: PlacePhoto[] = [];
+      const work = Promise.allSettled([
+        searchHeroPhotos(tags, getPhotoProviders(getAllIntegrations()), {
+          strict: true,
+          signal: controller.signal,
+          onError: (error) => failures.push(error),
+          onPhotos: (photos) => completedHeroes.push(...photos),
+        }).then((photos) => {
+          completedHeroes = photos;
+          return photos;
         }),
+        tags.wikidata || tags.wikipedia
+          ? getPlaceKnowledge(categoryPlaceToPlace({ ...input, osmTags: tags }), lang, {
+              cardPhoto: true,
+              signal: controller.signal,
+              onError: (error) => failures.push(error),
+              onPhotos: (photos) => completedKnowledge.push(...photos),
+            }).then((result) => {
+              completedKnowledge = result.photos ?? [];
+              return result;
+            })
+          : Promise.resolve({ photos: [] }),
       ]);
-      if (settled === deadline) {
-        const completedPhoto = deduplicatePhotos([...completedHeroes, ...completedKnowledge]).find(
-          proxyablePhoto,
-        );
-        if (completedPhoto) return { photo: completedPhoto };
-        let knownDelay = 0;
-        let knownFailure: unknown;
-        for (const failure of failures) {
-          const delay = failureOutcome(failure).retryAfterMs ?? 0;
-          if (delay > knownDelay) {
-            knownDelay = delay;
-            knownFailure = failure;
+      pendingCardPhoto.set(key, work);
+      void work.then(() => {
+        if (pendingCardPhoto.get(key) === work) pendingCardPhoto.delete(key);
+      });
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const deadline = Symbol("photo deadline");
+        const settled = await Promise.race([
+          work,
+          abandonment(abandoned),
+          new Promise<typeof deadline>((resolve) => {
+            timer = setTimeout(
+              () => {
+                const error = new Error("Photo deadline exceeded");
+                controller.abort(error);
+                resolve(deadline);
+              },
+              Math.max(0, deadlineAt - Date.now()),
+            );
+          }),
+        ]);
+        abandoned.throwIfAborted();
+        if (settled === deadline) {
+          const completedPhoto = deduplicatePhotos([
+            ...completedHeroes,
+            ...completedKnowledge,
+          ]).find(proxyablePhoto);
+          if (completedPhoto) return { photo: completedPhoto };
+          let knownDelay = 0;
+          let knownFailure: unknown;
+          for (const failure of failures) {
+            const delay = failureOutcome(failure).retryAfterMs ?? 0;
+            if (delay > knownDelay) {
+              knownDelay = delay;
+              knownFailure = failure;
+            }
           }
+          if (knownDelay > 0) throw knownFailure;
+          throw controller.signal.reason;
         }
-        if (knownDelay > 0) throw knownFailure;
-        throw controller.signal.reason;
+        const [heroResult, knowledgeResult] = settled;
+        const heroes = heroResult.status === "fulfilled" ? heroResult.value : [];
+        const knowledgePhotos =
+          knowledgeResult.status === "fulfilled" ? (knowledgeResult.value.photos ?? []) : [];
+        if (heroResult.status === "rejected") failures.push(heroResult.reason);
+        if (knowledgeResult.status === "rejected") failures.push(knowledgeResult.reason);
+        const photo =
+          deduplicatePhotos([...heroes, ...knowledgePhotos]).find(proxyablePhoto) ?? null;
+        if (!photo && failures.length > 0) {
+          failures.sort(
+            (left, right) =>
+              (failureOutcome(right).retryAfterMs ?? -1) -
+              (failureOutcome(left).retryAfterMs ?? -1),
+          );
+          throw failures[0];
+        }
+        return { photo };
+      } finally {
+        if (timer) clearTimeout(timer);
       }
-      const [heroResult, knowledgeResult] = settled;
-      const heroes = heroResult.status === "fulfilled" ? heroResult.value : [];
-      const knowledgePhotos =
-        knowledgeResult.status === "fulfilled" ? (knowledgeResult.value.photos ?? []) : [];
-      if (heroResult.status === "rejected") failures.push(heroResult.reason);
-      if (knowledgeResult.status === "rejected") failures.push(knowledgeResult.reason);
-      const photo = deduplicatePhotos([...heroes, ...knowledgePhotos]).find(proxyablePhoto) ?? null;
-      if (!photo && failures.length > 0) {
-        failures.sort(
-          (left, right) =>
-            (failureOutcome(right).retryAfterMs ?? -1) - (failureOutcome(left).retryAfterMs ?? -1),
-        );
-        throw failures[0];
-      }
-      return { photo };
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
-  });
+    },
+  );
   return photo;
 }
 
-async function cardRating(input: CardInput): Promise<CardResult["rating"] | null> {
+async function cardRating(
+  input: CardInput,
+  request: CardRequest,
+): Promise<CardResult["rating"] | null> {
   const [lng, lat] = input.coordinates;
   const match = /^osm:(node|way|relation)\/(\d+)$/.exec(input.id);
   const subject = {
@@ -342,61 +435,72 @@ async function cardRating(input: CardInput): Promise<CardResult["rating"] | null
     osmId: match ? `${match[1]}/${match[2]}` : undefined,
   };
   const key = hashKey("cache:card-rating:v3-contributors", subject);
-  const { rating } = await withCardCache(key, 600, async () => {
-    if (pendingCardRating.has(key)) throw new Error("Previous rating request is still settling");
-    if (pendingCardRating.size >= 4) throw new Error("Rating providers are still settling");
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const work = fetchAggregate(subject, getReviewProviders(getAllIntegrations()), {
-      signal: controller.signal,
-      strict: true,
-    });
-    pendingCardRating.set(key, work);
-    void work.then(
-      () => {
-        if (pendingCardRating.get(key) === work) pendingCardRating.delete(key);
-      },
-      () => {
-        if (pendingCardRating.get(key) === work) pendingCardRating.delete(key);
-      },
-    );
-    try {
-      const aggregate = await Promise.race([
-        work,
-        new Promise<never>((_resolve, reject) => {
-          timer = setTimeout(() => {
-            const error = new Error("Rating deadline exceeded");
-            controller.abort(error);
-            reject(error);
-          }, 1500);
-        }),
-      ]);
-      const ratedCount = aggregate?.ratedCount;
-      if (
-        !aggregate ||
-        !Number.isFinite(aggregate.stars) ||
-        aggregate.stars <= 0 ||
-        aggregate.stars > 5 ||
-        typeof ratedCount !== "number" ||
-        !Number.isInteger(ratedCount) ||
-        ratedCount < 3 ||
-        !Number.isInteger(aggregate.count) ||
-        ratedCount > aggregate.count ||
-        !aggregate.source
-      )
-        return { rating: null };
-      return {
-        rating: {
-          stars: aggregate.stars,
-          count: ratedCount,
-          source: aggregate.source,
-          contributors: contributorsForRecords([aggregate]),
+  const { rating } = await admitCardWork(
+    cardRatingQueue,
+    key,
+    600,
+    request,
+    async (abandoned, deadlineAt) => {
+      if (pendingCardRating.has(key)) throw new Error("Previous rating request is still settling");
+      if (pendingCardRating.size >= 4) throw new Error("Rating providers are still settling");
+      const controller = new AbortController();
+      abandoned.addEventListener("abort", () => controller.abort(abandoned.reason), { once: true });
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const work = fetchAggregate(subject, getReviewProviders(getAllIntegrations()), {
+        signal: controller.signal,
+        strict: true,
+      });
+      pendingCardRating.set(key, work);
+      void work.then(
+        () => {
+          if (pendingCardRating.get(key) === work) pendingCardRating.delete(key);
         },
-      };
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
-  });
+        () => {
+          if (pendingCardRating.get(key) === work) pendingCardRating.delete(key);
+        },
+      );
+      try {
+        const aggregate = await Promise.race([
+          work,
+          abandonment(abandoned),
+          new Promise<never>((_resolve, reject) => {
+            timer = setTimeout(
+              () => {
+                const error = new Error("Rating deadline exceeded");
+                controller.abort(error);
+                reject(error);
+              },
+              Math.max(0, Math.min(CARD_RATING_TIMEOUT_MS, deadlineAt - Date.now())),
+            );
+          }),
+        ]);
+        const ratedCount = aggregate?.ratedCount;
+        if (
+          !aggregate ||
+          !Number.isFinite(aggregate.stars) ||
+          aggregate.stars <= 0 ||
+          aggregate.stars > 5 ||
+          typeof ratedCount !== "number" ||
+          !Number.isInteger(ratedCount) ||
+          ratedCount < 3 ||
+          !Number.isInteger(aggregate.count) ||
+          ratedCount > aggregate.count ||
+          !aggregate.source
+        )
+          return { rating: null };
+        return {
+          rating: {
+            stars: aggregate.stars,
+            count: ratedCount,
+            source: aggregate.source,
+            contributors: contributorsForRecords([aggregate]),
+          },
+        };
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    },
+  );
   return rating;
 }
 
@@ -417,17 +521,21 @@ function failureOutcome(error: unknown): { status: "failed"; retryAfterMs?: numb
   };
 }
 
-async function enrichCard(input: CardInput, lang: string | undefined): Promise<CardResult> {
+async function enrichCard(
+  input: CardInput,
+  lang: string | undefined,
+  request: CardRequest,
+): Promise<CardResult> {
   const fields = input.fields ?? ["photo", "rating"];
   const [photoResult, ratingResult] = await Promise.all([
     fields.includes("photo")
-      ? cardPhoto(input, lang).then(
+      ? cardPhoto(input, lang, request).then(
           (value) => ({ value }),
           (error) => ({ error }),
         )
       : Promise.resolve(undefined),
     fields.includes("rating")
-      ? cardRating(input).then(
+      ? cardRating(input, request).then(
           (value) => ({ value }),
           (error) => ({ error }),
         )
@@ -446,8 +554,11 @@ async function enrichCard(input: CardInput, lang: string | undefined): Promise<C
       "error" in ratingResult
         ? failureOutcome(ratingResult.error)
         : { status: rating ? "available" : "absent" };
-  if (outcomes.photo) recordCardEnrichment("photo", outcomes.photo.status);
-  if (outcomes.rating) recordCardEnrichment("rating", outcomes.rating.status);
+  // A caller that disconnected never sees these outcomes; they are not provider results.
+  if (!request.signal.aborted) {
+    if (outcomes.photo) recordCardEnrichment("photo", outcomes.photo.status);
+    if (outcomes.rating) recordCardEnrichment("rating", outcomes.rating.status);
+  }
   return { id: input.id, ...(photo ? { photo } : {}), ...(rating ? { rating } : {}), outcomes };
 }
 
@@ -874,6 +985,14 @@ interface CacheableError {
   message: string;
 }
 
+function isDeadlineReason(reason: unknown): boolean {
+  return reason instanceof DOMException && reason.name === "TimeoutError";
+}
+
+function admissionStatus(error: WorkAdmissionError): number {
+  return error.reason === "client-capacity" ? 429 : 503;
+}
+
 export const placesRoute: FastifyPluginAsync = async (fastify) => {
   declareRouteAuth(fastify, "public");
 
@@ -882,10 +1001,20 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
     handler: async (req, reply) => {
       const body = normalizeCardRequest(req.body);
       if (!body) return reply.status(400).send({ error: "Invalid card enrichment request" });
-      const results = await Promise.all(
-        body.places.map((place) => cardEnrichLimit(() => enrichCard(place, body.lang))),
-      );
-      return { results } satisfies CategoryCardEnrichmentResponse;
+      const disconnect = bindRequestAbort(req, reply);
+      try {
+        const request: CardRequest = {
+          client: requestNetworkKey(req),
+          deadlineAt: Date.now() + CARD_DEADLINE_MS,
+          signal: disconnect.signal,
+        };
+        const results = await Promise.all(
+          body.places.map((place) => enrichCard(place, body.lang, request)),
+        );
+        return { results } satisfies CategoryCardEnrichmentResponse;
+      } finally {
+        disconnect.dispose();
+      }
     },
   });
 
@@ -927,6 +1056,8 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
       // The shared canonical identity contains every normalized input that can
       // affect resolution or enrichment. Hash the structured value so
       // unconstrained string fields cannot create separator collisions.
+      const disconnect = bindRequestAbort(req, reply);
+      const waiting = withDeadline(disconnect.signal, PLACE_DETAIL_DEADLINE_MS);
       try {
         const parsed = parseId(rawId);
         const published =
@@ -939,42 +1070,40 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
             ? { ...placeRequest.identity, ambientGeneration: published.generation }
             : placeRequest.identity,
         );
-        const result = await withCache(cacheKey, TTL.places.detail, async () => {
-          const parsedId = parseId(rawId);
-          const latQ = placeRequest.identity.lat ?? Number.NaN;
-          const lngQ = placeRequest.identity.lng ?? Number.NaN;
-          const resolverCtx: PlaceResolverContext = {
-            lang: placeRequest.identity.lang ?? undefined,
-            lat: Number.isFinite(latQ) ? latQ : undefined,
-            lng: Number.isFinite(lngQ) ? lngQ : undefined,
-            hasAddress,
-          };
+        const resolveAndEnrich = () =>
+          withCache(cacheKey, TTL.places.detail, async () => {
+            const parsedId = parseId(rawId);
+            const latQ = placeRequest.identity.lat ?? Number.NaN;
+            const lngQ = placeRequest.identity.lng ?? Number.NaN;
+            const resolverCtx: PlaceResolverContext = {
+              lang: placeRequest.identity.lang ?? undefined,
+              lat: Number.isFinite(latQ) ? latQ : undefined,
+              lng: Number.isFinite(lngQ) ? lngQ : undefined,
+              hasAddress,
+            };
 
-          // Registered resolver dispatch — each scheme's owner integration
-          // registers a resolver at boot (see `integrations/geocoding`,
-          // `integrations/geocoding-db-ris`, and the per-provider data-source
-          // resolvers registered via `createDataSourceResolver`).
-          if (parsedId) {
-            const resolver = getPlaceResolver<Place>(parsedId.scheme);
-            if (resolver) {
-              const resolved = await resolver(parsedId.value, resolverCtx);
-              if (!resolved) {
-                const err: CacheableError = {
-                  statusCode: 404,
-                  message: `No match for ${rawId}`,
-                };
-                throw err;
+            // Registered resolver dispatch — each scheme's owner integration
+            // registers a resolver at boot (see `integrations/geocoding`,
+            // `integrations/geocoding-db-ris`, and the per-provider data-source
+            // resolvers registered via `createDataSourceResolver`).
+            if (parsedId) {
+              const resolver = getPlaceResolver<Place>(parsedId.scheme);
+              if (resolver) {
+                const resolved = await resolver(parsedId.value, resolverCtx);
+                if (!resolved) {
+                  const err: CacheableError = {
+                    statusCode: 404,
+                    message: `No match for ${rawId}`,
+                  };
+                  throw err;
+                }
+                return enrichPlace(resolved, placeRequest.identity.lang ?? undefined);
               }
-              return enrichLimit(() =>
-                enrichPlace(resolved, placeRequest.identity.lang ?? undefined),
-              );
-            }
-            // The optional search provider may be disabled. An ambient
-            // publication still owns its GERS identity; never snap that record
-            // to a neighboring OSM object through coordinate fallback.
-            if (published) {
-              return enrichLimit(() =>
-                enrichPlace(
+              // The optional search provider may be disabled. An ambient
+              // publication still owns its GERS identity; never snap that record
+              // to a neighboring OSM object through coordinate fallback.
+              if (published) {
+                return enrichPlace(
                   categoryPlaceToPlace(
                     ambientPlaceToCategoryPlace(
                       published.place,
@@ -982,73 +1111,86 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
                     ),
                   ),
                   placeRequest.identity.lang ?? undefined,
-                ),
-              );
+                );
+              }
+              // No resolver registered for this scheme. The coord-fallback
+              // below would happily snap to the nearest OSM POI — fine for
+              // freeform UI schemes (saved labels, basemap POI clicks,
+              // street-level imagery drops) that aren't backed by any integration,
+              // dangerous for an integration whose `setup()` failed and
+              // never got to register its resolver. The manifest registry
+              // tells us which is which: enabled integration schemes are strict.
+              // OSM references also remain exact when their owning integration
+              // is unavailable; coordinates cannot establish another object's identity.
+              if (parsedId.scheme === "osm" || isEnabledIntegrationScheme(parsedId.scheme)) {
+                fastify.log.warn(
+                  { scheme: parsedId.scheme },
+                  "places: integration scheme has no resolver; refusing coord-fallback",
+                );
+                const err: CacheableError = {
+                  statusCode: 404,
+                  message: `No resolver for scheme '${parsedId.scheme}'`,
+                };
+                throw err;
+              }
             }
-            // No resolver registered for this scheme. The coord-fallback
-            // below would happily snap to the nearest OSM POI — fine for
-            // freeform UI schemes (saved labels, basemap POI clicks,
-            // street-level imagery drops) that aren't backed by any integration,
-            // dangerous for an integration whose `setup()` failed and
-            // never got to register its resolver. The manifest registry
-            // tells us which is which: enabled integration schemes are strict.
-            // OSM references also remain exact when their owning integration
-            // is unavailable; coordinates cannot establish another object's identity.
-            if (parsedId.scheme === "osm" || isEnabledIntegrationScheme(parsedId.scheme)) {
-              fastify.log.warn(
-                { scheme: parsedId.scheme },
-                "places: integration scheme has no resolver; refusing coord-fallback",
-              );
+
+            // Coord-fallback path for schemes without a registered resolver
+            // (saved-label handles, coordinate fallbacks, opaque deep-link
+            // ids). Requires lat/lng/name — without them there's nothing to do.
+            const lat = latQ;
+            const lng = lngQ;
+            const name = placeRequest.identity.name ?? "";
+
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
               const err: CacheableError = {
-                statusCode: 404,
-                message: `No resolver for scheme '${parsedId.scheme}'`,
+                statusCode: 400,
+                message: "Non-resolvable place ID requires lat and lng query parameters",
               };
               throw err;
             }
-          }
 
-          // Coord-fallback path for schemes without a registered resolver
-          // (saved-label handles, coordinate fallbacks, opaque deep-link
-          // ids). Requires lat/lng/name — without them there's nothing to do.
-          const lat = latQ;
-          const lng = lngQ;
-          const name = placeRequest.identity.name ?? "";
+            if (!name) {
+              const err: CacheableError = {
+                statusCode: 400,
+                message: "Non-resolvable place ID requires lat, lng, and name query parameters",
+              };
+              throw err;
+            }
 
-          if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-            const err: CacheableError = {
-              statusCode: 400,
-              message: "Non-resolvable place ID requires lat and lng query parameters",
-            };
-            throw err;
-          }
+            const place =
+              (await lookupByNameAndCoords(
+                name,
+                lat,
+                lng,
+                rawId,
+                placeRequest.identity.lang ?? undefined,
+              )) ??
+              (await lookupByCoords(lat, lng, rawId, placeRequest.identity.lang ?? undefined));
 
-          if (!name) {
-            const err: CacheableError = {
-              statusCode: 400,
-              message: "Non-resolvable place ID requires lat, lng, and name query parameters",
-            };
-            throw err;
-          }
+            if (!place) {
+              const err: CacheableError = {
+                statusCode: 404,
+                message: `No OSM match found near [${lat}, ${lng}]`,
+              };
+              throw err;
+            }
 
-          const place =
-            (await lookupByNameAndCoords(
-              name,
-              lat,
-              lng,
-              rawId,
-              placeRequest.identity.lang ?? undefined,
-            )) ?? (await lookupByCoords(lat, lng, rawId, placeRequest.identity.lang ?? undefined));
-
-          if (!place) {
-            const err: CacheableError = {
-              statusCode: 404,
-              message: `No OSM match found near [${lat}, ${lng}]`,
-            };
-            throw err;
-          }
-
-          return enrichLimit(() => enrichPlace(place, placeRequest.identity.lang ?? undefined));
-        });
+            return enrichPlace(place, placeRequest.identity.lang ?? undefined);
+          });
+        // Cached details never enter the queue. A miss is admitted against the
+        // global and per-network budget, and equal requests share one execution.
+        const result =
+          (await cacheGet<Place>(cacheKey)) ??
+          (await placeEnrichQueue.run(
+            {
+              key: cacheKey,
+              client: requestNetworkKey(req),
+              deadlineAt: Date.now() + PLACE_DETAIL_DEADLINE_MS,
+              signal: waiting,
+            },
+            resolveAndEnrich,
+          ));
         const openingHoursInfo = await currentOpeningHoursInfo(result.openingHours, {
           lat: result.coordinates[1],
           lon: result.coordinates[0],
@@ -1063,11 +1205,25 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
           ? { ...current, photos: current.photos.filter(isDisplayablePhoto) }
           : current;
       } catch (err) {
+        if (isWorkAdmissionError(err)) {
+          return reply
+            .header("Retry-After", String(Math.ceil(err.retryAfterMs / 1000)))
+            .status(admissionStatus(err))
+            .send({ error: err.message });
+        }
+        if (waiting.aborted) {
+          // Either the shared deadline passed or the client is gone; neither is a server fault.
+          return isDeadlineReason(waiting.reason)
+            ? reply.status(504).send({ error: "Place details took too long" })
+            : reply.status(503).send({ error: "Request cancelled" });
+        }
         const e = err as CacheableError;
         const statusCode = e.statusCode ?? 500;
         return reply
           .status(statusCode)
           .send({ error: statusCode >= 500 ? "Internal server error" : e.message });
+      } finally {
+        disconnect.dispose();
       }
     },
   });
