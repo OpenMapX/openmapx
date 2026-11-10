@@ -56,6 +56,12 @@ describe("per-recipient mail limit", () => {
     expect(key).toBe(mailRecipientKey("person@example.test"));
     expect(String(key)).toMatch(/^mail-recipient:[0-9a-f]{64}$/);
     expect(String(key)).not.toContain("person");
+    expect(mailRecipientKey("person@example.test", "one-secret")).not.toBe(
+      mailRecipientKey("person@example.test", "another-secret"),
+    );
+    expect(mailRecipientKey("Person+tag@Example.test", "one-secret")).toBe(
+      mailRecipientKey("person@example.test", "one-secret"),
+    );
     expect(windowMs).toBe("3600000");
     expect(ttl.get(String(key))).toBe(3_600_000);
   });

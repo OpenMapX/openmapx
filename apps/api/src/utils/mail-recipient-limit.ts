@@ -1,13 +1,13 @@
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 import type Redis from "ioredis";
 
 /**
  * How many messages one mailbox receives from this instance per hour.
  *
- * Sign-up, verification, password reset, email change and privacy identity
- * challenges can all be triggered for an address the requester does not own.
- * Per-IP limits bound one client; this bounds what any number of clients can
- * send to one person. Legitimate use stays far below it.
+ * Sign-up, verification, password reset and email change mail can be
+ * triggered for an address the requester does not own. Per-IP limits bound one
+ * client; this bounds what any number of clients can send to one person.
+ * Legitimate use stays far below it.
  */
 export const MAIL_RECIPIENT_HOURLY_LIMIT = 10;
 const WINDOW_MS = 3_600_000;
@@ -43,9 +43,20 @@ export function normalizeMailRecipient(address: string): string {
   return `${local}@${domain}`;
 }
 
-/** The shared-store key for an address. The store never holds the address itself. */
-export function mailRecipientKey(address: string): string {
-  return `mail-recipient:${createHash("sha256").update(normalizeMailRecipient(address)).digest("hex")}`;
+/**
+ * The shared-store key for an address. The store never holds the address, and
+ * keying the digest with the server secret keeps it from being reversed by
+ * hashing a list of likely addresses.
+ */
+export function mailRecipientKey(
+  address: string,
+  secret: string = process.env.BETTER_AUTH_SECRET ?? "",
+): string {
+  const digest = createHmac("sha256", secret)
+    .update("openmapx-mail-recipient\0")
+    .update(normalizeMailRecipient(address))
+    .digest("hex");
+  return `mail-recipient:${digest}`;
 }
 
 export interface MailRecipientLimitOptions {
@@ -59,9 +70,8 @@ export interface MailRecipientLimitOptions {
 }
 
 /**
- * When the shared store cannot answer, mail goes out uncounted. Verification,
- * password reset and privacy challenges are how people get into and out of
- * their accounts. Because a refused message looks exactly like a sent one, a
+ * When the shared store cannot answer, mail goes out uncounted. Verification
+ * and password reset are how people get into their accounts. Because a refused message looks exactly like a sent one, a
  * store outage that silently stopped them would be invisible. The per-IP
  * limits still apply while the store is down.
  */
