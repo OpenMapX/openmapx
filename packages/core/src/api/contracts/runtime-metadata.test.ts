@@ -96,6 +96,7 @@ describe("runtime metadata wire contracts", () => {
           ],
           cloudAvailable: true,
           cloudConsentRequired: true,
+          cloudRequiresSignIn: false,
           cloudProviderLabels: ["Router"],
         },
         { type: "email", provider: "smtp", vendorName: "", countryCode: "", transfer: "none" },

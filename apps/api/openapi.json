@@ -973,6 +973,9 @@
                     "cloudConsentRequired": {
                       "type": "boolean"
                     },
+                    "cloudRequiresSignIn": {
+                      "type": "boolean"
+                    },
                     "cloudProviderLabels": {
                       "type": "array",
                       "items": {
@@ -989,6 +992,7 @@
                     "cloudProcessors",
                     "cloudAvailable",
                     "cloudConsentRequired",
+                    "cloudRequiresSignIn",
                     "cloudProviderLabels"
                   ],
                   "additionalProperties": false

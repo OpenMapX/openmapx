@@ -40,6 +40,7 @@ describe("computeAiSearchDisclosure", () => {
       cloudProcessors: [],
       cloudAvailable: false,
       cloudConsentRequired: false,
+      cloudRequiresSignIn: false,
       cloudProviderLabels: [],
     });
   });
@@ -63,6 +64,7 @@ describe("computeAiSearchDisclosure", () => {
     expect(disclosure.cloudProcessors).toEqual([google]);
     expect(disclosure.cloudAvailable).toBe(true);
     expect(disclosure.cloudConsentRequired).toBe(true);
+    expect(disclosure.cloudRequiresSignIn).toBe(true);
     expect(disclosure.cloudProviderLabels).toEqual(["gemini-fast", "gemini-quality"]);
   });
 
@@ -73,11 +75,13 @@ describe("computeAiSearchDisclosure", () => {
       cloudActive: true,
       cloudAvailable: false,
       cloudConsentRequired: false,
+      cloudRequiresSignIn: false,
     });
     expect(computeAiSearchDisclosure(providers, "open")).toMatchObject({
       cloudActive: true,
       cloudAvailable: true,
       cloudConsentRequired: false,
+      cloudRequiresSignIn: false,
     });
   });
 });

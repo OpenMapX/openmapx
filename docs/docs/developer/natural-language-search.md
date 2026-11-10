@@ -214,8 +214,10 @@ boundary:
   request carries an explicit positive consent signal. The consent then belongs
   to an account the server has verified. An anonymous request is always
   local-only in this mode, whatever it sends, and its response reports cloud as
-  unavailable. Without remembered acceptance, the browser offers consent before
-  a cloud-authorized parse. Remembered acceptance can authorize the first
+  unavailable. The integration's disclosure metadata says so with
+  `cloudRequiresSignIn`, and the browser asks only a signed-in user. Without
+  remembered acceptance, the browser offers consent before a cloud-authorized
+  parse. Remembered acceptance can authorize the first
   request; the request still carries the explicit signal.
 - **`privacyMode: open`** permits policy-deferred cloud access. The browser can authorize the first parse after reading integration
   disclosure metadata. A local-only parse followed by a retry also supports

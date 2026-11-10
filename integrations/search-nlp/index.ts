@@ -292,6 +292,7 @@ export function computeAiSearchDisclosure(
     cloudProcessors,
     cloudAvailable,
     cloudConsentRequired: cloudAvailable && privacyMode === "consent",
+    cloudRequiresSignIn: cloudAvailable && privacyMode === "consent",
     cloudProviderLabels: providers
       .filter((provider) => provider.requiresNetwork)
       .map((provider) => provider.label),

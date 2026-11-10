@@ -102,6 +102,7 @@ function integration(): LoadedIntegration {
         cloudProcessors: [],
         cloudAvailable: false,
         cloudConsentRequired: true,
+        cloudRequiresSignIn: false,
         cloudProviderLabels: [],
       },
     ],
