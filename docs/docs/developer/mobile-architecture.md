@@ -86,9 +86,10 @@ only when the OS starts the task without the app.
   step, immediately before the stop, so a screen that locks while the change
   waits is respected. Nothing is held in memory: a runtime the system starts
   for one background batch is torn down seconds later. When the app becomes
-  active, the foreground coordinator derives the cadence again from the
-  committed session (`refreshLocationProfile`) and applies it to a running
-  stream. iOS changes profiles at any time.
+  active on Android, including a cold open where it is already active as the
+  foreground coordinator starts, the coordinator derives the cadence again from
+  the committed session (`refreshLocationProfile`) and applies it to a running
+  stream. iOS changes profiles at any time, so it needs no refresh.
 - **Storage.** expo-sqlite runs each exclusive transaction on its own
   connection, so `getDatabase` queues writes on the one handle and sets a busy
   timeout. Without the queue a diagnostic write and a batch commit collide with

@@ -368,11 +368,18 @@ export async function createForegroundNavigation(
 
   const unregister =
     options.registerAsForeground === false ? () => {} : registerForegroundCoordinator(coordinator);
-  // A cadence change asked for in the background was not applied (Android) and
-  // may have been asked by a runtime that no longer exists.
-  const stopWatchingActivity = device.app.onActive(() => {
-    void coordinator.refreshLocationProfile();
-  });
+  // On Android a cadence change asked for in the background was not applied,
+  // and the runtime that asked may no longer exist. Apply the session's cadence
+  // whenever the app becomes active, including a cold open where the app is
+  // already active before this subscribes. iOS applies changes in the
+  // background, so it needs no refresh.
+  let stopWatchingActivity = () => {};
+  if (device.platform.os === "android") {
+    stopWatchingActivity = device.app.onActive(() => {
+      void coordinator.refreshLocationProfile();
+    });
+    if (device.app.isActive()) void coordinator.refreshLocationProfile();
+  }
 
   return {
     coordinator,

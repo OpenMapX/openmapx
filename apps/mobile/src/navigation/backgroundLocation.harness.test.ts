@@ -97,6 +97,19 @@ describe("a cadence held in a runtime that no longer exists", () => {
     expect(harness.phone.location.running).toBe(true);
     expect(harness.phone.location.profile).toEqual(profileFor("transit-near-event", "android"));
   });
+
+  it("is derived again on a cold open, when the app is already active as it starts", async () => {
+    await rideTowardsTheEnd();
+    // The user opens the app after the background runtime was torn down: the
+    // new runtime starts in the foreground, so no activation event follows.
+    harness.phone.app.visible = true;
+    harness = await harness.relaunch();
+    await new Promise((resolve) => setImmediate(resolve));
+    await harness.settle();
+
+    expect(harness.phone.location.running).toBe(true);
+    expect(harness.phone.location.profile).toEqual(profileFor("transit-near-event", "android"));
+  });
 });
 
 describe("arriving with the app in the background", () => {
