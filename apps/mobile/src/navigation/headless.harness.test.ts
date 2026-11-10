@@ -9,6 +9,10 @@ import {
   STRAIGHT_ROUTE,
   startForegroundHarness,
 } from "./testing/foregroundHarness";
+import {
+  transitItineraryFixture,
+  transitStartPackageFixture,
+} from "./transit/testing/transitFixture";
 
 /**
  * The operating system can kill the app mid-trip and start the process again
@@ -27,6 +31,7 @@ afterEach(async () => {
 });
 
 const DIRECTIONS_PATH = "/api/integrations/routing/directions";
+const REFRESH_PATH = "/api/integrations/transit/plan/refresh";
 /** Well away from the followed road. */
 const OFF_ROUTE: readonly [number, number] = [8.75, 50.2];
 const DESTINATION = STRAIGHT_ROUTE[STRAIGHT_ROUTE.length - 1];
@@ -103,6 +108,55 @@ describe("a process the system started for a location batch", () => {
     await headless.deliver([rawFix(headless.phone.clock, STRAIGHT_ROUTE[2])]);
 
     expect(reopened.sent.some((message) => message.type === "snapshot.update")).toBe(true);
+    reopened.navigation.dispose();
+  });
+});
+
+describe("a refresh in flight when the visible app takes over", () => {
+  it("is left to finish, so the rotated token is kept and no attempt is spent", async () => {
+    foreground = await startForegroundHarness();
+    foreground.phone.network.respond = async (url) =>
+      url.includes(REFRESH_PATH)
+        ? Response.json({ data: { itinerary: transitItineraryFixture() } })
+        : Response.json({ data: { stops: [] } });
+    await foreground.start(transitStartPackageFixture());
+    await foreground.elapse(5_000);
+
+    headless = await foreground.relaunchHeadless();
+    const { phone } = headless;
+    let answer: (response: Response) => void = () => {};
+    phone.network.respond = (url) =>
+      url.includes(REFRESH_PATH)
+        ? new Promise<Response>((resolve) => {
+            answer = resolve;
+          })
+        : Promise.resolve(Response.json({ data: { stops: [] } }));
+    const before = phone.network.requests.filter((url) => url.includes(REFRESH_PATH)).length;
+    for (let tick = 0; tick < 8; tick += 1) {
+      phone.clock.advance(5_000);
+      await headless.coordinator.handleLocationBatch({ locations: [] });
+      await headless.coordinator.settle();
+    }
+    expect(phone.network.requests.filter((url) => url.includes(REFRESH_PATH)).length).toBe(
+      before + 1,
+    );
+
+    // The user opens the app: its composition registers and the headless one goes.
+    const reopened = await startForegroundHarness({ phone });
+    answer(
+      Response.json({
+        data: { itinerary: { ...transitItineraryFixture(), refreshToken: "tok_after_takeover" } },
+      }),
+    );
+    await headless.settle();
+
+    const session = await reopened.session();
+    expect(session?.kind === "transit" && session.payload.refreshToken).toBe("tok_after_takeover");
+    expect(session?.kind === "transit" && session.payload.refresh).toMatchObject({
+      status: "ready",
+      attempts: 0,
+    });
+    expect(session?.kind === "transit" && session.payload.refresh.ambiguousAttempts).toBeFalsy();
     reopened.navigation.dispose();
   });
 });

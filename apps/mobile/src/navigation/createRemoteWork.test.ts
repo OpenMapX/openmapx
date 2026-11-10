@@ -105,7 +105,7 @@ it("runs native transit refresh through the remote-work production port", async 
     applyReroute: jest.fn(),
     now: () => NOW,
     diagnostics: { record: jest.fn() },
-    transitRefresh: { request, abortAll: jest.fn() },
+    transitRefresh: { request },
     applyTransitRefresh: apply,
   });
   await work.port.transitRefresh("r1");

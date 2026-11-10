@@ -187,6 +187,11 @@ start.
   replayed only within the server's 120 s replay window.
 - **Transit refresh.** A refresh effect starts the request off the queue and
   the answer re-enters as a queued `applyTransitRefresh`, like a reroute.
+  Unlike a reroute, a refresh is never abandoned, not even when its
+  composition is disposed (for example when the visible app takes over from a
+  headless process): the server may already have spent the one-time token,
+  and only the answer carries its replacement. The 15 s request timeout
+  bounds it.
   Replanning a missed connection is not wired; the session keeps running on its
   itinerary.
 

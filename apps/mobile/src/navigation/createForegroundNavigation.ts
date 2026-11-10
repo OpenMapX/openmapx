@@ -545,7 +545,7 @@ export async function createForegroundNavigation(
     dispose: () => {
       if (disposed) return;
       disposed = true;
-      remote?.abortAll();
+      remote?.abortReroutes();
       unregister();
       stopApplyingConnectivity();
       stopWatchingConnectivity();

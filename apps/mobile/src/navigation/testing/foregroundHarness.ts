@@ -276,10 +276,19 @@ export class FakeNetwork {
     throw new TypeError("Network request failed");
   };
 
+  /** Like the platform's `fetch`, an aborted request rejects at once. */
   readonly fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     this.requests.push(url);
-    return this.respond(url, init);
+    const signal = init?.signal;
+    if (!signal) return this.respond(url, init);
+    if (signal.aborted) return Promise.reject(new DOMException("Aborted", "AbortError"));
+    return new Promise<Response>((resolve, reject) => {
+      signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), {
+        once: true,
+      });
+      this.respond(url, init).then(resolve, reject);
+    });
   };
 }
 
