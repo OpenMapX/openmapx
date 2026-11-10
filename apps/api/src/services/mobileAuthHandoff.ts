@@ -121,8 +121,9 @@ export class MobileAuthHandoffService {
   constructor(deps: HandoffDeps = {}) {
     this.db = deps.db ?? defaultDb;
     this.randomId = deps.randomId ?? (() => randomBytes(16).toString("hex"));
-    // 32 bytes. The code travels through an OS-routed custom-scheme URL, so it
-    // has to be unguessable on its own even though PKCE also protects it.
+    // 32 bytes. The code travels in an OS-routed callback URL that can end up in
+    // browser history, so it has to be unguessable on its own even though PKCE
+    // also protects it.
     this.randomCode = deps.randomCode ?? (() => randomBytes(32).toString("base64url"));
   }
 

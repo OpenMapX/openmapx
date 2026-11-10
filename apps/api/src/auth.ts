@@ -111,8 +111,8 @@ function createPolicyAuth(
     baseURL: envString("BETTER_AUTH_URL", "http://localhost:3001"),
     secret,
     // Web origins only. The installed app never receives a Better Auth redirect:
-    // `/mobile-auth` returns to the app's scheme itself, with a PKCE-bound code
-    // instead of a session, so no custom scheme belongs in this list.
+    // `/mobile-auth` sends it a PKCE-bound code on a verified link of this web
+    // origin instead of a session, so no app scheme belongs in this list.
     trustedOrigins: configuredTrustedWebOrigins(),
     appName: "OpenMapX",
     user: {
@@ -319,8 +319,8 @@ function createPolicyAuth(
       admin(),
       // The one mechanism by which a session established in the system browser
       // becomes a session in the WebView. Two minutes and single-use because the
-      // token is in flight across a custom-scheme callback the OS routes, and the
-      // only legitimate holder redeems it immediately. Stored hashed so a database
+      // token is in flight from the handoff exchange to the WebView, and the only
+      // legitimate holder redeems it immediately. Stored hashed so a database
       // read never yields a usable token.
       oneTimeToken({ expiresIn: 2, storeToken: "hashed" }),
       emailHarmony({ allowNormalizedSignin: true }),

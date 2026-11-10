@@ -33,8 +33,16 @@ adapter are composed. They are blocked in the current production composition.
       `purpose`, `state`, `code_challenge` and `code_challenge_method=S256`, and
       nothing else.
 - [ ] Complete sign-in in the browser. Confirm the redirect goes to
-      `<compiled scheme>://auth/callback` and carries only `code` and `state`.
-      Development builds use `openmapx-dev`; official releases use `openmapx`.
+      `https://<compiled origin>/mobile-auth/callback`, carries only `code` and
+      `state`, and is taken over by the app rather than loaded in the browser.
+      This needs the deployment's well-known settings to list the build's
+      identifier and signing identity; development builds use the `.dev`
+      identifier (see Mobile store operations, "Verified links").
+- [ ] With the identifier removed from those settings, confirm the browser shows
+      the "Return to the app" page and the app reports a cancellation once the
+      browser is closed.
+- [ ] On an iOS version below 17.4, confirm no browser opens, the dialog explains
+      that iOS 17.4 or later is needed, and provider and passkey sign-in turn off.
 - [ ] Confirm the app returns to the foreground and the WebView shows a signed-in
       session without a further prompt.
 - [ ] Confirm the session survives a WebView reload.
@@ -59,15 +67,15 @@ adapter are composed. They are blocked in the current production composition.
 ### Hostile callbacks
 
 Deliver these with `xcrun simctl openurl` / `adb shell am start` while an attempt
-is in flight. Use the compiled scheme for the build. Each invalid callback must fail without
+is in flight. Use the compiled origin for the build. Each invalid callback must fail without
 establishing a session. Record whether the browser adapter ignores it or returns
 a clean failure; the session helper itself returns `failed` for a mismatched URL.
 
-- [ ] `openmapx://auth/callback` with a different `state`.
-- [ ] `openmapx://auth/callback` with no `state`.
-- [ ] `openmapx://auth/other?code=…&state=…`.
-- [ ] `openmapx://elsewhere/callback?code=…&state=…`.
-- [ ] `https://openmapx.com/auth/callback?code=…&state=…`.
+- [ ] `https://openmapx.com/mobile-auth/callback` with a different `state`.
+- [ ] `https://openmapx.com/mobile-auth/callback` with no `state`.
+- [ ] `https://openmapx.com/mobile-auth/other?code=…&state=…`.
+- [ ] `https://openmapx.com.example.test/mobile-auth/callback?code=…&state=…`.
+- [ ] `openmapx://auth/callback?code=…&state=…`, the former custom-scheme callback.
 - [ ] The same valid callback delivered twice.
 
 ### Replay and expiry
