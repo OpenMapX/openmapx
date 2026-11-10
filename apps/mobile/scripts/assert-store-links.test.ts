@@ -1,7 +1,7 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { renderAppLinks, settingsForIdentities } from "./renderAppLinks";
 import {
   ALLOWED_APPLINK_PATHS,
+  checkAll,
   checkAppleAssociation,
   checkAssetLinks,
   checkIdentities,
@@ -273,21 +273,59 @@ describe("checkAssetLinks", () => {
   });
 });
 
-describe("the committed association files", () => {
-  const base = resolve(import.meta.dirname, "../../../services/well-known/config/html");
-  const identities = JSON.parse(
-    readFileSync(resolve(import.meta.dirname, "../release/public-signing-identities.json"), "utf8"),
-  ) as PublicSigningIdentities;
+describe("the well-known service's rendered association files", () => {
+  const settings = settingsForIdentities(REAL, { apple: true, google: true });
 
-  it("declare the approved paths and nothing else", () => {
-    const raw = readFileSync(resolve(base, "apple-app-site-association"), "utf8");
+  it("claim nothing when no app identity is configured", () => {
+    const files = renderAppLinks({});
 
-    expect(errors(checkAppleAssociation(raw, identities))).toEqual([]);
+    expect(JSON.parse(files.apple)).toEqual({
+      applinks: { details: [] },
+      webcredentials: { apps: [] },
+    });
+    expect(JSON.parse(files.assetlinks)).toEqual([]);
   });
 
-  it("name this package and no other", () => {
-    const raw = readFileSync(resolve(base, "assetlinks.json"), "utf8");
+  it("match the configured identities and claim the sign-in callback", () => {
+    const files = renderAppLinks(settings);
 
-    expect(errors(checkAssetLinks(raw, identities))).toEqual([]);
+    expect(checkAll(REAL, files)).toEqual([]);
+    expect(files.apple).toContain('"/mobile-auth/callback"');
+  });
+
+  it("list every configured bundle and package, such as a development build's", () => {
+    const files = renderAppLinks({
+      ...settings,
+      MOBILE_IOS_BUNDLE_IDS: "org.openmapx.app, org.openmapx.app.dev",
+      MOBILE_ANDROID_PACKAGES: "org.openmapx.app,org.openmapx.app.dev",
+    });
+
+    expect(JSON.parse(files.apple).webcredentials.apps).toEqual([
+      "ABCDE12345.org.openmapx.app",
+      "ABCDE12345.org.openmapx.app.dev",
+    ]);
+    expect(
+      JSON.parse(files.assetlinks).map(
+        (statement: { target: { package_name: string } }) => statement.target.package_name,
+      ),
+    ).toEqual(["org.openmapx.app", "org.openmapx.app.dev"]);
+  });
+
+  it.each([
+    [{ MOBILE_APPLE_TEAM_ID: "ABCDE12345" }, "MOBILE_IOS_BUNDLE_IDS"],
+    [{ MOBILE_IOS_BUNDLE_IDS: "org.openmapx.app" }, "MOBILE_APPLE_TEAM_ID"],
+    [
+      { MOBILE_APPLE_TEAM_ID: "abcde12345", MOBILE_IOS_BUNDLE_IDS: "org.openmapx.app" },
+      "ten uppercase",
+    ],
+    [{ MOBILE_APPLE_TEAM_ID: "ABCDE12345", MOBILE_IOS_BUNDLE_IDS: "app" }, "bundle identifier"],
+    [{ MOBILE_ANDROID_PACKAGES: "org.openmapx.app" }, "MOBILE_ANDROID_CERT_SHA256"],
+    [
+      { MOBILE_ANDROID_PACKAGES: "org.openmapx.app", MOBILE_ANDROID_CERT_SHA256: "AA:BB" },
+      "fingerprints",
+    ],
+    [{ ...settings, MOBILE_IOS_BUNDLE_IDS: 'org.openmapx.app","x' }, "bundle identifier"],
+  ])("refuse a partial or malformed configuration %#", (input, message) => {
+    expect(() => renderAppLinks(input)).toThrow(message);
   });
 });

@@ -230,9 +230,13 @@ build's application identifier and signing identity (see
 [Store operations](./mobile-store-operations.md#verified-links)). On iOS it
 requires 17.4 or later, where `ASWebAuthenticationSession` can match an HTTPS
 callback; on earlier versions the shell reports the handoff as failed instead of
-falling back to a custom scheme. A development build against a plain-HTTP
-origin, or without an Apple Team ID, cannot complete the handoff: the browser
-then shows the callback page, which asks the user to return to the app.
+falling back to a custom scheme. The deployment's well-known service lists the
+allowed app identifiers; development builds use `org.openmapx.app.dev` and their
+own signing certificate, so they complete the handoff only when the operator
+also lists that identifier (and, on Android, its fingerprint). A development
+build against a plain-HTTP origin, or without an Apple Team ID, cannot complete
+the handoff at all. When the OS does not take the link over, the browser shows
+the callback page, which asks the user to return to the app.
 
 ### The handoff, and its threat model
 

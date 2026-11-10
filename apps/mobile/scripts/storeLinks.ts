@@ -52,7 +52,7 @@ const PLACEHOLDER_MARKERS = ["TEAM_ID", "REPLACE_", "EXAMPLE", "XXXX", "CHANGEME
 const SHA256_FINGERPRINT = /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/i;
 const BARE_SHA256 = /^[0-9a-f]{64}$/i;
 
-function isPlaceholder(value: string): boolean {
+export function isPlaceholder(value: string): boolean {
   return PLACEHOLDER_MARKERS.some((marker) => value.toUpperCase().includes(marker));
 }
 

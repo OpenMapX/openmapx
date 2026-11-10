@@ -26,7 +26,9 @@ review status. Resolve the composition and build-input blockers in
 
 `public-signing-identities.json` has `status: "pending-enrollment"`, `TEAM_ID` and
 `REPLACE_WITH_SHA256_FINGERPRINT`. Replace them only with verified public values.
-Its account-status note is not an external account inventory.
+Its account-status note is not an external account inventory. These records feed
+the release checks; a deployment serves its associations from the well-known
+service settings described under [Verified links](#verified-links).
 
 `assert-store-links.mts` reports placeholders as **pending and exits 0** when
 there are no structural errors. Read the output: a successful exit does not
@@ -35,16 +37,43 @@ pending result into a failure.
 
 ## Verified links
 
-The committed association files live in
-`services/well-known/config/html/`. The Apple file claims `/`,
-`/navigation/active`, `/mobile-auth` and `/mobile-auth/callback`, plus
-`webcredentials`. The Android file names `org.openmapx.app` and its app-signing
-certificate fingerprint, and the app declares a verified intent filter for
-`/mobile-auth/callback` on its web host. The system-browser sign-in returns
-through that callback, so sign-in in the app works only once both files carry
-real identities and the OS has verified them; the validator rejects an Apple
-file that omits the callback. Keep those files and the recorded public
-identities consistent.
+The well-known service renders `/.well-known/apple-app-site-association` and
+`/.well-known/assetlinks.json` when its container starts, from four service
+settings. Nothing is committed with real or placeholder identities: with no
+setting, both files are valid and claim no app, so no link opens an app and the
+in-app system-browser sign-in cannot complete.
+
+| Setting                      | Value                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| `MOBILE_APPLE_TEAM_ID`       | The ten-character Apple Team ID that signs the iOS app                   |
+| `MOBILE_IOS_BUNDLE_IDS`      | Comma-separated bundle identifiers, for example `org.openmapx.app`       |
+| `MOBILE_ANDROID_PACKAGES`    | Comma-separated Android application ids, for example `org.openmapx.app`  |
+| `MOBILE_ANDROID_CERT_SHA256` | Comma-separated SHA-256 signing-certificate fingerprints, `AA:BB:…` form |
+
+Set them in the admin panel's form for **Well-Known Files**, or as
+`SERVICE_WELL_KNOWN_<SETTING>` in `infra/docker/.env` (for example
+`SERVICE_WELL_KNOWN_MOBILE_APPLE_TEAM_ID`), then render and apply the service.
+Set each platform's two settings together. A platform that is only half
+configured, or a malformed value, stops the container with a message naming
+the setting, rather than serving a file that never verifies.
+
+The identifiers must be the ones the app was built with. The build takes them
+from its own configuration (`apps/mobile/config/mobileConfig.ts`):
+`OPENMAPX_MOBILE_APP_ID` (default `org.openmapx.app`) and
+`OPENMAPX_APPLE_TEAM_ID`. Release builds use the application id unchanged;
+**development builds append `.dev`** (`org.openmapx.app.dev`) and are signed
+with a different certificate. A development build therefore cannot complete the
+in-app sign-in unless the operator also lists its identifier, and for Android
+its signing fingerprint, for example
+`MOBILE_IOS_BUNDLE_IDS=org.openmapx.app,org.openmapx.app.dev`. The development
+build also needs an HTTPS web origin, and on iOS an Apple Team ID, for its
+associated domain to exist.
+
+The Apple file claims `/`, `/navigation/active`, `/mobile-auth` and
+`/mobile-auth/callback` for every listed bundle, plus `webcredentials`. The
+Android file grants every listed package `handle_all_urls` and
+`get_login_creds` for the listed fingerprints, and the app declares a verified
+intent filter for `/mobile-auth/callback` on its web host.
 
 ### The fingerprint that catches people out
 
@@ -58,13 +87,16 @@ validator rejects matching upload/app-signing values when both are supplied.
 Run from the repository root:
 
 ```bash
-# Inspect committed files without contacting production.
-pnpm -C apps/mobile exec tsx scripts/assert-store-links.mts \
-  --local ../../services/well-known/config/html
+# Render the files with the service's script from the recorded public
+# identities, without contacting production. release:prepare runs this.
+pnpm -C apps/mobile exec tsx scripts/assert-store-links.mts --render
 
 # After deploying real identities, inspect the HTTPS responses.
 pnpm -C apps/mobile exec tsx scripts/assert-store-links.mts
 ```
+
+`--local <dir>` checks files from a directory instead, for example ones copied
+out of the running container from `/var/lib/openmapx/app-links/`.
 
 The network form rejects redirects, non-success responses and content types that
 do not contain `application/json`. It then checks content against the recorded

@@ -2,7 +2,7 @@
   "id": "well-known",
   "name": "Well-Known Files",
   "version": "1.0.0",
-  "description": "nginx serving /.well-known/ for passkey RP and mobile app linking.",
+  "description": "nginx serving the mobile app association files under /.well-known/, rendered from the operator's app identities.",
   "license": "BSD-2-Clause",
   "quality": "built-in",
   "subjectData": {
@@ -16,13 +16,16 @@
     "tag": "1.31.8-alpine",
     "digest": "sha256:785835ea65db4bba6f021acc0f3be91b0fef76a53fe41f8588c6698d2aed0606",
     "expose": [80],
+    "entrypoint": ["/bin/sh", "/opt/openmapx/well-known/app-links.sh"],
+    "command": ["/docker-entrypoint.sh", "nginx", "-g", "daemon off;"],
     "memory": "32m",
     "restart": "unless-stopped"
   },
   "bindMounts": [
     {
-      "source": "config/html",
-      "target": "/usr/share/nginx/html/.well-known"
+      "source": "config/app-links.sh",
+      "target": "/opt/openmapx/well-known/app-links.sh",
+      "readOnly": true
     },
     {
       "source": "config/nginx.conf",
@@ -41,6 +44,34 @@
   "configSchema": {
     "type": "object",
     "properties": {
+      "MOBILE_APPLE_TEAM_ID": {
+        "type": "string",
+        "title": "Apple Team ID",
+        "description": "Ten-character Team ID that signs the iOS app. Set it together with the iOS bundle identifiers; leave both empty to claim no iOS app.",
+        "pattern": "^[A-Z0-9]*$",
+        "maxLength": 10
+      },
+      "MOBILE_IOS_BUNDLE_IDS": {
+        "type": "string",
+        "title": "iOS bundle identifiers",
+        "description": "Comma-separated bundle identifiers allowed to open this site's links and complete the in-app sign-in, for example org.openmapx.app. Add the development build's identifier (with its .dev suffix) to test with it.",
+        "pattern": "^[A-Za-z0-9., ]*$",
+        "maxLength": 1024
+      },
+      "MOBILE_ANDROID_PACKAGES": {
+        "type": "string",
+        "title": "Android application ids",
+        "description": "Comma-separated application ids allowed to open this site's links and complete the in-app sign-in. Set them together with the certificate fingerprints; leave both empty to claim no Android app.",
+        "pattern": "^[A-Za-z0-9., ]*$",
+        "maxLength": 1024
+      },
+      "MOBILE_ANDROID_CERT_SHA256": {
+        "type": "string",
+        "title": "Android signing certificate SHA-256",
+        "description": "Comma-separated SHA-256 fingerprints (AA:BB:\u2026 form) of the certificates the installed app is signed with. For Play distribution, use the Play app-signing certificate, not the upload key.",
+        "pattern": "^[A-Fa-f0-9:, ]*$",
+        "maxLength": 2048
+      },
       "OPENMAPX_MEMORY_MIB": {
         "type": "integer",
         "title": "Container memory limit (MiB)",
