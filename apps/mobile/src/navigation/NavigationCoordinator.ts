@@ -399,7 +399,11 @@ export class NavigationCoordinator {
 
     const existing = await repository.loadActive(now);
     if (existing && !this.isTerminal(existing) && !isMobileSessionExpired(existing, now)) {
-      return errorResponse("session-active");
+      if (existing.status !== "preparing") return errorResponse("session-active");
+      // A preparation that was never started holds no location, alerts or
+      // guidance, and the page that made it may have reloaded and lost it. The
+      // latest intent wins: it ends here, and a late start for it is refused.
+      await this.endSession(existing, "stopped", now, "command");
     }
 
     const prepared = processor.prepare(command.payload.startPackage as never, {

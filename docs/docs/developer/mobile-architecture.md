@@ -176,7 +176,12 @@ notification grant through the same port.
 - **Session end.** Every end goes through one coordinator method: End or
   arrival completion from the page, End on the trip card or the recovery
   screen, a car trip replacing the current one, a refused permission or a
-  driver that could not start, and expiry. It removes the session row, runs
+  driver that could not start, and expiry. A new `session.prepare` also ends
+  a preparation that was never started, because the page that made it may
+  have reloaded; the latest intent wins, and a late start for the old one is
+  refused with `revision-conflict`. Such an end sends the page no notice,
+  since nothing was guided. A running trip still refuses a new prepare with
+  `session-active`. Every end removes the session row, runs
   the device effects (location, audio, alerts, surface, a final snapshot) and
   then notifies each consumer once. The page hears the end as the reply to its
   own command, or, when native ended the trip, as one unsolicited

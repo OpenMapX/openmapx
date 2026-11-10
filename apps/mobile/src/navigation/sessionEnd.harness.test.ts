@@ -308,6 +308,35 @@ describe("a trip between prepare and start", () => {
     expect(harness.sessionEnds).toEqual([]);
   });
 
+  it("lets a reloaded page prepare and start a new trip over the one it abandoned", async () => {
+    harness = await startForegroundHarness();
+    const abandoned = await prepare();
+
+    // The page reloads and prepares again, without knowing the earlier trip.
+    const replacement = await prepare();
+    const started = await harness.command("session.start", {}, replacement);
+
+    expect(replacement.sessionId).not.toBe(abandoned.sessionId);
+    expect(started?.type).toBe("session.started");
+    expect((await harness.session())?.sessionId).toBe(replacement.sessionId);
+    // The abandoned page's own start cannot reach the new trip.
+    const late = await harness.command("session.start", {}, abandoned);
+    expect(late).toMatchObject({ type: "native.error", payload: { code: "revision-conflict" } });
+    // Nothing was guided, so the replaced preparation ends without a notice to the page.
+    expect(stoppedMessages()).toEqual([]);
+  });
+
+  it("still refuses a new trip while one is running", async () => {
+    harness = await startForegroundHarness();
+    await harness.start(groundStartPackage());
+
+    const refused = await harness.command("session.prepare", {
+      startPackage: groundStartPackage(),
+    });
+
+    expect(refused).toMatchObject({ type: "native.error", payload: { code: "session-active" } });
+  });
+
   it("ends a preparation that was never started once its grace is over", async () => {
     harness = await startForegroundHarness();
     const { sessionId } = await prepare();
