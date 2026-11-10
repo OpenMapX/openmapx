@@ -48,7 +48,7 @@ export const EXCEPTIONS: Readonly<Record<string, CacheWriteException>> = {
   "integrations/transit/index.ts": {
     count: 6,
     reason:
-      "Converted with the transit correctness changes on their own branch; lower this count as its writes move to captureCacheWriter.",
+      "Two writes store trip refresh-token session state, not upstream results. Four cache upstream transit responses (stop transfers, route, route stops, vehicle journey) and are still to move to captureCacheWriter; lower the count as each moves.",
   },
   "integrations/transit-motis/rentals-capability.ts": {
     count: 1,
