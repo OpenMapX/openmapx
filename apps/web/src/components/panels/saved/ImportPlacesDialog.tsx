@@ -52,7 +52,7 @@ interface ImportOutcome {
   skippedDuplicates: number;
   failed: boolean;
   /** Set when the server refused the list for an account limit. */
-  limit?: Exclude<SavedWriteError, { key: "saveFailed" }>;
+  limit?: Extract<SavedWriteError, { key: "listLimitReached" | "placeLimitReached" }>;
 }
 /** Throttled chunks wait for Retry-After and resume; past this many waits the list fails. */
 const IMPORT_THROTTLE_RETRIES = 10;
@@ -236,8 +236,8 @@ export function ImportPlacesDialog({
       } catch (error) {
         outcome.failed = true;
         const reason = savedWriteError(error);
-        if (reason.key !== "saveFailed") outcome.limit = reason;
-        if (reason.key === "placeLimitReached") placeLimit = reason;
+        if (reason.key === "listLimitReached") outcome.limit = reason;
+        if (reason.key === "placeLimitReached") outcome.limit = placeLimit = reason;
       }
       results.push(outcome);
     }

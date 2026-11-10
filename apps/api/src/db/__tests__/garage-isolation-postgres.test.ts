@@ -228,6 +228,43 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect((await bState()).vehicles).toHaveLength(1);
     });
 
+    it("answers 409 for a duplicate vehicle name and leaves the garage unchanged", async () => {
+      const duplicate = await request("POST", "/vehicles", {
+        name: "Car a",
+        kind: "car",
+        powertrain: "petrol",
+        isDefault: true,
+      });
+      expect(duplicate.statusCode).toBe(409);
+      expect(duplicate.json()).toMatchObject({ code: "VEHICLE_NAME_TAKEN" });
+      // The failed create rolled back its default reassignment.
+      const [vehicle] = await fixture.db
+        .select()
+        .from(personalVehicle)
+        .where(eq(personalVehicle.id, "v-a"));
+      expect(vehicle.isDefault).toBe(true);
+      const other = await request("POST", "/vehicles", {
+        name: "Second car",
+        kind: "car",
+        powertrain: "petrol",
+      });
+      expect(other.statusCode).toBe(200);
+      const renamed = await request("PATCH", `/vehicles/${other.json().id}`, { name: "Car a" });
+      expect(renamed.statusCode).toBe(409);
+      expect(renamed.json()).toMatchObject({ code: "VEHICLE_NAME_TAKEN" });
+      // Another account may use the same name.
+      expect(
+        (
+          await request(
+            "POST",
+            "/vehicles",
+            { name: "Second car", kind: "car", powertrain: "petrol" },
+            "b",
+          )
+        ).statusCode,
+      ).toBe(200);
+    });
+
     it("serializes concurrent creates at the last garage slot", async () => {
       await fixture.db.insert(personalVehicle).values(
         Array.from({ length: 10 }, (_, i) => ({

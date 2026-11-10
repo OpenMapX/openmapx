@@ -169,6 +169,26 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         vi.unstubAllGlobals();
       }
     });
+    it("answers 409 for duplicate list names on create and rename", async () => {
+      const create = (name: string) =>
+        app.inject({ method: "POST", url: "/api/saved/lists", payload: { name } });
+      const first = await create("Duplicate fixture");
+      expect(first.statusCode).toBe(200);
+      const duplicate = await create("Duplicate fixture");
+      expect(duplicate.statusCode).toBe(409);
+      expect(duplicate.json()).toEqual({
+        error: "A list with this name already exists",
+        code: "SAVED_LIST_NAME_TAKEN",
+      });
+      const second = await create("Duplicate fixture 2");
+      const renamed = await app.inject({
+        method: "PATCH",
+        url: `/api/saved/lists/${second.json().id}`,
+        payload: { name: "Duplicate fixture" },
+      });
+      expect(renamed.statusCode).toBe(409);
+      expect(renamed.json()).toMatchObject({ code: "SAVED_LIST_NAME_TAKEN" });
+    });
     it("admits only one of two concurrent list creations at the last free slot", async () => {
       await fixture.sql`DELETE FROM saved_list WHERE user_id = 'import-user'`;
       await fixture.sql`INSERT INTO saved_list (id, user_id, name) SELECT 'cap-' || n, 'import-user', 'Cap ' || n FROM generate_series(1, 499) AS n`;

@@ -90,6 +90,13 @@ export const garageUpdateParkedSchema = garageSaveParkedSchema
   .partial();
 export const garageIdParamsSchema = z.object({ id });
 export const garageOkSchema = z.strictObject({ ok: z.literal(true) });
+/** Machine-readable reasons a vehicle write conflicts with the stored garage. */
+export const GARAGE_CONFLICT_CODES = ["VEHICLE_LIMIT", "VEHICLE_NAME_TAKEN"] as const;
+export type GarageConflictCode = (typeof GARAGE_CONFLICT_CODES)[number];
+export const garageConflictSchema = z.strictObject({
+  error: z.string(),
+  code: z.enum(GARAGE_CONFLICT_CODES),
+});
 export const garageVehiclesSchema = z.strictObject({ vehicles: z.array(garageVehicleSchema) });
 export const garageParkingSchema = z.strictObject({ parked: z.array(garageParkedSchema) });
 export const garageNoStoreHeadersSchema = z.object({ "cache-control": z.literal("no-store") });

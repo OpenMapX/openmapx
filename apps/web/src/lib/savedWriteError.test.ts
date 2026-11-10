@@ -10,6 +10,11 @@ describe("savedWriteError", () => {
     expect(
       savedWriteError(new ApiClientError(409, { error: "limit", code: "SAVED_PLACE_LIMIT" }, null)),
     ).toEqual({ key: "placeLimitReached", values: { count: 50_000 } });
+    expect(
+      savedWriteError(
+        new ApiClientError(409, { error: "taken", code: "SAVED_LIST_NAME_TAKEN" }, null),
+      ),
+    ).toEqual({ key: "listNameTaken" });
   });
 
   it("falls back to the generic message for anything undeclared", () => {

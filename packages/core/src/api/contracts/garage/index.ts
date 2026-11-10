@@ -24,6 +24,8 @@ const common = {
   ),
 };
 const ok = { ...common, 200: json(s.garageOkSchema, s.garageNoStoreHeadersSchema) };
+/** Vehicle writes can conflict with the garage's limit or an existing vehicle name. */
+const conflict = { 409: json(s.garageConflictSchema) };
 export const garageOperations = {
   listGarageVehicles: {
     method: "GET",
@@ -36,14 +38,18 @@ export const garageOperations = {
     path: "/api/vehicles",
     auth: "session",
     request: { body: s.garageCreateVehicleSchema },
-    responses: { ...common, 200: json(s.garageVehicleCreatedSchema, s.garageNoStoreHeadersSchema) },
+    responses: {
+      ...common,
+      ...conflict,
+      200: json(s.garageVehicleCreatedSchema, s.garageNoStoreHeadersSchema),
+    },
   },
   updateGarageVehicle: {
     method: "PATCH",
     path: "/api/vehicles/:id",
     auth: "session",
     request: { params: s.garageIdParamsSchema, body: s.garageUpdateVehicleSchema },
-    responses: ok,
+    responses: { ...ok, ...conflict },
   },
   deleteGarageVehicle: {
     method: "DELETE",

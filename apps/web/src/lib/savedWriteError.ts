@@ -9,6 +9,7 @@ import { savedConflictSchema } from "@openmapx/core/saved-places-sdk";
 export type SavedWriteError =
   | { key: "listLimitReached"; values: { count: number } }
   | { key: "placeLimitReached"; values: { count: number } }
+  | { key: "listNameTaken"; values?: undefined }
   | { key: "saveFailed"; values?: undefined };
 
 /** Reads only the declared conflict codes; any other failure gets the generic message. */
@@ -19,6 +20,8 @@ export function savedWriteError(error: unknown): SavedWriteError {
       return { key: "listLimitReached", values: { count: MAX_SAVED_LISTS_PER_USER } };
     if (conflict.success && conflict.data.code === "SAVED_PLACE_LIMIT")
       return { key: "placeLimitReached", values: { count: MAX_SAVED_PLACES_PER_USER } };
+    if (conflict.success && conflict.data.code === "SAVED_LIST_NAME_TAKEN")
+      return { key: "listNameTaken" };
   }
   return { key: "saveFailed" };
 }

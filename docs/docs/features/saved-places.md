@@ -23,6 +23,8 @@ The Saved panel has two tabs:
   **Work**. Labeled places are set from the **Add a label** row on a place's
   Overview tab, and they surface near the top of search.
 
+List names are unique within an account; creating or renaming a list to a name
+already in use is refused with a message, and a new unnamed list is numbered.
 An account can hold up to 500 lists, counting the built-in ones, and up to
 50,000 saved places across all of its lists. When a limit is reached, the app
 says so and saves nothing further until lists or places are removed.

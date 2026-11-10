@@ -63,7 +63,23 @@ describe("saved list name ownership", () => {
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "Trip" } });
     fireEvent.blur(input);
-    expect(state.update).toHaveBeenCalledWith({ id: "list-1", name: "Trip" });
+    expect(state.update).toHaveBeenCalledWith({ id: "list-1", name: "Trip" }, expect.any(Object));
+  });
+
+  it("explains a rename that repeats another list's name", async () => {
+    const { ApiClientError } = await import("@openmapx/core");
+    renderDetail();
+    const input = screen.getByRole("textbox");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "Taken" } });
+    fireEvent.blur(input);
+    const options = state.update.mock.calls[0][1] as { onError: (error: unknown) => void };
+    act(() =>
+      options.onError(
+        new ApiClientError(409, { error: "taken", code: "SAVED_LIST_NAME_TAKEN" }, null),
+      ),
+    );
+    expect(await screen.findByText(en.saved.listNameTaken)).toBeInTheDocument();
   });
 
   it.each(["$favorites", "$wantToGo", "$starredPlaces"])(

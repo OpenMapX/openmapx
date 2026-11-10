@@ -20,7 +20,9 @@ import {
 import { and, eq, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db/index";
+import { SAVED_LIST_NAME_UNIQUE } from "../db/saved-schema";
 import { labeledPlace, savedList, savedPlace, user } from "../db/schema";
+import { isUniqueViolation } from "../db/unique-violation";
 import { savedImportLimit } from "../utils/rate-limit";
 import { getUserId, requireAuthHook } from "../utils/require-auth";
 import { declareRouteAuth } from "../utils/route-auth";
@@ -34,20 +36,27 @@ const DEFAULT_LISTS: { name: string; icon: string; sortOrder: number }[] = [
 
 type SavedTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-const LIMIT_ERRORS: Record<SavedConflictCode, string> = {
+const CONFLICT_ERRORS: Record<SavedConflictCode, string> = {
   SAVED_LIST_LIMIT: `Accounts can have at most ${MAX_SAVED_LISTS_PER_USER} saved lists`,
   SAVED_PLACE_LIMIT: `Accounts can save at most ${MAX_SAVED_PLACES_PER_USER} places`,
+  SAVED_LIST_NAME_TAKEN: "A list with this name already exists",
 };
 
 /** Thrown inside a transaction so nothing it already wrote is kept. */
 class SavedLimitError extends Error {
   constructor(readonly code: SavedConflictCode) {
-    super(LIMIT_ERRORS[code]);
+    super(CONFLICT_ERRORS[code]);
   }
 }
 
-function limitBody(code: SavedConflictCode) {
-  return { error: LIMIT_ERRORS[code], code };
+function conflictBody(code: SavedConflictCode) {
+  return { error: CONFLICT_ERRORS[code], code };
+}
+
+/** A failed write has already rolled back; only a repeated list name becomes a 409. */
+function rethrowUnlessNameTaken(error: unknown): "name-taken" {
+  if (isUniqueViolation(error, SAVED_LIST_NAME_UNIQUE)) return "name-taken";
+  throw error;
 }
 
 /**
@@ -137,21 +146,25 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
 
     const id = crypto.randomUUID();
     const now = new Date();
-    const created = await db.transaction(async (tx) => {
-      await lockSavedQuota(tx, userId);
-      if ((await countSavedLists(tx, userId)) >= MAX_SAVED_LISTS_PER_USER) return false;
-      await tx.insert(savedList).values({
-        id,
-        userId,
-        name: body.name,
-        icon: body.icon ?? null,
-        isPrivate: body.isPrivate ?? true,
-        createdAt: now,
-        updatedAt: now,
-      });
-      return true;
-    });
-    if (!created) return reply.status(409).send(limitBody("SAVED_LIST_LIMIT"));
+    const created = await db
+      .transaction(async (tx) => {
+        await lockSavedQuota(tx, userId);
+        if ((await countSavedLists(tx, userId)) >= MAX_SAVED_LISTS_PER_USER) return false;
+        await tx.insert(savedList).values({
+          id,
+          userId,
+          name: body.name,
+          icon: body.icon ?? null,
+          isPrivate: body.isPrivate ?? true,
+          createdAt: now,
+          updatedAt: now,
+        });
+        return true;
+      })
+      .catch(rethrowUnlessNameTaken);
+    if (created === "name-taken")
+      return reply.status(409).send(conflictBody("SAVED_LIST_NAME_TAKEN"));
+    if (!created) return reply.status(409).send(conflictBody("SAVED_LIST_LIMIT"));
 
     return { id, name: body.name, icon: body.icon ?? null, isPrivate: body.isPrivate ?? true };
   });
@@ -284,7 +297,8 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
           if (error instanceof SavedLimitError) return error;
           throw error;
         });
-      if (result instanceof SavedLimitError) return reply.status(409).send(limitBody(result.code));
+      if (result instanceof SavedLimitError)
+        return reply.status(409).send(conflictBody(result.code));
       if (!result) return reply.status(404).send({ error: "List not found" });
       return result;
     },
@@ -324,11 +338,17 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
       return reply.status(400).send({ error: "No fields to update" });
     }
 
-    const result = await db
-      .update(savedList)
-      .set(updates)
-      .where(and(eq(savedList.id, id), eq(savedList.userId, userId)))
-      .returning({ id: savedList.id });
+    let result: { id: string }[];
+    try {
+      result = await db
+        .update(savedList)
+        .set(updates)
+        .where(and(eq(savedList.id, id), eq(savedList.userId, userId)))
+        .returning({ id: savedList.id });
+    } catch (error) {
+      rethrowUnlessNameTaken(error);
+      return reply.status(409).send(conflictBody("SAVED_LIST_NAME_TAKEN"));
+    }
 
     if (result.length === 0) {
       return reply.status(404).send({ error: "List not found" });
@@ -477,7 +497,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
       return "created" as const;
     });
     if (outcome === "missing") return reply.status(404).send({ error: "List not found" });
-    if (outcome === "limit") return reply.status(409).send(limitBody("SAVED_PLACE_LIMIT"));
+    if (outcome === "limit") return reply.status(409).send(conflictBody("SAVED_PLACE_LIMIT"));
 
     return {
       id,

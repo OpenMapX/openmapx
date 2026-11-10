@@ -52,7 +52,7 @@ export const savedOperations = {
     path: "/api/saved/lists/:id",
     auth: "session",
     request: { params: s.savedIdParamsSchema, body: s.savedUpdateListSchema },
-    responses: ok,
+    responses: { ...ok, ...conflict },
   },
   deleteSavedList: {
     method: "DELETE",

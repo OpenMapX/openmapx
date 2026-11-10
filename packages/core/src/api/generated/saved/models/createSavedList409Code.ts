@@ -7,4 +7,5 @@ export type CreateSavedList409Code =
 export const CreateSavedList409Code = {
   SAVED_LIST_LIMIT: "SAVED_LIST_LIMIT",
   SAVED_PLACE_LIMIT: "SAVED_PLACE_LIMIT",
+  SAVED_LIST_NAME_TAKEN: "SAVED_LIST_NAME_TAKEN",
 } as const;

@@ -59,8 +59,13 @@ export function SavedListsTab() {
 
   const handleCreate = () => {
     setCreateError(null);
+    // List names are unique per account, so a second unnamed list gets a number.
+    const taken = new Set(lists?.map((list) => list.name));
+    const base = t("untitledList");
+    let name = base;
+    for (let suffix = 2; taken.has(name); suffix++) name = `${base} (${suffix})`;
     createListMutation.mutate(
-      { name: t("untitledList") },
+      { name },
       {
         onSuccess: (created) => {
           selectList(created.id);

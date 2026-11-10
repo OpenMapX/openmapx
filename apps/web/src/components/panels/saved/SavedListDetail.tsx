@@ -47,6 +47,7 @@ import { BRAND, BRAND_LIGHT } from "@/integration-api/runtime/theme";
 import { exportSavedList } from "@/lib/exportSavedList";
 import { resolveListIcon } from "@/lib/listIcon";
 import { openSavedPlace } from "@/lib/openSavedPlace";
+import { savedWriteError } from "@/lib/savedWriteError";
 import { ImportPlacesPicker } from "./ImportPlacesPicker";
 import { SavedListRows } from "./SavedListRows";
 import { ShareListDialog } from "./ShareListDialog";
@@ -102,7 +103,16 @@ export function SavedListDetail() {
     const trimmed = nameValue.trim();
     const currentDisplay = resolveListName(list.name);
     if (trimmed && trimmed !== currentDisplay) {
-      updateListMutation.mutate({ id: selectedListId, name: trimmed });
+      updateListMutation.mutate(
+        { id: selectedListId, name: trimmed },
+        {
+          onError: (error) => {
+            const reason = savedWriteError(error);
+            setSnackbarMessage(t(reason.key, reason.values));
+            setSnackbarOpen(true);
+          },
+        },
+      );
     }
     setEditingName(false);
   };

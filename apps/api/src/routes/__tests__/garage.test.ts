@@ -8,8 +8,16 @@ vi.mock("../../utils/require-auth.js", () => ({
   getUserId: vi.fn(() => "user-1"),
 }));
 
-const queue: unknown[][] = [];
-function prime(...results: unknown[][]) {
+const queue: unknown[] = [];
+function nameTaken() {
+  return new Error("Failed query", {
+    cause: Object.assign(new Error("duplicate key value"), {
+      code: "23505",
+      constraint_name: "personalVehicle_userId_name_unq",
+    }),
+  });
+}
+function prime(...results: unknown[]) {
   queue.length = 0;
   queue.push(...results);
 }
@@ -41,7 +49,10 @@ function makeChain(operation: string, lock = false) {
   };
   // biome-ignore lint/suspicious/noThenProperty: drizzle builders are thenable; stub must mirror that.
   chain.then = (onFulfilled: (v: unknown) => unknown, onRejected?: (e: unknown) => unknown) =>
-    Promise.resolve(result).then(onFulfilled, onRejected);
+    (result instanceof Error ? Promise.reject(result) : Promise.resolve(result)).then(
+      onFulfilled,
+      onRejected,
+    );
   return chain;
 }
 
@@ -135,6 +146,40 @@ describe("vehicles", () => {
     prime([{ count: 12 }]);
     const res = await app.inject({ method: "POST", url: "/api/vehicles", payload: VEHICLE_BODY });
     expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({ error: "vehicle limit reached", code: "VEHICLE_LIMIT" });
+  });
+
+  it("answers 409 when a new vehicle repeats an existing name", async () => {
+    prime([{ count: 1 }], nameTaken());
+    const res = await app.inject({ method: "POST", url: "/api/vehicles", payload: VEHICLE_BODY });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({
+      error: "A vehicle with this name already exists",
+      code: "VEHICLE_NAME_TAKEN",
+    });
+  });
+
+  it("answers 409 when a rename repeats another vehicle's name", async () => {
+    prime([vehicleRow], nameTaken());
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/api/vehicles/v1",
+      payload: { name: "Taken", isDefault: false },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ code: "VEHICLE_NAME_TAKEN" });
+  });
+
+  it("keeps other insert failures as server errors", async () => {
+    prime(
+      [{ count: 1 }],
+      Object.assign(new Error("foreign key"), {
+        code: "23503",
+        constraint_name: "personal_vehicle_user_id_user_id_fk",
+      }),
+    );
+    const res = await app.inject({ method: "POST", url: "/api/vehicles", payload: VEHICLE_BODY });
+    expect(res.statusCode).toBe(500);
   });
 
   it("404s PATCH on a vehicle the caller does not own", async () => {

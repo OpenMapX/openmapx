@@ -112,6 +112,7 @@ import type {
   UpdateSavedList401,
   UpdateSavedList403,
   UpdateSavedList404,
+  UpdateSavedList409,
   UpdateSavedList413,
   UpdateSavedList415,
   UpdateSavedList429,
@@ -906,6 +907,11 @@ export type updateSavedListResponse404 = {
   status: 404;
 };
 
+export type updateSavedListResponse409 = {
+  data: UpdateSavedList409;
+  status: 409;
+};
+
 export type updateSavedListResponse413 = {
   data: UpdateSavedList413;
   status: 413;
@@ -934,6 +940,7 @@ export type updateSavedListResponseError = (
   | updateSavedListResponse401
   | updateSavedListResponse403
   | updateSavedListResponse404
+  | updateSavedListResponse409
   | updateSavedListResponse413
   | updateSavedListResponse415
   | updateSavedListResponse429

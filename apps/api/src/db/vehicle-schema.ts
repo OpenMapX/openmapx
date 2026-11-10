@@ -16,6 +16,9 @@ import { user } from "./auth-schema";
  * columns: it is passed around whole by the charge planner and never queried
  * field-wise, so splitting it would declare its shape in a second place.
  */
+/** Unique per account; a write that repeats a vehicle name raises this constraint. */
+export const PERSONAL_VEHICLE_NAME_UNIQUE = "personalVehicle_userId_name_unq";
+
 export const personalVehicle = pgTable(
   "personal_vehicle",
   {
@@ -38,7 +41,7 @@ export const personalVehicle = pgTable(
   },
   (table) => [
     index("personalVehicle_userId_idx").on(table.userId),
-    unique("personalVehicle_userId_name_unq").on(table.userId, table.name),
+    unique(PERSONAL_VEHICLE_NAME_UNIQUE).on(table.userId, table.name),
   ],
 );
 

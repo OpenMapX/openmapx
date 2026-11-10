@@ -54,6 +54,15 @@ vi.mock("../../db/schema.js", () => ({
 
 let app: FastifyInstance;
 
+function uniqueViolation(constraint: string) {
+  return new Error("Failed query", {
+    cause: Object.assign(new Error("duplicate key value"), {
+      code: "23505",
+      constraint_name: constraint,
+    }),
+  });
+}
+
 beforeEach(async () => {
   const { savedRoute } = await import("../saved.js");
   app = await buildTestApp(savedRoute, { prefix: "/api" });
@@ -259,6 +268,70 @@ describe("POST /api/saved/lists", () => {
       payload: { icon: "car" },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  it("answers 409 when the account already has a list with that name", async () => {
+    dbMock.db.insert.mockImplementationOnce(() =>
+      makeQueryChain(Promise.reject(uniqueViolation("savedList_userId_name_unq"))),
+    );
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/saved/lists",
+      payload: { name: "Weekend Trip" },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({
+      error: "A list with this name already exists",
+      code: "SAVED_LIST_NAME_TAKEN",
+    });
+  });
+
+  it("keeps other database failures as server errors", async () => {
+    dbMock.db.insert.mockImplementationOnce(() =>
+      makeQueryChain(Promise.reject(uniqueViolation("saved_list_pkey"))),
+    );
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/saved/lists",
+      payload: { name: "Weekend Trip" },
+    });
+    expect(res.statusCode).toBe(500);
+  });
+});
+
+describe("PATCH /api/saved/lists/:id name conflicts", () => {
+  it("answers 409 when a rename collides with another list", async () => {
+    dbMock.queueSelect([{ name: "Trip" }]);
+    dbMock.db.update.mockImplementationOnce(() =>
+      makeQueryChain(Promise.reject(uniqueViolation("savedList_userId_name_unq"))),
+    );
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/api/saved/lists/list-1",
+      payload: { name: "Taken" },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ code: "SAVED_LIST_NAME_TAKEN" });
+  });
+
+  it("keeps a non-unique update failure as a server error", async () => {
+    dbMock.queueSelect([{ name: "Trip" }]);
+    dbMock.db.update.mockImplementationOnce(() =>
+      makeQueryChain(
+        Promise.reject(
+          Object.assign(new Error("deadlock"), {
+            code: "40P01",
+            constraint_name: "savedList_userId_name_unq",
+          }),
+        ),
+      ),
+    );
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/api/saved/lists/list-1",
+      payload: { name: "Taken" },
+    });
+    expect(res.statusCode).toBe(500);
   });
 });
 

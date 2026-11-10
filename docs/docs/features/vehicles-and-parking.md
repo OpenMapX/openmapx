@@ -10,7 +10,9 @@ OpenMapX can remember a small set of your vehicles and where each one is parked.
 
 ## Vehicles
 
-Settings → Vehicles holds up to 12 vehicles. Each has a name, a type (car,
+Settings → Vehicles holds up to 12 vehicles. Each has a name, unique among your
+vehicles (saving a second vehicle under a name already in use is refused with a
+message), a type (car,
 motorcycle, bicycle) and a powertrain. Electric and plug-in-hybrid vehicles carry
 battery size, consumption, maximum DC/AC power, and connectors. You can seed these from a model in the bundled open-ev-data table and then adjust.
 Petrol, diesel, and hybrid vehicles can record fuel consumption in litres per
