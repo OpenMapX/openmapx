@@ -47,8 +47,8 @@ describe("SystemAuthSession.open", () => {
     const url = new URL(opened[0].url);
     expect(url.origin).toBe("https://openmapx.com");
     expect(url.pathname).toBe("/mobile-auth");
-    // A verified link on the compiled origin: only the app the OS has bound to
-    // that origin receives it, unlike a custom scheme any app can register.
+    // A verified link on the compiled origin, which the OS routes to the app
+    // bound to that origin rather than to any app registering a scheme.
     expect(opened[0].redirect).toBe("https://openmapx.com/mobile-auth/callback");
   });
 

@@ -247,9 +247,12 @@ the callback page, which asks the user to return to the app.
 memory. It opens `/mobile-auth` on the compiled origin with the S256 challenge,
 state and purpose. The callback is `/mobile-auth/callback` on the same compiled
 origin and contains a code and state; the shell accepts it only from that exact
-origin and path. A custom scheme can be registered by any app, including one
-that started the flow with its own verifier and so could redeem the code. The OS
-delivers a verified link only to the app the origin's association files name.
+origin and path. With a verified link, the OS routes the callback to the app the
+origin's association files name, instead of to any app that registered the same
+custom scheme. That guarantee covers routing only. Another app on the device can
+still open `/mobile-auth` in its own browser session with its own PKCE verifier
+and receive its own callback; the consent page, which states the purpose, and
+the user's explicit tap on "Continue to the app" are what stand against that.
 The deep-link parser refuses `/mobile-auth/*`, so the callback never loads in the
 WebView.
 

@@ -10,9 +10,11 @@
  * The app never receives a session. It receives an opaque callback code, which
  * is useless without the PKCE verifier it kept in memory and never wrote down.
  * The code returns on a verified link on the compiled web origin (an Android
- * App Link or iOS Universal Link). The OS hands that link only to the app the
- * origin's association files name. A custom scheme can be registered by any
- * app, including one that started the flow with its own verifier.
+ * App Link or iOS Universal Link), so the OS routes this callback to the app
+ * the origin's association files name rather than to whichever app registered
+ * a scheme. That is a routing guarantee only: it does not stop another app
+ * from opening `/mobile-auth` in its own browser session with its own verifier,
+ * so the consent page and the user's tap remain part of the protection.
  *
  * Everything here is memory-only and single-attempt. There is no persistence, no
  * retry, and no outbox entry — a half-finished sign-in that survived a restart

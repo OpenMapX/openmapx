@@ -23,8 +23,8 @@ import { useEnv } from "@/integration-api/runtime/EnvProvider";
  * be: put the one-time token anywhere in the URL, accept a redirect target from
  * a query parameter, or keep any of it after the redirect. The callback is a
  * fixed path on this page's own origin, which the association files under
- * `/.well-known` bind to the official app, so the OS hands it to that app and
- * no other. Nothing on this page chooses where the user goes next.
+ * `/.well-known` bind to the configured app, so the OS routes the callback to
+ * that app. Nothing on this page chooses where the user goes next.
  */
 
 /** The verified-link path the app waits for. */

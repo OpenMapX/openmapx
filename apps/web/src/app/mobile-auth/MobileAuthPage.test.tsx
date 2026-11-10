@@ -94,8 +94,8 @@ describe("MobileAuthClient", () => {
 
     await waitFor(() => expect(replaced).toHaveLength(1));
     const callback = new URL(replaced[0]);
-    // An App Link or Universal Link on the page's own origin, which the OS hands
-    // only to the app the association files name.
+    // An App Link or Universal Link on the page's own origin, which the OS
+    // routes to the app the association files name.
     expect(callback.origin).toBe("https://openmapx.test");
     expect(callback.pathname).toBe("/mobile-auth/callback");
     expect(callback.searchParams.get("code")).toBe("code-value");

@@ -32,8 +32,8 @@ const associatedDomains = mobile.appleTeamId
 
 /**
  * The system-browser sign-in returns its callback code on this path of the
- * compiled origin. Android hands a verified App Link only to the app that
- * `assetlinks.json` names, so only an HTTPS origin can carry it.
+ * compiled origin. Android routes a verified App Link to the app that
+ * `assetlinks.json` names, and verifies only HTTPS origins.
  */
 const authCallbackFilter = mobile.webOrigin.startsWith("https:")
   ? [
