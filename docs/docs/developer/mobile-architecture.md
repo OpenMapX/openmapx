@@ -149,7 +149,10 @@ start.
   `onSessionEnded` tells the shell, which clears guidance and any recovery
   screen, and keep-awake releases the screen. Guidance starting, or stopping
   at an arrival, is derived from the committed row after each publish and
-  reported once per change. Recovery (`NavigationRecoveryController`) is part
+  reported once per change. When recovery leaves an active session untracked
+  (Resume or permission lost), no publish reports guidance as running until
+  the user resumes or the session ends, so a connectivity change or a late
+  reroute or refresh answer cannot clear that screen. Recovery (`NavigationRecoveryController`) is part
   of the composition. It inspects the session on every visibility change, but
   it ends a session only through the coordinator, between its own steps on
   the shared executor. It ends a session past its lifetime and a preparation

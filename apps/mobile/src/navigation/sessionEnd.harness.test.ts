@@ -2,6 +2,7 @@ import {
   MOBILE_NAVIGATION_SESSION_MAX_AGE_MS,
   TRANSIT_UNDO_WINDOW_MS,
 } from "@openmapx/core/navigation";
+import { CONNECTIVITY_DEBOUNCE_MS } from "../connectivity/ConnectivityDriver";
 import { ARRIVAL_CUE_GRACE_MS } from "./arrival";
 import {
   createFakePhone,
@@ -238,5 +239,42 @@ describe("opening the app inside an arrival's release window", () => {
     expect(harness.phone.location.running).toBe(true);
     await harness.elapse(ARRIVAL_CUE_GRACE_MS);
     expect(harness.phone.location.running).toBe(false);
+  });
+});
+
+describe("a recovery hold on the shell", () => {
+  async function resumeRequiredAfterRestart() {
+    harness = await startForegroundHarness();
+    const { sessionId } = await harness.start(groundStartPackage());
+    await harness.elapse(CONNECTIVITY_DEBOUNCE_MS);
+    // The system stopped location with the process, so the trip needs Resume.
+    harness.phone.location.running = false;
+    harness = await harness.relaunch();
+    await harness.setVisible(true);
+    expect(harness.recoveryEvents.at(-1)).toBe("resume-required");
+    return sessionId;
+  }
+
+  it("keeps the Resume offer through a commit that is not a resume", async () => {
+    await resumeRequiredAfterRestart();
+
+    harness.phone.connectivity.set("offline");
+    await harness.elapse(CONNECTIVITY_DEBOUNCE_MS);
+
+    expect((await harness.session())?.connectivity).toBe("offline");
+    expect(harness.navigatingReports).toEqual([]);
+  });
+
+  it("reports guidance again once the user resumes", async () => {
+    await resumeRequiredAfterRestart();
+
+    expect(await harness.navigation.recovery.resume()).toBe("session-started");
+    harness.phone.connectivity.set("offline");
+    await harness.elapse(CONNECTIVITY_DEBOUNCE_MS);
+    await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
+
+    expect(harness.phone.location.running).toBe(true);
+    // Resume is dispatched by the shell itself; the arrival is the next change.
+    expect(harness.navigatingReports).toEqual([false]);
   });
 });

@@ -308,10 +308,18 @@ export async function createForegroundNavigation(
    * (an arrival) means not. An end is reported separately, once, by
    * `onSessionEnded`; recovery outcomes set it without a report, because the
    * shell dispatches those outcomes itself.
+   *
+   * A recovery outcome that leaves an active session untracked (the stream
+   * was not running, or the location grant was lost) holds it: the shell is
+   * showing Resume or the permission screen, and a commit that has nothing to
+   * do with tracking (a connectivity change, a late reroute or refresh answer)
+   * must not report guidance as running. Only a resume, or the session's end,
+   * lifts the hold.
    */
   let navigating = false;
+  let heldByRecovery = false;
   const reportNavigating = (value: boolean) => {
-    if (value === navigating) return;
+    if (value === navigating || (value && heldByRecovery)) return;
     navigating = value;
     options.onNavigatingChanged(value);
   };
@@ -328,6 +336,7 @@ export async function createForegroundNavigation(
     connectivity,
     onSessionEnded: (ended) => {
       navigating = false;
+      heldByRecovery = false;
       options.onSessionEnded?.(ended);
       void reviewKeepAwake(null);
     },
@@ -479,6 +488,7 @@ export async function createForegroundNavigation(
   const recovered = async (outcome: Promise<RecoveryEvent>) => {
     const event = await outcome;
     navigating = event === "session-started";
+    heldByRecovery = event === "resume-required" || event === "permission-lost";
     return event;
   };
 
