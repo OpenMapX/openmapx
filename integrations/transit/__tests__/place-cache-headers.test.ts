@@ -56,13 +56,17 @@ function provider(id: string, search: TransitProvider["searchStopsByName"]): Tra
   };
 }
 
-function routes(providers: TransitProvider[]): Map<string, Handler> {
+function routes(
+  providers: TransitProvider[],
+  cache: Partial<IntegrationContext["cache"]> = {},
+): Map<string, Handler> {
   const handlers = new Map<string, Handler>();
   const ctx = {
     cache: {
       get: async () => null,
       set: async () => {},
       withCache: (_key: string, _ttl: number, load: () => unknown) => load(),
+      ...cache,
     },
     providerHealth: {
       isHealthy: async () => true,
@@ -141,6 +145,21 @@ describe("transit place response caching", () => {
     await routes([answering(), failing()]).get(route)?.({ query, params: {} }, res);
     expect(res.headers["Cache-Control"]).toBe("no-store");
     expect(res.body).toMatchObject({ freshness: { isPartial: true } });
+  });
+
+  it("still answers a partial lookup when the cache write fence cannot be captured", async () => {
+    const set = vi.fn(async () => {});
+    const captureWriter = vi.fn(async () => {
+      throw new Error("Redis unavailable");
+    });
+    const res = reply();
+    await routes([answering(), failing()], { set, captureWriter }).get("GET /stops/near-place")?.(
+      { query: place, params: {} },
+      res,
+    );
+    expect(captureWriter).toHaveBeenCalled();
+    expect(res.body).toMatchObject({ freshness: { isPartial: true } });
+    expect(set).not.toHaveBeenCalled();
   });
 
   it("sets no cacheable header when the lookup fails", async () => {

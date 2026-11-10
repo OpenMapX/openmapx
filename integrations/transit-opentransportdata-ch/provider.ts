@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import type { BBox } from "@openmapx/core";
-import { type CacheClient, captureTransitContributors } from "@openmapx/integration-framework";
+import {
+  type CacheClient,
+  captureCacheWriter,
+  captureTransitContributors,
+} from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   type ContributingRecord,
@@ -913,7 +917,7 @@ async function getObservedRoute(
   pruneObservedRoutes(runtime);
   const local = runtime.state.observedRoutes.get(routeId);
   if (local) return local;
-  if (!runtime.writer) return null;
+  if (!runtime.cache) return null;
   try {
     const cached = await runtime.cache?.get<SwissObservedRouteEntry>(
       observationCacheKey(runtime, routeId),
@@ -3782,7 +3786,7 @@ export function createOpenTransportDataChProvider(options: {
     async (...args: Args): Promise<Result> => {
       if (state.disposed) throw new Error("Swiss provider retired");
       const epoch = state.epoch;
-      const writer = await options.cache?.captureWriter?.().catch(() => undefined);
+      const writer = options.cache ? await captureCacheWriter(options.cache) : undefined;
       if (state.disposed) throw new Error("Swiss provider retired");
       const result = await operation(
         {

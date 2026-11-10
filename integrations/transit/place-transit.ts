@@ -609,7 +609,7 @@ export function createPlaceTransit(
         // The short-lived entry is best effort, like the shared cache's own reads and writes.
         const recent = await cache.get<CachedStopsEnvelope>(partialKey).catch(() => null);
         if (recent) return recent;
-        const writer = (await cache.captureWriter?.()) ?? cache;
+        const writer = await captureCacheWriter(cache);
         const discovered = await discoverLinkedStops(link.lat, link.lng, link.names);
         if (discovered.freshness.isPartial) {
           await writer.set(partialKey, discovered, TTL.partialDiscovery).catch(() => {});
