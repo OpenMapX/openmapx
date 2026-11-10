@@ -65,6 +65,15 @@ export interface TransitTickOptions {
   itineraryFingerprint: string;
   accuracyCapMeters: number;
 }
+/**
+ * How long a board, alight or continue tap can be undone. Long enough to
+ * notice a mistaken tap on the platform or as the doors close; short enough
+ * that an undo cannot rewind a journey the rider has visibly moved on from.
+ * Native keeps the location stream running this long after an arrival, so an
+ * undo resumes a trip that is still being tracked.
+ */
+export const TRANSIT_UNDO_WINDOW_MS = 120_000;
+
 export const DEFAULT_TRANSIT_TICK_OPTIONS: Omit<TransitTickOptions, "itineraryFingerprint"> = {
   accuracyCapMeters: 100,
 };
@@ -183,7 +192,11 @@ export function processTransitFix(input: TransitTickInput): TransitTickResult {
   if (action) {
     if (action.type === "undo") {
       const previous = state.lastAction;
-      if (previous && previous.legIndex === action.legIndex && nowMs - previous.atMs <= 120000) {
+      if (
+        previous &&
+        previous.legIndex === action.legIndex &&
+        nowMs - previous.atMs <= TRANSIT_UNDO_WINDOW_MS
+      ) {
         Object.assign(state, previous.previous);
         state.lastAction = undefined;
         state.stopTracking = undefined;

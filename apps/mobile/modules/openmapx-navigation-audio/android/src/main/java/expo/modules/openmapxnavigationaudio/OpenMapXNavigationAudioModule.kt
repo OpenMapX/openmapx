@@ -55,8 +55,12 @@ class OpenMapXNavigationAudioModule : Module() {
     when (change) {
       AudioManager.AUDIOFOCUS_LOSS, AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
         textToSpeech?.stop()
-        focusPolicy.didLoseFocus()
-        abandonFocus()
+        // Under the policy's lock, so a cue cannot be granted a new request
+        // between recording the loss and abandoning the request that lost.
+        abandonFocusIf {
+          focusPolicy.didLoseFocus()
+          true
+        }
       }
       AudioManager.AUDIOFOCUS_GAIN -> focusPolicy.didRegainFocus()
       else -> Unit
@@ -96,7 +100,6 @@ class OpenMapXNavigationAudioModule : Module() {
       return finish(SpeakOutcome.FAILED)
     }
     val locale = SpeechLocale.parse(request.locale) ?: return finish(SpeakOutcome.FAILED)
-    if (!focusPolicy.acceptsSpeech) return finish(SpeakOutcome.SKIPPED)
 
     val engine = ensureEngine() ?: return finish(SpeakOutcome.FAILED)
     // `TextToSpeech` binds to the engine asynchronously, and until it has, every
@@ -112,10 +115,8 @@ class OpenMapXNavigationAudioModule : Module() {
     // only once the engine can speak, so a cold engine does not swallow it.
     if (!ledger.record(request.cueId)) return finish(SpeakOutcome.SKIPPED)
 
-    if (focusPolicy.willEnqueue() && !requestFocus()) {
-      focusPolicy.didStop()
-      return finish(SpeakOutcome.FAILED)
-    }
+    // After an interruption this request is what learns whether it has ended.
+    focusPolicy.acquireFor(::requestFocus)?.let { return finish(it) }
 
     engine.language = locale.locale
     engine.setSpeechRate(speechRate(request.rate))
@@ -126,7 +127,7 @@ class OpenMapXNavigationAudioModule : Module() {
     val queued = engine.speak(request.text, TextToSpeech.QUEUE_ADD, params, request.cueId)
     if (queued != TextToSpeech.SUCCESS) {
       speaking = false
-      if (focusPolicy.didFinishUtterance()) abandonFocus()
+      abandonFocusIf { focusPolicy.didFinishUtterance() }
       return finish(SpeakOutcome.FAILED)
     }
     return finish(SpeakOutcome.SPOKEN)
@@ -135,7 +136,7 @@ class OpenMapXNavigationAudioModule : Module() {
   private fun stopSpeaking() {
     textToSpeech?.stop()
     speaking = false
-    if (focusPolicy.didStop()) abandonFocus()
+    abandonFocusIf { focusPolicy.didStop() }
   }
 
   @Synchronized
@@ -156,7 +157,7 @@ class OpenMapXNavigationAudioModule : Module() {
 
         override fun onDone(utteranceId: String?) {
           speaking = false
-          if (focusPolicy.didFinishUtterance()) abandonFocus()
+          abandonFocusIf { focusPolicy.didFinishUtterance() }
         }
 
         @Deprecated("Required by the platform base class", ReplaceWith("onError(utteranceId, -1)"))
@@ -165,7 +166,7 @@ class OpenMapXNavigationAudioModule : Module() {
         override fun onError(utteranceId: String?, errorCode: Int) {
           speaking = false
           lastResultCode = SpeakOutcome.FAILED.code
-          if (focusPolicy.didFinishUtterance()) abandonFocus()
+          abandonFocusIf { focusPolicy.didFinishUtterance() }
         }
       }
     )
@@ -191,6 +192,16 @@ class OpenMapXNavigationAudioModule : Module() {
       .build()
     focusRequest = request
     return audioManager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+  }
+
+  /**
+   * Decides and abandons as one step on the policy's monitor, which is also held
+   * while a cue requests focus (`AudioFocusPolicy.acquireFor`). Otherwise a
+   * decision taken for an old request could abandon a request a cue was just
+   * granted.
+   */
+  private fun abandonFocusIf(decide: () -> Boolean) {
+    synchronized(focusPolicy) { if (decide()) abandonFocus() }
   }
 
   private fun abandonFocus() {

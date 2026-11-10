@@ -1,9 +1,8 @@
 import type { MobileNavigationSession } from "@openmapx/core/navigation";
 import type { LocationPermissionState } from "../location/LocationDriver";
 import type { LocationProfileKind } from "../location/profiles";
-import { locationProfileForMode } from "../navigation/ground/groundSession";
 import type { SerialExecutor } from "../navigation/serialExecutor";
-import { transitProfileForTime } from "../navigation/transit/transitSession";
+import { profileForSession } from "../navigation/sessionProfile";
 import type { AppVisibility } from "./lifecyclePolicy";
 
 export type RecoveryEvent =
@@ -141,13 +140,4 @@ function permissionAllows(
 ): boolean {
   if (session.permissionMode === "background") return permission === "background";
   return permission === "foreground" || permission === "background";
-}
-
-export function profileForSession(
-  session: MobileNavigationSession,
-  nowMs: number,
-): LocationProfileKind {
-  return session.kind === "ground"
-    ? locationProfileForMode(session.payload.startPackage.mode)
-    : transitProfileForTime(session, nowMs);
 }

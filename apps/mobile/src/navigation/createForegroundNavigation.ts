@@ -1,15 +1,22 @@
+import type { MobileNavigationSession } from "@openmapx/core/navigation";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import * as Notifications from "expo-notifications";
 import type { MobileLocale } from "../../config/nativeCopy";
+import type { NavigationAudio } from "../audio/navigationAudio";
 import { getNavigationAudio, isNavigationAudioAvailable } from "../audio/navigationAudioModule";
 import { currentPlatform } from "../background/createHeadlessCoordinator";
 import type { ShellDescription } from "../bridge/nativeBridge";
 import { DiagnosticRepository, type DiagnosticType } from "../diagnostics/DiagnosticRepository";
-import { createLocationDriver } from "../location/createLocationDriver";
+import type { AppActivity } from "../location/backgroundSafeDriver";
+import { appActivity, createLocationDriver } from "../location/createLocationDriver";
 import { readLocationPermissionSnapshot } from "../location/ExpoLocationDriver";
 import type { LocationDriver } from "../location/LocationDriver";
 import { initialProfileFor, type LocationProfileKind, profileFor } from "../location/profiles";
 import { ExpoNotificationScheduler } from "../notifications/ExpoNotificationScheduler";
+import type { NotificationScheduler } from "../notifications/NotificationScheduler";
 import { PermissionController, type PermissionUi } from "../permissions/permissionController";
+import type { PermissionSnapshot } from "../permissions/permissionMachine";
+import { type Database, getDatabase } from "../storage/database";
 import { createCoordinator } from "./createCoordinator";
 import { createRemoteWork } from "./createRemoteWork";
 import { registerForegroundCoordinator } from "./foregroundCoordinator";
@@ -49,32 +56,109 @@ export interface ForegroundNavigationOptions {
   permissionUi: PermissionUi;
   isAppActive(): boolean;
   auxiliary: AuxiliaryCommandHandler;
-  /** Told when guidance starts or ends, for keep-awake and the shell states. */
+  /** Told when guidance starts or ends, for the shell states. */
   onNavigatingChanged(navigating: boolean): void;
-  driver?: LocationDriver;
   registerAsForeground?: boolean;
   startContext?(): NavigationStartContext;
+  /** Replaces device services; production binds the Expo modules. */
+  device?: Partial<ForegroundDevice>;
+}
+
+/**
+ * Everything this composition needs from the phone itself.
+ *
+ * Each member is the narrowest boundary the composition already depended on,
+ * so a test can substitute the device while the coordinator, repository,
+ * processors and effect ports above it stay the shipped ones.
+ */
+export interface ForegroundDevice {
+  /**
+   * The location stream and the permission grants it reports. Production's
+   * driver never restarts a running Android stream while the app is in the
+   * background (`withBackgroundSafeProfiles`); `app` activation re-applies the
+   * session's cadence.
+   */
+  driver: LocationDriver;
+  /** Reads the location grant, including whether it is precise. */
+  readLocationPermission(): Promise<PermissionSnapshot>;
+  audio: Pick<NavigationAudio, "speak" | "stop">;
+  speechAvailable(): boolean;
+  notifications: {
+    scheduler: NotificationScheduler;
+    permission(): Promise<{ granted: boolean; canAskAgain: boolean }>;
+    /** Asks the user; resolves with whether the grant now exists. */
+    request(): Promise<boolean>;
+  };
+  /** Opens the durable store when this is the first composition in the process. */
+  openStorage(): Promise<Database>;
+  /** When the user comes back to the app. */
+  app: AppActivity;
+  /** Which platform's location profiles and permission flow apply. */
+  platform: ReturnType<typeof currentPlatform>;
+  /** The screen's wake lock. Both calls are idempotent. */
+  keepAwake: { activate(): Promise<void>; deactivate(): Promise<void> };
+  clock(): number;
+  /** Runs `callback` once after `delayMs` of clock time; returns a cancel function. */
+  schedule(callback: () => void, delayMs: number): () => void;
+}
+
+/** Scopes this composition's wake lock, so releasing it cannot release anyone else's. */
+const KEEP_AWAKE_TAG = "openmapx-navigation";
+
+function productionDevice(): ForegroundDevice {
+  return {
+    driver: createLocationDriver(),
+    readLocationPermission: readLocationPermissionSnapshot,
+    audio: getNavigationAudio(),
+    speechAvailable: isNavigationAudioAvailable,
+    notifications: {
+      scheduler: new ExpoNotificationScheduler(),
+      permission: async () => {
+        const current = await Notifications.getPermissionsAsync();
+        return { granted: current.granted, canAskAgain: current.canAskAgain };
+      },
+      request: async () => (await Notifications.requestPermissionsAsync()).granted,
+    },
+    openStorage: getDatabase,
+    app: appActivity,
+    platform: currentPlatform(),
+    keepAwake: {
+      activate: () => activateKeepAwakeAsync(KEEP_AWAKE_TAG),
+      deactivate: () => deactivateKeepAwake(KEEP_AWAKE_TAG),
+    },
+    clock: () => Date.now(),
+    schedule: (callback, delayMs) => {
+      const timer = setTimeout(callback, delayMs);
+      return () => clearTimeout(timer);
+    },
+  };
 }
 
 export interface ForegroundNavigation {
   coordinator: NavigationCoordinator;
   capabilities(): ShellDescription["capabilities"];
   activeSession(): Promise<ShellDescription["activeSession"]>;
+  /**
+   * Re-reads visibility and the durable session for keep-awake. Call it when
+   * the app's visibility changes and after anything outside this composition
+   * resumed or ended the session.
+   */
+  reviewKeepAwake(): Promise<void>;
   dispose(): void;
 }
 
 export async function createForegroundNavigation(
   options: ForegroundNavigationOptions,
 ): Promise<ForegroundNavigation> {
-  const driver = options.driver ?? createLocationDriver();
-  const audio = getNavigationAudio();
-  const scheduler = new ExpoNotificationScheduler();
-  const now = () => Date.now();
+  const device: ForegroundDevice = { ...productionDevice(), ...options.device };
+  const { driver, audio } = device;
+  const scheduler = device.notifications.scheduler;
+  const now = () => device.clock();
 
   let notificationsGranted = false;
   const refreshNotificationGrant = async () => {
     try {
-      notificationsGranted = (await Notifications.getPermissionsAsync()).granted;
+      notificationsGranted = (await device.notifications.permission()).granted;
     } catch {
       notificationsGranted = false;
     }
@@ -90,12 +174,59 @@ export async function createForegroundNavigation(
     diagnosticsRef?.recordAsync(type as DiagnosticType, fields);
   };
 
+  /**
+   * Keep-awake follows the durable session, not what the page or the shell
+   * last heard: the screen is held only while the app is visible, a tracked
+   * session is active and that session's keep-screen-on setting is on. It is
+   * re-checked after every published change, so a setting, an arrival or an
+   * end takes effect with the commit that caused it. Never held for a
+   * composition that is not visible, such as the car runtime's.
+   */
+  let disposed = false;
+  let screenHeld = false;
+  let keepAwakeReview = 0;
+  const holdScreen = (wanted: boolean) => {
+    if (wanted === screenHeld) return;
+    screenHeld = wanted;
+    if (wanted) {
+      device.keepAwake.activate().catch(() => {
+        // Not held after all; the next review asks again.
+        screenHeld = false;
+      });
+    } else {
+      device.keepAwake.deactivate().catch(() => undefined);
+    }
+  };
+  /**
+   * `loaded` is the committed row when the caller has just read it. The driver
+   * is asked only when the screen is not already held: a held screen was
+   * checked against a running stream, and anything that stops the stream for
+   * an active session also ends that session or the app's visibility.
+   */
+  const reviewKeepAwake = async (loaded?: MobileNavigationSession | null) => {
+    const review = ++keepAwakeReview;
+    let wanted = false;
+    if (!disposed && options.isAppActive() && repositoryRef) {
+      try {
+        const session = loaded === undefined ? await repositoryRef.loadActive(now()) : loaded;
+        wanted =
+          session?.status === "active" &&
+          session.payload.startPackage.settings.keepScreenOn &&
+          (screenHeld || (await driver.isRunning()));
+      } catch {
+        wanted = false;
+      }
+    }
+    // Only the newest review decides; an older one may have read older state.
+    if (review === keepAwakeReview && !disposed) holdScreen(wanted);
+  };
+
   const permissions = new PermissionController({
     driver,
-    platform: currentPlatform(),
+    platform: device.platform,
     ui: options.permissionUi,
     isAppActive: options.isAppActive,
-    snapshot: readLocationPermissionSnapshot,
+    snapshot: () => device.readLocationPermission(),
   });
 
   const rerouteService = new GroundRerouteService({ apiOrigin: options.apiOrigin, now });
@@ -111,6 +242,9 @@ export async function createForegroundNavigation(
   };
 
   const composition = await createCoordinator({
+    openStorage: () => device.openStorage(),
+    clock: now,
+    schedule: (callback, delayMs) => device.schedule(callback, delayMs),
     bridge,
     permissions: {
       state: () => driver.getPermissionState(),
@@ -123,10 +257,8 @@ export async function createForegroundNavigation(
         // moment it is asked for, once.
         if (decision !== "denied" && !(await refreshNotificationGrant())) {
           try {
-            const asked = await Notifications.getPermissionsAsync();
-            if (asked.canAskAgain) {
-              notificationsGranted = (await Notifications.requestPermissionsAsync()).granted;
-            }
+            const asked = await device.notifications.permission();
+            if (asked.canAskAgain) notificationsGranted = await device.notifications.request();
           } catch {
             // Navigation proceeds without alerts.
           }
@@ -145,13 +277,13 @@ export async function createForegroundNavigation(
         start: async () => {
           const session = repositoryRef ? await repositoryRef.loadActive(now()) : null;
           driver.setLocale?.(session?.locale ?? options.locale);
-          await driver.start(profileFor(initialProfileFor(session)));
+          await driver.start(profileFor(initialProfileFor(session), device.platform.os));
         },
         stop: () => driver.stop(),
         updateProfile: async (profile) => {
           const session = repositoryRef ? await repositoryRef.loadActive(now()) : null;
           driver.setLocale?.(session?.locale ?? options.locale);
-          await driver.start(profileFor(profile as LocationProfileKind));
+          await driver.start(profileFor(profile as LocationProfileKind, device.platform.os));
         },
         isRunning: () => driver.isRunning(),
       },
@@ -197,6 +329,7 @@ export async function createForegroundNavigation(
           // a command, so the shell learns about them here.
           const active = repositoryRef ? await repositoryRef.loadActive(now()) : null;
           if (active?.status !== "active") options.onNavigatingChanged(false);
+          await reviewKeepAwake(active);
         },
         event: async (eventId) => {
           await publish?.port.event(eventId);
@@ -235,6 +368,18 @@ export async function createForegroundNavigation(
 
   const unregister =
     options.registerAsForeground === false ? () => {} : registerForegroundCoordinator(coordinator);
+  // On Android a cadence change asked for in the background was not applied,
+  // and the runtime that asked may no longer exist. Apply the session's cadence
+  // whenever the app becomes active, including a cold open where the app is
+  // already active before this subscribes. iOS applies changes in the
+  // background, so it needs no refresh.
+  let stopWatchingActivity = () => {};
+  if (device.platform.os === "android") {
+    stopWatchingActivity = device.app.onActive(() => {
+      void coordinator.refreshLocationProfile();
+    });
+    if (device.app.isActive()) void coordinator.refreshLocationProfile();
+  }
 
   return {
     coordinator,
@@ -244,16 +389,21 @@ export async function createForegroundNavigation(
       transitActions: true,
       backgroundLocation: true,
       localNotifications: notificationsGranted,
-      speech: isNavigationAudioAvailable(),
+      speech: device.speechAvailable(),
     }),
     activeSession: async () => {
       const session = await repository.loadActive(now());
       if (!session) return null;
       return { sessionId: session.sessionId, revision: session.revision, kind: session.kind };
     },
+    reviewKeepAwake: () => reviewKeepAwake(),
     dispose: () => {
+      if (disposed) return;
+      disposed = true;
       remote?.abortAll();
       unregister();
+      stopWatchingActivity();
+      holdScreen(false);
     },
   };
 }

@@ -54,6 +54,7 @@ const mockNavigation = {
   coordinator: { dispatch: jest.fn(), stopFromSurface: jest.fn() },
   capabilities: jest.fn(),
   activeSession: jest.fn(),
+  reviewKeepAwake: jest.fn(async () => undefined),
   dispose: jest.fn(),
 };
 const mockCreateForegroundNavigation = jest.fn();

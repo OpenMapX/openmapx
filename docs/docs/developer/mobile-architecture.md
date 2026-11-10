@@ -71,6 +71,25 @@ only when the OS starts the task without the app.
   `defineNavigationTask.ts`. expo-task-manager schedules a persisted job, so the
   app holds `RECEIVE_BOOT_COMPLETED`; without it the first location update
   crashes the process. The app does not start anything at boot.
+- **Location profiles.** Each phase asks for a cadence (`location/profiles.ts`).
+  On Android every profile has no distance filter, so updates arrive on the
+  time interval even while the user stands still. iOS keeps its distance
+  filters, because it ignores the time interval. Changing a profile restarts
+  the stream, and restarting it starts the location foreground service.
+  Android 12 and later forbid starting a foreground service from the
+  background, and expo-location enforces this on every Android version: it
+  throws `ForegroundServiceStartNotAllowedException` unless its activity is in
+  the foreground, and a locked screen or a headless process does not count. The
+  stream would then already be stopped. On Android the shared driver
+  (`location/backgroundSafeDriver.ts`) therefore never restarts a running
+  stream while the app is not active. It asks inside the driver's serialized
+  step, immediately before the stop, so a screen that locks while the change
+  waits is respected. Nothing is held in memory: a runtime the system starts
+  for one background batch is torn down seconds later. When the app becomes
+  active on Android, including a cold open where it is already active as the
+  foreground coordinator starts, the coordinator derives the cadence again from
+  the committed session (`refreshLocationProfile`) and applies it to a running
+  stream. iOS changes profiles at any time, so it needs no refresh.
 - **Storage.** expo-sqlite runs each exclusive transaction on its own
   connection, so `getDatabase` queues writes on the one handle and sets a busy
   timeout. Without the queue a diagnostic write and a batch commit collide with
@@ -79,6 +98,39 @@ only when the OS starts the task without the app.
   (`createRemoteWork.ts`). The answer re-enters the coordinator as a queued
   `applyReroute`, which applies it only while the session and its pending
   request id still match. A newer request aborts the one in flight.
+- **Settings.** `settings.update` changes the running session: voice guidance,
+  keep-screen-on, voice timing (ground) and alight alerts (transit), plus locale
+  and units. Only the session identity is checked, not the revision, because
+  every field is an absolute value and progress commits about once a second.
+  Muting cuts off a prompt that is already playing. The page sends the user's
+  voice timing in the start package and sends a change made during the trip.
+- **Arrival.** The arrival commit keeps the session row for the page and
+  releases the location stream and its foreground service after a release
+  window (`navigation/arrival.ts`). Every arrival keeps the stream for
+  `ARRIVAL_CUE_GRACE_MS` (10 s), so iOS does not suspend a backgrounded app
+  before the arrival announcement plays. A transit arrival keeps it until the
+  last rider confirmation can no longer be undone, if that is later, so an undo
+  resumes a tracked trip. Neither a road nor a transit arrival changes the
+  profile, so nothing restarts the stream. A coordinator timer releases the stream where
+  JavaScript timers run: in the foreground, and on iOS while background
+  location keeps the app running. Android pauses a backgrounded app's timers
+  even under a foreground service. There the first batch after the window
+  releases the stream, and the time-driven Android profiles guarantee that
+  batch while the user stands still. A batch also releases the stream after a
+  process restart.
+- **Keep-awake.** The composition holds the screen only while the app is
+  visible, the location stream runs for an active session, and that session's
+  keep-screen-on setting is on. It re-checks after every published change and
+  when the shell reports a visibility change or a recovery outcome, so a
+  setting change, arrival or end releases the screen with the commit itself.
+- **Speech interruptions.** A call or another source that takes audio focus
+  during a cue stops it, and later cues are not queued behind the interruption.
+  iOS observes the end of an audio-session interruption. Android abandons its
+  focus request on loss, so no end is delivered; each later cue requests focus
+  again instead. During a call Android usually denies that request and the cue
+  is skipped. Against another app's transient focus, such as a voice assistant
+  or another navigation prompt, the request is usually granted and the cue
+  speaks.
 - **Transit refresh and replan** are not wired yet. Their effects are no-ops,
   and the session keeps running on its captured itinerary.
 
@@ -292,10 +344,15 @@ Source and policy tests alone do not prove a deployed browser enforced it.
 
 Captured-route processing and storage tests exercise progress without network
 access, with external location, audio and networking ports replaced by test
-implementations. They do not establish installed background guidance because the
-foreground command composition is missing. A complete OS callback blackout also
-prevents real-time processing; foreground coasting does not create a background
-wake source.
+implementations. `foregroundNavigation.harness.test.ts` runs the shipped
+`createForegroundNavigation` composition on a fake phone
+(`navigation/testing/foregroundHarness.ts`): only location, audio, notifications,
+storage, network and clock are replaced, through the composition's `device`
+option. That covers the wiring between page commands, location batches, the
+durable session and device effects, including a process restart. It does not
+establish OS delivery, background execution or audio behaviour on a device. A
+complete OS callback blackout also prevents real-time processing; foreground
+coasting does not create a background wake source.
 
 The remotely served UI has no guaranteed offline cold start. If no cached page is
 available, native loading and recovery UI must remain usable. Physical-device
@@ -417,8 +474,9 @@ confirmation and requires unlocking/foregrounding the app. Only confirmation
 calls `NavigationCoordinator.stopFromSurface`, through the shared session
 executor and the same durable teardown used by the web command. Replayed links
 from Recents or an old card cannot stop a replacement trip. The existing
-`session.stopped` message also clears a matching web read model and releases the
-shell's keep-awake state; older web versions may ignore the unsolicited message.
+`session.stopped` message also clears a matching web read model; older web
+versions may ignore the unsolicited message. Keep-awake is released by the
+same teardown, because it follows the durable session.
 
 Lock-screen content follows system privacy settings. Android's private visibility
 and generic public version do not override a user's decision to show sensitive
