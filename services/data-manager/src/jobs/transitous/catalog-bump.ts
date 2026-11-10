@@ -40,7 +40,7 @@ export class CatalogBumpError extends Error {
 export interface ResolveCatalogBumpOptions {
   /** The already-cloned Transitous catalog working copy. */
   catalogDir: string;
-  /** Branch to track. Defaults to `DEFAULT_CATALOG_BRANCH`. */
+  /** Branch to track. Defaults to the shared default catalog branch, `main`. */
   branch?: string;
   runner?: CommandRunner;
 }
