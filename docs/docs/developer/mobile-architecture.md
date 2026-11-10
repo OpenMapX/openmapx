@@ -131,8 +131,10 @@ notification grant through the same port.
   answer never came back, because its process died or its composition was
   disposed, stops counting as open 20 s after it was sent. Each wait is also
   bounded by its own length, so a clock set backwards cannot stretch it. A
-  refusal costs nothing: the engine has already started its own backoff and
-  asks again while the user is off route. A reroute held back while offline
+  refused reroute is withheld rather than spent (`withheldReroute`): the
+  engine keeps its score and does not grow its own backoff, so it asks again
+  on the next off-route fix and the reroute is sent as soon as the guard
+  allows. A reroute held back while offline
   is asked for as soon as the connection is confirmed again. A `reroute`
   effect only starts the request (`createRemoteWork.ts`). The answer re-enters
   the coordinator as a queued `applyReroute`, which applies it only while the

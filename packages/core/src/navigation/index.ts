@@ -104,6 +104,7 @@ export {
   type SpeedLimitRoute,
   VOICE_TIMING_MULTIPLIER,
   type VoiceTiming,
+  withheldReroute,
 } from "./groundSessionPolicy";
 export {
   type GuidanceIconName,

@@ -29,6 +29,7 @@ import {
   rerouteCandidate,
   rerouteRetryDelayMs,
   VOICE_TIMING_MULTIPLIER,
+  withheldReroute,
 } from "./groundSessionPolicy";
 import { navOptionsForMode } from "./options";
 import { nextVoiceCue } from "./voiceCue";
@@ -333,6 +334,33 @@ describe("reroute transitions", () => {
     expect(onRerouteSucceeded()).toEqual(IDLE_REROUTE);
     expect(onBackOnRoute({ status: "failed", attempts: 5 })).toEqual(IDLE_REROUTE);
     expect(onBackOnRoute(inFlight)).toBe(inFlight);
+  });
+});
+
+describe("withheldReroute", () => {
+  it("keeps the engine asking without growing its backoff", () => {
+    const before = {
+      offRouteScore: 4,
+      lastRerouteAtMs: NOW - 60_000,
+      rerouteBackoffMs: 4_500,
+      spokenCues: ["0:far"],
+      uTurnSinceMs: null,
+    };
+    const fired = {
+      ...before,
+      offRouteScore: 0,
+      lastRerouteAtMs: NOW,
+      rerouteBackoffMs: 6_750,
+      lastFixMs: NOW,
+    };
+
+    expect(withheldReroute(before, fired, 6)).toEqual({
+      ...fired,
+      offRouteScore: 6,
+      lastRerouteAtMs: NOW - 60_000,
+      rerouteBackoffMs: 4_500,
+      uTurnSinceMs: null,
+    });
   });
 });
 

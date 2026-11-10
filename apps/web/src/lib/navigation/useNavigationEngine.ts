@@ -35,6 +35,7 @@ import {
   rerouteCandidate,
   spokenInstructionFor,
   VOICE_TIMING_MULTIPLIER,
+  withheldReroute,
 } from "@openmapx/core/navigation";
 import { formatNavigationCue, NavigationCueError, resolveLocale } from "@openmapx/i18n";
 import type { NavIncidentResource } from "@openmapx/integration-framework/react";
@@ -279,7 +280,8 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
       opts.announceMultiplier =
         VOICE_TIMING_MULTIPLIER[useSettingsStore.getState().voiceGuidanceTiming];
       const matcher = matcherFor(route.geometry);
-      const result = processFix(route, fix, tickRef.current, opts, matcher);
+      const before = tickRef.current;
+      const result = processFix(route, fix, before, opts, matcher);
       tickRef.current = result.nextState;
       // Surface noisy GPS: fixes dropped for poor accuracy flag "Weak GPS"; a
       // usable fix clears it. (Dropping them also suppresses false off-route.)
@@ -335,27 +337,36 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
       const retryRequested = rerouteRetryNonce > lastHandledRetryNonceRef.current;
       const canAttemptReroute =
         connectivity === "online" && (!rerouteUnavailable || retryRequested);
-      if (result.needsReroute && connectivity === "offline") {
+      if (result.needsReroute && connectivity === "offline" && !rerouteUnavailable) {
         store.setRerouteUnavailable(true);
       }
-      if (result.needsReroute && canAttemptReroute && !useNavRecordingStore.getState().replaying) {
-        if (retryRequested) rerouteRef.current = onRerouteRetryRequested(rerouteRef.current);
-        // Re-anchor at the actual GPS position. The progress position is snapped
-        // onto the obsolete route; using it here would ask the router for the
-        // same route again and leave a genuinely off-route traveller stranded in
-        // a reroute → waiting-for-GPS loop. Keep the old route projection only
-        // for deciding which intermediate stops are already behind us.
-        const started = executeReroute({
-          trigger: "off-route",
-          route,
-          matcher,
-          origin: fix.coords,
-          alongMeters: result.progress.alongMeters,
-          destinationWaypoints,
-          mode,
-          routeOptions,
-        });
-        if (started && retryRequested) lastHandledRetryNonceRef.current = rerouteRetryNonce;
+      if (result.needsReroute && !useNavRecordingStore.getState().replaying) {
+        let started = false;
+        if (canAttemptReroute) {
+          if (retryRequested) rerouteRef.current = onRerouteRetryRequested(rerouteRef.current);
+          // Re-anchor at the actual GPS position. The progress position is snapped
+          // onto the obsolete route; using it here would ask the router for the
+          // same route again and leave a genuinely off-route traveller stranded in
+          // a reroute → waiting-for-GPS loop. Keep the old route projection only
+          // for deciding which intermediate stops are already behind us.
+          started = executeReroute({
+            trigger: "off-route",
+            route,
+            matcher,
+            origin: fix.coords,
+            alongMeters: result.progress.alongMeters,
+            destinationWaypoints,
+            mode,
+            routeOptions,
+          });
+          if (started && retryRequested) lastHandledRetryNonceRef.current = rerouteRetryNonce;
+        }
+        // Held back, the reroute is withheld rather than spent: the engine asks
+        // again on the next off-route fix instead of waiting out its own backoff
+        // on top of the guard's.
+        if (!started) {
+          tickRef.current = withheldReroute(before, result.nextState, opts.reroute.scoreThreshold);
+        }
       }
     },
     [speakCue, captureFix, matcherFor, executeReroute],

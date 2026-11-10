@@ -10,6 +10,7 @@ import {
   routeFingerprint,
   type SpeedLimitRoute,
   VOICE_TIMING_MULTIPLIER,
+  withheldReroute,
 } from "@openmapx/core/navigation";
 import type { ScheduledAlertInput, SessionEffect } from "../../storage/SessionRepository";
 import type { ProcessorMutation } from "../processor";
@@ -110,6 +111,12 @@ export interface ProcessGroundBatchInput {
   fixes: readonly FixInput[];
   nowMs: number;
   cache: GroundRouteCache;
+  /**
+   * Whether the guards would send a reroute now. When they would not, a
+   * reroute the engine asks for is withheld rather than spent, so its own
+   * backoff does not grow and it asks again on the next off-route fix.
+   */
+  rerouteAllowed?: boolean;
 }
 
 /**
@@ -122,7 +129,7 @@ export interface ProcessGroundBatchInput {
  * behind them.
  */
 export function processGroundBatch(input: ProcessGroundBatchInput): GroundBatchOutcome {
-  const { session, fixes, nowMs, cache } = input;
+  const { session, fixes, nowMs, cache, rerouteAllowed = true } = input;
   const { startPackage } = session.payload;
   const fingerprint = routeFingerprint(startPackage.route.geometry);
   const matcher = cache.matcherFor(session);
@@ -166,7 +173,14 @@ export function processGroundBatch(input: ProcessGroundBatchInput): GroundBatchO
       options,
       matcher,
     );
-    tickState = result.nextState as never;
+    tickState =
+      result.needsReroute && !rerouteAllowed
+        ? (withheldReroute(
+            tickState as never,
+            result.nextState,
+            options.reroute.scoreThreshold,
+          ) as never)
+        : (result.nextState as never);
     weakGps = result.weakGps;
 
     if (result.accuracyRejected) {

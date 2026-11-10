@@ -2,7 +2,7 @@ import type { LngLat } from "../types/geometry";
 import { coastState } from "./coast";
 import { positionAt } from "./deadReckon";
 import { pickSpeedLimit } from "./speedLimits";
-import type { FixInput } from "./types";
+import type { FixInput, NavTickState } from "./types";
 
 /**
  * The rules a road session follows around the engine, shared by the browser's
@@ -221,6 +221,28 @@ export function canRequestReroute(
     return { allow: false, reason: "backoff" };
   }
   return { allow: true };
+}
+
+/**
+ * The engine's state after a fix whose reroute the guards refused, as if the
+ * reroute had not fired. The engine resets its score and grows its own backoff
+ * when it asks; keeping that would stack its wait on top of the guard's. Held
+ * at the threshold instead, the engine asks again on the next off-route fix,
+ * so a reroute still needed is sent as soon as the guard allows it. A fix back
+ * on route clears the score as usual.
+ */
+export function withheldReroute(
+  before: NavTickState,
+  after: NavTickState,
+  scoreThreshold: number,
+): NavTickState {
+  return {
+    ...after,
+    offRouteScore: Math.max(before.offRouteScore, scoreThreshold),
+    lastRerouteAtMs: before.lastRerouteAtMs,
+    rerouteBackoffMs: before.rerouteBackoffMs,
+    uTurnSinceMs: before.uTurnSinceMs ?? null,
+  };
 }
 
 /** The delay after the given number of consecutive failures; jitter is injected. */

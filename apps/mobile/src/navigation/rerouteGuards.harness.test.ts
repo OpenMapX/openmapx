@@ -129,6 +129,33 @@ describe("reroute guards on the native session", () => {
     expect(directionsRequests()).toBeGreaterThan(3);
   });
 
+  it("asks again once the failure delay is over, not after the engine's own backoff too", async () => {
+    harness = await startForegroundHarness();
+    const askedAt: number[] = [];
+    harness.phone.network.respond = async (url) => {
+      if (!url.includes(DIRECTIONS_PATH)) throw new TypeError("Network request failed");
+      askedAt.push(harness.phone.clock.now());
+      // The first three answers fail.
+      if (askedAt.length <= 3) throw new TypeError("Network request failed");
+      return Response.json({ routes: [routeBetween(OFF_ROUTE, DESTINATION)] });
+    };
+    await harness.start(groundStartPackage());
+    await driveStraightRoute(harness, 0, 5);
+
+    let seconds = 0;
+    while (askedAt.length < 4 && seconds < 120) {
+      await offRouteFor(1);
+      seconds += 1;
+    }
+
+    expect(askedAt).toHaveLength(4);
+    // After the third failure the delay is 12 s plus up to 1 s of jitter, and
+    // fixes arrive once a second. The engine asks inside that delay; spending
+    // its request there would add its own growing backoff, about 15 s more.
+    expect(askedAt[3] - askedAt[2]).toBeLessThanOrEqual(14_000);
+    expect((await ground()).payload.startPackage.route.geometry[0]).toEqual([...OFF_ROUTE]);
+  });
+
   it("asks nothing while offline and asks once the connection is back", async () => {
     harness = await startForegroundHarness();
     harness.phone.network.respond = async (url) =>

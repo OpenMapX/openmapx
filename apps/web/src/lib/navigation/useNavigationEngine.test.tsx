@@ -419,6 +419,41 @@ describe("useNavigationEngine", () => {
     }
   });
 
+  it("asks on the first off-route fix after the delay, without the engine's backoff on top", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(100_000);
+      useNavigationStore.getState().startGroundNavigation(route, "driving", [
+        [0, 0],
+        [0.004, 0],
+      ]);
+      fetchDirections.mockRejectedValueOnce(new Error("Server error 500"));
+      fetchDirections.mockResolvedValue({
+        routes: [{ ...route, distance: 999 } as Route],
+        activeRouteIndex: 0,
+      });
+      renderHook(() => useNavigationEngine(disabledResource));
+      await triggerOffRoute();
+      await act(async () => {
+        await Promise.resolve();
+      });
+      // Still off route inside the delay: the engine asks and is held back.
+      vi.setSystemTime(102_000);
+      await triggerOffRoute(10_000);
+      expect(fetchDirections).toHaveBeenCalledTimes(1);
+
+      vi.setSystemTime(104_100);
+      await act(async () => {
+        fixHandler?.({ coords: [0.0022, 0.002], accuracy: 5, speed: 15, timestampMs: 17_000 });
+        await Promise.resolve();
+      });
+
+      expect(fetchDirections).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("enters a cooldown after three successful reroutes in the churn window", async () => {
     vi.useFakeTimers();
     try {

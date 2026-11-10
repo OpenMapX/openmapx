@@ -59,10 +59,25 @@ export class GroundNavigationProcessor implements NavigationProcessor<"ground"> 
     fixes: readonly FixInput[],
     nowMs: number,
   ): ProcessorMutation {
-    const outcome = processGroundBatch({ session, fixes, nowMs, cache: this.cache });
+    // The guards decide once for the batch. A refusal withholds the engine's
+    // reroute rather than spending it, so it is asked for again on the next
+    // off-route fix and sent as soon as the guard allows.
+    const current = session.payload.reroute;
+    const decision = canRequestReroute(
+      current,
+      session.payload.rerouteChurn ?? EMPTY_REROUTE_CHURN,
+      session.connectivity,
+      nowMs,
+    );
+    const outcome = processGroundBatch({
+      session,
+      fixes,
+      nowMs,
+      cache: this.cache,
+      rerouteAllowed: decision.allow,
+    });
     const { arrived, needsReroute, ...mutation } = outcome;
     const advanced = mutation.session as GroundMobileSession;
-    const current = advanced.payload.reroute;
 
     if (arrived) return mutation;
     if (!needsReroute) {
@@ -71,15 +86,6 @@ export class GroundNavigationProcessor implements NavigationProcessor<"ground"> 
       return { ...mutation, session: withReroute(advanced, settled) };
     }
 
-    // The engine asked for a reroute; the guards decide whether one is sent.
-    // A refusal costs nothing: the engine has already started its own backoff
-    // and asks again if the user is still off route.
-    const decision = canRequestReroute(
-      current,
-      advanced.payload.rerouteChurn ?? EMPTY_REROUTE_CHURN,
-      advanced.connectivity,
-      nowMs,
-    );
     if (!decision.allow) {
       if (decision.reason !== "offline" || current.status === "unavailable") return mutation;
       // Waiting for the network, which `onConnectivityRestored` retries.
