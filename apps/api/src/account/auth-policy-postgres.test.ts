@@ -23,11 +23,12 @@ dbDescribe("account policy through installed Better Auth", () => {
     vi.stubEnv("BETTER_AUTH_SECRET", randomBytes(48).toString("base64url"));
     vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3001");
     vi.doMock("../db", () => ({ db: fixture.db, sql: fixture.sql }));
-    vi.doMock("../utils/email", () => ({
-      sendMail: async (message: { to: string; text: string }) => {
+    vi.doMock("../utils/email", () => {
+      const capture = async (message: { to: string; text: string }) => {
         mail.push(message);
-      },
-    }));
+      };
+      return { sendMail: capture, sendAuthMail: capture };
+    });
     await fixture.db.insert(systemSettings).values([
       { key: "emailVerificationRequired", value: false },
       { key: "twoFaEnabled", value: false },

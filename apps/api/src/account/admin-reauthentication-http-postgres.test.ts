@@ -18,7 +18,7 @@ dbDescribe("administrator proof through actual auth HTTP and generated SDK", () 
     vi.stubEnv("BETTER_AUTH_SECRET", randomBytes(48).toString("base64url"));
     vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3001");
     vi.doMock("../db", () => ({ db: fixture.db, sql: fixture.sql }));
-    vi.doMock("../utils/email", () => ({ sendMail: async () => {} }));
+    vi.doMock("../utils/email", () => ({ sendMail: async () => {}, sendAuthMail: async () => {} }));
     ({ auth } = await import("../auth"));
     app = Fastify();
     await app.register((await import("../routes/auth")).authRoute, {

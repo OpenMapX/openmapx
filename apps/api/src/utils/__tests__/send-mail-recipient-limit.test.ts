@@ -23,13 +23,13 @@ vi.mock("../../privacy/disclosures.js", () => ({
 }));
 vi.mock("nodemailer", () => ({ createTransport: () => ({ sendMail: mocks.smtp }) }));
 
-import { sendMail, sendMailOrRefuse } from "../email";
-import { MailDeliveryRefusedError } from "../mail-outcome";
+import { sendAuthMail, sendMail } from "../email";
 
 beforeEach(() => {
   mocks.counts.clear();
   mocks.smtp.mockClear();
   mocks.disclosure.mockClear();
+  mocks.store.eval.mockClear();
   vi.stubEnv("EMAILLABS_APP_KEY", "");
   vi.stubEnv("LETTERMINT_API_TOKEN", "");
 });
@@ -42,27 +42,29 @@ const message = (to: string) => ({
   disclosure: { userId: "user-1", operationCode: "auth.reset-password.email" },
 });
 
-it("stops delivering to one mailbox at the hourly limit without telling the caller", async () => {
+it("stops request-driven auth mail to one mailbox at the hourly limit, silently", async () => {
   for (let index = 0; index < MAIL_RECIPIENT_HOURLY_LIMIT; index += 1)
-    await expect(sendMail(message("person@example.test"))).resolves.toBe("sent");
-  await expect(sendMail(message("Person+again@example.test"))).resolves.toBe("limited");
+    await expect(sendAuthMail(message("person@example.test"))).resolves.toBeUndefined();
+  await expect(sendAuthMail(message("Person+again@example.test"))).resolves.toBeUndefined();
   expect(mocks.smtp).toHaveBeenCalledTimes(MAIL_RECIPIENT_HOURLY_LIMIT);
   expect(mocks.disclosure).toHaveBeenCalledTimes(MAIL_RECIPIENT_HOURLY_LIMIT);
-  await expect(sendMail(message("other@example.test"))).resolves.toBe("sent");
+  await sendAuthMail(message("other@example.test"));
   expect(mocks.smtp).toHaveBeenCalledTimes(MAIL_RECIPIENT_HOURLY_LIMIT + 1);
 });
 
-it("delivers uncounted when the shared store cannot answer", async () => {
-  mocks.store.eval.mockRejectedValueOnce(new Error("connection refused"));
-  await expect(sendMail(message("person@example.test"))).resolves.toBe("sent");
-  expect(mocks.smtp).toHaveBeenCalledOnce();
+it("neither counts nor limits privacy and administrator mail", async () => {
+  for (let index = 0; index <= MAIL_RECIPIENT_HOURLY_LIMIT; index += 1)
+    await sendAuthMail(message("person@example.test"));
+  expect(mocks.smtp).toHaveBeenCalledTimes(MAIL_RECIPIENT_HOURLY_LIMIT);
+  const countedCalls = mocks.store.eval.mock.calls.length;
+
+  await sendMail(message("person@example.test"));
+  expect(mocks.smtp).toHaveBeenCalledTimes(MAIL_RECIPIENT_HOURLY_LIMIT + 1);
+  expect(mocks.store.eval.mock.calls).toHaveLength(countedCalls);
 });
 
-it("refuses delivery for retrying queues once the allowance is spent", async () => {
-  for (let index = 0; index < MAIL_RECIPIENT_HOURLY_LIMIT; index += 1)
-    await expect(sendMailOrRefuse(message("queued@example.test"))).resolves.toBeUndefined();
-  await expect(sendMailOrRefuse(message("queued@example.test"))).rejects.toBeInstanceOf(
-    MailDeliveryRefusedError,
-  );
-  expect(mocks.smtp).toHaveBeenCalledTimes(MAIL_RECIPIENT_HOURLY_LIMIT);
+it("delivers auth mail uncounted when the shared store cannot answer", async () => {
+  mocks.store.eval.mockRejectedValueOnce(new Error("connection refused"));
+  await sendAuthMail(message("person@example.test"));
+  expect(mocks.smtp).toHaveBeenCalledOnce();
 });

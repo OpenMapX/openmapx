@@ -465,16 +465,18 @@ Used for email verification, password reset, and email-change flows. The provide
 auto-detected by priority: **EmailLabs > Lettermint > SMTP**. These are also
 settable in `/admin/settings/email`; env always wins.
 
-Each mailbox receives at most 10 messages per hour from the instance. The count
-lives in Valkey under a hash of the address, and spellings that reach the same
-mailbox (case, `+tag`, Gmail dots) share one count. Beyond the limit, sign-up,
-verification, reset and email-change requests still answer exactly as usual, so
-a response never shows whether the limit was reached or the address has an
-account. Administrator invitations held back this way show as failed deliveries,
-and privacy identity challenges and request notifications retry later. When Valkey cannot answer within a
-second, the message is sent uncounted and a warning is logged, so a Valkey outage
-does not silently stop account recovery; the per-IP authentication limits still
-apply. The administrator test email is not counted.
+Authentication mail that anyone can trigger for any address (sign-up
+verification, verification resends, password reset and email-change codes) is
+limited to 10 messages per mailbox per hour. The count lives in Valkey under a
+hash of the address, and spellings that reach the same mailbox (case, `+tag`,
+Gmail dots) share one count. Beyond the limit those requests still answer
+exactly as usual, so a response never shows whether the limit was reached or
+the address has an account. Privacy request notifications, privacy identity
+challenges and mail an administrator sends (invitations, password setup) are
+neither counted nor limited, and neither is the administrator test email. When
+Valkey cannot answer within a second, the message is sent uncounted and a
+warning is logged, so a Valkey outage does not silently stop account recovery;
+the per-IP authentication limits still apply.
 
 | Variable                 | Description                                                                      | Required / Default          |
 | ------------------------ | -------------------------------------------------------------------------------- | --------------------------- |

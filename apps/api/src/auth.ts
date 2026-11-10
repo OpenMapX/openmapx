@@ -37,7 +37,7 @@ import { recordSessionFromAuthContext } from "./privacy/session-assurance.js";
 import { userErasureHooks } from "./services/user-erasure";
 import { auditAdminActionsHook } from "./utils/auth-audit-hook";
 import { configuredTrustedWebOrigins } from "./utils/csrf.js";
-import { sendMail } from "./utils/email";
+import { sendAuthMail } from "./utils/email";
 import {
   emailOtpEmail,
   resetPasswordEmail,
@@ -149,7 +149,7 @@ function createPolicyAuth(
           ...mail,
           disclosure: { userId: user.id, operationCode: "auth.reset-password.email" },
         };
-        if (!(await enqueueCapturedAccountMail(message))) await sendMail(message);
+        if (!(await enqueueCapturedAccountMail(message))) await sendAuthMail(message);
       },
     },
     emailVerification: {
@@ -162,7 +162,7 @@ function createPolicyAuth(
           ...mail,
           disclosure: { userId: user.id, operationCode: "auth.verify-email.email" },
         };
-        if (!(await enqueueCapturedAccountMail(message))) await sendMail(message);
+        if (!(await enqueueCapturedAccountMail(message))) await sendAuthMail(message);
       },
     },
     account: {
@@ -406,7 +406,7 @@ function createPolicyAuth(
           // Email OTP can be sent during account changes before a user row is
           // available in this callback; only record it when Better Auth gives us
           // an exact subject identifier through the typed context.
-          await sendMail({ to: email, ...mail });
+          await sendAuthMail({ to: email, ...mail });
         },
         changeEmail: {
           enabled: true,

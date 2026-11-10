@@ -40,7 +40,7 @@ dbDescribe("atomic last administrator protection", () => {
     vi.stubEnv("ERASURE_JOURNAL_KEY_UID", String(process.getuid?.() ?? 0));
     vi.stubEnv("ERASURE_JOURNAL_PATH", journal);
     vi.doMock("../db", () => ({ db: fixture.db, sql: fixture.sql }));
-    vi.doMock("../utils/email", () => ({ sendMail: async () => {} }));
+    vi.doMock("../utils/email", () => ({ sendMail: async () => {}, sendAuthMail: async () => {} }));
     ({ auth } = await import("../auth"));
     app = Fastify();
     await app.register(authRoute, {

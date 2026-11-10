@@ -20,13 +20,6 @@ const recipientLimit = createMailRecipientLimit({
     }),
 });
 
-/**
- * `limited` means the recipient's hourly allowance is spent and nothing was
- * sent. Request handlers ignore it, so a response never reveals the limit or
- * whether the address has an account; delivery queues record it as a failure.
- */
-export type MailSendResult = "sent" | "limited";
-
 export interface MailOptions {
   to: string;
   subject: string;
@@ -197,8 +190,7 @@ async function sendViaSmtp(opts: MailOptions, config: EmailConfig): Promise<void
   }
 }
 
-export async function sendMail(opts: MailOptions): Promise<MailSendResult> {
-  if (!(await recipientLimit.admit(opts.to))) return "limited";
+export async function sendMail(opts: MailOptions): Promise<void> {
   const config = await loadEmailConfig();
   const { disclosure, ...message } = opts;
   switch (config.provider) {
@@ -230,12 +222,18 @@ export async function sendMail(opts: MailOptions): Promise<MailSendResult> {
       ...(disclosure.idempotencyKey ? { idempotencyKey: disclosure.idempotencyKey } : {}),
     });
   }
-  return "sent";
 }
 
-/** For delivery queues that retry: a spent recipient allowance is a refused delivery. */
-export async function sendMailOrRefuse(opts: MailOptions): Promise<void> {
-  if ((await sendMail(opts)) === "limited") throw new MailDeliveryRefusedError();
+/**
+ * Sends authentication mail that an anonymous request can trigger: sign-up
+ * verification, verification resend, password reset and email-code mail.
+ * Beyond the recipient's hourly allowance the message is dropped silently, so
+ * the response never reveals the limit or whether the address has an account.
+ * Administrator-initiated and privacy mail use `sendMail` and are not counted.
+ */
+export async function sendAuthMail(opts: MailOptions): Promise<void> {
+  if (!(await recipientLimit.admit(opts.to))) return;
+  await sendMail(opts);
 }
 
 const TRANSFER_SAFEGUARDS = ["eea", "adequacy", "dpf", "scc", "none"] as const;

@@ -143,7 +143,7 @@ import { handleSystemDiagnosticsJob, handleSystemUpdateJob } from "./services/sy
 import { configurePrivacyArtifactDeleter, readJournalKey } from "./services/user-erasure.js";
 import { applyRequiredMigrations } from "./startup-migrations";
 import { configuredTrustedWebOrigins, makeCsrfGuardHook } from "./utils/csrf";
-import { sendMailOrRefuse } from "./utils/email.js";
+import { sendMail } from "./utils/email.js";
 import {
   authLimit,
   expensivePublicApiLimit,
@@ -524,7 +524,9 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
   const privacyEmailChallengeWorker = privacyEmailChallengeService
     ? createPrivacyEmailChallengeWorker({
         service: privacyEmailChallengeService,
-        sender: sendMailOrRefuse,
+        sender: async (message) => {
+          await sendMail(message);
+        },
       })
     : undefined;
   const privacyOperationsMonitor = createPrivacyOperationsMonitor({

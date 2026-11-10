@@ -42,11 +42,12 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
       "https://osm-fixture.example.test/.well-known/openid-configuration",
     );
     vi.doMock("./db", () => ({ db: fixture.db, sql: fixture.sql }));
-    vi.doMock("./utils/email", () => ({
-      sendMail: async (message: { to: string; text: string }) => {
+    vi.doMock("./utils/email", () => {
+      const capture = async (message: { to: string; text: string }) => {
         mail.push(message);
-      },
-    }));
+      };
+      return { sendMail: capture, sendAuthMail: capture };
+    });
     // No public provider or mail request is needed for these local protocols.
     vi.stubGlobal(
       "fetch",
