@@ -494,6 +494,7 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
    * again. It is never part of the background task: holding a wake lock from a
    * headless callback would drain the battery for a screen nobody is looking at.
    */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: visibility and navigating are the triggers for a fresh keep-awake review, not values the effect reads.
   useEffect(() => {
     void navigation.then((composed) => composed?.reviewKeepAwake()).catch(() => undefined);
   }, [navigation, visibility, shellState.context.navigating]);
