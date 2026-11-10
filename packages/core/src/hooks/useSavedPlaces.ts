@@ -6,6 +6,7 @@ import { useSession } from "../auth/useSession";
 export type { ImportPlacesInput, ImportPlacesResult } from "../api/contracts/saved";
 
 import type { ImportPlacesInput } from "../api/contracts/saved";
+import type { MutationHookOptions } from "./mutationErrorDisplay";
 
 /**
  * Saved data lives on the server per account, so a signed-out visitor has none
@@ -73,9 +74,10 @@ export function useIsSaved(placeId: string | null) {
   });
 }
 
-export function useCreateList() {
+export function useCreateList(options: MutationHookOptions = {}) {
   const queryClient = useQueryClient();
   return useMutation({
+    ...options,
     mutationFn: (data: sdk.CreateSavedListInput) =>
       sdk.createSavedList(data).then(sdk.unwrapSavedResponse),
     onSuccess: () => {
@@ -84,9 +86,10 @@ export function useCreateList() {
   });
 }
 
-export function useImportPlaces() {
+export function useImportPlaces(options: MutationHookOptions = {}) {
   const queryClient = useQueryClient();
   return useMutation({
+    ...options,
     mutationFn: (data: ImportPlacesInput) =>
       sdk.importSavedPlaces(data).then(sdk.unwrapSavedResponse),
     onSuccess: (result) => {
@@ -97,9 +100,10 @@ export function useImportPlaces() {
   });
 }
 
-export function useUpdateList() {
+export function useUpdateList(options: MutationHookOptions = {}) {
   const queryClient = useQueryClient();
   return useMutation({
+    ...options,
     mutationFn: ({ id, ...data }: sdk.UpdateSavedListInput & { id: string }) =>
       sdk.updateSavedList(id, data).then(sdk.unwrapSavedResponse),
     onSuccess: () => {
@@ -108,9 +112,10 @@ export function useUpdateList() {
   });
 }
 
-export function useDeleteList() {
+export function useDeleteList(options: MutationHookOptions = {}) {
   const queryClient = useQueryClient();
   return useMutation({
+    ...options,
     mutationFn: (id: string) => sdk.deleteSavedList(id).then(sdk.unwrapSavedResponse),
     onSuccess: async (_data, id) => {
       void queryClient.invalidateQueries({ queryKey: ["savedLists"] });
@@ -123,9 +128,10 @@ export function useDeleteList() {
   });
 }
 
-export function useSavePlace() {
+export function useSavePlace(options: MutationHookOptions = {}) {
   const queryClient = useQueryClient();
   return useMutation({
+    ...options,
     mutationFn: ({ listId, ...data }: sdk.CreateSavedPlaceInput & { listId: string }) =>
       sdk.createSavedPlace(listId, data).then(sdk.unwrapSavedResponse),
     onSuccess: (_data, vars) => {
@@ -136,9 +142,10 @@ export function useSavePlace() {
   });
 }
 
-export function useRemovePlace() {
+export function useRemovePlace(options: MutationHookOptions = {}) {
   const queryClient = useQueryClient();
   return useMutation({
+    ...options,
     mutationFn: (id: string) => sdk.deleteSavedPlace(id).then(sdk.unwrapSavedResponse),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["savedLists"] });
@@ -148,9 +155,10 @@ export function useRemovePlace() {
   });
 }
 
-export function useUpdatePlace() {
+export function useUpdatePlace(options: MutationHookOptions = {}) {
   const queryClient = useQueryClient();
   return useMutation({
+    ...options,
     mutationFn: ({ id, ...data }: sdk.UpdateSavedPlaceInput & { id: string }) =>
       sdk.updateSavedPlace(id, data).then(sdk.unwrapSavedResponse),
     onSuccess: () => {
@@ -159,9 +167,10 @@ export function useUpdatePlace() {
   });
 }
 
-export function useUpdateLabel() {
+export function useUpdateLabel(options: MutationHookOptions = {}) {
   const queryClient = useQueryClient();
   return useMutation({
+    ...options,
     mutationFn: ({ label, ...data }: sdk.WriteSavedLabelInput & { label: string }) =>
       sdk.writeSavedLabel(label, data).then(sdk.unwrapSavedResponse),
     onSuccess: () => {
@@ -170,9 +179,10 @@ export function useUpdateLabel() {
   });
 }
 
-export function useDeleteLabel() {
+export function useDeleteLabel(options: MutationHookOptions = {}) {
   const queryClient = useQueryClient();
   return useMutation({
+    ...options,
     mutationFn: (label: string) => sdk.deleteSavedLabel(label).then(sdk.unwrapSavedResponse),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["labeledPlaces"] });

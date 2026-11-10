@@ -27,6 +27,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import { CALLER_SHOWS_ERRORS } from "@openmapx/core";
 import { fingerprintPem, isWebAuthnAvailable } from "@openmapx/mangrove-client";
 import {
   type KeypairWrap,
@@ -53,10 +54,10 @@ export function MangroveLocalAccountSection() {
   const fmt = useDateTimeFormat();
   const { publicPem, needsSetup, needsUnlock } = useUserKeypair();
   const state = useKeypairState();
-  const addWrap = useAddWrap();
+  const addWrap = useAddWrap(CALLER_SHOWS_ERRORS);
   const removeWrap = useRemoveWrap();
-  const regenerate = useRegenerateMangroveKeypair();
-  const changePassphrase = useChangePassphrase();
+  const regenerate = useRegenerateMangroveKeypair(CALLER_SHOWS_ERRORS);
+  const changePassphrase = useChangePassphrase(CALLER_SHOWS_ERRORS);
 
   const [setupOpen, setSetupOpen] = useState(false);
   const [unlockOpen, setUnlockOpen] = useState(false);

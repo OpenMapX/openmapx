@@ -12,6 +12,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
 import {
+  CALLER_SHOWS_ERRORS,
   isSystemSavedList,
   useCreateList,
   useIsSaved,
@@ -44,9 +45,9 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
   const { data: lists, isLoading: listsLoading } = useSavedLists();
   const { data: savedInListIds } = useIsSaved(open ? place.id : null);
 
-  const savePlaceMutation = useSavePlace();
-  const removePlaceMutation = useRemovePlace();
-  const createListMutation = useCreateList();
+  const savePlaceMutation = useSavePlace(CALLER_SHOWS_ERRORS);
+  const removePlaceMutation = useRemovePlace(CALLER_SHOWS_ERRORS);
+  const createListMutation = useCreateList(CALLER_SHOWS_ERRORS);
 
   const [checkedLists, setCheckedLists] = useState<Set<string>>(new Set());
   const [creating, setCreating] = useState(false);

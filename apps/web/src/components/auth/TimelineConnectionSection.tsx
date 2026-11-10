@@ -19,6 +19,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import {
+  CALLER_SHOWS_ERRORS,
   type PersonalTimelineApiError,
   safeHref,
   type TimelineConnectionMode,
@@ -88,9 +89,9 @@ export const TimelineConnectionSection = forwardRef<
   const tc = useTranslations("common");
   const locale = useLocale();
   const connectionQuery = useTimelineConnection(ownerId);
-  const connectMutation = useConnectTimeline(ownerId);
-  const testMutation = useTestTimelineConnection(ownerId);
-  const disconnectMutation = useDisconnectTimeline(ownerId);
+  const connectMutation = useConnectTimeline(ownerId, CALLER_SHOWS_ERRORS);
+  const testMutation = useTestTimelineConnection(ownerId, CALLER_SHOWS_ERRORS);
+  const disconnectMutation = useDisconnectTimeline(ownerId, CALLER_SHOWS_ERRORS);
   const view = connectionQuery.data ?? null;
   const current = view?.connection ?? null;
   const [mode, setMode] = useState<TimelineConnectionMode>(() =>

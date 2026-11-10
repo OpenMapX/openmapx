@@ -20,6 +20,7 @@ import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 import type { SavedList } from "@openmapx/core";
 import {
+  CALLER_SHOWS_ERRORS,
   isSystemSavedList,
   useCreateList,
   useDeleteList,
@@ -47,7 +48,7 @@ export function SavedListsTab() {
   const { data: lists, isLoading } = useSavedLists();
   const selectList = useSavedPlacesStore((s) => s.selectList);
 
-  const createListMutation = useCreateList();
+  const createListMutation = useCreateList(CALLER_SHOWS_ERRORS);
   const deleteListMutation = useDeleteList();
 
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);

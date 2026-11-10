@@ -326,7 +326,9 @@
     "panelAriaLabel": "Panel",
     "resultsPanelAriaLabel": "Search results",
     "detailsPanelAriaLabel": "Place details",
-    "dataModified": "data modified"
+    "dataModified": "data modified",
+    "signedOutRetry": "You've been signed out. Sign in again, then try once more.",
+    "actionFailed": "That didn't go through. Try again."
   },
   "timePicker": {
     "select": "Select time",

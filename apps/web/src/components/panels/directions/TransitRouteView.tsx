@@ -9,6 +9,7 @@ import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import type { TransitReplanOptions } from "@openmapx/core";
 import {
+  CALLER_SHOWS_ERRORS,
   formatDistance,
   formatDuration,
   timeZoneAt,
@@ -276,7 +277,7 @@ export function TransitItineraryCard({
   // leg's stops before the session exists.
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
-  const refreshMutation = useRefreshTransitItinerary();
+  const refreshMutation = useRefreshTransitItinerary(CALLER_SHOWS_ERRORS);
   const fareSummary = extractFareSummary(itinerary.fare);
   const occupancy = worstOccupancy(itinerary);
   const firstBoardingLeg = itinerary.legs.find(

@@ -1,4 +1,9 @@
 export {
+  CALLER_SHOWS_ERRORS,
+  isErrorShownByCaller,
+  type MutationHookOptions,
+} from "./mutationErrorDisplay";
+export {
   resolvePrimaryTransitStopId,
   transitPlanningCapabilitiesQueryOptions,
   useArrivals,

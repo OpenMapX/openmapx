@@ -20,4 +20,6 @@ export type WriteSavedLabelBody = {
   fieldContributors?: WriteSavedLabelBodyFieldContributors;
   /** @maxLength 50 */
   icon?: string;
+  /** @minLength 1 */
+  replaces?: string;
 };

@@ -1,7 +1,7 @@
 "use client";
 
 import type { LngLat, ParkedSource } from "@openmapx/core";
-import { useDefaultVehicle, useSaveParkedLocation } from "@openmapx/core";
+import { CALLER_SHOWS_ERRORS, useDefaultVehicle, useSaveParkedLocation } from "@openmapx/core";
 import { useCallback } from "react";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
 
@@ -23,7 +23,7 @@ interface SaveAtOptions {
  * at where the user was when the map last updated is worse than no pin.
  */
 export function useSaveParking() {
-  const save = useSaveParkedLocation();
+  const save = useSaveParkedLocation(CALLER_SHOWS_ERRORS);
   const defaultVehicle = useDefaultVehicle();
   const requestFix = useForegroundLocation();
   const saveAsync = save.mutateAsync;

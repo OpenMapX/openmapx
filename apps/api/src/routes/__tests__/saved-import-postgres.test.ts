@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createApiClient } from "../../../../../packages/core/src/api/client";
-import { savedList, savedPlace, user } from "../../db/schema";
+import { labeledPlace, savedList, savedPlace, user } from "../../db/schema";
 import { buildTestApp } from "../../test/app";
 import { createMigratedPostgresFixture } from "../../test/postgres-fixture";
 import { administrationSdkFetch } from "./helpers/administration-sdk-fetch";
@@ -259,6 +259,27 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .insert(savedList)
         .values({ id: "other-import-list", userId: "other-import-user", name: "Other" });
       expect((await send({ listId: "other-import-list" })).statusCode).toBe(404);
+    });
+    it("replaces a label atomically and keeps the old one when the new write fails", async () => {
+      const writeLabel = (label: string, payload: object) =>
+        app.inject({ method: "PUT", url: `/api/saved/labels/${label}`, payload });
+      const labels = async () =>
+        (
+          await fixture.db
+            .select({ label: labeledPlace.label, name: labeledPlace.name })
+            .from(labeledPlace)
+            .where(eq(labeledPlace.userId, "import-user"))
+        ).map((row) => row.label);
+
+      expect((await writeLabel("office", point)).statusCode).toBe(200);
+      expect((await writeLabel("studio", { ...point, replaces: "office" })).statusCode).toBe(200);
+      expect(await labels()).toEqual(["studio"]);
+
+      await fixture.sql`CREATE FUNCTION label_test_reject() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.name = 'Reject' THEN RAISE EXCEPTION 'test failure'; END IF; RETURN NEW; END $$`;
+      await fixture.sql`CREATE TRIGGER label_test_reject BEFORE INSERT ON labeled_place FOR EACH ROW EXECUTE FUNCTION label_test_reject()`;
+      const failed = await writeLabel("gym", { ...point, name: "Reject", replaces: "studio" });
+      expect(failed.statusCode).toBe(500);
+      expect(await labels()).toEqual(["studio"]);
     });
   },
 );

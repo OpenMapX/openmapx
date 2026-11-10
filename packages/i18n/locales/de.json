@@ -326,7 +326,9 @@
     "panelAriaLabel": "Panel",
     "resultsPanelAriaLabel": "Suchergebnisse",
     "detailsPanelAriaLabel": "Ortsdetails",
-    "dataModified": "Daten verändert"
+    "dataModified": "Daten verändert",
+    "signedOutRetry": "Du wurdest abgemeldet. Melde dich erneut an und versuche es dann noch einmal.",
+    "actionFailed": "Das hat nicht geklappt. Versuche es erneut."
   },
   "timePicker": {
     "select": "Uhrzeit auswählen",

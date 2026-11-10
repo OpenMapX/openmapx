@@ -4,6 +4,7 @@ import { API_ENDPOINTS } from "../api/endpoints";
 import { type BikeRoutingOptions, bicycleQueryParameters } from "../routing/bicycleOptions";
 import type { LngLat } from "../types/geometry";
 import type { DirectionsResult, TravelMode } from "../types/routing";
+import type { MutationHookOptions } from "./mutationErrorDisplay";
 
 interface OptimizeRouteParams extends BikeRoutingOptions {
   waypoints: LngLat[];
@@ -18,8 +19,9 @@ interface OptimizeRouteParams extends BikeRoutingOptions {
   arriveBy?: string;
 }
 
-export function useOptimizeRoute() {
+export function useOptimizeRoute(options: MutationHookOptions = {}) {
   return useMutation({
+    ...options,
     mutationFn: ({
       waypoints,
       mode,

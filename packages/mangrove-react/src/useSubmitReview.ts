@@ -6,7 +6,7 @@ import {
   signMangroveReview,
   verifyMangroveReview,
 } from "@openmapx/mangrove-client";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { type MutationMeta, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { keypairOwner, useKeypairStore } from "./keypairStore";
 import { useMangroveCurrentUser, useMangroveTransport } from "./provider";
@@ -37,7 +37,7 @@ export interface SubmitReviewInput {
  * through the host transport. Invalidates the matching `placeReviews` /
  * `placeReviewAggregate` queries on success.
  */
-export function useSubmitReview() {
+export function useSubmitReview(options: { meta?: MutationMeta } = {}) {
   const qc = useQueryClient();
   const transport = useMangroveTransport();
   const currentUser = useMangroveCurrentUser();
@@ -55,6 +55,7 @@ export function useSubmitReview() {
   const sessionNickname = currentUser?.nickname?.trim() || null;
 
   return useMutation({
+    ...options,
     mutationFn: async (input: SubmitReviewInput): Promise<{ id: string }> => {
       const owner = currentUser;
       const signal = lifetime.current.signal;

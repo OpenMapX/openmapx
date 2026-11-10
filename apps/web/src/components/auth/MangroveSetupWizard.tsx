@@ -21,6 +21,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { CALLER_SHOWS_ERRORS } from "@openmapx/core";
 import { fingerprintPem, isWebAuthnAvailable, publicKeyToPem } from "@openmapx/mangrove-client";
 import { useSetupKeypair } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
@@ -89,7 +90,7 @@ export function MangroveSetupWizard({
   const t = useTranslations("account");
   const tc = useTranslations("common");
   const fullScreen = useFullScreenOnMobile();
-  const setup = useSetupKeypair();
+  const setup = useSetupKeypair(CALLER_SHOWS_ERRORS);
 
   const [step, setStep] = useState<Step>("chooseMode");
   const [mode, setMode] = useState<Mode>("passphrase");

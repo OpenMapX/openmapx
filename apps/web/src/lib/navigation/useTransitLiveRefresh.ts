@@ -1,6 +1,10 @@
 "use client";
 
-import { useNavigationStore, useRefreshTransitItinerary } from "@openmapx/core";
+import {
+  CALLER_SHOWS_ERRORS,
+  useNavigationStore,
+  useRefreshTransitItinerary,
+} from "@openmapx/core";
 import { isApiClientError } from "@openmapx/core/navigation/api";
 import { onlineManager } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
@@ -14,7 +18,7 @@ const REFRESH_INTERVAL_MS = 30_000;
  * Hosted itineraries without tokens are kept current by vehicle-journey polling.
  */
 export function useTransitLiveRefresh(active: boolean): void {
-  const refresh = useRefreshTransitItinerary();
+  const refresh = useRefreshTransitItinerary(CALLER_SHOWS_ERRORS);
   const mutateRef = useRef(refresh.mutateAsync);
   mutateRef.current = refresh.mutateAsync;
   const inFlightRef = useRef<{ requestId: string | null; token: string } | null>(null);

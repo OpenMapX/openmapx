@@ -385,11 +385,11 @@ export function PlaceOverviewTab({
     if (existingLabel?.label === label) {
       deleteLabelMutation.mutate(label);
     } else {
-      if (existingLabel) {
-        deleteLabelMutation.mutate(existingLabel.label);
-      }
+      // The server removes the place's previous label in the same write, so a
+      // failure keeps the old label instead of leaving the place unlabelled.
       updateLabelMutation.mutate({
         label,
+        ...(existingLabel ? { replaces: existingLabel.label } : {}),
         name: place.name,
         address: place.address ?? undefined,
         lat: place.coordinates[1],

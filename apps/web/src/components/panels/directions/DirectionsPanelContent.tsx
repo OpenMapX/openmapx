@@ -20,6 +20,7 @@ import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import type { AutocompleteResult, DirectionsResult, LngLat, TravelMode } from "@openmapx/core";
 import {
+  CALLER_SHOWS_ERRORS,
   directionsQueryKey,
   formatDistance,
   formatDuration,
@@ -271,7 +272,7 @@ export function DirectionsPanelContent() {
   const registry = useIntegrationRegistry();
   const { services: caps } = useCapabilities();
   const queryClient = useQueryClient();
-  const optimizeMutation = useOptimizeRoute();
+  const optimizeMutation = useOptimizeRoute(CALLER_SHOWS_ERRORS);
 
   const [showOptions, setShowOptions] = useState(false);
   const [detailsRouteIndex, setDetailsRouteIndex] = useState<number | null>(null);

@@ -27,6 +27,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import type { SavedPlace } from "@openmapx/core";
 import {
+  CALLER_SHOWS_ERRORS,
   isSystemSavedList,
   useDeleteList,
   useSavedListPlaces,
@@ -67,6 +68,7 @@ export function SavedListDetail() {
   const { data: places, isLoading: placesLoading } = useSavedListPlaces(selectedListId);
 
   const updateListMutation = useUpdateList();
+  const renameListMutation = useUpdateList(CALLER_SHOWS_ERRORS);
   const deleteListMutation = useDeleteList();
   const updatePlaceMutation = useUpdatePlace();
 
@@ -103,7 +105,7 @@ export function SavedListDetail() {
     const trimmed = nameValue.trim();
     const currentDisplay = resolveListName(list.name);
     if (trimmed && trimmed !== currentDisplay) {
-      updateListMutation.mutate(
+      renameListMutation.mutate(
         { id: selectedListId, name: trimmed },
         {
           onError: (error) => {

@@ -8,6 +8,7 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
 import type { Review } from "@openmapx/core";
+import { CALLER_SHOWS_ERRORS } from "@openmapx/core";
 import { useSubmitReview } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
 import Dialog from "@/components/ui/Dialog";
@@ -25,7 +26,7 @@ interface Props {
 export function DeleteReviewDialog({ open, onClose, review, subject }: Props) {
   const t = useTranslations("place");
   const tc = useTranslations("common");
-  const submit = useSubmitReview();
+  const submit = useSubmitReview(CALLER_SHOWS_ERRORS);
 
   async function handleConfirm() {
     await submit.mutateAsync({

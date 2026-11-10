@@ -19,6 +19,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import {
+  CALLER_SHOWS_ERRORS,
   type ImportPlacesInput,
   isApiClientError,
   isSystemSavedList,
@@ -97,7 +98,7 @@ export function ImportPlacesDialog({
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down("sm"));
   const { data: savedLists } = useSavedLists();
-  const mutation = useImportPlaces();
+  const mutation = useImportPlaces(CALLER_SHOWS_ERRORS);
   const selectList = useSavedPlacesStore((state) => state.selectList);
   const [phase, setPhase] = useState<"parsing" | "locating" | "review" | "importing" | "done">(
     "parsing",

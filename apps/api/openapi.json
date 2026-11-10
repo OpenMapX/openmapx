@@ -142218,6 +142218,10 @@
                   "icon": {
                     "type": "string",
                     "maxLength": 50
+                  },
+                  "replaces": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 },
                 "required": [

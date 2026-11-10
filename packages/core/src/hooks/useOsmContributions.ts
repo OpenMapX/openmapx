@@ -35,6 +35,7 @@ import type {
   OsmNoteRequest,
   OsmNoteResult,
 } from "../types/osmContribution";
+import type { MutationHookOptions } from "./mutationErrorDisplay";
 
 /** Shortest query that is worth sending to the bounded category search. */
 export const OSM_CATEGORY_MIN_QUERY_LENGTH = 2;
@@ -200,12 +201,13 @@ export function useOsmContributionCategories(input: OsmCategorySearchInput, enab
   });
 }
 
-export function usePreviewOsmContribution() {
+export function usePreviewOsmContribution(options: MutationHookOptions = {}) {
   return useMutation<
     OsmContributionPreview,
     OsmContributionRequestError,
     OsmContributionPreviewRequest
   >({
+    ...options,
     mutationFn: (request) =>
       run(osmContributionPreviewSchema, () =>
         apiClient.post(API_ENDPOINTS.osmContributionPreview, request),
@@ -214,13 +216,14 @@ export function usePreviewOsmContribution() {
   });
 }
 
-export function usePublishOsmContribution() {
+export function usePublishOsmContribution(options: MutationHookOptions = {}) {
   const queryClient = useQueryClient();
   return useMutation<
     OsmContributionPublishResult,
     OsmContributionRequestError,
     OsmContributionPublishRequest
   >({
+    ...options,
     mutationFn: (request) =>
       run(osmContributionPublishResultSchema, () =>
         apiClient.post(API_ENDPOINTS.osmContributionPublish, request),
@@ -235,8 +238,9 @@ export function usePublishOsmContribution() {
   });
 }
 
-export function useCreateOsmNote() {
+export function useCreateOsmNote(options: MutationHookOptions = {}) {
   return useMutation<OsmNoteResult, OsmContributionRequestError, OsmNoteRequest>({
+    ...options,
     mutationFn: (request) =>
       run(osmNoteResultSchema, () => apiClient.post(API_ENDPOINTS.osmContributionNotes, request)),
     retry: false,
