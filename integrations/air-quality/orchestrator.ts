@@ -171,6 +171,7 @@ export function createAirQualityOrchestrator(ctx: IntegrationContext) {
       const settled = await Promise.all(
         selection.runnable.map(async ({ provider }) => {
           const startedAt = Date.now();
+          const probe = ctx.providerHealth?.heldProbe?.(provider.id);
           try {
             const evidence = await runWithProviderDeadline(
               (call) => {
@@ -212,7 +213,8 @@ export function createAirQualityOrchestrator(ctx: IntegrationContext) {
             const code = failureCode(error);
             const latencyMs = Date.now() - startedAt;
             const outcome = classifyProviderFailure(error, signal);
-            // A cancellation says nothing about the provider: metrics only, never health.
+            // A cancellation says nothing about the provider: metrics only, never an
+            // outcome. A cancelled probe gives its lease back.
             if (outcome !== "caller_cancelled")
               await ctx.providerHealth
                 ?.recordFailure(
@@ -222,6 +224,8 @@ export function createAirQualityOrchestrator(ctx: IntegrationContext) {
                   error instanceof Error ? error.message : undefined,
                 )
                 .catch(() => undefined);
+            else if (probe)
+              await ctx.providerHealth?.releaseProbe?.(provider.id, probe).catch(() => undefined);
             ctx.metricsRecorder?.recordAirQualityProviderCall?.({
               providerId: provider.id,
               method,
@@ -280,6 +284,7 @@ export function createAirQualityOrchestrator(ctx: IntegrationContext) {
       const settled = await Promise.all(
         selection.runnable.map(async ({ provider }) => {
           const startedAt = Date.now();
+          const probe = ctx.providerHealth?.heldProbe?.(provider.id);
           try {
             const page = await runWithProviderDeadline(
               (call) =>
@@ -312,6 +317,8 @@ export function createAirQualityOrchestrator(ctx: IntegrationContext) {
               await ctx.providerHealth
                 ?.recordFailure(provider.id, latencyMs, outcome)
                 .catch(() => undefined);
+            else if (probe)
+              await ctx.providerHealth?.releaseProbe?.(provider.id, probe).catch(() => undefined);
             ctx.metricsRecorder?.recordAirQualityProviderCall?.({
               providerId: provider.id,
               method: "stations",

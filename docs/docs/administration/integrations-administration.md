@@ -256,8 +256,9 @@ degrades a provider. Five consecutive counted failures or a failure rate above
 through 5, 10, 20, 40, and 60 minutes. Exactly one process owns the half-open
 probe. Timeouts, connection errors, upstream 4xx and 5xx responses,
 authentication failures, and invalid payloads count; valid empty results, policy
-rejections, adapter-rejected input, and quota denial do not. Cancelled calls are
-counted in metrics only and leave provider health untouched. If the health store
+rejections, bad caller input (including "not found" for an identifier the user
+supplied), and quota denial do not. Cancelled calls are counted in metrics only
+and record no outcome; a cancelled half-open probe releases its lease. If the health store
 itself fails, requests remain enabled with a diagnostic instead of suppressing
 every provider.
 

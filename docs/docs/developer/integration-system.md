@@ -976,11 +976,19 @@ paths to the global URL-pattern limiter.
 Provider health accepts only closed outcomes. Timeouts, connection failures,
 upstream 5xx responses, other upstream 4xx responses, authentication failures,
 and invalid payloads affect the circuit; valid empty results, policy rejection,
-quota denial, and input the adapter itself rejected (code `invalid_request`)
-remain observable without penalizing the provider. A cancellation is recorded in
-metrics only and never reaches provider health: it does not change counts, the
-last error, the latency average or a half-open probe lease, and the host ignores
-a `caller_cancelled` record.
+quota denial, and bad caller input remain observable without penalizing the
+provider. Bad caller input (code `invalid_request`, thrown as
+`ProviderInputError`) is a value the adapter rejected itself, or an upstream 404
+or "unknown stop/station/line" answer to a lookup keyed by an identifier the
+caller supplied, so repeated bogus identifiers cannot open a circuit. The
+adapter maps it where it knows the identifier came from the caller; a 404 on a
+fixed endpoint stays a counted failure. A cancellation is recorded in metrics
+only and records no outcome: it does not change counts, the last error or the
+latency average, and the host ignores a `caller_cancelled` record. If the
+cancelled call was the half-open probe, the orchestrator gives the lease back
+with `releaseProbe(providerId, heldProbe(providerId))`, read when the call
+started, so the next request can probe at once; the release deletes the lease
+only while it still holds that owner token.
 
 Orchestrators derive the outcome with `classifyProviderFailure(error, signal)`
 from `@openmapx/integration-framework`, passing the caller's signal. The error

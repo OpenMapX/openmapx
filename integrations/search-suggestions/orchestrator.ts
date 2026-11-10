@@ -58,6 +58,7 @@ async function invokeProvider(
     throw new Error("search suggestion provider unavailable");
   }
 
+  const probe = ctx.providerHealth?.heldProbe?.(entry.provider.id);
   try {
     const result = await runWithProviderDeadline(
       (providerContext) => entry.provider.searchSuggestions(query, providerContext),
@@ -81,6 +82,7 @@ async function invokeProvider(
     // A cancellation says nothing about the provider: metrics only, never health.
     if (outcome !== "caller_cancelled")
       await ctx.providerHealth?.recordFailure(entry.provider.id, elapsed, outcome, reason);
+    else if (probe) await ctx.providerHealth?.releaseProbe?.(entry.provider.id, probe);
     ctx.metricsRecorder?.recordProviderCall(
       {
         providerId: entry.provider.id,

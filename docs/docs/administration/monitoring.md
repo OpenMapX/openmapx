@@ -119,12 +119,15 @@ operator message, or the failure outcome when none was recorded.
 
 Timeouts, connection failures, upstream 5xx and other 4xx responses,
 authentication failures and invalid payloads count toward opening. Valid empty
-responses, policy rejections, requests the adapter itself rejected as invalid
-input and quota denial do not. Lifetime failure totals can therefore differ
-from counted failures in the recent window. A cancelled call, whether the user
-left or a reload retired the provider, is not recorded here at all: it appears
-only in metrics, so it never hides the last real error or releases a probe
-lease.
+responses, policy rejections, bad caller input and quota denial do not. Bad
+caller input includes a "not found" answer for a stop, station or line
+identifier a user supplied, so requests for bogus identifiers cannot open a
+provider's circuit; a "not found" on a fixed endpoint still counts. Lifetime
+failure totals can therefore differ from counted failures in the recent window.
+A cancelled call, whether the user left or a reload retired the provider, is
+not recorded here at all: it appears only in metrics, so it never hides the last
+real error. A cancelled half-open probe gives its lease back, so the next
+request can probe immediately instead of waiting for the lease to expire.
 
 If Redis is unavailable, the circuit returns a diagnostic and leaves provider
 requests enabled. This differs from the quota-bound upstream runtime, which

@@ -75,24 +75,42 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       });
     });
 
-    it("leaves state, the last error and a half-open lease untouched by a cancellation", async () => {
-      let now = 1_700_000_000_000;
-      const health = await ProviderHealth.init({
-        redis: fixture.client,
-        now: () => now,
-        cooldownsMs: [100],
+    it("never opens the circuit on repeated caller input", async () => {
+      const health = await ProviderHealth.init({ redis: fixture.client });
+      for (let index = 0; index < 12; index++)
+        await health.recordFailure("lookup", 10, "input", "Unknown stop identifier");
+      expect(await health.getSnapshot("lookup")).toMatchObject({
+        state: "healthy",
+        failureCount: 12,
+        countedFailureCount: 0,
       });
+      expect(await health.isHealthy("lookup")).toBe(true);
+    });
+
+    it("releases a cancelled probe's lease without recording an outcome", async () => {
+      let now = 1_700_000_000_000;
+      const options = { redis: fixture.client, now: () => now, cooldownsMs: [100] };
+      const health = await ProviderHealth.init(options);
+      const other = await ProviderHealth.init(options);
       for (let index = 0; index < 5; index++)
         await health.recordFailure("probe", 10, "auth", "credential rejected");
       now += 101;
       expect(await health.isHealthy("probe")).toBe(true);
+      expect(await other.isHealthy("probe")).toBe(false);
       const before = await fixture.client.get("provider:health:probe");
+      const token = health.heldProbe("probe") as string;
 
       await health.recordFailure("probe", 900, "caller_cancelled", "provider call cancelled");
+      expect(await fixture.client.get("provider:health:probe")).toBe(before);
+      await health.releaseProbe("probe", token);
 
       expect(await fixture.client.get("provider:health:probe")).toBe(before);
+      expect(await fixture.client.exists("provider:health-probe:probe")).toBe(0);
+      // Another process can probe at once.
+      expect(await other.isHealthy("probe")).toBe(true);
+      // A stale token never deletes the new owner's lease.
+      await health.releaseProbe("probe", token);
       expect(await fixture.client.exists("provider:health-probe:probe")).toBe(1);
-      expect(await health.isHealthy("probe")).toBe(false);
     });
 
     it("leases one half-open probe, escalates cooldowns, and recovers after three successes", async () => {

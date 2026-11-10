@@ -301,8 +301,7 @@ export interface ProviderHealthHandle {
   /**
    * Record a failed call. `reason` is truncated to 200 chars on the host.
    * Never record `caller_cancelled`: a cancellation goes to metrics only, and
-   * the host ignores it so it cannot change counts, the last error, latency or
-   * a half-open probe lease.
+   * the host ignores it so it cannot change counts, the last error or latency.
    * `latencyMs` is the wall-clock time elapsed before the failure surfaced
    * (so timeouts still contribute to the EMA).
    */
@@ -314,6 +313,17 @@ export interface ProviderHealthHandle {
   ): Promise<void>;
   /** Read the deterministic state and atomically claim an eligible half-open probe. */
   getSnapshot(providerId: string): Promise<ProviderHealthSnapshot>;
+  /**
+   * The owner token of a half-open lease this host instance currently holds
+   * for the provider. Read it when a call starts; a call that started without
+   * one is not the probe.
+   */
+  heldProbe?(providerId: string): string | undefined;
+  /**
+   * Release a half-open lease without recording any outcome, when the probe
+   * call was cancelled. Deletes the lease only while it still holds the token.
+   */
+  releaseProbe?(providerId: string, probeToken: string): Promise<void>;
 }
 
 /**

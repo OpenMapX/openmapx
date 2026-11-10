@@ -225,8 +225,8 @@ function classifyOutcome(value: unknown): ProviderCallOutcome {
  *
  * With a caller signal, the call settles as cancelled as soon as the caller
  * aborts, even if the provider ignores the signal. A cancelled call is counted
- * in metrics only and leaves provider health untouched: no failure count, last
- * error, latency sample or half-open lease release.
+ * in metrics only and records no outcome: no failure count, last error or
+ * latency sample. If it was the half-open probe, it releases the lease.
  */
 async function timed<T>(
   health: ProviderHealthHandle,
@@ -237,6 +237,8 @@ async function timed<T>(
   signal?: AbortSignal,
 ): Promise<{ ok: true; value: T } | { ok: false; error: unknown }> {
   const start = performance.now();
+  // A half-open lease held now belongs to this call: the probe.
+  const probe = health.heldProbe?.(providerId);
   try {
     const rawValue = await raceCallerAbort(fn(), signal);
     const value =
@@ -256,9 +258,11 @@ async function timed<T>(
   } catch (error) {
     const elapsed = performance.now() - start;
     const outcome = classifyProviderFailure(error, signal);
-    // A cancellation says nothing about the provider: metrics only, never health.
+    // A cancellation says nothing about the provider: metrics only, never an
+    // outcome. A cancelled probe gives its lease back so the next call can probe.
     if (outcome !== "caller_cancelled")
       await health.recordFailure(providerId, elapsed, outcome, failureReason(error));
+    else if (probe) await health.releaseProbe?.(providerId, probe);
     metrics.recordProviderCall(
       {
         providerId,
