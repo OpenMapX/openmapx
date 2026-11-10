@@ -334,7 +334,8 @@ describe("image-proxy route", () => {
       vi.stubEnv("CORS_ORIGIN", value);
       expect(() => corsOptions()).toThrow(/CORS_ORIGIN/);
       const res = await inject({ referer: "https://web.example/page" });
-      expect(res.statusCode).toBeGreaterThanOrEqual(400);
+      expect(res.statusCode).toBe(500);
+      expect(res.json()).toEqual({ error: "Internal Server Error" });
       expect(mockFetchWithRedirects).not.toHaveBeenCalled();
     },
   );
