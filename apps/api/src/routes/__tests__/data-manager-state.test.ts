@@ -1,6 +1,8 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -35,6 +37,8 @@ const fakeDb = vi.hoisted(() => ({
    * appropriate dataset.
    */
   callIndex: 0,
+  /** Each select's `where` condition, rendered later through drizzle's dialect. */
+  conditions: [] as unknown[],
 }));
 
 // The pin is the agent's; /state reads it through the api role's read-only
@@ -79,7 +83,8 @@ vi.mock("../../db/index.js", () => {
       from() {
         return builder;
       },
-      where() {
+      where(condition: unknown) {
+        fakeDb.conditions.push(condition);
         return builder;
       },
       orderBy() {
@@ -156,6 +161,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   fakeDb.callIndex = 0;
+  fakeDb.conditions = [];
   fakeDb.state = {
     lastJob: null,
     feedCount: 0,
@@ -169,6 +175,53 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+function renderedConditions(): Array<{ sql: string; params: unknown[] }> {
+  const dialect = new PgDialect();
+  return fakeDb.conditions.map((condition) => dialect.sqlToQuery(condition as SQL));
+}
+
+describe("transit job filters", () => {
+  it("reads state from the transit-sync jobs the durable pipeline writes", async () => {
+    fakeDb.state.lastJob = {
+      id: "job-queued",
+      kind: "transit-sync",
+      status: "queued",
+      startedAt: new Date("2026-11-10T03:00:00.000Z"),
+      finishedAt: null,
+      triggeredBy: "cron:data-manager-cron",
+      idempotencyKey: null,
+      metadata: null,
+    };
+    fakeDb.state.currentJob = fakeDb.state.lastJob;
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/data-manager/transit/state",
+      headers: { authorization: "Bearer test-token" },
+    });
+
+    expect(res.json()).toMatchObject({
+      lastSyncStatus: null,
+      currentJob: { jobId: "job-queued", startedAt: "2026-11-10T03:00:00.000Z" },
+    });
+    const [last, current] = renderedConditions().filter((query) => query.sql.includes('"kind"'));
+    expect(last?.params).toEqual(["transit-sync"]);
+    expect(current?.params).toEqual(["transit-sync", "queued", "running", "cancel_pending"]);
+  });
+
+  it("lists transit-sync jobs by default", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/data-manager/transit/jobs",
+      headers: { authorization: "Bearer test-token" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const kinds = renderedConditions().filter((query) => query.sql.includes('"kind"'));
+    expect(kinds.map((query) => query.params)).toEqual([["transit-sync"], ["transit-sync"]]);
+  });
+});
+
 describe("GET /data-manager/transit/state", () => {
   it("returns 401 without auth", async () => {
     const res = await app.inject({ method: "GET", url: "/data-manager/transit/state" });
@@ -178,7 +231,7 @@ describe("GET /data-manager/transit/state", () => {
   it("returns the merged lockfile + DB state under bearer token auth", async () => {
     fakeDb.state.lastJob = {
       id: "job-1",
-      kind: "transitous-sync",
+      kind: "transit-sync",
       status: "ok",
       startedAt: new Date("2026-05-20T03:00:00.000Z"),
       finishedAt: new Date("2026-05-20T04:00:00.000Z"),
@@ -220,7 +273,7 @@ describe("GET /data-manager/transit/state", () => {
   it("surfaces an active running job in `currentJob`", async () => {
     fakeDb.state.lastJob = {
       id: "job-running",
-      kind: "transitous-sync",
+      kind: "transit-sync",
       status: "running",
       startedAt: new Date("2026-05-21T03:00:00.000Z"),
       finishedAt: null,
@@ -230,7 +283,7 @@ describe("GET /data-manager/transit/state", () => {
     };
     fakeDb.state.currentJob = {
       id: "job-running",
-      kind: "transitous-sync",
+      kind: "transit-sync",
       status: "running",
       startedAt: new Date("2026-05-21T03:00:00.000Z"),
       finishedAt: null,

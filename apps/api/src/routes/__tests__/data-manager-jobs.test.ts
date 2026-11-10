@@ -136,7 +136,7 @@ describe("serialized data-manager job projections", () => {
       [
         {
           id: jobId,
-          kind: "transitous-sync",
+          kind: "transit-sync",
           status: "error",
           startedAt: date,
           finishedAt: date,

@@ -269,6 +269,11 @@ Operators who need local timetables should follow the
 licenses before building a dataset. Local endpoint configuration alone is not
 proof that an active dataset and its capability metadata are ready.
 
+**Admin → Transit** reads the `transit-sync` jobs that scheduled and manual syncs
+create. The last sync shows the latest finished run. A queued, running or
+cancel-pending run appears as the current job, and the job list shows
+`transit-sync` runs unless another `kind` is requested.
+
 ### The transit providers (integrations)
 
 Manage provider credentials and enablement under **Admin → Integrations**.
