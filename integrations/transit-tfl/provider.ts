@@ -215,6 +215,10 @@ export async function searchByName(
 ): Promise<TransitStop[]> {
   const key = apiKey();
   if (!key) return [];
+  // An empty, "." or ".." path segment collapses during URL normalisation and
+  // would query a different TfL path, whose failure would count against TfL.
+  // Such text names no stop.
+  if (query === "" || query === "." || query === "..") return [];
   const params = new URLSearchParams({
     maxResults: String(Math.min(limit, 50)),
     app_key: key,

@@ -100,6 +100,11 @@ describe("TfL payload validation", () => {
     }
   });
 
+  it("answers no stops for search text that would collapse into another TfL path", async () => {
+    for (const query of ["", ".", ".."]) await expect(searchByName(query, 5)).resolves.toEqual([]);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   it("treats a 404 for a caller's stop or line as bad input", async () => {
     mockFetch.mockImplementation(async () => new Response("not found", { status: 404 }));
 
