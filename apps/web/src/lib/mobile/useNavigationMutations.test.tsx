@@ -1,5 +1,5 @@
-import { useNavigationStore } from "@openmapx/core";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useNavigationStore, useSettingsStore } from "@openmapx/core";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@/test";
 
 const runtime = vi.hoisted(() => ({
@@ -7,6 +7,7 @@ const runtime = vi.hoisted(() => ({
   commands: null as null | {
     stop: ReturnType<typeof vi.fn>;
     requestSnapshot: ReturnType<typeof vi.fn>;
+    updateSettings?: ReturnType<typeof vi.fn>;
   },
 }));
 
@@ -50,5 +51,36 @@ describe("useNavigationMutations.completeArrival", () => {
     const { result } = renderHook(() => useNavigationMutations());
 
     await expect(act(() => result.current.completeArrival())).resolves.toBe(false);
+  });
+});
+
+describe("useNavigationMutations.setVoiceTiming", () => {
+  const initialTiming = useSettingsStore.getState().voiceGuidanceTiming;
+  beforeEach(() => {
+    runtime.browserAuthority = true;
+    runtime.commands = null;
+  });
+  afterEach(() => {
+    useSettingsStore.getState().setVoiceGuidanceTiming(initialTiming);
+  });
+
+  it("stores the preference for a browser-owned trip", async () => {
+    const { result } = renderHook(() => useNavigationMutations());
+
+    await act(() => result.current.setVoiceTiming("early"));
+
+    expect(useSettingsStore.getState().voiceGuidanceTiming).toBe("early");
+  });
+
+  it("tells the native session as well as storing the preference", async () => {
+    const updateSettings = vi.fn(async () => undefined);
+    runtime.browserAuthority = false;
+    runtime.commands = { stop: vi.fn(), requestSnapshot: vi.fn(), updateSettings };
+    const { result } = renderHook(() => useNavigationMutations());
+
+    await act(() => result.current.setVoiceTiming("late"));
+
+    expect(useSettingsStore.getState().voiceGuidanceTiming).toBe("late");
+    expect(updateSettings).toHaveBeenCalledWith({ voiceTiming: "late" });
   });
 });

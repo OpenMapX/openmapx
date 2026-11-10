@@ -79,6 +79,17 @@ only when the OS starts the task without the app.
   (`createRemoteWork.ts`). The answer re-enters the coordinator as a queued
   `applyReroute`, which applies it only while the session and its pending
   request id still match. A newer request aborts the one in flight.
+- **Settings.** `settings.update` changes the running session: voice guidance,
+  keep-screen-on, voice timing (ground) and alight alerts (transit), plus locale
+  and units. Only the session identity is checked, not the revision, because
+  every field is an absolute value and progress commits about once a second.
+  Muting cuts off a prompt that is already playing. The page sends the user's
+  voice timing in the start package and sends a change made during the trip.
+- **Keep-awake.** The composition holds the screen only while the app is
+  visible, the location stream runs for an active session, and that session's
+  keep-screen-on setting is on. It re-checks after every published change and
+  when the shell reports a visibility change or a recovery outcome, so a
+  setting change, arrival or end releases the screen with the commit itself.
 - **Transit refresh and replan** are not wired yet. Their effects are no-ops,
   and the session keeps running on its captured itinerary.
 
@@ -422,8 +433,9 @@ confirmation and requires unlocking/foregrounding the app. Only confirmation
 calls `NavigationCoordinator.stopFromSurface`, through the shared session
 executor and the same durable teardown used by the web command. Replayed links
 from Recents or an old card cannot stop a replacement trip. The existing
-`session.stopped` message also clears a matching web read model and releases the
-shell's keep-awake state; older web versions may ignore the unsolicited message.
+`session.stopped` message also clears a matching web read model; older web
+versions may ignore the unsolicited message. Keep-awake is released by the
+same teardown, because it follows the durable session.
 
 Lock-screen content follows system privacy settings. Android's private visibility
 and generic public version do not override a user's decision to show sensitive

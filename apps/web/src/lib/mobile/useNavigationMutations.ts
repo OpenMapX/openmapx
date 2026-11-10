@@ -1,6 +1,6 @@
 "use client";
 
-import { useNavigationStore } from "@openmapx/core";
+import { useNavigationStore, useSettingsStore, type VoiceGuidanceTiming } from "@openmapx/core";
 import { useCallback } from "react";
 import { useMobileRuntimeContext } from "./MobileRuntimeProvider";
 
@@ -82,5 +82,22 @@ export function useNavigationMutations() {
       .catch(() => undefined);
   }, [browserAuthority, commands]);
 
-  return { endNavigation, completeArrival, toggleVoice, toggleKeepScreenOn } as const;
+  const setVoiceTiming = useCallback(
+    async (timing: VoiceGuidanceTiming) => {
+      // The browser engine reads the preference on every cue; native has its own
+      // copy in the session, so a native trip has to be told.
+      useSettingsStore.getState().setVoiceGuidanceTiming(timing);
+      if (browserAuthority || !commands) return;
+      await commands.updateSettings({ voiceTiming: timing }).catch(() => undefined);
+    },
+    [browserAuthority, commands],
+  );
+
+  return {
+    endNavigation,
+    completeArrival,
+    toggleVoice,
+    toggleKeepScreenOn,
+    setVoiceTiming,
+  } as const;
 }

@@ -16,6 +16,7 @@ import type { RerouteOutcome } from "./ground/GroundRerouteService";
 import { onRerouteFailed, onRerouteSucceeded, type RerouteRuntime } from "./ground/rerouteState";
 import type { AnyNavigationProcessor, ProcessorMutation, ProcessorRegistry } from "./processor";
 import { SerialExecutor } from "./serialExecutor";
+import { applySettingsPatch } from "./sessionSettings";
 import { groundFullSnapshot } from "./snapshots/groundSnapshot";
 import { transitFullSnapshot } from "./snapshots/transitSnapshot";
 import { allowsNavigationStart, type NavigationStartContext } from "./startContext";
@@ -532,27 +533,25 @@ export class NavigationCoordinator {
     command: Extract<WebToNativeMessage, { type: "settings.update" }>,
     now: number,
   ): Promise<CommandResponse> {
-    const current = await this.deps.repository.loadActive(now);
-    if (!current) return errorResponse("no-session", command.messageId);
-    if (!this.matches(command, current))
-      return errorResponse("revision-conflict", command.messageId);
-
-    const { locale, units } = command.payload;
-    const committed = await this.deps.repository.compareAndSwap(
-      current.sessionId,
-      current.revision,
-      (session) => ({
-        session: {
-          ...session,
-          revision: session.revision + 1,
-          updatedAtMs: now,
-          ...(locale === undefined ? {} : { locale }),
-          ...(units === undefined ? {} : { units }),
-        },
-        effects: [{ kind: "publish-snapshot", immediate: true }],
-      }),
-      now,
-    );
+    // Only the trip is checked, not the revision: progress commits about once a
+    // second, so the revision the page last saw is routinely behind, and every
+    // field of the patch is an absolute value that is safe on top of newer state.
+    let committed: CommitResult = { ok: false, code: "no-active-session" };
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const current = await this.deps.repository.loadActive(now);
+      if (!current) return errorResponse("no-session", command.messageId);
+      if (command.sessionId !== undefined && command.sessionId !== current.sessionId)
+        return errorResponse("revision-conflict", command.messageId);
+      committed = await this.deps.repository.compareAndSwap(
+        current.sessionId,
+        current.revision,
+        (session) => applySettingsPatch(session, command.payload, now),
+        now,
+      );
+      // A writer outside this queue may have committed between the read and the
+      // swap; the patch is then applied once more on top of that revision.
+      if (committed.ok || committed.code !== "revision-conflict") break;
+    }
     if (!committed.ok) return errorResponse(committed.code, command.messageId);
     await this.deps.effects.run(committed.effects);
 

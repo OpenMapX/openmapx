@@ -223,6 +223,23 @@ export class FakeApp {
   visible = true;
 }
 
+/** The screen's wake lock. */
+export class FakeKeepAwake {
+  held = false;
+  /** Every change, in order, so a test can see a release and a re-hold. */
+  readonly calls: Array<"activate" | "deactivate"> = [];
+
+  async activate(): Promise<void> {
+    this.calls.push("activate");
+    this.held = true;
+  }
+
+  async deactivate(): Promise<void> {
+    this.calls.push("deactivate");
+    this.held = false;
+  }
+}
+
 /** The native screens a start can show. Accepting is the default answer. */
 export class FakePermissionScreens implements PermissionUi {
   readonly shown: string[] = [];
@@ -260,6 +277,7 @@ export interface FakePhone {
   network: FakeNetwork;
   storage: FakeStorage;
   app: FakeApp;
+  keepAwake: FakeKeepAwake;
   permissionScreens: FakePermissionScreens;
 }
 
@@ -272,6 +290,7 @@ export function createFakePhone(): FakePhone {
     network: new FakeNetwork(),
     storage: new FakeStorage(),
     app: new FakeApp(),
+    keepAwake: new FakeKeepAwake(),
     permissionScreens: new FakePermissionScreens(),
   };
 }
@@ -305,6 +324,8 @@ export interface ForegroundHarness {
    * stopped stream delivers nothing, so this reports whether it was delivered.
    */
   deliver(locations: readonly RawLocation[]): Promise<boolean>;
+  /** The user brings the app to the front or leaves it. */
+  setVisible(visible: boolean): Promise<void>;
   /** The committed session, read from storage. */
   session(): Promise<MobileNavigationSession | null>;
   /** Waits for every queued coordinator operation and its remote work. */
@@ -352,6 +373,7 @@ export async function startForegroundHarness(
       request: async () => phone.notifications.granted,
     },
     openStorage: () => phone.storage.open(),
+    keepAwake: phone.keepAwake,
     clock: phone.clock.now,
   };
 
@@ -418,6 +440,10 @@ export async function startForegroundHarness(
       await coordinator.handleLocationBatch({ locations });
       await settle();
       return true;
+    },
+    async setVisible(visible) {
+      phone.app.visible = visible;
+      await navigation.reviewKeepAwake();
     },
     session: () => repository.loadActive(phone.clock.now()),
     settle,

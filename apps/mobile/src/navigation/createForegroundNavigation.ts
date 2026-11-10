@@ -1,3 +1,4 @@
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import * as Notifications from "expo-notifications";
 import type { MobileLocale } from "../../config/nativeCopy";
 import type { NavigationAudio } from "../audio/navigationAudio";
@@ -53,7 +54,7 @@ export interface ForegroundNavigationOptions {
   permissionUi: PermissionUi;
   isAppActive(): boolean;
   auxiliary: AuxiliaryCommandHandler;
-  /** Told when guidance starts or ends, for keep-awake and the shell states. */
+  /** Told when guidance starts or ends, for the shell states. */
   onNavigatingChanged(navigating: boolean): void;
   registerAsForeground?: boolean;
   startContext?(): NavigationStartContext;
@@ -83,8 +84,13 @@ export interface ForegroundDevice {
   };
   /** Opens the durable store when this is the first composition in the process. */
   openStorage(): Promise<Database>;
+  /** The screen's wake lock. Both calls are idempotent. */
+  keepAwake: { activate(): Promise<void>; deactivate(): Promise<void> };
   clock(): number;
 }
+
+/** Scopes this composition's wake lock, so releasing it cannot release anyone else's. */
+const KEEP_AWAKE_TAG = "openmapx-navigation";
 
 function productionDevice(): ForegroundDevice {
   return {
@@ -101,6 +107,10 @@ function productionDevice(): ForegroundDevice {
       request: async () => (await Notifications.requestPermissionsAsync()).granted,
     },
     openStorage: getDatabase,
+    keepAwake: {
+      activate: () => activateKeepAwakeAsync(KEEP_AWAKE_TAG),
+      deactivate: () => deactivateKeepAwake(KEEP_AWAKE_TAG),
+    },
     clock: () => Date.now(),
   };
 }
@@ -109,6 +119,12 @@ export interface ForegroundNavigation {
   coordinator: NavigationCoordinator;
   capabilities(): ShellDescription["capabilities"];
   activeSession(): Promise<ShellDescription["activeSession"]>;
+  /**
+   * Re-reads visibility and the durable session for keep-awake. Call it when
+   * the app's visibility changes and after anything outside this composition
+   * resumed or ended the session.
+   */
+  reviewKeepAwake(): Promise<void>;
   dispose(): void;
 }
 
@@ -137,6 +153,47 @@ export async function createForegroundNavigation(
   let diagnosticsRef: DiagnosticRepository | null = null;
   const record = (type: string, fields: Record<string, unknown>) => {
     diagnosticsRef?.recordAsync(type as DiagnosticType, fields);
+  };
+
+  /**
+   * Keep-awake follows the durable session, not what the page or the shell
+   * last heard: the screen is held only while the app is visible, a tracked
+   * session is active and that session's keep-screen-on setting is on. It is
+   * re-checked after every published change, so a setting, an arrival or an
+   * end takes effect with the commit that caused it. Never held for a
+   * composition that is not visible, such as the car runtime's.
+   */
+  let disposed = false;
+  let screenHeld = false;
+  let keepAwakeReview = 0;
+  const holdScreen = (wanted: boolean) => {
+    if (wanted === screenHeld) return;
+    screenHeld = wanted;
+    if (wanted) {
+      device.keepAwake.activate().catch(() => {
+        // Not held after all; the next review asks again.
+        screenHeld = false;
+      });
+    } else {
+      device.keepAwake.deactivate().catch(() => undefined);
+    }
+  };
+  const reviewKeepAwake = async () => {
+    const review = ++keepAwakeReview;
+    let wanted = false;
+    if (!disposed && options.isAppActive() && repositoryRef) {
+      try {
+        const session = await repositoryRef.loadActive(now());
+        wanted =
+          session?.status === "active" &&
+          session.payload.startPackage.settings.keepScreenOn &&
+          (await driver.isRunning());
+      } catch {
+        wanted = false;
+      }
+    }
+    // Only the newest review decides; an older one may have read older state.
+    if (review === keepAwakeReview && !disposed) holdScreen(wanted);
   };
 
   const permissions = new PermissionController({
@@ -246,6 +303,7 @@ export async function createForegroundNavigation(
           // a command, so the shell learns about them here.
           const active = repositoryRef ? await repositoryRef.loadActive(now()) : null;
           if (active?.status !== "active") options.onNavigatingChanged(false);
+          await reviewKeepAwake();
         },
         event: async (eventId) => {
           await publish?.port.event(eventId);
@@ -300,9 +358,13 @@ export async function createForegroundNavigation(
       if (!session) return null;
       return { sessionId: session.sessionId, revision: session.revision, kind: session.kind };
     },
+    reviewKeepAwake,
     dispose: () => {
+      if (disposed) return;
+      disposed = true;
       remote?.abortAll();
       unregister();
+      holdScreen(false);
     },
   };
 }
