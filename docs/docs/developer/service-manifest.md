@@ -736,8 +736,10 @@ service:
 
 - `container.memory` is required and must be a literal size such as `"512m"` or
   `"1g"`. The renderer writes it as the container's memory limit.
-- The renderer sets `pids_limit: 512`, which caps the processes and threads one
-  container may hold. The value is the platform's and has no manifest field.
+- The renderer sets `deploy.resources.limits.pids: 512` beside the memory
+  limit, which caps the processes and threads one container may hold. Compose
+  refuses a service-level `pids_limit` next to `deploy` limits, so the cap lives
+  there. The value is the platform's and has no manifest field.
 - The renderer sets `security_opt: ["no-new-privileges:true"]`, so a process
   cannot gain privileges through a setuid binary or file capability. An image
   that starts as root and drops to its own user, for example with `gosu`, still

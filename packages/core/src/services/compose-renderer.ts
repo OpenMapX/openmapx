@@ -474,7 +474,6 @@ export interface ComposeServiceSnippet {
   cap_add?: string[];
   cap_drop?: string[];
   security_opt?: string[];
-  pids_limit?: number;
   devices?: string[];
   privileged?: boolean;
   network_mode?: string;
@@ -489,7 +488,7 @@ export interface ComposeServiceSnippet {
   logging?: { driver: string; options?: Record<string, string> };
   deploy?: {
     resources?: {
-      limits?: { memory?: string; cpus?: string };
+      limits?: { memory?: string; cpus?: string; pids?: number };
       reservations?: {
         devices?: Array<{ driver: string; count: number | "all"; capabilities: string[] }>;
       };
@@ -931,7 +930,11 @@ export function renderServiceSnippet(
   if (!service.isBuiltIn) {
     // The memory ceiling comes from the manifest, which the sandbox check
     // requires; the process ceiling and privilege lock are the platform's own.
-    snippet.pids_limit = COMMUNITY_PIDS_LIMIT;
+    // Compose refuses a service-level pids_limit beside deploy limits, so the
+    // process ceiling joins the memory limit under deploy.resources.limits.
+    const resources = snippet.deploy?.resources ?? {};
+    resources.limits = { ...resources.limits, pids: COMMUNITY_PIDS_LIMIT };
+    snippet.deploy = { ...snippet.deploy, resources };
     snippet.security_opt = ["no-new-privileges:true"];
     deepEscapeCommunitySnippet(snippet);
   }

@@ -1,4 +1,8 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: these are literal Docker Compose references under test
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { load } from "js-yaml";
 import { describe, expect, it } from "vitest";
 import { renderCompose, renderServiceSnippet } from "../services/compose-renderer";
@@ -85,9 +89,9 @@ describe("community container memory limit", () => {
 describe("community container hardening", () => {
   it("limits processes, blocks privilege gain and keeps the memory limit", () => {
     const snippet = renderServiceSnippet(service({ memory: "256m" }, { builtIn: false }), {});
-    expect(snippet.pids_limit).toBe(512);
     expect(snippet.security_opt).toEqual(["no-new-privileges:true"]);
-    expect(snippet.deploy?.resources?.limits?.memory).toBe("256m");
+    expect(snippet).not.toHaveProperty("pids_limit");
+    expect(snippet.deploy?.resources?.limits).toEqual({ memory: "256m", pids: 512 });
   });
 
   it("appears in the rendered Compose file", () => {
@@ -96,9 +100,8 @@ describe("community container hardening", () => {
       services: Record<string, Record<string, unknown>>;
     };
     expect(rendered.services["community-limits"]).toMatchObject({
-      pids_limit: 512,
       security_opt: ["no-new-privileges:true"],
-      deploy: { resources: { limits: { memory: "256m" } } },
+      deploy: { resources: { limits: { memory: "256m", pids: 512 } } },
     });
   });
 
@@ -109,8 +112,85 @@ describe("community container hardening", () => {
     expect(snippet.deploy).toBeUndefined();
 
     const sized = renderServiceSnippet(service({ memory: "2g" }, { builtIn: true }), {});
-    expect(sized.deploy?.resources?.limits?.memory).toBe("2g");
+    expect(sized.deploy?.resources?.limits).toEqual({ memory: "2g" });
     expect(sized).not.toHaveProperty("pids_limit");
     expect(sized).not.toHaveProperty("security_opt");
   });
 });
+
+const composeAvailable =
+  spawnSync("docker", ["compose", "version"], { stdio: "ignore", timeout: 15_000 }).status === 0;
+
+// Compose rejects a service that sets pids_limit beside deploy.resources.limits,
+// so the rendered file has to parse with the real tool. `config` only reads and
+// validates the file: it starts, pulls and builds nothing.
+describe.skipIf(!composeAvailable)(
+  "community Compose output with the docker compose parser",
+  () => {
+    it("is a valid project beside a first-party service", () => {
+      const { composeYaml } = renderCompose(
+        [
+          service({ memory: "256m" }, { builtIn: false }),
+          service({ memory: "2g" }, { builtIn: true }),
+          {
+            ...service(
+              { memory: "256m", gpu: { driver: "nvidia", count: "all", capabilities: ["gpu"] } },
+              { builtIn: false },
+            ),
+            manifest: {
+              ...service(
+                { memory: "256m", gpu: { driver: "nvidia", count: "all", capabilities: ["gpu"] } },
+                { builtIn: false },
+              ).manifest,
+              id: "community-gpu",
+            },
+          },
+        ],
+        {},
+      );
+      const directory = mkdtempSync(join(tmpdir(), "openmapx-compose-parse-"));
+      try {
+        const file = join(directory, "docker-compose.yml");
+        writeFileSync(file, composeYaml);
+        const output = execFileSync(
+          "docker",
+          [
+            "compose",
+            "--project-name",
+            "openmapx-parse-check",
+            "-f",
+            file,
+            "config",
+            "--format",
+            "json",
+          ],
+          { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 60_000 },
+        );
+        const project = JSON.parse(output) as {
+          services: Record<
+            string,
+            {
+              security_opt?: string[];
+              deploy?: { resources?: { limits?: Record<string, unknown> } };
+            }
+          >;
+        };
+        expect(project.services["community-limits"]?.security_opt).toEqual([
+          "no-new-privileges:true",
+        ]);
+        expect(project.services["community-limits"]?.deploy?.resources?.limits).toMatchObject({
+          memory: String(256 * 1024 * 1024),
+          pids: 512,
+        });
+        expect(project.services["community-gpu"]?.deploy?.resources?.limits).toMatchObject({
+          pids: 512,
+        });
+        expect(
+          project.services["first-party-limits"]?.deploy?.resources?.limits,
+        ).not.toHaveProperty("pids");
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    });
+  },
+);

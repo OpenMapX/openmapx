@@ -522,7 +522,7 @@ renderer would write as plain text. The scaffold starts at `"256m"`. Set it abov
 your service's real peak, because Docker kills a container that exceeds it.
 
 The renderer also gives every community container a limit of 512 processes and
-threads (`pids_limit`) and `no-new-privileges`, which stops a process from gaining
+threads (`deploy.resources.limits.pids`) and `no-new-privileges`, which stops a process from gaining
 privileges through a setuid binary or file capability. Neither has a manifest
 field. An image that starts as root and drops to its own user, for example with
 `gosu`, keeps working; one that relies on `sudo` or a setuid helper does not, so
