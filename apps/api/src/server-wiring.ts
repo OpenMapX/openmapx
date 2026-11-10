@@ -87,21 +87,27 @@ export function registerControlledRequestLogging(
       done();
       return;
     }
-    request.log.error(
-      {
-        event: "request.error",
-        requestId: controlledRequestId(request),
-        method: controlledMethod(request),
-        route: matchedRoutePattern(request),
-        statusCode:
-          typeof error.statusCode === "number" && error.statusCode >= 400
-            ? error.statusCode
-            : Math.max(500, reply.statusCode),
-        durationMs: duration(request),
-        errorClass: safeErrorClass(error),
-      },
-      "Request failed",
-    );
+    const statusCode =
+      typeof error.statusCode === "number" && error.statusCode >= 400
+        ? error.statusCode
+        : Math.max(500, reply.statusCode);
+    const fields = {
+      requestId: controlledRequestId(request),
+      method: controlledMethod(request),
+      route: matchedRoutePattern(request),
+      statusCode,
+      durationMs: duration(request),
+      errorClass: safeErrorClass(error),
+    };
+    // A refused request (no session, bad input, missing resource) is the
+    // client's outcome, not a server fault. Logging it at `info` keeps it out
+    // of the persisted error log, which anyone could otherwise fill with one
+    // row per anonymous request.
+    if (statusCode < 500) {
+      request.log.info({ event: "request.rejected", ...fields }, "Request rejected");
+    } else {
+      request.log.error({ event: "request.error", ...fields }, "Request failed");
+    }
     done();
   });
 
@@ -309,42 +315,50 @@ export function corsOptions(trustedWebOrigins: readonly string[] = configuredTru
   };
 }
 
+/**
+ * True when a matched route template is the prefix itself or sits below it.
+ * Classifiers read the template Fastify matched, never the raw URL: the router
+ * decodes escapes such as `/%61pi/...` before matching, so a raw-URL check can
+ * be steered around by spelling the same path differently.
+ */
+function routeUnder(route: string, prefix: string): boolean {
+  return route === prefix || route.startsWith(`${prefix}/`);
+}
+
+function matchedRoute(request: FastifyRequest): string | undefined {
+  const route = request.routeOptions?.url;
+  return typeof route === "string" ? route : undefined;
+}
+
 // Tile-ish routes get their own tier because a single viewport change can
 // fan out 30-60 requests; sharing a bucket with the rest of the API would
 // let map panning starve unrelated traffic (autocomplete, place lookups).
-const TILE_PUBLIC_PATTERNS = [
-  /^\/api\/maptiler\//,
-  /^\/api\/tiles\//,
-  /^\/api\/traffic\//,
-  /^\/api\/offline\/packages\/glyphs\//,
-];
+export const TILE_ROUTE_PREFIXES = [
+  "/api/maptiler",
+  "/api/tiles",
+  "/api/traffic",
+  "/api/offline/packages/glyphs",
+] as const;
 
-const EXPENSIVE_PUBLIC_PATTERNS = [
-  /^\/api\/isochrone(\/|$|\?)/,
-  /^\/api\/elevation(\/|$|\?)/,
-  /^\/api\/motis(\/|$)/,
-  /^\/api\/places(\/|$|\?)/,
-  /^\/api\/image-proxy(\/|$|\?)/,
-  /^\/api\/winter-sports(\/|$)/,
-  /^\/api\/offline\/packages\/prepare(\/|$|\?)/,
-];
+export const EXPENSIVE_ROUTE_PREFIXES = [
+  "/api/isochrone",
+  "/api/elevation",
+  "/api/places",
+  "/api/image-proxy",
+  "/api/winter-sports",
+  "/api/offline/packages/prepare",
+] as const;
 
 export function isTimelineApiRequest(request: FastifyRequest): boolean {
-  const path = request.url.split("?", 1)[0];
-  return path?.startsWith("/api/timeline/") ?? false;
+  const route = matchedRoute(request);
+  return route !== undefined && routeUnder(route, "/api/timeline");
 }
 
-export function isTimelineDayRequest(request: FastifyRequest): boolean {
-  const path = request.url.split("?", 1)[0];
-  return request.method === "GET" && /^\/api\/timeline\/day\/[^/]+$/.test(path ?? "");
-}
-
-function isExpensiveTimelineRequest(request: FastifyRequest): boolean {
-  const path = request.url.split("?", 1)[0];
+function isExpensiveTimelineRequest(request: FastifyRequest, route: string): boolean {
   return (
-    (request.method === "PUT" && path === "/api/timeline/connection") ||
-    (request.method === "POST" && path === "/api/timeline/connection/test") ||
-    (request.method === "DELETE" && path === "/api/timeline/connection")
+    (request.method === "PUT" && route === "/api/timeline/connection") ||
+    (request.method === "POST" && route === "/api/timeline/connection/test") ||
+    (request.method === "DELETE" && route === "/api/timeline/connection")
   );
 }
 
@@ -381,7 +395,7 @@ export function applyAdminStatusPrivacyHeaders(reply: FastifyReply): void {
  */
 export function makeSecurityResponseHeaderHook() {
   return (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    const path = request.url.split("?", 1)[0];
+    const path = matchedRoute(request);
     if (
       request.method === "POST" &&
       (path === "/api/mobile-auth/issue" || path === "/api/mobile-auth/exchange")
@@ -449,12 +463,15 @@ export interface RateLimitTiers {
   integrationIngress: Limit;
   status: Limit;
   public: Limit;
+  unmatched: Limit;
 }
 
 const INTEGRATION_DISPATCHER_ROUTES = new Set(["/api/integrations/:id", "/api/integrations/:id/*"]);
 const BODY_CAPABLE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-// Global rate limiting for the public surface.
+// Global rate limiting for the public surface. Every request is classified by
+// the route template Fastify matched, so an encoded spelling of a path lands
+// in the same tier as the plain one.
 //
 // Skips:
 //   - `/health` — used by Docker/Traefik healthchecks at high frequency.
@@ -465,55 +482,59 @@ const BODY_CAPABLE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 //     cannot forge XFF to bypass the limit (see `require-admin.ts`).
 //
 // Tiers, applied in order:
+//   - no matched route           → small dedicated bucket (scanners, typos)
+//   - integration dispatcher     → body admission only; the dispatcher charges
+//                                  the matched integration route's own tier
 //   - `/api/auth/*`              → strict (credential stuffing, email spam)
-//   - tile / map asset routes    → generous (bursty, cacheable, CDN-friendly)
-//   - expensive public routes    → tight (Valhalla, MOTIS, geocoding fan-out)
 //   - exactly `GET /api/status`  → 60/minute (dependency snapshot refresh)
-//   - everything else            → broad floor
+//   - tile / map asset routes    → generous (bursty, cacheable, CDN-friendly)
+//   - expensive public routes    → tight (Valhalla, place and image fan-out)
+//   - every other matched route  → broad floor, including timeline day reads,
+//                                  which add a per-user bucket after sign-in
 export function makeRateLimitTierHook(limits: RateLimitTiers) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    const url = request.url;
+    const route = matchedRoute(request);
     if (isTimelineApiRequest(request)) applyTimelinePrivacyHeaders(reply);
-    if (url === "/health" || url.startsWith("/health?")) return;
-    // Day reads are limited after the timeline plugin authenticates the user,
-    // using a separate per-user expensive bucket. Do not stack the pre-auth IP
-    // limiter or broad public floor on this privacy-sensitive route.
-    if (isTimelineDayRequest(request)) return;
+    if (route === "/health") return;
 
     // Trust only the actual TCP peer here, never XFF.
     const peer = request.socket?.remoteAddress;
     if (peer && LOOPBACK.has(peer)) return;
 
+    if (route === undefined) {
+      await limits.unmatched(request, reply);
+      return;
+    }
+
     // Fastify parses these methods' bodies before the dispatcher can select
     // the matched route's declared tier. Charge a separate admission bucket
-    // first; GET/HEAD keep their deliberate tile/public/expensive late tier.
-    const route = request.routeOptions.url;
-    if (route && INTEGRATION_DISPATCHER_ROUTES.has(route)) {
+    // first; GET/HEAD keep their deliberate late tier.
+    if (INTEGRATION_DISPATCHER_ROUTES.has(route)) {
       if (BODY_CAPABLE_METHODS.has(request.method)) {
         await limits.integrationIngress(request, reply);
       }
       return;
     }
 
-    if (url.startsWith("/api/auth/")) {
+    if (routeUnder(route, "/api/auth")) {
       await limits.auth(request, reply);
       return;
     }
-    const path = url.split("?", 1)[0];
-    if (request.method === "GET" && path === "/api/status") {
+    if (request.method === "GET" && route === "/api/status") {
       await limits.status(request, reply);
       return;
     }
-    if (TILE_PUBLIC_PATTERNS.some((p) => p.test(url))) {
+    if (TILE_ROUTE_PREFIXES.some((prefix) => routeUnder(route, prefix))) {
       await limits.tile(request, reply);
       return;
     }
-    if (isExpensiveTimelineRequest(request) || EXPENSIVE_PUBLIC_PATTERNS.some((p) => p.test(url))) {
+    if (
+      isExpensiveTimelineRequest(request, route) ||
+      EXPENSIVE_ROUTE_PREFIXES.some((prefix) => routeUnder(route, prefix))
+    ) {
       await limits.expensive(request, reply);
       return;
     }
-    if (url.startsWith("/api/")) {
-      await limits.public(request, reply);
-    }
+    await limits.public(request, reply);
   };
 }

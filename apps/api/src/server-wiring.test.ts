@@ -5,6 +5,7 @@ import cors from "@fastify/cors";
 import { ApiClientError, createApiClient } from "@openmapx/core";
 import { getApiDataManagerTransitState, unwrapAdminResponse } from "@openmapx/core/api-admin-sdk";
 import { exportSavedList, unwrapSavedResponse } from "@openmapx/core/saved-places-sdk";
+import { httpError } from "@openmapx/integration-framework";
 import Fastify, { type FastifyInstance } from "fastify";
 import pino from "pino";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -22,6 +23,7 @@ import {
   trustProxyConfig,
   uniformErrorHandler,
 } from "./server-wiring.js";
+import { AppLogger } from "./services/app-logger.js";
 import { RateLimiter } from "./utils/rate-limit.js";
 import { createSafePinoOptions } from "./utils/safe-log-fields.js";
 
@@ -333,24 +335,42 @@ describe("makeRateLimitTierHook", () => {
       integrationIngress: vi.fn(async () => {}),
       status: vi.fn(async () => {}),
       public: vi.fn(async () => {}),
+      unmatched: vi.fn(async () => {}),
     };
     return { hook: stubs as unknown as RateLimitTiers, stubs };
   }
 
+  const ALL_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"] as const;
+
+  // Real route templates, so classification sees what production's router
+  // matches rather than a catch-all.
   async function tierApp(tiers: RateLimitTiers): Promise<FastifyInstance> {
     const app = Fastify({ logger: false });
     app.addHook("onRequest", makeRateLimitTierHook(tiers));
-    app.route({
-      method: ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"],
-      url: "/api/integrations/:id",
-      handler: async () => ({ ok: true }),
-    });
-    app.route({
-      method: ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"],
-      url: "/api/integrations/:id/*",
-      handler: async () => ({ ok: true }),
-    });
-    app.all("/*", async () => ({ ok: true }));
+    const ok = async () => ({ ok: true });
+    for (const url of [
+      "/api/integrations/:id",
+      "/api/integrations/:id/*",
+      "/api/auth/*",
+      "/api/status",
+      "/api/admin/status",
+      "/api/integrations",
+      "/api/saved",
+      "/api/timeline/connection",
+      "/api/timeline/connection/test",
+    ]) {
+      app.route({ method: [...ALL_METHODS], url, handler: ok });
+    }
+    app.get("/health", ok);
+    app.get("/api/tiles/cyclosm/:z/:x/:y.png", ok);
+    app.get("/api/maptiler/*", ok);
+    app.get("/api/offline/packages/glyphs/:version/:fontstack/:range.pbf", ok);
+    app.get("/api/offline/packages/:packageId/archive", ok);
+    app.post("/api/offline/packages/prepare", ok);
+    app.get("/api/isochrone", ok);
+    app.get("/api/places/:id", ok);
+    app.get("/api/timeline/day/:date", ok);
+    app.get("/auth/oidc/consent", ok);
     await app.ready();
     return app;
   }
@@ -362,12 +382,13 @@ describe("makeRateLimitTierHook", () => {
   }> = [
     { url: "/health", tier: null },
     { url: "/api/auth/sign-in", tier: "auth" },
-    { url: "/api/tiles/1/2/3", tier: "tile" },
+    { url: "/api/tiles/cyclosm/1/2/3.png", tier: "tile" },
+    { url: "/api/maptiler/tiles/v3/1/2/3.pbf", tier: "tile" },
     { url: "/api/offline/packages/glyphs/glyphs-v1/Noto%20Sans/0-255.pbf", tier: "tile" },
     { url: `/api/offline/packages/omp2-${"a".repeat(64)}/archive`, tier: "public" },
-    { url: "/api/offline/packages/prepare", tier: "expensive" },
+    { method: "POST", url: "/api/offline/packages/prepare", tier: "expensive" },
     { url: "/api/isochrone?x=1", tier: "expensive" },
-    { url: "/api/motis/plan", tier: "expensive" },
+    { url: "/api/places/node%2F1", tier: "expensive" },
     {
       method: "POST",
       url: "/api/integrations/transit/reachability/surface",
@@ -390,15 +411,26 @@ describe("makeRateLimitTierHook", () => {
     { method: "GET", url: "/api/status", tier: "status" },
     { method: "GET", url: "/api/status?probe=public", tier: "status" },
     { method: "POST", url: "/api/status", tier: "public" },
-    { method: "GET", url: "/api/status/", tier: "public" },
     { method: "GET", url: "/api/admin/status", tier: "public" },
     { method: "GET", url: "/api/timeline/connection", tier: "public" },
-    { method: "GET", url: "/api/timeline/day/2026-08-09", tier: null },
+    { method: "GET", url: "/api/timeline/day/2026-08-09", tier: "public" },
     { method: "PUT", url: "/api/timeline/connection", tier: "expensive" },
     { method: "POST", url: "/api/timeline/connection/test", tier: "expensive" },
     { method: "DELETE", url: "/api/timeline/connection", tier: "expensive" },
     { url: "/api/saved", tier: "public" },
-    { url: "/whatever", tier: null },
+    { url: "/auth/oidc/consent", tier: "public" },
+    // Encoded spellings reach the same route, so they reach the same tier.
+    { url: "/%61pi/isochrone", tier: "expensive" },
+    { url: "/api/%69sochrone", tier: "expensive" },
+    { url: "/%61pi/tiles/cyclosm/1/2/3.png", tier: "tile" },
+    { url: "/%61pi/auth/sign-in", tier: "auth" },
+    { url: "/%61pi/saved", tier: "public" },
+    { method: "POST", url: "/%61pi/integrations/example/item", tier: "integrationIngress" },
+    // Nothing unrouted is unlimited, and none of it shares a real bucket.
+    { url: "/api/status/", tier: "unmatched" },
+    { url: "/api/motis/plan", tier: "unmatched" },
+    { url: "/whatever", tier: "unmatched" },
+    { url: "/%68ealth/missing", tier: "unmatched" },
   ];
 
   for (const { method = "GET", url, tier } of cases) {
@@ -416,6 +448,67 @@ describe("makeRateLimitTierHook", () => {
       await app.close();
     });
   }
+
+  it("limits an encoded path sent straight to the API like the plain path", async () => {
+    const limiter = new RateLimiter({ max: 3, windowMs: 60_000 });
+    const { hook } = stubTiers();
+    hook.expensive = limiter.preHandler();
+    const app = await tierApp(hook);
+    const statuses: number[] = [];
+    for (const url of [
+      "/api/isochrone",
+      "/%61pi/isochrone",
+      "/api/%69sochrone",
+      "/%61pi/isochrone",
+    ]) {
+      statuses.push((await app.inject({ url, remoteAddress: "198.51.100.7" })).statusCode);
+    }
+    expect(statuses).toEqual([200, 200, 200, 429]);
+    await app.close();
+    limiter.destroy();
+  });
+
+  it("charges every address in one IPv6 /64 to the same bucket", async () => {
+    const limiter = new RateLimiter({ max: 2, windowMs: 60_000 });
+    const { hook } = stubTiers();
+    hook.public = limiter.preHandler();
+    const app = await tierApp(hook);
+    const statuses: number[] = [];
+    for (const remoteAddress of [
+      "2001:db8:1:2::1",
+      "2001:db8:1:2:ffff::9",
+      "2001:0db8:0001:0002::abcd",
+    ]) {
+      statuses.push((await app.inject({ url: "/api/saved", remoteAddress })).statusCode);
+    }
+    const otherPrefix = await app.inject({ url: "/api/saved", remoteAddress: "2001:db8:1:3::1" });
+    expect(statuses).toEqual([200, 200, 429]);
+    expect(otherPrefix.statusCode).toBe(200);
+    await app.close();
+    limiter.destroy();
+  });
+
+  it("charges an anonymous timeline day read to the broad floor with the timeline 429 shape", async () => {
+    const limiter = new RateLimiter({ max: 1, windowMs: 60_000 });
+    const { hook } = stubTiers();
+    hook.public = makeTimelineAwareRateLimit(limiter);
+    const app = await tierApp(hook);
+    const request = {
+      method: "GET" as const,
+      url: "/api/timeline/day/2026-08-09",
+      remoteAddress: "198.51.100.8",
+    };
+    const first = await app.inject(request);
+    const exhausted = await app.inject(request);
+
+    expect(first.statusCode).toBe(200);
+    expect(exhausted.statusCode).toBe(429);
+    expect(exhausted.json()).toMatchObject({ code: "TIMELINE_RATE_LIMITED" });
+    expect(exhausted.headers["cache-control"]).toBe("private, no-store");
+    expect(exhausted.headers.vary).toContain("Cookie");
+    await app.close();
+    limiter.destroy();
+  });
 
   it("skips all tiers for a loopback socket peer", async () => {
     const { hook, stubs } = stubTiers();
@@ -586,38 +679,6 @@ describe("makeRateLimitTierHook", () => {
     await app.close();
     limiter.destroy();
   });
-
-  it("skips the global IP limiter for timeline day reads while retaining privacy headers", async () => {
-    const limiter = new RateLimiter({ max: 1, windowMs: 60_000 });
-    const { hook } = stubTiers();
-    hook.expensive = makeTimelineAwareRateLimit(limiter);
-    const app = Fastify({ logger: false });
-    app.addHook("onRequest", makeRateLimitTierHook(hook));
-    await app.register(
-      async (timeline) => {
-        timeline.get("/timeline/day/:date", async () => ({ ok: true }));
-      },
-      { prefix: "/api" },
-    );
-    await app.ready();
-
-    const request = {
-      method: "GET" as const,
-      url: "/api/timeline/day/2026-08-09",
-      remoteAddress: "198.51.100.8",
-    };
-    const first = await app.inject(request);
-    const exhausted = await app.inject(request);
-
-    expect(first.statusCode).toBe(200);
-    expect(exhausted.statusCode).toBe(200);
-    expect(exhausted.json()).toEqual({ ok: true });
-    expect(exhausted.headers["cache-control"]).toBe("private, no-store");
-    expect(exhausted.headers.pragma).toBe("no-cache");
-    expect(exhausted.headers.vary).toContain("Cookie");
-    await app.close();
-    limiter.destroy();
-  });
 });
 
 describe("controlled request lifecycle logging", () => {
@@ -748,6 +809,57 @@ describe("controlled request lifecycle logging", () => {
     ]) {
       expect(output).not.toContain(marker);
     }
+  });
+
+  it("logs a refused request at info and keeps it out of the persisted log", async () => {
+    const persist = vi.fn(async () => {});
+    const appLogger = new AppLogger({ persist });
+    const lines: string[] = [];
+    const consoleStream = new Writable({
+      write(chunk, _encoding, callback) {
+        lines.push(String(chunk));
+        callback();
+      },
+    });
+    const records = () =>
+      lines
+        .join("")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const logger = pino(
+      createSafePinoOptions("info"),
+      pino.multistream([{ stream: consoleStream }, { stream: appLogger.createPinoStream() }]),
+    );
+    const app = Fastify(controlledRequestLoggingOptions(logger));
+    registerControlledRequestLogging(app, { now: () => 1 });
+    app.setErrorHandler(uniformErrorHandler);
+    app.get("/api/saved/lists", async () => {
+      throw httpError(401, "Authentication required");
+    });
+    app.get("/api/explode", async () => {
+      throw new Error("boom");
+    });
+    await app.ready();
+
+    const anonymous = await app.inject({ method: "GET", url: "/api/saved/lists" });
+    await appLogger.flushPersisted();
+
+    expect(anonymous.statusCode).toBe(401);
+    const rejected = records().find((record) => record.event === "request.rejected");
+    expect(rejected).toMatchObject({ level: 30, statusCode: 401, route: "/api/saved/lists" });
+    expect(records().some((record) => record.event === "request.error")).toBe(false);
+    expect(persist).not.toHaveBeenCalled();
+
+    const failed = await app.inject({ method: "GET", url: "/api/explode" });
+    await appLogger.flushPersisted();
+
+    expect(failed.statusCode).toBe(500);
+    expect(persist).toHaveBeenCalledOnce();
+    expect(persist).toHaveBeenCalledWith(
+      expect.objectContaining({ level: "error", msg: "Request failed" }),
+    );
+    await app.close();
   });
 
   it("logs a handler failing after the client hung up as aborted, not as a server error", async () => {

@@ -129,6 +129,7 @@ describe("host and dispatcher request tier ownership", () => {
       auth: vi.fn(),
       integrationIngress: vi.fn(),
       status: vi.fn(),
+      unmatched: vi.fn(),
     };
     app.addHook("onRequest", makeRateLimitTierHook(tiers));
     setIntegrationRouteRateLimits(tiers);
@@ -200,6 +201,7 @@ describe("host and dispatcher request tier ownership", () => {
       integrationIngress: ingress.preHandler(),
       status: unexpectedTier,
       public: latePublic,
+      unmatched: unexpectedTier,
     };
     app.addContentTypeParser("application/x-integration-probe", { parseAs: "string" }, parseBody);
     app.addHook("onRequest", makeRateLimitTierHook(tiers));

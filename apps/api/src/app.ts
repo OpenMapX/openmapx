@@ -151,6 +151,7 @@ import {
   publicApiLimit,
   statusPublicApiLimit,
   tilePublicApiLimit,
+  unmatchedRouteLimit,
 } from "./utils/rate-limit";
 import { createSafePinoOptions } from "./utils/safe-log-fields";
 
@@ -284,6 +285,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
     integrationIngress: integrationIngressApiLimit.preHandler(),
     status: makeStatusAwareRateLimit(statusPublicApiLimit),
     public: makeTimelineAwareRateLimit(publicApiLimit),
+    unmatched: unmatchedRouteLimit.preHandler(),
   };
   setIntegrationRouteRateLimits(rateLimitTiers);
   server.addHook("onRequest", makeRateLimitTierHook(rateLimitTiers));

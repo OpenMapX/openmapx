@@ -368,6 +368,7 @@ async function wire(max = 1000) {
       expensive: unexpected,
       integrationIngress: unexpected,
       status: unexpected,
+      unmatched: unexpected,
     }),
   );
   const registered = new Map<string, string>();

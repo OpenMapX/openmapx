@@ -233,7 +233,12 @@ and asynchronous jobs:
 - The job runner executes service lifecycle operations, data preparation, and
   community installs off the request path. The admin UI polls its progress.
 
-A global `onRequest` hook applies tiered, IP-keyed rate limits. Admin route
+A global `onRequest` hook applies tiered, IP-keyed rate limits. It classifies
+each request by the route template Fastify matched, not the raw URL, so an
+encoded spelling of a path lands in the same tier as the plain one, and a
+request that matches no route has its own small bucket rather than none. Keys
+reduce an IPv6 client to its /64 and an IPv4-mapped address to its IPv4 form,
+and each limiter keeps a bounded number of buckets. Admin route
 scopes also enforce administrator authorization through their runtime guards. Fastify trusts
 forwarding headers only when the socket peer belongs to an explicitly configured
 proxy IP/CIDR range, so limiters and the audit log see the real client IP without

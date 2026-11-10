@@ -38,6 +38,8 @@ const OMIT_KEYS = new Set([
 
 export interface AppLoggerOptions {
   maxSize?: number;
+  /** Most entries waiting to be written to `app_logs`; later ones are counted and dropped. */
+  maxPersistQueue?: number;
   persist?: (entry: AppLogEntry) => Promise<void>;
 }
 
@@ -65,10 +67,15 @@ export class AppLogger {
   private buffer: AppLogEntry[] = [];
   private readonly maxSize: number;
   private readonly persistAdapter: (entry: AppLogEntry) => Promise<void>;
+  private readonly maxPersistQueue: number;
+  private readonly persistQueue: AppLogEntry[] = [];
+  private draining: Promise<void> | null = null;
+  private droppedPersists = 0;
   private nextId = 1;
 
   constructor(options: AppLoggerOptions = {}) {
     this.maxSize = options.maxSize ?? 10_000;
+    this.maxPersistQueue = Math.max(1, options.maxPersistQueue ?? 1_000);
     this.persistAdapter = options.persist ?? persistAppLog;
   }
 
@@ -78,9 +85,53 @@ export class AppLogger {
     if (this.buffer.length > this.maxSize) {
       this.buffer.shift();
     }
-    if (PERSIST_LEVELS.has(entry.level)) {
-      this.persist(full).catch(() => {});
+    if (PERSIST_LEVELS.has(entry.level)) this.enqueuePersist(full);
+  }
+
+  // Rows are written one at a time from a bounded queue, so a burst of log
+  // lines holds at most one database connection and a fixed amount of memory.
+  // Entries past the bound stay in the in-memory buffer; the database gets one
+  // row saying how many were left out.
+  private enqueuePersist(entry: AppLogEntry): void {
+    if (this.persistQueue.length >= this.maxPersistQueue) {
+      this.droppedPersists += 1;
+      return;
     }
+    this.persistQueue.push(entry);
+    if (!this.draining) this.startDrain();
+  }
+
+  private startDrain(): void {
+    this.draining = this.drainPersistQueue().finally(() => {
+      this.draining = null;
+      // An entry queued after the loop saw an empty queue, but before this
+      // callback ran, would otherwise wait for the next log line.
+      if (this.persistQueue.length > 0 || this.droppedPersists > 0) this.startDrain();
+    });
+  }
+
+  private async drainPersistQueue(): Promise<void> {
+    for (;;) {
+      const entry = this.persistQueue.shift();
+      if (entry) {
+        await this.persist(entry);
+        continue;
+      }
+      if (this.droppedPersists === 0) return;
+      const dropped = this.droppedPersists;
+      this.droppedPersists = 0;
+      this.add({
+        level: "warn",
+        source: "platform",
+        msg: `${dropped} log entries were not written to the database because the write queue was full`,
+        time: Date.now(),
+      });
+    }
+  }
+
+  /** Resolves once every queued entry has been handed to the database. */
+  async flushPersisted(): Promise<void> {
+    while (this.draining) await this.draining;
   }
 
   private async persist(entry: AppLogEntry) {
