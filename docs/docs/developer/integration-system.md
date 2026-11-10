@@ -1292,13 +1292,14 @@ acquisitions. Both live in
 `@/integration-api/overlay/rasterMapContribution`. Opacity-zero preload frames,
 missing-key suppliers and failed first loads owe no active-frame credit;
 retained successful tiles and fading parents keep their original receipt during
-partial failures. A tile of a uniformly credited source that was acquired before
-any credit was known (the integration registry had not loaded yet) holds an
-empty receipt and takes the source's current credit once the hook supplies it, so
-a layer that was already showing needs no source or layer rebuild when the
-registry arrives. Add sources from an effect that reads the resolver through a
-ref, so the effect does not rerun and rebuild them when the registry changes. The hook combines only content actually sampled by the raster
-renderer, including old and new suppliers during a fade.
+partial failures. A tile of a uniformly credited source that was acquired
+before any credit was known (the integration registry had not loaded yet) holds
+an empty receipt and takes the source's current credit once the hook supplies
+it, so a layer that was already showing needs no source or layer rebuild when
+the registry arrives. Add sources from an effect that reads the resolver through
+a ref, so the effect does not rerun and rebuild them when the registry changes.
+The hook combines only content actually sampled by the raster renderer,
+including old and new suppliers during a fade.
 
 The host adapter wraps MapLibre's public `RasterTileSource.loadTile` acquisition
 entry point and observes the texture/loaded commit for each invocation. It also
