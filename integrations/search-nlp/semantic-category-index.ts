@@ -271,10 +271,11 @@ export function createSemanticCategoryIndex(options: {
             catalog.map(({ document }) => document),
             signal,
           );
-          if (writer.available) {
+          const indexWriter = writer.available ? writer.value : undefined;
+          if (indexWriter) {
             await cacheCircuit.run(
               () =>
-                writer.value.set(
+                indexWriter.set(
                   indexCacheKey(identity),
                   {
                     identity,
@@ -348,10 +349,11 @@ export function createSemanticCategoryIndex(options: {
           );
         }
         const result = { top, second, margin: top.score - second.score };
-        if (writer.available) {
+        const scoreWriter = writer.available ? writer.value : undefined;
+        if (scoreWriter) {
           await cacheCircuit.run(
             () =>
-              writer.value.set(
+              scoreWriter.set(
                 scoreCacheKey(prepared?.modelIdentity ?? preparedIdentity(), input),
                 result,
                 QUERY_SCORE_TTL_SECONDS,
