@@ -365,6 +365,18 @@ describe("Wikimedia acquisition sharing within one enrichment", () => {
       expect(counts()).toEqual({ entity: 1, summary: 2, commons: 2 });
     });
 
+    it("lets a lookup cancelled by the scope's own signal reuse it", async () => {
+      const controller = new AbortController();
+      const signalled = createRequestJsonScope({ signal: controller.signal });
+      await knowledgeModule.getPlaceKnowledge(place(), "en", { jsonScope: signalled });
+      requests = [];
+      await knowledgeModule.getPlaceKnowledge(place(), "en", {
+        signal: controller.signal,
+        jsonScope: signalled,
+      });
+      expect(counts()).toEqual({ entity: 1, summary: 0, commons: 0 });
+    });
+
     it("lets an unsignalled lookup reuse it", async () => {
       await knowledgeModule.getPlaceKnowledge(place(), "en", { jsonScope: scope });
       expect(counts()).toEqual({ entity: 1, summary: 0, commons: 0 });

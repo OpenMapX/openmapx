@@ -29,8 +29,17 @@ export interface RequestJsonScope {
    * headers or any option outside the keyed set bypass the scope and run
    * through {@link fetchJson} unchanged. So do new requests after the entry
    * budget is exhausted.
+   *
+   * Every request the scope starts, shared or bypassing, also observes the
+   * scope's own {@link RequestJsonScope.signal}.
    */
   getJson<T>(url: string, options?: RequestJsonOptions): Promise<T>;
+  /**
+   * Cancellation owned by the whole unit of work. Because every shared request
+   * carries this one signal, a consumer holding the same signal may still use
+   * the scope: no joiner can be cancelled by a signal it does not share.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /**
@@ -105,17 +114,27 @@ function requestKey(url: string, options: RequestJsonOptions): string | undefine
   ]);
 }
 
-export function createRequestJsonScope(): RequestJsonScope {
+export function createRequestJsonScope(
+  scopeOptions: { signal?: AbortSignal } = {},
+): RequestJsonScope {
   const entries = new Map<string, Promise<unknown>>();
+  const scopeSignal = scopeOptions.signal;
+
+  /** The scope signal joins the caller's own; it never takes part in the request identity. */
+  function withScopeSignal(options: RequestJsonOptions): RequestJsonOptions {
+    if (!scopeSignal) return options;
+    const signal = options.signal ? AbortSignal.any([scopeSignal, options.signal]) : scopeSignal;
+    return { ...options, signal };
+  }
 
   function getJson<T>(url: string, options: RequestJsonOptions = {}): Promise<T> {
     const key = requestKey(url, options);
-    if (key === undefined) return fetchJson<T>(url, options);
+    if (key === undefined) return fetchJson<T>(url, withScopeSignal(options));
 
     let shared = entries.get(key);
     if (!shared) {
-      if (entries.size >= MAX_SCOPE_ENTRIES) return fetchJson<T>(url, options);
-      const created = fetchJson<unknown>(url, options);
+      if (entries.size >= MAX_SCOPE_ENTRIES) return fetchJson<T>(url, withScopeSignal(options));
+      const created = fetchJson<unknown>(url, withScopeSignal(options));
       shared = created;
       entries.set(key, created);
       // Observe the failure now and forget it so only joiners share it.
@@ -126,5 +145,5 @@ export function createRequestJsonScope(): RequestJsonScope {
     return shared.then((value) => structuredClone(value) as T);
   }
 
-  return { getJson };
+  return { getJson, signal: scopeSignal };
 }

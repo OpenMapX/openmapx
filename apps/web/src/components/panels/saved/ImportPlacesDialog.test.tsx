@@ -1,4 +1,4 @@
-import type { ImportPlacesInput } from "@openmapx/core";
+import { ApiClientError, type ImportPlacesInput } from "@openmapx/core";
 import { en } from "@openmapx/i18n";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { strToU8, zipSync } from "fflate";
@@ -282,5 +282,49 @@ describe("import dialog", () => {
     expect(screen.getByText(/could not be imported/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(state.select).toHaveBeenCalledWith("created");
+  });
+  it("waits out a throttled chunk and resumes the same chunk", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let calls = 0;
+      state.mutate.mockImplementation(async () => {
+        if (calls++ === 0)
+          throw new ApiClientError(429, { error: "Too many requests", retryAfter: 6 }, 6);
+        return { listId: "created", name: "Trip", imported: 1, skippedDuplicates: 0 };
+      });
+      mount();
+      await screen.findByDisplayValue("Trip");
+      fireEvent.click(screen.getByRole("button", { name: "Import" }));
+      await waitFor(() => expect(state.mutate).toHaveBeenCalledTimes(1));
+      await vi.advanceTimersByTimeAsync(6_000);
+      await screen.findByText(/Imported 1/);
+      expect(state.mutate).toHaveBeenCalledTimes(2);
+      expect(state.mutate.mock.calls[1][0]).toEqual(state.mutate.mock.calls[0][0]);
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("explains an account limit and stops sending further lists", async () => {
+    const input = parsed();
+    input.lists.push({
+      name: "Second",
+      source: "Second.csv",
+      places: [{ name: "Other", lat: 50, lng: 8, status: "exact" }],
+    });
+    state.parse.mockResolvedValue(input);
+    state.mutate.mockRejectedValue(
+      new ApiClientError(
+        409,
+        { error: "Accounts can save at most 50000 places", code: "SAVED_PLACE_LIMIT" },
+        null,
+      ),
+    );
+    mount();
+    await screen.findByDisplayValue("Second");
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    const alerts = await screen.findAllByText(/Import stopped at the limit of 50,000 saved places/);
+    expect(alerts).toHaveLength(2);
+    expect(state.mutate).toHaveBeenCalledTimes(1);
   });
 });

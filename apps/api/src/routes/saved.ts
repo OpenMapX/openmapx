@@ -1,4 +1,9 @@
-import { isSystemSavedList } from "@openmapx/core/saved-lists";
+import type { SavedConflictCode } from "@openmapx/core/api-contracts";
+import {
+  isSystemSavedList,
+  MAX_SAVED_LISTS_PER_USER,
+  MAX_SAVED_PLACES_PER_USER,
+} from "@openmapx/core/saved-lists";
 import {
   parseSavedPlaceContributors,
   SAVED_PLACE_FIELDS,
@@ -15,7 +20,10 @@ import {
 import { and, eq, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db/index";
-import { labeledPlace, savedList, savedPlace } from "../db/schema";
+import { SAVED_LIST_NAME_UNIQUE } from "../db/saved-schema";
+import { labeledPlace, savedList, savedPlace, user } from "../db/schema";
+import { isUniqueViolation } from "../db/unique-violation";
+import { savedImportLimit } from "../utils/rate-limit";
 import { getUserId, requireAuthHook } from "../utils/require-auth";
 import { declareRouteAuth } from "../utils/route-auth";
 import { registerSavedImportRoute, registerSavedRoute } from "./saved-contract";
@@ -25,6 +33,58 @@ const DEFAULT_LISTS: { name: string; icon: string; sortOrder: number }[] = [
   { name: "$wantToGo", icon: "flag", sortOrder: 1 },
   { name: "$starredPlaces", icon: "star", sortOrder: 2 },
 ];
+
+type SavedTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+const CONFLICT_ERRORS: Record<SavedConflictCode, string> = {
+  SAVED_LIST_LIMIT: `Accounts can have at most ${MAX_SAVED_LISTS_PER_USER} saved lists`,
+  SAVED_PLACE_LIMIT: `Accounts can save at most ${MAX_SAVED_PLACES_PER_USER} places`,
+  SAVED_LIST_NAME_TAKEN: "A list with this name already exists",
+};
+
+/** Thrown inside a transaction so nothing it already wrote is kept. */
+class SavedLimitError extends Error {
+  constructor(readonly code: SavedConflictCode) {
+    super(CONFLICT_ERRORS[code]);
+  }
+}
+
+function conflictBody(code: SavedConflictCode) {
+  return { error: CONFLICT_ERRORS[code], code };
+}
+
+/** A failed write has already rolled back; only a repeated list name becomes a 409. */
+function rethrowUnlessNameTaken(error: unknown): "name-taken" {
+  if (isUniqueViolation(error, SAVED_LIST_NAME_UNIQUE)) return "name-taken";
+  throw error;
+}
+
+/**
+ * Serializes every write that adds lists or places for one account, so two
+ * concurrent requests cannot both pass a count check. NO KEY UPDATE conflicts
+ * with itself but not with the key-share locks that foreign-key checks take,
+ * so ordinary inserts referencing the account are not blocked.
+ */
+async function lockSavedQuota(tx: SavedTransaction, userId: string): Promise<void> {
+  await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("no key update");
+}
+
+async function countSavedLists(tx: SavedTransaction, userId: string): Promise<number> {
+  const [row] = await tx
+    .select({ count: sql<number>`count(*)::int` })
+    .from(savedList)
+    .where(eq(savedList.userId, userId));
+  return row?.count ?? 0;
+}
+
+async function countSavedPlaces(tx: SavedTransaction, userId: string): Promise<number> {
+  const [row] = await tx
+    .select({ count: sql<number>`count(*)::int` })
+    .from(savedPlace)
+    .innerJoin(savedList, eq(savedPlace.listId, savedList.id))
+    .where(eq(savedList.userId, userId));
+  return row?.count ?? 0;
+}
 
 export const savedRoute: FastifyPluginAsync = async (fastify) => {
   declareRouteAuth(fastify, "session");
@@ -86,122 +146,165 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
 
     const id = crypto.randomUUID();
     const now = new Date();
-    await db.insert(savedList).values({
-      id,
-      userId,
-      name: body.name,
-      icon: body.icon ?? null,
-      isPrivate: body.isPrivate ?? true,
-      createdAt: now,
-      updatedAt: now,
-    });
+    const created = await db
+      .transaction(async (tx) => {
+        await lockSavedQuota(tx, userId);
+        if ((await countSavedLists(tx, userId)) >= MAX_SAVED_LISTS_PER_USER) return false;
+        await tx.insert(savedList).values({
+          id,
+          userId,
+          name: body.name,
+          icon: body.icon ?? null,
+          isPrivate: body.isPrivate ?? true,
+          createdAt: now,
+          updatedAt: now,
+        });
+        return true;
+      })
+      .catch(rethrowUnlessNameTaken);
+    if (created === "name-taken")
+      return reply.status(409).send(conflictBody("SAVED_LIST_NAME_TAKEN"));
+    if (!created) return reply.status(409).send(conflictBody("SAVED_LIST_LIMIT"));
 
     return { id, name: body.name, icon: body.icon ?? null, isPrivate: body.isPrivate ?? true };
   });
 
-  registerSavedImportRoute(fastify, "importSavedPlaces", async (req, reply) => {
-    const userId = getUserId(req);
-    const { target, places } = req.body;
-    const targetId = "listId" in target ? target.listId : undefined;
-    const targetName = "name" in target ? target.name : undefined;
-    if (targetName !== undefined && (!targetName.trim() || targetName.trim().startsWith("$"))) {
-      return reply
-        .status(400)
-        .send({ error: "Specify exactly one listId or non-reserved list name" });
-    }
-    for (const place of places) {
-      if (place.fieldContributors === undefined) continue;
-      const captured = parseSavedPlaceContributors(place.fieldContributors);
-      if (captured === undefined)
-        return reply.status(400).send({ error: "Invalid fieldContributors" });
-      place.fieldContributors = captured;
-    }
-    const result = await db.transaction(async (tx) => {
-      let listId = targetId;
-      let name = targetName?.trim() || "";
-      if (listId) {
-        // Serialize imports into this list before reading membership and sort order.
-        const [existing] = await tx
-          .select({ id: savedList.id, name: savedList.name })
-          .from(savedList)
-          .where(and(eq(savedList.id, listId), eq(savedList.userId, userId)))
-          .for("update");
-        if (!existing) return null;
-        name = existing.name;
-      } else {
-        const base = name;
-        for (let suffix = 1; ; suffix++) {
-          const ending = suffix === 1 ? "" : ` (${suffix})`;
-          name = `${base.slice(0, 200 - ending.length).replace(/[\uD800-\uDBFF]$/, "")}${ending}`;
-          const id = crypto.randomUUID();
-          // ON CONFLICT permits concurrent imports and ordinary list creation to race safely.
-          const inserted = await tx
-            .insert(savedList)
-            .values({ id, userId, name })
-            .onConflictDoNothing({ target: [savedList.userId, savedList.name] })
-            .returning({ id: savedList.id });
-          if (inserted.length) {
-            listId = id;
-            break;
-          }
-        }
+  registerSavedImportRoute(
+    fastify,
+    "importSavedPlaces",
+    async (req, reply) => {
+      const userId = getUserId(req);
+      const { target, places } = req.body;
+      const targetId = "listId" in target ? target.listId : undefined;
+      const targetName = "name" in target ? target.name : undefined;
+      if (targetName !== undefined && (!targetName.trim() || targetName.trim().startsWith("$"))) {
+        return reply
+          .status(400)
+          .send({ error: "Specify exactly one listId or non-reserved list name" });
       }
-      const existing = await tx
-        .select({
-          name: savedPlace.name,
-          lat: savedPlace.lat,
-          lng: savedPlace.lng,
-          sortOrder: savedPlace.sortOrder,
-        })
-        .from(savedPlace)
-        .where(eq(savedPlace.listId, listId));
-      const cells = new Map<string, { lat: number; lng: number }[]>();
-      const cellKey = (name: string, x: number, y: number) => JSON.stringify([name, x, y]);
-      const remember = (place: { name: string; lat: number; lng: number }) => {
-        const key = cellKey(place.name, Math.floor(place.lat / 1e-5), Math.floor(place.lng / 1e-5));
-        const cell = cells.get(key) || [];
-        cell.push(place);
-        cells.set(key, cell);
-      };
-      for (const place of existing) remember(place);
-      let order = existing.reduce((max, place) => Math.max(max, place.sortOrder), -1);
-      const rows: (typeof savedPlace.$inferInsert)[] = [];
       for (const place of places) {
-        const x = Math.floor(place.lat / 1e-5);
-        const y = Math.floor(place.lng / 1e-5);
-        let duplicate = false;
-        for (let dx = -1; dx <= 1 && !duplicate; dx++) {
-          for (let dy = -1; dy <= 1 && !duplicate; dy++) {
-            duplicate = (cells.get(cellKey(place.name, x + dx, y + dy)) || []).some(
-              (other) =>
-                Math.abs(other.lat - place.lat) <= 1e-5 && Math.abs(other.lng - place.lng) <= 1e-5,
-            );
+        if (place.fieldContributors === undefined) continue;
+        const captured = parseSavedPlaceContributors(place.fieldContributors);
+        if (captured === undefined)
+          return reply.status(400).send({ error: "Invalid fieldContributors" });
+        place.fieldContributors = captured;
+      }
+      const result = await db
+        .transaction(async (tx) => {
+          await lockSavedQuota(tx, userId);
+          let listId = targetId;
+          let name = targetName?.trim() || "";
+          if (listId) {
+            // Serialize imports into this list before reading membership and sort order.
+            const [existing] = await tx
+              .select({ id: savedList.id, name: savedList.name })
+              .from(savedList)
+              .where(and(eq(savedList.id, listId), eq(savedList.userId, userId)))
+              .for("update");
+            if (!existing) return null;
+            name = existing.name;
+          } else {
+            if ((await countSavedLists(tx, userId)) >= MAX_SAVED_LISTS_PER_USER) {
+              throw new SavedLimitError("SAVED_LIST_LIMIT");
+            }
+            const base = name;
+            for (let suffix = 1; ; suffix++) {
+              const ending = suffix === 1 ? "" : ` (${suffix})`;
+              name = `${base.slice(0, 200 - ending.length).replace(/[\uD800-\uDBFF]$/, "")}${ending}`;
+              const id = crypto.randomUUID();
+              // ON CONFLICT permits concurrent imports and ordinary list creation to race safely.
+              const inserted = await tx
+                .insert(savedList)
+                .values({ id, userId, name })
+                .onConflictDoNothing({ target: [savedList.userId, savedList.name] })
+                .returning({ id: savedList.id });
+              if (inserted.length) {
+                listId = id;
+                break;
+              }
+            }
           }
-        }
-        if (duplicate) continue;
-        remember(place);
-        rows.push({
-          ...place,
-          id: crypto.randomUUID(),
-          listId,
-          placeId: null,
-          sortOrder: ++order,
+          const existing = await tx
+            .select({
+              name: savedPlace.name,
+              lat: savedPlace.lat,
+              lng: savedPlace.lng,
+              sortOrder: savedPlace.sortOrder,
+            })
+            .from(savedPlace)
+            .where(eq(savedPlace.listId, listId));
+          const cells = new Map<string, { lat: number; lng: number }[]>();
+          const cellKey = (name: string, x: number, y: number) => JSON.stringify([name, x, y]);
+          const remember = (place: { name: string; lat: number; lng: number }) => {
+            const key = cellKey(
+              place.name,
+              Math.floor(place.lat / 1e-5),
+              Math.floor(place.lng / 1e-5),
+            );
+            const cell = cells.get(key) || [];
+            cell.push(place);
+            cells.set(key, cell);
+          };
+          for (const place of existing) remember(place);
+          let order = existing.reduce((max, place) => Math.max(max, place.sortOrder), -1);
+          const rows: (typeof savedPlace.$inferInsert)[] = [];
+          for (const place of places) {
+            const x = Math.floor(place.lat / 1e-5);
+            const y = Math.floor(place.lng / 1e-5);
+            let duplicate = false;
+            for (let dx = -1; dx <= 1 && !duplicate; dx++) {
+              for (let dy = -1; dy <= 1 && !duplicate; dy++) {
+                duplicate = (cells.get(cellKey(place.name, x + dx, y + dy)) || []).some(
+                  (other) =>
+                    Math.abs(other.lat - place.lat) <= 1e-5 &&
+                    Math.abs(other.lng - place.lng) <= 1e-5,
+                );
+              }
+            }
+            if (duplicate) continue;
+            remember(place);
+            rows.push({
+              ...place,
+              id: crypto.randomUUID(),
+              listId,
+              placeId: null,
+              sortOrder: ++order,
+            });
+          }
+          // All or nothing: a batch that would pass the cap is refused whole, and
+          // the throw also rolls back a list created for it above.
+          if (
+            rows.length &&
+            (await countSavedPlaces(tx, userId)) + rows.length > MAX_SAVED_PLACES_PER_USER
+          ) {
+            throw new SavedLimitError("SAVED_PLACE_LIMIT");
+          }
+          if (rows.length) {
+            await tx.insert(savedPlace).values(rows);
+            await tx
+              .update(savedList)
+              .set({ updatedAt: new Date() })
+              .where(eq(savedList.id, listId));
+          }
+          return {
+            listId,
+            name,
+            imported: rows.length,
+            skippedDuplicates: places.length - rows.length,
+          };
+        })
+        .catch((error: unknown) => {
+          if (error instanceof SavedLimitError) return error;
+          throw error;
         });
-      }
-      if (rows.length) {
-        await tx.insert(savedPlace).values(rows);
-        await tx.update(savedList).set({ updatedAt: new Date() }).where(eq(savedList.id, listId));
-      }
-      return {
-        listId,
-        name,
-        imported: rows.length,
-        skippedDuplicates: places.length - rows.length,
-      };
-    });
-    if (!result) return reply.status(404).send({ error: "List not found" });
-    return result;
-  });
+      if (result instanceof SavedLimitError)
+        return reply.status(409).send(conflictBody(result.code));
+      if (!result) return reply.status(404).send({ error: "List not found" });
+      return result;
+    },
+    // Throttle before the batch is validated or touches the database.
+    { beforeValidation: savedImportLimit.preHandler() },
+  );
 
   registerSavedRoute(fastify, "updateSavedList", async (req, reply) => {
     const userId = getUserId(req);
@@ -235,11 +338,17 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
       return reply.status(400).send({ error: "No fields to update" });
     }
 
-    const result = await db
-      .update(savedList)
-      .set(updates)
-      .where(and(eq(savedList.id, id), eq(savedList.userId, userId)))
-      .returning({ id: savedList.id });
+    let result: { id: string }[];
+    try {
+      result = await db
+        .update(savedList)
+        .set(updates)
+        .where(and(eq(savedList.id, id), eq(savedList.userId, userId)))
+        .returning({ id: savedList.id });
+    } catch (error) {
+      rethrowUnlessNameTaken(error);
+      return reply.status(409).send(conflictBody("SAVED_LIST_NAME_TAKEN"));
+    }
 
     if (result.length === 0) {
       return reply.status(404).send({ error: "List not found" });
@@ -350,17 +459,6 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
     const userId = getUserId(req);
 
     const { id: listId } = req.params;
-
-    const list = await db
-      .select({ id: savedList.id })
-      .from(savedList)
-      .where(and(eq(savedList.id, listId), eq(savedList.userId, userId)))
-      .limit(1);
-
-    if (list.length === 0) {
-      return reply.status(404).send({ error: "List not found" });
-    }
-
     const body = req.body;
 
     if (!body.name || body.lat === undefined || body.lng === undefined) {
@@ -374,17 +472,32 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
     if (body.fieldContributors !== undefined && captured === undefined)
       return reply.status(400).send({ error: "Invalid fieldContributors" });
     const id = crypto.randomUUID();
-    await db.insert(savedPlace).values({
-      id,
-      listId,
-      name: body.name,
-      address: body.address ?? null,
-      lat: body.lat,
-      lng: body.lng,
-      placeId: body.placeId ?? null,
-      fieldContributors: captured ?? null,
-      note: body.note ?? null,
+    const outcome = await db.transaction(async (tx) => {
+      await lockSavedQuota(tx, userId);
+      const list = await tx
+        .select({ id: savedList.id })
+        .from(savedList)
+        .where(and(eq(savedList.id, listId), eq(savedList.userId, userId)))
+        .limit(1);
+      if (list.length === 0) return "missing" as const;
+      if ((await countSavedPlaces(tx, userId)) >= MAX_SAVED_PLACES_PER_USER) {
+        return "limit" as const;
+      }
+      await tx.insert(savedPlace).values({
+        id,
+        listId,
+        name: body.name,
+        address: body.address ?? null,
+        lat: body.lat,
+        lng: body.lng,
+        placeId: body.placeId ?? null,
+        fieldContributors: captured ?? null,
+        note: body.note ?? null,
+      });
+      return "created" as const;
     });
+    if (outcome === "missing") return reply.status(404).send({ error: "List not found" });
+    if (outcome === "limit") return reply.status(409).send(conflictBody("SAVED_PLACE_LIMIT"));
 
     return {
       id,

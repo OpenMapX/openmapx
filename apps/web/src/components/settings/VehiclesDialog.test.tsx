@@ -241,6 +241,27 @@ describe.each(SAVE_SCENARIOS)("VehiclesDialog saving ($label)", (scenario) => {
   const specInput = () => screen.getByLabelText(scenario.specLabel) as HTMLInputElement;
   const editorOpen = () => screen.queryByLabelText("vehicles.name") !== null;
 
+  it("explains a repeated vehicle name instead of a generic failure", async () => {
+    const { ApiClientError } = await import("@openmapx/core");
+    const failing = deferred();
+    respondWith(scenario.request, failing.promise);
+    await scenario.start();
+    await clickSave();
+    await waitFor(() => expect(scenario.request).toHaveBeenCalledTimes(1));
+    await act(async () =>
+      failing.reject(
+        new ApiClientError(
+          409,
+          { error: "A vehicle with this name already exists", code: "VEHICLE_NAME_TAKEN" },
+          null,
+        ),
+      ),
+    );
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("vehicles.nameTaken");
+    expect(editorOpen()).toBe(true);
+  });
+
   it("keeps the submitted draft visible and locked while the request is unresolved", async () => {
     const request = deferred();
     respondWith(scenario.request, request.promise);

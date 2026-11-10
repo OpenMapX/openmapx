@@ -3,6 +3,8 @@ import { and, asc, desc, eq, getTableColumns, ne, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db/index";
 import { parkedLocation, personalVehicle, user } from "../db/schema";
+import { isUniqueViolation } from "../db/unique-violation";
+import { PERSONAL_VEHICLE_NAME_UNIQUE } from "../db/vehicle-schema";
 import { getUserId, requireAuthHook } from "../utils/require-auth";
 import { declareRouteAuth } from "../utils/route-auth";
 import { registerGarageRoute } from "./garage-contract";
@@ -11,6 +13,17 @@ const { userId: _vehicleOwner, ...vehicleColumns } = getTableColumns(personalVeh
 const { userId: _parkingOwner, ...parkingColumns } = getTableColumns(parkedLocation);
 
 type GarageTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+const VEHICLE_NAME_TAKEN = {
+  error: "A vehicle with this name already exists",
+  code: "VEHICLE_NAME_TAKEN",
+} as const;
+
+/** The transaction has already rolled back; only a repeated name becomes a 409. */
+function rethrowUnlessNameTaken(error: unknown): typeof VEHICLE_NAME_TAKEN {
+  if (isUniqueViolation(error, PERSONAL_VEHICLE_NAME_UNIQUE)) return VEHICLE_NAME_TAKEN;
+  throw error;
+}
 
 /** Empty garages have no vehicle row to lock; serialize on their owning account. */
 async function lockGarage(tx: GarageTransaction, userId: string): Promise<void> {
@@ -46,26 +59,30 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
     const draft = normalizeVehicleDraft(req.body);
     if (!draft.ok) return reply.status(400).send({ error: draft.reason });
 
-    const created = await db.transaction(async (tx) => {
-      await lockGarage(tx, userId);
-      const counted = await tx
-        .select({ count: sql<number>`count(*)::int` })
-        .from(personalVehicle)
-        .where(eq(personalVehicle.userId, userId));
-      const existing = counted[0]?.count ?? 0;
-      if (existing >= MAX_VEHICLES_PER_USER) return null;
-      const isDefault = draft.value.isDefault || existing === 0;
-      const id = crypto.randomUUID();
-      if (isDefault) {
-        await tx
-          .update(personalVehicle)
-          .set({ isDefault: false })
+    const created = await db
+      .transaction(async (tx) => {
+        await lockGarage(tx, userId);
+        const counted = await tx
+          .select({ count: sql<number>`count(*)::int` })
+          .from(personalVehicle)
           .where(eq(personalVehicle.userId, userId));
-      }
-      await tx.insert(personalVehicle).values({ id, userId, ...draft.value, isDefault });
-      return { id, ...draft.value, isDefault };
-    });
-    if (!created) return reply.status(409).send({ error: "vehicle limit reached" });
+        const existing = counted[0]?.count ?? 0;
+        if (existing >= MAX_VEHICLES_PER_USER) return null;
+        const isDefault = draft.value.isDefault || existing === 0;
+        const id = crypto.randomUUID();
+        if (isDefault) {
+          await tx
+            .update(personalVehicle)
+            .set({ isDefault: false })
+            .where(eq(personalVehicle.userId, userId));
+        }
+        await tx.insert(personalVehicle).values({ id, userId, ...draft.value, isDefault });
+        return { id, ...draft.value, isDefault };
+      })
+      .catch(rethrowUnlessNameTaken);
+    if (!created)
+      return reply.status(409).send({ error: "vehicle limit reached", code: "VEHICLE_LIMIT" });
+    if ("code" in created) return reply.status(409).send(created);
     return reply.send(created);
   });
 
@@ -73,31 +90,34 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
     const userId = getUserId(req);
     const { id } = req.params;
 
-    const error = await db.transaction(async (tx) => {
-      await lockGarage(tx, userId);
-      const existing = await tx
-        .select()
-        .from(personalVehicle)
-        .where(and(eq(personalVehicle.id, id), eq(personalVehicle.userId, userId)))
-        .limit(1);
-      if (existing.length === 0) return { status: 404, error: "Vehicle not found" };
-      const draft = normalizeVehicleDraft({
-        ...existing[0],
-        ...req.body,
-      });
-      if (!draft.ok) return { status: 400, error: draft.reason };
-      if (draft.value.isDefault) {
+    const error = await db
+      .transaction(async (tx) => {
+        await lockGarage(tx, userId);
+        const existing = await tx
+          .select()
+          .from(personalVehicle)
+          .where(and(eq(personalVehicle.id, id), eq(personalVehicle.userId, userId)))
+          .limit(1);
+        if (existing.length === 0) return { status: 404, error: "Vehicle not found" };
+        const draft = normalizeVehicleDraft({
+          ...existing[0],
+          ...req.body,
+        });
+        if (!draft.ok) return { status: 400, error: draft.reason };
+        if (draft.value.isDefault) {
+          await tx
+            .update(personalVehicle)
+            .set({ isDefault: false })
+            .where(and(eq(personalVehicle.userId, userId), ne(personalVehicle.id, id)));
+        }
         await tx
           .update(personalVehicle)
-          .set({ isDefault: false })
-          .where(and(eq(personalVehicle.userId, userId), ne(personalVehicle.id, id)));
-      }
-      await tx
-        .update(personalVehicle)
-        .set(draft.value)
-        .where(and(eq(personalVehicle.id, id), eq(personalVehicle.userId, userId)));
-      return null;
-    });
+          .set(draft.value)
+          .where(and(eq(personalVehicle.id, id), eq(personalVehicle.userId, userId)));
+        return null;
+      })
+      .catch(rethrowUnlessNameTaken);
+    if (error && "code" in error) return reply.status(409).send(error);
     if (error) return reply.status(error.status).send({ error: error.error });
     return reply.send({ ok: true });
   });
