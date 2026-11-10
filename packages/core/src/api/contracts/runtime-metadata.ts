@@ -38,8 +38,11 @@ export const aiSearchDisclosureSchema = z.strictObject({
   cloudProcessors: z.array(aiCloudProcessorSchema),
   cloudAvailable: z.boolean(),
   cloudConsentRequired: z.boolean(),
-  /** Cloud parsing is offered only to signed-in users; anonymous searches stay local. */
-  cloudRequiresSignIn: z.boolean(),
+  /**
+   * Cloud parsing is offered only to signed-in users; anonymous searches stay
+   * local. Absent means false, so a disclosure that predates it still parses.
+   */
+  cloudRequiresSignIn: z.boolean().optional(),
   cloudProviderLabels: z.array(z.string()),
 });
 export const emailProviderSchema = z.enum(["emaillabs", "lettermint", "smtp"]);

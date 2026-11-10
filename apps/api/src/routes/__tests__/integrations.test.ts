@@ -167,6 +167,27 @@ describe("public integration metadata route", () => {
     await isolated.close();
   });
 
+  it("serves an AI-search disclosure that does not state cloudRequiresSignIn", async () => {
+    const isolated = Fastify({ logger: false });
+    const row = integration();
+    const { cloudRequiresSignIn: _omitted, ...withoutSignIn } = row.disclosures[0] as Record<
+      string,
+      unknown
+    >;
+    await isolated.register(integrationsRoute, {
+      getIntegrations: () => [{ ...row, disclosures: [withoutSignIn] } as typeof row],
+      getEmailDisclosure: vi.fn().mockRejectedValue(new Error("no mail provider")),
+    });
+
+    const response = await isolated.inject("/api/integrations");
+
+    expect(response.statusCode).toBe(200);
+    const body = integrationsResponseSchema.parse(response.json());
+    expect(body.disclosures).toHaveLength(1);
+    expect(body.disclosures[0]).not.toHaveProperty("cloudRequiresSignIn");
+    await isolated.close();
+  });
+
   it("rejects malformed producer metadata without publishing validation issues", async () => {
     const isolated = Fastify({ logger: false });
     const row = integration();
