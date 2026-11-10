@@ -200,7 +200,11 @@ export class BoundedWorkQueue {
     // so it never joins a result that is already being cancelled.
     const predecessor = this.#abandoned.get(job.key) ?? Promise.resolve();
     predecessor
-      .then(() => job.operation(job.controller.signal, job.deadlineAt))
+      .then(() => {
+        // Every caller may have left while this job waited; never start cancelled work.
+        job.controller.signal.throwIfAborted();
+        return job.operation(job.controller.signal, job.deadlineAt);
+      })
       .then(
         (value) => this.#finish(job, (waiter) => waiter.resolve(value)),
         (error) => this.#finish(job, (waiter) => waiter.reject(error)),

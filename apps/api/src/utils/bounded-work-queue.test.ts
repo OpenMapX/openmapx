@@ -213,6 +213,42 @@ describe("BoundedWorkQueue", () => {
     expect(queue.pendingFor("a")).toBe(0);
   });
 
+  it("never starts an operation whose callers all left while it waited for its predecessor", async () => {
+    const queue = new BoundedWorkQueue({
+      concurrency: 2,
+      maxQueued: 1,
+      maxPerClient: 10,
+      cancelAbandoned: true,
+    });
+    const settled = deferred<void>();
+    const first = new AbortController();
+    const abandoned = queue.run(
+      { key: "k", client: "a", deadlineAt: later(), signal: first.signal },
+      async () => {
+        await settled.promise;
+        throw new Error("cancelled");
+      },
+    );
+    await flush();
+    first.abort(new Error("Client disconnected"));
+    await expect(abandoned).rejects.toThrow("Client disconnected");
+
+    const second = new AbortController();
+    const replacementOperation = vi.fn(async () => "fresh");
+    const replacement = queue.run(
+      { key: "k", client: "b", deadlineAt: later(), signal: second.signal },
+      replacementOperation,
+    );
+    await flush();
+    second.abort(new Error("Client disconnected"));
+    await expect(replacement).rejects.toThrow("Client disconnected");
+    settled.resolve();
+    await flush();
+    expect(replacementOperation).not.toHaveBeenCalled();
+    expect(queue.active).toBe(0);
+    expect(queue.pendingFor("b")).toBe(0);
+  });
+
   it("lets later callers join running work that ignores cancellation", async () => {
     const queue = new BoundedWorkQueue({
       concurrency: 1,
