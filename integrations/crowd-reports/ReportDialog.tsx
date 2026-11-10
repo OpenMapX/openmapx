@@ -28,7 +28,7 @@ import { alpha } from "@mui/material/styles";
 import ToggleButton from "@mui/material/ToggleButton";
 import Typography from "@mui/material/Typography";
 import { createSvgIcon } from "@mui/material/utils";
-import { useMapStore } from "@openmapx/core";
+import { CALLER_SHOWS_ERRORS, useMapStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import Dialog from "@/integration-api/components/Dialog";
@@ -118,7 +118,8 @@ export function ReportDialog() {
   const startPicking = useCrowdReportStore((s) => s.startPicking);
   const setLocation = useCrowdReportStore((s) => s.setLocation);
   const userLocation = useMapStore((s) => s.userLocation);
-  const submit = useSubmitReport();
+  // The dialog stays open and shows a failed submit beside its actions.
+  const submit = useSubmitReport(CALLER_SHOWS_ERRORS);
 
   const [category, setCategory] = useState<ReportCategory>("hazard_object");
   const [fuzziness, setFuzziness] = useState<FuzzinessChoice>("here");
