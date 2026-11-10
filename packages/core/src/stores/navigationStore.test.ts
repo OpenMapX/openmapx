@@ -5,7 +5,7 @@ import type { TransitProgress } from "../navigation/transitProgress";
 import type { NavProgress } from "../navigation/types";
 import { configureStorage, type StorageAdapter } from "../platform/storage";
 import type { LngLat } from "../types/geometry";
-import type { Route } from "../types/routing";
+import type { RoadConditionRouteImpact, Route } from "../types/routing";
 import type { NativeNavigationProjection } from "./navigationStore";
 import { useNavigationStore } from "./navigationStore";
 
@@ -555,9 +555,8 @@ describe("navigationStore route-identity reset", () => {
       assertSpecific: () => {
         const s = useNavigationStore.getState();
         expect(s.route?.distance).toBe(321);
-        // Unlike the other three route-identity actions, addStop does not
-        // touch a pending faster-route proposal.
-        expect(s.fasterRoute?.route.distance).toBe(777);
+        // A pending offer was priced without the new stop, so it is withdrawn.
+        expect(s.fasterRoute).toBeNull();
       },
     },
     {
@@ -623,6 +622,128 @@ describe("navigationStore route-identity reset", () => {
       assertSpecific();
     },
   );
+});
+
+describe("navigationStore route transitions", () => {
+  const routeWith = (distance: number): Route => ({ ...route, distance }) as Route;
+  const twoWaypoints: LngLat[] = [
+    [0, 0],
+    [1, 1],
+  ];
+  const currentImpact = (validUntil: string): RoadConditionRouteImpact => ({
+    availability: "current",
+    evaluatedAt: "2026-09-12T12:00:00Z",
+    validUntil,
+    reasons: [],
+  });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-12T12:00:00Z"));
+    useNavigationStore.getState().stopNavigation();
+  });
+  afterEach(() => {
+    useNavigationStore.getState().stopNavigation();
+    vi.useRealTimers();
+  });
+
+  it("keeps an added stop when a faster-route offer is accepted afterwards", () => {
+    const store = useNavigationStore.getState();
+    store.startGroundNavigation(route, "driving", twoWaypoints);
+    store.proposeFasterRoute({
+      route: routeWith(777),
+      alternatives: [],
+      savedSeconds: 300,
+      proposedAtMs: 1,
+    });
+    const withStop: LngLat[] = [
+      [0, 0],
+      [0.5, 0.5],
+      [1, 1],
+    ];
+    store.addStop(routeWith(321), withStop);
+
+    store.acceptFasterRoute();
+
+    const s = useNavigationStore.getState();
+    expect(s.route?.distance).toBe(321);
+    expect(s.destinationWaypoints).toEqual(withStop);
+  });
+
+  it("keeps the lease timer when accepting with no offer pending", () => {
+    useNavigationStore
+      .getState()
+      .startGroundNavigation(route, "driving", twoWaypoints, [], "routing-valhalla", {
+        roadConditionImpact: currentImpact("2026-09-12T12:00:01Z"),
+      });
+
+    useNavigationStore.getState().acceptFasterRoute();
+    vi.advanceTimersByTime(1_000);
+
+    expect(useNavigationStore.getState().roadConditionImpact?.availability).toBe("expired");
+  });
+
+  it("keeps the lease timer when the alternative selected shares the held assessment", () => {
+    useNavigationStore
+      .getState()
+      .startGroundNavigation(route, "driving", twoWaypoints, [routeWith(555)], "routing-valhalla", {
+        roadConditionImpact: currentImpact("2026-09-12T12:00:01Z"),
+      });
+
+    useNavigationStore.getState().selectRoute(1);
+    vi.advanceTimersByTime(1_000);
+
+    expect(useNavigationStore.getState().roadConditionImpact?.availability).toBe("expired");
+  });
+
+  it("moves the lease timer to the assessment a reroute brings", () => {
+    useNavigationStore
+      .getState()
+      .startGroundNavigation(route, "driving", twoWaypoints, [], "routing-valhalla", {
+        roadConditionImpact: currentImpact("2026-09-12T12:00:01Z"),
+      });
+
+    useNavigationStore
+      .getState()
+      .applyReroute(routeWith(654), undefined, undefined, currentImpact("2026-09-12T12:00:10Z"));
+    vi.advanceTimersByTime(1_000);
+    expect(useNavigationStore.getState().roadConditionImpact?.availability).toBe("current");
+
+    vi.advanceTimersByTime(9_000);
+    expect(useNavigationStore.getState().roadConditionImpact?.availability).toBe("expired");
+  });
+
+  it("does not let a dropped assessment's timer flag live data once the route changed", () => {
+    const store = useNavigationStore.getState();
+    store.startGroundNavigation(route, "driving", twoWaypoints, [], "routing-valhalla", {
+      roadConditionImpact: currentImpact("2026-09-12T12:00:01Z"),
+    });
+
+    store.addStop(routeWith(321), [
+      [0, 0],
+      [0.5, 0.5],
+      [1, 1],
+    ]);
+    vi.advanceTimersByTime(5_000);
+
+    const s = useNavigationStore.getState();
+    expect(s.roadConditionImpact).toBeNull();
+    expect(s.liveDataUnavailable).toBe(false);
+  });
+
+  it("drops the lease timer with the session when navigation stops", () => {
+    useNavigationStore
+      .getState()
+      .startGroundNavigation(route, "driving", twoWaypoints, [], "routing-valhalla", {
+        roadConditionImpact: currentImpact("2026-09-12T12:00:01Z"),
+      });
+
+    useNavigationStore.getState().stopNavigation();
+    vi.advanceTimersByTime(5_000);
+
+    expect(vi.getTimerCount()).toBe(0);
+    expect(useNavigationStore.getState().liveDataUnavailable).toBe(false);
+  });
 });
 
 describe("navigationStore preference persistence", () => {
