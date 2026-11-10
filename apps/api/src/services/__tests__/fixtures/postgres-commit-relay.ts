@@ -3,21 +3,35 @@
  * durable tuples are never replaced; credentials/packets are never logged. */
 import { connect, createServer, type Socket } from "node:net";
 
+/** The parameter that only an admin job lease renewal binds. */
+const LEASE_RENEWAL_PARAMETER = Buffer.from('{"_observationLeaseUntil"');
+/** How long after its client is gone a withheld renewal reaches PostgreSQL. */
+const LATE_RENEWAL_DELAY_MS = 1000;
+
 export async function postgresCommitRelay(
   database: URL,
   shouldHold: (observation: { backendPid: number; command: string }) => Promise<boolean>,
   options: {
     holdCommand?: "COMMIT" | "INSERT" | "UPDATE" | "API_TERMINAL_UPDATE";
     observeFrontend?: "service-secret-insert";
+    /**
+     * After the terminal update is held, withhold the next lease renewal the
+     * API sends and deliver it only after that API's connection has closed,
+     * as a renewal sent just before the process died can still commit.
+     */
+    withholdLateRenewal?: boolean;
   } = {},
 ) {
   if (database.hostname !== "127.0.0.1" || !/^\d+$/.test(database.port))
     throw Error("Explicit owned local PostgreSQL required");
   const reached = Promise.withResolvers<void>(),
+    renewalWithheld = Promise.withResolvers<void>(),
     sockets = new Set<Socket>(),
-    releases = new Set<() => void>();
+    releases = new Set<() => void>(),
+    backendPids = new Set<number>();
   let retained = false,
-    released = false;
+    released = false,
+    renewalTaken = false;
   const server = createServer((client) => {
     const backend = connect({ host: database.hostname, port: Number(database.port) });
     sockets.add(client);
@@ -36,11 +50,13 @@ export async function postgresCommitRelay(
     let frontend = Buffer.alloc(0),
       startup = true,
       frontendSuspended = false,
-      observedSecretInsert = false;
+      observedSecretInsert = false,
+      withholding = false;
     const forwardFrontend = () => {
       if (!backend.destroyed && frontend.length) backend.write(frontend);
       frontend = Buffer.alloc(0);
       frontendSuspended = false;
+      withholding = false;
       client.resume();
     };
     releases.add(forwardFrontend);
@@ -50,7 +66,7 @@ export async function postgresCommitRelay(
         return;
       }
       frontend = Buffer.concat([frontend, Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes)]);
-      if (frontendSuspended) return;
+      if (frontendSuspended || withholding) return;
       while (frontend.length >= (startup ? 4 : 5)) {
         const size = frontend.readInt32BE(startup ? 0 : 1) + (startup ? 0 : 1);
         if (size < 5 || size > 16 * 1024 * 1024) {
@@ -93,6 +109,20 @@ export async function postgresCommitRelay(
             });
           return;
         }
+        if (
+          options.withholdLateRenewal &&
+          retained &&
+          !released &&
+          !renewalTaken &&
+          packet[0] === 0x42 &&
+          packet.includes(LEASE_RENEWAL_PARAMETER)
+        ) {
+          // The Bind and everything after it stay buffered in `frontend`.
+          renewalTaken = true;
+          withholding = true;
+          renewalWithheld.resolve();
+          return;
+        }
         startup = false;
         frontend = frontend.subarray(size);
         if (!backend.destroyed) backend.write(packet);
@@ -102,6 +132,13 @@ export async function postgresCommitRelay(
       sockets.delete(client);
       releases.delete(flush);
       releases.delete(forwardFrontend);
+      if (withholding) {
+        const late = frontend;
+        setTimeout(() => {
+          if (!backend.destroyed) backend.end(late);
+        }, LATE_RENEWAL_DELAY_MS);
+        return;
+      }
       backend.destroy();
     });
     client.on("error", () => backend.destroy());
@@ -127,7 +164,10 @@ export async function postgresCommitRelay(
         if (pending.length < size) return;
         const packet = pending.subarray(0, size);
         pending = pending.subarray(size);
-        if (packet[0] === 0x4b && size === 13) backendPid = packet.readInt32BE(5);
+        if (packet[0] === 0x4b && size === 13) {
+          backendPid = packet.readInt32BE(5);
+          backendPids.add(backendPid);
+        }
         const command = packet[0] === 0x43 ? packet.subarray(5, -1).toString() : null,
           selected =
             options.holdCommand === "API_TERMINAL_UPDATE"
@@ -169,6 +209,10 @@ export async function postgresCommitRelay(
   return {
     databaseUrl: url.toString(),
     reached: reached.promise,
+    /** Resolves once `withholdLateRenewal` has taken a renewal. */
+    renewalWithheld: renewalWithheld.promise,
+    /** PostgreSQL backend process IDs of every session relayed so far. */
+    backendPids: () => [...backendPids],
     release() {
       released = true;
       for (const flush of releases) flush();

@@ -238,7 +238,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               })
             );
           },
-          { holdCommand: retirement ? (retired ? "API_TERMINAL_UPDATE" : "UPDATE") : "COMMIT" },
+          {
+            holdCommand: retirement ? (retired ? "API_TERMINAL_UPDATE" : "UPDATE") : "COMMIT",
+            withholdLateRenewal: retired,
+          },
         );
         const loader = createRequire(new URL("../../../package.json", import.meta.url)).resolve(
             "tsx/esm",
@@ -337,9 +340,24 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               await fixture.sql`SELECT integration_id,xmin::text AS version FROM integration_config ORDER BY integration_id`;
           expect(versions).toHaveLength(2);
           expect(renderPosts).toBe(mode === "applied" || retirement ? 1 : 0);
+          // The API's lease heartbeat keeps running while its terminal update
+          // is held. Kill it with that renewal sent but not yet applied.
+          if (retired) await relay.renewalWithheld;
           first.child.kill("SIGKILL");
           expect((await first.exited).signal).toBe("SIGKILL");
           relay.release();
+          // A lease renewal the API sent before it died can still commit after
+          // the kill. Its lease is final only once PostgreSQL has ended every
+          // session that API used.
+          const sessionsEndBy = Date.now() + 30000;
+          while (
+            (
+              await fixture.sql`SELECT 1 FROM pg_stat_activity WHERE pid = ANY(${relay.backendPids()}::int[])`
+            ).length
+          ) {
+            if (Date.now() > sessionsEndBy) throw Error("Killed import API sessions did not end");
+            await nativeDelay(20);
+          }
           const [retained] = await fixture.db.select().from(schema.adminJob),
             lease = Date.parse(
               (retained!.result as Record<string, unknown>)._observationLeaseUntil as string,
