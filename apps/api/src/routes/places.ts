@@ -176,7 +176,10 @@ async function withCardCache<T>(
     return await withCache(key, ttlSeconds, fn);
   } catch (error) {
     // Work cancelled because every caller left says nothing about the provider.
-    const delay = signal.aborted ? undefined : failureOutcome(error).retryAfterMs;
+    const delay =
+      signal.aborted || error instanceof AbandonedWorkSettling
+        ? undefined
+        : failureOutcome(error).retryAfterMs;
     if (delay) {
       cardFailureCooldown.set(key, { error, until: Date.now() + delay });
       if (cardFailureCooldown.size > 1024)
@@ -298,6 +301,51 @@ function proxyablePhoto(photo: PlacePhoto): boolean {
 }
 
 /** Rejects once `signal` aborts, so abandoned work stops holding its queue slot. */
+/** Provider work that kept running after every caller of its card job left. */
+const abandonedCardWork = new WeakSet<Promise<unknown>>();
+
+/** Another caller's abandoned work outlived this caller's deadline; not a provider failure. */
+class AbandonedWorkSettling extends Error {
+  constructor() {
+    super("Previous card request is still settling after its caller left");
+  }
+}
+
+function markAbandoned(abandoned: AbortSignal, work: Promise<unknown>): void {
+  abandoned.addEventListener("abort", () => abandonedCardWork.add(work), { once: true });
+}
+
+/**
+ * A replacement job for a card whose previous caller left waits for that
+ * aborted provider work to settle, so a disconnect never turns into a failure
+ * and shared cooldown for the next caller.
+ */
+async function awaitAbandonedWork(
+  pending: Map<string, Promise<unknown>>,
+  key: string,
+  abandoned: AbortSignal,
+  deadlineAt: number,
+): Promise<void> {
+  const previous = pending.get(key);
+  if (!previous || !abandonedCardWork.has(previous)) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      previous.then(
+        () => undefined,
+        () => undefined,
+      ),
+      abandonment(abandoned),
+      new Promise((resolve) => {
+        timer = setTimeout(resolve, Math.max(0, deadlineAt - Date.now()));
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+  if (pending.get(key) === previous) throw new AbandonedWorkSettling();
+}
+
 function abandonment(signal: AbortSignal): Promise<never> {
   return new Promise((_resolve, reject) => {
     if (signal.aborted) reject(signal.reason);
@@ -327,6 +375,7 @@ async function cardPhoto(
     TTL.photos,
     request,
     async (abandoned, deadlineAt) => {
+      await awaitAbandonedWork(pendingCardPhoto, key, abandoned, deadlineAt);
       if (pendingCardPhoto.has(key)) throw new Error("Previous photo request is still settling");
       if (pendingCardPhoto.size >= 4) throw new Error("Photo providers are still settling");
       const controller = new AbortController();
@@ -357,6 +406,7 @@ async function cardPhoto(
           : Promise.resolve({ photos: [] }),
       ]);
       pendingCardPhoto.set(key, work);
+      markAbandoned(abandoned, work);
       void work.then(() => {
         if (pendingCardPhoto.get(key) === work) pendingCardPhoto.delete(key);
       });
@@ -440,6 +490,7 @@ async function cardRating(
     600,
     request,
     async (abandoned, deadlineAt) => {
+      await awaitAbandonedWork(pendingCardRating, key, abandoned, deadlineAt);
       if (pendingCardRating.has(key)) throw new Error("Previous rating request is still settling");
       if (pendingCardRating.size >= 4) throw new Error("Rating providers are still settling");
       const controller = new AbortController();
@@ -450,6 +501,7 @@ async function cardRating(
         strict: true,
       });
       pendingCardRating.set(key, work);
+      markAbandoned(abandoned, work);
       void work.then(
         () => {
           if (pendingCardRating.get(key) === work) pendingCardRating.delete(key);

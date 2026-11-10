@@ -2288,6 +2288,45 @@ describe("bounded enrichment admission", () => {
     expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(1);
   });
 
+  it("lets a new caller wait for abandoned photo work instead of cooling the card down", async () => {
+    const settle = Promise.withResolvers<void>();
+    const photo = licensedPhoto({
+      url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Replacement.jpg",
+      source: "wikimedia",
+    });
+    let signal: AbortSignal | undefined;
+    // The abandoned provider call notices the abort but takes a while to settle.
+    mockSearchHeroPhotos.mockImplementationOnce(
+      (_tags, _providers, options) =>
+        new Promise((_resolve, reject) => {
+          signal = options.signal;
+          options.signal.addEventListener(
+            "abort",
+            () => void settle.promise.then(() => reject(options.signal.reason)),
+            { once: true },
+          );
+        }),
+    );
+    mockSearchHeroPhotos.mockResolvedValue([photo]);
+    const card = photoCard(7_700_000);
+    const leaving = await openClient("/places/card-enrichment", { places: [card] });
+    await vi.waitFor(() => expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(1));
+    leaving.disconnect();
+    await vi.waitFor(() => expect(signal?.aborted).toBe(true));
+    const replacement = app
+      .inject({
+        method: "POST",
+        url: "/places/card-enrichment",
+        remoteAddress: "10.8.0.1",
+        payload: { places: [card] },
+      })
+      .then((response) => response);
+    await pause(50);
+    settle.resolve();
+    expect((await replacement).json().results[0].outcomes.photo).toEqual({ status: "available" });
+    expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(2);
+  });
+
   it("aborts a running card photo once its only caller disconnects", async () => {
     let signal: AbortSignal | undefined;
     mockSearchHeroPhotos.mockImplementation(
