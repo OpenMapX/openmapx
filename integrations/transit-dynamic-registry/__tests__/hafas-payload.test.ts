@@ -8,6 +8,7 @@ const client = vi.hoisted(() => ({
   nearby: vi.fn(),
   locations: vi.fn(),
   departures: vi.fn(),
+  arrivals: vi.fn(),
 }));
 const createClient = vi.hoisted(() => vi.fn(() => client));
 vi.mock("hafas-client", () => ({ createClient }));
@@ -34,6 +35,7 @@ beforeEach(() => {
   client.nearby.mockReset();
   client.locations.mockReset();
   client.departures.mockReset();
+  client.arrivals.mockReset();
 });
 
 describe("HAFAS payload validation", () => {
@@ -112,6 +114,23 @@ describe("HAFAS payload validation", () => {
       .catch((error: unknown) => error);
 
     expect(classifyProviderFailure(failure)).toBe("invalid_payload");
+  });
+
+  it("keeps the library error on a failed arrivals board and reports a malformed one", async () => {
+    client.arrivals.mockRejectedValue(
+      Object.assign(new Error("HAFAS: SERVER_ERROR"), { code: "SERVER_ERROR" }),
+    );
+    const failure = await hafasMgateAdapter
+      .getArrivals(entry(), "vbb:900000024101", 30)
+      .catch((error: unknown) => error);
+    expect((failure as Error).message).toBe("HAFAS timetable unavailable");
+    expect(classifyProviderFailure(failure)).toBe("upstream_5xx");
+
+    client.arrivals.mockResolvedValue({ arrivals: [{ tripId: "1|2" }] });
+    const malformed = await hafasMgateAdapter
+      .getArrivals(entry(), "vbb:900000024101", 30)
+      .catch((error: unknown) => error);
+    expect(classifyProviderFailure(malformed)).toBe("invalid_payload");
   });
 
   it("searches stops only and rejects matches without coordinates", async () => {

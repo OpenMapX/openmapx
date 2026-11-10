@@ -137,6 +137,20 @@ describe("Transitland transit provider", () => {
     expect(url.searchParams.get("apikey")).toBe("test-tl-key");
   });
 
+  it("takes the first stop's board when the envelope lists several stops", async () => {
+    const [first] = departuresFixture.stops;
+    mockFetch.mockResolvedValueOnce(
+      mockOk({ stops: [first, { platform_code: "9", departures: [] }] }),
+    );
+
+    const departures = await getDepartures("tl:s-9q9p1bc1td-lakemerritt");
+
+    expect(departures.map((d) => [d.tripId, d.platform])).toEqual([
+      ["BA:1965768", "2"],
+      ["BA:1965375", "2"],
+    ]);
+  });
+
   it("marks a canceled trip and omits realtime when no estimate exists", async () => {
     const [first] = departuresFixture.stops[0].departures;
     mockFetch.mockResolvedValueOnce(

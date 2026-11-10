@@ -507,6 +507,26 @@ describe("irail provider", () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
+    it("serves the previous station list when the daily refresh is malformed", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        vi.setSystemTime(new Date("2026-11-10T08:00:00Z"));
+        mockStationsResponse();
+        const { getStops } = await loadModule();
+        expect(await getStops(50.835, 4.336, 5000)).toHaveLength(1);
+
+        for (const malformed of [{ station: [] }, { stations: "none" }]) {
+          vi.setSystemTime(Date.now() + 25 * 60 * 60 * 1000);
+          mockFetch.mockResolvedValueOnce(mockOk(malformed));
+          const stops = await getStops(50.835, 4.336, 5000);
+          expect(stops.map((s) => s.id)).toEqual(["ir:BE.NMBS.008814001"]);
+        }
+        expect(mockFetch).toHaveBeenCalledTimes(3);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("rejects an empty station list instead of caching it", async () => {
       mockFetch.mockResolvedValueOnce(mockOk({ station: [] }));
       mockStationsResponse();

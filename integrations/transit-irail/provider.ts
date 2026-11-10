@@ -162,23 +162,24 @@ let stationsCache: IrailStation[] | null = null;
 let stationsCachedAt = 0;
 
 /**
- * The national station list, cached for a day. A failed refresh serves the
- * previous list when there is one and otherwise throws; a malformed or empty
- * list is never cached.
+ * The national station list, cached for a day. A failed or malformed refresh
+ * serves the previous list when there is one and otherwise throws; a malformed
+ * or empty list is never cached.
  */
 async function getAllStations(signal?: AbortSignal): Promise<IrailStation[]> {
   if (stationsCache && Date.now() - stationsCachedAt < STATIONS_TTL_MS) {
     return stationsCache;
   }
-  let data: unknown;
+  let stations: IrailStation[];
   try {
-    data = await irailJson(`${BASE_URL}/stations/?format=json&lang=en`, "stations", signal);
+    const data = await irailJson(`${BASE_URL}/stations/?format=json&lang=en`, "stations", signal);
+    const { station } = parseProviderPayload(stationListSchema, data, "iRail stations");
+    stations = parseProviderRecords(stationSchema, station, "iRail stations").map(toStation);
   } catch (error) {
     if (stationsCache && !signal?.aborted) return stationsCache;
     throw error;
   }
-  const { station } = parseProviderPayload(stationListSchema, data, "iRail stations");
-  stationsCache = parseProviderRecords(stationSchema, station, "iRail stations").map(toStation);
+  stationsCache = stations;
   stationsCachedAt = Date.now();
   return stationsCache;
 }

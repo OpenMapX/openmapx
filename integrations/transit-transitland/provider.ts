@@ -103,14 +103,12 @@ const departureSchema = z.object({
 });
 type TransitlandDeparture = z.infer<typeof departureSchema>;
 const departuresEnvelope = z.object({
-  stops: z
-    .array(
-      z.object({
-        platform_code: optionalText,
-        departures: z.array(z.unknown()),
-      }),
-    )
-    .max(1),
+  stops: z.array(
+    z.object({
+      platform_code: optionalText,
+      departures: z.array(z.unknown()),
+    }),
+  ),
 });
 
 function mapModes(routeTypes: number[]): TransportMode[] {

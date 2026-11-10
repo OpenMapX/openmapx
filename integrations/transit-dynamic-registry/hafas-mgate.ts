@@ -375,25 +375,25 @@ export function createHafasMgateAdapter(): ProtocolAdapter {
     },
 
     async getArrivals(entry, stopId, minutes) {
+      let result: unknown;
       try {
-        const client = getClient(entry);
-        const result = await withTimeout(
-          client.arrivals(rawId(stopId, entry), {
+        result = await withTimeout(
+          getClient(entry).arrivals(rawId(stopId, entry), {
             duration: minutes,
             results: Math.min(500, Math.max(50, minutes * 3)),
             remarks: true,
           }),
           TIMEOUT_MS,
         );
-        const departures = parseBoard(result, entry, "arrivals");
-        const dataAsOf = upstreamDataAsOf(
-          (result as { realtimeDataUpdatedAt?: number | null } | null)?.realtimeDataUpdatedAt,
-        );
-        return { departures, ...(dataAsOf ? { dataAsOf } : {}) };
-      } catch {
+      } catch (error) {
         // A failed board must not read as "no departures".
-        throw new Error("HAFAS timetable unavailable");
+        throw unavailable("timetable", error);
       }
+      const departures = parseBoard(result, entry, "arrivals");
+      const dataAsOf = upstreamDataAsOf(
+        (result as { realtimeDataUpdatedAt?: number | null } | null)?.realtimeDataUpdatedAt,
+      );
+      return { departures, ...(dataAsOf ? { dataAsOf } : {}) };
     },
 
     async searchByName(entry, query, limit) {
