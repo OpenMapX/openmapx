@@ -32,6 +32,7 @@ import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicat
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RemarkChip } from "@/components/panels/transit/RemarkChip";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { ClickableRow } from "@/components/ui/ClickableRow";
 import { BRAND, BRAND_HEX } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
@@ -473,12 +474,11 @@ export function TransitItineraryCard({
       )}
       {active && (
         <Box sx={{ mt: 0.5, ml: -1.5, display: "flex", alignItems: "center", gap: 0.5 }}>
-          <Typography
-            component="span"
-            variant="caption"
+          <ClickableRow
             sx={{
+              width: "auto",
+              typography: "caption",
               color: BRAND,
-              cursor: "pointer",
               fontWeight: 500,
               px: 1.5,
               py: 0.75,
@@ -492,7 +492,7 @@ export function TransitItineraryCard({
             }}
           >
             {tc("details")}
-          </Typography>
+          </ClickableRow>
           <Button
             size="small"
             variant="contained"

@@ -253,7 +253,7 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
             {lists?.map((list) => (
               <Box
                 key={list.id}
-                onClick={() => handleToggle(list.id)}
+                component="label"
                 sx={{
                   display: "flex",
                   alignItems: "center",
@@ -266,12 +266,12 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
               >
                 <Checkbox
                   checked={checkedLists.has(list.id)}
+                  onChange={() => handleToggle(list.id)}
                   sx={{
                     color: "text.secondary",
                     "&.Mui-checked": { color: BRAND },
                   }}
                   size="small"
-                  tabIndex={-1}
                 />
                 {resolveListIcon(list.icon, 20)}
                 <Typography

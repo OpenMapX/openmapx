@@ -115,6 +115,7 @@ export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos, onPho
         </Box>
       </ButtonBase>
       {/* Attribution badge */}
+      {/* biome-ignore lint/plugin/noClickableLayoutElement: keeps credit clicks from opening the gallery */}
       <Box
         onClick={(e) => e.stopPropagation()}
         sx={{

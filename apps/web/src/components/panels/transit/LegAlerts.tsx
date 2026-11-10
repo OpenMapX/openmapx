@@ -2,13 +2,13 @@
 
 import Box from "@mui/material/Box";
 import Collapse from "@mui/material/Collapse";
-import Typography from "@mui/material/Typography";
 import { useRouteAlerts } from "@openmapx/core";
 import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import type { ServiceAlert } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { ClickableRow } from "@/components/ui/ClickableRow";
 import { AlertCard, SEVERITY_PRIORITY } from "./AlertCard";
 
 interface LegAlertsProps {
@@ -41,19 +41,21 @@ export function LegAlerts({ routeId, legAlerts }: LegAlertsProps) {
       <AttributionStrip attributions={contributorsForRecords(sorted)} variant="inline" />
       {hiddenCount > 0 && (
         <>
-          <Typography
-            variant="caption"
+          <ClickableRow
+            aria-expanded={expanded}
             onClick={() => setExpanded((e) => !e)}
             sx={{
+              width: "auto",
+              alignSelf: "flex-start",
+              typography: "caption",
               color: "text.secondary",
-              cursor: "pointer",
               fontSize: "0.65rem",
               pl: 0.75,
               "&:hover": { textDecoration: "underline" },
             }}
           >
             {expanded ? t("showLess") : t("showMoreAlerts", { count: hiddenCount })}
-          </Typography>
+          </ClickableRow>
           <Collapse in={expanded}>
             <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
               {sorted.slice(1).map((a) => (

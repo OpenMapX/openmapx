@@ -386,6 +386,7 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
                 >
                   <IconButton
                     size="small"
+                    aria-label={t("removeReviewPhoto")}
                     onClick={() => removeImage(img.src)}
                     sx={{
                       position: "absolute",

@@ -82,6 +82,7 @@ import { useExpandOnBackgroundTap, useMobileSheet } from "@/components/panels/sh
 import { AutocompleteDropdown } from "@/components/search/AutocompleteDropdown";
 import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { ClickableRow } from "@/components/ui/ClickableRow";
 import Menu from "@/components/ui/Menu";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
@@ -1007,7 +1008,9 @@ export function DirectionsPanelContent() {
   };
 
   return (
-    // Tapping the collapsed sheet's background opens it to mid.
+    // Tapping the collapsed sheet's background opens it to mid. Keyboard users
+    // change the sheet's height from the focusable sheet itself.
+    // biome-ignore lint/plugin/noClickableLayoutElement: background tap, not an action
     <Box onClick={expandOnBackgroundTap}>
       {/* Keep panel actions separate so every travel mode gets the full panel width. */}
       <Box
@@ -1191,17 +1194,16 @@ export function DirectionsPanelContent() {
             }}
           >
             {showTimePicker && (
-              <Box
+              <ClickableRow
+                aria-expanded={timePickerOpen}
                 onClick={() => setTimePickerOpen((v) => !v)}
                 sx={{
-                  display: "inline-flex",
-                  alignItems: "center",
+                  width: "auto",
                   gap: 0.75,
                   px: 1.75,
                   py: 0.75,
                   borderRadius: "12px",
                   bgcolor: activeTimeMode !== "now" ? `${BRAND}18` : "action.hover",
-                  cursor: "pointer",
                   "&:hover": {
                     bgcolor: activeTimeMode !== "now" ? `${BRAND}28` : "action.selected",
                   },
@@ -1227,14 +1229,15 @@ export function DirectionsPanelContent() {
                 <ExpandMoreIcon
                   sx={{ fontSize: 18, color: activeTimeMode !== "now" ? BRAND : "text.primary" }}
                 />
-              </Box>
+              </ClickableRow>
             )}
 
-            <Typography
-              variant="body2"
+            <ClickableRow
+              aria-expanded={showOptions}
               sx={{
+                width: "auto",
+                typography: "body2",
                 color: showOptions ? BRAND : "text.secondary",
-                cursor: "pointer",
                 fontWeight: 500,
                 px: 1.5,
                 py: 0.75,
@@ -1245,7 +1248,7 @@ export function DirectionsPanelContent() {
               onClick={() => setShowOptions((v) => !v)}
             >
               {t("options")}
-            </Typography>
+            </ClickableRow>
           </Box>
         )}
 
@@ -1528,6 +1531,8 @@ export function DirectionsPanelContent() {
             // Multi-stop: single route with leg summary
             <>
               <Box>
+                {/* Pointer shortcut for the Details button below, the keyboard path. */}
+                {/* biome-ignore lint/plugin/noClickableLayoutElement: duplicates the Details button */}
                 <Box
                   sx={{
                     px: 2,
@@ -1595,12 +1600,11 @@ export function DirectionsPanelContent() {
                     </Box>
                   )}
                   <Box sx={{ mt: 0.5, ml: -1.5 }}>
-                    <Typography
-                      component="span"
-                      variant="caption"
+                    <ClickableRow
                       sx={{
+                        width: "auto",
+                        typography: "caption",
                         color: BRAND,
-                        cursor: "pointer",
                         fontWeight: 500,
                         px: 1.5,
                         py: 0.75,
@@ -1614,7 +1618,7 @@ export function DirectionsPanelContent() {
                       }}
                     >
                       {tc("details")}
-                    </Typography>
+                    </ClickableRow>
                   </Box>
                 </Box>
               </Box>

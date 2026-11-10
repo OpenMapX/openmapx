@@ -1,0 +1,33 @@
+language js
+
+// MUI layout components render static elements, so Biome's own a11y rules do
+// not see a click handler on them. Such an element has no keyboard path and no
+// role. Use ClickableRow, a Button or ButtonBase instead; for a genuine
+// background tap that has another keyboard path, suppress with the reason.
+or {
+  jsx_opening_element(name=$name, attributes=$attrs),
+  jsx_self_closing_element(name=$name, attributes=$attrs)
+} as $element where {
+  $name <: or {
+    `Avatar`,
+    `Box`,
+    `Card`,
+    `CardContent`,
+    `CardMedia`,
+    `Container`,
+    `Grid`,
+    `ListItem`,
+    `ListItemIcon`,
+    `ListItemText`,
+    `Paper`,
+    `Stack`,
+    `Toolbar`,
+    `Typography`
+  },
+  $attrs <: some jsx_attribute(name=`onClick`),
+  not $attrs <: some jsx_attribute(name=`role`),
+  not $attrs <: some jsx_attribute(name=`component`, value=$component) where {
+    $component <: r"=\"(?:a|button|input|label|select|summary|textarea)\"|=\{(?:Link|ButtonBase)\}"
+  },
+  register_diagnostic(span=$element, message="This element handles clicks but has no keyboard access or role. Use ClickableRow, a Button or ButtonBase.")
+}

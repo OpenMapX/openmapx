@@ -26,6 +26,7 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { MapCredits } from "@/components/map/MapCredits";
+import { ClickableRow } from "@/components/ui/ClickableRow";
 import { LocationMinimap } from "@/integration-api/components/LocationMinimap";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
@@ -153,6 +154,7 @@ function PlacePhotoGalleryInner({ open, onClose, placeName, placeId, lat, lng }:
               <GalleryThumbnail
                 key={photo.url}
                 photo={photo}
+                label={tp("showPhoto", { number: idx + 1 })}
                 isSelected={idx === clampedIdx}
                 onClick={() => setSelectedIdx(idx)}
               />
@@ -248,6 +250,7 @@ function PlacePhotoGalleryInner({ open, onClose, placeName, placeId, lat, lng }:
                       lat={minimapCoords[1]}
                       sx={GALLERY_MINIMAP_SX}
                       onCreditsChange={setMinimapCredits}
+                      clickLabel={tp("showOnMap")}
                       onClick={() => {
                         onClose();
                         setSelectedPlace(null);
@@ -279,6 +282,7 @@ function PlacePhotoGalleryInner({ open, onClose, placeName, placeId, lat, lng }:
                   <MobileThumbnail
                     key={photo.url}
                     photo={photo}
+                    label={tp("showPhoto", { number: idx + 1 })}
                     isSelected={idx === clampedIdx}
                     onClick={() => setSelectedIdx(idx)}
                   />
@@ -392,10 +396,12 @@ function MainImage({ photo, placeName }: { photo: PlacePhoto; placeName: string 
 /** Sidebar thumbnail — tries thumbnailUrl, then full url, then placeholder. */
 function GalleryThumbnail({
   photo,
+  label,
   isSelected,
   onClick,
 }: {
   photo: PlacePhoto;
+  label: string;
   isSelected: boolean;
   onClick: () => void;
 }) {
@@ -414,9 +420,7 @@ function GalleryThumbnail({
   return (
     <Box
       data-testid="gallery-thumbnail"
-      onClick={onClick}
       sx={{
-        cursor: "pointer",
         borderRadius: 1,
         overflow: "hidden",
         border: isSelected ? "2px solid #4fc3f7" : "2px solid transparent",
@@ -425,6 +429,7 @@ function GalleryThumbnail({
         "&:hover": { opacity: 0.85 },
       }}
     >
+      <ThumbnailButton label={label} isSelected={isSelected} onClick={onClick} />
       <Box
         data-testid="thumbnail-image-cell"
         sx={{ display: "grid", position: "relative", minWidth: 0, minHeight: 150 }}
@@ -474,10 +479,12 @@ function GalleryThumbnail({
 /** Mobile thumbnail with placeholder on error. */
 function MobileThumbnail({
   photo,
+  label,
   isSelected,
   onClick,
 }: {
   photo: PlacePhoto;
+  label: string;
   isSelected: boolean;
   onClick: () => void;
 }) {
@@ -494,16 +501,16 @@ function MobileThumbnail({
   return (
     <Box
       data-testid="gallery-thumbnail"
-      onClick={onClick}
       sx={{
         width: 120,
         flexShrink: 0,
         borderRadius: 0.5,
         overflow: "hidden",
-        cursor: "pointer",
+        position: "relative",
         border: isSelected ? "2px solid #4fc3f7" : "2px solid transparent",
       }}
     >
+      <ThumbnailButton label={label} isSelected={isSelected} onClick={onClick} />
       <Box
         data-testid="thumbnail-image-cell"
         sx={{ display: "grid", position: "relative", minWidth: 0, minHeight: 60 }}
@@ -591,3 +598,26 @@ const THUMBNAIL_CREDIT_SX = {
   },
   overflowWrap: "anywhere",
 } as const;
+
+/**
+ * Covers a thumbnail so the whole image selects it, while the photo credit
+ * stays above it as its own control rather than nested inside a button.
+ */
+function ThumbnailButton({
+  label,
+  isSelected,
+  onClick,
+}: {
+  label: string;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <ClickableRow
+      aria-label={label}
+      aria-pressed={isSelected}
+      onClick={onClick}
+      sx={{ position: "absolute", inset: 0, zIndex: 0, borderRadius: 0 }}
+    />
+  );
+}

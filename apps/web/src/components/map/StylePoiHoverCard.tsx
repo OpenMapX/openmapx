@@ -107,6 +107,9 @@ export function StylePoiHoverCard({
   const category = details?.category?.toLowerCase() === "poi" ? undefined : details?.category;
 
   return (
+    // Shown only while a pointer hovers a map icon: a click opens the place the
+    // pointer is over, and the card's buttons are its controls.
+    // biome-ignore lint/plugin/noClickableLayoutElement: pointer-only hover card
     <Paper
       component="section"
       aria-label={name}

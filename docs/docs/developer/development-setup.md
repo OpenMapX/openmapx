@@ -255,7 +255,13 @@ Tooling notes:
   two-space indent, double quotes, a 100-column line width, and import
   organization. `pnpm format` rewrites files; `pnpm lint` checks without
   writing. Prettier formats Markdown and YAML; Biome owns the other supported
-  source files.
+  source files. In `apps/web` and `integrations`, a Biome plugin
+  (`scripts/biome-plugins/noClickableLayoutElement.grit`) rejects a click
+  handler on an MUI layout component such as `Box` or `Typography`, which has
+  no keyboard access. Use `ClickableRow` (`apps/web/src/components/ui`), a
+  `Button` or `ButtonBase` instead. For a background tap or a pointer shortcut
+  that has another keyboard path, suppress it with
+  `biome-ignore lint/plugin/noClickableLayoutElement:` and the reason.
 - **Vitest** runs the tests from a single root config (`vitest.config.ts`),
   split into two projects: `node` (API, integrations, packages, services) and
   `web` (the Next.js app and React-bound packages, in jsdom). All test commands

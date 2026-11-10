@@ -361,6 +361,9 @@ export function RouteCard({
   };
 
   return (
+    // The whole card is a pointer target for the route's radio or peek button,
+    // which is the keyboard path.
+    // biome-ignore lint/plugin/noClickableLayoutElement: pointer shortcut for the selection control
     <Box
       onClick={(event) => {
         if (!(event.target as Element).closest("button, input, label, a, [role='button']"))
@@ -446,6 +449,7 @@ export function RouteCard({
             </Box>
           )}
         {impact ? (
+          // biome-ignore lint/plugin/noClickableLayoutElement: keeps the badge's click from selecting the route
           <Box
             sx={{ mt: 0.5 }}
             onClick={(e) => {
@@ -544,6 +548,7 @@ export function RouteCard({
         )}
       </Box>
       {impact && (
+        // biome-ignore lint/plugin/noClickableLayoutElement: keeps dialog clicks from selecting the route
         <Box onClick={(e) => e.stopPropagation()}>
           <RouteImpactDetailsDialog
             open={impactDetailsOpen}

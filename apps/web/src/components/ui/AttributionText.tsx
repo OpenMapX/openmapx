@@ -26,6 +26,8 @@ export interface AttributionTextProps {
  */
 export function AttributionText({ html, sx }: AttributionTextProps) {
   return (
+    // Link clicks must not trigger an enclosing row; the links are the controls.
+    // biome-ignore lint/plugin/noClickableLayoutElement: stops propagation, not an action
     <Box
       component="span"
       onClick={(event) => {

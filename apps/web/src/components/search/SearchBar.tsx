@@ -1095,7 +1095,12 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
                 <ArrowBackIcon sx={{ fontSize: 22, color: "text.secondary" }} />
               </IconButton>
             ) : selectedListId ? (
-              <IconButton size="small" sx={{ ml: 0.5, mr: 0.5 }} onClick={clearSelectedList}>
+              <IconButton
+                size="small"
+                sx={{ ml: 0.5, mr: 0.5 }}
+                onClick={clearSelectedList}
+                aria-label={tCommon("back")}
+              >
                 <ArrowBackIcon sx={{ fontSize: 22, color: "text.secondary" }} />
               </IconButton>
             ) : (

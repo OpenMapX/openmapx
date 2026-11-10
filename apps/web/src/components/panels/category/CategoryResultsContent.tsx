@@ -336,6 +336,8 @@ export function CategoryResultsContent() {
   return (
     // Tapping the collapsed sheet opens it to mid — at peek height only the
     // top of the results list is visible, so any tap should reveal the rest.
+    // Keyboard users change the sheet's height from the focusable sheet itself.
+    // biome-ignore lint/plugin/noClickableLayoutElement: background tap, not an action
     <Box ref={scrollRef} onClick={expandOnBackgroundTap} sx={{ flex: 1, overflowY: "auto" }}>
       <AttributionDetailsGroup placement="footer">
         <BrandHeaderCard />

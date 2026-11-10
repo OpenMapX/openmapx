@@ -116,6 +116,7 @@ export function HotelSearchControls() {
           <Box
             component="input"
             type="date"
+            aria-label={t("checkIn")}
             min={todayStr}
             value={checkIn}
             // The store enforces check-out > check-in, so the handler is a
@@ -131,6 +132,7 @@ export function HotelSearchControls() {
           <Box
             component="input"
             type="date"
+            aria-label={t("checkOut")}
             min={checkIn || todayStr}
             value={checkOut}
             onChange={(e: ChangeEvent<HTMLInputElement>) => setCheckOut(e.target.value)}

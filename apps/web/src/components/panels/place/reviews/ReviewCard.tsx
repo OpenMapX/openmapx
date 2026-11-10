@@ -125,7 +125,11 @@ export function ReviewCard({ review, currentUserPem, onEdit, onDelete, onReport 
             </Typography>
           </Box>
         </Box>
-        <IconButton size="small" onClick={(e) => setMenuAnchor(e.currentTarget)}>
+        <IconButton
+          size="small"
+          aria-label={t("more")}
+          onClick={(e) => setMenuAnchor(e.currentTarget)}
+        >
           <MoreVertIcon sx={{ fontSize: 18 }} />
         </IconButton>
       </Box>

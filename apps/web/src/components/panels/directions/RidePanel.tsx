@@ -25,6 +25,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RideQuoteList } from "@/components/panels/directions/RideQuoteList";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { ClickableRow } from "@/components/ui/ClickableRow";
 import { DateTimeField } from "@/components/ui/DateTimeField";
 import { BRAND } from "@/integration-api/runtime/theme";
 
@@ -86,13 +87,14 @@ function ProviderChip({
   onSelect: () => void;
 }) {
   return (
-    <Box
+    <ClickableRow
+      aria-pressed={selected}
       onClick={onSelect}
       sx={{
+        width: "auto",
         px: 1.5,
         py: 0.5,
         borderRadius: 99,
-        cursor: "pointer",
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
@@ -110,7 +112,7 @@ function ProviderChip({
       >
         {provider.name}
       </Typography>
-    </Box>
+    </ClickableRow>
   );
 }
 

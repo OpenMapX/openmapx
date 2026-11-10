@@ -40,6 +40,7 @@ import { useTranslations } from "next-intl";
 import type React from "react";
 import { useRef, useState } from "react";
 import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup";
+import { ClickableRow } from "@/components/ui/ClickableRow";
 import Dialog from "@/components/ui/Dialog";
 import Menu from "@/components/ui/Menu";
 import Popover from "@/components/ui/Popover";
@@ -52,6 +53,18 @@ import { savedWriteError } from "@/lib/savedWriteError";
 import { ImportPlacesPicker } from "./ImportPlacesPicker";
 import { SavedListRows } from "./SavedListRows";
 import { ShareListDialog } from "./ShareListDialog";
+
+const iconTileSx = {
+  mt: 0.5,
+  width: 40,
+  height: 40,
+  borderRadius: 1,
+  bgcolor: "action.hover",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flexShrink: 0,
+} as const;
 
 export function SavedListDetail() {
   const importInput = useRef<HTMLInputElement>(null);
@@ -198,24 +211,21 @@ export function SavedListDetail() {
     <Box>
       <Box sx={{ px: 2, pb: 2 }}>
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5 }}>
-          <Box
-            onClick={isDefault ? undefined : (e) => setIconAnchor(e.currentTarget)}
-            sx={{
-              mt: 0.5,
-              width: 40,
-              height: 40,
-              borderRadius: 1,
-              bgcolor: "action.hover",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: isDefault ? "default" : "pointer",
-              flexShrink: 0,
-              ...(!isDefault && { "&:hover": { bgcolor: "action.selected" } }),
-            }}
-          >
-            {resolveListIcon(list.icon, 28)}
-          </Box>
+          {isDefault ? (
+            <Box sx={iconTileSx}>{resolveListIcon(list.icon, 28)}</Box>
+          ) : (
+            <ClickableRow
+              aria-label={t("changeIcon")}
+              onClick={(e) => setIconAnchor(e.currentTarget)}
+              sx={{
+                ...iconTileSx,
+                justifyContent: "center",
+                "&:hover": { bgcolor: "action.selected" },
+              }}
+            >
+              {resolveListIcon(list.icon, 28)}
+            </ClickableRow>
+          )}
           <Box sx={{ flex: 1, minWidth: 0 }}>
             {isDefault ? (
               <Typography
@@ -271,7 +281,12 @@ export function SavedListDetail() {
               </>
             )}
           </Box>
-          <IconButton size="small" onClick={handleMenuOpen} sx={{ mt: 0.5 }}>
+          <IconButton
+            size="small"
+            aria-label={t("itemOptions", { name: resolveListName(list.name) })}
+            onClick={handleMenuOpen}
+            sx={{ mt: 0.5 }}
+          >
             <MoreVertIcon />
           </IconButton>
         </Box>

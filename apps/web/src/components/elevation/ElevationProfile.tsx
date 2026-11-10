@@ -14,6 +14,7 @@ import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { ClickableRow } from "@/components/ui/ClickableRow";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useElevationHover } from "./ElevationHoverContext";
 import { ElevationStats } from "./ElevationStats";
@@ -62,15 +63,16 @@ export function ElevationProfile({ route, units }: ElevationProfileProps) {
   return (
     <Box>
       <Divider />
-      <Box
+      <ClickableRow
+        aria-expanded={expanded}
         onClick={() => setExpanded((v) => !v)}
         sx={{
           display: "flex",
           alignItems: "center",
           gap: 1,
+          borderRadius: 0,
           px: 2,
           py: 1,
-          cursor: "pointer",
           "&:hover": { bgcolor: "action.hover" },
           transition: "background-color 0.15s",
           userSelect: "none",
@@ -93,7 +95,7 @@ export function ElevationProfile({ route, units }: ElevationProfileProps) {
         ) : (
           <ExpandMoreIcon sx={{ fontSize: 18, color: "text.secondary" }} />
         )}
-      </Box>
+      </ClickableRow>
       {hasData && (
         <Box sx={{ px: 2, pb: 1 }}>
           <AttributionStrip

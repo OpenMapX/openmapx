@@ -7,6 +7,7 @@ import Typography from "@mui/material/Typography";
 import type { ServiceAlert } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { ClickableRow } from "@/components/ui/ClickableRow";
 import { AlertCard, SEVERITY_PRIORITY } from "./AlertCard";
 
 interface AlertsBannerProps {
@@ -31,7 +32,8 @@ export function AlertsBanner({ alerts }: AlertsBannerProps) {
         <AlertCard key={alert.id} alert={alert} />
       ))}
       {hasMore && (
-        <Box
+        <ClickableRow
+          aria-expanded={expanded}
           onClick={() => setExpanded(!expanded)}
           sx={{
             display: "flex",
@@ -39,7 +41,6 @@ export function AlertsBanner({ alerts }: AlertsBannerProps) {
             justifyContent: "center",
             gap: 0.5,
             py: 0.5,
-            cursor: "pointer",
             borderRadius: 1,
             "&:hover": { bgcolor: "action.hover" },
           }}
@@ -57,7 +58,7 @@ export function AlertsBanner({ alerts }: AlertsBannerProps) {
           >
             {expanded ? t("showLess") : t("moreAlerts", { count: sorted.length - 2 })}
           </Typography>
-        </Box>
+        </ClickableRow>
       )}
     </Box>
   );

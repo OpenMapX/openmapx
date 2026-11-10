@@ -30,6 +30,7 @@ import {
 import { useTranslations } from "next-intl";
 import type React from "react";
 import { useRef, useState } from "react";
+import { ClickableRow } from "@/components/ui/ClickableRow";
 import Dialog from "@/components/ui/Dialog";
 import Menu from "@/components/ui/Menu";
 import { BRAND, BRAND_LIGHT } from "@/integration-api/runtime/theme";
@@ -152,48 +153,52 @@ export function SavedListsTab() {
       {lists?.map((list) => (
         <Box
           key={list.id}
-          onClick={() => selectList(list.id)}
           sx={{
             display: "flex",
             alignItems: "center",
-            gap: 1.5,
-            py: 1.5,
-            px: 1,
-            cursor: "pointer",
             borderRadius: 1,
             "&:hover": { bgcolor: "action.hover" },
           }}
         >
-          <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-            {resolveListIcon(list.icon)}
-          </Box>
+          <ClickableRow
+            onClick={() => selectList(list.id)}
+            sx={{ flex: 1, gap: 1.5, py: 1.5, px: 1 }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+              {resolveListIcon(list.icon)}
+            </Box>
 
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography
-              variant="body2"
-              noWrap
-              sx={{
-                fontWeight: 500,
-              }}
-            >
-              {resolveListName(list.name)}
-            </Typography>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-              {list.isPrivate && <LockIcon sx={{ fontSize: 14, color: "text.secondary" }} />}
+            <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography
-                variant="caption"
+                variant="body2"
+                noWrap
                 sx={{
-                  color: "text.secondary",
+                  fontWeight: 500,
                 }}
               >
-                {list.isPrivate ? t("private") : t("shared")}
-                {" \u00b7 "}
-                {t("places", { count: list.placeCount })}
+                {resolveListName(list.name)}
               </Typography>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                {list.isPrivate && <LockIcon sx={{ fontSize: 14, color: "text.secondary" }} />}
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
+                  {list.isPrivate ? t("private") : t("shared")}
+                  {" \u00b7 "}
+                  {t("places", { count: list.placeCount })}
+                </Typography>
+              </Box>
             </Box>
-          </Box>
-
-          <IconButton size="small" onClick={(e) => handleMenuOpen(e, list)} sx={{ flexShrink: 0 }}>
+          </ClickableRow>
+          <IconButton
+            size="small"
+            aria-label={t("itemOptions", { name: resolveListName(list.name) })}
+            onClick={(e) => handleMenuOpen(e, list)}
+            sx={{ flexShrink: 0 }}
+          >
             <MoreVertIcon fontSize="small" />
           </IconButton>
         </Box>

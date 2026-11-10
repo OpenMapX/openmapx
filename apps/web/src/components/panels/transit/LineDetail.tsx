@@ -20,6 +20,7 @@ import type { MergedRoute, TransitRoute, TransitStop } from "@openmapx/mobility-
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { ClickableRow } from "@/components/ui/ClickableRow";
 import { PRIMARY_BLUE } from "@/integration-api/runtime/theme";
 import { PanelDetailHeader } from "../shared/PanelDetailHeader";
 import { AlertsBanner } from "./AlertsBanner";
@@ -170,7 +171,8 @@ export function LineDetail({
             {stops.map((s, idx) => {
               const isCurrent = currentStop ? s.id === currentStop.id : false;
               return (
-                <Box
+                <ClickableRow
+                  disabled={!onSelectStop || !currentStop}
                   // biome-ignore lint/suspicious/noArrayIndexKey: stops may contain the same stop multiple times (circular routes)
                   key={`${s.id}-${idx}`}
                   onClick={() => {
@@ -242,7 +244,7 @@ export function LineDetail({
                       {t("platform")} {s.platformCode}
                     </Typography>
                   )}
-                </Box>
+                </ClickableRow>
               );
             })}
           </Box>

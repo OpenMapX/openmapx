@@ -50,6 +50,8 @@ export function MapCredits({ attributions, sx }: MapCreditsProps) {
   );
   if (presentation.fullHtml.length === 0) return null;
   return (
+    // Keeps clicks on the credits from reaching the map or its click action below.
+    // biome-ignore lint/plugin/noClickableLayoutElement: stops propagation, not an action
     <Box
       onClick={(event) => event.stopPropagation()}
       sx={{ position: "absolute", right: 0, bottom: 0, maxWidth: "100%", zIndex: 1, ...sx }}

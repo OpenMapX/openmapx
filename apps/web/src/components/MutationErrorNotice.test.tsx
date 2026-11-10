@@ -232,8 +232,9 @@ describe("failed saves on personal data surfaces", () => {
     ];
     renderWithNotice(<SavedLabeledTab />);
 
-    const row = screen.getByText("Gym").parentElement?.parentElement as HTMLElement;
-    await userEvent.click(within(row).getByRole("button"));
+    await userEvent.click(
+      screen.getByRole("button", { name: en.saved.itemOptions.replace("{name}", "Gym") }),
+    );
     await userEvent.click(screen.getByRole("menuitem", { name: en.saved.removeAddress }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(FAILED);
