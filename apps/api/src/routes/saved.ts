@@ -32,6 +32,13 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
   // Every /saved route is per-user; authenticate once here so no handler can
   // forget the check (which would silently expose another user's data).
   fastify.addHook("onRequest", requireAuthHook);
+  // Saved places are personal location data, so no shared cache may hold a
+  // response. Set on the hook rather than per handler so a new route or an
+  // error response cannot miss it.
+  fastify.addHook("onSend", async (_req, reply, payload) => {
+    reply.header("Cache-Control", "no-store");
+    return payload;
+  });
 
   registerSavedRoute(fastify, "listSavedLists", async (req, _reply) => {
     const userId = getUserId(req);

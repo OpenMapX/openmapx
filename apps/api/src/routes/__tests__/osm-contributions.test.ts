@@ -143,6 +143,36 @@ describe("authentication", () => {
   });
 });
 
+describe("caching", () => {
+  it("never lets a shared cache keep a contribution response", async () => {
+    const requests = [
+      { method: "GET" as const, url: "/api/osm/contributions/capabilities" },
+      { method: "GET" as const, url: "/api/osm/contributions/node/12" },
+      { method: "POST" as const, url: "/api/osm/contributions/preview", payload: previewBody() },
+      // A rejected body is a response too.
+      { method: "POST" as const, url: "/api/osm/contributions/preview", payload: {} },
+    ];
+    for (const request of requests) {
+      const response = await app.inject(request);
+      expect(response.headers["cache-control"], `${request.method} ${request.url}`).toBe(
+        "no-store",
+      );
+    }
+  });
+
+  it("marks a refused request as uncacheable too", async () => {
+    vi.mocked(requireAuth.requireAuthHook).mockImplementation(async () => {
+      throw Object.assign(new Error("Authentication required"), { statusCode: 401 });
+    });
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/osm/contributions/capabilities",
+    });
+    expect(response.statusCode).toBe(401);
+    expect(response.headers["cache-control"]).toBe("no-store");
+  });
+});
+
 describe("successful responses", () => {
   it("returns capabilities", async () => {
     const response = await app.inject({
