@@ -358,17 +358,20 @@ enrichment pass, so a real-time provider only does work that adds something.
 
 ## The provider factory
 
-The framework offers shared attribution storage and response wrappers through `defineTransitProvider()`, exported from
-`@openmapx/integration-framework`:
+The framework offers attribution storage and response wrappers through `defineTransitProvider(ctx)`, exported from
+`@openmapx/integration-framework`. Call it inside `setup`:
 
 ```ts
-const { attribution, wrap, wrapRT, init } = defineTransitProvider();
+export function setup(ctx: IntegrationContext): void {
+  const { attribution, wrap, wrapRT } = defineTransitProvider(ctx);
+  // register the provider with attribution.all() and wrap its results
+}
 ```
 
-- **`init(ctx)`** schedules the attribution-store update with `ctx.onActivate`.
-  It runs immediately on initial startup and is deferred until activation on
-  reload. Do not read it during staging to capture a new generation's receipts;
-  capture those directly from `ctx` before acquisition.
+- **Generation ownership**: the scaffold reads `ctx.manifest.dataSources` when
+  it is created and never changes afterwards. A request that started before a
+  reload keeps crediting the generation that served it, even if the reload
+  changes the declared sources. Never create the scaffold at module level.
 - **`attribution.all()`**: the resolved `Attribution[]` to put on the provider.
 - **`wrap(data, sourceIds?)` / `wrapRT(data, sourceIds?)`**: retain captured
   record contributors and derive envelope credits from those records, with a

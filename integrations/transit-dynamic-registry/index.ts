@@ -10,7 +10,7 @@ import { withAttribution } from "@openmapx/mobility-core/result";
 import { OtpError } from "@openmapx/otp-client";
 import { getAdapter } from "./adapters.js";
 import { fetchRegistryEntries, setCache, setGithubToken } from "./fetcher.js";
-import { setRedis } from "./hafas-mgate.js";
+import { createHafasMgateAdapter } from "./hafas-mgate.js";
 import { RegistryManager, registry } from "./registry.js";
 import type { RegistryEntry } from "./registry-types.js";
 
@@ -58,8 +58,7 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
   const generation = new AbortController();
   const githubToken = ctx.config.githubToken as string | undefined;
 
-  // Inject Redis for cached-hafas-client if available via config
-  const redisClient = ctx.config.redis;
+  const hafas = createHafasMgateAdapter();
   const stagedRegistry = new RegistryManager(() =>
     fetchRegistryEntries({ cache: ctx.cache, githubToken }),
   );
@@ -69,21 +68,25 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
 
   // Register each discovered entry as a transit provider
   for (const entry of stagedRegistry.snapshotEntries()) {
-    const adapter = getAdapter(entry.protocol, {
-      http: ctx.http,
-      upstreamRuntime: ctx.upstreamRuntime,
-      signal: generation.signal,
-      digitransitApiKey: ctx.config.digitransitApiKey,
-      isSourceAllowed: async (owner, sourceId) => {
-        const denied = await ctx.getDisallowedSourceIds?.();
-        return (
-          !denied?.has(ctx.id) &&
-          !denied?.has(`dyn:${owner.id}`) &&
-          !denied?.has(sourceId) &&
-          !denied?.has("regional-operators")
-        );
+    const adapter = getAdapter(
+      entry.protocol,
+      {
+        http: ctx.http,
+        upstreamRuntime: ctx.upstreamRuntime,
+        signal: generation.signal,
+        digitransitApiKey: ctx.config.digitransitApiKey,
+        isSourceAllowed: async (owner, sourceId) => {
+          const denied = await ctx.getDisallowedSourceIds?.();
+          return (
+            !denied?.has(ctx.id) &&
+            !denied?.has(`dyn:${owner.id}`) &&
+            !denied?.has(sourceId) &&
+            !denied?.has("regional-operators")
+          );
+        },
       },
-    });
+      hafas,
+    );
     if (!adapter) continue;
 
     // Capture the real operator attribution from the registry entry so it
@@ -195,10 +198,6 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
   ctx.onActivate(() => {
     setCache(ctx.cache);
     setGithubToken(githubToken);
-    // Clear the previous generation's adapter as well as installing a new one;
-    // otherwise removing Redis from configuration leaves the retired client
-    // reachable through cached-hafas-client after reload.
-    setRedis(redisClient ?? null);
     registry.replaceWith(stagedRegistry);
     releaseRefresh = registry.startRefresh();
   });

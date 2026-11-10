@@ -1,10 +1,8 @@
 import { defineTransitProvider, type IntegrationContext } from "@openmapx/integration-framework";
 import * as ris from "./provider.js";
 
-const { attribution, wrapRT, init } = defineTransitProvider();
-
 export function setup(ctx: IntegrationContext): void {
-  init(ctx);
+  const { attribution, wrapRT } = defineTransitProvider(ctx);
   const clientId = ctx.config.clientId as string | undefined;
   const apiKey = ctx.config.apiKey as string | undefined;
   ctx.onActivate(() => {

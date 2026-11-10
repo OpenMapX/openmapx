@@ -9,9 +9,11 @@ const client = vi.hoisted(() => ({
   locations: vi.fn(),
   departures: vi.fn(),
 }));
-vi.mock("hafas-client", () => ({ createClient: vi.fn(() => client) }));
+const createClient = vi.hoisted(() => vi.fn(() => client));
+vi.mock("hafas-client", () => ({ createClient }));
 
-const { hafasMgateAdapter } = await import("../hafas-mgate");
+const { createHafasMgateAdapter } = await import("../hafas-mgate");
+const hafasMgateAdapter = createHafasMgateAdapter();
 
 let sequence = 0;
 function entry(): RegistryEntry {
@@ -133,5 +135,24 @@ describe("HAFAS payload validation", () => {
       .searchByName?.(entry(), "No place", 5)
       .catch((error: unknown) => error);
     expect(classifyProviderFailure(failure)).toBe("invalid_payload");
+  });
+});
+
+describe("HAFAS client ownership", () => {
+  it("reuses a client within a generation and builds new ones for the next", async () => {
+    client.nearby.mockResolvedValue([]);
+    const first = entry();
+    const replacement = { ...first, options: { endpoint: "https://replacement.test/mgate" } };
+    createClient.mockClear();
+
+    const generation = createHafasMgateAdapter();
+    await generation.getStopsNearby(first, 52.5, 13.4, 100);
+    await generation.getStopsNearby(first, 52.5, 13.4, 100);
+    await createHafasMgateAdapter().getStopsNearby(replacement, 52.5, 13.4, 100);
+
+    const endpoints = (createClient.mock.calls as unknown as Array<[{ endpoint?: string }]>).map(
+      ([profile]) => profile.endpoint,
+    );
+    expect(endpoints).toEqual(["https://hafas.test/mgate", "https://replacement.test/mgate"]);
   });
 });

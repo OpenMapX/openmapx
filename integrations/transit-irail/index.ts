@@ -5,10 +5,8 @@ import {
 } from "@openmapx/integration-framework";
 import * as irail from "./provider.js";
 
-const { attribution, wrap, wrapRT, init } = defineTransitProvider();
-
 export function setup(ctx: IntegrationContext): void {
-  init(ctx);
+  const { attribution, wrap, wrapRT } = defineTransitProvider(ctx);
   ctx.registerTransitProvider({
     id: "transit-irail",
     prefix: "ir:",
