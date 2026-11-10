@@ -55,7 +55,8 @@ export interface KnowledgeContext {
    * Request-local acquisition scope owned by the caller for one full place
    * enrichment. A provider may route identical, uncancelled public JSON through
    * it; it never carries source permission, so the provider still passes its own
-   * policy and builds its own receipts. Absent for card-photo and signalled work.
+   * policy and builds its own receipts. Absent for card-photo work. A provider
+   * may use it while signalled only when `signal` is the scope's own signal.
    */
   jsonScope?: RequestJsonScope;
 }

@@ -986,7 +986,11 @@ describe("GET /places/:id", () => {
     expect(mockLookupByOsmRef).toHaveBeenCalledWith("node", "12345", "osm:node/12345", undefined);
     expect(mockGetPlaceKnowledge).toHaveBeenCalledWith(MOCK_PLACE, undefined, {
       jsonScope: expect.objectContaining({ getJson: expect.any(Function) }),
+      signal: expect.any(AbortSignal),
     });
+    // The scope and its consumers share one signal, so sharing stays cancellation-safe.
+    const options = mockGetPlaceKnowledge.mock.calls[0][2];
+    expect(options.jsonScope.signal).toBe(options.signal);
     expect(mockBuildReviewLinks).toHaveBeenCalledWith(
       expect.objectContaining({ id: "osm:node/12345" }),
     );
@@ -1503,7 +1507,11 @@ describe("GET /places/:id", () => {
     expect(mockLookupByOsmRef).toHaveBeenCalledWith("node", "12345", "osm:node/12345", "de");
     expect(mockGetPlaceKnowledge).toHaveBeenCalledWith(MOCK_PLACE, "de", {
       jsonScope: expect.objectContaining({ getJson: expect.any(Function) }),
+      signal: expect.any(AbortSignal),
     });
+    // The scope and its consumers share one signal, so sharing stays cancellation-safe.
+    const options = mockGetPlaceKnowledge.mock.calls[0][2];
+    expect(options.jsonScope.signal).toBe(options.signal);
   });
 
   it.each(["way", "relation"])(
@@ -1610,9 +1618,14 @@ describe("GET /places/:id", () => {
 
     try {
       await vi.waitFor(() => expect(mockGetPlaceKnowledge).toHaveBeenCalledTimes(1));
-      expect(mockFetchOsmBoundary).toHaveBeenCalledWith("relation/62422", undefined);
+      expect(mockFetchOsmBoundary).toHaveBeenCalledWith(
+        "relation/62422",
+        undefined,
+        expect.any(AbortSignal),
+      );
       expect(mockSearchHeroPhotos).toHaveBeenCalledWith(adminPlace.osmTags, [], {
         getJson: expect.any(Function),
+        signal: expect.any(AbortSignal),
       });
       expect(mockFetchAggregate).toHaveBeenCalled();
     } finally {
@@ -2003,6 +2016,7 @@ describe("bounded enrichment admission", () => {
     mockLookupByOsmRef.mockReset();
     mockGetPlaceKnowledge.mockReset();
     mockBuildReviewLinks.mockReset();
+    mockFetchOsmBoundary.mockReset();
   });
 
   it("runs a finite number of blocked card photo jobs and refuses the rest at once", async () => {
@@ -2168,6 +2182,73 @@ describe("bounded enrichment admission", () => {
       true,
     );
     expect(mockLookupByOsmRef.mock.calls.map((call) => call[1])).not.toContain("7300999");
+  });
+
+  /** Blocks every full-enrichment provider until aborted and records the signals it saw. */
+  function blockPlaceProviders() {
+    const signals: AbortSignal[] = [];
+    const gate = Promise.withResolvers<void>();
+    const block = (signal: AbortSignal, value: unknown) =>
+      new Promise((resolve, reject) => {
+        signals.push(signal);
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        void gate.promise.then(() => resolve(value));
+      });
+    mockLookupByOsmRef.mockImplementation(async (type, id, fullId) => ({
+      ...MOCK_PLACE,
+      id: fullId,
+      ids: { osm: `${type}/${id}` },
+      osmTags: { boundary: "administrative", name: "Bounded" },
+    }));
+    mockBuildReviewLinks.mockReturnValue([]);
+    mockGetPlaceKnowledge.mockImplementation((_place, _lang, options) =>
+      block(options.signal, MOCK_ENRICHMENT),
+    );
+    mockSearchHeroPhotos.mockImplementation((_tags, _providers, options) =>
+      block(options.signal, []),
+    );
+    mockFetchOsmBoundary.mockImplementation((_ref, _lang, signal) => block(signal, null));
+    mockFetchAggregate.mockImplementation((_subject, _providers, options) =>
+      block(options.signal, null),
+    );
+    return { signals, release: () => gate.resolve() };
+  }
+
+  it("cancels running place details once their last caller disconnects", async () => {
+    const providers = blockPlaceProviders();
+    const leaving = await openClient(placeUrl(7_600_000));
+    await vi.waitFor(() => expect(providers.signals).toHaveLength(4));
+    leaving.disconnect();
+    await vi.waitFor(() => expect(providers.signals.every((signal) => signal.aborted)).toBe(true));
+    // The abandoned enrichment is never cached; a later caller runs it afresh.
+    providers.release();
+    mockGetPlaceKnowledge.mockResolvedValue(MOCK_ENRICHMENT);
+    mockSearchHeroPhotos.mockResolvedValue([]);
+    mockFetchOsmBoundary.mockResolvedValue(null);
+    mockFetchAggregate.mockResolvedValue(null);
+    const retried = await app.inject({
+      method: "GET",
+      url: placeUrl(7_600_000),
+      remoteAddress: "10.7.0.1",
+    });
+    expect(retried.statusCode).toBe(200);
+    expect(mockWithCache).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps running place details for a caller still attached when another disconnects", async () => {
+    const providers = blockPlaceProviders();
+    const leaving = await openClient(placeUrl(7_600_100));
+    await vi.waitFor(() => expect(providers.signals).toHaveLength(4));
+    const staying = app
+      .inject({ method: "GET", url: placeUrl(7_600_100), remoteAddress: "10.7.0.2" })
+      .then((response) => response);
+    await pause(20);
+    leaving.disconnect();
+    await pause(100);
+    expect(providers.signals.some((signal) => signal.aborted)).toBe(false);
+    providers.release();
+    expect((await staying).statusCode).toBe(200);
+    expect(mockLookupByOsmRef).toHaveBeenCalledTimes(1);
   });
 
   it("keeps a shared card photo running for a caller that stays when another disconnects", async () => {

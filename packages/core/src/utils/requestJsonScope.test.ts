@@ -49,6 +49,29 @@ describe("createRequestJsonScope", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("cancels every shared request through the scope's own signal", async () => {
+    respond = () => new Promise<Response>(() => {});
+    fetchMock.mockImplementation(
+      (_input: unknown, init?: RequestInit) =>
+        new Promise((_resolve, reject) =>
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), {
+            once: true,
+          }),
+        ),
+    );
+    const controller = new AbortController();
+    const scope = createRequestJsonScope({ signal: controller.signal });
+    expect(scope.signal).toBe(controller.signal);
+    const first = scope.getJson(URL_A);
+    const second = scope.getJson(URL_A);
+    const bypass = scope.getJson(URL_A, { headers: { Authorization: "Bearer x" } });
+    controller.abort(new Error("caller left"));
+    await expect(first).rejects.toThrow();
+    await expect(second).rejects.toThrow();
+    await expect(bypass).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("never shares scopes with each other", async () => {
     await createRequestJsonScope().getJson(URL_A);
     await createRequestJsonScope().getJson(URL_A);

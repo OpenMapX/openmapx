@@ -116,8 +116,9 @@ details answer `503` (or `429` when one network already has many requests
 waiting) with a `Retry-After` header, and category cards report the photo or
 rating as temporarily unavailable so the app retries them. Time spent waiting
 counts toward each request's deadline. Work that a closed tab or app no longer
-needs leaves the queue; identical requests from several people share one
-enrichment, so one person leaving does not cancel it for the others.
+needs leaves the queue, or stops its provider requests if it had already
+started; identical requests from several people share one enrichment, so one
+person leaving does not cancel it for the others.
 
 ### Knowledge integrations
 

@@ -37,7 +37,7 @@ export async function getPlaceKnowledge(
   options?: {
     cardPhoto?: boolean;
     signal?: AbortSignal;
-    /** Request-local Wikimedia JSON scope owned by one full enrichment; never for card-photo or signalled work. */
+    /** Request-local Wikimedia JSON scope owned by one full enrichment; never for card-photo work. Pass the scope's own signal as `signal`. */
     jsonScope?: RequestJsonScope;
     onError?: (error: unknown) => void;
     onPhotos?: (photos: NonNullable<KnowledgeResult["photos"]>) => void;

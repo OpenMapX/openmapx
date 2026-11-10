@@ -124,8 +124,12 @@ export const wikidataSource: KnowledgeProvider = {
     url.searchParams.set("sitefilter", `${effectiveLang}wiki`);
     url.searchParams.set("format", "json");
 
-    // Share identical Wikimedia JSON only within one uncancelled full enrichment.
-    const scope = context?.cardPhoto || context?.signal ? undefined : context?.jsonScope;
+    // Share identical Wikimedia JSON only within one full enrichment, and only
+    // when this lookup is cancelled by the same signal as every other consumer.
+    const scope =
+      context?.cardPhoto || (context?.signal && context.signal !== context.jsonScope?.signal)
+        ? undefined
+        : context?.jsonScope;
 
     const data = await fetchJson<{ entities?: Record<string, WdEntity> }>(url.toString(), {
       headers: HEADERS,

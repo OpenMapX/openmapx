@@ -77,14 +77,13 @@ if (!Number.isFinite(ENRICH_CONCURRENCY)) {
 }
 /** The place client stops waiting after 20 seconds, so queue time and work share this budget. */
 const PLACE_DETAIL_DEADLINE_MS = 20_000;
-// Full enrichment shares request-local JSON between its providers, which a
-// cancellation signal would bypass. Running work therefore finishes and fills
-// the cache even after its callers leave; queued work is still dropped.
+// Every provider in one enrichment shares the execution's signal, so the
+// request-local JSON scope stays shareable and abandoned work stops upstream.
 const placeEnrichQueue = new BoundedWorkQueue({
   concurrency: ENRICH_CONCURRENCY,
   maxQueued: ENRICH_CONCURRENCY * 4,
   maxPerClient: 16,
-  cancelAbandoned: false,
+  cancelAbandoned: true,
 });
 /** Card photo budget measured from admission; queue time counts toward it. */
 const CARD_DEADLINE_MS = 5_500;
@@ -726,11 +725,12 @@ async function safeAggregate(
   name: string,
   osmId: string | undefined,
   providers: ReviewProvider[],
+  signal: AbortSignal,
 ): Promise<Pick<ReviewAggregate, "stars" | "count" | "contributors"> | null> {
   if (!name) return null;
   try {
     const result = await Promise.race([
-      fetchAggregate({ lat, lng, name, osmId }, providers),
+      fetchAggregate({ lat, lng, name, osmId }, providers, { signal }),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
     ]);
     if (!result || result.count < 3 || result.stars <= 0) return null;
@@ -750,28 +750,35 @@ async function safeAggregate(
  * it. Extracted so the resolver branch and the coord-fallback branch
  * share identical enrichment.
  */
-async function enrichPlace(place: Place, lang: string | undefined): Promise<Place> {
+async function enrichPlace(
+  place: Place,
+  lang: string | undefined,
+  signal: AbortSignal,
+): Promise<Place> {
   const allIntegrations = getAllIntegrations();
   const photoProviders = getPhotoProviders(allIntegrations);
   const reviewProviders = getReviewProviders(allIntegrations);
   const [plng, plat] = place.coordinates;
   // One scope per full enrichment: knowledge and hero photos share identical
-  // Wikimedia JSON, and it is released with this call. Never wired into card mode.
-  const jsonScope = createRequestJsonScope();
+  // Wikimedia JSON, and it is released with this call. Never wired into card
+  // mode. Every consumer shares the scope's one signal.
+  const jsonScope = createRequestJsonScope({ signal });
 
   // These inputs do not depend on knowledge's auxiliary IDs. Start all four
   // branches together, then fold those IDs into the final response.
   const [knowledgeResult, adminBoundary, heroPhotos, reviewStats] = await Promise.all([
-    getPlaceKnowledge(place, lang, { jsonScope }),
+    getPlaceKnowledge(place, lang, { jsonScope, signal }),
     // Only administrative areas get a boundary highlight.
     place.osmTags?.boundary === "administrative" && place.ids?.osm
-      ? fetchOsmBoundary(place.ids.osm, lang)
+      ? fetchOsmBoundary(place.ids.osm, lang, signal)
       : Promise.resolve(null),
     place.osmTags
-      ? searchHeroPhotos(place.osmTags, photoProviders, { getJson: jsonScope.getJson })
+      ? searchHeroPhotos(place.osmTags, photoProviders, { getJson: jsonScope.getJson, signal })
       : Promise.resolve([]),
-    safeAggregate(plat, plng, place.name, place.ids?.osm, reviewProviders),
+    safeAggregate(plat, plng, place.name, place.ids?.osm, reviewProviders, signal),
   ]);
+  // Providers degrade to empty results when cancelled; never cache that as the place.
+  signal.throwIfAborted();
   const {
     externalIds,
     photos: knowledgePhotos,
@@ -1070,7 +1077,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
             ? { ...placeRequest.identity, ambientGeneration: published.generation }
             : placeRequest.identity,
         );
-        const resolveAndEnrich = () =>
+        const resolveAndEnrich = (signal: AbortSignal) =>
           withCache(cacheKey, TTL.places.detail, async () => {
             const parsedId = parseId(rawId);
             const latQ = placeRequest.identity.lat ?? Number.NaN;
@@ -1097,7 +1104,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
                   };
                   throw err;
                 }
-                return enrichPlace(resolved, placeRequest.identity.lang ?? undefined);
+                return enrichPlace(resolved, placeRequest.identity.lang ?? undefined, signal);
               }
               // The optional search provider may be disabled. An ambient
               // publication still owns its GERS identity; never snap that record
@@ -1111,6 +1118,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
                     ),
                   ),
                   placeRequest.identity.lang ?? undefined,
+                  signal,
                 );
               }
               // No resolver registered for this scheme. The coord-fallback
@@ -1176,7 +1184,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
               throw err;
             }
 
-            return enrichPlace(place, placeRequest.identity.lang ?? undefined);
+            return enrichPlace(place, placeRequest.identity.lang ?? undefined, signal);
           });
         // Cached details never enter the queue. A miss is admitted against the
         // global and per-network budget, and equal requests share one execution.
