@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { envString } from "@openmapx/core/server-env";
 import type Redis from "ioredis";
 
 /**
@@ -50,7 +51,7 @@ export function normalizeMailRecipient(address: string): string {
  */
 export function mailRecipientKey(
   address: string,
-  secret: string = process.env.BETTER_AUTH_SECRET ?? "",
+  secret: string = envString("BETTER_AUTH_SECRET", ""),
 ): string {
   const digest = createHmac("sha256", secret)
     .update("openmapx-mail-recipient\0")
