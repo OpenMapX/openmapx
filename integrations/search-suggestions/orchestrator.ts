@@ -78,7 +78,9 @@ async function invokeProvider(
     const elapsed = Date.now() - startedAt;
     const reason = error instanceof Error ? error.message : "provider error";
     const outcome = classifyProviderFailure(error, signal);
-    await ctx.providerHealth?.recordFailure(entry.provider.id, elapsed, outcome, reason);
+    // A cancellation says nothing about the provider: metrics only, never health.
+    if (outcome !== "caller_cancelled")
+      await ctx.providerHealth?.recordFailure(entry.provider.id, elapsed, outcome, reason);
     ctx.metricsRecorder?.recordProviderCall(
       {
         providerId: entry.provider.id,

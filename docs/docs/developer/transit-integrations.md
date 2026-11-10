@@ -313,8 +313,8 @@ selects among them with two strategies, depending on the request:
 Coverage overlap is a plain rectangle-intersection test, so a tight `coverage.bbox`
 scopes a provider out of unrelated requests. Provider calls are timed and recorded in the host health tracker. Counted
 failures can open its circuit; eligible half-open probes allow recovery. Valid
-empty results, input/policy rejection, quota denial and caller cancellation must
-not count as upstream failures.
+empty results, input/policy rejection and quota denial must not count as
+upstream failures, and a cancelled call never reaches provider health.
 
 ## The `RealtimeProvider` contract
 

@@ -321,6 +321,10 @@ export class ProviderHealth implements ProviderHealthHandle {
     outcome: ProviderHealthFailureOutcome,
     operatorMessage = "",
   ): Promise<void> {
+    // A cancellation says nothing about the provider. Recording it would bump
+    // the failure count, hide the last real error, skew latency and release a
+    // half-open probe lease, so it never reaches the stored state.
+    if (outcome === "caller_cancelled") return;
     await this.transition(providerId, "failure", latencyMs, outcome, operatorMessage);
   }
 

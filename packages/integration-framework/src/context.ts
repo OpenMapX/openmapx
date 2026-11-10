@@ -300,6 +300,9 @@ export interface ProviderHealthHandle {
   recordSuccess(providerId: string, latencyMs: number): Promise<void>;
   /**
    * Record a failed call. `reason` is truncated to 200 chars on the host.
+   * Never record `caller_cancelled`: a cancellation goes to metrics only, and
+   * the host ignores it so it cannot change counts, the last error, latency or
+   * a half-open probe lease.
    * `latencyMs` is the wall-clock time elapsed before the failure surfaced
    * (so timeouts still contribute to the EMA).
    */

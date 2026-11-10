@@ -224,8 +224,9 @@ function classifyOutcome(value: unknown): ProviderCallOutcome {
  * a `transit_provider_call_duration_ms` observation with the same labels.
  *
  * With a caller signal, the call settles as cancelled as soon as the caller
- * aborts, so an abandoned request records `caller_cancelled`, which never
- * counts toward the provider's health, even if the provider ignores the signal.
+ * aborts, even if the provider ignores the signal. A cancelled call is counted
+ * in metrics only and leaves provider health untouched: no failure count, last
+ * error, latency sample or half-open lease release.
  */
 async function timed<T>(
   health: ProviderHealthHandle,
@@ -255,7 +256,9 @@ async function timed<T>(
   } catch (error) {
     const elapsed = performance.now() - start;
     const outcome = classifyProviderFailure(error, signal);
-    await health.recordFailure(providerId, elapsed, outcome, failureReason(error));
+    // A cancellation says nothing about the provider: metrics only, never health.
+    if (outcome !== "caller_cancelled")
+      await health.recordFailure(providerId, elapsed, outcome, failureReason(error));
     metrics.recordProviderCall(
       {
         providerId,

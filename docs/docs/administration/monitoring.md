@@ -117,10 +117,14 @@ operator message, or the failure outcome when none was recorded.
 | EMA latency weighting | 0.2                                                                                        |
 | Record expiry         | 30 days since last write                                                                   |
 
-Timeouts, connection failures, upstream 5xx, authentication failures and invalid
-payloads count toward opening. Valid empty responses, policy/input rejections,
-quota denial and caller cancellation do not. Lifetime failure totals can
-therefore differ from counted failures in the recent window.
+Timeouts, connection failures, upstream 5xx and other 4xx responses,
+authentication failures and invalid payloads count toward opening. Valid empty
+responses, policy rejections, requests the adapter itself rejected as invalid
+input and quota denial do not. Lifetime failure totals can therefore differ
+from counted failures in the recent window. A cancelled call, whether the user
+left or a reload retired the provider, is not recorded here at all: it appears
+only in metrics, so it never hides the last real error or releases a probe
+lease.
 
 If Redis is unavailable, the circuit returns a diagnostic and leaves provider
 requests enabled. This differs from the quota-bound upstream runtime, which

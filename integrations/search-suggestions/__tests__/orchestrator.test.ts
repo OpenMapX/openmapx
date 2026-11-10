@@ -167,6 +167,8 @@ describe("search suggestion fan-out", () => {
     const controller = new AbortController();
     const ctx = context([slow]);
     const recordFailure = vi.fn(async () => {});
+    const recordProviderCall = vi.fn();
+    ctx.metricsRecorder = { recordProviderCall };
     ctx.providerHealth = {
       isHealthy: async () => true,
       recordSuccess: async () => {},
@@ -183,14 +185,12 @@ describe("search suggestion fan-out", () => {
 
     await expect(work).rejects.toBeInstanceOf(ProviderCancelledError);
     await vi.waitFor(() =>
-      expect(recordFailure).toHaveBeenCalledWith(
-        "slow",
+      expect(recordProviderCall).toHaveBeenCalledWith(
+        expect.objectContaining({ providerId: "slow", outcome: "cancelled" }),
         expect.any(Number),
-        "caller_cancelled",
-        expect.any(String),
       ),
     );
-    expect(recordFailure).toHaveBeenCalledTimes(1);
+    expect(recordFailure).not.toHaveBeenCalled();
   });
 });
 

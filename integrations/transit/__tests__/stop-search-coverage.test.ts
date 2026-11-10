@@ -1,4 +1,8 @@
-import type { IntegrationContext, TransitProvider } from "@openmapx/integration-framework";
+import {
+  type IntegrationContext,
+  ProviderRetiredError,
+  type TransitProvider,
+} from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
@@ -69,10 +73,13 @@ function orchestrator(
   options: { coolingDown?: string[]; disallowedSources?: string[] } = {},
 ) {
   const recordFailure = vi.fn(async () => {});
+  const recordSuccess = vi.fn(async () => {});
+  const recordProviderCall = vi.fn();
   const ctx = {
+    metricsRecorder: { recordProviderCall },
     providerHealth: {
       isHealthy: async (id: string) => !options.coolingDown?.includes(id),
-      recordSuccess: async () => {},
+      recordSuccess,
       recordFailure,
     },
     getDisallowedSourceIds: async () => new Set(options.disallowedSources ?? []),
@@ -84,13 +91,17 @@ function orchestrator(
           }))
         : [],
   } as unknown as IntegrationContext;
-  return { transit: createTransitOrchestrator(ctx), recordFailure };
+  return {
+    transit: createTransitOrchestrator(ctx),
+    recordFailure,
+    recordSuccess,
+    cancelledCalls: () =>
+      recordProviderCall.mock.calls.filter(([call]) => call.outcome === "cancelled").length,
+  };
 }
 
 describe("stop-name search cancellation", () => {
-  const COUNTED = new Set(["timeout", "connection", "upstream_5xx", "auth", "invalid_payload"]);
-
-  it("records an abandoned search as caller_cancelled, even when a provider ignores the signal", async () => {
+  it("counts an abandoned search in metrics only, even when a provider ignores the signal", async () => {
     const honouring = searching(
       "a",
       vi.fn(
@@ -112,7 +123,10 @@ describe("stop-name search cancellation", () => {
           }),
       ),
     );
-    const { transit, recordFailure } = orchestrator([honouring, ignoring]);
+    const { transit, recordFailure, recordSuccess, cancelledCalls } = orchestrator([
+      honouring,
+      ignoring,
+    ]);
     const controller = new AbortController();
     const context = { signal: controller.signal, deadlineAt: Date.now() + 5_000 };
 
@@ -122,9 +136,25 @@ describe("stop-name search cancellation", () => {
     failIgnoring(new Error("upstream down"));
 
     await expect(search).rejects.toBeDefined();
-    await vi.waitFor(() => expect(recordFailure).toHaveBeenCalledTimes(2));
-    for (const call of recordFailure.mock.calls as unknown as unknown[][])
-      expect(call[2]).toBe("caller_cancelled");
+    await vi.waitFor(() => expect(cancelledCalls()).toBe(2));
+    expect(recordFailure).not.toHaveBeenCalled();
+    expect(recordSuccess).not.toHaveBeenCalled();
+  });
+
+  it("leaves provider health untouched when the host retires a provider mid-call", async () => {
+    const retired = searching(
+      "a",
+      vi.fn(async () => {
+        throw new TypeError("fetch failed", { cause: new ProviderRetiredError() });
+      }),
+    );
+    const { transit, recordFailure, cancelledCalls } = orchestrator([retired, answering("b")]);
+
+    const result = await transit.searchByNameRaw("Central", 30);
+
+    expect(result.data.map((stop) => stop.id)).toEqual(["b:central"]);
+    expect(recordFailure).not.toHaveBeenCalled();
+    expect(cancelledCalls()).toBe(1);
   });
 
   it("never records a counted failure for repeatedly abandoned searches", async () => {
@@ -139,7 +169,7 @@ describe("stop-name search cancellation", () => {
           }),
       ),
     );
-    const { transit, recordFailure } = orchestrator([slow]);
+    const { transit, recordFailure, cancelledCalls } = orchestrator([slow]);
     for (let attempt = 0; attempt < 12; attempt++) {
       const controller = new AbortController();
       const search = transit.searchByNameRaw("Cen", 30, undefined, {
@@ -152,9 +182,8 @@ describe("stop-name search cancellation", () => {
       controller.abort();
       await expect(search).rejects.toBeDefined();
     }
-    await vi.waitFor(() => expect(recordFailure).toHaveBeenCalledTimes(12));
-    const outcomes = (recordFailure.mock.calls as unknown as unknown[][]).map((call) => call[2]);
-    expect(outcomes.filter((outcome) => COUNTED.has(outcome as string))).toEqual([]);
+    await vi.waitFor(() => expect(cancelledCalls()).toBe(12));
+    expect(recordFailure).not.toHaveBeenCalled();
   });
 
   it("keeps the upstream failure when the caller aborts after it settled", async () => {

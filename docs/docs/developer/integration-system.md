@@ -974,17 +974,24 @@ bursty integration tile traffic retains its dedicated tier. Do not add integrati
 paths to the global URL-pattern limiter.
 
 Provider health accepts only closed outcomes. Timeouts, connection failures,
-upstream 5xx responses, authentication failures, and invalid payloads affect the
-circuit; valid empty results, policy/input rejection, quota denial, and caller
-cancellation remain observable without penalizing the provider. Orchestrators
-derive the outcome with `classifyProviderFailure(error, signal)` from
-`@openmapx/integration-framework`, passing the caller's signal. The error that
-settled the call decides: a caller abort is `caller_cancelled`, a deadline is
-`timeout` even though it aborts a signal, and an upstream failure that settled
-before the caller aborted keeps its own outcome. Wrap the provider promise in
-`raceCallerAbort(work, signal)` (or run it through `runWithProviderDeadline`) so a
-provider that ignores its signal still settles as cancelled when the caller
-leaves. Keep bounded operator detail separate from the outcome code. Air-quality metrics likewise
+upstream 5xx responses, other upstream 4xx responses, authentication failures,
+and invalid payloads affect the circuit; valid empty results, policy rejection,
+quota denial, and input the adapter itself rejected (code `invalid_request`)
+remain observable without penalizing the provider. A cancellation is recorded in
+metrics only and never reaches provider health: it does not change counts, the
+last error, the latency average or a half-open probe lease, and the host ignores
+a `caller_cancelled` record.
+
+Orchestrators derive the outcome with `classifyProviderFailure(error, signal)`
+from `@openmapx/integration-framework`, passing the caller's signal. The error
+that settled the call decides: a caller abort is `caller_cancelled`, a deadline
+is `timeout` even though it aborts a signal, and an upstream failure that
+settled before the caller aborted keeps its own outcome. Abort a
+generation-owned signal with `ProviderRetiredError` on shutdown or reload, so a
+call the host interrupts is also a cancellation rather than a provider failure.
+Wrap the provider promise in `raceCallerAbort(work, signal)` (or run it through
+`runWithProviderDeadline`) so a provider that ignores its signal still settles
+as cancelled when the caller leaves. Keep bounded operator detail separate from the outcome code. Air-quality metrics likewise
 accept only closed method, outcome, cache, evidence-class, rejection, quota, and
 compatibility fields; user strings and location identifiers are not labels.
 

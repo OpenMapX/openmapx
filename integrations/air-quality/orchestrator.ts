@@ -211,14 +211,17 @@ export function createAirQualityOrchestrator(ctx: IntegrationContext) {
           } catch (error) {
             const code = failureCode(error);
             const latencyMs = Date.now() - startedAt;
-            await ctx.providerHealth
-              ?.recordFailure(
-                provider.id,
-                latencyMs,
-                classifyProviderFailure(error, signal),
-                error instanceof Error ? error.message : undefined,
-              )
-              .catch(() => undefined);
+            const outcome = classifyProviderFailure(error, signal);
+            // A cancellation says nothing about the provider: metrics only, never health.
+            if (outcome !== "caller_cancelled")
+              await ctx.providerHealth
+                ?.recordFailure(
+                  provider.id,
+                  latencyMs,
+                  outcome,
+                  error instanceof Error ? error.message : undefined,
+                )
+                .catch(() => undefined);
             ctx.metricsRecorder?.recordAirQualityProviderCall?.({
               providerId: provider.id,
               method,
@@ -304,9 +307,11 @@ export function createAirQualityOrchestrator(ctx: IntegrationContext) {
           } catch (error) {
             const code = failureCode(error);
             const latencyMs = Date.now() - startedAt;
-            await ctx.providerHealth
-              ?.recordFailure(provider.id, latencyMs, classifyProviderFailure(error, signal))
-              .catch(() => undefined);
+            const outcome = classifyProviderFailure(error, signal);
+            if (outcome !== "caller_cancelled")
+              await ctx.providerHealth
+                ?.recordFailure(provider.id, latencyMs, outcome)
+                .catch(() => undefined);
             ctx.metricsRecorder?.recordAirQualityProviderCall?.({
               providerId: provider.id,
               method: "stations",
