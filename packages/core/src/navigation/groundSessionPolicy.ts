@@ -17,8 +17,6 @@ import type { FixInput } from "./types";
  * here is pure; each shell supplies its state and runs the effects.
  */
 
-/* ---------------------------------------------------------- voice timing --- */
-
 export type VoiceTiming = "early" | "normal" | "late";
 
 /**
@@ -32,8 +30,6 @@ export const VOICE_TIMING_MULTIPLIER: Readonly<Record<VoiceTiming, number>> = {
   normal: 1,
   late: 0.6,
 };
-
-/* ------------------------------------------------------------ speed limit --- */
 
 export interface SpeedLimitRoute {
   /** Per-segment limits the routing engine attached to the route, indexed by segment. */
@@ -65,8 +61,6 @@ export function groundSpeedLimit(input: {
     typeof stepLimit === "number" ? stepLimit : null,
   );
 }
-
-/* --------------------------------------------------------------- coasting --- */
 
 /** How long after the last real fix the position starts to coast. */
 export const COAST_START_DELAY_MS = 3_000;
@@ -129,8 +123,6 @@ export function coastedFix(
     coasted: true,
   };
 }
-
-/* ---------------------------------------------------------------- reroute --- */
 
 /*
  * Rerouting is the one thing a session does that costs a network request while
@@ -307,8 +299,6 @@ export function recordRerouteSuccess(churn: RerouteChurn, nowMs: number): Rerout
   }
   return { successAtMs: recent };
 }
-
-/* ------------------------------------------------------- route selection --- */
 
 /**
  * The route of a directions answer that a reroute follows: the one the server

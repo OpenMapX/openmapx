@@ -175,10 +175,10 @@ export const NATIVE_SNAPSHOT_HOT_FIELDS: readonly string[] = [
   ]),
 ].filter((field) => !IDENTITY_FIELDS.has(field));
 
-/* ------------------------------------------------------- what pages accept --- */
-
+/** A value from an open vocabulary: what a page accepts may be newer than it knows. */
 const openText = z.string().max(64);
 
+/** What every snapshot a page accepts may carry; only type, session and revision are required. */
 const wireCommon = {
   type: z.enum(["full", "progress"]),
   sessionId: boundedId,
