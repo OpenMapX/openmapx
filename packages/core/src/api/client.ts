@@ -489,13 +489,26 @@ export function apiUrl(path: string, params?: Record<string, string>): string {
   return url.toString();
 }
 
+// A host no real URL can name: resolving against it tells a URL that carries its
+// own host from a relative path, which keeps this host.
+const RELATIVE_URL_HOST = "relative.invalid";
+
 /**
  * Rewrite an image URL to go through the backend image proxy.
  * This prevents leaking the user's IP address to external image hosts.
+ * Absolute http(s) URLs in any letter case and scheme-relative `//host` URLs
+ * are proxied; relative paths and other schemes (`data:`, `blob:`) are returned
+ * as they came.
  */
 export function proxyImageUrl(url: string): string {
-  // Only proxy external HTTP(S) URLs
-  if (!url.startsWith("http://") && !url.startsWith("https://")) return url;
+  let target: URL;
+  try {
+    target = new URL(url, `https://${RELATIVE_URL_HOST}`);
+  } catch {
+    return url;
+  }
+  if (target.protocol !== "http:" && target.protocol !== "https:") return url;
+  if (target.hostname === RELATIVE_URL_HOST) return url;
   const cfg = getConfig();
-  return `${cfg.baseUrl}/api/image-proxy?url=${encodeURIComponent(url)}`;
+  return `${cfg.baseUrl}/api/image-proxy?url=${encodeURIComponent(target.href)}`;
 }
