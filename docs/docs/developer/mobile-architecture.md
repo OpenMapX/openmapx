@@ -101,8 +101,10 @@ only when the OS starts the task without the app.
   during a cue stops it, and later cues are not queued behind the interruption.
   iOS observes the end of an audio-session interruption. Android abandons its
   focus request on loss, so no end is delivered; each later cue requests focus
-  again, is skipped while the other source still holds it, and speaks once
-  focus is granted.
+  again instead. During a call Android usually denies that request and the cue
+  is skipped. Against another app's transient focus, such as a voice assistant
+  or another navigation prompt, the request is usually granted and the cue
+  speaks.
 - **Transit refresh and replan** are not wired yet. Their effects are no-ops,
   and the session keeps running on its captured itinerary.
 

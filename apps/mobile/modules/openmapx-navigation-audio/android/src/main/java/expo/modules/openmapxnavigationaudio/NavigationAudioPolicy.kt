@@ -77,7 +77,9 @@ class CueLedger(capacity: Int = DEFAULT_CAPACITY) {
  * request is therefore what finds out whether the interruption is over.
  *
  * Called from the module queue, the focus listener and the speech engine's
- * callbacks, so every transition is synchronised.
+ * callbacks, so every transition is synchronised on this object. The module
+ * holds the same monitor around each decision and the platform call it implies
+ * (request or abandon), so the two cannot interleave.
  */
 class AudioFocusPolicy {
   var pendingUtterances: Int = 0
