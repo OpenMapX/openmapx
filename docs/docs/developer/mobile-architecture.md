@@ -306,7 +306,9 @@ reload to negotiate again.
 A correlated `native.error` rejects the page's request with a
 `NativeCommandError` that carries the shell's code; it never resolves as the
 reply the command expected. A refusal that arrives after the page's deadline
-finds no pending request and is ignored. The navigation commands treat
+finds no pending request and is ignored. A reply that fails the page's schema
+fails its request at once with `invalid-response` instead of leaving it to its
+deadline; the page logs the message type, never its payload, once per type. The navigation commands treat
 `no-session` as done for End and for a settings change, because there is
 nothing left to end and the next start reads the stored preference. Every
 other refusal fails the command. A failed End asks for a fresh snapshot and

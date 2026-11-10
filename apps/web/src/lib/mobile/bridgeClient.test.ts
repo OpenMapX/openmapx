@@ -45,7 +45,7 @@ interface Timer {
   dueAtMs: number;
 }
 
-function harness(options: { scope?: unknown } = {}) {
+function harness(options: { scope?: unknown; reportInvalid?: (type: string) => void } = {}) {
   const shell = shellScope();
   const timers = new Map<number, Timer>();
   let nextHandle = 1;
@@ -63,6 +63,7 @@ function harness(options: { scope?: unknown } = {}) {
     clearTimeout: (handle) => {
       timers.delete(handle as number);
     },
+    ...(options.reportInvalid ? { reportInvalid: options.reportInvalid } : {}),
   });
 
   const advance = (ms: number) => {
@@ -417,6 +418,37 @@ describe("BridgeClient.request", () => {
         payload: expect.objectContaining({ snapshot: snapshotAt(7) }),
       }),
     ]);
+  });
+
+  it("fails a request at once when its reply fails the schema, reporting only the type", async () => {
+    const reported: string[] = [];
+    const context = harness({ reportInvalid: (type) => reported.push(type) });
+    context.client.attach();
+    const ready = context.client.hello();
+    deliverHello(context);
+    await ready;
+    context.sent.length = 0;
+    const seen: unknown[] = [];
+    context.client.subscribe((message) => seen.push(message));
+
+    const pending = context.client.request("snapshot.request", {});
+    const messageId = JSON.parse(context.sent[0]).messageId as string;
+    const refused = {
+      ...snapshotMessage(7),
+      payload: { snapshot: { revision: 7 }, forMessageId: messageId },
+    };
+    context.deliver(refused);
+
+    await expect(pending).rejects.toMatchObject({ code: "invalid-response" });
+    expect(context.client.pendingCount).toBe(0);
+    expect(context.timerCount()).toBe(0);
+    expect(seen).toEqual([]);
+    expect(reported).toEqual(["snapshot.update"]);
+
+    // Reported once per type, and never for another document's message.
+    context.deliver(refused);
+    context.deliver({ ...refused, type: "voice.event", channelNonce: "some-other-document" });
+    expect(reported).toEqual(["snapshot.update"]);
   });
 
   it("rejects a correlated reply whose type cannot answer the named command", async () => {
