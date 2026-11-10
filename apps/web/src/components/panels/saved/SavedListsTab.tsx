@@ -5,6 +5,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import LockIcon from "@mui/icons-material/Lock";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -32,6 +33,7 @@ import Dialog from "@/components/ui/Dialog";
 import Menu from "@/components/ui/Menu";
 import { BRAND, BRAND_LIGHT } from "@/integration-api/runtime/theme";
 import { resolveListIcon } from "@/lib/listIcon";
+import { type SavedWriteError, savedWriteError } from "@/lib/savedWriteError";
 
 import { ImportPlacesPicker } from "./ImportPlacesPicker";
 
@@ -53,13 +55,17 @@ export function SavedListsTab() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<SavedList | null>(null);
 
+  const [createError, setCreateError] = useState<SavedWriteError | null>(null);
+
   const handleCreate = () => {
+    setCreateError(null);
     createListMutation.mutate(
       { name: t("untitledList") },
       {
         onSuccess: (created) => {
           selectList(created.id);
         },
+        onError: (error) => setCreateError(savedWriteError(error)),
       },
     );
   };
@@ -132,6 +138,11 @@ export function SavedListsTab() {
         {t("import")}
       </Button>
       <ImportPlacesPicker inputRef={importInput} />
+      {createError && (
+        <Alert severity="error" sx={{ mb: 1.5 }} onClose={() => setCreateError(null)}>
+          {t(createError.key, createError.values)}
+        </Alert>
+      )}
       {lists?.map((list) => (
         <Box
           key={list.id}

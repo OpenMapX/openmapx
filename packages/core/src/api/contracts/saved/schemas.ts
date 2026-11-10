@@ -70,6 +70,13 @@ export const savedListCreatedSchema = savedListSchema.pick({
 export const savedPlaceCreatedSchema = savedPlaceSchema.omit({ sortOrder: true, createdAt: true });
 export const savedLabelWrittenSchema = z.strictObject({ id, label: z.string() });
 export const savedOkSchema = z.strictObject({ ok: z.literal(true) });
+/** Machine-readable reasons a saved-data write was refused as conflicting with stored state. */
+export const SAVED_CONFLICT_CODES = ["SAVED_LIST_LIMIT", "SAVED_PLACE_LIMIT"] as const;
+export type SavedConflictCode = (typeof SAVED_CONFLICT_CODES)[number];
+export const savedConflictSchema = z.strictObject({
+  error: z.string(),
+  code: z.enum(SAVED_CONFLICT_CODES),
+});
 export const savedListsResponseSchema = z.strictObject({ lists: z.array(savedListSchema) });
 export const savedPlacesResponseSchema = z.strictObject({ places: z.array(savedPlaceSchema) });
 export const savedLabelsResponseSchema = z.strictObject({ labels: z.array(labeledPlaceSchema) });

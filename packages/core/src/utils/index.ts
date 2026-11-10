@@ -373,7 +373,11 @@ export {
   type RoadConditionRightsPolicy,
   routingRightsReasons,
 } from "./roadConditionRouting";
-export { isSystemSavedList } from "./savedLists";
+export {
+  isSystemSavedList,
+  MAX_SAVED_LISTS_PER_USER,
+  MAX_SAVED_PLACES_PER_USER,
+} from "./savedLists";
 export {
   compareSearchSuggestions,
   editDistance,

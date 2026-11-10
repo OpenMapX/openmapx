@@ -3296,7 +3296,12 @@
     "importError_takeoutNoSaved": "This Google Takeout archive has no saved lists. When exporting from Google Takeout, include the “Saved” product. “Maps (your places)” is optional, for older starred places.",
     "importSkippedLists": "Skipped {count, plural, one {# saved list} other {# saved lists}} without places: {names}",
     "importError_networkLink": "This file only links to online data. Export it again without the “keep data up to date” option.",
-    "importError_tooLarge": "This file is too large. Split the export into smaller files (up to 200 MB)."
+    "importError_tooLarge": "This file is too large. Split the export into smaller files (up to 200 MB).",
+    "listLimitReached": "You can have up to {count, number} lists.",
+    "placeLimitReached": "You can save up to {count, number} places in total.",
+    "saveFailed": "Could not save. Try again.",
+    "importListLimit": "This list was not created because you already have {count, number} lists. Places already imported have been kept.",
+    "importPlaceLimit": "Import stopped at the limit of {count, number} saved places. Places already imported have been kept."
   },
   "share": {
     "sharedList": "Shared list",

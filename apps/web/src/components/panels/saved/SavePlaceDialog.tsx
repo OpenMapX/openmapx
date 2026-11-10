@@ -1,6 +1,7 @@
 "use client";
 
 import AddIcon from "@mui/icons-material/Add";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
@@ -27,6 +28,7 @@ import Dialog from "@/components/ui/Dialog";
 import { BRAND, BRAND_LIGHT } from "@/integration-api/runtime/theme";
 import { haptics } from "@/lib/haptics";
 import { resolveListIcon } from "@/lib/listIcon";
+import { type SavedWriteError, savedWriteError } from "@/lib/savedWriteError";
 
 interface Props {
   open: boolean;
@@ -49,6 +51,7 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
   const [checkedLists, setCheckedLists] = useState<Set<string>>(new Set());
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
+  const [writeError, setWriteError] = useState<SavedWriteError | null>(null);
   const createInputRef = useRef<HTMLInputElement>(null);
 
   const queryClient = useQueryClient();
@@ -167,9 +170,11 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
             operations.current.delete(key);
             break;
           }
-        } catch {
+        } catch (error) {
           operations.current.delete(key);
           updateCheckbox(current.present);
+          if (mounted.current && displayedPlace.current === capturedPlace.id)
+            setWriteError(savedWriteError(error));
         } finally {
           current.running = false;
           void queryClient.invalidateQueries({
@@ -186,6 +191,7 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
     (listId: string) => {
       const pending = operations.current.get(JSON.stringify([place.id, listId]));
       const desired = !(pending?.desired ?? checkedLists.has(listId));
+      setWriteError(null);
       if (desired) haptics.success();
       setMembership(listId, desired);
     },
@@ -204,6 +210,7 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
       setCreating(false);
       return;
     }
+    setWriteError(null);
     createListMutation.mutate(
       { name: trimmed },
       {
@@ -211,6 +218,7 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
           setCreating(false);
           setMembership(newList.id, true);
         },
+        onError: (error) => setWriteError(savedWriteError(error)),
       },
     );
   };
@@ -305,6 +313,11 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
               >
                 {t("createNewList")}
               </Button>
+            )}
+            {writeError && (
+              <Alert severity="error" sx={{ mt: 1.5 }} onClose={() => setWriteError(null)}>
+                {t(writeError.key, writeError.values)}
+              </Alert>
             )}
           </>
         )}

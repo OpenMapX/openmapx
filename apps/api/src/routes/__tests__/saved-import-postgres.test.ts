@@ -44,7 +44,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     });
     const fieldContributors = { lat: [{ sourceId: "geo", name: "Original geocoder" }], lng: [] };
     const point = { name: "Cafe", lat: 52, lng: 13, fieldContributors };
-    const send = (target: unknown, places = [point]) =>
+    const send = (target: unknown, places: object[] = [point]) =>
       app.inject({ method: "POST", url: "/api/saved/lists/import", payload: { target, places } });
 
     it("suffixes concurrent new-list imports and serializes duplicate membership", async () => {
@@ -168,6 +168,68 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       } finally {
         vi.unstubAllGlobals();
       }
+    });
+    it("admits only one of two concurrent list creations at the last free slot", async () => {
+      await fixture.sql`DELETE FROM saved_list WHERE user_id = 'import-user'`;
+      await fixture.sql`INSERT INTO saved_list (id, user_id, name) SELECT 'cap-' || n, 'import-user', 'Cap ' || n FROM generate_series(1, 499) AS n`;
+      const created = await Promise.all(
+        ["Last A", "Last B"].map((name) =>
+          app.inject({ method: "POST", url: "/api/saved/lists", payload: { name } }),
+        ),
+      );
+      expect(created.map((response) => response.statusCode).sort()).toEqual([200, 409]);
+      expect(created.find((response) => response.statusCode === 409)?.json()).toMatchObject({
+        code: "SAVED_LIST_LIMIT",
+      });
+      const refusedImport = await send({ name: "Beyond the limit" });
+      expect(refusedImport.statusCode).toBe(409);
+      const [{ count }] = await fixture.sql<
+        { count: number }[]
+      >`SELECT count(*)::int AS count FROM saved_list WHERE user_id = 'import-user'`;
+      expect(count).toBe(500);
+    });
+    it("applies only one of two concurrent imports that together pass the place limit", async () => {
+      await fixture.sql`DELETE FROM saved_list WHERE user_id = 'import-user'`;
+      await fixture.sql`INSERT INTO saved_list (id, user_id, name) VALUES ('bulk', 'import-user', 'Bulk')`;
+      await fixture.sql`INSERT INTO saved_place (id, list_id, name, lat, lng) SELECT 'bulk-' || n, 'bulk', 'Bulk ' || n, 10, 10 FROM generate_series(1, 49000) AS n`;
+      const batch = (prefix: string) =>
+        Array.from({ length: 600 }, (_, index) => ({
+          name: `${prefix} ${index}`,
+          lat: 40 + index / 1000,
+          lng: 5,
+        }));
+      const imports = await Promise.all([
+        send({ name: "Batch A" }, batch("A")),
+        send({ name: "Batch B" }, batch("B")),
+      ]);
+      expect(imports.map((response) => response.statusCode).sort()).toEqual([200, 409]);
+      expect(imports.find((response) => response.statusCode === 409)?.json()).toMatchObject({
+        code: "SAVED_PLACE_LIMIT",
+      });
+      const [{ places }] = await fixture.sql<
+        { places: number }[]
+      >`SELECT count(*)::int AS places FROM saved_place JOIN saved_list ON saved_list.id = saved_place.list_id WHERE saved_list.user_id = 'import-user'`;
+      expect(places).toBe(49_600);
+      // The refused batch's new list was rolled back with it.
+      const lists = await fixture.sql<
+        { name: string }[]
+      >`SELECT name FROM saved_list WHERE user_id = 'import-user' AND name LIKE 'Batch %'`;
+      expect(lists).toHaveLength(1);
+      const single = await app.inject({
+        method: "POST",
+        url: `/api/saved/lists/bulk/places`,
+        payload: { name: "Fits", lat: 1, lng: 1 },
+      });
+      expect(single.statusCode).toBe(200);
+      await fixture.sql`INSERT INTO saved_place (id, list_id, name, lat, lng) SELECT 'fill-' || n, 'bulk', 'Fill ' || n, 11, 11 FROM generate_series(1, 399) AS n`;
+      const full = await app.inject({
+        method: "POST",
+        url: `/api/saved/lists/bulk/places`,
+        payload: { name: "Over", lat: 1, lng: 1 },
+      });
+      expect(full.statusCode).toBe(409);
+      expect(full.json()).toMatchObject({ code: "SAVED_PLACE_LIMIT" });
+      await fixture.sql`DELETE FROM saved_list WHERE user_id = 'import-user'`;
     });
     it("does not import into another account's list", async () => {
       await fixture.db

@@ -23,6 +23,10 @@ The Saved panel has two tabs:
   **Work**. Labeled places are set from the **Add a label** row on a place's
   Overview tab, and they surface near the top of search.
 
+An account can hold up to 500 lists, counting the built-in ones, and up to
+50,000 saved places across all of its lists. When a limit is reached, the app
+says so and saves nothing further until lists or places are removed.
+
 ## Importing places
 
 In **Saved → Lists**, choose **Import** and select one or more files. To add
@@ -70,6 +74,12 @@ are skipped; expand the count to see their names. Check the result summary for
 imported places, duplicates, and any failures. Successful batches remain saved
 if a later batch fails. Each selected file and its expanded archive contents are limited to
 200 MiB, with at most 10,000 archive entries.
+
+Places are sent in batches of up to 2,000. A batch that would take the account
+past its saved-place limit, or a new list beyond the list limit, is refused as a
+whole, and the summary names the limit. The server also limits how many import
+batches one account can send in a short time; a large import then pauses and
+continues automatically.
 
 ## Exporting a list
 

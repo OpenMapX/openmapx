@@ -20,6 +20,7 @@ import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import {
   type ImportPlacesInput,
+  isApiClientError,
   isSystemSavedList,
   useImportPlaces,
   useSavedLists,
@@ -35,6 +36,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import Dialog from "@/components/ui/Dialog";
 import type { ImportList, ImportPlace, ParsedImport } from "@/lib/savedPlacesImport/types";
+import { type SavedWriteError, savedWriteError } from "@/lib/savedWriteError";
 
 interface ReviewList extends ImportList {
   id: string;
@@ -49,7 +51,15 @@ interface ImportOutcome {
   imported: number;
   skippedDuplicates: number;
   failed: boolean;
+  /** Set when the server refused the list for an account limit. */
+  limit?: Exclude<SavedWriteError, { key: "saveFailed" }>;
 }
+/** Throttled chunks wait for Retry-After and resume; past this many waits the list fails. */
+const IMPORT_THROTTLE_RETRIES = 10;
+const IMPORT_LIMIT_MESSAGES = {
+  listLimitReached: "importListLimit",
+  placeLimitReached: "importPlaceLimit",
+} as const;
 const ready = (place: ImportPlace) => place.status === "exact" || place.status === "located";
 function payloadPlaces(list: ReviewList): ImportPlacesInput["places"] {
   return list.places
@@ -175,12 +185,25 @@ export function ImportPlacesDialog({
       (!list.name.trim() || list.name.trim().startsWith("$") || list.name.length > 200),
   );
   const displayName = (name: string) => (isSystemSavedList(name) ? t(name.slice(1)) : name);
+  async function importChunk(input: ImportPlacesInput) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await mutation.mutateAsync(input);
+      } catch (error) {
+        if (!isApiClientError(error) || error.status !== 429 || attempt >= IMPORT_THROTTLE_RETRIES)
+          throw error;
+        const waitMs = Math.max(1, error.retryAfterSeconds ?? 5) * 1000;
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+      }
+    }
+  }
   async function runImport() {
     setPhase("importing");
     const total = eligible.reduce((count, list) => count + payloadPlaces(list).length, 0);
     setProgress({ done: 0, total });
     let done = 0;
     const results: ImportOutcome[] = [];
+    let placeLimit: ImportOutcome["limit"];
     for (const list of eligible) {
       const places = payloadPlaces(list);
       const outcome: ImportOutcome = {
@@ -190,13 +213,18 @@ export function ImportPlacesDialog({
         skippedDuplicates: 0,
         failed: false,
       };
+      if (placeLimit) {
+        // The account is full; sending more lists would only be refused again.
+        results.push({ ...outcome, failed: true, limit: placeLimit });
+        continue;
+      }
       let target: ImportPlacesInput["target"] = list.target
         ? { listId: list.target }
         : { name: list.name.trim() };
       try {
         for (let offset = 0; offset < places.length; offset += 2000) {
           const chunk = places.slice(offset, offset + 2000);
-          const response = await mutation.mutateAsync({ target, places: chunk });
+          const response = await importChunk({ target, places: chunk });
           target = { listId: response.listId };
           outcome.listId = response.listId;
           outcome.name = response.name;
@@ -205,8 +233,11 @@ export function ImportPlacesDialog({
           done += chunk.length;
           setProgress({ done, total });
         }
-      } catch {
+      } catch (error) {
         outcome.failed = true;
+        const reason = savedWriteError(error);
+        if (reason.key !== "saveFailed") outcome.limit = reason;
+        if (reason.key === "placeLimitReached") placeLimit = reason;
       }
       results.push(outcome);
     }
@@ -379,7 +410,13 @@ export function ImportPlacesDialog({
                   duplicates: outcome.skippedDuplicates,
                 })}
               </Typography>
-              {outcome.failed && <Alert severity="error">{t("importFailed")}</Alert>}
+              {outcome.failed && (
+                <Alert severity="error">
+                  {outcome.limit
+                    ? t(IMPORT_LIMIT_MESSAGES[outcome.limit.key], outcome.limit.values)
+                    : t("importFailed")}
+                </Alert>
+              )}
             </Box>
           ))}
       </DialogContent>

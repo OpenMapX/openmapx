@@ -24,6 +24,8 @@ const common = {
   500: json(httpErrorSchema),
 };
 const ok = { ...common, 200: json(s.savedOkSchema) };
+/** Writes that can be refused because of the account's stored lists and places. */
+const conflict = { 409: json(s.savedConflictSchema) };
 export const savedOperations = {
   listSavedLists: {
     method: "GET",
@@ -36,14 +38,14 @@ export const savedOperations = {
     path: "/api/saved/lists",
     auth: "session",
     request: { body: s.savedCreateListSchema },
-    responses: { ...common, 200: json(s.savedListCreatedSchema) },
+    responses: { ...common, ...conflict, 200: json(s.savedListCreatedSchema) },
   },
   importSavedPlaces: {
     method: "POST",
     path: "/api/saved/lists/import",
     auth: "session",
     request: { body: s.savedImportSchema },
-    responses: { ...common, 200: json(s.savedImportResultSchema) },
+    responses: { ...common, ...conflict, 200: json(s.savedImportResultSchema) },
   },
   updateSavedList: {
     method: "PATCH",
@@ -71,7 +73,7 @@ export const savedOperations = {
     path: "/api/saved/lists/:id/places",
     auth: "session",
     request: { params: s.savedIdParamsSchema, body: s.savedCreatePlaceSchema },
-    responses: { ...common, 200: json(s.savedPlaceCreatedSchema) },
+    responses: { ...common, ...conflict, 200: json(s.savedPlaceCreatedSchema) },
   },
   exportSavedList: {
     method: "GET",

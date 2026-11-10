@@ -17,6 +17,7 @@ vi.mock("../../db/index.js", () => ({ db: dbMock.db }));
 // constrained on (e.g. `saved_list.user_id = <userId>`), which is the whole
 // point of the cross-user isolation checks below.
 vi.mock("../../db/schema.js", () => ({
+  user: { id: "user.id" },
   savedList: {
     id: "saved_list.id",
     userId: "saved_list.user_id",
@@ -390,6 +391,7 @@ describe("GET /api/saved/lists/:id/places", () => {
 
 describe("POST /api/saved/lists/:id/places", () => {
   it("adds a place after confirming the list is owned by the caller", async () => {
+    dbMock.queueSelect([]); // account quota lock
     dbMock.queueSelect([{ id: "list-1" }]); // ownership lookup
 
     const res = await app.inject({
@@ -404,12 +406,13 @@ describe("POST /api/saved/lists/:id/places", () => {
     expect(body.name).toBe("Brandenburg Gate");
     expect(body.lat).toBe(52.5163);
     expect(dbMock.db.insert).toHaveBeenCalledTimes(1);
-    const where = selectWhereArgs(0);
+    const where = selectWhereArgs(1);
     expect(where).toContain("saved_list.user_id");
     expect(where).toContain(USER_ID);
   });
 
   it("404s and inserts nothing when adding to another user's list", async () => {
+    dbMock.queueSelect([]); // account quota lock
     dbMock.queueSelect([]); // ownership lookup returns nothing
 
     const res = await app.inject({

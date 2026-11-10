@@ -3296,7 +3296,12 @@
     "importError_takeoutNoSaved": "Dieses Google-Takeout-Archiv enthält keine gespeicherten Listen. Wähle beim Export aus Google Takeout das Produkt „Gespeichert“ („Saved“) aus. „Maps (meine Orte)“ („Maps (your places)“) ist optional und enthält ältere markierte Orte.",
     "importSkippedLists": "{count, plural, one {# gespeicherte Liste} other {# gespeicherte Listen}} ohne Orte übersprungen: {names}",
     "importError_networkLink": "Diese Datei verlinkt nur auf Onlinedaten. Exportiere sie erneut, ohne die Option zur automatischen Aktualisierung der Daten zu aktivieren.",
-    "importError_tooLarge": "Diese Datei ist zu groß. Teile den Export in kleinere Dateien auf (bis zu 200 MB)."
+    "importError_tooLarge": "Diese Datei ist zu groß. Teile den Export in kleinere Dateien auf (bis zu 200 MB).",
+    "listLimitReached": "Du kannst bis zu {count, number} Listen anlegen.",
+    "placeLimitReached": "Du kannst insgesamt bis zu {count, number} Orte speichern.",
+    "saveFailed": "Speichern fehlgeschlagen. Versuche es erneut.",
+    "importListLimit": "Diese Liste wurde nicht angelegt, weil du bereits {count, number} Listen hast. Bereits importierte Orte bleiben erhalten.",
+    "importPlaceLimit": "Der Import wurde am Limit von {count, number} gespeicherten Orten angehalten. Bereits importierte Orte bleiben erhalten."
   },
   "share": {
     "sharedList": "Geteilte Liste",
