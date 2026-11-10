@@ -982,7 +982,9 @@ provider. Bad caller input (code `invalid_request`, thrown as
 or "unknown stop/station/line" answer to a lookup keyed by an identifier the
 caller supplied, so repeated bogus identifiers cannot open a circuit. The
 adapter maps it where it knows the identifier came from the caller; a 404 on a
-fixed endpoint stays a counted failure. A cancellation is recorded in metrics
+fixed endpoint stays a counted failure. An orchestrator that
+looks up identifiers it took from provider results, not from the request,
+counts such an answer as a provider failure. A cancellation is recorded in metrics
 only and records no outcome: it does not change counts, the last error or the
 latency average, and the host ignores a `caller_cancelled` record. If the
 cancelled call was the half-open probe, the orchestrator gives the lease back

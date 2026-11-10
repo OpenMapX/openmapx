@@ -161,11 +161,20 @@ here", so the board would show "No departures" or no lines, and caches would kee
 it. The orchestrator turns a thrown error into a partial or failed board and
 records it in provider health. Keep thrown messages generic when request URLs
 carry credentials, and keep the upstream error as the `cause` so provider health
-can still classify its status or code. When a lookup is keyed by an identifier
-the caller supplied (a stop's board, a line's status or route, search text in
-the path) and the upstream answers 404 or "unknown stop", throw
-`ProviderInputError`: that is bad caller input and does not count against the
-provider. A 404 on a fixed endpoint is a provider failure.
+can still classify its status or code. When a lookup is keyed by a stop or line
+identifier (a stop's board, a line's status or route) and the upstream answers
+404, "unknown stop" or "malformed stop id", throw `ProviderInputError`: when
+the identifier came from the request, that is bad caller input and does not
+count against the provider. A 404 on a fixed endpoint, or on search text, is a
+provider failure.
+
+The orchestrator decides whose input it was. A route that passes the request's
+identifier keeps the default `idOrigin: "request"`. Calls whose identifiers the
+server took from provider results, such as the place fan-outs for departures,
+arrivals, alerts, routes and facilities, and realtime enrichment, pass
+`{ idOrigin: "derived" }`. Their bad-input answers then count as provider
+failures, so a provider whose stop lookups break for stops its own search
+returned still opens its circuit.
 
 Validate only the fields the adapter consumes, with a zod schema, through
 `parseProviderPayload` and `parseProviderRecords` from

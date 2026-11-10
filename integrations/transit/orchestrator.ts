@@ -216,6 +216,25 @@ function classifyOutcome(value: unknown): ProviderCallOutcome {
   return "ok";
 }
 
+interface TimedOptions {
+  /** The caller's signal: the call settles as cancelled as soon as it aborts. */
+  signal?: AbortSignal;
+  /**
+   * The identifiers in this call came from provider data, not from the request,
+   * so a bad-input answer counts as a provider failure.
+   */
+  derivedIds?: boolean;
+}
+
+/** Where a lookup's identifier came from. */
+export interface LookupOptions {
+  /**
+   * `derived` for identifiers the server took from provider results, as in
+   * place fan-outs. Defaults to `request`: an identifier the caller supplied.
+   */
+  idOrigin?: "request" | "derived";
+}
+
 /**
  * Wraps a provider call with latency timing + health tracking + OTEL metrics.
  * The provider's existing fallback semantics (catch + return null/empty) stay
@@ -234,8 +253,9 @@ async function timed<T>(
   providerId: string,
   method: string,
   fn: () => Promise<T>,
-  signal?: AbortSignal,
+  options: TimedOptions = {},
 ): Promise<{ ok: true; value: T } | { ok: false; error: unknown }> {
+  const { signal } = options;
   const start = performance.now();
   // A half-open lease held now belongs to this call: the probe.
   const probe = health.heldProbe?.(providerId);
@@ -257,7 +277,10 @@ async function timed<T>(
     return { ok: true, value };
   } catch (error) {
     const elapsed = performance.now() - start;
-    const outcome = classifyProviderFailure(error, signal);
+    const classified = classifyProviderFailure(error, signal);
+    // An identifier the server took from a provider's own results cannot be the
+    // caller's mistake: a "not found" for it means the provider broke.
+    const outcome = classified === "input" && options.derivedIds ? "connection" : classified;
     // A cancellation says nothing about the provider: metrics only, never an
     // outcome. A cancelled probe gives its lease back so the next call can probe.
     if (outcome !== "caller_cancelled")
@@ -477,14 +500,17 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   // Bound `timed` for realtime-enrichment fan-out so its calls share the
   // same health-tracking + OTEL recorder path as the orchestrator's own
   // provider calls (G3 telemetry wiring).
+  // Enrichment calls use trip and stop identifiers taken from provider results.
   const boundTimed = <T>(providerId: string, method: string, fn: () => Promise<T>) =>
-    timed(providerHealth, metricsRecorder, providerId, method, fn);
+    timed(providerHealth, metricsRecorder, providerId, method, fn, { derivedIds: true });
 
   async function getDepartures(
     stopId: string,
     minutes: number,
     time?: string,
+    lookup: LookupOptions = {},
   ): Promise<MobilityResult<Departure[]>> {
+    const lookupTimed = { derivedIds: lookup.idOrigin === "derived" };
     if (time) {
       const provider = await resolveLookup(stopId, (p) => Boolean(p.getDeparturesAt));
       if (provider === "unavailable")
@@ -497,6 +523,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
         provider.id,
         "getDeparturesAt",
         () => anchored(stopId, minutes, time),
+        lookupTimed,
       );
       if (!result.ok)
         throw new TripReferenceUnavailableError("Transit timetable source unavailable");
@@ -505,8 +532,13 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     const provider = await resolveByPrefix(stopId);
     if (!provider?.getDepartures) throw new Error("Transit timetable source unavailable");
     const fn = provider.getDepartures.bind(provider);
-    const outcome = await timed(providerHealth, metricsRecorder, provider.id, "getDepartures", () =>
-      fn(stopId, minutes),
+    const outcome = await timed(
+      providerHealth,
+      metricsRecorder,
+      provider.id,
+      "getDepartures",
+      () => fn(stopId, minutes),
+      lookupTimed,
     );
     if (!outcome.ok) throw new Error("Transit timetable source unavailable");
     const base = outcome.value;
@@ -516,12 +548,18 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   async function getArrivals(
     stopId: string,
     minutes: number,
+    lookup: LookupOptions = {},
   ): Promise<MobilityResult<Departure[]>> {
     const provider = await resolveByPrefix(stopId);
     if (!provider?.getArrivals) throw new Error("Transit timetable source unavailable");
     const fn = provider.getArrivals.bind(provider);
-    const outcome = await timed(providerHealth, metricsRecorder, provider.id, "getArrivals", () =>
-      fn(stopId, minutes),
+    const outcome = await timed(
+      providerHealth,
+      metricsRecorder,
+      provider.id,
+      "getArrivals",
+      () => fn(stopId, minutes),
+      { derivedIds: lookup.idOrigin === "derived" },
     );
     if (!outcome.ok) throw new Error("Transit timetable source unavailable");
     const base = outcome.value;
@@ -590,7 +628,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
           p.id,
           "searchStopsByName",
           () => fn(query, limit, context),
-          context?.signal,
+          { signal: context?.signal },
         );
         return outcome.ok ? outcome.value : null;
       },
@@ -917,7 +955,11 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
    * instead of answering "no lines"; only a stop no allowed provider can
    * describe answers empty.
    */
-  async function getRoutesForStop(stopId: string): Promise<MobilityResult<TransitRoute[]>> {
+  async function getRoutesForStop(
+    stopId: string,
+    lookup: LookupOptions = {},
+  ): Promise<MobilityResult<TransitRoute[]>> {
+    const lookupTimed = { derivedIds: lookup.idOrigin === "derived" };
     const provider = await resolveLookup(stopId, (p) =>
       Boolean(p.getRoutesForStop || p.getDepartures),
     );
@@ -934,6 +976,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
         provider.id,
         "getRoutesForStop",
         () => fn(stopId),
+        lookupTimed,
       );
       if (outcome.ok) {
         const result = outcome.value;
@@ -959,6 +1002,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       provider.id,
       "getRoutesForStop.viaDepartures",
       () => boundDep(stopId, 720),
+      lookupTimed,
     );
     if (!depOutcome.ok) {
       // The native lookup's empty answer stands; only a lookup with no answer at all fails.
@@ -1136,7 +1180,10 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   /** Alerts for a stop; rejects when the provider that offers them fails or is in cooldown. */
-  async function getStopAlerts(stopId: string): Promise<MobilityResult<ServiceAlert[]>> {
+  async function getStopAlerts(
+    stopId: string,
+    lookup: LookupOptions = {},
+  ): Promise<MobilityResult<ServiceAlert[]>> {
     const provider = await resolveLookup(stopId, (p) => Boolean(p.getAlertsForStop));
     if (provider === "unavailable") throw new Error("Transit alert source unavailable");
     if (!provider?.getAlertsForStop)
@@ -1148,6 +1195,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       provider.id,
       "getAlertsForStop",
       () => fn(stopId),
+      { derivedIds: lookup.idOrigin === "derived" },
     );
     if (!outcome.ok) throw new Error("Transit alert source unavailable");
     return outcome.value;
@@ -1237,13 +1285,21 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   /** Facilities at a stop; rejects when the provider that offers them fails or is in cooldown. */
-  async function getFacilities(stopId: string): Promise<MobilityResult<Facility[]>> {
+  async function getFacilities(
+    stopId: string,
+    lookup: LookupOptions = {},
+  ): Promise<MobilityResult<Facility[]>> {
     const provider = await resolveLookup(stopId, (p) => Boolean(p.getFacilities));
     if (provider === "unavailable") throw new Error("Transit facility source unavailable");
     if (!provider?.getFacilities) return emptyResult<Facility[]>([]);
     const fn = provider.getFacilities.bind(provider);
-    const outcome = await timed(providerHealth, metricsRecorder, provider.id, "getFacilities", () =>
-      fn(stopId),
+    const outcome = await timed(
+      providerHealth,
+      metricsRecorder,
+      provider.id,
+      "getFacilities",
+      () => fn(stopId),
+      { derivedIds: lookup.idOrigin === "derived" },
     );
     if (!outcome.ok) throw new Error("Transit facility source unavailable");
     return outcome.value;
