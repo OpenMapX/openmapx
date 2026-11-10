@@ -165,11 +165,12 @@ export class NavigationCoordinator {
 
   /**
    * Ends a session that is no longer being guided, if it is finished: past its
-   * lifetime, a preparation that was never started, or an arrival whose release
-   * window has closed. An arrival still inside its window (the announcement
-   * grace, or the transit undo window) is kept, and its location release is
-   * scheduled in this process, so opening the app neither cuts the window short
-   * nor lets it run past its end.
+   * lifetime, or a preparation that was never started. An arrival is kept
+   * whatever the app's visibility: the page ends it when the user is done.
+   * Its release window governs location only. Inside the window (the
+   * announcement grace, or the transit undo window) the release is scheduled
+   * in this process, so opening the app neither cuts the window short nor lets
+   * it run past its end; past it, location is released now.
    */
   closeFinishedSession(expectedSessionId: string): Promise<"ended" | "kept" | "active" | "gone"> {
     return this.queue.run(async () => {
@@ -182,13 +183,13 @@ export class NavigationCoordinator {
       }
       if (session.status === "active") return "active";
       if (session.status === "arrived") {
+        // The window governs location only. The arrival stays for the page,
+        // which ends it when the user is done; otherwise its lifetime ends it.
         const releaseAt = locationReleaseAtMs(session);
-        if (releaseAt !== null && releaseAt > now) {
-          this.scheduleLocationRelease(session, now);
-          return "kept";
-        }
-        await this.endSession(session, "arrived", now, "native");
-        return "ended";
+        if (releaseAt !== null && releaseAt > now) this.scheduleLocationRelease(session, now);
+        else
+          await this.deps.effects.run([{ kind: "stop-location" }, { kind: "reconcile-surface" }]);
+        return "kept";
       }
       await this.endSession(session, "stopped", now, "native");
       return "ended";

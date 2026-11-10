@@ -188,21 +188,41 @@ describe("opening the app inside an arrival's release window", () => {
     expect(harness.phone.location.running).toBe(true);
   });
 
-  it("ends the arrival with one notice when the app is opened after the window", async () => {
+  it("keeps the arrival for the page when the app is opened after the window", async () => {
     harness = await startForegroundHarness();
     const { sessionId } = await alightAtTheEnd();
     await harness.setVisible(false);
+    // Paused timers, so recovery is what releases location here.
+    harness.phone.clock.timersPaused = true;
     await harness.elapse(TRANSIT_UNDO_WINDOW_MS + 1_000);
+    expect(harness.phone.location.running).toBe(true);
 
     await harness.setVisible(true);
 
-    expect(await harness.session()).toBeNull();
-    expect(stoppedMessages()).toEqual([
-      expect.objectContaining({
-        payload: expect.objectContaining({ sessionId, finalStatus: "arrived" }),
-      }),
-    ]);
+    expect(await harness.session()).toMatchObject({ sessionId, status: "arrived" });
+    expect(harness.phone.location.running).toBe(false);
+    expect(stoppedMessages()).toEqual([]);
+    expect(harness.sessionEnds).toEqual([]);
+
+    // The page's "Done" ends it, with the reply as its one notice.
+    const done = await harness.command("session.complete", {}, { sessionId });
+    expect(done).toMatchObject({ type: "session.stopped", payload: { finalStatus: "arrived" } });
     expect(harness.sessionEnds).toHaveLength(1);
+  });
+
+  it("keeps a road arrival card when the user switches apps after the grace", async () => {
+    harness = await startForegroundHarness();
+    const { sessionId } = await harness.start(groundStartPackage());
+    await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
+    await harness.setVisible(false);
+    await harness.elapse(20_000);
+
+    await harness.setVisible(true);
+
+    expect(await harness.session()).toMatchObject({ sessionId, status: "arrived" });
+    expect(harness.phone.location.running).toBe(false);
+    expect(stoppedMessages()).toEqual([]);
+    expect(harness.sessionEnds).toEqual([]);
   });
 
   it("keeps a road arrival through its announcement grace after the process died", async () => {

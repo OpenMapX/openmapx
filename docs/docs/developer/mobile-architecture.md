@@ -130,10 +130,13 @@ start.
   even under a foreground service. There the first batch after the window
   releases the stream, and the time-driven Android profiles guarantee that
   batch while the user stands still. A batch also releases the stream after a
-  process restart. Opening the app inside the window keeps the arrival and
-  its undo: recovery asks the coordinator (`closeFinishedSession`), which
-  keeps an arrival whose window is still open and schedules its release in
-  the current process. An arrival whose window has closed is ended then.
+  process restart. The window governs location only. The arrival itself, and
+  the page's arrival card, last until the page completes it ("Done") or the
+  session reaches its lifetime, whatever the app's visibility. Opening the app
+  runs recovery, which asks the coordinator (`closeFinishedSession`). Inside
+  the window, the coordinator keeps the arrival and its undo and schedules the
+  release in the current process. Past the window, it releases location and
+  the trip surface now and keeps the row.
 - **Session end.** Every end goes through one coordinator method: End or
   arrival completion from the page, End on the trip card or the recovery
   screen, a car trip replacing the current one, a refused permission or a
@@ -149,8 +152,8 @@ start.
   reported once per change. Recovery (`NavigationRecoveryController`) is part
   of the composition. It inspects the session on every visibility change, but
   it ends a session only through the coordinator, between its own steps on
-  the shared executor. It ends a session past its lifetime, a preparation the
-  page never started, and an arrival whose release window has closed.
+  the shared executor. It ends a session past its lifetime and a preparation
+  the page never started. It never ends an arrival.
 - **Keep-awake.** The composition holds the screen only while the app is
   visible, the location stream runs for an active session, and that session's
   keep-screen-on setting is on. It re-checks after every published change,
