@@ -51,14 +51,14 @@ describe("PreferencesClient during an installed-app trip", () => {
     expect(runtime.commands.updateSettings).toHaveBeenCalledWith({ keepScreenOn: false });
   });
 
-  it("only stores the preference when no native session is running", () => {
+  it("sends a change made before the page has seen the session", () => {
     useNavigationStore.setState({ nativeSessionId: null });
     render(<PreferencesClient />);
 
     fireEvent.click(voiceSwitch());
 
     expect(useNavigationStore.getState().voiceEnabled).toBe(false);
-    expect(runtime.commands.updateSettings).not.toHaveBeenCalled();
+    expect(runtime.commands.updateSettings).toHaveBeenCalledWith({ voiceEnabled: false });
   });
 
   it("only stores the preference in a browser", () => {

@@ -58,18 +58,20 @@ export function useNavigationMutations() {
   }, [browserAuthority, commands]);
 
   /**
-   * Tells a running native session about a preference the page just stored.
+   * Tells the native session about a preference the page just stored.
    *
    * The preference is the user's and is always stored locally first; the
    * session holds its own copy because guidance runs natively, so any page that
    * changes one of these preferences (the in-trip menus, the settings dialog,
-   * the preferences page) goes through here. With no native session there is
-   * nothing to tell, and the next start carries the stored value.
+   * the preferences page) goes through here. It is sent whether or not the page
+   * has seen the session yet: a change made while a start is in flight waits
+   * behind it in the command queue and lands on the new session, and one made
+   * with no session is refused by native while the next start reads the stored
+   * value.
    */
   const tellNativeSession = useCallback(
     async (patch: NavigationSettingsPatch) => {
       if (browserAuthority || !commands) return;
-      if (useNavigationStore.getState().nativeSessionId === null) return;
       await commands.updateSettings(patch).catch(() => undefined);
     },
     [browserAuthority, commands],
