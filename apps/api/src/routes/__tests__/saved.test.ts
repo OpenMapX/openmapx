@@ -2,7 +2,13 @@ import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildTestApp } from "../../test/app.js";
 import { mockRequireAuth } from "../../test/auth.js";
-import { createDbMock, type DbMock, makeQueryChain, whereArgs } from "../../test/db.js";
+import {
+  createDbMock,
+  type DbMock,
+  makeQueryChain,
+  orderByArgs,
+  whereArgs,
+} from "../../test/db.js";
 
 const USER_ID = "user-A";
 
@@ -32,6 +38,7 @@ vi.mock("../../db/schema.js", () => ({
     id: "saved_place.id",
     listId: "saved_place.list_id",
     sortOrder: "saved_place.sort_order",
+    createdAt: "saved_place.created_at",
     name: "saved_place.name",
     lat: "saved_place.lat",
     lng: "saved_place.lng",
@@ -156,6 +163,29 @@ describe("GET /api/saved/lists", () => {
     const where = whereArgs(dbMock, "select", 0);
     expect(where).toContain("saved_list.user_id");
     expect(where).toContain(USER_ID);
+  });
+
+  it("orders lists by position, then creation time, then id so equal positions keep one order", async () => {
+    dbMock.queueSelect([
+      {
+        id: "list-1",
+        name: "a",
+        icon: "heart",
+        isPrivate: true,
+        sortOrder: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        placeCount: 0,
+      },
+    ]);
+
+    await app.inject({ method: "GET", url: "/api/saved/lists" });
+
+    expect(orderByArgs(dbMock, "select", 0)).toEqual([
+      "saved_list.sort_order",
+      "saved_list.created_at",
+      "saved_list.id",
+    ]);
   });
 
   it("seeds default lists for a first-time user when none exist", async () => {
@@ -446,6 +476,19 @@ describe("GET /api/saved/lists/:id/places", () => {
     const where = whereArgs(dbMock, "select", 0);
     expect(where).toContain("saved_list.user_id");
     expect(where).toContain(USER_ID);
+  });
+
+  it("orders places by position, then creation time, then id so equal positions keep one order", async () => {
+    dbMock.queueSelect([{ id: "list-1" }]);
+    dbMock.queueSelect([]);
+
+    await app.inject({ method: "GET", url: "/api/saved/lists/list-1/places" });
+
+    expect(orderByArgs(dbMock, "select", 1)).toEqual([
+      "saved_place.sort_order",
+      "saved_place.created_at",
+      "saved_place.id",
+    ]);
   });
 
   it("404s for a list owned by another user without reading its places", async () => {

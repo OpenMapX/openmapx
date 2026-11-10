@@ -28,6 +28,7 @@ vi.mock("@integrations/photos/orchestrator", async (importOriginal) => ({
 
 import {
   controlledRequestLoggingOptions,
+  corsOptions,
   registerControlledRequestLogging,
 } from "../../server-wiring.js";
 import { buildTestApp } from "../../test/app.js";
@@ -304,6 +305,40 @@ describe("image-proxy route", () => {
     // Passed the referer guard and reached upstream (which we stubbed to 404).
     expect(res.statusCode).toBe(404);
   });
+
+  it.each([
+    ["whitespace around each entry", " https://web.example , http://second.test "],
+    ["an uppercase scheme, host and default port", "HTTPS://Web.Example:443,http://second.test"],
+    ["an empty value, which falls back to the default origin", ""],
+    ["a blank value, which falls back to the default origin", "   "],
+  ])("reads CORS_ORIGIN with %s the way the CORS setup does", async (_name, value) => {
+    vi.stubEnv("CORS_ORIGIN", value);
+    mockFetchWithRedirects.mockResolvedValue({ ok: false, status: 404, headers: new Headers() });
+    const trusted = corsOptions().origin;
+    expect(trusted.length).toBeGreaterThan(0);
+
+    for (const origin of trusted) {
+      const res = await inject({ referer: `${origin}/page` });
+      expect(res.statusCode, origin).toBe(404);
+    }
+    const stranger = await inject({ referer: "https://stranger.example/page" });
+    expect(stranger.statusCode).toBe(403);
+  });
+
+  it.each([
+    ["a trailing slash", "https://web.example/"],
+    ["a trailing comma", "https://web.example,"],
+  ])(
+    "serves no request when CORS_ORIGIN has %s, as the CORS setup refuses it",
+    async (_name, value) => {
+      vi.stubEnv("CORS_ORIGIN", value);
+      expect(() => corsOptions()).toThrow(/CORS_ORIGIN/);
+      const res = await inject({ referer: "https://web.example/page" });
+      expect(res.statusCode).toBe(500);
+      expect(res.json()).toEqual({ error: "Internal Server Error" });
+      expect(mockFetchWithRedirects).not.toHaveBeenCalled();
+    },
+  );
 
   it("rejects a disallowed upstream host with 403", async () => {
     const res = await inject({ referer: ALLOWED_REFERER, url: "https://evil.attacker.com/a.png" });

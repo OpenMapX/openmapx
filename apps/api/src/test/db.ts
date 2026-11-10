@@ -74,6 +74,18 @@ export function whereArgs(dbMock: DbMock, op: Op, callIndex = -1): string {
 }
 
 /**
+ * The arguments passed to `.orderBy()` on one query chain, in order. With a
+ * schema mock that maps columns to distinctive strings this shows the exact
+ * sort keys, including any tiebreaker. `callIndex` picks the chain; negative
+ * values count from the end.
+ */
+export function orderByArgs(dbMock: DbMock, op: Op, callIndex = -1): unknown[] {
+  const results = dbMock.db[op].mock.results;
+  const chain = results.at(callIndex)?.value as { orderBy: { mock: { calls: unknown[][] } } };
+  return chain.orderBy.mock.calls.flat();
+}
+
+/**
  * Build a queue-driven `db` mock. Each `db.<op>()` call shifts the next queued
  * result for that op (defaulting to `[]`) and returns a thenable chain that
  * resolves to it. Assert on `dbMock.db.select.mock.calls` etc.

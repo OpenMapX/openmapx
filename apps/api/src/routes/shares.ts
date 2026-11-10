@@ -21,6 +21,7 @@ import {
 import { shareMintLimit, shareResolveLimit } from "../utils/rate-limit";
 import { getUserId, requireAuthHook } from "../utils/require-auth";
 import { declareRouteAuth } from "../utils/route-auth";
+import { PLACE_ORDER } from "./saved";
 import { registerSharingRoute } from "./sharing-contract";
 
 /** Test hook: drop limiter buckets so injected requests never hit a stale 429. */
@@ -79,7 +80,7 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
         .select()
         .from(savedPlace)
         .where(eq(savedPlace.listId, list.id))
-        .orderBy(savedPlace.sortOrder)
+        .orderBy(...PLACE_ORDER)
         .limit(MAX_SNAPSHOT_PLACES);
       const snap = listSnapshotFrom(list, places);
       if (!snap) throw gone();
@@ -141,7 +142,7 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
                 .select()
                 .from(savedPlace)
                 .where(eq(savedPlace.listId, list.id))
-                .orderBy(savedPlace.sortOrder)
+                .orderBy(...PLACE_ORDER)
                 .limit(MAX_SNAPSHOT_PLACES + 1);
               if (places.length > MAX_SNAPSHOT_PLACES) {
                 throw httpError(
