@@ -12,10 +12,11 @@ requests are no longer stored as error rows in the application log.
 
 Routing, route optimization, reverse geocoding, transit journey planning and
 hotel offers now use the tighter `expensive` limit. Autocomplete and forward
-geocoding use a new `typeahead` limit sized for typing. The TomTom traffic and
-MapTiler proxies share a daily request budget across all clients, by default
-50,000 TomTom tiles and 3,300 MapTiler assets a day, and each routing engine has
-a shared budget of 600 calls a minute and 100,000 a day.
+geocoding use a new `typeahead` limit sized for typing. The TomTom traffic proxy
+shares a daily budget of 50,000 tiles across all clients. The MapTiler proxy can
+be given one with `MAPTILER_DAILY_REQUEST_LIMIT`; it has none unless you set it.
+Each routing engine has a shared budget of 3,000 calls a minute and 500,000 a
+day.
 
 Natural-language search counts its hourly limit per client network, ignores the
 old `ip` query parameter, rejects queries over 500 characters and gives cloud
@@ -25,20 +26,19 @@ anonymous searches use local providers.
 
 ## Who is affected
 
-Installations that use MapTiler for the hosted basemap or MapTiler layers on a
-paid plan, where 3,300 requests a day may be too few. Installations whose
-routing engines serve more than 600 calls a minute. Installations with a cloud
-natural-language provider in `consent` mode, whose anonymous users lose cloud
-parsing.
+Installations whose routing engines serve more than 3,000 calls a minute.
+Installations with a cloud natural-language provider in `consent` mode, whose
+anonymous users lose cloud parsing.
 
-While Valkey is configured but unreachable, the TomTom and MapTiler proxies and
-routing engine calls answer 503, and natural-language search uses only its
-keyword parser.
+While Valkey is configured but unreachable, the TomTom proxy answers 503,
+routing engines and any configured MapTiler budget are counted in each API
+process instead, and natural-language search uses only its keyword parser.
 
 ## Required action
 
-On a paid MapTiler plan, set `MAPTILER_DAILY_REQUEST_LIMIT` to your plan's daily
-share. Raise `TOMTOM_TRAFFIC_DAILY_REQUEST_LIMIT`, the routing integration's
+To cap what visitors can spend on your MapTiler key, set
+`MAPTILER_DAILY_REQUEST_LIMIT`, sized for every visitor's basemap tiles and
+glyphs. Raise `TOMTOM_TRAFFIC_DAILY_REQUEST_LIMIT`, the routing integration's
 `providerRequestsPerMinute` and `providerRequestsPerDay`, or search-nlp's
 `cloudRequestsPerDay` and `cloudRequestsPerClientPerHour` if your traffic needs
 more. To keep cloud parsing for anonymous users, set search-nlp's `privacyMode`

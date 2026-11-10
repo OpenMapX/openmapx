@@ -52,7 +52,9 @@ export const trafficRoute: FastifyPluginAsync<{ budget?: ProviderDailyBudget }> 
 
       try {
         const admission = await budget.admit(requestAbort.signal);
-        if (!admission.allowed) return sendProviderBudgetRefusal(reply, admission, "TomTom");
+        if (!admission.allowed) {
+          return sendProviderBudgetRefusal(reply, admission, "TomTom", req.log);
+        }
         const tile = await getTrafficProvider().getFlowTile(z, x, y, requestAbort.signal);
 
         reply.header("Cache-Control", tile.cacheControl ?? "public, max-age=30, s-maxage=30");
