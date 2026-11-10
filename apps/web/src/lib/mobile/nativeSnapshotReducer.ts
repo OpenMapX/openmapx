@@ -18,28 +18,45 @@
  * and applying the newest one gives the same state as applying them all.
  */
 
-import type { NativeNavigationProjection } from "@openmapx/core";
+import type {
+  NativeNavigationProjection,
+  NavProgress,
+  Route,
+  TransitProgress,
+} from "@openmapx/core";
+import {
+  type GroundSnapshotWire,
+  NATIVE_SNAPSHOT_HOT_FIELDS,
+  type NativeSnapshotWire,
+  type TransitLegCapture,
+  type TransitSnapshotWire,
+} from "@openmapx/core/navigation";
 
 export type NativeAuthority = "browser" | "native";
 
-export interface SnapshotEnvelope {
+interface SnapshotIdentity {
   type: "full" | "progress";
   sessionId: string;
   revision: number;
   /** `routeFingerprint` for ground, `itineraryFingerprint` for transit. */
   fingerprint: string;
-  kind: "ground" | "transit";
-  data: Record<string, unknown>;
 }
 
-export interface NativeReadModel {
+/** One received snapshot, placed: which session, revision and route it describes. */
+export type SnapshotEnvelope =
+  | (SnapshotIdentity & { kind: "ground"; data: GroundSnapshotWire })
+  | (SnapshotIdentity & { kind: "transit"; data: TransitSnapshotWire });
+
+interface ReadModelIdentity {
   sessionId: string;
   revision: number;
   fingerprint: string;
-  kind: "ground" | "transit";
-  /** The full snapshot, with every delta folded into it. */
-  snapshot: Record<string, unknown>;
 }
+
+/** What the page holds: the full snapshot, with every delta folded into it. */
+export type NativeReadModel =
+  | (ReadModelIdentity & { kind: "ground"; snapshot: GroundSnapshotWire })
+  | (ReadModelIdentity & { kind: "transit"; snapshot: TransitSnapshotWire });
 
 export type ApplyOutcome =
   | {
@@ -52,58 +69,30 @@ export type ApplyOutcome =
   | { ok: false; reason: "need-full-snapshot" | "stale" };
 
 /**
- * Fields a progress snapshot is permitted to move. A commit that changes
- * anything else publishes a full snapshot.
+ * Places a snapshot the bridge has already checked against the shared wire
+ * schema (`nativeSnapshot` in core). A ground snapshot names its route's
+ * fingerprint and a transit one its itinerary's; that is what tells them apart,
+ * including a progress snapshot, which does not repeat its kind. The empty
+ * snapshot that answers a request when there is no session places nowhere.
  */
-const HOT_FIELDS = [
-  "revision",
-  "status",
-  "progress",
-  "weakGps",
-  "offRoute",
-  "coasting",
-  "currentSpeedLimit",
-  "connectivity",
-  "reroute",
-  "currentLegIndex",
-  "currentWalkStepIndex",
-  "transitProgress",
-  "phase",
-  "confidence",
-  "liveStatus",
-] as const;
-
-/**
- * Reads the identity out of a raw snapshot payload.
- *
- * Ground and transit name their fingerprint differently, which is fine on the
- * wire but would spread a conditional through every consumer. It is normalised
- * once, here.
- */
-export function envelopeOf(snapshot: unknown): SnapshotEnvelope | null {
-  if (!snapshot || typeof snapshot !== "object") return null;
-  const raw = snapshot as Record<string, unknown>;
-
-  const type = raw.type;
-  if (type !== "full" && type !== "progress") return null;
-  const kind = raw.kind === "transit" ? "transit" : raw.kind === "ground" ? "ground" : null;
-
-  const sessionId = raw.sessionId;
-  const revision = raw.revision;
-  const fingerprint = raw.routeFingerprint ?? raw.itineraryFingerprint;
-  if (typeof sessionId !== "string" || sessionId.length === 0) return null;
-  if (typeof revision !== "number" || !Number.isFinite(revision)) return null;
-  if (typeof fingerprint !== "string" || fingerprint.length === 0) return null;
-
-  // A progress snapshot does not carry `kind`; it inherits the model's.
-  return {
-    type,
-    sessionId,
-    revision,
-    fingerprint,
-    kind: kind ?? "ground",
-    data: raw,
+export function envelopeOf(snapshot: NativeSnapshotWire): SnapshotEnvelope | null {
+  if (!("type" in snapshot)) return null;
+  const identity = {
+    type: snapshot.type,
+    sessionId: snapshot.sessionId,
+    revision: snapshot.revision,
   };
+  // The schema guarantees one of the two fingerprints; their index signatures
+  // keep TypeScript from narrowing on it, so the branch is asserted here.
+  if (typeof snapshot.routeFingerprint === "string") {
+    const data = snapshot as GroundSnapshotWire;
+    return { ...identity, kind: "ground", fingerprint: data.routeFingerprint, data };
+  }
+  if (typeof snapshot.itineraryFingerprint === "string") {
+    const data = snapshot as TransitSnapshotWire;
+    return { ...identity, kind: "transit", fingerprint: data.itineraryFingerprint, data };
+  }
+  return null;
 }
 
 /**
@@ -128,13 +117,10 @@ export function applyNativeSnapshot(
     return {
       ok: true,
       changed: current?.revision !== incoming.revision || current?.sessionId !== incoming.sessionId,
-      model: {
-        sessionId: incoming.sessionId,
-        revision: incoming.revision,
-        fingerprint: incoming.fingerprint,
-        kind: incoming.kind,
-        snapshot: incoming.data,
-      },
+      model:
+        incoming.kind === "ground"
+          ? { ...identityOf(incoming), kind: "ground", snapshot: incoming.data }
+          : { ...identityOf(incoming), kind: "transit", snapshot: incoming.data },
     };
   }
 
@@ -148,7 +134,7 @@ export function applyNativeSnapshot(
   if (incoming.revision <= current.revision) return { ok: false, reason: "stale" };
 
   const merged: Record<string, unknown> = { ...current.snapshot };
-  for (const field of HOT_FIELDS) {
+  for (const field of NATIVE_SNAPSHOT_HOT_FIELDS) {
     // A replacement can publish an empty tick before its next fix. Keep the
     // last authoritative position rather than resetting the walking banner.
     if (
@@ -162,11 +148,17 @@ export function applyNativeSnapshot(
     if (field in incoming.data) merged[field] = incoming.data[field];
   }
 
+  // Only the hot values of a delta for the same session and fingerprint were
+  // folded in, so the merged record is still the kind of snapshot it was.
+  const model = { ...current, revision: incoming.revision, snapshot: merged } as NativeReadModel;
+  return { ok: true, changed: true, model, baseRevision: current.revision };
+}
+
+function identityOf(incoming: SnapshotEnvelope): ReadModelIdentity {
   return {
-    ok: true,
-    changed: true,
-    model: { ...current, revision: incoming.revision, snapshot: merged },
-    baseRevision: current.revision,
+    sessionId: incoming.sessionId,
+    revision: incoming.revision,
+    fingerprint: incoming.fingerprint,
   };
 }
 
@@ -184,15 +176,13 @@ export function projectionOf(
   type: SnapshotEnvelope["type"],
   baseRevision?: number,
 ): NativeNavigationProjection {
-  const raw = model.snapshot;
-  const pick = <T>(key: string): T | undefined => (key in raw ? (raw[key] as T) : undefined);
-
+  const { snapshot } = model;
   const projection: NativeNavigationProjection = {
     sessionId: model.sessionId,
     revision: model.revision,
     fingerprint: model.fingerprint,
     kind: model.kind,
-    status: nativeStatusToNavStatus(raw.status),
+    status: nativeStatusToNavStatus(snapshot.status),
     ...(type === "progress" && baseRevision !== undefined ? { baseRevision } : {}),
   };
 
@@ -203,46 +193,45 @@ export function projectionOf(
     if (value !== undefined) projection[key] = value;
   };
 
-  assign("mode", pick<NativeNavigationProjection["mode"]>("mode"));
-  assign("route", pick<NativeNavigationProjection["route"]>("route"));
-  assign("routeProvider", pick<string>("routeProvider") ?? undefined);
-  assign(
-    "routeSelectionIntent",
-    pick<NativeNavigationProjection["routeSelectionIntent"]>("routeSelectionIntent"),
-  );
-  assign("progress", pick<NativeNavigationProjection["progress"]>("progress"));
-  assign("offRoute", pick<boolean>("offRoute"));
-  assign("weakGps", pick<boolean>("weakGps"));
-  assign("coasting", pick<boolean>("coasting"));
-  assign("currentSpeedLimit", pick<number | null>("currentSpeedLimit"));
-  assign("itinerary", pick<NativeNavigationProjection["itinerary"]>("itinerary"));
-  assign(
-    "transitReplanOptions",
-    pick<NativeNavigationProjection["transitReplanOptions"]>("transitReplanOptions"),
-  );
-  assign("transitCaptures", pick<NativeNavigationProjection["transitCaptures"]>("captures"));
-  assign("transitProgress", pick<NativeNavigationProjection["transitProgress"]>("transitProgress"));
-  const liveStatus = pick<{ refresh?: string }>("liveStatus");
-  if (liveStatus)
-    assign(
-      "liveDataUnavailable",
-      liveStatus.refresh === "broken" || liveStatus.refresh === "stale",
-    );
-  assign("connectivity", pick<NativeNavigationProjection["connectivity"]>("connectivity"));
-  assign("permissionMode", permissionModeOf(raw.permissionMode));
-  assign("alertAvailability", alertAvailabilityOf(raw.alightAlertAvailability));
-  assign("confidence", confidenceOf(raw.confidence, raw.coasting));
+  assign("connectivity", connectivityOf(snapshot.connectivity));
+  assign("permissionMode", permissionModeOf(snapshot.permissionMode));
 
-  // The followed route plus the alternatives the shell is still offering. A
-  // ground snapshot carries them separately; the UI reads one list.
-  const route = projection.route;
-  const alternatives = pick<unknown[]>("alternatives");
-  if (route && alternatives) {
-    projection.routes = [route, ...(alternatives as NonNullable<typeof route>[])];
-  } else if (route) {
-    projection.routes = [route];
+  // Routes, progress and itineraries are the engine's own shapes. The wire
+  // checks that each is an object; their bodies are typed as the engine's.
+  if (model.kind === "ground") {
+    const ground = model.snapshot;
+    assign("mode", travelModeOf(ground.mode));
+    assign("route", ground.route as Route | undefined);
+    assign("routeProvider", ground.routeProvider);
+    assign("routeSelectionIntent", routeSelectionIntentOf(ground.routeSelectionIntent));
+    assign("progress", ground.progress as NavProgress | null | undefined);
+    assign("offRoute", ground.offRoute);
+    assign("weakGps", ground.weakGps);
+    assign("coasting", ground.coasting);
+    assign("currentSpeedLimit", ground.currentSpeedLimit);
+    // A coasting ground session makes the same claim as transit's dead reckoning.
+    if (ground.coasting !== undefined) assign("confidence", ground.coasting ? "coasting" : "live");
+
+    // The followed route plus the alternatives the shell is still offering. A
+    // ground snapshot carries them separately; the UI reads one list.
+    const route = projection.route;
+    if (route) projection.routes = [route, ...((ground.alternatives ?? []) as unknown as Route[])];
+    return projection;
   }
 
+  const transit = model.snapshot;
+  assign("itinerary", transit.itinerary as NativeNavigationProjection["itinerary"]);
+  assign(
+    "transitReplanOptions",
+    transit.transitReplanOptions as NativeNavigationProjection["transitReplanOptions"],
+  );
+  assign("transitCaptures", transit.captures as TransitLegCapture[] | undefined);
+  assign("transitProgress", transit.transitProgress as TransitProgress | null | undefined);
+  const refresh = transit.liveStatus?.refresh;
+  if (transit.liveStatus)
+    assign("liveDataUnavailable", refresh === "broken" || refresh === "stale");
+  assign("alertAvailability", alertAvailabilityOf(transit.alightAlertAvailability));
+  assign("confidence", transitConfidenceOf(transit.confidence));
   return projection;
 }
 
@@ -253,29 +242,46 @@ function nativeStatusToNavStatus(status: unknown): NativeNavigationProjection["s
   return "navigating";
 }
 
-function permissionModeOf(value: unknown): NativeNavigationProjection["permissionMode"] {
-  return value === "denied" || value === "foreground" || value === "background" ? value : undefined;
+function travelModeOf(value: string | undefined): NativeNavigationProjection["mode"] {
+  return value === "driving" || value === "walking" || value === "cycling" || value === "motorcycle"
+    ? value
+    : undefined;
 }
 
-function alertAvailabilityOf(value: unknown): NativeNavigationProjection["alertAvailability"] {
+function routeSelectionIntentOf(
+  value: string | undefined,
+): NativeNavigationProjection["routeSelectionIntent"] {
+  return value === "automatic" || value === "userSelected" ? value : undefined;
+}
+
+/** The session's own `unknown` is no reading at all, so it is not shown as one. */
+function connectivityOf(value: string | undefined): NativeNavigationProjection["connectivity"] {
+  return value === "online" || value === "offline" ? value : undefined;
+}
+
+/** The session's grant: background tracking, or tracking only while the app is open. */
+function permissionModeOf(value: string | undefined): NativeNavigationProjection["permissionMode"] {
+  if (value === "background") return "background";
+  if (value === "foreground-only") return "foreground";
+  return undefined;
+}
+
+function alertAvailabilityOf(
+  value: string | undefined,
+): NativeNavigationProjection["alertAvailability"] {
   return value === "scheduled" || value === "unavailable" || value === "disabled"
     ? value
     : undefined;
 }
 
 /**
- * How much the session trusts its position.
- *
- * Transit reports it directly. Ground does not, but a coasting ground session is
- * exactly the same claim — dead reckoning between fixes — so it is derived rather
- * than left blank.
+ * How much a transit session trusts its position: a GPS fix, an estimate from
+ * the timetable (the same claim as coasting), or nothing current.
  */
-function confidenceOf(
-  reported: unknown,
-  coasting: unknown,
-): NativeNavigationProjection["confidence"] {
-  if (reported === "live" || reported === "coasting" || reported === "stale") return reported;
-  if (typeof coasting === "boolean") return coasting ? "coasting" : "live";
+function transitConfidenceOf(value: string | undefined): NativeNavigationProjection["confidence"] {
+  if (value === "gps") return "live";
+  if (value === "schedule") return "coasting";
+  if (value === "stale") return "stale";
   return undefined;
 }
 

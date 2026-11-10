@@ -1,4 +1,4 @@
-import type { GroundFullSnapshot } from "../navigation/snapshots/groundSnapshot";
+import type { GroundFullSnapshot } from "@openmapx/core/navigation";
 import { buildCarTripProjection } from "./CarTripProjection";
 
 const snapshot = {

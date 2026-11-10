@@ -2,6 +2,8 @@ import {
   MOBILE_PROTOCOL_MAX,
   MOBILE_PROTOCOL_MIN,
   type NativeToWebMessage,
+  type NativeToWebPayload,
+  type NativeToWebType,
   nativeToWebSchema,
   negotiateMobileProtocol,
   type ParseErrorCode,
@@ -241,7 +243,11 @@ export class NativeBridge {
   /* ------------------------------------------------------------ outbound --- */
 
   /** Sends a native-to-web message, queueing it until the page can receive it. */
-  send(type: NativeToWebMessage["type"], payload: unknown, options: SendOptions = {}): SendOutcome {
+  send<T extends NativeToWebType>(
+    type: T,
+    payload: NativeToWebPayload<T>,
+    options: SendOptions = {},
+  ): SendOutcome {
     return this.emit({ type, payload, ...options }, {}, options.forMessageId);
   }
 

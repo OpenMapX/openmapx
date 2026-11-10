@@ -175,6 +175,8 @@ export {
   NATIVE_TO_WEB_TYPES,
   type NativeCapabilities,
   type NativeToWebMessage,
+  type NativeToWebPayload,
+  type NativeToWebType,
   type NavigationStartPackage,
   nativeToWebSchema,
   navigationStartPackageSchema,
@@ -191,6 +193,8 @@ export {
   voiceEventSchema,
   WEB_TO_NATIVE_TYPES,
   type WebToNativeMessage,
+  type WebToNativePayload,
+  type WebToNativeType,
   webToNativeSchema,
 } from "./mobileProtocol";
 export {
@@ -211,6 +215,25 @@ export {
   type TransitMobileSession,
 } from "./mobileSession";
 export * from "./nativeIntake";
+export {
+  type GroundFullSnapshot,
+  type GroundProgressSnapshot,
+  type GroundSnapshotWire,
+  groundFullSnapshotSchema,
+  groundProgressSnapshotSchema,
+  groundSnapshotWireSchema,
+  NATIVE_SNAPSHOT_HOT_FIELDS,
+  NATIVE_SNAPSHOT_VERSION,
+  type NativeSnapshot,
+  type NativeSnapshotWire,
+  nativeSnapshotWireSchema,
+  type TransitFullSnapshot,
+  type TransitProgressSnapshot,
+  type TransitSnapshotWire,
+  transitFullSnapshotSchema,
+  transitProgressSnapshotSchema,
+  transitSnapshotWireSchema,
+} from "./nativeSnapshot";
 export {
   createNavigationSessionSnapshot,
   isNavigationSessionExpired,

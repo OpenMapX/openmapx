@@ -1,5 +1,10 @@
-import type { GroundMobileSession } from "@openmapx/core/navigation";
-import { routeFingerprint } from "@openmapx/core/navigation";
+import {
+  type GroundFullSnapshot,
+  type GroundMobileSession,
+  type GroundProgressSnapshot,
+  NATIVE_SNAPSHOT_VERSION,
+  routeFingerprint,
+} from "@openmapx/core/navigation";
 
 /**
  * What the page is told about a ground session.
@@ -16,58 +21,15 @@ import { routeFingerprint } from "@openmapx/core/navigation";
  * coordinate adds nothing it can use and is the most sensitive value the session
  * holds. Destination waypoints, routing options and any refresh material stay
  * native-side for the same reason.
+ *
+ * Both shapes are the shared snapshot contract (`nativeSnapshot` in core), which
+ * the page parses with its own, more tolerant schema.
  */
-
-export const GROUND_SNAPSHOT_VERSION = 1 as const;
-
-export interface GroundFullSnapshot {
-  version: typeof GROUND_SNAPSHOT_VERSION;
-  type: "full";
-  sessionId: string;
-  revision: number;
-  status: GroundMobileSession["status"];
-  kind: "ground";
-  mode: string;
-  routeFingerprint: string;
-  route: unknown;
-  alternatives: unknown[];
-  routeProvider?: string;
-  routeSelectionIntent: "automatic" | "userSelected";
-  progress: unknown;
-  weakGps: boolean;
-  offRoute: boolean;
-  coasting: boolean;
-  currentSpeedLimit: number | null;
-  settings: unknown;
-  locale: "en" | "de";
-  units: "metric" | "imperial";
-  connectivity: GroundMobileSession["connectivity"];
-  permissionMode: GroundMobileSession["permissionMode"];
-  reroute: unknown;
-}
-
-export interface GroundProgressSnapshot {
-  version: typeof GROUND_SNAPSHOT_VERSION;
-  type: "progress";
-  sessionId: string;
-  revision: number;
-  routeFingerprint: string;
-  status: GroundMobileSession["status"];
-  progress: unknown;
-  weakGps: boolean;
-  offRoute: boolean;
-  coasting: boolean;
-  currentSpeedLimit: number | null;
-  connectivity: GroundMobileSession["connectivity"];
-  reroute: unknown;
-}
-
-export type GroundSnapshot = GroundFullSnapshot | GroundProgressSnapshot;
 
 export function groundFullSnapshot(session: GroundMobileSession): GroundFullSnapshot {
   const { startPackage } = session.payload;
   return {
-    version: GROUND_SNAPSHOT_VERSION,
+    version: NATIVE_SNAPSHOT_VERSION,
     type: "full",
     sessionId: session.sessionId,
     revision: session.revision,
@@ -97,7 +59,7 @@ export function groundFullSnapshot(session: GroundMobileSession): GroundFullSnap
 
 export function groundProgressSnapshot(session: GroundMobileSession): GroundProgressSnapshot {
   return {
-    version: GROUND_SNAPSHOT_VERSION,
+    version: NATIVE_SNAPSHOT_VERSION,
     type: "progress",
     sessionId: session.sessionId,
     revision: session.revision,
@@ -110,75 +72,5 @@ export function groundProgressSnapshot(session: GroundMobileSession): GroundProg
     currentSpeedLimit: session.payload.currentSpeedLimit,
     connectivity: session.connectivity,
     reroute: structuredClone(session.payload.reroute),
-  };
-}
-
-/* ------------------------------------------------------ the web's side --- */
-
-export interface SnapshotView {
-  sessionId: string;
-  revision: number;
-  routeFingerprint: string;
-  full: GroundFullSnapshot;
-}
-
-export type ApplyResult =
-  | { ok: true; view: SnapshotView }
-  | { ok: false; reason: "need-full-snapshot" };
-
-/**
- * How a consumer folds a snapshot into what it is showing.
- *
- * Lives here rather than in the web app because both sides have to agree on it
- * exactly, and a disagreement is invisible until the page is drawing a puck on
- * the wrong road. The rules are deliberately unforgiving: a delta for a
- * different route, for a different session, or for a revision that did not move
- * forward is refused, and refusing means asking for a full snapshot rather than
- * guessing.
- */
-export function applyGroundSnapshot(
-  current: SnapshotView | null,
-  incoming: GroundSnapshot,
-): ApplyResult {
-  if (incoming.type === "full") {
-    return {
-      ok: true,
-      view: {
-        sessionId: incoming.sessionId,
-        revision: incoming.revision,
-        routeFingerprint: incoming.routeFingerprint,
-        full: incoming,
-      },
-    };
-  }
-
-  // A delta with nothing to apply it to is not an error, but it is not enough.
-  if (!current) return { ok: false, reason: "need-full-snapshot" };
-  if (incoming.sessionId !== current.sessionId) return { ok: false, reason: "need-full-snapshot" };
-  if (incoming.routeFingerprint !== current.routeFingerprint) {
-    // The route changed underneath the delta, so its progress refers to a line
-    // this consumer does not have.
-    return { ok: false, reason: "need-full-snapshot" };
-  }
-  if (incoming.revision <= current.revision) return { ok: false, reason: "need-full-snapshot" };
-
-  return {
-    ok: true,
-    view: {
-      ...current,
-      revision: incoming.revision,
-      full: {
-        ...current.full,
-        revision: incoming.revision,
-        status: incoming.status,
-        progress: incoming.progress,
-        weakGps: incoming.weakGps,
-        offRoute: incoming.offRoute,
-        coasting: incoming.coasting,
-        currentSpeedLimit: incoming.currentSpeedLimit,
-        connectivity: incoming.connectivity,
-        reroute: incoming.reroute,
-      },
-    },
   };
 }

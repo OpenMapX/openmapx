@@ -1,7 +1,10 @@
 import {
+  NATIVE_SNAPSHOT_VERSION,
   prepareTransitProgress,
   stripTransitSecretsForSnapshot,
+  type TransitFullSnapshot,
   type TransitMobileSession,
+  type TransitProgressSnapshot,
   transitProgressFromTick,
 } from "@openmapx/core/navigation";
 
@@ -14,54 +17,6 @@ import {
  * rather than assembling around it: an allowlist would leak the first time the
  * server moved the field, and a session's itinerary is server-shaped.
  */
-
-export const TRANSIT_SNAPSHOT_VERSION = 1 as const;
-
-export interface TransitFullSnapshot {
-  version: typeof TRANSIT_SNAPSHOT_VERSION;
-  type: "full";
-  sessionId: string;
-  revision: number;
-  status: TransitMobileSession["status"];
-  kind: "transit";
-  itineraryFingerprint: string;
-  itinerary: unknown;
-  captures: unknown;
-  transitReplanOptions: unknown;
-  currentLegIndex: number;
-  currentWalkStepIndex: number;
-  phase: string;
-  confidence: TransitMobileSession["payload"]["confidence"];
-  /** The engine's leg, phase and position on it, as the page's `transitProgress`. */
-  transitProgress: unknown;
-  settings: unknown;
-  locale: "en" | "de";
-  units: "metric" | "imperial";
-  connectivity: TransitMobileSession["connectivity"];
-  permissionMode: TransitMobileSession["permissionMode"];
-  /** Whether live data is current, and whether a replan is wanted or stuck. */
-  liveStatus: { refresh: string; hasLiveToken: boolean };
-  /** Whether the local get-off backup could actually be scheduled. */
-  alightAlertAvailability: "scheduled" | "unavailable" | "disabled";
-}
-
-export interface TransitProgressSnapshot {
-  version: typeof TRANSIT_SNAPSHOT_VERSION;
-  type: "progress";
-  sessionId: string;
-  revision: number;
-  itineraryFingerprint: string;
-  status: TransitMobileSession["status"];
-  currentLegIndex: number;
-  currentWalkStepIndex: number;
-  phase: string;
-  confidence: TransitMobileSession["payload"]["confidence"];
-  transitProgress: unknown;
-  connectivity: TransitMobileSession["connectivity"];
-  liveStatus: { refresh: string; hasLiveToken: boolean };
-}
-
-export type TransitSnapshot = TransitFullSnapshot | TransitProgressSnapshot;
 
 function liveStatus(session: TransitMobileSession) {
   return {
@@ -82,7 +37,7 @@ function alightAvailability(
 export function transitFullSnapshot(session: TransitMobileSession): TransitFullSnapshot {
   const { startPackage, tickState } = session.payload;
   return {
-    version: TRANSIT_SNAPSHOT_VERSION,
+    version: NATIVE_SNAPSHOT_VERSION,
     type: "full",
     sessionId: session.sessionId,
     revision: session.revision,
@@ -96,16 +51,19 @@ export function transitFullSnapshot(session: TransitMobileSession): TransitFullS
     currentWalkStepIndex: tickState.currentWalkStepIndex,
     phase: tickState.phase,
     confidence: session.payload.confidence,
-    transitProgress: structuredClone(
-      session.payload.progress ??
-        transitProgressFromTick(
-          {
-            ...tickState,
-            ...(session.lastAcceptedFix ? { lastAcceptedFix: session.lastAcceptedFix } : {}),
-          },
-          prepareTransitProgress(startPackage.itinerary as never),
-        ),
-    ),
+    // Spread into a plain record, which is what the snapshot carries.
+    transitProgress: {
+      ...structuredClone(
+        session.payload.progress ??
+          transitProgressFromTick(
+            {
+              ...tickState,
+              ...(session.lastAcceptedFix ? { lastAcceptedFix: session.lastAcceptedFix } : {}),
+            },
+            prepareTransitProgress(startPackage.itinerary as never),
+          ),
+      ),
+    },
     settings: structuredClone(startPackage.settings),
     locale: session.locale,
     units: session.units,
@@ -119,7 +77,7 @@ export function transitFullSnapshot(session: TransitMobileSession): TransitFullS
 export function transitProgressSnapshot(session: TransitMobileSession): TransitProgressSnapshot {
   const { tickState } = session.payload;
   return {
-    version: TRANSIT_SNAPSHOT_VERSION,
+    version: NATIVE_SNAPSHOT_VERSION,
     type: "progress",
     sessionId: session.sessionId,
     revision: session.revision,

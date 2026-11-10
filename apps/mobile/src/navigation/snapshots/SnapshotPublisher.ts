@@ -1,8 +1,7 @@
-import type { GroundSnapshot } from "./groundSnapshot";
-import type { TransitSnapshot } from "./transitSnapshot";
+import type { NativeSnapshot } from "@openmapx/core/navigation";
 
 /** Either mode’s projection; the publisher’s policy is identical for both. */
-export type PublishableSnapshot = GroundSnapshot | TransitSnapshot;
+export type PublishableSnapshot = NativeSnapshot;
 
 /**
  * How often the page hears about progress.

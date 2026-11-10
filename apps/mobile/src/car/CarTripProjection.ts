@@ -1,4 +1,5 @@
 import type { ManeuverLane, ManeuverSign } from "@openmapx/core";
+import type { GroundFullSnapshot } from "@openmapx/core/navigation";
 import {
   type GuidanceIconName,
   guidanceApproachMeters,
@@ -8,7 +9,6 @@ import {
   upcomingManeuverIndex,
 } from "@openmapx/core/navigation";
 import { z } from "zod";
-import type { GroundFullSnapshot } from "../navigation/snapshots/groundSnapshot";
 
 const nonnegative = z.number().finite().nonnegative();
 /** The phone banner's rounding (`measurementDistanceParts`), so the car shows the same. */

@@ -1,4 +1,5 @@
 import { useNavigationStore } from "@openmapx/core";
+import type { GroundSnapshotWire } from "@openmapx/core/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeMap } from "@/test";
 import {
@@ -139,7 +140,10 @@ describe("car surface", () => {
     receive({
       ...fixture.message,
       payload: {
-        snapshot: { ...fixture.message.payload.snapshot, route: { geometry: "invalid" } },
+        snapshot: {
+          ...(fixture.message.payload.snapshot as GroundSnapshotWire),
+          route: { geometry: "invalid" },
+        },
       },
     });
     expect(error).toHaveBeenCalledWith("invalid-snapshot");

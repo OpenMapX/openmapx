@@ -1,6 +1,9 @@
 import type { WebToNativeMessage } from "@openmapx/core/navigation";
-import type { CommandResponse } from "../navigation/NavigationCoordinator";
-import type { SendOutcome } from "./nativeBridge";
+import {
+  type BridgePort,
+  type CommandResponse,
+  sendResponse,
+} from "../navigation/NavigationCoordinator";
 
 /**
  * The page's one-shot requests: a location fix, opening OS settings and a
@@ -31,11 +34,7 @@ export type AuxiliaryCommandHandler = (
 export async function answerCommand(
   message: WebToNativeMessage,
   handle: AuxiliaryCommandHandler,
-  send: (
-    type: CommandResponse["type"],
-    payload: unknown,
-    options: { forMessageId: string; sessionId?: string; revision?: number },
-  ) => SendOutcome,
+  send: BridgePort["send"],
 ): Promise<void> {
   if (message.type === "web.hello") return;
   const response = await handle(message);
@@ -43,11 +42,7 @@ export async function answerCommand(
     send("native.error", { code: "unsupported-capability" }, { forMessageId: message.messageId });
     return;
   }
-  const outcome = send(response.type, response.payload, {
-    forMessageId: message.messageId,
-    ...(response.sessionId === undefined ? {} : { sessionId: response.sessionId }),
-    ...(response.revision === undefined ? {} : { revision: response.revision }),
-  });
+  const outcome = sendResponse(send, response, { forMessageId: message.messageId });
   // An answer that fails its schema is refused instead, so the page is not
   // left waiting out its deadline.
   if (outcome === "invalid" && response.type !== "native.error") {

@@ -116,6 +116,11 @@ function deliverHello(
   context.deliver(helloReply(forMessageId, overrides));
 }
 
+/** The least a snapshot carries for the page to place it. */
+function snapshotAt(revision: number) {
+  return { type: "progress", sessionId: "s1", revision, routeFingerprint: "2:abc" } as const;
+}
+
 function snapshotMessage(revision: number) {
   return {
     protocolVersion: MOBILE_PROTOCOL_MAX,
@@ -123,7 +128,7 @@ function snapshotMessage(revision: number) {
     messageId: `n-snap-${revision}`,
     channelNonce: NONCE,
     sentAtMs: 1_700_000_000_000,
-    payload: { snapshot: { revision } },
+    payload: { snapshot: snapshotAt(revision) },
   };
 }
 
@@ -187,6 +192,8 @@ describe("voice dispatch", () => {
     expect(() => h.client.send("voice.start", { requestId: "r", locale: "de_DE" })).toThrow(
       BridgeError,
     );
+    // @ts-expect-error A payload outside its command's schema does not compile.
+    expect(() => h.client.send("voice.stop", { requestId: 7 })).toThrow(BridgeError);
     const event = {
       ...snapshotMessage(1),
       type: "voice.event",
@@ -374,7 +381,7 @@ describe("BridgeClient.request", () => {
     context.deliver({
       ...snapshotMessage(2),
       protocolVersion: MOBILE_PROTOCOL_MAX,
-      payload: { snapshot: { revision: 2 }, forMessageId: secondMessageId },
+      payload: { snapshot: snapshotAt(2), forMessageId: secondMessageId },
     });
 
     expect(context.client.pendingCount).toBe(1);
@@ -383,7 +390,7 @@ describe("BridgeClient.request", () => {
     context.deliver({
       ...snapshotMessage(1),
       protocolVersion: MOBILE_PROTOCOL_MAX,
-      payload: { snapshot: { revision: 1 }, forMessageId: firstMessageId },
+      payload: { snapshot: snapshotAt(1), forMessageId: firstMessageId },
     });
 
     await expect(first).resolves.toMatchObject({ payload: { snapshot: { revision: 1 } } });
@@ -400,14 +407,14 @@ describe("BridgeClient.request", () => {
     context.deliver({
       ...snapshotMessage(7),
       protocolVersion: MOBILE_PROTOCOL_MAX,
-      payload: { snapshot: { revision: 7 }, forMessageId: messageId },
+      payload: { snapshot: snapshotAt(7), forMessageId: messageId },
     });
 
     await expect(pending).resolves.toMatchObject({ type: "snapshot.update" });
     expect(seen).toEqual([
       expect.objectContaining({
         type: "snapshot.update",
-        payload: expect.objectContaining({ snapshot: { revision: 7 } }),
+        payload: expect.objectContaining({ snapshot: snapshotAt(7) }),
       }),
     ]);
   });

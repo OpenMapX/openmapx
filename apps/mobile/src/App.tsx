@@ -235,7 +235,7 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
       port: intakePort,
       scheme: config.scheme,
       currentNonce: () => composed.registry.current()?.nonce,
-      send: (type, payload) => composed.bridge.send(type, payload),
+      send: (type, payload, options) => composed.bridge.send(type, payload, options),
       canApply: async () => {
         const runtime = await navigation;
         if (runtime === null) {

@@ -1,10 +1,18 @@
-import type { NativeToWebMessage, WebToNativeMessage } from "@openmapx/core/navigation";
+import type {
+  NativeToWebPayload,
+  NativeToWebType,
+  WebToNativeMessage,
+} from "@openmapx/core/navigation";
 import { NativeIntakeError, type NativeIntakePort } from "./nativeIntakeModule";
 
 interface Dependencies {
   port: NativeIntakePort;
   currentNonce(): string | undefined;
-  send(type: NativeToWebMessage["type"], payload: unknown): unknown;
+  send<T extends NativeToWebType>(
+    type: T,
+    payload: NativeToWebPayload<T>,
+    options: { forMessageId: string },
+  ): unknown;
   canApply(): Promise<boolean>;
   scheme: string;
 }
@@ -14,8 +22,8 @@ export class IntakeController {
   async dispatch(message: WebToNativeMessage): Promise<void> {
     const current = () => this.deps.currentNonce() === message.channelNonce;
     if (!current() || message.protocolVersion < 4) return;
-    const reply = (type: NativeToWebMessage["type"], payload: Record<string, unknown>) => {
-      if (current()) this.deps.send(type, { ...payload, forMessageId: message.messageId });
+    const reply = <T extends NativeToWebType>(type: T, payload: NativeToWebPayload<T>) => {
+      if (current()) this.deps.send(type, payload, { forMessageId: message.messageId });
     };
     try {
       switch (message.type) {

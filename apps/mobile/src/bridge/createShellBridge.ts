@@ -95,7 +95,7 @@ export function createShellBridge(options: ShellBridgeOptions): ShellBridge {
       // an uncomposed capability look like a broken implementation.
       bridge.send(
         "native.error",
-        { code: "unsupported-capability", forMessageId: message.messageId },
+        { code: "unsupported-capability" },
         { forMessageId: message.messageId },
       );
     },

@@ -13,6 +13,7 @@ import {
   type CommandResponse,
   type CoordinatorDeps,
   NavigationCoordinator,
+  type SendStamp,
 } from "./NavigationCoordinator";
 import { type NavigationProcessor, ProcessorRegistry } from "./processor";
 
@@ -62,7 +63,7 @@ function fakeGroundProcessor(): NavigationProcessor<"ground"> {
 interface Harness {
   coordinator: NavigationCoordinator;
   repository: SessionRepository;
-  sent: Array<{ type: string; payload: unknown; options: Record<string, unknown> }>;
+  sent: Array<{ type: string; payload: unknown; options: SendStamp }>;
   effectLog: string[];
   observedAtStart: Array<MobileNavigationSession | null>;
   deps: CoordinatorDeps;
@@ -86,7 +87,7 @@ async function harness(
   const processor = overrides.processor === undefined ? fakeGroundProcessor() : overrides.processor;
   if (processor) processors.register(processor);
 
-  const sent: Array<{ type: string; payload: unknown; options: Record<string, unknown> }> = [];
+  const sent: Array<{ type: string; payload: unknown; options: SendStamp }> = [];
   const effectLog: string[] = [];
   const observedAtStart: Array<MobileNavigationSession | null> = [];
   const fail = (label: string) => async () => {

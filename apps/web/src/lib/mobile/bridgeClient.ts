@@ -4,6 +4,8 @@ import {
   type NativeToWebMessage,
   nativeToWebSchema,
   type WebToNativeMessage,
+  type WebToNativePayload,
+  type WebToNativeType,
   webToNativeSchema,
 } from "@openmapx/core/navigation";
 import {
@@ -262,7 +264,7 @@ export class BridgeClient {
    * can never be mistaken for the reply the command expected.
    */
   request(
-    type: WebToNativeMessage["type"],
+    type: WebToNativeType,
     payload: unknown,
     options: RequestOptions = {},
   ): Promise<NativeToWebMessage> {
@@ -313,7 +315,11 @@ export class BridgeClient {
   }
 
   /** Sends a command whose protocol contract intentionally has no direct reply. */
-  send(type: WebToNativeMessage["type"], payload: unknown, options: RequestOptions = {}): void {
+  send<T extends WebToNativeType>(
+    type: T,
+    payload: WebToNativePayload<T>,
+    options: RequestOptions = {},
+  ): void {
     if (this.closed) throw new BridgeError("channel-reset");
     if (!this.transport || !this.nonce) throw new BridgeError("no-transport");
     if (options.requireHandshake !== false) {

@@ -61,11 +61,7 @@ export interface ForegroundNavigationOptions {
   apiOrigin: string;
   locale: MobileLocale;
   /** Sends a message to the page; reports whether it was sent or queued. */
-  send(
-    type: Parameters<BridgePort["send"]>[0],
-    payload: unknown,
-    options?: { sessionId?: string; revision?: number; forMessageId?: string },
-  ): "sent" | "queued" | "dropped" | "invalid";
+  send: BridgePort["send"];
   permissionUi: PermissionUi;
   isAppActive(): boolean;
   /** Answers the page's one-shot requests, beside the navigation queue. */

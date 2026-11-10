@@ -135,7 +135,7 @@ export function MobileRuntimeProvider({ children, webBuildId, scope }: MobileRun
         return;
       }
       if (message.type === "snapshot.update") {
-        const incoming = envelopeOf((message.payload as { snapshot?: unknown }).snapshot);
+        const incoming = envelopeOf(message.payload.snapshot);
         if (!incoming) return;
         const outcome = applyNativeSnapshot(readModelRef.current, incoming);
         if (!outcome.ok) {

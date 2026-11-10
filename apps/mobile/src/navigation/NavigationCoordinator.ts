@@ -4,7 +4,9 @@ import {
   isMobileSessionExpired,
   type MobileNavigationSession,
   mergeTransitRefresh,
-  type NativeToWebMessage,
+  type NativeSnapshot,
+  type NativeToWebPayload,
+  type NativeToWebType,
   onRerouteFailed,
   onRerouteSucceeded,
   prepareTransitProgress,
@@ -43,20 +45,50 @@ import type { RefreshOutcome } from "./transit/TransitRefreshService";
  * for a state that was never persisted.
  */
 
-export interface CommandResponse {
-  type: NativeToWebMessage["type"];
-  payload: unknown;
+/** A reply to the page: one message type with its payload. */
+export type CommandResponse = {
+  [T in NativeToWebType]: {
+    type: T;
+    payload: NativeToWebPayload<T>;
+    sessionId?: string;
+    revision?: number;
+  };
+}[NativeToWebType];
+
+export interface SendStamp {
   sessionId?: string;
   revision?: number;
+  forMessageId?: string;
 }
 
 export interface BridgePort {
   /** `invalid` means the message failed its schema and was not sent. */
-  send(
-    type: NativeToWebMessage["type"],
-    payload: unknown,
-    options?: { sessionId?: string; revision?: number; forMessageId?: string },
+  send<T extends NativeToWebType>(
+    type: T,
+    payload: NativeToWebPayload<T>,
+    options?: SendStamp,
   ): SendOutcome;
+}
+
+/**
+ * Sends a reply built elsewhere. Its type and payload were paired when the
+ * reply was built; TypeScript cannot follow that pairing through a union, so it
+ * is widened here, once.
+ */
+export function sendResponse(
+  send: BridgePort["send"],
+  response: CommandResponse,
+  stamp: SendStamp,
+): SendOutcome {
+  return (send as (type: NativeToWebType, payload: unknown, options?: SendStamp) => SendOutcome)(
+    response.type,
+    response.payload,
+    {
+      ...(response.sessionId === undefined ? {} : { sessionId: response.sessionId }),
+      ...(response.revision === undefined ? {} : { revision: response.revision }),
+      ...stamp,
+    },
+  );
 }
 
 export interface PermissionPort {
@@ -127,11 +159,9 @@ function scheduleWithTimer(callback: () => void, delayMs: number): () => void {
   return () => clearTimeout(timer);
 }
 
-function errorResponse(code: string, forMessageId?: string): CommandResponse {
-  return {
-    type: "native.error",
-    payload: forMessageId ? { code, forMessageId } : { code },
-  };
+/** A refusal; the bridge adds the id of the command it answers. */
+function errorResponse(code: string): CommandResponse {
+  return { type: "native.error", payload: { code } };
 }
 
 export class NavigationCoordinator {
@@ -282,7 +312,7 @@ export class NavigationCoordinator {
       response = await this.route(command, now);
     } catch {
       this.deps.diagnostics.record("typed.error", { scope: "command", type: command.type });
-      response = errorResponse("internal-error", command.messageId);
+      response = errorResponse("internal-error");
     }
 
     if (response && MUTATING.has(command.type)) {
@@ -298,11 +328,11 @@ export class NavigationCoordinator {
   }
 
   private reply(response: CommandResponse, forMessageId: string): void {
-    const outcome = this.deps.bridge.send(response.type, response.payload, {
-      ...(response.sessionId === undefined ? {} : { sessionId: response.sessionId }),
-      ...(response.revision === undefined ? {} : { revision: response.revision }),
-      forMessageId,
-    });
+    const outcome = sendResponse(
+      (type, payload, options) => this.deps.bridge.send(type, payload, options),
+      response,
+      { forMessageId },
+    );
     // A reply that fails its schema never leaves; the page would otherwise wait
     // out its deadline for an answer that was refused here.
     if (outcome === "invalid" && response.type !== "native.error") {
@@ -327,7 +357,7 @@ export class NavigationCoordinator {
       case "intake.read":
       case "intake.complete":
         // Intake is composed by the visible shell, never the headless navigator.
-        return errorResponse("unsupported-capability", command.messageId);
+        return errorResponse("unsupported-capability");
       case "session.prepare":
         return this.prepare(command, now);
       case "session.start":
@@ -352,7 +382,7 @@ export class NavigationCoordinator {
         // Answered by the composition beside this queue (`isAuxiliaryCommand`):
         // a prompt or a sign-in must not hold up location batches. One that
         // reaches a coordinator with no such handler is refused, not dropped.
-        return errorResponse("unsupported-capability", command.messageId);
+        return errorResponse("unsupported-capability");
     }
   }
 
@@ -365,11 +395,11 @@ export class NavigationCoordinator {
     const { repository, processors, newSessionId } = this.deps;
     const kind = command.payload.startPackage.kind;
     const processor = processors.get(kind);
-    if (!processor) return errorResponse("mode-unsupported", command.messageId);
+    if (!processor) return errorResponse("mode-unsupported");
 
     const existing = await repository.loadActive(now);
     if (existing && !this.isTerminal(existing) && !isMobileSessionExpired(existing, now)) {
-      return errorResponse("session-active", command.messageId);
+      return errorResponse("session-active");
     }
 
     const prepared = processor.prepare(command.payload.startPackage as never, {
@@ -378,10 +408,10 @@ export class NavigationCoordinator {
       // Upgraded to `background` only once the user has actually granted it.
       permissionMode: "foreground-only",
     });
-    if (!prepared.ok) return errorResponse(prepared.code, command.messageId);
+    if (!prepared.ok) return errorResponse(prepared.code);
 
     const created = await repository.createPreparing(prepared.session);
-    if (!created.ok) return errorResponse(created.code, command.messageId);
+    if (!created.ok) return errorResponse(created.code);
 
     return {
       type: "session.prepared",
@@ -409,12 +439,11 @@ export class NavigationCoordinator {
   ): Promise<CommandResponse> {
     const { repository, permissions } = this.deps;
     const current = await repository.loadActive(now);
-    if (!current) return errorResponse("no-session", command.messageId);
-    if (!this.matches(command, current))
-      return errorResponse("revision-conflict", command.messageId);
-    if (current.status !== "preparing") return errorResponse("invalid-state", command.messageId);
+    if (!current) return errorResponse("no-session");
+    if (!this.matches(command, current)) return errorResponse("revision-conflict");
+    if (current.status !== "preparing") return errorResponse("invalid-state");
     if (!this.deps.processors.supports(current.kind)) {
-      return errorResponse("mode-unsupported", command.messageId);
+      return errorResponse("mode-unsupported");
     }
     // Android refuses to start a location foreground service from the
     // background, and asking for permission while invisible is a prompt the user
@@ -425,16 +454,16 @@ export class NavigationCoordinator {
         activityVisible: permissions.isAppActive(),
       };
     if (!allowsNavigationStart(startContext, await permissions.state()))
-      return errorResponse("app-not-visible", command.messageId);
+      return errorResponse("app-not-visible");
 
     const decision =
       startContext.kind === "car" ? "background" : await permissions.requestForStart();
     if (decision === "denied") {
       await this.endSession(current, "error", now, "command");
-      return errorResponse("permission-denied", command.messageId);
+      return errorResponse("permission-denied");
     }
 
-    if (!valid()) return errorResponse("invalid-state", command.messageId);
+    if (!valid()) return errorResponse("invalid-state");
     const committed = await repository.compareAndSwap(
       current.sessionId,
       current.revision,
@@ -453,14 +482,14 @@ export class NavigationCoordinator {
       }),
       now,
     );
-    if (!committed.ok) return errorResponse(committed.code, command.messageId);
+    if (!committed.ok) return errorResponse(committed.code);
 
     const { failed } = await this.deps.effects.run(committed.effects);
     if (failed > 0) {
       // The driver could not be started, so the session must not claim it is
       // tracking. Terminalise atomically rather than leaving a phantom.
       await this.endSession(committed.session, "error", now, "command");
-      return errorResponse("driver-start-failed", command.messageId);
+      return errorResponse("driver-start-failed");
     }
 
     return {
@@ -478,7 +507,7 @@ export class NavigationCoordinator {
     now: number,
   ): Promise<CommandResponse> {
     const current = await this.deps.repository.loadActive(now);
-    if (!current) return errorResponse("no-session", command.messageId);
+    if (!current) return errorResponse("no-session");
     if (
       !(
         current.kind === "transit" &&
@@ -488,22 +517,21 @@ export class NavigationCoordinator {
       ) &&
       !this.matches(command, current)
     )
-      return errorResponse("revision-conflict", command.messageId);
-    if (current.status !== "active") return errorResponse("invalid-state", command.messageId);
+      return errorResponse("revision-conflict");
+    if (current.status !== "active") return errorResponse("invalid-state");
 
     const processor = this.deps.processors.get(current.kind);
-    if (!processor) return errorResponse("mode-unsupported", command.messageId);
+    if (!processor) return errorResponse("mode-unsupported");
     if (command.payload.startPackage.kind !== current.kind) {
       // Switching mode mid-session is a new session, not a replacement.
-      return errorResponse("mode-mismatch", command.messageId);
+      return errorResponse("mode-mismatch");
     }
 
     const outcome = processor.replace(current as never, command.payload.startPackage, now);
-    if ("ok" in outcome && outcome.ok === false)
-      return errorResponse(outcome.code, command.messageId);
+    if ("ok" in outcome && outcome.ok === false) return errorResponse(outcome.code);
 
     const committed = await this.commit(current, outcome as ProcessorMutation, now);
-    if (!committed.ok) return errorResponse(committed.code, command.messageId);
+    if (!committed.ok) return errorResponse(committed.code);
 
     return {
       type: "session.replaced",
@@ -524,18 +552,18 @@ export class NavigationCoordinator {
       current.sessionId !== command.sessionId ||
       current.payload.startPackage.itineraryFingerprint !== command.payload.itineraryFingerprint
     )
-      return errorResponse("revision-conflict", command.messageId);
+      return errorResponse("revision-conflict");
     const processor = this.deps.processors.get("transit");
-    if (!processor?.repairTransitWalk) return errorResponse("mode-unsupported", command.messageId);
+    if (!processor?.repairTransitWalk) return errorResponse("mode-unsupported");
     const result = processor.repairTransitWalk(
       current as never,
       command.payload.legIndex,
       command.payload.route as never,
       now,
     );
-    if ("ok" in result) return errorResponse(result.code, command.messageId);
+    if ("ok" in result) return errorResponse(result.code);
     const committed = await this.commit(current, result, now);
-    if (!committed.ok) return errorResponse(committed.code, command.messageId);
+    if (!committed.ok) return errorResponse(committed.code);
     await this.deps.effects.run(committed.effects);
     return this.snapshot(now);
   }
@@ -545,13 +573,13 @@ export class NavigationCoordinator {
     now: number,
   ): Promise<CommandResponse> {
     const current = await this.deps.repository.loadActive(now);
-    if (current?.kind !== "transit") return errorResponse("no-session", command.messageId);
+    if (current?.kind !== "transit") return errorResponse("no-session");
     const action = command.payload;
     if (
       current.sessionId !== command.sessionId ||
       current.payload.startPackage.itineraryFingerprint !== action.itineraryFingerprint
     )
-      return errorResponse("revision-conflict", command.messageId);
+      return errorResponse("revision-conflict");
     if (current.payload.tickState.lastActionId === action.actionId) return this.snapshot(now);
     // Arriving at the selected platform may race the tap; the processor still
     // validates that this board action targets the same immediately selected ride.
@@ -563,19 +591,19 @@ export class NavigationCoordinator {
       (current.payload.tickState.phase !== action.expectedPhase && !boardPhaseRace) ||
       (current.status !== "active" && !(current.status === "arrived" && action.type === "undo"))
     )
-      return errorResponse("invalid-state", command.messageId);
+      return errorResponse("invalid-state");
     const processor = this.deps.processors.get("transit");
-    if (!processor?.transitAction) return errorResponse("mode-unsupported", command.messageId);
+    if (!processor?.transitAction) return errorResponse("mode-unsupported");
     const outcome = processor.transitAction(
       current as never,
       { type: action.type, legIndex: action.legIndex },
       now,
     );
-    if ("ok" in outcome) return errorResponse(outcome.code, command.messageId);
+    if ("ok" in outcome) return errorResponse(outcome.code);
     if (outcome.session.kind === "transit")
       outcome.session.payload.tickState.lastActionId = action.actionId;
     const committed = await this.commit(current, outcome, now);
-    if (!committed.ok) return errorResponse(committed.code, command.messageId);
+    if (!committed.ok) return errorResponse(committed.code);
     await this.deps.effects.run(committed.effects);
     return {
       type: "snapshot.update",
@@ -597,9 +625,9 @@ export class NavigationCoordinator {
     let committed: CommitResult = { ok: false, code: "no-active-session" };
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const current = await this.deps.repository.loadActive(now);
-      if (!current) return errorResponse("no-session", command.messageId);
+      if (!current) return errorResponse("no-session");
       if (command.sessionId !== undefined && command.sessionId !== current.sessionId)
-        return errorResponse("revision-conflict", command.messageId);
+        return errorResponse("revision-conflict");
       committed = await this.deps.repository.compareAndSwap(
         current.sessionId,
         current.revision,
@@ -610,7 +638,7 @@ export class NavigationCoordinator {
       // swap; the patch is then applied once more on top of that revision.
       if (committed.ok || committed.code !== "revision-conflict") break;
     }
-    if (!committed.ok) return errorResponse(committed.code, command.messageId);
+    if (!committed.ok) return errorResponse(committed.code);
     await this.deps.effects.run(committed.effects);
 
     return {
@@ -643,10 +671,8 @@ export class NavigationCoordinator {
    * server shaped, so the reply still carried it. Anything leaving native goes
    * through the builders, which strip by key at every depth.
    */
-  private snapshotOf(session: MobileNavigationSession): Record<string, unknown> {
-    return session.kind === "ground"
-      ? (groundFullSnapshot(session) as unknown as Record<string, unknown>)
-      : (transitFullSnapshot(session) as unknown as Record<string, unknown>);
+  private snapshotOf(session: MobileNavigationSession): NativeSnapshot {
+    return session.kind === "ground" ? groundFullSnapshot(session) : transitFullSnapshot(session);
   }
 
   // Ending a session.
@@ -664,7 +690,7 @@ export class NavigationCoordinator {
       // to act on. With no trip named there is nothing to acknowledge, and the
       // page treats `no-session` as already stopped.
       const sessionId = command.sessionId;
-      if (!sessionId) return errorResponse("no-session", command.messageId);
+      if (!sessionId) return errorResponse("no-session");
       const ack = await repository.readTerminalAck(sessionId);
       return {
         type: "session.stopped",
@@ -677,7 +703,7 @@ export class NavigationCoordinator {
       };
     }
     if (command.sessionId !== undefined && command.sessionId !== current.sessionId) {
-      return errorResponse("revision-conflict", command.messageId);
+      return errorResponse("revision-conflict");
     }
 
     // The reply to this command is the page's notice of the end.

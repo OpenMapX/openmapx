@@ -13,6 +13,11 @@ import {
 } from "./nativeBridge";
 
 const WEB_ORIGIN = "https://openmapx.com";
+/** The least a progress snapshot must carry for the page to place it. */
+function progressSnapshot(revision: number) {
+  return { type: "progress", sessionId: "s1", revision, routeFingerprint: "2:abc" } as const;
+}
+
 const NOW = 1_700_000_000_000;
 
 const SHELL: ShellDescription = {
@@ -497,8 +502,20 @@ describe("NativeBridge.send", () => {
   it("refuses a payload that does not match the protocol", async () => {
     const { bridge, injected } = await handshaken();
 
+    // @ts-expect-error A payload outside its message's schema does not compile.
     expect(bridge.send("permission.state", { permission: "omniscient" })).toBe("invalid");
     expect(injected).toHaveLength(1);
+  });
+
+  it("types each message's payload by its type", async () => {
+    const { bridge } = await handshaken();
+    const stopped = { sessionId: "s1", finalStatus: "stopped", revision: 1 } as const;
+
+    expect(bridge.send("session.stopped", stopped)).toBe("sent");
+    // @ts-expect-error One message's payload is not another's.
+    expect(bridge.send("permission.state", stopped)).toBe("invalid");
+    // @ts-expect-error A snapshot without its identity does not compile.
+    expect(bridge.send("snapshot.update", { snapshot: { revision: 3 } })).toBe("invalid");
   });
 
   it("reports a refused message by type, without its payload", () => {
@@ -506,6 +523,7 @@ describe("NativeBridge.send", () => {
     const { bridge, registry } = harness({ reportInvalid: (type) => reported.push(type) });
     registry.beginDocumentLoad(NOW);
 
+    // @ts-expect-error A payload outside its message's schema does not compile.
     expect(bridge.send("permission.state", { permission: "omniscient" })).toBe("invalid");
     expect(reported).toEqual(["permission.state"]);
   });
@@ -514,9 +532,9 @@ describe("NativeBridge.send", () => {
     const { bridge, registry, injected } = harness();
     const channel = registry.beginDocumentLoad(NOW);
 
-    bridge.send("snapshot.update", { snapshot: { revision: 1 } });
-    bridge.send("snapshot.update", { snapshot: { revision: 2 } });
-    bridge.send("snapshot.update", { snapshot: { revision: 3 } });
+    bridge.send("snapshot.update", { snapshot: progressSnapshot(1) });
+    bridge.send("snapshot.update", { snapshot: progressSnapshot(2) });
+    bridge.send("snapshot.update", { snapshot: progressSnapshot(3) });
 
     expect(bridge.queuedCount).toBe(1);
     await bridge.receive({ url: WEB_ORIGIN, data: hello(channel.nonce) });
@@ -595,7 +613,7 @@ describe("intake protocol compatibility", () => {
   it("stamps pre-handshake navigation output with the selected older version", async () => {
     const { bridge, registry, injected } = harness();
     const channel = registry.beginDocumentLoad(NOW);
-    expect(bridge.send("snapshot.update", { snapshot: { active: true } })).toBe("queued");
+    expect(bridge.send("snapshot.update", { snapshot: progressSnapshot(1) })).toBe("queued");
     expect(
       bridge.send("session.stopped", {
         sessionId: "before-hello",

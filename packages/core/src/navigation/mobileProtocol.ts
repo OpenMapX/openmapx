@@ -8,6 +8,7 @@ import {
   intakeItemSchema,
   MAX_INTAKE_FILE_BYTES,
 } from "./nativeIntake";
+import { nativeSnapshotWireSchema } from "./nativeSnapshot";
 
 /**
  * The complete wire contract between the OpenMapX web UI and the installed
@@ -675,7 +676,7 @@ export const nativeToWebSchema = z.discriminatedUnion("type", [
     "snapshot.update",
     z
       .object({
-        snapshot: z.record(z.string(), z.unknown()),
+        snapshot: nativeSnapshotWireSchema,
         forMessageId: boundedId.optional(),
       })
       .strict(),
@@ -750,6 +751,23 @@ export const mobileBridgeMessageSchema = z.union([webToNativeSchema, nativeToWeb
 export type WebToNativeMessage = z.infer<typeof webToNativeSchema>;
 export type NativeToWebMessage = z.infer<typeof nativeToWebSchema>;
 export type MobileBridgeMessage = z.infer<typeof mobileBridgeMessageSchema>;
+
+type WithoutCorrelation<P> = P extends unknown ? Omit<P, "forMessageId"> : never;
+
+/**
+ * What a native sender supplies for one message type: the payload its schema
+ * accepts, without the correlation id, which the bridge adds from the command
+ * being answered.
+ */
+export type NativeToWebPayload<T extends NativeToWebType> = WithoutCorrelation<
+  Extract<z.input<typeof nativeToWebSchema>, { type: T }>["payload"]
+>;
+
+/** What the page supplies for one command type: the payload its schema accepts. */
+export type WebToNativePayload<T extends WebToNativeType> = Extract<
+  z.input<typeof webToNativeSchema>,
+  { type: T }
+>["payload"];
 
 // Parsing.
 

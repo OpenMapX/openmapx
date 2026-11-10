@@ -1,3 +1,4 @@
+import type { NativeToWebPayload } from "@openmapx/core/navigation";
 import { publishCarState } from "../../car/publishCarState";
 import type { SessionRepository } from "../../storage/SessionRepository";
 import type { PublishPort } from "../effects";
@@ -17,7 +18,7 @@ import { transitFullSnapshot, transitProgressSnapshot } from "./transitSnapshot"
 export interface PublishPortDeps {
   repository: SessionRepository;
   /** Sends a native-to-web message; false when no document can receive it. */
-  send(type: "snapshot.update", payload: unknown): boolean;
+  send(type: "snapshot.update", payload: NativeToWebPayload<"snapshot.update">): boolean;
   now: () => number;
   reconcileSurface?: () => Promise<void>;
 }
