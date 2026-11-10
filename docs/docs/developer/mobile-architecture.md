@@ -19,7 +19,10 @@ settings and sign-in requests (`bridge/answerCommand.ts`) through the shell
 services beside that queue, because each can wait on the user for as long as a
 prompt or a browser is open, and location batches must not wait with it. The
 permission flow of `session.start` stays in the queue, because it guards the
-prepared session. A command nothing handles receives `unsupported-capability`. The handshake reports ground and transit
+prepared session. Permission prompts are serialized with each other beside the queue
+(`permissions/permissionPromptLock.ts`): the start flow, a one-shot location
+request and voice search's microphone prompt each wait for a prompt already
+showing, because Android rejects a permission request while another is open. A command nothing handles receives `unsupported-capability`. The handshake reports ground and transit
 navigation and background location as available, local notifications once the
 notification permission is granted, and speech when the native audio module is
 present. Installed-device evidence covers Android only; see

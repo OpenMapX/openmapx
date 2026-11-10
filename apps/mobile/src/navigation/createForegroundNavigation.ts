@@ -27,6 +27,7 @@ import { ExpoNotificationScheduler } from "../notifications/ExpoNotificationSche
 import type { NotificationScheduler } from "../notifications/NotificationScheduler";
 import { PermissionController, type PermissionUi } from "../permissions/permissionController";
 import type { PermissionSnapshot } from "../permissions/permissionMachine";
+import { withPermissionPrompt } from "../permissions/permissionPromptLock";
 import { currentPlatform } from "../platform/currentPlatform";
 import { type Database, getDatabase } from "../storage/database";
 import { createCoordinator } from "./createCoordinator";
@@ -346,21 +347,23 @@ export async function createForegroundNavigation(
       state: () => driver.getPermissionState(),
       isAppActive: options.isAppActive,
       ...(options.startContext ? { startContext: options.startContext } : {}),
-      requestForStart: async () => {
-        const decision = await permissions.requestForStart();
-        // The tracking notification and the get-off alert both need the
-        // notification permission on Android 13 and later; the start is the
-        // moment it is asked for, once.
-        if (decision !== "denied" && !(await refreshNotificationGrant())) {
-          try {
-            const asked = await device.notifications.permission();
-            if (asked.canAskAgain) notificationsGranted = await device.notifications.request();
-          } catch {
-            // Navigation proceeds without alerts.
+      // The whole flow is one prompt sequence, so no other prompt interleaves.
+      requestForStart: () =>
+        withPermissionPrompt(async () => {
+          const decision = await permissions.requestForStart();
+          // The tracking notification and the get-off alert both need the
+          // notification permission on Android 13 and later; the start is the
+          // moment it is asked for, once.
+          if (decision !== "denied" && !(await refreshNotificationGrant())) {
+            try {
+              const asked = await device.notifications.permission();
+              if (asked.canAskAgain) notificationsGranted = await device.notifications.request();
+            } catch {
+              // Navigation proceeds without alerts.
+            }
           }
-        }
-        return decision;
-      },
+          return decision;
+        }),
     },
     driver: { isRunning: () => driver.isRunning() },
     ports: {

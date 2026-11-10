@@ -1,5 +1,6 @@
 import type { NativeToWebMessage } from "@openmapx/core/navigation";
 import type { ExpoSpeechRecognitionModule } from "expo-speech-recognition";
+import { withPermissionPrompt } from "../permissions/permissionPromptLock";
 import type { VoiceAudioLease } from "./audioArbiter";
 
 type SpeechModule = Pick<
@@ -304,7 +305,7 @@ export class VoiceInputController {
         if (!permission.granted && permission.canAskAgain) {
           s.prompting = true;
           try {
-            permission = await requestPermission();
+            permission = await withPermissionPrompt(requestPermission);
           } finally {
             s.prompting = false;
           }

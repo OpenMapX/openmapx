@@ -1,4 +1,5 @@
 import type { WebToNativeMessage } from "@openmapx/core/navigation";
+import { withPermissionPrompt } from "../permissions/permissionPromptLock";
 import type { CommandResponse } from "./NavigationCoordinator";
 import {
   type ForegroundHarness,
@@ -76,5 +77,40 @@ describe("one-shot requests during a trip", () => {
       type: "native.error",
       payload: { code: "unsupported-capability" },
     });
+  });
+});
+
+describe("permission prompts during a start", () => {
+  it("keeps any other permission prompt waiting until the start flow is answered", async () => {
+    harness = await startForegroundHarness();
+    harness.phone.location.permission = "not-determined";
+    let answerDisclosure: (answer: "dismiss") => void = () => {};
+    harness.phone.permissionScreens.showDisclosure = () =>
+      new Promise((resolve) => {
+        answerDisclosure = resolve;
+      });
+    const order: string[] = [];
+
+    const starting = harness
+      .command("session.prepare", { startPackage: groundStartPackage() })
+      .then((prepared) => {
+        const { sessionId, revision } = prepared?.payload as {
+          sessionId: string;
+          revision: number;
+        };
+        return harness.command("session.start", {}, { sessionId, revision });
+      });
+    for (let turn = 0; turn < 5; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+    const other = withPermissionPrompt(async () => {
+      order.push("other prompt");
+    });
+    for (let turn = 0; turn < 5; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+    expect(order).toEqual([]);
+
+    order.push("disclosure answered");
+    answerDisclosure("dismiss");
+    await starting;
+    await other;
+    expect(order).toEqual(["disclosure answered", "other prompt"]);
   });
 });

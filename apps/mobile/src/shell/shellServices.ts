@@ -5,6 +5,7 @@ import type { MobileRuntimeConfig } from "../config/runtimeConfig";
 import { createLocationDriver } from "../location/createLocationDriver";
 import { ForegroundLocationService } from "../location/ForegroundLocationService";
 import type { LocationDriver, LocationPermissionState } from "../location/LocationDriver";
+import { withPermissionPrompt } from "../permissions/permissionPromptLock";
 import { openAppSettings } from "../settings/openAppSettings";
 import { createAuxiliaryCommandHandler } from "./auxiliaryCommands";
 
@@ -32,8 +33,10 @@ export function createShellServices(options: ShellServicesOptions): ShellService
   const location = new ForegroundLocationService({
     driver,
     clock: () => Date.now(),
-    requestForegroundPermission: async () =>
-      options.isAppActive() ? driver.requestForegroundPermission() : driver.getPermissionState(),
+    requestForegroundPermission: () =>
+      withPermissionPrompt(async () =>
+        options.isAppActive() ? driver.requestForegroundPermission() : driver.getPermissionState(),
+      ),
   });
   const auth = createSystemAuthSession({ webOrigin: options.config.webOrigin });
 
