@@ -118,6 +118,16 @@ export function show(el: HTMLElement, p: Record<string, string>) {
       ).toEqual(["p.html", "p.text"]);
     });
 
+    it("a raw value appended to innerHTML or outerHTML", () => {
+      expect(
+        offenders(`
+export function show(el: HTMLElement, p: Record<string, string>) {
+  el.innerHTML += p.html;
+  el.outerHTML += \`<p>\${p.text}</p>\`;
+}`),
+      ).toEqual(["p.html", "p.text"]);
+    });
+
     it("a raw value passed to insertAdjacentHTML or createContextualFragment", () => {
       expect(
         offenders(`
@@ -142,6 +152,40 @@ export function show(el: HTMLElement, p: Record<string, string>) {
       ).toEqual(["p.name"]);
     });
 
+    it("a helper imported under another helper's name", () => {
+      const source = `
+import { raw as escapeHtml } from "./raw";
+export const popup = (p: Record<string, string>) => \`<b>\${escapeHtml(p.name)}</b>\`;`;
+      expect(findUnsafeInterpolations(source, "popup.tsx").map((o) => o.text)).toEqual([
+        "escapeHtml(p.name)",
+      ]);
+    });
+
+    it("a local value that shadows a helper's name", () => {
+      expect(
+        offenders(`
+export function popup(p: Record<string, string>) {
+  const sanitizeUrl = (value: string) => value;
+  const escape = sanitizeUrl;
+  return \`<a href="\${sanitizeUrl(p.url)}">\${escape(p.name)}</a>\`;
+}`),
+      ).toEqual(["sanitizeUrl(p.url)", "escape(p.name)"]);
+    });
+
+    it("a translation that interpolates values into its message", () => {
+      expect(
+        offenders(`
+export function popup(p: Record<string, string>, t: (k: string, v?: object) => string) {
+  return \`<b>\${t("greeting", { name: p.name })}</b>\`;
+}`),
+      ).toEqual(['t("greeting", { name: p.name })']);
+      expect(
+        offenders(
+          `export const popup = (p: string) => \`<b>\${translate("greeting", { n: p })}</b>\`;`,
+        ),
+      ).toEqual(['translate("greeting", { n: p })']);
+    });
+
     it("a locale formatter applied to a raw string", () => {
       expect(
         offenders(
@@ -164,6 +208,7 @@ export function show(el: HTMLElement, p: Record<string, string>) {
       ["a comparison", "`<b>${p.a === p.b}</b>`"],
       ["a URL checked by sanitizeUrl", '`<a href="${sanitizeUrl(p.url)}">x</a>`'],
       ["a translated label", "`<b>${t(p.key)}</b>`"],
+      ["a translation without values", '`<b>${translate("greeting")}</b>`'],
       ["a date formatted for the locale", "`<b>${new Date(p.when).toLocaleString()}</b>`"],
       ["a lookup in a constant table", '`<b style="color:${COLORS[p.level] || "#888"}">x</b>`'],
       ["an escaped list", '`<ul>${items.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>`'],
@@ -252,6 +297,8 @@ export const popup = (level: string) => \`<b style="color:\${COLORS[level] || "#
     it.each([
       "popup.setHTML(html)",
       "el.innerHTML = html",
+      "el.innerHTML += html",
+      "el.outerHTML+=html",
       "el.outerHTML = html",
       "el.insertAdjacentHTML('beforeend', html)",
       "range.createContextualFragment(html)",
@@ -262,6 +309,7 @@ export const popup = (level: string) => \`<b style="color:\${COLORS[level] || "#
 
     it("does not treat reads or text content as sinks", () => {
       expect(hasHtmlSink("const text = el.innerHTML.length; el.textContent = x;")).toBe(false);
+      expect(hasHtmlSink("if (el.innerHTML === html || el.innerHTML == html) return;")).toBe(false);
     });
   });
 });

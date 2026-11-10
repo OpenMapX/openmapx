@@ -24,8 +24,7 @@ const TRUSTED_CALLS = new Set([
   "buildStackedPopupCardItems",
   "buildPopupCreditsHtml",
   "buildRoadConditionPopupHtml",
-  "t",
-  "translate",
+  "renderWildfirePopupModel",
   "Number",
   "Boolean",
   "parseInt",
@@ -42,6 +41,13 @@ const TRUSTED_CALLS = new Set([
   "Number.parseFloat",
   "Number.parseInt",
 ]);
+
+/**
+ * Translation callbacks a caller supplies. Their messages are shipped copy, but
+ * next-intl does not escape values interpolated into a message, so a call that
+ * passes values is not safe.
+ */
+const TRANSLATION_CALLS = new Set(["t", "translate"]);
 
 /** Methods that only exist on numbers, so their result is digits and punctuation. */
 const NUMBER_ONLY_METHODS = new Set(["toFixed", "toPrecision", "toExponential"]);
@@ -73,7 +79,7 @@ const PASS_THROUGH_METHODS = new Set([
 ]);
 
 const HTML_SINK_PATTERN =
-  /\.setHTML\s*\(|\.innerHTML\s*=|\.outerHTML\s*=|\.insertAdjacentHTML\s*\(|dangerouslySetInnerHTML|\.createContextualFragment\s*\(/;
+  /\.setHTML\s*\(|\.(?:inner|outer)HTML\s*\+?=(?!=)|\.insertAdjacentHTML\s*\(|dangerouslySetInnerHTML|\.createContextualFragment\s*\(/;
 
 const MARKUP_PATTERN = /<[A-Za-z/!]/;
 
@@ -583,7 +589,8 @@ class FileAnalysis {
       if (local?.some((binding) => binding.kind === "function")) {
         return this.unsafeLocalCall(local, call);
       }
-      return TRUSTED_CALLS.has(callee.text) ? null : call;
+      if (TRANSLATION_CALLS.has(callee.text)) return call.arguments.length > 1 ? call : null;
+      return this.isTrustedName(callee) ? null : call;
     }
 
     if (ts.isPropertyAccessExpression(callee) || ts.isElementAccessExpression(callee)) {
@@ -631,9 +638,23 @@ class FileAnalysis {
       if (local?.some((binding) => binding.kind === "function")) {
         return this.unsafeLocalCall(local, call);
       }
-      return TRUSTED_CALLS.has(target.text) ? null : call;
+      return this.isTrustedName(target) ? null : call;
     }
     return call;
+  }
+
+  /**
+   * Whether a function named in this file is one of the trusted helpers. An
+   * import counts by the name it imports, so an import of `raw as escapeHtml` does
+   * not; a local value that shadows a helper's name does not either. A name with
+   * no declaration at all is a global such as Number.
+   */
+  private isTrustedName(identifier: ts.Identifier): boolean {
+    const bindings = this.bindingsOf(identifier.text, identifier);
+    if (!bindings) return TRUSTED_CALLS.has(identifier.text);
+    return bindings.every(
+      (binding) => binding.kind === "imported" && TRUSTED_CALLS.has(binding.name),
+    );
   }
 
   /** A call to a function declared in this file is as safe as everything it returns. */
@@ -703,7 +724,11 @@ function sinkArgument(node: ts.Node): ts.Expression | null {
       const index = HTML_CALL_METHODS[callee.name.text];
       if (index !== undefined) return node.arguments[index] ?? null;
     }
-  } else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+  } else if (
+    ts.isBinaryExpression(node) &&
+    (node.operatorToken.kind === ts.SyntaxKind.EqualsToken ||
+      node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken)
+  ) {
     const left = unwrap(node.left);
     if (ts.isPropertyAccessExpression(left) && HTML_ASSIGNMENT_PROPERTIES.has(left.name.text)) {
       return node.right;
