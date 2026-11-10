@@ -62,6 +62,7 @@ describe("useNavigationMutations.setVoiceTiming", () => {
   });
   afterEach(() => {
     useSettingsStore.getState().setVoiceGuidanceTiming(initialTiming);
+    useNavigationStore.setState({ nativeSessionId: null });
   });
 
   it("stores the preference for a browser-owned trip", async () => {
@@ -74,6 +75,7 @@ describe("useNavigationMutations.setVoiceTiming", () => {
 
   it("tells the native session as well as storing the preference", async () => {
     const updateSettings = vi.fn(async () => undefined);
+    useNavigationStore.setState({ nativeSessionId: "trip-1" });
     runtime.browserAuthority = false;
     runtime.commands = { stop: vi.fn(), requestSnapshot: vi.fn(), updateSettings };
     const { result } = renderHook(() => useNavigationMutations());
