@@ -182,8 +182,10 @@ notification grant through the same port.
   a preparation that was never started, because the page that made it may
   have reloaded; the latest intent wins, and a late start for the old one is
   refused with `revision-conflict`. Such an end sends the page no notice,
-  since nothing was guided. A running trip still refuses a new prepare with
-  `session-active`. Every end removes the session row, runs
+  since nothing was guided. A car start ends an unstarted phone preparation
+  the same way, but tells the page with `session.stopped`, because the phone
+  page may still be showing it. A running trip still refuses a new prepare
+  with `session-active`, and a car start unless the car names that trip. Every end removes the session row, runs
   the device effects (location, audio, alerts, surface, a final snapshot) and
   then notifies each consumer once. The page hears the end as the reply to its
   own command, or, when native ended the trip, as one unsolicited

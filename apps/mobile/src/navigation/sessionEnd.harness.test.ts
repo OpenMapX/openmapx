@@ -1,4 +1,5 @@
 import {
+  groundStartPackageSchema,
   MOBILE_NAVIGATION_SESSION_MAX_AGE_MS,
   TRANSIT_UNDO_WINDOW_MS,
 } from "@openmapx/core/navigation";
@@ -324,6 +325,45 @@ describe("a trip between prepare and start", () => {
     expect(late).toMatchObject({ type: "native.error", payload: { code: "revision-conflict" } });
     // Nothing was guided, so the replaced preparation ends without a notice to the page.
     expect(stoppedMessages()).toEqual([]);
+  });
+
+  it("lets a car start replace the phone's preparation, telling the page once", async () => {
+    harness = await startForegroundHarness();
+    const phone = await prepare();
+    const car = { kind: "car", hostAuthorized: true, locationServiceStartAllowed: true } as const;
+
+    const started = await harness.navigation.coordinator.startCarTrip(
+      groundStartPackageSchema.parse(groundStartPackage()),
+      () => car,
+      () => true,
+    );
+    await harness.settle();
+
+    expect(started?.type).toBe("session.started");
+    expect(started?.sessionId).not.toBe(phone.sessionId);
+    expect((await harness.session())?.status).toBe("active");
+    // The phone page may still be loaded, so it hears its preparation end, once.
+    expect(stoppedMessages()).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({ sessionId: phone.sessionId, finalStatus: "stopped" }),
+      }),
+    ]);
+    const late = await harness.command("session.start", {}, phone);
+    expect(late).toMatchObject({ type: "native.error", payload: { code: "revision-conflict" } });
+  });
+
+  it("still refuses a car start over a running trip it does not name", async () => {
+    harness = await startForegroundHarness();
+    await harness.start(groundStartPackage());
+    const car = { kind: "car", hostAuthorized: true, locationServiceStartAllowed: true } as const;
+
+    const refused = await harness.navigation.coordinator.startCarTrip(
+      groundStartPackageSchema.parse(groundStartPackage()),
+      () => car,
+      () => true,
+    );
+
+    expect(refused).toMatchObject({ type: "native.error", payload: { code: "session-active" } });
   });
 
   it("still refuses a new trip while one is running", async () => {

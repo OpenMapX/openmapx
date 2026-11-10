@@ -257,8 +257,12 @@ export class NavigationCoordinator {
         sentAtMs: now,
       };
       if (current && !this.isTerminal(current)) {
-        if (current.sessionId !== replaceSessionId) return errorResponse("session-active");
-        // The page did not ask for this end, so it is told.
+        // The latest intent wins over a preparation that was never started, as
+        // it does for a page's own prepare. A running trip yields only when the
+        // car names it. Either way the page did not ask for this end, so it is
+        // told, and a phone page still showing the preparation resets.
+        if (current.status !== "preparing" && current.sessionId !== replaceSessionId)
+          return errorResponse("session-active");
         await this.endSession(current, "stopped", now, "native");
       }
       if (!valid()) return errorResponse("invalid-state");
