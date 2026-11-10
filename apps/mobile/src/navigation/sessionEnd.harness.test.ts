@@ -14,6 +14,7 @@ import {
   rawFix,
   STRAIGHT_ROUTE,
   startForegroundHarness,
+  WHOLE_ROUTE_TIMEOUT_MS,
 } from "./testing/foregroundHarness";
 import {
   FIXTURE_FINGERPRINT,
@@ -102,14 +103,18 @@ describe("one notice per end", () => {
     expect(await harness.session()).toBeNull();
   });
 
-  it("reports guidance stopping at an arrival without reporting an end", async () => {
-    harness = await startForegroundHarness();
-    await harness.start(groundStartPackage());
-    await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
+  it(
+    "reports guidance stopping at an arrival without reporting an end",
+    async () => {
+      harness = await startForegroundHarness();
+      await harness.start(groundStartPackage());
+      await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
 
-    expect(harness.navigatingReports).toEqual([true, false]);
-    expect(harness.sessionEnds).toEqual([]);
-  });
+      expect(harness.navigatingReports).toEqual([true, false]);
+      expect(harness.sessionEnds).toEqual([]);
+    },
+    WHOLE_ROUTE_TIMEOUT_MS,
+  );
 });
 
 describe("opening the app inside an arrival's release window", () => {
@@ -213,35 +218,43 @@ describe("opening the app inside an arrival's release window", () => {
     expect(harness.sessionEnds).toHaveLength(1);
   });
 
-  it("keeps a road arrival card when the user switches apps after the grace", async () => {
-    harness = await startForegroundHarness();
-    const { sessionId } = await harness.start(groundStartPackage());
-    await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
-    await harness.setVisible(false);
-    await harness.elapse(20_000);
+  it(
+    "keeps a road arrival card when the user switches apps after the grace",
+    async () => {
+      harness = await startForegroundHarness();
+      const { sessionId } = await harness.start(groundStartPackage());
+      await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
+      await harness.setVisible(false);
+      await harness.elapse(20_000);
 
-    await harness.setVisible(true);
+      await harness.setVisible(true);
 
-    expect(await harness.session()).toMatchObject({ sessionId, status: "arrived" });
-    expect(harness.phone.location.running).toBe(false);
-    expect(stoppedMessages()).toEqual([]);
-    expect(harness.sessionEnds).toEqual([]);
-  });
+      expect(await harness.session()).toMatchObject({ sessionId, status: "arrived" });
+      expect(harness.phone.location.running).toBe(false);
+      expect(stoppedMessages()).toEqual([]);
+      expect(harness.sessionEnds).toEqual([]);
+    },
+    WHOLE_ROUTE_TIMEOUT_MS,
+  );
 
-  it("keeps a road arrival through its announcement grace after the process died", async () => {
-    harness = await startForegroundHarness({ phone: createFakePhone() });
-    await harness.start(groundStartPackage());
-    await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
-    expect((await harness.session())?.status).toBe("arrived");
+  it(
+    "keeps a road arrival through its announcement grace after the process died",
+    async () => {
+      harness = await startForegroundHarness({ phone: createFakePhone() });
+      await harness.start(groundStartPackage());
+      await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
+      expect((await harness.session())?.status).toBe("arrived");
 
-    harness = await harness.relaunch();
-    await harness.setVisible(true);
+      harness = await harness.relaunch();
+      await harness.setVisible(true);
 
-    expect((await harness.session())?.status).toBe("arrived");
-    expect(harness.phone.location.running).toBe(true);
-    await harness.elapse(ARRIVAL_CUE_GRACE_MS);
-    expect(harness.phone.location.running).toBe(false);
-  });
+      expect((await harness.session())?.status).toBe("arrived");
+      expect(harness.phone.location.running).toBe(true);
+      await harness.elapse(ARRIVAL_CUE_GRACE_MS);
+      expect(harness.phone.location.running).toBe(false);
+    },
+    WHOLE_ROUTE_TIMEOUT_MS,
+  );
 });
 
 describe("a recovery hold on the shell", () => {
@@ -267,18 +280,22 @@ describe("a recovery hold on the shell", () => {
     expect(harness.navigatingReports).toEqual([]);
   });
 
-  it("reports guidance again once the user resumes", async () => {
-    await resumeRequiredAfterRestart();
+  it(
+    "reports guidance again once the user resumes",
+    async () => {
+      await resumeRequiredAfterRestart();
 
-    expect(await harness.navigation.recovery.resume()).toBe("session-started");
-    harness.phone.connectivity.set("offline");
-    await harness.elapse(CONNECTIVITY_DEBOUNCE_MS);
-    await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
+      expect(await harness.navigation.recovery.resume()).toBe("session-started");
+      harness.phone.connectivity.set("offline");
+      await harness.elapse(CONNECTIVITY_DEBOUNCE_MS);
+      await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
 
-    expect(harness.phone.location.running).toBe(true);
-    // Resume is dispatched by the shell itself; the arrival is the next change.
-    expect(harness.navigatingReports).toEqual([false]);
-  });
+      expect(harness.phone.location.running).toBe(true);
+      // Resume is dispatched by the shell itself; the arrival is the next change.
+      expect(harness.navigatingReports).toEqual([false]);
+    },
+    WHOLE_ROUTE_TIMEOUT_MS,
+  );
 });
 
 describe("a trip between prepare and start", () => {

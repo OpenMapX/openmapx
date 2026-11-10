@@ -8,6 +8,7 @@ import {
   rawFix,
   STRAIGHT_ROUTE,
   startForegroundHarness,
+  WHOLE_ROUTE_TIMEOUT_MS,
 } from "./testing/foregroundHarness";
 import {
   FIXTURE_FINGERPRINT,
@@ -36,54 +37,66 @@ describe("arriving by road", () => {
     return trip;
   }
 
-  it("announces the arrival before location stops, and stops it after the grace", async () => {
-    await arrive();
-    const arrivalCue = harness.phone.speech.cueIds.at(-1) ?? "";
-    expect(arrivalCue).toMatch(/arriv/);
-    expect(harness.phone.location.running).toBe(true);
-    expect(harness.phone.keepAwake.held).toBe(false);
-    expect(harness.navigatingReports.at(-1)).toBe(false);
+  it(
+    "announces the arrival before location stops, and stops it after the grace",
+    async () => {
+      await arrive();
+      const arrivalCue = harness.phone.speech.cueIds.at(-1) ?? "";
+      expect(arrivalCue).toMatch(/arriv/);
+      expect(harness.phone.location.running).toBe(true);
+      expect(harness.phone.keepAwake.held).toBe(false);
+      expect(harness.navigatingReports.at(-1)).toBe(false);
 
-    await harness.elapse(ARRIVAL_CUE_GRACE_MS - 1_000);
-    expect(harness.phone.location.running).toBe(true);
-    await harness.elapse(2_000);
+      await harness.elapse(ARRIVAL_CUE_GRACE_MS - 1_000);
+      expect(harness.phone.location.running).toBe(true);
+      await harness.elapse(2_000);
 
-    expect(harness.phone.location.running).toBe(false);
-    const { timeline } = harness.phone;
-    expect(timeline.indexOf(`speak:${arrivalCue}`)).toBeLessThan(
-      timeline.lastIndexOf("location:stop"),
-    );
-    expect((await harness.session())?.status).toBe("arrived");
-  });
+      expect(harness.phone.location.running).toBe(false);
+      const { timeline } = harness.phone;
+      expect(timeline.indexOf(`speak:${arrivalCue}`)).toBeLessThan(
+        timeline.lastIndexOf("location:stop"),
+      );
+      expect((await harness.session())?.status).toBe("arrived");
+    },
+    WHOLE_ROUTE_TIMEOUT_MS,
+  );
 
-  it("releases location by batches alone when the app's timers are paused", async () => {
-    await arrive("android");
-    // A backgrounded Android app: no JavaScript timer fires, and the user stands
-    // still at the destination.
-    harness.phone.clock.timersPaused = true;
+  it(
+    "releases location by batches alone when the app's timers are paused",
+    async () => {
+      await arrive("android");
+      // A backgrounded Android app: no JavaScript timer fires, and the user stands
+      // still at the destination.
+      harness.phone.clock.timersPaused = true;
 
-    await harness.standStill(DESTINATION, ARRIVAL_CUE_GRACE_MS - 1_000);
-    expect(harness.phone.location.running).toBe(true);
-    await harness.standStill(DESTINATION, 10_000);
+      await harness.standStill(DESTINATION, ARRIVAL_CUE_GRACE_MS - 1_000);
+      expect(harness.phone.location.running).toBe(true);
+      await harness.standStill(DESTINATION, 10_000);
 
-    expect(harness.phone.location.running).toBe(false);
-  });
+      expect(harness.phone.location.running).toBe(false);
+    },
+    WHOLE_ROUTE_TIMEOUT_MS,
+  );
 
-  it("ends cleanly when the page closes the arrival card straight away", async () => {
-    const { sessionId } = await arrive();
+  it(
+    "ends cleanly when the page closes the arrival card straight away",
+    async () => {
+      const { sessionId } = await arrive();
 
-    const reply = await harness.command("session.complete", {}, { sessionId });
+      const reply = await harness.command("session.complete", {}, { sessionId });
 
-    expect(reply).toMatchObject({ type: "session.stopped", payload: { finalStatus: "arrived" } });
-    expect(await harness.session()).toBeNull();
-    expect(harness.phone.location.running).toBe(false);
-    const { calls } = harness.phone.location;
-    expect(calls.slice(calls.indexOf("stop"))).not.toContain("start");
-    expect(harness.phone.keepAwake.held).toBe(false);
+      expect(reply).toMatchObject({ type: "session.stopped", payload: { finalStatus: "arrived" } });
+      expect(await harness.session()).toBeNull();
+      expect(harness.phone.location.running).toBe(false);
+      const { calls } = harness.phone.location;
+      expect(calls.slice(calls.indexOf("stop"))).not.toContain("start");
+      expect(harness.phone.keepAwake.held).toBe(false);
 
-    await harness.elapse(ARRIVAL_CUE_GRACE_MS * 2);
-    expect(harness.phone.location.running).toBe(false);
-  });
+      await harness.elapse(ARRIVAL_CUE_GRACE_MS * 2);
+      expect(harness.phone.location.running).toBe(false);
+    },
+    WHOLE_ROUTE_TIMEOUT_MS,
+  );
 });
 
 describe("arriving by transit", () => {

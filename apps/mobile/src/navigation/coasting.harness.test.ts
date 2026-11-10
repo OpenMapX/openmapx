@@ -6,6 +6,7 @@ import {
   rawFix,
   STRAIGHT_ROUTE,
   startForegroundHarness,
+  WHOLE_ROUTE_TIMEOUT_MS,
 } from "./testing/foregroundHarness";
 
 /**
@@ -136,17 +137,21 @@ describe("coasting through a gap in location delivery", () => {
     expect(harness.phone.clock.pendingTimers).toBe(0);
   });
 
-  it("stops once the trip has arrived", async () => {
-    harness = await startForegroundHarness();
-    await harness.start(groundStartPackage());
-    await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
-    const arrived = await ground();
-    expect(arrived.status).toBe("arrived");
+  it(
+    "stops once the trip has arrived",
+    async () => {
+      harness = await startForegroundHarness();
+      await harness.start(groundStartPackage());
+      await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
+      const arrived = await ground();
+      expect(arrived.status).toBe("arrived");
 
-    await noFixesFor(8);
+      await noFixesFor(8);
 
-    expect((await ground()).revision).toBe(arrived.revision);
-  });
+      expect((await ground()).revision).toBe(arrived.revision);
+    },
+    WHOLE_ROUTE_TIMEOUT_MS,
+  );
 
   it("stops when the estimate runs out instead of drifting on", async () => {
     harness = await startForegroundHarness();

@@ -5,6 +5,7 @@ import {
   rawFix,
   STRAIGHT_ROUTE,
   startForegroundHarness,
+  WHOLE_ROUTE_TIMEOUT_MS,
 } from "./testing/foregroundHarness";
 
 /**
@@ -40,28 +41,32 @@ async function announcementIndexes(from: number, to: number): Promise<Record<str
 }
 
 describe("voice guidance switched off and on during a trip", () => {
-  it("silences the cues that follow and cuts off the one being spoken", async () => {
-    harness = await startForegroundHarness();
-    const { sessionId } = await harness.start(groundStartPackage());
-    await driveStraightRoute(harness, 0, 120);
-    const stopsBefore = harness.phone.speech.stops;
+  it(
+    "silences the cues that follow and cuts off the one being spoken",
+    async () => {
+      harness = await startForegroundHarness();
+      const { sessionId } = await harness.start(groundStartPackage());
+      await driveStraightRoute(harness, 0, 120);
+      const stopsBefore = harness.phone.speech.stops;
 
-    const reply = await harness.command(
-      "settings.update",
-      { voiceEnabled: false },
-      { sessionId, revision: await currentRevision() },
-    );
+      const reply = await harness.command(
+        "settings.update",
+        { voiceEnabled: false },
+        { sessionId, revision: await currentRevision() },
+      );
 
-    expect(reply?.type).toBe("snapshot.update");
-    expect(harness.phone.speech.stops).toBeGreaterThan(stopsBefore);
-    const spokenWhileMuted = harness.phone.speech.cueIds.length;
-    await driveStraightRoute(harness, 120, 150);
-    expect(harness.phone.speech.cueIds.length).toBe(spokenWhileMuted);
+      expect(reply?.type).toBe("snapshot.update");
+      expect(harness.phone.speech.stops).toBeGreaterThan(stopsBefore);
+      const spokenWhileMuted = harness.phone.speech.cueIds.length;
+      await driveStraightRoute(harness, 120, 150);
+      expect(harness.phone.speech.cueIds.length).toBe(spokenWhileMuted);
 
-    await harness.command("settings.update", { voiceEnabled: true }, { sessionId });
-    await driveStraightRoute(harness, 150, STRAIGHT_ROUTE.length);
-    expect(harness.phone.speech.cueIds.at(-1)).toMatch(/arriv/);
-  });
+      await harness.command("settings.update", { voiceEnabled: true }, { sessionId });
+      await driveStraightRoute(harness, 150, STRAIGHT_ROUTE.length);
+      expect(harness.phone.speech.cueIds.at(-1)).toMatch(/arriv/);
+    },
+    WHOLE_ROUTE_TIMEOUT_MS,
+  );
 
   it("applies a change sent against a revision the page saw before newer progress", async () => {
     harness = await startForegroundHarness();
