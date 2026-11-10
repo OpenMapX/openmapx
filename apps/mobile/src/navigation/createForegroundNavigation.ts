@@ -1,3 +1,4 @@
+import type { MobileNavigationSession } from "@openmapx/core/navigation";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import * as Notifications from "expo-notifications";
 import type { MobileLocale } from "../../config/nativeCopy";
@@ -184,16 +185,22 @@ export async function createForegroundNavigation(
       device.keepAwake.deactivate().catch(() => undefined);
     }
   };
-  const reviewKeepAwake = async () => {
+  /**
+   * `loaded` is the committed row when the caller has just read it. The driver
+   * is asked only when the screen is not already held: a held screen was
+   * checked against a running stream, and anything that stops the stream for
+   * an active session also ends that session or the app's visibility.
+   */
+  const reviewKeepAwake = async (loaded?: MobileNavigationSession | null) => {
     const review = ++keepAwakeReview;
     let wanted = false;
     if (!disposed && options.isAppActive() && repositoryRef) {
       try {
-        const session = await repositoryRef.loadActive(now());
+        const session = loaded === undefined ? await repositoryRef.loadActive(now()) : loaded;
         wanted =
           session?.status === "active" &&
           session.payload.startPackage.settings.keepScreenOn &&
-          (await driver.isRunning());
+          (screenHeld || (await driver.isRunning()));
       } catch {
         wanted = false;
       }
@@ -310,7 +317,7 @@ export async function createForegroundNavigation(
           // a command, so the shell learns about them here.
           const active = repositoryRef ? await repositoryRef.loadActive(now()) : null;
           if (active?.status !== "active") options.onNavigatingChanged(false);
-          await reviewKeepAwake();
+          await reviewKeepAwake(active);
         },
         event: async (eventId) => {
           await publish?.port.event(eventId);
@@ -365,7 +372,7 @@ export async function createForegroundNavigation(
       if (!session) return null;
       return { sessionId: session.sessionId, revision: session.revision, kind: session.kind };
     },
-    reviewKeepAwake,
+    reviewKeepAwake: () => reviewKeepAwake(),
     dispose: () => {
       if (disposed) return;
       disposed = true;
