@@ -1,4 +1,8 @@
-import { renderAppLinks, settingsForIdentities } from "./renderAppLinks";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { APP_LINKS_SCRIPT, renderAppLinks, settingsForIdentities } from "./renderAppLinks";
 import {
   ALLOWED_APPLINK_PATHS,
   checkAll,
@@ -309,6 +313,27 @@ describe("the well-known service's rendered association files", () => {
         (statement: { target: { package_name: string } }) => statement.target.package_name,
       ),
     ).toEqual(["org.openmapx.app", "org.openmapx.app.dev"]);
+  });
+
+  it("never glob-expands a list value into file names", () => {
+    const dir = mkdtempSync(join(tmpdir(), "openmapx-app-links-glob-"));
+    try {
+      // A file whose name would pass as a bundle identifier if `*` expanded.
+      writeFileSync(join(dir, "org.example.app"), "");
+      const env = {
+        PATH: process.env.PATH,
+        NODE_ENV: process.env.NODE_ENV,
+        OPENMAPX_APP_LINKS_DIR: join(dir, "out"),
+        MOBILE_APPLE_TEAM_ID: "ABCDE12345",
+        MOBILE_IOS_BUNDLE_IDS: "*",
+      };
+      expect(() =>
+        execFileSync("sh", [APP_LINKS_SCRIPT], { cwd: dir, env, stdio: "pipe" }),
+      ).toThrow();
+      expect(existsSync(join(dir, "out", "apple-app-site-association"))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it.each([

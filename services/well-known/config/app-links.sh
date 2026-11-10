@@ -13,6 +13,8 @@
 # association that silently fails to verify is worse than a visible error.
 
 set -eu
+# List values are split on whitespace in `for` loops; never let them glob.
+set -f
 umask 022
 
 out=${OPENMAPX_APP_LINKS_DIR:-/var/lib/openmapx/app-links}

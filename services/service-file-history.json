@@ -93,6 +93,7 @@
       "f16070bcb705c76a589455fc0d5e9342872eb1da1082c9f27d3dcff560881a14"
     ],
     "well-known/config/app-links.sh": [
+      "c2de075b1317e72d6d843e5e65c377762d69f6d17b34cced3f716ea57fa520d4",
       "fb81822708daac15f75370902f416c26921a76e20a50b63482af9336ac548de7"
     ],
     "well-known/config/nginx.conf": [
