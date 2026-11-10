@@ -22,6 +22,7 @@ import type {
 } from "@openmapx/core";
 import {
   CONNECTOR_STANDARDS,
+  isApiClientError,
   MAX_VEHICLES_PER_USER,
   normalizeEvSpec,
   useCreateVehicle,
@@ -31,6 +32,7 @@ import {
   VEHICLE_KINDS,
   VEHICLE_POWERTRAINS,
 } from "@openmapx/core";
+import { garageConflictSchema } from "@openmapx/core/garage-sdk";
 import { getVehiclePreset, listVehicles } from "@openmapx/ev-charge-planner";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
@@ -135,6 +137,13 @@ function draftToVehicle(draft: Draft): VehicleDraft | null {
   };
 }
 
+/** Only the declared name conflict gets its own message; other failures stay generic. */
+function isNameTaken(error: unknown): boolean {
+  if (!isApiClientError(error) || error.status !== 409) return false;
+  const conflict = garageConflictSchema.safeParse(error.payload);
+  return conflict.success && conflict.data.code === "VEHICLE_NAME_TAKEN";
+}
+
 export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useTranslations("vehicles");
   const tc = useTranslations("common");
@@ -148,7 +157,7 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
   const remove = useDeleteVehicle();
 
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "failed">("idle");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "failed" | "nameTaken">("idle");
   // Identifies the current editor. A save only publishes its outcome while the
   // editor that submitted it is still the current one, so a late completion
   // can never close, lock or flag a newer editor. Not a transport abort: an
@@ -205,8 +214,9 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
         const { isDefault: _isDefault, ...patch } = payload;
         await update.mutateAsync({ id: draft.id, ...patch });
       } else await create.mutateAsync(payload);
-    } catch {
-      if (editorSession.current === session) setSaveState("failed");
+    } catch (error) {
+      if (editorSession.current === session)
+        setSaveState(isNameTaken(error) ? "nameTaken" : "failed");
       return;
     }
     if (editorSession.current === session) openEditor(null);
@@ -436,6 +446,7 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
               )}
 
               {saveState === "failed" && <Alert severity="error">{t("saveFailed")}</Alert>}
+              {saveState === "nameTaken" && <Alert severity="error">{t("nameTaken")}</Alert>}
 
               <Box sx={{ display: "flex", gap: 1 }}>
                 <Button

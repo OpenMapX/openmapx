@@ -7,6 +7,7 @@
     "image": "ghcr.io/your-org/__ID__",
     "tag": "latest",
     "expose": [],
+    "memory": "256m",
     "environment": {},
     "dependsOn": [],
     "healthcheck": {

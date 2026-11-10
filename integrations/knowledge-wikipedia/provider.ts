@@ -42,8 +42,12 @@ export const wikipediaSource: KnowledgeProvider = {
       originalimage?: { source: string; width: number; height: number };
       content_urls?: { desktop?: { page?: string } };
     };
-    // Share identical Wikimedia JSON only within one uncancelled full enrichment.
-    const scope = context?.cardPhoto || context?.signal ? undefined : context?.jsonScope;
+    // Share identical Wikimedia JSON only within one full enrichment, and only
+    // when this lookup is cancelled by the same signal as every other consumer.
+    const scope =
+      context?.cardPhoto || (context?.signal && context.signal !== context.jsonScope?.signal)
+        ? undefined
+        : context?.jsonScope;
     const data = scope
       ? await scope.getJson<Summary>(url, { headers: HEADERS, timeoutMs: 3000 }).catch(() => null)
       : await fetchJson<Summary>(url, {

@@ -28,8 +28,14 @@ function svc(id: string, opts: Partial<LoadedService["manifest"]> = {}): LoadedS
 }
 
 function communitySvc(id: string, opts: Partial<LoadedService["manifest"]> = {}): LoadedService {
+  const service = svc(id, { ...opts, quality: "community" });
   return {
-    ...svc(id, { ...opts, quality: "community" }),
+    ...service,
+    // A community service must declare the memory it may use.
+    manifest: {
+      ...service.manifest,
+      container: { memory: "256m", ...service.manifest.container },
+    },
     isBuiltIn: false,
   };
 }
@@ -125,7 +131,7 @@ describe("renderServiceSnippet", () => {
         workingDir: path,
         user: marker,
         shmSize: marker,
-        memory: marker,
+        memory: "256m",
         healthcheck: {
           type: "exec",
           command: ["sh", "-c", marker],
@@ -171,7 +177,7 @@ describe("renderServiceSnippet", () => {
     expect(snippet.depends_on).toEqual({
       "$${POSTGRES_PASSWORD}": { condition: "service_started" },
     });
-    expect(snippet.deploy?.resources?.limits?.memory).toBe("$${POSTGRES_PASSWORD}");
+    expect(snippet.deploy?.resources?.limits?.memory).toBe("256m");
     expect(snippet.deploy?.resources?.reservations?.devices).toEqual([
       { driver: "$${POSTGRES_PASSWORD}", count: "all", capabilities: ["$${POSTGRES_PASSWORD}"] },
     ]);

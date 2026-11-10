@@ -1,3 +1,4 @@
+import { request as httpRequest } from "node:http";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import * as placeIds from "@openmapx/place-ids";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -108,7 +109,9 @@ vi.mock("../../services/review-links.js", () => ({
 
 const mockWithCache = vi.fn((_key: string, _ttl: number, fn: () => unknown) => fn());
 const mockHashKey = vi.fn((prefix: string, data: unknown) => `${prefix}:${JSON.stringify(data)}`);
+const mockCacheGet = vi.fn().mockResolvedValue(null);
 vi.mock("../../utils/cache.js", () => ({
+  cacheGet: mockCacheGet,
   hashKey: mockHashKey,
   withCache: mockWithCache,
   TTL: { places: { detail: 86400 }, photos: 3600 },
@@ -983,7 +986,11 @@ describe("GET /places/:id", () => {
     expect(mockLookupByOsmRef).toHaveBeenCalledWith("node", "12345", "osm:node/12345", undefined);
     expect(mockGetPlaceKnowledge).toHaveBeenCalledWith(MOCK_PLACE, undefined, {
       jsonScope: expect.objectContaining({ getJson: expect.any(Function) }),
+      signal: expect.any(AbortSignal),
     });
+    // The scope and its consumers share one signal, so sharing stays cancellation-safe.
+    const options = mockGetPlaceKnowledge.mock.calls[0][2];
+    expect(options.jsonScope.signal).toBe(options.signal);
     expect(mockBuildReviewLinks).toHaveBeenCalledWith(
       expect.objectContaining({ id: "osm:node/12345" }),
     );
@@ -1500,7 +1507,11 @@ describe("GET /places/:id", () => {
     expect(mockLookupByOsmRef).toHaveBeenCalledWith("node", "12345", "osm:node/12345", "de");
     expect(mockGetPlaceKnowledge).toHaveBeenCalledWith(MOCK_PLACE, "de", {
       jsonScope: expect.objectContaining({ getJson: expect.any(Function) }),
+      signal: expect.any(AbortSignal),
     });
+    // The scope and its consumers share one signal, so sharing stays cancellation-safe.
+    const options = mockGetPlaceKnowledge.mock.calls[0][2];
+    expect(options.jsonScope.signal).toBe(options.signal);
   });
 
   it.each(["way", "relation"])(
@@ -1607,9 +1618,14 @@ describe("GET /places/:id", () => {
 
     try {
       await vi.waitFor(() => expect(mockGetPlaceKnowledge).toHaveBeenCalledTimes(1));
-      expect(mockFetchOsmBoundary).toHaveBeenCalledWith("relation/62422", undefined);
+      expect(mockFetchOsmBoundary).toHaveBeenCalledWith(
+        "relation/62422",
+        undefined,
+        expect.any(AbortSignal),
+      );
       expect(mockSearchHeroPhotos).toHaveBeenCalledWith(adminPlace.osmTags, [], {
         getJson: expect.any(Function),
+        signal: expect.any(AbortSignal),
       });
       expect(mockFetchAggregate).toHaveBeenCalled();
     } finally {
@@ -1958,4 +1974,381 @@ it("rejects an unbounded enrichment setting during route initialization", async 
   } finally {
     vi.unstubAllEnvs();
   }
+});
+
+describe("bounded enrichment admission", () => {
+  const photoCard = (id: number) => ({
+    id: `osm:node/${id}`,
+    name: `Bounded ${id}`,
+    coordinates: [6.08, 50.77],
+    photoTags: { wikimedia_commons: "File:Bounded.jpg" },
+    fields: ["photo"],
+  });
+  const placeUrl = (id: number) => `/places/${encodeURIComponent(`osm:node/${id}`)}`;
+  const resolvePlaces = () =>
+    mockLookupByOsmRef.mockImplementation(async (type, id, fullId) => ({
+      ...MOCK_PLACE,
+      id: fullId,
+      ids: { osm: `${type}/${id}` },
+    }));
+  const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  type InjectResponse = Awaited<ReturnType<typeof app.inject>>;
+
+  /** A real socket, so the server observes the disconnect the way it would in production. */
+  async function openClient(path: string, body?: unknown) {
+    if (!app.server.listening) await app.listen({ port: 0, host: "127.0.0.1" });
+    const address = app.server.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+    const payload = body === undefined ? undefined : JSON.stringify(body);
+    const req = httpRequest({
+      host: "127.0.0.1",
+      port,
+      path,
+      method: payload ? "POST" : "GET",
+      headers: payload ? { "content-type": "application/json" } : undefined,
+    });
+    req.on("error", () => {});
+    req.end(payload);
+    return { disconnect: () => req.destroy() };
+  }
+
+  afterEach(() => {
+    mockLookupByOsmRef.mockReset();
+    mockGetPlaceKnowledge.mockReset();
+    mockBuildReviewLinks.mockReset();
+    mockFetchOsmBoundary.mockReset();
+  });
+
+  it("runs a finite number of blocked card photo jobs and refuses the rest at once", async () => {
+    const gate = Promise.withResolvers<void>();
+    mockSearchHeroPhotos.mockImplementation(async () => {
+      await gate.promise;
+      return [];
+    });
+    const early: string[] = [];
+    let released = false;
+    const batches = Array.from({ length: 6 }, (_, batch) =>
+      app
+        .inject({
+          method: "POST",
+          url: "/places/card-enrichment",
+          remoteAddress: `10.1.0.${batch + 1}`,
+          payload: {
+            places: Array.from({ length: 8 }, (_, index) =>
+              photoCard(7_100_000 + batch * 8 + index),
+            ),
+          },
+        })
+        .then((response) => {
+          if (!released) {
+            for (const result of response.json().results) early.push(result.outcomes.photo.status);
+          }
+          return response;
+        }),
+    );
+    try {
+      await vi.waitFor(() => expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(4));
+      await pause(20);
+      expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(4);
+      // Anything answered while every worker is blocked can only be a refusal.
+      expect(early.every((status) => status === "failed")).toBe(true);
+    } finally {
+      released = true;
+      gate.resolve();
+    }
+    const outcomes = (await Promise.all(batches)).flatMap((response) =>
+      response
+        .json()
+        .results.map(
+          (result: { outcomes: { photo: { status: string } } }) => result.outcomes.photo,
+        ),
+    );
+    expect(outcomes.filter((outcome) => outcome.status === "absent")).toHaveLength(36);
+    expect(outcomes.filter((outcome) => outcome.status === "failed")).toEqual(
+      Array(12).fill({ status: "failed", retryAfterMs: 2000 }),
+    );
+    expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(36);
+  });
+
+  it("refuses place details beyond a finite pending ceiling while enrichment is blocked", async () => {
+    const gate = Promise.withResolvers<void>();
+    resolvePlaces();
+    mockBuildReviewLinks.mockReturnValue([]);
+    mockGetPlaceKnowledge.mockImplementation(async () => {
+      await gate.promise;
+      return MOCK_ENRICHMENT;
+    });
+    const refused: number[] = [];
+    const requests = Array.from({ length: 50 }, (_, index) =>
+      app
+        .inject({
+          method: "GET",
+          url: placeUrl(7_200_000 + index),
+          remoteAddress: `10.2.0.${index + 1}`,
+        })
+        .then((response) => {
+          if (response.statusCode === 503) refused.push(index);
+          return response;
+        }),
+    );
+    try {
+      await vi.waitFor(() => expect(mockGetPlaceKnowledge).toHaveBeenCalledTimes(8));
+      await vi.waitFor(() => expect(refused).toHaveLength(10));
+      await pause(20);
+      expect(mockGetPlaceKnowledge).toHaveBeenCalledTimes(8);
+      expect(mockLookupByOsmRef).toHaveBeenCalledTimes(8);
+    } finally {
+      gate.resolve();
+    }
+    const responses = await Promise.all(requests);
+    const busy = responses.filter((response) => response.statusCode === 503);
+    expect(busy).toHaveLength(10);
+    expect(busy.every((response) => response.headers["retry-after"] === "2")).toBe(true);
+    expect(responses.filter((response) => response.statusCode === 200)).toHaveLength(40);
+    expect(mockGetPlaceKnowledge).toHaveBeenCalledTimes(40);
+  });
+
+  it("limits the place details one network can hold pending", async () => {
+    const gate = Promise.withResolvers<void>();
+    resolvePlaces();
+    mockBuildReviewLinks.mockReturnValue([]);
+    mockGetPlaceKnowledge.mockImplementation(async () => {
+      await gate.promise;
+      return MOCK_ENRICHMENT;
+    });
+    const requests = Array.from({ length: 17 }, (_, index) =>
+      app.inject({ method: "GET", url: placeUrl(7_250_000 + index), remoteAddress: "10.3.0.1" }),
+    );
+    const other = app.inject({
+      method: "GET",
+      url: placeUrl(7_250_100),
+      remoteAddress: "10.3.0.2",
+    });
+    try {
+      await vi.waitFor(() => expect(mockGetPlaceKnowledge).toHaveBeenCalledTimes(8));
+    } finally {
+      gate.resolve();
+    }
+    const statuses = (await Promise.all(requests)).map((response) => response.statusCode);
+    expect(statuses.filter((status) => status === 429)).toHaveLength(1);
+    expect(statuses.filter((status) => status === 200)).toHaveLength(16);
+    expect((await other).statusCode).toBe(200);
+  });
+
+  it("drops a disconnected caller's queued place enrichment so another caller proceeds", async () => {
+    const gate = Promise.withResolvers<void>();
+    resolvePlaces();
+    mockBuildReviewLinks.mockReturnValue([]);
+    mockGetPlaceKnowledge.mockImplementation(async () => {
+      await gate.promise;
+      return MOCK_ENRICHMENT;
+    });
+    const filling = Array.from({ length: 39 }, (_, index) =>
+      app.inject({
+        method: "GET",
+        url: placeUrl(7_300_000 + index),
+        remoteAddress: `10.4.0.${index + 1}`,
+      }),
+    );
+    let probe: Promise<InjectResponse> | undefined;
+    try {
+      await vi.waitFor(() => expect(mockGetPlaceKnowledge).toHaveBeenCalledTimes(8));
+      const leaving = await openClient(placeUrl(7_300_999));
+      // Admission follows the cache lookup, so 40 lookups mean the queue is full.
+      await vi.waitFor(() => expect(mockCacheGet).toHaveBeenCalledTimes(40));
+      await pause(20);
+      const full = await Promise.race([
+        app.inject({ method: "GET", url: placeUrl(7_301_000), remoteAddress: "10.4.1.1" }),
+        pause(500).then(() => undefined),
+      ]);
+      expect(full?.statusCode).toBe(503);
+      leaving.disconnect();
+      await pause(100);
+      let probeStatus: number | undefined;
+      const admitted = app
+        .inject({ method: "GET", url: placeUrl(7_301_001), remoteAddress: "10.4.1.2" })
+        .then((response) => response);
+      probe = admitted;
+      void admitted.then((response) => {
+        probeStatus = response.statusCode;
+      });
+      await pause(50);
+      expect(probeStatus).toBeUndefined();
+    } finally {
+      gate.resolve();
+    }
+    expect((await probe)?.statusCode).toBe(200);
+    expect((await Promise.all(filling)).every((response) => response.statusCode === 200)).toBe(
+      true,
+    );
+    expect(mockLookupByOsmRef.mock.calls.map((call) => call[1])).not.toContain("7300999");
+  });
+
+  /** Blocks every full-enrichment provider until aborted and records the signals it saw. */
+  function blockPlaceProviders() {
+    const signals: AbortSignal[] = [];
+    const gate = Promise.withResolvers<void>();
+    const block = (signal: AbortSignal, value: unknown) =>
+      new Promise((resolve, reject) => {
+        signals.push(signal);
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        void gate.promise.then(() => resolve(value));
+      });
+    mockLookupByOsmRef.mockImplementation(async (type, id, fullId) => ({
+      ...MOCK_PLACE,
+      id: fullId,
+      ids: { osm: `${type}/${id}` },
+      osmTags: { boundary: "administrative", name: "Bounded" },
+    }));
+    mockBuildReviewLinks.mockReturnValue([]);
+    mockGetPlaceKnowledge.mockImplementation((_place, _lang, options) =>
+      block(options.signal, MOCK_ENRICHMENT),
+    );
+    mockSearchHeroPhotos.mockImplementation((_tags, _providers, options) =>
+      block(options.signal, []),
+    );
+    mockFetchOsmBoundary.mockImplementation((_ref, _lang, signal) => block(signal, null));
+    mockFetchAggregate.mockImplementation((_subject, _providers, options) =>
+      block(options.signal, null),
+    );
+    return { signals, release: () => gate.resolve() };
+  }
+
+  it("cancels running place details once their last caller disconnects", async () => {
+    const providers = blockPlaceProviders();
+    const leaving = await openClient(placeUrl(7_600_000));
+    await vi.waitFor(() => expect(providers.signals).toHaveLength(4));
+    leaving.disconnect();
+    await vi.waitFor(() => expect(providers.signals.every((signal) => signal.aborted)).toBe(true));
+    // The abandoned enrichment is never cached; a later caller runs it afresh.
+    providers.release();
+    mockGetPlaceKnowledge.mockResolvedValue(MOCK_ENRICHMENT);
+    mockSearchHeroPhotos.mockResolvedValue([]);
+    mockFetchOsmBoundary.mockResolvedValue(null);
+    mockFetchAggregate.mockResolvedValue(null);
+    const retried = await app.inject({
+      method: "GET",
+      url: placeUrl(7_600_000),
+      remoteAddress: "10.7.0.1",
+    });
+    expect(retried.statusCode).toBe(200);
+    expect(mockWithCache).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps running place details for a caller still attached when another disconnects", async () => {
+    const providers = blockPlaceProviders();
+    const leaving = await openClient(placeUrl(7_600_100));
+    await vi.waitFor(() => expect(providers.signals).toHaveLength(4));
+    const staying = app
+      .inject({ method: "GET", url: placeUrl(7_600_100), remoteAddress: "10.7.0.2" })
+      .then((response) => response);
+    await pause(20);
+    leaving.disconnect();
+    await pause(100);
+    expect(providers.signals.some((signal) => signal.aborted)).toBe(false);
+    providers.release();
+    expect((await staying).statusCode).toBe(200);
+    expect(mockLookupByOsmRef).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a shared card photo running for a caller that stays when another disconnects", async () => {
+    const gate = Promise.withResolvers<void>();
+    let signal: AbortSignal | undefined;
+    const photo = licensedPhoto({
+      url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Shared.jpg",
+      source: "wikimedia",
+    });
+    mockSearchHeroPhotos.mockImplementation(async (_tags, _providers, options) => {
+      signal = options.signal;
+      await gate.promise;
+      return [photo];
+    });
+    const card = photoCard(7_400_000);
+    const leaving = await openClient("/places/card-enrichment", { places: [card] });
+    let staying: Promise<InjectResponse> | undefined;
+    try {
+      await vi.waitFor(() => expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(1));
+      staying = app
+        .inject({
+          method: "POST",
+          url: "/places/card-enrichment",
+          remoteAddress: "10.5.0.1",
+          payload: { places: [card] },
+        })
+        .then((response) => response);
+      await pause(20);
+      leaving.disconnect();
+      await pause(100);
+      expect(signal?.aborted).toBe(false);
+    } finally {
+      gate.resolve();
+    }
+    const response = await staying;
+    expect(response?.json().results[0].outcomes.photo).toEqual({ status: "available" });
+    expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a new caller wait for abandoned photo work instead of cooling the card down", async () => {
+    const settle = Promise.withResolvers<void>();
+    const photo = licensedPhoto({
+      url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Replacement.jpg",
+      source: "wikimedia",
+    });
+    let signal: AbortSignal | undefined;
+    // The abandoned provider call notices the abort but takes a while to settle.
+    mockSearchHeroPhotos.mockImplementationOnce(
+      (_tags, _providers, options) =>
+        new Promise((_resolve, reject) => {
+          signal = options.signal;
+          options.signal.addEventListener(
+            "abort",
+            () => void settle.promise.then(() => reject(options.signal.reason)),
+            { once: true },
+          );
+        }),
+    );
+    mockSearchHeroPhotos.mockResolvedValue([photo]);
+    const card = photoCard(7_700_000);
+    const leaving = await openClient("/places/card-enrichment", { places: [card] });
+    await vi.waitFor(() => expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(1));
+    leaving.disconnect();
+    await vi.waitFor(() => expect(signal?.aborted).toBe(true));
+    const replacement = app
+      .inject({
+        method: "POST",
+        url: "/places/card-enrichment",
+        remoteAddress: "10.8.0.1",
+        payload: { places: [card] },
+      })
+      .then((response) => response);
+    await pause(50);
+    settle.resolve();
+    expect((await replacement).json().results[0].outcomes.photo).toEqual({ status: "available" });
+    expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(2);
+  });
+
+  it("aborts a running card photo once its only caller disconnects", async () => {
+    let signal: AbortSignal | undefined;
+    mockSearchHeroPhotos.mockImplementation(
+      (_tags, _providers, options) =>
+        new Promise((_resolve, reject) => {
+          signal = options.signal;
+          options.signal.addEventListener("abort", () => reject(options.signal.reason), {
+            once: true,
+          });
+        }),
+    );
+    const leaving = await openClient("/places/card-enrichment", { places: [photoCard(7_500_000)] });
+    await vi.waitFor(() => expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(1));
+    leaving.disconnect();
+    await vi.waitFor(() => expect(signal?.aborted).toBe(true));
+    mockSearchHeroPhotos.mockResolvedValue([]);
+    const retried = await app.inject({
+      method: "POST",
+      url: "/places/card-enrichment",
+      remoteAddress: "10.6.0.1",
+      payload: { places: [photoCard(7_500_000)] },
+    });
+    expect(retried.json().results[0].outcomes.photo).toEqual({ status: "absent" });
+  });
 });

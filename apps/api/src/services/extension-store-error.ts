@@ -12,6 +12,7 @@ const messages = {
   invalid_source_snapshot: "Stored catalog sources are invalid",
   invalid_catalog_snapshot: "Stored catalog snapshot is invalid",
   catalog_acquisition_failed: "Catalog acquisition failed",
+  revocation_feed_invalid: "Revocation feed is not a valid denial list",
   invalid_source_url: "Catalog source must use a public HTTPS URL without credentials",
 } as const;
 

@@ -38,6 +38,46 @@ trust. Catalog installs continue to require matching identity, declared version
 and digest where present. Verification is not a security audit. Verified and
 community services receive the same community container sandbox.
 
+### What earns the Verified tier
+
+An entry is verified only when all of these hold, and the host checks the first
+three itself:
+
+1. The entry is in the **default catalog** and the host reads that catalog from an
+   immutable URL, one that names an exact 40-character commit. A branch URL, a
+   custom source or an `EXTENSION_CATALOG_URL` that can move never carries
+   verified trust.
+2. The entry names the exact manifest `id`, `version` and `manifest` URL, and the
+   SHA-256 of the manifest bytes in `manifestSha256`. The host hashes the bytes it
+   receives before parsing them and refuses a mismatch, a different `id` or a
+   different `version`. An entry cannot declare its own `trust`.
+3. The fetched manifest validates, and every integration artifact it names carries
+   its own SHA-256.
+4. An OpenMapX maintainer reviewed the extension against the review bar below
+   before the entry was added to the catalog repository.
+
+The review bar for step 4 covers what the digest cannot show. The reviewer reads
+the manifest and everything it references at the pinned revisions:
+
+- Each service repository is pinned to a full commit SHA, not a tag, branch or an
+  omitted ref, and the reviewer has read the code and `Dockerfile` at that commit.
+- The container image, requested host ports, bind mounts, environment and
+  credentials, and outbound network access are what the extension's purpose needs.
+- Each integration artifact contains no backend or frontend runtime entry point,
+  and its files match the digest.
+- The extension states the license and attribution of the data it serves.
+
+Passing this review establishes who vouched for these exact bytes. It is not a
+security audit, and a verified service runs in the same community container
+sandbox as any other.
+
+A verified entry reaches installations through a host release, not through the
+catalog repository alone: the default catalog is pinned to a commit in the
+OpenMapX source, so a new or changed entry becomes verified for users when that
+pin is moved to a catalog commit containing it. A new version of an extension
+needs its own reviewed entry with a new digest. Until the pin moves, the entry is
+not offered as verified.
+
 ## Browsing and installing
 
 Open **Extensions** in the admin panel. It has three tabs:
@@ -239,7 +279,13 @@ state instead. They may not use `networkMode: "host"`,
 `privileged: true`, host device pass-through, escape-class Linux capabilities
 (`SYS_ADMIN`, `SYS_PTRACE`, `NET_ADMIN`, and similar), deployment `envFile`, or
 Compose-variable bind paths. Network aliases may not collide with another
-service id or alias. Operator configuration belongs in
+service id or alias. Every community service must declare a literal memory limit
+in `container.memory` (for example `"512m"`); installation and updates reject a
+service without one with `community_memory_limit_required`. The platform also
+limits each community container to 512 processes and threads
+(`deploy.resources.limits.pids`, beside the memory limit) and starts it with
+`no-new-privileges`, so a runaway extension cannot take the host down or gain
+privileges through a setuid binary. Operator configuration belongs in
 `configSchema`; secret fields are delivered as `/run/secrets/<KEY>` with
 `<KEY>_FILE` set. A community Git URL must also be `https://` on a short
 allowlist of public hosts (`github.com`, `gitlab.com`, `codeberg.org`,
@@ -351,16 +397,58 @@ A storage or refresh error is not evidence that the catalog is empty.
   its service containers, drops the cloned repos and the integrations it placed,
   re-renders compose, and reloads the integration host. Standalone installs of
   the same component are left alone.
-- The catalog can carry a **kill-switch**: an extension marked `removed` is hidden
-  from Browse (with a banner on installed copies), and one marked `critical`
-  refuses preview, new installation and update admission. The worker rechecks
-  before installation effects and before committing installed state, including
-  when an advisory arrives while a job is queued. Every critical entry blocks
-  regardless of its version; advisory `maxVersion` is display information only.
-  Wait for the advisory to be cleared before trying another deliberate install
-  or update. Removal remains available. If the moving revocation feed cannot be
-  refreshed, known cached denials remain effective and the API reports stale
-  revocation data; an unavailable feed does not certify an extension as clean.
+- The catalog and a separate **revocation feed** can carry a **kill-switch**. An
+  extension listed as `removed` is shown as delisted and cannot be installed or
+  updated. One listed as `critical` refuses preview, new installation and update
+  admission. The worker rechecks before installation effects and before
+  committing installed state, including when an advisory arrives while a job is
+  queued. Every critical entry blocks regardless of its version; advisory
+  `maxVersion` is display information only. Wait for the advisory to be cleared
+  before trying another deliberate install or update. Removal remains available.
+  A revocation does not stop or remove a copy that is already installed, and the
+  **Installed** tab does not show revocation state. The **Browse** card of an
+  installed extension does show it, so remove an extension that is revoked.
+- If the revocation feed cannot be refreshed, or answers with something that is
+  not a valid denial list, known cached denials remain effective and the API
+  reports stale revocation data. Browse then shows a stale-data warning on the
+  page and on every entry that is not revoked, beside its tier, so "could not
+  check" never reads as "clean". An empty list is a fresh answer and shows no
+  warning.
+
+### Publishing a revocation
+
+The revocation feed is `revocations.json` on the `main` branch of the
+`community-extensions` repository, read from
+`https://raw.githubusercontent.com/openmapx/community-extensions/main/revocations.json`.
+Set `EXTENSION_REVOCATION_URL` to read a different feed. It is deny-only: it can
+block an extension but never add one, change a manifest or raise trust. It takes
+effect on installations without a release, once GitHub serves the new file, which
+can take a few minutes.
+
+```json
+{
+  "removed": [{ "id": "example-extension", "reason": "Abandoned by its maintainer" }],
+  "critical": [
+    {
+      "id": "another-extension",
+      "reason": "Exfiltrates credentials",
+      "maxVersion": "1.2.0"
+    }
+  ]
+}
+```
+
+- `removed` delists an extension. `critical` is a security advisory.
+- Both lists are optional; a feed with neither is valid and empty. `id` is
+  required on every entry, and `reason` (and `maxVersion` on `critical` entries)
+  is optional text.
+- The whole document is validated. One malformed entry makes installations treat
+  the entire feed as unreadable and keep their last good denials, so validate
+  before merging.
+- To lift a revocation, delete its entry. The feed carries no expiry.
+
+Revoke by merging a change to `revocations.json`; do not edit the catalog entry to
+revoke it, because the default catalog is pinned and only changes with a release.
 
 :::note[An extension-managed service repo is pinned]
 Service repos installed as part of an extension are pinned and marked

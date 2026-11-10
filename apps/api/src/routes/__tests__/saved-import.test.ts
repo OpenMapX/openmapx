@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { buildTestApp } from "../../test/app";
 import { mockRequireAuth } from "../../test/auth";
 import { makeQueryChain } from "../../test/db";
+import { savedImportLimit } from "../../utils/rate-limit";
 
 const authMock = mockRequireAuth("user-1");
 vi.mock("../../utils/require-auth", () => authMock);
@@ -36,10 +37,12 @@ vi.mock("../../db/index", () => {
   return { db };
 });
 vi.mock("../../db/schema", () => ({
+  user: { id: "user.id" },
   savedList: { id: "id", userId: "userId", name: "name" },
   savedPlace: "places",
   labeledPlace: {},
 }));
+const LOCK: unknown[] = [];
 let app: FastifyInstance;
 const point = { name: "Cafe", lat: 52, lng: 13, note: "A note" };
 beforeAll(async () => {
@@ -50,6 +53,7 @@ afterAll(async () => {
   await app?.close();
 });
 beforeEach(() => {
+  savedImportLimit.reset();
   state.queue = [];
   state.inserted = [];
   state.transactions = 0;
@@ -67,8 +71,10 @@ describe("saved list imports", () => {
   });
   it("imports into an owned system list, skips near duplicates, and appends sort order", async () => {
     state.queue.push(
+      LOCK,
       [{ id: "list-1", name: "$favorites" }],
       [{ name: "Cafe", lat: 52.000009, lng: 13.000009, sortOrder: 8 }],
+      [{ count: 10 }],
       [],
       [],
     );
@@ -91,7 +97,7 @@ describe("saved list imports", () => {
   });
   it("stores validated field captures without changing duplicate handling", async () => {
     const fieldContributors = { lat: [{ sourceId: "geo", name: "Geocoder" }], lng: [] };
-    state.queue.push([{ id: "list-1", name: "Trip" }], [], [], []);
+    state.queue.push(LOCK, [{ id: "list-1", name: "Trip" }], [], [], [], []);
     expect(
       (await request({ listId: "list-1" }, [{ ...point, fieldContributors }])).statusCode,
     ).toBe(200);
@@ -108,7 +114,7 @@ describe("saved list imports", () => {
     },
   );
   it("suffixes a colliding list name without exceeding 200 characters", async () => {
-    state.queue.push([], [{ id: "new-list" }], [], [], []);
+    state.queue.push(LOCK, [{ count: 3 }], [], [{ id: "new-list" }], [], [], [], []);
     const response = await request({ name: "a".repeat(200) });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ name: `${"a".repeat(196)} (2)`, imported: 1 });
@@ -138,7 +144,7 @@ describe("saved list imports", () => {
     expect((await request({ name: "Trip" }, places)).statusCode).toBe(400),
   );
   it("accepts 2000 places with full notes beyond Fastify's default body limit", async () => {
-    state.queue.push([{ id: "list-1", name: "Trip" }], [], [], []);
+    state.queue.push(LOCK, [{ id: "list-1", name: "Trip" }], [], [], [], []);
     const places = Array.from({ length: 2000 }, (_, index) => ({
       ...point,
       name: `Place ${index}`,
@@ -149,7 +155,7 @@ describe("saved list imports", () => {
     expect(response.json()).toMatchObject({ imported: 2000, skippedDuplicates: 0 });
   });
   it("accepts 2000 realistic rows", async () => {
-    state.queue.push([{ id: "list-1", name: "Trip" }], [], [], []);
+    state.queue.push(LOCK, [{ id: "list-1", name: "Trip" }], [], [], [], []);
     const places = Array.from({ length: 2000 }, (_, index) => ({
       name: `Cafe ${index}`,
       address: `${index} Example Street, Berlin`,
@@ -169,8 +175,41 @@ describe("saved list imports", () => {
     expect(state.transactions).toBe(0);
   });
   it("does not report success when a transactional insert fails", async () => {
-    state.queue.push([{ id: "list-1", name: "Trip" }], []);
+    state.queue.push(LOCK, [{ id: "list-1", name: "Trip" }], [], []);
     state.failInsert = true;
     expect((await request({ listId: "list-1" })).statusCode).toBe(500);
+  });
+  it("refuses a new list once the account holds the list limit", async () => {
+    state.queue.push(LOCK, [{ count: 500 }]);
+    const response = await request({ name: "One too many" });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "Accounts can have at most 500 saved lists",
+      code: "SAVED_LIST_LIMIT",
+    });
+    expect(state.inserted).toHaveLength(0);
+  });
+  it("refuses a whole batch that would pass the place limit", async () => {
+    state.queue.push(LOCK, [{ id: "list-1", name: "Trip" }], [], [{ count: 49_999 }]);
+    const response = await request({ listId: "list-1" }, [point, { ...point, name: "Second" }]);
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ code: "SAVED_PLACE_LIMIT" });
+    expect(state.inserted).toHaveLength(0);
+  });
+  it("still imports a batch that exactly reaches the place limit", async () => {
+    state.queue.push(LOCK, [{ id: "list-1", name: "Trip" }], [], [{ count: 49_998 }], [], []);
+    const response = await request({ listId: "list-1" }, [point, { ...point, name: "Second" }]);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ imported: 2 });
+  });
+  it("throttles one account's imports before validating or opening a transaction", async () => {
+    for (let index = 0; index < 100; index++) {
+      expect((await request({ name: "" })).statusCode).toBe(400);
+    }
+    const limited = await request({ listId: "list-1" });
+    expect(limited.statusCode).toBe(429);
+    expect(limited.headers["retry-after"]).toBe("6");
+    expect(limited.json()).toEqual({ error: "Too many requests", retryAfter: 6 });
+    expect(state.transactions).toBe(0);
   });
 });

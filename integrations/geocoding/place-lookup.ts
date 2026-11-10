@@ -280,9 +280,10 @@ function toPlace(
   });
 }
 
-async function fetchNominatim<T>(url: URL, lang?: string): Promise<T> {
+async function fetchNominatim<T>(url: URL, lang?: string, signal?: AbortSignal): Promise<T> {
   return fetchJson<T>(url.toString(), {
     headers: headersForLang(lang),
+    signal,
     errorMessage: ({ status }) => `Nominatim error ${status}: ${url.pathname}`,
   });
 }
@@ -340,6 +341,7 @@ interface NominatimBoundaryResult {
 export async function fetchOsmBoundary(
   osmRef: string,
   lang?: string,
+  signal?: AbortSignal,
 ): Promise<{ boundary: AreaGeometry; boundingBox?: BBox; contributors: Attribution[] } | null> {
   const [osmType, osmId] = osmRef.split("/");
   const prefix = OSM_TYPE_PREFIX[osmType];
@@ -352,7 +354,7 @@ export async function fetchOsmBoundary(
   url.searchParams.set("polygon_threshold", "0.0005");
 
   try {
-    const data = await fetchNominatim<NominatimBoundaryResult[]>(url, lang);
+    const data = await fetchNominatim<NominatimBoundaryResult[]>(url, lang, signal);
     const result = data[0];
     const geojson = result?.geojson;
     if (!geojson || (geojson.type !== "Polygon" && geojson.type !== "MultiPolygon")) {

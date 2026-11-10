@@ -10,7 +10,7 @@ import { EMPTY_FEATURE_COLLECTION, type MapLayerGroup } from "@/integration-api/
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import type { WildfirePopupController, WildfirePopupLease } from "../popup-controller";
 import {
-  renderWildfirePopupModel as buildPopupCard,
+  renderWildfirePopupModel,
   type WildfirePopupModel,
   type WildfirePopupTranslate,
 } from "../presentation";
@@ -136,7 +136,7 @@ export function usePolygonLayerLifecycle({
           className: "omx-popup",
         })
           .setLngLat(event.lngLat)
-          .setHTML(buildPopupCard(model, translate))
+          .setHTML(renderWildfirePopupModel(model, translate))
           .addTo(map),
       );
     };

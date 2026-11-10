@@ -24,6 +24,21 @@ export const COMMUNITY_SAFE_CAPS = new Set([
   "SETUID",
 ]);
 
+// A literal memory size the container runtime reads as a limit: a positive
+// number with a k, m or g unit. A Compose variable reference is not accepted,
+// because a community value is never interpolated from the host environment.
+const COMMUNITY_MEMORY_LIMIT_REGEX = /^([0-9]+(?:\.[0-9]+)?)([kmg])b?$/i;
+const MEMORY_UNIT_BYTES = { k: 1024, m: 1024 ** 2, g: 1024 ** 3 } as const;
+// Docker refuses a memory limit below 6 MiB, so a smaller value could never start.
+const MIN_COMMUNITY_MEMORY_BYTES = 6 * 1024 ** 2;
+
+function isCommunityMemoryLimit(value: string | undefined): boolean {
+  const match = COMMUNITY_MEMORY_LIMIT_REGEX.exec(value ?? "");
+  if (!match) return false;
+  const unit = match[2].toLowerCase() as keyof typeof MEMORY_UNIT_BYTES;
+  return Number(match[1]) * MEMORY_UNIT_BYTES[unit] >= MIN_COMMUNITY_MEMORY_BYTES;
+}
+
 /**
  * Static, single-manifest sandbox rules. Returns error strings; an empty array
  * means the manifest is acceptable at its provenance level. Called by
@@ -89,6 +104,13 @@ export function checkManifestSandbox(m: ServiceManifest, provenance: ManifestPro
       )
     )
       errors.push("Reserved platform resource settings are not allowed for community services");
+    // A single host runs every service, so a community container without a
+    // memory ceiling can take the others down with it.
+    if (!isCommunityMemoryLimit(m.container.memory)) {
+      errors.push(
+        'community_memory_limit_required: container.memory must be a literal limit of at least 6m, such as "512m" or "1g", for community services',
+      );
+    }
     for (const cap of m.container.capAdd ?? []) {
       if (!COMMUNITY_SAFE_CAPS.has(cap)) {
         errors.push(`container.capAdd: '${cap}' is not allowed for community services`);

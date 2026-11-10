@@ -10,12 +10,14 @@ import {
 import { validateServiceManifest } from "../manifest-schema";
 import type { LoadedService, ServiceManifest } from "../types";
 
-// The fixture is a verbatim copy of services/ingest/service.json in the
-// OpenConditions repository (github.com/OpenConditions/openconditions): the
-// extension service whose whole configuration must reach its container through
-// OpenMapX's config model, since a community service's own `${…}` entries are
-// escaped. To refresh it, run `pnpm gen:credentials` in OpenConditions and copy
-// that file over __fixtures__/openconditions-ingest.service.json unchanged.
+// The fixture is a copy of services/ingest/service.json in the OpenConditions
+// repository (github.com/OpenConditions/openconditions): the extension service
+// whose whole configuration must reach its container through OpenMapX's config
+// model, since a community service's own `${…}` entries are escaped. Its memory
+// limit is written as a literal, which a community service must do because a
+// host variable reference would never be substituted. To refresh it, run
+// `pnpm gen:credentials` in OpenConditions, copy that file over
+// __fixtures__/openconditions-ingest.service.json and restore the literal limit.
 const manifest = JSON.parse(
   readFileSync(
     new URL("./__fixtures__/openconditions-ingest.service.json", import.meta.url),

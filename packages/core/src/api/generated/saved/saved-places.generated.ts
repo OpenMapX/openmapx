@@ -16,6 +16,7 @@ import type {
   CreateSavedList401,
   CreateSavedList403,
   CreateSavedList404,
+  CreateSavedList409,
   CreateSavedList413,
   CreateSavedList415,
   CreateSavedList429,
@@ -26,6 +27,7 @@ import type {
   CreateSavedPlace401,
   CreateSavedPlace403,
   CreateSavedPlace404,
+  CreateSavedPlace409,
   CreateSavedPlace413,
   CreateSavedPlace415,
   CreateSavedPlace429,
@@ -72,6 +74,7 @@ import type {
   ImportSavedPlaces401,
   ImportSavedPlaces403,
   ImportSavedPlaces404,
+  ImportSavedPlaces409,
   ImportSavedPlaces413,
   ImportSavedPlaces415,
   ImportSavedPlaces429,
@@ -109,6 +112,7 @@ import type {
   UpdateSavedList401,
   UpdateSavedList403,
   UpdateSavedList404,
+  UpdateSavedList409,
   UpdateSavedList413,
   UpdateSavedList415,
   UpdateSavedList429,
@@ -616,6 +620,11 @@ export type createSavedListResponse404 = {
   status: 404;
 };
 
+export type createSavedListResponse409 = {
+  data: CreateSavedList409;
+  status: 409;
+};
+
 export type createSavedListResponse413 = {
   data: CreateSavedList413;
   status: 413;
@@ -644,6 +653,7 @@ export type createSavedListResponseError = (
   | createSavedListResponse401
   | createSavedListResponse403
   | createSavedListResponse404
+  | createSavedListResponse409
   | createSavedListResponse413
   | createSavedListResponse415
   | createSavedListResponse429
@@ -714,6 +724,11 @@ export type importSavedPlacesResponse404 = {
   status: 404;
 };
 
+export type importSavedPlacesResponse409 = {
+  data: ImportSavedPlaces409;
+  status: 409;
+};
+
 export type importSavedPlacesResponse413 = {
   data: ImportSavedPlaces413;
   status: 413;
@@ -742,6 +757,7 @@ export type importSavedPlacesResponseError = (
   | importSavedPlacesResponse401
   | importSavedPlacesResponse403
   | importSavedPlacesResponse404
+  | importSavedPlacesResponse409
   | importSavedPlacesResponse413
   | importSavedPlacesResponse415
   | importSavedPlacesResponse429
@@ -891,6 +907,11 @@ export type updateSavedListResponse404 = {
   status: 404;
 };
 
+export type updateSavedListResponse409 = {
+  data: UpdateSavedList409;
+  status: 409;
+};
+
 export type updateSavedListResponse413 = {
   data: UpdateSavedList413;
   status: 413;
@@ -919,6 +940,7 @@ export type updateSavedListResponseError = (
   | updateSavedListResponse401
   | updateSavedListResponse403
   | updateSavedListResponse404
+  | updateSavedListResponse409
   | updateSavedListResponse413
   | updateSavedListResponse415
   | updateSavedListResponse429
@@ -1173,6 +1195,11 @@ export type createSavedPlaceResponse404 = {
   status: 404;
 };
 
+export type createSavedPlaceResponse409 = {
+  data: CreateSavedPlace409;
+  status: 409;
+};
+
 export type createSavedPlaceResponse413 = {
   data: CreateSavedPlace413;
   status: 413;
@@ -1201,6 +1228,7 @@ export type createSavedPlaceResponseError = (
   | createSavedPlaceResponse401
   | createSavedPlaceResponse403
   | createSavedPlaceResponse404
+  | createSavedPlaceResponse409
   | createSavedPlaceResponse413
   | createSavedPlaceResponse415
   | createSavedPlaceResponse429

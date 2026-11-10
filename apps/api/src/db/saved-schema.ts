@@ -13,6 +13,9 @@ import {
 } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
+/** Unique per account; a write that repeats a list name raises this constraint. */
+export const SAVED_LIST_NAME_UNIQUE = "savedList_userId_name_unq";
+
 export const savedList = pgTable(
   "saved_list",
   {
@@ -32,7 +35,7 @@ export const savedList = pgTable(
   },
   (table) => [
     index("savedList_userId_idx").on(table.userId),
-    unique("savedList_userId_name_unq").on(table.userId, table.name),
+    unique(SAVED_LIST_NAME_UNIQUE).on(table.userId, table.name),
   ],
 );
 

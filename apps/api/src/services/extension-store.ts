@@ -149,20 +149,29 @@ async function fetchRevocations(): Promise<{ snapshot: RevocationSnapshot; stale
       headers: { "User-Agent": USER_AGENT_ADMIN },
       timeoutMs: 15_000,
     });
-    const control = (data ?? {}) as CatalogControl;
+    // Validate the whole document before using any of it. A document of the
+    // wrong shape is a failed refresh, not evidence that nothing is revoked, and
+    // it must not replace the last good snapshot.
+    if (
+      !isCatalogRecord(data) ||
+      (Object.hasOwn(data, "removed") && !isCatalogControlList(data.removed, false)) ||
+      (Object.hasOwn(data, "critical") && !isCatalogControlList(data.critical, true))
+    ) {
+      throw new ExtensionStoreError("revocation_feed_invalid");
+    }
+    const control = data as CatalogControl;
     const snapshot: RevocationSnapshot = {
-      removed: (control.removed ?? [])
-        .filter((r) => typeof r?.id === "string")
-        .map((r) => [r.id, typeof r.reason === "string" ? r.reason : "delisted"]),
-      critical: (control.critical ?? [])
-        .filter((c) => typeof c?.id === "string")
-        .map((c) => [
-          c.id,
-          {
-            reason: typeof c.reason === "string" ? c.reason : "security advisory",
-            ...(typeof c.maxVersion === "string" ? { maxVersion: c.maxVersion } : {}),
-          },
-        ]),
+      removed: (control.removed ?? []).map((r) => [
+        r.id,
+        typeof r.reason === "string" ? r.reason : "delisted",
+      ]),
+      critical: (control.critical ?? []).map((c) => [
+        c.id,
+        {
+          reason: typeof c.reason === "string" ? c.reason : "security advisory",
+          ...(typeof c.maxVersion === "string" ? { maxVersion: c.maxVersion } : {}),
+        },
+      ]),
       fetchedAtMs: Date.now(),
     };
     if (redis) {

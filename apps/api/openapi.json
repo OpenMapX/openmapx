@@ -144211,6 +144211,34 @@
               }
             }
           },
+          "409": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "SAVED_LIST_LIMIT",
+                        "SAVED_PLACE_LIMIT",
+                        "SAVED_LIST_NAME_TAKEN"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
           "413": {
             "description": "Response",
             "content": {
@@ -144821,6 +144849,34 @@
                       "additionalProperties": false
                     }
                   ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "SAVED_LIST_LIMIT",
+                        "SAVED_PLACE_LIMIT",
+                        "SAVED_LIST_NAME_TAKEN"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
@@ -145962,6 +146018,34 @@
                       "additionalProperties": false
                     }
                   ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "SAVED_LIST_LIMIT",
+                        "SAVED_PLACE_LIMIT",
+                        "SAVED_LIST_NAME_TAKEN"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
@@ -147879,6 +147963,34 @@
                       "additionalProperties": false
                     }
                   ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "SAVED_LIST_LIMIT",
+                        "SAVED_PLACE_LIMIT",
+                        "SAVED_LIST_NAME_TAKEN"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
@@ -154209,57 +154321,24 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
-                        },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
                     },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
-                        "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "statusCode",
-                        "error",
-                        "message"
-                      ],
-                      "additionalProperties": false
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "VEHICLE_LIMIT",
+                        "VEHICLE_NAME_TAKEN"
+                      ]
                     }
-                  ]
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
@@ -155558,57 +155637,24 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "error": {
-                          "type": "string"
-                        },
-                        "ok": {
-                          "type": "boolean",
-                          "enum": [
-                            false
-                          ]
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "jobId": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "error"
-                      ],
-                      "additionalProperties": false
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
                     },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "statusCode": {
-                          "type": "integer",
-                          "minimum": 400,
-                          "maximum": 599
-                        },
-                        "error": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "statusCode",
-                        "error",
-                        "message"
-                      ],
-                      "additionalProperties": false
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "VEHICLE_LIMIT",
+                        "VEHICLE_NAME_TAKEN"
+                      ]
                     }
-                  ]
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

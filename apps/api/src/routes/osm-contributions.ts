@@ -95,6 +95,13 @@ export function osmContributionsRoute(
     // that hook so `request.userId` is already set when they derive a bucket.
     declareRouteAuth(fastify, "session");
     fastify.addHook("onRequest", requireAuthHook);
+    // Contribution context and drafts belong to one account, so no shared cache
+    // may hold a response. Set on the hook so a new route or an error response
+    // cannot miss it.
+    fastify.addHook("onSend", async (_request, reply, payload) => {
+      reply.header("Cache-Control", "no-store");
+      return payload;
+    });
 
     fastify.get(
       "/osm/contributions/capabilities",

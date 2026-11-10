@@ -26,6 +26,7 @@ function makeChain() {
     "values",
     "onConflictDoNothing",
     "returning",
+    "for",
   ]) {
     chain[m] = vi.fn(() => chain);
   }
@@ -35,16 +36,19 @@ function makeChain() {
   return chain;
 }
 
-vi.mock("../../db/index.js", () => ({
-  db: {
+vi.mock("../../db/index.js", () => {
+  const db = {
     select: () => makeChain(),
     insert: () => makeChain(),
     update: () => makeChain(),
     delete: () => makeChain(),
-  },
-}));
+    transaction: async (fn: (tx: unknown) => unknown) => fn(db),
+  };
+  return { db };
+});
 
 vi.mock("../../db/schema.js", () => ({
+  user: { id: "user.id" },
   savedList: {
     id: "id",
     userId: "userId",
@@ -182,7 +186,7 @@ it("serializes exact saved captures and rejects malformed or unbounded public fi
     lat: [],
     lng: [],
   };
-  prime([{ id: "list-1" }]);
+  prime([], [{ id: "list-1" }]);
   const saved = await app.inject({
     method: "POST",
     url: "/api/saved/lists/list-1/places",

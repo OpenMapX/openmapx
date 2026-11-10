@@ -288,6 +288,18 @@ export const osmContributionLimiters = [
 ] as const;
 
 /**
+ * Saved-place imports for a signed-in user. Each request can write up to 2,000
+ * rows, so the bucket bounds database churn while a large export, imported in
+ * chunks, still completes; the web importer waits for Retry-After and resumes.
+ * Registered after the auth hook so `userDigestKeyFn` sees `request.userId`.
+ */
+export const savedImportLimit = new RateLimiter({
+  max: 100,
+  windowMs: 600_000,
+  keyFn: userDigestKeyFn,
+});
+
+/**
  * Public share-link resolution. One indexed SELECT per hit, but the endpoint
  * is anonymous and token-guessing must stay expensive on top of the token's
  * 256-bit entropy. Uses the default composite (`req.ip` + socket peer) key.

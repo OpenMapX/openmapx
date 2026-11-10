@@ -126,6 +126,7 @@ describe("saved serialized wire contracts", () => {
     expect(sdk.unwrapSavedResponse(await sdk.listSavedListPlaces("list", { client }))).toEqual({
       places: [place],
     });
+    database.queueSelect([]); // account quota lock
     database.queueSelect([{ id: "list" }]);
     const added = sdk.unwrapSavedResponse(
       await sdk.createSavedPlace(
@@ -182,6 +183,7 @@ describe("saved serialized wire contracts", () => {
     expect(
       sdk.unwrapSavedResponse(await sdk.checkSavedPlace({ placeId: "osm:node:1" }, { client })),
     ).toEqual({ listIds: ["list"] });
+    database.queueSelect([]); // account quota lock
     database.queueSelect([{ id: "list", name: "Trip" }]);
     database.queueSelect([]);
     expect(

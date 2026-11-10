@@ -17,6 +17,7 @@ vi.mock("../../db/index.js", () => ({ db: dbMock.db }));
 // constrained on (e.g. `saved_list.user_id = <userId>`), which is the whole
 // point of the cross-user isolation checks below.
 vi.mock("../../db/schema.js", () => ({
+  user: { id: "user.id" },
   savedList: {
     id: "saved_list.id",
     userId: "saved_list.user_id",
@@ -53,6 +54,15 @@ vi.mock("../../db/schema.js", () => ({
 
 let app: FastifyInstance;
 
+function uniqueViolation(constraint: string) {
+  return new Error("Failed query", {
+    cause: Object.assign(new Error("duplicate key value"), {
+      code: "23505",
+      constraint_name: constraint,
+    }),
+  });
+}
+
 beforeEach(async () => {
   const { savedRoute } = await import("../saved.js");
   app = await buildTestApp(savedRoute, { prefix: "/api" });
@@ -88,6 +98,21 @@ describe("saved routes — authentication", () => {
     expect(res.json()).toEqual({ error: "Authentication required" });
     // No DB access should occur once auth fails.
     expect(dbMock.db.select).not.toHaveBeenCalled();
+  });
+
+  it("never lets a shared cache keep a saved-places response", async () => {
+    dbMock.queueSelect([]);
+    const ok = await app.inject({ method: "GET", url: "/api/saved/lists" });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.headers["cache-control"]).toBe("no-store");
+
+    const { httpError } = await import("@openmapx/integration-framework");
+    authMock.requireAuthHook.mockImplementation(async () => {
+      throw httpError(401, "Authentication required");
+    });
+    const refused = await app.inject({ method: "GET", url: "/api/saved/lists" });
+    expect(refused.statusCode).toBe(401);
+    expect(refused.headers["cache-control"]).toBe("no-store");
   });
 
   it("401 surfaces for a write route too (preHandler runs before the handler)", async () => {
@@ -241,6 +266,70 @@ describe("POST /api/saved/lists", () => {
     });
     expect(res.statusCode).toBe(400);
   });
+
+  it("answers 409 when the account already has a list with that name", async () => {
+    dbMock.db.insert.mockImplementationOnce(() =>
+      makeQueryChain(Promise.reject(uniqueViolation("savedList_userId_name_unq"))),
+    );
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/saved/lists",
+      payload: { name: "Weekend Trip" },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({
+      error: "A list with this name already exists",
+      code: "SAVED_LIST_NAME_TAKEN",
+    });
+  });
+
+  it("keeps other database failures as server errors", async () => {
+    dbMock.db.insert.mockImplementationOnce(() =>
+      makeQueryChain(Promise.reject(uniqueViolation("saved_list_pkey"))),
+    );
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/saved/lists",
+      payload: { name: "Weekend Trip" },
+    });
+    expect(res.statusCode).toBe(500);
+  });
+});
+
+describe("PATCH /api/saved/lists/:id name conflicts", () => {
+  it("answers 409 when a rename collides with another list", async () => {
+    dbMock.queueSelect([{ name: "Trip" }]);
+    dbMock.db.update.mockImplementationOnce(() =>
+      makeQueryChain(Promise.reject(uniqueViolation("savedList_userId_name_unq"))),
+    );
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/api/saved/lists/list-1",
+      payload: { name: "Taken" },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ code: "SAVED_LIST_NAME_TAKEN" });
+  });
+
+  it("keeps a non-unique update failure as a server error", async () => {
+    dbMock.queueSelect([{ name: "Trip" }]);
+    dbMock.db.update.mockImplementationOnce(() =>
+      makeQueryChain(
+        Promise.reject(
+          Object.assign(new Error("deadlock"), {
+            code: "40P01",
+            constraint_name: "savedList_userId_name_unq",
+          }),
+        ),
+      ),
+    );
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/api/saved/lists/list-1",
+      payload: { name: "Taken" },
+    });
+    expect(res.statusCode).toBe(500);
+  });
 });
 
 describe("PATCH /api/saved/lists/:id", () => {
@@ -372,6 +461,7 @@ describe("GET /api/saved/lists/:id/places", () => {
 
 describe("POST /api/saved/lists/:id/places", () => {
   it("adds a place after confirming the list is owned by the caller", async () => {
+    dbMock.queueSelect([]); // account quota lock
     dbMock.queueSelect([{ id: "list-1" }]); // ownership lookup
 
     const res = await app.inject({
@@ -386,12 +476,13 @@ describe("POST /api/saved/lists/:id/places", () => {
     expect(body.name).toBe("Brandenburg Gate");
     expect(body.lat).toBe(52.5163);
     expect(dbMock.db.insert).toHaveBeenCalledTimes(1);
-    const where = whereArgs(dbMock, "select", 0);
+    const where = whereArgs(dbMock, "select", 1);
     expect(where).toContain("saved_list.user_id");
     expect(where).toContain(USER_ID);
   });
 
   it("404s and inserts nothing when adding to another user's list", async () => {
+    dbMock.queueSelect([]); // account quota lock
     dbMock.queueSelect([]); // ownership lookup returns nothing
 
     const res = await app.inject({
