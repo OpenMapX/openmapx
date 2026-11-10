@@ -11,14 +11,14 @@ import {
 } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
+/** Unique per account; a write that repeats a vehicle name raises this constraint. */
+export const PERSONAL_VEHICLE_NAME_UNIQUE = "personalVehicle_userId_name_unq";
+
 /**
  * A user's small garage. The EV spec is one JSON value rather than seven
  * columns: it is passed around whole by the charge planner and never queried
  * field-wise, so splitting it would declare its shape in a second place.
  */
-/** Unique per account; a write that repeats a vehicle name raises this constraint. */
-export const PERSONAL_VEHICLE_NAME_UNIQUE = "personalVehicle_userId_name_unq";
-
 export const personalVehicle = pgTable(
   "personal_vehicle",
   {
