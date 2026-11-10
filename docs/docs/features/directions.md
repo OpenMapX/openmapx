@@ -51,12 +51,14 @@ including time-aware requests, can exclude a provider.
 | OSRM     | Driving                               | Coverage and profile depend on its prepared dataset; follows Valhalla in the default order      |
 
 Every engine call first takes one unit from that engine's shared budget,
-counted across all clients and API replicas in Valkey: by default 600 calls a
-minute and 100,000 a day per engine, set by the routing integration's
+counted across all clients and API replicas in Valkey: by default 3,000 calls a
+minute and 500,000 a day per engine, set by the routing integration's
 `providerRequestsPerMinute` and `providerRequestsPerDay`. A call past the
-budget is not sent; the next compatible engine is tried, and if none can take
-it the request answers 429 with `Retry-After`. While Valkey is configured but
-unreachable, engine calls are refused with 503 rather than run unmetered.
+budget is not sent; the next compatible engine is tried. If none can take it
+the request answers 429 with `Retry-After`, unless an engine already failed
+upstream, in which case that failure (502) is reported. While Valkey is
+configured but unreachable, each API process counts the same budget itself, so
+routing keeps working and stays metered.
 
 Untimed cycling tries BRouter before Valhalla. Driving tries Valhalla before
 OSRM. Running a compatible service does not establish that it has data for the

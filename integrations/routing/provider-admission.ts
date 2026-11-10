@@ -1,30 +1,35 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import {
+  createLocalQuotaMeter,
+  type IntegrationContext,
+  type QuotaDecision,
+} from "@openmapx/integration-framework";
 import type { RoutingProvider } from "./types.js";
 
-const DEFAULT_REQUESTS_PER_MINUTE = 600;
-const DEFAULT_REQUESTS_PER_DAY = 100_000;
-const STORE_UNAVAILABLE_RETRY_SECONDS = 30;
+const DEFAULT_REQUESTS_PER_MINUTE = 3_000;
+const DEFAULT_REQUESTS_PER_DAY = 500_000;
 
 /**
- * A routing engine call the shared provider budget refused. The engine was not
- * contacted. `status` is 429 when the budget is spent and 503 when the shared
- * store could not be asked.
+ * A routing engine call the provider budget refused. The engine was not
+ * contacted.
  */
-export class RoutingAdmissionDeniedError extends Error {
-  readonly status: 429 | 503;
+class RoutingAdmissionDeniedError extends Error {
+  readonly status = 429;
 
-  constructor(
-    readonly reason: "quota" | "store_unavailable",
-    readonly retryAfterSeconds: number,
-  ) {
-    super(
-      reason === "quota"
-        ? "Routing is temporarily over its request budget"
-        : "Routing admission is temporarily unavailable",
-    );
+  constructor(readonly retryAfterSeconds: number) {
+    super("Routing is temporarily over its request budget");
     this.name = "RoutingAdmissionDeniedError";
-    this.status = reason === "quota" ? 429 : 503;
   }
+}
+
+/**
+ * The error a chain of engine attempts should report. A refusal by the
+ * budget says nothing about the route, so once any engine has failed
+ * upstream that failure wins: a preferred engine's 5xx followed by a
+ * fallback engine's refusal answers 502, not 429.
+ */
+export function routingChainError(previous: unknown, next: unknown): unknown {
+  if (previous !== undefined && next instanceof RoutingAdmissionDeniedError) return previous;
+  return next;
 }
 
 /** Answers a denied engine call; returns false for any other error. */
@@ -56,12 +61,13 @@ type Admit = () => Promise<void>;
  * metered one.
  *
  * With no shared store configured (a development checkout) calls are not
- * metered. With a store configured but unreachable, calls are refused: the
- * budget cannot be checked, and the upstream runtime contract never lets a
- * store failure turn into unmetered upstream use.
+ * metered. With a store configured but unreachable, the same budget is
+ * counted in this process instead, so routing keeps working and the engine
+ * stays metered (each replica then admits up to the full budget).
  */
 export function createRoutingProviderAdmission(ctx: IntegrationContext) {
   const runtime = ctx.upstreamRuntime;
+  const localMeter = createLocalQuotaMeter();
   const perMinute = positiveInteger(
     ctx.config?.providerRequestsPerMinute,
     DEFAULT_REQUESTS_PER_MINUTE,
@@ -72,20 +78,19 @@ export function createRoutingProviderAdmission(ctx: IntegrationContext) {
     (integrationId: string): Admit =>
     async () => {
       if (!runtime) return;
-      const decision = await runtime.consumeQuota({
+      const request = {
         bucket: `routing-provider:${integrationId}`,
         cost: 1,
         windows: [
           { id: "minute", limit: perMinute, durationMs: 60_000 },
           { id: "day", limit: perDay, durationMs: 86_400_000 },
         ],
-      });
+      };
+      let decision: QuotaDecision = await runtime.consumeQuota(request);
+      if (decision.diagnostic === "store_unavailable") decision = localMeter.consume(request);
       if (decision.allowed) return;
-      if (decision.diagnostic === "store_unavailable") {
-        throw new RoutingAdmissionDeniedError("store_unavailable", STORE_UNAVAILABLE_RETRY_SECONDS);
-      }
       const retryAfterMs = decision.retryAt === null ? 60_000 : decision.retryAt - Date.now();
-      throw new RoutingAdmissionDeniedError("quota", Math.max(1, Math.ceil(retryAfterMs / 1000)));
+      throw new RoutingAdmissionDeniedError(Math.max(1, Math.ceil(retryAfterMs / 1000)));
     };
 
   /**

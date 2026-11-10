@@ -47,7 +47,7 @@ import {
 } from "./navigation-alerts.js";
 import { captureRoutingResult, createRoutingOrchestrator } from "./orchestrator.js";
 import { avoidPlannedClosures, plannedClosureImpact } from "./planned-closures.js";
-import { sendRoutingAdmissionDenied } from "./provider-admission.js";
+import { routingChainError, sendRoutingAdmissionDenied } from "./provider-admission.js";
 import { roadConditionImpactForRequest } from "./road-condition-routing.js";
 import { NoScheduleProviderError, runSchedulePlan } from "./schedule-plan.js";
 import {
@@ -412,7 +412,7 @@ export function setup(ctx: IntegrationContext): void {
               { providerId: resolved.integrationId, method: "getRoute", outcome: "error" },
               performance.now() - providerStartedAt,
             );
-            lastErr = err;
+            lastErr = routingChainError(lastErr, err);
             ctx.log.warn(
               `routing provider ${resolved.integrationId} failed; trying next`,
               err as Error,
@@ -595,7 +595,7 @@ export function setup(ctx: IntegrationContext): void {
                   },
                   performance.now() - providerStartedAt,
                 );
-                lastErr = err;
+                lastErr = routingChainError(lastErr, err);
                 ctx.log.warn(
                   `routing optimizer ${resolved.integrationId} failed; trying next`,
                   err as Error,
@@ -1108,7 +1108,7 @@ export function setup(ctx: IntegrationContext): void {
             break;
           } catch (error) {
             if ((error as { status?: number }).status === 400) throw error;
-            lastError = error;
+            lastError = routingChainError(lastError, error);
             ctx.log.warn(
               `[ev] routing provider ${resolved.integrationId} failed; trying next`,
               error as Error,

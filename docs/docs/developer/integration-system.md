@@ -812,8 +812,11 @@ as structural interfaces and injected by the host).
 cache returns `fresh`, `stale`, `stale-if-error`, or `miss`; a refresh lease is
 owner-released; and all named quota windows are checked and consumed atomically.
 Do not replace it with process-local maps or counters in production. Redis
-failure must deny a new quota-consuming refresh, although eligible stale data
-may still be returned with its original evidence time.
+failure must never become unmetered upstream use: deny a new quota-consuming
+refresh, or, where a refusal would take a core feature down, count the same
+windows in process with `createLocalQuotaMeter` until the store returns
+(each replica then admits up to the full limit). Eligible stale data may still
+be returned with its original evidence time.
 
 #### Shared request admission
 

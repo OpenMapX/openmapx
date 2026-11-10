@@ -322,6 +322,7 @@ export type {
   LoadedIntegrationMeta,
 } from "./loader";
 export { toIntegrationMeta } from "./loader";
+export { createLocalQuotaMeter, type LocalQuotaMeter } from "./local-quota-meter";
 export type {
   CredentialSetup,
   DataSourceValidationResult,

@@ -63,18 +63,46 @@ describe("routing provider admission", () => {
       bucket: "routing-provider:routing-valhalla",
       cost: 1,
       windows: [
-        { id: "minute", limit: 600, durationMs: 60_000 },
-        { id: "day", limit: 100_000, durationMs: 86_400_000 },
+        { id: "minute", limit: 3_000, durationMs: 60_000 },
+        { id: "day", limit: 500_000, durationMs: 86_400_000 },
       ],
     });
   });
 
-  it("refuses with 503 and never calls the engine when the shared store is unavailable", async () => {
+  it("meters the engine in process when the shared store is unavailable", async () => {
     const engine = provider("routing-valhalla", 1);
     const { runtime } = fakeRuntime(10, { unavailable: true });
     const environment = createRoutingHandlerEnvironment({
       routingProviders: [engine.fixture],
-      contextOverrides: { upstreamRuntime: runtime },
+      contextOverrides: {
+        upstreamRuntime: runtime,
+        config: { providerRequestsPerMinute: 2 },
+      },
+    });
+    const directions = environment.getHandler("/directions");
+    const codes: number[] = [];
+    for (let index = 0; index < 3; index += 1) {
+      const reply = createRoutingTestReply();
+      await directions({ query: { waypoints: WAYPOINTS, mode: "driving" } }, reply);
+      codes.push(reply.code);
+    }
+
+    expect(codes).toEqual([200, 200, 429]);
+    expect(engine.getRoute).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports the preferred engine's upstream failure, not the fallback's refusal", async () => {
+    const preferred = provider("routing-valhalla", 1);
+    preferred.getRoute.mockRejectedValue(new Error("upstream 500"));
+    const fallback = provider("routing-osrm", 2);
+    const consumeQuota = vi.fn(async (input: { bucket: string }) =>
+      input.bucket === "routing-provider:routing-osrm"
+        ? { allowed: false, remaining: {}, retryAt: Date.now() + 10_000 }
+        : { allowed: true, remaining: {}, retryAt: null },
+    );
+    const environment = createRoutingHandlerEnvironment({
+      routingProviders: [preferred.fixture, fallback.fixture],
+      contextOverrides: { upstreamRuntime: { consumeQuota } as unknown as UpstreamRuntime },
     });
     const reply = createRoutingTestReply();
 
@@ -83,8 +111,9 @@ describe("routing provider admission", () => {
       reply,
     );
 
-    expect(reply.code).toBe(503);
-    expect(engine.getRoute).not.toHaveBeenCalled();
+    expect(reply.code).toBe(502);
+    expect(preferred.getRoute).toHaveBeenCalledOnce();
+    expect(fallback.getRoute).not.toHaveBeenCalled();
   });
 
   it("falls through to the next engine when the preferred one is over budget", async () => {
