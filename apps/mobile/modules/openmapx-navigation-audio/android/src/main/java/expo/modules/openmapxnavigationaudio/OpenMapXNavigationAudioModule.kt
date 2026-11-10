@@ -96,7 +96,6 @@ class OpenMapXNavigationAudioModule : Module() {
       return finish(SpeakOutcome.FAILED)
     }
     val locale = SpeechLocale.parse(request.locale) ?: return finish(SpeakOutcome.FAILED)
-    if (!focusPolicy.acceptsSpeech) return finish(SpeakOutcome.SKIPPED)
 
     val engine = ensureEngine() ?: return finish(SpeakOutcome.FAILED)
     // `TextToSpeech` binds to the engine asynchronously, and until it has, every
@@ -112,10 +111,8 @@ class OpenMapXNavigationAudioModule : Module() {
     // only once the engine can speak, so a cold engine does not swallow it.
     if (!ledger.record(request.cueId)) return finish(SpeakOutcome.SKIPPED)
 
-    if (focusPolicy.willEnqueue() && !requestFocus()) {
-      focusPolicy.didStop()
-      return finish(SpeakOutcome.FAILED)
-    }
+    // After an interruption this request is what learns whether it has ended.
+    focusPolicy.acquireFor(::requestFocus)?.let { return finish(it) }
 
     engine.language = locale.locale
     engine.setSpeechRate(speechRate(request.rate))

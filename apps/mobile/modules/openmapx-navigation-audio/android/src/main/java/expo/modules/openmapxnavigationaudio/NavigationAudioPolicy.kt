@@ -70,6 +70,14 @@ class CueLedger(capacity: Int = DEFAULT_CAPACITY) {
  * Focus is requested immediately before an utterance and abandoned as soon as
  * the queue drains, so music and podcasts duck for the length of a prompt rather
  * than the length of a journey.
+ *
+ * An interruption ends when focus is granted again. Android reports the end of
+ * a loss only to a listener whose request is still registered, and the request
+ * is abandoned on loss so nothing ducks behind a call; the next cue's own
+ * request is therefore what finds out whether the interruption is over.
+ *
+ * Called from the module queue, the focus listener and the speech engine's
+ * callbacks, so every transition is synchronised.
  */
 class AudioFocusPolicy {
   var pendingUtterances: Int = 0
@@ -81,7 +89,26 @@ class AudioFocusPolicy {
   var isInterrupted: Boolean = false
     private set
 
+  /**
+   * Prepares one utterance, asking `requestFocus` for focus when the queue does
+   * not already hold it. Returns null when the utterance may be spoken, or the
+   * outcome to report: skipped while another source still holds focus after an
+   * interruption, failed when focus is refused otherwise.
+   */
+  @Synchronized
+  fun acquireFor(requestFocus: () -> Boolean): SpeakOutcome? {
+    if (!willEnqueue()) return null
+    if (requestFocus()) {
+      isInterrupted = false
+      return null
+    }
+    val outcome = if (isInterrupted) SpeakOutcome.SKIPPED else SpeakOutcome.FAILED
+    didStop()
+    return outcome
+  }
+
   /** True when the caller must request focus before enqueuing. */
+  @Synchronized
   fun willEnqueue(): Boolean {
     pendingUtterances += 1
     if (holdsFocus) return false
@@ -90,6 +117,7 @@ class AudioFocusPolicy {
   }
 
   /** True when the caller must abandon focus after this utterance ended. */
+  @Synchronized
   fun didFinishUtterance(): Boolean {
     pendingUtterances = maxOf(0, pendingUtterances - 1)
     if (pendingUtterances > 0 || !holdsFocus) return false
@@ -98,6 +126,7 @@ class AudioFocusPolicy {
   }
 
   /** True when the caller must abandon focus after an explicit stop. */
+  @Synchronized
   fun didStop(): Boolean {
     pendingUtterances = 0
     if (!holdsFocus) return false
@@ -109,18 +138,17 @@ class AudioFocusPolicy {
    * A call or another priority source took focus. Speech is abandoned rather
    * than queued: a prompt delivered minutes late is worse than none.
    */
+  @Synchronized
   fun didLoseFocus() {
     isInterrupted = true
     pendingUtterances = 0
     holdsFocus = false
   }
 
+  @Synchronized
   fun didRegainFocus() {
     isInterrupted = false
   }
-
-  val acceptsSpeech: Boolean
-    get() = !isInterrupted
 }
 
 /**

@@ -97,6 +97,12 @@ only when the OS starts the task without the app.
   keep-screen-on setting is on. It re-checks after every published change and
   when the shell reports a visibility change or a recovery outcome, so a
   setting change, arrival or end releases the screen with the commit itself.
+- **Speech interruptions.** A call or another source that takes audio focus
+  during a cue stops it, and later cues are not queued behind the interruption.
+  iOS observes the end of an audio-session interruption. Android abandons its
+  focus request on loss, so no end is delivered; each later cue requests focus
+  again, is skipped while the other source still holds it, and speaks once
+  focus is granted.
 - **Transit refresh and replan** are not wired yet. Their effects are no-ops,
   and the session keeps running on its captured itinerary.
 

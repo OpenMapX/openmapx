@@ -79,16 +79,76 @@ class AudioFocusPolicyTest {
   }
 
   @Test
-  fun refusesSpeechAfterLosingFocus() {
+  fun dropsTheQueueWhenFocusIsLost() {
     val policy = AudioFocusPolicy()
+    assertNull(policy.acquireFor { true })
     policy.willEnqueue()
     policy.didLoseFocus()
-    assertFalse(policy.acceptsSpeech)
+    assertTrue(policy.isInterrupted)
     assertFalse(policy.holdsFocus)
     assertEquals(0, policy.pendingUtterances)
+  }
+
+  @Test
+  fun aLaterCueEndsTheInterruptionWhenFocusIsGrantedAgain() {
+    val policy = AudioFocusPolicy()
+    // A cue is speaking when a call takes focus mid-utterance; the request is
+    // abandoned, so no gain will ever be delivered to it.
+    assertNull(policy.acquireFor { true })
+    policy.didLoseFocus()
+    // The engine may still report the interrupted utterance as finished.
+    assertFalse(policy.didFinishUtterance())
+
+    var requests = 0
+    assertNull(policy.acquireFor { requests += 1; true })
+
+    assertEquals(1, requests)
+    assertFalse(policy.isInterrupted)
+    assertTrue(policy.holdsFocus)
+    assertEquals(1, policy.pendingUtterances)
+    assertTrue(policy.didFinishUtterance())
+  }
+
+  @Test
+  fun skipsCuesWhileTheInterruptingSourceStillHoldsFocus() {
+    val policy = AudioFocusPolicy()
+    assertNull(policy.acquireFor { true })
+    policy.didLoseFocus()
+
+    assertEquals(SpeakOutcome.SKIPPED, policy.acquireFor { false })
+    assertTrue(policy.isInterrupted)
+    assertFalse(policy.holdsFocus)
+    assertEquals(0, policy.pendingUtterances)
+
+    // Each later cue asks again rather than staying silent for the process.
+    assertNull(policy.acquireFor { true })
+    assertFalse(policy.isInterrupted)
+  }
+
+  @Test
+  fun failsACueWhoseFocusRequestIsRefusedWithoutAnInterruption() {
+    val policy = AudioFocusPolicy()
+    assertEquals(SpeakOutcome.FAILED, policy.acquireFor { false })
+    assertFalse(policy.holdsFocus)
+    assertEquals(0, policy.pendingUtterances)
+  }
+
+  @Test
+  fun doesNotAskAgainWhileTheQueueHoldsFocus() {
+    val policy = AudioFocusPolicy()
+    assertNull(policy.acquireFor { true })
+    var requests = 0
+    assertNull(policy.acquireFor { requests += 1; false })
+    assertEquals(0, requests)
+    assertEquals(2, policy.pendingUtterances)
+  }
+
+  @Test
+  fun aDeliveredGainAlsoEndsTheInterruption() {
+    val policy = AudioFocusPolicy()
+    policy.didLoseFocus()
     policy.didRegainFocus()
-    assertTrue(policy.acceptsSpeech)
-    assertTrue(policy.willEnqueue())
+    assertFalse(policy.isInterrupted)
   }
 
 }
