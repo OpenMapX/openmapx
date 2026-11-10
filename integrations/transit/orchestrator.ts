@@ -2,11 +2,13 @@ import { createHash } from "node:crypto";
 import type { BBox } from "@openmapx/core";
 import {
   captureTransitContributors,
+  classifyProviderFailure,
   type IntegrationContext,
   type MetricsRecorder,
   type ProviderCallContext,
   type ProviderCallOutcome,
   type ProviderHealthHandle,
+  raceCallerAbort,
   type TransitProvider,
   TransitTripResolutionUnsupportedError,
   type TripPlanRequest,
@@ -219,8 +221,11 @@ function classifyOutcome(value: unknown): ProviderCallOutcome {
  * The provider's existing fallback semantics (catch + return null/empty) stay
  * identical; this helper just feeds success/failure + latency into the
  * health tracker and emits a `transit_provider_calls_total` increment plus
- * a `transit_provider_call_duration_ms` observation with the same labels
- * (G3 wiring).
+ * a `transit_provider_call_duration_ms` observation with the same labels.
+ *
+ * With a caller signal, the call settles as cancelled as soon as the caller
+ * aborts, so an abandoned request records `caller_cancelled`, which never
+ * counts toward the provider's health, even if the provider ignores the signal.
  */
 async function timed<T>(
   health: ProviderHealthHandle,
@@ -228,10 +233,11 @@ async function timed<T>(
   providerId: string,
   method: string,
   fn: () => Promise<T>,
+  signal?: AbortSignal,
 ): Promise<{ ok: true; value: T } | { ok: false; error: unknown }> {
   const start = performance.now();
   try {
-    const rawValue = await fn();
+    const rawValue = await raceCallerAbort(fn(), signal);
     const value =
       rawValue && typeof rawValue === "object" && "data" in rawValue && "attributions" in rawValue
         ? ({
@@ -248,8 +254,21 @@ async function timed<T>(
     return { ok: true, value };
   } catch (error) {
     const elapsed = performance.now() - start;
-    await health.recordFailure(providerId, elapsed, "connection", failureReason(error));
-    metrics.recordProviderCall({ providerId, method, outcome: "error" }, elapsed);
+    const outcome = classifyProviderFailure(error, signal);
+    await health.recordFailure(providerId, elapsed, outcome, failureReason(error));
+    metrics.recordProviderCall(
+      {
+        providerId,
+        method,
+        outcome:
+          outcome === "caller_cancelled"
+            ? "cancelled"
+            : outcome === "timeout"
+              ? "timeout"
+              : "error",
+      },
+      elapsed,
+    );
     return { ok: false, error };
   }
 }
@@ -564,6 +583,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
           p.id,
           "searchStopsByName",
           () => fn(query, limit, context),
+          context?.signal,
         );
         return outcome.ok ? outcome.value : null;
       },

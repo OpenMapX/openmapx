@@ -76,6 +76,25 @@ describe("listProviders", () => {
     expect(providers.map((p) => p.id)).toEqual(["ok"]);
   });
 
+  it("records a rejected credential as an auth failure, not a connection failure", async () => {
+    const rejected = makeProvider({
+      id: "rejected",
+      getAvailability: async () => {
+        throw Object.assign(new Error("HTTP 401"), { status: 401 });
+      },
+    });
+    const ctx = ctxWith([rejected]);
+    const recordFailure = vi.fn(async () => {});
+    ctx.providerHealth = {
+      isHealthy: async () => true,
+      recordSuccess: async () => {},
+      recordFailure,
+      getSnapshot: vi.fn(),
+    };
+    await createRideOrchestrator(ctx).listProviders(request);
+    expect(recordFailure).toHaveBeenCalledWith("rejected", expect.any(Number), "auth", "HTTP 401");
+  });
+
   it("skips providers whose source the operator policy disallows", async () => {
     const ctx = ctxWith([makeProvider({ id: "allowed" }), makeProvider({ id: "banned" })]);
     ctx.getDisallowedSourceIds = async () => new Set(["banned"]);

@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  classifyProviderFailure,
   ProviderCancelledError,
+  ProviderPayloadError,
   ProviderTimeoutError,
+  raceCallerAbort,
   runWithProviderDeadline,
 } from "../provider-execution";
 
@@ -33,5 +36,97 @@ describe("provider execution", () => {
     });
     controller.abort();
     await expect(work).rejects.toBeInstanceOf(ProviderCancelledError);
+  });
+});
+
+describe("classifyProviderFailure", () => {
+  function aborted(reason?: unknown): AbortSignal {
+    const controller = new AbortController();
+    controller.abort(reason);
+    return controller.signal;
+  }
+
+  it("maps a caller abort to caller_cancelled", () => {
+    expect(classifyProviderFailure(new ProviderCancelledError())).toBe("caller_cancelled");
+    const signal = aborted();
+    expect(classifyProviderFailure(signal.reason, signal)).toBe("caller_cancelled");
+  });
+
+  it("follows the cause chain of a wrapped abort", () => {
+    const signal = aborted();
+    const wrapped = new TypeError("fetch failed", { cause: signal.reason });
+    expect(classifyProviderFailure(wrapped, signal)).toBe("caller_cancelled");
+    const named = Object.assign(new Error("request aborted"), { name: "AbortError" });
+    expect(classifyProviderFailure(named, signal)).toBe("caller_cancelled");
+  });
+
+  it("keeps an upstream failure that settled before the caller aborted", () => {
+    const signal = aborted();
+    const upstream = Object.assign(new Error("HTTP 503"), { status: 503 });
+    expect(classifyProviderFailure(upstream, signal)).toBe("upstream_5xx");
+    expect(classifyProviderFailure(new Error("socket hang up"), signal)).toBe("connection");
+  });
+
+  it("reports deadlines as timeouts, not cancellations", () => {
+    expect(classifyProviderFailure(new ProviderTimeoutError())).toBe("timeout");
+    expect(classifyProviderFailure(new ProviderTimeoutError(), aborted())).toBe("timeout");
+    const deadline = aborted(new DOMException("signal timed out", "TimeoutError"));
+    expect(classifyProviderFailure(deadline.reason, deadline)).toBe("timeout");
+    const timeoutReason = aborted(new ProviderTimeoutError());
+    const abort = Object.assign(new Error("aborted"), { name: "AbortError" });
+    expect(classifyProviderFailure(abort, timeoutReason)).toBe("timeout");
+  });
+
+  it("treats an abort the caller did not request as the provider's own deadline", () => {
+    const abort = Object.assign(new Error("aborted"), { name: "AbortError" });
+    expect(classifyProviderFailure(abort)).toBe("timeout");
+    expect(classifyProviderFailure(abort, new AbortController().signal)).toBe("timeout");
+  });
+
+  it("classifies HTTP statuses and structured codes", () => {
+    const status = (value: number) => Object.assign(new Error(`HTTP ${value}`), { status: value });
+    expect(classifyProviderFailure(status(401))).toBe("auth");
+    expect(classifyProviderFailure(status(403))).toBe("auth");
+    expect(classifyProviderFailure(status(429))).toBe("quota");
+    expect(classifyProviderFailure(status(404))).toBe("input");
+    expect(classifyProviderFailure(status(502))).toBe("upstream_5xx");
+    expect(classifyProviderFailure(Object.assign(new Error("bad"), { statusCode: 500 }))).toBe(
+      "upstream_5xx",
+    );
+    const code = (value: string) => Object.assign(new Error(value), { code: value });
+    expect(classifyProviderFailure(code("quota_exhausted"))).toBe("quota");
+    expect(classifyProviderFailure(code("invalid_response"))).toBe("invalid_payload");
+    expect(classifyProviderFailure(code("invalid_request"))).toBe("input");
+    expect(classifyProviderFailure(code("unauthorized"))).toBe("auth");
+    expect(classifyProviderFailure(code("forbidden"))).toBe("auth");
+    expect(classifyProviderFailure(code("ETIMEDOUT"))).toBe("timeout");
+    expect(classifyProviderFailure(new ProviderPayloadError("missing departures"))).toBe(
+      "invalid_payload",
+    );
+    expect(classifyProviderFailure(Object.assign(new Error("parse"), { name: "ZodError" }))).toBe(
+      "invalid_payload",
+    );
+    expect(classifyProviderFailure("boom")).toBe("connection");
+  });
+});
+
+describe("raceCallerAbort", () => {
+  it("settles with a cancellation as soon as the caller aborts", async () => {
+    const controller = new AbortController();
+    const work = raceCallerAbort(new Promise(() => {}), controller.signal);
+    controller.abort();
+    await expect(work).rejects.toBeInstanceOf(ProviderCancelledError);
+  });
+
+  it("keeps the provider's own failure when it settles first", async () => {
+    const controller = new AbortController();
+    const upstream = Object.assign(new Error("HTTP 500"), { status: 500 });
+    const work = raceCallerAbort(Promise.reject(upstream), controller.signal);
+    await expect(work).rejects.toBe(upstream);
+    controller.abort();
+  });
+
+  it("passes the result through without a signal", async () => {
+    await expect(raceCallerAbort(Promise.resolve(3))).resolves.toBe(3);
   });
 });

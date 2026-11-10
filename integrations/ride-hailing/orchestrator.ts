@@ -1,7 +1,8 @@
-import type {
-  IntegrationContext,
-  RideProvider,
-  RideQuoteRequest,
+import {
+  classifyProviderFailure,
+  type IntegrationContext,
+  type RideProvider,
+  type RideQuoteRequest,
 } from "@openmapx/integration-framework";
 import {
   captureResultContributors,
@@ -103,9 +104,10 @@ export function createRideOrchestrator(ctx: IntegrationContext) {
       // reason with any URL query string stripped out.
       const reason = redactUrlsInReason(raw);
       ctx.log.warn(`ride provider call failed: ${provider.id}.${method}`, reason);
-      await ctx.providerHealth?.recordFailure(provider.id, latency, "connection", reason);
+      const outcome = classifyProviderFailure(err);
+      await ctx.providerHealth?.recordFailure(provider.id, latency, outcome, reason);
       ctx.metricsRecorder?.recordProviderCall(
-        { providerId: provider.id, method, outcome: "error" },
+        { providerId: provider.id, method, outcome: outcome === "timeout" ? "timeout" : "error" },
         latency,
       );
       return null;

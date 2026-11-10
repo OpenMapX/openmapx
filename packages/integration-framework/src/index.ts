@@ -359,10 +359,13 @@ export {
   resolveIntegrationPlatformEndpoint,
 } from "./platform-endpoints";
 export {
+  classifyProviderFailure,
   type ProviderCallContext,
   ProviderCancelledError,
   type ProviderDeadlineOptions,
+  ProviderPayloadError,
   ProviderTimeoutError,
+  raceCallerAbort,
   runWithProviderDeadline,
 } from "./provider-execution";
 export {

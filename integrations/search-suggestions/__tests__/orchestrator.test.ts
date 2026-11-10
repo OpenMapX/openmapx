@@ -165,7 +165,15 @@ describe("search suggestion fan-out", () => {
       },
     };
     const controller = new AbortController();
-    const work = createSearchSuggestionsOrchestrator(context([slow])).search(
+    const ctx = context([slow]);
+    const recordFailure = vi.fn(async () => {});
+    ctx.providerHealth = {
+      isHealthy: async () => true,
+      recordSuccess: async () => {},
+      recordFailure,
+      getSnapshot: vi.fn(),
+    };
+    const work = createSearchSuggestionsOrchestrator(ctx).search(
       { query: "FRA", lang: "en", limit: 8 },
       controller.signal,
     );
@@ -174,6 +182,15 @@ describe("search suggestion fan-out", () => {
     controller.abort(new Error("caller left"));
 
     await expect(work).rejects.toBeInstanceOf(ProviderCancelledError);
+    await vi.waitFor(() =>
+      expect(recordFailure).toHaveBeenCalledWith(
+        "slow",
+        expect.any(Number),
+        "caller_cancelled",
+        expect.any(String),
+      ),
+    );
+    expect(recordFailure).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -87,6 +87,97 @@ function orchestrator(
   return { transit: createTransitOrchestrator(ctx), recordFailure };
 }
 
+describe("stop-name search cancellation", () => {
+  const COUNTED = new Set(["timeout", "connection", "upstream_5xx", "auth", "invalid_payload"]);
+
+  it("records an abandoned search as caller_cancelled, even when a provider ignores the signal", async () => {
+    const honouring = searching(
+      "a",
+      vi.fn(
+        (_q: string, _l: number, context?: { signal: AbortSignal }) =>
+          new Promise<never>((_resolve, reject) => {
+            context?.signal.addEventListener("abort", () => reject(context.signal.reason), {
+              once: true,
+            });
+          }),
+      ),
+    );
+    let failIgnoring: (error: Error) => void = () => {};
+    const ignoring = searching(
+      "b",
+      vi.fn(
+        () =>
+          new Promise<never>((_resolve, reject) => {
+            failIgnoring = reject;
+          }),
+      ),
+    );
+    const { transit, recordFailure } = orchestrator([honouring, ignoring]);
+    const controller = new AbortController();
+    const context = { signal: controller.signal, deadlineAt: Date.now() + 5_000 };
+
+    const search = transit.searchByNameRaw("Central", 30, undefined, context);
+    await vi.waitFor(() => expect(ignoring.provider.searchStopsByName).toHaveBeenCalled());
+    controller.abort();
+    failIgnoring(new Error("upstream down"));
+
+    await expect(search).rejects.toBeDefined();
+    await vi.waitFor(() => expect(recordFailure).toHaveBeenCalledTimes(2));
+    for (const call of recordFailure.mock.calls as unknown as unknown[][])
+      expect(call[2]).toBe("caller_cancelled");
+  });
+
+  it("never records a counted failure for repeatedly abandoned searches", async () => {
+    const slow = searching(
+      "a",
+      vi.fn(
+        (_q: string, _l: number, context?: { signal: AbortSignal }) =>
+          new Promise<never>((_resolve, reject) => {
+            context?.signal.addEventListener("abort", () => reject(new Error("aborted")), {
+              once: true,
+            });
+          }),
+      ),
+    );
+    const { transit, recordFailure } = orchestrator([slow]);
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const controller = new AbortController();
+      const search = transit.searchByNameRaw("Cen", 30, undefined, {
+        signal: controller.signal,
+        deadlineAt: Date.now() + 5_000,
+      });
+      await vi.waitFor(() =>
+        expect(slow.provider.searchStopsByName).toHaveBeenCalledTimes(attempt + 1),
+      );
+      controller.abort();
+      await expect(search).rejects.toBeDefined();
+    }
+    await vi.waitFor(() => expect(recordFailure).toHaveBeenCalledTimes(12));
+    const outcomes = (recordFailure.mock.calls as unknown as unknown[][]).map((call) => call[2]);
+    expect(outcomes.filter((outcome) => COUNTED.has(outcome as string))).toEqual([]);
+  });
+
+  it("keeps the upstream failure when the caller aborts after it settled", async () => {
+    const failed = searching(
+      "a",
+      vi.fn(async () => {
+        throw Object.assign(new Error("HTTP 503"), { status: 503 });
+      }),
+    );
+    const { transit, recordFailure } = orchestrator([failed, answering("b")]);
+    const controller = new AbortController();
+
+    const result = await transit.searchByNameRaw("Central", 30, undefined, {
+      signal: controller.signal,
+      deadlineAt: Date.now() + 5_000,
+    });
+    controller.abort();
+
+    expect(result.data.map((s) => s.id)).toEqual(["b:central"]);
+    expect(recordFailure).toHaveBeenCalledWith("a", expect.any(Number), "upstream_5xx", "HTTP 503");
+  });
+});
+
 describe("stop-name search coverage", () => {
   it("keeps answers from working providers and marks the result partial when one fails", async () => {
     const { transit, recordFailure } = orchestrator([answering("a"), failing("b")]);

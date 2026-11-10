@@ -976,8 +976,15 @@ paths to the global URL-pattern limiter.
 Provider health accepts only closed outcomes. Timeouts, connection failures,
 upstream 5xx responses, authentication failures, and invalid payloads affect the
 circuit; valid empty results, policy/input rejection, quota denial, and caller
-cancellation remain observable without penalizing the provider. Keep bounded
-operator detail separate from the outcome code. Air-quality metrics likewise
+cancellation remain observable without penalizing the provider. Orchestrators
+derive the outcome with `classifyProviderFailure(error, signal)` from
+`@openmapx/integration-framework`, passing the caller's signal. The error that
+settled the call decides: a caller abort is `caller_cancelled`, a deadline is
+`timeout` even though it aborts a signal, and an upstream failure that settled
+before the caller aborted keeps its own outcome. Wrap the provider promise in
+`raceCallerAbort(work, signal)` (or run it through `runWithProviderDeadline`) so a
+provider that ignores its signal still settles as cancelled when the caller
+leaves. Keep bounded operator detail separate from the outcome code. Air-quality metrics likewise
 accept only closed method, outcome, cache, evidence-class, rejection, quota, and
 compatibility fields; user strings and location identifiers are not labels.
 
