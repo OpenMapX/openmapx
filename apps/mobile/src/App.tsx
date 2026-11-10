@@ -214,6 +214,9 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
       }),
       permission: () => services.permission(),
       activeSession: async () => (await navigation)?.activeSession() ?? null,
+      reportInvalidSend: (type) => {
+        void navigation.then((composed) => composed?.reportInvalidSend(type));
+      },
     });
     if (!config.feasibilityMode) {
       navigation = createForegroundNavigation({

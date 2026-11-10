@@ -104,7 +104,7 @@ export async function getHeadlessCoordinator(): Promise<NavigationCoordinator> {
   const { coordinator } = await createCoordinator({
     // Nothing to send to, and nothing that would accept it: a headless process
     // has no channel, so every outbound message is dropped by design.
-    bridge: { send: () => undefined },
+    bridge: { send: () => "dropped" },
     permissions: {
       state: () => createLocationDriver().getPermissionState(),
       // A background callback is by definition not a visible start, so this is

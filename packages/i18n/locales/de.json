@@ -232,6 +232,7 @@
     "voiceDistanceFeet": "{feet} Fuß",
     "voiceDistanceMiles": "{miles} Meilen",
     "startFailed": "Die Navigation konnte nicht gestartet werden. Bitte versuche es erneut.",
+    "endFailed": "Die Navigation konnte nicht beendet werden und läuft weiter. Bitte versuche es erneut.",
     "startUpdateRequired": "Aktualisiere die App, um zu navigieren.",
     "walkToDestination": "Zu Fuß zum Ziel",
     "startWalking": "Fußweg starten",

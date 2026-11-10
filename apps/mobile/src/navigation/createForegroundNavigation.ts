@@ -150,6 +150,8 @@ export interface ForegroundNavigation {
    * resumed or ended the session.
    */
   reviewKeepAwake(): Promise<void>;
+  /** Records a native message that failed its schema and was not sent. */
+  reportInvalidSend(type: string): void;
   dispose(): void;
 }
 
@@ -415,6 +417,7 @@ export async function createForegroundNavigation(
       return { sessionId: session.sessionId, revision: session.revision, kind: session.kind };
     },
     reviewKeepAwake: () => reviewKeepAwake(),
+    reportInvalidSend: (type) => record("typed.error", { scope: "bridge-send", type }),
     dispose: () => {
       if (disposed) return;
       disposed = true;

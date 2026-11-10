@@ -15,7 +15,46 @@ vi.mock("./MobileRuntimeProvider", () => ({
   useMobileRuntimeContext: () => runtime,
 }));
 
+import { useNativeEndFailure } from "./nativeEndFailure";
 import { useNavigationMutations } from "./useNavigationMutations";
+
+describe("useNavigationMutations.endNavigation", () => {
+  beforeEach(() => {
+    runtime.browserAuthority = false;
+    useNativeEndFailure.getState().dismiss();
+  });
+
+  it("tells the user and reconciles when native refuses to end the trip", async () => {
+    const clear = vi.spyOn(useNavigationStore.getState(), "clearNativeReadModel");
+    const requestSnapshot = vi.fn(async () => undefined);
+    runtime.commands = {
+      stop: vi.fn(async () => {
+        throw new Error("native stop refused");
+      }),
+      requestSnapshot,
+    };
+    const { result } = renderHook(() => useNavigationMutations());
+
+    await act(() => result.current.endNavigation());
+
+    expect(useNativeEndFailure.getState().failed).toBe(true);
+    expect(requestSnapshot).toHaveBeenCalledTimes(1);
+    expect(clear).not.toHaveBeenCalled();
+    clear.mockRestore();
+  });
+
+  it("clears the page's copy once native has ended the trip, reporting nothing", async () => {
+    const clear = vi.spyOn(useNavigationStore.getState(), "clearNativeReadModel");
+    runtime.commands = { stop: vi.fn(async () => undefined), requestSnapshot: vi.fn() };
+    const { result } = renderHook(() => useNavigationMutations());
+
+    await act(() => result.current.endNavigation());
+
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(useNativeEndFailure.getState().failed).toBe(false);
+    clear.mockRestore();
+  });
+});
 
 describe("useNavigationMutations.completeArrival", () => {
   beforeEach(() => {

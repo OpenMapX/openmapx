@@ -29,6 +29,8 @@ export interface ShellBridgeOptions {
   capabilities?: () => ShellDescription["capabilities"] | Promise<ShellDescription["capabilities"]>;
   permission?: () => Promise<ShellDescription["permission"]>;
   activeSession?: () => Promise<ShellDescription["activeSession"]>;
+  /** Told about a native message that failed its schema and was not sent. */
+  reportInvalidSend?: (type: string) => void;
 }
 
 export interface ShellBridge {
@@ -100,6 +102,7 @@ export function createShellBridge(options: ShellBridgeOptions): ShellBridge {
       }
     },
     describeShell: () => describeShell(options),
+    ...(options.reportInvalidSend ? { reportInvalid: options.reportInvalidSend } : {}),
   });
 
   return { registry, bridge };

@@ -9,6 +9,7 @@ import {
   transitStartPackageSchema,
   type WebToNativeMessage,
 } from "@openmapx/core/navigation";
+import type { SendOutcome } from "../bridge/nativeBridge";
 import type { ConnectivityState } from "../connectivity/ConnectivityDriver";
 import { type RawLocation, sanitiseFixes } from "../location/sanitiseFixes";
 import type { CommitResult, SessionEffect, SessionRepository } from "../storage/SessionRepository";
@@ -45,11 +46,12 @@ export interface CommandResponse {
 }
 
 export interface BridgePort {
+  /** `invalid` means the message failed its schema and was not sent. */
   send(
     type: NativeToWebMessage["type"],
     payload: unknown,
     options?: { sessionId?: string; revision?: number; forMessageId?: string },
-  ): unknown;
+  ): SendOutcome;
 }
 
 export interface PermissionPort {
@@ -264,11 +266,16 @@ export class NavigationCoordinator {
   }
 
   private reply(response: CommandResponse, forMessageId: string): void {
-    this.deps.bridge.send(response.type, response.payload, {
+    const outcome = this.deps.bridge.send(response.type, response.payload, {
       ...(response.sessionId === undefined ? {} : { sessionId: response.sessionId }),
       ...(response.revision === undefined ? {} : { revision: response.revision }),
       forMessageId,
     });
+    // A reply that fails its schema never leaves; the page would otherwise wait
+    // out its deadline for an answer that was refused here.
+    if (outcome === "invalid" && response.type !== "native.error") {
+      this.deps.bridge.send("native.error", { code: "internal-error" }, { forMessageId });
+    }
   }
 
   private async route(command: WebToNativeMessage, now: number): Promise<CommandResponse | null> {
@@ -623,18 +630,21 @@ export class NavigationCoordinator {
     const { repository } = this.deps;
     const current = await repository.loadActive(now);
     if (!current) {
-      // Stopping nothing is success, not an error: a retry after the process
-      // died must not surface as a failure the user has to act on.
+      // Stopping a named trip that already ended is success, not an error: a
+      // retry after the process died must not surface as a failure the user has
+      // to act on. With no trip named there is nothing to acknowledge, and the
+      // page treats `no-session` as already stopped.
       const sessionId = command.sessionId;
-      const ack = sessionId ? await repository.readTerminalAck(sessionId) : null;
+      if (!sessionId) return errorResponse("no-session", command.messageId);
+      const ack = await repository.readTerminalAck(sessionId);
       return {
         type: "session.stopped",
         payload: {
-          sessionId: sessionId ?? "",
+          sessionId,
           finalStatus: ack?.finalStatus ?? finalStatus,
           revision: ack?.finalRevision ?? 0,
         },
-        ...(sessionId ? { sessionId } : {}),
+        sessionId,
       };
     }
     if (command.sessionId !== undefined && command.sessionId !== current.sessionId) {

@@ -212,6 +212,22 @@ does not cancel the native operation, and an authoritative snapshot can still
 show the trip as active later. A timed-out initial handshake requires a page
 reload to negotiate again.
 
+A correlated `native.error` rejects the page's request with a
+`NativeCommandError` that carries the shell's code; it never resolves as the
+reply the command expected. A refusal that arrives after the page's deadline
+finds no pending request and is ignored. The navigation commands treat
+`no-session` as done for End and for a settings change, because there is
+nothing left to end and the next start reads the stored preference. Every
+other refusal fails the command. A refused or unanswered End shows the user
+that navigation is still running and asks for a fresh snapshot. A stop that
+names no session, sent when there is none, is answered with `no-session`.
+
+Every native send reports `sent`, `queued`, `dropped` or `invalid`. A message
+that fails its schema is not sent; the bridge records its type (never its
+payload) as a `typed.error` diagnostic. A correlated reply that fails its schema
+is followed by `native.error` with `internal-error`, so the page gets an answer
+instead of waiting out its deadline.
+
 ### Rollout order
 
 Before changing the protocol, identify the actually deployed shell and web

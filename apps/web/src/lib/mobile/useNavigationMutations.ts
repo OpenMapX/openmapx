@@ -3,6 +3,7 @@
 import { useNavigationStore, useSettingsStore, type VoiceGuidanceTiming } from "@openmapx/core";
 import { useCallback } from "react";
 import { useMobileRuntimeContext } from "./MobileRuntimeProvider";
+import { useNativeEndFailure } from "./nativeEndFailure";
 import type { NavigationSettingsPatch } from "./navigationCommands";
 
 /**
@@ -14,7 +15,8 @@ import type { NavigationSettingsPatch } from "./navigationCommands";
  * a notification — leaving the user with no way back to a trip that is very much
  * still running. So the store is only cleared once the shell has acknowledged,
  * and if the acknowledgement never comes the page reconciles from a full
- * snapshot instead of guessing.
+ * snapshot instead of guessing. A refused or unanswered End is reported to the
+ * user, because the trip they asked to end is still running.
  */
 export function useNavigationMutations() {
   const runtime = useMobileRuntimeContext();
@@ -30,12 +32,12 @@ export function useNavigationMutations() {
     if (!commands) return;
     try {
       await commands.stop();
-      // The terminal snapshot that follows is what clears the read model; this
-      // only releases the page's own copy once native has agreed it is over.
+      // Released only once native has agreed the trip is over.
       store.clearNativeReadModel();
     } catch {
       // Native may well still be guiding. Ask what is actually true rather than
       // pretend the trip ended.
+      useNativeEndFailure.getState().report();
       void commands.requestSnapshot();
     }
   }, [browserAuthority, commands]);
@@ -52,6 +54,7 @@ export function useNavigationMutations() {
       store.clearNativeReadModel();
       return true;
     } catch {
+      useNativeEndFailure.getState().report();
       void commands.requestSnapshot();
       return false;
     }

@@ -76,6 +76,8 @@ export interface NativeBridgeDeps {
   dispatch: (message: WebToNativeMessage) => Promise<void>;
   /** Current shell state for the handshake reply. */
   describeShell: () => Promise<ShellDescription> | ShellDescription;
+  /** Told about a message that failed its schema and was not sent. */
+  reportInvalid?: (type: NativeToWebMessage["type"]) => void;
 }
 
 interface OutboundDraft {
@@ -279,7 +281,10 @@ export class NativeBridge {
     // Validated before encoding, so a malformed native payload is a local error
     // rather than something the page has to defend against.
     const validated = nativeToWebSchema.safeParse(candidate);
-    if (!validated.success) return "invalid";
+    if (!validated.success) {
+      this.deps.reportInvalid?.(draft.type);
+      return "invalid";
+    }
 
     if (draft.type === "voice.event" && !handshake) return "dropped";
     if (!options.immediate && !handshake)

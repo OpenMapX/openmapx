@@ -45,7 +45,10 @@ function overrides(sent: Array<{ type: NativeToWebMessage["type"]; forMessageId?
         type: NativeToWebMessage["type"],
         _payload: unknown,
         options?: { forMessageId?: string },
-      ) => sent.push({ type, forMessageId: options?.forMessageId }),
+      ) => {
+        sent.push({ type, forMessageId: options?.forMessageId });
+        return "sent" as const;
+      },
     },
     permissions: {
       state: async () => "background" as const,

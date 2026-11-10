@@ -1,6 +1,7 @@
 import type { WebToNativeMessage } from "@openmapx/core/navigation";
 import { Linking } from "react-native";
 import { createSystemAuthSession } from "../auth/createSystemAuthSession";
+import type { SendOutcome } from "../bridge/nativeBridge";
 import type { MobileRuntimeConfig } from "../config/runtimeConfig";
 import { createLocationDriver } from "../location/createLocationDriver";
 import { ForegroundLocationService } from "../location/ForegroundLocationService";
@@ -68,7 +69,7 @@ export async function answerCommand(
     type: CommandResponse["type"],
     payload: unknown,
     options: { forMessageId: string; sessionId?: string; revision?: number },
-  ) => unknown,
+  ) => SendOutcome,
 ): Promise<void> {
   if (message.type === "event.ack" || message.type === "web.hello") return;
   const response = await handle(message);
@@ -76,9 +77,14 @@ export async function answerCommand(
     send("native.error", { code: "unsupported-capability" }, { forMessageId: message.messageId });
     return;
   }
-  send(response.type, response.payload, {
+  const outcome = send(response.type, response.payload, {
     forMessageId: message.messageId,
     ...(response.sessionId === undefined ? {} : { sessionId: response.sessionId }),
     ...(response.revision === undefined ? {} : { revision: response.revision }),
   });
+  // An answer that fails its schema is refused instead, so the page is not
+  // left waiting out its deadline.
+  if (outcome === "invalid" && response.type !== "native.error") {
+    send("native.error", { code: "internal-error" }, { forMessageId: message.messageId });
+  }
 }

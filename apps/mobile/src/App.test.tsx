@@ -55,6 +55,7 @@ const mockNavigation = {
   capabilities: jest.fn(),
   activeSession: jest.fn(),
   reviewKeepAwake: jest.fn(async () => undefined),
+  reportInvalidSend: jest.fn(),
   dispose: jest.fn(),
 };
 const mockCreateForegroundNavigation = jest.fn();
