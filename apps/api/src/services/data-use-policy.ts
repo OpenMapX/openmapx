@@ -52,8 +52,10 @@ const EMPTY: Set<string> = new Set();
  * Resolve the policy from env and the database. When the database cannot be
  * read, the previous policy's values stand in for the stored settings (an
  * environment pin still applies) and the result is not authoritative: a
- * database outage must not turn a stored exclusion into "allowed". Only when
- * there is no previous policy, on the very first load, do the defaults apply.
+ * database outage must not turn a stored exclusion into "allowed". With no
+ * previous policy, on the very first load, nothing is known about the stored
+ * settings, so both restricted classes are excluded until a load succeeds:
+ * hiding data for one retry is better than showing data an operator excluded.
  */
 async function loadPolicy(
   previous: PolicyCache | null,
@@ -80,19 +82,17 @@ async function loadPolicy(
         source: "data-use-policy",
         msg: previous
           ? "Data-use policy refresh failed; keeping the last good policy"
-          : "Data-use policy could not be loaded; applying the defaults until it can",
+          : "Data-use policy could not be loaded; excluding both restricted classes until it can",
         time: Date.now(),
         metadata: { errorClass: safeErrorClass(err) },
       });
-      if (previous) {
-        return {
-          value: {
-            allowNonCommercial: envNC ?? previous.value.allowNonCommercial,
-            allowGreyArea: envGrey ?? previous.value.allowGreyArea,
-          },
-          authoritative,
-        };
-      }
+      return {
+        value: {
+          allowNonCommercial: envNC ?? previous?.value.allowNonCommercial ?? false,
+          allowGreyArea: envGrey ?? previous?.value.allowGreyArea ?? false,
+        },
+        authoritative,
+      };
     }
   }
 

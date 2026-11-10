@@ -223,9 +223,11 @@ database outage, and logs a warning (`data-use-policy`) on each failed refresh.
 An environment variable still overrides the kept value. The policy is then
 reported as not current to the road-conditions writer, which does not treat it as
 authoritative until a refresh succeeds. Only when the very first load after a
-start fails is there nothing to keep: both classes are then allowed, as by
-default, until the database answers. Where exclusions matter from the first
-request, pin them with the environment variables above, which need no database.
+start fails is there nothing to keep: both classes are then excluded until the
+database answers, because hiding data for a retry is better than showing data you
+excluded. An environment variable still decides its own class. To allow a class
+through such an outage, pin it with the environment variables above, which need
+no database.
 
 OpenConditions states a permission per use for each of its feeds (display,
 redistribution, derived products, retention, commercial use): `yes` only where

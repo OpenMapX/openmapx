@@ -367,7 +367,7 @@ describe("a failed policy refresh", () => {
     expect([...getGatedSourceIdsSync()]).toEqual([]);
   });
 
-  it("applies the defaults, and logs it, when the very first load fails", async () => {
+  it("excludes both restricted classes, and logs it, when the very first load fails", async () => {
     vi.resetModules();
     const fresh = await import("../data-use-policy.js");
     const { appLogger: freshLogger } = await import("../app-logger.js");
@@ -377,10 +377,11 @@ describe("a failed policy refresh", () => {
     await fresh.refreshDataUsePolicy();
 
     expect(await fresh.getDataUsePolicy()).toEqual({
-      allowNonCommercial: true,
-      allowGreyArea: true,
+      allowNonCommercial: false,
+      allowGreyArea: false,
     });
-    expect([...fresh.getGatedSourceIdsSync()]).toEqual([]);
+    expect([...fresh.getGatedSourceIdsSync()].sort()).toEqual(["grey-src", "nc-src"]);
+    expect([...(await fresh.getGatedIntegrationIds())].sort()).toEqual(["i-grey", "i-nc"]);
     expect(log).toHaveBeenCalledWith(
       expect.objectContaining({
         level: "warn",
@@ -395,5 +396,21 @@ describe("a failed policy refresh", () => {
     dbRowsMock.mockReturnValue([{ key: "allowNonCommercial", value: false }]);
     await fresh.refreshDataUsePolicy();
     expect([...fresh.getGatedSourceIdsSync()]).toEqual(["nc-src"]);
+    expect((await fresh.getRoadConditionsPolicySnapshot()).authoritative).toBe(true);
+  });
+
+  it("lets an environment pin allow a class even when the very first load fails", async () => {
+    vi.resetModules();
+    const fresh = await import("../data-use-policy.js");
+    vi.stubEnv("OPENMAPX_ALLOW_NONCOMMERCIAL", "true");
+    outage();
+
+    await fresh.refreshDataUsePolicy();
+
+    expect(await fresh.getDataUsePolicy()).toEqual({
+      allowNonCommercial: true,
+      allowGreyArea: false,
+    });
+    expect([...fresh.getGatedSourceIdsSync()]).toEqual(["grey-src"]);
   });
 });
