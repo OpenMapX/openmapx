@@ -186,8 +186,11 @@ export interface RerouteChurn {
   cooldownUntilMs?: number;
 }
 
-export const IDLE_REROUTE: RerouteRuntime = { status: "idle", attempts: 0 };
-export const EMPTY_REROUTE_CHURN: RerouteChurn = { successAtMs: [] };
+export const IDLE_REROUTE: Readonly<RerouteRuntime> = Object.freeze({
+  status: "idle",
+  attempts: 0,
+});
+export const EMPTY_REROUTE_CHURN: Readonly<RerouteChurn> = Object.freeze({ successAtMs: [] });
 
 export type RerouteDecision =
   | { allow: true }
@@ -276,7 +279,7 @@ export function onRerouteOffline(runtime: RerouteRuntime): RerouteRuntime {
 
 /** Success clears the failure history; the next problem starts from scratch. */
 export function onRerouteSucceeded(): RerouteRuntime {
-  return IDLE_REROUTE;
+  return { status: "idle", attempts: 0 };
 }
 
 /**
@@ -284,7 +287,9 @@ export function onRerouteSucceeded(): RerouteRuntime {
  * answer is applied or dropped when it arrives.
  */
 export function onBackOnRoute(runtime: RerouteRuntime): RerouteRuntime {
-  return runtime.status === "idle" || runtime.status === "in-flight" ? runtime : IDLE_REROUTE;
+  return runtime.status === "idle" || runtime.status === "in-flight"
+    ? runtime
+    : { status: "idle", attempts: 0 };
 }
 
 /**
