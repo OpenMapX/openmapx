@@ -17,7 +17,7 @@ import {
   type BrandSummary,
   type CategoryPlace,
   type DirectionsQueryParams,
-  formatDistance,
+  formatMeasurementDistance,
   MAX_DIRECTIONS_WAYPOINTS,
   type Route,
   routeStopInsertIndex,
@@ -55,12 +55,6 @@ const PAGE_SIZE = 20;
 const METERS_PER_MILE = 1609.34;
 
 type Units = "metric" | "imperial";
-
-function formatRouteDistance(meters: number, units: Units): string {
-  return units === "imperial"
-    ? `${(meters / METERS_PER_MILE).toFixed(1)} mi`
-    : formatDistance(meters);
-}
 
 function formatRoundDistance(meters: number, units: Units, locale: string): string {
   const value = units === "imperial" ? meters / METERS_PER_MILE : meters / 1000;
@@ -300,7 +294,7 @@ export function RouteStopSearch({ route, provider, request, units }: RouteStopSe
         {poi.detour?.kind === "network" && (
           <Typography variant="body2" color="text.secondary">
             {t("rsPlanDetourDistance", {
-              distance: formatRouteDistance(poi.detour.meters, units),
+              distance: formatMeasurementDistance(poi.detour.meters, units),
             })}
           </Typography>
         )}
@@ -478,7 +472,7 @@ export function RouteStopSearch({ route, provider, request, units }: RouteStopSe
                     <ListItemText
                       primary={poi.place.name}
                       secondary={`${t("rsPlanFromStart", {
-                        distance: formatRouteDistance(poi.alongMeters, units),
+                        distance: formatMeasurementDistance(poi.alongMeters, units),
                       })} · ${t(copy.key, "values" in copy ? copy.values : undefined)}`}
                     />
                   </ListItemButton>

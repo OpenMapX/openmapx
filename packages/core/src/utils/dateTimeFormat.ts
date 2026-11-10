@@ -118,9 +118,12 @@ export interface RelativeTimeOptions {
 }
 
 // Largest-unit-first so a 2-day-old timestamp reads "2 days ago" rather than
-// "2880 minutes ago". "second" is last and always matches (its own
+// "2880 minutes ago". Months and years are 30 and 365 days, which is as
+// coarse as the wording is. "second" is last and always matches (its own
 // threshold is 1), so the loop always terminates.
 const RELATIVE_TIME_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ["year", 365 * 86400],
+  ["month", 30 * 86400],
   ["day", 86400],
   ["hour", 3600],
   ["minute", 60],

@@ -1,10 +1,10 @@
 "use client";
 
-import { escapeHtml, relativeTime } from "@openmapx/core";
+import { escapeHtml, formatRelativeTime } from "@openmapx/core";
 import { captureHazardFeatures } from "@openmapx/integration-framework";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { createHeatmapPaint } from "@/integration-api/map/heatmapLayer";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
@@ -226,6 +226,7 @@ export function buildHotspotPopupHtml(
   p: Record<string, unknown>,
   coords: [number, number],
   t: (key: string) => string,
+  locale: string,
 ): string {
   const frp = Number(p.frp ?? 0);
   const brightness = p.brightness == null ? null : Number(p.brightness);
@@ -243,7 +244,10 @@ export function buildHotspotPopupHtml(
       : "",
     confidence ? popupLine(t("confidence"), confidence) : "",
     satellite ? popupLine(t("satellite"), satellite) : "",
-    popupLine(t("detected"), `${relativeTime(ageMs)} (${acqDate} ${formattedTime})`),
+    popupLine(
+      t("detected"),
+      `${formatRelativeTime(Date.now() - ageMs, { locale })} (${acqDate} ${formattedTime})`,
+    ),
     dayNight ? popupLine(t("observation"), dayNight === "D" ? t("daytime") : t("nighttime")) : "",
     popupLine(t("coordinates"), `${coords[1].toFixed(4)}, ${coords[0].toFixed(4)}`),
   ].join("");
@@ -283,6 +287,7 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
   const showHeatmap = useWildfireStore((s) => s.showHeatmap);
   const showLowConfidence = useWildfireStore((s) => s.showLowConfidence);
   const t = useTranslations("wildfires");
+  const locale = useLocale();
   const popupLease = useRef<WildfirePopupLease>({});
   const resolveContributors = useContributorResolver();
   useRenderedMapAttributions(
@@ -414,7 +419,10 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
       const f = e.features?.[0];
       if (!f) return;
       const coords = (f.geometry as { coordinates: number[] }).coordinates as [number, number];
-      openPopup(coords, buildHotspotPopupHtml(f.properties as Record<string, unknown>, coords, t));
+      openPopup(
+        coords,
+        buildHotspotPopupHtml(f.properties as Record<string, unknown>, coords, t, locale),
+      );
     };
 
     const onDensityClick = (e: MapLayerMouseEvent) => {
@@ -451,7 +459,7 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
       }
       map.getCanvasContainer().style.cursor = "";
     };
-  }, [mapReady, mapRef, active, popupController, t]);
+  }, [mapReady, mapRef, active, popupController, t, locale]);
 
   return null;
 }

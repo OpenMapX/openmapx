@@ -105,17 +105,9 @@ export {
 } from "./fetchWithRedirects";
 export { buildFlightOpenUrl } from "./flightLink";
 export { isFoodPlace, resolveOsmMenuUrl } from "./foodPlace";
-export {
-  escapeHtml,
-  formatTime,
-  isSafeHttpUrl,
-  relativeTime,
-  safeHref,
-  sanitizeUrl,
-} from "./format";
+export { escapeHtml, isSafeHttpUrl, safeHref, sanitizeUrl } from "./format";
 export {
   formatArea,
-  formatDistance,
   formatDuration,
   formatMeasurementDistance,
   getInitials,

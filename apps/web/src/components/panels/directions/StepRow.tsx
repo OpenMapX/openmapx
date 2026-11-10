@@ -5,8 +5,8 @@ import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import Typography from "@mui/material/Typography";
 import {
-  formatDistance,
   formatDuration,
+  formatMeasurementDistance,
   type ManeuverLane,
   type ManeuverSign,
 } from "@openmapx/core";
@@ -38,8 +38,7 @@ export function StepRow({
   sign,
   country,
 }: StepRowProps) {
-  const dist =
-    units === "imperial" ? `${(distance / 1609.34).toFixed(1)} mi` : formatDistance(distance);
+  const dist = formatMeasurementDistance(distance, units);
 
   return (
     <Box>

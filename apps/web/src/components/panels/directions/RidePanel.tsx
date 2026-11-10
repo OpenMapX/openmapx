@@ -9,13 +9,14 @@ import Typography from "@mui/material/Typography";
 import type { RideProviderInfo, RideQuote, RideQuoteRequest } from "@openmapx/core";
 import {
   buildRideOpenUrl,
-  formatDistance,
   formatDuration,
+  formatMeasurementDistance,
   isQuoteExpired,
   useDirectionsStore,
   useRideProviders,
   useRideQuotes,
   useRideStore,
+  useSettingsStore,
 } from "@openmapx/core";
 import {
   captureResultContributors,
@@ -180,6 +181,7 @@ function PaxStepper({
 export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
   const t = useTranslations("directions");
   const locale = useLocale();
+  const units = useSettingsStore((s) => s.units);
   const origin = useDirectionsStore((s) => s.waypoints[0]?.coords ?? null);
   const destination = useDirectionsStore((s) => s.waypoints.at(-1)?.coords ?? null);
 
@@ -354,7 +356,7 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
       {route && (
         <Typography variant="caption" sx={{ color: BRAND, fontWeight: 600 }}>
           {t("rideTripSummary", {
-            distance: formatDistance(route.distanceMeters),
+            distance: formatMeasurementDistance(route.distanceMeters, units),
             duration: formatDuration(route.durationSeconds),
           })}
         </Typography>

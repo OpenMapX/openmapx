@@ -19,8 +19,8 @@ import type {
 import {
   buildElevationProfile,
   estimateDrivingCo2Grams,
-  formatDistance,
   formatDuration,
+  formatMeasurementDistance,
   roadConditionRouteNotice,
   tzDiffMinutes,
   tzOffsetLabel,
@@ -217,10 +217,7 @@ export function RouteCard({
     }
   };
 
-  const dist =
-    units === "imperial"
-      ? `${(route.distance / 1609.34).toFixed(1)} mi`
-      : formatDistance(route.distance);
+  const dist = formatMeasurementDistance(route.distance, units);
 
   const ascentMeters = useMemo(() => {
     if (

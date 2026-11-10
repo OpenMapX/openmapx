@@ -8,8 +8,8 @@ import Typography from "@mui/material/Typography";
 import type { Route, RouteCountrySpan, RouteStep } from "@openmapx/core";
 import {
   countryAtMeters,
-  formatDistance,
   formatDuration,
+  formatMeasurementDistance,
   useCountryFromCoordinates,
   useNavigationStore,
 } from "@openmapx/core";
@@ -119,10 +119,7 @@ export function DetailsView({
         )
       : stepCredits(route.steps),
   );
-  const dist =
-    units === "imperial"
-      ? `${(route.distance / 1609.34).toFixed(1)} mi`
-      : formatDistance(route.distance);
+  const dist = formatMeasurementDistance(route.distance, units);
 
   const intermediateLabels = waypointLabels ? waypointLabels.slice(1, -1).filter(Boolean) : [];
 
@@ -258,10 +255,7 @@ function LegByLegView({
         const legCountries = stepCountries(leg.steps, legStartMeters, routeCountries, country);
         const fromLabel = waypointLabels[i] || t("origin");
         const toLabel = waypointLabels[i + 1] || t("destination");
-        const legDist =
-          units === "imperial"
-            ? `${(leg.distance / 1609.34).toFixed(1)} mi`
-            : formatDistance(leg.distance);
+        const legDist = formatMeasurementDistance(leg.distance, units);
         const isExpanded = expandedLegs.has(i);
 
         return (

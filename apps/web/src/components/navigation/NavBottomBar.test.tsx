@@ -6,7 +6,6 @@ vi.mock("next-intl", () => ({
   useLocale: () => "en",
 }));
 vi.mock("@openmapx/core", () => ({
-  formatDistance: (m: number) => `${m} m`,
   formatDuration: (s: number) => `${s}s`,
   formatMeasurementDistance: (m: number, sys: string) =>
     sys === "imperial" ? `${m} ft` : `${m} m`,

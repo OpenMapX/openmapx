@@ -25,7 +25,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import Menu from "@/components/ui/Menu";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { relativeTimeFromIso } from "@/lib/formatTime";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { TableSkeleton } from "../shared/TableSkeleton";
@@ -210,6 +210,7 @@ function ActionChip({ action }: { action: string }) {
 
 export function AuditLog() {
   const env = useEnv();
+  const dtf = useDateTimeFormat();
   const queryClient = useQueryClient();
   const [actionFilter, setActionFilter] = useState("");
   const [targetTypeFilter, setTargetTypeFilter] = useState("");
@@ -470,7 +471,7 @@ export function AuditLog() {
                           color: "text.secondary",
                         }}
                       >
-                        {relativeTimeFromIso(entry.createdAt)}
+                        {dtf.relative(entry.createdAt)}
                       </Typography>
                     </Tooltip>
                   </TableCell>

@@ -15,11 +15,12 @@ import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import type { LngLat } from "@openmapx/core";
 import {
-  formatDistance,
+  formatMeasurementDistance,
   haversineMeters,
   makeSyntheticStopPlace,
   PANEL,
   resolveStopAsPlace,
+  useSettingsStore,
   useSidebarStore,
   useStopsNearby,
 } from "@openmapx/core";
@@ -78,6 +79,7 @@ export function DataSourceNearbyTransit({
   radiusMeters = DEFAULT_RADIUS_M,
 }: DataSourceNearbyTransitProps) {
   const t = useTranslations();
+  const units = useSettingsStore((s) => s.units);
   const { data: stops, isLoading } = useStopsNearby(coordinates, radiusMeters);
   const { selectWithEnrichment } = usePlaceEnrichment();
   const { flyTo } = useMap();
@@ -193,7 +195,7 @@ export function DataSourceNearbyTransit({
                   fontVariantNumeric: "tabular-nums",
                 }}
               >
-                {formatDistance(distance)}
+                {formatMeasurementDistance(distance, units)}
               </Typography>
               <ChevronRightIcon sx={{ fontSize: 16, color: "text.disabled", flexShrink: 0 }} />
             </ButtonBase>

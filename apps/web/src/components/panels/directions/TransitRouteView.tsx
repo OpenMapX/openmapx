@@ -9,8 +9,8 @@ import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import type { TransitReplanOptions } from "@openmapx/core";
 import {
-  formatDistance,
   formatDuration,
+  formatMeasurementDistance,
   timeZoneAt,
   tzDiffMinutes,
   tzOffsetLabel,
@@ -327,7 +327,9 @@ export function TransitItineraryCard({
   const metaBits: string[] = [];
   if (itinerary.transfers > 0) metaBits.push(t("transfers", { count: itinerary.transfers }));
   if (itinerary.walkDistance > 0) {
-    metaBits.push(t("walkDistance", { distance: formatDistance(itinerary.walkDistance) }));
+    metaBits.push(
+      t("walkDistance", { distance: formatMeasurementDistance(itinerary.walkDistance, units) }),
+    );
   }
 
   return (

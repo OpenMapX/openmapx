@@ -45,7 +45,7 @@ vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();
   return {
     ...actual,
-    formatDistance: (distance: number) => `${distance} m`,
+    formatMeasurementDistance: (distance: number) => `${distance} m`,
     formatDuration: (duration: number) => `${duration}s`,
     useVehicleJourney: () => ({ data: null }),
     useRefreshTransitItinerary: () => ({ mutateAsync: vi.fn(), isPending: false }),

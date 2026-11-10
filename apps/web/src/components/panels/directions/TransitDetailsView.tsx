@@ -22,8 +22,8 @@ import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
 import {
-  formatDistance,
   formatDuration,
+  formatMeasurementDistance,
   geocodeStopAsPlace,
   makeSyntheticStopPlace,
   PANEL,
@@ -32,6 +32,7 @@ import {
   safeHref,
   tzOffsetLabel,
   usePlaceStore,
+  useSettingsStore,
   useSidebarStore,
 } from "@openmapx/core";
 import {
@@ -112,6 +113,7 @@ function isPerLegRedundant(
 
 function LegStatusDetails({ leg, itinerary }: { leg: TripLeg; itinerary: TripItinerary }) {
   const t = useTranslations("directions");
+  const units = useSettingsStore((s) => s.units);
   const tNav = useTranslations("navigation");
   const [stepsExpanded, setStepsExpanded] = useState(false);
   const statuses: string[] = [];
@@ -162,8 +164,9 @@ function LegStatusDetails({ leg, itinerary }: { leg: TripLeg; itinerary: TripIti
             )}
             <Typography variant="caption">
               {t("walkDistance", {
-                distance: formatDistance(
+                distance: formatMeasurementDistance(
                   leg.steps.reduce((sum, step) => sum + (step.distanceMeters ?? 0), 0),
+                  units,
                 ),
               })}
             </Typography>
@@ -178,7 +181,7 @@ function LegStatusDetails({ leg, itinerary }: { leg: TripLeg; itinerary: TripIti
                   key={`${stepIndex}-${step.instruction}-${step.fromLevel}-${step.toLevel}-${step.distanceMeters}-${step.streetName ?? ""}`}
                 >
                   {composeWalkInstruction(walkStepInfo(step), tNav)} ·{" "}
-                  {formatDistance(step.distanceMeters)}
+                  {formatMeasurementDistance(step.distanceMeters, units)}
                   {step.accessRestriction ? ` · ${t("accessRestricted")}` : ""}
                 </Typography>
               ))}
@@ -235,6 +238,7 @@ export function TransitDetailsView({
   const tNav = useTranslations("navigation");
   const locale = useLocale();
   const fmt = useDateTimeFormat();
+  const units = useSettingsStore((s) => s.units);
   const [activeLegDep, setActiveLegDep] = useState<MergedDeparture | null>(null);
   const { setSelectedPlace } = usePlaceStore();
   const { selectWithEnrichment } = usePlaceEnrichment();
@@ -297,7 +301,9 @@ export function TransitDetailsView({
   const summaryBits: string[] = [];
   if (itinerary.transfers > 0) summaryBits.push(t("transfers", { count: itinerary.transfers }));
   if (itinerary.walkDistance > 0) {
-    summaryBits.push(t("walkDistance", { distance: formatDistance(itinerary.walkDistance) }));
+    summaryBits.push(
+      t("walkDistance", { distance: formatMeasurementDistance(itinerary.walkDistance, units) }),
+    );
   }
 
   if (activeLegDep) {

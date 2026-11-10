@@ -5,6 +5,7 @@ import { JobDetail } from "../JobDetail";
 import { JobList } from "../JobList";
 import { FakeEventSource, job, log, stage, timestamp } from "./fixtures";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 let apiUrl = "http://api.test";
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({ useEnv: () => ({ apiUrl }) }));
 const clients: QueryClient[] = [];

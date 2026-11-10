@@ -1,6 +1,6 @@
 "use client";
 
-import { escapeHtml, relativeTime, sanitizeUrl, useOverlayExclusion } from "@openmapx/core";
+import { escapeHtml, formatRelativeTime, sanitizeUrl, useOverlayExclusion } from "@openmapx/core";
 import { captureHazardFeatures } from "@openmapx/integration-framework";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
@@ -141,6 +141,7 @@ function depthLabel(depth: number): string {
 export function buildEarthquakePopupHtml(
   p: Record<string, string | number>,
   t: (key: string) => string,
+  locale: string,
 ): string {
   const mag = Number(p.mag ?? 0);
   const depth = Number(p.depth ?? 0);
@@ -169,7 +170,7 @@ export function buildEarthquakePopupHtml(
 
   const details = [
     `<div style="font-size:12px;color:#666">${t("depth")}: ${depth.toFixed(1)} km (${depthLabel(depth)})</div>`,
-    `<div style="font-size:12px;color:#666">${t("time")}: ${relativeTime(age)} (${dateStr})</div>`,
+    `<div style="font-size:12px;color:#666">${t("time")}: ${formatRelativeTime(time || Date.now() - age, { locale })} (${dateStr})</div>`,
     felt
       ? `<div style="font-size:12px;color:#666">${t("felt")}: ${felt} ${t("reports")}</div>`
       : "",
@@ -397,7 +398,7 @@ export function EarthquakeLayer() {
       if (!f) return;
       const p = f.properties as Record<string, string | number>;
       const coords = (f.geometry as { coordinates: number[] }).coordinates as [number, number];
-      const html = buildEarthquakePopupHtml(p, t);
+      const html = buildEarthquakePopupHtml(p, t, locale);
 
       popupRef.current?.remove();
       popupRef.current = new maplibregl.Popup({
@@ -427,7 +428,7 @@ export function EarthquakeLayer() {
       popupRef.current?.remove();
       INTERACTIVE_LAYER_IDS.delete(CIRCLE_LAYER_ID);
     };
-  }, [mapReady, mapRef, styleVersion, layerVisible, t]);
+  }, [mapReady, mapRef, styleVersion, layerVisible, t, locale]);
 
   return null;
 }

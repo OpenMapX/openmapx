@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { formatCalendarDate, formatClockTime, formatDateAndTime } from "./dateTimeFormat";
+import {
+  formatCalendarDate,
+  formatClockTime,
+  formatDateAndTime,
+  formatRelativeTime,
+} from "./dateTimeFormat";
 
 // Fixed instant: 2025-01-31 13:05 UTC. Tests pin timeZone: "UTC" so they are
 // stable regardless of the machine's local zone.
@@ -70,5 +75,40 @@ describe("formatDateAndTime", () => {
         timeZone: "UTC",
       }),
     ).toBe("2025-01-31, 13:05");
+  });
+});
+
+describe("formatRelativeTime", () => {
+  const NOW = Date.parse(ISO);
+  const ago = (seconds: number) => NOW - seconds * 1000;
+
+  it("words the age in the viewer's language, with no English fragments in German", () => {
+    const german = [
+      formatRelativeTime(ago(30), { locale: "de", now: NOW }),
+      formatRelativeTime(ago(5 * 60), { locale: "de", now: NOW }),
+      formatRelativeTime(ago(3 * 3600), { locale: "de", now: NOW }),
+      formatRelativeTime(ago(2 * 86400), { locale: "de", now: NOW }),
+      formatRelativeTime(ago(90 * 86400), { locale: "de", now: NOW }),
+      formatRelativeTime(ago(800 * 86400), { locale: "de", now: NOW }),
+    ];
+    expect(german).toEqual([
+      "vor 30 Sekunden",
+      "vor 5 Minuten",
+      "vor 3 Stunden",
+      "vorgestern",
+      "vor 3 Monaten",
+      "vor 2 Jahren",
+    ]);
+    for (const text of german) expect(text).not.toMatch(/\bago\b|\d[smhd]\b/);
+  });
+
+  it("uses the largest whole unit in English", () => {
+    expect(formatRelativeTime(ago(5 * 60), { locale: "en", now: NOW })).toBe("5 minutes ago");
+    expect(formatRelativeTime(ago(2 * 86400), { locale: "en", now: NOW })).toBe("2 days ago");
+    expect(formatRelativeTime(ago(400 * 86400), { locale: "en", now: NOW })).toBe("last year");
+  });
+
+  it("is empty for an unreadable timestamp", () => {
+    expect(formatRelativeTime("not a date", { locale: "en", now: NOW })).toBe("");
   });
 });

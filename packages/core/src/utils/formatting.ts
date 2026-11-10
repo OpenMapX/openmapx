@@ -10,16 +10,6 @@ export function getInitials(name: string | null | undefined, email: string): str
   return email[0].toUpperCase();
 }
 
-/**
- * Format a distance in metres to a human-readable string.
- * < 1000 m → "850 m"
- * ≥ 1000 m → "1.2 km"
- */
-export function formatDistance(metres: number): string {
-  if (metres < 1000) return `${Math.round(metres)} m`;
-  return `${(metres / 1000).toFixed(1)} km`;
-}
-
 import type { UnitSystem } from "../types/geometry.js";
 
 const FEET_PER_METRE = 3.28084;

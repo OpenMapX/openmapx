@@ -21,8 +21,8 @@ import Typography from "@mui/material/Typography";
 import type { AutocompleteResult, DirectionsResult, LngLat, TravelMode } from "@openmapx/core";
 import {
   directionsQueryKey,
-  formatDistance,
   formatDuration,
+  formatMeasurementDistance,
   isApiClientError,
   timeZoneAt,
   tzDiffMinutes,
@@ -1560,9 +1560,7 @@ export function DirectionsPanelContent() {
                         color: "text.secondary",
                       }}
                     >
-                      {units === "imperial"
-                        ? `${(data.routes[0].distance / 1609.34).toFixed(1)} mi`
-                        : formatDistance(data.routes[0].distance)}
+                      {formatMeasurementDistance(data.routes[0].distance, units)}
                     </Typography>
                   </Box>
                   {data.routes[0].legs.length > 1 && (
@@ -1585,9 +1583,7 @@ export function DirectionsPanelContent() {
                             {" · "}
                             {formatDuration(leg.duration)}
                             {" · "}
-                            {units === "imperial"
-                              ? `${(leg.distance / 1609.34).toFixed(1)} mi`
-                              : formatDistance(leg.distance)}
+                            {formatMeasurementDistance(leg.distance, units)}
                           </Typography>
                         );
                       })}

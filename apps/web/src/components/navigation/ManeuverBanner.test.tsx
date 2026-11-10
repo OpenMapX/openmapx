@@ -14,7 +14,6 @@ vi.mock("next-intl", () => ({
 }));
 vi.mock("@openmapx/core", async () => ({
   ...(await import("../../../../../packages/core/src/navigation/signFormat")),
-  formatDistance: (m: number) => `${m} m`,
   formatMeasurementDistance: (m: number, sys: string) =>
     sys === "imperial" ? `${m} ft` : `${m} m`,
   // Passthrough: the lanes already carry valid/active flags in these tests.
