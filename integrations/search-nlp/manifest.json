@@ -250,11 +250,28 @@
         "type": "string",
         "enum": ["strict", "consent", "open"],
         "default": "consent",
-        "description": "strict never calls cloud providers; consent requires browser opt-in before a cloud request; open permits cloud calls without a consent gate."
+        "description": "strict never calls cloud providers; consent calls them only for a signed-in user who opted in; open permits cloud calls without a consent gate."
       },
       "roundCoordsDecimals": { "type": "integer", "default": 2, "minimum": 0, "maximum": 5 },
       "intentCacheTtlSeconds": { "type": "integer", "default": 86400, "minimum": 0 },
-      "rateLimitPerIpPerHour": { "type": "integer", "default": 200, "minimum": 1 }
+      "rateLimitPerIpPerHour": {
+        "type": "integer",
+        "default": 200,
+        "minimum": 1,
+        "description": "Parses per client network per hour. The network is an IPv4 address or an IPv6 /64, read through trusted proxies only."
+      },
+      "cloudRequestsPerDay": {
+        "type": "integer",
+        "default": 1000,
+        "minimum": 1,
+        "description": "Cloud provider calls per day for the whole deployment. Past it, searches use local providers."
+      },
+      "cloudRequestsPerClientPerHour": {
+        "type": "integer",
+        "default": 20,
+        "minimum": 1,
+        "description": "Cloud provider calls per hour for one signed-in user, or one client network in open mode, so no caller can spend the daily total."
+      }
     }
   }
 }

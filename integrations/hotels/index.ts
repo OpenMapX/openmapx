@@ -132,63 +132,68 @@ export function setup(ctx: IntegrationContext): void {
     reply.send({ liveEnabled: ratesProvider !== null, defaultCurrency: liteApiCurrency });
   });
 
-  ctx.registerRoute("GET", "/offers", async (req, reply) => {
-    if (!ratesProvider) {
-      // Live rates not configured — deep-links remain the experience.
-      reply.status(204).send({});
-      return;
-    }
-    const parsed = parseHotelQuery(scalarQueries(req.query));
-    if (!parsed.ok) {
-      reply.status(400).send({ error: parsed.error });
-      return;
-    }
-    const q = parsed.query;
-    if (typeof q.lat !== "number" || typeof q.lng !== "number" || !q.checkIn || !q.checkOut) {
-      reply.status(204).send({});
-      return;
-    }
-    // Currency + guest nationality are user-chosen; fall back to the operator
-    // currency and the place's country (US) when absent or malformed.
-    const curRaw = (scalarQueries(req.query).currency ?? "").trim();
-    const natRaw = (scalarQueries(req.query).nationality ?? "").trim();
-    const opts = {
-      currency: CURRENCY_RE.test(curRaw) ? curRaw.toUpperCase() : liteApiCurrency,
-      guestNationality: NATIONALITY_RE.test(natRaw)
-        ? natRaw.toUpperCase()
-        : (q.countryCode ?? "us").toUpperCase(),
-    };
-    // The hotel name is part of the key because searchOffer picks WHICH nearby
-    // hotel to price by name — two different hotels rounding to the same coords
-    // must not share a cached rate.
-    const key = `hotels:offer:contributors-v1:${q.name.toLowerCase()}:${q.lat.toFixed(4)}:${q.lng.toFixed(4)}:${q.checkIn}:${q.checkOut}:${q.adults ?? 2}:${q.rooms ?? 1}:${opts.currency}:${opts.guestNationality}`;
-    try {
-      // Explicit get/set (not withCache) so positives and "no availability"
-      // negatives get different TTLs — see OFFER_NEGATIVE_TTL. "" is the negative
-      // sentinel (distinct from a cache miss).
-      const cached = await ctx.cache.get<HotelOffer | "">(key);
-      let best: HotelOffer | null;
-      if (cached != null) {
-        best = cached || null;
-      } else {
-        const captured = resolveIntegrationContributors(ctx, ["liteapi"]);
-        const acquired = await ratesProvider.searchOffer(q, opts);
-        best = acquired
-          ? withContributors(acquired, captureResultContributors(acquired, captured))
-          : null;
-        await ctx.cache.set(key, best ?? "", best ? OFFER_TTL : OFFER_NEGATIVE_TTL);
-      }
-      if (!best) {
+  ctx.registerRoute(
+    "GET",
+    "/offers",
+    async (req, reply) => {
+      if (!ratesProvider) {
+        // Live rates not configured — deep-links remain the experience.
         reply.status(204).send({});
         return;
       }
-      reply.header("Cache-Control", "private, max-age=900");
-      reply.send({ best });
-    } catch (err) {
-      ctx.log.debug?.(`[hotels] offer lookup failed: ${(err as Error).message}`);
-      reply.status(204).send({});
-    }
-  });
+      const parsed = parseHotelQuery(scalarQueries(req.query));
+      if (!parsed.ok) {
+        reply.status(400).send({ error: parsed.error });
+        return;
+      }
+      const q = parsed.query;
+      if (typeof q.lat !== "number" || typeof q.lng !== "number" || !q.checkIn || !q.checkOut) {
+        reply.status(204).send({});
+        return;
+      }
+      // Currency + guest nationality are user-chosen; fall back to the operator
+      // currency and the place's country (US) when absent or malformed.
+      const curRaw = (scalarQueries(req.query).currency ?? "").trim();
+      const natRaw = (scalarQueries(req.query).nationality ?? "").trim();
+      const opts = {
+        currency: CURRENCY_RE.test(curRaw) ? curRaw.toUpperCase() : liteApiCurrency,
+        guestNationality: NATIONALITY_RE.test(natRaw)
+          ? natRaw.toUpperCase()
+          : (q.countryCode ?? "us").toUpperCase(),
+      };
+      // The hotel name is part of the key because searchOffer picks WHICH nearby
+      // hotel to price by name — two different hotels rounding to the same coords
+      // must not share a cached rate.
+      const key = `hotels:offer:contributors-v1:${q.name.toLowerCase()}:${q.lat.toFixed(4)}:${q.lng.toFixed(4)}:${q.checkIn}:${q.checkOut}:${q.adults ?? 2}:${q.rooms ?? 1}:${opts.currency}:${opts.guestNationality}`;
+      try {
+        // Explicit get/set (not withCache) so positives and "no availability"
+        // negatives get different TTLs — see OFFER_NEGATIVE_TTL. "" is the negative
+        // sentinel (distinct from a cache miss).
+        const cached = await ctx.cache.get<HotelOffer | "">(key);
+        let best: HotelOffer | null;
+        if (cached != null) {
+          best = cached || null;
+        } else {
+          const captured = resolveIntegrationContributors(ctx, ["liteapi"]);
+          const acquired = await ratesProvider.searchOffer(q, opts);
+          best = acquired
+            ? withContributors(acquired, captureResultContributors(acquired, captured))
+            : null;
+          await ctx.cache.set(key, best ?? "", best ? OFFER_TTL : OFFER_NEGATIVE_TTL);
+        }
+        if (!best) {
+          reply.status(204).send({});
+          return;
+        }
+        reply.header("Cache-Control", "private, max-age=900");
+        reply.send({ best });
+      } catch (err) {
+        ctx.log.debug?.(`[hotels] offer lookup failed: ${(err as Error).message}`);
+        reply.status(204).send({});
+      }
+    },
+    { rateLimitTier: "expensive" },
+  );
 
   ctx.registerRoute("GET", "/official", async (req, reply) => {
     const website = (scalarQueries(req.query).website ?? "").trim();

@@ -169,6 +169,7 @@ function richIntegration(): LoadedIntegration {
         ],
         cloudAvailable: true,
         cloudConsentRequired: true,
+        cloudRequiresSignIn: false,
         cloudProviderLabels: ["Optional cloud"],
       },
     ],

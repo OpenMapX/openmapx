@@ -812,8 +812,11 @@ as structural interfaces and injected by the host).
 cache returns `fresh`, `stale`, `stale-if-error`, or `miss`; a refresh lease is
 owner-released; and all named quota windows are checked and consumed atomically.
 Do not replace it with process-local maps or counters in production. Redis
-failure must deny a new quota-consuming refresh, although eligible stale data
-may still be returned with its original evidence time.
+failure must never become unmetered upstream use: deny a new quota-consuming
+refresh, or, where a refusal would take a core feature down, count the same
+windows in process with `createLocalQuotaMeter` until the store returns
+(each replica then admits up to the full limit). Eligible stale data may still
+be returned with its original evidence time.
 
 #### Shared request admission
 
@@ -960,7 +963,11 @@ before the handler runs, and before the request body is read. A route accepts a
 body of up to 1 MiB; declare `bodyLimit` (in bytes, at most 8 MiB) in the options
 of a route that needs more. Every matched route consumes exactly one operation-tier
 bucket: `rateLimitTier` defaults to `public`, upstream-heavy point/list routes use
-`expensive`, and tile fan-out uses `tile`. In addition, `POST`, `PUT`, `PATCH`, and
+`expensive`, turn-by-turn directions use `routing`, routes a client calls on
+every debounced keystroke (autocomplete, forward geocoding) use `typeahead`,
+and tile fan-out uses `tile`. A request
+under `/api/integrations/` that matches no enabled integration route is charged
+to the host's unmatched-route bucket before its 404. In addition, `POST`, `PUT`, `PATCH`, and
 `DELETE` requests consume a separate per-client integration-ingress bucket before
 Fastify parses their bodies. `GET` and `HEAD` do not use that admission bucket, so
 bursty integration tile traffic retains its dedicated tier. Do not add integration

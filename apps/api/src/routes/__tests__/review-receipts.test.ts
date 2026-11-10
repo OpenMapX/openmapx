@@ -81,6 +81,7 @@ it("serializes captured receipts, skips old caches and invalidates both receipt-
             body: request.body,
             params: {},
             headers: request.headers,
+            clientKey: "test-client",
           },
           reply as never,
         ),

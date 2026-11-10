@@ -1,8 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import { buildPlaceDetailsRequest } from "../api/placeDetails";
-import { apiQueryRequestOptions, DETAIL_QUERY_POLICY } from "../api/queryPolicy";
+import {
+  apiQueryRequestOptions,
+  DETAIL_QUERY_POLICY,
+  rateLimitAwareRetry,
+} from "../api/queryPolicy";
 import type { LngLat } from "../types/geometry";
 import type { Place } from "../types/place";
 import { isDisplayablePhoto } from "../utils/commons-metadata";
@@ -18,6 +22,7 @@ export function usePlaceDetails(
     placeId !== null
       ? buildPlaceDetailsRequest({ id: placeId, coordinates, name, lang, hasAddress })
       : null;
+  const fallbackRetry = useQueryClient().getDefaultOptions().queries?.retry;
   return useQuery({
     queryKey: ["place", request?.identity ?? null, 3],
     queryFn: ({ signal }) => {
@@ -29,6 +34,9 @@ export function usePlaceDetails(
       );
     },
     enabled: request !== null,
+    // A saved list loads details for each row, sharing the per-client
+    // expensive budget with photos and the image proxy; wait out a 429.
+    ...rateLimitAwareRetry(fallbackRetry),
     staleTime: 30_000,
     refetchInterval: 60_000,
     gcTime: DETAIL_QUERY_POLICY.gcTime,

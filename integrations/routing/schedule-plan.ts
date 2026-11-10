@@ -16,6 +16,7 @@ import {
   worstSupport,
 } from "@openmapx/core";
 import { captureRoutingResult, type ResolvedProvider } from "./orchestrator.js";
+import { routingChainError } from "./provider-admission.js";
 import { concatenateRoutes } from "./route-concat.js";
 import type { ParsedScheduleRequest } from "./schedule-request.js";
 import type { Route, RoutingOptions } from "./types.js";
@@ -123,7 +124,7 @@ export async function runSchedulePlan(
       } catch (error) {
         hooks.onProviderCall?.(candidate.integrationId, "error", performance.now() - startedAt);
         previousId = candidate.integrationId;
-        lastError = error;
+        lastError = routingChainError(lastError, error);
       }
     }
     throw lastError ?? new Error("All routing providers failed");

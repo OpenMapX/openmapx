@@ -298,3 +298,39 @@ describe("AppLogger sanitization boundary", () => {
     expect(stringify(persisted)).not.toContain(PRIVATE_URL);
   });
 });
+
+describe("AppLogger persistence queue", () => {
+  it("writes one row at a time and drops past its bound with a single summary row", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const persisted: AppLogEntry[] = [];
+    const persist = vi.fn(async (entry: AppLogEntry) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await gate;
+      persisted.push(entry);
+      inFlight -= 1;
+    });
+    const logger = new AppLogger({ persist, maxPersistQueue: 3 });
+
+    for (let index = 0; index < 10; index += 1) {
+      logger.add({ level: "error", source: "test", msg: `failure ${index}`, time: Date.now() });
+    }
+    release();
+    await logger.flushPersisted();
+
+    expect(maxInFlight).toBe(1);
+    expect(persisted.map((entry) => entry.msg)).toEqual([
+      "failure 0",
+      "failure 1",
+      "failure 2",
+      "failure 3",
+      "6 log entries were not written to the database because the write queue was full",
+    ]);
+    expect(logger.getEntries({ limit: 20 }).total).toBe(11);
+  });
+});

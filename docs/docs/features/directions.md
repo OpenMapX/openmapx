@@ -50,6 +50,18 @@ including time-aware requests, can exclude a provider.
 | Valhalla | Driving, motorcycle, cycling, walking | Prepared local data or configured hosted service; supports timed routing and elevation sampling |
 | OSRM     | Driving                               | Coverage and profile depend on its prepared dataset; follows Valhalla in the default order      |
 
+Every engine call first takes one unit from that engine's shared budget,
+counted across all clients and API replicas in Valkey: by default 3,000 calls a
+minute and 500,000 a day per engine, set by the routing integration's
+`providerRequestsPerMinute` and `providerRequestsPerDay`. Calls to the public
+OSRM demo are held to its usage policy instead, 60 a minute and 10,000 a day;
+see [Engine request budgets](../guides/routing-engines.md#engine-request-budgets).
+A call past the budget is not sent; the next compatible engine is tried. If none can take it
+the request answers 429 with `Retry-After`, unless an engine already failed
+upstream, in which case that failure (502) is reported. While Valkey is
+configured but unreachable, each API process counts the same budget itself, so
+routing keeps working and stays metered.
+
 Untimed cycling tries BRouter before Valhalla. Driving tries Valhalla before
 OSRM. Running a compatible service does not establish that it has data for the
 whole requested trip. Follow the [routing engine guide](../guides/routing-engines.md)

@@ -51,4 +51,20 @@ export function setup(ctx: IntegrationContext): void {
     },
     { rateLimitTier: "tile" },
   );
+  ctx.registerRoute(
+    "GET",
+    "/tier-typeahead",
+    async (_req, reply) => {
+      reply.send({ invoked: true });
+    },
+    { rateLimitTier: "typeahead" },
+  );
+  ctx.registerRoute(
+    "GET",
+    "/tier-routing",
+    async (_req, reply) => {
+      reply.send({ invoked: true });
+    },
+    { rateLimitTier: "routing" },
+  );
 }

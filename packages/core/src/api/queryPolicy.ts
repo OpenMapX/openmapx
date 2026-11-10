@@ -1,4 +1,4 @@
-import type { ApiRequestOptions } from "./client";
+import { ApiClientError, type ApiRequestOptions } from "./client";
 
 export interface ApiQueryPolicy {
   gcTime: number;
@@ -50,4 +50,53 @@ export function apiQueryRequestOptions(
   policy: ApiQueryPolicy,
 ): ApiRequestOptions {
   return { signal, timeoutMs: policy.timeoutMs };
+}
+
+/** How many times one query waits out a 429 before it reports the failure. */
+const MAX_RATE_LIMIT_RETRIES = 5;
+const MAX_RATE_LIMIT_WAIT_SECONDS = 60;
+
+function isRateLimited(error: unknown): error is ApiClientError {
+  return error instanceof ApiClientError && error.status === 429;
+}
+
+/** The client-wide `retry` default a query would otherwise use. */
+type FallbackRetry =
+  | boolean
+  | number
+  | ((failureCount: number, error: Error) => boolean)
+  | undefined;
+
+/** TanStack Query's own default when a client sets no `retry`. */
+const TANSTACK_DEFAULT_RETRIES = 3;
+
+function retriesOtherwise(fallback: FallbackRetry, failureCount: number, error: unknown): boolean {
+  if (typeof fallback === "function") return fallback(failureCount, error as Error);
+  if (typeof fallback === "number") return failureCount < fallback;
+  if (typeof fallback === "boolean") return fallback;
+  return failureCount < TANSTACK_DEFAULT_RETRIES;
+}
+
+/**
+ * Retry options for a query that many components may issue at once, such as
+ * one lookup per row of a long list. A 429 is retried after the server's
+ * `Retry-After` (at most 60 s, at most five times), so rows past the API's
+ * per-client budget fill in as it refills instead of staying empty. Any other
+ * failure follows `fallback`, the query client's own `retry` default. Retries
+ * stop when the query has no observers left.
+ */
+export function rateLimitAwareRetry(fallback: FallbackRetry) {
+  return {
+    retry: (failureCount: number, error: unknown) =>
+      isRateLimited(error)
+        ? failureCount < MAX_RATE_LIMIT_RETRIES
+        : retriesOtherwise(fallback, failureCount, error),
+    retryDelay: (attempt: number, error: unknown) =>
+      isRateLimited(error)
+        ? Math.min(
+            MAX_RATE_LIMIT_WAIT_SECONDS,
+            Math.max(1, error.retryAfterSeconds ?? 2 ** attempt),
+          ) * 1000
+        : Math.min(1000 * 2 ** attempt, 30_000),
+  };
 }

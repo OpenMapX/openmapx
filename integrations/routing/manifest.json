@@ -16,5 +16,22 @@
   "requires": [
     { "capability": "routing-engine", "optional": true },
     { "service": "data-manager", "optional": true }
-  ]
+  ],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "providerRequestsPerMinute": {
+        "type": "integer",
+        "default": 3000,
+        "minimum": 1,
+        "description": "Most routing-engine calls per engine per minute, across every client and API replica. Calls past it are refused before they reach the engine."
+      },
+      "providerRequestsPerDay": {
+        "type": "integer",
+        "default": 500000,
+        "minimum": 1,
+        "description": "Most routing-engine calls per engine per day, across every client and API replica."
+      }
+    }
+  }
 }

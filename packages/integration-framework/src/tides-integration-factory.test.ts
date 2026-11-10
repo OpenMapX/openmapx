@@ -34,7 +34,10 @@ function host() {
     };
     const route = ctx.registered.routes.find((r) => r.path === "/tides");
     if (!route) throw new Error("missing tides route");
-    await route.handler({ params: {}, headers: {}, body: null, query }, reply);
+    await route.handler(
+      { params: {}, headers: {}, body: null, query, clientKey: "test-client" },
+      reply,
+    );
     return body as TidesPayload;
   };
   return {

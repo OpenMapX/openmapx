@@ -7,6 +7,11 @@ import {
 } from "@openmapx/core/server";
 import { envString } from "@openmapx/core/server-env";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
+import {
+  maptilerDailyBudget,
+  type ProviderDailyBudget,
+  sendProviderBudgetRefusal,
+} from "../services/provider-daily-budget.js";
 import { loadMapSettings } from "../utils/map-settings.js";
 import { bindRequestAbort, withDeadline } from "../utils/request-abort.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
@@ -239,8 +244,15 @@ function getRequestedMaptilerPath(req: FastifyRequest): string | null {
   }
 }
 
-export const maptilerRoute: FastifyPluginAsync = async (fastify) => {
+export const maptilerRoute: FastifyPluginAsync<{ budget?: ProviderDailyBudget | null }> = async (
+  fastify,
+  options,
+) => {
   declareRouteAuth(fastify, "public");
+  // An operator can cap what all clients together spend on the key each day,
+  // on top of the per-client tile limit. Off unless configured: the proxy can
+  // carry the whole basemap.
+  const budget = options.budget === undefined ? maptilerDailyBudget() : options.budget;
 
   fastify.get("/maptiler/*", async (req, reply) => {
     const path = getRequestedMaptilerPath(req);
@@ -266,6 +278,10 @@ export const maptilerRoute: FastifyPluginAsync = async (fastify) => {
     upstreamUrl.searchParams.set("key", key);
 
     const requestAbort = bindRequestAbort(req, reply);
+    const admission = budget ? await budget.admit(requestAbort.signal) : { allowed: true as const };
+    if (!admission.allowed) {
+      return sendProviderBudgetRefusal(reply, admission, "MapTiler", req.log);
+    }
     const signal = withDeadline(requestAbort.signal, MAPTILER_TIMEOUT_MS);
     let upstream: Response;
     try {

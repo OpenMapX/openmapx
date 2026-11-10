@@ -77,6 +77,14 @@ export interface RoutingProvider {
    * `resolveTemporalCapabilities`, so an existing provider keeps working.
    */
   readonly temporal?: TemporalCapabilities;
+  /**
+   * The most engine calls the provider's current upstream permits, when that
+   * is stricter than the deployment's routing budget (a public demo server
+   * with a usage policy, for example). Host admission charges the lower of
+   * the two. Called on every engine call, so it can follow an endpoint that
+   * changes at runtime; undefined means no ceiling of its own.
+   */
+  admissionCeiling?(): { perMinute: number; perDay: number } | undefined;
   getRoute(
     waypoints: LngLat[],
     mode: TravelMode,

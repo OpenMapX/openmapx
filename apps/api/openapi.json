@@ -973,6 +973,9 @@
                     "cloudConsentRequired": {
                       "type": "boolean"
                     },
+                    "cloudRequiresSignIn": {
+                      "type": "boolean"
+                    },
                     "cloudProviderLabels": {
                       "type": "array",
                       "items": {

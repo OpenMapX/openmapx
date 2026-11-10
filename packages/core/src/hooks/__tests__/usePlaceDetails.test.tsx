@@ -1,6 +1,6 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { apiClient } from "../../api/client";
+import { ApiClientError, apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
 import { createQueryWrapper, createTestQueryClient } from "../../test/queryWrapper";
 import type { LngLat } from "../../types/geometry";
@@ -27,6 +27,20 @@ describe("usePlaceDetails", () => {
       { fileMetadata: "3", lat: "52.5", lng: "13.4", name: "Gate", lang: "en", hasAddress: "1" },
       expect.objectContaining({ signal: expect.anything(), timeoutMs: 20_000 }),
     );
+  });
+
+  it("waits out a 429 for its Retry-After and then loads the place", async () => {
+    const spy = vi
+      .spyOn(apiClient, "get")
+      .mockRejectedValueOnce(new ApiClientError(429, null, 1))
+      .mockResolvedValue({ name: "Gate" } as never);
+
+    const { result } = renderHook(() => usePlaceDetails("p1"), {
+      wrapper: createQueryWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true), { timeout: 3_000 });
+    expect(spy).toHaveBeenCalledTimes(2);
   });
 
   it("versions the HTTP cache even when only the id is provided", async () => {
