@@ -95,24 +95,6 @@ export function validateGroundStartPackage(value: unknown): GroundPackageResult 
   return { ok: true, startPackage };
 }
 
-/**
- * How eagerly cues fire, per user preference.
- *
- * Exhaustive and pinned rather than a number from the bridge: an arbitrary
- * multiplier would let the page schedule a cue kilometres early or suppress it
- * entirely, and neither is a preference the user expressed.
- */
-export function announceMultiplierFor(timing: "early" | "normal" | "late"): number {
-  switch (timing) {
-    case "early":
-      return 1.35;
-    case "normal":
-      return 1;
-    case "late":
-      return 0.75;
-  }
-}
-
 /** Which qualified location cadence a mode asks the operating system for. */
 export function locationProfileForMode(mode: GroundMode): LocationProfileKind {
   switch (mode) {

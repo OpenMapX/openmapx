@@ -1,29 +1,41 @@
 import {
-  coastState,
   cumulativeDistances,
   type FixInput,
   fetchDirections,
-  isReroutingTooOften,
   type LngLat,
   type NavigationRouteOptions,
   type NavTickState,
   navOptionsForMode,
   type PreparedRouteMatcher,
-  pickSpeedLimit,
-  positionAt,
   prepareRouteMatcher,
   processFix,
-  pruneRerouteTimes,
   type Route,
   remainingWaypoints,
   shouldRerouteForClosure,
   type TravelMode,
   useNavigationStore,
   useSettingsStore,
-  VOICE_TIMING_MULTIPLIER,
   type VoiceCue,
 } from "@openmapx/core";
-import { spokenInstructionFor } from "@openmapx/core/navigation";
+import {
+  COAST_TICK_MS,
+  canRequestReroute,
+  coastedFix,
+  EMPTY_REROUTE_CHURN,
+  groundSpeedLimit,
+  IDLE_REROUTE,
+  mayCoast,
+  onRerouteFailed,
+  onRerouteRequested,
+  onRerouteRetryRequested,
+  onRerouteSucceeded,
+  type RerouteChurn,
+  type RerouteRuntime,
+  recordRerouteSuccess,
+  rerouteCandidate,
+  spokenInstructionFor,
+  VOICE_TIMING_MULTIPLIER,
+} from "@openmapx/core/navigation";
 import { formatNavigationCue, NavigationCueError, resolveLocale } from "@openmapx/i18n";
 import type { NavIncidentResource } from "@openmapx/integration-framework/react";
 import { useLocale } from "next-intl";
@@ -46,21 +58,9 @@ const freshTick = (): NavTickState => ({
   spokenCues: [],
 });
 
-// Churn guard: when reroutes fire too often (the fresh route keeps reading
-// off-route from GPS noise / an awkward first maneuver), pause rerouting briefly
-// so the recomputed route can settle instead of churning on every fix.
-const REROUTE_CHURN_WINDOW_MS = 120_000; // 2 min
-const REROUTE_CHURN_MAX = 3; // reroutes within the window that trip the cooldown
-const REROUTE_CHURN_COOLDOWN_MS = 30_000;
-
-// Coasting: when real fixes stop (tunnel, garage, urban canyon), extrapolate the
-// position along the route instead of freezing at the outage point. Start after
-// a few fix-less seconds, decelerate to a stop over ~2 min, and never coast more
-// than ~3 km — a straight-tunnel estimate degrades gracefully rather than lying.
-const COAST_START_MS = 3000;
-const COAST_MAX_MS = 120_000;
-const COAST_MAX_METERS = 3000;
-const COAST_TICK_MS = 250;
+// When to reroute, which route to follow, how cues are timed, which speed limit
+// shows and how the position coasts through a gap in fixes are the shared
+// ground session policy, which the installed app's native session follows too.
 
 interface RerouteExecutionRequest {
   trigger: "off-route" | "closure";
@@ -79,13 +79,13 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
   const speak = useNavigationVoice(locale);
 
   const tickRef = useRef<NavTickState>(freshTick());
-  const reroutingRef = useRef(false);
+  // The reroute in flight or held back, and the recent successes the churn
+  // guard counts.
+  const rerouteRef = useRef<RerouteRuntime>(IDLE_REROUTE);
+  const churnRef = useRef<RerouteChurn>(EMPTY_REROUTE_CHURN);
   const rerouteAttemptRef = useRef(0);
   const mountedRef = useRef(false);
   const lastHandledRetryNonceRef = useRef(0);
-  // Recent successful-reroute times (ms) + cooldown deadline for the churn guard.
-  const rerouteTimesRef = useRef<number[]>([]);
-  const rerouteCooldownUntilRef = useRef(0);
   // Closure ids present at the time the first road-conditions fetch for the
   // committed route resolved (the baseline). Only incidents whose id is NOT in
   // this set are treated as "new" and trigger a reroute.
@@ -128,7 +128,7 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
     return () => {
       mountedRef.current = false;
       rerouteAttemptRef.current++;
-      reroutingRef.current = false;
+      rerouteRef.current = IDLE_REROUTE;
       if (useNavigationStore.getState().status === "rerouting") {
         useNavigationStore.setState({ status: "navigating" });
       }
@@ -138,9 +138,16 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
   const executeReroute = useCallback(
     (request: RerouteExecutionRequest): boolean => {
       const now = Date.now();
-      if (reroutingRef.current || now < rerouteCooldownUntilRef.current) return false;
+      const decision = canRequestReroute(
+        rerouteRef.current,
+        churnRef.current,
+        useNavigationStore.getState().connectivity,
+        now,
+      );
+      if (!decision.allow) return false;
 
       const attempt = ++rerouteAttemptRef.current;
+      const requestId = String(attempt);
       const navigationStartedAtMs = useNavigationStore.getState().navigationStartedAtMs;
       const isCurrentAttempt = () => {
         const state = useNavigationStore.getState();
@@ -154,7 +161,7 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
         );
       };
 
-      reroutingRef.current = true;
+      rerouteRef.current = onRerouteRequested(rerouteRef.current, requestId, now);
       haptics.warn();
       useNavigationStore.getState().beginReroute();
       const waypoints = remainingWaypoints(
@@ -172,23 +179,21 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
       })
         .then((response) => {
           if (!isCurrentAttempt()) return;
-          const next = response.routes?.[response.activeRouteIndex ?? 0];
+          const next = rerouteCandidate(response);
           if (!next) {
+            rerouteRef.current = onRerouteFailed(
+              rerouteRef.current,
+              "no-route",
+              Date.now(),
+              Math.random(),
+            );
             useNavigationStore.setState({ status: "navigating" });
             useNavigationStore.getState().signalRerouteFailed();
             return;
           }
 
-          const completedAt = Date.now();
-          rerouteTimesRef.current = pruneRerouteTimes(
-            [...rerouteTimesRef.current, completedAt],
-            completedAt,
-            REROUTE_CHURN_WINDOW_MS,
-          );
-          if (isReroutingTooOften(rerouteTimesRef.current, REROUTE_CHURN_MAX)) {
-            rerouteCooldownUntilRef.current = completedAt + REROUTE_CHURN_COOLDOWN_MS;
-            rerouteTimesRef.current = [];
-          }
+          rerouteRef.current = onRerouteSucceeded();
+          churnRef.current = recordRerouteSuccess(churnRef.current, Date.now());
           tickRef.current = freshTick();
           useNavigationStore
             .getState()
@@ -203,13 +208,26 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
         .catch((error) => {
           if (!isCurrentAttempt()) return;
           useNavigationStore.setState({ status: "navigating" });
-          if (isConnectivityFailure(error, useNavigationStore.getState().connectivity)) {
-            useNavigationStore.getState().setRerouteUnavailable(true);
-          }
+          const connectivityFailure = isConnectivityFailure(
+            error,
+            useNavigationStore.getState().connectivity,
+          );
+          rerouteRef.current = onRerouteFailed(
+            rerouteRef.current,
+            connectivityFailure ? "network" : "request-failed",
+            Date.now(),
+            Math.random(),
+          );
+          if (connectivityFailure) useNavigationStore.getState().setRerouteUnavailable(true);
           useNavigationStore.getState().signalRerouteFailed();
         })
         .finally(() => {
-          if (rerouteAttemptRef.current === attempt) reroutingRef.current = false;
+          // An answer nobody applied (the trip ended or its route was replaced)
+          // leaves no request open.
+          const runtime = rerouteRef.current;
+          if (runtime.status === "in-flight" && runtime.requestId === requestId) {
+            rerouteRef.current = { status: "idle", attempts: runtime.attempts };
+          }
         });
       return true;
     },
@@ -258,7 +276,6 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
       if (!fix.coasted) captureFix(fix, route, mode);
 
       const opts = navOptionsForMode(mode);
-      // Shift voice-cue timing earlier/later per the user's preference.
       opts.announceMultiplier =
         VOICE_TIMING_MULTIPLIER[useSettingsStore.getState().voiceGuidanceTiming];
       const matcher = matcherFor(route.geometry);
@@ -283,20 +300,16 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
         };
       }
 
-      // Speed limit (driving only): read the limit for the segment the user is
-      // on straight from the route. OSRM carries per-segment limits on the route
-      // (`segmentSpeedLimits`); Valhalla's are accumulated up front into
-      // `liveSpeedLimits` by the windowed map-match — both indexed by the snap's
-      // segment, so no per-fix lookup. The per-step `speedLimit` is the final
-      // fallback. Walking/cycling clear the badge.
-      const currentSpeedLimit =
-        mode === "driving"
-          ? pickSpeedLimit(
-              route.segmentSpeedLimits?.[result.progress.segmentIndex],
-              store.liveSpeedLimits?.[result.progress.segmentIndex],
-              route.steps[result.progress.currentStepIndex]?.speedLimit,
-            )
-          : null;
+      // OSRM carries per-segment limits on the route (`segmentSpeedLimits`);
+      // Valhalla's are accumulated up front into `liveSpeedLimits` by the
+      // windowed map-match. Both are indexed by the snap's segment.
+      const currentSpeedLimit = groundSpeedLimit({
+        mode,
+        route,
+        liveSpeedLimits: store.liveSpeedLimits,
+        segmentIndex: result.progress.segmentIndex,
+        stepIndex: result.progress.currentStepIndex,
+      });
 
       // Everything this fix produced describes one instant, so publish it as one
       // store update. A coasted fix leaves `coasting` alone to keep the coast
@@ -326,6 +339,7 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
         store.setRerouteUnavailable(true);
       }
       if (result.needsReroute && canAttemptReroute && !useNavRecordingStore.getState().replaying) {
+        if (retryRequested) rerouteRef.current = onRerouteRetryRequested(rerouteRef.current);
         // Re-anchor at the actual GPS position. The progress position is snapped
         // onto the obsolete route; using it here would ask the router for the
         // same route again and leave a genuinely off-route traveller stranded in
@@ -387,9 +401,8 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
   useEffect(() => {
     if (navStatus === "idle") {
       rerouteAttemptRef.current++;
-      reroutingRef.current = false;
-      rerouteTimesRef.current = [];
-      rerouteCooldownUntilRef.current = 0;
+      rerouteRef.current = IDLE_REROUTE;
+      churnRef.current = EMPTY_REROUTE_CHURN;
       lastRealFixRef.current = null;
       cumRef.current = null;
       matcherRef.current = null;
@@ -465,7 +478,8 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
   // synthetic on-route fix at the extrapolated position so the puck, ETA, and
   // voice cues keep advancing through the outage instead of freezing. On-route
   // by construction, so it can never trip an off-route reroute; a real fix
-  // re-anchors it (above). Runs only while navigating — not during a reroute.
+  // re-anchors it (above). Runs only while navigating on the route, and stops
+  // where the estimate runs out.
   useEffect(() => {
     if (!active || simEnabled || replaying) return;
     const id = window.setInterval(() => {
@@ -473,26 +487,16 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
       const route = store.route;
       const last = lastRealFixRef.current;
       if (store.status !== "navigating" || !route || !last) return;
-      const coast = coastState(last.alongMeters, last.speedMps, Date.now() - last.atMs, {
-        startAfterMs: COAST_START_MS,
-        maxCoastMs: COAST_MAX_MS,
-        maxCoastMeters: COAST_MAX_METERS,
-        routeLengthMeters: route.distance,
-      });
-      if (!coast.coasting) return;
+      if (!mayCoast({ offRoute: store.offRoute, rerouting: false, speedMps: last.speedMps })) {
+        return;
+      }
       if (cumRef.current?.route !== route) {
         cumRef.current = { route, cum: cumulativeDistances(route.geometry) };
       }
-      const { point, bearing } = positionAt(route.geometry, cumRef.current.cum, coast.alongMeters);
+      const fix = coastedFix(last, route.geometry, cumRef.current.cum, Date.now());
+      if (!fix) return;
       store.setCoasting(true);
-      onFix({
-        coords: point,
-        accuracy: 1,
-        heading: bearing,
-        speed: coast.speedMps,
-        timestampMs: Date.now(),
-        coasted: true,
-      });
+      onFix(fix);
     }, COAST_TICK_MS);
     return () => window.clearInterval(id);
   }, [active, simEnabled, replaying, onFix]);

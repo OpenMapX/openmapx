@@ -1,10 +1,14 @@
 import {
+  EMPTY_REROUTE_CHURN,
   type FixInput,
   isMobileSessionExpired,
   type MobileNavigationSession,
   mergeTransitRefresh,
   type NativeToWebMessage,
+  onRerouteFailed,
+  onRerouteSucceeded,
   prepareTransitProgress,
+  recordRerouteSuccess,
   refreshTransitCaptures,
   transitProgressFromTick,
   transitStartPackageSchema,
@@ -18,13 +22,6 @@ import { locationReleaseAtMs } from "./arrival";
 import type { DiagnosticSink, EffectRunner } from "./effects";
 import { type CoastOrigin, canCoast } from "./ground/GroundCoastingScheduler";
 import type { RerouteOutcome } from "./ground/GroundRerouteService";
-import {
-  EMPTY_CHURN,
-  onRerouteFailed,
-  onRerouteSucceeded,
-  type RerouteRuntime,
-  recordSuccess,
-} from "./ground/rerouteState";
 import type { AnyNavigationProcessor, ProcessorMutation, ProcessorRegistry } from "./processor";
 import { SerialExecutor } from "./serialExecutor";
 import { profileForSession } from "./sessionProfile";
@@ -981,7 +978,10 @@ export class NavigationCoordinator {
                   payload: {
                     ...next.payload,
                     reroute: onRerouteSucceeded(),
-                    rerouteChurn: recordSuccess(session.payload.rerouteChurn ?? EMPTY_CHURN, now),
+                    rerouteChurn: recordRerouteSuccess(
+                      session.payload.rerouteChurn ?? EMPTY_REROUTE_CHURN,
+                      now,
+                    ),
                   },
                 },
               }
@@ -997,7 +997,7 @@ export class NavigationCoordinator {
           updatedAtMs: now,
           payload: {
             ...session.payload,
-            reroute: onRerouteFailed(reroute as RerouteRuntime, code, now, Math.random()),
+            reroute: onRerouteFailed(reroute, code, now, Math.random()),
           },
         },
         effects: [{ kind: "publish-snapshot", immediate: false }],

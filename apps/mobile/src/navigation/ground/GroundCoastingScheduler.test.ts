@@ -1,14 +1,16 @@
-import type { FixInput, GroundMobileSession } from "@openmapx/core/navigation";
+import {
+  COAST_START_DELAY_MS,
+  type FixInput,
+  type GroundMobileSession,
+  MAX_COAST_MS,
+} from "@openmapx/core/navigation";
 import { groundSessionFixture } from "../../storage/testing/sessionFixture";
 import {
   anchorFor,
-  COAST_START_DELAY_MS,
-  COAST_TICK_MS,
+  COAST_DISPATCH_MS,
   type CoastOrigin,
   canCoast,
-  coastFixAt,
   GroundCoastingScheduler,
-  MAX_COAST_MS,
 } from "./GroundCoastingScheduler";
 
 const NOW = 1_700_000_100_000;
@@ -85,32 +87,6 @@ describe("canCoast", () => {
   );
 });
 
-describe("coastFixAt", () => {
-  const anchor = { alongMeters: 500, speedMps: 20, atMs: NOW };
-
-  it("produces nothing before the start delay", () => {
-    expect(coastFixAt(session(), anchor, NOW + COAST_START_DELAY_MS - 1)).toBeNull();
-    expect(coastFixAt(session(), anchor, NOW + COAST_START_DELAY_MS)).toMatchObject({
-      coasted: true,
-      timestampMs: NOW + COAST_START_DELAY_MS,
-      accuracy: 1,
-    });
-  });
-
-  it("moves further along the route as time passes", () => {
-    const early = coastFixAt(session(), anchor, NOW + 4_000);
-    const later = coastFixAt(session(), anchor, NOW + 20_000);
-
-    expect(later?.coords[0]).toBeGreaterThan(early?.coords[0] ?? 0);
-    const slow = coastFixAt(session(), anchor, NOW + 60_000);
-    expect(slow?.speed).toBeLessThan(early?.speed ?? 0);
-  });
-
-  it("stops entirely past the coast limit", () => {
-    expect(coastFixAt(session(), anchor, NOW + MAX_COAST_MS + 1)).toBeNull();
-  });
-});
-
 describe("GroundCoastingScheduler", () => {
   function harness() {
     let now = NOW;
@@ -164,9 +140,9 @@ describe("GroundCoastingScheduler", () => {
     const { scheduler, dispatched, origins, advance } = harness();
     scheduler.sync(session(), "active");
     expect(scheduler.running).toBe(true);
-    advance(COAST_START_DELAY_MS - COAST_TICK_MS);
+    advance(COAST_START_DELAY_MS - 1);
     expect(dispatched).toEqual([]);
-    advance(10_000 - (COAST_START_DELAY_MS - COAST_TICK_MS));
+    advance(10_000 - (COAST_START_DELAY_MS - 1));
 
     expect(dispatched.length).toBeGreaterThan(0);
     for (const fix of dispatched) expect(fix.coasted).toBe(true);
@@ -174,9 +150,9 @@ describe("GroundCoastingScheduler", () => {
       new Set([JSON.stringify({ sessionId: session().sessionId, anchorAtMs: NOW })]),
     );
     for (let index = 1; index < dispatched.length; index++)
-      expect(
-        dispatched[index].timestampMs - dispatched[index - 1].timestampMs,
-      ).toBeGreaterThanOrEqual(1000);
+      expect(dispatched[index].timestampMs - dispatched[index - 1].timestampMs).toBe(
+        COAST_DISPATCH_MS,
+      );
   });
 
   it("stops itself when the coast runs out", () => {

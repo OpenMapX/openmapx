@@ -99,8 +99,9 @@ describe("voice guidance switched off and on during a trip", () => {
 
 describe("voice timing changed during a trip", () => {
   it.each([
-    ["early", 129],
-    ["late", 134],
+    // The shared policy's multipliers, 1.5 and 0.6, around normal's 132.
+    ["early", 128],
+    ["late", 136],
   ] as const)("moves the next announcement when set to %s", async (timing, farIndex) => {
     harness = await startForegroundHarness();
     const { sessionId } = await harness.start(groundStartPackage({ voiceTiming: "normal" }));
@@ -123,7 +124,7 @@ describe("voice timing changed during a trip", () => {
     harness = await startForegroundHarness();
     await harness.start(groundStartPackage({ voiceTiming: "late" }));
 
-    expect((await announcementIndexes(0, 145)).far).toBe(134);
+    expect((await announcementIndexes(0, 145)).far).toBe(136);
   });
 });
 

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { VoiceTiming } from "../navigation/groundSessionPolicy";
 import { getStorage } from "../platform/storage";
 import type { UnitSystem } from "../types/geometry";
 import type { DateFormat, TimeFormat } from "../utils/dateTimeFormat";
@@ -39,16 +40,10 @@ const DATE_FORMATS: readonly DateFormat[] = ["auto", "dmy", "mdy", "ymd"];
 /**
  * How early navigation voice prompts fire. `normal` keeps the tuned defaults;
  * `early` announces sooner (more reaction time), `late` closer to the maneuver.
+ * The distances each one means are the ground session policy's.
  */
-export type VoiceGuidanceTiming = "early" | "normal" | "late";
+export type VoiceGuidanceTiming = VoiceTiming;
 const VOICE_TIMINGS: readonly VoiceGuidanceTiming[] = ["early", "normal", "late"];
-
-/** Multiplier applied to voice-cue trigger distances per timing preference. */
-export const VOICE_TIMING_MULTIPLIER: Record<VoiceGuidanceTiming, number> = {
-  early: 1.5,
-  normal: 1,
-  late: 0.6,
-};
 
 function readUnits(): UnitSystem {
   return getStorage().getString(UNITS_STORAGE_KEY) === "imperial" ? "imperial" : "metric";

@@ -1,7 +1,6 @@
 import type { GroundNavigationStartPackage } from "@openmapx/core/navigation";
 import { groundSessionFixture } from "../../storage/testing/sessionFixture";
 import {
-  announceMultiplierFor,
   createGroundPreparingSession,
   GROUND_MODES,
   type GroundMode,
@@ -179,15 +178,6 @@ describe("createGroundPreparingSession", () => {
     expect(session.locale).toBe("de");
     expect(session.units).toBe("imperial");
     expect(session.permissionMode).toBe("foreground-only");
-  });
-});
-
-describe("announceMultiplierFor", () => {
-  it("puts early cues before normal, and normal before late", () => {
-    expect(announceMultiplierFor("early")).toBeGreaterThan(announceMultiplierFor("normal"));
-    expect(announceMultiplierFor("normal")).toBeGreaterThan(announceMultiplierFor("late"));
-
-    expect(announceMultiplierFor("normal")).toBe(1);
   });
 });
 

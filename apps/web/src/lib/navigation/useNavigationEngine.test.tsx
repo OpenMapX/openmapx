@@ -385,6 +385,40 @@ describe("useNavigationEngine", () => {
     });
   });
 
+  it("waits out the delay after a failed reroute before asking again", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(100_000);
+      useNavigationStore.getState().startGroundNavigation(route, "driving", [
+        [0, 0],
+        [0.004, 0],
+      ]);
+      fetchDirections.mockRejectedValueOnce(new Error("Server error 500"));
+      fetchDirections.mockResolvedValue({
+        routes: [{ ...route, distance: 999 } as Route],
+        activeRouteIndex: 0,
+      });
+      renderHook(() => useNavigationEngine(disabledResource));
+
+      await triggerOffRoute();
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(fetchDirections).toHaveBeenCalledTimes(1);
+
+      // The engine asks again, inside the first retry delay of three seconds.
+      vi.setSystemTime(102_000);
+      await triggerOffRoute(10_000);
+      expect(fetchDirections).toHaveBeenCalledTimes(1);
+
+      vi.setSystemTime(104_100);
+      await triggerOffRoute(20_000);
+      expect(fetchDirections).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("enters a cooldown after three successful reroutes in the churn window", async () => {
     vi.useFakeTimers();
     try {

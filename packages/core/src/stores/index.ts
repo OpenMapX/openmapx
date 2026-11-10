@@ -82,7 +82,6 @@ export { useSavedPlacesStore } from "./savedPlacesStore";
 export { useSearchStore } from "./searchStore";
 export {
   useSettingsStore,
-  VOICE_TIMING_MULTIPLIER,
   type VoiceGuidanceTiming,
 } from "./settingsStore";
 export { useSidebarStore } from "./sidebarStore";

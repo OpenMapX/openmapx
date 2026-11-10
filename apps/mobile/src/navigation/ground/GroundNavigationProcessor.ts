@@ -1,19 +1,17 @@
-import type {
-  FixInput,
-  GroundMobileSession,
-  GroundNavigationStartPackage,
+import {
+  canRequestReroute,
+  EMPTY_REROUTE_CHURN,
+  type FixInput,
+  type GroundMobileSession,
+  type GroundNavigationStartPackage,
+  onBackOnRoute,
+  onRerouteOffline,
+  onRerouteRequested,
 } from "@openmapx/core/navigation";
 import type { NavigationProcessor, ProcessorMutation, ProcessorPreparation } from "../processor";
 import { GroundRouteCache, processGroundBatch } from "./groundBatch";
 import { applyGroundReplacement, validateGroundReplacement } from "./groundReplacement";
 import { createGroundPreparingSession, validateGroundStartPackage } from "./groundSession";
-import {
-  canRequestReroute,
-  EMPTY_CHURN,
-  onBackOnRoute,
-  onRerouteOffline,
-  onRerouteRequested,
-} from "./rerouteState";
 
 /**
  * Ground navigation, as the coordinator sees it.
@@ -78,7 +76,7 @@ export class GroundNavigationProcessor implements NavigationProcessor<"ground"> 
     // and asks again if the user is still off route.
     const decision = canRequestReroute(
       current,
-      advanced.payload.rerouteChurn ?? EMPTY_CHURN,
+      advanced.payload.rerouteChurn ?? EMPTY_REROUTE_CHURN,
       advanced.connectivity,
       nowMs,
     );
@@ -124,7 +122,7 @@ export class GroundNavigationProcessor implements NavigationProcessor<"ground"> 
     if (reroute.status !== "unavailable") return null;
     const decision = canRequestReroute(
       reroute,
-      session.payload.rerouteChurn ?? EMPTY_CHURN,
+      session.payload.rerouteChurn ?? EMPTY_REROUTE_CHURN,
       "online",
       nowMs,
     );

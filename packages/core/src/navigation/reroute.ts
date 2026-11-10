@@ -67,28 +67,6 @@ export function shouldReroute(
 }
 
 /**
- * Drop reroute timestamps (ms) older than `windowMs` relative to `nowMs`, keeping
- * a rolling window for churn detection.
- */
-export function pruneRerouteTimes(
-  timestampsMs: number[],
-  nowMs: number,
-  windowMs: number,
-): number[] {
-  return timestampsMs.filter((t) => nowMs - t < windowMs);
-}
-
-/**
- * Reroute churn: at least `maxInWindow` reroutes within the rolling window
- * (`timestampsMs` must already be pruned to it). The engine reacts by imposing a
- * short cooldown so it stops re-rerouting onto fresh routes that immediately read
- * off-route (GPS noise, an awkward first maneuver) — breaking the loop.
- */
-export function isReroutingTooOften(timestampsMs: number[], maxInWindow: number): boolean {
-  return timestampsMs.length >= maxInWindow;
-}
-
-/**
  * Re-anchor the itinerary at `from` and drop passed intermediate stops. Resolve
  * occurrences in itinerary order from the route origin before comparing them
  * with current geometry-measured progress; the final destination is always kept.

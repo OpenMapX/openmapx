@@ -1,14 +1,15 @@
 import {
   type FixInput,
   type GroundMobileSession,
-  matchSpeedLimitsByPoint,
+  groundSpeedLimit,
   type NavTickResult,
   navOptionsForMode,
   type PreparedRouteMatcher,
-  pickSpeedLimit,
   prepareRouteMatcher,
   processFix,
   routeFingerprint,
+  type SpeedLimitRoute,
+  VOICE_TIMING_MULTIPLIER,
 } from "@openmapx/core/navigation";
 import type { ScheduledAlertInput, SessionEffect } from "../../storage/SessionRepository";
 import type { ProcessorMutation } from "../processor";
@@ -19,7 +20,6 @@ import {
   offRouteEpisodeId,
   statusCueEffect,
 } from "./groundCue";
-import { announceMultiplierFor } from "./groundSession";
 
 /**
  * One batch of fixes becomes one committed revision.
@@ -105,27 +105,6 @@ interface CueCandidate {
   atMs: number;
 }
 
-/**
- * Which limit applies where the user actually is.
- *
- * Captured live limits win over the route's own, because they were fetched for
- * this journey; both are indexed by segment, which is why a mismatched captured
- * array is rejected at preparation rather than silently misattributed here.
- */
-function speedLimitAt(session: GroundMobileSession, segmentIndex: number): number | null {
-  const { startPackage } = session.payload;
-  const captured = startPackage.capturedLiveSpeedLimits;
-  if (captured && segmentIndex >= 0 && segmentIndex < captured.length) {
-    const limit = captured[segmentIndex];
-    if (typeof limit === "number") return limit;
-  }
-  const routeLimits = startPackage.route.segmentSpeedLimits;
-  if (routeLimits && segmentIndex >= 0 && segmentIndex < routeLimits.length) {
-    return routeLimits[segmentIndex] ?? null;
-  }
-  return null;
-}
-
 export interface ProcessGroundBatchInput {
   session: GroundMobileSession;
   fixes: readonly FixInput[];
@@ -150,7 +129,7 @@ export function processGroundBatch(input: ProcessGroundBatchInput): GroundBatchO
 
   const options = {
     ...navOptionsForMode(startPackage.mode),
-    announceMultiplier: announceMultiplierFor(startPackage.settings.voiceTiming),
+    announceMultiplier: VOICE_TIMING_MULTIPLIER[startPackage.settings.voiceTiming],
   };
 
   // The current session's own route, bound to the cache's canonical geometry so
@@ -198,7 +177,13 @@ export function processGroundBatch(input: ProcessGroundBatchInput): GroundBatchO
 
     if (result.progress) {
       progress = result.progress as never;
-      currentSpeedLimit = speedLimitAt(session, result.progress.segmentIndex);
+      currentSpeedLimit = groundSpeedLimit({
+        mode: startPackage.mode,
+        route: startPackage.route as SpeedLimitRoute,
+        liveSpeedLimits: startPackage.capturedLiveSpeedLimits,
+        segmentIndex: result.progress.segmentIndex,
+        stepIndex: result.progress.currentStepIndex,
+      });
       // A coasted fix moves what is shown, never what was measured: the last
       // accepted fix and the coasting anchor stay with the last real fix.
       coasting = fix.coasted === true;
@@ -313,6 +298,3 @@ function appendBounded(existing: readonly string[], additions: readonly string[]
   for (const id of additions) if (!next.includes(id)) next.push(id);
   return next.length > 512 ? next.slice(next.length - 512) : next;
 }
-
-/** Exposed so the speed-limit helpers stay reachable to later plans. */
-export const groundSpeedLimitHelpers = { matchSpeedLimitsByPoint, pickSpeedLimit };

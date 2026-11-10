@@ -123,6 +123,22 @@ describe("GroundRerouteService", () => {
     expect(calls[0].options).toMatchObject({ timeoutMs: 15_000, signal: expect.any(AbortSignal) });
   });
 
+  it("follows the route the server marked active, as the browser does", async () => {
+    const answer = routeAnswer();
+    const marked = { ...answer.routes[0], distance: 4_200 };
+    const { client } = fakeClient({ routes: [answer.routes[0], marked], activeRouteIndex: 1 });
+
+    const outcome = await service(client).request({
+      requestId: "r1",
+      session: session(),
+      origin: ORIGIN,
+    });
+
+    expect(outcome.ok && (outcome.route as { route: { distance: number } }).route.distance).toBe(
+      4_200,
+    );
+  });
+
   it("pairs a successful replacement with the requested itinerary", async () => {
     const current = session();
     current.payload.progress = { alongMeters: 4000 } as never;
