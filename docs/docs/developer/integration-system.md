@@ -780,15 +780,20 @@ the fence is never recaptured after acquisition. Hosts without shared cache
 administration, such as CLI and test fixtures, have no fence to capture, and
 the writer writes to their cache directly.
 
+Shared packages that receive an integration's cache use the same writer:
+`@openmapx/mobility-core/cache` exports `captureCacheWriter`, which the
+framework re-exports, because mobility-core cannot depend on the framework.
+
 `pnpm check-integration-cache-writes`, part of `pnpm check:policy`, refuses a
-direct `set` on an integration cache in `integrations/` and
-`packages/integration-framework/src`, before or after an await, since a helper
-that wraps the write hides the await. It also refuses the shared helpers that
-write without the fence: `cacheSet` from `@openmapx/mobility-core/cache` and
-`withCache(cache, …)` from `@openmapx/core`. The fenced `withCache` from
-`@openmapx/mobility-core/cache` delegates to `cache.withCache` and is allowed. It lists the files allowed to keep one
-with the reason, such as an in-memory map named `cache` or a write that stores
-no upstream result, and the exact number of writes each may hold.
+direct `set` on an integration cache, before or after an await, since a helper
+that wraps the write hides the await. It scans `integrations/`,
+`packages/integration-framework/src`, `packages/mobility-core/src` and
+`packages/noaa-coops-data`. It also refuses `withCache(cache, …)` from
+`@openmapx/core`, which writes without the fence. The fenced `withCache` from
+`@openmapx/mobility-core/cache` delegates to `cache.withCache` and is allowed.
+The gate lists the files allowed to keep a direct write, each with its reason,
+such as an in-memory map named `cache` or a write that stores no upstream
+result, and the exact number of writes each may hold.
 
 The writer fences the captured Redis invalidation epoch; callers must also guard
 local state/lifetime through `onInvalidate` and disposal. It does not create a

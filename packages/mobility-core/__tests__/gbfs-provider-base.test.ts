@@ -342,3 +342,109 @@ it("captures explicit GBFS owner receipts before parsed-system caching and prese
   );
   expect(second.vehicles[0].contributors).toEqual([receipt]);
 });
+
+/** Models the host fence: a writer captured before a clear stores nothing after it. */
+function fencedCache() {
+  const values = new Map<string, unknown>();
+  let epoch = 0;
+  const fenced: CacheClient = {
+    ...cache,
+    get: async <T>(key: string) => (values.get(key) as T) ?? null,
+    set: async (key, value) => {
+      values.set(key, structuredClone(value));
+    },
+    captureWriter: async () => {
+      const captured = epoch;
+      return {
+        set: async (key, value) => {
+          if (captured === epoch) values.set(key, structuredClone(value));
+        },
+      };
+    },
+  };
+  const clear = () => {
+    values.clear();
+    epoch += 1;
+  };
+  return { fenced, values, clear };
+}
+
+function gate() {
+  let release!: () => void;
+  let enter!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    enter = resolve;
+  });
+  const opened = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const pass = async () => {
+    enter();
+    await opened;
+  };
+  return { entered, release, pass };
+}
+
+const systemData = (systemId: string) => ({
+  systemInfo: { systemId, name: "Bikes", timezone: "Europe/Berlin" },
+  stations: [],
+  stationStatuses: new Map(),
+  vehicles: [{ bikeId: "one", lat: 50.5, lon: 10.5, isReserved: false, isDisabled: false }],
+  vehicleTypes: new Map(),
+  pricingPlans: new Map(),
+});
+
+describe("system data fetched across an admin cache clear", () => {
+  const bbox = { west: 10, south: 50, east: 11, north: 51 };
+
+  it("stays out of the cache when the clear lands during the probe", async () => {
+    const { fenced, values, clear } = fencedCache();
+    const probe = gate();
+    vi.mocked(catalog.loadCatalog).mockResolvedValue([
+      {
+        systemId: "probed-network",
+        name: "Bikes",
+        countryCode: "DE",
+        location: "Germany",
+        url: "https://example.com",
+        autoDiscoveryUrl: "https://example.com/gbfs",
+      },
+    ]);
+    vi.spyOn(catalog, "probeSystem").mockImplementation(async () => {
+      await probe.pass();
+      return {
+        bbox,
+        vehicleTypes: new Set(["bicycle"] as const),
+        systemData: systemData("probed-network"),
+      };
+    });
+
+    const loading = fetchGbfsData(bbox, new Set(["bicycle"]), { ...dependencies(), cache: fenced });
+    await probe.entered;
+    clear();
+    probe.release();
+
+    expect((await loading).vehicles).toHaveLength(1);
+    expect(values.size).toBe(0);
+  });
+
+  it("stays out of the cache when the clear lands during the Swiss discovery fetch", async () => {
+    const { fenced, values, clear } = fencedCache();
+    const fetch = gate();
+    vi.mocked(fetchGbfsSystem).mockImplementation(async () => {
+      await fetch.pass();
+      return systemData("sharedmobility.ch");
+    });
+
+    const loading = fetchSwissSharedMobilityData(bbox, new Set(["bicycle"]), {
+      ...dependencies(),
+      cache: fenced,
+    });
+    await fetch.entered;
+    clear();
+    fetch.release();
+
+    expect((await loading).vehicles).toHaveLength(1);
+    expect(values.size).toBe(0);
+  });
+});

@@ -6,7 +6,7 @@ import type { Attribution } from "./types/attribution.js";
  * Handles catalog lookup, system probing, and station/vehicle extraction.
  */
 
-import { type CacheClient, cacheGet, cacheSet, TTL } from "./cache.js";
+import { type CacheClient, type CacheWriter, cacheGet, captureCacheWriter, TTL } from "./cache.js";
 import { isEnturGbfsUrl } from "./entur-gbfs.js";
 import {
   filterCatalogByBbox,
@@ -145,6 +145,8 @@ export async function fetchGbfsData(
   // large countries cannot trigger hundreds of full GBFS fetches per search.
   const sorted = sortByRelevance(filtered, city);
   const probeCandidates = sorted.slice(0, MAX_SYSTEMS_PER_SEARCH);
+  // Probes already download system data, so the fence is captured before them.
+  const writer = await captureCacheWriter(cache);
 
   const probed = await pMapSettled(
     probeCandidates,
@@ -186,6 +188,7 @@ export async function fetchGbfsData(
           unknownFormFactor,
           systemData,
           cache,
+          writer,
           dependencies.resolveContributors,
         ),
         SYSTEM_FETCH_TIMEOUT_MS,
@@ -228,6 +231,7 @@ export async function fetchSwissSharedMobilityData(
     unknownFormFactor,
     undefined,
     dependencies.cache,
+    undefined,
     dependencies.resolveContributors,
   );
   return result ?? { stations: [], vehicles: [] };
@@ -255,6 +259,11 @@ async function fetchSystemData(
   unknownFormFactor: VehicleFormFactor,
   prefetchedSystemData: GbfsSystemData | undefined,
   cache: CacheClient,
+  /**
+   * Fence captured before a probe that already downloaded this system's data.
+   * Without one, the fence is captured after the cache miss.
+   */
+  probeWriter: CacheWriter | undefined,
   resolveContributors?: (sourceIds: readonly string[]) => Attribution[],
 ): Promise<{ stations: SharedMobilityStation[]; vehicles: SharedMobilityVehicle[] } | null> {
   // Check Redis cache (persists across requests with different bboxes)
@@ -275,6 +284,7 @@ async function fetchSystemData(
     };
   }
 
+  const writer = probeWriter ?? (await captureCacheWriter(cache));
   const systemData =
     prefetchedSystemData ??
     (await fetchGbfsSystem(autoDiscoveryUrl, getGbfsDiscoveryHeaders(autoDiscoveryUrl), {
@@ -482,7 +492,7 @@ async function fetchSystemData(
   }
 
   // Cache all data (pre-bbox-filter, all form factors) in Redis for reuse across providers/bboxes
-  await cacheSet(cache, cacheKey, { stations, vehicles }, SYSTEM_CACHE_TTL);
+  await writer.set(cacheKey, { stations, vehicles }, SYSTEM_CACHE_TTL);
 
   // Filter to bbox and target form factors
   return {

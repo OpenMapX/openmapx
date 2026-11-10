@@ -78,7 +78,7 @@ describe("SharedMobilityDetailStore", () => {
     const { cache, writes } = sharedCache();
     const firstReplica = new SharedMobilityDetailStore(cache, 600, 1);
     const items = [station("provider-a", "station-1"), vehicle("provider-a", "vehicle-1")];
-    await firstReplica.store(items);
+    await firstReplica.store(items, cache);
 
     expect(writes).toHaveLength(1);
 
@@ -92,7 +92,7 @@ describe("SharedMobilityDetailStore", () => {
     const store = new SharedMobilityDetailStore(cache, 600, 1);
     const first = station("provider-a", "same-id");
     const second = station("provider-b", "same-id");
-    await store.store([first, second]);
+    await store.store([first, second], cache);
 
     store.clearL1();
     expect(await store.get(first.id)).toMatchObject({ providerId: first.providerId });
@@ -112,7 +112,7 @@ describe("SharedMobilityDetailStore", () => {
       sources: ["gbfs/operator-a"],
     };
     const writer = new SharedMobilityDetailStore(cache, 600, 1);
-    await writer.store([direct]);
+    await writer.store([direct], cache);
 
     const reader = new SharedMobilityDetailStore(cache, 600, 1);
     expect(await reader.get(direct.id)).toEqual(direct);
@@ -127,9 +127,9 @@ it("a fresh subset acquisition cannot renew unrelated retained item deadlines", 
   const writer = new SharedMobilityDetailStore(cache, 600, 100);
   const first = station("same-provider", "first");
   const second = station("same-provider", "second");
-  await writer.store([first]);
+  await writer.store([first], cache);
   vi.setSystemTime(300_000);
-  await writer.store([second]);
+  await writer.store([second], cache);
   vi.setSystemTime(700_000);
   const replica = new SharedMobilityDetailStore(cache, 600, 100);
   expect(await replica.get(first.id)).toBeNull();
@@ -149,7 +149,7 @@ describe.each([
       ...station("provider", "one"),
       contributors: [{ sourceId: "first", name: "First" }],
     };
-    await store.store([first]);
+    await store.store([first], cache);
     if (_seam === "inventory") store.clearL1();
     const pause = pauseNextLookup(cache, prefix);
     const pending = store.getRetained(first.id);
@@ -160,7 +160,7 @@ describe.each([
       availableVehicles: 7,
       contributors: [{ sourceId: "second", name: "Second" }],
     };
-    await store.store([second]);
+    await store.store([second], cache);
     pause.release();
     await pending;
 
@@ -168,7 +168,7 @@ describe.each([
       const retained = await reader.getRetained(first.id);
       expect(retained).toMatchObject({ item: second, acquiredAt: 100_000, expiresAt: 700_000 });
       assert(retained);
-      expect(await reader.updateRetained(retained, second)).toBe(false);
+      expect(await reader.updateRetained(retained, second, cache)).toBe(false);
     }
     expect(writes).toHaveLength(2);
     vi.setSystemTime(700_000);
@@ -181,7 +181,7 @@ describe.each([
     const { cache, values, writes } = sharedCache();
     const store = new SharedMobilityDetailStore(cache, 600, 100);
     const first = station("provider", "one");
-    await store.store([first]);
+    await store.store([first], cache);
     if (_seam === "inventory") store.clearL1();
     const pause = pauseNextLookup(cache, prefix);
     const pending = store.getRetained(first.id);
@@ -201,7 +201,7 @@ describe.each([
     const { cache, writes } = sharedCache();
     const store = new SharedMobilityDetailStore(cache, 600, 100);
     const first = station("provider", "one");
-    await store.store([first]);
+    await store.store([first], cache);
     if (_seam === "inventory") store.clearL1();
     const pause = pauseNextLookup(cache, prefix);
     const pending = store.getRetained(first.id);
@@ -220,7 +220,7 @@ it("a paused patch lookup cannot discard enrichment already retained for the sam
   const { cache, writes } = sharedCache();
   const store = new SharedMobilityDetailStore(cache, 600, 100);
   const first = station("provider", "one");
-  await store.store([first]);
+  await store.store([first], cache);
   const retained = await store.getRetained(first.id);
   assert(retained);
   const pause = pauseNextLookup(cache, "shared-mobility-detail:enrichment:v1:");
@@ -232,7 +232,7 @@ it("a paused patch lookup cannot discard enrichment already retained for the sam
     name: "Enriched station",
     contributors: [{ sourceId: "enricher", name: "Enricher" }],
   };
-  expect(await store.updateRetained(retained, enriched)).toBe(true);
+  expect(await store.updateRetained(retained, enriched, cache)).toBe(true);
   pause.release();
   expect(await pending).toMatchObject({ item: enriched, acquiredAt: 0, expiresAt: 600_000 });
   expect(await store.getRetained(first.id)).toMatchObject({

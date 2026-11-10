@@ -1,4 +1,8 @@
-import { createNoopLogger, createPassthroughCache } from "@openmapx/integration-framework/testing";
+import {
+  createFencedMemoryCache,
+  createNoopLogger,
+  createPassthroughCache,
+} from "@openmapx/integration-framework/testing";
 import { afterEach, expect, it, vi } from "vitest";
 import { loadStations } from "./stations";
 
@@ -53,4 +57,31 @@ it("captures authoritative empty and excludes legacy raw catalogs from receipt-a
     contributors: [],
   });
   expect((await loadStations(cache, log))[0]).toMatchObject({ id: "old" });
+});
+
+it("keeps a catalog fetched across an admin cache clear out of the cache", async () => {
+  const cache = createFencedMemoryCache();
+  let release!: () => void;
+  let fetching!: () => void;
+  const started = new Promise<void>((resolve) => {
+    fetching = resolve;
+  });
+  vi.stubGlobal("fetch", async () => {
+    fetching();
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return {
+      ok: true,
+      json: async () => ({ stations: [{ id: "1", name: "Boston", lat: 42, lng: -71 }] }),
+    };
+  });
+
+  const loading = loadStations(cache, createNoopLogger(), ["tide-predictions"], []);
+  await started;
+  cache.clear();
+  release();
+
+  expect((await loading).map((station) => station.id)).toEqual(["1"]);
+  expect(cache.values.size).toBe(0);
 });

@@ -24,12 +24,17 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SCAN_ROOTS = ["integrations", "packages/integration-framework/src"];
+/** Integration code and the shared packages that receive an integration's cache. */
+const SCAN_ROOTS = [
+  "integrations",
+  "packages/integration-framework/src",
+  "packages/mobility-core/src",
+  "packages/noaa-coops-data",
+];
 const SKIPPED_DIRECTORIES = new Set(["node_modules", "dist", "__tests__", "__fixtures__"]);
 
 /** Helpers outside the scanned roots that call `cache.set` on the cache they are given. */
 const UNFENCED_HELPERS: ReadonlyArray<{ module: string; name: string }> = [
-  { module: "@openmapx/mobility-core/cache", name: "cacheSet" },
   { module: "@openmapx/core", name: "withCache" },
 ];
 

@@ -1,6 +1,7 @@
 import {
   type CacheClient,
   type ContributingRecord,
+  captureCacheWriter,
   type Logger,
   snapshotContributors,
 } from "@openmapx/integration-framework";
@@ -94,6 +95,7 @@ export async function loadStations(
   const cached = await cache.get<NoaaStation[]>(cacheKey);
   if (cached?.length) return cached.map(clone);
 
+  const writer = await captureCacheWriter(cache);
   const responses = await Promise.all(types.map((t) => fetchOneType(t, log)));
   const byId = new Map<string, NoaaStation>();
 
@@ -125,7 +127,7 @@ export async function loadStations(
   }
 
   const stations = Array.from(byId.values());
-  await cache.set(cacheKey, stations.map(clone), STATIONS_CACHE_TTL);
+  await writer.set(cacheKey, stations.map(clone), STATIONS_CACHE_TTL);
   log.info(`noaa-coops: cached ${stations.length} stations across ${types.length} type(s)`);
   return stations.map(clone);
 }
