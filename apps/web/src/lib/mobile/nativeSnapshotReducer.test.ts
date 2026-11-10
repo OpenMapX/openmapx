@@ -3,10 +3,8 @@ import {
   applyNativeSnapshot,
   browserEngineAllowed,
   envelopeOf,
-  forgetEvents,
   type NativeReadModel,
   projectionOf,
-  rememberEvent,
   type SnapshotEnvelope,
 } from "./nativeSnapshotReducer";
 
@@ -165,49 +163,10 @@ describe("applyNativeSnapshot", () => {
     expect(outcome.model.snapshot).not.toHaveProperty("settings");
   });
 
-  it("keeps pending events across a delta", () => {
-    const model = rememberEvent(seeded(), "e1");
-
-    const outcome = applyNativeSnapshot(model, envelope(progressSnapshot()));
-
-    expect(outcome.ok && outcome.model.pendingEventIds).toEqual(["e1"]);
-  });
-
-  it("keeps pending events across a full snapshot for the same session", () => {
-    const model = rememberEvent(seeded(), "e1");
-
-    const outcome = applyNativeSnapshot(model, envelope(fullSnapshot({ revision: 9 })));
-
-    expect(outcome.ok && outcome.model.pendingEventIds).toEqual(["e1"]);
-  });
-
-  it("drops pending events when the session changes", () => {
-    const model = rememberEvent(seeded(), "e1");
-
-    const outcome = applyNativeSnapshot(model, envelope(fullSnapshot({ sessionId: "s2" })));
-
-    expect(outcome.ok && outcome.model.pendingEventIds).toEqual([]);
-  });
-
   it("reports an unchanged full snapshot as unchanged", () => {
     const outcome = applyNativeSnapshot(seeded(), envelope(fullSnapshot()));
 
     expect(outcome).toMatchObject({ ok: true, changed: false });
-  });
-});
-
-describe("event acknowledgement", () => {
-  it("remembers an event once", () => {
-    const model = rememberEvent(rememberEvent(seeded(), "e1"), "e1");
-
-    expect(model.pendingEventIds).toEqual(["e1"]);
-  });
-
-  it("forgets acknowledged events", () => {
-    const model = rememberEvent(rememberEvent(seeded(), "e1"), "e2");
-
-    expect(forgetEvents(model, ["somewhere-else"]).pendingEventIds).toEqual(["e1", "e2"]);
-    expect(forgetEvents(model, ["e1"]).pendingEventIds).toEqual(["e2"]);
   });
 });
 

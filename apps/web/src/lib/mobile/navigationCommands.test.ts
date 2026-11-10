@@ -324,12 +324,4 @@ describe("NativeNavigationCommands revision stamping", () => {
 
     expect(calls[0].type).toBe("session.complete");
   });
-
-  it("sends nothing when there is nothing to acknowledge", async () => {
-    const { client, calls } = fakeClient();
-
-    await new NativeNavigationCommands(client, acknowledged()).acknowledgeEvents([]);
-
-    expect(calls).toEqual([]);
-  });
 });

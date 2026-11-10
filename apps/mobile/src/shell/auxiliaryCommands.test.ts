@@ -235,15 +235,4 @@ describe("answerCommand", () => {
       { forMessageId: "m-1" },
     );
   });
-
-  it("never answers an acknowledgement", async () => {
-    const send = jest.fn();
-    await answerCommand(
-      { ...envelope, type: "event.ack", payload: { eventIds: [] } } as WebToNativeMessage,
-      async () => null,
-      send,
-    );
-
-    expect(send).not.toHaveBeenCalled();
-  });
 });

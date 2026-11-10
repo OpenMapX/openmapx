@@ -349,9 +349,6 @@ export class NavigationCoordinator {
         return this.terminate(command, "stopped", now);
       case "session.complete":
         return this.terminate(command, "arrived", now);
-      case "event.ack":
-        await this.deps.repository.ackEvents(command.payload.eventIds);
-        return null;
       case "location.request":
       case "settings.open":
       case "auth.open":
@@ -1213,7 +1210,6 @@ export class NavigationCoordinator {
       () => ({
         session: mutation.session,
         effects: mutation.effects ?? [],
-        ...(mutation.enqueue ? { enqueue: mutation.enqueue } : {}),
         ...(mutation.alerts ? { alerts: mutation.alerts } : {}),
       }),
       now,

@@ -26,8 +26,7 @@ export type AuxiliaryCommandHandler = (
 /**
  * Turns a handler's answer into a reply on the bridge.
  *
- * A command nothing in this shell handles is refused explicitly, except an
- * event acknowledgement, which never has a reply.
+ * A command nothing in this shell handles is refused explicitly.
  */
 export async function answerCommand(
   message: WebToNativeMessage,
@@ -38,7 +37,7 @@ export async function answerCommand(
     options: { forMessageId: string; sessionId?: string; revision?: number },
   ) => SendOutcome,
 ): Promise<void> {
-  if (message.type === "event.ack" || message.type === "web.hello") return;
+  if (message.type === "web.hello") return;
   const response = await handle(message);
   if (!response) {
     send("native.error", { code: "unsupported-capability" }, { forMessageId: message.messageId });

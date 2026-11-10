@@ -167,14 +167,14 @@ describe("processTransitBatch events", () => {
     expect((outcome.session as TransitMobileSession).payload.tickState.phase).toBe("riding");
     expect(outcome.events).toEqual([]);
   });
-  it("durably enqueues explicit alighting and transfer, without location-bearing event data", () => {
+  it("records explicit alighting and transfer once, and shows them at once", () => {
     const first = run({ session: riding(), action: { type: "alight", legIndex: 1 } });
     expect(first.events.map((e) => e.type)).toEqual(["alight", "transfer"]);
-    const ids = (first.enqueue ?? []).map((e) => e.eventId);
-    expect(first.session.cueLedger.events).toEqual(ids);
-    expect(JSON.stringify(first.enqueue)).not.toMatch(/Messe|50.11|8.68/);
+    expect(first.session.cueLedger.events).toEqual(first.events.map((e) => e.id));
+    expect(first.effects).toContainEqual({ kind: "publish-snapshot", immediate: true });
     const second = run({ session: first.session as TransitMobileSession });
-    expect(second.enqueue ?? []).toEqual([]);
+    expect(second.session.cueLedger.events).toEqual(first.session.cueLedger.events);
+    expect(second.effects).toContainEqual({ kind: "publish-snapshot", immediate: false });
   });
   it("records a confirmed action without speaking when voice is disabled", () => {
     const muted = riding();

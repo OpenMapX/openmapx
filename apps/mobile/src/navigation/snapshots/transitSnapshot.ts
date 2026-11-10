@@ -9,8 +9,8 @@ import {
  * What the page is told about a transit session.
  *
  * The rotating refresh token is the value this file exists to keep out. Native
- * is its exclusive consumer; it must not reach the page, the outbox, a
- * diagnostic, a notification row or an error string. So the projection strips it
+ * is its exclusive consumer; it must not reach the page, a diagnostic, a
+ * notification row or an error string. So the projection strips it
  * rather than assembling around it: an allowlist would leak the first time the
  * server moved the field, and a session's itinerary is server-shaped.
  */

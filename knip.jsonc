@@ -82,12 +82,6 @@
         "release/**/*.mts",
         "scripts/**/*.mts",
         "store/screenshots/**/*.mts"
-      ],
-      "ignoreFiles": [
-        // The production local-notification adapter is complete, but foreground
-        // navigation composition is not yet mounted by App.tsx. Keep this explicit
-        // so Knip does not turn unfinished product wiring into a deletion.
-        "src/notifications/ExpoNotificationScheduler.ts"
       ]
     },
     "apps/ops-agent": {

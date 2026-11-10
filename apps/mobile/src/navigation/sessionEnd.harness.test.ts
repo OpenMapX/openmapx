@@ -3,6 +3,7 @@ import {
   TRANSIT_UNDO_WINDOW_MS,
 } from "@openmapx/core/navigation";
 import { CONNECTIVITY_DEBOUNCE_MS } from "../connectivity/ConnectivityDriver";
+import { PREPARING_GRACE_MS } from "../lifecycle/NavigationRecoveryController";
 import { ARRIVAL_CUE_GRACE_MS } from "./arrival";
 import {
   createFakePhone,
@@ -276,5 +277,48 @@ describe("a recovery hold on the shell", () => {
     expect(harness.phone.location.running).toBe(true);
     // Resume is dispatched by the shell itself; the arrival is the next change.
     expect(harness.navigatingReports).toEqual([false]);
+  });
+});
+
+describe("a trip between prepare and start", () => {
+  async function prepare(): Promise<{ sessionId: string; revision: number }> {
+    const prepared = await harness.command("session.prepare", {
+      startPackage: groundStartPackage(),
+    });
+    if (prepared?.type !== "session.prepared") throw new Error("prepare refused");
+    return prepared.payload as { sessionId: string; revision: number };
+  }
+
+  it("survives the app losing focus to a prompt the page shows before start", async () => {
+    harness = await startForegroundHarness();
+    const prepared = await prepare();
+
+    // The page asks for another permission between prepare and start; the
+    // system prompt makes the app inactive, then hands focus back.
+    await harness.setVisible(false);
+    await harness.elapse(20_000);
+    await harness.setVisible(true);
+    // Nothing is guided yet, so nothing holds the screen.
+    expect(harness.phone.keepAwake.held).toBe(false);
+    const started = await harness.command("session.start", {}, prepared);
+
+    expect(started?.type).toBe("session.started");
+    expect(harness.phone.keepAwake.held).toBe(true);
+    expect(stoppedMessages()).toEqual([]);
+    expect(harness.sessionEnds).toEqual([]);
+  });
+
+  it("ends a preparation that was never started once its grace is over", async () => {
+    harness = await startForegroundHarness();
+    const { sessionId } = await prepare();
+
+    await harness.elapse(PREPARING_GRACE_MS);
+    await harness.setVisible(false);
+
+    expect(await harness.session()).toBeNull();
+    expect(stoppedMessages()).toEqual([
+      expect.objectContaining({ payload: expect.objectContaining({ sessionId }) }),
+    ]);
+    expect(harness.sessionEnds).toHaveLength(1);
   });
 });

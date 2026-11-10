@@ -434,24 +434,6 @@ describe("BridgeClient.request", () => {
     expect(context.client.pendingCount).toBe(0);
   });
 
-  it("does not retain a pending request for a fire-and-forget event acknowledgement", async () => {
-    const context = await negotiated();
-    const commands = new NativeNavigationCommands(context.client, () => ({
-      sessionId: "s1",
-      revision: 1,
-    }));
-
-    const acknowledgement = commands.acknowledgeEvents(["event-1"]);
-    await Promise.resolve();
-
-    expect(context.client.pendingCount).toBe(0);
-    expect(JSON.parse(context.sent[0])).toMatchObject({
-      type: "event.ack",
-      payload: { eventIds: ["event-1"] },
-    });
-    await acknowledgement;
-  });
-
   it("times out a read-only command on the short deadline", async () => {
     const context = await negotiated();
 

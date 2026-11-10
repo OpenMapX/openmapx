@@ -175,7 +175,6 @@ export function processGroundBatch(input: ProcessGroundBatchInput): GroundBatchO
   const cueCandidates: CueCandidate[] = [];
   const spokenCueIds: string[] = [];
   const eventIds: string[] = [];
-  const enqueue: Array<{ eventId: string; critical: boolean; payload: unknown }> = [];
 
   for (const fix of fixes) {
     // The wire schema is deliberately looser than the engine's `Route` — it
@@ -254,7 +253,6 @@ export function processGroundBatch(input: ProcessGroundBatchInput): GroundBatchO
     const episodeId = offRouteEpisodeId(session.sessionId, fingerprint, offRouteEpisodeStart);
     if (!session.cueLedger.events.includes(episodeId)) {
       eventIds.push(episodeId);
-      enqueue.push({ eventId: episodeId, critical: true, payload: { type: "off-route" } });
       // A turn prompt while off route would be worse than silence, so the
       // engine's own cue is already suppressed; this is the one thing to say.
       if (startPackage.settings.voiceEnabled) {
@@ -268,7 +266,6 @@ export function processGroundBatch(input: ProcessGroundBatchInput): GroundBatchO
     const cueId = arrivalCueId(session.sessionId, fingerprint);
     if (!session.cueLedger.events.includes(cueId)) {
       eventIds.push(cueId);
-      enqueue.push({ eventId: cueId, critical: true, payload: { type: "arrived" } });
       if (startPackage.settings.voiceEnabled) {
         const spoken = statusCueEffect(session, cueId, "arrival");
         if (spoken) effects.push(spoken);
@@ -304,7 +301,6 @@ export function processGroundBatch(input: ProcessGroundBatchInput): GroundBatchO
       },
     },
     effects,
-    ...(enqueue.length > 0 ? { enqueue } : {}),
     ...(alerts ? { alerts } : {}),
     arrived,
     needsReroute,

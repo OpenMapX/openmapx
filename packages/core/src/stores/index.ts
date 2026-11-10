@@ -36,7 +36,6 @@ export type {
   AlertAvailability,
   NativeApplyOutcome,
   NativeConfidence,
-  NativeNavigationEvent,
   NativeNavigationProjection,
   NativePermissionMode,
   NavigationAuthority,

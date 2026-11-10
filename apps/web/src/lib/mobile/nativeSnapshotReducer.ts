@@ -39,8 +39,6 @@ export interface NativeReadModel {
   kind: "ground" | "transit";
   /** The full snapshot, with every delta folded into it. */
   snapshot: Record<string, unknown>;
-  /** Events the page has received but not yet acknowledged. */
-  pendingEventIds: string[];
 }
 
 export type ApplyOutcome =
@@ -136,7 +134,6 @@ export function applyNativeSnapshot(
         fingerprint: incoming.fingerprint,
         kind: incoming.kind,
         snapshot: incoming.data,
-        pendingEventIds: current?.sessionId === incoming.sessionId ? current.pendingEventIds : [],
       },
     };
   }
@@ -280,21 +277,6 @@ function confidenceOf(
   if (reported === "live" || reported === "coasting" || reported === "stale") return reported;
   if (typeof coasting === "boolean") return coasting ? "coasting" : "live";
   return undefined;
-}
-
-/** Records an event the page has seen but not yet acknowledged. */
-export function rememberEvent(model: NativeReadModel, eventId: string): NativeReadModel {
-  if (model.pendingEventIds.includes(eventId)) return model;
-  return { ...model, pendingEventIds: [...model.pendingEventIds, eventId] };
-}
-
-/** Forgets events once native has confirmed the acknowledgement. */
-export function forgetEvents(model: NativeReadModel, eventIds: readonly string[]): NativeReadModel {
-  const removing = new Set(eventIds);
-  return {
-    ...model,
-    pendingEventIds: model.pendingEventIds.filter((id) => !removing.has(id)),
-  };
 }
 
 /**

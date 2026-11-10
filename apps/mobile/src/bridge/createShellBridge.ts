@@ -93,13 +93,11 @@ export function createShellBridge(options: ShellBridgeOptions): ShellBridge {
       // A command from a stale or unexpected page must get an explicit answer.
       // Silently accepting it leaves the caller waiting for a timeout and makes
       // an uncomposed capability look like a broken implementation.
-      if (message.type !== "event.ack") {
-        bridge.send(
-          "native.error",
-          { code: "unsupported-capability", forMessageId: message.messageId },
-          { forMessageId: message.messageId },
-        );
-      }
+      bridge.send(
+        "native.error",
+        { code: "unsupported-capability", forMessageId: message.messageId },
+        { forMessageId: message.messageId },
+      );
     },
     describeShell: () => describeShell(options),
     ...(options.reportInvalidSend ? { reportInvalid: options.reportInvalidSend } : {}),

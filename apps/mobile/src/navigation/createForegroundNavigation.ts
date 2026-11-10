@@ -436,9 +436,6 @@ export async function createForegroundNavigation(
           if (active) reportNavigating(active.status === "active");
           await reviewForegroundWork(active);
         },
-        event: async (eventId) => {
-          await publish?.port.event(eventId);
-        },
       },
       remote: {
         reroute: async (requestId) => remote?.port.reroute(requestId),

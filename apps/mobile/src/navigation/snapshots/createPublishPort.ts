@@ -17,7 +17,7 @@ import { transitFullSnapshot, transitProgressSnapshot } from "./transitSnapshot"
 export interface PublishPortDeps {
   repository: SessionRepository;
   /** Sends a native-to-web message; false when no document can receive it. */
-  send(type: "snapshot.update" | "navigation.event", payload: unknown): boolean;
+  send(type: "snapshot.update", payload: unknown): boolean;
   now: () => number;
   reconcileSurface?: () => Promise<void>;
 }
@@ -56,15 +56,6 @@ export function createPublishPort(deps: PublishPortDeps): PublishPortHandle {
             ? transitFullSnapshot(session)
             : transitProgressSnapshot(session);
       publisher.offer(snapshot, { immediate });
-    },
-    event: async (eventId) => {
-      const session = await deps.repository.loadActive(deps.now());
-      if (!session) return;
-      const pending = await deps.repository.listPendingEvents(session.sessionId);
-      const event = pending.find((entry) => entry.eventId === eventId);
-      // The event stays in the outbox until the page acknowledges it, so a
-      // failed delivery here is simply retried on the next handshake.
-      if (event) deps.send("navigation.event", { eventId, event: event.payload });
     },
   };
 

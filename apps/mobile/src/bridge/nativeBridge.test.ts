@@ -527,22 +527,28 @@ describe("NativeBridge.send", () => {
     expect(bridge.queuedCount).toBe(0);
   });
 
-  it("drops a snapshot rather than a critical event when the queue is full", async () => {
+  it("drops a snapshot rather than a session notice when the queue is full", async () => {
     const { bridge, registry, injected } = harness();
     const channel = registry.beginDocumentLoad(NOW);
     bridge.send("snapshot.update", { snapshot: {} });
     for (let index = 0; index < MAX_QUEUED_OUTBOUND - 1; index += 1) {
-      bridge.send("navigation.event", { eventId: `e${index}`, event: {} });
+      bridge.send("session.stopped", {
+        sessionId: `s${index}`,
+        finalStatus: "stopped",
+        revision: 1,
+      });
     }
 
-    expect(bridge.send("navigation.event", { eventId: "critical", event: {} })).toBe("queued");
+    expect(
+      bridge.send("session.stopped", { sessionId: "last", finalStatus: "stopped", revision: 1 }),
+    ).toBe("queued");
     expect(bridge.queuedCount).toBe(MAX_QUEUED_OUTBOUND);
     await bridge.receive({ url: WEB_ORIGIN, data: hello(channel.nonce) });
     const delivered = injected.map(decodePayload).slice(1);
-    expect(delivered.every((message) => message.type === "navigation.event")).toBe(true);
-    expect(delivered.map((message) => message.payload.eventId)).toEqual([
-      ...Array.from({ length: MAX_QUEUED_OUTBOUND - 1 }, (_, i) => `e${i}`),
-      "critical",
+    expect(delivered.every((message) => message.type === "session.stopped")).toBe(true);
+    expect(delivered.map((message) => message.payload.sessionId)).toEqual([
+      ...Array.from({ length: MAX_QUEUED_OUTBOUND - 1 }, (_, i) => `s${i}`),
+      "last",
     ]);
   });
 
@@ -550,18 +556,28 @@ describe("NativeBridge.send", () => {
     const { bridge, registry, injected } = harness();
     const channel = registry.beginDocumentLoad(NOW);
     for (let index = 0; index < MAX_QUEUED_OUTBOUND; index += 1) {
-      bridge.send("navigation.event", { eventId: `e${index}`, event: {} });
+      bridge.send("session.stopped", {
+        sessionId: `s${index}`,
+        finalStatus: "stopped",
+        revision: 1,
+      });
     }
 
-    expect(bridge.send("navigation.event", { eventId: "overflow", event: {} })).toBe("dropped");
+    expect(
+      bridge.send("session.stopped", {
+        sessionId: "overflow",
+        finalStatus: "stopped",
+        revision: 1,
+      }),
+    ).toBe("dropped");
     expect(bridge.queuedCount).toBe(MAX_QUEUED_OUTBOUND);
     await bridge.receive({ url: WEB_ORIGIN, data: hello(channel.nonce) });
     expect(
       injected
         .map(decodePayload)
         .slice(1)
-        .map((message) => message.payload.eventId),
-    ).toEqual(Array.from({ length: MAX_QUEUED_OUTBOUND }, (_, i) => `e${i}`));
+        .map((message) => message.payload.sessionId),
+    ).toEqual(Array.from({ length: MAX_QUEUED_OUTBOUND }, (_, i) => `s${i}`));
   });
 
   it("discards queued output for a document that is gone", async () => {
@@ -580,7 +596,13 @@ describe("intake protocol compatibility", () => {
     const { bridge, registry, injected } = harness();
     const channel = registry.beginDocumentLoad(NOW);
     expect(bridge.send("snapshot.update", { snapshot: { active: true } })).toBe("queued");
-    expect(bridge.send("navigation.event", { eventId: "before-hello", event: {} })).toBe("queued");
+    expect(
+      bridge.send("session.stopped", {
+        sessionId: "before-hello",
+        finalStatus: "stopped",
+        revision: 1,
+      }),
+    ).toBe("queued");
     await bridge.receive({ url: WEB_ORIGIN, data: hello(channel.nonce, { min: 3, max: 3 }) });
     const messages = injected.map(
       (s) => decodePayload(s) as unknown as { protocolVersion: number; type: string },
@@ -588,7 +610,7 @@ describe("intake protocol compatibility", () => {
     expect(messages.map((m) => m.type)).toEqual([
       "native.hello",
       "snapshot.update",
-      "navigation.event",
+      "session.stopped",
     ]);
     expect(messages.map((m) => m.protocolVersion)).toEqual([3, 3, 3]);
   });

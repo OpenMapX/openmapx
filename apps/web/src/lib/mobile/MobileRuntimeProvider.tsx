@@ -18,10 +18,8 @@ import { applyNativeDeepLink, readNativeDeepLink } from "./nativeDeepLink";
 import {
   applyNativeSnapshot,
   envelopeOf,
-  forgetEvents,
   type NativeReadModel,
   projectionOf,
-  rememberEvent,
 } from "./nativeSnapshotReducer";
 import { applyNativeSurfaceStop } from "./nativeSurfaceStop";
 import { NativeNavigationCommands } from "./navigationCommands";
@@ -178,24 +176,6 @@ export function MobileRuntimeProvider({ children, webBuildId, scope }: MobileRun
           requestSnapshot: () => nativeCommands.requestSnapshot(),
         });
         return;
-      }
-
-      if (message.type === "navigation.event") {
-        const eventId = (message.payload as { eventId?: string }).eventId;
-        if (!eventId) return;
-        // A reconnect replays whatever was never acknowledged, so the store
-        // decides whether this one has already been rendered.
-        const outcome = useNavigationStore
-          .getState()
-          .applyNativeEvent({ eventId, type: String(message.type) });
-        if (outcome !== "applied") return;
-        const current = readModelRef.current;
-        if (current) setReadModel(rememberEvent(current, eventId));
-        // Acknowledged immediately: the durable copy lives natively, and leaving
-        // it unacknowledged would replay it on every reconnect.
-        void nativeCommands.acknowledgeEvents([eventId]);
-        const remembered = readModelRef.current;
-        if (remembered) setReadModel(forgetEvents(remembered, [eventId]));
       }
     });
 

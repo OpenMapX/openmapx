@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
-import type { AppVisibility } from "./lifecyclePolicy";
+export type AppVisibility = "active" | "inactive" | "background";
 
 /**
- * The app's visibility, as the lifecycle policy understands it.
+ * The app's visibility, as recovery and the web page's visibility understand it.
  *
  * `inactive` is kept distinct from `background` rather than folded into it: on
  * iOS it covers the app switcher and an incoming call, and a foreground-only

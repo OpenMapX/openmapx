@@ -238,9 +238,7 @@ describe("processGroundBatch rejected and stale fixes", () => {
     expect(estimated.payload.coastingAnchor).toEqual(current.payload.coastingAnchor);
     expect(coasted.arrived).toBe(false);
     expect(estimated.status).toBe("active");
-    expect(coasted.enqueue ?? []).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ payload: { type: "arrived" } })]),
-    );
+    expect(estimated.cueLedger.events).toEqual(current.cueLedger.events);
 
     const real = processGroundBatch({
       session: estimated,

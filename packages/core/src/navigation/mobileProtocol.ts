@@ -84,7 +84,6 @@ export const WEB_TO_NATIVE_TYPES = [
   "snapshot.request",
   "session.stop",
   "session.complete",
-  "event.ack",
   "location.request",
   "settings.open",
   "auth.open",
@@ -106,7 +105,6 @@ export const NATIVE_TO_WEB_TYPES = [
   "session.replaced",
   "session.stopped",
   "snapshot.update",
-  "navigation.event",
   "native.error",
   "location.result",
   "settings.result",
@@ -520,7 +518,6 @@ export const webToNativeSchema = z.discriminatedUnion("type", [
   envelope("snapshot.request", z.object({}).strict()),
   envelope("session.stop", z.object({}).strict()),
   envelope("session.complete", z.object({}).strict()),
-  envelope("event.ack", z.object({ eventIds: z.array(boundedId).max(256) }).strict()),
   envelope(
     "location.request",
     z
@@ -742,15 +739,6 @@ export const nativeToWebSchema = z.discriminatedUnion("type", [
          */
         codeVerifier: boundedId.optional(),
         forMessageId: boundedId,
-      })
-      .strict(),
-  ),
-  envelope(
-    "navigation.event",
-    z
-      .object({
-        eventId: boundedId,
-        event: z.record(z.string(), z.unknown()),
       })
       .strict(),
   ),

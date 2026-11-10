@@ -1,4 +1,4 @@
-import type { AppVisibility } from "./lifecyclePolicy";
+import type { AppVisibility } from "./useAppLifecycle";
 
 /** WebView does not forward the host's pause/resume to Page Visibility on Android. */
 export function buildWebVisibilityScript(visibility: AppVisibility): string {

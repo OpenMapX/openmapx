@@ -13,7 +13,7 @@ import type { SessionEffect } from "../storage/SessionRepository";
  *
  * Order is fixed rather than incidental: stop the driver before releasing audio,
  * reconcile alerts before publishing, and publish the snapshot last so the page
- * sees the state that produced the events it just received.
+ * sees the state that every other effect has already acted on.
  */
 
 const ORDER: Record<SessionEffect["kind"], number> = {
@@ -27,8 +27,7 @@ const ORDER: Record<SessionEffect["kind"], number> = {
   "request-reroute": 7,
   "request-transit-refresh": 8,
   "reconcile-surface": 9,
-  "publish-event": 10,
-  "publish-snapshot": 11,
+  "publish-snapshot": 10,
 };
 
 export interface LocationDriverPort {
@@ -50,7 +49,6 @@ export interface AlertPort {
 
 export interface PublishPort {
   snapshot(immediate: boolean): Promise<void>;
-  event(eventId: string): Promise<void>;
 }
 
 export interface RemoteWorkPort {
@@ -113,8 +111,6 @@ export class EffectRunner {
         return alerts.cancelSession(effect.sessionId);
       case "publish-snapshot":
         return publish.snapshot(effect.immediate);
-      case "publish-event":
-        return publish.event(effect.eventId);
       case "request-reroute":
         return remote.reroute(effect.requestId);
       case "request-transit-refresh":
