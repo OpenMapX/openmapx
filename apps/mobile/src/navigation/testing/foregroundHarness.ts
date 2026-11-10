@@ -10,6 +10,7 @@ import {
   type SpeakRequest,
   type SpeakResult,
 } from "../../audio/navigationAudio";
+import type { ConnectivityDriver, ConnectivityState } from "../../connectivity/ConnectivityDriver";
 import { type AppActivity, withBackgroundSafeProfiles } from "../../location/backgroundSafeDriver";
 import type {
   LocationDriver,
@@ -275,6 +276,37 @@ export class FakeNetwork {
   };
 }
 
+/**
+ * Internet reachability as the platform reports it: a change is reported once,
+ * when it happens, and a state that holds produces no further report.
+ */
+export class FakeConnectivity implements ConnectivityDriver {
+  private state: ConnectivityState = "online";
+  private listeners = new Set<(state: ConnectivityState) => void>();
+
+  current(): ConnectivityState {
+    return this.state;
+  }
+
+  subscribe(listener: (state: ConnectivityState) => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  set(state: ConnectivityState): void {
+    if (state === this.state) return;
+    this.state = state;
+    for (const listener of this.listeners) listener(state);
+  }
+
+  /** A killed process takes its subscriptions with it. */
+  dropListeners(): void {
+    this.listeners.clear();
+  }
+}
+
 /** The persistent store, standing in for the database file. */
 export class FakeStorage {
   readonly file: Database = openTestDatabase();
@@ -373,6 +405,7 @@ export interface FakePhone {
   speech: FakeSpeech;
   notifications: FakeNotifications;
   network: FakeNetwork;
+  connectivity: FakeConnectivity;
   storage: FakeStorage;
   app: FakeApp;
   keepAwake: FakeKeepAwake;
@@ -391,6 +424,7 @@ export function createFakePhone(options: { os?: "ios" | "android" } = {}): FakeP
     speech: new FakeSpeech(timeline),
     notifications: new FakeNotifications(),
     network: new FakeNetwork(),
+    connectivity: new FakeConnectivity(),
     storage: new FakeStorage(),
     app,
     keepAwake: new FakeKeepAwake(),
@@ -475,6 +509,7 @@ export async function startForegroundHarness(
     driver: withBackgroundSafeProfiles(phone.location, phone.os, phone.app),
     platform: phone.os === "android" ? { os: "android", sdkInt: 34 } : { os: "ios" },
     app: phone.app,
+    connectivity: phone.connectivity,
     readLocationPermission: () => phone.location.readPermission(),
     audio: createNavigationAudio(phone.speech),
     speechAvailable: () => phone.speech.available,
@@ -585,6 +620,7 @@ export async function startForegroundHarness(
       navigation.dispose();
       phone.clock.dropTimers();
       phone.app.dropListeners();
+      phone.connectivity.dropListeners();
       return startForegroundHarness({ ...options, phone });
     },
     async shutdown() {

@@ -5,6 +5,7 @@ import { GroundNavigationProcessor } from "./ground/GroundNavigationProcessor";
 import {
   type AuxiliaryCommandHandler,
   type BridgePort,
+  type ConnectivityPort,
   type CoordinatorDeps,
   type DriverPort,
   NavigationCoordinator,
@@ -40,6 +41,7 @@ export interface CoordinatorOverrides {
   clock?: () => number;
   schedule?: (callback: () => void, delayMs: number) => () => void;
   newSessionId?: () => string;
+  connectivity?: ConnectivityPort;
   /** Answers the page's one-shot requests; absent in the headless task. */
   auxiliary?: AuxiliaryCommandHandler;
   /**
@@ -106,6 +108,7 @@ export async function createCoordinator(
     clock: overrides.clock ?? (() => Date.now()),
     ...(overrides.schedule ? { schedule: overrides.schedule } : {}),
     newSessionId: overrides.newSessionId ?? randomSessionId,
+    ...(overrides.connectivity ? { connectivity: overrides.connectivity } : {}),
     ...(overrides.auxiliary ? { auxiliary: overrides.auxiliary } : {}),
   };
 

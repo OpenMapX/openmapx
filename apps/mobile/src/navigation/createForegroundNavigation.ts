@@ -6,6 +6,9 @@ import type { NavigationAudio } from "../audio/navigationAudio";
 import { getNavigationAudio, isNavigationAudioAvailable } from "../audio/navigationAudioModule";
 import { currentPlatform } from "../background/createHeadlessCoordinator";
 import type { ShellDescription } from "../bridge/nativeBridge";
+import { ConfirmedConnectivity } from "../connectivity/ConfirmedConnectivity";
+import type { ConnectivityDriver } from "../connectivity/ConnectivityDriver";
+import { NetInfoConnectivityDriver } from "../connectivity/NetInfoConnectivityDriver";
 import { DiagnosticRepository, type DiagnosticType } from "../diagnostics/DiagnosticRepository";
 import type { AppActivity } from "../location/backgroundSafeDriver";
 import { appActivity, createLocationDriver } from "../location/createLocationDriver";
@@ -93,6 +96,8 @@ export interface ForegroundDevice {
   openStorage(): Promise<Database>;
   /** When the user comes back to the app. */
   app: AppActivity;
+  /** Whether the internet is reachable, as the platform reports it. */
+  connectivity: ConnectivityDriver;
   /** Which platform's location profiles and permission flow apply. */
   platform: ReturnType<typeof currentPlatform>;
   /** The screen's wake lock. Both calls are idempotent. */
@@ -121,6 +126,7 @@ function productionDevice(): ForegroundDevice {
     },
     openStorage: getDatabase,
     app: appActivity,
+    connectivity: new NetInfoConnectivityDriver(),
     platform: currentPlatform(),
     keepAwake: {
       activate: () => activateKeepAwakeAsync(KEEP_AWAKE_TAG),
@@ -241,9 +247,16 @@ export async function createForegroundNavigation(
     },
   };
 
+  const connectivity = new ConfirmedConnectivity({
+    driver: device.connectivity,
+    now,
+    schedule: (callback, delayMs) => device.schedule(callback, delayMs),
+  });
+
   const composition = await createCoordinator({
     openStorage: () => device.openStorage(),
     clock: now,
+    connectivity,
     schedule: (callback, delayMs) => device.schedule(callback, delayMs),
     bridge,
     permissions: {
@@ -364,10 +377,15 @@ export async function createForegroundNavigation(
     applyReroute: (outcome) => coordinatorRef?.applyReroute(outcome) ?? Promise.resolve(),
     now,
     diagnostics: { record },
+    track: (work) => coordinator.trackRemoteWork(work),
   });
 
   const unregister =
     options.registerAsForeground === false ? () => {} : registerForegroundCoordinator(coordinator);
+  const stopWatchingConnectivity = connectivity.start();
+  const stopApplyingConnectivity = connectivity.onConfirmed(() => {
+    void coordinator.connectivityChanged();
+  });
   // On Android a cadence change asked for in the background was not applied,
   // and the runtime that asked may no longer exist. Apply the session's cadence
   // whenever the app becomes active, including a cold open where the app is
@@ -402,6 +420,8 @@ export async function createForegroundNavigation(
       disposed = true;
       remote?.abortAll();
       unregister();
+      stopApplyingConnectivity();
+      stopWatchingConnectivity();
       stopWatchingActivity();
       holdScreen(false);
     },

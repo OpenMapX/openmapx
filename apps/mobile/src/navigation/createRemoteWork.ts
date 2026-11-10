@@ -31,6 +31,11 @@ export interface RemoteWorkDeps {
   applyTransitRefresh?(outcome: RefreshOutcome): Promise<void>;
   now(): number;
   diagnostics: { record(type: string, fields: Record<string, unknown>): void };
+  /**
+   * Told about each request started, so whoever must not finish while one is
+   * in flight (the background task) can wait for it.
+   */
+  track?(work: Promise<void>): void;
 }
 
 export interface RemoteWork {
@@ -47,6 +52,7 @@ export function createRemoteWork(deps: RemoteWorkDeps): RemoteWork {
   const track = (work: Promise<void>) => {
     inFlight.add(work);
     void work.finally(() => inFlight.delete(work));
+    deps.track?.(work);
   };
 
   const port: RemoteWorkPort = {

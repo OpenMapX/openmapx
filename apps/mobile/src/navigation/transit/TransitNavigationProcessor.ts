@@ -198,8 +198,9 @@ export class TransitNavigationProcessor implements NavigationProcessor<"transit"
     const hasJourneys = session.payload.startPackage.captures.some(
       (c) => c.legIndex >= session.payload.tickState.currentLegIndex,
     );
+    // Whatever the outage held back is asked for at once, rather than on the
+    // next location batch; one not yet due waits for its time as usual.
     if (
-      refresh.status !== "stale" ||
       !shouldRefresh({
         runtime: refresh,
         hasToken: !!session.payload.refreshToken || hasJourneys,

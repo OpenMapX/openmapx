@@ -131,8 +131,24 @@ only when the OS starts the task without the app.
   is skipped. Against another app's transient focus, such as a voice assistant
   or another navigation prompt, the request is usually granted and the cue
   speaks.
-- **Transit refresh and replan** are not wired yet. Their effects are no-ops,
-  and the session keeps running on its captured itinerary.
+- **Connectivity.** The composition follows NetInfo through
+  `connectivity/ConfirmedConnectivity.ts`. A reading counts once it has held
+  for 3 s, so a tunnel or a cell handover that flaps for a second changes
+  nothing. A timer confirms a reading that holds. Android pauses a backgrounded
+  app's timers, so each location batch also checks the reading against the
+  clock. The coordinator commits a confirmed change to the active session
+  (`connectivityChanged`) and publishes a full snapshot. While a session is
+  offline, reroutes and itinerary refreshes are not attempted, so a rider
+  underground keeps the one-time refresh token. When the network returns, the
+  processors ask at once for a reroute the outage held back or a refresh that
+  fell due. An `unknown` reading leaves the committed state alone. A request
+  already in flight when the network drops still counts as an ambiguous
+  attempt, because the server may have spent the token; such a token is
+  replayed only within the server's 120 s replay window.
+- **Transit refresh.** A refresh effect starts the request off the queue and
+  the answer re-enters as a queued `applyTransitRefresh`, like a reroute.
+  Replanning a missed connection is not wired; the session keeps running on its
+  itinerary.
 
 ## Android Auto surface and runtime
 

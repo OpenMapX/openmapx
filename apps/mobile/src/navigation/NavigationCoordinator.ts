@@ -9,6 +9,7 @@ import {
   transitStartPackageSchema,
   type WebToNativeMessage,
 } from "@openmapx/core/navigation";
+import type { ConnectivityState } from "../connectivity/ConnectivityDriver";
 import { type RawLocation, sanitiseFixes } from "../location/sanitiseFixes";
 import type { CommitResult, SessionEffect, SessionRepository } from "../storage/SessionRepository";
 import { locationReleaseAtMs } from "./arrival";
@@ -65,6 +66,11 @@ export interface DriverPort {
   isRunning(): Promise<boolean>;
 }
 
+/** The connectivity state that has held long enough to act on. */
+export interface ConnectivityPort {
+  confirmed(): ConnectivityState;
+}
+
 export interface CoordinatorDeps {
   repository: SessionRepository;
   processors: ProcessorRegistry;
@@ -77,6 +83,11 @@ export interface CoordinatorDeps {
   /** Runs `callback` once after `delayMs`; returns a cancel function. Defaults to `setTimeout`. */
   schedule?: (callback: () => void, delayMs: number) => () => void;
   newSessionId: () => string;
+  /**
+   * Confirmed connectivity. Optional so focused session tests need no stand-in;
+   * without it a session's connectivity stays as it was committed.
+   */
+  connectivity?: ConnectivityPort;
   /**
    * Handles commands that are not about a navigation session —
    * a one-off location fix, opening OS settings, a system-browser sign-in.
@@ -702,11 +713,18 @@ export class NavigationCoordinator {
 
     const processor = processors.get(session.kind);
     if (!processor) return;
+    // A batch is the one input a backgrounded Android app still receives, so it
+    // also carries a connectivity change no timer could deliver.
+    const current = await this.applyConnectivity(session, now);
+    if (!current) {
+      if (mayRetry) await this.processBatch(batch, false);
+      return;
+    }
 
     const { accepted, rejectedCount } = sanitiseFixes(
       batch.locations ?? [],
       now,
-      session.lastAcceptedFix?.timestampMs ?? null,
+      current.lastAcceptedFix?.timestampMs ?? null,
     );
     diagnostics.record("location.batch", {
       accepted: accepted.length,
@@ -720,11 +738,11 @@ export class NavigationCoordinator {
     if (accepted.length === 0 && !processor.needsScheduleTicks) return;
 
     const mutation = (processor as AnyNavigationProcessor).processFixes(
-      session as never,
+      current as never,
       accepted,
       now,
     );
-    const committed = await this.commit(session, mutation, now);
+    const committed = await this.commit(current, mutation, now);
     if (committed.ok) {
       await this.deps.effects.run(committed.effects);
       return;
@@ -732,6 +750,74 @@ export class NavigationCoordinator {
     if (committed.code === "revision-conflict" && mayRetry) {
       await this.processBatch(batch, false);
     }
+  }
+
+  // Connectivity.
+
+  /**
+   * Applies the confirmed connectivity to the active session. Called when the
+   * confirmed state changes; a location batch applies it too.
+   */
+  connectivityChanged(): Promise<void> {
+    return this.queue.run(async () => {
+      try {
+        const now = this.deps.clock();
+        const session = await this.deps.repository.loadActive(now);
+        if (session) await this.applyConnectivity(session, now);
+      } catch {
+        this.deps.diagnostics.record("typed.error", { scope: "connectivity" });
+      }
+    });
+  }
+
+  /**
+   * Commits a confirmed connectivity change and returns the session to continue
+   * from, or null when the commit lost a race and the caller should reload.
+   *
+   * Offline holds back reroutes and itinerary refreshes, so a rider underground
+   * does not spend the refresh token on requests that cannot arrive. Coming back
+   * online lets the processor retry what the outage held back. An `unknown`
+   * reading is no evidence either way and leaves the committed state alone.
+   */
+  private async applyConnectivity(
+    session: MobileNavigationSession,
+    now: number,
+  ): Promise<MobileNavigationSession | null> {
+    const confirmed = this.deps.connectivity?.confirmed();
+    if (
+      !confirmed ||
+      confirmed === "unknown" ||
+      confirmed === session.connectivity ||
+      session.status !== "active"
+    )
+      return session;
+    const processor = this.deps.processors.get(session.kind);
+    if (!processor) return session;
+    this.deps.diagnostics.record("network.transition", {
+      from: session.connectivity,
+      to: confirmed,
+      confirmed: true,
+    });
+    const marked = { ...session, connectivity: confirmed } as MobileNavigationSession;
+    const restored =
+      confirmed === "online"
+        ? await (processor as AnyNavigationProcessor).onConnectivityRestored(marked as never, now)
+        : null;
+    const mutation: ProcessorMutation = restored ?? {
+      session: { ...marked, revision: session.revision + 1, updatedAtMs: now },
+    };
+    const committed = await this.commit(
+      session,
+      {
+        ...mutation,
+        // Rare, and shown on the page, so the page hears it at once.
+        effects: [...(mutation.effects ?? []), { kind: "publish-snapshot", immediate: true }],
+      },
+      now,
+    );
+    if (!committed.ok) return null;
+    await this.deps.effects.run(committed.effects);
+    return committed.session;
   }
 
   // Answers from remote work.
