@@ -47,14 +47,22 @@ describe("community container memory limit", () => {
     expect(result.errors?.join("\n")).toMatch(/community_memory_limit_required/);
   });
 
-  it.each(["64m", "512m", "1g", "1.5g", "2G", "512MB", "1024k"])("accepts %s", (memory) => {
-    expect(validateCommunity(manifest({ memory })).valid).toBe(true);
-  });
+  it.each(["6m", "64m", "512m", "1g", "1.5g", "2G", "512MB", "6144k", "0.01g", "6.5m"])(
+    "accepts %s",
+    (memory) => {
+      expect(validateCommunity(manifest({ memory })).valid).toBe(true);
+    },
+  );
 
   it.each([
     "",
     "0m",
     "0g",
+    "5m",
+    "5.9m",
+    "1k",
+    "6143k",
+    "0.005g",
     "512",
     "512x",
     "-1g",

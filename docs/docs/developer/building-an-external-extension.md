@@ -516,7 +516,7 @@ it is entirely your service's responsibility.
 
 The platform runs every service on one host, so a community service declares
 the most memory it may use. `container.memory` is required and must be a literal
-size with a `k`, `m` or `g` unit, such as `"512m"` or `"1g"`; validation rejects
+size of at least `6m` with a `k`, `m` or `g` unit, such as `"512m"` or `"1g"`; validation rejects
 a missing value and a Compose reference such as `${MEMORY:-512m}`, which the
 renderer would write as plain text. The scaffold starts at `"256m"`. Set it above
 your service's real peak, because Docker kills a container that exceeds it.
