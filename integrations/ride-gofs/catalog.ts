@@ -1,5 +1,9 @@
 import { safeFetchJson } from "@openmapx/core/server";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import {
+  type CacheWriter,
+  captureCacheWriter,
+  type IntegrationContext,
+} from "@openmapx/integration-framework";
 import { parseGofsDiscovery } from "@openmapx/mobility-formats";
 import { applyGofsAuth, type GofsFetchJson } from "./feed.js";
 import supplement from "./systems.supplement.json" with { type: "json" };
@@ -193,9 +197,14 @@ export function createGofsCatalog(ctx: IntegrationContext, fetchJson?: GofsFetch
     }
   }
 
-  async function cacheSet(key: string, value: unknown, ttlSeconds: number): Promise<void> {
+  async function cacheSet(
+    writer: CacheWriter,
+    key: string,
+    value: unknown,
+    ttlSeconds: number,
+  ): Promise<void> {
     try {
-      await ctx.cache.set(key, value, ttlSeconds);
+      await writer.set(key, value, ttlSeconds);
     } catch {
       // Nothing to do: the value was still computed and returned to the caller.
     }
@@ -205,10 +214,11 @@ export function createGofsCatalog(ctx: IntegrationContext, fetchJson?: GofsFetch
     if (ctx.config.useUpstreamCatalog === false) return [];
     const cached = await cacheGet<UpstreamSystem[]>(CATALOG_CACHE_KEY);
     if (cached) return cached.flatMap((s) => toEntry(s, "upstream") ?? []);
+    const writer = await captureCacheWriter(ctx.cache);
     try {
       const systems =
         ((await doFetch(UPSTREAM_URL)) as { systems?: UpstreamSystem[] })?.systems ?? [];
-      await cacheSet(CATALOG_CACHE_KEY, systems, CATALOG_TTL_SECONDS);
+      await cacheSet(writer, CATALOG_CACHE_KEY, systems, CATALOG_TTL_SECONDS);
       return systems.flatMap((s) => toEntry(s, "upstream") ?? []);
     } catch (err) {
       // A registry outage must not take out the operator's own feeds.
@@ -238,6 +248,7 @@ export function createGofsCatalog(ctx: IntegrationContext, fetchJson?: GofsFetch
     const cached = await cacheGet<CatalogStatus>(key);
     if (cached) return { ...entry, status: cached };
 
+    const writer = await captureCacheWriter(ctx.cache);
     let status: CatalogStatus;
     try {
       const { url, headers } = applyGofsAuth(entry.url, entry.auth);
@@ -246,7 +257,7 @@ export function createGofsCatalog(ctx: IntegrationContext, fetchJson?: GofsFetch
     } catch (err) {
       status = statusFromError(err);
     }
-    await cacheSet(key, status, PROBE_TTL_SECONDS);
+    await cacheSet(writer, key, status, PROBE_TTL_SECONDS);
     return { ...entry, status };
   }
 

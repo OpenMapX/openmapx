@@ -5,6 +5,7 @@ import {
   readBoundedBinaryResponse,
 } from "@openmapx/core/server";
 import {
+  captureCacheWriter,
   dataSourceToAttribution,
   type IntegrationContext,
   scalarQueries,
@@ -219,6 +220,7 @@ async function fetchAndCacheTile(
   if (cached?.data) {
     return Buffer.from(cached.data, "base64");
   }
+  const writer = await captureCacheWriter(ctx.cache);
   const res = await fetchWithTimeout(upstreamUrl, undefined, signal);
   if (!res?.ok) return null;
   try {
@@ -228,7 +230,7 @@ async function fetchAndCacheTile(
       fallbackContentType: "image/png",
       label: "nautical tile",
     });
-    await ctx.cache.set(cacheKey, { data: data.toString("base64") }, ttl);
+    await writer.set(cacheKey, { data: data.toString("base64") }, ttl);
     return data;
   } catch {
     return null;
@@ -441,6 +443,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.send(Buffer.from(cached.data, "base64"));
       return;
     }
+    const writer = await captureCacheWriter(ctx.cache);
     const res = await fetchWithTimeout(wmsUrl.toString(), undefined, req.signal);
     if (!res?.ok) {
       reply.status(502).send({ message: "GEBCO tile fetch failed" });
@@ -459,7 +462,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(502).send({ message: "GEBCO tile fetch failed" });
       return;
     }
-    await ctx.cache.set(
+    await writer.set(
       cacheKey,
       { data: buf.toString("base64"), contentType },
       DEPTH_RELIEF_CACHE_TTL,
@@ -577,6 +580,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
+    const writer = await captureCacheWriter(ctx.cache);
     const url = new URL(harbourApiUrl);
     url.searchParams.set("b", String(south));
     url.searchParams.set("t", String(north));
@@ -606,7 +610,7 @@ export function setup(ctx: IntegrationContext): void {
       properties: { ...f.properties, _mapAttributions: serializeContributors(receipts) },
     }));
     const collection: HarborCollection = { type: "FeatureCollection", features };
-    await ctx.cache.set(cacheKey, collection, HARBORS_CACHE_TTL);
+    await writer.set(cacheKey, collection, HARBORS_CACHE_TTL);
     reply.header("Cache-Control", "public, max-age=1800");
     reply.send(collection);
   });
@@ -632,6 +636,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
+    const writer = await captureCacheWriter(ctx.cache);
     // Facilities + nearest-tide-station lookups run in parallel — the
     // station catalog is Redis-cached for a week so the second leg is cheap.
     const [facilities, nearestTideStation] = await Promise.all([
@@ -678,7 +683,7 @@ export function setup(ctx: IntegrationContext): void {
       ),
     };
 
-    await ctx.cache.set(cacheKey, detail, HARBOR_DETAIL_CACHE_TTL);
+    await writer.set(cacheKey, detail, HARBOR_DETAIL_CACHE_TTL);
     reply.header("Cache-Control", "public, max-age=3600");
     reply.send(detail);
   });
@@ -736,6 +741,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
+    const writer = await captureCacheWriter(ctx.cache);
     // Load NOAA via the existing typed loader; load non-NOAA networks via the
     // new merger module. Each catalog is Redis-cached for 7d behind its own key.
     const [noaaRaw, extraRaw] = await Promise.all([
@@ -812,7 +818,7 @@ export function setup(ctx: IntegrationContext): void {
       }),
     };
 
-    await ctx.cache.set(cacheKey, collection, STATIONS_CACHE_TTL);
+    await writer.set(cacheKey, collection, STATIONS_CACHE_TTL);
     reply.header("Cache-Control", "public, max-age=3600");
     reply.send(collection);
   });

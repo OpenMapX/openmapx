@@ -22,7 +22,8 @@ import { snapshotContributors } from "@openmapx/mobility-core/contributors";
  */
 
 import { type BoundingBox, bboxContains, fetchJson, type LngLat } from "@openmapx/core";
-import { type CacheClient, cacheGet, cacheSet, TTL } from "@openmapx/mobility-core/cache";
+import { captureCacheWriter } from "@openmapx/integration-framework";
+import { type CacheClient, cacheGet, TTL } from "@openmapx/mobility-core/cache";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import type { RegionalCarSharingClient } from "./regional-client-types.js";
 
@@ -150,6 +151,7 @@ async function fetchCityStations(
       `&MaxLongitude=${CANADA_BBOX.maxLng}&MinLongitude=${CANADA_BBOX.minLng}` +
       `&StartDate=${start}&EndDate=${end}`;
     try {
+      const writer = await captureCacheWriter(cache);
       const body = await fetchJson<CommunautoStationAvailabilityResponse>(url, {
         timeoutMs: FETCH_TIMEOUT_MS,
       });
@@ -158,7 +160,7 @@ async function fetchCityStations(
           ? station
           : { ...station, contributors: snapshotContributors(contributors) },
       );
-      await cacheSet(cache, cacheKey, stations, TTL.sharedMobility.stations);
+      await writer.set(cacheKey, stations, TTL.sharedMobility.stations);
     } catch {
       return [];
     }

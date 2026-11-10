@@ -1,6 +1,7 @@
 import { fetchJson } from "@openmapx/core";
 import {
   type ContributingRecord,
+  captureCacheWriter,
   dataSourceToAttribution,
   type IntegrationContext,
   type Logger,
@@ -153,13 +154,14 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     try {
+      const writer = await captureCacheWriter(ctx.cache);
       const log = ctx.log;
       const osmStations = await fetchOpenSenseMap(s, w, n, e, sensorType, exposure, log);
       const scStations = await fetchSensorCommunity(s, w, n, e, sensorType, exposure, log);
 
       const stations = deduplicateStations(osmStations, scStations);
 
-      await ctx.cache.set(cacheKey, stations, STATION_CACHE_TTL);
+      await writer.set(cacheKey, stations, STATION_CACHE_TTL);
       reply.send(stations);
     } catch (err) {
       ctx.log.error("[overlay-environment] Error fetching stations:", err);

@@ -6,7 +6,8 @@ import { snapshotContributors } from "@openmapx/mobility-core/contributors";
  */
 
 import { type BoundingBox, bboxContains, type LngLat, USER_AGENT } from "@openmapx/core";
-import { type CacheClient, cacheGet, cacheSet, TTL } from "@openmapx/mobility-core/cache";
+import { captureCacheWriter } from "@openmapx/integration-framework";
+import { type CacheClient, cacheGet, TTL } from "@openmapx/mobility-core/cache";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import type { RegionalCarSharingClient } from "./regional-client-types.js";
 
@@ -42,6 +43,7 @@ export function createStaticCarSharingClient(
     const cached = await cacheGet<SharedMobilityStation[]>(cache, cacheKey);
     if (cached) return cached;
 
+    const writer = await captureCacheWriter(cache);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
@@ -59,7 +61,7 @@ export function createStaticCarSharingClient(
             : { ...station, contributors: snapshotContributors(contributors) },
         );
 
-      await cacheSet(cache, cacheKey, stations, TTL.sharedMobility.stations);
+      await writer.set(cacheKey, stations, TTL.sharedMobility.stations);
       return stations;
     } catch {
       clearTimeout(timer);

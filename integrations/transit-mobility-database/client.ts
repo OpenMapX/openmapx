@@ -1,4 +1,4 @@
-import type { CacheClient } from "@openmapx/integration-framework";
+import { type CacheClient, captureCacheWriter } from "@openmapx/integration-framework";
 import type { MdbFeed, MdbTokenResponse } from "./types.js";
 
 const DEFAULT_BASE_URL = "https://api.mobilitydatabase.org";
@@ -79,10 +79,11 @@ export class MdbClient {
       if (cached && Array.isArray(cached)) return cached;
     }
 
+    const writer = this.cache ? await captureCacheWriter(this.cache) : null;
     const feeds = await this.fetchAllPages(kind);
 
-    if (this.cache && feeds.length > 0) {
-      await this.cache.set(cacheKey, feeds, FEED_LIST_TTL).catch(() => {});
+    if (writer && feeds.length > 0) {
+      await writer.set(cacheKey, feeds, FEED_LIST_TTL).catch(() => {});
     }
     return feeds;
   }

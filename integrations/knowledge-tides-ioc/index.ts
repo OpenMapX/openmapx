@@ -7,6 +7,7 @@ import {
 } from "@openmapx/core";
 import {
   type ContributingRecord,
+  captureCacheWriter,
   createTidesIntegration,
   type IntegrationContext,
   resolveIntegrationContributors,
@@ -145,6 +146,7 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
   const cached = await ctx.cache.get<CachedStation[]>("catalog:contributors-v1");
   if (cached) return cached;
   const captured = resolveIntegrationContributors(ctx, ["ioc-sealevel"]);
+  const writer = await captureCacheWriter(ctx.cache);
 
   const raw = await fetchJson<IocStationRaw[]>(`${BASE}?query=stationlist&format=json`);
   if (!raw) {
@@ -167,7 +169,7 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
     });
   }
   const acquired = stations.map((station) => withContributors(station, captured));
-  await ctx.cache.set("catalog:contributors-v1", acquired, CATALOG_TTL);
+  await writer.set("catalog:contributors-v1", acquired, CATALOG_TTL);
   return acquired;
 }
 
@@ -217,6 +219,7 @@ async function buildTidesResponse(
   const cached = await ctx.cache.get<TideStationResponse>(cacheKey);
   if (cached) return cached;
   const captured = resolveIntegrationContributors(ctx, ["ioc-sealevel"]);
+  const writer = await captureCacheWriter(ctx.cache);
 
   const obs = await fetchObservations(station.code);
   if (obs.length === 0) return null;
@@ -263,7 +266,7 @@ async function buildTidesResponse(
       valueFt: Math.round(last.value * M_TO_FT * 100) / 100,
     },
   };
-  await ctx.cache.set(cacheKey, result, TIDES_TTL);
+  await writer.set(cacheKey, result, TIDES_TTL);
   return result;
 }
 

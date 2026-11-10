@@ -1,6 +1,7 @@
 import { createPlace, type Place, USER_AGENT } from "@openmapx/core";
 import {
   type ContributingRecord,
+  captureCacheWriter,
   createTidesIntegration,
   type IntegrationContext,
   resolveIntegrationContributors,
@@ -76,6 +77,7 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
   const cached = await ctx.cache.get<CachedStation[]>("catalog:contributors-v1");
   if (cached) return cached;
   const captured = resolveIntegrationContributors(ctx, ["kartverket-sehavniva"]);
+  const writer = await captureCacheWriter(ctx.cache);
 
   const xml = await fetchText(`${BASE}?tide_request=stationlist&type=perm&lang=en`);
   if (!xml) {
@@ -92,7 +94,7 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
     stations.push({ code: m[2], name: m[1], lat, lng });
   }
   const acquired = stations.map((station) => withContributors(station, captured));
-  await ctx.cache.set("catalog:contributors-v1", acquired, CATALOG_TTL);
+  await writer.set("catalog:contributors-v1", acquired, CATALOG_TTL);
   return acquired;
 }
 
@@ -161,6 +163,7 @@ async function buildTidesResponse(
   const cached = await ctx.cache.get<TideStationResponse>(cacheKey);
   if (cached) return cached;
   const captured = resolveIntegrationContributors(ctx, ["kartverket-sehavniva"]);
+  const writer = await captureCacheWriter(ctx.cache);
 
   const [events, curve] = await Promise.all([fetchHilo(station), fetchCurve(station)]);
   if (events.length === 0 && curve.length === 0) return null;
@@ -185,7 +188,7 @@ async function buildTidesResponse(
     timeZone: "iso_offset",
     heightSource: "prediction",
   };
-  await ctx.cache.set(cacheKey, result, TIDES_TTL);
+  await writer.set(cacheKey, result, TIDES_TTL);
   return result;
 }
 

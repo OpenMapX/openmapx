@@ -410,7 +410,11 @@ services:
   (`int:<id>:<key>`), so you cannot collide with another integration's keys. Its
   `withCache(key, ttl, fn, callerSignal?)` helper coalesces misses and passes
   an operation signal into the loader. Pass it to HTTP acquisition; caller
-  cancellation need not cancel other callers sharing the same work.
+  cancellation need not cancel other callers sharing the same work. When results
+  need different TTLs, such as a shorter one for "not found", capture a writer
+  with `captureCacheWriter(ctx.cache)` before the upstream request and store
+  through it. A direct `ctx.cache.set` after the request could refill a cache an
+  admin cleared meanwhile, and `pnpm check-integration-cache-writes` refuses it.
 - **`ctx.http`** is a small `fetch` wrapper that can transparently cache GET
   responses in Redis when you pass a `{ cache: { ttl } }` option.
 - **`ctx.log`** is a structured logger already tagged with the integration id.

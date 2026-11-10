@@ -9,6 +9,7 @@ import {
   type TravelMode,
 } from "@openmapx/core";
 import {
+  captureCacheWriter,
   type IntegrationContext,
   parseWgs84BoundingBox,
   parseWgs84Point,
@@ -806,6 +807,7 @@ export function setup(ctx: IntegrationContext): void {
       bounds.east,
     ]);
     try {
+      const writer = await captureCacheWriter(ctx.cache);
       const result = await ctx.cache.withCache(
         key,
         NAVIGATION_ALERTS_TTL_SECONDS,
@@ -825,7 +827,7 @@ export function setup(ctx: IntegrationContext): void {
       if (!result.complete) {
         // Hold the miss briefly so a box Overpass cannot answer is not
         // re-queried by every client on every request.
-        await ctx.cache.set(key, result, NAVIGATION_ALERTS_RETRY_SECONDS).catch(() => undefined);
+        await writer.set(key, result, NAVIGATION_ALERTS_RETRY_SECONDS).catch(() => undefined);
       }
       reply.header(
         "Cache-Control",
@@ -869,6 +871,7 @@ export function setup(ctx: IntegrationContext): void {
       const missing = points.flatMap((point, index) => (cached[index] ? [] : [{ point, index }]));
       const fetched = new Map<number, Omit<JunctionLookupResult, "index">>();
       if (missing.length > 0) {
+        const writer = await captureCacheWriter(ctx.cache);
         const data = await overpassQuerySafe(
           buildJunctionsQuery(missing.map((entry) => entry.point)),
           null,
@@ -881,7 +884,7 @@ export function setup(ctx: IntegrationContext): void {
             missing.map(async ({ point, index }) => {
               const result = mapJunctionWays(data.elements ?? [], point);
               fetched.set(index, result);
-              await ctx.cache.set(keys[index], result, JUNCTION_CACHE_TTL_SECONDS);
+              await writer.set(keys[index], result, JUNCTION_CACHE_TTL_SECONDS);
             }),
           );
         }

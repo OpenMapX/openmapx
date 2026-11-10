@@ -2,6 +2,7 @@ import type { TideResponseStation, TidesPayload } from "@openmapx/core";
 import { haversineKm } from "@openmapx/core";
 import type { PlaceResolverContext } from "@openmapx/place-ids";
 import { registerPlaceResolver } from "@openmapx/place-ids";
+import { captureCacheWriter } from "./cache-writer";
 import type { IntegrationContext } from "./context";
 import { scalarQuery } from "./query";
 
@@ -191,10 +192,11 @@ export function createTidesIntegration<S extends TideStationBase>(
         return;
       }
 
+      const writer = await captureCacheWriter(ctx.cache);
       const stations = await config.loadStations(ctx);
       const nearest = findNearest(stations, lat, lng, config.maxStationDistanceKm);
       if (!nearest) {
-        await ctx.cache.set(cacheKey, { notFound: true } as const, config.nearestCacheTtl);
+        await writer.set(cacheKey, { notFound: true } as const, config.nearestCacheTtl);
         reply.status(204).send(null);
         return;
       }
@@ -203,12 +205,12 @@ export function createTidesIntegration<S extends TideStationBase>(
 
       const result = await config.buildTidesResponse(ctx, resolvedStation);
       if (!result) {
-        await ctx.cache.set(cacheKey, { notFound: true } as const, config.nearestCacheTtl);
+        await writer.set(cacheKey, { notFound: true } as const, config.nearestCacheTtl);
         reply.status(204).send(null);
         return;
       }
       const response = forCaller(result, distanceKm);
-      await ctx.cache.set(cacheKey, response, config.nearestCacheTtl);
+      await writer.set(cacheKey, response, config.nearestCacheTtl);
       reply.header("Cache-Control", `public, max-age=${config.cacheControlMaxAge}`);
       reply.send(structuredClone(response));
       return;

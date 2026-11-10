@@ -261,6 +261,70 @@ export function createPassthroughCache(): CacheClient {
   };
 }
 
+/** An in-memory `CacheClient` that models the host's administrative clear fence. */
+export interface FencedMemoryCache extends CacheClient {
+  /** Stored values by key. Reads return copies. */
+  readonly values: Map<string, unknown>;
+  /** TTL in seconds of the last accepted write per key. */
+  readonly ttls: Map<string, number | undefined>;
+  /** Admin clear: drops every entry and advances the invalidation epoch. */
+  clear(): void;
+}
+
+/**
+ * Mirrors the managed host: `captureWriter` and `withCache` capture the
+ * invalidation epoch before acquisition and drop a write once a clear has
+ * advanced it, while a direct `set` fences only its own invocation, so a late
+ * direct write refills a cleared cache.
+ */
+export function createFencedMemoryCache(): FencedMemoryCache {
+  const values = new Map<string, unknown>();
+  const ttls = new Map<string, number | undefined>();
+  let epoch = 0;
+  const writeIfCurrent = (captured: number, key: string, value: unknown, ttl?: number) => {
+    if (captured !== epoch) return;
+    values.set(key, structuredClone(value));
+    ttls.set(key, ttl);
+  };
+  const get = async <T>(key: string): Promise<T | null> =>
+    values.has(key) ? structuredClone(values.get(key) as T) : null;
+  return {
+    values,
+    ttls,
+    clear() {
+      values.clear();
+      ttls.clear();
+      epoch += 1;
+    },
+    async captureWriter() {
+      const captured = epoch;
+      return { set: async (key, value, ttl) => writeIfCurrent(captured, key, value, ttl) };
+    },
+    get,
+    async set(key, value, ttl) {
+      writeIfCurrent(epoch, key, value, ttl);
+    },
+    async del(key) {
+      values.delete(key);
+      ttls.delete(key);
+    },
+    async withCache<T>(
+      key: string,
+      ttl: number,
+      fn: (operationSignal: AbortSignal) => Promise<T>,
+      _callerSignal?: AbortSignal,
+      shouldCache?: (value: T) => boolean,
+    ): Promise<T> {
+      const captured = epoch;
+      const cached = await get<T>(key);
+      if (cached !== null && (shouldCache?.(cached) ?? true)) return cached;
+      const result = await fn(new AbortController().signal);
+      if (shouldCache?.(result) ?? true) writeIfCurrent(captured, key, result, ttl);
+      return result;
+    },
+  };
+}
+
 /** Every provider/route/source an integration registered during `setup()`. */
 export interface CapturedRegistrations {
   transit: TransitProvider[];

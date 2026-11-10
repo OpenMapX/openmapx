@@ -27,19 +27,24 @@ export function setup(ctx: IntegrationContext): void {
 
     // ctx.cache is namespaced per integration (int:__ID__:<key>), so keys
     // cannot collide with other integrations.
-    const cached = await ctx.cache.get<{ ok: boolean }>(cacheKey);
-    if (cached) {
-      reply.send(cached);
-      return;
-    }
+    //
+    // withCache returns the cached value, or runs the loader once for every
+    // concurrent caller and stores its result. An admin cache clear while the
+    // loader runs keeps the late result out of the cache. When results need
+    // different TTLs, for example a shorter one for "not found", capture a
+    // writer before the upstream request instead of calling ctx.cache.set
+    // after it (pnpm check-integration-cache-writes refuses that):
+    //
+    //   const writer = await captureCacheWriter(ctx.cache);
+    //   const found = await fetchFromUpstream();
+    //   await writer.set(cacheKey, found ?? { notFound: true }, found ? CACHE_TTL : 300);
+    const result = await ctx.cache.withCache(cacheKey, CACHE_TTL, async () => {
+      // Replace this with a real fetch to your upstream API.
+      // ctx.log is a structured logger already tagged with the integration id.
+      ctx.log.info("Fetching from upstream");
+      return { ok: true, integration: "__ID__" };
+    });
 
-    // Replace this with a real fetch to your upstream API.
-    // ctx.log is a structured logger already tagged with the integration id.
-    ctx.log.info("Fetching from upstream");
-
-    const result = { ok: true, integration: "__ID__" };
-
-    await ctx.cache.set(cacheKey, result, CACHE_TTL);
     reply.send(result);
   });
 }

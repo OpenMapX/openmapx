@@ -1,7 +1,7 @@
 import type { BBox } from "@openmapx/core";
 import { haversineMeters } from "@openmapx/core";
 import type { IntegrationContext, TransitProvider } from "@openmapx/integration-framework";
-import { captureTransitContributors } from "@openmapx/integration-framework";
+import { captureCacheWriter, captureTransitContributors } from "@openmapx/integration-framework";
 import {
   expandSearchQuery,
   getQueryVariants,
@@ -689,6 +689,7 @@ export function createPlaceTransit(
       };
     }
 
+    const writer = await captureCacheWriter(cache);
     const stopsRes = await linkedStops(link);
     const stops = stopsRes.data;
     if (stops.length === 0) {
@@ -697,7 +698,7 @@ export function createPlaceTransit(
         attributions: [],
         freshness: stopsRes.freshness,
       };
-      await cache.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeRoutes));
+      await writer.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeRoutes));
       return { data: [], attributions: [], freshness: stopsRes.freshness };
     }
 
@@ -781,7 +782,7 @@ export function createPlaceTransit(
     const attributions = contributorsForRecords(merged);
     const freshness = withPartial(mergeFreshness(...allFresh), partialRoutes);
     const envelope: CachedRoutes = { routes: merged, attributions, freshness };
-    await cache.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeRoutes));
+    await writer.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeRoutes));
     return { data: merged, attributions, freshness };
   }
 
@@ -1078,6 +1079,7 @@ export function createPlaceTransit(
       };
     }
 
+    const writer = await captureCacheWriter(cache);
     const stopsRes = await linkedStops(link);
     const stops = stopsRes.data;
     if (stops.length === 0) {
@@ -1086,7 +1088,7 @@ export function createPlaceTransit(
         attributions: [],
         freshness: stopsRes.freshness,
       };
-      await cache.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeAlerts));
+      await writer.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeAlerts));
       return { data: [], attributions: [], freshness: stopsRes.freshness };
     }
 
@@ -1130,7 +1132,7 @@ export function createPlaceTransit(
     const attributions = contributorsForRecords(merged);
     const freshness = withPartial(mergeFreshness(...allFresh), partialAlerts);
     const envelope: CachedAlerts = { alerts: merged, attributions, freshness };
-    await cache.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeAlerts));
+    await writer.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeAlerts));
     return { data: merged, attributions, freshness };
   }
 
@@ -1158,6 +1160,7 @@ export function createPlaceTransit(
       };
     }
 
+    const writer = await captureCacheWriter(cache);
     const stopsRes = await linkedStops(link);
     const stops = stopsRes.data;
     if (stops.length === 0) {
@@ -1166,7 +1169,7 @@ export function createPlaceTransit(
         attributions: [],
         freshness: stopsRes.freshness,
       };
-      await cache.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeFacilities));
+      await writer.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeFacilities));
       return { data: [], attributions: [], freshness: stopsRes.freshness };
     }
 
@@ -1188,7 +1191,7 @@ export function createPlaceTransit(
     const attributions = contributorsForRecords(merged);
     const freshness = withPartial(mergeFreshness(...allFresh), partialFacilities);
     const envelope: CachedFacilities = { facilities: merged, attributions, freshness };
-    await cache.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeFacilities));
+    await writer.set(key, envelope, cacheTtl(envelope.freshness, TTL.placeFacilities));
     return { data: merged, attributions, freshness };
   }
 

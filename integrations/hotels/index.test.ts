@@ -1,5 +1,8 @@
 import type { HotelOffer, HotelOffersResponse } from "@openmapx/core/server";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createFencedMemoryCache,
+  createMockIntegrationContext,
+} from "@openmapx/integration-framework/testing";
 import { afterEach, expect, it, vi } from "vitest";
 import { setup } from "./index.js";
 
@@ -103,4 +106,66 @@ it.each([
     reply,
   );
   expect((body as HotelOffersResponse).best?.contributors).toEqual(contributors);
+});
+
+async function readOffer(ctx: ReturnType<typeof createMockIntegrationContext>, name: string) {
+  const route = ctx.registered.routes.find((r) => r.path === "/offers");
+  if (!route) throw new Error("missing offers route");
+  const reply = { header: () => reply, status: () => reply, send: () => reply, type: () => reply };
+  await route.handler(
+    {
+      params: {},
+      headers: {},
+      body: null,
+      query: { name, lat: "52", lng: "13", checkIn: "2026-10-20", checkOut: "2026-10-22" },
+      clientKey: "test-client",
+    },
+    reply,
+  );
+}
+
+it("keeps a rate fetched across an admin cache clear out of the cache", async () => {
+  const cache = createFencedMemoryCache();
+  const ctx = createMockIntegrationContext({ config: { liteApiKey: "test" }, cache });
+  let release!: () => void;
+  let searching!: () => void;
+  const started = new Promise<void>((resolve) => {
+    searching = resolve;
+  });
+  searchOffer.mockImplementation(async () => {
+    searching();
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return offer;
+  });
+  setup(ctx);
+
+  const request = readOffer(ctx, "Hotel");
+  await started;
+  cache.clear();
+  release();
+  await request;
+
+  expect(cache.values.size).toBe(0);
+});
+
+it("stores rates and no-availability answers with their own TTLs", async () => {
+  const cache = createFencedMemoryCache();
+  const ctx = createMockIntegrationContext({ config: { liteApiKey: "test" }, cache });
+  searchOffer.mockResolvedValueOnce(offer).mockResolvedValueOnce(null);
+  setup(ctx);
+
+  await readOffer(ctx, "Available");
+  await readOffer(ctx, "Full");
+
+  const entries = [...cache.ttls].map(([key, ttl]) => [
+    key.split(":")[3],
+    ttl,
+    cache.values.get(key),
+  ]);
+  expect(entries).toEqual([
+    ["available", 15 * 60, expect.objectContaining({ total: 150 })],
+    ["full", 3 * 60, ""],
+  ]);
 });

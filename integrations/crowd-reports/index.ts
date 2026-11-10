@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { captureCacheWriter, type IntegrationContext } from "@openmapx/integration-framework";
 import {
   isRecordClass,
   isSafeReportId,
@@ -103,9 +103,10 @@ export function setup(ctx: IntegrationContext): void {
         reply.status(cached.status).send(cached.body);
         return;
       }
+      const writer = await captureCacheWriter(ctx.cache);
       const result = await relayContribution(ctx.http, "GET", "/contrib/issuer-keys");
       if (result.status >= 200 && result.status < 300) {
-        await ctx.cache.set(ISSUER_KEYS_CACHE_KEY, result, ISSUER_KEYS_TTL_SECONDS);
+        await writer.set(ISSUER_KEYS_CACHE_KEY, result, ISSUER_KEYS_TTL_SECONDS);
         reply.header("Cache-Control", `public, max-age=${ISSUER_KEYS_TTL_SECONDS}`);
       } else {
         reply.header("Cache-Control", "no-cache");

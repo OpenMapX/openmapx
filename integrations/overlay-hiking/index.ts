@@ -5,6 +5,7 @@ import {
   RASTER_IMAGE_MEDIA_TYPES,
 } from "@openmapx/core/server";
 import {
+  captureCacheWriter,
   dataSourceToAttribution,
   type IntegrationContext,
   scalarQueries,
@@ -91,8 +92,9 @@ export function setup(ctx: IntegrationContext): void {
         reply.send(cached);
         return;
       }
+      const writer = await captureCacheWriter(ctx.cache);
       const results = await searchTrails(query, limit);
-      await ctx.cache.set(cacheKey, results, CACHE_TTL_SHORT);
+      await writer.set(cacheKey, results, CACHE_TTL_SHORT);
       reply.send(results);
     } catch (err) {
       ctx.log.warn("Hiking trail search failed", err);
@@ -124,8 +126,9 @@ export function setup(ctx: IntegrationContext): void {
         reply.send(cached);
         return;
       }
+      const writer = await captureCacheWriter(ctx.cache);
       const results = await trailsByArea(south, west, north, east, limit);
-      await ctx.cache.set(cacheKey, results, CACHE_TTL_SHORT);
+      await writer.set(cacheKey, results, CACHE_TTL_SHORT);
       reply.send(results);
     } catch (err) {
       ctx.log.warn("Hiking area search failed", err);
@@ -146,8 +149,9 @@ export function setup(ctx: IntegrationContext): void {
         reply.send(cached);
         return;
       }
+      const writer = await captureCacheWriter(ctx.cache);
       const detail = await trailDetail(id);
-      await ctx.cache.set(cacheKey, detail, CACHE_TTL_LONG);
+      await writer.set(cacheKey, detail, CACHE_TTL_LONG);
       reply.send(detail);
     } catch (err) {
       ctx.log.warn("Hiking trail detail failed", err);
@@ -168,8 +172,9 @@ export function setup(ctx: IntegrationContext): void {
         reply.send(cached);
         return;
       }
+      const writer = await captureCacheWriter(ctx.cache);
       const geojson = await fetchRouteGeometry(id);
-      await ctx.cache.set(cacheKey, geojson, CACHE_TTL_LONG);
+      await writer.set(cacheKey, geojson, CACHE_TTL_LONG);
       reply.send(geojson);
     } catch (err) {
       ctx.log.warn("Hiking trail geometry failed", err);
@@ -205,6 +210,7 @@ export function setup(ctx: IntegrationContext): void {
         reply.send(cached);
         return;
       }
+      const writer = await captureCacheWriter(ctx.cache);
 
       const bbox = `${west},${south},${east},${north}`;
       let url = `https://www.refuges.info/api/bbox?bbox=${bbox}&format=geojson&detail=simple&nb_points=200`;
@@ -260,7 +266,7 @@ export function setup(ctx: IntegrationContext): void {
         }),
       };
 
-      await ctx.cache.set(cacheKey, result, CACHE_TTL_SHORT);
+      await writer.set(cacheKey, result, CACHE_TTL_SHORT);
       reply.send(result);
     } catch (err) {
       ctx.log.warn("Mountain shelter fetch failed", err);

@@ -1,6 +1,7 @@
 import { fetchJson as coreFetchJson, createPlace, type Place } from "@openmapx/core";
 import {
   type ContributingRecord,
+  captureCacheWriter,
   contributorsForFields,
   createTidesIntegration,
   type IntegrationContext,
@@ -100,6 +101,7 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
   const cached = await ctx.cache.get<CachedStation[]>("catalog:contributors-v1");
   if (cached) return cached;
   const captured = resolveIntegrationContributors(ctx, ["dfo-iwls"]);
+  const writer = await captureCacheWriter(ctx.cache);
   // Pull every station that exposes water-level predictions. The IWLS catalog
   // is ~700 stations; `max=2000` covers the entire active set comfortably.
   const raw = await fetchJson<IwlsStationRaw[]>(
@@ -125,7 +127,7 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
       };
     });
   const acquired = stations.map((station) => withContributors(station, captured));
-  await ctx.cache.set("catalog:contributors-v1", acquired, CATALOG_TTL);
+  await writer.set("catalog:contributors-v1", acquired, CATALOG_TTL);
   return acquired;
 }
 
@@ -223,9 +225,10 @@ async function refreshCurrentLevel(
   const cached = await ctx.cache.get<CapturedObservation | { notFound: true }>(obsKey);
   if (cached) return "notFound" in cached ? undefined : cached;
   const captured = resolveIntegrationContributors(ctx, ["dfo-iwls"]);
+  const writer = await captureCacheWriter(ctx.cache);
   const fetched = await fetchLatestObservation(stationId);
   const observed = fetched ? withContributors(fetched, captured) : undefined;
-  await ctx.cache.set(obsKey, observed ?? ({ notFound: true } as const), OBSERVATION_TTL);
+  await writer.set(obsKey, observed ?? ({ notFound: true } as const), OBSERVATION_TTL);
   return observed;
 }
 
@@ -265,6 +268,7 @@ async function buildTidesResponse(
   }
 
   const captured = resolveIntegrationContributors(ctx, ["dfo-iwls"]);
+  const writer = await captureCacheWriter(ctx.cache);
   const [events, curve] = await Promise.all([fetchHiloEvents(station.id), fetchCurve(station.id)]);
   if (events.length === 0 && curve.length === 0) return null;
 
@@ -292,7 +296,7 @@ async function buildTidesResponse(
     currentLevel,
   };
   const acquired = station.hasWlo ? withCurrentLevel(result, currentLevel) : result;
-  await ctx.cache.set(cacheKey, acquired, TIDES_TTL);
+  await writer.set(cacheKey, acquired, TIDES_TTL);
   return acquired;
 }
 

@@ -5,6 +5,7 @@ import {
   RASTER_IMAGE_MEDIA_TYPES,
 } from "@openmapx/core/server";
 import {
+  captureCacheWriter,
   type IntegrationContext,
   type RouteHandler,
   scalarQueries,
@@ -106,6 +107,7 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     try {
+      const writer = await captureCacheWriter(ctx.cache);
       const data = await fetchJson<{
         host: string;
         radar: { past: RadarFrame[]; nowcast: RadarFrame[] };
@@ -127,7 +129,7 @@ export function setup(ctx: IntegrationContext): void {
         past: data.radar.past ?? [],
         nowcast: data.radar.nowcast ?? [],
       };
-      await ctx.cache.set("weather:radar:meta", meta, 300);
+      await writer.set("weather:radar:meta", meta, 300);
       reply.send(meta);
     } catch {
       reply.status(502).send({ message: "RainViewer unavailable" });

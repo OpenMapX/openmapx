@@ -1,5 +1,8 @@
-import type { RouteHandler } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import type { CacheClient, RouteHandler } from "@openmapx/integration-framework";
+import {
+  createFencedMemoryCache,
+  createMockIntegrationContext,
+} from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildCurrent,
@@ -156,8 +159,8 @@ function mockOk(data: unknown) {
   return Response.json(data);
 }
 
-function getHandler(): RouteHandler {
-  const ctx = createMockIntegrationContext();
+function getHandler(cache?: CacheClient): RouteHandler {
+  const ctx = createMockIntegrationContext(cache ? { cache } : {});
   ctx.manifest.dataSources = [
     {
       sourceId: "open-meteo-marine",
@@ -183,9 +186,9 @@ function getHandler(): RouteHandler {
   return route.handler;
 }
 
-async function invoke(query: Record<string, string>): Promise<FakeReply> {
+async function invoke(query: Record<string, string>, cache?: CacheClient): Promise<FakeReply> {
   const reply = makeReply();
-  await getHandler()({ query, params: {}, body: undefined, headers: {} }, reply);
+  await getHandler(cache)({ query, params: {}, body: undefined, headers: {} }, reply);
   return reply;
 }
 
@@ -310,5 +313,54 @@ describe("GET /marine route", () => {
 
     expect(reply.statusCode).toBe(204);
     expect(reply.payload).toBeNull();
+  });
+});
+
+describe("GET /marine caching", () => {
+  const coastal = {
+    hourly: {
+      time: ["2026-06-14T00:00", "2026-06-14T01:00"],
+      wave_height: [0.8, 0.9],
+    },
+  };
+
+  it("keeps a response fetched across an admin cache clear out of the cache", async () => {
+    const cache = createFencedMemoryCache();
+    let release!: () => void;
+    let fetching!: () => void;
+    const started = new Promise<void>((resolve) => {
+      fetching = resolve;
+    });
+    mockFetch.mockImplementationOnce(async () => {
+      fetching();
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return mockOk(coastal);
+    });
+
+    const request = invoke({ lat: "54.0", lng: "8.0" }, cache);
+    await started;
+    cache.clear();
+    release();
+    const reply = await request;
+
+    expect(reply.statusCode).toBe(200);
+    expect(cache.values.size).toBe(0);
+  });
+
+  it("stores answers and inland results with their own TTLs", async () => {
+    const cache = createFencedMemoryCache();
+    mockFetch.mockResolvedValueOnce(mockOk(coastal));
+    mockFetch.mockResolvedValueOnce(mockOk({ error: true, reason: "no marine data" }));
+
+    await invoke({ lat: "54.0", lng: "8.0" }, cache);
+    await invoke({ lat: "50.78", lng: "6.08" }, cache);
+
+    expect(Object.fromEntries(cache.ttls)).toEqual({
+      "marine:utc-v1:54.00,8.00": 30 * 60,
+      "marine:utc-v1:50.78,6.08": 60 * 60,
+    });
+    expect(cache.values.get("marine:utc-v1:50.78,6.08")).toEqual({ notFound: true });
   });
 });

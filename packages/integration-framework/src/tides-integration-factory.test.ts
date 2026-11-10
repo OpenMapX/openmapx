@@ -5,7 +5,7 @@ import { setup as canada } from "../../../integrations/knowledge-tides-canada/in
 import { setup as ioc } from "../../../integrations/knowledge-tides-ioc/index";
 import { setup as norway } from "../../../integrations/knowledge-tides-norway/index";
 import { setup as pegel } from "../../../integrations/knowledge-tides-pegelonline/index";
-import { createMockIntegrationContext } from "./testing";
+import { createFencedMemoryCache, createMockIntegrationContext } from "./testing";
 import { createTidesIntegration } from "./tides-integration-factory";
 
 function host() {
@@ -335,4 +335,60 @@ it("refreshes Canadian current-level ownership without relabelling predictions o
     "Fresh observation terms",
   ]);
   expect(predictionCaches()).toEqual(retained);
+});
+
+it("does not refill a cache cleared while the station response is in flight", async () => {
+  const ctx = createMockIntegrationContext();
+  const cache = createFencedMemoryCache();
+  Object.defineProperty(ctx, "cache", { value: cache });
+  let finishFetch!: () => void;
+  let fetching!: () => void;
+  const started = new Promise<void>((resolve) => {
+    fetching = resolve;
+  });
+  createTidesIntegration(ctx, {
+    scheme: "test-clear",
+    sourceId: "wrapper",
+    loadStations: async () => [{ lat: 54, lng: 10 }],
+    findStationById: (stations) => stations[0],
+    createPlace: () => null,
+    buildTidesResponse: async () => {
+      fetching();
+      await new Promise<void>((resolve) => {
+        finishFetch = resolve;
+      });
+      return {
+        station: { id: "s", name: "S", lat: 54, lng: 10 },
+        events: [],
+        curve: [],
+        datum: "MLLW",
+        units: "english",
+        timeZone: "lst_ldt",
+        heightSource: "prediction",
+      };
+    },
+    maxStationDistanceKm: 10,
+    nearestCacheTtl: 60,
+    cacheControlMaxAge: 60,
+    unavailableMessage: "empty",
+  });
+  const route = ctx.registered.routes.find((r) => r.path === "/tides");
+  const reply = { header: () => reply, status: () => reply, send: () => reply, type: () => reply };
+  const request = route?.handler(
+    {
+      params: {},
+      headers: {},
+      body: null,
+      query: { lat: "54", lng: "10" },
+      clientKey: "test-client",
+    },
+    reply,
+  );
+
+  await started;
+  cache.clear();
+  finishFetch();
+  await request;
+
+  expect(cache.values.size).toBe(0);
 });

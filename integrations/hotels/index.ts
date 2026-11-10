@@ -1,5 +1,6 @@
 import { bareDomain, type HotelOffer, type HotelProviderInfo } from "@openmapx/core/server";
 import {
+  captureCacheWriter,
   captureResultContributors,
   type IntegrationContext,
   resolveIntegrationContributors,
@@ -175,11 +176,12 @@ export function setup(ctx: IntegrationContext): void {
           best = cached || null;
         } else {
           const captured = resolveIntegrationContributors(ctx, ["liteapi"]);
+          const writer = await captureCacheWriter(ctx.cache);
           const acquired = await ratesProvider.searchOffer(q, opts);
           best = acquired
             ? withContributors(acquired, captureResultContributors(acquired, captured))
             : null;
-          await ctx.cache.set(key, best ?? "", best ? OFFER_TTL : OFFER_NEGATIVE_TTL);
+          await writer.set(key, best ?? "", best ? OFFER_TTL : OFFER_NEGATIVE_TTL);
         }
         if (!best) {
           reply.status(204).send({});

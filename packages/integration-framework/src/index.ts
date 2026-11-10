@@ -5,6 +5,7 @@ export {
   type IntegrationActivation,
   runImmediateActivation,
 } from "./activation-transaction";
+export { type CacheWriter, captureCacheWriter } from "./cache-writer";
 export {
   type CollectionOrchestrator,
   type CollectionOrchestratorOptions,

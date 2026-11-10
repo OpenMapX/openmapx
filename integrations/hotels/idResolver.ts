@@ -1,3 +1,4 @@
+import { type CacheClient, captureCacheWriter } from "@openmapx/integration-framework";
 import type { HotelProviderConfig, HotelQuery } from "./types.js";
 import type { WikidataOtaIds } from "./wikidata.js";
 
@@ -82,10 +83,7 @@ export interface ResolvedHotelId {
 }
 
 /** Minimal cache surface this resolver needs (a CacheClient satisfies it). */
-export interface IdResolverCache {
-  get<T = unknown>(key: string): Promise<T | null>;
-  set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
-}
+export type IdResolverCache = Pick<CacheClient, "get" | "set" | "captureWriter">;
 
 /** Injected dependencies — real wiring supplies these in index.ts. */
 export interface IdResolverDeps {
@@ -148,13 +146,14 @@ async function wikidataIdsCached(
   const key = `hotels:wd:${q.wikidata}`;
   const cached = await deps.cache.get<WikidataOtaIds>(key);
   if (cached != null) return cached;
+  const writer = await captureCacheWriter(deps.cache);
   const ids = await deps.wikidata(q.wikidata);
   // A transient fetch failure (null) is NOT cached — the next request retries,
   // rather than freezing a false "no ids" for ID_NEGATIVE_TTL.
   if (ids == null) return null;
   // An empty result (entity has no OTA claims yet) is cached only briefly, so a
   // hotel that gets its Wikidata ids added is picked up within hours, not a week.
-  await deps.cache.set(key, ids, Object.keys(ids).length > 0 ? ID_POSITIVE_TTL : ID_NEGATIVE_TTL);
+  await writer.set(key, ids, Object.keys(ids).length > 0 ? ID_POSITIVE_TTL : ID_NEGATIVE_TTL);
   return ids;
 }
 
@@ -174,6 +173,7 @@ export async function resolveOtaHotelId(
   const cached = await deps.cache.get<ResolvedHotelId | "">(key);
   if (cached != null) return cached || null; // "" negative sentinel → null
 
+  const writer = await captureCacheWriter(deps.cache);
   const wdIds = await wikidataIdsCached(q, deps);
   let result: ResolvedHotelId | null = null;
   const wdId = wdIds ? wikidataIdFor(ota, wdIds) : undefined;
@@ -188,13 +188,13 @@ export async function resolveOtaHotelId(
   }
 
   if (result) {
-    await deps.cache.set(key, result, ID_POSITIVE_TTL);
+    await writer.set(key, result, ID_POSITIVE_TTL);
   } else if (wdIds != null) {
     // Cache a negative only when the lookup definitively found nothing. When
     // Wikidata transiently failed (wdIds === null) and typeahead also came up
     // empty, leave the key unset so the next request retries instead of
     // suppressing exact links for ID_NEGATIVE_TTL.
-    await deps.cache.set(key, "", ID_NEGATIVE_TTL);
+    await writer.set(key, "", ID_NEGATIVE_TTL);
   }
   return result;
 }

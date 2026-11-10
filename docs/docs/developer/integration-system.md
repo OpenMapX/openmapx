@@ -760,12 +760,29 @@ operations have a three-second deadline. A failed epoch capture skips the shared
 write; a failed clear control operation fails the clear request. These fences
 apply to host HTTP/cache acquisition, not the separate quota runtime's policy.
 
-For additional derived cache entries, managed hosts offer
-`const writer = await ctx.cache.captureWriter?.()` before acquisition. Use
-`writer?.set(key, value, ttlSeconds)` after the upstream await: it retains the
-original administrative invalidation fence. A direct `ctx.cache.set` captures
-its fence only when that write starts. Do not recapture after acquisition if the
-initial capture fails; hosts without this capability keep derived entries local.
+When `withCache` does not fit, for example when the TTL depends on the result
+(a shorter one for "not found") or for additional derived entries, capture a
+writer before acquisition with `const writer = await captureCacheWriter(ctx.cache)`
+from `@openmapx/integration-framework`, and call
+`writer.set(key, value, ttlSeconds)` after the upstream await. On a managed host
+it uses `ctx.cache.captureWriter()`, which retains the original administrative
+invalidation fence. A direct `ctx.cache.set` captures its fence only when that
+write starts, so after an upstream await it can refill a namespace an admin
+cleared during the request. If the capture fails, the writer stores nothing:
+the fence is never recaptured after acquisition. Hosts without shared cache
+administration, such as CLI and test fixtures, have no fence to capture, and
+the writer writes to their cache directly.
+
+`pnpm check-integration-cache-writes`, part of `pnpm check:policy`, refuses a
+direct `set` on an integration cache in `integrations/` and
+`packages/integration-framework/src`, before or after an await, since a helper
+that wraps the write hides the await. It also refuses the shared helpers that
+write without the fence: `cacheSet` from `@openmapx/mobility-core/cache` and
+`withCache(cache, …)` from `@openmapx/core`. The fenced `withCache` from
+`@openmapx/mobility-core/cache` delegates to `cache.withCache` and is allowed. It lists the files allowed to keep one
+with the reason, such as an in-memory map named `cache` or a write that stores
+no upstream result, and the exact number of writes each may hold.
+
 The writer fences the captured Redis invalidation epoch; callers must also guard
 local state/lifetime through `onInvalidate` and disposal. It does not create a
 linearizable cross-worker read barrier. Shared cache reads must retain the
