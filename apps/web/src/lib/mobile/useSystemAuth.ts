@@ -38,6 +38,12 @@ export type AuthRoute =
   /** Not offered at all in this build. */
   | "unavailable";
 
+/**
+ * `unsupported` comes only from the shell refusing this device (iOS below 17.4,
+ * which cannot receive a verified callback), so the UI can stop offering a
+ * sign-in that cannot work. Any bridge or transport problem is `failed`: it
+ * says nothing about the device, and a later attempt may succeed.
+ */
 export type SystemAuthOutcome = "ok" | "cancelled" | "failed" | "unsupported";
 
 export interface SystemAuthRuntime {
@@ -87,7 +93,7 @@ export function useSystemAuth(): SystemAuthRuntime {
   const runSystemAuth = useCallback(
     async (purpose: "sign-in" | "link-provider" | "add-passkey"): Promise<SystemAuthOutcome> => {
       const client = runtime.client;
-      if (!client || runtime.state !== "native-compatible") return "unsupported";
+      if (!client || runtime.state !== "native-compatible") return "failed";
 
       let opened: Awaited<ReturnType<typeof client.request>>;
       try {
@@ -99,7 +105,8 @@ export function useSystemAuth(): SystemAuthRuntime {
           { timeoutMs: 120_000 },
         );
       } catch {
-        return "unsupported";
+        // Timeout, channel reset, missing transport or too many pending requests.
+        return "failed";
       }
 
       if (opened.type !== "auth.result") return "failed";

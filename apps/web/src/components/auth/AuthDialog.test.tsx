@@ -81,6 +81,20 @@ describe("AuthDialog in the installed app", () => {
     expect(systemAuth.runSystemAuth).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps passkey and provider sign-in on after a bridge failure", async () => {
+    systemAuth.route = "system-browser";
+    systemAuth.runSystemAuth.mockResolvedValue("failed");
+    const { AuthDialog } = await import("./AuthDialog");
+    render(<AuthDialog open onClose={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "auth.signInWithPasskey" }));
+
+    await screen.findByText("mobileAuth.systemAuthFailed");
+    expect(screen.queryByText("mobileAuth.systemAuthUnsupported")).toBeNull();
+    for (const name of ["auth.signInWithPasskey", "auth.continueWith"])
+      expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("reports a completed system-browser sign-in as authenticated", async () => {
     systemAuth.route = "system-browser";
     systemAuth.runSystemAuth.mockResolvedValue("ok");
