@@ -309,6 +309,21 @@ writer guards or reinterpret a selected overlay as proof of completion.
 
 ### Recovering a refused host service update
 
+A standalone host `services start` or `services update` that fails releases its
+service locks as it exits, once its failure is recorded under
+`infra/docker/data/ops-agent/lifecycle/<operation-key>.json`, so you can fix the
+cause and run the command again. Containers that already started are left running;
+the retry converges on them. The locks stay in place when the failure could not be
+recorded, or when a hardlink request had already been issued to Data Manager. A
+later command that finds a service locked names the operation holding it.
+
+When the command failed at the hardlink step itself, `services recover-update`
+below may release the locks. When the hardlink request had already completed and a
+later step failed, such as a Compose start that hit a port conflict,
+`recover-update` refuses with `Original failure before hardlink completion required`
+and no automated release exists yet: those services stay locked. Keep the original
+records and do not delete guards.
+
 A read-only traffic inspection failure is terminal. Data Manager also settles an
 interrupted legacy data job by observation, at startup and then every minute. It
 looks up each host operation the job recorded by its operation key, and it never

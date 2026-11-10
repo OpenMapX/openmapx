@@ -19,7 +19,9 @@ const WAIT_MS = 5_000;
 
 export class ConfigurationWriterBusyError extends Error {
   constructor() {
-    super("Configuration writer is busy; an interrupted writer requires operator recovery");
+    super(
+      "Configuration writer is busy: another configuration change is running. Try again when it finishes.",
+    );
   }
 }
 

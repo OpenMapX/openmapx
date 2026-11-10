@@ -22,8 +22,12 @@ import {
   generationHardlinksNonAdmissionPayloadSchema,
   generationHardlinksNonAdmissionSchema,
 } from "../services/data-manager/contracts/executions";
-// biome-ignore lint/suspicious/noImportCycles: Original receipt recovery is called after initialization, never during module evaluation.
-import { readFailedServiceHardlinksReceipt } from "../services/service-lifecycle-receipt";
+// biome-ignore-start lint/suspicious/noImportCycles: Original receipt recovery is called after initialization, never during module evaluation.
+import {
+  readFailedServiceHardlinksReceipt,
+  readFailedServiceLifecycleReceipt,
+} from "../services/service-lifecycle-receipt";
+// biome-ignore-end lint/suspicious/noImportCycles: Original receipt recovery is called after initialization, never during module evaluation.
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import {
   inspectControlChildPublication,
@@ -1142,6 +1146,37 @@ function assertImagePullTargetLeaseCompatibility(
     data.close();
   }
 }
+/** Names who holds a target. The refusal stands even when the holder cannot be read. */
+function heldTargetError(
+  installation: InstallationState,
+  leases: AnchoredDirectory,
+  target: string,
+): Error {
+  let holder: string | undefined;
+  try {
+    for (const name of leases.listBounded(CONTROL_RETENTION_LIMITS.leases + 3)) {
+      if (holder || !uuid.safeParse(name).success) continue;
+      try {
+        const owner = openState(installation.dataRoot, name, installation, true);
+        try {
+          if (owner.certificate.serviceIds.includes(target) && !owner.slots?.releasedAt)
+            holder = owner.execution.operationKey;
+        } finally {
+          closeState(owner);
+        }
+      } catch {
+        /* A lease being written or retired is not the one to name. */
+      }
+    }
+  } catch {
+    /* The lease directory could not be listed. */
+  }
+  return Error(
+    holder
+      ? `Target lease busy: ${target} is held by operation ${holder}. Wait for it to finish; a service start or update records its state in infra/docker/data/ops-agent/lifecycle/${holder}.json.`
+      : `Target lease busy: ${target} is held by an operation that could not be identified. Inspect infra/docker/data/.admin-target-control/leases.`,
+  );
+}
 export async function acquireArtifactTargetLease(options: {
   dataRoot: string;
   serviceIds: readonly string[];
@@ -1203,7 +1238,7 @@ export async function acquireArtifactTargetLease(options: {
     for (const id of serviceIds) {
       for (;;) {
         options.signal?.throwIfAborted();
-        if (Date.now() >= until) throw Error("Target lease acquisition deadline elapsed");
+        if (Date.now() >= until) throw heldTargetError(authority.installation, leases, id);
         try {
           mkdirSync(locks.name(id), { mode: 0o700 });
           fsyncSync(locks.fd);
@@ -1213,8 +1248,7 @@ export async function acquireArtifactTargetLease(options: {
           break;
         } catch (e) {
           if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-          if (Date.now() >= until)
-            throw Error("Target lease busy; existing ownership cannot be stolen");
+          if (Date.now() >= until) throw heldTargetError(authority.installation, leases, id);
           await delay(Math.min(50, until - Date.now()), undefined, { signal: options.signal });
         }
       }
@@ -3351,10 +3385,11 @@ export async function revokeUnadoptedServiceHardlinks(
   });
 }
 /** The effect producer re-reads the actual signed failure and complete shared
- * tree; a caller-provided HTTP status or observation is never containment. */
+ * tree; a caller-provided HTTP status or observation is never containment.
+ * A failure whose tree holds no grant issued nothing that could outlive it.
+ * Once a grant exists, only its recorded unadopted revocation contains it. */
 export function verifyFailedServiceLifecycleContainment(authority: VerifiedExecutionAuthority) {
-  const receipt = readFailedServiceHardlinksReceipt(authority),
-    state = executionAuthorityState(authority);
+  const state = executionAuthorityState(authority);
   const reference = z
     .strictObject({ leaseId: uuid, certificateDigest: digest })
     .parse(
@@ -3366,11 +3401,23 @@ export function verifyFailedServiceLifecycleContainment(authority: VerifiedExecu
     );
   const s = openState(state.installation.dataRoot, reference.leaseId, state.installation, true);
   try {
-    const t = tree(s),
-      failedReceiptDigest = controlDigest(receipt);
+    const t = tree(s);
     if (
       controlDigest(s.certificateEnvelope) !== reference.certificateDigest ||
-      controlDigest(s.execution) !== controlDigest(state.execution) ||
+      controlDigest(s.execution) !== controlDigest(state.execution)
+    )
+      throw Error("Original unadopted hardlink revocation required");
+    if (t.grants.size === 0 && t.children.size === 0) {
+      const failure = readFailedServiceLifecycleReceipt(authority);
+      return {
+        failedReceiptDigest: controlDigest(failure),
+        revisionId: failure.finalRevisionId,
+        leaseId: reference.leaseId,
+      };
+    }
+    const receipt = readFailedServiceHardlinksReceipt(authority),
+      failedReceiptDigest = controlDigest(receipt);
+    if (
       t.root.phase === "held" ||
       t.grants.size !== 1 ||
       t.children.size !== 1 ||
@@ -3382,7 +3429,7 @@ export function verifyFailedServiceLifecycleContainment(authority: VerifiedExecu
       throw Error("Original unadopted hardlink revocation required");
     return {
       failedReceiptDigest,
-      revisionId: receipt.finalRevisionId!,
+      revisionId: receipt.finalRevisionId,
       leaseId: reference.leaseId,
     };
   } finally {

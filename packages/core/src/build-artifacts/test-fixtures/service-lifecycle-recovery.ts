@@ -29,6 +29,7 @@ import * as leases from "../target-lease";
 export async function failedServiceLifecycle(
   root: string,
   adopt: boolean | "after-failure" = false,
+  issueChild = true,
 ) {
   const installations: c.ControlInstallation[] = [];
   const generation = {
@@ -181,15 +182,17 @@ export async function failedServiceLifecycle(
           sequence: receipt.sequence + 1,
         };
         await store.checkpoint(receipt.sequence - 1, receipt, ownership);
-        child = await bindControlChildPhase(authority, { phase: "hardlinks", ordinal: 0 });
-        const issued = await issueControlChildPhase(authority, {
-          phase: "hardlinks",
-          ordinal: 0,
-          childPublicKey: c.controlRolePublicKey(installation, "data-manager"),
-          lease,
-        });
-        assertion = issued.assertion;
-        if (adopt === true) await adoptOriginalChild();
+        if (issueChild) {
+          child = await bindControlChildPhase(authority, { phase: "hardlinks", ordinal: 0 });
+          const issued = await issueControlChildPhase(authority, {
+            phase: "hardlinks",
+            ordinal: 0,
+            childPublicKey: c.controlRolePublicKey(installation, "data-manager"),
+            lease,
+          });
+          assertion = issued.assertion;
+          if (adopt === true) await adoptOriginalChild();
+        }
         await store.checkpoint(
           receipt.sequence,
           {

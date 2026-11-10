@@ -71,6 +71,8 @@ export class ServiceLifecycleCommandError extends Error {
     super(message);
   }
 }
+/** The configuration moved under this lifecycle: a conflict, whatever phase it stopped in. */
+class LifecycleConfigurationConflict extends Error {}
 export async function runCliServiceLifecycle(options: {
   action: "start" | "update";
   serviceIds: readonly string[];
@@ -234,6 +236,7 @@ export async function runCliServiceLifecycle(options: {
   let finalCommit: ReturnType<typeof services.configurationGenerationWriterCommit>;
   let failureAttempted = false;
   let releaseSelection: string | null | undefined;
+  let dockerEffectReached = false;
   const checkpoint = async (
     owned: services.VerifiedLifecycleOwnership,
     patch: Partial<services.ServiceLifecycleReceipt>,
@@ -252,21 +255,24 @@ export async function runCliServiceLifecycle(options: {
   const failureEvidence = (
     last: services.ServiceLifecycleReceipt,
     committed: typeof finalCommit,
+    error: unknown,
   ): Partial<services.ServiceLifecycleReceipt> => ({
     phase: committed && !last.finalRevisionId ? "unknown" : "failed",
     ...(committed ? { commit: "final_committed", finalRevisionId: committed.revisionId } : {}),
     followUp: committed ? "unknown" : last.finalRevisionId ? "failed" : "not_started",
     failure: {
       reason:
-        last.phase === "prepared"
-          ? "pins"
-          : last.phase === "pins_validated"
-            ? "pull"
-            : last.phase === "pulled"
-              ? "receipt_io"
-              : last.phase === "generation_committed"
-                ? "hardlinks"
-                : "recreate",
+        error instanceof LifecycleConfigurationConflict
+          ? "revision_conflict"
+          : last.phase === "prepared"
+            ? "pins"
+            : last.phase === "pins_validated"
+              ? "pull"
+              : last.phase === "pulled"
+                ? "receipt_io"
+                : last.phase === "generation_committed"
+                  ? "hardlinks"
+                  : "recreate",
       failedServiceIds: ids,
     },
   });
@@ -276,19 +282,19 @@ export async function runCliServiceLifecycle(options: {
     log.warn("The lifecycle failure was not recorded; its targets stay fenced until reconciled.");
   // The receipt only accepts a newly recorded final revision from the writer that
   // committed it, so a step that commits and then fails records its failure itself.
-  const recordFailure = async (owned: services.VerifiedLifecycleOwnership) => {
+  const recordFailure = async (owned: services.VerifiedLifecycleOwnership, error: unknown) => {
     if (failureAttempted || !receipt) return;
     failureAttempted = true;
     const committed = services.configurationGenerationWriterCommit(owned.writer) ?? finalCommit;
     try {
-      await checkpoint(owned, failureEvidence(receipt, committed));
+      await checkpoint(owned, failureEvidence(receipt, committed, error));
     } catch {
       warnFailureNotRecorded();
     }
   };
   // Runs outside every step. Cancellation or expiry can have ended forward ownership,
   // so this takes a fresh writer and records through the receipt-only entry.
-  const recordContainedFailure = async () => {
+  const recordContainedFailure = async (error: unknown) => {
     if (failureAttempted || !store || !receipt || !lease) return;
     failureAttempted = true;
     const opened = store,
@@ -298,7 +304,7 @@ export async function runCliServiceLifecycle(options: {
       await services.withConfigurationGenerationWriter(paths.infraDir, async (writer) => {
         const next = {
           ...last,
-          ...failureEvidence(last, finalCommit),
+          ...failureEvidence(last, finalCommit, error),
           sequence: last.sequence + 1,
         };
         await opened.recordContainment(last.sequence, next, { writer, lease: held, authority });
@@ -325,16 +331,18 @@ export async function runCliServiceLifecycle(options: {
             const releasePaths = services.releaseStatePaths(paths.infraDir);
             services.ensureReleaseStateDirectory(releasePaths.directory);
             services.ensureReleaseStateDirectory(releasePaths.store);
+            // A brief holder such as release selection must not fail a lifecycle whose
+            // containers may already be running, so later steps wait for the store.
             const lock = await services.acquireReleaseStoreLock(
               releasePaths.store,
               {},
-              { failIfBusy: true },
+              { failIfBusy: !dockerEffectReached },
             );
             releaseStoreLock = lock;
             try {
               return await run(owned);
             } catch (error) {
-              await recordFailure(owned);
+              await recordFailure(owned, error);
               throw error;
             } finally {
               finalCommit =
@@ -352,9 +360,9 @@ export async function runCliServiceLifecycle(options: {
   // Selecting a release rewrites the overlay without moving the generation.
   const assertConfigurationUnchanged = (revisionId: string, conflict: string) => {
     if (services.currentConfigurationGeneration(paths.infraDir) !== revisionId)
-      throw Error(conflict);
+      throw new LifecycleConfigurationConflict(conflict);
     if (releaseSelection !== undefined && readReleaseSelection() !== releaseSelection)
-      throw Error("Lifecycle release selection changed");
+      throw new LifecycleConfigurationConflict("Lifecycle release selection changed");
   };
   /**
    * Refuses the Docker effect that follows unless the configuration is still the
@@ -365,6 +373,7 @@ export async function runCliServiceLifecycle(options: {
   const beforeDockerEffect = async (revisionId: string, conflict: string, signal?: AbortSignal) => {
     await withWriterStep(async () => assertConfigurationUnchanged(revisionId, conflict), signal);
     assertForward(signal);
+    dockerEffectReached = true;
   };
   const committedRevisionId = () => {
     if (!receipt?.finalRevisionId) throw Error("Lifecycle generation is not committed");
@@ -421,7 +430,7 @@ export async function runCliServiceLifecycle(options: {
         );
         return result;
       } catch (error) {
-        await recordContainedFailure();
+        await recordContainedFailure(error);
         throw error;
       } finally {
         owning = false;
@@ -547,6 +556,66 @@ export async function runCliServiceLifecycle(options: {
       }, signal);
     },
   };
+  const dataRoot = join(paths.infraDir, "data");
+  /**
+   * Runs in the process that recorded the failure, after every Docker effect has been
+   * awaited. Only a hardlink child issued to data-manager can still be running, so
+   * that case keeps its fence for `services recover-update`. The caller rethrows the
+   * original failure, which a release failing here must not replace.
+   */
+  const releaseAfterContainedFailure = async () => {
+    if (inherited || lease?.mode !== "owner") return;
+    const held = lease,
+      key = execution.operationKey;
+    try {
+      // A failure before the receipt opened has run nothing and has nothing to record.
+      if (!receipt)
+        control.retainControlEffectReceipt(authority, {
+          outcome: "failed_without_effect",
+          publication: "not_started",
+          receipt: { kind: "not-started" },
+        });
+      else {
+        const failed = await services.withServiceLifecycleReceiptAuthority(authority, () =>
+          services.readServiceLifecycleReceipt({ dataRoot, execution }),
+        );
+        let attempt: unknown = null;
+        try {
+          if (reservation) attempt = control.lookupControlChildPhaseAttempt(authority, reservation);
+        } catch (lookupError) {
+          attempt = lookupError;
+        }
+        if (!services.lifecycleFailureHasNoSurvivor(failed, attempt)) {
+          // Recovery accepts only a failure at the hardlink step itself.
+          if (attempt !== null)
+            log.warn(
+              failed.failure?.reason === "hardlinks" && !failed.hardlinks
+                ? `Operation ${key} keeps its service locks because a hardlink request issued to data-manager may still be running. Inspect infra/docker/data/ops-agent/lifecycle/${key}.json; after its deadline, \`pnpm openmapx services recover-update --operation-key ${key}\` can release an unadopted request.`
+                : `Operation ${key} keeps its service locks because a hardlink child was issued to data-manager. No automated release exists yet for this case, and \`services recover-update\` does not apply. Its record is infra/docker/data/ops-agent/lifecycle/${key}.json.`,
+            );
+          return;
+        }
+        control.retainControlEffectReceipt(authority, {
+          outcome: "contained",
+          publication: "committed",
+          receipt: {
+            kind: "service-lifecycle-contained-failure",
+            failedReceiptDigest: control.controlDigest(failed),
+          },
+        });
+      }
+      await control.settleArtifactTargetLeaseChild(
+        held,
+        control.verifyControlEffectSettlement(installation, execution),
+      );
+      await control.releaseArtifactTargetLease(held);
+      lease = undefined;
+    } catch (releaseError) {
+      log.warn(
+        `Operation ${key} could not release its service locks: ${releaseError instanceof Error ? releaseError.message : "unknown error"}`,
+      );
+    }
+  };
   try {
     await effects.withOwnership(request, async () => {
       if (options.action === "update")
@@ -573,7 +642,7 @@ export async function runCliServiceLifecycle(options: {
     });
     if (!inherited && lease?.mode === "owner") {
       const verified = await services.withServiceLifecycleReceiptAuthority(authority, () =>
-        services.readServiceLifecycleReceipt({ dataRoot: join(paths.infraDir, "data"), execution }),
+        services.readServiceLifecycleReceipt({ dataRoot, execution }),
       );
       if (verified.phase !== "complete" || !verified.finalRevisionId)
         throw Error("Exact completed lifecycle receipt required");
@@ -596,6 +665,7 @@ export async function runCliServiceLifecycle(options: {
       lease = undefined;
     }
   } catch (error) {
+    await releaseAfterContainedFailure();
     let cause = error;
     while (cause instanceof services.ConfigurationGenerationError && cause.cause instanceof Error)
       cause = cause.cause;
