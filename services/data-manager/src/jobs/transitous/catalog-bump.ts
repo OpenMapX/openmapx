@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { DEFAULT_CATALOG_BRANCH } from "@openmapx/core/data-manager-contracts";
 import { parseRefShaPair, type TransitousLock } from "@openmapx/transitous-core";
 import { execa } from "execa";
 import {
@@ -39,7 +40,7 @@ export class CatalogBumpError extends Error {
 export interface ResolveCatalogBumpOptions {
   /** The already-cloned Transitous catalog working copy. */
   catalogDir: string;
-  /** Branch to track. Defaults to "main". */
+  /** Branch to track. Defaults to `DEFAULT_CATALOG_BRANCH`. */
   branch?: string;
   runner?: CommandRunner;
 }
@@ -56,7 +57,7 @@ export interface ResolveCatalogBumpOptions {
 export async function resolveCatalogBumpCandidate(
   opts: ResolveCatalogBumpOptions,
 ): Promise<CatalogBumpCandidate> {
-  const branch = opts.branch?.trim() || "main";
+  const branch = opts.branch?.trim() || DEFAULT_CATALOG_BRANCH;
   const runner = opts.runner ?? defaultRunner;
   const { catalogDir } = opts;
   await beginLegacyCatalogPreflight();
