@@ -410,7 +410,7 @@ describe.skipIf(!manifestsPresent)(
           OIDC_ISSUER: "https://${DOMAIN:-localhost}/api/auth",
           OIDC_REDIRECT_URI:
             "https://timeline.${DOMAIN:-localhost}/users/auth/openid_connect/callback",
-          ALLOW_EMAIL_PASSWORD_REGISTRATION: "true",
+          ALLOW_EMAIL_PASSWORD_REGISTRATION: "false",
         });
         // biome-ignore-end lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation syntax
         for (const key of ["DATABASE_PASSWORD", "SECRET_KEY_BASE", "OIDC_CLIENT_SECRET"]) {
