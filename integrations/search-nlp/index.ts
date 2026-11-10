@@ -5,7 +5,6 @@ import type {
   IntegrationContext,
   NlpProvider,
 } from "@openmapx/integration-framework";
-import { scalarQueries } from "@openmapx/integration-framework";
 import { resolveBrandPredicates } from "./brand-resolution";
 import { createChain } from "./orchestrator";
 import {
@@ -23,7 +22,13 @@ import type { ParseContext } from "./types";
 const DEFAULT_ROUND_DECIMALS = 2;
 const DEFAULT_INTENT_TTL = 86400;
 const DEFAULT_RATE_LIMIT = 200;
+const DEFAULT_CLOUD_REQUESTS_PER_DAY = 1_000;
+const DEFAULT_CLOUD_REQUESTS_PER_CLIENT_PER_HOUR = 20;
 const BREAKER_TTL_SECONDS = 60;
+/** Longest query accepted, in characters. A search phrase never needs more. */
+export const MAX_QUERY_CHARACTERS = 500;
+const HOUR_MS = 3_600_000;
+const DAY_MS = 86_400_000;
 
 function readString(ctx: IntegrationContext, key: string): string | undefined {
   const v = ctx.config[key];
@@ -33,6 +38,11 @@ function readString(ctx: IntegrationContext, key: string): string | undefined {
 function readNumber(ctx: IntegrationContext, key: string): number | undefined {
   const v = ctx.config[key];
   return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+}
+
+function readPositiveInteger(ctx: IntegrationContext, key: string): number | undefined {
+  const v = ctx.config[key];
+  return typeof v === "number" && Number.isInteger(v) && v > 0 ? v : undefined;
 }
 
 function localAiEndpoint(ctx: IntegrationContext): string | undefined {
@@ -112,6 +122,12 @@ export function applyLocalOnly(providers: NlpProvider[]): NlpProvider[] {
   return [...local, keywordProvider];
 }
 
+/** Only the deterministic, non-AI providers; the keyword floor is guaranteed. */
+export function applyKeywordOnly(providers: NlpProvider[]): NlpProvider[] {
+  const keyword = providers.filter((p) => !p.isAi);
+  return keyword.length > 0 ? keyword : [keywordProvider];
+}
+
 export function intentCacheKey(
   query: string,
   center: [number, number],
@@ -127,35 +143,93 @@ export function intentCacheKey(
 }
 
 /**
- * Build the rate-limit cache key for an IP within a fixed hourly bucket. The
- * bucket id is `floor(epochSeconds / 3600)`, so the key changes every hour and
- * the count resets naturally — no rolling-window problem. Re-setting the 1h TTL
- * within the same bucket is harmless (the bucket id, not the TTL, bounds the
- * window). Exported so tests can assert the key contains the hour bucket.
+ * Build the rate-limit cache key for a client within a fixed hourly bucket.
+ * The bucket id is `floor(epochSeconds / 3600)`, so the key changes every hour
+ * and the count resets naturally. Exported so tests can assert the key
+ * contains the hour bucket.
  */
-export function __rateLimitKey(ip: string, nowMs: number = Date.now()): string {
+export function __rateLimitKey(clientKey: string, nowMs: number = Date.now()): string {
   const bucket = Math.floor(nowMs / 1000 / 3600);
-  return `nlp:rl:${ip}:${bucket}`;
+  return `nlp:rl:${clientKey}:${bucket}`;
+}
+
+type QuotaOutcome = "allowed" | "denied" | "unavailable";
+
+/**
+ * Per-client hourly parse quota, keyed by the host's trusted client key so a
+ * caller can neither pick its own bucket nor exhaust anyone else's. With the
+ * shared upstream runtime the count is atomic across replicas; without one (a
+ * development checkout) a best-effort cache counter stands in.
+ */
+async function consumeParseQuota(
+  ctx: IntegrationContext,
+  clientKey: string,
+  limit: number,
+): Promise<QuotaOutcome> {
+  const runtime = ctx.upstreamRuntime;
+  if (runtime) {
+    const decision = await runtime.consumeQuota({
+      bucket: "parse",
+      cost: 1,
+      windows: [{ id: `client:${clientKey}`, limit, durationMs: HOUR_MS }],
+    });
+    if (decision.allowed) return "allowed";
+    return decision.diagnostic === "store_unavailable" ? "unavailable" : "denied";
+  }
+  const key = __rateLimitKey(clientKey);
+  const current = (await ctx.cache.get<number>(key)) ?? 0;
+  if (current >= limit) return "denied";
+  await ctx.cache.set(key, current + 1, 3600);
+  return "allowed";
+}
+
+/** A cloud call the budget refused. It is not a provider failure. */
+export class CloudBudgetDeniedError extends Error {
+  constructor() {
+    super("Cloud search budget exhausted");
+    this.name = "CloudBudgetDeniedError";
+  }
+}
+
+function digest(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 32);
 }
 
 /**
- * Best-effort per-IP hourly rate limiter built on the get/set cache API (the
- * CacheClient has no `incr` and no keep-TTL update). Uses a time-bucketed key
- * so the hourly window is a FIXED bucket rather than a rolling one: the count
- * lives at `nlp:rl:<ip>:<hourBucket>` with a 1h TTL on every write, and because
- * the bucket id changes each hour the count resets cleanly. Returns true when
- * the request is allowed.
+ * Wraps cloud providers so each call first takes one unit from two budgets in
+ * one atomic step: the caller's hourly share and the deployment's daily total.
+ * A refused call never reaches the provider, and one caller can use at most
+ * its hourly share of the daily total. Without the shared runtime, or with it
+ * unreachable, every cloud call is refused: paid usage is never unmetered.
  */
-async function rateLimitAllow(
+function budgetCloudProviders(
   ctx: IntegrationContext,
-  ip: string,
-  limit: number,
-): Promise<boolean> {
-  const key = __rateLimitKey(ip);
-  const current = (await ctx.cache.get<number>(key)) ?? 0;
-  if (current >= limit) return false;
-  await ctx.cache.set(key, current + 1, 3600);
-  return true;
+  providers: NlpProvider[],
+  budgetKey: string,
+  limits: { perDay: number; perClientPerHour: number },
+): NlpProvider[] {
+  const admit = async () => {
+    const runtime = ctx.upstreamRuntime;
+    if (!runtime) throw new CloudBudgetDeniedError();
+    const decision = await runtime.consumeQuota({
+      bucket: "cloud",
+      cost: 1,
+      windows: [
+        { id: `client:${budgetKey}`, limit: limits.perClientPerHour, durationMs: HOUR_MS },
+        { id: "deployment", limit: limits.perDay, durationMs: DAY_MS },
+      ],
+    });
+    if (!decision.allowed) throw new CloudBudgetDeniedError();
+  };
+  return providers.map((provider) => {
+    if (!provider.requiresNetwork) return provider;
+    const budgeted = Object.create(provider) as NlpProvider;
+    budgeted.parseQuery = async (query, parseContext) => {
+      await admit();
+      return provider.parseQuery(query, parseContext);
+    };
+    return budgeted;
+  });
 }
 
 /**
@@ -237,6 +311,12 @@ export function setup(ctx: IntegrationContext): void {
   const roundDecimals = readNumber(ctx, "roundCoordsDecimals") ?? DEFAULT_ROUND_DECIMALS;
   const intentTtl = readNumber(ctx, "intentCacheTtlSeconds") ?? DEFAULT_INTENT_TTL;
   const rateLimit = readNumber(ctx, "rateLimitPerIpPerHour") ?? DEFAULT_RATE_LIMIT;
+  const cloudLimits = {
+    perDay: readPositiveInteger(ctx, "cloudRequestsPerDay") ?? DEFAULT_CLOUD_REQUESTS_PER_DAY,
+    perClientPerHour:
+      readPositiveInteger(ctx, "cloudRequestsPerClientPerHour") ??
+      DEFAULT_CLOUD_REQUESTS_PER_CLIENT_PER_HOUR,
+  };
 
   ctx.registerRoute(
     "POST",
@@ -280,32 +360,51 @@ export function setup(ctx: IntegrationContext): void {
         return;
       }
 
-      // Per-IP hourly limit. The integration route abstraction does not expose
-      // the socket peer, so we key on a forwarded `ip` query value when present
-      // (the dispatcher in apps/api/server.ts enforces the real per-IP throttle
-      // against the trusted socket peer). Falls back to a shared "anon" bucket.
-      const ip =
-        typeof scalarQueries(req.query).ip === "string" && scalarQueries(req.query).ip
-          ? scalarQueries(req.query).ip
-          : "anon";
-      if (!(await rateLimitAllow(ctx, ip, rateLimit))) {
+      if (query.length > MAX_QUERY_CHARACTERS && [...query].length > MAX_QUERY_CHARACTERS) {
+        reply.status(400).send({ error: "query_too_long" });
+        return;
+      }
+
+      const quota = await consumeParseQuota(ctx, req.clientKey, rateLimit);
+      if (quota === "denied") {
         reply.header("Retry-After", "3600");
         reply.status(429).send({ error: "rate_limited" });
         return;
       }
 
-      const afterBreakers = await __filterOpenBreakers(providers, ctx);
-      // Cloud access is fail-closed. Consent mode needs an explicit positive
-      // authorization on every request; open mode additionally accepts a client
-      // request to defer to server policy. Strict mode always excludes cloud.
+      // Cloud access is decided here, never asserted by the client. Strict
+      // mode never uses cloud. Open mode uses it unless the caller declines.
+      // Consent mode uses it only for a signed-in user who opted in: the
+      // choice belongs to an account the server has verified, and an
+      // anonymous caller cannot unlock paid processing by sending a flag.
+      const signedIn = typeof req.userId === "string" && req.userId.length > 0;
       const strictPrivacy = privacyMode === "strict";
+      const cloudOffered = !strictPrivacy && (privacyMode === "open" || signedIn);
       const cloudAllowed =
-        !strictPrivacy &&
+        cloudOffered &&
+        quota === "allowed" &&
         (cloudAccess === "consented" ||
           (privacyMode === "open" && cloudAccess === "defer-to-server"));
-      const active = cloudAllowed ? afterBreakers : applyLocalOnly(afterBreakers);
+
+      const afterBreakers = await __filterOpenBreakers(providers, ctx);
+      // A quota store that cannot be reached leaves only the deterministic
+      // keyword floor: neither paid cloud calls nor local model time can be
+      // metered, so neither runs.
+      const permitted =
+        quota === "unavailable"
+          ? applyKeywordOnly(afterBreakers)
+          : cloudAllowed
+            ? afterBreakers
+            : applyLocalOnly(afterBreakers);
+      const budgetKey = signedIn ? `user:${digest(req.userId as string)}` : `net:${req.clientKey}`;
+      const active = budgetCloudProviders(ctx, permitted, budgetKey, cloudLimits);
+      let cloudBudgetDenied = false;
       const chain = createChain(active, {
         onProviderFailure: async (provider, error) => {
+          if (error instanceof CloudBudgetDeniedError) {
+            cloudBudgetDenied = true;
+            return;
+          }
           if (!provider.requiresNetwork) return;
           await ctx.cache.set(breakerKey(provider.id), 1, BREAKER_TTL_SECONDS).catch(() => {});
           ctx.log.warn(`[search-nlp] provider ${provider.id} failed`, (error as Error).message);
@@ -313,16 +412,24 @@ export function setup(ctx: IntegrationContext): void {
       });
       const parseCtx: ParseContext = { mapCenter, mapBbox, lang };
 
-      const chainId = active.map((provider) => provider.cacheKey).join("|");
+      const chainId = permitted.map((provider) => provider.cacheKey).join("|");
 
       let cached = true;
       const key = intentCacheKey(query, mapCenter, roundDecimals, chainId, cloudAllowed);
 
       try {
-        const result = await ctx.cache.withCache(key, intentTtl, async () => {
-          cached = false;
-          return chain.parse(query, parseCtx);
-        });
+        // An answer produced only because the cloud budget was spent is not
+        // cached, so the query gets a cloud answer once budget is available.
+        const result = await ctx.cache.withCache(
+          key,
+          intentTtl,
+          async () => {
+            cached = false;
+            return chain.parse(query, parseCtx);
+          },
+          undefined,
+          () => !cloudBudgetDenied,
+        );
 
         // Re-resolved on every request (cached or not) rather than baked into
         // the cached intent, so a catalog update takes effect immediately and
@@ -350,7 +457,7 @@ export function setup(ctx: IntegrationContext): void {
           provider: result.provider.id,
           providerLabel: result.provider.label,
           cloud: result.provider.cloud,
-          cloudAvailable: !strictPrivacy && disclosure.cloudActive,
+          cloudAvailable: cloudOffered && disclosure.cloudActive,
           cloudConsentRequired: privacyMode === "consent",
           cloudProviderLabels: providers
             .filter((provider) => provider.requiresNetwork)
@@ -362,7 +469,7 @@ export function setup(ctx: IntegrationContext): void {
         reply.status(502).send({ error: "nlp_unavailable" });
       }
     },
-    { rateLimitTier: "expensive" },
+    { rateLimitTier: "expensive", optionalAuth: true },
   );
 
   for (const definition of definitions) {
