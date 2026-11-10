@@ -1,6 +1,7 @@
 import type { AuthPolicySnapshot } from "@openmapx/core/api-contracts";
 import type { BetterAuthOptions } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
+import { configuredTrustedWebOrigins } from "../utils/csrf";
 import { accountRoleSchema } from "./account-mutations";
 
 /**
@@ -47,18 +48,28 @@ const EMAIL_PROVEN_SESSION_PATHS = new Set(["/verify-email", ...EMAIL_ONLY_SIGN_
 export function applyPasswordVerificationPolicy(policy: AuthPolicySnapshot) {
   const sessionHooks: NonNullable<NonNullable<BetterAuthOptions["databaseHooks"]>["session"]> = {
     create: {
-      // A verification link still verifies the address, but it does not sign
-      // in an account that has enrolled a second factor.
       before: async (session, context) => {
         if (!context?.path || !EMAIL_PROVEN_SESSION_PATHS.has(context.path)) return;
         const owner = (await context.context.internalAdapter.findUserById(session.userId)) as {
           twoFactorEnabled?: boolean | null;
         } | null;
-        if (!owner || owner.twoFactorEnabled === true)
-          throw new APIError("FORBIDDEN", {
-            code: "TWO_FACTOR_REQUIRED",
-            message: "Sign in with your password and second factor",
-          });
+        if (owner && owner.twoFactorEnabled !== true) return;
+        // A verification link has already verified the address by now. An
+        // account with a second factor goes on to its callback, or to the web
+        // app where it can sign in, without a session; the link's callback has
+        // passed Better Auth's origin check.
+        if (context.path === "/verify-email" && owner) {
+          const callbackURL = context.query?.callbackURL;
+          throw context.redirect(
+            typeof callbackURL === "string" && callbackURL
+              ? callbackURL
+              : `${configuredTrustedWebOrigins()[0]}/`,
+          );
+        }
+        throw new APIError("FORBIDDEN", {
+          code: "TWO_FACTOR_REQUIRED",
+          message: "Sign in with your password and second factor",
+        });
       },
     },
   };

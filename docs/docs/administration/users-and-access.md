@@ -260,8 +260,9 @@ user list flags accounts that have it turned on.
 
 A password reset by email code does not bypass the second factor: the next
 sign-in still asks for it. Following an email verification link verifies the
-address but signs in only accounts without a second factor; an account with one
-signs in with its password and code afterwards.
+address but signs in only accounts without a second factor. An account with one
+is sent on to the link's destination without a session and signs in with its
+password and code there.
 
 Verify recovery access before revoking an account's sessions.
 

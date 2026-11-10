@@ -345,26 +345,42 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
     });
   });
 
-  it("verifies a TOTP user's address from the link without signing them in", async () => {
-    const email = "link-bypass-fixture@example.test";
-    const { userId } = await enrolledTotpUser(email);
-    // Fixture input: an enrolled account whose address became unverified, as
-    // when an administrator turns verification on after enrollment.
-    await fixture.db.update(user).set({ emailVerified: false }).where(eq(user.id, userId));
-    const requested = await request("/api/auth/send-verification-email", { email });
-    expect(requested.statusCode, requested.body).toBe(200);
-    const url = mail
-      .findLast((message) => message.to === email)
-      ?.text.match(/http:\/\/localhost:3001\/api\/auth\/verify-email\?\S+/)?.[0];
-    if (!url) throw new Error("Missing verification URL in captured production mail");
-    const target = new URL(url);
-    const visited = await request(`${target.pathname}${target.search}`);
-    expect(visited.statusCode, visited.body).toBe(403);
-    expect(await sessions(userId)).toHaveLength(0);
-    expect((await fixture.db.select().from(user).where(eq(user.id, userId)))[0]).toMatchObject({
-      emailVerified: true,
-    });
-  });
+  it.each([
+    [
+      "to the link's callback",
+      "http://localhost:3000/after-verification",
+      "http://localhost:3000/after-verification",
+    ],
+    // Better Auth puts its default callback, `/`, into a link requested without one.
+    ["to the default callback", undefined, "/"],
+  ])(
+    "verifies a TOTP user's address from the link and redirects %s without a session",
+    async (_label, callbackURL, location) => {
+      const email = `link-${callbackURL ? "callback" : "plain"}-fixture@example.test`;
+      const { userId } = await enrolledTotpUser(email);
+      // Fixture input: an enrolled account whose address became unverified, as
+      // when an administrator turns verification on after enrollment.
+      await fixture.db.update(user).set({ emailVerified: false }).where(eq(user.id, userId));
+      const requested = await request("/api/auth/send-verification-email", {
+        email,
+        ...(callbackURL ? { callbackURL } : {}),
+      });
+      expect(requested.statusCode, requested.body).toBe(200);
+      const url = mail
+        .findLast((message) => message.to === email)
+        ?.text.match(/http:\/\/localhost:3001\/api\/auth\/verify-email\?\S+/)?.[0];
+      if (!url) throw new Error("Missing verification URL in captured production mail");
+      const target = new URL(url);
+      const visited = await request(`${target.pathname}${target.search}`);
+      expect(visited.statusCode, visited.body).toBe(302);
+      expect(visited.headers.location).toBe(location);
+      expect(cookies(visited)).not.toContain("session_token");
+      expect(await sessions(userId)).toHaveLength(0);
+      expect((await fixture.db.select().from(user).where(eq(user.id, userId)))[0]).toMatchObject({
+        emailVerified: true,
+      });
+    },
+  );
 
   it("keeps email codes for password reset and email change on a TOTP account", async () => {
     const email = "otp-recovery-fixture@example.test";
