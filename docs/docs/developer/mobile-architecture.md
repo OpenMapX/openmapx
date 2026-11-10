@@ -121,12 +121,33 @@ only when the OS starts the task without the app.
   even under a foreground service. There the first batch after the window
   releases the stream, and the time-driven Android profiles guarantee that
   batch while the user stands still. A batch also releases the stream after a
-  process restart.
+  process restart. Opening the app inside the window keeps the arrival and
+  its undo: recovery asks the coordinator (`closeFinishedSession`), which
+  keeps an arrival whose window is still open and schedules its release in
+  the current process. An arrival whose window has closed is ended then.
+- **Session end.** Every end goes through one coordinator method: End or
+  arrival completion from the page, End on the trip card or the recovery
+  screen, a car trip replacing the current one, a refused permission or a
+  driver that could not start, and expiry. It removes the session row, runs
+  the device effects (location, audio, alerts, surface, a final snapshot) and
+  then notifies each consumer once. The page hears the end as the reply to its
+  own command, or, when native ended the trip, as one unsolicited
+  `session.stopped`, never both. A page that is not loaded learns it from the
+  next handshake, which reports no active session. The composition's
+  `onSessionEnded` tells the shell, which clears guidance and any recovery
+  screen, and keep-awake releases the screen. Guidance starting, or stopping
+  at an arrival, is derived from the committed row after each publish and
+  reported once per change. Recovery (`NavigationRecoveryController`) is part
+  of the composition. It inspects the session on every visibility change, but
+  it ends a session only through the coordinator, between its own steps on
+  the shared executor. It ends a session past its lifetime, a preparation the
+  page never started, and an arrival whose release window has closed.
 - **Keep-awake.** The composition holds the screen only while the app is
   visible, the location stream runs for an active session, and that session's
-  keep-screen-on setting is on. It re-checks after every published change and
-  when the shell reports a visibility change or a recovery outcome, so a
-  setting change, arrival or end releases the screen with the commit itself.
+  keep-screen-on setting is on. It re-checks after every published change,
+  after every session end and when the shell reports a visibility change or a
+  recovery outcome, so a setting change, arrival or end releases the screen
+  with the commit itself.
 - **Speech interruptions.** A call or another source that takes audio focus
   during a cue stops it, and later cues are not queued behind the interruption.
   iOS observes the end of an audio-session interruption. Android abandons its
@@ -511,12 +532,11 @@ raw fix, refresh token or credential crosses into the surface payload.
 
 Tapping a card reopens native navigation. End opens an identity-bound native
 confirmation and requires unlocking/foregrounding the app. Only confirmation
-calls `NavigationCoordinator.stopFromSurface`, through the shared session
-executor and the same durable teardown used by the web command. Replayed links
-from Recents or an old card cannot stop a replacement trip. The existing
-`session.stopped` message also clears a matching web read model; older web
-versions may ignore the unsolicited message. Keep-awake is released by the
-same teardown, because it follows the durable session.
+calls `NavigationCoordinator.stopNatively`, through the shared session
+executor and the same terminal path as the web command. Replayed links from
+Recents or an old card cannot stop a replacement trip. The unsolicited
+`session.stopped` that path sends clears a matching web read model; older web
+versions may ignore it. Keep-awake is released by the same end notification.
 
 Lock-screen content follows system privacy settings. Android's private visibility
 and generic public version do not override a user's decision to show sensitive

@@ -26,7 +26,6 @@ import { getRuntimeConfig, type MobileRuntimeConfig } from "./config/runtimeConf
 import { useConnectivity } from "./connectivity/useConnectivity";
 import { IntakeController } from "./intake/IntakeController";
 import { createNativeIntakePort, NativeIntakeError } from "./intake/nativeIntakeModule";
-import { createNavigationRecoveryController } from "./lifecycle/createNavigationRecoveryController";
 import { useAppVisibility } from "./lifecycle/useAppLifecycle";
 import { buildWebVisibilityScript } from "./lifecycle/webVisibility";
 import type { DeepLinkIntent } from "./links/deepLinkIntent";
@@ -137,13 +136,13 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
       }),
     [locale],
   );
-  // Shell states follow guidance starting and ending; repeated reports of the
-  // same state are dropped so a stream of snapshots is not a stream of renders.
-  const navigatingRef = useRef(false);
+  // Shell states follow the composition, which reports each guidance change
+  // once and every end once, whoever caused it.
   const setNavigating = useCallback((navigating: boolean) => {
-    if (navigatingRef.current === navigating) return;
-    navigatingRef.current = navigating;
     dispatchShell({ type: navigating ? "session-started" : "session-ended" });
+  }, []);
+  const sessionEnded = useCallback(() => {
+    dispatchShell({ type: "session-ended" });
   }, []);
   const intakePort = useMemo(() => createNativeIntakePort(), []);
   const { shell, navigation, voice } = useMemo(() => {
@@ -229,6 +228,7 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
         isAppActive: () => visibilityRef.current === "active",
         auxiliary: services.auxiliary,
         onNavigatingChanged: setNavigating,
+        onSessionEnded: sessionEnded,
       }).catch(() => null);
     }
     intake = new IntakeController({
@@ -250,7 +250,7 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
       },
     });
     return { shell: composed, navigation, intake, voice };
-  }, [config, locale, prompter, services, setNavigating, intakePort, voiceIntent]);
+  }, [config, locale, prompter, services, setNavigating, sessionEnded, intakePort, voiceIntent]);
   useEffect(() => {
     if (visibility !== "active") voice.suspend();
   }, [visibility, voice]);
@@ -279,19 +279,14 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
               text: copy.end,
               style: "destructive",
               onPress: () => {
-                void composed.coordinator
-                  .stopFromSurface(sessionId)
-                  .then((stopped) => {
-                    if (stopped) setNavigating(false);
-                  })
-                  .catch(() => undefined);
+                void composed.coordinator.stopNatively(sessionId).catch(() => undefined);
               },
             },
           ]);
         })
         .catch(() => Alert.alert(surfaceCopy[locale].unavailable));
     },
-    [navigation, locale, setNavigating],
+    [navigation, locale],
   );
   const incomingLinks = useIncomingLinks(config, deliverLink, requestNativeEnd);
   useEffect(
@@ -300,15 +295,6 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
       void navigation.then((composed) => composed?.dispose());
     },
     [navigation, voice],
-  );
-  const recovery = useMemo(
-    () =>
-      config.feasibilityMode
-        ? null
-        : createNavigationRecoveryController({
-            isAppActive: () => visibilityRef.current === "active",
-          }),
-    [config.feasibilityMode],
   );
 
   /**
@@ -476,18 +462,17 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   // Reconcile on process creation and every visibility transition; never infer
   // navigation from what the WebView happened to render.
   useEffect(() => {
-    if (!recovery) return undefined;
     let disposed = false;
-    void recovery
-      .then((controller) => controller.reconcile(visibility))
+    void navigation
+      .then((composed) => composed?.recovery.reconcile(visibility))
       .then((event) => {
-        if (!disposed) dispatchShell({ type: event });
+        if (event && !disposed) dispatchShell({ type: event });
       })
       .catch(() => undefined);
     return () => {
       disposed = true;
     };
-  }, [recovery, visibility]);
+  }, [navigation, visibility]);
 
   /**
    * Keep-awake, narrowly.
@@ -516,24 +501,26 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
           void Linking.openSettings().catch(() => undefined);
           return;
         case "resume":
-          if (!recovery) return;
-          void recovery
-            .then((controller) => controller.resume())
-            .then((event) => dispatchShell({ type: event }))
+          void navigation
+            .then((composed) => composed?.recovery.resume())
+            .then((event) => {
+              if (event) dispatchShell({ type: event });
+            })
             .catch(() => undefined);
           return;
         case "end":
-          if (!recovery) return;
-          void recovery
-            .then((controller) => controller.end())
-            .then((event) => dispatchShell({ type: event }))
+          void navigation
+            .then((composed) => composed?.recovery.end())
+            .then((event) => {
+              if (event) dispatchShell({ type: event });
+            })
             .catch(() => undefined);
           return;
         case "dismiss":
           dispatchShell({ type: "dismissed" });
       }
     },
-    [recovery],
+    [navigation],
   );
 
   return (

@@ -12,6 +12,7 @@ import {
 } from "../../audio/navigationAudio";
 import type { AuxiliaryCommandHandler } from "../../bridge/answerCommand";
 import type { ConnectivityDriver, ConnectivityState } from "../../connectivity/ConnectivityDriver";
+import type { RecoveryEvent } from "../../lifecycle/NavigationRecoveryController";
 import { type AppActivity, withBackgroundSafeProfiles } from "../../location/backgroundSafeDriver";
 import type {
   LocationDriver,
@@ -38,6 +39,7 @@ import {
   type ForegroundNavigation,
 } from "../createForegroundNavigation";
 import { foregroundCoordinator } from "../foregroundCoordinator";
+import type { SessionEnded } from "../NavigationCoordinator";
 
 /**
  * The shipped foreground navigation composition, running on a fake phone.
@@ -447,8 +449,12 @@ export interface ForegroundHarness {
   navigation: ForegroundNavigation;
   /** Everything sent to the page, in order, across this composition's lifetime. */
   sent: SentMessage[];
-  /** Each guidance start or end the shell was told about. */
+  /** Each guidance start or stop the shell was told about. */
   navigatingReports: boolean[];
+  /** Each session end the shell was told about, in order. */
+  sessionEnds: SessionEnded[];
+  /** The recovery outcome of each visibility change, as the shell receives it. */
+  recoveryEvents: RecoveryEvent[];
   /** Sends a page command as the shell dispatches it and returns the reply the page received. */
   command(
     type: WebToNativeMessage["type"],
@@ -462,7 +468,7 @@ export interface ForegroundHarness {
    * stopped stream delivers nothing, so this reports whether it was delivered.
    */
   deliver(locations: readonly RawLocation[]): Promise<boolean>;
-  /** The user brings the app to the front or leaves it. */
+  /** The user brings the app to the front or leaves it, and the shell runs recovery. */
   setVisible(visible: boolean): Promise<void>;
   /** The committed session, read from storage. */
   session(): Promise<MobileNavigationSession | null>;
@@ -507,6 +513,8 @@ export async function startForegroundHarness(
 
   const sent: SentMessage[] = [];
   const navigatingReports: boolean[] = [];
+  const sessionEnds: SessionEnded[] = [];
+  const recoveryEvents: RecoveryEvent[] = [];
   const device: ForegroundDevice = {
     // The wrapper `createLocationDriver` puts around the platform driver.
     driver: withBackgroundSafeProfiles(phone.location, phone.os, phone.app),
@@ -541,6 +549,7 @@ export async function startForegroundHarness(
     isAppActive: () => phone.app.visible,
     auxiliary: options.auxiliary ?? (async () => null),
     onNavigatingChanged: (navigating) => navigatingReports.push(navigating),
+    onSessionEnded: (ended) => sessionEnds.push(ended),
     device,
   });
   const repository = new SessionRepository(phone.storage.file);
@@ -555,6 +564,8 @@ export async function startForegroundHarness(
     navigation,
     sent,
     navigatingReports,
+    sessionEnds,
+    recoveryEvents,
     async command(type, payload = {}, stamp = {}) {
       messageCounter += 1;
       const messageId = stamp.messageId ?? `harness-${messageCounter}`;
@@ -598,6 +609,9 @@ export async function startForegroundHarness(
       phone.app.setVisible(visible);
       // Work started by an activation listener is not awaited by anyone.
       await new Promise((resolve) => setImmediate(resolve));
+      await settle();
+      // The shell reconciles on every visibility change, as App.tsx does.
+      recoveryEvents.push(await navigation.recovery.reconcile(visible ? "active" : "background"));
       await settle();
       await navigation.reviewKeepAwake();
     },

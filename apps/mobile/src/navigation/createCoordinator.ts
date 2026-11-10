@@ -30,6 +30,8 @@ export interface CoordinatorComposition {
   coordinator: NavigationCoordinator;
   repository: SessionRepository;
   processors: ProcessorRegistry;
+  /** The process-wide queue the coordinator runs on, for work that must not interleave with it. */
+  executor: SerialExecutor;
 }
 
 export interface CoordinatorOverrides {
@@ -41,6 +43,7 @@ export interface CoordinatorOverrides {
   schedule?: (callback: () => void, delayMs: number) => () => void;
   newSessionId?: () => string;
   connectivity?: ConnectivityPort;
+  onSessionEnded?: CoordinatorDeps["onSessionEnded"];
   /**
    * Opens the durable store, if this composition is the first in the process.
    * Later compositions share whatever the first one opened.
@@ -106,12 +109,14 @@ export async function createCoordinator(
     ...(overrides.schedule ? { schedule: overrides.schedule } : {}),
     newSessionId: overrides.newSessionId ?? randomSessionId,
     ...(overrides.connectivity ? { connectivity: overrides.connectivity } : {}),
+    ...(overrides.onSessionEnded ? { onSessionEnded: overrides.onSessionEnded } : {}),
   };
 
   return {
     coordinator: new NavigationCoordinator(deps, executor),
     repository,
     processors,
+    executor,
   };
 }
 

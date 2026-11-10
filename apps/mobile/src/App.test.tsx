@@ -45,18 +45,15 @@ jest.mock("./shell/FeasibilityOverlay", () => {
   return { FeasibilityOverlay: () => React.createElement(View, { testID: "feasibility-overlay" }) };
 });
 
-jest.mock("./lifecycle/createNavigationRecoveryController", () => ({
-  createNavigationRecoveryController: jest.fn(async () => mockRecoveryController),
-}));
-
 /** A composed foreground navigation graph, standing in for the native one. */
 const mockNavigation = {
-  coordinator: { dispatch: jest.fn(), stopFromSurface: jest.fn() },
+  coordinator: { dispatch: jest.fn(), stopNatively: jest.fn() },
   // The composition routes navigation commands to its coordinator.
   dispatch: (message: unknown) => mockNavigation.coordinator.dispatch(message),
   capabilities: jest.fn(),
   activeSession: jest.fn(),
   reviewKeepAwake: jest.fn(async () => undefined),
+  recovery: mockRecoveryController,
   reportInvalidSend: jest.fn(),
   dispose: jest.fn(),
 };
@@ -113,8 +110,8 @@ beforeEach(async () => {
   // graph fails to compose, as it would on a device missing one of them.
   mockCreateForegroundNavigation.mockReset();
   mockCreateForegroundNavigation.mockRejectedValue(new Error("no native modules"));
-  mockNavigation.coordinator.stopFromSurface.mockReset();
-  mockNavigation.coordinator.stopFromSurface.mockResolvedValue(true);
+  mockNavigation.coordinator.stopNatively.mockReset();
+  mockNavigation.coordinator.stopNatively.mockResolvedValue(true);
   mockNavigation.coordinator.dispatch.mockReset();
   mockNavigation.coordinator.dispatch.mockResolvedValue(undefined);
   mockNavigation.capabilities.mockReturnValue(NAVIGATION_CAPABILITIES);
@@ -969,6 +966,9 @@ describe("App load states", () => {
 });
 
 describe("App navigation recovery composition", () => {
+  // Recovery is part of the navigation composition.
+  beforeEach(() => mockCreateForegroundNavigation.mockResolvedValue(mockNavigation));
+
   it("derives an already-running process-death session before explaining a page failure", async () => {
     mockRecoveryController.reconcile.mockResolvedValue("session-started");
     const view = await renderApp();
@@ -1051,10 +1051,10 @@ it("requires native confirmation before ending the exact cold-launch surface own
     .mockResolvedValue("openmapx:///navigation/end?sessionId=session-1");
   await renderApp();
   expect(alert).toHaveBeenCalled();
-  expect(mockNavigation.coordinator.stopFromSurface).not.toHaveBeenCalled();
+  expect(mockNavigation.coordinator.stopNatively).not.toHaveBeenCalled();
   const buttons = alert.mock.calls.at(-1)?.[2];
   await act(async () => buttons?.find((b) => b.style === "destructive")?.onPress?.());
-  expect(mockNavigation.coordinator.stopFromSurface).toHaveBeenCalledWith("session-1");
+  expect(mockNavigation.coordinator.stopNatively).toHaveBeenCalledWith("session-1");
 });
 it("does not offer an old End action against a newer session", async () => {
   const alert = jest.spyOn(Alert, "alert");
@@ -1069,7 +1069,7 @@ it("does not offer an old End action against a newer session", async () => {
     .mockResolvedValue("openmapx:///navigation/end?sessionId=old-session");
   await renderApp();
   expect(alert.mock.calls.at(-1)?.[0]).toContain("ended");
-  expect(mockNavigation.coordinator.stopFromSurface).not.toHaveBeenCalled();
+  expect(mockNavigation.coordinator.stopNatively).not.toHaveBeenCalled();
 });
 it("explains a surface End action when the navigation layer cannot load", async () => {
   const alert = jest.spyOn(Alert, "alert");
@@ -1078,7 +1078,7 @@ it("explains a surface End action when the navigation layer cannot load", async 
     .mockResolvedValue("openmapx:///navigation/end?sessionId=session-1");
   await renderApp();
   expect(alert.mock.calls.at(-1)?.[0]).toContain("unavailable");
-  expect(mockNavigation.coordinator.stopFromSurface).not.toHaveBeenCalled();
+  expect(mockNavigation.coordinator.stopNatively).not.toHaveBeenCalled();
 });
 it("confirms a warm surface End without waiting for the web bridge", async () => {
   const alert = jest.spyOn(Alert, "alert");
@@ -1096,7 +1096,7 @@ it("confirms a warm surface End without waiting for the web bridge", async () =>
   await renderApp();
   await act(async () => receiveUrl({ url: "openmapx:///navigation/end?sessionId=session-1" }));
   expect(alert.mock.calls.at(-1)?.[1]).toContain("End this");
-  expect(mockNavigation.coordinator.stopFromSurface).not.toHaveBeenCalled();
+  expect(mockNavigation.coordinator.stopNatively).not.toHaveBeenCalled();
 });
 it("cancels voice on document replacement, load failure, visibility and teardown", async () => {
   const cancel = jest.spyOn(VoiceInputController.prototype, "cancel").mockImplementation(() => {});

@@ -19,7 +19,19 @@ export type RecoveryInspection =
 
 export interface RecoverySessionStore {
   inspect(nowMs: number): Promise<RecoveryInspection>;
-  terminate(sessionId: string, nowMs: number): Promise<boolean>;
+}
+
+/**
+ * How recovery ends a session: through the coordinator's one terminal path,
+ * so the page, the shell state and keep-awake hear about it like any other
+ * end. Each call takes the coordinator's queue, so it is made between, never
+ * inside, this controller's own steps on the shared executor.
+ */
+export interface RecoverySessions {
+  /** Ends the session if it is finished; keeps an arrival inside its release window. */
+  closeFinished(sessionId: string): Promise<"ended" | "kept" | "active" | "gone">;
+  /** Ends the session the user chose to end. */
+  stop(sessionId: string): Promise<boolean>;
 }
 
 export interface RecoveryDriver {
@@ -31,6 +43,7 @@ export interface RecoveryDriver {
 
 export interface NavigationRecoveryDeps {
   store: RecoverySessionStore;
+  sessions: RecoverySessions;
   driver: RecoveryDriver;
   stopAudio(): Promise<void>;
   clearAlerts(): Promise<void>;
@@ -47,21 +60,32 @@ export interface NavigationRecoveryDeps {
  *
  * This controller cannot create or mutate a route. It can only reconcile an
  * already-active durable session, explicitly restart its one location stream,
- * or terminate it and release device resources. Keeping that boundary narrow
- * lets recovery be truthful without advertising native navigation to the web
- * application prematurely.
+ * ask the coordinator to end it, and release device resources nothing owns.
+ * Keeping that boundary narrow lets recovery be truthful without advertising
+ * native navigation to the web application prematurely.
  */
 export class NavigationRecoveryController {
   constructor(private readonly deps: NavigationRecoveryDeps) {}
 
-  reconcile(visibility: AppVisibility): Promise<RecoveryEvent> {
-    return this.deps.executor.run(() => this.reconcileNow(visibility));
+  async reconcile(visibility: AppVisibility): Promise<RecoveryEvent> {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const step = await this.deps.executor.run(() => this.reconcileNow(visibility));
+      if (typeof step === "string") return step;
+      // Undone back to an active trip since it was read: look again, once.
+      if ((await this.deps.sessions.closeFinished(step.close)) !== "active") break;
+    }
+    // Ended, kept for its release window, or already gone: guidance is over.
+    return "session-ended";
   }
 
   resume(): Promise<RecoveryEvent> {
     return this.deps.executor.run<RecoveryEvent>(async () => {
       const inspected = await this.deps.store.inspect(this.deps.now());
-      if (inspected.kind !== "active" || inspected.session.status !== "active") {
+      // An arrival owns its location until its release window closes.
+      if (inspected.kind === "active" && inspected.session.status !== "active") {
+        return "session-ended";
+      }
+      if (inspected.kind !== "active") {
         await this.cleanupDeviceWork();
         return inspected.kind === "quarantined" ? "session-quarantined" : "session-ended";
       }
@@ -79,18 +103,22 @@ export class NavigationRecoveryController {
     });
   }
 
-  end(): Promise<RecoveryEvent> {
-    return this.deps.executor.run<RecoveryEvent>(async () => {
-      const inspected = await this.deps.store.inspect(this.deps.now());
-      if (inspected.kind === "active") {
-        await this.deps.store.terminate(inspected.session.sessionId, this.deps.now());
+  async end(): Promise<RecoveryEvent> {
+    const inspected = await this.deps.executor.run(() => this.deps.store.inspect(this.deps.now()));
+    if (inspected.kind === "active") await this.deps.sessions.stop(inspected.session.sessionId);
+    await this.deps.executor.run(async () => {
+      // Whatever is still running belongs to no session now.
+      if ((await this.deps.store.inspect(this.deps.now())).kind !== "active") {
+        await this.cleanupDeviceWork();
       }
-      await this.cleanupDeviceWork();
-      return "session-ended" as const;
     });
+    return "session-ended";
   }
 
-  private async reconcileNow(visibility: AppVisibility): Promise<RecoveryEvent> {
+  /** One step on the executor: an outcome, or a session the coordinator has to close. */
+  private async reconcileNow(
+    visibility: AppVisibility,
+  ): Promise<RecoveryEvent | { close: string }> {
     const now = this.deps.now();
     const inspected = await this.deps.store.inspect(now);
     if (inspected.kind !== "active") {
@@ -100,9 +128,7 @@ export class NavigationRecoveryController {
 
     const { session } = inspected;
     if (session.status !== "active" || session.expiresAtMs <= now) {
-      await this.deps.store.terminate(session.sessionId, now);
-      await this.cleanupDeviceWork();
-      return "session-ended";
+      return { close: session.sessionId };
     }
 
     const permission = await this.deps.driver.permission();

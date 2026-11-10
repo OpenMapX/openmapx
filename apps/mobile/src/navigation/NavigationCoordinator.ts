@@ -68,6 +68,13 @@ export interface DriverPort {
   isRunning(): Promise<boolean>;
 }
 
+/** What every consumer of a session's end is told, once per end. */
+export interface SessionEnded {
+  sessionId: string;
+  finalStatus: "arrived" | "stopped" | "expired" | "error";
+  revision: number;
+}
+
 /** The connectivity state that has held long enough to act on. */
 export interface ConnectivityPort {
   confirmed(): ConnectivityState;
@@ -90,6 +97,12 @@ export interface CoordinatorDeps {
    * without it a session's connectivity stays as it was committed.
    */
   connectivity?: ConnectivityPort;
+  /**
+   * Told once after a session has ended and its device effects have run,
+   * whoever ended it. The shell state, keep-awake and recovery follow this
+   * rather than deciding for themselves that a trip is over.
+   */
+  onSessionEnded?(ended: SessionEnded): void;
 }
 
 /** Commands whose response must survive a replay unchanged. */
@@ -136,18 +149,49 @@ export class NavigationCoordinator {
     private readonly queue = new SerialExecutor(),
   ) {}
 
-  /** A confirmed OS action cannot act on whichever trip happens to be current. */
-  stopFromSurface(expectedSessionId: string): Promise<boolean> {
+  /**
+   * Ends the trip the user confirmed natively: End on the trip card or on the
+   * recovery screen. Bound to the trip that was shown, so a stale confirmation
+   * cannot end whichever trip happens to be current.
+   */
+  stopNatively(expectedSessionId: string): Promise<boolean> {
     return this.queue.run(async () => {
-      const current = await this.deps.repository.loadActive(this.deps.clock());
+      const now = this.deps.clock();
+      const current = await this.deps.repository.loadActive(now);
       if (!current || current.sessionId !== expectedSessionId) return false;
-      const response = await this.terminate(
-        { sessionId: expectedSessionId, messageId: "native-surface" },
-        "stopped",
-        this.deps.clock(),
-      );
-      this.deps.bridge.send(response.type, response.payload, { sessionId: expectedSessionId });
-      return true;
+      return (await this.endSession(current, "stopped", now, "native")) !== null;
+    });
+  }
+
+  /**
+   * Ends a session that is no longer being guided, if it is finished: past its
+   * lifetime, a preparation that was never started, or an arrival whose release
+   * window has closed. An arrival still inside its window (the announcement
+   * grace, or the transit undo window) is kept, and its location release is
+   * scheduled in this process, so opening the app neither cuts the window short
+   * nor lets it run past its end.
+   */
+  closeFinishedSession(expectedSessionId: string): Promise<"ended" | "kept" | "active" | "gone"> {
+    return this.queue.run(async () => {
+      const now = this.deps.clock();
+      const session = await this.deps.repository.loadActive(now);
+      if (!session || session.sessionId !== expectedSessionId) return "gone";
+      if (isMobileSessionExpired(session, now)) {
+        await this.endSession(session, "expired", now, "native");
+        return "ended";
+      }
+      if (session.status === "active") return "active";
+      if (session.status === "arrived") {
+        const releaseAt = locationReleaseAtMs(session);
+        if (releaseAt !== null && releaseAt > now) {
+          this.scheduleLocationRelease(session, now);
+          return "kept";
+        }
+        await this.endSession(session, "arrived", now, "native");
+        return "ended";
+      }
+      await this.endSession(session, "stopped", now, "native");
+      return "ended";
     });
   }
 
@@ -178,11 +222,8 @@ export class NavigationCoordinator {
       };
       if (current && !this.isTerminal(current)) {
         if (current.sessionId !== replaceSessionId) return errorResponse("session-active");
-        await this.terminate(
-          { messageId: base.messageId, sessionId: current.sessionId },
-          "stopped",
-          now,
-        );
+        // The page did not ask for this end, so it is told.
+        await this.endSession(current, "stopped", now, "native");
       }
       if (!valid()) return errorResponse("invalid-state");
       const prepared = await this.prepare(
@@ -191,11 +232,10 @@ export class NavigationCoordinator {
       );
       if (prepared.type !== "session.prepared") return prepared;
       if (!valid()) {
-        await this.terminate(
-          { messageId: base.messageId, sessionId: prepared.sessionId },
-          "stopped",
-          now,
-        );
+        const preparing = await this.deps.repository.loadActive(now);
+        // Never shown to the page, so only the car's own answer reports it.
+        if (preparing && preparing.sessionId === prepared.sessionId)
+          await this.endSession(preparing, "stopped", now, "command");
         return errorResponse("invalid-state");
       }
       const response = await this.start(
@@ -387,7 +427,7 @@ export class NavigationCoordinator {
     const decision =
       startContext.kind === "car" ? "background" : await permissions.requestForStart();
     if (decision === "denied") {
-      await repository.terminate(current.sessionId, "error", now);
+      await this.endSession(current, "error", now, "command");
       return errorResponse("permission-denied", command.messageId);
     }
 
@@ -416,8 +456,7 @@ export class NavigationCoordinator {
     if (failed > 0) {
       // The driver could not be started, so the session must not claim it is
       // tracking. Terminalise atomically rather than leaving a phantom.
-      const cleanup = await repository.terminate(committed.session.sessionId, "error", now);
-      await this.deps.effects.run(cleanup.effects);
+      await this.endSession(committed.session, "error", now, "command");
       return errorResponse("driver-start-failed", command.messageId);
     }
 
@@ -638,17 +677,60 @@ export class NavigationCoordinator {
       return errorResponse("revision-conflict", command.messageId);
     }
 
-    const { ack, effects } = await repository.terminate(current.sessionId, finalStatus, now);
-    await this.deps.effects.run(effects);
+    // The reply to this command is the page's notice of the end.
+    const ended = await this.endSession(current, finalStatus, now, "command");
     return {
       type: "session.stopped",
       payload: {
         sessionId: current.sessionId,
-        finalStatus: ack?.finalStatus ?? finalStatus,
-        revision: ack?.finalRevision ?? current.revision,
+        finalStatus: ended?.finalStatus ?? finalStatus,
+        revision: ended?.revision ?? current.revision,
       },
       sessionId: current.sessionId,
     };
+  }
+
+  /**
+   * The one way a session ends. It removes the row, runs the device effects
+   * (location, audio, alerts, surface, snapshot), then tells every consumer
+   * once. The page hears it as the reply to its own command, or, when native
+   * ended the trip, as an unsolicited `session.stopped`: never both, so a page
+   * neither misses an end nor hears it twice. A page that is not loaded learns
+   * it from the next handshake, which reports no active session.
+   */
+  private async endSession(
+    session: MobileNavigationSession,
+    finalStatus: SessionEnded["finalStatus"],
+    now: number,
+    origin: "command" | "native",
+  ): Promise<SessionEnded | null> {
+    const { ack, effects } = await this.deps.repository.terminate(
+      session.sessionId,
+      finalStatus,
+      now,
+    );
+    if (!ack) return null;
+    this.cancelLocationRelease?.();
+    this.cancelLocationRelease = null;
+    await this.deps.effects.run(effects);
+    const ended: SessionEnded = {
+      sessionId: ack.sessionId,
+      finalStatus: ack.finalStatus,
+      revision: ack.finalRevision,
+    };
+    if (origin === "native") {
+      this.deps.bridge.send(
+        "session.stopped",
+        { sessionId: ended.sessionId, finalStatus: ended.finalStatus, revision: ended.revision },
+        { sessionId: ended.sessionId },
+      );
+    }
+    try {
+      this.deps.onSessionEnded?.(ended);
+    } catch {
+      this.deps.diagnostics.record("typed.error", { scope: "session-ended" });
+    }
+    return ended;
   }
 
   // Location input from the driver.
@@ -690,8 +772,7 @@ export class NavigationCoordinator {
     }
 
     if (isMobileSessionExpired(session, now)) {
-      const expired = await repository.terminate(session.sessionId, "expired", now);
-      await this.deps.effects.run(expired.effects);
+      await this.endSession(session, "expired", now, "native");
       return;
     }
     if (session.status !== "active") {

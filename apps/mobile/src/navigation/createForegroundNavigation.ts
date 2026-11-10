@@ -15,6 +15,10 @@ import { ConfirmedConnectivity } from "../connectivity/ConfirmedConnectivity";
 import type { ConnectivityDriver } from "../connectivity/ConnectivityDriver";
 import { NetInfoConnectivityDriver } from "../connectivity/NetInfoConnectivityDriver";
 import { DiagnosticRepository, type DiagnosticType } from "../diagnostics/DiagnosticRepository";
+import {
+  NavigationRecoveryController,
+  type RecoveryEvent,
+} from "../lifecycle/NavigationRecoveryController";
 import type { AppActivity } from "../location/backgroundSafeDriver";
 import { appActivity, createLocationDriver } from "../location/createLocationDriver";
 import { readLocationPermissionSnapshot } from "../location/ExpoLocationDriver";
@@ -29,10 +33,10 @@ import { createCoordinator } from "./createCoordinator";
 import { createRemoteWork } from "./createRemoteWork";
 import { registerForegroundCoordinator } from "./foregroundCoordinator";
 import { GroundRerouteService } from "./ground/GroundRerouteService";
-import type { BridgePort, NavigationCoordinator } from "./NavigationCoordinator";
+import type { BridgePort, NavigationCoordinator, SessionEnded } from "./NavigationCoordinator";
 import { createPublishPort } from "./snapshots/createPublishPort";
 import type { NavigationStartContext } from "./startContext";
-import { reconcileNavigationSurface } from "./surfaces/createSurfacePort";
+import { clearNavigationSurface, reconcileNavigationSurface } from "./surfaces/createSurfacePort";
 import { alightAlertCopy } from "./transit/alightAlertCopy";
 import { createAlertPort } from "./transit/createAlertPort";
 import { TransitRefreshService } from "./transit/TransitRefreshService";
@@ -61,8 +65,13 @@ export interface ForegroundNavigationOptions {
   isAppActive(): boolean;
   /** Answers the page's one-shot requests, beside the navigation queue. */
   auxiliary: AuxiliaryCommandHandler;
-  /** Told when guidance starts or ends, for the shell states. */
+  /**
+   * Told when guidance starts, or stops while its session remains (an
+   * arrival). Each change is reported once.
+   */
   onNavigatingChanged(navigating: boolean): void;
+  /** Told once whenever a session ends, whoever ended it. */
+  onSessionEnded?(ended: SessionEnded): void;
   registerAsForeground?: boolean;
   startContext?(): NavigationStartContext;
   /** Replaces device services; production binds the Expo modules. */
@@ -158,6 +167,12 @@ export interface ForegroundNavigation {
    * resumed or ended the session.
    */
   reviewKeepAwake(): Promise<void>;
+  /**
+   * Reconciles a session that outlived its process or the app's visibility,
+   * and the user's answers to the recovery screen. Ends go through the
+   * coordinator, so they reach the page and keep-awake like any other end.
+   */
+  recovery: Pick<NavigationRecoveryController, "reconcile" | "resume" | "end">;
   /** Records a native message that failed its schema and was not sent. */
   reportInvalidSend(type: string): void;
   dispose(): void;
@@ -248,13 +263,20 @@ export async function createForegroundNavigation(
   const rerouteService = new GroundRerouteService({ apiOrigin: options.apiOrigin, now });
   let remote: ReturnType<typeof createRemoteWork> | null = null;
 
-  const bridge: BridgePort = {
-    send: (type, payload, sendOptions) => {
-      const outcome = options.send(type, payload, sendOptions);
-      if (type === "session.started") options.onNavigatingChanged(true);
-      if (type === "session.stopped") options.onNavigatingChanged(false);
-      return outcome;
-    },
+  const bridge: BridgePort = { send: options.send };
+
+  /**
+   * Whether guidance is running, as the shell was last told. It follows the
+   * committed row after every publish: active means guiding, anything else
+   * (an arrival) means not. An end is reported separately, once, by
+   * `onSessionEnded`; recovery outcomes set it without a report, because the
+   * shell dispatches those outcomes itself.
+   */
+  let navigating = false;
+  const reportNavigating = (value: boolean) => {
+    if (value === navigating) return;
+    navigating = value;
+    options.onNavigatingChanged(value);
   };
 
   const connectivity = new ConfirmedConnectivity({
@@ -267,6 +289,11 @@ export async function createForegroundNavigation(
     openStorage: () => device.openStorage(),
     clock: now,
     connectivity,
+    onSessionEnded: (ended) => {
+      navigating = false;
+      options.onSessionEnded?.(ended);
+      void reviewKeepAwake(null);
+    },
     schedule: (callback, delayMs) => device.schedule(callback, delayMs),
     bridge,
     permissions: {
@@ -346,10 +373,9 @@ export async function createForegroundNavigation(
       publish: {
         snapshot: async (immediate) => {
           await publish?.port.snapshot(immediate);
-          // Arrival and expiry end a session from a location batch rather than
-          // a command, so the shell learns about them here.
           const active = repositoryRef ? await repositoryRef.loadActive(now()) : null;
-          if (active?.status !== "active") options.onNavigatingChanged(false);
+          // With no row the session ended, which `onSessionEnded` reports.
+          if (active) reportNavigating(active.status === "active");
           await reviewKeepAwake(active);
         },
         event: async (eventId) => {
@@ -364,7 +390,7 @@ export async function createForegroundNavigation(
     },
   });
 
-  const { coordinator, repository } = composition;
+  const { coordinator, repository, executor } = composition;
   coordinatorRef = coordinator;
   repositoryRef = repository;
   diagnosticsRef = new DiagnosticRepository(repository);
@@ -387,6 +413,37 @@ export async function createForegroundNavigation(
     diagnostics: { record },
     track: (work) => coordinator.trackRemoteWork(work),
   });
+
+  const recoveryController = new NavigationRecoveryController({
+    store: { inspect: (nowMs) => repository.inspectActive(nowMs) },
+    sessions: {
+      closeFinished: (sessionId) => coordinator.closeFinishedSession(sessionId),
+      stop: (sessionId) => coordinator.stopNatively(sessionId),
+    },
+    driver: {
+      permission: () => driver.getPermissionState(),
+      running: () => driver.isRunning(),
+      start: (profile) => driver.start(profileFor(profile, device.platform.os)),
+      stop: () => driver.stop(),
+    },
+    stopAudio: () => audio.stop(),
+    clearSurface: clearNavigationSurface,
+    reconcileSurface: () => reconcileNavigationSurface(repository, options.isAppActive()),
+    // Reconciliation with an empty desired set cancels only identifiers owned
+    // by OpenMapX, including alerts whose rows were removed with their session.
+    clearAlerts: async () => {
+      await scheduler.reconcile([]);
+    },
+    isAppActive: options.isAppActive,
+    now,
+    executor,
+  });
+  /** The shell shows a recovery outcome itself; this only keeps `navigating` in step. */
+  const recovered = async (outcome: Promise<RecoveryEvent>) => {
+    const event = await outcome;
+    navigating = event === "session-started";
+    return event;
+  };
 
   const unregister =
     options.registerAsForeground === false ? () => {} : registerForegroundCoordinator(coordinator);
@@ -432,6 +489,11 @@ export async function createForegroundNavigation(
       return { sessionId: session.sessionId, revision: session.revision, kind: session.kind };
     },
     reviewKeepAwake: () => reviewKeepAwake(),
+    recovery: {
+      reconcile: (visibility) => recovered(recoveryController.reconcile(visibility)),
+      resume: () => recovered(recoveryController.resume()),
+      end: () => recovered(recoveryController.end()),
+    },
     reportInvalidSend: (type) => record("typed.error", { scope: "bridge-send", type }),
     dispose: () => {
       if (disposed) return;
