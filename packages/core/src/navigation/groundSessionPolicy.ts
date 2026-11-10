@@ -44,7 +44,8 @@ export interface SpeedLimitRoute {
 /**
  * The limit shown for where the user is, or null for no badge.
  *
- * Driving only: walking and cycling show none. The route's own per-segment
+ * Motorised modes only (driving and motorcycle): riders are bound by limits
+ * too, while walking and cycling show none. The route's own per-segment
  * limit comes first, then a limit matched along the route for this journey
  * (`liveSpeedLimits`, indexed by the same segment), then the current step's
  * limit. A zero or negative value is a "no data" marker, never a limit.
@@ -56,7 +57,7 @@ export function groundSpeedLimit(input: {
   segmentIndex: number;
   stepIndex: number;
 }): number | null {
-  if (input.mode !== "driving") return null;
+  if (input.mode !== "driving" && input.mode !== "motorcycle") return null;
   const stepLimit = input.route.steps[input.stepIndex]?.speedLimit;
   return pickSpeedLimit(
     input.route.segmentSpeedLimits?.[input.segmentIndex],

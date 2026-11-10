@@ -116,8 +116,9 @@ notification grant through the same port.
   live in `packages/core/src/navigation/groundSessionPolicy.ts`, which the
   browser engine (`useNavigationEngine.ts`) imports too: cue timing for the
   voice-timing setting (1.5, 1 and 0.6 times the trigger distances), the
-  reroute guards, the speed limit shown (driving only: the route's segment
-  limit, then the limit matched for the journey, then the step's), coasting,
+  reroute guards, the speed limit shown (driving and motorcycle, never walking
+  or cycling: the route's segment limit, then the limit matched for the
+  journey, then the step's), coasting,
   and which route of a directions answer a reroute follows (the one the server
   marked active). One difference is the shells' own: after a connection
   failure the browser waits for the user's retry, which skips the failure

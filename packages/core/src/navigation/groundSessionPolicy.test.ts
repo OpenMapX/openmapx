@@ -95,7 +95,19 @@ describe("groundSpeedLimit", () => {
     ).toBeNull();
   });
 
-  it.each(["walking", "cycling", "motorcycle"])("shows no limit while %s", (mode) => {
+  it("shows the limit to a motorcyclist as to a driver", () => {
+    expect(
+      groundSpeedLimit({
+        mode: "motorcycle",
+        route,
+        liveSpeedLimits: null,
+        segmentIndex: 0,
+        stepIndex: 0,
+      }),
+    ).toBe(50);
+  });
+
+  it.each(["walking", "cycling"])("shows no limit while %s", (mode) => {
     expect(
       groundSpeedLimit({ mode, route, liveSpeedLimits: null, segmentIndex: 0, stepIndex: 0 }),
     ).toBeNull();
