@@ -77,6 +77,9 @@ export function applyGroundReplacement(
       coasting: false,
       currentSpeedLimit: null,
       reroute: { status: "idle", attempts: session.payload.reroute.attempts },
+      // Reroutes in the last minutes still count against the churn guard,
+      // whichever route they produced.
+      ...(session.payload.rerouteChurn ? { rerouteChurn: session.payload.rerouteChurn } : {}),
     },
   };
   // `lastAcceptedFix` is optional in the schema, and an explicit `undefined`

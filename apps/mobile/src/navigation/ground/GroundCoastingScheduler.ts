@@ -17,8 +17,13 @@ import {
  * What it deliberately does **not** do is pretend a JavaScript timer runs while
  * the operating system has suspended the app. Coasting is foreground-only. In
  * the background, position comes from operating-system callbacks or it does not
- * come at all, and a gap in delivery is caught up conservatively when the next
- * real fix arrives rather than invented while nothing was running.
+ * come at all, and the next real fix places the user wherever they turned out
+ * to be.
+ *
+ * The anchor is the last real fix's position along the route, persisted with
+ * the session (`coastingAnchor`). A coasted fix advances the shown progress but
+ * never the anchor or the last accepted fix, so every estimate is measured from
+ * a real position and nothing synthetic is ever treated as one.
  */
 
 /** How long to wait after a real fix before extrapolating at all. */
@@ -31,8 +36,6 @@ export const MAX_COAST_METERS = 3_000;
 export const COAST_TICK_MS = 250;
 /** How often a coasted position is actually persisted. */
 export const COAST_PERSIST_MS = 1_000;
-/** Most synthetic points one delayed batch may contain. */
-export const MAX_CATCH_UP_POINTS = 120;
 
 export interface CoastAnchor {
   alongMeters: number;
@@ -56,19 +59,16 @@ export function canCoast(
   if (session.permissionMode === "foreground-only" && visibility !== "active") return false;
   if (session.payload.offRoute) return false;
   if (session.payload.reroute.status === "in-flight") return false;
+  if (!session.payload.progress) return false;
 
-  const progress = session.payload.progress as { speedMps?: number } | null;
-  if (!progress) return false;
-  if (!progress.speedMps || progress.speedMps <= 0) return false;
-  return session.lastAcceptedFix !== undefined;
+  const anchor = anchorFor(session);
+  return anchor !== null && anchor.speedMps > 0;
 }
 
 export function anchorFor(session: GroundMobileSession): CoastAnchor | null {
-  const progress = session.payload.progress as { alongMeters: number; speedMps: number } | null;
-  const fix = session.lastAcceptedFix;
-  if (!progress || !fix) return null;
-  if (!Number.isFinite(progress.alongMeters) || !Number.isFinite(progress.speedMps)) return null;
-  return { alongMeters: progress.alongMeters, speedMps: progress.speedMps, atMs: fix.timestampMs };
+  const anchor = session.payload.coastingAnchor;
+  if (!anchor) return null;
+  return { alongMeters: anchor.alongMeters, speedMps: anchor.speedMps, atMs: anchor.acceptedAtMs };
 }
 
 /**
@@ -114,46 +114,21 @@ export function coastFixAt(
   };
 }
 
-/**
- * Fills a delivery gap with bounded synthetic points, then lets the real fix land.
- *
- * The points are generated at 1 Hz and stop at the coast limit; the real fix is
- * *not* extrapolated to. A two-minute blackout produces a coast that runs out
- * and a session flagged as stale, not a confident jump to wherever the user
- * turned out to be.
- */
-export function catchUpFixes(session: GroundMobileSession, realFix: FixInput): FixInput[] {
-  const anchor = anchorFor(session);
-  if (!anchor) return [];
-  if (session.payload.offRoute) return [];
-  if (session.payload.reroute.status === "in-flight") return [];
-  if (anchor.speedMps <= 0) return [];
-
-  const gapMs = realFix.timestampMs - anchor.atMs;
-  if (gapMs <= COAST_START_DELAY_MS) return [];
-
-  const points: FixInput[] = [];
-  for (
-    let atMs = anchor.atMs + COAST_START_DELAY_MS;
-    atMs < realFix.timestampMs && points.length < MAX_CATCH_UP_POINTS;
-    atMs += COAST_PERSIST_MS
-  ) {
-    const synthetic = coastFixAt(session, anchor, atMs);
-    // Once the coast is exhausted there is nothing further that can honestly be
-    // said about where the user was.
-    if (!synthetic) break;
-    points.push(synthetic);
-  }
-  return points;
+/** Which session and which real fix a coasted fix was estimated from. */
+export interface CoastOrigin {
+  sessionId: string;
+  anchorAtMs: number;
 }
 
 export interface SchedulerPorts {
   now(): number;
-  /** Schedules the next tick; returns a handle the scheduler can cancel. */
-  schedule(callback: () => void, delayMs: number): unknown;
-  cancel(handle: unknown): void;
-  /** Delivers a synthetic fix through the same path a real one takes. */
-  dispatch(fix: FixInput): void;
+  /** Schedules the next tick; returns a function that cancels it. */
+  schedule(callback: () => void, delayMs: number): () => void;
+  /**
+   * Delivers a synthetic fix through the same path a real one takes. The
+   * receiver drops it if the session has moved on from `origin` since.
+   */
+  dispatch(fix: FixInput, origin: CoastOrigin): void;
 }
 
 /**
@@ -164,7 +139,7 @@ export interface SchedulerPorts {
  * serialised, compared-and-swapped and persisted exactly like a real one.
  */
 export class GroundCoastingScheduler {
-  private handle: unknown = null;
+  private cancelTick: (() => void) | null = null;
   private anchor: CoastAnchor | null = null;
   private session: GroundMobileSession | null = null;
   private lastDispatchAtMs = Number.NEGATIVE_INFINITY;
@@ -172,7 +147,7 @@ export class GroundCoastingScheduler {
   constructor(private readonly ports: SchedulerPorts) {}
 
   get running(): boolean {
-    return this.handle !== null;
+    return this.cancelTick !== null;
   }
 
   /** Starts, restarts or stops the coast to match the session's current state. */
@@ -192,23 +167,24 @@ export class GroundCoastingScheduler {
 
     // A new real fix reanchors and starts a fresh coast, rather than continuing
     // an old extrapolation from a position that has been superseded.
-    const reanchored = this.anchor?.atMs !== anchor.atMs;
+    const reanchored =
+      this.session?.sessionId !== session.sessionId || this.anchor?.atMs !== anchor.atMs;
     this.session = session;
     this.anchor = anchor;
     if (reanchored) this.lastDispatchAtMs = Number.NEGATIVE_INFINITY;
-    if (!this.handle) this.tick();
+    if (!this.cancelTick) this.tick();
   }
 
   stop(): void {
-    if (this.handle !== null) this.ports.cancel(this.handle);
-    this.handle = null;
+    this.cancelTick?.();
+    this.cancelTick = null;
     this.anchor = null;
     this.session = null;
     this.lastDispatchAtMs = Number.NEGATIVE_INFINITY;
   }
 
   private tick = (): void => {
-    this.handle = null;
+    this.cancelTick = null;
     const session = this.session;
     const anchor = this.anchor;
     if (!session || !anchor) return;
@@ -218,8 +194,8 @@ export class GroundCoastingScheduler {
 
     if (elapsedMs < COAST_START_DELAY_MS) {
       // Not yet, rather than over: the fix is recent enough that extrapolating
-      // would add nothing, so wait for the next tick.
-      this.handle = this.ports.schedule(this.tick, COAST_TICK_MS);
+      // would add nothing, so look again when it is old enough.
+      this.cancelTick = this.ports.schedule(this.tick, COAST_START_DELAY_MS - elapsedMs);
       return;
     }
 
@@ -235,8 +211,8 @@ export class GroundCoastingScheduler {
     // cost a database write.
     if (now - this.lastDispatchAtMs >= COAST_PERSIST_MS) {
       this.lastDispatchAtMs = now;
-      this.ports.dispatch(synthetic);
+      this.ports.dispatch(synthetic, { sessionId: session.sessionId, anchorAtMs: anchor.atMs });
     }
-    this.handle = this.ports.schedule(this.tick, COAST_TICK_MS);
+    this.cancelTick = this.ports.schedule(this.tick, COAST_TICK_MS);
   };
 }

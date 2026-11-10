@@ -33,6 +33,7 @@ import { type Database, getDatabase } from "../storage/database";
 import { createCoordinator } from "./createCoordinator";
 import { createRemoteWork } from "./createRemoteWork";
 import { registerForegroundCoordinator } from "./foregroundCoordinator";
+import { GroundCoastingScheduler } from "./ground/GroundCoastingScheduler";
 import { GroundRerouteService } from "./ground/GroundRerouteService";
 import type { BridgePort, NavigationCoordinator, SessionEnded } from "./NavigationCoordinator";
 import { createPublishPort } from "./snapshots/createPublishPort";
@@ -166,11 +167,12 @@ export interface ForegroundNavigation {
   capabilities(): ShellDescription["capabilities"];
   activeSession(): Promise<ShellDescription["activeSession"]>;
   /**
-   * Re-reads visibility and the durable session for keep-awake. Call it when
-   * the app's visibility changes and after anything outside this composition
-   * resumed or ended the session.
+   * Re-reads visibility and the durable session for the work that runs only
+   * while the app is visible: keep-awake and coasting. Call it when the app's
+   * visibility changes and after anything outside this composition resumed or
+   * ended the session.
    */
-  reviewKeepAwake(): Promise<void>;
+  reviewForegroundWork(): Promise<void>;
   /**
    * Reconciles a session that outlived its process or the app's visibility,
    * and the user's answers to the recovery screen. Ends go through the
@@ -244,16 +246,19 @@ export async function createForegroundNavigation(
   };
 
   /**
-   * Keep-awake follows the durable session, not what the page or the shell
-   * last heard: the screen is held only while the app is visible, a tracked
-   * session is active and that session's keep-screen-on setting is on. It is
-   * re-checked after every published change, so a setting, an arrival or an
-   * end takes effect with the commit that caused it. Never held for a
-   * composition that is not visible, such as the car runtime's.
+   * Keep-awake and coasting follow the durable session, not what the page or
+   * the shell last heard. The screen is held only while the app is visible, a
+   * tracked session is active and that session's keep-screen-on setting is on.
+   * The puck coasts only while the app is visible and the session allows it
+   * (`canCoast`). Both are re-checked after every published change, so a
+   * setting, a new fix, an arrival or an end takes effect with the commit that
+   * caused it. Neither runs for a composition that is not visible, such as the
+   * car runtime's or a headless process's.
    */
   let disposed = false;
   let screenHeld = false;
   let keepAwakeReview = 0;
+  let coaster: GroundCoastingScheduler | null = null;
   const holdScreen = (wanted: boolean) => {
     if (wanted === screenHeld) return;
     screenHeld = wanted;
@@ -272,12 +277,14 @@ export async function createForegroundNavigation(
    * checked against a running stream, and anything that stops the stream for
    * an active session also ends that session or the app's visibility.
    */
-  const reviewKeepAwake = async (loaded?: MobileNavigationSession | null) => {
+  const reviewForegroundWork = async (loaded?: MobileNavigationSession | null) => {
     const review = ++keepAwakeReview;
     let wanted = false;
-    if (!disposed && options.isAppActive() && repositoryRef) {
+    let session: MobileNavigationSession | null = null;
+    const visible = !disposed && options.isAppActive();
+    if (visible && repositoryRef) {
       try {
-        const session = loaded === undefined ? await repositoryRef.loadActive(now()) : loaded;
+        session = loaded === undefined ? await repositoryRef.loadActive(now()) : loaded;
         wanted =
           session?.status === "active" &&
           session.payload.startPackage.settings.keepScreenOn &&
@@ -287,7 +294,9 @@ export async function createForegroundNavigation(
       }
     }
     // Only the newest review decides; an older one may have read older state.
-    if (review === keepAwakeReview && !disposed) holdScreen(wanted);
+    if (review !== keepAwakeReview || disposed) return;
+    holdScreen(wanted);
+    coaster?.sync(session?.kind === "ground" ? session : null, visible ? "active" : "background");
   };
 
   const permissions = new PermissionController({
@@ -339,7 +348,7 @@ export async function createForegroundNavigation(
       navigating = false;
       heldByRecovery = false;
       options.onSessionEnded?.(ended);
-      void reviewKeepAwake(null);
+      void reviewForegroundWork(null);
     },
     schedule: (callback, delayMs) => device.schedule(callback, delayMs),
     bridge,
@@ -425,7 +434,7 @@ export async function createForegroundNavigation(
           const active = repositoryRef ? await repositoryRef.loadActive(now()) : null;
           // With no row the session ended, which `onSessionEnded` reports.
           if (active) reportNavigating(active.status === "active");
-          await reviewKeepAwake(active);
+          await reviewForegroundWork(active);
         },
         event: async (eventId) => {
           await publish?.port.event(eventId);
@@ -441,6 +450,13 @@ export async function createForegroundNavigation(
 
   const { coordinator, repository, executor } = composition;
   coordinatorRef = coordinator;
+  coaster = new GroundCoastingScheduler({
+    now,
+    schedule: (callback, delayMs) => device.schedule(callback, delayMs),
+    dispatch: (fix, origin) => {
+      void coordinator.handleCoastedFix(fix, origin);
+    },
+  });
   repositoryRef = repository;
   diagnosticsRef = new DiagnosticRepository(repository);
   const publish = createPublishPort({
@@ -538,7 +554,7 @@ export async function createForegroundNavigation(
       if (!session) return null;
       return { sessionId: session.sessionId, revision: session.revision, kind: session.kind };
     },
-    reviewKeepAwake: () => reviewKeepAwake(),
+    reviewForegroundWork: () => reviewForegroundWork(),
     recovery: {
       reconcile: (visibility) => recovered(recoveryController.reconcile(visibility)),
       resume: () => recovered(recoveryController.resume()),
@@ -554,6 +570,7 @@ export async function createForegroundNavigation(
       stopWatchingConnectivity();
       stopWatchingActivity();
       holdScreen(false);
+      coaster?.stop();
     },
   };
 }

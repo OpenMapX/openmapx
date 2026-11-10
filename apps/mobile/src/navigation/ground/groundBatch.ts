@@ -166,6 +166,8 @@ export function processGroundBatch(input: ProcessGroundBatchInput): GroundBatchO
   let offRoute = session.payload.offRoute;
   let currentSpeedLimit = session.payload.currentSpeedLimit;
   let lastAcceptedFix = session.lastAcceptedFix;
+  let coastingAnchor = session.payload.coastingAnchor;
+  let coasting = session.payload.coasting;
   let arrived = false;
   let needsReroute = false;
   let offRouteEpisodeStart: number | null = null;
@@ -198,14 +200,23 @@ export function processGroundBatch(input: ProcessGroundBatchInput): GroundBatchO
     if (result.progress) {
       progress = result.progress as never;
       currentSpeedLimit = speedLimitAt(session, result.progress.segmentIndex);
-      lastAcceptedFix = {
-        coords: fix.coords,
-        accuracy: fix.accuracy,
-        timestampMs: fix.timestampMs,
-        ...(fix.coasted ? { coasted: true } : {}),
-        ...(typeof fix.heading === "number" ? { heading: fix.heading } : {}),
-        ...(typeof fix.speed === "number" ? { speed: fix.speed } : {}),
-      };
+      // A coasted fix moves what is shown, never what was measured: the last
+      // accepted fix and the coasting anchor stay with the last real fix.
+      coasting = fix.coasted === true;
+      if (!fix.coasted) {
+        lastAcceptedFix = {
+          coords: fix.coords,
+          accuracy: fix.accuracy,
+          timestampMs: fix.timestampMs,
+          ...(typeof fix.heading === "number" ? { heading: fix.heading } : {}),
+          ...(typeof fix.speed === "number" ? { speed: fix.speed } : {}),
+        };
+        coastingAnchor = {
+          acceptedAtMs: fix.timestampMs,
+          alongMeters: Math.max(0, result.progress.alongMeters),
+          speedMps: Math.max(0, result.progress.speedMps),
+        };
+      }
     }
 
     // A new off-route episode starts when the flag flips, not on every fix.
@@ -287,11 +298,9 @@ export function processGroundBatch(input: ProcessGroundBatchInput): GroundBatchO
         progress,
         weakGps,
         offRoute,
-        // A real accepted fix ends coasting; a synthetic one keeps it.
-        coasting: fixes.some((fix) => !fix.coasted && !isRejected(fix, options.accuracyCapMeters))
-          ? false
-          : session.payload.coasting,
+        coasting,
         currentSpeedLimit,
+        ...(coastingAnchor ? { coastingAnchor } : {}),
       },
     },
     effects,
@@ -300,10 +309,6 @@ export function processGroundBatch(input: ProcessGroundBatchInput): GroundBatchO
     arrived,
     needsReroute,
   };
-}
-
-function isRejected(fix: FixInput, accuracyCapMeters: number): boolean {
-  return fix.accuracy > accuracyCapMeters;
 }
 
 /** Appends without duplicates, trimming the oldest past the shared cap. */

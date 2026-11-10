@@ -4,6 +4,7 @@ import {
   CHURN_WINDOW_MS,
   canRequestReroute,
   EMPTY_CHURN,
+  IN_FLIGHT_STALE_MS,
   MAX_CONSECUTIVE_FAILURES,
   onBackOnRoute,
   onRerouteFailed,
@@ -26,12 +27,34 @@ describe("canRequestReroute", () => {
   });
 
   it("allows only one request at a time", () => {
-    const inFlight: RerouteRuntime = { status: "in-flight", attempts: 0, requestId: "r1" };
+    const inFlight = onRerouteRequested(IDLE, "r1", NOW - 5_000);
 
     expect(canRequestReroute(inFlight, EMPTY_CHURN, "online", NOW)).toEqual({
       allow: false,
       reason: "in-flight",
     });
+  });
+
+  it("stops waiting for a request whose answer never came back", () => {
+    const inFlight = onRerouteRequested(IDLE, "r1", NOW);
+
+    expect(canRequestReroute(inFlight, EMPTY_CHURN, "online", NOW + IN_FLIGHT_STALE_MS)).toEqual({
+      allow: true,
+    });
+  });
+
+  it("does not let a clock set backwards stretch a wait", () => {
+    const inFlight = onRerouteRequested(IDLE, "r1", NOW + 60 * 60_000);
+    const churn = { successAtMs: [], cooldownUntilMs: NOW + 60 * 60_000 };
+    const backingOff: RerouteRuntime = {
+      status: "pending",
+      attempts: 1,
+      nextAttemptAtMs: NOW + 60 * 60_000,
+    };
+
+    expect(canRequestReroute(inFlight, EMPTY_CHURN, "online", NOW)).toEqual({ allow: true });
+    expect(canRequestReroute(IDLE, churn, "online", NOW)).toEqual({ allow: true });
+    expect(canRequestReroute(backingOff, EMPTY_CHURN, "online", NOW)).toEqual({ allow: true });
   });
 
   it("refuses while offline rather than failing", () => {
@@ -63,12 +86,20 @@ describe("canRequestReroute", () => {
     });
   });
 
-  it("stops asking after the retries are exhausted", () => {
-    const exhausted: RerouteRuntime = { status: "failed", attempts: MAX_CONSECUTIVE_FAILURES };
+  it("keeps offering a reroute after the last retry, at the longest delay", () => {
+    let runtime: RerouteRuntime = IDLE;
+    for (let attempt = 0; attempt < MAX_CONSECUTIVE_FAILURES + 2; attempt += 1) {
+      runtime = onRerouteFailed(runtime, "network", NOW, 0);
+    }
+    const longest = RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1];
 
-    expect(canRequestReroute(exhausted, EMPTY_CHURN, "online", NOW)).toEqual({
+    expect(runtime.status).toBe("failed");
+    expect(canRequestReroute(runtime, EMPTY_CHURN, "online", NOW + longest - 1)).toEqual({
       allow: false,
-      reason: "exhausted",
+      reason: "backoff",
+    });
+    expect(canRequestReroute(runtime, EMPTY_CHURN, "online", NOW + longest)).toEqual({
+      allow: true,
     });
   });
 
@@ -112,10 +143,11 @@ describe("retryDelayMs", () => {
 
 describe("reroute transitions", () => {
   it("marks a request in flight with its identifier", () => {
-    expect(onRerouteRequested(IDLE, "r1")).toEqual({
+    expect(onRerouteRequested(IDLE, "r1", NOW)).toEqual({
       status: "in-flight",
       attempts: 0,
       requestId: "r1",
+      requestedAtMs: NOW,
     });
   });
 
@@ -135,6 +167,9 @@ describe("reroute transitions", () => {
 
     expect(runtime.status).toBe("failed");
     expect(runtime.attempts).toBe(MAX_CONSECUTIVE_FAILURES);
+
+    // The count stops there, so the persisted value stays bounded.
+    expect(onRerouteFailed(runtime, "network", NOW, 0).attempts).toBe(MAX_CONSECUTIVE_FAILURES);
   });
 
   it("truncates a long failure code rather than storing it whole", () => {
@@ -166,6 +201,12 @@ describe("reroute transitions", () => {
 
   it("leaves an already-idle runtime untouched", () => {
     expect(onBackOnRoute(IDLE)).toBe(IDLE);
+  });
+
+  it("leaves a request in flight to be answered", () => {
+    const inFlight = onRerouteRequested(IDLE, "r1", NOW);
+
+    expect(onBackOnRoute(inFlight)).toBe(inFlight);
   });
 });
 

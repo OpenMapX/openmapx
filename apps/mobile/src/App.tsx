@@ -475,18 +475,20 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   }, [navigation, visibility]);
 
   /**
-   * Keep-awake, narrowly.
+   * Keep-awake and coasting, narrowly.
    *
    * The navigation composition holds the screen only while the app is
    * foregrounded, a session is being tracked and its keep-screen-on setting is
-   * on. It re-checks after its own commits; visibility changes and recovery
-   * outcomes (which change `navigating`) happen here, so they ask it to look
-   * again. It is never part of the background task: holding a wake lock from a
-   * headless callback would drain the battery for a screen nobody is looking at.
+   * on, and moves the puck through a gap in location delivery only while the
+   * app is foregrounded. It re-checks after its own commits; visibility changes
+   * and recovery outcomes (which change `navigating`) happen here, so they ask
+   * it to look again. Neither is part of the background task: holding a wake
+   * lock or running a timer from a headless callback would drain the battery
+   * for a screen nobody is looking at.
    */
-  // biome-ignore lint/correctness/useExhaustiveDependencies: visibility and navigating are the triggers for a fresh keep-awake review, not values the effect reads.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: visibility and navigating are the triggers for a fresh review, not values the effect reads.
   useEffect(() => {
-    void navigation.then((composed) => composed?.reviewKeepAwake()).catch(() => undefined);
+    void navigation.then((composed) => composed?.reviewForegroundWork()).catch(() => undefined);
   }, [navigation, visibility, shellState.context.navigating]);
 
   const handleShellAction = useCallback(

@@ -233,7 +233,9 @@ describe("processGroundBatch rejected and stale fixes", () => {
     const estimated = coasted.session as GroundMobileSession;
     expect(estimated.payload.progress?.distanceRemaining).toBe(0);
     expect(estimated.payload.coasting).toBe(true);
-    expect(estimated.lastAcceptedFix?.coasted).toBe(true);
+    // An estimate is never recorded as a measured position or a new anchor.
+    expect(estimated.lastAcceptedFix).toEqual(current.lastAcceptedFix);
+    expect(estimated.payload.coastingAnchor).toEqual(current.payload.coastingAnchor);
     expect(coasted.arrived).toBe(false);
     expect(estimated.status).toBe("active");
     expect(coasted.enqueue ?? []).not.toEqual(
@@ -572,14 +574,60 @@ describe("GroundNavigationProcessor", () => {
     const mutation = processor().processFixes(current, away, NOW + 20_000);
     const next = mutation.session as GroundMobileSession;
 
-    expect(next.payload.reroute.status).toBe("pending");
-    expect(mutation.effects).toContainEqual({
-      kind: "request-reroute",
-      requestId: expect.any(String),
+    expect(next.payload.reroute).toMatchObject({
+      status: "in-flight",
+      requestedAtMs: NOW + 20_000,
     });
     expect(mutation.effects).toContainEqual({
       kind: "request-reroute",
       requestId: next.payload.reroute.requestId,
+    });
+  });
+
+  it("sends no second request while one is open", () => {
+    const current = session();
+    current.payload.reroute = {
+      status: "in-flight",
+      requestId: "open",
+      requestedAtMs: NOW + 15_000,
+      attempts: 0,
+    };
+    const away = Array.from({ length: 20 }, (_, index) =>
+      fixAt(5, NOW + index * 1_000, { coords: [8.75, 50.2] }),
+    );
+
+    const mutation = processor().processFixes(current, away, NOW + 20_000);
+
+    expect((mutation.session as GroundMobileSession).payload.reroute.requestId).toBe("open");
+    expect(mutation.effects).not.toContainEqual(
+      expect.objectContaining({ kind: "request-reroute" }),
+    );
+  });
+
+  it("waits for the network instead of asking while offline", () => {
+    const current = session();
+    current.connectivity = "offline";
+    const away = Array.from({ length: 20 }, (_, index) =>
+      fixAt(5, NOW + index * 1_000, { coords: [8.75, 50.2] }),
+    );
+
+    const mutation = processor().processFixes(current, away, NOW + 20_000);
+
+    expect((mutation.session as GroundMobileSession).payload.reroute.status).toBe("unavailable");
+    expect(mutation.effects).not.toContainEqual(
+      expect.objectContaining({ kind: "request-reroute" }),
+    );
+  });
+
+  it("clears a failed reroute once the user is back on the route", () => {
+    const current = session();
+    current.payload.reroute = { status: "failed", attempts: 5, nextAttemptAtMs: NOW + 30_000 };
+
+    const mutation = processor().processFixes(current, [fixAt(20, NOW)], NOW);
+
+    expect((mutation.session as GroundMobileSession).payload.reroute).toEqual({
+      status: "idle",
+      attempts: 0,
     });
   });
 

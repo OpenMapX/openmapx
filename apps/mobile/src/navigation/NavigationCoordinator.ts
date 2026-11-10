@@ -1,4 +1,5 @@
 import {
+  type FixInput,
   isMobileSessionExpired,
   type MobileNavigationSession,
   mergeTransitRefresh,
@@ -15,8 +16,15 @@ import { type RawLocation, sanitiseFixes } from "../location/sanitiseFixes";
 import type { CommitResult, SessionEffect, SessionRepository } from "../storage/SessionRepository";
 import { locationReleaseAtMs } from "./arrival";
 import type { DiagnosticSink, EffectRunner } from "./effects";
+import { type CoastOrigin, canCoast } from "./ground/GroundCoastingScheduler";
 import type { RerouteOutcome } from "./ground/GroundRerouteService";
-import { onRerouteFailed, onRerouteSucceeded, type RerouteRuntime } from "./ground/rerouteState";
+import {
+  EMPTY_CHURN,
+  onRerouteFailed,
+  onRerouteSucceeded,
+  type RerouteRuntime,
+  recordSuccess,
+} from "./ground/rerouteState";
 import type { AnyNavigationProcessor, ProcessorMutation, ProcessorRegistry } from "./processor";
 import { SerialExecutor } from "./serialExecutor";
 import { profileForSession } from "./sessionProfile";
@@ -760,6 +768,35 @@ export class NavigationCoordinator {
     });
   }
 
+  /**
+   * A position estimated along the route while no real fix arrives. It takes
+   * the same queue, commit and effects as a real batch, and is dropped if the
+   * session has moved on from the real fix it was estimated from: a newer
+   * real fix, a new route, an end, or anything that rules coasting out.
+   */
+  async handleCoastedFix(fix: FixInput, origin: CoastOrigin): Promise<void> {
+    await this.queue.run(async () => {
+      try {
+        const now = this.deps.clock();
+        const session = await this.deps.repository.loadActive(now);
+        if (session?.kind !== "ground" || session.sessionId !== origin.sessionId) return;
+        if (isMobileSessionExpired(session, now)) return;
+        if (session.payload.coastingAnchor?.acceptedAtMs !== origin.anchorAtMs) return;
+        if (!canCoast(session, "active")) return;
+        const processor = this.deps.processors.get("ground");
+        if (!processor) return;
+        const committed = await this.commit(
+          session,
+          (processor as AnyNavigationProcessor).processFixes(session as never, [fix], now),
+          now,
+        );
+        if (committed.ok) await this.deps.effects.run(committed.effects);
+      } catch {
+        this.deps.diagnostics.record("typed.error", { scope: "coasted-fix" });
+      }
+    });
+  }
+
   private async processBatch(
     batch: { locations: readonly RawLocation[]; errorCode?: string },
     mayRetry: boolean,
@@ -944,7 +981,11 @@ export class NavigationCoordinator {
                 ...applied,
                 session: {
                   ...next,
-                  payload: { ...next.payload, reroute: onRerouteSucceeded() },
+                  payload: {
+                    ...next.payload,
+                    reroute: onRerouteSucceeded(),
+                    rerouteChurn: recordSuccess(session.payload.rerouteChurn ?? EMPTY_CHURN, now),
+                  },
                 },
               }
             : applied;

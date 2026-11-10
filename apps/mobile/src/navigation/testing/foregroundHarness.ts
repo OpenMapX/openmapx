@@ -648,7 +648,7 @@ export async function startForegroundHarness(
       // The shell reconciles on every visibility change, as App.tsx does.
       recoveryEvents.push(await navigation.recovery.reconcile(visible ? "active" : "background"));
       await settle();
-      await navigation.reviewKeepAwake();
+      await navigation.reviewForegroundWork();
     },
     session: () => repository.loadActive(phone.clock.now()),
     settle,

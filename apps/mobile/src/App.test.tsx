@@ -52,7 +52,7 @@ const mockNavigation = {
   dispatch: (message: unknown) => mockNavigation.coordinator.dispatch(message),
   capabilities: jest.fn(),
   activeSession: jest.fn(),
-  reviewKeepAwake: jest.fn(async () => undefined),
+  reviewForegroundWork: jest.fn(async () => undefined),
   recovery: mockRecoveryController,
   reportInvalidSend: jest.fn(),
   dispose: jest.fn(),
