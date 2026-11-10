@@ -1,4 +1,5 @@
 import { TRANSIT_UNDO_WINDOW_MS } from "@openmapx/core/navigation";
+import { ARRIVAL_CUE_GRACE_MS } from "./arrival";
 import {
   driveStraightRoute,
   type ForegroundHarness,
@@ -24,22 +25,48 @@ afterEach(async () => {
 });
 
 describe("arriving by road", () => {
+  const DESTINATION = STRAIGHT_ROUTE[STRAIGHT_ROUTE.length - 1];
+
   async function arrive() {
     harness = await startForegroundHarness();
     const trip = await harness.start(groundStartPackage());
     await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
+    expect((await harness.session())?.status).toBe("arrived");
     return trip;
   }
 
-  it("stops location at the arrival and keeps the outcome for the page", async () => {
+  it("announces the arrival before location stops, and stops it after the grace", async () => {
     await arrive();
-
-    expect((await harness.session())?.status).toBe("arrived");
-    expect(harness.phone.location.running).toBe(false);
-    expect(harness.phone.location.calls).toEqual(["start", "stop"]);
-    expect(harness.phone.speech.cueIds.at(-1)).toMatch(/arriv/);
+    const arrivalCue = harness.phone.speech.cueIds.at(-1) ?? "";
+    expect(arrivalCue).toMatch(/arriv/);
+    expect(harness.phone.location.running).toBe(true);
+    expect(harness.phone.location.profile?.distanceIntervalMeters).toBe(0);
     expect(harness.phone.keepAwake.held).toBe(false);
     expect(harness.navigatingReports.at(-1)).toBe(false);
+
+    await harness.elapse(ARRIVAL_CUE_GRACE_MS - 1_000);
+    expect(harness.phone.location.running).toBe(true);
+    await harness.elapse(2_000);
+
+    expect(harness.phone.location.running).toBe(false);
+    const { timeline } = harness.phone;
+    expect(timeline.indexOf(`speak:${arrivalCue}`)).toBeLessThan(
+      timeline.lastIndexOf("location:stop"),
+    );
+    expect((await harness.session())?.status).toBe("arrived");
+  });
+
+  it("releases location by batches alone when the app's timers are paused", async () => {
+    await arrive();
+    // A backgrounded Android app: no JavaScript timer fires, and the user stands
+    // still at the destination.
+    harness.phone.clock.timersPaused = true;
+
+    await harness.standStill(DESTINATION, ARRIVAL_CUE_GRACE_MS - 1_000);
+    expect(harness.phone.location.running).toBe(true);
+    await harness.standStill(DESTINATION, 10_000);
+
+    expect(harness.phone.location.running).toBe(false);
   });
 
   it("ends cleanly when the page closes the arrival card straight away", async () => {
@@ -50,8 +77,12 @@ describe("arriving by road", () => {
     expect(reply).toMatchObject({ type: "session.stopped", payload: { finalStatus: "arrived" } });
     expect(await harness.session()).toBeNull();
     expect(harness.phone.location.running).toBe(false);
-    expect(harness.phone.location.calls.filter((call) => call === "start")).toHaveLength(1);
+    const { calls } = harness.phone.location;
+    expect(calls.slice(calls.indexOf("stop"))).not.toContain("start");
     expect(harness.phone.keepAwake.held).toBe(false);
+
+    await harness.elapse(ARRIVAL_CUE_GRACE_MS * 2);
+    expect(harness.phone.location.running).toBe(false);
   });
 });
 
@@ -105,6 +136,19 @@ describe("arriving by transit", () => {
     expect((await harness.session())?.status).toBe("arrived");
   });
 
+  it("closes the undo window by batches alone when the app's timers are paused", async () => {
+    await alightAtTheEnd();
+    harness.phone.clock.timersPaused = true;
+    expect(harness.phone.location.profile?.distanceIntervalMeters).toBe(0);
+
+    await harness.standStill([8.64, 50.11], TRANSIT_UNDO_WINDOW_MS - 5_000);
+    expect(harness.phone.location.running).toBe(true);
+    await harness.standStill([8.64, 50.11], 15_000);
+
+    expect(harness.phone.location.running).toBe(false);
+    expect((await harness.session())?.status).toBe("arrived");
+  });
+
   it("resumes the trip on an undo inside the window, still tracking", async () => {
     const { sessionId } = await alightAtTheEnd();
     await harness.elapse(60_000);
@@ -116,6 +160,7 @@ describe("arriving by transit", () => {
     expect(session?.status).toBe("active");
     expect(session?.kind === "transit" && session.payload.tickState.phase).toBe("riding");
     expect(harness.phone.location.running).toBe(true);
+    expect(harness.phone.location.profile?.distanceIntervalMeters).toBeGreaterThan(0);
     expect(harness.phone.clock.pendingTimers).toBe(0);
 
     await harness.elapse(TRANSIT_UNDO_WINDOW_MS);

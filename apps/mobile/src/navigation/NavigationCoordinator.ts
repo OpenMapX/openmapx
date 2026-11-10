@@ -686,8 +686,9 @@ export class NavigationCoordinator {
       return;
     }
     if (session.status !== "active") {
-      // A batch can still arrive after arrival: while a transit undo window is
-      // open, or because the timer that closes it did not survive the process.
+      // After an arrival the stream delivers on time alone until it is released,
+      // so a batch is what closes the window wherever a timer cannot: a
+      // backgrounded Android app, or a process that did not survive it.
       const releaseAt = locationReleaseAtMs(session);
       if (releaseAt !== null && releaseAt <= now) {
         await this.deps.effects.run([{ kind: "stop-location" }, { kind: "reconcile-surface" }]);
@@ -916,11 +917,13 @@ export class NavigationCoordinator {
   // Releasing location after a transit arrival.
 
   /**
-   * Arranges for the location stream to stop when an arrived session's undo
-   * window closes. A stationary rider produces no batches, so the window cannot
-   * rely on one arriving. The stream keeps the process alive until then, which
-   * is what lets a timer fire; a process that dies first is covered by the next
-   * batch or by recovery when the app opens.
+   * Arranges for the location stream to stop when an arrived session's release
+   * window closes. The timer is the prompt path where JavaScript timers run: in
+   * the foreground, and on iOS while background location keeps the app running.
+   * Android pauses a backgrounded app's JavaScript timers even under a
+   * foreground service, so there the release comes from the next batch, which
+   * the time-only arrival profile guarantees. A process that dies first is
+   * covered the same way, or by recovery when the app opens.
    */
   private scheduleLocationRelease(session: MobileNavigationSession, now: number): void {
     const releaseAt = locationReleaseAtMs(session);

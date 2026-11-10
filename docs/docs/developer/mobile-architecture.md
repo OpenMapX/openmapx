@@ -85,13 +85,19 @@ only when the OS starts the task without the app.
   every field is an absolute value and progress commits about once a second.
   Muting cuts off a prompt that is already playing. The page sends the user's
   voice timing in the start package and sends a change made during the trip.
-- **Arrival.** The arrival commit keeps the session row for the page and stops
-  the location stream and its foreground service. A transit arrival keeps the
-  stream until the last rider confirmation can no longer be undone
-  (`navigation/arrival.ts`), so an undo resumes a tracked trip. A coordinator
-  timer stops it then, since a stationary rider produces no batches; a batch
-  that finds the window closed, for example after a process restart, stops it
-  too.
+- **Arrival.** The arrival commit keeps the session row for the page and
+  releases the location stream and its foreground service after a release
+  window (`navigation/arrival.ts`). Every arrival keeps the stream for
+  `ARRIVAL_CUE_GRACE_MS` (10 s), so iOS does not suspend a backgrounded app
+  before the arrival announcement plays. A transit arrival keeps it until the
+  last rider confirmation can no longer be undone, if that is later, so an undo
+  resumes a tracked trip. During the window the stream switches to the
+  `arrival-release` profile, which has no distance filter and delivers every
+  5 s while the user stands still. A coordinator timer releases the stream
+  where JavaScript timers run: in the foreground, and on iOS while background
+  location keeps the app running. Android pauses a backgrounded app's timers
+  even under a foreground service, so there the next batch after the window
+  releases it, as it does after a process restart.
 - **Keep-awake.** The composition holds the screen only while the app is
   visible, the location stream runs for an active session, and that session's
   keep-screen-on setting is on. It re-checks after every published change and

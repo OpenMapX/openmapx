@@ -16,7 +16,6 @@ import {
 import { createTranslator } from "@openmapx/i18n";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import type { SessionEffect } from "../../storage/SessionRepository";
-import { locationReleaseAtMs } from "../arrival";
 import type { ProcessorMutation } from "../processor";
 import { transitCueEffect, transitWalkCueEffect } from "./transitCue";
 import { transitProfileForTime } from "./transitSession";
@@ -213,17 +212,16 @@ export function processTransitBatch(input: ProcessTransitBatchInput): TransitBat
     },
   };
 
-  // An arrival with nothing left to undo releases the stream now; otherwise the
-  // coordinator releases it when the undo window closes.
-  const releaseAt = locationReleaseAtMs(next);
-  if (releaseAt !== null && releaseAt <= nowMs) {
-    effects.push({ kind: "stop-location" });
+  // The cadence follows the phase, and a change is a profile update on the one
+  // existing stream — never a second one. Between an arrival and its release
+  // the stream runs on a cadence that delivers while the rider stands still, so
+  // the batch that releases it is sure to come; an undo restores the phase's own.
+  if (next.status === "arrived") {
+    effects.push({ kind: "update-location-profile", profile: "arrival-release" });
   } else {
-    // The cadence follows the phase, and a change is a profile update on the one
-    // existing stream — never a second one.
     const profile = transitProfileForTime(next, nowMs);
     const previousProfile = transitProfileForTime(session, nowMs);
-    if (profile !== previousProfile) {
+    if (profile !== previousProfile || session.status === "arrived") {
       effects.push({ kind: "update-location-profile", profile });
     }
   }

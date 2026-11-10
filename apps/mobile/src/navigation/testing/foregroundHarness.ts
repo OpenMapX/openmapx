@@ -60,6 +60,11 @@ export const HARNESS_START_MS = 1_700_000_100_000;
 
 export class FakeClock {
   private timers: Array<{ dueAtMs: number; callback: () => void }> = [];
+  /**
+   * Whether JavaScript timers fire as time passes. Android pauses them while
+   * the app is in the background, even with a foreground service running.
+   */
+  timersPaused = false;
 
   constructor(private value: number = HARNESS_START_MS) {}
 
@@ -90,6 +95,7 @@ export class FakeClock {
   advance(ms: number): void {
     const target = this.value + ms;
     for (;;) {
+      if (this.timersPaused) break;
       const next = this.timers
         .filter((timer) => timer.dueAtMs <= target)
         .sort((a, b) => a.dueAtMs - b.dueAtMs)[0];
@@ -112,6 +118,9 @@ export class FakeLocation implements LocationDriver {
   readonly calls: Array<"start" | "stop"> = [];
   locale: "en" | "de" | null = null;
 
+  /** `timeline` is shared with other fakes, so a test can see what happened first. */
+  constructor(private readonly timeline: string[] = []) {}
+
   setLocale(locale: "en" | "de"): void {
     this.locale = locale;
   }
@@ -130,12 +139,14 @@ export class FakeLocation implements LocationDriver {
 
   async start(profile: LocationProfile): Promise<void> {
     this.calls.push("start");
+    this.timeline.push("location:start");
     this.running = true;
     this.profile = profile;
   }
 
   async stop(): Promise<void> {
     this.calls.push("stop");
+    this.timeline.push("location:stop");
     this.running = false;
     this.profile = null;
   }
@@ -167,8 +178,13 @@ export class FakeSpeech implements NativeNavigationAudio {
   result: SpeakResult = "spoken";
   available = true;
 
+  constructor(private readonly timeline: string[] = []) {}
+
   async speak(request: SpeakRequest): Promise<SpeakResult> {
-    if (this.result === "spoken") this.spoken.push(request);
+    if (this.result === "spoken") {
+      this.spoken.push(request);
+      this.timeline.push(`speak:${request.cueId}`);
+    }
     return this.result;
   }
 
@@ -304,6 +320,8 @@ export class FakePermissionScreens implements PermissionUi {
 }
 
 export interface FakePhone {
+  /** Location starts and stops and spoken cues, in the order they happened. */
+  timeline: string[];
   clock: FakeClock;
   location: FakeLocation;
   speech: FakeSpeech;
@@ -316,10 +334,12 @@ export interface FakePhone {
 }
 
 export function createFakePhone(): FakePhone {
+  const timeline: string[] = [];
   return {
+    timeline,
     clock: new FakeClock(),
-    location: new FakeLocation(),
-    speech: new FakeSpeech(),
+    location: new FakeLocation(timeline),
+    speech: new FakeSpeech(timeline),
     notifications: new FakeNotifications(),
     network: new FakeNetwork(),
     storage: new FakeStorage(),
@@ -366,6 +386,12 @@ export interface ForegroundHarness {
   settle(): Promise<void>;
   /** Lets `ms` of clock time pass with no location delivered, then settles. */
   elapse(ms: number): Promise<void>;
+  /**
+   * The user stands still at `lngLat` for `ms`. The stream delivers on its
+   * profile's time interval only if that profile has no distance filter, which
+   * is what a stationary device gets from either platform.
+   */
+  standStill(lngLat: readonly [number, number], ms: number): Promise<void>;
   /** The process dies and the app is started again on the same phone. */
   relaunch(): Promise<ForegroundHarness>;
   /** Disposes this composition and closes the phone's storage. */
@@ -487,6 +513,18 @@ export async function startForegroundHarness(
     async elapse(ms) {
       phone.clock.advance(ms);
       await settle();
+    },
+    async standStill(lngLat, ms) {
+      const until = phone.clock.now() + ms;
+      while (phone.clock.now() < until) {
+        const profile = phone.location.profile;
+        const step = Math.min(profile?.timeIntervalMs ?? 1_000, until - phone.clock.now());
+        phone.clock.advance(step);
+        await settle();
+        if (profile && profile.distanceIntervalMeters === 0 && phone.location.profile === profile) {
+          await harness.deliver([rawFix(phone.clock, lngLat, { speed: 0 })]);
+        }
+      }
     },
     async relaunch() {
       navigation.dispose();

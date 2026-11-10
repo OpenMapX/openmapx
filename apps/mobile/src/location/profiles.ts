@@ -20,6 +20,7 @@ export const LOCATION_PROFILE_KINDS = [
   "walking",
   "transit-cruise",
   "transit-near-event",
+  "arrival-release",
 ] as const;
 
 export type LocationProfileKind = (typeof LOCATION_PROFILE_KINDS)[number];
@@ -68,6 +69,19 @@ const PROFILES: Record<LocationProfileKind, LocationProfile> = {
     accuracy: "high",
     timeIntervalMs: 3_000,
     distanceIntervalMeters: 10,
+    activityType: "other-navigation",
+    pausesUpdatesAutomatically: false,
+  }),
+  // After arrival, until the stream is released. Every other profile filters by
+  // distance, so a user standing still at the destination gets no update, and
+  // on Android a backgrounded app's JavaScript timers do not fire either. With
+  // no distance filter the stream delivers on time alone, which guarantees the
+  // batch that releases it. Five seconds closes the window promptly once it is
+  // due without waking the device more than a few times.
+  "arrival-release": Object.freeze({
+    accuracy: "high",
+    timeIntervalMs: 5_000,
+    distanceIntervalMeters: 0,
     activityType: "other-navigation",
     pausesUpdatesAutomatically: false,
   }),

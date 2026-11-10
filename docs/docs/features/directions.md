@@ -317,7 +317,8 @@ sleep while you drive. If you leave the route, OpenMapX **reroutes
 automatically** from your current position; when a reroute can't be computed it
 shows a notice. A recenter control snaps the
 camera back to follow mode after you pan away to look ahead. In the installed
-app, location tracking and the screen wake lock stop when you arrive.
+app, the screen wake lock is released when you arrive, and location tracking
+stops a few seconds later, once the arrival announcement has played.
 
 A navigation menu keeps route overview, satellite view, contextual overlays,
 directions, settings, and search-along-route within reach. Voice selection,
