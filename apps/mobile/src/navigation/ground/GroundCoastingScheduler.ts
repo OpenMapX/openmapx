@@ -6,6 +6,7 @@ import {
   type FixInput,
   type GroundMobileSession,
   mayCoast,
+  routeFingerprint,
 } from "@openmapx/core/navigation";
 
 /**
@@ -94,6 +95,8 @@ interface Coast {
 export class GroundCoastingScheduler {
   private cancelTick: (() => void) | null = null;
   private coast: Coast | null = null;
+  /** The followed route's cumulative distances, kept while its session and geometry stay. */
+  private route: { sessionId: string; fingerprint: string; cumulative: number[] } | null = null;
 
   constructor(private readonly ports: SchedulerPorts) {}
 
@@ -123,7 +126,7 @@ export class GroundCoastingScheduler {
       sessionId: session.sessionId,
       anchor,
       geometry,
-      cumulative: cumulativeDistances(geometry),
+      cumulative: this.cumulativeFor(session.sessionId, geometry),
     };
     this.schedule(anchor.atMs + COAST_START_DELAY_MS - this.ports.now());
   }
@@ -132,6 +135,21 @@ export class GroundCoastingScheduler {
     this.cancelTick?.();
     this.cancelTick = null;
     this.coast = null;
+  }
+
+  /**
+   * Every real fix reanchors the coast, about once a second, while the route
+   * changes only with a replacement; its distances are worked out once per
+   * route rather than once per fix.
+   */
+  private cumulativeFor(sessionId: string, geometry: Coast["geometry"]): number[] {
+    const fingerprint = routeFingerprint(geometry);
+    if (this.route?.sessionId === sessionId && this.route.fingerprint === fingerprint) {
+      return this.route.cumulative;
+    }
+    const cumulative = cumulativeDistances(geometry);
+    this.route = { sessionId, fingerprint, cumulative };
+    return cumulative;
   }
 
   private schedule(delayMs: number): void {

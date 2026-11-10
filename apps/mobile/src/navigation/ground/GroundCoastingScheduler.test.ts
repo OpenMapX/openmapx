@@ -1,5 +1,6 @@
 import {
   COAST_START_DELAY_MS,
+  cumulativeDistances,
   type FixInput,
   type GroundMobileSession,
   MAX_COAST_MS,
@@ -12,6 +13,11 @@ import {
   canCoast,
   GroundCoastingScheduler,
 } from "./GroundCoastingScheduler";
+
+jest.mock("@openmapx/core/navigation", () => {
+  const actual = jest.requireActual("@openmapx/core/navigation");
+  return { ...actual, cumulativeDistances: jest.fn(actual.cumulativeDistances) };
+});
 
 const NOW = 1_700_000_100_000;
 
@@ -235,6 +241,29 @@ describe("GroundCoastingScheduler", () => {
 
     // The fresh anchor restarts the delay, so nothing is dispatched yet.
     expect(dispatched).toHaveLength(before);
+  });
+
+  it("works out the route's distances once per route, not once per real fix", () => {
+    const { scheduler } = harness();
+    const measured = jest.mocked(cumulativeDistances);
+    measured.mockClear();
+    for (let fix = 0; fix < 5; fix += 1) {
+      const next = session();
+      next.payload.coastingAnchor = {
+        acceptedAtMs: NOW + fix * 1_000,
+        alongMeters: 500 + fix * 20,
+        speedMps: 20,
+      };
+      scheduler.sync(next, "active");
+    }
+    expect(measured).toHaveBeenCalledTimes(1);
+
+    const replaced = session();
+    replaced.payload.startPackage.route.geometry = GEOMETRY.slice(0, 150) as never;
+    replaced.payload.coastingAnchor = { acceptedAtMs: NOW + 9_000, alongMeters: 0, speedMps: 20 };
+    scheduler.sync(replaced, "active");
+
+    expect(measured).toHaveBeenCalledTimes(2);
   });
 
   it("keeps its coast when a coasted commit leaves the anchor unchanged", () => {
