@@ -45,7 +45,7 @@ vi.mock("../../db/index.js", () => ({
 }));
 vi.mock("../../db/schema.js", () => ({
   savedList: { id: "id", userId: "userId", name: "name" },
-  savedPlace: { id: "id", listId: "listId", sortOrder: "sortOrder" },
+  savedPlace: { id: "place.id", listId: "listId", sortOrder: "sortOrder", createdAt: "createdAt" },
   labeledPlace: {},
 }));
 
@@ -77,6 +77,15 @@ describe("GET /api/saved/lists/:id/export", () => {
     expect(fc.type).toBe("FeatureCollection");
     expect(fc.features[0].properties.fieldContributors).toEqual(placeRows[0].fieldContributors);
     expect(fc.features[0].geometry.coordinates).toEqual([13.3777, 52.5163]);
+  });
+
+  it("reads places by position, then creation time, then id so equal positions export in one order", async () => {
+    primeListAndPlaces();
+    await app.inject({ method: "GET", url: "/api/saved/lists/list-1/export" });
+    const placeQuery = mockSelect.mock.results[1]?.value as {
+      orderBy: { mock: { calls: unknown[][] } };
+    };
+    expect(placeQuery.orderBy.mock.calls.flat()).toEqual(["sortOrder", "createdAt", "place.id"]);
   });
 
   it("exports GPX with the right content type and filename", async () => {

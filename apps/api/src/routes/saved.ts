@@ -28,6 +28,12 @@ import { getUserId, requireAuthHook } from "../utils/require-auth";
 import { declareRouteAuth } from "../utils/route-auth";
 import { registerSavedImportRoute, registerSavedRoute } from "./saved-contract";
 
+// Positions are not unique, and a row can be inserted at an existing one. Ties
+// fall back to creation time and then the primary key, so a listing keeps one
+// order from request to request.
+const LIST_ORDER = [savedList.sortOrder, savedList.createdAt, savedList.id] as const;
+const PLACE_ORDER = [savedPlace.sortOrder, savedPlace.createdAt, savedPlace.id] as const;
+
 const DEFAULT_LISTS: { name: string; icon: string; sortOrder: number }[] = [
   { name: "$favorites", icon: "heart", sortOrder: 0 },
   { name: "$wantToGo", icon: "flag", sortOrder: 1 },
@@ -119,7 +125,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
         })
         .from(savedList)
         .where(eq(savedList.userId, userId))
-        .orderBy(savedList.sortOrder);
+        .orderBy(...LIST_ORDER);
 
     let lists = await readLists();
 
@@ -407,7 +413,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
       .select()
       .from(savedPlace)
       .where(eq(savedPlace.listId, id))
-      .orderBy(savedPlace.sortOrder);
+      .orderBy(...PLACE_ORDER);
 
     return { places };
   });
@@ -431,7 +437,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
       .select()
       .from(savedPlace)
       .where(eq(savedPlace.listId, id))
-      .orderBy(savedPlace.sortOrder);
+      .orderBy(...PLACE_ORDER);
 
     const places: ExportPlace[] = rows.map((p) => ({
       fieldContributors: p.fieldContributors ?? undefined,
