@@ -257,6 +257,35 @@ describe.skipIf(!manifestsPresent)(
       expect(result.composeYaml).not.toContain("./data/motis/gtfs");
     });
 
+    it("pre-creates the data directories a service mounts read-only", async () => {
+      const registry = new ServiceRegistry({ rootDir: repoRoot });
+      await registry.load();
+
+      const services = registry
+        .list()
+        .filter((service) =>
+          ["data-manager", "app-api", "transitous-runner"].includes(service.manifest.id),
+        );
+      const result = renderCompose(services, {
+        domain: "example.com",
+        allServices: registry.list(),
+        composeOutDir: "/repo/infra/docker",
+      });
+
+      // The data-manager writes these directories, so Docker must not create
+      // them as root when the stack first starts.
+      expect(result.composeYaml).toContain("./data/motis/live:/var/lib/openmapx/motis-live:ro");
+      expect(result.composeYaml).toContain(
+        "./data/.transitous-catalog:/data/.transitous-catalog:ro",
+      );
+      expect(result.writableBindDirs).toEqual(
+        expect.arrayContaining([
+          "/repo/infra/docker/data/motis/live",
+          "/repo/infra/docker/data/.transitous-catalog",
+        ]),
+      );
+    });
+
     it("renders Pelias with produced placeholder and PIP data plus explicit runtime dependencies", async () => {
       const registry = new ServiceRegistry({ rootDir: repoRoot });
       await registry.load();

@@ -96,7 +96,14 @@ run it without other full suites running; the command prints a warning.
 Database, mobile, production builds and native-device checks remain separate;
 choose those when the changed behavior requires them. To confirm that a built
 API image starts, run `scripts/ci/api-image-boot-check.sh <image>`, which CI also
-runs on pull requests that rebuild the image.
+runs on pull requests that rebuild the image. To follow the documented fresh
+install against images built from your checkout, run
+`scripts/ci/install-smoke.sh` on a Linux host with at least 8 GiB of memory for
+Docker. It builds the five application images, starts the default stack and
+removes the Compose project `docker` and the ignored files under `infra/docker`
+afterwards, so it refuses to run beside an existing deployment. CI runs it on
+main, nightly and on pull requests that touch the CLI, service rendering,
+`services/`, `infra/docker`, the operations agent or a Dockerfile.
 
 `pnpm verify:full` does not cover the repository scripts, the integration test
 files or `packages/mobility-core`, which still have type errors.

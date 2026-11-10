@@ -56,7 +56,7 @@ function writeOsm(): void {
 }
 
 /** A data-manager that answers `/status` and records each `/link` request. */
-async function fakeDataManager(): Promise<{
+async function fakeDataManager(options: { linkRefusal?: string } = {}): Promise<{
   url: string;
   requests: Array<{ plan: unknown; prune: unknown }>;
   server: Server;
@@ -74,6 +74,11 @@ async function fakeDataManager(): Promise<{
       req.on("end", () => {
         const body = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
         requests.push({ plan: body.plan, prune: body.prune });
+        if (options.linkRefusal) {
+          res.writeHead(503, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: options.linkRefusal }));
+          return;
+        }
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ ok: true, linked: 7, skipped: 2, pruned: 1 }));
       });
@@ -136,6 +141,55 @@ describe("applyGeneratedHardlinks", () => {
       expect(dataManager.requests).toEqual([{ plan: [OSM_FOR_VALHALLA], prune: true }]);
       // data-manager links; the CLI made nothing in the data directory.
       expect(existsSync(join(dataRoot(), "valhalla"))).toBe(false);
+    } finally {
+      await new Promise<void>((resolve) => dataManager.server.close(() => resolve()));
+    }
+  });
+
+  it.each([
+    ["an empty plan", []],
+    ["a plan whose producers hold no data", [OSM_FOR_VALHALLA]],
+  ])("does not call /link for %s, even when data-manager is reachable", async (_name, plan) => {
+    writePlan(plan);
+    const dataManager = await fakeDataManager();
+    try {
+      const result = await applyGeneratedHardlinks({
+        rootDir: tmp,
+        requirePlan: true,
+        prune: true,
+        dataManagerUrl: dataManager.url,
+      });
+
+      expect(result).toMatchObject({
+        applied: false,
+        entries: plan.length,
+        linked: 0,
+        skipped: 0,
+        pruned: 0,
+        via: "none",
+      });
+      expect(dataManager.requests).toEqual([]);
+    } finally {
+      await new Promise<void>((resolve) => dataManager.server.close(() => resolve()));
+    }
+  });
+
+  it("still reaches /link for a plan with work and surfaces the route's error", async () => {
+    writeOsm();
+    writePlan([OSM_FOR_VALHALLA]);
+    const dataManager = await fakeDataManager({
+      linkRefusal: "A signed generation-hardlinks execution is required",
+    });
+    try {
+      await expect(
+        applyGeneratedHardlinks({
+          rootDir: tmp,
+          requirePlan: true,
+          prune: true,
+          dataManagerUrl: dataManager.url,
+        }),
+      ).rejects.toThrow(/signed generation-hardlinks execution is required/);
+      expect(dataManager.requests).toEqual([{ plan: [OSM_FOR_VALHALLA], prune: true }]);
     } finally {
       await new Promise<void>((resolve) => dataManager.server.close(() => resolve()));
     }

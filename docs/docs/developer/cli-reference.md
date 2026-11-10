@@ -105,6 +105,12 @@ For the difference between `services start` (a subset) and `compose up` (the
 whole stack), and how `--services` overrides the persisted selection for a single
 render, see [Rendering the stack](../install/managing-services.md#rendering-the-stack).
 
+`compose up` applies hardlinks through data-manager's `/link` route, which
+refuses with `A signed generation-hardlinks execution is required` when the plan
+has links to make or prune. With nothing prepared it succeeds. When engines have
+built data, use `services start <ids>`, which applies the plan through a signed
+execution.
+
 ## `data`
 
 Download source data, build prepared artifacts, and keep consumer directories
@@ -140,6 +146,11 @@ hardlinks, authenticated feeds — lives in
 | `data search-index status`         | Show the active index region, health/staleness, epoch, row counts, fingerprints, timestamps, and last build error.                                                                                                                                                               |
 | `data notable-places build`        | Fetch the places many Wikipedias cover from Wikidata and publish them atomically for search ranking.                                                                                                                                                                             |
 | `data notable-places status`       | Show the published notable-places snapshot: counts, sitelink threshold, source endpoint, epoch, and last error.                                                                                                                                                                  |
+
+`data link`, `data build` and `services build` use the same `/link` route as
+`compose up` and refuse the same way when the plan has links to make or prune;
+a build's artifacts are complete by then. `services start` and `services update`
+apply the plan through a signed execution.
 
 `data download osm`, `data build`, `data convert`, and `data update` fall back to
 `$OPENMAPX_REGION` when you omit the region; without either, the region-bearing

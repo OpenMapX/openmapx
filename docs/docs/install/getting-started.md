@@ -186,6 +186,17 @@ This renders and applies producer-to-consumer hardlinks under
 consumer directories must share a filesystem; derived indexes still occupy
 additional disk space.
 
+:::caution[`data link` with prepared data]
+`compose up` and `data link` still go through a data-manager route that refuses
+with `A signed generation-hardlinks execution is required` when the hardlink
+plan has links to make or prune. With no prepared data they have nothing to link
+and succeed. Once engines have built data, apply the plan with
+`pnpm openmapx services start <ids>`, which applies it through a signed
+execution. `services build` and `data build` link through the same route, so
+with a nonempty plan they report the refusal after the build has finished;
+start the consumers with `services start` instead of `data link`.
+:::
+
 ## 9. Bring up the full stack
 
 ```bash
@@ -194,6 +205,8 @@ pnpm openmapx services status
 ```
 
 This starts all services in the current selection, retaining the release overlay.
+With prepared data from steps 6 and 7, it stops on the `/link` refusal described
+in step 8; start the stack with `services start` and the service ids instead.
 If you added a first-import engine such as Nominatim or Valhalla, expect a long
 preparation period and monitor its logs. Start heavy engines individually if
 concurrent imports would exceed the host's capacity.

@@ -145,6 +145,17 @@ export async function applyGeneratedHardlinks(
 
   const baseUrl = opts.dataManagerUrl ?? dataManagerUrl();
   const timeout = opts.reachabilityTimeoutMs ?? 1500;
+  if (!hardlinkPlanHasWork(plan, { rootDir: dataRoot })) {
+    return {
+      applied: false,
+      entries: plan.length,
+      planPath,
+      linked: 0,
+      skipped: 0,
+      pruned: 0,
+      via: "none",
+    };
+  }
   if (!(await dataManagerReachable(baseUrl, timeout))) {
     // Before any data exists, typically the first `compose up`, there is
     // nothing to link or prune.

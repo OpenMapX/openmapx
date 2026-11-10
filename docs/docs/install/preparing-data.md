@@ -269,6 +269,14 @@ successful inventory.
 pnpm openmapx data link
 ```
 
+`data link` goes through a data-manager route that refuses with
+`A signed generation-hardlinks execution is required` when the plan has links to
+make or prune, as do the link steps of `services build` and `data build`. Only
+`services start` and `services update` apply a nonempty plan through a signed
+execution, so start consumers with them after preparing data; the same applies
+to the `data link` that follows `data convert overpass` above. With nothing
+prepared, `data link` has nothing to do and succeeds.
+
 Correct existing links are kept; stale links are replaced and removed mappings
 are pruned. Producer and consumer paths must be on the same filesystem. A
 hardlink shares input bytes, while every derived graph or index adds storage.

@@ -44,6 +44,10 @@ RUN pnpm install --frozen-lockfile
 FROM base AS builder
 WORKDIR /app
 
+# The build needs more heap than Node's default limit allows. This applies to
+# the builder stage only; the runtime image keeps Node's own default.
+ENV NODE_OPTIONS=--max-old-space-size=5632
+
 COPY --from=deps /app ./
 
 COPY --exclude=*/package.json packages/ packages/
