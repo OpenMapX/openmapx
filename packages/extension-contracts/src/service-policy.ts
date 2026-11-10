@@ -24,6 +24,11 @@ export const COMMUNITY_SAFE_CAPS = new Set([
   "SETUID",
 ]);
 
+// A literal memory size the container runtime reads as a limit: a positive
+// number with a k, m or g unit. A Compose variable reference is not accepted,
+// because a community value is never interpolated from the host environment.
+const COMMUNITY_MEMORY_LIMIT_REGEX = /^[1-9][0-9]*(\.[0-9]+)?[kmg]b?$/i;
+
 /**
  * Static, single-manifest sandbox rules. Returns error strings; an empty array
  * means the manifest is acceptable at its provenance level. Called by
@@ -89,6 +94,13 @@ export function checkManifestSandbox(m: ServiceManifest, provenance: ManifestPro
       )
     )
       errors.push("Reserved platform resource settings are not allowed for community services");
+    // A single host runs every service, so a community container without a
+    // memory ceiling can take the others down with it.
+    if (!COMMUNITY_MEMORY_LIMIT_REGEX.test(m.container.memory ?? "")) {
+      errors.push(
+        'community_memory_limit_required: container.memory must be a literal limit such as "512m" or "1g" for community services',
+      );
+    }
     for (const cap of m.container.capAdd ?? []) {
       if (!COMMUNITY_SAFE_CAPS.has(cap)) {
         errors.push(`container.capAdd: '${cap}' is not allowed for community services`);

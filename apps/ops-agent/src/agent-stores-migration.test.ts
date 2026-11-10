@@ -55,6 +55,7 @@ function serviceManifest(version: string) {
       image: "registry.example.test/community-live",
       tag: version,
       digest: `sha256:${"a".repeat(64)}`,
+      memory: "256m",
     },
   });
 }

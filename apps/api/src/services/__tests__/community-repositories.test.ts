@@ -46,6 +46,7 @@ function manifest(id: string, overrides: Record<string, unknown> = {}) {
       image: `registry.example.test/${id}`,
       tag: "1.0.0",
       digest: `sha256:${"c".repeat(64)}`,
+      memory: "256m",
     },
     ...overrides,
   };

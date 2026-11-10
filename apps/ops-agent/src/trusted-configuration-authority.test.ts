@@ -62,6 +62,7 @@ function serviceManifest(id = "community-live"): string {
       image: `registry.example.test/${id}`,
       tag: "1.0.0",
       digest: `sha256:${"a".repeat(64)}`,
+      memory: "256m",
     },
     configSchema: { type: "object", properties: { region: { enum: ["eu"] } } },
   });

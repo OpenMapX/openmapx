@@ -104,7 +104,7 @@ describe("validateServiceManifest — capability warnings", () => {
     name: "My Service",
     version: "1.0.0",
     quality: "community" as const,
-    container: { image: "owner/image", tag: "latest", expose: [80] },
+    container: { image: "owner/image", tag: "latest", expose: [80], memory: "256m" },
   };
 
   // A community-tier fixture — validate it the way the registry validates a

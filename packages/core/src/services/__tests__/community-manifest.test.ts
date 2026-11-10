@@ -16,6 +16,7 @@ function manifest(overrides: Record<string, unknown> = {}) {
       image: "registry.example.test/maps-tiles",
       tag: "1.0.0",
       digest: `sha256:${"a".repeat(64)}`,
+      memory: "256m",
     },
     ...overrides,
   };
@@ -30,7 +31,7 @@ describe("communityServiceManifestProblems", () => {
     ["a built-in quality tier", { quality: "built-in" }, /built-in/],
     [
       "an image without a digest",
-      { container: { image: "registry.example.test/x", tag: "latest" } },
+      { container: { image: "registry.example.test/x", tag: "latest", memory: "256m" } },
       /must pin its container image by sha256 digest/,
     ],
     [
@@ -45,6 +46,7 @@ describe("communityServiceManifestProblems", () => {
           image: "registry.example.test/x",
           tag: "1",
           digest: `sha256:${"a".repeat(64)}`,
+          memory: "256m",
           privileged: true,
         },
       },

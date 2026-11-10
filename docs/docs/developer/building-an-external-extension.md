@@ -487,6 +487,7 @@ A service that creates and migrates its own Postgres schema declares it in
     "image": "ghcr.io/your-org/conditions-ingest",
     "tag": "1.0.0",
     "expose": [4000],
+    "memory": "512m",
     "healthcheck": {
       "type": "http",
       "path": "/health",
@@ -510,6 +511,24 @@ above is not a deployable artifact.
 `ownsSchema` must be a valid lowercase Postgres identifier
 (`[a-z_][a-z0-9_]*`). The platform applies no migration and grants nothing,
 it is entirely your service's responsibility.
+
+### Set resource limits
+
+The platform runs every service on one host, so a community service declares
+the most memory it may use. `container.memory` is required and must be a literal
+size with a `k`, `m` or `g` unit, such as `"512m"` or `"1g"`; validation rejects
+a missing value and a Compose reference such as `${MEMORY:-512m}`, which the
+renderer would write as plain text. The scaffold starts at `"256m"`. Set it above
+your service's real peak, because Docker kills a container that exceeds it.
+
+The renderer also gives every community container a limit of 512 processes and
+threads (`pids_limit`) and `no-new-privileges`, which stops a process from gaining
+privileges through a setuid binary or file capability. Neither has a manifest
+field. An image that starts as root and drops to its own user, for example with
+`gosu`, keeps working; one that relies on `sudo` or a setuid helper does not, so
+run it as an unprivileged user from the start. First-party services are not
+affected. See the [service manifest](./service-manifest.md#quality-tiers) for
+the full community sandbox.
 
 ### Migrate idempotently on boot
 

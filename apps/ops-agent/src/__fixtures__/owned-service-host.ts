@@ -238,6 +238,7 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
             image: "example/community-live",
             tag: "1",
             digest: `sha256:${"b".repeat(64)}`,
+            memory: "256m",
           },
         }),
         { mode: 0o644 },

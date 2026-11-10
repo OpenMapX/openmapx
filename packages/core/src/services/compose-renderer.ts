@@ -473,6 +473,8 @@ export interface ComposeServiceSnippet {
   shm_size?: string;
   cap_add?: string[];
   cap_drop?: string[];
+  security_opt?: string[];
+  pids_limit?: number;
   devices?: string[];
   privileged?: boolean;
   network_mode?: string;
@@ -494,6 +496,13 @@ export interface ComposeServiceSnippet {
     };
   };
 }
+
+/**
+ * The most processes and threads one community container may hold. It is far
+ * above what a small service needs and well below what a fork loop takes to
+ * starve the host.
+ */
+const COMMUNITY_PIDS_LIMIT = 512;
 
 export function escapeComposeInterpolation(value: string): string {
   return value.replaceAll("$", () => "$$");
@@ -919,7 +928,13 @@ export function renderServiceSnippet(
     snippet.deploy = { resources };
   }
 
-  if (!service.isBuiltIn) deepEscapeCommunitySnippet(snippet);
+  if (!service.isBuiltIn) {
+    // The memory ceiling comes from the manifest, which the sandbox check
+    // requires; the process ceiling and privilege lock are the platform's own.
+    snippet.pids_limit = COMMUNITY_PIDS_LIMIT;
+    snippet.security_opt = ["no-new-privileges:true"];
+    deepEscapeCommunitySnippet(snippet);
+  }
   writeServiceConfigEnvReferences(snippet, m, ctx.serviceConfigEnvKeys?.get(m.id) ?? []);
 
   return snippet;

@@ -239,7 +239,12 @@ state instead. They may not use `networkMode: "host"`,
 `privileged: true`, host device pass-through, escape-class Linux capabilities
 (`SYS_ADMIN`, `SYS_PTRACE`, `NET_ADMIN`, and similar), deployment `envFile`, or
 Compose-variable bind paths. Network aliases may not collide with another
-service id or alias. Operator configuration belongs in
+service id or alias. Every community service must declare a literal memory limit
+in `container.memory` (for example `"512m"`); installation and updates reject a
+service without one with `community_memory_limit_required`. The platform also
+limits each community container to 512 processes and threads and starts it with
+`no-new-privileges`, so a runaway extension cannot take the host down or gain
+privileges through a setuid binary. Operator configuration belongs in
 `configSchema`; secret fields are delivered as `/run/secrets/<KEY>` with
 `<KEY>_FILE` set. A community Git URL must also be `https://` on a short
 allowlist of public hosts (`github.com`, `gitlab.com`, `codeberg.org`,

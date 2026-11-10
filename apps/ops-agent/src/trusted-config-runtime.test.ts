@@ -564,6 +564,7 @@ describe("ops-agent trusted configuration runtime", () => {
     community.isBuiltIn = false;
     community.manifest.quality = "community";
     community.manifest.container.digest = `sha256:${"a".repeat(64)}`;
+    community.manifest.container.memory = "256m";
     let authority = {
       revisionId: "authority-initial",
       services: [service("alpha")],

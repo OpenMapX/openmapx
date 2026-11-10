@@ -54,7 +54,12 @@ describe.skipIf(!manifestsPresent)(
             name: id,
             version: "1.0.0",
             quality: "community-verified",
-            container: { image: `ghcr.io/openconditions/${id}`, tag: "latest", expose: [4100] },
+            container: {
+              image: `ghcr.io/openconditions/${id}`,
+              tag: "latest",
+              expose: [4100],
+              memory: "256m",
+            },
           },
           directory: `/community/${id}`,
           isBuiltIn: false,

@@ -25,7 +25,7 @@ function manifest(id: string, image = `registry.example.test/${id}`): string {
     name: id,
     version: "1.0.0",
     quality: "community",
-    container: { image, tag: "1", digest: `sha256:${"a".repeat(64)}` },
+    container: { image, tag: "1", digest: `sha256:${"a".repeat(64)}`, memory: "256m" },
   });
 }
 

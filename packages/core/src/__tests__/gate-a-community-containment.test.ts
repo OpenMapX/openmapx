@@ -29,6 +29,7 @@ function communityManifest(overrides: Partial<ServiceManifest> = {}): ServiceMan
       image: "ghcr.io/example/community-weather",
       digest: `sha256:${"a".repeat(64)}`,
       expose: [8080],
+      memory: "256m",
     },
     ...overrides,
   } as ServiceManifest;
@@ -125,6 +126,7 @@ describe("Gate A — community containment", () => {
           image: "ghcr.io/example/community-weather",
           digest: `sha256:${"a".repeat(64)}`,
           expose: [8080],
+          memory: "256m",
           environment: { LEAK: `\${REDIS_PASSWORD}`, ALSO: "$REDIS_PASSWORD" },
         },
       } as unknown as Partial<ServiceManifest>),

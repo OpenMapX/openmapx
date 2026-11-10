@@ -166,7 +166,7 @@ service keys; the renderer copies them through.
 | `workingDir`      | string                 | Working directory inside the container.                                                                                                                                                                                                                                                                                                                                                            |
 | `user`            | string                 | Run-as user, e.g. `"${UID:?…}:${GID:?…}"` for the deployment's user, which a host render writes into `.env`.                                                                                                                                                                                                                                                                                       |
 | `shmSize`         | string                 | Shared-memory size, e.g. `"1g"`.                                                                                                                                                                                                                                                                                                                                                                   |
-| `memory`          | string                 | Memory limit, e.g. `"16g"`, `"512m"`.                                                                                                                                                                                                                                                                                                                                                              |
+| `memory`          | string                 | Memory limit, e.g. `"16g"`, `"512m"`. **Required for third-party services**, as a literal size with a `k`, `m` or `g` unit: a Compose reference such as `${MEMORY:-512m}` is rejected, because community values are never interpolated.                                                                                                                                                            |
 | `restart`         | enum                   | `no`, `on-failure`, `always`, or `unless-stopped`.                                                                                                                                                                                                                                                                                                                                                 |
 | `stopGracePeriod` | string                 | How long Docker waits for the container to stop before killing it (`stop_grace_period`), as a duration such as `30s`, `5m` or `1m30s`. Docker's default is 10 seconds; a service that must flush state on shutdown (a database writing its buffers at its shutdown checkpoint) needs longer, or every restart is a crash it recovers from.                                                         |
 | `capAdd`          | string[]               | Linux capabilities to add, from a fixed allowlist; unknown strings are rejected. First-party services may request the full allowlist (`NET_ADMIN`, `SYS_ADMIN`, `IPC_LOCK`, …). Third-party services are held to a stricter safe subset: escape-class caps (`SYS_ADMIN`, `SYS_PTRACE`, `SYS_TIME`, `SYS_CHROOT`, `NET_ADMIN`, `MKNOD`, `DAC_READ_SEARCH`, `IPC_LOCK`, `AUDIT_WRITE`) are rejected. |
@@ -718,10 +718,10 @@ manifest must declare `quality: "built-in"`, and a third-party manifest may not
 declare it. A manifest cannot grant itself first-party privileges by changing
 this field.
 
-| Origin                                                                                  | Sandbox                                                                                                                                                                                                                                                                                                                                                                   |
-| :-------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| First-party (`services/`, `quality: "built-in"`)                                        | May use first-party-only host privileges and special sources such as `@docker-socket`, `@service:`, `@infra:`, host networking, privileged mode, and narrowly reviewed `communityNetworkAccess`.                                                                                                                                                                          |
-| Third-party (agent's community store, `quality: "community"` or `"community-verified"`) | Identical sandbox for both labels: one isolated per-service network; no `communityNetworkAccess`, bind mounts of any kind, host networking, privileged mode, devices, escape-class capabilities, deployment `envFile`, Compose-variable bind paths, or Traefik proxy routes; named volumes must use `openmapx-<serviceId>-<suffix>`, and network aliases may not collide. |
+| Origin                                                                                  | Sandbox                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| :-------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| First-party (`services/`, `quality: "built-in"`)                                        | May use first-party-only host privileges and special sources such as `@docker-socket`, `@service:`, `@infra:`, host networking, privileged mode, and narrowly reviewed `communityNetworkAccess`.                                                                                                                                                                                                                                                                                           |
+| Third-party (agent's community store, `quality: "community"` or `"community-verified"`) | Identical sandbox for both labels: one isolated per-service network; no `communityNetworkAccess`, bind mounts of any kind, host networking, privileged mode, devices, escape-class capabilities, deployment `envFile`, Compose-variable bind paths, or Traefik proxy routes; named volumes must use `openmapx-<serviceId>-<suffix>`, and network aliases may not collide. Every community container also has a required memory limit, a process limit and `no-new-privileges` (see below). |
 
 The third-party rules apply at validation and again at render time. Community
 services must migrate persistent state to a namespaced named volume; operator
@@ -729,6 +729,22 @@ configuration should use `configSchema`, and secret fields are delivered as
 `/run/secrets/<KEY>` with `<KEY>_FILE` set rather than by exposing
 `infra/docker/.env`. The renderer also checks cross-service volume and
 network-alias collisions.
+
+Every community container runs with resource limits and without the ability to
+gain privileges, so one extension cannot starve the host that runs every other
+service:
+
+- `container.memory` is required and must be a literal size such as `"512m"` or
+  `"1g"`. The renderer writes it as the container's memory limit.
+- The renderer sets `pids_limit: 512`, which caps the processes and threads one
+  container may hold. The value is the platform's and has no manifest field.
+- The renderer sets `security_opt: ["no-new-privileges:true"]`, so a process
+  cannot gain privileges through a setuid binary or file capability. An image
+  that starts as root and drops to its own user, for example with `gosu`, still
+  works; an image that relies on `sudo` or a setuid helper does not.
+
+First-party services are unaffected: they keep whatever limits their manifests
+declare, and the renderer adds neither field to them.
 
 Community services retain namespaced named-volume persistence and outbound
 internet access through their isolated bridge network. They cannot reach the
@@ -755,6 +771,7 @@ The schema enforces, among other rules:
 - `communityNetworkAccess` is first-party-only and names community service ids (uninstalled or disabled targets are skipped); community services never join `openmapx`, including when a manifest is handed directly to the renderer.
 - `privateNetworks` and `platformNetwork` are first-party-only and cannot be combined with host networking. Private network names are DNS-label-shaped; `platformNetwork: false` requires at least one private network.
 - `exposure.hostPorts[].bindAddress` is an IPv4 or IPv6 address (no hostnames, ports or Compose references). Community ports without one bind to `127.0.0.1`.
+- Third-party services must declare `container.memory` as a literal size (`k`, `m` or `g` unit); a Compose reference is rejected.
 - Third-party services may not use bind mounts, host networking, privileged mode, host device pass-through, escape-class capabilities, deployment `envFile`, a `logging` block, a writable `consumes` mount (`readOnly: false`), Compose-variable bind paths, platform proxy routes, or deployment-variable interpolation anywhere in their rendered Compose entry. Their `consumes` mounts are always read-only, and their volume names and network aliases are isolated from platform-owned names.
 
 Capability and data-type strings that are neither well-known nor namespaced
