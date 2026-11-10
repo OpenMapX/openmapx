@@ -315,9 +315,8 @@ Navigation also speaks instructions aloud (voice guidance can be toggled off) an
 offers a **keep-screen-on** option that holds a wake lock so the display does not
 sleep while you drive. If you leave the route, OpenMapX **reroutes
 automatically** from your current position; when a reroute can't be computed it
-shows a notice and tries again a little later. After three reroutes within two
-minutes that each read off the new route at once, rerouting pauses for 30
-seconds. In a tunnel or another gap in location, your position keeps moving
+shows a notice and tries again a little later. After any three successful
+reroutes within two minutes, rerouting pauses for 30 seconds. In a tunnel or another gap in location, your position keeps moving
 along the route for up to two minutes while the map is on screen, slowing to a
 stop, until the next real location arrives. The browser and the installed app
 follow the same rules, and **Early** and **Late** voice timing move every

@@ -80,9 +80,6 @@ export { usePlaceStore } from "./placeStore";
 export { useRideStore } from "./rideStore";
 export { useSavedPlacesStore } from "./savedPlacesStore";
 export { useSearchStore } from "./searchStore";
-export {
-  useSettingsStore,
-  type VoiceGuidanceTiming,
-} from "./settingsStore";
+export { useSettingsStore } from "./settingsStore";
 export { useSidebarStore } from "./sidebarStore";
 export { useStreetLevelStore } from "./streetLevelStore";

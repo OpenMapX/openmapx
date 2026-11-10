@@ -8,12 +8,8 @@ import IconButton from "@mui/material/IconButton";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Typography from "@mui/material/Typography";
-import {
-  useDirectionsStore,
-  useNavigationStore,
-  useSettingsStore,
-  type VoiceGuidanceTiming,
-} from "@openmapx/core";
+import { useDirectionsStore, useNavigationStore, useSettingsStore } from "@openmapx/core";
+import type { VoiceTiming } from "@openmapx/core/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import Dialog from "@/components/ui/Dialog";
 import {
@@ -24,7 +20,7 @@ import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { speakOnce, useAvailableVoices } from "@/lib/navigation/useNavigationVoice";
 import { Section, SettingRow, SwitchControl } from "./settingsPrimitives";
 
-const VOICE_TIMING_OPTIONS: { value: VoiceGuidanceTiming; labelKey: string }[] = [
+const VOICE_TIMING_OPTIONS: { value: VoiceTiming; labelKey: string }[] = [
   { value: "early", labelKey: "voiceTimingEarly" },
   { value: "normal", labelKey: "voiceTimingNormal" },
   { value: "late", labelKey: "voiceTimingLate" },
@@ -103,7 +99,7 @@ export function NavigationSettingsDialog({
               size="small"
               fullWidth
               value={voiceGuidanceTiming}
-              onChange={(e) => void setVoiceTiming(e.target.value as VoiceGuidanceTiming)}
+              onChange={(e) => void setVoiceTiming(e.target.value as VoiceTiming)}
             >
               {VOICE_TIMING_OPTIONS.map((o) => (
                 <MenuItem key={o.value} value={o.value}>

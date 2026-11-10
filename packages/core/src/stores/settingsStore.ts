@@ -38,12 +38,11 @@ const TIME_FORMATS: readonly TimeFormat[] = ["auto", "12h", "24h"];
 const DATE_FORMATS: readonly DateFormat[] = ["auto", "dmy", "mdy", "ymd"];
 
 /**
- * How early navigation voice prompts fire. `normal` keeps the tuned defaults;
+ * How early navigation voice prompts fire: `normal` keeps the tuned defaults,
  * `early` announces sooner (more reaction time), `late` closer to the maneuver.
  * The distances each one means are the ground session policy's.
  */
-export type VoiceGuidanceTiming = VoiceTiming;
-const VOICE_TIMINGS: readonly VoiceGuidanceTiming[] = ["early", "normal", "late"];
+const VOICE_TIMINGS: readonly VoiceTiming[] = ["early", "normal", "late"];
 
 function readUnits(): UnitSystem {
   return getStorage().getString(UNITS_STORAGE_KEY) === "imperial" ? "imperial" : "metric";
@@ -59,9 +58,9 @@ function readDateFormat(): DateFormat {
   return DATE_FORMATS.includes(v as DateFormat) ? (v as DateFormat) : "auto";
 }
 
-function readVoiceTiming(): VoiceGuidanceTiming {
+function readVoiceTiming(): VoiceTiming {
   const v = getStorage().getString(VOICE_TIMING_STORAGE_KEY);
-  return VOICE_TIMINGS.includes(v as VoiceGuidanceTiming) ? (v as VoiceGuidanceTiming) : "normal";
+  return VOICE_TIMINGS.includes(v as VoiceTiming) ? (v as VoiceTiming) : "normal";
 }
 
 // Speed-camera alerts are opt-in (default off): they're legally restricted in
@@ -177,8 +176,8 @@ interface SettingsState {
   dateFormat: DateFormat;
   setDateFormat: (f: DateFormat) => void;
   /** How early navigation voice prompts fire. */
-  voiceGuidanceTiming: VoiceGuidanceTiming;
-  setVoiceGuidanceTiming: (t: VoiceGuidanceTiming) => void;
+  voiceGuidanceTiming: VoiceTiming;
+  setVoiceGuidanceTiming: (t: VoiceTiming) => void;
   /** Opt-in speed-camera approach alerts (off by default; region-gated downstream). */
   speedCameraAlerts: boolean;
   setSpeedCameraAlerts: (v: boolean) => void;

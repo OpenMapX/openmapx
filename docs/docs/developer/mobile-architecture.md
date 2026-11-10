@@ -324,9 +324,10 @@ wrong payload does not compile; the bridge adds the id of the command a reply
 answers. The page's fire-and-forget `send` is typed the same way
 (`WebToNativePayload`); its correlated `request` is checked against the same
 schema at run time. A message that fails its schema is not sent; the bridge
-records its type (never its payload) as a `typed.error` diagnostic. A correlated reply that fails its schema
-is followed by `native.error` with `internal-error`, so the page gets an answer
-instead of waiting out its deadline.
+records its type (never its payload) as a `typed.error` diagnostic. A
+correlated reply that fails its schema is followed by `native.error` with
+`internal-error`, so the page gets an answer instead of waiting out its
+deadline.
 
 ### Rollout order
 
