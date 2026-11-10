@@ -53,7 +53,7 @@ function scanItems(input: string): Item[] | null {
   return input.slice(end).trim() === "" ? items : null;
 }
 
-const HALF = /^(?:([NSEW])\s*)?(-?\d+(?:\.\d+)?)\s*°?\s*(?:([NSEW]))?$/i;
+const HALF = /^(?:([NSEW])\s*)?(-?\d+(?:\.\d+)?)\s*(?:°\s*)?([NSEW])?$/i;
 
 /** One comma-separated half, for example "N51.39", "51.39°N" or "6.75"; a letter on both sides is refused. */
 function readHalf(half: string): CoordinateReading | null {
@@ -91,6 +91,8 @@ function readSpaced(items: Item[]): { lat: number; lng: number }[] {
   return readings;
 }
 
+const MAX_INPUT_LENGTH = 200;
+
 /**
  * Attempts to parse user input as decimal-degree coordinates.
  * Supports:
@@ -107,8 +109,11 @@ function readSpaced(items: Item[]): { lat: number; lng: number }[] {
  * the two readings differ.
  */
 export function parseCoordinateInput(input: string): { lngLat: LngLat; label: string } | null {
+  // Coordinate input is short; refusing long text keeps parsing cheap.
+  if (input.length > MAX_INPUT_LENGTH) return null;
   // A comma left at the end, as when the pair is pasted from a list, is not a separator.
-  const trimmed = input.trim().replace(/\s*,$/, "");
+  let trimmed = input.trim();
+  if (trimmed.endsWith(",")) trimmed = trimmed.slice(0, -1).trimEnd();
   if (!trimmed) return null;
 
   const halves = trimmed.split(",");
