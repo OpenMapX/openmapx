@@ -66,6 +66,33 @@ describe("coasting through a gap in location delivery", () => {
     expect(after.lastAcceptedFix?.timestampMs).toBe(harness.phone.clock.now());
   });
 
+  it("ends the coast on the next real fix and starts any later coast from that fix", async () => {
+    harness = await startForegroundHarness();
+    await harness.start(groundStartPackage());
+    await driveStraightRoute(harness, 0, 12);
+    await noFixesFor(6);
+    expect((await ground()).payload.coasting).toBe(true);
+
+    harness.phone.clock.advance(1_000);
+    await harness.deliver([rawFix(harness.phone.clock, STRAIGHT_ROUTE[18])]);
+    const resumed = await ground();
+    expect(resumed.payload.coasting).toBe(false);
+    expect(resumed.payload.coastingAnchor?.acceptedAtMs).toBe(harness.phone.clock.now());
+
+    // Inside the start delay after the real fix nothing is estimated.
+    await noFixesFor(2);
+    const settled = await ground();
+    expect(settled.revision).toBe(resumed.revision);
+    expect(along(settled)).toBe(along(resumed));
+
+    // A later gap coasts on from the new fix, not from the old estimate.
+    await noFixesFor(3);
+    const coasting = await ground();
+    expect(coasting.payload.coasting).toBe(true);
+    expect(along(coasting)).toBeGreaterThan(along(resumed));
+    expect(coasting.payload.coastingAnchor).toEqual(resumed.payload.coastingAnchor);
+  });
+
   it("waits a few seconds after the last fix before estimating anything", async () => {
     harness = await startForegroundHarness();
     await harness.start(groundStartPackage());
