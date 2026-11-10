@@ -135,14 +135,15 @@ export async function dispatchAccountMailQueue(
         throw Error("Account mail recipient changed");
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        await Promise.race([
+        const result = await Promise.race([
           sendMail(message),
           new Promise<never>((_, reject) => {
             timer = setTimeout(() => reject(Error("Account mail handoff timed out")), 30000);
             timer.unref();
           }),
         ]);
-        outcome = "sent";
+        // Nothing left this instance when the recipient's hourly allowance was spent.
+        outcome = result === "sent" ? "sent" : "failed";
       } catch (error) {
         outcome = error instanceof MailDeliveryRefusedError ? "failed" : "unknown";
       } finally {

@@ -4,7 +4,28 @@ import { createTransport } from "nodemailer";
 import { db } from "../db";
 import { systemSettings } from "../db/schema";
 import { recordDataDisclosureBestEffort } from "../privacy/disclosures.js";
+import { redis } from "../redis";
+import { appLogger } from "../services/app-logger.js";
 import { MailDeliveryRefusedError } from "./mail-outcome";
+import { createMailRecipientLimit } from "./mail-recipient-limit";
+
+const recipientLimit = createMailRecipientLimit({
+  store: redis,
+  onUnavailable: () =>
+    appLogger.add({
+      level: "warn",
+      source: "mail",
+      msg: "Mail recipient limit unavailable; message sent uncounted",
+      time: Date.now(),
+    }),
+});
+
+/**
+ * `limited` means the recipient's hourly allowance is spent and nothing was
+ * sent. Request handlers ignore it, so a response never reveals the limit or
+ * whether the address has an account; delivery queues record it as a failure.
+ */
+export type MailSendResult = "sent" | "limited";
 
 export interface MailOptions {
   to: string;
@@ -176,7 +197,8 @@ async function sendViaSmtp(opts: MailOptions, config: EmailConfig): Promise<void
   }
 }
 
-export async function sendMail(opts: MailOptions): Promise<void> {
+export async function sendMail(opts: MailOptions): Promise<MailSendResult> {
+  if (!(await recipientLimit.admit(opts.to))) return "limited";
   const config = await loadEmailConfig();
   const { disclosure, ...message } = opts;
   switch (config.provider) {
@@ -208,6 +230,12 @@ export async function sendMail(opts: MailOptions): Promise<void> {
       ...(disclosure.idempotencyKey ? { idempotencyKey: disclosure.idempotencyKey } : {}),
     });
   }
+  return "sent";
+}
+
+/** For delivery queues that retry: a spent recipient allowance is a refused delivery. */
+export async function sendMailOrRefuse(opts: MailOptions): Promise<void> {
+  if ((await sendMail(opts)) === "limited") throw new MailDeliveryRefusedError();
 }
 
 const TRANSFER_SAFEGUARDS = ["eea", "adequacy", "dpf", "scc", "none"] as const;

@@ -10,7 +10,7 @@ import {
   type PrivacyNotificationTemplate,
 } from "../db/privacy-schema.js";
 import { dataSubjectRequestNotification, user } from "../db/schema.js";
-import { sendMail } from "../utils/email.js";
+import { type MailOptions, sendMailOrRefuse } from "../utils/email.js";
 import { privacyRequestEmail } from "../utils/emailTemplates.js";
 
 const code = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/);
@@ -138,7 +138,8 @@ export interface PrivacyNotificationDispatcherOptions {
   batchSize?: number;
   maxAttempts?: number;
   retryDelayMs?: number;
-  send?: typeof sendMail;
+  /** Must throw when nothing was delivered, so the notification is retried. */
+  send?: (message: MailOptions) => Promise<void>;
 }
 
 /**
@@ -227,7 +228,7 @@ export async function dispatchPrivacyNotifications(
     }
     try {
       const mail = privacyRequestEmail(claimed.template, resolveLocale(claimed.locale));
-      await (options.send ?? sendMail)({
+      await (options.send ?? sendMailOrRefuse)({
         to: recipient.email,
         ...mail,
         disclosure: {

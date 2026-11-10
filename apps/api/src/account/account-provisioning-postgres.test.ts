@@ -15,7 +15,7 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
     vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3001");
     vi.doMock("../db", () => ({ db: fixture.db, sql: fixture.sql }));
     vi.doMock("../utils/email", () => ({ sendMail: mail }));
-    mail.mockResolvedValue(undefined);
+    mail.mockResolvedValue("sent");
     ({ auth } = await import("../auth"));
   }, 90000);
   afterEach(async () => {
@@ -25,7 +25,7 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
       .set({ state: "failed", ciphertext: null, iv: null, tag: null, finishedAt: new Date() })
       .where(eq(accountMailOutbox.state, "queued"));
     mail.mockClear();
-    mail.mockResolvedValue(undefined);
+    mail.mockResolvedValue("sent");
   });
   afterAll(async () => {
     await fixture?.stop();
@@ -163,6 +163,28 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
       passwordSetupDelivery: "queued",
     });
     await dispatchAccountMailQueue();
+    expect(await provisionAccount(input)).toMatchObject({
+      verificationDelivery: "failed",
+      passwordSetupDelivery: "failed",
+    });
+  });
+
+  it("records a message held back by the recipient's hourly allowance as failed", async () => {
+    const admin = await actor(),
+      { provisionAccount } = await import("./account-provisioning"),
+      { dispatchAccountMailQueue } = await import("./account-mail-outbox");
+    mail.mockResolvedValue("limited");
+    const input = {
+      name: "Limited subject",
+      email: `held-${randomUUID()}@example.test`,
+      role: "user" as const,
+      sendInvitation: true,
+      idempotencyKey: randomUUID(),
+      actor: admin,
+    };
+    await provisionAccount(input);
+    await dispatchAccountMailQueue();
+    expect(mail).toHaveBeenCalledTimes(2);
     expect(await provisionAccount(input)).toMatchObject({
       verificationDelivery: "failed",
       passwordSetupDelivery: "failed",

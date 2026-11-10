@@ -88,7 +88,7 @@ import { PrivacyRequestError, PrivacyRequestService } from "../privacy/request-s
 import { loadRuntimeGdprExportReadiness } from "../privacy/runtime-readiness.js";
 import { getSessionAuthAssurance } from "../privacy/session-assurance.js";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../services/ops-client.js";
-import { sendMail } from "../utils/email.js";
+import { sendMailOrRefuse } from "../utils/email.js";
 import { getPrivacyAdminSession, requirePrivacyAdmin } from "../utils/require-privacy-admin.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 import { sendAdminByteResponse } from "./admin-byte-response";
@@ -656,7 +656,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
           idempotencyKey,
         });
         const delivery = await challengeService.dispatchPending({
-          sender: options.sendIdentityChallenge ?? sendMail,
+          sender: options.sendIdentityChallenge ?? sendMailOrRefuse,
           challengeId: challenge.challengeId,
           limit: 1,
         });
