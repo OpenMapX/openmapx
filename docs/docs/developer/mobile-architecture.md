@@ -237,7 +237,12 @@ and contains a code and state. Development builds use a suffixed scheme such as
 The server stores a hash of the callback code. Codes expire after two minutes and
 are consumed atomically; a well-formed but incorrect verifier also consumes the
 attempt. The exchange uses
-uniform rejection responses. An intercepted code cannot be redeemed without its
+uniform rejection responses. `POST /api/mobile-auth/issue` and
+`/api/mobile-auth/exchange` accept only requests whose `Origin` is one of the
+deployment's trusted web origins (`CORS_ORIGIN`). `MOBILE_AUTH_ALLOWED_ORIGINS`,
+when set, replaces that list with a narrower one. A native client can forge
+`Origin`, so this check keeps browsers on other sites out; it does not
+authenticate the app. An intercepted code cannot be redeemed without its
 verifier; concurrent redemptions cannot both succeed.
 
 The page receives the code, state and verifier through the bounded result,

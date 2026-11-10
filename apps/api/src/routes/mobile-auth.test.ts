@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { buildTestApp } from "../test/app.js";
 
 const WEB_ORIGIN = "https://openmapx.test";
+const SECOND_WEB_ORIGIN = "https://maps.openmapx.test";
 
 /** What the mocked Better Auth returns for this request. */
 const authState: {
@@ -49,7 +50,8 @@ const STATE = "s".repeat(22);
 let app: FastifyInstance;
 
 beforeAll(async () => {
-  vi.stubEnv("WEB_ORIGIN", WEB_ORIGIN);
+  // The deployment's trusted web origins; no mobile-specific setting.
+  vi.stubEnv("CORS_ORIGIN", `${WEB_ORIGIN},${SECOND_WEB_ORIGIN}`);
   vi.stubEnv("MOBILE_AUTH_ALLOWED_ORIGINS", undefined);
   const { mobileAuthRoute } = await import("./mobile-auth.js");
   app = await buildTestApp(mobileAuthRoute, { prefix: "/api" });
@@ -122,6 +124,24 @@ async function rawChunked(path: "issue" | "exchange", body: string) {
     payload: Readable.from([body.slice(0, 2_048), body.slice(2_048)]),
   });
 }
+
+describe("allowed origins", () => {
+  it("defaults to every trusted web origin of the deployment", async () => {
+    expect((await issue(validIssue, { origin: SECOND_WEB_ORIGIN })).statusCode).toBe(200);
+    expect((await exchange(validExchange, { origin: SECOND_WEB_ORIGIN })).statusCode).toBe(200);
+    expect((await issue(validIssue, { origin: "http://localhost:3000" })).statusCode).toBe(403);
+  });
+
+  it("narrows to an explicit mobile origin list when one is configured", async () => {
+    vi.stubEnv("MOBILE_AUTH_ALLOWED_ORIGINS", WEB_ORIGIN);
+    try {
+      expect((await issue(validIssue)).statusCode).toBe(200);
+      expect((await issue(validIssue, { origin: SECOND_WEB_ORIGIN })).statusCode).toBe(403);
+    } finally {
+      vi.stubEnv("MOBILE_AUTH_ALLOWED_ORIGINS", undefined);
+    }
+  });
+});
 
 describe("POST /mobile-auth/issue", () => {
   it("returns only the callback code", async () => {
