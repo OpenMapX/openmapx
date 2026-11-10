@@ -22,7 +22,11 @@
 
 export type AuthPurpose = "sign-in" | "link-provider" | "add-passkey";
 
-export type SystemAuthStatus = "ok" | "cancelled" | "failed";
+/**
+ * `unsupported` means this device cannot receive a verified callback at all, so
+ * a retry would fail the same way; nothing was opened.
+ */
+export type SystemAuthStatus = "ok" | "cancelled" | "failed" | "unsupported";
 
 export type SystemAuthResult =
   | { status: "ok"; callbackCode: string; state: string; codeVerifier: string }
@@ -49,6 +53,8 @@ export interface SystemAuthDeps {
   browser: SystemBrowser;
   /** 32 bytes from the platform CSPRNG, base64url. */
   randomBytes: (length: number) => string;
+  /** Whether this device can receive the verified callback. Defaults to yes. */
+  supportsVerifiedCallback?: () => boolean;
 }
 
 /** RFC 7636 puts the verifier at 43–128 characters; 32 bytes gives 43. */
@@ -82,6 +88,8 @@ export class SystemAuthSession {
     // A second concurrent attempt would leave two verifiers alive and make the
     // returned callback ambiguous.
     if (this.attempt) return { status: "failed" };
+    if (this.deps.supportsVerifiedCallback && !this.deps.supportsVerifiedCallback())
+      return { status: "unsupported" };
 
     const codeVerifier = this.deps.randomBytes(VERIFIER_BYTES);
     const state = this.deps.randomBytes(STATE_BYTES);

@@ -25,8 +25,6 @@ export function createSystemAuthSession(config: { webOrigin: string }): SystemAu
       config,
       browser: {
         openAuthSessionAsync: async (url, redirectUrl) => {
-          if (!supportsVerifiedAuthCallback(Platform.OS, Platform.Version))
-            throw new Error("This device cannot receive a verified sign-in callback");
           // Only iOS reads this option; Android passes its options to the Custom Tab.
           const result = await openAuthSessionAsync(
             url,
@@ -37,6 +35,7 @@ export function createSystemAuthSession(config: { webOrigin: string }): SystemAu
         },
       },
       randomBytes: (length) => encodeBase64Url(getRandomValues(new Uint8Array(length))),
+      supportsVerifiedCallback: () => supportsVerifiedAuthCallback(Platform.OS, Platform.Version),
     },
     async (input) =>
       base64ToBase64Url(

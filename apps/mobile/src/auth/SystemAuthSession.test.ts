@@ -112,6 +112,30 @@ describe("SystemAuthSession.open", () => {
   });
 });
 
+describe("SystemAuthSession on a device without verified callbacks", () => {
+  it("reports unsupported without opening a browser or keeping an attempt", async () => {
+    const opened: string[] = [];
+    const session = new SystemAuthSession(
+      {
+        config: CONFIG,
+        randomBytes,
+        supportsVerifiedCallback: () => false,
+        browser: {
+          openAuthSessionAsync: async (url) => {
+            opened.push(url);
+            return successCallback();
+          },
+        },
+      },
+      sha256,
+    );
+
+    await expect(session.open("sign-in")).resolves.toEqual({ status: "unsupported" });
+    expect(opened).toEqual([]);
+    expect(session.hasAttemptInFlight).toBe(false);
+  });
+});
+
 describe("SystemAuthSession callback validation", () => {
   it.each([
     {

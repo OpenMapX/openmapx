@@ -229,8 +229,11 @@ The verified callback needs an HTTPS origin whose association files name the
 build's application identifier and signing identity (see
 [Store operations](./mobile-store-operations.md#verified-links)). On iOS it
 requires 17.4 or later, where `ASWebAuthenticationSession` can match an HTTPS
-callback; on earlier versions the shell reports the handoff as failed instead of
-falling back to a custom scheme. The deployment's well-known service lists the
+callback. On earlier versions the shell does not open a browser and answers
+`auth.result` with `unsupported` instead of falling back to a custom scheme; the
+sign-in dialog then explains that the device needs iOS 17.4 or later and turns
+off provider and passkey sign-in, leaving email and password. The deployment
+target stays at iOS 16.4. The deployment's well-known service lists the
 allowed app identifiers; development builds use `org.openmapx.app.dev` and their
 own signing certificate, so they complete the handoff only when the operator
 also lists that identifier (and, on Android, its fingerprint). A development

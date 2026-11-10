@@ -3682,7 +3682,8 @@
     "openInBrowserTitle": "Sign in using your browser",
     "openInBrowserBody": "This version of the app cannot carry the sign-in back automatically. You can sign in on the website, but you will need to sign in again in the app after updating.",
     "systemAuthCancelled": "Sign-in was cancelled.",
-    "systemAuthFailed": "Sign-in could not be completed. Please try again."
+    "systemAuthFailed": "Sign-in could not be completed. Please try again.",
+    "systemAuthUnsupported": "Signing in with a provider or a passkey isn't available in the app on this device: it needs iOS 17.4 or later. Sign in with your email and password instead."
   },
   "parking": {
     "title": "Parking location",

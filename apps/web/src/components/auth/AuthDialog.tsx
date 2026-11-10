@@ -61,6 +61,10 @@ export function AuthDialog({
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set once the shell reports that this device cannot complete a system-browser
+  // sign-in; the provider and passkey buttons then stay off, since a retry
+  // would fail the same way.
+  const [systemAuthUnsupported, setSystemAuthUnsupported] = useState(false);
   // Sign-up requires explicit acceptance of the Terms and Privacy Policy.
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   // Sign-up is blocked until the Terms/Privacy checkbox is ticked. Gates both
@@ -238,6 +242,17 @@ export function AuthDialog({
     }
   };
 
+  const reportSystemAuthOutcome = (outcome: "cancelled" | "failed" | "unsupported") => {
+    if (outcome === "unsupported") {
+      setSystemAuthUnsupported(true);
+      setError(tMobile("systemAuthUnsupported"));
+      return;
+    }
+    setError(
+      outcome === "cancelled" ? tMobile("systemAuthCancelled") : tMobile("systemAuthFailed"),
+    );
+  };
+
   const handlePasskeySignIn = async () => {
     setLoading(true);
     setError(null);
@@ -251,9 +266,7 @@ export function AuthDialog({
           handleAuthenticated();
           return;
         }
-        setError(
-          outcome === "cancelled" ? tMobile("systemAuthCancelled") : tMobile("systemAuthFailed"),
-        );
+        reportSystemAuthOutcome(outcome);
         return;
       }
       if (route === "external-browser-only") {
@@ -291,9 +304,7 @@ export function AuthDialog({
           handleAuthenticated();
           return;
         }
-        setError(
-          outcome === "cancelled" ? tMobile("systemAuthCancelled") : tMobile("systemAuthFailed"),
-        );
+        reportSystemAuthOutcome(outcome);
         return;
       }
       if (route !== "in-page") {
@@ -656,7 +667,7 @@ export function AuthDialog({
                 variant="outlined"
                 fullWidth
                 onClick={handlePasskeySignIn}
-                disabled={loading}
+                disabled={loading || systemAuthUnsupported}
                 startIcon={<KeyIcon />}
                 sx={{ mb: 1.5, py: 1, fontWeight: 500 }}
               >
@@ -673,7 +684,7 @@ export function AuthDialog({
                 variant="outlined"
                 fullWidth
                 onClick={() => handleOAuthSignIn(provider.providerId, provider.name)}
-                disabled={loading || signupBlocked}
+                disabled={loading || signupBlocked || systemAuthUnsupported}
                 sx={{
                   mb: 1.5,
                   py: 1,

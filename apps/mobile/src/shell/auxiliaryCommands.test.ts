@@ -133,6 +133,23 @@ describe("createAuxiliaryCommandHandler", () => {
     expect(openSettings).toHaveBeenCalledWith("location");
   });
 
+  it("tells the page when this device cannot complete a sign-in at all", async () => {
+    const handle = createAuxiliaryCommandHandler(
+      deps({ signIn: async () => ({ status: "unsupported" }) }),
+    );
+
+    await expect(
+      handle({
+        ...envelope,
+        type: "auth.open",
+        payload: { requestId: "auth-sign-in", purpose: "sign-in" },
+      } as WebToNativeMessage),
+    ).resolves.toEqual({
+      type: "auth.result",
+      payload: { requestId: "auth-sign-in", status: "unsupported" },
+    });
+  });
+
   it("hands a completed sign-in's code, state and verifier to the page", async () => {
     const handle = createAuxiliaryCommandHandler(
       deps({
