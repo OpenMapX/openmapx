@@ -9,6 +9,9 @@ export interface MutationHookOptions {
  * Passed by a caller that shows the mutation's failure itself, such as an
  * inline form error. The app's general failure notice then stays silent, so
  * the user never sees the same failure twice.
+ *
+ * An error thrown inside a hook's own `onSuccess` also fails the mutation and
+ * is reported as a failed save, so those handlers must not throw.
  */
 export const CALLER_SHOWS_ERRORS = {
   meta: { errorShownByCaller: true },
