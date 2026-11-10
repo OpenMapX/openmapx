@@ -31,40 +31,40 @@ async function startOnAndroid() {
   return harness;
 }
 
-describe("a transit cadence change with the app in the background", () => {
-  async function rideTowardsTheEnd() {
-    await startOnAndroid();
-    const itinerary = transitItineraryFixture();
-    const { sessionId } = await harness.start(
-      transitStartPackageFixture({
-        itinerary: {
-          ...itinerary,
-          endTime: itinerary.legs[1].endTime,
-          legs: itinerary.legs.slice(0, 2),
-        },
-      }),
-    );
-    await harness.command(
-      "transit.action",
-      {
-        actionId: "board-1",
-        itineraryFingerprint: FIXTURE_FINGERPRINT,
-        expectedPhase: "walking",
-        type: "board",
-        legIndex: 1,
+async function rideTowardsTheEnd() {
+  await startOnAndroid();
+  const itinerary = transitItineraryFixture();
+  const { sessionId } = await harness.start(
+    transitStartPackageFixture({
+      itinerary: {
+        ...itinerary,
+        endTime: itinerary.legs[1].endTime,
+        legs: itinerary.legs.slice(0, 2),
       },
-      { sessionId },
-    );
-    expect(harness.phone.location.profile).toEqual(profileFor("transit-cruise", "android"));
-    await harness.setVisible(false);
-    harness.phone.clock.timersPaused = true;
-    // Two stops before the end: the engine asks for the near-event cadence.
-    for (const lng of [8.67, 8.66, 8.655]) {
-      harness.phone.clock.advance(5_000);
-      expect(await harness.deliver([rawFix(harness.phone.clock, [lng, 50.11])])).toBe(true);
-    }
+    }),
+  );
+  await harness.command(
+    "transit.action",
+    {
+      actionId: "board-1",
+      itineraryFingerprint: FIXTURE_FINGERPRINT,
+      expectedPhase: "walking",
+      type: "board",
+      legIndex: 1,
+    },
+    { sessionId },
+  );
+  expect(harness.phone.location.profile).toEqual(profileFor("transit-cruise", "android"));
+  await harness.setVisible(false);
+  harness.phone.clock.timersPaused = true;
+  // Two stops before the end: the engine asks for the near-event cadence.
+  for (const lng of [8.67, 8.66, 8.655]) {
+    harness.phone.clock.advance(5_000);
+    expect(await harness.deliver([rawFix(harness.phone.clock, [lng, 50.11])])).toBe(true);
   }
+}
 
+describe("a transit cadence change with the app in the background", () => {
   it("keeps tracking at the current cadence instead of stopping", async () => {
     await rideTowardsTheEnd();
 
@@ -75,6 +75,22 @@ describe("a transit cadence change with the app in the background", () => {
 
   it("applies the requested cadence when the app is opened", async () => {
     await rideTowardsTheEnd();
+
+    await harness.setVisible(true);
+
+    expect(harness.phone.location.running).toBe(true);
+    expect(harness.phone.location.profile).toEqual(profileFor("transit-near-event", "android"));
+  });
+});
+
+describe("a cadence held in a runtime that no longer exists", () => {
+  it("is derived again from the session when the app is opened", async () => {
+    await rideTowardsTheEnd();
+    // The runtime that asked for the near-event cadence is torn down, as the
+    // system does a few seconds after a background batch; nothing it held
+    // survives.
+    harness = await harness.relaunch();
+    expect(harness.phone.location.profile).toEqual(profileFor("transit-cruise", "android"));
 
     await harness.setVisible(true);
 

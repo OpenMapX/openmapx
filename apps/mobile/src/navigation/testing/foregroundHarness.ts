@@ -15,6 +15,7 @@ import type {
   LocationDriver,
   LocationPermissionState,
   LocationProfile,
+  StartOptions,
 } from "../../location/LocationDriver";
 import type { RawLocation } from "../../location/sanitiseFixes";
 import {
@@ -151,8 +152,9 @@ export class FakeLocation implements LocationDriver {
    * Android the start throws `ForegroundServiceStartNotAllowedException` unless
    * the app is in the foreground, after the stop has already happened.
    */
-  async start(profile: LocationProfile): Promise<void> {
+  async start(profile: LocationProfile, options: StartOptions = {}): Promise<void> {
     if (this.running && this.profile && sameProfile(this.profile, profile)) return;
+    if (this.running && options.mayRestart && !options.mayRestart()) return;
     if (this.running) await this.stop();
     if (this.os === "android" && !this.app.visible) {
       throw new Error("ForegroundServiceStartNotAllowedException");
@@ -472,6 +474,7 @@ export async function startForegroundHarness(
     // The wrapper `createLocationDriver` puts around the platform driver.
     driver: withBackgroundSafeProfiles(phone.location, phone.os, phone.app),
     platform: phone.os === "android" ? { os: "android", sdkInt: 34 } : { os: "ios" },
+    app: phone.app,
     readLocationPermission: () => phone.location.readPermission(),
     audio: createNavigationAudio(phone.speech),
     speechAvailable: () => phone.speech.available,

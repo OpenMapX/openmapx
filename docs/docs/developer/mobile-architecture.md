@@ -81,9 +81,14 @@ only when the OS starts the task without the app.
   throws `ForegroundServiceStartNotAllowedException` unless its activity is in
   the foreground, and a locked screen or a headless process does not count. The
   stream would then already be stopped. On Android the shared driver
-  (`location/backgroundSafeDriver.ts`) therefore keeps a running stream while
-  the app is not active, and applies the latest requested profile when the app
-  next becomes active. iOS changes profiles at any time.
+  (`location/backgroundSafeDriver.ts`) therefore never restarts a running
+  stream while the app is not active. It asks inside the driver's serialized
+  step, immediately before the stop, so a screen that locks while the change
+  waits is respected. Nothing is held in memory: a runtime the system starts
+  for one background batch is torn down seconds later. When the app becomes
+  active, the foreground coordinator derives the cadence again from the
+  committed session (`refreshLocationProfile`) and applies it to a running
+  stream. iOS changes profiles at any time.
 - **Storage.** expo-sqlite runs each exclusive transaction on its own
   connection, so `getDatabase` queues writes on the one handle and sets a busy
   timeout. Without the queue a diagnostic write and a batch commit collide with

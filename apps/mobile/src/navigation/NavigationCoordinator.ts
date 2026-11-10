@@ -17,6 +17,7 @@ import type { RerouteOutcome } from "./ground/GroundRerouteService";
 import { onRerouteFailed, onRerouteSucceeded, type RerouteRuntime } from "./ground/rerouteState";
 import type { AnyNavigationProcessor, ProcessorMutation, ProcessorRegistry } from "./processor";
 import { SerialExecutor } from "./serialExecutor";
+import { profileForSession } from "./sessionProfile";
 import { applySettingsPatch } from "./sessionSettings";
 import { groundFullSnapshot } from "./snapshots/groundSnapshot";
 import { transitFullSnapshot } from "./snapshots/transitSnapshot";
@@ -911,6 +912,33 @@ export class NavigationCoordinator {
         now,
       );
       if (committed.ok) await this.deps.effects.run(committed.effects);
+    });
+  }
+
+  // Location cadence when the app comes back.
+
+  /**
+   * Puts a running stream on the cadence the committed session wants now.
+   *
+   * On Android a cadence change cannot restart the stream while the app is in
+   * the background, so a change asked for then is not applied, and the runtime
+   * that asked may be gone by the time the app is opened. Called when the app
+   * becomes active, this derives the cadence again from the session, which is
+   * the only thing that survives.
+   */
+  refreshLocationProfile(): Promise<void> {
+    return this.queue.run(async () => {
+      try {
+        const now = this.deps.clock();
+        const session = await this.deps.repository.loadActive(now);
+        if (session?.status !== "active") return;
+        if (!(await this.deps.driver.isRunning())) return;
+        await this.deps.effects.run([
+          { kind: "update-location-profile", profile: profileForSession(session, now) },
+        ]);
+      } catch {
+        this.deps.diagnostics.record("typed.error", { scope: "location-profile" });
+      }
     });
   }
 

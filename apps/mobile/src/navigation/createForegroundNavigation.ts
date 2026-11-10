@@ -7,7 +7,8 @@ import { getNavigationAudio, isNavigationAudioAvailable } from "../audio/navigat
 import { currentPlatform } from "../background/createHeadlessCoordinator";
 import type { ShellDescription } from "../bridge/nativeBridge";
 import { DiagnosticRepository, type DiagnosticType } from "../diagnostics/DiagnosticRepository";
-import { createLocationDriver } from "../location/createLocationDriver";
+import type { AppActivity } from "../location/backgroundSafeDriver";
+import { appActivity, createLocationDriver } from "../location/createLocationDriver";
 import { readLocationPermissionSnapshot } from "../location/ExpoLocationDriver";
 import type { LocationDriver } from "../location/LocationDriver";
 import { initialProfileFor, type LocationProfileKind, profileFor } from "../location/profiles";
@@ -73,8 +74,9 @@ export interface ForegroundNavigationOptions {
 export interface ForegroundDevice {
   /**
    * The location stream and the permission grants it reports. Production's
-   * driver already holds back Android profile changes the platform would refuse
-   * in the background (`withBackgroundSafeProfiles`).
+   * driver never restarts a running Android stream while the app is in the
+   * background (`withBackgroundSafeProfiles`); `app` activation re-applies the
+   * session's cadence.
    */
   driver: LocationDriver;
   /** Reads the location grant, including whether it is precise. */
@@ -89,6 +91,8 @@ export interface ForegroundDevice {
   };
   /** Opens the durable store when this is the first composition in the process. */
   openStorage(): Promise<Database>;
+  /** When the user comes back to the app. */
+  app: AppActivity;
   /** Which platform's location profiles and permission flow apply. */
   platform: ReturnType<typeof currentPlatform>;
   /** The screen's wake lock. Both calls are idempotent. */
@@ -116,6 +120,7 @@ function productionDevice(): ForegroundDevice {
       request: async () => (await Notifications.requestPermissionsAsync()).granted,
     },
     openStorage: getDatabase,
+    app: appActivity,
     platform: currentPlatform(),
     keepAwake: {
       activate: () => activateKeepAwakeAsync(KEEP_AWAKE_TAG),
@@ -363,6 +368,11 @@ export async function createForegroundNavigation(
 
   const unregister =
     options.registerAsForeground === false ? () => {} : registerForegroundCoordinator(coordinator);
+  // A cadence change asked for in the background was not applied (Android) and
+  // may have been asked by a runtime that no longer exists.
+  const stopWatchingActivity = device.app.onActive(() => {
+    void coordinator.refreshLocationProfile();
+  });
 
   return {
     coordinator,
@@ -385,6 +395,7 @@ export async function createForegroundNavigation(
       disposed = true;
       remote?.abortAll();
       unregister();
+      stopWatchingActivity();
       holdScreen(false);
     },
   };
