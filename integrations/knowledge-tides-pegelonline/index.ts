@@ -12,7 +12,7 @@ import {
   resolveIntegrationContributors,
   snapshotContributors,
   type TideEvent,
-  type TidesResponse,
+  type TideStationResponse,
   withContributors,
 } from "@openmapx/integration-framework";
 
@@ -138,11 +138,10 @@ export function deriveExtrema(curve: Array<{ time: string; valueCm: number }>): 
 async function buildTidesResponse(
   ctx: IntegrationContext,
   station: CachedStation,
-  distanceKm: number,
-): Promise<TidesResponse | null> {
+): Promise<TideStationResponse | null> {
   const quarterKey = Math.floor(Date.now() / (TIDES_TTL * 1000));
   const cacheKey = `tides:height-source-v1:${station.uuid}:${quarterKey}`;
-  const cached = await ctx.cache.get<TidesResponse>(cacheKey);
+  const cached = await ctx.cache.get<TideStationResponse>(cacheKey);
   if (cached) return cached;
   const captured = resolveIntegrationContributors(ctx, ["wsv-pegelonline"]);
 
@@ -162,7 +161,7 @@ async function buildTidesResponse(
   const events = deriveExtrema(curveRaw);
   const last = curveRaw[curveRaw.length - 1];
 
-  const result: TidesResponse = {
+  const result: TideStationResponse = {
     contributors: snapshotContributors(station.contributors ?? [], captured),
     fieldContributors: {
       station: snapshotContributors(station.contributors ?? []),
@@ -175,7 +174,6 @@ async function buildTidesResponse(
       name: station.name,
       lat: station.lat,
       lng: station.lng,
-      distanceKm: Number(distanceKm.toFixed(2)),
     },
     events,
     curve,

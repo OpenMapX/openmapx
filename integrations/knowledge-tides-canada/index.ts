@@ -8,7 +8,7 @@ import {
   snapshotContributors,
   type TideCurvePoint,
   type TideEvent,
-  type TidesResponse,
+  type TideStationResponse,
   type WaterLevelObservation,
   withContributors,
 } from "@openmapx/integration-framework";
@@ -230,10 +230,10 @@ async function refreshCurrentLevel(
 }
 
 /** Replace only the live observation and its ownership, retaining prediction snapshots. */
-function withCurrentLevel(
-  payload: TidesResponse,
+function withCurrentLevel<P extends TideStationResponse>(
+  payload: P,
   observation: CapturedObservation | undefined,
-): TidesResponse {
+): P {
   const fieldContributors = {
     ...payload.fieldContributors,
     currentLevel: snapshotContributors(observation?.contributors ?? []),
@@ -253,12 +253,11 @@ function withCurrentLevel(
 async function buildTidesResponse(
   ctx: IntegrationContext,
   station: CachedStation,
-  distanceKm: number,
-): Promise<TidesResponse | null> {
+): Promise<TideStationResponse | null> {
   const dayKey = new Date().toISOString().slice(0, 10);
   // High/low events + curve are deterministic; cache 6h.
   const cacheKey = `tides:height-source-v1:${station.id}:${dayKey}`;
-  const cached = await ctx.cache.get<TidesResponse>(cacheKey);
+  const cached = await ctx.cache.get<TideStationResponse>(cacheKey);
   if (cached) {
     return station.hasWlo
       ? withCurrentLevel(cached, await refreshCurrentLevel(ctx, station.id, true))
@@ -271,7 +270,7 @@ async function buildTidesResponse(
 
   const currentLevel = await refreshCurrentLevel(ctx, station.id, station.hasWlo);
 
-  const result: TidesResponse = {
+  const result: TideStationResponse = {
     contributors: snapshotContributors(station.contributors ?? [], captured),
     fieldContributors: {
       station: snapshotContributors(station.contributors ?? []),
@@ -283,7 +282,6 @@ async function buildTidesResponse(
       name: station.name,
       lat: station.lat,
       lng: station.lng,
-      distanceKm: Number(distanceKm.toFixed(2)),
     },
     events,
     curve,

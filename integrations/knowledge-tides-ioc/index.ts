@@ -12,7 +12,7 @@ import {
   resolveIntegrationContributors,
   snapshotContributors,
   type TideEvent,
-  type TidesResponse,
+  type TideStationResponse,
   withContributors,
 } from "@openmapx/integration-framework";
 
@@ -211,11 +211,10 @@ export function deriveExtrema(curve: Array<{ time: string; value: number }>): Ti
 async function buildTidesResponse(
   ctx: IntegrationContext,
   station: CachedStation,
-  distanceKm: number,
-): Promise<TidesResponse | null> {
+): Promise<TideStationResponse | null> {
   const hourKey = new Date().toISOString().slice(0, 13);
   const cacheKey = `tides:${CACHE_GENERATION}:${station.code}:${hourKey}`;
-  const cached = await ctx.cache.get<TidesResponse>(cacheKey);
+  const cached = await ctx.cache.get<TideStationResponse>(cacheKey);
   if (cached) return cached;
   const captured = resolveIntegrationContributors(ctx, ["ioc-sealevel"]);
 
@@ -239,7 +238,7 @@ async function buildTidesResponse(
 
   const last = curveRaw[curveRaw.length - 1];
 
-  const result: TidesResponse = {
+  const result: TideStationResponse = {
     contributors: snapshotContributors(station.contributors ?? [], captured),
     fieldContributors: {
       station: snapshotContributors(station.contributors ?? []),
@@ -252,7 +251,6 @@ async function buildTidesResponse(
       name: station.name,
       lat: station.lat,
       lng: station.lng,
-      distanceKm: Number(distanceKm.toFixed(2)),
     },
     events,
     curve,

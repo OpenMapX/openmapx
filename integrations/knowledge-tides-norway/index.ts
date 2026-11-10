@@ -7,7 +7,7 @@ import {
   snapshotContributors,
   type TideCurvePoint,
   type TideEvent,
-  type TidesResponse,
+  type TideStationResponse,
   withContributors,
 } from "@openmapx/integration-framework";
 
@@ -155,18 +155,17 @@ export async function fetchCurve(station: CachedStation): Promise<TideCurvePoint
 async function buildTidesResponse(
   ctx: IntegrationContext,
   station: CachedStation,
-  distanceKm: number,
-): Promise<TidesResponse | null> {
+): Promise<TideStationResponse | null> {
   const dayKey = new Date().toISOString().slice(0, 10);
   const cacheKey = `tides:height-source-v1:${station.code}:${dayKey}`;
-  const cached = await ctx.cache.get<TidesResponse>(cacheKey);
+  const cached = await ctx.cache.get<TideStationResponse>(cacheKey);
   if (cached) return cached;
   const captured = resolveIntegrationContributors(ctx, ["kartverket-sehavniva"]);
 
   const [events, curve] = await Promise.all([fetchHilo(station), fetchCurve(station)]);
   if (events.length === 0 && curve.length === 0) return null;
 
-  const result: TidesResponse = {
+  const result: TideStationResponse = {
     contributors: snapshotContributors(station.contributors ?? [], captured),
     fieldContributors: {
       station: snapshotContributors(station.contributors ?? []),
@@ -178,7 +177,6 @@ async function buildTidesResponse(
       name: station.name,
       lat: station.lat,
       lng: station.lng,
-      distanceKm: Number(distanceKm.toFixed(2)),
     },
     events,
     curve,

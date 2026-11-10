@@ -721,6 +721,9 @@ interface IntegrationContext {
   epoch before the read/loader and atomically refuses a fill whose epoch changed.
   Direct `set` captures its invocation epoch, so it cannot identify a provider
   request that began earlier. HTTP GET caching uses the same acquisition fence.
+  An entry that several callers share holds only what the upstream returned;
+  add caller-specific values, such as the distance from the caller to a tide
+  station, to a copy at the route.
 - **`db`** is present only when the manifest requires the `postgis` service;
   otherwise it is `undefined`.
 - **`log`** is a structured logger tagged with the integration id.

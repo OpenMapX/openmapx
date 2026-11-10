@@ -408,6 +408,7 @@ export {
   type TideEvent,
   type TideResponseStation,
   type TideStationBase,
+  type TideStationResponse,
   type TidesIntegrationConfig,
   type TidesResponse,
   type WaterLevelObservation,

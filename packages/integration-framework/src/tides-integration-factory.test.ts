@@ -172,6 +172,45 @@ describe.each(cases)("$name acquisition", (adapter) => {
     }
   });
 
+  it("gives each caller its own distance to a station fetched once", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-15T12:00:00Z"));
+    const h = host();
+    let dataFetches = 0;
+    vi.stubGlobal("fetch", async (input: string | URL | Request) => {
+      const url = String(input);
+      const isCatalog =
+        url.includes("stationlist") || url.includes("/stations?") || url.includes("/stations.json");
+      if (!isCatalog) dataFetches += 1;
+      const value = isCatalog ? adapter.catalog : adapter.data;
+      return new Response(typeof value === "string" ? value : JSON.stringify(value), {
+        status: 200,
+      });
+    });
+    adapter.setup(h.ctx);
+    const fetchesPerAcquisition = async () => {
+      const before = dataFetches;
+      await h.read({ station: adapter.id });
+      return dataFetches - before;
+    };
+
+    const perAcquisition = await fetchesPerAcquisition();
+    const near = await h.read({ lat: "54.01", lng: "10" });
+    const far = await h.read({ lat: "54.05", lng: "10" });
+    const direct = await h.read({ station: adapter.id });
+
+    expect(perAcquisition).toBeGreaterThan(0);
+    expect(dataFetches).toBe(perAcquisition);
+    expect(near.station.distanceKm).toBe(1.11);
+    expect(far.station.distanceKm).toBe(5.56);
+    expect(direct.station.distanceKm).toBe(0);
+    for (const [key, value] of h.values) {
+      if (key.startsWith("tides:")) {
+        expect((value as TidesPayload).station).not.toHaveProperty("distanceKm");
+      }
+    }
+  });
+
   it("rebuilds coordinate lookups cached before heights named their source", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-15T12:00:00Z"));
