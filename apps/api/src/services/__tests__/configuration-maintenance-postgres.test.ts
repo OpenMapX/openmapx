@@ -40,6 +40,31 @@ import { createConfigurationPostgresFixture } from "../../test/configuration-pos
 import type { JobContext } from "../job-runner";
 import { postgresCommitRelay } from "./fixtures/postgres-commit-relay";
 
+/** A database URL whose sessions carry `applicationName`, so they can be found again. */
+function taggedDatabaseUrl(url: string, applicationName: string): string {
+  const tagged = new URL(url);
+  tagged.searchParams.set("application_name", applicationName);
+  return tagged.toString();
+}
+
+/**
+ * A lease renewal an API sent before it was killed can still commit after the
+ * kill. Its lease is final only once PostgreSQL has ended every session that
+ * API opened.
+ */
+async function apiSessionsEnded(
+  sql: import("postgres").Sql,
+  applicationName: string,
+): Promise<void> {
+  const endBy = Date.now() + 30_000;
+  while (
+    (await sql`SELECT 1 FROM pg_stat_activity WHERE application_name = ${applicationName}`).length
+  ) {
+    if (Date.now() > endBy) throw Error("Killed API sessions did not end");
+    await nativeDelay(20);
+  }
+}
+
 type Fixture = Awaited<ReturnType<typeof createConfigurationPostgresFixture>>;
 const state = vi.hoisted(() => ({
   fixture: null as unknown as Fixture,
@@ -429,13 +454,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           ),
           children: ReturnType<typeof spawn>[] = [];
         const start = () => {
+          const applicationName = `omx-native-api-${children.length}`;
           const args = ["--import", loader, script],
             child = spawn(process.execPath, args, {
               cwd: host.root,
               stdio: ["pipe", "pipe", "pipe"],
               env: {
                 ...process.env,
-                DATABASE_URL: relay.databaseUrl,
+                DATABASE_URL: taggedDatabaseUrl(relay.databaseUrl, applicationName),
                 OPENMAPX_ROOT_DIR: host.root,
                 NODE_ENV: "test",
                 BETTER_AUTH_SECRET: "synthetic-task012-native-api-auth-fixture",
@@ -466,7 +492,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               action: credential ? "ordinary-service-secret" : "ordinary-service-config",
             }),
           );
-          return { child, exited };
+          return { child, exited, applicationName };
         };
         let readyObserver: ReturnType<typeof watch> | undefined;
         const first = start();
@@ -496,6 +522,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           first.child.kill("SIGKILL");
           expect((await first.exited).signal).toBe("SIGKILL");
           relay.release();
+          await apiSessionsEnded(fixture.sql, first.applicationName);
           if (mode === "missing") rmSync(path);
           if (mode === "corrupt") {
             const value = JSON.parse(bytes.toString());
@@ -993,13 +1020,17 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           ),
           children: ReturnType<typeof spawn>[] = [];
         const start = (action?: "reconcile") => {
+          const applicationName = `omx-native-api-${children.length}`;
           const args = ["--import", loader, script],
             child = spawn(process.execPath, args, {
               cwd: host.root,
               stdio: ["pipe", "pipe", "pipe"],
               env: {
                 ...process.env,
-                DATABASE_URL: sqlRelay?.databaseUrl ?? database.toString(),
+                DATABASE_URL: taggedDatabaseUrl(
+                  sqlRelay?.databaseUrl ?? database.toString(),
+                  applicationName,
+                ),
                 OPENMAPX_ROOT_DIR: host.root,
                 OPS_AGENT_URL: `http://127.0.0.1:${address.port}`,
                 NODE_ENV: "test",
@@ -1040,7 +1071,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   : {}),
             }),
           );
-          return { child, exited };
+          return { child, exited, applicationName };
         };
         if (busyId) {
           await fixture.sql.begin(async (tx) => {
@@ -1202,6 +1233,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           holdPreparedReply = false;
           releaseReply.resolve();
           sqlRelay?.release();
+          await apiSessionsEnded(fixture.sql, first.applicationName);
           const [retained] = await fixture.db
             .select()
             .from(schema.adminJob)
