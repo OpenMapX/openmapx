@@ -1,3 +1,4 @@
+import type { CacheWriter } from "./cache-writer.js";
 import { TTL as TTL_POLICY } from "./policy.js";
 
 // Local structural type that mirrors `CacheClient` from
@@ -16,7 +17,7 @@ export interface CacheClient {
    * the returned writer refuses a write once an admin clear has intervened.
    * CLI and test caches may omit it.
    */
-  captureWriter?(): Promise<Pick<CacheClient, "set">>;
+  captureWriter?(): Promise<CacheWriter>;
   get<T = unknown>(key: string): Promise<T | null>;
   set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
   del(key: string): Promise<void>;
@@ -33,32 +34,7 @@ export async function cacheGet<T>(cache: CacheClient, key: string): Promise<T | 
   return cache.get<T>(key);
 }
 
-/** Writes cache entries under the administrative fence captured when it was created. */
-export type CacheWriter = Pick<CacheClient, "set">;
-
-const skipWrites: CacheWriter = { set: async () => undefined };
-
-/**
- * Capture the cache's administrative write fence before an upstream request,
- * then store what the request returned through the writer it gives. A write
- * that lands after an admin cache clear is refused, so a request that began
- * before the clear cannot refill the namespace.
- *
- * Hosts without shared cache administration (CLI and test fixtures) have no
- * fence to capture; their cache writes directly. A host whose capture fails
- * gets a writer that stores nothing: the fence is never recaptured after the
- * request.
- */
-export async function captureCacheWriter(
-  cache: Pick<CacheClient, "set" | "captureWriter">,
-): Promise<CacheWriter> {
-  if (!cache.captureWriter) return cache;
-  try {
-    return await cache.captureWriter();
-  } catch {
-    return skipWrites;
-  }
-}
+export { type CacheWriter, captureCacheWriter } from "./cache-writer.js";
 
 export async function withCache<T>(
   cache: CacheClient,
