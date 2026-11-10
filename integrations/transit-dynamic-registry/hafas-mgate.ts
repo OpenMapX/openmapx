@@ -229,10 +229,12 @@ function unavailable(what: string, error: unknown): Error {
 
 /**
  * A board is keyed by a stop id the caller supplied, so HAFAS's NOT_FOUND
- * there means the stop is unknown: bad caller input, not a provider failure.
+ * (unknown stop) or INVALID_REQUEST (a malformed stop id, HAFAS `PARAMETER`)
+ * there is bad caller input, not a provider failure.
  */
 function boardUnavailable(error: unknown): Error {
-  return error && typeof error === "object" && "code" in error && error.code === "NOT_FOUND"
+  const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+  return code === "NOT_FOUND" || code === "INVALID_REQUEST"
     ? new ProviderInputError("Unknown HAFAS stop identifier", { cause: error })
     : unavailable("timetable", error);
 }

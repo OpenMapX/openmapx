@@ -153,6 +153,34 @@ describe("HAFAS payload validation", () => {
     expect(classifyProviderFailure(nearby)).toBe("connection");
   });
 
+  it("treats hafas-client's INVALID_REQUEST for a malformed caller stop id as bad input", async () => {
+    const { HafasInvalidRequestError, byErrorCode } = (await import(
+      // @ts-expect-error hafas-client ships no types for its error module
+      "hafas-client/lib/errors.js"
+    )) as {
+      HafasInvalidRequestError: new (message: string, hafasCode: string, props: object) => Error;
+      byErrorCode: Record<string, { message: string }>;
+    };
+    const parameter = () =>
+      new HafasInvalidRequestError(byErrorCode.PARAMETER?.message ?? "", "PARAMETER", {});
+    expect(parameter()).toMatchObject({ code: "INVALID_REQUEST", hafasCode: "PARAMETER" });
+    client.departures.mockRejectedValue(parameter());
+    client.arrivals.mockRejectedValue(parameter());
+    client.nearby.mockRejectedValue(parameter());
+
+    for (const call of [
+      () => hafasMgateAdapter.getDepartures(entry(), "vbb:not a stop", 30),
+      () => hafasMgateAdapter.getArrivals(entry(), "vbb:not a stop", 30),
+    ]) {
+      const failure = await call().catch((error: unknown) => error);
+      expect(classifyProviderFailure(failure)).toBe("input");
+    }
+    const nearby = await hafasMgateAdapter
+      .getStopsNearby(entry(), 52.5, 13.4, 400)
+      .catch((error: unknown) => error);
+    expect(classifyProviderFailure(nearby)).toBe("connection");
+  });
+
   it("searches stops only and rejects matches without coordinates", async () => {
     client.locations.mockResolvedValue([
       { type: "location", address: "Somewhere 1", latitude: 52.5, longitude: 13.4 },

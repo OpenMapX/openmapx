@@ -59,9 +59,9 @@ async function tflJson(url: string, what: string, signal?: AbortSignal): Promise
 }
 
 /**
- * Fetch a TfL resource whose path carries an identifier or text the caller
- * supplied. A 404 there means TfL does not know that identifier: bad caller
- * input, which must not count against TfL's health.
+ * Fetch a TfL resource whose path carries an identifier the caller supplied.
+ * A 404 there means TfL does not know that identifier: bad caller input, which
+ * must not count against TfL's health.
  */
 async function tflKeyedJson(url: string, what: string, signal?: AbortSignal): Promise<unknown> {
   try {
@@ -219,7 +219,9 @@ export async function searchByName(
     maxResults: String(Math.min(limit, 50)),
     app_key: key,
   });
-  const data = await tflKeyedJson(
+  // Search text is not an identifier: TfL answers unmatched text with no
+  // matches, so a 404 here means the endpoint broke and counts as a failure.
+  const data = await tflJson(
     `${BASE_URL}/StopPoint/Search/${encodeURIComponent(query)}?${params}`,
     "stop search",
     signal,
