@@ -1,0 +1,67 @@
+import { describe, expect, it } from "vitest";
+import { parseCoordinateInput, parseDMSCoordinateInput } from "./parseCoordinates";
+
+describe("parseCoordinateInput", () => {
+  it.each([
+    ["51.396216, 6.758663", [6.758663, 51.396216]],
+    ["51.396216 6.758663", [6.758663, 51.396216]],
+    ["51.396216,6.758663", [6.758663, 51.396216]],
+    ["-33.8688, 151.2093", [151.2093, -33.8688]],
+    ["51.39°, 6.75°", [6.75, 51.39]],
+    ["51.39N 6.75E", [6.75, 51.39]],
+    ["51.39 N, 6.75 E", [6.75, 51.39]],
+    ["E 6.75 51.39", [6.75, 51.39]],
+    ["51.39° N 6.75° E", [6.75, 51.39]],
+    ["N51.39, E6.75", [6.75, 51.39]],
+    ["N 51.39 E 6.75", [6.75, 51.39]],
+    ["E6.75, N51.39", [6.75, 51.39]],
+    ["6.75E 51.39N", [6.75, 51.39]],
+    ["6.75E, 51.39N", [6.75, 51.39]],
+    ["e6.75 n51.39", [6.75, 51.39]],
+    ["33.8688S 151.2093E", [151.2093, -33.8688]],
+    ["151.2093E, 33.8688S", [151.2093, -33.8688]],
+    ["W74.006, N40.7128", [-74.006, 40.7128]],
+    ["40.7128N 74.006W", [-74.006, 40.7128]],
+    ["N51.39, 6.75", [6.75, 51.39]],
+    ["E6.75, 51.39", [6.75, 51.39]],
+    ["51.39, E6.75", [6.75, 51.39]],
+  ])("reads %j", (input, lngLat) => {
+    expect(parseCoordinateInput(input)?.lngLat).toEqual(lngLat);
+  });
+
+  it.each([
+    "",
+    "   ",
+    "51.39",
+    "51.39, 6.75, 7",
+    "N51.39, N6.75",
+    "E6.75, W7.5",
+    "N51.39S, E6.75",
+    "S-33.87, E151.2",
+    "-33.87S, 151.2E",
+    "91, 10",
+    "10, 181",
+    "N91, E10",
+    "E181, N10",
+    "151.2, -33.87",
+    "51.39 N E",
+    "51.39 N 6.75",
+    "N, E",
+    "Berlin 52.5, 13.4",
+    "51,39, 6,75",
+  ])("refuses %j", (input) => {
+    expect(parseCoordinateInput(input)).toBeNull();
+  });
+
+  it("labels the reading latitude first, whatever the input order", () => {
+    expect(parseCoordinateInput("E6.75, N51.39")?.label).toBe("51.39, 6.75");
+  });
+});
+
+describe("parseDMSCoordinateInput", () => {
+  it("reads a degrees-minutes-seconds pair", () => {
+    const parsed = parseDMSCoordinateInput("51°23'46.4\"N 6°45'31.9\"E");
+    expect(parsed?.lngLat[1]).toBeCloseTo(51.396222, 5);
+    expect(parsed?.lngLat[0]).toBeCloseTo(6.758861, 5);
+  });
+});
