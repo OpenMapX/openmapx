@@ -141,6 +141,21 @@ describe("checkAppleAssociation", () => {
     expect(errors(checkAppleAssociation(aasa(details), REAL))[0].message).toContain("/admin");
   });
 
+  it("requires the sign-in callback, without which the app can never finish signing in", () => {
+    const details = [
+      {
+        appIDs: [REAL.apple.applicationIdentifier],
+        components: ALLOWED_APPLINK_PATHS.filter((path) => path !== "/mobile-auth/callback").map(
+          (path) => ({ "/": path }),
+        ),
+      },
+    ];
+
+    expect(errors(checkAppleAssociation(aasa(details), REAL))[0].message).toContain(
+      "/mobile-auth/callback",
+    );
+  });
+
   it("rejects another app claiming our links", () => {
     const details = [{ appIDs: ["ZZZZZ99999.org.somebody.else"], components: [{ "/": "/" }] }];
 

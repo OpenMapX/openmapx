@@ -34,6 +34,7 @@ vi.mock("next-intl/server", async () => {
 
 const { MobileAuthClient } = await import("./MobileAuthClient");
 const MobileAuthPage = (await import("./page")).default;
+const MobileAuthCallbackPage = (await import("./callback/page")).default;
 
 const STATE = "s".repeat(22);
 const CHALLENGE = "c".repeat(43);
@@ -46,7 +47,11 @@ beforeEach(() => {
   replaced.length = 0;
   Object.defineProperty(window, "location", {
     configurable: true,
-    value: { replace: (url: string) => replaced.push(url), href: "https://openmapx.test/" },
+    value: {
+      replace: (url: string) => replaced.push(url),
+      href: "https://openmapx.test/mobile-auth",
+      origin: "https://openmapx.test",
+    },
   });
 });
 
@@ -58,13 +63,7 @@ afterEach(() => {
 function renderClient(props: Record<string, unknown> = {}) {
   return render(
     <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
-      <MobileAuthClient
-        purpose="sign-in"
-        state={STATE}
-        codeChallenge={CHALLENGE}
-        callbackScheme="openmapx"
-        {...props}
-      />
+      <MobileAuthClient purpose="sign-in" state={STATE} codeChallenge={CHALLENGE} {...props} />
     </NextIntlClientProvider>,
   );
 }
@@ -83,7 +82,7 @@ function stubIssue(response: { ok: boolean; body?: unknown }) {
 }
 
 describe("MobileAuthClient", () => {
-  it("issues a handoff and redirects to the compiled callback scheme", async () => {
+  it("issues a handoff and returns through the verified callback on this origin", async () => {
     const calls = stubIssue({
       ok: true,
       body: { callbackCode: "code-value", token: "must-not-appear" },
@@ -95,7 +94,10 @@ describe("MobileAuthClient", () => {
 
     await waitFor(() => expect(replaced).toHaveLength(1));
     const callback = new URL(replaced[0]);
-    expect(callback.protocol).toBe("openmapx:");
+    // An App Link or Universal Link on the page's own origin, which the OS hands
+    // only to the app the association files name.
+    expect(callback.origin).toBe("https://openmapx.test");
+    expect(callback.pathname).toBe("/mobile-auth/callback");
     expect(callback.searchParams.get("code")).toBe("code-value");
     expect(callback.searchParams.get("state")).toBe(STATE);
     expect(calls[0].url).toBe("https://api.example.test/mobile-auth/issue");
@@ -147,12 +149,7 @@ describe("MobileAuthClient", () => {
     sessionState.isPending = true;
     view.rerender(
       <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
-        <MobileAuthClient
-          purpose="sign-in"
-          state={STATE}
-          codeChallenge={CHALLENGE}
-          callbackScheme="openmapx"
-        />
+        <MobileAuthClient purpose="sign-in" state={STATE} codeChallenge={CHALLENGE} />
       </NextIntlClientProvider>,
     );
 
@@ -246,5 +243,23 @@ describe("MobileAuthPage query validation", () => {
       state: STATE,
       codeChallenge: CHALLENGE,
     });
+  });
+});
+
+describe("MobileAuthCallbackPage", () => {
+  it("tells the user to return to the app and drops the code from the address", async () => {
+    const replaceState = vi.fn();
+    vi.stubGlobal("history", { replaceState });
+    const view = render(
+      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+        {await MobileAuthCallbackPage()}
+      </NextIntlClientProvider>,
+    );
+
+    expect(view.getByText(en.mobileAuth.callbackTitle)).toBeInTheDocument();
+    expect(view.getByText(en.mobileAuth.callbackBody)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(replaceState).toHaveBeenCalledWith(null, "", "/mobile-auth/callback"),
+    );
   });
 });

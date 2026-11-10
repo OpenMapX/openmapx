@@ -37,9 +37,14 @@ pending result into a failure.
 
 The committed association files live in
 `services/well-known/config/html/`. The Apple file claims `/`,
-`/navigation/active` and `/mobile-auth`, plus `webcredentials`. The Android file
-names `org.openmapx.app` and its app-signing certificate fingerprint. Keep those
-files and the recorded public identities consistent.
+`/navigation/active`, `/mobile-auth` and `/mobile-auth/callback`, plus
+`webcredentials`. The Android file names `org.openmapx.app` and its app-signing
+certificate fingerprint, and the app declares a verified intent filter for
+`/mobile-auth/callback` on its web host. The system-browser sign-in returns
+through that callback, so sign-in in the app works only once both files carry
+real identities and the OS has verified them; the validator rejects an Apple
+file that omits the callback. Keep those files and the recorded public
+identities consistent.
 
 ### The fingerprint that catches people out
 

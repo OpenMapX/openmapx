@@ -38,7 +38,15 @@ export interface LinkFinding {
 export const MAX_ASSOCIATION_BYTES = 128 * 1024;
 
 /** Paths the app is willing to claim. Everything else stays a web link. */
-export const ALLOWED_APPLINK_PATHS = ["/", "/navigation/active", "/mobile-auth"];
+export const ALLOWED_APPLINK_PATHS = [
+  "/",
+  "/navigation/active",
+  "/mobile-auth",
+  "/mobile-auth/callback",
+];
+
+/** The system-browser sign-in returns here; without it, sign-in in the app never completes. */
+const REQUIRED_APPLINK_PATHS = ["/mobile-auth/callback"];
 
 const PLACEHOLDER_MARKERS = ["TEAM_ID", "REPLACE_", "EXAMPLE", "XXXX", "CHANGEME"];
 const SHA256_FINGERPRINT = /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/i;
@@ -188,6 +196,17 @@ export function checkAppleAssociation(
           message: `applinks claims ${path}, which is not one of the approved paths`,
         });
       }
+    }
+  }
+
+  const claimedAnywhere = new Set(details.flatMap((detail) => readClaimedPaths(detail)));
+  for (const path of REQUIRED_APPLINK_PATHS) {
+    if (details.length > 0 && !claimedAnywhere.has(path)) {
+      findings.push({
+        file,
+        severity: "error",
+        message: `applinks must claim ${path}, or sign-in in the app can never complete`,
+      });
     }
   }
 

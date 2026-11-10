@@ -221,18 +221,30 @@ Email/password, verification, email-code password reset and TOTP use the web UI 
 cookie. OAuth and passkeys go through `auth.open`: the shell opens `/mobile-auth`
 with `expo-web-browser` (a Custom Tab on Android, `ASWebAuthenticationSession`
 on iOS). That page signs the user in inside the real browser when needed and
-then hands back a callback code on the compiled scheme. The page's callback
-scheme comes from `NEXT_PUBLIC_MOBILE_SCHEME` (default `openmapx`), so a
-development build, whose scheme is `openmapx-dev`, completes the handoff only
-against a web build configured with that scheme.
+then hands back a callback code on `/mobile-auth/callback` of its own origin, a
+verified link: an Android App Link or an iOS Universal Link. The custom scheme
+still carries map and navigation deep links, but never the sign-in callback.
+
+The verified callback needs an HTTPS origin whose association files name the
+build's application identifier and signing identity (see
+[Store operations](./mobile-store-operations.md#verified-links)). On iOS it
+requires 17.4 or later, where `ASWebAuthenticationSession` can match an HTTPS
+callback; on earlier versions the shell reports the handoff as failed instead of
+falling back to a custom scheme. A development build against a plain-HTTP
+origin, or without an Apple Team ID, cannot complete the handoff: the browser
+then shows the callback page, which asks the user to return to the app.
 
 ### The handoff, and its threat model
 
 `SystemAuthSession.ts` generates a 32-byte PKCE verifier and a per-attempt state in
 memory. It opens `/mobile-auth` on the compiled origin with the S256 challenge,
-state and purpose. The callback uses the compiled scheme's `auth/callback` path
-and contains a code and state. Development builds use a suffixed scheme such as
-`openmapx-dev`.
+state and purpose. The callback is `/mobile-auth/callback` on the same compiled
+origin and contains a code and state; the shell accepts it only from that exact
+origin and path. A custom scheme can be registered by any app, including one
+that started the flow with its own verifier and so could redeem the code. The OS
+delivers a verified link only to the app the origin's association files name.
+The deep-link parser refuses `/mobile-auth/*`, so the callback never loads in the
+WebView.
 
 The server stores a hash of the callback code. Codes expire after two minutes and
 are consumed atomically; a well-formed but incorrect verifier also consumes the

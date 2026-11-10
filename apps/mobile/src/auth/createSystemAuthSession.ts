@@ -5,27 +5,34 @@ import {
   getRandomValues,
 } from "expo-crypto";
 import { openAuthSessionAsync } from "expo-web-browser";
+import { Platform } from "react-native";
 import { encodeBase64Url } from "../bridge/base64";
 import { SystemAuthSession } from "./SystemAuthSession";
+import { supportsVerifiedAuthCallback } from "./verifiedCallbackSupport";
 
 /**
  * The system-browser sign-in, bound to the platform.
  *
  * `openAuthSessionAsync` uses `ASWebAuthenticationSession` on iOS and a Custom
- * Tab on Android, and resolves with the callback URL only when the operating
- * system routed the compiled scheme back to this app. Everything that decides
- * what is accepted stays in `SystemAuthSession`.
+ * Tab on Android. The callback is a verified HTTPS link on the compiled
+ * origin: iOS matches it inside the session (`preferUniversalLinks`, which
+ * needs the associated domain), and Android receives it as an App Link.
+ * Everything that decides what is accepted stays in `SystemAuthSession`.
  */
-export function createSystemAuthSession(config: {
-  webOrigin: string;
-  scheme: string;
-}): SystemAuthSession {
+export function createSystemAuthSession(config: { webOrigin: string }): SystemAuthSession {
   return new SystemAuthSession(
     {
       config,
       browser: {
         openAuthSessionAsync: async (url, redirectUrl) => {
-          const result = await openAuthSessionAsync(url, redirectUrl);
+          if (!supportsVerifiedAuthCallback(Platform.OS, Platform.Version))
+            throw new Error("This device cannot receive a verified sign-in callback");
+          // Only iOS reads this option; Android passes its options to the Custom Tab.
+          const result = await openAuthSessionAsync(
+            url,
+            redirectUrl,
+            Platform.OS === "ios" ? { preferUniversalLinks: true } : {},
+          );
           return result.type === "success" ? result.url : null;
         },
       },

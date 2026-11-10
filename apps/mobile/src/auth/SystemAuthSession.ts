@@ -9,8 +9,10 @@
  *
  * The app never receives a session. It receives an opaque callback code, which
  * is useless without the PKCE verifier it kept in memory and never wrote down.
- * That is the whole design: even an app on the device that manages to intercept
- * the custom-scheme callback has nothing it can redeem.
+ * The code returns on a verified link on the compiled web origin (an Android
+ * App Link or iOS Universal Link). The OS hands that link only to the app the
+ * origin's association files name. A custom scheme can be registered by any
+ * app, including one that started the flow with its own verifier.
  *
  * Everything here is memory-only and single-attempt. There is no persistence, no
  * retry, and no outbox entry — a half-finished sign-in that survived a restart
@@ -29,9 +31,10 @@ export type SystemAuthResult =
 export interface SystemAuthConfig {
   /** The compiled web origin. Never taken from a message. */
   webOrigin: string;
-  /** The compiled custom scheme, without `:`. */
-  scheme: string;
 }
+
+/** The verified-link path the web page sends the callback code to. */
+export const AUTH_CALLBACK_PATH = "/mobile-auth/callback";
 
 export interface SystemBrowser {
   /**
@@ -66,7 +69,7 @@ export class SystemAuthSession {
 
   /** The callback the app is willing to be called back on. Compiled, not passed. */
   get redirectUrl(): string {
-    return `${this.deps.config.scheme}://auth/callback`;
+    return new URL(AUTH_CALLBACK_PATH, this.deps.config.webOrigin).toString();
   }
 
   /**
@@ -122,23 +125,22 @@ export class SystemAuthSession {
   /**
    * Validates the callback URL.
    *
-   * Exactly one scheme, exactly one host, exactly one path, and a state that
-   * matches the attempt. Anything else came from somewhere this app did not
-   * send anybody.
+   * Exactly the compiled origin, exactly one path, and a state that matches the
+   * attempt. Anything else came from somewhere this app did not send anybody.
    */
   private readCallback(rawUrl: string, expectedState: string): { code: string } | null {
     let url: URL;
+    let compiled: URL;
     try {
       url = new URL(rawUrl);
+      compiled = new URL(this.deps.config.webOrigin);
     } catch {
       return null;
     }
-    if (url.protocol.replace(/:$/, "").toLowerCase() !== this.deps.config.scheme.toLowerCase()) {
-      return null;
-    }
+    // Compared as a whole origin: scheme, host and port.
+    if (url.origin !== compiled.origin) return null;
     if (url.username !== "" || url.password !== "") return null;
-    if (url.host.toLowerCase() !== "auth") return null;
-    if (url.pathname.replace(/\/+$/, "") !== "/callback") return null;
+    if (url.pathname.replace(/\/+$/, "") !== AUTH_CALLBACK_PATH) return null;
 
     const state = url.searchParams.get("state");
     const code = url.searchParams.get("code");

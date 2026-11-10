@@ -3677,6 +3677,8 @@
     "cancel": "Cancel",
     "failed": "Sign-in could not be completed. Close this page and try again in the app.",
     "invalidRequest": "This sign-in link is not valid. Start again from the OpenMapX app.",
+    "callbackTitle": "Return to the app",
+    "callbackBody": "The OpenMapX app did not pick up this sign-in. Close this page and start again from the app.",
     "openInBrowserTitle": "Sign in using your browser",
     "openInBrowserBody": "This version of the app cannot carry the sign-in back automatically. You can sign in on the website, but you will need to sign in again in the app after updating.",
     "systemAuthCancelled": "Sign-in was cancelled.",

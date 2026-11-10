@@ -21,10 +21,14 @@ import { useEnv } from "@/integration-api/runtime/EnvProvider";
  *
  * Three things this page must never do, in decreasing order of how bad it would
  * be: put the one-time token anywhere in the URL, accept a redirect target from
- * a query parameter, or keep any of it after the redirect. The callback scheme
- * is compiled into the app and echoed by the server-side route only as a fixed
- * literal; nothing on this page chooses where the user goes next.
+ * a query parameter, or keep any of it after the redirect. The callback is a
+ * fixed path on this page's own origin, which the association files under
+ * `/.well-known` bind to the official app, so the OS hands it to that app and
+ * no other. Nothing on this page chooses where the user goes next.
  */
+
+/** The verified-link path the app waits for. */
+const CALLBACK_PATH = "/mobile-auth/callback";
 
 export type AuthPurpose = "sign-in" | "link-provider" | "add-passkey";
 
@@ -32,18 +36,11 @@ export interface MobileAuthClientProps {
   purpose: AuthPurpose;
   state: string;
   codeChallenge: string;
-  /** Compiled into the app; supplied here only so the page can navigate to it. */
-  callbackScheme: string;
 }
 
 type Phase = "idle" | "working" | "error";
 
-export function MobileAuthClient({
-  purpose,
-  state,
-  codeChallenge,
-  callbackScheme,
-}: MobileAuthClientProps) {
+export function MobileAuthClient({ purpose, state, codeChallenge }: MobileAuthClientProps) {
   const t = useTranslations("mobileAuth");
   const { apiUrl } = useEnv();
   const { data: session, isPending } = useSession();
@@ -96,16 +93,16 @@ export function MobileAuthClient({
         return;
       }
 
-      // Built from the compiled scheme plus the two values the app is waiting
-      // for. No token, no session data, no caller-supplied destination.
-      const callback = new URL(`${callbackScheme}://auth/callback`);
+      // This origin's fixed callback path plus the two values the app is
+      // waiting for. No token, no session data, no caller-supplied destination.
+      const callback = new URL(CALLBACK_PATH, window.location.origin);
       callback.searchParams.set("code", body.callbackCode);
       callback.searchParams.set("state", state);
       window.location.replace(callback.toString());
     } catch {
       setPhase("error");
     }
-  }, [apiUrl, callbackScheme, codeChallenge, purpose, state]);
+  }, [apiUrl, codeChallenge, purpose, state]);
 
   const cancel = useCallback(() => {
     // Closing is the honest cancel: the app treats a dismissed browser as
