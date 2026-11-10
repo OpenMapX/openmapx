@@ -69,7 +69,7 @@ export function EvPlanCard({
             {t("totalDrive")}
           </Typography>
           <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            {formatDuration(result.totals.driveSeconds)}
+            {formatDuration(result.totals.driveSeconds, locale)}
           </Typography>
         </Box>
         <Box>
@@ -77,7 +77,7 @@ export function EvPlanCard({
             {t("totalCharge")}
           </Typography>
           <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            {formatDuration(result.totals.chargeSeconds)}
+            {formatDuration(result.totals.chargeSeconds, locale)}
           </Typography>
         </Box>
         <Box>
@@ -85,7 +85,7 @@ export function EvPlanCard({
             {t("totalTime")}
           </Typography>
           <Typography variant="body2" sx={{ fontWeight: 600, color: BRAND }}>
-            {formatDuration(totalSeconds)}
+            {formatDuration(totalSeconds, locale)}
           </Typography>
         </Box>
         <Box>
@@ -321,7 +321,7 @@ function EvPlanStopRow({
             })}
           </Typography>
           <Typography variant="caption" sx={{ color: "text.secondary" }}>
-            {formatDuration(stop.chargeSeconds)}
+            {formatDuration(stop.chargeSeconds, locale)}
           </Typography>
           {stop.availability && (
             <Typography variant="caption" sx={{ color: "text.secondary" }}>

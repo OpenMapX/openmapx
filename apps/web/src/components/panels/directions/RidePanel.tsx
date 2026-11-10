@@ -10,7 +10,7 @@ import type { RideProviderInfo, RideQuote, RideQuoteRequest } from "@openmapx/co
 import {
   buildRideOpenUrl,
   formatDuration,
-  formatMeasurementDistance,
+  formatOverviewDistance,
   isQuoteExpired,
   useDirectionsStore,
   useRideProviders,
@@ -356,8 +356,8 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
       {route && (
         <Typography variant="caption" sx={{ color: BRAND, fontWeight: 600 }}>
           {t("rideTripSummary", {
-            distance: formatMeasurementDistance(route.distanceMeters, units),
-            duration: formatDuration(route.durationSeconds),
+            distance: formatOverviewDistance(route.distanceMeters, units),
+            duration: formatDuration(route.durationSeconds, locale),
           })}
         </Typography>
       )}

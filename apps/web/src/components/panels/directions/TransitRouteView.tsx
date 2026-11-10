@@ -10,7 +10,7 @@ import Typography from "@mui/material/Typography";
 import type { TransitReplanOptions } from "@openmapx/core";
 import {
   formatDuration,
-  formatMeasurementDistance,
+  formatOverviewDistance,
   timeZoneAt,
   tzDiffMinutes,
   tzOffsetLabel,
@@ -328,7 +328,7 @@ export function TransitItineraryCard({
   if (itinerary.transfers > 0) metaBits.push(t("transfers", { count: itinerary.transfers }));
   if (itinerary.walkDistance > 0) {
     metaBits.push(
-      t("walkDistance", { distance: formatMeasurementDistance(itinerary.walkDistance, units) }),
+      t("walkDistance", { distance: formatOverviewDistance(itinerary.walkDistance, units) }),
     );
   }
 
@@ -372,7 +372,7 @@ export function TransitItineraryCard({
               fontWeight: 600,
             }}
           >
-            {formatDuration(itinerary.duration)}
+            {formatDuration(itinerary.duration, locale)}
           </Typography>
         </Box>
       </Box>

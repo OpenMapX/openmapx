@@ -112,6 +112,7 @@ export {
   formatArea,
   formatDuration,
   formatMeasurementDistance,
+  formatOverviewDistance,
   getInitials,
   type MeasurementDistanceParts,
   measurementDistanceParts,

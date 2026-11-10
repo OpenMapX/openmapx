@@ -58,7 +58,7 @@ export function AlertWidget({ alert }: { alert: ActiveAlert }) {
   const baseLabel = incident ? t(incidentTypeLabelKey(incident)) : t(LABEL_KEY[type]);
   const delayText =
     incident && typeof incident.delaySeconds === "number" && incident.delaySeconds >= 60
-      ? `+${formatDuration(incident.delaySeconds)}`
+      ? `+${formatDuration(incident.delaySeconds, locale)}`
       : null;
   const label = delayText ? `${baseLabel} · ${delayText}` : baseLabel;
   const distanceText = formatMeasurementDistance(alert.distanceMeters, units);

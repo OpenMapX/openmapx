@@ -1,10 +1,10 @@
-import { useRideStore } from "@openmapx/core";
-import { en } from "@openmapx/i18n";
+import { useRideStore, useSettingsStore } from "@openmapx/core";
+import { de, en } from "@openmapx/i18n";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { enterDateTime } from "@/test/dateTimeField";
 
 let providers: import("@openmapx/core").RideProvidersResponse = {
@@ -65,12 +65,18 @@ vi.mock("@openmapx/core", async () => {
 
 import { RidePanel } from "./RidePanel";
 
-const renderPanel = () => {
+const renderPanel = (
+  props: { route?: { distanceMeters: number; durationSeconds: number }; locale?: "en" | "de" } = {},
+) => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
-        <RidePanel />
+      <NextIntlClientProvider
+        locale={props.locale ?? "en"}
+        messages={props.locale === "de" ? de : en}
+        timeZone="Europe/Berlin"
+      >
+        <RidePanel route={props.route} />
       </NextIntlClientProvider>
     </QueryClientProvider>,
   );
@@ -331,4 +337,27 @@ it("credits displayed availability rules when quote acquisition returned no quot
   renderPanel();
   expect(screen.getByText(/30 minutes/)).toBeInTheDocument();
   expect(screen.getByText(/Availability rules supplier/)).toBeInTheDocument();
+});
+
+describe("RidePanel trip summary", () => {
+  const route = { distanceMeters: 400_000, durationSeconds: 45 };
+  afterEach(() => useSettingsStore.setState({ units: "metric" }));
+
+  it("writes an imperial distance in whole miles", () => {
+    useSettingsStore.setState({ units: "imperial" });
+    renderPanel({ route });
+    expect(screen.getByText("249 mi · about 45 sec by car")).toBeInTheDocument();
+  });
+
+  it("writes a metric distance in whole kilometres", () => {
+    useSettingsStore.setState({ units: "metric" });
+    renderPanel({ route });
+    expect(screen.getByText("400 km · about 45 sec by car")).toBeInTheDocument();
+  });
+
+  it("words a duration under a minute in German", () => {
+    renderPanel({ route, locale: "de" });
+    expect(screen.getByText("400 km · etwa 45 Sek. mit dem Auto")).toBeInTheDocument();
+    expect(screen.queryByText(/45 sec/)).toBeNull();
+  });
 });

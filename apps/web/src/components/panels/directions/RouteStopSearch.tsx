@@ -17,7 +17,7 @@ import {
   type BrandSummary,
   type CategoryPlace,
   type DirectionsQueryParams,
-  formatMeasurementDistance,
+  formatOverviewDistance,
   MAX_DIRECTIONS_WAYPOINTS,
   type Route,
   routeStopInsertIndex,
@@ -294,7 +294,7 @@ export function RouteStopSearch({ route, provider, request, units }: RouteStopSe
         {poi.detour?.kind === "network" && (
           <Typography variant="body2" color="text.secondary">
             {t("rsPlanDetourDistance", {
-              distance: formatMeasurementDistance(poi.detour.meters, units),
+              distance: formatOverviewDistance(poi.detour.meters, units),
             })}
           </Typography>
         )}
@@ -472,7 +472,7 @@ export function RouteStopSearch({ route, provider, request, units }: RouteStopSe
                     <ListItemText
                       primary={poi.place.name}
                       secondary={`${t("rsPlanFromStart", {
-                        distance: formatMeasurementDistance(poi.alongMeters, units),
+                        distance: formatOverviewDistance(poi.alongMeters, units),
                       })} · ${t(copy.key, "values" in copy ? copy.values : undefined)}`}
                     />
                   </ListItemButton>

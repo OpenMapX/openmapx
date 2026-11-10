@@ -10,7 +10,7 @@ import {
   contributorsForRecords,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Fragment } from "react";
 import { TransitItineraryCard } from "@/components/panels/directions/TransitRouteView";
 import { TripScheduleCard } from "@/components/panels/directions/TripScheduleCard";
@@ -47,6 +47,7 @@ export function TransitChainView({
   onSegmentDetails,
 }: TransitChainViewProps) {
   const t = useTranslations("directions");
+  const locale = useLocale();
   const labelFor = (index: number) => waypointLabels[index] ?? String(index + 1);
   const displayedSegments = new Set(plan.segments.map((segment) => segment.fromIndex));
 
@@ -93,13 +94,13 @@ export function TransitChainView({
             {segment.boardingWaitSeconds > 0 && (
               <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
                 {t("chainBoardingWait", {
-                  duration: formatDuration(segment.boardingWaitSeconds),
+                  duration: formatDuration(segment.boardingWaitSeconds, locale),
                 })}
               </Typography>
             )}
             {segment.delaySeconds > 0 && (
               <Typography variant="caption" color="error" sx={{ display: "block" }}>
-                {t("chainDelay", { delay: formatDuration(segment.delaySeconds) })}
+                {t("chainDelay", { delay: formatDuration(segment.delaySeconds, locale) })}
               </Typography>
             )}
           </Box>

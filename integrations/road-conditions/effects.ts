@@ -55,9 +55,9 @@ function humanizeToken(raw: string): string {
  * A quantity in the unit a driver reads. Tonnes are a display convenience
  * only; the effect keeps the unit its producer published.
  */
-function quantityText(q: Quantity): string {
+function quantityText(q: Quantity, locale: string): string {
   if (q.unit === "kg" && q.value % 1000 === 0) return `${(q.value / 1000).toLocaleString()} t`;
-  if (q.unit === "s") return formatDuration(q.value);
+  if (q.unit === "s") return formatDuration(q.value, locale);
   return `${q.value.toLocaleString()} ${q.unit}`;
 }
 
@@ -180,7 +180,7 @@ function describe(
       return {
         label,
         value: [
-          quantityText(effect.limit),
+          quantityText(effect.limit, locale),
           effect.advisory ? translate("effect.advisorySpeed") : undefined,
         ]
           .filter(Boolean)
@@ -189,7 +189,7 @@ function describe(
     case "delay": {
       const parts = [
         effect.delay
-          ? `+${quantityText(effect.delay)}`
+          ? `+${quantityText(effect.delay, locale)}`
           : effect.delayBand
             ? DELAY_BANDS.has(effect.delayBand)
               ? translate(`effect.delayBand.${effect.delayBand}`)
@@ -201,7 +201,7 @@ function describe(
             : humanizeToken(effect.delayType)
           : undefined,
         effect.queueLength
-          ? translate("effect.queue", { length: quantityText(effect.queueLength) })
+          ? translate("effect.queue", { length: quantityText(effect.queueLength, locale) })
           : undefined,
       ].filter(Boolean);
       return { label, ...(parts.length ? { value: parts.join(", ") } : {}) };
@@ -214,7 +214,7 @@ function describe(
     case "dimension_limit": {
       const value = `${translate(`dimension.${effect.dimension}`)} ${translate(
         `operator.${effect.operator}`,
-      )} ${quantityText(effect.value)}`;
+      )} ${quantityText(effect.value, locale)}`;
       return {
         label,
         value:

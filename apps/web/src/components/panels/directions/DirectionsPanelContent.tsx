@@ -22,7 +22,7 @@ import type { AutocompleteResult, DirectionsResult, LngLat, TravelMode } from "@
 import {
   directionsQueryKey,
   formatDuration,
-  formatMeasurementDistance,
+  formatOverviewDistance,
   isApiClientError,
   timeZoneAt,
   tzDiffMinutes,
@@ -712,7 +712,7 @@ export function DirectionsPanelContent() {
     const route = cached?.routes[0];
     return route?.duration !== undefined
       ? {
-          time: formatDuration(route.duration),
+          time: formatDuration(route.duration, locale),
           contributors: contributorsForField(route, "duration"),
         }
       : undefined;
@@ -733,7 +733,7 @@ export function DirectionsPanelContent() {
       ? undefined
       : record?.duration !== undefined
         ? {
-            time: formatDuration(record.duration),
+            time: formatDuration(record.duration, locale),
             contributors: contributorsForField(record, "duration"),
           }
         : cached;
@@ -1552,7 +1552,7 @@ export function DirectionsPanelContent() {
                         color: "text.primary",
                       }}
                     >
-                      {formatDuration(data.routes[0].duration)}
+                      {formatDuration(data.routes[0].duration, locale)}
                     </Typography>
                     <Typography
                       variant="body2"
@@ -1560,7 +1560,7 @@ export function DirectionsPanelContent() {
                         color: "text.secondary",
                       }}
                     >
-                      {formatMeasurementDistance(data.routes[0].distance, units)}
+                      {formatOverviewDistance(data.routes[0].distance, units)}
                     </Typography>
                   </Box>
                   {data.routes[0].legs.length > 1 && (
@@ -1581,9 +1581,9 @@ export function DirectionsPanelContent() {
                           >
                             {fromLabel}→ {toLabel}
                             {" · "}
-                            {formatDuration(leg.duration)}
+                            {formatDuration(leg.duration, locale)}
                             {" · "}
-                            {formatMeasurementDistance(leg.distance, units)}
+                            {formatOverviewDistance(leg.distance, units)}
                           </Typography>
                         );
                       })}

@@ -1343,7 +1343,7 @@ it("credits the exact duration fields on inactive cached mode buttons", () => {
     } satisfies DirectionsResult,
   );
   render(<DirectionsPanelContent />, { wrapper: createQueryWrapper(queryClient) });
-  expect(screen.getByText(formatDuration(600))).toBeTruthy();
+  expect(screen.getByText(formatDuration(600, "de"))).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "footer.attributions" }));
   expect(screen.getByRole("dialog")).toHaveTextContent("Captured walking duration");
   expect(screen.queryByText("Hidden walking geometry")).toBeNull();
@@ -1391,8 +1391,8 @@ it("keeps cached empty duration receipts authoritative and hides spinner-only du
     } satisfies DirectionsResult,
   );
   render(<DirectionsPanelContent />, { wrapper: createQueryWrapper(queryClient) });
-  expect(screen.getByText(formatDuration(1200))).toBeTruthy();
-  expect(screen.queryByText(formatDuration(600))).toBeNull();
+  expect(screen.getByText(formatDuration(1200, "de"))).toBeTruthy();
+  expect(screen.queryByText(formatDuration(600, "de"))).toBeNull();
   expect(screen.queryByText("Hidden duration owner")).toBeNull();
   expect(screen.queryByRole("button", { name: "footer.attributions" })).toBeNull();
 });

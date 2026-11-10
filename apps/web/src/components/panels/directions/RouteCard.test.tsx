@@ -370,7 +370,7 @@ describe("RouteCard compact traffic explanation", () => {
     renderCard({ ...baseRoute, duration: 6300, baselineDuration: 3600 });
     expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\(\+45 min\)$/);
     const heading = screen.getByRole("heading", { level: 6 });
-    expect(heading).toHaveTextContent("1 h 45 min (+45 min)");
+    expect(heading).toHaveTextContent("1 hr 45 min (+45 min)");
     expect(heading.contains(screen.getByTestId("traffic-delay"))).toBe(true);
     expect(screen.getAllByTestId("traffic-delay")).toHaveLength(1);
     expect(screen.queryByText(/baseline/i)).toBeNull();
@@ -1055,3 +1055,36 @@ it.each(["route", "peek"] as const)(
     );
   },
 );
+
+describe("RouteCard totals", () => {
+  const long = { ...baseRoute, distance: 400_000, duration: 45 };
+  const selection = () =>
+    document.querySelector("[aria-label*='via A46']")?.getAttribute("aria-label") ?? "";
+
+  it("writes an imperial route total in whole miles from 10 up", () => {
+    renderCard(long, "imperial");
+    expect(selection()).toContain("249 mi");
+    expect(selection()).not.toContain("248.55");
+  });
+
+  it("keeps one decimal below 10 miles and feet below a mile", () => {
+    renderCard({ ...long, distance: 8_500 }, "imperial");
+    expect(selection()).toContain("5.3 mi");
+    cleanup();
+    renderCard({ ...long, distance: 300 }, "imperial");
+    expect(selection()).toContain("984 ft");
+  });
+
+  it("writes a metric route total in whole kilometres from 10 up", () => {
+    renderCard(long, "metric");
+    expect(selection()).toContain("400 km");
+  });
+
+  it("words a duration under a minute in the viewer's language", () => {
+    renderCard(long, "metric", "de");
+    expect(selection()).toContain("45 Sek.");
+    cleanup();
+    renderCard(long, "metric", "en");
+    expect(selection()).toContain("45 sec");
+  });
+});

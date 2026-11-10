@@ -24,6 +24,7 @@ import type { Place } from "@openmapx/core";
 import {
   formatDuration,
   formatMeasurementDistance,
+  formatOverviewDistance,
   geocodeStopAsPlace,
   makeSyntheticStopPlace,
   PANEL,
@@ -302,7 +303,7 @@ export function TransitDetailsView({
   if (itinerary.transfers > 0) summaryBits.push(t("transfers", { count: itinerary.transfers }));
   if (itinerary.walkDistance > 0) {
     summaryBits.push(
-      t("walkDistance", { distance: formatMeasurementDistance(itinerary.walkDistance, units) }),
+      t("walkDistance", { distance: formatOverviewDistance(itinerary.walkDistance, units) }),
     );
   }
 
@@ -341,7 +342,7 @@ export function TransitDetailsView({
             color: "text.secondary",
           }}
         >
-          ({formatDuration(itinerary.duration)})
+          ({formatDuration(itinerary.duration, locale)})
         </Typography>
         {/* This view is an early return from the itinerary list, so the
             explanatory line the list renders below its cards never reaches
@@ -500,7 +501,7 @@ export function TransitDetailsView({
                         <street.Icon sx={{ fontSize: 16, color: "text.secondary" }} />
                         <Typography variant="body2" sx={{ color: "text.secondary" }}>
                           {t(street.durationKey, {
-                            duration: formatDuration(Math.round(duration) * 60),
+                            duration: formatDuration(Math.round(duration) * 60, locale),
                           })}
                         </Typography>
                       </Box>
@@ -602,7 +603,7 @@ export function TransitDetailsView({
                         }}
                       >
                         {t("transitDuration", {
-                          duration: formatDuration(Math.round(duration) * 60),
+                          duration: formatDuration(Math.round(duration) * 60, locale),
                         })}
                       </Typography>
                       {(() => {

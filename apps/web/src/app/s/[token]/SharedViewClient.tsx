@@ -9,7 +9,7 @@ import type { LngLat, PublicShare, PublicSharePlace, Route } from "@openmapx/cor
 import {
   coordinateId,
   formatDuration,
-  formatMeasurementDistance,
+  formatOverviewDistance,
   isSystemSavedList,
   makeId,
   useDirections,
@@ -187,6 +187,7 @@ function SharedRouteContent({
   isError: boolean;
 }) {
   const t = useTranslations("share");
+  const locale = useLocale();
   const units = useSettingsStore((s) => s.units);
   const registry = useIntegrationRegistry();
   const routingAttributions = useMemo(
@@ -222,8 +223,8 @@ function SharedRouteContent({
       ))}
       {activeRoute && (
         <Typography variant="body2" sx={{ color: "text.secondary", py: 0.5 }}>
-          {formatMeasurementDistance(activeRoute.distance, units)} ·{" "}
-          {formatDuration(activeRoute.duration)}
+          {formatOverviewDistance(activeRoute.distance, units)} ·{" "}
+          {formatDuration(activeRoute.duration, locale)}
         </Typography>
       )}
       {isError && (

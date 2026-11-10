@@ -31,13 +31,12 @@ function mount(ui: React.ReactNode) {
 }
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(NOW);
+  vi.spyOn(Date, "now").mockReturnValue(NOW);
   useSettingsStore.setState({ dateFormat: "ymd", timeFormat: "24h" });
 });
 afterEach(() => {
   cleanup();
-  vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 

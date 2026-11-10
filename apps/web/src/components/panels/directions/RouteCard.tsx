@@ -20,7 +20,7 @@ import {
   buildElevationProfile,
   estimateDrivingCo2Grams,
   formatDuration,
-  formatMeasurementDistance,
+  formatOverviewDistance,
   roadConditionRouteNotice,
   tzDiffMinutes,
   tzOffsetLabel,
@@ -217,7 +217,7 @@ export function RouteCard({
     }
   };
 
-  const dist = formatMeasurementDistance(route.distance, units);
+  const dist = formatOverviewDistance(route.distance, units);
 
   const ascentMeters = useMemo(() => {
     if (
@@ -253,7 +253,7 @@ export function RouteCard({
       <DirectionsBikeIcon sx={{ fontSize: 22, color: active ? BRAND : "text.disabled" }} />
     );
 
-  const selectionLabel = `${route.summary ?? t("bestRoute")}, ${formatDuration(route.duration)}, ${dist}${ascentLabel ? `, ${ascentLabel}` : ""}`;
+  const selectionLabel = `${route.summary ?? t("bestRoute")}, ${formatDuration(route.duration, locale)}, ${dist}${ascentLabel ? `, ${ascentLabel}` : ""}`;
   const summaryContent = (
     <>
       <Typography
@@ -280,7 +280,7 @@ export function RouteCard({
           py: route.mode === "driving" || route.mode === "motorcycle" ? 0.5 : 0,
         }}
       >
-        <span>{formatDuration(route.duration)}</span>
+        <span>{formatDuration(route.duration, locale)}</span>
         {traffic.kind === "delay" && (
           <Typography
             component="span"
@@ -290,7 +290,7 @@ export function RouteCard({
             sx={{ color: "inherit", fontWeight: 500, whiteSpace: "nowrap", lineHeight: 1.35 }}
           >
             {" "}
-            ({tTraffic("delay", { delay: formatDuration(traffic.seconds) })})
+            ({tTraffic("delay", { delay: formatDuration(traffic.seconds, locale) })})
           </Typography>
         )}
       </Typography>

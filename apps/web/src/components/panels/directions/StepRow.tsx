@@ -10,6 +10,7 @@ import {
   type ManeuverLane,
   type ManeuverSign,
 } from "@openmapx/core";
+import { useLocale } from "next-intl";
 import { LaneGuidance } from "@/components/navigation/LaneGuidance";
 import { ExitSignStrip } from "@/components/navigation/signs/ExitSignStrip";
 
@@ -38,6 +39,7 @@ export function StepRow({
   sign,
   country,
 }: StepRowProps) {
+  const locale = useLocale();
   const dist = formatMeasurementDistance(distance, units);
 
   return (
@@ -69,7 +71,7 @@ export function StepRow({
             color: "text.secondary",
           }}
         >
-          {formatDuration(duration)} ({dist})
+          {formatDuration(duration, locale)} ({dist})
         </Typography>
         <Divider sx={{ mt: 0.5 }} />
       </Box>

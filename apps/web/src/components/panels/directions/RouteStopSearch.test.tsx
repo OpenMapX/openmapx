@@ -182,7 +182,7 @@ describe("RouteStopSearch", () => {
   it("uses miles for imperial units", () => {
     render(view({ units: "imperial" }));
     fireEvent.click(chip("Fuel"));
-    expect(screen.getByText(/7\.46 mi from start/)).toBeInTheDocument();
+    expect(screen.getByText(/7\.5 mi from start/)).toBeInTheDocument();
   });
 
   it("adds the selected stop to a two-point route and leaves the search", () => {

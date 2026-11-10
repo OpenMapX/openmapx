@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { formatMeasurementDistance, measurementDistanceParts } from "./formatting";
+import {
+  formatDuration,
+  formatMeasurementDistance,
+  formatOverviewDistance,
+  measurementDistanceParts,
+} from "./formatting";
 
 describe("formatMeasurementDistance (metric km)", () => {
   it("shows one decimal for a single-digit kilometre value", () => {
@@ -41,5 +46,69 @@ describe("measurementDistanceParts", () => {
       decimals: 2,
     });
     expect(measurementDistanceParts(Number.NaN)).toEqual({ value: 0, unit: "m", decimals: 0 });
+  });
+});
+
+describe("formatOverviewDistance", () => {
+  it.each([
+    [0, "0 m"],
+    [850, "850 m"],
+    [5300, "5.3 km"],
+    [9960, "10 km"],
+    [12_000, "12 km"],
+    [400_000, "400 km"],
+  ])("rounds %d m as %s in metric", (metres, text) => {
+    expect(formatOverviewDistance(metres, "metric")).toBe(text);
+    expect(formatOverviewDistance(metres)).toBe(text);
+  });
+
+  it.each([
+    [0, "0 ft"],
+    [100, "328 ft"],
+    [1500, "4921 ft"],
+    [1609.34, "1.0 mi"],
+    [8500, "5.3 mi"],
+    [16_000, "9.9 mi"],
+    [16_093, "10 mi"],
+    [16_100, "10 mi"],
+    [400_000, "249 mi"],
+    [1_000_000, "621 mi"],
+  ])("rounds %d m as %s in imperial, whole from 10 up like metric", (metres, text) => {
+    expect(formatOverviewDistance(metres, "imperial")).toBe(text);
+  });
+
+  it("leaves guidance precision to the step formatter", () => {
+    expect(formatMeasurementDistance(400_000, "imperial")).toBe("248.55 mi");
+  });
+
+  it("treats a negative or non-finite distance as zero", () => {
+    expect(formatOverviewDistance(-5, "imperial")).toBe("0 ft");
+    expect(formatOverviewDistance(Number.NaN, "imperial")).toBe("0 ft");
+  });
+});
+
+describe("formatDuration", () => {
+  it.each([
+    [45, "en", "45 sec"],
+    [45, "de", "45 Sek."],
+    [720, "en", "12 min"],
+    [720, "de", "12 Min."],
+    [3600, "en", "1 hr"],
+    [3600, "de", "1 Std."],
+    [4980, "en", "1 hr 23 min"],
+    [4980, "de", "1 Std. 23 Min."],
+  ])("writes %d s in %s as %s", (seconds, locale, text) => {
+    expect(formatDuration(seconds, locale)).toBe(text);
+  });
+
+  it("carries no English unit into German", () => {
+    for (const seconds of [5, 59, 60, 3599, 3600, 5400, 90_000]) {
+      expect(formatDuration(seconds, "de")).not.toMatch(/\b(sec|hr|h)\b/);
+    }
+  });
+
+  it("rounds to the nearest minute from a minute up", () => {
+    expect(formatDuration(89, "en")).toBe("1 min");
+    expect(formatDuration(90, "en")).toBe("2 min");
   });
 });

@@ -7,11 +7,11 @@ import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import {
   formatDuration,
-  formatMeasurementDistance,
+  formatOverviewDistance,
   type Route,
   useSettingsStore,
 } from "@openmapx/core";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 interface Props {
   route: Route | null;
@@ -22,6 +22,7 @@ interface Props {
 
 export function WalkingHandoffCard({ route, isLoading, onStartWalking, disabled = false }: Props) {
   const t = useTranslations("navigation");
+  const locale = useLocale();
   const units = useSettingsStore((s) => s.units);
 
   if (isLoading) {
@@ -57,7 +58,7 @@ export function WalkingHandoffCard({ route, isLoading, onStartWalking, disabled 
           {t("walkToDestination")}
         </Typography>
         <Typography variant="caption" color="text.secondary">
-          {formatDuration(route.duration)} · {formatMeasurementDistance(route.distance, units)}
+          {formatDuration(route.duration, locale)} · {formatOverviewDistance(route.distance, units)}
         </Typography>
       </Box>
       <Button

@@ -56,6 +56,22 @@ export function formatMeasurementDistance(metres: number, system: UnitSystem = "
   return `${value.toFixed(decimals)} ${unit}`;
 }
 
+/**
+ * A distance as an overview shows it (route and leg totals, distance along a route),
+ * where guidance's two decimals of miles are noise. Both unit systems follow one rule:
+ * the small unit below one large unit, one decimal while single-digit, whole numbers
+ * from 10 up ("5.3 mi", "249 mi", not "248.55 mi"). Metric is the guidance rounding.
+ */
+export function formatOverviewDistance(metres: number, system: UnitSystem = "metric"): string {
+  if (system !== "imperial") return formatMeasurementDistance(metres, system);
+  const safe = Number.isFinite(metres) ? Math.max(0, metres) : 0;
+  const feet = safe * FEET_PER_METRE;
+  if (Math.round(feet) < FEET_PER_MILE) return `${Math.round(feet)} ft`;
+  const miles = feet / FEET_PER_MILE;
+  const tenths = Math.round(miles * 10) / 10;
+  return tenths >= 10 ? `${Math.round(miles)} mi` : `${tenths.toFixed(1)} mi`;
+}
+
 export function formatArea(squareMetres: number, system: UnitSystem = "metric"): string {
   if (system === "imperial") {
     const sqFt = squareMetres * SQ_FEET_PER_SQ_METRE;
@@ -68,17 +84,23 @@ export function formatArea(squareMetres: number, system: UnitSystem = "metric"):
   return `${(squareMetres / 1_000_000).toFixed(2)} km\u00B2`;
 }
 
+function durationPart(locale: string, unit: "second" | "minute" | "hour", value: number): string {
+  return new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "short" }).format(value);
+}
+
 /**
- * Format a duration in seconds to a human-readable string.
- * < 60 s  → "45 sec"
- * < 3600  → "12 min"
- * ≥ 3600  → "1 h 23 min"
+ * Format a duration in seconds in the viewer's language, with locale unit names.
+ * < 60 s  → "45 sec" / "45 Sek."
+ * < 3600  → "12 min" / "12 Min."
+ * ≥ 3600  → "1 hr 23 min" / "1 Std. 23 Min."
  */
-export function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${Math.round(seconds)} sec`;
+export function formatDuration(seconds: number, locale: string): string {
+  if (seconds < 60) return durationPart(locale, "second", Math.round(seconds));
   const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 60) return durationPart(locale, "minute", minutes);
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-  return m === 0 ? `${h} h` : `${h} h ${m} min`;
+  return m === 0
+    ? durationPart(locale, "hour", h)
+    : `${durationPart(locale, "hour", h)} ${durationPart(locale, "minute", m)}`;
 }
