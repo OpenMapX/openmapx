@@ -73,9 +73,9 @@ reroute and refresh, connectivity), with nothing sent to a page, no prompts
 and no keep-awake. An off-route driver in an OS-started process therefore gets
 a reroute, and the background task waits for that request
 (`settleRemoteWork`) before it reports the batch handled. When the visible
-app's composition registers, the headless one is disposed. Alerts are now
-reconciled in that process as well, rather than deferred to the next app
-start.
+app's composition registers, the headless one is disposed. A transit commit
+in that process reconciles the scheduled get-off alerts there, reading the
+notification grant through the same port.
 
 - **Start.** `session.start` runs the `PermissionController`. Its screens are
   native (`PermissionPrompts.tsx`) because the page may be suspended during the
