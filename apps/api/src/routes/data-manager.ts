@@ -1,6 +1,6 @@
 import * as dm from "@openmapx/core/data-manager-sdk";
 import { envString } from "@openmapx/core/server-env";
-import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../db/index.js";
 import { dataManagerFeedState, dataManagerJobStages, dataManagerJobs } from "../db/schema.js";
@@ -168,11 +168,21 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     const lock = await readLockSummary();
 
     const [lastJobRow, feedCountRow, regionRows, statusRows, currentRows] = await Promise.all([
+      // The last sync is the latest finished run; a queued or running job
+      // must not blank the previous result.
       db
         .select()
         .from(dataManagerJobs)
-        .where(eq(dataManagerJobs.kind, TRANSIT_SYNC_JOB_KIND))
-        .orderBy(desc(dataManagerJobs.startedAt))
+        .where(
+          and(
+            eq(dataManagerJobs.kind, TRANSIT_SYNC_JOB_KIND),
+            notInArray(dataManagerJobs.status, ACTIVE_JOB_STATUSES),
+          ),
+        )
+        .orderBy(
+          sql`${dataManagerJobs.finishedAt} desc nulls last`,
+          desc(dataManagerJobs.startedAt),
+        )
         .limit(1),
       db.select({ total: count() }).from(dataManagerFeedState),
       db
@@ -209,8 +219,7 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
       transitousLockedAt: lock.lockedAt,
       transitousLockedBy: lock.lockedBy,
       lastSyncAt: lastJob?.finishedAt ? lastJob.finishedAt.toISOString() : null,
-      lastSyncStatus:
-        lastJob && !ACTIVE_JOB_STATUSES.includes(lastJob.status) ? lastJob.status : null,
+      lastSyncStatus: lastJob?.status ?? null,
       currentJob: current
         ? { jobId: current.id, startedAt: current.startedAt.toISOString() }
         : null,

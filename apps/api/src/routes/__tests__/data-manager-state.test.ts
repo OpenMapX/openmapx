@@ -39,6 +39,7 @@ const fakeDb = vi.hoisted(() => ({
   callIndex: 0,
   /** Each select's `where` condition, rendered later through drizzle's dialect. */
   conditions: [] as unknown[],
+  orderings: [] as unknown[][],
 }));
 
 // The pin is the agent's; /state reads it through the api role's read-only
@@ -87,7 +88,8 @@ vi.mock("../../db/index.js", () => {
         fakeDb.conditions.push(condition);
         return builder;
       },
-      orderBy() {
+      orderBy(...columns: unknown[]) {
+        fakeDb.orderings.push(columns);
         return builder;
       },
       groupBy() {
@@ -162,6 +164,7 @@ afterAll(async () => {
 beforeEach(() => {
   fakeDb.callIndex = 0;
   fakeDb.conditions = [];
+  fakeDb.orderings = [];
   fakeDb.state = {
     lastJob: null,
     feedCount: 0,
@@ -181,8 +184,18 @@ function renderedConditions(): Array<{ sql: string; params: unknown[] }> {
 }
 
 describe("transit job filters", () => {
-  it("reads state from the transit-sync jobs the durable pipeline writes", async () => {
+  it("reports the latest finished transit-sync run while a newer one is queued", async () => {
     fakeDb.state.lastJob = {
+      id: "job-finished",
+      kind: "transit-sync",
+      status: "partial",
+      startedAt: new Date("2026-11-09T03:00:00.000Z"),
+      finishedAt: new Date("2026-11-09T03:40:00.000Z"),
+      triggeredBy: "cron:data-manager-cron",
+      idempotencyKey: null,
+      metadata: null,
+    };
+    fakeDb.state.currentJob = {
       id: "job-queued",
       kind: "transit-sync",
       status: "queued",
@@ -192,7 +205,6 @@ describe("transit job filters", () => {
       idempotencyKey: null,
       metadata: null,
     };
-    fakeDb.state.currentJob = fakeDb.state.lastJob;
 
     const res = await app.inject({
       method: "GET",
@@ -201,12 +213,18 @@ describe("transit job filters", () => {
     });
 
     expect(res.json()).toMatchObject({
-      lastSyncStatus: null,
+      lastSyncStatus: "partial",
+      lastSyncAt: "2026-11-09T03:40:00.000Z",
       currentJob: { jobId: "job-queued", startedAt: "2026-11-10T03:00:00.000Z" },
     });
     const [last, current] = renderedConditions().filter((query) => query.sql.includes('"kind"'));
-    expect(last?.params).toEqual(["transit-sync"]);
+    expect(last?.sql).toContain("not in");
+    expect(last?.params).toEqual(["transit-sync", "queued", "running", "cancel_pending"]);
+    expect(current?.sql).not.toContain("not in");
     expect(current?.params).toEqual(["transit-sync", "queued", "running", "cancel_pending"]);
+    const dialect = new PgDialect();
+    const lastOrder = dialect.sqlToQuery(fakeDb.orderings[0]?.[0] as SQL).sql;
+    expect(lastOrder).toContain('"finished_at" desc nulls last');
   });
 
   it("lists transit-sync jobs by default", async () => {
@@ -271,16 +289,8 @@ describe("GET /data-manager/transit/state", () => {
   });
 
   it("surfaces an active running job in `currentJob`", async () => {
-    fakeDb.state.lastJob = {
-      id: "job-running",
-      kind: "transit-sync",
-      status: "running",
-      startedAt: new Date("2026-05-21T03:00:00.000Z"),
-      finishedAt: null,
-      triggeredBy: "api:user:alice",
-      idempotencyKey: null,
-      metadata: null,
-    };
+    // The last-sync query reads finished runs only; with none, it returns no row.
+    fakeDb.state.lastJob = null;
     fakeDb.state.currentJob = {
       id: "job-running",
       kind: "transit-sync",

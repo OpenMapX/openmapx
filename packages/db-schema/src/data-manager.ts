@@ -25,7 +25,7 @@ export const jobs = dataManager.table(
   "jobs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    /** e.g. "transitous-sync" */
+    /** e.g. "transit-sync", "download-osm" */
     kind: text("kind").notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
