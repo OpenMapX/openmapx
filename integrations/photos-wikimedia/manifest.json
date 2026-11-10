@@ -42,7 +42,6 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false,
-      "capabilities": ["geo-search", "tag-lookup"],
       "licensing": {
         "version": 1,
         "bindings": [

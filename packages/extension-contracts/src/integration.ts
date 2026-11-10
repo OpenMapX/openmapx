@@ -414,7 +414,12 @@ export const integrationManifestSchema = z.object({
   healthCheckIntervalMs: z.number().int().min(60_000).optional(),
   quality: z.enum(["built-in", "community-verified", "community"]).optional(),
 
-  dataSources: z.array(dataSourceSchema).optional(),
+  /**
+   * Static sources refuse keys the schema does not name, so a misspelled field
+   * such as credit text under `attributionText` fails validation instead of
+   * being dropped silently.
+   */
+  dataSources: z.array(z.strictObject(dataSourceSchema.shape)).optional(),
   /**
    * The integration supplies its data sources at runtime through
    * `ctx.setDataSources()` instead of a static `dataSources` list — for an

@@ -370,6 +370,11 @@ that every listed source supplied a result. Runtime integrations supply metadata
 with `setDataSources` (see [Runtime data sources](#runtime-data-sources));
 per-record receipts also retain exact runtime-feed and required notice metadata.
 
+Manifest validation refuses a data-source key the schema does not name. The
+credit text goes in `attribution`; `attributionText` is the name of that text
+on a receipt, and a manifest entry that uses it fails validation instead of
+losing the credit silently.
+
 Use the shared [licence metadata contract](./licensing.md): scoped subjects,
 registered SPDX expressions, captured custom definitions and explicit unknown
 or per-item states. The host derives labels and links; data sources do not
@@ -560,7 +565,9 @@ Manifest validation rejects the flag next to a non-empty static `dataSources`
 list. `setDataSources` throws for an integration without the flag. Each source
 in the list is validated like a static entry, with `validateDataSource` from
 `@openmapx/integration-framework`: the required fields must be present and
-`domain` must be one of the manifest's `domains`. The host drops an invalid
+`domain` must be one of the manifest's `domains`. Unlike a static entry, a
+runtime source keeps its credit when it carries a key the schema does not name;
+the key is dropped. The host drops an invalid
 source, a repeated `sourceId`, or a `sourceId` another live integration already
 declares, and logs a warning that names it (and, for the last, both
 integrations). It keeps the rest.

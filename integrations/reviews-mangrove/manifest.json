@@ -52,7 +52,6 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false,
-      "capabilities": ["read", "aggregate", "write", "image-upload"],
       "licensing": {
         "version": 1,
         "bindings": [
@@ -90,7 +89,6 @@
       "personalData": true,
       "cookies": true,
       "dpaAvailable": false,
-      "capabilities": ["write"],
       "notes": "Optional delegated signing. Browser login and provider identity, session tokens, review content and the public review key are processed by the signer. The signer can decrypt the private key and sign; this is not end-to-end encryption. OpenMapX does not persist signer tokens. Third-party apps cannot manage signer account keys or logins.",
       "licensing": {
         "version": 1,
