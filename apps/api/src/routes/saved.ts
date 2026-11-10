@@ -30,9 +30,10 @@ import { registerSavedImportRoute, registerSavedRoute } from "./saved-contract";
 
 // Positions are not unique, and a row can be inserted at an existing one. Ties
 // fall back to creation time and then the primary key, so a listing keeps one
-// order from request to request.
+// order from request to request. Shared lists use the place order too, so a
+// share reads in the owner's order.
 const LIST_ORDER = [savedList.sortOrder, savedList.createdAt, savedList.id] as const;
-const PLACE_ORDER = [savedPlace.sortOrder, savedPlace.createdAt, savedPlace.id] as const;
+export const PLACE_ORDER = [savedPlace.sortOrder, savedPlace.createdAt, savedPlace.id] as const;
 
 const DEFAULT_LISTS: { name: string; icon: string; sortOrder: number }[] = [
   { name: "$favorites", icon: "heart", sortOrder: 0 },
