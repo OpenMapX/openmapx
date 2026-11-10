@@ -19,25 +19,54 @@ import { AdminTablePagination } from "@/components/admin/shared/AdminTablePagina
 import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
 import { useClientPagination } from "@/components/admin/shared/tableHooks";
-import { useProviderHealth, useResetProvider } from "@/lib/admin/transitHooks";
+import {
+  type ProviderHealthEntry,
+  useProviderHealth,
+  useResetProvider,
+} from "@/lib/admin/transitHooks";
 
-function formatPercent(rate: number | undefined): string {
-  if (rate === undefined || rate === null || !Number.isFinite(rate)) return "—";
+function formatPercent(rate: number | null): string {
+  if (rate === null || !Number.isFinite(rate)) return "—";
   return `${(rate * 100).toFixed(0)}%`;
 }
 
-function isDisabled(disabledUntil: string | undefined): boolean {
-  if (!disabledUntil) return false;
-  const t = new Date(disabledUntil).getTime();
-  if (!Number.isFinite(t)) return false;
-  return t > Date.now();
-}
-
-function failureRateColor(rate: number | undefined): "default" | "success" | "warning" | "error" {
-  if (rate === undefined) return "default";
+function failureRateColor(rate: number | null): "default" | "success" | "warning" | "error" {
+  if (rate === null) return "default";
   if (rate >= 0.5) return "error";
   if (rate >= 0.1) return "warning";
   return "success";
+}
+
+function formatClock(at: string | null | undefined): string | null {
+  if (!at) return null;
+  const time = new Date(at);
+  return Number.isFinite(time.getTime()) ? time.toLocaleTimeString() : null;
+}
+
+function StateChip({ provider }: { provider: ProviderHealthEntry }) {
+  const retryAt = formatClock(provider.retryAt);
+  switch (provider.state) {
+    case "healthy":
+      return <Chip size="small" color="success" variant="outlined" label="healthy" />;
+    case "degraded":
+      return (
+        <Tooltip title="Recent counted failures; requests still reach this provider">
+          <Chip size="small" color="warning" variant="outlined" label="degraded" />
+        </Tooltip>
+      );
+    case "open":
+      return (
+        <Tooltip title="Circuit open; requests skip this provider until the cooldown ends">
+          <Chip size="small" color="error" label={retryAt ? `open until ${retryAt}` : "open"} />
+        </Tooltip>
+      );
+    case "half-open":
+      return (
+        <Tooltip title="Cooldown ended; the next request is a trial probe">
+          <Chip size="small" color="warning" label="half-open" />
+        </Tooltip>
+      );
+  }
 }
 
 export function ProviderHealthTable() {
@@ -64,7 +93,7 @@ export function ProviderHealthTable() {
   return (
     <AdminTableSurface
       title="Provider health"
-      description="Sliding-window failure rate · EMA latency · cooldown state"
+      description="Sliding-window failure rate · EMA latency · circuit state"
       pagination={<AdminTablePagination {...paginationProps} />}
     >
       {isLoading ? (
@@ -107,7 +136,7 @@ export function ProviderHealthTable() {
             </TableHead>
             <TableBody>
               {paged.map((p) => {
-                const disabled = isDisabled(p.disabledUntil);
+                const lastError = p.lastOperatorMessage || p.lastFailureOutcome;
                 return (
                   <TableRow key={p.id} hover>
                     <TableCell>
@@ -120,8 +149,8 @@ export function ProviderHealthTable() {
                         >
                           {p.id}
                         </Typography>
-                        {p.lastFailureReason && (
-                          <Tooltip title={p.lastFailureReason}>
+                        {lastError && (
+                          <Tooltip title={lastError}>
                             <Typography
                               variant="caption"
                               sx={{
@@ -133,14 +162,14 @@ export function ProviderHealthTable() {
                                 cursor: "help",
                               }}
                             >
-                              last error: {p.lastFailureReason}
+                              last error: {lastError}
                             </Typography>
                           </Tooltip>
                         )}
                       </Stack>
                     </TableCell>
-                    <TableCell align="right">{p.success.toLocaleString()}</TableCell>
-                    <TableCell align="right">{p.failure.toLocaleString()}</TableCell>
+                    <TableCell align="right">{p.successCount.toLocaleString()}</TableCell>
+                    <TableCell align="right">{p.failureCount.toLocaleString()}</TableCell>
                     <TableCell align="right">
                       <Chip
                         size="small"
@@ -153,19 +182,7 @@ export function ProviderHealthTable() {
                       {Number.isFinite(p.emaLatencyMs) ? `${Math.round(p.emaLatencyMs)} ms` : "—"}
                     </TableCell>
                     <TableCell>
-                      {disabled ? (
-                        <Tooltip title={p.disabledReason ?? "Auto-disabled (cooldown)"}>
-                          <Chip
-                            size="small"
-                            color="error"
-                            label={`disabled until ${new Date(
-                              p.disabledUntil ?? "",
-                            ).toLocaleTimeString()}`}
-                          />
-                        </Tooltip>
-                      ) : (
-                        <Chip size="small" color="success" variant="outlined" label="active" />
-                      )}
+                      <StateChip provider={p} />
                     </TableCell>
                     <TableCell align="right">
                       <Button

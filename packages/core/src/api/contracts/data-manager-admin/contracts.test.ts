@@ -66,17 +66,21 @@ describe("application data-manager administration contracts", () => {
       reopenCount: 0,
       emaLatencyMs: 5,
       window: [{ outcome: "ok", at: "2026-10-19T00:00:00.000Z", latencyMs: 5 }],
-      success: 1,
-      failure: 0,
       windowFailureRate: 0,
     };
     expect(providerHealthEntrySchema.parse(provider)).toEqual(provider);
-    expect(providerHealthEntrySchema.safeParse({ ...provider, state: "half-open" }).success).toBe(
+    expect(
+      providerHealthEntrySchema.safeParse({
+        ...provider,
+        state: "half-open",
+        retryAt: "2026-10-19T00:05:00.000Z",
+      }).success,
+    ).toBe(true);
+    expect(providerHealthEntrySchema.safeParse({ ...provider, state: "active" }).success).toBe(
       false,
     );
-    expect(providerHealthEntrySchema.safeParse({ id: "p", success: 1, failure: 0 }).success).toBe(
-      false,
-    );
+    for (const legacy of [{ success: 1 }, { disabledUntil: "2026-10-19T00:05:00.000Z" }])
+      expect(providerHealthEntrySchema.safeParse({ ...provider, ...legacy }).success).toBe(false);
   });
   it("keeps structured JSONB stage errors and nullable job metadata", () => {
     const job = {

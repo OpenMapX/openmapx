@@ -88,9 +88,23 @@ inspect a container's lifecycle state, use the service catalog under
 ## Transit provider health
 
 Open **Admin → Transit → Provider health**. The table shows success/failure
-counts, recent failure rate, latency and cooldown state from shared Redis/Valkey
+counts, recent failure rate, latency and circuit state from shared Redis/Valkey
 records. The shared circuit distinguishes `healthy`, `degraded` and `open`;
 after cooldown, one process can acquire the half-open probe lease.
+
+The **Status** column and the read API's `state` field show what the next
+request meets:
+
+| State       | Meaning                                                                   |
+| ----------- | ------------------------------------------------------------------------- |
+| `healthy`   | No recent counted failures that degrade the provider                      |
+| `degraded`  | Recent counted failures; requests still reach the provider                |
+| `open`      | Requests skip the provider until `retryAt`, shown as "open until"         |
+| `half-open` | The cooldown has ended; the next request is a trial probe that decides it |
+
+Reading the table never claims the probe lease, so a provider can stay
+`half-open` until real traffic arrives. The last error shows the bounded
+operator message, or the failure outcome when none was recorded.
 
 | Transition or limit   | Default                                                                                    |
 | --------------------- | ------------------------------------------------------------------------------------------ |

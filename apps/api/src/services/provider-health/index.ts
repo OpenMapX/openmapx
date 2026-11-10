@@ -25,15 +25,19 @@ export interface ProviderHealthState {
   lastFailureAt: string | null;
   lastFailureOutcome: ProviderHealthFailureOutcome | null;
   lastOperatorMessage: string | null;
-  lastFailureReason?: string;
   emaLatencyMs: number;
   window: ProviderHealthCall[];
   retryAt: string | null;
-  success?: number;
-  failure?: number;
-  windowFailureRate?: number;
-  disabledUntil?: string;
-  disabledReason?: string;
+}
+
+/** A stored record as operators see it, without claiming a half-open probe. */
+export interface ProviderHealthObservation extends Omit<ProviderHealthState, "state"> {
+  /**
+   * The circuit state the next request meets. An open circuit whose cooldown
+   * has ended is `half-open`: the next request is a trial probe.
+   */
+  state: ProviderHealthSnapshot["state"];
+  windowFailureRate: number | null;
 }
 
 export interface ProviderHealthOptions {
@@ -171,16 +175,16 @@ function failureRate(state: ProviderHealthState): number | null {
   return state.window.filter((call) => call.outcome === "error").length / state.window.length;
 }
 
-function compatibilityState(state: ProviderHealthState): ProviderHealthState {
-  const rate = failureRate(state);
+export function observeProviderHealth(
+  stored: ProviderHealthState,
+  now: number,
+): ProviderHealthObservation {
+  const retryAtMs = stored.retryAt ? Date.parse(stored.retryAt) : Number.NaN;
+  const cooldownEnded = Number.isFinite(retryAtMs) && retryAtMs <= now;
   return {
-    ...state,
-    success: state.successCount,
-    failure: state.failureCount,
-    windowFailureRate: rate ?? undefined,
-    disabledUntil: state.state === "open" ? (state.retryAt ?? undefined) : undefined,
-    disabledReason: state.state === "open" ? "provider circuit open" : undefined,
-    lastFailureReason: state.lastOperatorMessage ?? undefined,
+    ...stored,
+    state: stored.state === "open" && cooldownEnded ? "half-open" : stored.state,
+    windowFailureRate: failureRate(stored),
   };
 }
 
@@ -432,18 +436,18 @@ export class ProviderHealth implements ProviderHealthHandle {
     return snapshot.state !== "open" || snapshot.ownsHalfOpenProbe;
   }
 
-  async getState(providerId: string): Promise<ProviderHealthState | null> {
+  async getState(providerId: string): Promise<ProviderHealthObservation | null> {
     try {
       const raw = await this.redis.get(keyFor(providerId));
       if (!raw) return null;
       const state = parseState(raw);
-      return state ? compatibilityState(state) : null;
+      return state ? observeProviderHealth(state, this.now()) : null;
     } catch {
       return null;
     }
   }
 
-  async getAll(): Promise<Record<string, ProviderHealthState>> {
+  async getAll(): Promise<Record<string, ProviderHealthObservation>> {
     const keys: string[] = [];
     let cursor = "0";
     do {
@@ -460,13 +464,17 @@ export class ProviderHealth implements ProviderHealthHandle {
     if (keys.length === 0) return {};
     keys.sort();
     const values = await this.redis.mget(...keys);
-    const result: Record<string, ProviderHealthState> = {};
+    const result: Record<string, ProviderHealthObservation> = {};
+    const now = this.now();
     for (let index = 0; index < keys.length; index++) {
       const raw = values[index];
       if (!raw) continue;
       const state = parseState(raw);
       if (state)
-        result[(keys[index] as string).slice(REDIS_PREFIX.length)] = compatibilityState(state);
+        result[(keys[index] as string).slice(REDIS_PREFIX.length)] = observeProviderHealth(
+          state,
+          now,
+        );
     }
     return result;
   }

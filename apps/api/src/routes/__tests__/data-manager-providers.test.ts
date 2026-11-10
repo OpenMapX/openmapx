@@ -2,7 +2,7 @@ import { createApiClient } from "@openmapx/core";
 import { getApiDataManagerProviders } from "@openmapx/core/api-admin-sdk";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ProviderHealthState } from "../../services/provider-health/index.js";
+import type { ProviderHealthObservation } from "../../services/provider-health/index.js";
 import { administrationSdkFetch } from "./helpers/administration-sdk-fetch";
 
 vi.mock("../../db/index.js", () => {
@@ -70,7 +70,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const sampleState: ProviderHealthState = {
+const sampleState: ProviderHealthObservation = {
   schema: 2,
   state: "degraded",
   successCount: 12,
@@ -79,8 +79,6 @@ const sampleState: ProviderHealthState = {
   consecutiveSuccesses: 0,
   consecutiveFailures: 1,
   reopenCount: 0,
-  success: 12,
-  failure: 3,
   emaLatencyMs: 80,
   window: [
     { outcome: "ok", at: "2026-05-21T00:00:00.000Z", latencyMs: 80 },
@@ -90,7 +88,6 @@ const sampleState: ProviderHealthState = {
   lastSuccessAt: "2026-05-21T00:00:00.000Z",
   lastFailureOutcome: "connection",
   lastOperatorMessage: "boom",
-  lastFailureReason: "boom",
   retryAt: null,
   windowFailureRate: 0.5,
 };
@@ -109,7 +106,7 @@ describe("GET /data-manager/providers", () => {
     });
     providerHealthMock.getAll.mockResolvedValue({
       zeta: { ...sampleState },
-      alpha: { ...sampleState, success: 5 },
+      alpha: { ...sampleState, successCount: 5 },
     });
     const res = await app.inject({ method: "GET", url: "/data-manager/providers" });
     expect(res.statusCode).toBe(200);
@@ -163,13 +160,15 @@ describe("GET /data-manager/providers/:id", () => {
       user: { id: "admin-1", role: "admin" },
       session: { id: "sess-1" },
     });
-    providerHealthMock.getState.mockResolvedValue(sampleState);
+    providerHealthMock.getState.mockResolvedValue({
+      ...sampleState,
+      state: "half-open",
+      retryAt: "2026-05-21T00:05:30.000Z",
+    });
 
     const res = await app.inject({ method: "GET", url: "/data-manager/providers/acme" });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { id: string; success: number };
-    expect(body.id).toBe("acme");
-    expect(body.success).toBe(12);
+    expect(res.json()).toMatchObject({ id: "acme", state: "half-open", successCount: 12 });
   });
 
   it("returns 404 when the provider is unknown", async () => {
