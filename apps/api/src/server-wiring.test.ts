@@ -336,6 +336,7 @@ describe("makeRateLimitTierHook", () => {
       status: vi.fn(async () => {}),
       public: vi.fn(async () => {}),
       unmatched: vi.fn(async () => {}),
+      typeahead: vi.fn(async () => {}),
     };
     return { hook: stubs as unknown as RateLimitTiers, stubs };
   }

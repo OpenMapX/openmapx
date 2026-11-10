@@ -398,7 +398,10 @@ services:
   unauthenticated callers with 401 before your handler runs and before the
   request body is read; the authenticated user id is then available as
   `req.userId`. A route accepts a request body of up to 1 MiB; pass
-  `{ bodyLimit }` (bytes, capped at 8 MiB) to accept more. The incoming request's headers are
+  `{ bodyLimit }` (bytes, capped at 8 MiB) to accept more. Pass `{ rateLimitTier }`
+  to choose the per-client bucket: `expensive` for a route that calls a costly or
+  quota-bound upstream, `typeahead` for one a client calls while the user types,
+  `tile` for map-tile fan-out, or the default `public`. The incoming request's headers are
   forwarded as `req.headers` (`Record<string, string | string[] | undefined>`);
   Node lowercases every header name when parsing the request, so read
   `req.headers["if-none-match"]`, not `req.headers["If-None-Match"]`.

@@ -369,6 +369,7 @@ async function wire(max = 1000) {
       integrationIngress: unexpected,
       status: unexpected,
       unmatched: unexpected,
+      typeahead: unexpected,
     }),
   );
   const registered = new Map<string, string>();

@@ -49,6 +49,7 @@ describe("Mangrove signer over the production dispatcher and host HTTP client", 
       public: vi.fn(async () => {}),
       expensive,
       tile: vi.fn(async () => {}),
+      typeahead: vi.fn(async () => {}),
     });
     fetchMock = vi.fn(async () => Response.json(ACCOUNT));
     vi.stubGlobal("fetch", fetchMock);

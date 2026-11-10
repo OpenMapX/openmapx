@@ -57,11 +57,11 @@ let stagedIntegrationRoutes: RegisteredIntegrationRoute[] | null = null;
 export const ROUTE_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"] as const;
 // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
 let _routeDispatcherFastify: FastifyInstance<any, any, any, any> | null = null;
-let routeRateLimits: Pick<RateLimitTiers, "public" | "expensive" | "tile"> | null = null;
+type IntegrationRouteTiers = Pick<RateLimitTiers, "public" | "expensive" | "typeahead" | "tile">;
 
-export function setIntegrationRouteRateLimits(
-  limits: Pick<RateLimitTiers, "public" | "expensive" | "tile"> | null,
-): void {
+let routeRateLimits: IntegrationRouteTiers | null = null;
+
+export function setIntegrationRouteRateLimits(limits: IntegrationRouteTiers | null): void {
   routeRateLimits = limits;
 }
 

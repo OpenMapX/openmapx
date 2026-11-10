@@ -151,6 +151,7 @@ import {
   publicApiLimit,
   statusPublicApiLimit,
   tilePublicApiLimit,
+  typeaheadApiLimit,
   unmatchedRouteLimit,
 } from "./utils/rate-limit";
 import { createSafePinoOptions } from "./utils/safe-log-fields";
@@ -282,6 +283,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
     auth: authLimit.preHandler(),
     tile: tilePublicApiLimit.preHandler(),
     expensive: makeTimelineAwareRateLimit(expensivePublicApiLimit),
+    typeahead: typeaheadApiLimit.preHandler(),
     integrationIngress: integrationIngressApiLimit.preHandler(),
     status: makeStatusAwareRateLimit(statusPublicApiLimit),
     public: makeTimelineAwareRateLimit(publicApiLimit),

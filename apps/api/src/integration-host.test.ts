@@ -96,10 +96,12 @@ describe("integration route rate tiers", () => {
       reply.status(429).send({ error: "limited" });
     });
     const tileLimit = vi.fn(async () => undefined);
+    const typeaheadLimit = vi.fn(async () => undefined);
     setIntegrationRouteRateLimits({
       public: publicLimit,
       expensive: expensiveLimit,
       tile: tileLimit,
+      typeahead: typeaheadLimit,
     });
     const app = makeApp();
     await initIntegrations(app, [FIXTURES_DIR]);
@@ -109,6 +111,8 @@ describe("integration route rate tiers", () => {
     expect(limited.statusCode).toBe(429);
     expect(limited.json()).toEqual({ error: "limited" });
     expect((await app.inject("/api/integrations/alpha/tier-tile")).statusCode).toBe(200);
+    expect((await app.inject("/api/integrations/alpha/tier-typeahead")).statusCode).toBe(200);
+    expect(typeaheadLimit).toHaveBeenCalledTimes(1);
     expect(publicLimit).toHaveBeenCalledTimes(1);
     expect(expensiveLimit).toHaveBeenCalledTimes(1);
     expect(tileLimit).toHaveBeenCalledTimes(1);
@@ -121,11 +125,13 @@ describe("host and dispatcher request tier ownership", () => {
       public: new RateLimiter({ max, windowMs: 60_000 }),
       expensive: new RateLimiter({ max, windowMs: 60_000 }),
       tile: new RateLimiter({ max, windowMs: 60_000 }),
+      typeahead: new RateLimiter({ max, windowMs: 60_000 }),
     };
     const tiers: RateLimitTiers = {
       public: buckets.public.preHandler(),
       expensive: buckets.expensive.preHandler(),
       tile: buckets.tile.preHandler(),
+      typeahead: buckets.typeahead.preHandler(),
       auth: vi.fn(),
       integrationIngress: vi.fn(),
       status: vi.fn(),
@@ -202,6 +208,7 @@ describe("host and dispatcher request tier ownership", () => {
       status: unexpectedTier,
       public: latePublic,
       unmatched: unexpectedTier,
+      typeahead: unexpectedTier,
     };
     app.addContentTypeParser("application/x-integration-probe", { parseAs: "string" }, parseBody);
     app.addHook("onRequest", makeRateLimitTierHook(tiers));
@@ -260,9 +267,11 @@ describe("host and dispatcher request tier ownership", () => {
     ["public", false],
     ["expensive", false],
     ["tile", false],
+    ["typeahead", false],
     ["public", true],
     ["expensive", true],
     ["tile", true],
+    ["typeahead", true],
   ] as const)(
     "charges actual dispatcher requests exactly once to %s (root route: %s)",
     async (tier, rootRoute) => {

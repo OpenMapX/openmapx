@@ -47,6 +47,7 @@ import {
 } from "./navigation-alerts.js";
 import { captureRoutingResult, createRoutingOrchestrator } from "./orchestrator.js";
 import { avoidPlannedClosures, plannedClosureImpact } from "./planned-closures.js";
+import { sendRoutingAdmissionDenied } from "./provider-admission.js";
 import { roadConditionImpactForRequest } from "./road-condition-routing.js";
 import { NoScheduleProviderError, runSchedulePlan } from "./schedule-plan.js";
 import {
@@ -323,320 +324,332 @@ export function setup(ctx: IntegrationContext): void {
   const { getRoutingProviders, getOptimizeProviders, getMatchProvider } =
     createRoutingOrchestrator(ctx);
 
-  ctx.registerRoute("GET", "/directions", async (req, reply) => {
-    const requestStartedAt = performance.now();
-    let request: ParsedDirectionsRequest;
-    try {
-      request = parseDirectionsRequest(req.query, DIRECTIONS_REQUEST_POLICY);
-    } catch (error) {
-      if (!(error instanceof DirectionsRequestValidationError)) throw error;
-      reply.status(400).send({ error: error.message });
-      return;
-    }
-
-    const {
-      waypoints,
-      travelMode,
-      avoidClosures: wantClosureAvoidance,
-      requireTimeAware,
-      routingOptions: baseRoutingOptions,
-    } = request;
-    const {
-      closureRefTime,
-      hasExclusions,
-      keyParams,
-      routingOptions,
-      roadConditionImpact,
-      localAccessLines,
-    } = await planDirectionsRequest(ctx, request);
-
-    // When exclusions are present, only use providers that explicitly honour
-    // the generic exclusion contract. Falling back to an engine that ignores
-    // these fields would silently return a route through the closed segment.
-    let resolvedChain = getRoutingProviders(travelMode, { requireTimeAware });
-    if (request.provider) {
-      resolvedChain = resolvedChain.filter((entry) => entry.integrationId === request.provider);
-    }
-    if (hasExclusions) {
-      resolvedChain = resolvedChain.filter((e) => e.provider.supportsExclusions === true);
-    }
-
-    if (resolvedChain.length === 0) {
-      recordRoutingRequest(ctx, {
-        providerId: "none",
-        mode: travelMode,
-        operation: "directions",
-        outcome: "error",
-        liveTraffic: baseRoutingOptions.useLiveTraffic,
-        closureAvoidance: wantClosureAvoidance,
-        startedAt: requestStartedAt,
-      });
-      const detail = requireTimeAware
-        ? `No time-aware routing provider available for mode: ${travelMode}`
-        : `No routing provider available for mode: ${travelMode}`;
-      reply.status(503).send({ error: detail });
-      return;
-    }
-
-    const conditionResponse = wantClosureAvoidance || Boolean(baseRoutingOptions.useLiveTraffic);
-    const responseRoadConditionImpact = roadConditionImpactForRequest(
-      roadConditionImpact,
-      Boolean(baseRoutingOptions.useLiveTraffic) && !closureRefTime,
-      baseRoutingOptions.useLiveTraffic && closureRefTime
-        ? ["unsupported_future_shared_traffic"]
-        : [],
-    );
-    const ttl = conditionResponse ? 0 : cacheTtlSeconds(closureRefTime);
-
-    const planWith = async (chain: typeof resolvedChain, options: RoutingOptions) => {
-      let lastErr: unknown;
-      for (const resolved of chain) {
-        const providerStartedAt = performance.now();
-        try {
-          const r = await resolved.provider.getRoute(waypoints, travelMode, options);
-          ctx.metricsRecorder?.recordProviderCall(
-            {
-              providerId: resolved.integrationId,
-              method: "getRoute",
-              outcome: r.routes.length > 0 ? "ok" : "empty",
-            },
-            performance.now() - providerStartedAt,
-          );
-          return captureRoutingResult(r, resolved);
-        } catch (err) {
-          ctx.metricsRecorder?.recordProviderCall(
-            { providerId: resolved.integrationId, method: "getRoute", outcome: "error" },
-            performance.now() - providerStartedAt,
-          );
-          lastErr = err;
-          ctx.log.warn(
-            `routing provider ${resolved.integrationId} failed; trying next`,
-            err as Error,
-          );
-        }
+  ctx.registerRoute(
+    "GET",
+    "/directions",
+    async (req, reply) => {
+      const requestStartedAt = performance.now();
+      let request: ParsedDirectionsRequest;
+      try {
+        request = parseDirectionsRequest(req.query, DIRECTIONS_REQUEST_POLICY);
+      } catch (error) {
+        if (!(error instanceof DirectionsRequestValidationError)) throw error;
+        reply.status(400).send({ error: error.message });
+        return;
       }
-      throw lastErr ?? new Error("All routing providers failed");
-    };
 
-    try {
-      let result = await withOptionalCache(
-        ctx,
-        hashKey("cache:directions:contributors-v3", keyParams),
-        ttl,
-        () => planWith(resolvedChain, routingOptions),
+      const {
+        waypoints,
+        travelMode,
+        avoidClosures: wantClosureAvoidance,
+        requireTimeAware,
+        routingOptions: baseRoutingOptions,
+      } = request;
+      const {
+        closureRefTime,
+        hasExclusions,
+        keyParams,
+        routingOptions,
+        roadConditionImpact,
+        localAccessLines,
+      } = await planDirectionsRequest(ctx, request);
+
+      // When exclusions are present, only use providers that explicitly honour
+      // the generic exclusion contract. Falling back to an engine that ignores
+      // these fields would silently return a route through the closed segment.
+      let resolvedChain = getRoutingProviders(travelMode, { requireTimeAware });
+      if (request.provider) {
+        resolvedChain = resolvedChain.filter((entry) => entry.integrationId === request.provider);
+      }
+      if (hasExclusions) {
+        resolvedChain = resolvedChain.filter((e) => e.provider.supportsExclusions === true);
+      }
+
+      if (resolvedChain.length === 0) {
+        recordRoutingRequest(ctx, {
+          providerId: "none",
+          mode: travelMode,
+          operation: "directions",
+          outcome: "error",
+          liveTraffic: baseRoutingOptions.useLiveTraffic,
+          closureAvoidance: wantClosureAvoidance,
+          startedAt: requestStartedAt,
+        });
+        const detail = requireTimeAware
+          ? `No time-aware routing provider available for mode: ${travelMode}`
+          : `No routing provider available for mode: ${travelMode}`;
+        reply.status(503).send({ error: detail });
+        return;
+      }
+
+      const conditionResponse = wantClosureAvoidance || Boolean(baseRoutingOptions.useLiveTraffic);
+      const responseRoadConditionImpact = roadConditionImpactForRequest(
+        roadConditionImpact,
+        Boolean(baseRoutingOptions.useLiveTraffic) && !closureRefTime,
+        baseRoutingOptions.useLiveTraffic && closureRefTime
+          ? ["unsupported_future_shared_traffic"]
+          : [],
       );
-      const planned =
-        wantClosureAvoidance &&
-        closureRefTime &&
-        (travelMode === "driving" || travelMode === "motorcycle")
-          ? await avoidPlannedClosures(ctx, {
-              first: result,
-              waypoints,
-              travelAt: closureRefTime,
-              options: routingOptions,
-              plan: (options) =>
-                planWith(
-                  resolvedChain.filter((e) => e.provider.supportsDirectedExclusions === true),
-                  options,
-                ),
-            })
-          : null;
-      if (planned) result = planned.result;
-      markLocalAccessRoutes(result.routes, localAccessLines);
-      if (responseRoadConditionImpact)
-        result.roadConditionImpact = await verifyRouteTraffic(
-          ctx,
-          result.routes,
-          responseRoadConditionImpact,
-          result.provider,
-        );
-      if (planned)
-        result.roadConditionImpact = plannedClosureImpact(
-          result.roadConditionImpact,
-          planned.outcome,
-        );
-      reply.header(
-        "Cache-Control",
-        conditionResponse
-          ? "no-store"
-          : `public, max-age=${ttl}, stale-while-revalidate=${STALE_WHILE_REVALIDATE_SECONDS}`,
-      );
-      recordRoutingRequest(ctx, {
-        providerId: result.provider ?? "unknown",
-        mode: travelMode,
-        operation: "directions",
-        outcome: "ok",
-        liveTraffic: baseRoutingOptions.useLiveTraffic,
-        closureAvoidance: wantClosureAvoidance,
-        startedAt: requestStartedAt,
-        result,
-      });
-      reply.send(result);
-    } catch (err) {
-      recordRoutingRequest(ctx, {
-        providerId: "none",
-        mode: travelMode,
-        operation: "directions",
-        outcome: "error",
-        liveTraffic: baseRoutingOptions.useLiveTraffic,
-        closureAvoidance: wantClosureAvoidance,
-        startedAt: requestStartedAt,
-      });
-      ctx.log.error("All routing providers failed", err as Error);
-      reply.status(isUnsupportedExclusionsError(err) ? 503 : 502).send({
-        error: isUnsupportedExclusionsError(err)
-          ? "Closure avoidance unavailable for this route"
-          : "Routing unavailable",
-      });
-    }
-  });
+      const ttl = conditionResponse ? 0 : cacheTtlSeconds(closureRefTime);
 
-  ctx.registerRoute("GET", "/directions/optimize", async (req, reply) => {
-    const requestStartedAt = performance.now();
-    let request: ParsedDirectionsRequest;
-    try {
-      request = parseDirectionsRequest(req.query, OPTIMIZE_DIRECTIONS_REQUEST_POLICY);
-    } catch (error) {
-      if (!(error instanceof DirectionsRequestValidationError)) throw error;
-      reply.status(400).send({ error: error.message });
-      return;
-    }
-
-    const {
-      waypoints,
-      travelMode,
-      avoidClosures: wantClosureAvoidance,
-      requireTimeAware,
-      routingOptions: baseRoutingOptions,
-    } = request;
-    const {
-      closureRefTime,
-      hasExclusions,
-      keyParams,
-      routingOptions,
-      roadConditionImpact,
-      localAccessLines,
-    } = await planDirectionsRequest(ctx, request);
-
-    let resolvedChain = getOptimizeProviders(travelMode, { requireTimeAware });
-    if (request.provider) {
-      resolvedChain = resolvedChain.filter((entry) => entry.integrationId === request.provider);
-    }
-    // When exclusions are present, only use providers that explicitly honour
-    // the generic exclusion contract.
-    if (hasExclusions) {
-      resolvedChain = resolvedChain.filter((entry) => entry.provider.supportsExclusions === true);
-    }
-    if (resolvedChain.length === 0) {
-      recordRoutingRequest(ctx, {
-        providerId: "none",
-        mode: travelMode,
-        operation: "optimize",
-        outcome: "error",
-        liveTraffic: baseRoutingOptions.useLiveTraffic,
-        closureAvoidance: wantClosureAvoidance,
-        startedAt: requestStartedAt,
-      });
-      const detail = requireTimeAware
-        ? `No time-aware optimize provider available for mode: ${travelMode}`
-        : `No optimize provider available for mode: ${travelMode}`;
-      reply.status(503).send({ error: detail });
-      return;
-    }
-
-    const conditionResponse = wantClosureAvoidance || Boolean(baseRoutingOptions.useLiveTraffic);
-    const responseRoadConditionImpact = roadConditionImpactForRequest(
-      roadConditionImpact,
-      Boolean(baseRoutingOptions.useLiveTraffic) && !closureRefTime,
-      baseRoutingOptions.useLiveTraffic && closureRefTime
-        ? ["unsupported_future_shared_traffic"]
-        : [],
-    );
-    const ttl = conditionResponse ? 0 : cacheTtlSeconds(closureRefTime);
-
-    try {
-      const result = await withOptionalCache(
-        ctx,
-        hashKey("cache:directions:optimize:contributors-v3", keyParams),
-        ttl,
-        async () => {
-          let lastErr: unknown;
-          for (const resolved of resolvedChain) {
-            const optimizeFn = resolved.provider.optimizeRoute;
-            if (!optimizeFn) continue;
-            const providerStartedAt = performance.now();
-            try {
-              const r = await optimizeFn(waypoints, travelMode, routingOptions);
-              ctx.metricsRecorder?.recordProviderCall(
-                {
-                  providerId: resolved.integrationId,
-                  method: "optimizeRoute",
-                  outcome: r.routes.length > 0 ? "ok" : "empty",
-                },
-                performance.now() - providerStartedAt,
-              );
-              return captureRoutingResult(r, resolved);
-            } catch (err) {
-              ctx.metricsRecorder?.recordProviderCall(
-                {
-                  providerId: resolved.integrationId,
-                  method: "optimizeRoute",
-                  outcome: "error",
-                },
-                performance.now() - providerStartedAt,
-              );
-              lastErr = err;
-              ctx.log.warn(
-                `routing optimizer ${resolved.integrationId} failed; trying next`,
-                err as Error,
-              );
-            }
+      const planWith = async (chain: typeof resolvedChain, options: RoutingOptions) => {
+        let lastErr: unknown;
+        for (const resolved of chain) {
+          const providerStartedAt = performance.now();
+          try {
+            const r = await resolved.provider.getRoute(waypoints, travelMode, options);
+            ctx.metricsRecorder?.recordProviderCall(
+              {
+                providerId: resolved.integrationId,
+                method: "getRoute",
+                outcome: r.routes.length > 0 ? "ok" : "empty",
+              },
+              performance.now() - providerStartedAt,
+            );
+            return captureRoutingResult(r, resolved);
+          } catch (err) {
+            ctx.metricsRecorder?.recordProviderCall(
+              { providerId: resolved.integrationId, method: "getRoute", outcome: "error" },
+              performance.now() - providerStartedAt,
+            );
+            lastErr = err;
+            ctx.log.warn(
+              `routing provider ${resolved.integrationId} failed; trying next`,
+              err as Error,
+            );
           }
-          throw lastErr ?? new Error("All route optimizers failed");
-        },
-      );
-      markLocalAccessRoutes(result.routes, localAccessLines);
-      if (responseRoadConditionImpact)
-        result.roadConditionImpact = await verifyRouteTraffic(
+        }
+        throw lastErr ?? new Error("All routing providers failed");
+      };
+
+      try {
+        let result = await withOptionalCache(
           ctx,
-          result.routes,
-          responseRoadConditionImpact,
-          result.provider,
+          hashKey("cache:directions:contributors-v3", keyParams),
+          ttl,
+          () => planWith(resolvedChain, routingOptions),
         );
-      reply.header(
-        "Cache-Control",
-        conditionResponse
-          ? "no-store"
-          : `public, max-age=${ttl}, stale-while-revalidate=${STALE_WHILE_REVALIDATE_SECONDS}`,
+        const planned =
+          wantClosureAvoidance &&
+          closureRefTime &&
+          (travelMode === "driving" || travelMode === "motorcycle")
+            ? await avoidPlannedClosures(ctx, {
+                first: result,
+                waypoints,
+                travelAt: closureRefTime,
+                options: routingOptions,
+                plan: (options) =>
+                  planWith(
+                    resolvedChain.filter((e) => e.provider.supportsDirectedExclusions === true),
+                    options,
+                  ),
+              })
+            : null;
+        if (planned) result = planned.result;
+        markLocalAccessRoutes(result.routes, localAccessLines);
+        if (responseRoadConditionImpact)
+          result.roadConditionImpact = await verifyRouteTraffic(
+            ctx,
+            result.routes,
+            responseRoadConditionImpact,
+            result.provider,
+          );
+        if (planned)
+          result.roadConditionImpact = plannedClosureImpact(
+            result.roadConditionImpact,
+            planned.outcome,
+          );
+        reply.header(
+          "Cache-Control",
+          conditionResponse
+            ? "no-store"
+            : `public, max-age=${ttl}, stale-while-revalidate=${STALE_WHILE_REVALIDATE_SECONDS}`,
+        );
+        recordRoutingRequest(ctx, {
+          providerId: result.provider ?? "unknown",
+          mode: travelMode,
+          operation: "directions",
+          outcome: "ok",
+          liveTraffic: baseRoutingOptions.useLiveTraffic,
+          closureAvoidance: wantClosureAvoidance,
+          startedAt: requestStartedAt,
+          result,
+        });
+        reply.send(result);
+      } catch (err) {
+        recordRoutingRequest(ctx, {
+          providerId: "none",
+          mode: travelMode,
+          operation: "directions",
+          outcome: "error",
+          liveTraffic: baseRoutingOptions.useLiveTraffic,
+          closureAvoidance: wantClosureAvoidance,
+          startedAt: requestStartedAt,
+        });
+        if (sendRoutingAdmissionDenied(reply, err)) return;
+        ctx.log.error("All routing providers failed", err as Error);
+        reply.status(isUnsupportedExclusionsError(err) ? 503 : 502).send({
+          error: isUnsupportedExclusionsError(err)
+            ? "Closure avoidance unavailable for this route"
+            : "Routing unavailable",
+        });
+      }
+    },
+    { rateLimitTier: "expensive" },
+  );
+
+  ctx.registerRoute(
+    "GET",
+    "/directions/optimize",
+    async (req, reply) => {
+      const requestStartedAt = performance.now();
+      let request: ParsedDirectionsRequest;
+      try {
+        request = parseDirectionsRequest(req.query, OPTIMIZE_DIRECTIONS_REQUEST_POLICY);
+      } catch (error) {
+        if (!(error instanceof DirectionsRequestValidationError)) throw error;
+        reply.status(400).send({ error: error.message });
+        return;
+      }
+
+      const {
+        waypoints,
+        travelMode,
+        avoidClosures: wantClosureAvoidance,
+        requireTimeAware,
+        routingOptions: baseRoutingOptions,
+      } = request;
+      const {
+        closureRefTime,
+        hasExclusions,
+        keyParams,
+        routingOptions,
+        roadConditionImpact,
+        localAccessLines,
+      } = await planDirectionsRequest(ctx, request);
+
+      let resolvedChain = getOptimizeProviders(travelMode, { requireTimeAware });
+      if (request.provider) {
+        resolvedChain = resolvedChain.filter((entry) => entry.integrationId === request.provider);
+      }
+      // When exclusions are present, only use providers that explicitly honour
+      // the generic exclusion contract.
+      if (hasExclusions) {
+        resolvedChain = resolvedChain.filter((entry) => entry.provider.supportsExclusions === true);
+      }
+      if (resolvedChain.length === 0) {
+        recordRoutingRequest(ctx, {
+          providerId: "none",
+          mode: travelMode,
+          operation: "optimize",
+          outcome: "error",
+          liveTraffic: baseRoutingOptions.useLiveTraffic,
+          closureAvoidance: wantClosureAvoidance,
+          startedAt: requestStartedAt,
+        });
+        const detail = requireTimeAware
+          ? `No time-aware optimize provider available for mode: ${travelMode}`
+          : `No optimize provider available for mode: ${travelMode}`;
+        reply.status(503).send({ error: detail });
+        return;
+      }
+
+      const conditionResponse = wantClosureAvoidance || Boolean(baseRoutingOptions.useLiveTraffic);
+      const responseRoadConditionImpact = roadConditionImpactForRequest(
+        roadConditionImpact,
+        Boolean(baseRoutingOptions.useLiveTraffic) && !closureRefTime,
+        baseRoutingOptions.useLiveTraffic && closureRefTime
+          ? ["unsupported_future_shared_traffic"]
+          : [],
       );
-      recordRoutingRequest(ctx, {
-        providerId: result.provider ?? "unknown",
-        mode: travelMode,
-        operation: "optimize",
-        outcome: "ok",
-        liveTraffic: baseRoutingOptions.useLiveTraffic,
-        closureAvoidance: wantClosureAvoidance,
-        startedAt: requestStartedAt,
-        result,
-      });
-      reply.send(result);
-    } catch (err) {
-      recordRoutingRequest(ctx, {
-        providerId: "none",
-        mode: travelMode,
-        operation: "optimize",
-        outcome: "error",
-        liveTraffic: baseRoutingOptions.useLiveTraffic,
-        closureAvoidance: wantClosureAvoidance,
-        startedAt: requestStartedAt,
-      });
-      reply.status(isUnsupportedExclusionsError(err) ? 503 : 502).send({
-        error: isUnsupportedExclusionsError(err)
-          ? "Closure avoidance unavailable for this route"
-          : "Route optimization unavailable",
-      });
-    }
-  });
+      const ttl = conditionResponse ? 0 : cacheTtlSeconds(closureRefTime);
+
+      try {
+        const result = await withOptionalCache(
+          ctx,
+          hashKey("cache:directions:optimize:contributors-v3", keyParams),
+          ttl,
+          async () => {
+            let lastErr: unknown;
+            for (const resolved of resolvedChain) {
+              const optimizeFn = resolved.provider.optimizeRoute;
+              if (!optimizeFn) continue;
+              const providerStartedAt = performance.now();
+              try {
+                const r = await optimizeFn(waypoints, travelMode, routingOptions);
+                ctx.metricsRecorder?.recordProviderCall(
+                  {
+                    providerId: resolved.integrationId,
+                    method: "optimizeRoute",
+                    outcome: r.routes.length > 0 ? "ok" : "empty",
+                  },
+                  performance.now() - providerStartedAt,
+                );
+                return captureRoutingResult(r, resolved);
+              } catch (err) {
+                ctx.metricsRecorder?.recordProviderCall(
+                  {
+                    providerId: resolved.integrationId,
+                    method: "optimizeRoute",
+                    outcome: "error",
+                  },
+                  performance.now() - providerStartedAt,
+                );
+                lastErr = err;
+                ctx.log.warn(
+                  `routing optimizer ${resolved.integrationId} failed; trying next`,
+                  err as Error,
+                );
+              }
+            }
+            throw lastErr ?? new Error("All route optimizers failed");
+          },
+        );
+        markLocalAccessRoutes(result.routes, localAccessLines);
+        if (responseRoadConditionImpact)
+          result.roadConditionImpact = await verifyRouteTraffic(
+            ctx,
+            result.routes,
+            responseRoadConditionImpact,
+            result.provider,
+          );
+        reply.header(
+          "Cache-Control",
+          conditionResponse
+            ? "no-store"
+            : `public, max-age=${ttl}, stale-while-revalidate=${STALE_WHILE_REVALIDATE_SECONDS}`,
+        );
+        recordRoutingRequest(ctx, {
+          providerId: result.provider ?? "unknown",
+          mode: travelMode,
+          operation: "optimize",
+          outcome: "ok",
+          liveTraffic: baseRoutingOptions.useLiveTraffic,
+          closureAvoidance: wantClosureAvoidance,
+          startedAt: requestStartedAt,
+          result,
+        });
+        reply.send(result);
+      } catch (err) {
+        recordRoutingRequest(ctx, {
+          providerId: "none",
+          mode: travelMode,
+          operation: "optimize",
+          outcome: "error",
+          liveTraffic: baseRoutingOptions.useLiveTraffic,
+          closureAvoidance: wantClosureAvoidance,
+          startedAt: requestStartedAt,
+        });
+        if (sendRoutingAdmissionDenied(reply, err)) return;
+        reply.status(isUnsupportedExclusionsError(err) ? 503 : 502).send({
+          error: isUnsupportedExclusionsError(err)
+            ? "Closure avoidance unavailable for this route"
+            : "Route optimization unavailable",
+        });
+      }
+    },
+    { rateLimitTier: "expensive" },
+  );
 
   /**
    * POST /match — snap a recorded GPS trace to the road network and return
@@ -727,6 +740,7 @@ export function setup(ctx: IntegrationContext): void {
       result.provider = resolved.integrationId;
       reply.send(result);
     } catch (err) {
+      if (sendRoutingAdmissionDenied(reply, err)) return;
       ctx.log.error("map matching failed", err as Error);
       reply.status(502).send({ error: "Map matching unavailable" });
     }
@@ -889,117 +903,123 @@ export function setup(ctx: IntegrationContext): void {
    * `@openmapx/core`. Returns one route plus the canonical trip schedule; a
    * scheduled trip is a chain, so there are no alternates.
    */
-  ctx.registerRoute("POST", "/directions/schedule", async (req, reply) => {
-    let request: ReturnType<typeof parseScheduleRequest>;
-    try {
-      request = parseScheduleRequest(req.body);
-    } catch (error) {
-      if (!(error instanceof ScheduleRequestValidationError)) throw error;
-      reply
-        .status(error.reason ? 422 : 400)
-        .send({ error: error.message, ...(error.reason ? { reason: error.reason } : {}) });
-      return;
-    }
+  ctx.registerRoute(
+    "POST",
+    "/directions/schedule",
+    async (req, reply) => {
+      let request: ReturnType<typeof parseScheduleRequest>;
+      try {
+        request = parseScheduleRequest(req.body);
+      } catch (error) {
+        if (!(error instanceof ScheduleRequestValidationError)) throw error;
+        reply
+          .status(error.reason ? 422 : 400)
+          .send({ error: error.message, ...(error.reason ? { reason: error.reason } : {}) });
+        return;
+      }
 
-    const closureRefTime = resolveTravelInstant(
-      request.waypoints,
-      request.anchor.kind === "departAt" ? request.anchor.wallClock : undefined,
-      request.anchor.kind === "arriveBy" ? request.anchor.wallClock : undefined,
-    );
-    const requestedLiveTraffic = Boolean(request.routingOptions.useLiveTraffic);
-    const { exclusions, hasExclusions, exclusionsHash, roadConditionImpact } =
-      await applyClosureExclusions(
-        ctx,
+      const closureRefTime = resolveTravelInstant(
         request.waypoints,
-        request.avoidClosures,
-        closureRefTime,
-        request.travelMode,
+        request.anchor.kind === "departAt" ? request.anchor.wallClock : undefined,
+        request.anchor.kind === "arriveBy" ? request.anchor.wallClock : undefined,
       );
-    if (hasExclusions) {
-      request.routingOptions.excludeLocations = exclusions.points;
-      request.routingOptions.excludePolygons = exclusions.polygons;
-    }
-    if (closureRefTime) request.routingOptions.useLiveTraffic = false;
-
-    let chain = getRoutingProviders(request.travelMode);
-    if (hasExclusions) {
-      chain = chain.filter((entry) => entry.provider.supportsExclusions === true);
-    }
-    if (chain.length === 0) {
-      reply
-        .status(503)
-        .send({ error: `No routing provider available for mode: ${request.travelMode}` });
-      return;
-    }
-
-    const conditionResponse = request.avoidClosures || requestedLiveTraffic;
-    const responseRoadConditionImpact = roadConditionImpactForRequest(
-      roadConditionImpact,
-      requestedLiveTraffic && !closureRefTime,
-      requestedLiveTraffic && closureRefTime ? ["unsupported_future_shared_traffic"] : [],
-    );
-    const ttl = conditionResponse ? 0 : cacheTtlSeconds(closureRefTime);
-    try {
-      const result = await withOptionalCache(
-        ctx,
-        hashKey(
-          "cache:directions:schedule:contributors-v3",
-          createScheduleCacheIdentity(request, exclusionsHash),
-        ),
-        ttl,
-        () =>
-          runSchedulePlan(request, chain, {
-            onProviderCall: (providerId, outcome, durationMs) => {
-              ctx.metricsRecorder?.recordProviderCall(
-                { providerId, method: "getRoute", outcome },
-                durationMs,
-              );
-            },
-          }),
-      );
-      if (responseRoadConditionImpact)
-        result.roadConditionImpact = await verifyRouteTraffic(
+      const requestedLiveTraffic = Boolean(request.routingOptions.useLiveTraffic);
+      const { exclusions, hasExclusions, exclusionsHash, roadConditionImpact } =
+        await applyClosureExclusions(
           ctx,
-          result.routes,
-          responseRoadConditionImpact,
-          result.provider,
+          request.waypoints,
+          request.avoidClosures,
+          closureRefTime,
+          request.travelMode,
         );
+      if (hasExclusions) {
+        request.routingOptions.excludeLocations = exclusions.points;
+        request.routingOptions.excludePolygons = exclusions.polygons;
+      }
+      if (closureRefTime) request.routingOptions.useLiveTraffic = false;
 
-      // A contradictory trip is a client error, but the planner still produced
-      // the best-effort schedule that explains why — send both.
-      const contradictory = result.schedule.violations.some(
-        (violation) =>
-          violation.kind === "inverted-order" ||
-          violation.kind === "anchor-conflict" ||
-          violation.kind === "conflicting-fields" ||
-          violation.kind === "invalid-time" ||
-          violation.kind === "invalid-dwell",
-      );
-      if (contradictory) {
-        reply.status(422).send({
-          error: "The requested schedule cannot be satisfied",
-          violations: result.schedule.violations,
-          schedule: result.schedule,
-        });
+      let chain = getRoutingProviders(request.travelMode);
+      if (hasExclusions) {
+        chain = chain.filter((entry) => entry.provider.supportsExclusions === true);
+      }
+      if (chain.length === 0) {
+        reply
+          .status(503)
+          .send({ error: `No routing provider available for mode: ${request.travelMode}` });
         return;
       }
 
-      reply.header(
-        "Cache-Control",
-        conditionResponse
-          ? "no-store"
-          : `private, max-age=${ttl}, stale-while-revalidate=${STALE_WHILE_REVALIDATE_SECONDS}`,
+      const conditionResponse = request.avoidClosures || requestedLiveTraffic;
+      const responseRoadConditionImpact = roadConditionImpactForRequest(
+        roadConditionImpact,
+        requestedLiveTraffic && !closureRefTime,
+        requestedLiveTraffic && closureRefTime ? ["unsupported_future_shared_traffic"] : [],
       );
-      reply.send(result);
-    } catch (error) {
-      if (error instanceof NoScheduleProviderError) {
-        reply.status(503).send({ error: error.message, missing: error.missing });
-        return;
+      const ttl = conditionResponse ? 0 : cacheTtlSeconds(closureRefTime);
+      try {
+        const result = await withOptionalCache(
+          ctx,
+          hashKey(
+            "cache:directions:schedule:contributors-v3",
+            createScheduleCacheIdentity(request, exclusionsHash),
+          ),
+          ttl,
+          () =>
+            runSchedulePlan(request, chain, {
+              onProviderCall: (providerId, outcome, durationMs) => {
+                ctx.metricsRecorder?.recordProviderCall(
+                  { providerId, method: "getRoute", outcome },
+                  durationMs,
+                );
+              },
+            }),
+        );
+        if (responseRoadConditionImpact)
+          result.roadConditionImpact = await verifyRouteTraffic(
+            ctx,
+            result.routes,
+            responseRoadConditionImpact,
+            result.provider,
+          );
+
+        // A contradictory trip is a client error, but the planner still produced
+        // the best-effort schedule that explains why — send both.
+        const contradictory = result.schedule.violations.some(
+          (violation) =>
+            violation.kind === "inverted-order" ||
+            violation.kind === "anchor-conflict" ||
+            violation.kind === "conflicting-fields" ||
+            violation.kind === "invalid-time" ||
+            violation.kind === "invalid-dwell",
+        );
+        if (contradictory) {
+          reply.status(422).send({
+            error: "The requested schedule cannot be satisfied",
+            violations: result.schedule.violations,
+            schedule: result.schedule,
+          });
+          return;
+        }
+
+        reply.header(
+          "Cache-Control",
+          conditionResponse
+            ? "no-store"
+            : `private, max-age=${ttl}, stale-while-revalidate=${STALE_WHILE_REVALIDATE_SECONDS}`,
+        );
+        reply.send(result);
+      } catch (error) {
+        if (error instanceof NoScheduleProviderError) {
+          reply.status(503).send({ error: error.message, missing: error.missing });
+          return;
+        }
+        if (sendRoutingAdmissionDenied(reply, error)) return;
+        ctx.log.error("Scheduled routing failed", error as Error);
+        reply.status(502).send({ error: "Routing unavailable" });
       }
-      ctx.log.error("Scheduled routing failed", error as Error);
-      reply.status(502).send({ error: "Routing unavailable" });
-    }
-  });
+    },
+    { rateLimitTier: "expensive" },
+  );
 
   /**
    * POST /directions/ev — a driving route with EV charging stops inserted
@@ -1019,82 +1039,93 @@ export function setup(ctx: IntegrationContext): void {
    *     homePricePerKwh?, homeCurrency?, units?, lang?
    *   }
    */
-  ctx.registerRoute("POST", "/directions/ev", async (req, reply) => {
-    const body = req.body as Record<string, unknown> | null | undefined;
+  ctx.registerRoute(
+    "POST",
+    "/directions/ev",
+    async (req, reply) => {
+      const body = req.body as Record<string, unknown> | null | undefined;
 
-    let planArgs: Parameters<typeof runEvPlan>[2];
-    try {
-      const waypoints = parseBodyWaypoints(body);
-      const socStartPct = Number(body?.socStartPct);
-      if (!Number.isFinite(socStartPct) || socStartPct < 0 || socStartPct > 100) {
-        throw Object.assign(new Error("socStartPct is required and must be between 0 and 100"), {
-          status: 400,
-        });
-      }
-      planArgs = {
-        waypoints,
-        vehicleId: typeof body?.vehicleId === "string" ? body.vehicleId : undefined,
-        vehicle: parseVehicleSpec(body?.vehicle),
-        socStartPct,
-        socArrivalMinPct: optionalNumberInRange(body?.socArrivalMinPct, "socArrivalMinPct", 0, 100),
-        socTargetPct: optionalNumberInRange(body?.socTargetPct, "socTargetPct", 0, 100),
-        ambientTempC: optionalNumberInRange(body?.ambientTempC, "ambientTempC", -60, 60),
-        departAt:
-          body?.departAt === undefined
-            ? undefined
-            : parseDateTime(String(body.departAt), "departAt"),
-        avoidClosures: body?.avoidClosures === true || body?.avoidClosures === "1",
-        avoidTolls: !!body?.avoidTolls,
-        avoidHighways: !!body?.avoidHighways,
-        avoidFerries: !!body?.avoidFerries,
-        preferredNetworks: Array.isArray(body?.preferredNetworks)
-          ? body.preferredNetworks
-          : undefined,
-        avoidedNetworks: Array.isArray(body?.avoidedNetworks) ? body.avoidedNetworks : undefined,
-        exclusiveNetworks:
-          typeof body?.exclusiveNetworks === "boolean" ? body.exclusiveNetworks : undefined,
-        preferCheaper: typeof body?.preferCheaper === "boolean" ? body.preferCheaper : undefined,
-        homePricePerKwh: optionalNumberInRange(body?.homePricePerKwh, "homePricePerKwh", 0, 100),
-        homeCurrency: typeof body?.homeCurrency === "string" ? body.homeCurrency : undefined,
-        units: body?.units as "metric" | "imperial" | undefined,
-        lang: typeof body?.lang === "string" ? body.lang : undefined,
-      };
-    } catch (e) {
-      const status = (e as { status?: number }).status ?? 400;
-      reply.status(status).send({ error: (e as Error).message });
-      return;
-    }
-
-    try {
-      const chain = getRoutingProviders("driving", {
-        requireTimeAware: Boolean(planArgs.departAt),
-      });
-      let result: Awaited<ReturnType<typeof runEvPlan>> | undefined;
-      let lastError: unknown;
-      for (const resolved of chain) {
-        try {
-          // Re-run the entire plan for the next provider. This makes the base
-          // route, charger matrix, and final route use one provider and one
-          // freshly evaluated road-condition request contract.
-          result = await runEvPlan(ctx, () => [resolved], planArgs);
-          break;
-        } catch (error) {
-          if ((error as { status?: number }).status === 400) throw error;
-          lastError = error;
-          ctx.log.warn(
-            `[ev] routing provider ${resolved.integrationId} failed; trying next`,
-            error as Error,
-          );
+      let planArgs: Parameters<typeof runEvPlan>[2];
+      try {
+        const waypoints = parseBodyWaypoints(body);
+        const socStartPct = Number(body?.socStartPct);
+        if (!Number.isFinite(socStartPct) || socStartPct < 0 || socStartPct > 100) {
+          throw Object.assign(new Error("socStartPct is required and must be between 0 and 100"), {
+            status: 400,
+          });
         }
+        planArgs = {
+          waypoints,
+          vehicleId: typeof body?.vehicleId === "string" ? body.vehicleId : undefined,
+          vehicle: parseVehicleSpec(body?.vehicle),
+          socStartPct,
+          socArrivalMinPct: optionalNumberInRange(
+            body?.socArrivalMinPct,
+            "socArrivalMinPct",
+            0,
+            100,
+          ),
+          socTargetPct: optionalNumberInRange(body?.socTargetPct, "socTargetPct", 0, 100),
+          ambientTempC: optionalNumberInRange(body?.ambientTempC, "ambientTempC", -60, 60),
+          departAt:
+            body?.departAt === undefined
+              ? undefined
+              : parseDateTime(String(body.departAt), "departAt"),
+          avoidClosures: body?.avoidClosures === true || body?.avoidClosures === "1",
+          avoidTolls: !!body?.avoidTolls,
+          avoidHighways: !!body?.avoidHighways,
+          avoidFerries: !!body?.avoidFerries,
+          preferredNetworks: Array.isArray(body?.preferredNetworks)
+            ? body.preferredNetworks
+            : undefined,
+          avoidedNetworks: Array.isArray(body?.avoidedNetworks) ? body.avoidedNetworks : undefined,
+          exclusiveNetworks:
+            typeof body?.exclusiveNetworks === "boolean" ? body.exclusiveNetworks : undefined,
+          preferCheaper: typeof body?.preferCheaper === "boolean" ? body.preferCheaper : undefined,
+          homePricePerKwh: optionalNumberInRange(body?.homePricePerKwh, "homePricePerKwh", 0, 100),
+          homeCurrency: typeof body?.homeCurrency === "string" ? body.homeCurrency : undefined,
+          units: body?.units as "metric" | "imperial" | undefined,
+          lang: typeof body?.lang === "string" ? body.lang : undefined,
+        };
+      } catch (e) {
+        const status = (e as { status?: number }).status ?? 400;
+        reply.status(status).send({ error: (e as Error).message });
+        return;
       }
-      if (!result) {
-        throw lastError ?? Object.assign(new Error("no routing provider"), { status: 503 });
+
+      try {
+        const chain = getRoutingProviders("driving", {
+          requireTimeAware: Boolean(planArgs.departAt),
+        });
+        let result: Awaited<ReturnType<typeof runEvPlan>> | undefined;
+        let lastError: unknown;
+        for (const resolved of chain) {
+          try {
+            // Re-run the entire plan for the next provider. This makes the base
+            // route, charger matrix, and final route use one provider and one
+            // freshly evaluated road-condition request contract.
+            result = await runEvPlan(ctx, () => [resolved], planArgs);
+            break;
+          } catch (error) {
+            if ((error as { status?: number }).status === 400) throw error;
+            lastError = error;
+            ctx.log.warn(
+              `[ev] routing provider ${resolved.integrationId} failed; trying next`,
+              error as Error,
+            );
+          }
+        }
+        if (!result) {
+          throw lastError ?? Object.assign(new Error("no routing provider"), { status: 503 });
+        }
+        reply.header("Cache-Control", "no-store");
+        reply.send(result);
+      } catch (e) {
+        if (sendRoutingAdmissionDenied(reply, e)) return;
+        const status = (e as { status?: number }).status ?? 502;
+        reply.status(status).send({ error: (e as Error).message });
       }
-      reply.header("Cache-Control", "no-store");
-      reply.send(result);
-    } catch (e) {
-      const status = (e as { status?: number }).status ?? 502;
-      reply.status(status).send({ error: (e as Error).message });
-    }
-  });
+    },
+    { rateLimitTier: "expensive" },
+  );
 }

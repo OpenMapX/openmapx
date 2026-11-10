@@ -1003,6 +1003,7 @@ describe("actual integration producers through generated SDK", () => {
         status: unexpected,
         public: limiter.preHandler(),
         unmatched: unexpected,
+        typeahead: unexpected,
       }),
     );
     app.addHook("preHandler", makeCsrfGuardHook(["https://app.test"]));

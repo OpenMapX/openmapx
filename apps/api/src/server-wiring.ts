@@ -343,6 +343,7 @@ export const TILE_ROUTE_PREFIXES = [
 export const EXPENSIVE_ROUTE_PREFIXES = [
   "/api/isochrone",
   "/api/elevation",
+  "/api/neighborhoods",
   "/api/places",
   "/api/image-proxy",
   "/api/winter-sports",
@@ -460,6 +461,7 @@ export interface RateLimitTiers {
   auth: Limit;
   tile: Limit;
   expensive: Limit;
+  typeahead: Limit;
   integrationIngress: Limit;
   status: Limit;
   public: Limit;
@@ -488,7 +490,7 @@ const BODY_CAPABLE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 //   - `/api/auth/*`              → strict (credential stuffing, email spam)
 //   - exactly `GET /api/status`  → 60/minute (dependency snapshot refresh)
 //   - tile / map asset routes    → generous (bursty, cacheable, CDN-friendly)
-//   - expensive public routes    → tight (Valhalla, place and image fan-out)
+//   - expensive public routes    → tight (Valhalla, Overpass, place and image fan-out)
 //   - every other matched route  → broad floor, including timeline day reads,
 //                                  which add a per-user bucket after sign-in
 export function makeRateLimitTierHook(limits: RateLimitTiers) {

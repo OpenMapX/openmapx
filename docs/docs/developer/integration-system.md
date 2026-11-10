@@ -960,7 +960,8 @@ before the handler runs, and before the request body is read. A route accepts a
 body of up to 1 MiB; declare `bodyLimit` (in bytes, at most 8 MiB) in the options
 of a route that needs more. Every matched route consumes exactly one operation-tier
 bucket: `rateLimitTier` defaults to `public`, upstream-heavy point/list routes use
-`expensive`, and tile fan-out uses `tile`. In addition, `POST`, `PUT`, `PATCH`, and
+`expensive`, routes a client calls on every debounced keystroke (autocomplete,
+forward geocoding) use `typeahead`, and tile fan-out uses `tile`. In addition, `POST`, `PUT`, `PATCH`, and
 `DELETE` requests consume a separate per-client integration-ingress bucket before
 Fastify parses their bodies. `GET` and `HEAD` do not use that admission bucket, so
 bursty integration tile traffic retains its dedicated tier. Do not add integration

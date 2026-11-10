@@ -101,6 +101,7 @@ beforeEach(async () => {
       status: unexpected,
       public: (req, reply) => floor.preHandler()(req, reply),
       unmatched: unexpected,
+      typeahead: unexpected,
     }),
   );
   app.addHook("preHandler", async (request) => {

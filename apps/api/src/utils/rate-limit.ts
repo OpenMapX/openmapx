@@ -274,12 +274,27 @@ export const statusPublicApiLimit = new RateLimiter({ max: 60, windowMs: 60_000 
 
 /**
  * Tight limiter for CPU- or quota-expensive endpoints that fan out to
- * upstream services (Valhalla isochrone, MOTIS, geocoding, photo / review
- * aggregation).
+ * upstream services (Valhalla isochrone and routing, MOTIS journey planning,
+ * reverse geocoding, hotel offers, photo / review aggregation).
  */
 export const expensivePublicApiLimit = new RateLimiter({
   max: envInt("RATE_LIMIT_EXPENSIVE_MAX", 60),
   windowMs: envInt("RATE_LIMIT_EXPENSIVE_WINDOW_MS", 60_000),
+});
+
+/**
+ * Integration routes a client calls while the user types (autocomplete and
+ * forward geocoding). Search fires one request per debounced keystroke, so a
+ * user typing steadily makes a few requests a second for a few seconds; the
+ * bucket holds several such bursts and refills at four requests a second.
+ * It is separate from `expensive`, so typing never spends the routing or
+ * place-detail budget, and tighter than the broad floor these routes used.
+ *
+ * Tunable via `RATE_LIMIT_TYPEAHEAD_MAX` / `RATE_LIMIT_TYPEAHEAD_WINDOW_MS`.
+ */
+export const typeaheadApiLimit = new RateLimiter({
+  max: envInt("RATE_LIMIT_TYPEAHEAD_MAX", 240),
+  windowMs: envInt("RATE_LIMIT_TYPEAHEAD_WINDOW_MS", 60_000),
 });
 
 /**

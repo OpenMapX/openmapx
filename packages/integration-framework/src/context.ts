@@ -195,8 +195,13 @@ export type RouteHandler = (
 export interface RouteOptions {
   /** Require a valid session; respond 401 before invoking the handler otherwise. */
   requireAuth?: boolean;
-  /** Host-owned limiter bucket. Every integration route uses exactly one tier. */
-  rateLimitTier?: "public" | "expensive" | "tile";
+  /**
+   * Host-owned limiter bucket. Every integration route uses exactly one tier:
+   * `public` (the default), `expensive` for routes that fan out to a costly
+   * upstream, `typeahead` for routes a client calls while the user types, and
+   * `tile` for map-tile fan-out.
+   */
+  rateLimitTier?: "public" | "expensive" | "typeahead" | "tile";
   /**
    * Largest request body the route accepts, in bytes. The host answers 413 to
    * anything larger, and also caps this value at 8 MiB. Routes that do not

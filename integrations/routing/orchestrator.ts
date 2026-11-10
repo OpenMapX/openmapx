@@ -8,6 +8,7 @@ import {
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { captureGeometryContributors } from "@openmapx/mobility-core/geometry-contributors";
+import { createRoutingProviderAdmission } from "./provider-admission.js";
 import type { RoutingProvider } from "./types.js";
 
 export interface ResolvedProvider {
@@ -35,6 +36,10 @@ function orderByPreference(entries: ResolvedProvider[]): ResolvedProvider[] {
 }
 
 export function createRoutingOrchestrator(ctx: IntegrationContext) {
+  // Every provider handed out is wrapped, so each engine call on any path
+  // (directions, optimize, schedule, EV, match) passes the shared admission.
+  const admission = createRoutingProviderAdmission(ctx);
+
   function collectProviders(): ResolvedProvider[] {
     const routingIntegrations = ctx.getIntegrationsByDomain("routing");
     const resolved: ResolvedProvider[] = [];
@@ -43,7 +48,7 @@ export function createRoutingOrchestrator(ctx: IntegrationContext) {
       const registered = (integration.providers.get("routing") ?? []) as RoutingProvider[];
       for (const provider of registered) {
         resolved.push({
-          provider,
+          provider: admission.admitted(provider, integration.id),
           integrationId: integration.id,
           contributors: snapshotContributors(
             (integration.manifest?.dataSources ?? []).map(dataSourceToAttribution),

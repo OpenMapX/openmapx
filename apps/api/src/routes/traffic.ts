@@ -1,4 +1,9 @@
 import type { FastifyPluginAsync } from "fastify";
+import {
+  type ProviderDailyBudget,
+  sendProviderBudgetRefusal,
+  tomtomTrafficDailyBudget,
+} from "../services/provider-daily-budget.js";
 import { getTrafficProvider } from "../services/traffic.factory";
 import { TrafficProviderHttpError } from "../services/traffic.provider";
 import { bindRequestAbort } from "../utils/request-abort.js";
@@ -8,8 +13,14 @@ import { normalizeUpstreamResponseStream } from "../utils/upstream-response.js";
 
 const TOMTOM_TRAFFIC_MAX_ZOOM = 22;
 
-export const trafficRoute: FastifyPluginAsync = async (fastify) => {
+export const trafficRoute: FastifyPluginAsync<{ budget?: ProviderDailyBudget }> = async (
+  fastify,
+  options,
+) => {
   declareRouteAuth(fastify, "public");
+  // Every tile is a live call on the operator's key, so all clients share one
+  // daily budget on top of their per-client tile limit.
+  const budget = options.budget ?? tomtomTrafficDailyBudget();
 
   fastify.get<{
     Params: { z: string; x: string; y: string };
@@ -40,6 +51,8 @@ export const trafficRoute: FastifyPluginAsync = async (fastify) => {
       const requestAbort = bindRequestAbort(req, reply);
 
       try {
+        const admission = await budget.admit(requestAbort.signal);
+        if (!admission.allowed) return sendProviderBudgetRefusal(reply, admission, "TomTom");
         const tile = await getTrafficProvider().getFlowTile(z, x, y, requestAbort.signal);
 
         reply.header("Cache-Control", tile.cacheControl ?? "public, max-age=30, s-maxage=30");
