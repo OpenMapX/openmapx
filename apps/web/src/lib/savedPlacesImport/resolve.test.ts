@@ -1,5 +1,5 @@
 import type { SearchResult } from "@openmapx/core";
-import { API_ENDPOINTS, apiClient } from "@openmapx/core";
+import { API_ENDPOINTS, ApiClientError, apiClient } from "@openmapx/core";
 import { waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveImportPlaces } from "./resolve";
@@ -24,8 +24,39 @@ const lists = (status: "approximate" | "needsLookup" = "approximate"): ImportLis
     ],
   },
 ];
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 describe("import coordinate resolution", () => {
+  it("waits out a geocoding 429 and retries instead of leaving the place unresolved", async () => {
+    vi.useFakeTimers();
+    const get = vi
+      .spyOn(apiClient, "get")
+      .mockRejectedValueOnce(new ApiClientError(429, null, 3))
+      .mockResolvedValue([result()]);
+    const pending = resolveImportPlaces(lists(), { signal: new AbortController().signal });
+
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(get).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    const resolved = await pending;
+
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(resolved[0].places[0]).toMatchObject({ status: "located" });
+  });
+  it("stops waiting when the import is cancelled", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(apiClient, "get").mockRejectedValue(new ApiClientError(429, null, 30));
+    const controller = new AbortController();
+    const pending = resolveImportPlaces(lists(), { signal: controller.signal });
+    const outcome = pending.catch((error: unknown) => error);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    controller.abort(new DOMException("Cancelled", "AbortError"));
+
+    expect(await outcome).toMatchObject({ name: "AbortError" });
+  });
   it("uses our API with language/proximity and retains served source evidence", async () => {
     const get = vi.spyOn(apiClient, "get").mockResolvedValue([result()]);
     const resolved = await resolveImportPlaces(lists(), {

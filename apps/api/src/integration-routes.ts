@@ -1,3 +1,4 @@
+import { createHmac, randomBytes } from "node:crypto";
 import { Transform } from "node:stream";
 import {
   httpError,
@@ -7,7 +8,42 @@ import {
 } from "@openmapx/integration-framework";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { RateLimitTiers } from "./server-wiring";
+import { requestNetworkKey } from "./utils/rate-limit";
 import { requireAuth } from "./utils/require-auth";
+
+// Keyed with the server secret so the key is the same on every replica and
+// across restarts, yet cannot be reversed to the address by enumerating the
+// IPv4 space. A server without the secret (tests, scripts) uses a key that
+// lives as long as the process.
+let processClientKeySecret: string | undefined;
+
+function clientKeySecret(): string {
+  const configured = process.env.BETTER_AUTH_SECRET;
+  if (configured) return configured;
+  processClientKeySecret ??= randomBytes(32).toString("hex");
+  return processClientKeySecret;
+}
+
+/** The opaque per-network key integration routes see as `req.clientKey`. */
+export function integrationClientKey(request: FastifyRequest): string {
+  return createHmac("sha256", clientKeySecret())
+    .update(`integration-client-key:${requestNetworkKey(request)}`)
+    .digest("hex")
+    .slice(0, 32);
+}
+
+/** The session's user, or undefined for a caller without a valid one. */
+async function optionalUserId(request: FastifyRequest): Promise<string | undefined> {
+  // Only a request carrying credentials can have a session, so an anonymous
+  // caller never costs a session lookup.
+  if (!request.headers.cookie && !request.headers.authorization) return undefined;
+  try {
+    return await requireAuth(request);
+  } catch (error) {
+    if ((error as { statusCode?: number }).statusCode === 401) return undefined;
+    throw error;
+  }
+}
 
 /** The request body an integration route accepts unless it declares a larger limit. */
 const INTEGRATION_ROUTE_BODY_LIMIT = 1024 * 1024;
@@ -57,11 +93,14 @@ let stagedIntegrationRoutes: RegisteredIntegrationRoute[] | null = null;
 export const ROUTE_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"] as const;
 // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
 let _routeDispatcherFastify: FastifyInstance<any, any, any, any> | null = null;
-let routeRateLimits: Pick<RateLimitTiers, "public" | "expensive" | "tile"> | null = null;
+type IntegrationRouteTiers = Pick<
+  RateLimitTiers,
+  "public" | "expensive" | "routing" | "typeahead" | "tile" | "unmatched"
+>;
 
-export function setIntegrationRouteRateLimits(
-  limits: Pick<RateLimitTiers, "public" | "expensive" | "tile"> | null,
-): void {
+let routeRateLimits: IntegrationRouteTiers | null = null;
+
+export function setIntegrationRouteRateLimits(limits: IntegrationRouteTiers | null): void {
   routeRateLimits = limits;
 }
 
@@ -273,11 +312,18 @@ export function registerIntegrationRouteDispatcher(
   // authentication, so an anonymous caller never has a body read for them.
   const admit = async (request: FastifyRequest, reply: FastifyReply) => {
     const id = (request.params as { id?: string }).id;
-    if (!id || !integrations.get(id)?.enabled) return;
-
     const routePath = rawIntegrationPath(request);
-    const matched = findIntegrationRoute(id, request.method, routePath);
-    if (!matched) return;
+    const matched =
+      id && integrations.get(id)?.enabled
+        ? findIntegrationRoute(id, request.method, routePath)
+        : undefined;
+    // The global hook leaves dispatcher requests to the matched route's tier.
+    // A request that matches no enabled integration route has no tier of its
+    // own, so it is charged to the unmatched-route bucket before its 404.
+    if (!id || !matched) {
+      await routeRateLimits?.unmatched(request, reply);
+      return reply.sent ? reply : undefined;
+    }
 
     const rateLimitTier = matched.route.options?.rateLimitTier ?? "public";
     const limiter = routeRateLimits?.[rateLimitTier];
@@ -289,6 +335,8 @@ export function registerIntegrationRouteDispatcher(
     let userId: string | undefined;
     if (matched.route.options?.requireAuth === true) {
       userId = await requireAuth(request);
+    } else if (matched.route.options?.optionalAuth === true) {
+      userId = await optionalUserId(request);
     }
     admissions.set(request, {
       integrationId: id,
@@ -334,6 +382,7 @@ export function registerIntegrationRouteDispatcher(
           params: routeParams,
           body: request.body,
           userId,
+          clientKey: integrationClientKey(request),
           headers: request.headers,
           signal: requestController.signal,
         },

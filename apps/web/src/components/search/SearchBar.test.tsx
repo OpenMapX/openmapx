@@ -1744,6 +1744,7 @@ describe("SearchBar", () => {
       cloudActive: true,
       cloudAvailable: true,
       cloudConsentRequired: true,
+      cloudRequiresSignIn: false,
       cloudProviderLabels: ["Gemini · gemini-3.5-flash-lite"],
       cloudProcessors: [
         {
@@ -1794,6 +1795,45 @@ describe("SearchBar", () => {
     });
     await screen.findByText("Accessible cafés with outdoor seating");
   });
+
+  it.each<[string, { data: { user: { id: string } } | null; isPending?: boolean }, boolean]>([
+    ["does not ask an anonymous visitor", { data: null, isPending: false }, false],
+    ["asks a signed-in user", { data: { user: { id: "test-user" } }, isPending: false }, true],
+    ["keeps the usual prompt while the session is loading", { data: null, isPending: true }, true],
+  ])(
+    "%s for consent the server could not use when cloud requires sign-in",
+    async (_label, session, asked) => {
+      useSessionMock.mockReturnValue(session);
+      useNlpSearchMock.mockReturnValue({ data: undefined, isFetching: false });
+      renderBar([
+        {
+          type: "ai-search",
+          integrationId: "search-nlp",
+          aiActive: true,
+          localActive: true,
+          cloudActive: true,
+          cloudAvailable: true,
+          cloudConsentRequired: true,
+          cloudRequiresSignIn: true,
+          cloudProviderLabels: ["Cloud test"],
+          cloudProcessors: [],
+        },
+      ]);
+      const input = screen.getByLabelText("search.ariaLabel");
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: "accessible cafes with outdoor seating" } });
+      fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+      if (asked) {
+        await screen.findByText("search.nlpConsentTitle");
+        expect(useNlpSearchMock.mock.calls.at(-1)?.[3]).toBe(false);
+      } else {
+        await waitFor(() => expect(useNlpSearchMock.mock.calls.at(-1)?.[3]).toBe(true));
+        expect(useNlpSearchMock.mock.calls.at(-1)?.[5]).toBe("deny");
+        expect(screen.queryByText("search.nlpConsentTitle")).toBeNull();
+      }
+    },
+  );
 
   it("silently swallows an autocomplete error (no dropdown, no crash)", async () => {
     useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: false, isError: true });
@@ -2019,6 +2059,7 @@ describe("SearchBar NLP submission context", () => {
         cloudActive: true,
         cloudAvailable: true,
         cloudConsentRequired: true,
+        cloudRequiresSignIn: false,
         cloudProviderLabels: ["Cloud test"],
         cloudProcessors: [],
       },

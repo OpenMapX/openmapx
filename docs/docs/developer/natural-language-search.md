@@ -204,19 +204,32 @@ subsequent searches do not repeatedly wait for an unhealthy service.
 
 ## Privacy and consent
 
-Cloud access is fail-closed at both the client and integration boundary:
+The server decides whether a request may use cloud; a client cannot unlock it
+by itself. Cloud access is fail-closed at both the client and integration
+boundary:
 
 - **`privacyMode: strict`** always removes cloud providers, even if a client
   sends a positive cloud-consent signal.
-- **`privacyMode: consent`** (default) requires an explicit positive consent
-  signal on every cloud-authorized request. Missing or unknown values mean
-  local-only. Without remembered acceptance, the browser offers consent before a
-  cloud-authorized parse. Remembered acceptance can authorize the first request;
-  the request still carries the explicit signal.
+- **`privacyMode: consent`** (default) uses cloud only for a signed-in user whose
+  request carries an explicit positive consent signal. The consent then belongs
+  to an account the server has verified. An anonymous request is always
+  local-only in this mode, whatever it sends, and its response reports cloud as
+  unavailable. The integration's disclosure metadata says so with
+  `cloudRequiresSignIn`, and the browser asks only a signed-in user. Without
+  remembered acceptance, the browser offers consent before a cloud-authorized
+  parse. Remembered acceptance can authorize the first
+  request; the request still carries the explicit signal.
 - **`privacyMode: open`** permits policy-deferred cloud access. The browser can authorize the first parse after reading integration
   disclosure metadata. A local-only parse followed by a retry also supports
   servers that disclose policy in the parse response. A remembered decline
   continues to win.
+
+Every cloud call also passes a budget held in Valkey before it is sent: the
+deployment's daily total (`cloudRequestsPerDay`) and the caller's hourly share
+of it (`cloudRequestsPerClientPerHour`), counted per signed-in user or, in open
+mode, per client network. A refused call does not reach the provider and does
+not trip its circuit breaker; the search uses the local providers instead, and
+that answer is not cached. Without a reachable Valkey no cloud call is made.
 
 Only the **query text and rounded map center** are included in the model prompt.
 Account identity, exact device location, and the map bounding box are not sent.
@@ -243,13 +256,15 @@ saving them. Credentials remain in the vault-backed Credentials tab.
 `providers` is the sole provider/model configuration surface; there is no
 parallel per-vendor model or endpoint setting.
 
-| Setting                 | Default                    | Meaning                                                                |
-| ----------------------- | -------------------------- | ---------------------------------------------------------------------- |
-| `providers`             | Local Ollama, then keyword | Ordered definitions described above                                    |
-| `privacyMode`           | `consent`                  | `strict`, `consent`, or `open`                                         |
-| `roundCoordsDecimals`   | `2`                        | Coordinate precision included in the model prompt and intent cache key |
-| `intentCacheTtlSeconds` | `86400`                    | Parsed-intent cache lifetime                                           |
-| `rateLimitPerIpPerHour` | `200`                      | Integration fixed-hour parse bucket limit; see the API notes below     |
+| Setting                         | Default                    | Meaning                                                                |
+| ------------------------------- | -------------------------- | ---------------------------------------------------------------------- |
+| `providers`                     | Local Ollama, then keyword | Ordered definitions described above                                    |
+| `privacyMode`                   | `consent`                  | `strict`, `consent`, or `open`                                         |
+| `roundCoordsDecimals`           | `2`                        | Coordinate precision included in the model prompt and intent cache key |
+| `intentCacheTtlSeconds`         | `86400`                    | Parsed-intent cache lifetime                                           |
+| `rateLimitPerIpPerHour`         | `200`                      | Parses per client network per hour; see the API notes below            |
+| `cloudRequestsPerDay`           | `1000`                     | Cloud provider calls per day for the whole deployment                  |
+| `cloudRequestsPerClientPerHour` | `20`                       | Cloud provider calls per hour for one user or client network           |
 
 Definitions whose required credential is absent are skipped with an operator
 warning. If the whole provider array is invalid, for example because of duplicate IDs or
@@ -292,22 +307,26 @@ body is:
 ```
 
 `mapCenter` is `[longitude, latitude]`. `query`, `mapCenter`, and `mapBbox` are
-required; `lang` is optional. `cloudAccess` is deliberately explicit and
-fail-closed:
+required; `lang` is optional. A `query` longer than 500 characters is rejected
+with `400` and `{ "error": "query_too_long" }`. `cloudAccess` is the caller's
+choice, deliberately explicit and fail-closed; the server still decides:
 
-| Value             | Behavior                                                                         |
-| ----------------- | -------------------------------------------------------------------------------- |
-| `deny`            | Local and keyword providers only; also the default for missing or unknown values |
-| `consented`       | Allows cloud in `consent` and `open`; `strict` still overrides it                |
-| `defer-to-server` | Allows cloud only when the operator selected `open`                              |
+| Value             | Behavior                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------ |
+| `deny`            | Local and keyword providers only; also the default for missing or unknown values     |
+| `consented`       | Allows cloud in `open`, and in `consent` for a signed-in user; `strict` overrides it |
+| `defer-to-server` | Allows cloud only when the operator selected `open`                                  |
 
 The response includes the validated `intent`, its `resolvedBbox`, provider ID
 and label, whether that result used cloud, whether cloud is available under the
 current policy and needs consent, the available cloud provider labels, and
 whether the intent came from cache. A request rejected by the hourly limit returns `429` with
-`Retry-After: 3600`. The integration uses the forwarded `ip` query value when
-present and otherwise a shared `anon` bucket; the host dispatcher separately
-applies its trusted-peer throttle. This setting is not an atomic per-user quota.
+`Retry-After: 3600`. The limit is counted per client network (an IPv4 address or
+an IPv6 /64), using the key the host derives from the trusted peer address;
+nothing in the request can choose or change it. With Valkey the count is atomic
+across replicas. If Valkey is configured but unreachable, the request is served
+by the keyword parser alone, since neither cloud spend nor local model time can
+be metered. The host dispatcher separately applies its own per-client limit.
 Parsing or spatial-resolution failure can return `502`. The browser falls back
 to plain visible-area search when parsing fails or produces no plausible intent.
 

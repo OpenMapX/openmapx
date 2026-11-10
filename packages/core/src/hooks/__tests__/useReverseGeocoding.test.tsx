@@ -1,6 +1,6 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { apiClient } from "../../api/client";
+import { ApiClientError, apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
 import { createQueryWrapper } from "../../test/queryWrapper";
 import type { LngLat } from "../../types/geometry";
@@ -26,6 +26,21 @@ describe("useReverseGeocoding", () => {
       { lat: "52.5", lng: "13.4", lang: "en" },
       expect.objectContaining({ signal: expect.anything(), timeoutMs: 20_000 }),
     );
+  });
+
+  it("waits out a 429 for its Retry-After and then labels the place", async () => {
+    const spy = vi
+      .spyOn(apiClient, "get")
+      .mockRejectedValueOnce(new ApiClientError(429, null, 1))
+      .mockResolvedValue({ name: "Berlin" } as never);
+
+    const { result } = renderHook(() => useReverseGeocoding(lngLat, "en"), {
+      wrapper: createQueryWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true), { timeout: 3_000 });
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(result.current.data).toEqual({ name: "Berlin" });
   });
 
   it("does not fire when coordinates are null", () => {

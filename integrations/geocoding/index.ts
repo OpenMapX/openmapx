@@ -73,198 +73,218 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   // GET /geocode
-  ctx.registerRoute("GET", "/geocode", async (req, reply) => {
-    const q = scalarQueries(req.query).q;
-    const lang = scalarQueries(req.query).lang;
+  ctx.registerRoute(
+    "GET",
+    "/geocode",
+    async (req, reply) => {
+      const q = scalarQueries(req.query).q;
+      const lang = scalarQueries(req.query).lang;
 
-    if (!q || typeof q !== "string" || q.trim().length === 0) {
-      reply.status(400).send({ error: "Query parameter 'q' is required" });
-      return;
-    }
+      if (!q || typeof q !== "string" || q.trim().length === 0) {
+        reply.status(400).send({ error: "Query parameter 'q' is required" });
+        return;
+      }
 
-    const lat = Number.parseFloat(scalarQueries(req.query).lat);
-    const lng = Number.parseFloat(scalarQueries(req.query).lng);
-    const proximity: [number, number] | undefined =
-      Number.isFinite(lat) && Number.isFinite(lng) ? [lng, lat] : undefined;
+      const lat = Number.parseFloat(scalarQueries(req.query).lat);
+      const lng = Number.parseFloat(scalarQueries(req.query).lng);
+      const proximity: [number, number] | undefined =
+        Number.isFinite(lat) && Number.isFinite(lng) ? [lng, lat] : undefined;
 
-    const effectiveLang = lang ?? "en";
-    const expandedQ = expandSearchQuery(q);
-    const normalizedQ = expandedQ.trim().toLowerCase();
-    // ~1 km rounding so nearby anchors share a cache slot; unbiased queries keep a distinct key.
-    const proxKey = proximity ? `${round(proximity[0], 2)},${round(proximity[1], 2)}` : "none";
+      const effectiveLang = lang ?? "en";
+      const expandedQ = expandSearchQuery(q);
+      const normalizedQ = expandedQ.trim().toLowerCase();
+      // ~1 km rounding so nearby anchors share a cache slot; unbiased queries keep a distinct key.
+      const proxKey = proximity ? `${round(proximity[0], 2)},${round(proximity[1], 2)}` : "none";
 
-    try {
-      const provider = getGeocodingProvider(ctx);
-      const result = await ctx.cache.withCache(
-        hashKey("cache:geocode", {
-          identity: geocodingCacheIdentity(ctx),
-          q: normalizedQ,
-          lang: effectiveLang,
-          prox: proxKey,
-        }),
-        TTL_FORWARD,
-        async () => {
-          // Equivalent station queries must fetch/deduplicate in the same order,
-          // whichever spelling first populates their shared cache slot.
-          const stationQuery = isStationQuery(q);
-          const candidates = await fetchWithVariants(
-            stationQuery ? normalizedQ : q,
-            (v) => provider.geocode(v, effectiveLang, proximity),
-            stationQuery ? mergeForwardEvidence : undefined,
-          );
-          return rankForwardResults(q, candidates);
-        },
-      );
-      reply.header("Cache-Control", "public, max-age=86400");
-      reply.send(result);
-    } catch (err) {
-      ctx.log.error("geocode upstream failed", err);
-      reply.header("Cache-Control", "no-cache");
-      reply.send([]);
-    }
-  });
+      try {
+        const provider = getGeocodingProvider(ctx);
+        const result = await ctx.cache.withCache(
+          hashKey("cache:geocode", {
+            identity: geocodingCacheIdentity(ctx),
+            q: normalizedQ,
+            lang: effectiveLang,
+            prox: proxKey,
+          }),
+          TTL_FORWARD,
+          async () => {
+            // Equivalent station queries must fetch/deduplicate in the same order,
+            // whichever spelling first populates their shared cache slot.
+            const stationQuery = isStationQuery(q);
+            const candidates = await fetchWithVariants(
+              stationQuery ? normalizedQ : q,
+              (v) => provider.geocode(v, effectiveLang, proximity),
+              stationQuery ? mergeForwardEvidence : undefined,
+            );
+            return rankForwardResults(q, candidates);
+          },
+        );
+        reply.header("Cache-Control", "public, max-age=86400");
+        reply.send(result);
+      } catch (err) {
+        ctx.log.error("geocode upstream failed", err);
+        reply.header("Cache-Control", "no-cache");
+        reply.send([]);
+      }
+    },
+    { rateLimitTier: "typeahead" },
+  );
 
   // GET /geocode/reverse
-  ctx.registerRoute("GET", "/geocode/reverse", async (req, reply) => {
-    const lat = Number.parseFloat(scalarQueries(req.query).lat);
-    const lng = Number.parseFloat(scalarQueries(req.query).lng);
-    const lang = scalarQueries(req.query).lang;
+  ctx.registerRoute(
+    "GET",
+    "/geocode/reverse",
+    async (req, reply) => {
+      const lat = Number.parseFloat(scalarQueries(req.query).lat);
+      const lng = Number.parseFloat(scalarQueries(req.query).lng);
+      const lang = scalarQueries(req.query).lang;
 
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      reply.status(400).send({ error: "lat and lng must be valid numbers" });
-      return;
-    }
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        reply.status(400).send({ error: "lat and lng must be valid numbers" });
+        return;
+      }
 
-    // Round to 4dp (~11m) to maximise cache hits for nearby queries
-    const effectiveLang = lang ?? "en";
-    const key = `cache:geocode:rev:${geocodingCacheIdentity(ctx)}:${round(lat, 4)}:${round(lng, 4)}:${effectiveLang}`;
+      // Round to 4dp (~11m) to maximise cache hits for nearby queries
+      const effectiveLang = lang ?? "en";
+      const key = `cache:geocode:rev:${geocodingCacheIdentity(ctx)}:${round(lat, 4)}:${round(lng, 4)}:${effectiveLang}`;
 
-    try {
-      const provider = getGeocodingProvider(ctx);
-      const result = await ctx.cache.withCache(key, TTL_REVERSE, () =>
-        provider.reverseGeocode(lat, lng, effectiveLang),
-      );
-      reply.header("Cache-Control", "public, max-age=86400");
-      reply.send(result);
-    } catch (err) {
-      ctx.log.error("reverse geocode upstream failed", err);
-      reply.header("Cache-Control", "no-cache");
-      reply.send(null);
-    }
-  });
+      try {
+        const provider = getGeocodingProvider(ctx);
+        const result = await ctx.cache.withCache(key, TTL_REVERSE, () =>
+          provider.reverseGeocode(lat, lng, effectiveLang),
+        );
+        reply.header("Cache-Control", "public, max-age=86400");
+        reply.send(result);
+      } catch (err) {
+        ctx.log.error("reverse geocode upstream failed", err);
+        reply.header("Cache-Control", "no-cache");
+        reply.send(null);
+      }
+    },
+    { rateLimitTier: "expensive" },
+  );
 
   // GET /geocode/country — coarse coordinate → lowercase ISO 3166-1 alpha-2
   // country code. Used by region-aware integrations (e.g. food-delivery) when a
   // place carries no countryCode of its own. Country-level zoom, cached 24h.
-  ctx.registerRoute("GET", "/geocode/country", async (req, reply) => {
-    const lat = Number.parseFloat(scalarQueries(req.query).lat);
-    const lng = Number.parseFloat(scalarQueries(req.query).lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      reply.status(400).send({ error: "lat and lng must be valid numbers" });
-      return;
-    }
-    const countryCode = await reverseGeocodeCountry(lat, lng);
-    reply.header("Cache-Control", "public, max-age=86400");
-    reply.send({ countryCode: countryCode ?? null });
-  });
-
-  // GET /autocomplete
-  ctx.registerRoute("GET", "/autocomplete", async (req, reply) => {
-    const q = scalarQueries(req.query).q;
-    const lang = scalarQueries(req.query).lang;
-
-    if (!q || typeof q !== "string" || q.trim().length === 0) {
-      reply.status(400).send({ error: "Query parameter 'q' is required" });
-      return;
-    }
-
-    const latRaw = scalarQueries(req.query).lat;
-    const lngRaw = scalarQueries(req.query).lng;
-    const lat = Number.parseFloat(latRaw ?? "");
-    const lng = Number.parseFloat(lngRaw ?? "");
-    if (
-      (latRaw !== undefined) !== (lngRaw !== undefined) ||
-      (latRaw !== undefined &&
-        (!Number.isFinite(lat) ||
-          !Number.isFinite(lng) ||
-          lat < -90 ||
-          lat > 90 ||
-          lng < -180 ||
-          lng > 180))
-    ) {
-      reply.status(400).send({ error: "lat and lng must both be valid coordinates" });
-      return;
-    }
-    // An unusable zoom only drops the radius hint; the point bias still applies.
-    const zoomValue = Number.parseFloat(scalarQueries(req.query).zoom ?? "");
-    const zoom =
-      Number.isFinite(zoomValue) && zoomValue >= 0 && zoomValue <= MAX_BIAS_ZOOM
-        ? Math.floor(zoomValue)
-        : undefined;
-    // ~1 km cells: the upstream sees the rounded point, so every request that
-    // shares a cache slot would have produced the same answer.
-    const bias: GeocodingBias | undefined =
-      latRaw !== undefined
-        ? {
-            proximity: [round(lng, 2), round(lat, 2)],
-            ...(zoom !== undefined ? { zoom } : {}),
-          }
-        : undefined;
-
-    const effectiveLang = lang ?? "en";
-    const expandedQ = expandSearchQuery(q);
-    // Normalize for cache key so "Hamburg"/"hamburg" and "Hbf"/"Hauptbahnhof" share a slot
-    const normalizedQ = expandedQ.trim().toLowerCase();
-    const key = hashKey("cache:autocomplete", {
-      identity: geocodingCacheIdentity(ctx),
-      q: normalizedQ,
-      lang: effectiveLang,
-      prox: bias ? bias.proximity.join(",") : "none",
-      zoom: bias?.zoom ?? "none",
-    });
-    const provider = getGeocodingProvider(ctx);
-    const requestGeneration = generation;
-    const load = () => fetchWithVariants(q, (v) => provider.autocomplete(v, effectiveLang, bias));
-    const remember = (data: AutocompleteResult[]) => {
-      if (cacheAvailable && requestGeneration === generation) {
-        memCache.set(key, data, MEM_SOFT_MS, MEM_HARD_MS);
-      }
-    };
-
-    // L1: in-memory check (sub-millisecond)
-    const mem = cacheAvailable ? memCache.get(key) : null;
-    if (mem) {
-      if (mem.stale) {
-        // Stale-while-revalidate: serve immediately, refresh in background
-        void ctx.cache
-          .withCache(key, TTL_AUTOCOMPLETE, load)
-          .then(remember)
-          .catch(() => {});
-      }
-      reply.header("Cache-Control", "public, max-age=3600");
-      reply.send(mem.data);
-      return;
-    }
-
-    // L2: Redis + upstream -- gracefully degrade on failure
-    try {
-      const result = await ctx.cache.withCache(key, TTL_AUTOCOMPLETE, load);
-      remember(result);
-      reply.header("Cache-Control", "public, max-age=3600");
-      reply.send(result);
-    } catch (err) {
-      ctx.log.error("autocomplete upstream failed, trying stale cache", err);
-      // Try stale Redis data before giving up
-      const stale = await ctx.cache.get<AutocompleteResult[]>(key);
-      if (stale) {
-        remember(stale);
-        reply.header("Cache-Control", "public, max-age=60");
-        reply.send(stale);
+  ctx.registerRoute(
+    "GET",
+    "/geocode/country",
+    async (req, reply) => {
+      const lat = Number.parseFloat(scalarQueries(req.query).lat);
+      const lng = Number.parseFloat(scalarQueries(req.query).lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        reply.status(400).send({ error: "lat and lng must be valid numbers" });
         return;
       }
-      // No cached data at all -- return empty instead of 500
-      reply.header("Cache-Control", "no-cache");
-      reply.send([]);
-    }
-  });
+      const countryCode = await reverseGeocodeCountry(lat, lng);
+      reply.header("Cache-Control", "public, max-age=86400");
+      reply.send({ countryCode: countryCode ?? null });
+    },
+    { rateLimitTier: "expensive" },
+  );
+
+  // GET /autocomplete
+  ctx.registerRoute(
+    "GET",
+    "/autocomplete",
+    async (req, reply) => {
+      const q = scalarQueries(req.query).q;
+      const lang = scalarQueries(req.query).lang;
+
+      if (!q || typeof q !== "string" || q.trim().length === 0) {
+        reply.status(400).send({ error: "Query parameter 'q' is required" });
+        return;
+      }
+
+      const latRaw = scalarQueries(req.query).lat;
+      const lngRaw = scalarQueries(req.query).lng;
+      const lat = Number.parseFloat(latRaw ?? "");
+      const lng = Number.parseFloat(lngRaw ?? "");
+      if (
+        (latRaw !== undefined) !== (lngRaw !== undefined) ||
+        (latRaw !== undefined &&
+          (!Number.isFinite(lat) ||
+            !Number.isFinite(lng) ||
+            lat < -90 ||
+            lat > 90 ||
+            lng < -180 ||
+            lng > 180))
+      ) {
+        reply.status(400).send({ error: "lat and lng must both be valid coordinates" });
+        return;
+      }
+      // An unusable zoom only drops the radius hint; the point bias still applies.
+      const zoomValue = Number.parseFloat(scalarQueries(req.query).zoom ?? "");
+      const zoom =
+        Number.isFinite(zoomValue) && zoomValue >= 0 && zoomValue <= MAX_BIAS_ZOOM
+          ? Math.floor(zoomValue)
+          : undefined;
+      // ~1 km cells: the upstream sees the rounded point, so every request that
+      // shares a cache slot would have produced the same answer.
+      const bias: GeocodingBias | undefined =
+        latRaw !== undefined
+          ? {
+              proximity: [round(lng, 2), round(lat, 2)],
+              ...(zoom !== undefined ? { zoom } : {}),
+            }
+          : undefined;
+
+      const effectiveLang = lang ?? "en";
+      const expandedQ = expandSearchQuery(q);
+      // Normalize for cache key so "Hamburg"/"hamburg" and "Hbf"/"Hauptbahnhof" share a slot
+      const normalizedQ = expandedQ.trim().toLowerCase();
+      const key = hashKey("cache:autocomplete", {
+        identity: geocodingCacheIdentity(ctx),
+        q: normalizedQ,
+        lang: effectiveLang,
+        prox: bias ? bias.proximity.join(",") : "none",
+        zoom: bias?.zoom ?? "none",
+      });
+      const provider = getGeocodingProvider(ctx);
+      const requestGeneration = generation;
+      const load = () => fetchWithVariants(q, (v) => provider.autocomplete(v, effectiveLang, bias));
+      const remember = (data: AutocompleteResult[]) => {
+        if (cacheAvailable && requestGeneration === generation) {
+          memCache.set(key, data, MEM_SOFT_MS, MEM_HARD_MS);
+        }
+      };
+
+      // L1: in-memory check (sub-millisecond)
+      const mem = cacheAvailable ? memCache.get(key) : null;
+      if (mem) {
+        if (mem.stale) {
+          // Stale-while-revalidate: serve immediately, refresh in background
+          void ctx.cache
+            .withCache(key, TTL_AUTOCOMPLETE, load)
+            .then(remember)
+            .catch(() => {});
+        }
+        reply.header("Cache-Control", "public, max-age=3600");
+        reply.send(mem.data);
+        return;
+      }
+
+      // L2: Redis + upstream -- gracefully degrade on failure
+      try {
+        const result = await ctx.cache.withCache(key, TTL_AUTOCOMPLETE, load);
+        remember(result);
+        reply.header("Cache-Control", "public, max-age=3600");
+        reply.send(result);
+      } catch (err) {
+        ctx.log.error("autocomplete upstream failed, trying stale cache", err);
+        // Try stale Redis data before giving up
+        const stale = await ctx.cache.get<AutocompleteResult[]>(key);
+        if (stale) {
+          remember(stale);
+          reply.header("Cache-Control", "public, max-age=60");
+          reply.send(stale);
+          return;
+        }
+        // No cached data at all -- return empty instead of 500
+        reply.header("Cache-Control", "no-cache");
+        reply.send([]);
+      }
+    },
+    { rateLimitTier: "typeahead" },
+  );
 }

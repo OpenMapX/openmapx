@@ -169,12 +169,22 @@ export type RouteHandler = (
     params: Record<string, string>;
     body: unknown;
     /**
-     * Authenticated user id. Only populated when the route was registered
-     * with `{ requireAuth: true }`; the host rejects unauthenticated callers
+     * Authenticated user id. Populated when the route was registered with
+     * `{ requireAuth: true }`, where the host rejects unauthenticated callers
      * with 401 before invoking the handler, so this field is non-null inside
-     * auth-required handlers.
+     * auth-required handlers. A route registered with `{ optionalAuth: true }`
+     * sees it only when the caller presented a valid session.
      */
     userId?: string;
+    /**
+     * Opaque key for the caller's network, derived by the host from the same
+     * trusted address its own rate limits use (an IPv4 address or an IPv6 /64,
+     * read through configured proxies only). It is stable across requests and
+     * replicas, cannot be chosen by the caller and cannot be turned back into
+     * the address. Use it for per-client quotas, never as an identity: several
+     * people can share one network.
+     */
+    clientKey: string;
     /**
      * The incoming request's HTTP headers, forwarded as-is from Fastify.
      * Node lowercases every header name when parsing the request, so read
@@ -195,8 +205,19 @@ export type RouteHandler = (
 export interface RouteOptions {
   /** Require a valid session; respond 401 before invoking the handler otherwise. */
   requireAuth?: boolean;
-  /** Host-owned limiter bucket. Every integration route uses exactly one tier. */
-  rateLimitTier?: "public" | "expensive" | "tile";
+  /**
+   * Resolve the caller's session when one is presented and pass its user id
+   * as `req.userId`; callers without a valid session still reach the handler.
+   * Ignored when `requireAuth` is set.
+   */
+  optionalAuth?: boolean;
+  /**
+   * Host-owned limiter bucket. Every integration route uses exactly one tier:
+   * `public` (the default), `expensive` for routes that fan out to a costly
+   * upstream, `routing` for turn-by-turn directions, `typeahead` for routes a
+   * client calls while the user types, and `tile` for map-tile fan-out.
+   */
+  rateLimitTier?: "public" | "expensive" | "routing" | "typeahead" | "tile";
   /**
    * Largest request body the route accepts, in bytes. The host answers 413 to
    * anything larger, and also caps this value at 8 MiB. Routes that do not

@@ -15,6 +15,7 @@ export interface RoutingProviderFixture {
   supportsExclusions?: boolean;
   supportsDirectedExclusions?: boolean;
   supportsTimeAware?: boolean;
+  admissionCeiling?: RoutingProvider["admissionCeiling"];
 }
 
 export interface RoutingTestRequest {
@@ -98,6 +99,9 @@ export function createRoutingHandlerEnvironment(options: RoutingHandlerEnvironme
                   getRoute: fixture.getRoute,
                   ...(fixture.optimizeRoute ? { optimizeRoute: fixture.optimizeRoute } : {}),
                   ...(fixture.getMatrix ? { getMatrix: fixture.getMatrix } : {}),
+                  ...(fixture.admissionCeiling
+                    ? { admissionCeiling: fixture.admissionCeiling }
+                    : {}),
                 },
               ],
             ],

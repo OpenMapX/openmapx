@@ -463,6 +463,7 @@ export const IntegrationsResponse = zod.strictObject({
         ),
         cloudAvailable: zod.boolean(),
         cloudConsentRequired: zod.boolean(),
+        cloudRequiresSignIn: zod.boolean().optional(),
         cloudProviderLabels: zod.array(zod.string()),
       }),
       zod.strictObject({

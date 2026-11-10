@@ -89,7 +89,13 @@ it("reacquires an allowed forecast fallback after cached supplier policy changes
   });
   app.get("/forecast", async (request, reply) => {
     await route.handler(
-      { query: request.query as RouteQuery, params: {}, body: null, headers: request.headers },
+      {
+        query: request.query as RouteQuery,
+        params: {},
+        body: null,
+        headers: request.headers,
+        clientKey: "test-client",
+      },
       reply,
     );
   });

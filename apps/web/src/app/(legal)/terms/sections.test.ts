@@ -24,6 +24,7 @@ function content(locale: (typeof LOCALES)[number]): string {
             cloudProcessors: [],
             cloudAvailable: false,
             cloudConsentRequired: false,
+            cloudRequiresSignIn: false,
             cloudProviderLabels: [],
           },
         ],

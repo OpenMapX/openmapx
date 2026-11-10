@@ -9,6 +9,7 @@ import {
   useNlpSearchStore,
   usePlaceStore,
   useSearchStore,
+  useSession,
   useSettingsStore,
   useSidebarStore,
   useStreetLevelStore,
@@ -157,11 +158,19 @@ export function useSearchSubmission({
   }, [cancelPendingSubmit, cancelNlpSubmission, surface]);
   const disclosures = useIntegrationDisclosures();
   const aiSearchDisclosure = useAiSearchDisclosure();
+  const { data: session, isPending: sessionPending } = useSession();
+  // Where the server offers cloud parsing only to signed-in users, an
+  // anonymous visitor's consent could never be used, so it is not asked for.
+  // Until the session is known the usual prompt stands; the server decides
+  // cloud use either way.
+  const cloudOutOfReach =
+    aiSearchDisclosure?.cloudRequiresSignIn === true && !sessionPending && !session?.user;
   const storedConsent = hasNlpConsent();
   const cloudDeclined = consentDeclined || isNlpCloudDeclined();
   const waitingForConsent =
     nlpOwned &&
     nlpCloudAccess === "deny" &&
+    !cloudOutOfReach &&
     aiSearchDisclosure?.cloudAvailable === true &&
     aiSearchDisclosure.cloudConsentRequired &&
     !consentGranted &&
@@ -337,6 +346,7 @@ export function useSearchSubmission({
       showConsent:
         waitingForConsent ||
         (nlpOwned &&
+          !cloudOutOfReach &&
           nlpData?.cloudAvailable === true &&
           nlpData.cloudConsentRequired &&
           !consentGranted &&
