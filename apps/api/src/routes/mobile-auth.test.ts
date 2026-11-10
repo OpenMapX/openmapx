@@ -52,7 +52,6 @@ let app: FastifyInstance;
 beforeAll(async () => {
   // The deployment's trusted web origins; no mobile-specific setting.
   vi.stubEnv("CORS_ORIGIN", `${WEB_ORIGIN},${SECOND_WEB_ORIGIN}`);
-  vi.stubEnv("MOBILE_AUTH_ALLOWED_ORIGINS", undefined);
   const { mobileAuthRoute } = await import("./mobile-auth.js");
   app = await buildTestApp(mobileAuthRoute, { prefix: "/api" });
 });
@@ -130,16 +129,6 @@ describe("allowed origins", () => {
     expect((await issue(validIssue, { origin: SECOND_WEB_ORIGIN })).statusCode).toBe(200);
     expect((await exchange(validExchange, { origin: SECOND_WEB_ORIGIN })).statusCode).toBe(200);
     expect((await issue(validIssue, { origin: "http://localhost:3000" })).statusCode).toBe(403);
-  });
-
-  it("narrows to an explicit mobile origin list when one is configured", async () => {
-    vi.stubEnv("MOBILE_AUTH_ALLOWED_ORIGINS", WEB_ORIGIN);
-    try {
-      expect((await issue(validIssue)).statusCode).toBe(200);
-      expect((await issue(validIssue, { origin: SECOND_WEB_ORIGIN })).statusCode).toBe(403);
-    } finally {
-      vi.stubEnv("MOBILE_AUTH_ALLOWED_ORIGINS", undefined);
-    }
   });
 });
 

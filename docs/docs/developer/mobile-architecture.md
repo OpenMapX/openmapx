@@ -258,8 +258,8 @@ are consumed atomically; a well-formed but incorrect verifier also consumes the
 attempt. The exchange uses
 uniform rejection responses. `POST /api/mobile-auth/issue` and
 `/api/mobile-auth/exchange` accept only requests whose `Origin` is one of the
-deployment's trusted web origins (`CORS_ORIGIN`). `MOBILE_AUTH_ALLOWED_ORIGINS`,
-when set, replaces that list with a narrower one. A native client can forge
+deployment's trusted web origins (`CORS_ORIGIN`); there is no separate mobile
+origin setting. A native client can forge
 `Origin`, so this check keeps browsers on other sites out; it does not
 authenticate the app. An intercepted code cannot be redeemed without its
 verifier; concurrent redemptions cannot both succeed.
