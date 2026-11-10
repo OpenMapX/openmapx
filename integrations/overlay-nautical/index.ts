@@ -149,7 +149,7 @@ interface HarborDetail extends ContributingRecord {
    * place panel uses this to surface a tides row without a second lookup.
    * Undefined when the harbor is outside US tidal waters.
    */
-  nearestTideStation?: {
+  nearestTideStation?: ContributingRecord & {
     id: string;
     name: string;
     distanceKm: number;
@@ -276,6 +276,38 @@ interface OverpassResponse {
     center?: { lat: number; lon: number };
     tags?: Record<string, string>;
   }>;
+}
+
+type HarborSurroundings = Pick<HarborDetail, "facilities" | "nearestTideStation">;
+
+/** Facilities around a harbour position and the NOAA tide station nearest to it. */
+async function fetchHarborSurroundings(
+  ctx: IntegrationContext,
+  lat: number,
+  lng: number,
+): Promise<HarborSurroundings> {
+  // Facilities + nearest-tide-station lookups run in parallel — the
+  // station catalog is Redis-cached for a week so the second leg is cheap.
+  const [facilities, nearestTideStation] = await Promise.all([
+    fetchHarborFacilities(ctx, lat, lng),
+    (async () => {
+      try {
+        const credits = stationContributors("noaa");
+        const stations = await loadNoaaStations(ctx.cache, ctx.log, undefined, credits);
+        const hit = findNearestStation(stations, lat, lng, 5, "tide-predictions");
+        if (!hit) return undefined;
+        return {
+          id: hit.station.id,
+          name: hit.station.name,
+          distanceKm: Number(hit.distanceKm.toFixed(2)),
+          contributors: snapshotContributors(hit.station.contributors ?? credits),
+        };
+      } catch {
+        return undefined;
+      }
+    })(),
+  ]);
+  return { facilities, nearestTideStation };
 }
 
 async function fetchHarborFacilities(
@@ -627,41 +659,19 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const nearbyCredits = stationContributors("noaa");
-    const cacheKey = `harbor:contributors-v1:${id}`;
-    const cached = await ctx.cache.get<HarborDetail>(cacheKey);
-    if (cached) {
-      reply.header("Cache-Control", "public, max-age=3600");
-      reply.send(cached);
-      return;
+    // The upstream lookups depend only on the position, so they are cached by
+    // the rounded position they query. The id, name and category come from
+    // the caller and go on a detached copy, never into the shared entry.
+    const queryLat = Math.round(lat * 10_000) / 10_000;
+    const queryLng = Math.round(lng * 10_000) / 10_000;
+    const cacheKey = `harbor:surroundings-v1:${queryLat},${queryLng}`;
+    let surroundings = await ctx.cache.get<HarborSurroundings>(cacheKey);
+    if (!surroundings) {
+      const writer = await captureCacheWriter(ctx.cache);
+      surroundings = await fetchHarborSurroundings(ctx, queryLat, queryLng);
+      await writer.set(cacheKey, surroundings, HARBOR_DETAIL_CACHE_TTL);
     }
-
-    const writer = await captureCacheWriter(ctx.cache);
-    // Facilities + nearest-tide-station lookups run in parallel — the
-    // station catalog is Redis-cached for a week so the second leg is cheap.
-    const [facilities, nearestTideStation] = await Promise.all([
-      fetchHarborFacilities(ctx, lat, lng),
-      (async () => {
-        try {
-          const stations = await loadNoaaStations(
-            ctx.cache,
-            ctx.log,
-            undefined,
-            stationContributors("noaa"),
-          );
-          const hit = findNearestStation(stations, lat, lng, 5, "tide-predictions");
-          if (!hit) return undefined;
-          return {
-            id: hit.station.id,
-            name: hit.station.name,
-            distanceKm: Number(hit.distanceKm.toFixed(2)),
-            contributors: snapshotContributors(hit.station.contributors ?? nearbyCredits),
-          };
-        } catch {
-          return undefined;
-        }
-      })(),
-    ]);
+    const { facilities, nearestTideStation } = structuredClone(surroundings);
 
     const detail: HarborDetail = {
       harbor: {
@@ -683,7 +693,6 @@ export function setup(ctx: IntegrationContext): void {
       ),
     };
 
-    await writer.set(cacheKey, detail, HARBOR_DETAIL_CACHE_TTL);
     reply.header("Cache-Control", "public, max-age=3600");
     reply.send(detail);
   });
