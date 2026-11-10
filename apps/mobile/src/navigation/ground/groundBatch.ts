@@ -265,6 +265,10 @@ export function processGroundBatch(input: ProcessGroundBatchInput): GroundBatchO
     }
   }
 
+  // Nothing after arrival needs a position: the stream and its foreground
+  // service stop with this commit, while the row stays for the page.
+  if (arrived) effects.push({ kind: "stop-location" });
+
   // One snapshot for the batch, not one per historical fix.
   effects.push({ kind: "publish-snapshot", immediate: arrived || offRouteEpisodeStart !== null });
 

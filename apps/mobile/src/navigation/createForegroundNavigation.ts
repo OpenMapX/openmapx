@@ -87,6 +87,8 @@ export interface ForegroundDevice {
   /** The screen's wake lock. Both calls are idempotent. */
   keepAwake: { activate(): Promise<void>; deactivate(): Promise<void> };
   clock(): number;
+  /** Runs `callback` once after `delayMs` of clock time; returns a cancel function. */
+  schedule(callback: () => void, delayMs: number): () => void;
 }
 
 /** Scopes this composition's wake lock, so releasing it cannot release anyone else's. */
@@ -112,6 +114,10 @@ function productionDevice(): ForegroundDevice {
       deactivate: () => deactivateKeepAwake(KEEP_AWAKE_TAG),
     },
     clock: () => Date.now(),
+    schedule: (callback, delayMs) => {
+      const timer = setTimeout(callback, delayMs);
+      return () => clearTimeout(timer);
+    },
   };
 }
 
@@ -219,6 +225,7 @@ export async function createForegroundNavigation(
   const composition = await createCoordinator({
     openStorage: () => device.openStorage(),
     clock: now,
+    schedule: (callback, delayMs) => device.schedule(callback, delayMs),
     bridge,
     permissions: {
       state: () => driver.getPermissionState(),

@@ -85,6 +85,13 @@ only when the OS starts the task without the app.
   every field is an absolute value and progress commits about once a second.
   Muting cuts off a prompt that is already playing. The page sends the user's
   voice timing in the start package and sends a change made during the trip.
+- **Arrival.** The arrival commit keeps the session row for the page and stops
+  the location stream and its foreground service. A transit arrival keeps the
+  stream until the last rider confirmation can no longer be undone
+  (`navigation/arrival.ts`), so an undo resumes a tracked trip. A coordinator
+  timer stops it then, since a stationary rider produces no batches; a batch
+  that finds the window closed, for example after a process restart, stops it
+  too.
 - **Keep-awake.** The composition holds the screen only while the app is
   visible, the location stream runs for an active session, and that session's
   keep-screen-on setting is on. It re-checks after every published change and

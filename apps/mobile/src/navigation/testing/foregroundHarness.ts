@@ -59,12 +59,46 @@ import { foregroundCoordinator } from "../foregroundCoordinator";
 export const HARNESS_START_MS = 1_700_000_100_000;
 
 export class FakeClock {
+  private timers: Array<{ dueAtMs: number; callback: () => void }> = [];
+
   constructor(private value: number = HARNESS_START_MS) {}
 
   readonly now = (): number => this.value;
 
+  readonly schedule = (callback: () => void, delayMs: number): (() => void) => {
+    const timer = { dueAtMs: this.value + Math.max(0, delayMs), callback };
+    this.timers.push(timer);
+    return () => {
+      this.timers = this.timers.filter((entry) => entry !== timer);
+    };
+  };
+
+  /** A killed process takes its timers with it; the clock itself carries on. */
+  dropTimers(): void {
+    this.timers = [];
+  }
+
+  /** Timers that have not fired or been cancelled. */
+  get pendingTimers(): number {
+    return this.timers.length;
+  }
+
+  /**
+   * Moves time forward, firing each timer that falls due at its own instant and
+   * in due order. Work a timer queues still has to be awaited, as with a real one.
+   */
   advance(ms: number): void {
-    this.value += ms;
+    const target = this.value + ms;
+    for (;;) {
+      const next = this.timers
+        .filter((timer) => timer.dueAtMs <= target)
+        .sort((a, b) => a.dueAtMs - b.dueAtMs)[0];
+      if (!next) break;
+      this.timers = this.timers.filter((timer) => timer !== next);
+      this.value = Math.max(this.value, next.dueAtMs);
+      next.callback();
+    }
+    this.value = target;
   }
 }
 
@@ -330,6 +364,8 @@ export interface ForegroundHarness {
   session(): Promise<MobileNavigationSession | null>;
   /** Waits for every queued coordinator operation and its remote work. */
   settle(): Promise<void>;
+  /** Lets `ms` of clock time pass with no location delivered, then settles. */
+  elapse(ms: number): Promise<void>;
   /** The process dies and the app is started again on the same phone. */
   relaunch(): Promise<ForegroundHarness>;
   /** Disposes this composition and closes the phone's storage. */
@@ -375,6 +411,7 @@ export async function startForegroundHarness(
     openStorage: () => phone.storage.open(),
     keepAwake: phone.keepAwake,
     clock: phone.clock.now,
+    schedule: phone.clock.schedule,
   };
 
   const navigation = await createForegroundNavigation({
@@ -447,8 +484,13 @@ export async function startForegroundHarness(
     },
     session: () => repository.loadActive(phone.clock.now()),
     settle,
+    async elapse(ms) {
+      phone.clock.advance(ms);
+      await settle();
+    },
     async relaunch() {
       navigation.dispose();
+      phone.clock.dropTimers();
       return startForegroundHarness({ ...options, phone });
     },
     async shutdown() {

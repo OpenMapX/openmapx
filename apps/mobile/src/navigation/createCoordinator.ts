@@ -38,6 +38,7 @@ export interface CoordinatorOverrides {
   driver: DriverPort;
   ports: EffectPorts;
   clock?: () => number;
+  schedule?: (callback: () => void, delayMs: number) => () => void;
   newSessionId?: () => string;
   /** Answers the page's one-shot requests; absent in the headless task. */
   auxiliary?: AuxiliaryCommandHandler;
@@ -103,6 +104,7 @@ export async function createCoordinator(
     driver: overrides.driver,
     diagnostics: overrides.ports.diagnostics,
     clock: overrides.clock ?? (() => Date.now()),
+    ...(overrides.schedule ? { schedule: overrides.schedule } : {}),
     newSessionId: overrides.newSessionId ?? randomSessionId,
     ...(overrides.auxiliary ? { auxiliary: overrides.auxiliary } : {}),
   };

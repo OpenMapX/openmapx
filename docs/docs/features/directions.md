@@ -316,7 +316,8 @@ offers a **keep-screen-on** option that holds a wake lock so the display does no
 sleep while you drive. If you leave the route, OpenMapX **reroutes
 automatically** from your current position; when a reroute can't be computed it
 shows a notice. A recenter control snaps the
-camera back to follow mode after you pan away to look ahead.
+camera back to follow mode after you pan away to look ahead. In the installed
+app, location tracking and the screen wake lock stop when you arrive.
 
 A navigation menu keeps route overview, satellite view, contextual overlays,
 directions, settings, and search-along-route within reach. Voice selection,

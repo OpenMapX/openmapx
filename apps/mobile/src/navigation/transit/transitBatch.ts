@@ -16,6 +16,7 @@ import {
 import { createTranslator } from "@openmapx/i18n";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import type { SessionEffect } from "../../storage/SessionRepository";
+import { locationReleaseAtMs } from "../arrival";
 import type { ProcessorMutation } from "../processor";
 import { transitCueEffect, transitWalkCueEffect } from "./transitCue";
 import { transitProfileForTime } from "./transitSession";
@@ -212,12 +213,19 @@ export function processTransitBatch(input: ProcessTransitBatchInput): TransitBat
     },
   };
 
-  // The cadence follows the phase, and a change is a profile update on the one
-  // existing stream — never a second one.
-  const profile = transitProfileForTime(next, nowMs);
-  const previousProfile = transitProfileForTime(session, nowMs);
-  if (profile !== previousProfile) {
-    effects.push({ kind: "update-location-profile", profile });
+  // An arrival with nothing left to undo releases the stream now; otherwise the
+  // coordinator releases it when the undo window closes.
+  const releaseAt = locationReleaseAtMs(next);
+  if (releaseAt !== null && releaseAt <= nowMs) {
+    effects.push({ kind: "stop-location" });
+  } else {
+    // The cadence follows the phase, and a change is a profile update on the one
+    // existing stream — never a second one.
+    const profile = transitProfileForTime(next, nowMs);
+    const previousProfile = transitProfileForTime(session, nowMs);
+    if (profile !== previousProfile) {
+      effects.push({ kind: "update-location-profile", profile });
+    }
   }
 
   effects.push({ kind: "reconcile-alerts", sessionId: session.sessionId });
