@@ -177,7 +177,9 @@ You can undo the last confirmation for two minutes. Where the itinerary explicit
 continues on the same vehicle, **Stay on board** continues to the next leg. A
 reminder can prompt you to confirm a forgotten boarding or alighting action; it
 does not act on your behalf. Getting off elsewhere keeps recovery and alternatives
-available. The final walk finishes when you reach the destination area.
+available. The final walk finishes when you reach the destination area. In the
+installed app, location tracking stops a few seconds after arrival, or once the
+last confirmation can no longer be undone if that is later.
 
 A departure time in the past is a reason to check your service, not proof you
 missed it. Delays, platform changes, cancellations, and tight transfers remain

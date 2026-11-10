@@ -56,6 +56,8 @@ export const catalogReviewSnapshotSchema = z.strictObject({
   validationEligible: z.boolean(),
   blocker: z.string().max(2048).nullable(),
 });
+/** The upstream catalog branch a proposal tracks when none is named. */
+export const DEFAULT_CATALOG_BRANCH = "main";
 export const catalogProposalCreateSchema = z.strictObject({
   branch: z
     .string()
@@ -69,7 +71,7 @@ export const catalogProposalCreateSchema = z.strictObject({
         !value.endsWith("/") &&
         !value.endsWith(".lock"),
     )
-    .default("main"),
+    .default(DEFAULT_CATALOG_BRANCH),
 });
 export const catalogValidateRequestSchema = z.strictObject({
   countries: z.array(z.string().regex(/^[A-Za-z]{2,3}$/)).max(256),

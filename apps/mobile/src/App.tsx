@@ -1,4 +1,3 @@
-import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { ExpoSpeechRecognitionModule } from "expo-speech-recognition";
 import {
   type ReactElement,
@@ -488,21 +487,17 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   /**
    * Keep-awake, narrowly.
    *
-   * Only while the app is foregrounded and a session is actually visible. It is
-   * never part of the background task: holding a wake lock from a headless
-   * callback would drain the battery for a screen nobody is looking at.
+   * The navigation composition holds the screen only while the app is
+   * foregrounded, a session is being tracked and its keep-screen-on setting is
+   * on. It re-checks after its own commits; visibility changes and recovery
+   * outcomes (which change `navigating`) happen here, so they ask it to look
+   * again. It is never part of the background task: holding a wake lock from a
+   * headless callback would drain the battery for a screen nobody is looking at.
    */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: visibility and navigating are the triggers for a fresh keep-awake review, not values the effect reads.
   useEffect(() => {
-    const shouldHold = visibility === "active" && shellState.context.navigating;
-    if (!shouldHold) {
-      void deactivateKeepAwake().catch(() => undefined);
-      return;
-    }
-    void activateKeepAwakeAsync().catch(() => undefined);
-    return () => {
-      void deactivateKeepAwake().catch(() => undefined);
-    };
-  }, [visibility, shellState.context.navigating]);
+    void navigation.then((composed) => composed?.reviewKeepAwake()).catch(() => undefined);
+  }, [navigation, visibility, shellState.context.navigating]);
 
   const handleShellAction = useCallback(
     (action: ShellAction) => {

@@ -69,19 +69,30 @@ export function serialiseWrites(database: Database): Database {
   };
 }
 
+/**
+ * Turns a freshly opened connection into the one the app uses: serialised
+ * writes, the connection settings, and the current schema.
+ *
+ * Separate from opening so a test can apply exactly this to its own SQLite
+ * engine instead of re-stating it.
+ */
+export async function prepareDatabase(opened: Database): Promise<Database> {
+  const database = serialiseWrites(opened);
+  await database.execAsync("PRAGMA journal_mode = WAL");
+  await database.execAsync("PRAGMA foreign_keys = ON");
+  // A lock held by another process (or a connection this queue does not
+  // see) is waited for briefly instead of failing outright.
+  await database.execAsync("PRAGMA busy_timeout = 5000");
+  await migrateSessionSchema(database);
+  return database;
+}
+
 let opening: Promise<Database> | null = null;
 
 export function getDatabase(): Promise<Database> {
   opening ??= (async () => {
     const opened = (await SQLite.openDatabaseAsync(DATABASE_NAME)) as unknown as Database;
-    const database = serialiseWrites(opened);
-    await database.execAsync("PRAGMA journal_mode = WAL");
-    await database.execAsync("PRAGMA foreign_keys = ON");
-    // A lock held by another process (or a connection this queue does not
-    // see) is waited for briefly instead of failing outright.
-    await database.execAsync("PRAGMA busy_timeout = 5000");
-    await migrateSessionSchema(database);
-    return database;
+    return prepareDatabase(opened);
   })().catch((error) => {
     // A failed open must not poison every later attempt.
     opening = null;

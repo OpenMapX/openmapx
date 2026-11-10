@@ -6,6 +6,7 @@ import { readBoundedResponseText } from "@openmapx/core";
 import type { PlannedTrafficClosures } from "@openmapx/core/data-manager-contracts";
 import {
   type DataExecutionStatus,
+  DEFAULT_CATALOG_BRANCH,
   isDataExecutionTerminal,
 } from "@openmapx/core/data-manager-contracts";
 
@@ -559,7 +560,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   const runAutoBump = async (): Promise<void> => {
     if (!options.catalogReview) throw Error("Installed paired catalog resolver is unavailable");
     const proposal = await options.catalogReview.resolveCatalogProposal({
-      branch: envString("TRANSITOUS_AUTO_BUMP_BRANCH", "master"),
+      branch: envString("TRANSITOUS_AUTO_BUMP_BRANCH", DEFAULT_CATALOG_BRANCH),
     });
     log.info("transitous-auto-bump: paired proposal retained for administrator review", {
       proposalId: proposal.proposalId,

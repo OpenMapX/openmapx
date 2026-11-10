@@ -448,7 +448,7 @@ function nativeStatePatch(projection: NativeNavigationProjection): Partial<Navig
 
 /**
  * Fields derived from the OLD route that must never survive a route identity
- * change (route switch, added stop, reroute, or accepted faster route): they
+ * change (route switch, added stop, reroute, or accepted faster route). They
  * are indexed into / measured against geometry that no longer exists, and
  * would mislead every consumer for one render until the next accepted fix
  * overwrites them. `currentSpeedLimit` belongs here alongside `progress` /
@@ -461,6 +461,13 @@ const ROUTE_IDENTITY_RESET = {
   liveSpeedLimits: null as (number | null)[] | null,
   routeCountries: null as RouteCountrySpan[] | null,
   currentSpeedLimit: null as number | null,
+  /**
+   * A pending offer was priced against the old route and itinerary. Accepting it
+   * later would replace the new route and drop whatever the change introduced,
+   * such as a stop that was just added.
+   */
+  fasterRoute: null as FasterRouteProposal | null,
+  fasterRouteSuppressed: false,
 };
 
 let nextTransitRequestId = 0;
@@ -538,6 +545,60 @@ function refuseBrowserStart(authority: NavigationAuthority, action: string): boo
   return true;
 }
 
+type NavigationSet = (
+  partial: Partial<NavigationState> | ((state: NavigationState) => Partial<NavigationState>),
+) => void;
+
+/**
+ * Applies a patch and keeps the road-condition lease timer attached to the
+ * assessment the store holds afterwards. A patch that does not mention the
+ * assessment leaves both it and its timer alone.
+ */
+function setHoldingLease(set: NavigationSet, patch: Partial<NavigationState>): void {
+  const replacesImpact = "roadConditionImpact" in patch;
+  if (replacesImpact) clearRoadConditionLeaseTimer();
+  set(patch);
+  if (replacesImpact) {
+    armRoadConditionLeaseTimer(useNavigationStore.getState().roadConditionImpact);
+  }
+}
+
+/**
+ * The one place a change of route identity is applied. `derive` describes what
+ * is new about the route from the current state, or returns null when there is
+ * nothing to change; everything that belongs to the previous route is cleared
+ * alongside it in a single update.
+ */
+function transitionRoute(
+  set: NavigationSet,
+  derive: (current: NavigationState) => Partial<NavigationState> | null,
+): void {
+  let patch: Partial<NavigationState> | null = null;
+  set((current) => {
+    patch = derive(current);
+    return patch ? { ...ROUTE_IDENTITY_RESET, ...patch } : {};
+  });
+  const applied = patch as Partial<NavigationState> | null;
+  if (applied && "roadConditionImpact" in applied) {
+    clearRoadConditionLeaseTimer();
+    armRoadConditionLeaseTimer(useNavigationStore.getState().roadConditionImpact);
+  }
+}
+
+/**
+ * Replaces the whole navigation session with a fresh one carrying `derive`'s
+ * fields, and moves the road-condition lease timer to whatever assessment the
+ * new session holds.
+ */
+function resetSession(
+  set: NavigationSet,
+  derive: (current: NavigationState) => Partial<NavigationState> = () => ({}),
+): void {
+  clearRoadConditionLeaseTimer();
+  set((current) => ({ ...INITIAL, ...derive(current) }));
+  armRoadConditionLeaseTimer(useNavigationStore.getState().roadConditionImpact);
+}
+
 export const useNavigationStore = create<NavigationState>((set, get) => ({
   ...INITIAL,
   ...NATIVE_READ_MODEL_INITIAL,
@@ -547,11 +608,9 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
 
   startGroundNavigation: (route, mode, waypoints, alternatives = [], provider, options) => {
     if (refuseBrowserStart(get().navigationAuthority, "startGroundNavigation")) return;
-    clearRoadConditionLeaseTimer();
     const roadConditionImpact =
       expireRoadConditionRouteImpact(options?.roadConditionImpact, Date.now()) ?? null;
-    set((current) => ({
-      ...INITIAL,
+    resetSession(set, (current) => ({
       status: "navigating",
       kind: "ground",
       mode,
@@ -569,43 +628,29 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
       liveDataUnavailable:
         current.connectivity === "offline" || roadConditionImpact?.availability === "expired",
     }));
-    armRoadConditionLeaseTimer(roadConditionImpact);
   },
-  // Switch the followed route to a shown alternative. Clears progress (it belongs
-  // to the old geometry) like a reroute; the engine/camera reset on route identity.
+  // Switch the followed route to a shown alternative. The alternatives share the
+  // held assessment, so it and its lease timer stay as they are.
   selectRoute: (index) =>
-    set((s) => {
+    transitionRoute(set, (s) => {
       const next = s.routes[index];
-      if (!next || index === s.activeRouteIndex) return {};
-      return {
-        route: next,
-        activeRouteIndex: index,
-        routeSelectionIntent: "userSelected",
-        ...ROUTE_IDENTITY_RESET,
-        fasterRoute: null,
-        fasterRouteSuppressed: false,
-      };
+      if (!next || index === s.activeRouteIndex) return null;
+      return { route: next, activeRouteIndex: index, routeSelectionIntent: "userSelected" };
     }),
-  addStop: (route, waypoints, provider) => {
-    clearRoadConditionLeaseTimer();
-    set({
+  addStop: (route, waypoints, provider) =>
+    transitionRoute(set, (s) => ({
       status: "navigating",
       route,
       routes: [route],
       activeRouteIndex: 0,
       destinationWaypoints: waypoints,
-      routeProvider: provider ?? get().routeProvider,
-      ...ROUTE_IDENTITY_RESET,
+      routeProvider: provider ?? s.routeProvider,
       routeSelectionIntent: "userSelected",
-      fasterRouteSuppressed: false,
       roadConditionImpact: null,
-    });
-  },
+    })),
   startTransitNavigation: (itinerary, replanOptions) => {
     if (refuseBrowserStart(get().navigationAuthority, "startTransitNavigation")) return;
-    clearRoadConditionLeaseTimer();
-    set((current) => ({
-      ...INITIAL,
+    resetSession(set, (current) => ({
       status: "navigating",
       kind: "transit",
       transitRequestId: String(++nextTransitRequestId),
@@ -743,24 +788,19 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
   // (larger) alongMeters in place would mislead every progress consumer for one
   // render against the new, often shorter, geometry until the next fix arrives.
   applyReroute: (route, provider, alternatives, impact, destinationWaypoints) => {
-    clearRoadConditionLeaseTimer();
     const roadConditionImpact = expireRoadConditionRouteImpact(impact, Date.now()) ?? null;
-    set((s) => ({
+    transitionRoute(set, (s) => ({
       status: "navigating",
       route,
-      ...ROUTE_IDENTITY_RESET,
       routeProvider: provider ?? s.routeProvider,
       destinationWaypoints: destinationWaypoints ?? s.destinationWaypoints,
       roadConditionImpact,
       routeSelectionIntent: "automatic",
-      fasterRoute: null,
-      fasterRouteSuppressed: false,
       rerouteUnavailable: false,
       liveDataUnavailable:
         s.connectivity === "offline" || roadConditionImpact?.availability === "expired",
       ...(alternatives && { routes: [route, ...alternatives], activeRouteIndex: 0 }),
     }));
-    armRoadConditionLeaseTimer(roadConditionImpact);
   },
   setConnectivity: (connectivity) =>
     set({
@@ -791,7 +831,6 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     ) {
       throw new Error("only a ground navigation snapshot can be restored");
     }
-    clearRoadConditionLeaseTimer();
     const restored = createNavigationSessionSnapshot({
       route: snapshot.route,
       routes: snapshot.routes,
@@ -807,8 +846,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
       updatedAtMs: snapshot.updatedAtMs,
       lastKnownPosition: snapshot.lastKnownPosition,
     });
-    set((current) => ({
-      ...INITIAL,
+    resetSession(set, (current) => ({
       status: "navigating",
       kind: "ground",
       mode: restored.mode,
@@ -827,25 +865,20 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     }));
   },
   proposeFasterRoute: (fasterRoute) => set({ fasterRoute }),
-  acceptFasterRoute: (routeIntent) => {
-    clearRoadConditionLeaseTimer();
-    set((s) => {
+  acceptFasterRoute: (routeIntent) =>
+    transitionRoute(set, (s) => {
       const proposal = s.fasterRoute;
-      if (!proposal) return {};
+      if (!proposal) return null;
       return {
-        status: "navigating" as const,
+        status: "navigating",
         route: proposal.route,
         destinationWaypoints: proposal.destinationWaypoints ?? s.destinationWaypoints,
         routes: [proposal.route, ...proposal.alternatives],
         activeRouteIndex: 0,
         routeSelectionIntent: routeIntent ?? s.routeSelectionIntent,
-        ...ROUTE_IDENTITY_RESET,
-        fasterRoute: null,
-        fasterRouteSuppressed: false,
         roadConditionImpact: null,
       };
-    });
-  },
+    }),
   dismissFasterRoute: () => set({ fasterRoute: null, fasterRouteSuppressed: true }),
   clearFasterRoute: () => set({ fasterRoute: null }),
   setCameraMode: (cameraMode) => set({ cameraMode }),
@@ -861,20 +894,15 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
       getStorage().setString(KEEP_SCREEN_ON_STORAGE_KEY, String(keepScreenOn));
       return { keepScreenOn };
     }),
-  completeArrival: () => {
-    clearRoadConditionLeaseTimer();
-    set({
+  completeArrival: () =>
+    setHoldingLease(set, {
       status: "arrived",
       rerouteUnavailable: false,
       liveDataUnavailable: false,
       transitRefreshUnavailable: false,
       roadConditionImpact: null,
-    });
-  },
-  stopNavigation: () => {
-    clearRoadConditionLeaseTimer();
-    set((current) => ({ ...INITIAL, connectivity: current.connectivity }));
-  },
+    }),
+  stopNavigation: () => resetSession(set, (current) => ({ connectivity: current.connectivity })),
   hydrate: () =>
     set({
       voiceEnabled: readBoolPref(VOICE_STORAGE_KEY, true),
@@ -894,10 +922,8 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     // A different session invalidates the events pending against the old one,
     // and the browser read model that a stale session left behind.
     const carriedEvents = sameSession ? current.nativeEventIds : [];
-    clearRoadConditionLeaseTimer();
     const patch = nativeStatePatch(projection);
-    set({ ...INITIAL, ...patch, nativeEventIds: carriedEvents });
-    armRoadConditionLeaseTimer(patch.roadConditionImpact ?? null);
+    resetSession(set, () => ({ ...patch, nativeEventIds: carriedEvents }));
     return "applied";
   },
 
@@ -913,12 +939,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     // A missed update is a moment of staleness; an invented one is a puck on the
     // wrong road.
     if (base !== current.nativeRevision) return "needs-full-snapshot";
-    if (projection.roadConditionImpact !== undefined) clearRoadConditionLeaseTimer();
-    const patch = nativeStatePatch(projection);
-    set(patch);
-    if (projection.roadConditionImpact !== undefined) {
-      armRoadConditionLeaseTimer(patch.roadConditionImpact ?? null);
-    }
+    setHoldingLease(set, nativeStatePatch(projection));
     return "applied";
   },
 
@@ -930,17 +951,14 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     return "applied";
   },
 
-  clearNativeReadModel: () => {
-    clearRoadConditionLeaseTimer();
-    set((current) => ({
-      ...INITIAL,
+  clearNativeReadModel: () =>
+    resetSession(set, (current) => ({
       ...NATIVE_READ_MODEL_INITIAL,
       connectivity: current.connectivity,
       // Authority describes where the page is running, not what it is doing, so
       // ending a session does not hand the browser engine the wheel.
       navigationAuthority: current.navigationAuthority,
-    }));
-  },
+    })),
 }));
 
 let roadConditionLeaseTimer: ReturnType<typeof setTimeout> | null = null;

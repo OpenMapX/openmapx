@@ -1,3 +1,4 @@
+import { DEFAULT_CATALOG_BRANCH } from "@openmapx/core/data-manager-contracts";
 import * as dm from "@openmapx/core/data-manager-sdk";
 import { envString } from "@openmapx/core/server-env";
 import { and, asc, count, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
@@ -534,7 +535,7 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
       const auth = await authenticateDataManager(req);
 
       const body = req.body ?? {};
-      const branch = body.branch?.trim() || "main";
+      const branch = body.branch?.trim() || DEFAULT_CATALOG_BRANCH;
       if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/.test(branch) || branch.includes("..")) {
         return reply.code(400).send({ error: "Invalid Transitous branch name" });
       }

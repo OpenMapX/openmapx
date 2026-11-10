@@ -316,12 +316,16 @@ offers a **keep-screen-on** option that holds a wake lock so the display does no
 sleep while you drive. If you leave the route, OpenMapX **reroutes
 automatically** from your current position; when a reroute can't be computed it
 shows a notice. A recenter control snaps the
-camera back to follow mode after you pan away to look ahead.
+camera back to follow mode after you pan away to look ahead. In the installed
+app, the screen wake lock is released when you arrive, and location tracking
+stops a few seconds later, once the arrival announcement has played.
 
 A navigation menu keeps route overview, satellite view, contextual overlays,
 directions, settings, and search-along-route within reach. Voice selection,
 north-up/follow behavior, avoidance preferences, and screen wake-lock controls
-are adjustable without abandoning the route. For a driving or motorcycle trip,
+are adjustable without abandoning the route; in the installed app, voice
+guidance, voice timing and keep-screen-on changes reach the running trip at
+once. For a driving or motorcycle trip,
 road conditions and self-hosted traffic flow switch on contextually; a manual
 layer choice is respected and restored when the trip ends. Incidents ahead can
 produce approach alerts, including confirmation/negation prompts for compatible

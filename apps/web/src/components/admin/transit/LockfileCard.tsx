@@ -14,6 +14,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { adminErrorMessage } from "@openmapx/core/api-admin-sdk";
+import { DEFAULT_CATALOG_BRANCH } from "@openmapx/core/data-manager-contracts";
 import { useEffect, useRef, useState } from "react";
 import { AdminJobLink } from "@/components/admin/activity/AdminJobLink";
 import { TransitCredentialsSection } from "@/components/admin/services/TransitCredentialsSection";
@@ -36,7 +37,7 @@ export function LockfileCard(_props: { state?: TransitStateSummary } = {}) {
   return <CatalogPinView key={JSON.stringify([apiUrl, actorId])} />;
 }
 function CatalogPinView() {
-  const [branch, setBranch] = useState("main"),
+  const [branch, setBranch] = useState(DEFAULT_CATALOG_BRANCH),
     [proposalId, setProposalId] = useState<string | undefined>(),
     [offset, setOffset] = useState(0),
     [diffOffset, setDiffOffset] = useState(0),

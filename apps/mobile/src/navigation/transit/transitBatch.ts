@@ -213,10 +213,13 @@ export function processTransitBatch(input: ProcessTransitBatchInput): TransitBat
   };
 
   // The cadence follows the phase, and a change is a profile update on the one
-  // existing stream — never a second one.
+  // existing stream — never a second one. On Android a running stream is not
+  // restarted while the app is in the background; the coordinator applies the
+  // session's cadence when the app is next opened. An arrival keeps the stream
+  // as it is until it is released.
   const profile = transitProfileForTime(next, nowMs);
   const previousProfile = transitProfileForTime(session, nowMs);
-  if (profile !== previousProfile) {
+  if (next.status !== "arrived" && profile !== previousProfile) {
     effects.push({ kind: "update-location-profile", profile });
   }
 

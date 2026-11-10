@@ -189,6 +189,7 @@ export {
   DEFAULT_TRANSIT_TICK_OPTIONS,
   freshTransitTickState,
   processTransitFix,
+  TRANSIT_UNDO_WINDOW_MS,
   type TransitConfidence,
   type TransitNavigationEvent,
   type TransitPhase,

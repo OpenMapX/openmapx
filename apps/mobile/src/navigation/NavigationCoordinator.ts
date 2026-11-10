@@ -11,11 +11,14 @@ import {
 } from "@openmapx/core/navigation";
 import { type RawLocation, sanitiseFixes } from "../location/sanitiseFixes";
 import type { CommitResult, SessionEffect, SessionRepository } from "../storage/SessionRepository";
+import { locationReleaseAtMs } from "./arrival";
 import type { DiagnosticSink, EffectRunner } from "./effects";
 import type { RerouteOutcome } from "./ground/GroundRerouteService";
 import { onRerouteFailed, onRerouteSucceeded, type RerouteRuntime } from "./ground/rerouteState";
 import type { AnyNavigationProcessor, ProcessorMutation, ProcessorRegistry } from "./processor";
 import { SerialExecutor } from "./serialExecutor";
+import { profileForSession } from "./sessionProfile";
+import { applySettingsPatch } from "./sessionSettings";
 import { groundFullSnapshot } from "./snapshots/groundSnapshot";
 import { transitFullSnapshot } from "./snapshots/transitSnapshot";
 import { allowsNavigationStart, type NavigationStartContext } from "./startContext";
@@ -71,6 +74,8 @@ export interface CoordinatorDeps {
   driver: DriverPort;
   diagnostics: DiagnosticSink;
   clock: () => number;
+  /** Runs `callback` once after `delayMs`; returns a cancel function. Defaults to `setTimeout`. */
+  schedule?: (callback: () => void, delayMs: number) => () => void;
   newSessionId: () => string;
   /**
    * Handles commands that are not about a navigation session —
@@ -100,6 +105,11 @@ const MUTATING = new Set<WebToNativeMessage["type"]>([
   "session.complete",
 ]);
 
+function scheduleWithTimer(callback: () => void, delayMs: number): () => void {
+  const timer = setTimeout(callback, delayMs);
+  return () => clearTimeout(timer);
+}
+
 function errorResponse(code: string, forMessageId?: string): CommandResponse {
   return {
     type: "native.error",
@@ -119,6 +129,8 @@ export class NavigationCoordinator {
   async settleRemoteWork(): Promise<void> {
     while (this.remoteTasks.size > 0) await Promise.allSettled([...this.remoteTasks]);
   }
+
+  private cancelLocationRelease: (() => void) | null = null;
 
   constructor(
     private readonly deps: CoordinatorDeps,
@@ -532,27 +544,25 @@ export class NavigationCoordinator {
     command: Extract<WebToNativeMessage, { type: "settings.update" }>,
     now: number,
   ): Promise<CommandResponse> {
-    const current = await this.deps.repository.loadActive(now);
-    if (!current) return errorResponse("no-session", command.messageId);
-    if (!this.matches(command, current))
-      return errorResponse("revision-conflict", command.messageId);
-
-    const { locale, units } = command.payload;
-    const committed = await this.deps.repository.compareAndSwap(
-      current.sessionId,
-      current.revision,
-      (session) => ({
-        session: {
-          ...session,
-          revision: session.revision + 1,
-          updatedAtMs: now,
-          ...(locale === undefined ? {} : { locale }),
-          ...(units === undefined ? {} : { units }),
-        },
-        effects: [{ kind: "publish-snapshot", immediate: true }],
-      }),
-      now,
-    );
+    // Only the trip is checked, not the revision: progress commits about once a
+    // second, so the revision the page last saw is routinely behind, and every
+    // field of the patch is an absolute value that is safe on top of newer state.
+    let committed: CommitResult = { ok: false, code: "no-active-session" };
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const current = await this.deps.repository.loadActive(now);
+      if (!current) return errorResponse("no-session", command.messageId);
+      if (command.sessionId !== undefined && command.sessionId !== current.sessionId)
+        return errorResponse("revision-conflict", command.messageId);
+      committed = await this.deps.repository.compareAndSwap(
+        current.sessionId,
+        current.revision,
+        (session) => applySettingsPatch(session, command.payload, now),
+        now,
+      );
+      // A writer outside this queue may have committed between the read and the
+      // swap; the patch is then applied once more on top of that revision.
+      if (committed.ok || committed.code !== "revision-conflict") break;
+    }
     if (!committed.ok) return errorResponse(committed.code, command.messageId);
     await this.deps.effects.run(committed.effects);
 
@@ -677,6 +687,15 @@ export class NavigationCoordinator {
       return;
     }
     if (session.status !== "active") {
+      // A batch closes the release window wherever a timer cannot: a
+      // backgrounded Android app, whose profiles have no distance filter so a
+      // user standing still still gets one, or a process that did not survive.
+      const releaseAt = locationReleaseAtMs(session);
+      if (releaseAt !== null && releaseAt <= now) {
+        await this.deps.effects.run([{ kind: "stop-location" }, { kind: "reconcile-surface" }]);
+        return;
+      }
+      this.scheduleLocationRelease(session, now);
       await this.deps.effects.run([{ kind: "reconcile-surface" }]);
       return;
     }
@@ -896,6 +915,85 @@ export class NavigationCoordinator {
     });
   }
 
+  // Location cadence when the app comes back.
+
+  /**
+   * Puts a running stream on the cadence the committed session wants now.
+   *
+   * On Android a cadence change cannot restart the stream while the app is in
+   * the background, so a change asked for then is not applied, and the runtime
+   * that asked may be gone by the time the app is opened. Called when the app
+   * becomes active, this derives the cadence again from the session, which is
+   * the only thing that survives.
+   */
+  refreshLocationProfile(): Promise<void> {
+    return this.queue.run(async () => {
+      try {
+        const now = this.deps.clock();
+        const session = await this.deps.repository.loadActive(now);
+        if (session?.status !== "active") return;
+        if (!(await this.deps.driver.isRunning())) return;
+        await this.deps.effects.run([
+          { kind: "update-location-profile", profile: profileForSession(session, now) },
+        ]);
+      } catch {
+        this.deps.diagnostics.record("typed.error", { scope: "location-profile" });
+      }
+    });
+  }
+
+  // Releasing location after a transit arrival.
+
+  /**
+   * Arranges for the location stream to stop when an arrived session's release
+   * window closes. The timer is the prompt path where JavaScript timers run: in
+   * the foreground, and on iOS while background location keeps the app running.
+   * Android pauses a backgrounded app's JavaScript timers even under a
+   * foreground service, so there the release comes from the next batch, which
+   * Android's profiles guarantee by requesting updates on time with no distance
+   * filter. A process that dies first is covered the same way, or by recovery
+   * when the app opens.
+   */
+  private scheduleLocationRelease(session: MobileNavigationSession, now: number): void {
+    const releaseAt = locationReleaseAtMs(session);
+    // An undo made the trip active again, so a pending release has nothing to do.
+    if (releaseAt === null && session.status === "active") {
+      this.cancelLocationRelease?.();
+      this.cancelLocationRelease = null;
+    }
+    if (releaseAt === null || releaseAt <= now) return;
+    this.cancelLocationRelease?.();
+    const schedule = this.deps.schedule ?? scheduleWithTimer;
+    this.cancelLocationRelease = schedule(() => {
+      this.cancelLocationRelease = null;
+      void this.releaseLocationIfDue(session.sessionId);
+    }, releaseAt - now);
+  }
+
+  /**
+   * Stops the stream for this arrived session if its window has closed. An undo
+   * since then made it active again, and an end or a new trip made it a
+   * different row; both leave the stream to whoever owns it now.
+   */
+  private releaseLocationIfDue(sessionId: string): Promise<void> {
+    return this.queue.run(async () => {
+      try {
+        const now = this.deps.clock();
+        const session = await this.deps.repository.loadActive(now);
+        if (session?.sessionId !== sessionId) return;
+        const releaseAt = locationReleaseAtMs(session);
+        if (releaseAt === null) return;
+        if (releaseAt > now) {
+          this.scheduleLocationRelease(session, now);
+          return;
+        }
+        await this.deps.effects.run([{ kind: "stop-location" }, { kind: "reconcile-surface" }]);
+      } catch {
+        this.deps.diagnostics.record("typed.error", { scope: "location-release" });
+      }
+    });
+  }
+
   // Internals.
 
   private async commit(
@@ -903,7 +1001,7 @@ export class NavigationCoordinator {
     mutation: ProcessorMutation,
     now: number,
   ): Promise<CommitResult> {
-    return this.deps.repository.compareAndSwap(
+    const committed = await this.deps.repository.compareAndSwap(
       current.sessionId,
       current.revision,
       () => ({
@@ -914,6 +1012,8 @@ export class NavigationCoordinator {
       }),
       now,
     );
+    if (committed.ok) this.scheduleLocationRelease(committed.session, now);
+    return committed;
   }
 
   private matches(command: WebToNativeMessage, session: MobileNavigationSession): boolean {

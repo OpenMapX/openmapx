@@ -46,11 +46,10 @@ export function NavigationSettingsDialog({
   const voices = useAvailableVoices();
 
   const voiceEnabled = useNavigationStore((s) => s.voiceEnabled);
-  const { toggleVoice, toggleKeepScreenOn } = useNavigationMutations();
+  const { toggleVoice, toggleKeepScreenOn, setVoiceTiming } = useNavigationMutations();
   const keepScreenOn = useNavigationStore((s) => s.keepScreenOn);
 
   const voiceGuidanceTiming = useSettingsStore((s) => s.voiceGuidanceTiming);
-  const setVoiceGuidanceTiming = useSettingsStore((s) => s.setVoiceGuidanceTiming);
   const voiceName = useSettingsStore((s) => s.voiceName);
   const setVoiceName = useSettingsStore((s) => s.setVoiceName);
   const speedCameraAlerts = useSettingsStore((s) => s.speedCameraAlerts);
@@ -104,7 +103,7 @@ export function NavigationSettingsDialog({
               size="small"
               fullWidth
               value={voiceGuidanceTiming}
-              onChange={(e) => setVoiceGuidanceTiming(e.target.value as VoiceGuidanceTiming)}
+              onChange={(e) => void setVoiceTiming(e.target.value as VoiceGuidanceTiming)}
             >
               {VOICE_TIMING_OPTIONS.map((o) => (
                 <MenuItem key={o.value} value={o.value}>

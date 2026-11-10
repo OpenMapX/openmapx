@@ -10,6 +10,7 @@ import { useNavigationStore, useSettingsStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { haptics, hapticsSupported, isHapticsEnabled, setHapticsEnabled } from "@/lib/haptics";
+import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useHydrated } from "@/lib/useHydrated";
 
 export function PreferencesClient() {
@@ -21,8 +22,9 @@ export function PreferencesClient() {
 
   const voiceEnabled = useNavigationStore((s) => s.voiceEnabled);
   const keepScreenOn = useNavigationStore((s) => s.keepScreenOn);
-  const toggleVoice = useNavigationStore((s) => s.toggleVoice);
-  const toggleKeepScreenOn = useNavigationStore((s) => s.toggleKeepScreenOn);
+  // Through the navigation mutations, so a change made here during an
+  // installed-app trip reaches the native session too.
+  const { toggleVoice, toggleKeepScreenOn } = useNavigationMutations();
   const searchHistoryEnabled = useSettingsStore((s) => s.searchHistoryEnabled);
   const setSearchHistoryEnabled = useSettingsStore((s) => s.setSearchHistoryEnabled);
   const rememberMapView = useSettingsStore((s) => s.rememberMapView);
@@ -107,7 +109,7 @@ export function PreferencesClient() {
           />
 
           <FormControlLabel
-            control={<Switch checked={voiceEnabled} onChange={() => toggleVoice()} />}
+            control={<Switch checked={voiceEnabled} onChange={() => void toggleVoice()} />}
             label={
               <Stack spacing={0.5}>
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>
@@ -122,7 +124,7 @@ export function PreferencesClient() {
           />
 
           <FormControlLabel
-            control={<Switch checked={keepScreenOn} onChange={() => toggleKeepScreenOn()} />}
+            control={<Switch checked={keepScreenOn} onChange={() => void toggleKeepScreenOn()} />}
             label={
               <Stack spacing={0.5}>
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>
