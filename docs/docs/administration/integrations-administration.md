@@ -217,6 +217,16 @@ data. Mixed-source integrations need source-level handling; these controls are
 not a general licence validator or proof that no upstream traffic occurred.
 Sources marked `conditional` still require review of their conditions.
 
+If the database cannot be read when the policy refreshes, the API keeps the last
+policy it read successfully, so exclusions you set stay in force through a
+database outage, and logs a warning (`data-use-policy`) on each failed refresh.
+An environment variable still overrides the kept value. The policy is then
+reported as not current to the road-conditions writer, which does not treat it as
+authoritative until a refresh succeeds. Only when the very first load after a
+start fails is there nothing to keep: both classes are then allowed, as by
+default, until the database answers. Where exclusions matter from the first
+request, pin them with the environment variables above, which need no database.
+
 OpenConditions states a permission per use for each of its feeds (display,
 redistribution, derived products, retention, commercial use): `yes` only where
 the licence grants it and someone has checked the publisher's own statement of

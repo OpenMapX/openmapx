@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { db } from "../db";
 import { systemSettings } from "../db/schema";
 import { getAllIntegrations } from "../integration-host";
+import { safeErrorClass } from "../utils/safe-log-fields";
+import { appLogger } from "./app-logger";
 
 /**
  * Operator policy for licence-restricted data sources. Both non-commercial
@@ -46,7 +48,16 @@ let refreshTimer: ReturnType<typeof setInterval> | null = null;
 const CACHE_TTL_MS = 30_000;
 const EMPTY: Set<string> = new Set();
 
-async function loadPolicy(): Promise<{ value: DataUsePolicy; authoritative: boolean }> {
+/**
+ * Resolve the policy from env and the database. When the database cannot be
+ * read, the previous policy's values stand in for the stored settings (an
+ * environment pin still applies) and the result is not authoritative: a
+ * database outage must not turn a stored exclusion into "allowed". Only when
+ * there is no previous policy, on the very first load, do the defaults apply.
+ */
+async function loadPolicy(
+  previous: PolicyCache | null,
+): Promise<{ value: DataUsePolicy; authoritative: boolean }> {
   const envNC = envBool(ENV_NON_COMMERCIAL);
   const envGrey = envBool(ENV_GREY_AREA);
 
@@ -60,9 +71,28 @@ async function loadPolicy(): Promise<{ value: DataUsePolicy; authoritative: bool
       const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
       if (typeof map.allowNonCommercial === "boolean") dbNC = map.allowNonCommercial;
       if (typeof map.allowGreyArea === "boolean") dbGrey = map.allowGreyArea;
-    } catch {
-      // Display policy keeps historical defaults; writer authority does not.
+    } catch (err) {
+      // Writer authority is lost either way; what display falls back to
+      // depends on whether there is a last good policy to keep.
       authoritative = false;
+      appLogger.add({
+        level: "warn",
+        source: "data-use-policy",
+        msg: previous
+          ? "Data-use policy refresh failed; keeping the last good policy"
+          : "Data-use policy could not be loaded; applying the defaults until it can",
+        time: Date.now(),
+        metadata: { errorClass: safeErrorClass(err) },
+      });
+      if (previous) {
+        return {
+          value: {
+            allowNonCommercial: envNC ?? previous.value.allowNonCommercial,
+            allowGreyArea: envGrey ?? previous.value.allowGreyArea,
+          },
+          authoritative,
+        };
+      }
     }
   }
 
@@ -120,11 +150,11 @@ function computeGatedIntegrations(gatedSources: Set<string>): Set<string> {
 /**
  * Reload the policy from env + DB and recompute the gated sets into the cache.
  * Side-effect-only so the lazy async path and the background timer can share it.
- * `loadPolicy` swallows DB errors (falling back to defaults), so this resolves
- * even when the DB is down.
+ * `loadPolicy` swallows DB errors (keeping the last good policy), so this
+ * resolves even when the DB is down.
  */
 export async function refreshDataUsePolicy(): Promise<void> {
-  const { value, authoritative } = await loadPolicy();
+  const { value, authoritative } = await loadPolicy(cache);
   const gatedSources = computeGatedSources(value);
   const gatedIntegrations = computeGatedIntegrations(gatedSources);
   cache = { value, authoritative, at: Date.now(), gatedSources, gatedIntegrations };
