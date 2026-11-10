@@ -50,7 +50,7 @@ bridge tests do not establish binary or deployed-browser behavior.
       Expect no cookie, session token, one-time token, callback code, verifier,
       password, or passkey assertion.
 - [ ] Export diagnostics. Expect shapes and reasons, not payloads.
-- [ ] Confirm the outbox and dedupe tables carry no `auth.open` entry.
+- [ ] Confirm the command-dedupe table carries no `auth.open` entry.
 
 ## The binary
 

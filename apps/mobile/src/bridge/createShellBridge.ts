@@ -42,8 +42,9 @@ export interface ShellBridge {
  * What the shell can actually do right now.
  *
  * A capability reported here is a promise the page will act on, so ground and
- * transit are answered from what is genuinely registered rather than from a
- * constant. Until a processor exists the page keeps planning in the browser.
+ * transit are answered from what the navigation composition reports rather than
+ * from a constant. Without a composition (feasibility builds, or a composition
+ * that failed) every navigation capability is false.
  */
 export async function describeShell(options: ShellBridgeOptions): Promise<ShellDescription> {
   const capabilities = (await options.capabilities?.()) ?? {

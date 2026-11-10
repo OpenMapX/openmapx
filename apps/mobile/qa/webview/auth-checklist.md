@@ -116,7 +116,7 @@ a clean failure; the session helper itself returns `failed` for a mismatched URL
 - [ ] After a completed sign-in, export native diagnostics. Confirm no cookie,
       session token, one-time token, callback code, or verifier appears.
 - [ ] Inspect the app's SQLite database. Confirm the same.
-- [ ] Confirm the outbox and command-dedupe tables contain no `auth.open` entry:
+- [ ] Confirm the command-dedupe table contains no `auth.open` entry:
       an auth attempt is memory-only and must not survive a restart.
 
 ## Pending volunteer-beta cases

@@ -64,14 +64,13 @@ export interface NavigationRecoveryDeps {
 }
 
 /**
- * Owns the small recovery surface that must work before the full foreground
- * navigation graph is shippable.
+ * Reconciles a session that outlived its process or the app's visibility.
  *
  * This controller cannot create or mutate a route. It can only reconcile an
  * already-active durable session, explicitly restart its one location stream,
  * ask the coordinator to end it, and release device resources nothing owns.
- * Keeping that boundary narrow lets recovery be truthful without advertising
- * native navigation to the web application prematurely.
+ * The shell never resumes tracking on its own: restarting a stream the system
+ * stopped is the user's decision (`resume`).
  */
 export class NavigationRecoveryController {
   constructor(private readonly deps: NavigationRecoveryDeps) {}

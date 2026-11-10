@@ -4,7 +4,6 @@ Complete the virtual cases before beta upload. Physical cases remain open until
 tested on the processed store build. Bind each report to source, configuration,
 web build and artifact identity using the release-candidate schema.
 
-The current foreground shell lacks navigation and auth command composition.
 Signing identities are placeholders and native version/signing inputs need
 verification. These are candidate blockers, not `pending-physical` outcomes. See
 `docs/docs/developer/mobile-release.md` and `qa/results/beta/README.md`.
