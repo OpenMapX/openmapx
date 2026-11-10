@@ -300,7 +300,6 @@ function proxyablePhoto(photo: PlacePhoto): boolean {
   );
 }
 
-/** Rejects once `signal` aborts, so abandoned work stops holding its queue slot. */
 /** Provider work that kept running after every caller of its card job left. */
 const abandonedCardWork = new WeakSet<Promise<unknown>>();
 
@@ -346,6 +345,7 @@ async function awaitAbandonedWork(
   if (pending.get(key) === previous) throw new AbandonedWorkSettling();
 }
 
+/** Rejects once `signal` aborts, so abandoned work stops holding its queue slot. */
 function abandonment(signal: AbortSignal): Promise<never> {
   return new Promise((_resolve, reject) => {
     if (signal.aborted) reject(signal.reason);
