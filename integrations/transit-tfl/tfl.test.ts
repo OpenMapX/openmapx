@@ -5,6 +5,7 @@ import stopPointsFixture from "./__fixtures__/stop-points.json";
 import {
   getAlerts,
   getDepartures,
+  getRouteAlerts,
   getRouteStopSequence,
   getStop,
   getStopAlerts,
@@ -96,6 +97,31 @@ describe("TfL payload validation", () => {
       expect(failure).toBeInstanceOf(Error);
       expect((failure as Error).message).not.toContain("test-tfl-key");
       expect(classifyProviderFailure(failure)).toBe("upstream_5xx");
+    }
+  });
+
+  it("treats a 404 for a caller's stop, line or search text as bad input", async () => {
+    mockFetch.mockImplementation(async () => new Response("not found", { status: 404 }));
+
+    for (const call of [
+      () => getDepartures("tfl:940GZZLUBOGUS", 30),
+      () => getStopAlerts("tfl:940GZZLUBOGUS"),
+      () => getRouteAlerts("tfl:bogus-line"),
+      () => getRouteStopSequence("tfl:bogus-line"),
+      () => searchByName("no such place", 5),
+    ]) {
+      const failure = await call().catch((error: unknown) => error);
+      expect(classifyProviderFailure(failure)).toBe("input");
+      expect((failure as Error).message).not.toContain("test-tfl-key");
+    }
+  });
+
+  it("still counts a 404 on the fixed mode-status and nearby endpoints", async () => {
+    mockFetch.mockImplementation(async () => new Response("not found", { status: 404 }));
+
+    for (const call of [() => getAlerts(), () => getStops(51.5, -0.1, 300)]) {
+      const failure = await call().catch((error: unknown) => error);
+      expect(classifyProviderFailure(failure)).toBe("connection");
     }
   });
 

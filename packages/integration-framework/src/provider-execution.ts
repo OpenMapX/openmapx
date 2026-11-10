@@ -39,6 +39,23 @@ export class ProviderRetiredError extends Error {
   }
 }
 
+/**
+ * The caller's request was bad input: a value the adapter rejected itself, or
+ * an upstream "not found" for an identifier the caller supplied. Provider
+ * health records it as the non-counted `input` outcome, so repeated bogus
+ * identifiers cannot open a provider's circuit. Throw it only where the adapter
+ * knows the identifier came from the caller; a 404 on a fixed endpoint is a
+ * provider failure.
+ */
+export class ProviderInputError extends Error {
+  readonly code = "invalid_request";
+
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "ProviderInputError";
+  }
+}
+
 /** A provider answered, but the fields it consumes were missing or malformed. */
 export class ProviderPayloadError extends Error {
   readonly code = "invalid_payload";

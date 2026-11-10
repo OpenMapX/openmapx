@@ -217,6 +217,17 @@ describe("Transitland transit provider", () => {
     await expect(getStops([0, 0, 1, 1])).rejects.toBeInstanceOf(ProviderPayloadError);
   });
 
+  it("treats a 404 for a caller's stop id as bad input and a 404 on the stop list as a failure", async () => {
+    mockFetch.mockResolvedValueOnce(new Response("not found", { status: 404 }));
+    const unknown = await getDepartures("tl:s-bogus").catch((error: unknown) => error);
+    expect((unknown as Error).message).toBe("Unknown Transitland timetable identifier");
+    expect(classifyProviderFailure(unknown)).toBe("input");
+
+    mockFetch.mockResolvedValueOnce(new Response("not found", { status: 404 }));
+    const retired = await getStops([0, 0, 1, 1]).catch((error: unknown) => error);
+    expect(classifyProviderFailure(retired)).toBe("connection");
+  });
+
   it("reports a failed stop list as unavailable, not as no stops", async () => {
     mockFetch.mockResolvedValueOnce(new Response("down", { status: 502 }));
 

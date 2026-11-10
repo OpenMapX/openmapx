@@ -100,6 +100,20 @@ describe("iRail documented responses", () => {
     });
   });
 
+  it("treats a 404 for a caller's station id as bad input and a 404 on the station list as a failure", async () => {
+    const { classifyProviderFailure } = await import("@openmapx/integration-framework");
+    fetchMock.mockImplementation(async () => new Response("not found", { status: 404 }));
+    const { getDepartures, getStops } = await import("./provider.js");
+
+    const unknown = await getDepartures("ir:BE.NMBS.000000000", 60).catch(
+      (error: unknown) => error,
+    );
+    expect(classifyProviderFailure(unknown)).toBe("input");
+
+    const stations = await getStops(50.8, 4.3, 500).catch((error: unknown) => error);
+    expect(classifyProviderFailure(stations)).toBe("connection");
+  });
+
   it("keeps valid departures and drops one without a time", async () => {
     const [entry] = liveboardFixture.departures.departure;
     fetchMock.mockImplementation(async () =>

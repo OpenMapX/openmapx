@@ -7,6 +7,7 @@ import {
   USER_AGENT,
 } from "@openmapx/core";
 import {
+  ProviderInputError,
   ProviderTimeoutError,
   parseProviderPayload,
   parseProviderRecords,
@@ -226,6 +227,16 @@ function unavailable(what: string, error: unknown): Error {
   return new Error(`HAFAS ${what} unavailable`, { cause: error });
 }
 
+/**
+ * A board is keyed by a stop id the caller supplied, so HAFAS's NOT_FOUND
+ * there means the stop is unknown: bad caller input, not a provider failure.
+ */
+function boardUnavailable(error: unknown): Error {
+  return error && typeof error === "object" && "code" in error && error.code === "NOT_FOUND"
+    ? new ProviderInputError("Unknown HAFAS stop identifier", { cause: error })
+    : unavailable("timetable", error);
+}
+
 // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF remark
 function mapRemark(r: any): TripRemark {
   const text = (
@@ -364,7 +375,7 @@ export function createHafasMgateAdapter(): ProtocolAdapter {
         );
       } catch (error) {
         // A failed board must not read as "no departures".
-        throw unavailable("timetable", error);
+        throw boardUnavailable(error);
       }
       const departures = parseBoard(result, entry, "timetable");
       // HAFAS's planrtTS: the latest realtime update in this answer. A cached answer has none.
@@ -387,7 +398,7 @@ export function createHafasMgateAdapter(): ProtocolAdapter {
         );
       } catch (error) {
         // A failed board must not read as "no departures".
-        throw unavailable("timetable", error);
+        throw boardUnavailable(error);
       }
       const departures = parseBoard(result, entry, "arrivals");
       const dataAsOf = upstreamDataAsOf(

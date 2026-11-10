@@ -133,6 +133,26 @@ describe("HAFAS payload validation", () => {
     expect(classifyProviderFailure(malformed)).toBe("invalid_payload");
   });
 
+  it("treats NOT_FOUND for a caller's stop as bad input and on a nearby lookup as a failure", async () => {
+    const notFound = () => Object.assign(new Error("HAFAS: LOCATION"), { code: "NOT_FOUND" });
+    client.departures.mockRejectedValue(notFound());
+    client.arrivals.mockRejectedValue(notFound());
+    client.nearby.mockRejectedValue(notFound());
+
+    for (const call of [
+      () => hafasMgateAdapter.getDepartures(entry(), "vbb:000000000", 30),
+      () => hafasMgateAdapter.getArrivals(entry(), "vbb:000000000", 30),
+    ]) {
+      const failure = await call().catch((error: unknown) => error);
+      expect((failure as Error).message).toBe("Unknown HAFAS stop identifier");
+      expect(classifyProviderFailure(failure)).toBe("input");
+    }
+    const nearby = await hafasMgateAdapter
+      .getStopsNearby(entry(), 52.5, 13.4, 400)
+      .catch((error: unknown) => error);
+    expect(classifyProviderFailure(nearby)).toBe("connection");
+  });
+
   it("searches stops only and rejects matches without coordinates", async () => {
     client.locations.mockResolvedValue([
       { type: "location", address: "Somewhere 1", latitude: 52.5, longitude: 13.4 },

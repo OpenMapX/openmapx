@@ -1,5 +1,9 @@
 import { FetchJsonHttpError, fetchJson, isoWithOffsetInZone } from "@openmapx/core";
-import { parseProviderPayload, parseProviderRecords } from "@openmapx/integration-framework";
+import {
+  ProviderInputError,
+  parseProviderPayload,
+  parseProviderRecords,
+} from "@openmapx/integration-framework";
 import type {
   Departure,
   TransitStop,
@@ -269,7 +273,15 @@ async function fetchLiveboard(
     arrdep,
   });
   // A failed or malformed board throws; it must not read as "no departures".
-  const data = await irailJson(`${BASE_URL}/liveboard/?${params}`, "timetable");
+  let data: unknown;
+  try {
+    data = await irailJson(`${BASE_URL}/liveboard/?${params}`, "timetable");
+  } catch (error) {
+    // The station id came from the caller: iRail's 404 means it is unknown.
+    if (isNotFound(error))
+      throw new ProviderInputError("Unknown iRail station identifier", { cause: error });
+    throw error;
+  }
   const entries =
     arrdep === "departure"
       ? parseProviderPayload(departuresBoardSchema, data, "iRail timetable").departures.departure

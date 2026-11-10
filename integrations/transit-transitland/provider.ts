@@ -1,5 +1,9 @@
-import { type BBox, fetchJson } from "@openmapx/core";
-import { parseProviderPayload, parseProviderRecords } from "@openmapx/integration-framework";
+import { type BBox, FetchJsonHttpError, fetchJson } from "@openmapx/core";
+import {
+  ProviderInputError,
+  parseProviderPayload,
+  parseProviderRecords,
+} from "@openmapx/integration-framework";
 import type {
   Departure,
   TransitRoute,
@@ -23,12 +27,15 @@ function apiKey(): string | null {
 
 /**
  * Fetch a Transitland resource. Failures throw without the keyed request URL;
- * the cause keeps the HTTP status for provider health.
+ * the cause keeps the HTTP status for provider health. `callerKeyed` marks a path built from an
+ * identifier the caller supplied: a 404 there means that identifier is
+ * unknown, which is bad caller input rather than a provider failure.
  */
 async function tlFetch(
   path: string,
   params: Record<string, string>,
   what: string,
+  callerKeyed = false,
 ): Promise<unknown> {
   const key = apiKey();
   if (!key) return null;
@@ -42,6 +49,8 @@ async function tlFetch(
       errorMessage: ({ status }) => `TransitLand ${path} → HTTP ${status}`,
     });
   } catch (error) {
+    if (callerKeyed && error instanceof FetchJsonHttpError && error.status === 404)
+      throw new ProviderInputError(`Unknown Transitland ${what} identifier`, { cause: error });
     throw new Error(`Transitland ${what} unavailable`, { cause: error });
   }
 }
@@ -214,6 +223,7 @@ export async function getDepartures(stopId: string, minutes = 60): Promise<Depar
     `/stops/${encodeURIComponent(onestopId)}/departures`,
     { next: String(minutes * 60) },
     "timetable",
+    true,
   );
   if (data === null) return [];
   const { stops } = parseProviderPayload(departuresEnvelope, data, "Transitland departures");

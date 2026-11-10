@@ -1,5 +1,9 @@
 import { FetchJsonHttpError, fetchJson } from "@openmapx/core";
-import { parseProviderPayload, parseProviderRecords } from "@openmapx/integration-framework";
+import {
+  ProviderInputError,
+  parseProviderPayload,
+  parseProviderRecords,
+} from "@openmapx/integration-framework";
 import { oldestDataAsOf, upstreamDataAsOf } from "@openmapx/mobility-core/freshness";
 import type {
   AlertSeverity,
@@ -51,6 +55,21 @@ async function tflJson(url: string, what: string, signal?: AbortSignal): Promise
   } catch (error) {
     if (signal?.aborted) throw error;
     throw new Error(`TfL ${what} unavailable`, { cause: error });
+  }
+}
+
+/**
+ * Fetch a TfL resource whose path carries an identifier or text the caller
+ * supplied. A 404 there means TfL does not know that identifier: bad caller
+ * input, which must not count against TfL's health.
+ */
+async function tflKeyedJson(url: string, what: string, signal?: AbortSignal): Promise<unknown> {
+  try {
+    return await tflJson(url, what, signal);
+  } catch (error) {
+    if (isNotFound(error))
+      throw new ProviderInputError(`Unknown TfL ${what} identifier`, { cause: error });
+    throw error;
   }
 }
 
@@ -200,7 +219,7 @@ export async function searchByName(
     maxResults: String(Math.min(limit, 50)),
     app_key: key,
   });
-  const data = await tflJson(
+  const data = await tflKeyedJson(
     `${BASE_URL}/StopPoint/Search/${encodeURIComponent(query)}?${params}`,
     "stop search",
     signal,
@@ -240,8 +259,12 @@ function lineToAlert(line: TflLineStatus): ServiceAlert | null {
   };
 }
 
-async function lineAlerts(url: string, what: string): Promise<ServiceAlert[]> {
-  const data = await tflJson(url, what);
+async function lineAlerts(
+  url: string,
+  what: string,
+  callerKeyed: boolean,
+): Promise<ServiceAlert[]> {
+  const data = callerKeyed ? await tflKeyedJson(url, what) : await tflJson(url, what);
   const lines = parseProviderPayload(z.array(z.unknown()), data, `TfL ${what}`);
   const alerts: ServiceAlert[] = [];
   for (const line of parseProviderRecords(lineStatusSchema, lines, `TfL ${what}`)) {
@@ -258,6 +281,7 @@ export async function getAlerts(): Promise<ServiceAlert[]> {
   return lineAlerts(
     `${BASE_URL}/Line/Mode/tube,dlr,elizabeth-line,overground,tram/Status?${params}`,
     "line status",
+    false,
   );
 }
 
@@ -269,6 +293,7 @@ export async function getRouteAlerts(lineId: string): Promise<ServiceAlert[]> {
   return lineAlerts(
     `${BASE_URL}/Line/${encodeURIComponent(rawId)}/Status?${params}`,
     "line status",
+    true,
   );
 }
 
@@ -278,7 +303,7 @@ export async function getRouteStopSequence(lineId: string): Promise<RouteStop[]>
   const rawId = lineId.startsWith("tfl:") ? lineId.slice(4) : lineId;
 
   const params = new URLSearchParams({ app_key: key });
-  const data = await tflJson(
+  const data = await tflKeyedJson(
     `${BASE_URL}/Line/${encodeURIComponent(rawId)}/Route/Sequence/outbound?${params}`,
     "route sequence",
   );
@@ -309,7 +334,7 @@ export async function getStopAlerts(stopId: string): Promise<ServiceAlert[]> {
   if (!key) return [];
   const naptanId = stopId.startsWith("tfl:") ? stopId.slice(4) : stopId;
   const params = new URLSearchParams({ app_key: key });
-  const data = await tflJson(
+  const data = await tflKeyedJson(
     `${BASE_URL}/StopPoint/${encodeURIComponent(naptanId)}/Disruption?${params}`,
     "stop alerts",
   );
@@ -346,7 +371,7 @@ export async function getDepartures(stopId: string, minutes: number): Promise<De
 
   const naptanId = stopId.startsWith("tfl:") ? stopId.slice(4) : stopId;
   const params = new URLSearchParams({ app_key: key });
-  const data = await tflJson(
+  const data = await tflKeyedJson(
     `${BASE_URL}/StopPoint/${encodeURIComponent(naptanId)}/Arrivals?${params}`,
     "timetable",
   );
