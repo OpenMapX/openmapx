@@ -464,14 +464,14 @@ export function AuditLog() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Tooltip title={new Date(entry.createdAt).toLocaleString()}>
+                    <Tooltip title={dtf.dateTime(entry.createdAt)}>
                       <Typography
                         variant="caption"
                         sx={{
                           color: "text.secondary",
                         }}
                       >
-                        {dtf.relative(entry.createdAt)}
+                        {dtf.recent(entry.createdAt)}
                       </Typography>
                     </Tooltip>
                   </TableCell>

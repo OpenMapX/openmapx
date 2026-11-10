@@ -99,14 +99,14 @@ function JobRow({ job, onSelect }: { job: AdminActivityJob; onSelect: () => void
           <ActorCell actorId={job.createdBy} actor={job.actor} fallbackLabel={job.actorLabel} />
         </TableCell>
         <TableCell>
-          <Tooltip title={new Date(job.createdAt).toLocaleString()}>
+          <Tooltip title={dtf.dateTime(job.createdAt)}>
             <Typography
               variant="caption"
               sx={{
                 color: "text.secondary",
               }}
             >
-              {dtf.relative(job.createdAt)}
+              {dtf.recent(job.createdAt)}
             </Typography>
           </Tooltip>
         </TableCell>

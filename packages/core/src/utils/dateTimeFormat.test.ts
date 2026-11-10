@@ -3,6 +3,7 @@ import {
   formatCalendarDate,
   formatClockTime,
   formatDateAndTime,
+  formatRecentOrDateTime,
   formatRelativeTime,
 } from "./dateTimeFormat";
 
@@ -110,5 +111,52 @@ describe("formatRelativeTime", () => {
 
   it("is empty for an unreadable timestamp", () => {
     expect(formatRelativeTime("not a date", { locale: "en", now: NOW })).toBe("");
+  });
+});
+
+describe("formatRelativeTime clock skew", () => {
+  const NOW = Date.parse(ISO);
+
+  it("reads a moment under a minute ahead as now", () => {
+    expect(formatRelativeTime(NOW + 5_000, { locale: "en", now: NOW })).toBe("now");
+    expect(formatRelativeTime(NOW + 59_000, { locale: "de", now: NOW })).toBe("jetzt");
+  });
+
+  it("keeps real future times and past seconds as they were", () => {
+    expect(formatRelativeTime(NOW + 5 * 60_000, { locale: "en", now: NOW })).toBe("in 5 minutes");
+    expect(formatRelativeTime(NOW - 5_000, { locale: "en", now: NOW })).toBe("5 seconds ago");
+  });
+});
+
+describe("formatRecentOrDateTime", () => {
+  const NOW = Date.parse(ISO);
+  const base = {
+    locale: "en-US",
+    dateFormat: "ymd",
+    timeFormat: "24h",
+    timeZone: "UTC",
+    now: NOW,
+  } as const;
+  const hoursAgo = (hours: number) => NOW - hours * 3_600_000;
+
+  it("words anything within the last day relatively", () => {
+    expect(formatRecentOrDateTime(hoursAgo(3), base)).toBe("3 hours ago");
+    expect(formatRecentOrDateTime(hoursAgo(23.9), base)).toBe("24 hours ago");
+  });
+
+  it("gives the date and time per preference from a day on", () => {
+    expect(formatRecentOrDateTime(hoursAgo(24), base)).toBe("2025-01-30, 13:05");
+    expect(formatRecentOrDateTime(hoursAgo(24 * 90), base)).toBe("2024-11-02, 13:05");
+    expect(formatRecentOrDateTime(hoursAgo(24), { ...base, timeFormat: "12h" })).toBe(
+      "2025-01-30, 01:05 PM",
+    );
+  });
+
+  it("localizes the relative side", () => {
+    expect(formatRecentOrDateTime(hoursAgo(3), { ...base, locale: "de" })).toBe("vor 3 Stunden");
+  });
+
+  it("is empty for an unreadable timestamp", () => {
+    expect(formatRecentOrDateTime("nope", base)).toBe("");
   });
 });

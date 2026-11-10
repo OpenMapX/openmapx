@@ -65,7 +65,9 @@ export {
   formatCalendarDate,
   formatClockTime,
   formatDateAndTime,
+  formatRecentOrDateTime,
   formatRelativeTime,
+  type RecentOrDateOptions,
   type RelativeTimeOptions,
   type TimeFormat,
 } from "./dateTimeFormat";
