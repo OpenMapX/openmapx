@@ -7,6 +7,7 @@ vi.mock("@openmapx/core", async (importOriginal) => ({
   overpassQuerySafe: (...args: unknown[]) => overpassQuerySafe(...args),
 }));
 
+import { createFencedMemoryCache } from "@openmapx/integration-framework/testing";
 import kaarst from "../__fixtures__/kaarst-maubisstrasse-alerts.json";
 import {
   createRoutingHandlerEnvironment,
@@ -18,6 +19,7 @@ const BBOX = "51.226,6.612,51.233,6.626";
 function environment() {
   const stored: { key: string; ttl: number; cached: boolean }[] = [];
   const cache = {
+    get: vi.fn(async () => null),
     withCache: vi.fn(
       async (
         key: string,
@@ -88,7 +90,36 @@ describe("GET /navigation/alerts", () => {
 
     expect(reply.body).toEqual({ alerts: [] });
     expect(stored.map((entry) => entry.cached)).toEqual([false]);
-    expect(held).toEqual([{ key: stored[0].key, ttl: 60 }]);
+    expect(held).toEqual([{ key: expect.stringMatching(/^cache:nav:alerts-hold:v1/), ttl: 60 }]);
     expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+  });
+
+  it("does not ask Overpass again while a miss is held, and asks once the hold ends", async () => {
+    overpassQuerySafe.mockResolvedValue(null);
+    const cache = createFencedMemoryCache();
+    const handler = createRoutingHandlerEnvironment({
+      routingProviders: [],
+      contextOverrides: { cache },
+    }).getHandler("/navigation/alerts");
+    const ask = async () => {
+      const reply = createRoutingTestReply();
+      await handler({ query: { bbox: BBOX } }, reply);
+      return reply;
+    };
+
+    await ask();
+    const held = await ask();
+
+    expect(overpassQuerySafe).toHaveBeenCalledTimes(1);
+    expect(held.body).toEqual({ alerts: [] });
+    expect(held.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+
+    for (const [key] of cache.values)
+      if (key.startsWith("cache:nav:alerts-hold")) cache.values.delete(key);
+    overpassQuerySafe.mockResolvedValue({ elements: kaarst.elements });
+    const answered = await ask();
+
+    expect(overpassQuerySafe).toHaveBeenCalledTimes(2);
+    expect((answered.body as { alerts: unknown[] }).alerts.length).toBeGreaterThan(0);
   });
 });
