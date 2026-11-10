@@ -10,8 +10,9 @@ plain one. A request that matches no route has its own small budget instead of
 none. Limits count every address in one IPv6 /64 as one client, and refused
 requests are no longer stored as error rows in the application log.
 
-Routing, route optimization, reverse geocoding, transit journey planning and
-hotel offers now use the tighter `expensive` limit. Autocomplete and forward
+Route optimization, EV route plans, reverse geocoding, transit journey planning
+and hotel offers now use the tighter `expensive` limit. Directions use a new
+`routing` limit sized for navigation. Autocomplete and forward
 geocoding use a new `typeahead` limit sized for typing. The TomTom traffic proxy
 shares a daily budget of 50,000 tiles across all clients. The MapTiler proxy can
 be given one with `MAPTILER_DAILY_REQUEST_LIMIT`; it has none unless you set it.

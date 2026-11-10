@@ -102,6 +102,7 @@ describe("integration route rate tiers", () => {
       expensive: expensiveLimit,
       tile: tileLimit,
       typeahead: typeaheadLimit,
+      routing: vi.fn(async () => undefined),
       unmatched: vi.fn(async () => undefined),
     });
     const app = makeApp();
@@ -127,12 +128,14 @@ describe("host and dispatcher request tier ownership", () => {
       expensive: new RateLimiter({ max, windowMs: 60_000 }),
       tile: new RateLimiter({ max, windowMs: 60_000 }),
       typeahead: new RateLimiter({ max, windowMs: 60_000 }),
+      routing: new RateLimiter({ max, windowMs: 60_000 }),
     };
     const tiers: RateLimitTiers = {
       public: buckets.public.preHandler(),
       expensive: buckets.expensive.preHandler(),
       tile: buckets.tile.preHandler(),
       typeahead: buckets.typeahead.preHandler(),
+      routing: buckets.routing.preHandler(),
       auth: vi.fn(),
       integrationIngress: vi.fn(),
       status: vi.fn(),
@@ -210,6 +213,7 @@ describe("host and dispatcher request tier ownership", () => {
       public: latePublic,
       unmatched: unexpectedTier,
       typeahead: unexpectedTier,
+      routing: unexpectedTier,
     };
     app.addContentTypeParser("application/x-integration-probe", { parseAs: "string" }, parseBody);
     app.addHook("onRequest", makeRateLimitTierHook(tiers));
@@ -269,10 +273,12 @@ describe("host and dispatcher request tier ownership", () => {
     ["expensive", false],
     ["tile", false],
     ["typeahead", false],
+    ["routing", false],
     ["public", true],
     ["expensive", true],
     ["tile", true],
     ["typeahead", true],
+    ["routing", true],
   ] as const)(
     "charges actual dispatcher requests exactly once to %s (root route: %s)",
     async (tier, rootRoute) => {

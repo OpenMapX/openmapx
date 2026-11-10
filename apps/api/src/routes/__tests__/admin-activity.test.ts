@@ -311,6 +311,7 @@ describe("actual generated Activity SDK through Fastify serialization", () => {
         public: limiter.preHandler(),
         unmatched: unexpectedTier,
         typeahead: unexpectedTier,
+        routing: unexpectedTier,
       }),
     );
     await limitedApp.register(adminActivityRoute, { prefix: "/api" });

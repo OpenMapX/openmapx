@@ -461,6 +461,7 @@ export interface RateLimitTiers {
   auth: Limit;
   tile: Limit;
   expensive: Limit;
+  routing: Limit;
   typeahead: Limit;
   integrationIngress: Limit;
   status: Limit;

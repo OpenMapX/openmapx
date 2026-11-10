@@ -64,6 +64,7 @@ describe("serialized data-manager job projections", () => {
         public: limiter.preHandler(),
         unmatched: unexpectedTier,
         typeahead: unexpectedTier,
+        routing: unexpectedTier,
       }),
     );
     const { dataManagerRoute } = await import("../data-manager.js");

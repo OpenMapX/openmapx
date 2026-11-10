@@ -100,6 +100,7 @@ describe("integration route caller identity", () => {
       public: routeTier,
       expensive: routeTier,
       typeahead: routeTier,
+      routing: routeTier,
       tile: routeTier,
       unmatched: unmatched.preHandler(),
     });

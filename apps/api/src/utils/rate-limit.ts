@@ -274,12 +274,29 @@ export const statusPublicApiLimit = new RateLimiter({ max: 60, windowMs: 60_000 
 
 /**
  * Tight limiter for CPU- or quota-expensive endpoints that fan out to
- * upstream services (Valhalla isochrone and routing, MOTIS journey planning,
- * reverse geocoding, hotel offers, photo / review aggregation).
+ * upstream services (Valhalla isochrone, route optimization and EV plans,
+ * MOTIS journey planning, reverse geocoding, hotel offers, photo / review
+ * aggregation).
  */
 export const expensivePublicApiLimit = new RateLimiter({
   max: envInt("RATE_LIMIT_EXPENSIVE_MAX", 60),
   windowMs: envInt("RATE_LIMIT_EXPENSIVE_WINDOW_MS", 60_000),
+});
+
+/**
+ * Directions (`/directions`, `/directions/schedule`). A navigating client
+ * re-checks route-stop detours every 500 m with up to seven directions calls
+ * each (about 47 calls a minute at 200 km/h), may reroute up to three times in
+ * two minutes, and can plan other routes alongside: about 70 calls a minute at
+ * worst. This bucket holds 240 and refills at four a second, so one session
+ * never reaches it and two on one network still fit. It is separate from
+ * `expensive`, so navigation never competes with photos and place details.
+ *
+ * Tunable via `RATE_LIMIT_ROUTING_MAX` / `RATE_LIMIT_ROUTING_WINDOW_MS`.
+ */
+export const routingApiLimit = new RateLimiter({
+  max: envInt("RATE_LIMIT_ROUTING_MAX", 240),
+  windowMs: envInt("RATE_LIMIT_ROUTING_WINDOW_MS", 60_000),
 });
 
 /**

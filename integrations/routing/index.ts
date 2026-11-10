@@ -495,7 +495,7 @@ export function setup(ctx: IntegrationContext): void {
         });
       }
     },
-    { rateLimitTier: "expensive" },
+    { rateLimitTier: "routing" },
   );
 
   ctx.registerRoute(
@@ -1018,7 +1018,7 @@ export function setup(ctx: IntegrationContext): void {
         reply.status(502).send({ error: "Routing unavailable" });
       }
     },
-    { rateLimitTier: "expensive" },
+    { rateLimitTier: "routing" },
   );
 
   /**

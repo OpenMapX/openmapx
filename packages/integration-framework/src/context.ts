@@ -214,10 +214,10 @@ export interface RouteOptions {
   /**
    * Host-owned limiter bucket. Every integration route uses exactly one tier:
    * `public` (the default), `expensive` for routes that fan out to a costly
-   * upstream, `typeahead` for routes a client calls while the user types, and
-   * `tile` for map-tile fan-out.
+   * upstream, `routing` for turn-by-turn directions, `typeahead` for routes a
+   * client calls while the user types, and `tile` for map-tile fan-out.
    */
-  rateLimitTier?: "public" | "expensive" | "typeahead" | "tile";
+  rateLimitTier?: "public" | "expensive" | "routing" | "typeahead" | "tile";
   /**
    * Largest request body the route accepts, in bytes. The host answers 413 to
    * anything larger, and also caps this value at 8 MiB. Routes that do not

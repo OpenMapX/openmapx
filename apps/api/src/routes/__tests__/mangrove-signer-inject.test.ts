@@ -50,6 +50,7 @@ describe("Mangrove signer over the production dispatcher and host HTTP client", 
       expensive,
       tile: vi.fn(async () => {}),
       typeahead: vi.fn(async () => {}),
+      routing: vi.fn(async () => {}),
       unmatched: vi.fn(async () => {}),
     });
     fetchMock = vi.fn(async () => Response.json(ACCOUNT));

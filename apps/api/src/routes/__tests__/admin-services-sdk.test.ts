@@ -370,6 +370,7 @@ async function wire(max = 1000) {
       status: unexpected,
       unmatched: unexpected,
       typeahead: unexpected,
+      routing: unexpected,
     }),
   );
   const registered = new Map<string, string>();
