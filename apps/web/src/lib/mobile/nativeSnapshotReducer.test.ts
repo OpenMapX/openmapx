@@ -128,13 +128,17 @@ describe("applyNativeSnapshot", () => {
     });
   });
 
-  it("asks for a full snapshot rather than interpolating a gap", () => {
-    // A missed update is a moment of staleness; an invented one is a puck on the
-    // wrong road.
-    expect(applyNativeSnapshot(seeded(), envelope(progressSnapshot({ revision: 9 })))).toEqual({
-      ok: false,
-      reason: "need-full-snapshot",
-    });
+  it("applies a newer delta after a dropped one, because deltas are absolute", () => {
+    // The shell throttles progress and drops the deltas in between; the newest
+    // one carries every value they would have set.
+    const outcome = applyNativeSnapshot(seeded(), envelope(progressSnapshot({ revision: 9 })));
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.model.revision).toBe(9);
+    expect(outcome.baseRevision).toBe(4);
+    expect((outcome.model.snapshot.progress as { alongMeters: number }).alongMeters).toBe(200);
+    expect(projectionOf(outcome.model, "progress", outcome.baseRevision).baseRevision).toBe(4);
   });
 
   it("accepts a full snapshot that moves the revision backwards", () => {

@@ -222,7 +222,7 @@ export function createCarSnapshotReceiver(error: (code: string) => void) {
       return;
     }
     const store = useNavigationStore.getState();
-    const projection = projectionOf(outcome.model, envelope.type);
+    const projection = projectionOf(outcome.model, envelope.type, outcome.baseRevision);
     const result =
       envelope.type === "full"
         ? store.applyNativeFullSnapshot(projection)

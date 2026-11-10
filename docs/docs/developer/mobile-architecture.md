@@ -262,10 +262,14 @@ allow a single-use callback code, state and PKCE verifier in `auth.result`; the
 page needs them to redeem the handoff. Keep these out of persistence, diagnostics
 and URLs that should contain only a challenge.
 
-A full snapshot can rehydrate the page at the current revision. A delta applies
-only to its matching session, route and base revision; a gap requests a full
-snapshot. The snapshot reducer and tests implement this contract independently
-of the unfinished foreground composition.
+A full snapshot can rehydrate the page at the current revision. A progress delta
+is absolute: it carries the current position, status and health values read
+from the committed session, not a difference from the last delta. The route,
+itinerary and settings change only in commits that publish a full snapshot. The
+shell throttles progress to one delta a second and drops the ones
+in between, so the page applies any newer delta for its session and route or
+itinerary, even after a revision gap. A delta for another session or route asks
+for a full snapshot, and an older one is ignored.
 
 ### Voice input messages
 
