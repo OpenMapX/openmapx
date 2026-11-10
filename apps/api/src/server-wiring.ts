@@ -219,6 +219,59 @@ export function registerBodyReadDeadline(
   });
 }
 
+export interface ShutdownServerOptions {
+  /** How long open connections, such as event streams, may keep the listener from closing. */
+  graceMs: number;
+  /** How much longer to wait for the close to finish once the remaining connections are cut. */
+  forceMs: number;
+  log: Pick<FastifyBaseLogger, "warn" | "error">;
+  /** Runs once the listener has closed, or once waiting for it has been given up. */
+  afterClose: () => Promise<void>;
+}
+
+/**
+ * Stops the server before anything it serves is torn down: the listener closes
+ * first and `afterClose` runs only then, so no request reaches a removed
+ * integration. Connections still open after `graceMs` (an event stream never
+ * ends by itself) are cut, and if the close still has not finished `forceMs`
+ * later, shutdown goes on regardless instead of waiting forever.
+ */
+export async function shutdownServer(
+  server: FastifyInstance,
+  options: ShutdownServerOptions,
+): Promise<void> {
+  const closing = server.close().catch((err) => {
+    options.log.error({ errorClass: safeErrorClass(err) }, "Closing the server failed");
+  });
+  const timers: ReturnType<typeof setTimeout>[] = [];
+  const settled = Symbol("settled");
+  const gaveUp = new Promise<typeof settled>((resolve) => {
+    timers.push(
+      setTimeout(() => {
+        options.log.warn(
+          { graceMs: options.graceMs },
+          "Connections still open at the shutdown deadline; closing them",
+        );
+        server.server.closeAllConnections();
+        timers.push(setTimeout(() => resolve(settled), options.forceMs));
+      }, options.graceMs),
+    );
+  });
+
+  try {
+    const result = await Promise.race([closing, gaveUp]);
+    if (result === settled) {
+      options.log.error(
+        { graceMs: options.graceMs, forceMs: options.forceMs },
+        "The listener did not close in time; continuing shutdown",
+      );
+    }
+  } finally {
+    for (const timer of timers) clearTimeout(timer);
+  }
+  await options.afterClose();
+}
+
 const TRUST_PROXY_ALIASES = new Set(["loopback", "linklocal", "uniquelocal"]);
 
 function validateProxyRange(value: string): void {
