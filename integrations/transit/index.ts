@@ -33,7 +33,6 @@ import type {
   TransitStop,
   TransitTripResolveRequest,
   TripItinerary,
-  VehicleJourney,
 } from "@openmapx/mobility-core/transit";
 import {
   parseTransitIsochroneRequest,
@@ -339,6 +338,7 @@ export function setup(ctx: IntegrationContext): void {
     if (!isRefreshEligible(itinerary) || !refreshSecret) return undefined;
     const id = randomUUID();
     const state: ReferenceRefreshState = { kind: "reference", request };
+    // Refresh-token session state, not cached upstream data.
     await ctx.cache.set(`transit-refresh:${id}`, state, refreshTtlSeconds);
     return signRefreshHandle(id, refreshSecret, Math.floor(Date.now() / 1000) + refreshTtlSeconds);
   }
@@ -362,6 +362,7 @@ export function setup(ctx: IntegrationContext): void {
       itineraryId: itinerary.id,
       request,
     };
+    // Refresh-token session state, not cached upstream data.
     await ctx.cache.set(`transit-refresh:${id}`, state, refreshTtlSeconds);
     return signRefreshHandle(id, refreshSecret, expiresAt);
   }
@@ -473,12 +474,9 @@ export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/stops/:id/transfers", async (req, reply) => {
     const stopId = req.params.id;
     const cacheKey = `stop-transfers:${stopId}`;
-    let env = (await ctx.cache.get(cacheKey)) as MobilityEnvelope<unknown> | null;
-    if (!env) {
-      const res = await orchestrator.getStopTransfers(stopId);
-      env = toEnvelope(res);
-      await ctx.cache.set(cacheKey, env, 3600);
-    }
+    const env = await ctx.cache.withCache(cacheKey, 3600, async () =>
+      toEnvelope(await orchestrator.getStopTransfers(stopId)),
+    );
     reply.header("Cache-Control", "public, max-age=600, s-maxage=3600");
     reply.send(env);
   });
@@ -692,15 +690,14 @@ export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/routes/:id", async (req, reply) => {
     const routeId = req.params.id;
     const cacheKey = `transit:route:${routeId}`;
-    let env = (await ctx.cache.get(cacheKey)) as MobilityEnvelope<unknown> | null;
-    if (!env) {
-      const res = await orchestrator.getRoute(routeId);
-      if (res.data) {
-        env = toEnvelope(res);
-        await ctx.cache.set(cacheKey, env, 3600);
-      }
-    }
-    if (!env?.data) {
+    const env = await ctx.cache.withCache(
+      cacheKey,
+      3600,
+      async () => toEnvelope(await orchestrator.getRoute(routeId)),
+      undefined,
+      (found) => Boolean(found.data),
+    );
+    if (!env.data) {
       reply.status(404).send({ error: "Route not found" });
       return;
     }
@@ -712,14 +709,13 @@ export function setup(ctx: IntegrationContext): void {
     const routeId = req.params.id;
     const hintStopId = scalarQueries(req.query).hint_stop_id || undefined;
     const cacheKey = `transit:route-stops:${routeId}:${hintStopId ?? ""}`;
-    let env = (await ctx.cache.get(cacheKey)) as MobilityEnvelope<unknown[]> | null;
-    if (!env) {
-      const res = await orchestrator.getRouteStops(routeId, hintStopId);
-      env = toEnvelope(res) as MobilityEnvelope<unknown[]>;
-      if (Array.isArray(env.data) && env.data.length > 0) {
-        await ctx.cache.set(cacheKey, env, 3600);
-      }
-    }
+    const env = await ctx.cache.withCache(
+      cacheKey,
+      3600,
+      async () => toEnvelope(await orchestrator.getRouteStops(routeId, hintStopId)),
+      undefined,
+      (stops) => Array.isArray(stops.data) && stops.data.length > 0,
+    );
     reply.send(env);
   });
 
@@ -1521,15 +1517,14 @@ export function setup(ctx: IntegrationContext): void {
     const nonEmptyFallbackIds = listQuery(req.query, "fallback_ids")?.filter((id) => id !== "");
     const fallbackIds = nonEmptyFallbackIds?.length ? nonEmptyFallbackIds : undefined;
     const cacheKey = `transit:vehicle-journey:${JSON.stringify([tripId, fallbackIds ?? []])}`;
-    let env = (await ctx.cache.get(cacheKey)) as MobilityEnvelope<VehicleJourney | null> | null;
-    if (!env) {
-      const res = await orchestrator.getVehicleJourney(tripId, fallbackIds);
-      if (res.data) {
-        env = toEnvelope(res);
-        await ctx.cache.set(cacheKey, env, 30);
-      }
-    }
-    if (!env?.data) {
+    const env = await ctx.cache.withCache(
+      cacheKey,
+      30,
+      async () => toEnvelope(await orchestrator.getVehicleJourney(tripId, fallbackIds)),
+      undefined,
+      (journey) => Boolean(journey.data),
+    );
+    if (!env.data) {
       reply.status(404).send({ error: "Vehicle journey not found" });
       return;
     }
