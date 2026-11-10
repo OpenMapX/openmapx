@@ -125,7 +125,6 @@ import {
   handleExtensionRemoveJob,
 } from "./services/extension-installer";
 import {
-  adoptUnrecordedIntegrations,
   recoverInterruptedExtensionChanges,
   warnAboutLegacyInstallJournals,
   withExtensionChangeLock,
@@ -258,10 +257,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
   // An unreachable agent must not keep the API down; every extension job runs
   // this recovery again before it changes anything.
   try {
-    // Adoption downloads archives again, so it waits until the API listens.
-    await withExtensionChangeLock(() =>
-      recoverInterruptedExtensionChanges(undefined, { adoptIntegrations: false }),
-    );
+    await withExtensionChangeLock(() => recoverInterruptedExtensionChanges());
     server.log.info("Interrupted extension changes recovered");
   } catch (err) {
     server.log.error(
@@ -873,15 +869,6 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
       server.log.error(err);
       throw err;
     }
-
-    // Integrations earlier releases installed load once the operations agent has
-    // verified them against their extensions' archives; every extension job retries.
-    void withExtensionChangeLock(() => adoptUnrecordedIntegrations()).catch((err) =>
-      server.log.warn(
-        err,
-        "Installed integrations could not be adopted yet; extension jobs will retry",
-      ),
-    );
 
     // Only complete a checkpointed self-update after the replacement API is
     // genuinely listening, migrations succeeded, and Docker confirms that this

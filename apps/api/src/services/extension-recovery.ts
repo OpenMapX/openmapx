@@ -32,31 +32,19 @@ export function withExtensionChangeLock<T>(work: () => Promise<T>): Promise<T> {
 
 /**
  * Finish what an interrupted extension change left behind: settle its pending
- * integration and repository transactions in the operations agent, have the
- * agent adopt integrations earlier releases installed, restore the service
- * selection the change touched, and repair the service runtimes it touched.
- * The caller holds the extension change lock.
+ * integration and repository transactions in the operations agent, restore the
+ * service selection the change touched, and repair the service runtimes it
+ * touched. With the job that is running it, also have the agent adopt
+ * integrations earlier releases installed; adoption needs a job to own its
+ * operations, so startup recovery runs without one and never adopts. The
+ * caller holds the extension change lock.
  */
-/**
- * Adopt the integrations earlier releases installed, which the agent holds no
- * record of, then reload the integration host if any was recorded. Startup
- * runs this in the background once the API listens: each adoption downloads
- * the extension's archive again. The caller holds the extension change lock.
- */
-export async function adoptUnrecordedIntegrations(signal?: AbortSignal): Promise<void> {
-  const integrations = await recoverAgentIntegrations({ signal });
-  if (integrations.adopted.length > 0 && isIntegrationHostInitialized()) {
-    await reloadIntegrations();
-  }
-}
-
 export async function recoverInterruptedExtensionChanges(
   signal?: AbortSignal,
-  options: { adoptIntegrations?: boolean; ctx?: JobContext } = {},
+  options: { ctx?: JobContext } = {},
 ): Promise<void> {
   const integrations = await recoverAgentIntegrations({
     signal,
-    adopt: options.adoptIntegrations ?? true,
     ctx: options.ctx,
   });
   if (

@@ -281,11 +281,7 @@ export async function recoverAgentIntegrations(
   options: {
     signal?: AbortSignal;
     log?: IntegrationRecoveryLog;
-    /**
-     * Also adopt what the agent holds no record of. Adoption downloads each
-     * extension's archive again, so startup leaves it to a background pass.
-     */
-    adopt?: boolean;
+    /** The running job. Adoption needs one to own its operations; without it nothing is adopted. */
     ctx?: JobContext;
   } = {},
 ): Promise<IntegrationRecoveryOutcome> {
@@ -366,7 +362,7 @@ export async function recoverAgentIntegrations(
     snapshot = await readInstalledIntegrations({ signal: options.signal });
   }
 
-  if (options.adopt === false || !options.ctx) return outcome;
+  if (!options.ctx) return outcome;
   const recorded = new Set(snapshot.integrations.map((entry) => entry.integrationId));
   const rows = await db
     .select({
