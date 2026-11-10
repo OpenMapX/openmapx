@@ -133,9 +133,9 @@ describe("the release's service files in the store", () => {
     );
     // PostGIS runs it as 999, nginx's workers read as another user again.
     expect(mode(script)).toBe(0o555);
-    const html = mountOf(infraDir, "well-known", "/usr/share/nginx/html/.well-known");
-    expect(mode(html)).toBe(0o755);
-    expect(mode(join(html, "assetlinks.json"))).toBe(0o444);
+    expect(mode(mountOf(infraDir, "well-known", "/opt/openmapx/well-known/app-links.sh"))).toBe(
+      0o444,
+    );
     // pelias-pip reads pelias's own file, through @service:.
     expect(
       relative(serviceFileStore(infraDir), mountOf(infraDir, "pelias-pip", "/code/pelias.json")),

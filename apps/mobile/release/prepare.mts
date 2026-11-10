@@ -110,15 +110,7 @@ const GATES: { label: string; command: string; args: string[] }[] = [
   {
     label: "verified link associations",
     command: "pnpm",
-    args: [
-      "-C",
-      "apps/mobile",
-      "exec",
-      "tsx",
-      "scripts/assert-store-links.mts",
-      "--local",
-      "../../services/well-known/config/html",
-    ],
+    args: ["-C", "apps/mobile", "exec", "tsx", "scripts/assert-store-links.mts", "--render"],
   },
   { label: "tests", command: "pnpm", args: ["test"] },
   { label: "types", command: "pnpm", args: ["check-types"] },

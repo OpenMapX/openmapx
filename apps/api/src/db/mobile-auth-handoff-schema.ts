@@ -13,12 +13,12 @@ import { user } from "./auth-schema";
  *
  * What is stored, and what is not:
  *
- *  - The callback code is stored **hashed**. The raw code travels through a
- *    custom-scheme URL the OS routes, which is the least private part of this
+ *  - The callback code is stored **hashed**. The raw code travels in a
+ *    callback URL the OS routes, which is the least private part of this
  *    whole exchange; a database read must not yield something redeemable.
  *  - The PKCE challenge is stored, the verifier never is. That is the entire
- *    point of PKCE: another app that intercepted the callback still cannot
- *    redeem it, because it never had the verifier.
+ *    point of PKCE: anything that sees the callback still cannot redeem the
+ *    code, because it never had the verifier.
  *  - The one-time token is AES-256-GCM encrypted with a key derived from the
  *    application auth secret and authenticated to this row's ID. PostgreSQL
  *    therefore holds no redeemable token even during the two-minute window.

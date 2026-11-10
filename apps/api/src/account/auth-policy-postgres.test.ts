@@ -1,4 +1,6 @@
 import { randomBytes } from "node:crypto";
+import { createEmailVerificationToken } from "better-auth/api";
+import { makeSignature } from "better-auth/crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -21,11 +23,12 @@ dbDescribe("account policy through installed Better Auth", () => {
     vi.stubEnv("BETTER_AUTH_SECRET", randomBytes(48).toString("base64url"));
     vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3001");
     vi.doMock("../db", () => ({ db: fixture.db, sql: fixture.sql }));
-    vi.doMock("../utils/email", () => ({
-      sendMail: async (message: { to: string; text: string }) => {
+    vi.doMock("../utils/email", () => {
+      const capture = async (message: { to: string; text: string }) => {
         mail.push(message);
-      },
-    }));
+      };
+      return { sendMail: capture, sendAuthMail: capture };
+    });
     await fixture.db.insert(systemSettings).values([
       { key: "emailVerificationRequired", value: false },
       { key: "twoFaEnabled", value: false },
@@ -546,22 +549,16 @@ dbDescribe("account policy through installed Better Auth", () => {
       auth.api.resetPassword({ body: { token, newPassword: "valid-replacement-password" } }),
     ).resolves.toMatchObject({ status: true });
   });
-  it("enforces active password bounds when setting the first password through an OTP session", async () => {
+  it("enforces active password bounds when setting the first password from a passwordless session", async () => {
     const passwordless = await auth.api.createUser({
       body: { name: "Passwordless", email: "passwordless-policy@example.test" },
     });
-    const otp = await auth.api.createVerificationOTP({
-      body: { email: passwordless.user.email, type: "sign-in" },
-    });
-    const otpSession = await auth.api.signInEmailOTP({
-      body: { email: passwordless.user.email, otp },
-      returnHeaders: true,
-    });
+    // Fixture input: the session a provider sign-in would give this account.
+    const context = await auth.$context;
+    const created = await context.internalAdapter.createSession(passwordless.user.id);
+    const signature = await makeSignature(created.token, context.secret);
     const passwordlessHeaders = new Headers({
-      cookie: otpSession.headers
-        .getSetCookie()
-        .map((v) => v.split(";")[0])
-        .join("; "),
+      cookie: `${context.authCookies.sessionToken.name}=${encodeURIComponent(`${created.token}.${signature}`)}`,
     });
     await expect(
       auth.api.setPassword({ headers: passwordlessHeaders, body: { newPassword: "short" } }),
@@ -590,14 +587,15 @@ dbDescribe("account policy through installed Better Auth", () => {
     const reset = await auth.api.createVerificationOTP({
         body: { email: created.user.email, type: "forget-password" },
       }),
-      verification = await auth.api.createVerificationOTP({
-        body: { email: created.user.email, type: "email-verification" },
-      });
+      verification = await createEmailVerificationToken(
+        (await auth.$context).secret,
+        created.user.email,
+      );
     await Promise.all([
       auth.api.resetPasswordEmailOTP({
         body: { email: created.user.email, otp: reset, password: "replacement-password" },
       }),
-      auth.api.verifyEmailOTP({ body: { email: created.user.email, otp: verification } }),
+      auth.api.verifyEmail({ query: { token: verification } }),
     ]);
     expect(
       (await fixture.db.select().from(user).where(eq(user.id, created.user.id)))[0]?.emailVerified,

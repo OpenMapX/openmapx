@@ -37,8 +37,9 @@ bridge tests do not establish binary or deployed-browser behavior.
 
 ## Authentication
 
-- [ ] Intercept the custom-scheme callback from another app. Confirm the code
-      cannot be redeemed without the verifier.
+- [ ] Confirm the sign-in callback reaches the app only as the verified
+      `/mobile-auth/callback` link, and that a code copied from it cannot be
+      redeemed without the verifier.
 - [ ] Replay a consumed callback code. Expect the same error as an unknown one.
 - [ ] Redeem after two minutes. Expect the same error again.
 - [ ] Confirm every failure returns an identical status and body.

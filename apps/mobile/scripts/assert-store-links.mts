@@ -2,15 +2,24 @@
 /**
  * Validates the published association files against the recorded identities.
  *
- * `--local <dir>` reads the files from a directory (the well-known service's
- * html root). Without it, they are fetched over HTTPS from the compiled origin,
- * which is the only way to catch the failures that only exist in production: a
- * redirect, a login wall, a CDN serving the wrong content type.
+ * `--render` renders them with the well-known service's own script from the
+ * recorded identities, as a deployment configured with those values would serve
+ * them. `--local <dir>` reads files from a directory, for example ones copied
+ * out of a running container. Without either, they are fetched over HTTPS from
+ * the compiled origin, which is the only way to catch the failures that only
+ * exist in production: a redirect, a login wall, a CDN serving the wrong
+ * content type.
  */
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { checkAll, type LinkFinding, type PublicSigningIdentities } from "./storeLinks.ts";
+import { renderAppLinks, settingsForIdentities } from "./renderAppLinks.ts";
+import {
+  checkAll,
+  isPlaceholder,
+  type LinkFinding,
+  type PublicSigningIdentities,
+} from "./storeLinks.ts";
 
 const mobileRoot = resolve(import.meta.dirname, "..");
 
@@ -24,7 +33,20 @@ const localDir = localIndex >= 0 ? process.argv[localIndex + 1] : null;
 let files: { apple?: string; assetlinks?: string } = {};
 let sourceLabel: string;
 
-if (localDir) {
+if (process.argv.includes("--render")) {
+  // An identity that has not been issued yet stays unset, so that platform's
+  // file claims nothing and only the identity check reports it as pending.
+  const issued = {
+    apple: !isPlaceholder(identities.apple.teamId),
+    google: !isPlaceholder(identities.google.playAppSigningSha256),
+  };
+  const rendered = renderAppLinks(settingsForIdentities(identities, issued));
+  files = {
+    ...(issued.apple ? { apple: rendered.apple } : {}),
+    ...(issued.google ? { assetlinks: rendered.assetlinks } : {}),
+  };
+  sourceLabel = "files rendered from the recorded identities";
+} else if (localDir) {
   const base = resolve(process.cwd(), localDir);
   const applePath = resolve(base, "apple-app-site-association");
   const assetPath = resolve(base, "assetlinks.json");

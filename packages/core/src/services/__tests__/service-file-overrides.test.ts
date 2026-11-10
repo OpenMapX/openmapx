@@ -6,7 +6,6 @@ import {
   linkSync,
   mkdirSync,
   mkdtempSync,
-  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -261,8 +260,10 @@ describe("service file overrides", () => {
         "infra/docker/overrides/services/well-known/config/html/security.txt is ignored: the release has no services/well-known/config/html/security.txt for it to replace.",
       ].map((message) => ({ level: "warn", message })),
     );
-    const html = mounted(f.infraDir, "well-known", "/usr/share/nginx/html/.well-known");
-    expect(readdirSync(html).sort()).toEqual(["apple-app-site-association", "assetlinks.json"]);
+    const script = mounted(f.infraDir, "well-known", "/opt/openmapx/well-known/app-links.sh");
+    expect(readFileSync(script, "utf8")).toBe(
+      readFileSync(join(REPOSITORY, "services/well-known/config/app-links.sh"), "utf8"),
+    );
   });
 
   it("flags an override whose release file changed since, until the override is edited", async () => {

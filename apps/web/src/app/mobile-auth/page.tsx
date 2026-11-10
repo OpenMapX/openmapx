@@ -84,12 +84,7 @@ export default async function MobileAuthPage({
 
   return (
     <Box component="main" sx={MAIN_SX}>
-      <MobileAuthClient
-        purpose={purpose}
-        state={state}
-        codeChallenge={codeChallenge}
-        callbackScheme={process.env.NEXT_PUBLIC_MOBILE_SCHEME ?? "openmapx"}
-      />
+      <MobileAuthClient purpose={purpose} state={state} codeChallenge={codeChallenge} />
     </Box>
   );
 }

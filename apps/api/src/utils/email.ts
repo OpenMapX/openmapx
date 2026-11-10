@@ -4,7 +4,21 @@ import { createTransport } from "nodemailer";
 import { db } from "../db";
 import { systemSettings } from "../db/schema";
 import { recordDataDisclosureBestEffort } from "../privacy/disclosures.js";
+import { redis } from "../redis";
+import { appLogger } from "../services/app-logger.js";
 import { MailDeliveryRefusedError } from "./mail-outcome";
+import { createMailRecipientLimit } from "./mail-recipient-limit";
+
+const recipientLimit = createMailRecipientLimit({
+  store: redis,
+  onUnavailable: () =>
+    appLogger.add({
+      level: "warn",
+      source: "mail",
+      msg: "Mail recipient limit unavailable; message sent uncounted",
+      time: Date.now(),
+    }),
+});
 
 export interface MailOptions {
   to: string;
@@ -208,6 +222,18 @@ export async function sendMail(opts: MailOptions): Promise<void> {
       ...(disclosure.idempotencyKey ? { idempotencyKey: disclosure.idempotencyKey } : {}),
     });
   }
+}
+
+/**
+ * Sends authentication mail that an anonymous request can trigger: sign-up
+ * verification, verification resend, password reset and email-code mail.
+ * Beyond the recipient's hourly allowance the message is dropped silently, so
+ * the response never reveals the limit or whether the address has an account.
+ * Administrator-initiated and privacy mail use `sendMail` and are not counted.
+ */
+export async function sendAuthMail(opts: MailOptions): Promise<void> {
+  if (!(await recipientLimit.admit(opts.to))) return;
+  await sendMail(opts);
 }
 
 const TRANSFER_SAFEGUARDS = ["eea", "adequacy", "dpf", "scc", "none"] as const;

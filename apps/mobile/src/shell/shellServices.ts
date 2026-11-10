@@ -22,7 +22,7 @@ export interface ShellServices {
 }
 
 export interface ShellServicesOptions {
-  config: Pick<MobileRuntimeConfig, "webOrigin" | "scheme">;
+  config: Pick<MobileRuntimeConfig, "webOrigin">;
   /** Prompts are shown only while the app is in front. */
   isAppActive(): boolean;
   driver?: LocationDriver;
@@ -36,10 +36,7 @@ export function createShellServices(options: ShellServicesOptions): ShellService
     requestForegroundPermission: async () =>
       options.isAppActive() ? driver.requestForegroundPermission() : driver.getPermissionState(),
   });
-  const auth = createSystemAuthSession({
-    webOrigin: options.config.webOrigin,
-    scheme: options.config.scheme,
-  });
+  const auth = createSystemAuthSession({ webOrigin: options.config.webOrigin });
 
   return {
     auxiliary: createAuxiliaryCommandHandler({

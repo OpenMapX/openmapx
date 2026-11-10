@@ -217,27 +217,54 @@ associations, origin and trademark-compliant name.
 
 ## Authentication
 
-Email/password, verification, email OTP and TOTP use the web UI and its session
+Email/password, verification, email-code password reset and TOTP use the web UI and its session
 cookie. OAuth and passkeys go through `auth.open`: the shell opens `/mobile-auth`
 with `expo-web-browser` (a Custom Tab on Android, `ASWebAuthenticationSession`
 on iOS). That page signs the user in inside the real browser when needed and
-then hands back a callback code on the compiled scheme. The page's callback
-scheme comes from `NEXT_PUBLIC_MOBILE_SCHEME` (default `openmapx`), so a
-development build, whose scheme is `openmapx-dev`, completes the handoff only
-against a web build configured with that scheme.
+then hands back a callback code on `/mobile-auth/callback` of its own origin, a
+verified link: an Android App Link or an iOS Universal Link. The custom scheme
+still carries map and navigation deep links, but never the sign-in callback.
+
+The verified callback needs an HTTPS origin whose association files name the
+build's application identifier and signing identity (see
+[Store operations](./mobile-store-operations.md#verified-links)). On iOS it
+requires 17.4 or later, where `ASWebAuthenticationSession` can match an HTTPS
+callback. On earlier versions the shell does not open a browser and answers
+`auth.result` with `unsupported` instead of falling back to a custom scheme; the
+sign-in dialog then explains that the device needs iOS 17.4 or later and turns
+off provider and passkey sign-in, leaving email and password. The deployment
+target stays at iOS 16.4. The deployment's well-known service lists the
+allowed app identifiers; development builds use `org.openmapx.app.dev` and their
+own signing certificate, so they complete the handoff only when the operator
+also lists that identifier (and, on Android, its fingerprint). A development
+build against a plain-HTTP origin, or without an Apple Team ID, cannot complete
+the handoff at all. When the OS does not take the link over, the browser shows
+the callback page, which asks the user to return to the app.
 
 ### The handoff, and its threat model
 
 `SystemAuthSession.ts` generates a 32-byte PKCE verifier and a per-attempt state in
 memory. It opens `/mobile-auth` on the compiled origin with the S256 challenge,
-state and purpose. The callback uses the compiled scheme's `auth/callback` path
-and contains a code and state. Development builds use a suffixed scheme such as
-`openmapx-dev`.
+state and purpose. The callback is `/mobile-auth/callback` on the same compiled
+origin and contains a code and state; the shell accepts it only from that exact
+origin and path. With a verified link, the OS routes the callback to the app the
+origin's association files name, instead of to any app that registered the same
+custom scheme. That guarantee covers routing only. Another app on the device can
+still open `/mobile-auth` in its own browser session with its own PKCE verifier
+and receive its own callback; the consent page, which states the purpose, and
+the user's explicit tap on "Continue to the app" are what stand against that.
+The deep-link parser refuses `/mobile-auth/*`, so the callback never loads in the
+WebView.
 
 The server stores a hash of the callback code. Codes expire after two minutes and
 are consumed atomically; a well-formed but incorrect verifier also consumes the
 attempt. The exchange uses
-uniform rejection responses. An intercepted code cannot be redeemed without its
+uniform rejection responses. `POST /api/mobile-auth/issue` and
+`/api/mobile-auth/exchange` accept only requests whose `Origin` is one of the
+deployment's trusted web origins (`CORS_ORIGIN`); there is no separate mobile
+origin setting. A native client can forge
+`Origin`, so this check keeps browsers on other sites out; it does not
+authenticate the app. An intercepted code cannot be redeemed without its
 verifier; concurrent redemptions cannot both succeed.
 
 The page receives the code, state and verifier through the bounded result,

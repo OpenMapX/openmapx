@@ -30,6 +30,22 @@ const associatedDomains = mobile.appleTeamId
   ? [`applinks:${mobile.webHost}`, `webcredentials:${mobile.webHost}`]
   : undefined;
 
+/**
+ * The system-browser sign-in returns its callback code on this path of the
+ * compiled origin. Android routes a verified App Link to the app that
+ * `assetlinks.json` names, and verifies only HTTPS origins.
+ */
+const authCallbackFilter = mobile.webOrigin.startsWith("https:")
+  ? [
+      {
+        action: "VIEW",
+        autoVerify: true,
+        category: ["DEFAULT", "BROWSABLE"],
+        data: [{ scheme: "https", host: mobile.webHost, path: "/mobile-auth/callback" }],
+      },
+    ]
+  : [];
+
 const config: ExpoConfig = {
   name: mobile.appName,
   slug: "openmapx",
@@ -69,6 +85,7 @@ const config: ExpoConfig = {
         category: ["DEFAULT", "BROWSABLE"],
         data: [{ scheme: "geo" }],
       },
+      ...authCallbackFilter,
     ],
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon.png",

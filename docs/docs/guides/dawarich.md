@@ -129,6 +129,14 @@ linking; do not bypass that challenge.
 Keep a verified local Dawarich administrator login until OIDC and linking have
 been tested. On shared devices, sign out of both applications.
 
+New Dawarich accounts come only from OpenMapX sign-in. The bundle sets
+`ALLOW_EMAIL_PASSWORD_REGISTRATION=false`, which in self-hosted Dawarich with
+OIDC configured refuses email and password sign-up, while `OIDC_AUTO_REGISTER`
+still creates an account on a first OpenMapX sign-in. Existing local accounts
+keep signing in with their password (`ALLOW_EMAIL_PASSWORD_LOGIN` stays on). A
+Dawarich administrator can re-enable registration under **Settings → Users**;
+that override lives in Dawarich's own cache, outside OpenMapX configuration.
+
 ## Connecting Dawarich to OpenMapX
 
 ### Step 1: Copy your Dawarich API key

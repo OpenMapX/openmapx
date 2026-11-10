@@ -206,8 +206,9 @@ logged but generally do not block the action. See [Monitoring](./monitoring.md).
 ## Authentication methods
 
 The current runtime configuration enables email/password with email verification,
-passkeys, the configured OAuth providers, TOTP/backup codes and email OTP
-support. The active authentication policy controls email verification, absolute
+passkeys, the configured OAuth providers and TOTP/backup codes. Email one-time
+codes serve password reset and email change only; they cannot sign anyone in or
+replace a second factor. The active authentication policy controls email verification, absolute
 session lifetime, new second-factor enrollment and minimum password length.
 Review and activate changes through **Settings → Authentication policy**.
 
@@ -218,6 +219,11 @@ verification is required — confirm their address before they can sign in.
 Password reset runs over a one-time code sent by email, and so does changing an
 account's email. Whether verification is enforced and the minimum password
 length are set under **Settings → Authentication policy**.
+
+Addresses in the reserved `.invalid` domain are refused at sign-up, email change
+and administrator account creation. OpenStreetMap and Mapillary sign-ins give
+their accounts placeholder addresses such as `<id>@osm.invalid`, and nobody else
+can register one to block that person's first provider sign-in.
 
 This path depends on a configured email provider for verification and reset
 messages. See **Settings → Email** and
@@ -247,9 +253,16 @@ Users manage linked accounts from their own account settings.
 
 When new enrollment is allowed under **Settings → Authentication policy**, users can add a second factor
 to their account: a TOTP authenticator app, with backup codes for recovery.
-Email one-time codes are also available. Two-factor is opt-in per user — the
+Emailed codes are not offered as a second factor, because access to the mailbox
+alone would then pass both steps. Two-factor is opt-in per user — the
 setting controls whether anyone can enroll, not a blanket requirement — and the
 user list flags accounts that have it turned on.
+
+A password reset by email code does not bypass the second factor: the next
+sign-in still asks for it. Following an email verification link verifies the
+address but signs in only accounts without a second factor. An account with one
+is sent on to the link's destination without a session and signs in with its
+password and code there.
 
 Verify recovery access before revoking an account's sessions.
 

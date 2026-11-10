@@ -74,6 +74,12 @@ describe("parseDeepLinkIntent refuses", () => {
     },
   );
 
+  it("the sign-in callback, which the auth session consumes and the WebView must never load", () => {
+    expect(
+      parse(`https://openmapx.com/mobile-auth/callback?code=${"c".repeat(43)}&state=s`),
+    ).toBeNull();
+  });
+
   it("an unknown path on the right origin", () => {
     // Loading it would hand the WebView a screen nobody reviewed.
     expect(parse("https://openmapx.com/admin/secret")).toBeNull();

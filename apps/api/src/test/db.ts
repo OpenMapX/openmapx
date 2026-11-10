@@ -59,6 +59,21 @@ export interface DbMock {
 }
 
 /**
+ * Serializes every argument passed to `.where()` on one query chain, so a test
+ * can assert which column and value a query is constrained on. With a schema
+ * mock that maps columns to distinctive strings (`saved_list.user_id`), the
+ * column name appears verbatim, which is what makes an ownership filter
+ * observable. `callIndex` picks the chain; negative values count from the end.
+ */
+export function whereArgs(dbMock: DbMock, op: Op, callIndex = -1): string {
+  const results = dbMock.db[op].mock.results;
+  const chain = results.at(callIndex)?.value as { where: { mock: { calls: unknown[][] } } };
+  return JSON.stringify(chain.where.mock.calls, (_key, value) =>
+    typeof value === "bigint" ? value.toString() : value,
+  );
+}
+
+/**
  * Build a queue-driven `db` mock. Each `db.<op>()` call shifts the next queued
  * result for that op (defaulting to `[]`) and returns a thenable chain that
  * resolves to it. Assert on `dbMock.db.select.mock.calls` etc.

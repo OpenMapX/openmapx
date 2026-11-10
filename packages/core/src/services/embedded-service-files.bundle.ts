@@ -139,21 +139,9 @@ export function embeddedBuiltInServiceFiles(): EmbeddedServiceFiles | null {
       },
       {
         serviceId: "well-known",
-        path: "config/html/apple-app-site-association",
+        path: "config/app-links.sh",
         executable: false,
-        url: new URL(
-          "../../../../services/well-known/config/html/apple-app-site-association",
-          import.meta.url,
-        ),
-      },
-      {
-        serviceId: "well-known",
-        path: "config/html/assetlinks.json",
-        executable: false,
-        url: new URL(
-          "../../../../services/well-known/config/html/assetlinks.json",
-          import.meta.url,
-        ),
+        url: new URL("../../../../services/well-known/config/app-links.sh", import.meta.url),
       },
       {
         serviceId: "well-known",

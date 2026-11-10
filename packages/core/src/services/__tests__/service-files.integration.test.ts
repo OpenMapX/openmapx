@@ -156,13 +156,18 @@ describe.runIf(runTests)("containers reading the release's files from the store"
       "--network",
       "none",
       ...renderedVolumes("well-known"),
+      "--entrypoint",
+      "/bin/sh",
       pinned("well-known"),
+      "/opt/openmapx/well-known/app-links.sh",
+      "/docker-entrypoint.sh",
+      "nginx",
+      "-g",
+      "daemon off;",
     );
     containers.push(nginx);
-    const expected = readFileSync(
-      join(REPOSITORY, "services/well-known/config/html/assetlinks.json"),
-      "utf8",
-    );
+    // With no app identity configured, the rendered file claims nothing.
+    const expected = "[]";
     let served = "";
     for (let attempt = 0; attempt < 50 && served !== expected; attempt += 1) {
       await sleep(200);

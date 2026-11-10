@@ -9,8 +9,12 @@
  *
  * The app never receives a session. It receives an opaque callback code, which
  * is useless without the PKCE verifier it kept in memory and never wrote down.
- * That is the whole design: even an app on the device that manages to intercept
- * the custom-scheme callback has nothing it can redeem.
+ * The code returns on a verified link on the compiled web origin (an Android
+ * App Link or iOS Universal Link), so the OS routes this callback to the app
+ * the origin's association files name rather than to whichever app registered
+ * a scheme. That is a routing guarantee only: it does not stop another app
+ * from opening `/mobile-auth` in its own browser session with its own verifier,
+ * so the consent page and the user's tap remain part of the protection.
  *
  * Everything here is memory-only and single-attempt. There is no persistence, no
  * retry, and no outbox entry — a half-finished sign-in that survived a restart
@@ -20,7 +24,11 @@
 
 export type AuthPurpose = "sign-in" | "link-provider" | "add-passkey";
 
-export type SystemAuthStatus = "ok" | "cancelled" | "failed";
+/**
+ * `unsupported` means this device cannot receive a verified callback at all, so
+ * a retry would fail the same way; nothing was opened.
+ */
+export type SystemAuthStatus = "ok" | "cancelled" | "failed" | "unsupported";
 
 export type SystemAuthResult =
   | { status: "ok"; callbackCode: string; state: string; codeVerifier: string }
@@ -29,9 +37,10 @@ export type SystemAuthResult =
 export interface SystemAuthConfig {
   /** The compiled web origin. Never taken from a message. */
   webOrigin: string;
-  /** The compiled custom scheme, without `:`. */
-  scheme: string;
 }
+
+/** The verified-link path the web page sends the callback code to. */
+export const AUTH_CALLBACK_PATH = "/mobile-auth/callback";
 
 export interface SystemBrowser {
   /**
@@ -46,6 +55,8 @@ export interface SystemAuthDeps {
   browser: SystemBrowser;
   /** 32 bytes from the platform CSPRNG, base64url. */
   randomBytes: (length: number) => string;
+  /** Whether this device can receive the verified callback. Defaults to yes. */
+  supportsVerifiedCallback?: () => boolean;
 }
 
 /** RFC 7636 puts the verifier at 43–128 characters; 32 bytes gives 43. */
@@ -66,7 +77,7 @@ export class SystemAuthSession {
 
   /** The callback the app is willing to be called back on. Compiled, not passed. */
   get redirectUrl(): string {
-    return `${this.deps.config.scheme}://auth/callback`;
+    return new URL(AUTH_CALLBACK_PATH, this.deps.config.webOrigin).toString();
   }
 
   /**
@@ -79,6 +90,8 @@ export class SystemAuthSession {
     // A second concurrent attempt would leave two verifiers alive and make the
     // returned callback ambiguous.
     if (this.attempt) return { status: "failed" };
+    if (this.deps.supportsVerifiedCallback && !this.deps.supportsVerifiedCallback())
+      return { status: "unsupported" };
 
     const codeVerifier = this.deps.randomBytes(VERIFIER_BYTES);
     const state = this.deps.randomBytes(STATE_BYTES);
@@ -122,23 +135,22 @@ export class SystemAuthSession {
   /**
    * Validates the callback URL.
    *
-   * Exactly one scheme, exactly one host, exactly one path, and a state that
-   * matches the attempt. Anything else came from somewhere this app did not
-   * send anybody.
+   * Exactly the compiled origin, exactly one path, and a state that matches the
+   * attempt. Anything else came from somewhere this app did not send anybody.
    */
   private readCallback(rawUrl: string, expectedState: string): { code: string } | null {
     let url: URL;
+    let compiled: URL;
     try {
       url = new URL(rawUrl);
+      compiled = new URL(this.deps.config.webOrigin);
     } catch {
       return null;
     }
-    if (url.protocol.replace(/:$/, "").toLowerCase() !== this.deps.config.scheme.toLowerCase()) {
-      return null;
-    }
+    // Compared as a whole origin: scheme, host and port.
+    if (url.origin !== compiled.origin) return null;
     if (url.username !== "" || url.password !== "") return null;
-    if (url.host.toLowerCase() !== "auth") return null;
-    if (url.pathname.replace(/\/+$/, "") !== "/callback") return null;
+    if (url.pathname.replace(/\/+$/, "") !== AUTH_CALLBACK_PATH) return null;
 
     const state = url.searchParams.get("state");
     const code = url.searchParams.get("code");

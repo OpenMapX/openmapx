@@ -14,7 +14,7 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
     vi.stubEnv("BETTER_AUTH_SECRET", randomBytes(48).toString("base64url"));
     vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3001");
     vi.doMock("../db", () => ({ db: fixture.db, sql: fixture.sql }));
-    vi.doMock("../utils/email", () => ({ sendMail: mail }));
+    vi.doMock("../utils/email", () => ({ sendMail: mail, sendAuthMail: mail }));
     mail.mockResolvedValue(undefined);
     ({ auth } = await import("../auth"));
   }, 90000);

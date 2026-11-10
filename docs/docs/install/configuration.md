@@ -174,6 +174,27 @@ http://127.0.0.1:3001/api/auth/callback/openstreetmap
 http://127.0.0.1:3001/api/auth/callback/mapillary
 ```
 
+### Mobile app links
+
+The installed app opens this site's links, and returns from its system-browser
+sign-in, only when the site's association files name it. The **Well-Known
+Files** service renders them from four settings, unset by default so that no app
+is claimed:
+
+| Variable                                        | Value                                                                |
+| ----------------------------------------------- | -------------------------------------------------------------------- |
+| `SERVICE_WELL_KNOWN_MOBILE_APPLE_TEAM_ID`       | Apple Team ID that signs the iOS app (ten characters)                |
+| `SERVICE_WELL_KNOWN_MOBILE_IOS_BUNDLE_IDS`      | Comma-separated iOS bundle identifiers, e.g. `org.openmapx.app`      |
+| `SERVICE_WELL_KNOWN_MOBILE_ANDROID_PACKAGES`    | Comma-separated Android application ids, e.g. `org.openmapx.app`     |
+| `SERVICE_WELL_KNOWN_MOBILE_ANDROID_CERT_SHA256` | Comma-separated SHA-256 signing-certificate fingerprints (`AA:BB:…`) |
+
+The same settings appear in the admin panel for the service. Set each
+platform's pair together; a half-configured platform or a malformed value stops
+the service with an error naming the setting. Development builds use the
+`.dev` identifier (`org.openmapx.app.dev`) and their own signing certificate,
+and complete sign-in only when those are listed too. See
+[Mobile store operations](../developer/mobile-store-operations.md#verified-links).
+
 ## OpenStreetMap contributions
 
 Lets a signed-in person publish a curated correction to an **existing**
@@ -456,9 +477,22 @@ Keys and overrides for the `app-api` traffic and tile proxies.
 
 ## Email
 
-Used for email verification, 2FA, and email-change flows. The provider is
+Used for email verification, password reset, and email-change flows. The provider is
 auto-detected by priority: **EmailLabs > Lettermint > SMTP**. These are also
 settable in `/admin/settings/email`; env always wins.
+
+Authentication mail that anyone can trigger for any address (sign-up
+verification, verification resends, password reset and email-change codes) is
+limited to 10 messages per mailbox per hour. The count lives in Valkey under a
+hash of the address, and spellings that reach the same mailbox (case, `+tag`,
+Gmail dots) share one count. Beyond the limit those requests still answer
+exactly as usual, so a response never shows whether the limit was reached or
+the address has an account. Privacy request notifications, privacy identity
+challenges and mail an administrator sends (invitations, password setup) are
+neither counted nor limited, and neither is the administrator test email. When
+Valkey cannot answer within a second, the message is sent uncounted and a
+warning is logged, so a Valkey outage does not silently stop account recovery;
+the per-IP authentication limits still apply.
 
 | Variable                 | Description                                                                      | Required / Default          |
 | ------------------------ | -------------------------------------------------------------------------------- | --------------------------- |

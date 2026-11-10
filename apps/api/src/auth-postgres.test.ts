@@ -33,6 +33,8 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
     vi.stubEnv("BETTER_AUTH_URL", BASE_URL);
     vi.stubEnv("BETTER_AUTH_SECRET", SECRET);
     vi.stubEnv("CORS_ORIGIN", "http://localhost:3000");
+    vi.stubEnv("OSM_CLIENT_ID", "fixture-osm-client");
+    vi.stubEnv("OSM_CLIENT_SECRET", "fixture-osm-secret");
     vi.stubEnv("OSM_API_URL", "https://osm-fixture.example.test");
     vi.stubEnv("OSM_WEB_URL", "https://osm-fixture.example.test");
     vi.stubEnv(
@@ -40,11 +42,12 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
       "https://osm-fixture.example.test/.well-known/openid-configuration",
     );
     vi.doMock("./db", () => ({ db: fixture.db, sql: fixture.sql }));
-    vi.doMock("./utils/email", () => ({
-      sendMail: async (message: { to: string; text: string }) => {
+    vi.doMock("./utils/email", () => {
+      const capture = async (message: { to: string; text: string }) => {
         mail.push(message);
-      },
-    }));
+      };
+      return { sendMail: capture, sendAuthMail: capture };
+    });
     // No public provider or mail request is needed for these local protocols.
     vi.stubGlobal(
       "fetch",
@@ -56,6 +59,16 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
             authorization_endpoint: "https://osm-fixture.example.test/oauth2/authorize",
             token_endpoint: "https://osm-fixture.example.test/oauth2/token",
           });
+        }
+        if (url === "https://osm-fixture.example.test/oauth2/token") {
+          return Response.json({
+            access_token: "fixture-osm-access-token",
+            token_type: "Bearer",
+            expires_in: 3600,
+          });
+        }
+        if (url === "https://osm-fixture.example.test/api/0.6/user/details.json") {
+          return Response.json({ user: { id: 4242, display_name: "Fixture Mapper" } });
         }
         throw new Error("External network forbidden in auth fixture");
       }),
@@ -239,6 +252,260 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
       await request("/api/auth/sign-out", {}, cookies(valid));
     }
   });
+  async function enrolledTotpUser(email: string) {
+    const { userId, cookie } = await verifiedUser(email);
+    const enabled = await request("/api/auth/two-factor/enable", { password: PASSWORD }, cookie);
+    expect(enabled.statusCode, enabled.body).toBe(200);
+    const [factor] = await fixture.db.select().from(twoFactor).where(eq(twoFactor.userId, userId));
+    if (!factor) throw new Error("MFA did not persist enrollment");
+    const secret = await symmetricDecrypt({ key: SECRET, data: factor.secret });
+    const totp = async () => (await auth.api.generateTOTP({ body: { secret } })).code;
+    const enrolled = await request(
+      "/api/auth/two-factor/verify-totp",
+      { code: await totp() },
+      cookie,
+    );
+    expect(enrolled.statusCode, enrolled.body).toBe(200);
+    await request("/api/auth/sign-out", {}, cookies(enrolled) || cookie);
+    expect(await sessions(userId)).toHaveLength(0);
+    return { userId, totp };
+  }
+
+  function mailedCode(to: string) {
+    const message = mail.findLast((candidate) => candidate.to === to);
+    const code = message?.text.match(/Your code is: (\d+)/)?.[1];
+    if (!code) throw new Error(`Missing one-time code in captured mail to ${to}`);
+    return code;
+  }
+
+  it("refuses every email-only route that would bypass an enrolled TOTP factor", async () => {
+    const email = "otp-bypass-fixture@example.test";
+    const { userId } = await enrolledTotpUser(email);
+    const mailBefore = mail.length;
+
+    for (const type of ["sign-in", "email-verification", "forget-password"])
+      expect(
+        (await request("/api/auth/email-otp/send-verification-otp", { email, type })).statusCode,
+      ).toBe(404);
+
+    // A code minted server-side stands in for one read from the mailbox.
+    const signInCode = await auth.api.createVerificationOTP({ body: { email, type: "sign-in" } });
+    for (const path of [
+      "/api/auth/sign-in/email-otp",
+      "/api/auth/sign-in/email-otp/",
+      "/api/auth/sign-in/email-otp?via=query",
+      "/api/auth/sign-in//email-otp",
+      "/api/auth/Sign-In/Email-OTP",
+      "/api/auth/sign-in%2Femail-otp",
+      "/api/auth/sign-in/%65mail-otp",
+    ]) {
+      const response = await request(path, { email, otp: signInCode });
+      expect(response.statusCode, `${path}: ${response.body}`).toBeGreaterThanOrEqual(400);
+      expect(await sessions(userId), path).toHaveLength(0);
+    }
+    await expect(auth.api.signInEmailOTP({ body: { email, otp: signInCode } })).rejects.toThrow();
+    expect(await sessions(userId)).toHaveLength(0);
+
+    const verificationCode = await auth.api.createVerificationOTP({
+      body: { email, type: "email-verification" },
+    });
+    const verified = await request("/api/auth/email-otp/verify-email", {
+      email,
+      otp: verificationCode,
+    });
+    expect(verified.statusCode, verified.body).toBe(404);
+    expect(await sessions(userId)).toHaveLength(0);
+
+    const signin = await request("/api/auth/sign-in/email", { email, password: PASSWORD });
+    expect(signin.json()).toMatchObject({ twoFactorRedirect: true });
+    const challengeCookie = cookies(signin);
+    const sent = await request("/api/auth/two-factor/send-otp", {}, challengeCookie);
+    expect(sent.statusCode, sent.body).toBe(404);
+    const otpVerified = await request(
+      "/api/auth/two-factor/verify-otp",
+      { code: "123456" },
+      challengeCookie,
+    );
+    expect(otpVerified.statusCode, otpVerified.body).toBe(404);
+    expect(await sessions(userId)).toHaveLength(0);
+    expect(mail.length).toBe(mailBefore);
+  });
+
+  it("refuses to enroll email codes as the second factor", async () => {
+    const email = "otp-enroll-fixture@example.test";
+    const { userId, cookie } = await verifiedUser(email);
+    const enabled = await request(
+      "/api/auth/two-factor/enable",
+      { password: PASSWORD, method: "otp" },
+      cookie,
+    );
+    expect(enabled.statusCode, enabled.body).toBe(400);
+    expect((await fixture.db.select().from(user).where(eq(user.id, userId)))[0]).toMatchObject({
+      twoFactorEnabled: false,
+    });
+  });
+
+  it.each([
+    [
+      "to the link's callback",
+      "http://localhost:3000/after-verification",
+      "http://localhost:3000/after-verification",
+    ],
+    // Better Auth puts its default callback, `/`, into a link requested without one.
+    ["to the default callback", undefined, "/"],
+  ])(
+    "verifies a TOTP user's address from the link and redirects %s without a session",
+    async (_label, callbackURL, location) => {
+      const email = `link-${callbackURL ? "callback" : "plain"}-fixture@example.test`;
+      const { userId } = await enrolledTotpUser(email);
+      // Fixture input: an enrolled account whose address became unverified, as
+      // when an administrator turns verification on after enrollment.
+      await fixture.db.update(user).set({ emailVerified: false }).where(eq(user.id, userId));
+      const requested = await request("/api/auth/send-verification-email", {
+        email,
+        ...(callbackURL ? { callbackURL } : {}),
+      });
+      expect(requested.statusCode, requested.body).toBe(200);
+      const url = mail
+        .findLast((message) => message.to === email)
+        ?.text.match(/http:\/\/localhost:3001\/api\/auth\/verify-email\?\S+/)?.[0];
+      if (!url) throw new Error("Missing verification URL in captured production mail");
+      const target = new URL(url);
+      const visited = await request(`${target.pathname}${target.search}`);
+      expect(visited.statusCode, visited.body).toBe(302);
+      expect(visited.headers.location).toBe(location);
+      expect(cookies(visited)).not.toContain("session_token");
+      expect(await sessions(userId)).toHaveLength(0);
+      expect((await fixture.db.select().from(user).where(eq(user.id, userId)))[0]).toMatchObject({
+        emailVerified: true,
+      });
+    },
+  );
+
+  it("keeps email codes for password reset and email change on a TOTP account", async () => {
+    const email = "otp-recovery-fixture@example.test";
+    const changedEmail = "otp-recovery-changed@example.test";
+    const replacement = "replacement-password-5678";
+    const { userId, totp } = await enrolledTotpUser(email);
+
+    const reset = await request("/api/auth/email-otp/request-password-reset", { email });
+    expect(reset.statusCode, reset.body).toBe(200);
+    const applied = await request("/api/auth/email-otp/reset-password", {
+      email,
+      otp: mailedCode(email),
+      password: replacement,
+    });
+    expect(applied.statusCode, applied.body).toBe(200);
+    expect(await sessions(userId)).toHaveLength(0);
+
+    const signin = await request("/api/auth/sign-in/email", { email, password: replacement });
+    expect(signin.json()).toMatchObject({ twoFactorRedirect: true });
+    expect(await sessions(userId)).toHaveLength(0);
+    const completed = await request(
+      "/api/auth/two-factor/verify-totp",
+      { code: await totp() },
+      cookies(signin),
+    );
+    expect(completed.statusCode, completed.body).toBe(200);
+    const session = cookies(completed);
+
+    const change = await request(
+      "/api/auth/email-otp/request-email-change",
+      { newEmail: changedEmail },
+      session,
+    );
+    expect(change.statusCode, change.body).toBe(200);
+    const changed = await request(
+      "/api/auth/email-otp/change-email",
+      { newEmail: changedEmail, otp: mailedCode(changedEmail) },
+      session,
+    );
+    expect(changed.statusCode, changed.body).toBe(200);
+    expect((await fixture.db.select().from(user).where(eq(user.id, userId)))[0]).toMatchObject({
+      email: changedEmail,
+      emailVerified: true,
+    });
+  });
+
+  it("refuses reserved .invalid addresses at sign-up without revealing existing placeholders", async () => {
+    // Fixture input: the account an OpenStreetMap sign-in would already own.
+    await fixture.db.insert(user).values({
+      id: "existing-osm-placeholder",
+      name: "Existing Mapper",
+      email: "777@osm.invalid",
+      emailVerified: false,
+    });
+    for (const email of [
+      "777@osm.invalid",
+      "778@osm.invalid",
+      "779@mapillary.invalid",
+      "Person@OSM.INVALID",
+      "person@invalid",
+      "person@deeper.example.invalid",
+    ]) {
+      const response = await request("/api/auth/sign-up/email", {
+        email,
+        name: "Squatter",
+        password: PASSWORD,
+      });
+      expect(response.statusCode, `${email}: ${response.body}`).toBe(400);
+      expect(response.json(), email).toMatchObject({ code: "INVALID_EMAIL" });
+    }
+    const rows = await fixture.db.select({ email: user.email }).from(user);
+    expect(rows.map((row) => row.email.toLowerCase()).filter((e) => e.endsWith("invalid"))).toEqual(
+      ["777@osm.invalid"],
+    );
+  });
+
+  it("refuses reserved .invalid addresses for email change and administrator creation", async () => {
+    const email = "invalid-change-fixture@example.test";
+    const { userId, cookie } = await verifiedUser(email);
+    const mailBefore = mail.length;
+    for (const [path, body] of [
+      ["/api/auth/email-otp/request-email-change", { newEmail: "9000@osm.invalid" }],
+      ["/api/auth/email-otp/change-email", { newEmail: "9000@osm.invalid", otp: "123456" }],
+      ["/api/auth/change-email", { newEmail: "9000@osm.invalid" }],
+    ] as const) {
+      const response = await request(path, body, cookie);
+      expect(response.statusCode, `${path}: ${response.body}`).toBe(400);
+      expect(response.json(), path).toMatchObject({ code: "INVALID_EMAIL" });
+    }
+    expect(mail.length).toBe(mailBefore);
+    expect((await fixture.db.select().from(user).where(eq(user.id, userId)))[0]?.email).toBe(email);
+
+    await expect(
+      auth.api.createUser({
+        body: { email: "9001@osm.invalid", name: "Created", password: PASSWORD },
+      }),
+    ).rejects.toMatchObject({ body: { code: "INVALID_EMAIL" } });
+    expect(
+      await fixture.db.select().from(user).where(eq(user.email, "9001@osm.invalid")),
+    ).toHaveLength(0);
+  });
+
+  it("still creates the OpenStreetMap placeholder address on a first provider sign-in", async () => {
+    const started = await request("/api/auth/sign-in/social", {
+      provider: "openstreetmap",
+      callbackURL: "http://localhost:3000/",
+    });
+    expect(started.statusCode, started.body).toBe(200);
+    const authorization = new URL(started.json().url as string);
+    const redirect = new URL(authorization.searchParams.get("redirect_uri") ?? "");
+    const callback = await request(
+      `${redirect.pathname}?code=fixture-code&state=${authorization.searchParams.get("state")}`,
+      undefined,
+      cookies(started),
+    );
+    expect(callback.statusCode, callback.body).toBe(302);
+    expect(callback.headers.location).not.toContain("error");
+    const [created] = await fixture.db
+      .select()
+      .from(user)
+      .where(eq(user.email, "4242@osm.invalid"));
+    expect(created).toMatchObject({ name: "Fixture Mapper", emailVerified: false });
+    expect(await sessions(created?.id ?? "")).toHaveLength(1);
+  });
+
   it("persists managed OIDC consent and signed PKCE tokens while rejecting invalid and reused codes", async () => {
     const email = "oidc-fixture@example.test";
     const { userId, cookie } = await verifiedUser(email);

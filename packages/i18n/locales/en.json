@@ -3683,10 +3683,13 @@
     "cancel": "Cancel",
     "failed": "Sign-in could not be completed. Close this page and try again in the app.",
     "invalidRequest": "This sign-in link is not valid. Start again from the OpenMapX app.",
+    "callbackTitle": "Return to the app",
+    "callbackBody": "The OpenMapX app did not pick up this sign-in. Close this page and start again from the app.",
     "openInBrowserTitle": "Sign in using your browser",
     "openInBrowserBody": "This version of the app cannot carry the sign-in back automatically. You can sign in on the website, but you will need to sign in again in the app after updating.",
     "systemAuthCancelled": "Sign-in was cancelled.",
-    "systemAuthFailed": "Sign-in could not be completed. Please try again."
+    "systemAuthFailed": "Sign-in could not be completed. Please try again.",
+    "systemAuthUnsupported": "Signing in with a provider or a passkey isn't available in the app on this device: it needs iOS 17.4 or later. Sign in with your email and password instead."
   },
   "parking": {
     "title": "Parking location",

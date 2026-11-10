@@ -106,18 +106,6 @@ export function verifyEmailEmail(url: string): { subject: string; text: string; 
   };
 }
 
-export function twoFactorOtpEmail(otp: string): { subject: string; text: string; html: string } {
-  return {
-    subject: "Your OpenMapX verification code",
-    text: `Your verification code is: ${otp}\n\nThis code expires in 5 minutes.\n\nIf you didn't request this, you can safely ignore this email.`,
-    html: layout(
-      heading("Verification code") +
-        paragraph("Use the code below to complete your sign-in. It expires in 5 minutes.") +
-        otpBlock(otp),
-    ),
-  };
-}
-
 export function emailOtpEmail(
   otp: string,
   type: string,

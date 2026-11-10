@@ -37,12 +37,11 @@ import { recordSessionFromAuthContext } from "./privacy/session-assurance.js";
 import { userErasureHooks } from "./services/user-erasure";
 import { auditAdminActionsHook } from "./utils/auth-audit-hook";
 import { configuredTrustedWebOrigins } from "./utils/csrf.js";
-import { sendMail } from "./utils/email";
+import { sendAuthMail } from "./utils/email";
 import {
   emailOtpEmail,
   resetPasswordEmail,
   setupPasswordEmail,
-  twoFactorOtpEmail,
   verifyEmailEmail,
 } from "./utils/emailTemplates";
 import { getOsmConfig } from "./utils/osm-config";
@@ -112,8 +111,8 @@ function createPolicyAuth(
     baseURL: envString("BETTER_AUTH_URL", "http://localhost:3001"),
     secret,
     // Web origins only. The installed app never receives a Better Auth redirect:
-    // `/mobile-auth` returns to the app's scheme itself, with a PKCE-bound code
-    // instead of a session, so no custom scheme belongs in this list.
+    // `/mobile-auth` sends it a PKCE-bound code on a verified link of this web
+    // origin instead of a session, so no app scheme belongs in this list.
     trustedOrigins: configuredTrustedWebOrigins(),
     appName: "OpenMapX",
     user: {
@@ -150,7 +149,7 @@ function createPolicyAuth(
           ...mail,
           disclosure: { userId: user.id, operationCode: "auth.reset-password.email" },
         };
-        if (!(await enqueueCapturedAccountMail(message))) await sendMail(message);
+        if (!(await enqueueCapturedAccountMail(message))) await sendAuthMail(message);
       },
     },
     emailVerification: {
@@ -163,7 +162,7 @@ function createPolicyAuth(
           ...mail,
           disclosure: { userId: user.id, operationCode: "auth.verify-email.email" },
         };
-        if (!(await enqueueCapturedAccountMail(message))) await sendMail(message);
+        if (!(await enqueueCapturedAccountMail(message))) await sendAuthMail(message);
       },
     },
     account: {
@@ -187,6 +186,7 @@ function createPolicyAuth(
     databaseHooks: {
       session: {
         create: {
+          ...passwordPolicy.sessionHooks.create,
           // This hook runs after Better Auth has created the usable session. It
           // intentionally records nothing for unrecognised endpoints.
           after: async (createdSession, context) => {
@@ -319,8 +319,8 @@ function createPolicyAuth(
       admin(),
       // The one mechanism by which a session established in the system browser
       // becomes a session in the WebView. Two minutes and single-use because the
-      // token is in flight across a custom-scheme callback the OS routes, and the
-      // only legitimate holder redeems it immediately. Stored hashed so a database
+      // token is in flight from the handoff exchange to the WebView, and the only
+      // legitimate holder redeems it immediately. Stored hashed so a database
       // read never yields a usable token.
       oneTimeToken({ expiresIn: 2, storeToken: "hashed" }),
       emailHarmony({ allowNormalizedSignin: true }),
@@ -397,26 +397,16 @@ function createPolicyAuth(
           },
         ],
       }),
-      twoFactor({
-        issuer: "OpenMapX",
-        otpOptions: {
-          async sendOTP({ user, otp }) {
-            const mail = twoFactorOtpEmail(otp);
-            await sendMail({
-              to: user.email,
-              ...mail,
-              disclosure: { userId: user.id, operationCode: "auth.two-factor.email" },
-            });
-          },
-        },
-      }),
+      // Authenticator apps and backup codes only. Without `otpOptions`, Better
+      // Auth also refuses to enroll emailed codes as a second factor.
+      twoFactor({ issuer: "OpenMapX" }),
       emailOTP({
         async sendVerificationOTP({ email, otp, type }) {
           const mail = emailOtpEmail(otp, type);
           // Email OTP can be sent during account changes before a user row is
           // available in this callback; only record it when Better Auth gives us
           // an exact subject identifier through the typed context.
-          await sendMail({ to: email, ...mail });
+          await sendAuthMail({ to: email, ...mail });
         },
         changeEmail: {
           enabled: true,

@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildTestApp } from "../../test/app.js";
 import { mockRequireAuth } from "../../test/auth.js";
-import { createDbMock, type DbMock, makeQueryChain } from "../../test/db.js";
+import { createDbMock, type DbMock, makeQueryChain, whereArgs } from "../../test/db.js";
 
 const USER_ID = "user-A";
 
@@ -85,24 +85,6 @@ afterEach(async () => {
   dbMock.db.delete.mockClear();
 });
 
-/** Serialize every arg passed to the `.where()` of the Nth select chain. */
-function selectWhereArgs(callIndex: number): string {
-  const chain = dbMock.db.select.mock.results[callIndex]?.value as {
-    where: { mock: { calls: unknown[][] } };
-  };
-  const calls = chain.where.mock.calls;
-  return JSON.stringify(calls, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
-}
-
-function lastWhereArgs(op: "select" | "update" | "delete"): string {
-  const results = dbMock.db[op].mock.results;
-  const chain = results[results.length - 1]?.value as {
-    where: { mock: { calls: unknown[][] } };
-  };
-  const calls = chain.where.mock.calls;
-  return JSON.stringify(calls, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
-}
-
 describe("saved routes — authentication", () => {
   it("returns 401 when the auth guard rejects (unauthenticated)", async () => {
     const { httpError } = await import("@openmapx/integration-framework");
@@ -171,7 +153,7 @@ describe("GET /api/saved/lists", () => {
     expect(res.json().lists).toHaveLength(1);
     expect(res.json().lists[0].id).toBe("list-1");
     // The list query must be filtered by the authenticated user's id.
-    const where = selectWhereArgs(0);
+    const where = whereArgs(dbMock, "select", 0);
     expect(where).toContain("saved_list.user_id");
     expect(where).toContain(USER_ID);
   });
@@ -248,8 +230,8 @@ describe("GET /api/saved/lists", () => {
     expect(res.json().lists.map((list: { placeCount: number }) => list.placeCount)).toEqual([
       2, 0, 1,
     ]);
-    expect(selectWhereArgs(1)).toContain(USER_ID);
-    expect(selectWhereArgs(1)).toContain("saved_list.user_id");
+    expect(whereArgs(dbMock, "select", 1)).toContain(USER_ID);
+    expect(whereArgs(dbMock, "select", 1)).toContain("saved_list.user_id");
   });
 });
 
@@ -364,7 +346,7 @@ describe("PATCH /api/saved/lists/:id", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true });
     // The UPDATE must be constrained to the owning user, not just the id.
-    const where = lastWhereArgs("update");
+    const where = whereArgs(dbMock, "update");
     expect(where).toContain("saved_list.user_id");
     expect(where).toContain(USER_ID);
   });
@@ -381,7 +363,7 @@ describe("PATCH /api/saved/lists/:id", () => {
     expect(res.statusCode).toBe(404);
     // Critically: no UPDATE is issued when ownership cannot be confirmed.
     expect(dbMock.db.update).not.toHaveBeenCalled();
-    const where = selectWhereArgs(0);
+    const where = whereArgs(dbMock, "select", 0);
     expect(where).toContain("saved_list.user_id");
     expect(where).toContain(USER_ID);
   });
@@ -413,7 +395,7 @@ describe("DELETE /api/saved/lists/:id", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true });
-    const where = lastWhereArgs("delete");
+    const where = whereArgs(dbMock, "delete");
     expect(where).toContain("saved_list.user_id");
     expect(where).toContain(USER_ID);
   });
@@ -461,7 +443,7 @@ describe("GET /api/saved/lists/:id/places", () => {
     expect(res.json().places).toHaveLength(1);
     expect(res.json().places[0].id).toBe("pl-1");
     // Ownership lookup must filter by userId.
-    const where = selectWhereArgs(0);
+    const where = whereArgs(dbMock, "select", 0);
     expect(where).toContain("saved_list.user_id");
     expect(where).toContain(USER_ID);
   });
@@ -494,7 +476,7 @@ describe("POST /api/saved/lists/:id/places", () => {
     expect(body.name).toBe("Brandenburg Gate");
     expect(body.lat).toBe(52.5163);
     expect(dbMock.db.insert).toHaveBeenCalledTimes(1);
-    const where = selectWhereArgs(1);
+    const where = whereArgs(dbMock, "select", 1);
     expect(where).toContain("saved_list.user_id");
     expect(where).toContain(USER_ID);
   });
@@ -527,7 +509,7 @@ describe("PATCH /api/saved/places/:id", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true });
     // The UPDATE itself re-scopes to lists owned by the caller via a subquery.
-    const where = lastWhereArgs("update");
+    const where = whereArgs(dbMock, "update");
     expect(where).toContain(USER_ID);
   });
 
@@ -553,7 +535,7 @@ describe("DELETE /api/saved/places/:id", () => {
     const res = await app.inject({ method: "DELETE", url: "/api/saved/places/pl-1" });
 
     expect(res.statusCode).toBe(200);
-    const where = lastWhereArgs("delete");
+    const where = whereArgs(dbMock, "delete");
     expect(where).toContain(USER_ID);
   });
 
@@ -586,7 +568,7 @@ describe("GET /api/saved/labels", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().labels).toHaveLength(1);
-    const where = selectWhereArgs(0);
+    const where = whereArgs(dbMock, "select", 0);
     expect(where).toContain("labeled_place.user_id");
     expect(where).toContain(USER_ID);
   });
@@ -610,7 +592,7 @@ describe("PUT /api/saved/labels/:label", () => {
     ).values.mock.calls[0][0] as { userId: string };
     expect(insertedValues.userId).toBe(USER_ID);
     // The existence lookup is scoped to the caller.
-    const where = selectWhereArgs(0);
+    const where = whereArgs(dbMock, "select", 0);
     expect(where).toContain("labeled_place.user_id");
     expect(where).toContain(USER_ID);
   });
@@ -639,7 +621,7 @@ describe("DELETE /api/saved/labels/:label", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true });
-    const where = lastWhereArgs("delete");
+    const where = whereArgs(dbMock, "delete");
     expect(where).toContain("labeled_place.user_id");
     expect(where).toContain(USER_ID);
   });
@@ -661,7 +643,7 @@ describe("GET /api/saved/check", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().listIds).toEqual(["list-1", "list-2"]);
-    const where = selectWhereArgs(0);
+    const where = whereArgs(dbMock, "select", 0);
     expect(where).toContain("saved_list.user_id");
     expect(where).toContain(USER_ID);
   });

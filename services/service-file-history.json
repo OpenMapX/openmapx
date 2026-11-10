@@ -92,15 +92,13 @@
       "ed41eee1d46609f3c2fd7302dd520951d1bc5787fdf9421f7281f2dd2d1c2856",
       "f16070bcb705c76a589455fc0d5e9342872eb1da1082c9f27d3dcff560881a14"
     ],
-    "well-known/config/html/apple-app-site-association": [
-      "2bf90dbb29b5e78e43337242ec4cf6e734d77249f0c35637987f968ee2918e22",
-      "db80497840e384b75c1b722edf58b24d60853af6b3e3b9ee9e8872440b89b11c"
-    ],
-    "well-known/config/html/assetlinks.json": [
-      "6792deeeec16a68a24d35d470c249aa70353d8696641dfbb4082255683145f6a"
+    "well-known/config/app-links.sh": [
+      "c2de075b1317e72d6d843e5e65c377762d69f6d17b34cced3f716ea57fa520d4",
+      "fb81822708daac15f75370902f416c26921a76e20a50b63482af9336ac548de7"
     ],
     "well-known/config/nginx.conf": [
-      "7251bbe47d3515253a05ca055e1dbf1026c3a9ce0c2c7975d79996f942730a86"
+      "7251bbe47d3515253a05ca055e1dbf1026c3a9ce0c2c7975d79996f942730a86",
+      "fd1d2e8ab0d2a996b73f315108ae130fa2ecc7b3faae1fc48f000900c7b05d2c"
     ]
   }
 }

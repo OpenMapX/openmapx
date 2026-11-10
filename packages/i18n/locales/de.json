@@ -3683,10 +3683,13 @@
     "cancel": "Abbrechen",
     "failed": "Die Anmeldung konnte nicht abgeschlossen werden. Schließe diese Seite und versuche es erneut in der App.",
     "invalidRequest": "Dieser Anmeldelink ist ungültig. Starte erneut in der OpenMapX-App.",
+    "callbackTitle": "Zurück zur App",
+    "callbackBody": "Die OpenMapX-App hat diese Anmeldung nicht übernommen. Schließe diese Seite und starte erneut in der App.",
     "openInBrowserTitle": "Im Browser anmelden",
     "openInBrowserBody": "Diese App-Version kann die Anmeldung nicht automatisch übernehmen. Du kannst dich auf der Website anmelden, musst dich nach dem Update aber erneut in der App anmelden.",
     "systemAuthCancelled": "Die Anmeldung wurde abgebrochen.",
-    "systemAuthFailed": "Die Anmeldung konnte nicht abgeschlossen werden. Bitte versuche es erneut."
+    "systemAuthFailed": "Die Anmeldung konnte nicht abgeschlossen werden. Bitte versuche es erneut.",
+    "systemAuthUnsupported": "Die Anmeldung über einen Anbieter oder einen Passkey ist in der App auf diesem Gerät nicht verfügbar: Sie erfordert iOS 17.4 oder neuer. Melde dich stattdessen mit E-Mail und Passwort an."
   },
   "parking": {
     "title": "Parkposition",

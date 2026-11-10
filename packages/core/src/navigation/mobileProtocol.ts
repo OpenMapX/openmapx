@@ -728,7 +728,8 @@ export const nativeToWebSchema = z.discriminatedUnion("type", [
     z
       .object({
         requestId: boundedId,
-        status: z.enum(["ok", "cancelled", "failed"]),
+        /** `unsupported`: this device cannot complete the handoff, so retrying cannot help. */
+        status: z.enum(["ok", "cancelled", "failed", "unsupported"]),
         /** Opaque, single-use, and exchanged by the page — never a token. */
         handoffCode: boundedId.optional(),
         state: boundedId.optional(),

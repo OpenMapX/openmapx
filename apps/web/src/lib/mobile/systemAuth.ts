@@ -109,7 +109,10 @@ export async function redeemSystemAuth(
  */
 export function readAuthResult(
   payload: unknown,
-): (SystemAuthHandoff & { status: "ok" }) | { status: "cancelled" | "failed" } | null {
+):
+  | (SystemAuthHandoff & { status: "ok" })
+  | { status: "cancelled" | "failed" | "unsupported" }
+  | null {
   if (!payload || typeof payload !== "object") return null;
   const raw = payload as {
     status?: unknown;
@@ -117,7 +120,8 @@ export function readAuthResult(
     state?: unknown;
     codeVerifier?: unknown;
   };
-  if (raw.status === "cancelled" || raw.status === "failed") return { status: raw.status };
+  if (raw.status === "cancelled" || raw.status === "failed" || raw.status === "unsupported")
+    return { status: raw.status };
   if (raw.status !== "ok") return null;
   if (
     typeof raw.handoffCode !== "string" ||

@@ -1,6 +1,6 @@
 import { type SystemAuthConfig, SystemAuthSession } from "./SystemAuthSession";
 
-const CONFIG: SystemAuthConfig = { webOrigin: "https://openmapx.com", scheme: "openmapx" };
+const CONFIG: SystemAuthConfig = { webOrigin: "https://openmapx.com" };
 
 const VERIFIER = "v".repeat(43);
 const STATE = "s".repeat(22);
@@ -34,7 +34,7 @@ function harness(callback: (url: string, redirect: string) => Promise<string | n
 }
 
 const successCallback = (code = CODE, state = STATE) =>
-  `openmapx://auth/callback?code=${code}&state=${state}`;
+  `https://openmapx.com/mobile-auth/callback?code=${code}&state=${state}`;
 
 describe("SystemAuthSession.open", () => {
   it("builds the URL from the compiled origin", async () => {
@@ -47,7 +47,9 @@ describe("SystemAuthSession.open", () => {
     const url = new URL(opened[0].url);
     expect(url.origin).toBe("https://openmapx.com");
     expect(url.pathname).toBe("/mobile-auth");
-    expect(opened[0].redirect).toBe("openmapx://auth/callback");
+    // A verified link on the compiled origin, which the OS routes to the app
+    // bound to that origin rather than to any app registering a scheme.
+    expect(opened[0].redirect).toBe("https://openmapx.com/mobile-auth/callback");
   });
 
   it("sends the challenge, state and purpose — and nothing else", async () => {
@@ -110,21 +112,66 @@ describe("SystemAuthSession.open", () => {
   });
 });
 
+describe("SystemAuthSession on a device without verified callbacks", () => {
+  it("reports unsupported without opening a browser or keeping an attempt", async () => {
+    const opened: string[] = [];
+    const session = new SystemAuthSession(
+      {
+        config: CONFIG,
+        randomBytes,
+        supportsVerifiedCallback: () => false,
+        browser: {
+          openAuthSessionAsync: async (url) => {
+            opened.push(url);
+            return successCallback();
+          },
+        },
+      },
+      sha256,
+    );
+
+    await expect(session.open("sign-in")).resolves.toEqual({ status: "unsupported" });
+    expect(opened).toEqual([]);
+    expect(session.hasAttemptInFlight).toBe(false);
+  });
+});
+
 describe("SystemAuthSession callback validation", () => {
   it.each([
     {
-      label: "a different scheme",
-      url: `openmapx-evil://auth/callback?code=${CODE}&state=${STATE}`,
+      label: "the former custom-scheme callback",
+      url: `openmapx://auth/callback?code=${CODE}&state=${STATE}`,
     },
     {
-      label: "an https callback",
-      url: `https://openmapx.com/auth/callback?code=${CODE}&state=${STATE}`,
+      label: "plain HTTP on the compiled host",
+      url: `http://openmapx.com/mobile-auth/callback?code=${CODE}&state=${STATE}`,
     },
-    { label: "a different host", url: `openmapx://elsewhere/callback?code=${CODE}&state=${STATE}` },
-    { label: "a different path", url: `openmapx://auth/other?code=${CODE}&state=${STATE}` },
-    { label: "userinfo", url: `openmapx://user@auth/callback?code=${CODE}&state=${STATE}` },
-    { label: "no code", url: `openmapx://auth/callback?state=${STATE}` },
-    { label: "no state", url: `openmapx://auth/callback?code=${CODE}` },
+    {
+      label: "a different host",
+      url: `https://openmapx.example/mobile-auth/callback?code=${CODE}&state=${STATE}`,
+    },
+    {
+      label: "a lookalike subdomain",
+      url: `https://openmapx.com.evil.example/mobile-auth/callback?code=${CODE}&state=${STATE}`,
+    },
+    {
+      label: "a different port",
+      url: `https://openmapx.com:8443/mobile-auth/callback?code=${CODE}&state=${STATE}`,
+    },
+    {
+      label: "a different path",
+      url: `https://openmapx.com/mobile-auth/other?code=${CODE}&state=${STATE}`,
+    },
+    {
+      label: "the handoff page itself",
+      url: `https://openmapx.com/mobile-auth?code=${CODE}&state=${STATE}`,
+    },
+    {
+      label: "userinfo",
+      url: `https://user@openmapx.com/mobile-auth/callback?code=${CODE}&state=${STATE}`,
+    },
+    { label: "no code", url: `https://openmapx.com/mobile-auth/callback?state=${STATE}` },
+    { label: "no state", url: `https://openmapx.com/mobile-auth/callback?code=${CODE}` },
     { label: "not a URL", url: "nonsense" },
   ])("refuses $label", async ({ url }) => {
     const { session } = harness(async () => url);

@@ -1,4 +1,3 @@
-import { envString } from "@openmapx/core/server-env";
 import { fromNodeHeaders } from "better-auth/node";
 import type {
   FastifyContextConfig,
@@ -8,6 +7,7 @@ import type {
 } from "fastify";
 import { auth } from "../auth";
 import { MobileAuthHandoffService } from "../services/mobileAuthHandoff";
+import { configuredTrustedWebOrigins } from "../utils/csrf";
 import { declareRouteAuth } from "../utils/route-auth";
 
 /**
@@ -97,21 +97,15 @@ function noStore(reply: FastifyReply): void {
 }
 
 /**
- * The origins allowed to call these endpoints.
+ * The origins allowed to call these endpoints: the deployment's trusted web
+ * origins (`CORS_ORIGIN`), parsed by the same code as the CSRF guard.
  *
- * Both live on the deployed web app; nothing else has any business calling
- * them. Read from configuration rather than reflected from the request, because
- * reflecting an Origin is the same as having no check.
+ * Both endpoints live on the deployed web app; nothing else has any business
+ * calling them. Read from configuration rather than reflected from the request,
+ * because reflecting an Origin is the same as having no check.
  */
 function allowedOrigins(): string[] {
-  const configured = envString("MOBILE_AUTH_ALLOWED_ORIGINS", "");
-  if (configured)
-    return configured
-      .split(",")
-      .map((origin) => origin.trim())
-      .filter(Boolean);
-  const web = envString("WEB_ORIGIN", "http://localhost:3000");
-  return [web];
+  return configuredTrustedWebOrigins();
 }
 
 /**

@@ -14,3 +14,14 @@ describe("Android map chooser registration", () => {
     );
   });
 });
+
+describe("Android sign-in callback registration", () => {
+  it("claims only the verified HTTPS callback path on the compiled web host", () => {
+    expect(config.android?.intentFilters).toContainEqual({
+      action: "VIEW",
+      autoVerify: true,
+      category: ["DEFAULT", "BROWSABLE"],
+      data: [{ scheme: "https", host: "openmapx.com", path: "/mobile-auth/callback" }],
+    });
+  });
+});
