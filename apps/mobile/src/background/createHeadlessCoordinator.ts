@@ -1,143 +1,70 @@
-import { Platform } from "react-native";
-import { getNavigationAudio } from "../audio/navigationAudioModule";
 import { getRuntimeConfig } from "../config/runtimeConfig";
-import { DiagnosticRepository, type DiagnosticType } from "../diagnostics/DiagnosticRepository";
-import { createLocationDriver } from "../location/createLocationDriver";
-import { type LocationProfileKind, profileFor } from "../location/profiles";
-import { createCoordinator } from "../navigation/createCoordinator";
-import type { EffectPorts } from "../navigation/effects";
+import {
+  createInvisibleNavigation,
+  type ForegroundDevice,
+  type ForegroundNavigation,
+} from "../navigation/createForegroundNavigation";
+import {
+  foregroundCoordinator,
+  onForegroundCoordinatorChanged,
+} from "../navigation/foregroundCoordinator";
 import type { NavigationCoordinator } from "../navigation/NavigationCoordinator";
-import { createPublishPort } from "../navigation/snapshots/createPublishPort";
-import { reconcileNavigationSurface } from "../navigation/surfaces/createSurfacePort";
-import { TransitRefreshService } from "../navigation/transit/TransitRefreshService";
-import { getDatabase } from "../storage/database";
-import { SessionRepository } from "../storage/SessionRepository";
+import { deviceMobileLocale } from "../shell/shellCopy";
 
 /**
  * The coordinator as it exists inside the background task.
  *
  * The operating system can launch this process straight into a location
  * callback with no user interface at all, so nothing here may reach React, the
- * WebView, a store or a hook — none of them exist in that case. What the
- * foreground app supplies through the bridge, this composition supplies through
- * the durable outbox instead: an event is persisted now and delivered when a
- * document next completes a handshake.
+ * WebView, a store or a hook; none of them exist in that case. The composition
+ * is the one every runtime uses (`createInvisibleNavigation`), over the same
+ * device ports, so an off-route driver gets a reroute and Android's background
+ * restrictions apply exactly as they do with the app open. Nothing is sent to a
+ * page; the next page to load reads the committed session.
  *
- * It is the *same* coordinator class and the same database, which is what makes
+ * It is the same coordinator class and the same database, which is what makes
  * a session started in the foreground and advanced in the background one
- * session rather than two.
+ * session rather than two. It is composed once per process and given up when
+ * the visible app's composition takes over.
  */
 
-function ports(
-  repository: SessionRepository,
-  refresh: (requestId: string) => Promise<void>,
-): EffectPorts {
-  const driver = createLocationDriver();
-  const audio = getNavigationAudio();
-  const diagnostics = new DiagnosticRepository(repository);
+let headless: Promise<ForegroundNavigation> | null = null;
+let stopWatchingForeground: () => void = () => {};
 
-  return {
-    reconcileSurface: () => reconcileNavigationSurface(repository, false),
-    driver: {
-      // The permission mode changes when delivery stops, not how it is
-      // requested: a foreground-only session uses the same cadence and is
-      // stopped by the lifecycle policy when the app leaves the foreground.
-      start: () => driver.start(profileFor("driving")),
-      stop: () => driver.stop(),
-      updateProfile: (profile) => driver.start(profileFor(profile as LocationProfileKind)),
-      isRunning: () => driver.isRunning(),
-    },
-    audio: {
-      speak: async (cueId, text, locale) => {
-        const result = await audio.speak({ cueId, text, locale });
-        // Only the stable result code is recorded — never the spoken text.
-        await diagnostics.record("audio.result", { result });
-      },
-      stop: () => audio.stop(),
-    },
-    alerts: {
-      // Notification scheduling is composed in the foreground; a headless run
-      // notes that reconciliation is owed and performs it when the app starts.
-      reconcile: async () => {
-        await diagnostics.record("notification.operation", { operation: "reconcile-deferred" });
-      },
-      cancelSession: async () => undefined,
-    },
-    // The same publish port the foreground uses. In a headless run `send`
-    // always reports failure, so a snapshot is discarded rather than queued —
-    // the next handshake reads the authoritative session directly, and a
-    // position from ten minutes ago would only animate the user backwards.
-    publish: createPublishPort({
-      repository,
-      reconcileSurface: () => reconcileNavigationSurface(repository, false),
-      send: () => false,
-      now: () => Date.now(),
-    }).port,
-    remote: {
-      reroute: async () => undefined,
-      transitRefresh: refresh,
-    },
-    diagnostics: {
-      // Everything goes through the allowlist, including calls from deep inside
-      // the effect runner: a bypass here would be the one place a coordinate
-      // could reach the local log.
-      record: (type, fields) => {
-        diagnostics.recordAsync(type as DiagnosticType, fields);
-      },
-    },
-  };
+export interface HeadlessOverrides {
+  apiOrigin?: string;
+  /** Replaces device services, as for the visible app's composition. */
+  device?: Partial<ForegroundDevice>;
+}
+
+export function getHeadlessCoordinator(
+  overrides: HeadlessOverrides = {},
+): Promise<NavigationCoordinator> {
+  if (!headless) {
+    const composing = createInvisibleNavigation({
+      apiOrigin: overrides.apiOrigin ?? getRuntimeConfig().apiOrigin,
+      locale: deviceMobileLocale(),
+      ...(overrides.device ? { device: overrides.device } : {}),
+    });
+    headless = composing;
+    composing.catch(() => {
+      if (headless === composing) releaseHeadlessComposition();
+    });
+    stopWatchingForeground = onForegroundCoordinatorChanged(() => {
+      if (foregroundCoordinator()) releaseHeadlessComposition();
+    });
+  }
+  return headless.then((composed) => composed.coordinator);
 }
 
 /**
- * Builds a headless-bound coordinator over the process-wide durable authority.
- *
- * `createCoordinator` shares the repository and executor with the foreground,
- * but keeps these headless-only adapters on this instance.
+ * Disposes this process's headless composition. Called when the visible app's
+ * composition registers, and by tests standing in for a process that died.
  */
-export async function getHeadlessCoordinator(): Promise<NavigationCoordinator> {
-  const repository = new SessionRepository(await getDatabase());
-  const refreshService = new TransitRefreshService({
-    apiOrigin: getRuntimeConfig().apiOrigin,
-    now: () => Date.now(),
-  });
-  let owner: NavigationCoordinator | null = null;
-  const { coordinator } = await createCoordinator({
-    // Nothing to send to, and nothing that would accept it: a headless process
-    // has no channel, so every outbound message is dropped by design.
-    bridge: { send: () => "dropped" },
-    permissions: {
-      state: () => createLocationDriver().getPermissionState(),
-      // A background callback is by definition not a visible start, so this is
-      // false: the only command it can serve is one that needs no prompt.
-      isAppActive: () => false,
-      requestForStart: async () => "denied",
-    },
-    driver: { isRunning: () => createLocationDriver().isRunning() },
-    ports: ports(repository, async (requestId) => {
-      const session = await repository.loadActive(Date.now());
-      const current = owner;
-      if (
-        !current ||
-        session?.kind !== "transit" ||
-        session.status !== "active" ||
-        session.payload.refresh.requestId !== requestId
-      )
-        return;
-      current.trackRemoteWork(
-        refreshService
-          .request({ requestId, generation: session.payload.refresh.generation, session })
-          .then((outcome) => current.applyTransitRefresh(outcome))
-          .catch(() => undefined),
-      );
-    }),
-  });
-  owner = coordinator;
-  return coordinator;
-}
-
-/** The platform description the permission flow needs, without importing React. */
-export function currentPlatform(): { os: "ios" } | { os: "android"; sdkInt: number } {
-  return Platform.OS === "android"
-    ? { os: "android", sdkInt: typeof Platform.Version === "number" ? Platform.Version : 0 }
-    : { os: "ios" };
+export function releaseHeadlessComposition(): void {
+  const released = headless;
+  headless = null;
+  stopWatchingForeground();
+  stopWatchingForeground = () => {};
+  void released?.then((composed) => composed.dispose()).catch(() => undefined);
 }

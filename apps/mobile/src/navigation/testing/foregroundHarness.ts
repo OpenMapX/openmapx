@@ -10,6 +10,10 @@ import {
   type SpeakRequest,
   type SpeakResult,
 } from "../../audio/navigationAudio";
+import {
+  getHeadlessCoordinator,
+  releaseHeadlessComposition,
+} from "../../background/createHeadlessCoordinator";
 import type { AuxiliaryCommandHandler } from "../../bridge/answerCommand";
 import type { ConnectivityDriver, ConnectivityState } from "../../connectivity/ConnectivityDriver";
 import type { RecoveryEvent } from "../../lifecycle/NavigationRecoveryController";
@@ -39,7 +43,7 @@ import {
   type ForegroundNavigation,
 } from "../createForegroundNavigation";
 import { foregroundCoordinator } from "../foregroundCoordinator";
-import type { SessionEnded } from "../NavigationCoordinator";
+import type { NavigationCoordinator, SessionEnded } from "../NavigationCoordinator";
 
 /**
  * The shipped foreground navigation composition, running on a fake phone.
@@ -484,6 +488,11 @@ export interface ForegroundHarness {
   standStill(lngLat: readonly [number, number], ms: number): Promise<void>;
   /** The process dies and the app is started again on the same phone. */
   relaunch(): Promise<ForegroundHarness>;
+  /**
+   * The process dies with the app out of sight, and the operating system
+   * starts it again for a location batch, with no app and no page.
+   */
+  relaunchHeadless(): Promise<HeadlessHarness>;
   /** Disposes this composition and closes the phone's storage. */
   shutdown(): Promise<void>;
 }
@@ -496,26 +505,13 @@ export interface HarnessOptions {
   apiOrigin?: string;
 }
 
-let messageCounter = 0;
-
-/** Composes the shipped foreground navigation on a fake phone. */
-export async function startForegroundHarness(
-  options: HarnessOptions = {},
-): Promise<ForegroundHarness> {
-  const phone = options.phone ?? createFakePhone();
-  // A new process: nothing composed before survives except the phone itself.
-  resetCoordinatorCache();
-  Object.defineProperty(globalThis, "fetch", {
-    configurable: true,
-    writable: true,
-    value: phone.network.fetch,
-  });
-
-  const sent: SentMessage[] = [];
-  const navigatingReports: boolean[] = [];
-  const sessionEnds: SessionEnded[] = [];
-  const recoveryEvents: RecoveryEvent[] = [];
-  const device: ForegroundDevice = {
+/**
+ * The phone as every composition sees it. The visible app's and the headless
+ * composition get the same ports, as `createForegroundNavigation` does in
+ * production.
+ */
+function phoneDevice(phone: FakePhone): ForegroundDevice {
+  return {
     // The wrapper `createLocationDriver` puts around the platform driver.
     driver: withBackgroundSafeProfiles(phone.location, phone.os, phone.app),
     platform: phone.os === "android" ? { os: "android", sdkInt: 34 } : { os: "ios" },
@@ -537,6 +533,36 @@ export async function startForegroundHarness(
     clock: phone.clock.now,
     schedule: phone.clock.schedule,
   };
+}
+
+/** A killed process takes its timers, listeners and compositions with it. */
+function killProcess(phone: FakePhone): void {
+  phone.clock.dropTimers();
+  phone.app.dropListeners();
+  phone.connectivity.dropListeners();
+  releaseHeadlessComposition();
+}
+
+let messageCounter = 0;
+
+/** Composes the shipped foreground navigation on a fake phone. */
+export async function startForegroundHarness(
+  options: HarnessOptions = {},
+): Promise<ForegroundHarness> {
+  const phone = options.phone ?? createFakePhone();
+  // A new process: nothing composed before survives except the phone itself.
+  resetCoordinatorCache();
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    writable: true,
+    value: phone.network.fetch,
+  });
+
+  const sent: SentMessage[] = [];
+  const navigatingReports: boolean[] = [];
+  const sessionEnds: SessionEnded[] = [];
+  const recoveryEvents: RecoveryEvent[] = [];
+  const device = phoneDevice(phone);
 
   const navigation = await createForegroundNavigation({
     apiOrigin: options.apiOrigin ?? "https://api.openmapx.test",
@@ -635,10 +661,14 @@ export async function startForegroundHarness(
     },
     async relaunch() {
       navigation.dispose();
-      phone.clock.dropTimers();
-      phone.app.dropListeners();
-      phone.connectivity.dropListeners();
+      killProcess(phone);
       return startForegroundHarness({ ...options, phone });
+    },
+    async relaunchHeadless() {
+      navigation.dispose();
+      killProcess(phone);
+      phone.app.setVisible(false);
+      return startHeadlessHarness({ ...options, phone });
     },
     async shutdown() {
       await settle();
@@ -647,6 +677,61 @@ export async function startForegroundHarness(
     },
   };
   return harness;
+}
+
+/** A process the operating system started for location batches, with no app. */
+export interface HeadlessHarness {
+  phone: FakePhone;
+  coordinator: NavigationCoordinator;
+  /**
+   * Delivers a batch as the background task does: to the visible app's
+   * composition if one exists, otherwise to the headless one. A stopped stream
+   * delivers nothing.
+   */
+  deliver(locations: readonly RawLocation[]): Promise<boolean>;
+  session(): Promise<MobileNavigationSession | null>;
+  /** Waits as the background task does before it reports the batch handled. */
+  settle(): Promise<void>;
+  shutdown(): Promise<void>;
+}
+
+/** Composes the shipped headless navigation on a fake phone, as the background task does. */
+export async function startHeadlessHarness(options: HarnessOptions = {}): Promise<HeadlessHarness> {
+  const phone = options.phone ?? createFakePhone();
+  resetCoordinatorCache();
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    writable: true,
+    value: phone.network.fetch,
+  });
+  const coordinator = await getHeadlessCoordinator({
+    apiOrigin: options.apiOrigin ?? "https://api.openmapx.test",
+    device: phoneDevice(phone),
+  });
+  const repository = new SessionRepository(phone.storage.file);
+  const settle = async () => {
+    await coordinator.settle();
+    await coordinator.settleRemoteWork();
+    await coordinator.settle();
+  };
+  return {
+    phone,
+    coordinator,
+    async deliver(locations) {
+      if (!phone.location.running) return false;
+      const owner = foregroundCoordinator() ?? coordinator;
+      await owner.handleLocationBatch({ locations });
+      await settle();
+      return true;
+    },
+    session: () => repository.loadActive(phone.clock.now()),
+    settle,
+    async shutdown() {
+      await settle();
+      killProcess(phone);
+      await phone.storage.close();
+    },
+  };
 }
 
 /** A raw platform fix, timestamped now unless told otherwise. */

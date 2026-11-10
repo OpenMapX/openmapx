@@ -4,7 +4,6 @@ import * as Notifications from "expo-notifications";
 import type { MobileLocale } from "../../config/nativeCopy";
 import type { NavigationAudio } from "../audio/navigationAudio";
 import { getNavigationAudio, isNavigationAudioAvailable } from "../audio/navigationAudioModule";
-import { currentPlatform } from "../background/createHeadlessCoordinator";
 import {
   type AuxiliaryCommandHandler,
   answerCommand,
@@ -28,6 +27,7 @@ import { ExpoNotificationScheduler } from "../notifications/ExpoNotificationSche
 import type { NotificationScheduler } from "../notifications/NotificationScheduler";
 import { PermissionController, type PermissionUi } from "../permissions/permissionController";
 import type { PermissionSnapshot } from "../permissions/permissionMachine";
+import { currentPlatform } from "../platform/currentPlatform";
 import { type Database, getDatabase } from "../storage/database";
 import { createCoordinator } from "./createCoordinator";
 import { createRemoteWork } from "./createRemoteWork";
@@ -42,14 +42,17 @@ import { createAlertPort } from "./transit/createAlertPort";
 import { TransitRefreshService } from "./transit/TransitRefreshService";
 
 /**
- * Native navigation as the visible app runs it.
+ * Native navigation, composed once per runtime from one set of device ports.
  *
- * The same coordinator class, repository and executor the background task
- * uses, with ports that reach this app's page: replies and snapshots go over
- * the bridge, the start flow shows the native permission screens, and reroutes
- * run against the compiled API origin. While this composition exists, the
- * background task hands its location batches here, so the page sees progress
- * as it happens.
+ * The visible app, the Android Auto runtime and a process the operating system
+ * starts for a background location batch all compose through here, over the
+ * same coordinator class, repository and executor and the same location
+ * driver, so reroutes, refreshes, alerts and Android's background restrictions
+ * behave the same whichever runtime owns a batch. The visible app's ports
+ * reach its page: replies and snapshots go over the bridge and the start flow
+ * shows the native permission screens. While that composition exists, the
+ * background task hands its location batches to it, so the page sees progress
+ * as it happens. `createInvisibleNavigation` composes the other two.
  */
 
 export interface ForegroundNavigationOptions {
@@ -176,6 +179,40 @@ export interface ForegroundNavigation {
   /** Records a native message that failed its schema and was not sent. */
   reportInvalidSend(type: string): void;
   dispose(): void;
+}
+
+/** Permission screens for a runtime the user cannot see: every one is declined. */
+const NO_PERMISSION_SCREENS: PermissionUi = {
+  showDisclosure: async () => "dismiss",
+  showSettingsRequired: async () => "dismiss",
+  offerForegroundOnly: async () => "dismiss",
+  showDenied: async () => {},
+  openSystemSettings: async () => {},
+};
+
+/**
+ * The same composition for a runtime with no page and no visible app: the
+ * Android Auto runtime, or a process the operating system started for a
+ * background location batch. Nothing reaches a page, no prompt is shown, the
+ * screen is never held awake, and it does not take the batches the visible
+ * app's composition would.
+ */
+export function createInvisibleNavigation(options: {
+  apiOrigin: string;
+  locale: MobileLocale;
+  device?: Partial<ForegroundDevice>;
+}): Promise<ForegroundNavigation> {
+  return createForegroundNavigation({
+    apiOrigin: options.apiOrigin,
+    locale: options.locale,
+    send: () => "dropped",
+    permissionUi: NO_PERMISSION_SCREENS,
+    isAppActive: () => false,
+    auxiliary: async () => null,
+    onNavigatingChanged: () => {},
+    registerAsForeground: false,
+    ...(options.device ? { device: options.device } : {}),
+  });
 }
 
 export async function createForegroundNavigation(

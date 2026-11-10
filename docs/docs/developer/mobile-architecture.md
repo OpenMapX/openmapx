@@ -63,7 +63,16 @@ use that descriptor, so they apply during negotiation, incompatibility and error
 `createForegroundNavigation` builds one coordinator per foreground app and
 registers it, so the background location task feeds the same instance instead
 of opening a second, headless one beside it. The headless coordinator is used
-only when the OS starts the task without the app.
+only when the OS starts the task without the app. It is composed once per
+process by `createInvisibleNavigation`, the same factory over the same device
+ports (location driver and its Android background rule, audio, alerts,
+reroute and refresh, connectivity), with nothing sent to a page, no prompts
+and no keep-awake. An off-route driver in an OS-started process therefore gets
+a reroute, and the background task waits for that request
+(`settleRemoteWork`) before it reports the batch handled. When the visible
+app's composition registers, the headless one is disposed. Alerts are now
+reconciled in that process as well, rather than deferred to the next app
+start.
 
 - **Start.** `session.start` runs the `PermissionController`. Its screens are
   native (`PermissionPrompts.tsx`) because the page may be suspended during the
@@ -186,8 +195,8 @@ The headless navigation bundle does not import the web renderer or MapLibre GL J
 
 `OpenMapXCarRuntime` runs through the application's existing ReactHost without
 requiring the phone Activity. It reuses the foreground coordinator when present,
-or composes car-capable reroute/audio ports over the same executor and SQLite
-repository. Committed snapshots fan out independently to phone and car; the car
+or composes its own with `createInvisibleNavigation`, over the same executor,
+SQLite repository and device ports. Committed snapshots fan out independently to phone and car; the car
 page is a passive projection, not another navigation engine. Car commands enter
 the same authority, including host stop. Car route planning uses the compiled
 public API and a bounded instance/account-scoped destinations cache from the phone.
@@ -408,9 +417,12 @@ access, with external location, audio and networking ports replaced by test
 implementations. `foregroundNavigation.harness.test.ts` runs the shipped
 `createForegroundNavigation` composition on a fake phone
 (`navigation/testing/foregroundHarness.ts`): only location, audio, notifications,
-storage, network and clock are replaced, through the composition's `device`
-option. That covers the wiring between page commands, location batches, the
-durable session and device effects, including a process restart. It does not
+storage, network, connectivity and clock are replaced, through the
+composition's `device` option. That covers the wiring between page commands,
+location batches, the durable session and device effects, including a process
+restart, recovery on a visibility change, and a process the OS starts for a
+location batch (`relaunchHeadless`), which composes the headless navigation
+over the same fake ports. It does not
 establish OS delivery, background execution or audio behaviour on a device. A
 complete OS callback blackout also prevents real-time processing; foreground
 coasting does not create a background wake source.
