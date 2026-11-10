@@ -65,6 +65,7 @@ const useTransitPlanMock = vi.fn();
 const useTransitChainPlanMock = vi.fn();
 const useEvDirectionsMock = vi.fn();
 const useAutocompleteMock = vi.fn();
+const optimizeMutate = vi.fn();
 const transitCollection = vi.hoisted(() => ({
   journey: undefined as import("@openmapx/mobility-core/transit").VehicleJourney | undefined,
   alerts: [] as import("@openmapx/mobility-core/transit").ServiceAlert[],
@@ -103,7 +104,10 @@ vi.mock("@openmapx/core", async (importOriginal) => {
     useVehicleJourney: () => ({ data: transitCollection.journey }),
     useRouteAlerts: () => ({ data: transitCollection.alerts }),
     useCapabilities: () => ({ services: capabilityServices }),
-    useOptimizeRoute: () => ({ mutate: vi.fn(), isPending: false }),
+    useOptimizeRoute: () => ({
+      mutate: (...a: unknown[]) => optimizeMutate(...a),
+      isPending: false,
+    }),
     useRouteInGermany: () => ({ bothInGermany: false }),
   };
 });
@@ -165,6 +169,8 @@ import {
 import { MobileSheetContext } from "@/components/panels/sheet/sheetState";
 import { DirectionsPanelContent } from "./DirectionsPanelContent";
 
+const timerCount = () => (vi as typeof vi & { getTimerCount(): number }).getTimerCount();
+
 /** Last positional call arg of a mocked hook, typed for the fields under test.
  * A stand-in for `toHaveBeenLastCalledWith`/`toMatchObject` partial matching,
  * neither of which this repo's local `vitest.d.ts` type shim declares. */
@@ -204,6 +210,7 @@ beforeEach(() => {
     .mockReset()
     .mockReturnValue({ data: undefined, isLoading: false, isError: false });
   useAutocompleteMock.mockReset().mockReturnValue({ data: [] });
+  optimizeMutate.mockReset();
   act(() => {
     useDirectionsStore.getState().close();
     useDirectionsStore.getState().setMode("driving");
@@ -1713,5 +1720,278 @@ it("opens provided provider details and keeps their origin when an earlier auto-
   expect(useDirectionsStore.getState().transitItineraries[0]).toMatchObject({
     id: "provider-trip",
     legs: [{ from: { platformCode: "17" } }],
+  });
+});
+
+describe("directions input behaviour", () => {
+  function seedThreeStops() {
+    act(() => {
+      useDirectionsStore.getState().setWaypoint(0, [13.3, 52.5], "Berlin");
+      useDirectionsStore.getState().setWaypoint(1, [11.5, 48.1], "Munich");
+      useDirectionsStore.getState().insertWaypoint(1, [12.37, 51.34], "Leipzig");
+    });
+  }
+  const inputValues = () =>
+    screen.getAllByRole("textbox").map((input) => (input as HTMLInputElement).value);
+
+  describe("Optimize", () => {
+    it("asks for the best order of the filled stops with the active mode", () => {
+      seedThreeStops();
+      renderPanel();
+
+      fireEvent.click(screen.getByRole("button", { name: /directions.optimizeStopOrder/ }));
+
+      expect(optimizeMutate).toHaveBeenCalledTimes(1);
+      const [request] = optimizeMutate.mock.calls[0] as [{ waypoints: unknown; mode: string }];
+      expect(request.waypoints).toEqual([
+        [13.3, 52.5],
+        [12.37, 51.34],
+        [11.5, 48.1],
+      ]);
+      expect(request.mode).toBe("driving");
+    });
+
+    it("moves each stop with its label to the optimized position", () => {
+      seedThreeStops();
+      renderPanel();
+      fireEvent.click(screen.getByRole("button", { name: /directions.optimizeStopOrder/ }));
+      const [, callbacks] = optimizeMutate.mock.calls[0] as [
+        unknown,
+        { onSuccess: (result: { optimizedOrder: number[] }) => void },
+      ];
+
+      act(() => callbacks.onSuccess({ optimizedOrder: [0, 2, 1] }));
+
+      expect(useDirectionsStore.getState().waypoints.map((wp) => wp.label)).toEqual([
+        "Berlin",
+        "Munich",
+        "Leipzig",
+      ]);
+      expect(inputValues()).toEqual(["Berlin", "Munich", "Leipzig"]);
+    });
+
+    it("keeps the order and reports a failed optimization", async () => {
+      seedThreeStops();
+      renderPanel();
+      fireEvent.click(screen.getByRole("button", { name: /directions.optimizeStopOrder/ }));
+      const [, callbacks] = optimizeMutate.mock.calls[0] as [unknown, { onError: () => void }];
+
+      act(() => callbacks.onError());
+
+      expect(inputValues()).toEqual(["Berlin", "Leipzig", "Munich"]);
+      await screen.findByText("directions.noRoutesFound");
+    });
+  });
+
+  describe("waypoint editing", () => {
+    it("clearing a field empties its waypoint and the plan request", () => {
+      seedOriginDestination();
+      renderPanel();
+
+      fireEvent.change(screen.getByDisplayValue("Munich"), { target: { value: "" } });
+
+      expect(useDirectionsStore.getState().waypoints[1]).toMatchObject({ coords: null, label: "" });
+      expect(lastArg<DirectionsCallArgs>(useDirectionsMock).waypoints).toEqual([]);
+    });
+
+    it("typing without choosing a suggestion leaves the stored waypoint untouched", () => {
+      seedOriginDestination();
+      renderPanel();
+
+      fireEvent.change(screen.getByDisplayValue("Munich"), { target: { value: "Mun" } });
+
+      expect(screen.getByDisplayValue("Mun")).toBeVisible();
+      expect(useDirectionsStore.getState().waypoints[1]).toMatchObject({
+        coords: [11.5, 48.1],
+        label: "Munich",
+      });
+    });
+
+    it("shows a label another surface writes into a field", () => {
+      seedOriginDestination();
+      renderPanel();
+
+      act(() => useDirectionsStore.getState().setWaypoint(1, [10, 53.5], "Hamburg"));
+
+      expect(inputValues()).toEqual(["Berlin", "Hamburg"]);
+    });
+
+    it("shows the waypoints a deep link replaces the trip with", async () => {
+      seedOriginDestination();
+      renderPanel();
+      fireEvent.change(screen.getByDisplayValue("Munich"), { target: { value: "Mun" } });
+      const selection = providerPlanSelection({
+        bikeHillPreference: useDirectionsStore.getState().bikeHillPreference,
+      });
+
+      act(() => {
+        useTransitPlanMock.mockReturnValue({
+          data: selection.plan.data,
+          isLoading: false,
+          isError: false,
+        });
+        useDirectionsStore.getState().openTransitSelection(selection);
+      });
+
+      const labels = useDirectionsStore.getState().waypoints.map((wp) => wp.label);
+      expect(labels[0]).toBe("Provider Aachen");
+      await waitFor(() => expect(screen.queryByDisplayValue("Mun")).toBeNull());
+    });
+
+    describe("typed text and focus", () => {
+      function stubFix() {
+        let giveFix: PositionCallback = () => {};
+        vi.stubGlobal("navigator", {
+          geolocation: {
+            getCurrentPosition: vi.fn((...args: unknown[]) => {
+              giveFix = args[0] as PositionCallback;
+            }),
+          },
+        });
+        return () =>
+          act(async () =>
+            giveFix({
+              coords: { longitude: 13.405, latitude: 52.52, accuracy: 5 },
+              timestamp: Date.now(),
+            } as GeolocationPosition),
+          );
+      }
+
+      it("keeps text typed into the destination when the location fix fills the origin", async () => {
+        const deliverFix = stubFix();
+        act(() => useDirectionsStore.getState().open());
+        renderPanel();
+        const destination = screen.getByPlaceholderText("directions.chooseDestination");
+        fireEvent.focus(destination);
+        fireEvent.change(destination, { target: { value: "Muni" } });
+
+        await deliverFix();
+
+        expect(useDirectionsStore.getState().waypoints[0]).toMatchObject({
+          coords: [13.405, 52.52],
+          label: "directions.myLocation",
+        });
+        expect(screen.getByDisplayValue("directions.myLocation")).toBeVisible();
+        expect(screen.getByPlaceholderText("directions.chooseDestination")).toHaveValue("Muni");
+      });
+
+      it("keeps text typed into the origin instead of replacing it with the location fix", async () => {
+        const deliverFix = stubFix();
+        act(() => useDirectionsStore.getState().open());
+        renderPanel();
+        const origin = screen.getByPlaceholderText("directions.chooseOrigin");
+        fireEvent.focus(origin);
+        fireEvent.change(origin, { target: { value: "Alexan" } });
+
+        await deliverFix();
+
+        expect(screen.getByPlaceholderText("directions.chooseOrigin")).toHaveValue("Alexan");
+        expect(useDirectionsStore.getState().waypoints[0].coords).toBeNull();
+        expect(useMapStore.getState().userLocation).toEqual([13.405, 52.52]);
+      });
+
+      it("keeps a typed stop with that stop when another one is removed", () => {
+        seedThreeStops();
+        renderPanel();
+        fireEvent.change(screen.getByDisplayValue("Munich"), { target: { value: "Mun" } });
+
+        fireEvent.click(screen.getAllByRole("button", { name: "directions.removeStop" })[1]);
+
+        expect(inputValues()).toEqual(["Berlin", "Mun"]);
+      });
+
+      it("shows the chosen suggestion rather than the text typed before it", async () => {
+        seedOriginDestination();
+        useAutocompleteMock.mockReturnValue({
+          data: [{ id: "x", label: "Munich", type: "poi", coordinates: [11.6, 48.2] }],
+        });
+        renderPanel();
+        const destination = screen.getByDisplayValue("Munich");
+        fireEvent.focus(destination);
+        fireEvent.change(destination, { target: { value: "Mun" } });
+
+        fireEvent.click(await screen.findByText("Munich", { selector: "li *, li" }));
+
+        expect(inputValues()).toEqual(["Berlin", "Munich"]);
+        expect(useDirectionsStore.getState().waypoints[1].coords).toEqual([11.6, 48.2]);
+      });
+
+      it("keeps autocomplete open on the next field after the previous field blurred", () => {
+        vi.useFakeTimers();
+        try {
+          seedOriginDestination();
+          useAutocompleteMock.mockReturnValue({
+            data: [{ id: "x", label: "Leipzig", type: "poi", coordinates: [12.37, 51.34] }],
+          });
+          renderPanel();
+          const origin = screen.getByDisplayValue("Berlin");
+          const destination = screen.getByDisplayValue("Munich");
+
+          fireEvent.focus(origin);
+          fireEvent.blur(origin);
+          fireEvent.focus(destination);
+          act(() => {
+            vi.advanceTimersByTime(300);
+          });
+
+          expect(screen.getByText("Leipzig")).toBeVisible();
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("closes autocomplete once a field blurs and nothing else takes focus", () => {
+        vi.useFakeTimers();
+        try {
+          seedOriginDestination();
+          useAutocompleteMock.mockReturnValue({
+            data: [{ id: "x", label: "Leipzig", type: "poi", coordinates: [12.37, 51.34] }],
+          });
+          renderPanel();
+          const origin = screen.getByDisplayValue("Berlin");
+
+          fireEvent.focus(origin);
+          fireEvent.blur(origin);
+          act(() => {
+            vi.advanceTimersByTime(300);
+          });
+
+          expect(screen.queryByText("Leipzig")).toBeNull();
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("drops a pending blur when the panel unmounts", () => {
+        vi.useFakeTimers();
+        try {
+          seedOriginDestination();
+          const { unmount } = renderPanel();
+          const origin = screen.getByDisplayValue("Berlin");
+          fireEvent.focus(origin);
+          const timersBeforeBlur = timerCount();
+          fireEvent.blur(origin);
+          expect(timerCount()).toBeGreaterThan(timersBeforeBlur);
+
+          unmount();
+
+          expect(timerCount()).toBeLessThanOrEqual(timersBeforeBlur);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+    });
+
+    it("reverse keeps the input texts in step with their stops", () => {
+      seedThreeStops();
+      const { container } = renderPanel();
+
+      const reverseButton = container
+        .querySelector('svg[data-testid="SwapVertIcon"]')
+        ?.closest("button");
+      fireEvent.click(reverseButton as HTMLButtonElement);
+
+      expect(inputValues()).toEqual(["Munich", "Leipzig", "Berlin"]);
+    });
   });
 });

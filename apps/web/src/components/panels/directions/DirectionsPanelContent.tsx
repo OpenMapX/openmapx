@@ -75,6 +75,7 @@ import { TransitChainView } from "@/components/panels/directions/TransitChainVie
 import { TransitDetailsView } from "@/components/panels/directions/TransitDetailsView";
 import { TransitItineraryCard } from "@/components/panels/directions/TransitRouteView";
 import { TripScheduleCard } from "@/components/panels/directions/TripScheduleCard";
+import { useWaypointDrafts } from "@/components/panels/directions/useWaypointDrafts";
 import { WaypointList } from "@/components/panels/directions/WaypointList";
 import { WaypointScheduleDialog } from "@/components/panels/directions/WaypointScheduleDialog";
 import { useExpandOnBackgroundTap, useMobileSheet } from "@/components/panels/sheet/sheetState";
@@ -288,6 +289,14 @@ export function DirectionsPanelContent() {
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const waypointListRef = useRef<HTMLDivElement>(null);
 
+  const { values: inputValues, setDraft, clearDraft, hasDraft } = useWaypointDrafts(waypoints);
+  const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelBlur = useCallback(() => {
+    if (blurTimeoutRef.current !== null) clearTimeout(blurTimeoutRef.current);
+    blurTimeoutRef.current = null;
+  }, []);
+  useEffect(() => cancelBlur, [cancelBlur]);
+
   const myLocationLabel = t("myLocation");
   const requestFix = useForegroundLocation();
   useEffect(() => {
@@ -305,13 +314,15 @@ export function DirectionsPanelContent() {
       if (!directions.isOpen || origin?.id !== requestedOrigin.id || origin.coords !== null) return;
       const location: LngLat = [result.fix.lng, result.fix.lat];
       useMapStore.getState().setUserLocation(location);
+      // Text being typed into the origin is the person's own choice of start.
+      if (hasDraft(origin.id)) return;
       setWaypoint(0, location, myLocationLabel);
     });
 
     return () => {
       active = false;
     };
-  }, [isOpen, myLocationLabel, setWaypoint, requestFix]);
+  }, [isOpen, myLocationLabel, setWaypoint, requestFix, hasDraft]);
 
   const [shareMenuAnchor, setShareMenuAnchor] = useState<HTMLElement | null>(null);
   const [shareRouteDialogOpen, setShareRouteDialogOpen] = useState(false);
@@ -330,14 +341,6 @@ export function DirectionsPanelContent() {
     }
     setShareMenuAnchor(event.currentTarget);
   };
-
-  // Per-waypoint input text (synced from store labels)
-  const [inputValues, setInputValues] = useState<string[]>(() => waypoints.map((wp) => wp.label));
-
-  // Sync input values when waypoints change externally
-  useEffect(() => {
-    setInputValues(waypoints.map((wp) => wp.label));
-  }, [waypoints]);
 
   const isTransitMode = mode === "transit";
   const isFlightMode = mode === "flying";
@@ -752,77 +755,64 @@ export function DirectionsPanelContent() {
 
   const handleUseMyLocation = useCallback(() => {
     if (userLocation) {
+      const origin = waypoints[0];
+      if (origin) clearDraft(origin.id);
       setWaypoint(0, userLocation, t("myLocation"));
     }
-  }, [userLocation, setWaypoint, t]);
+  }, [userLocation, waypoints, clearDraft, setWaypoint, t]);
 
+  // The dropdown must outlive the blur long enough for a click on a suggestion,
+  // but a pending blur belongs to the field that fired it, not the next one.
   const handleWaypointBlur = useCallback(() => {
-    setTimeout(() => setFocusedField(null), 150);
-  }, []);
+    cancelBlur();
+    blurTimeoutRef.current = setTimeout(() => {
+      blurTimeoutRef.current = null;
+      setFocusedField(null);
+    }, 150);
+  }, [cancelBlur]);
 
   // Expand to full so the autocomplete dropdown that opens under the focused
   // field has room — mid only shows a couple of rows.
   const handleWaypointFocus = useCallback(
     (index: number) => {
+      cancelBlur();
       setFocusedField(index);
       snapTo("full");
     },
-    [snapTo],
+    [cancelBlur, snapTo],
   );
 
   const handleInputChange = useCallback(
     (index: number, value: string) => {
-      setInputValues((prev) => {
-        const next = [...prev];
-        next[index] = value;
-        return next;
-      });
-      if (!value) {
-        setWaypoint(index, null, "");
+      const waypoint = waypoints[index];
+      if (!waypoint) return;
+      if (value) {
+        setDraft(waypoint, value);
+        return;
       }
+      clearDraft(waypoint.id);
+      setWaypoint(index, null, "");
     },
-    [setWaypoint],
+    [waypoints, setDraft, clearDraft, setWaypoint],
   );
 
   const handleSuggestionSelect = (result: AutocompleteResult) => {
     if (!result.coordinates || focusedField === null) return;
     const { label, coordinates } = result;
-    setInputValues((prev) => {
-      const next = [...prev];
-      next[focusedField] = label;
-      return next;
-    });
+    const waypoint = waypoints[focusedField];
+    if (waypoint) clearDraft(waypoint.id);
     setWaypoint(focusedField, coordinates, label);
+    cancelBlur();
     setFocusedField(null);
   };
 
-  const handleReverse = useCallback(() => {
-    reverseWaypoints();
-    setInputValues((prev) => [...prev].reverse());
-  }, [reverseWaypoints]);
-
   const handleRemove = useCallback(
     (index: number) => {
+      const waypoint = waypoints[index];
+      if (waypoint) clearDraft(waypoint.id);
       removeWaypoint(index);
-      setInputValues((prev) => {
-        const next = [...prev];
-        next.splice(index, 1);
-        return next;
-      });
     },
-    [removeWaypoint],
-  );
-
-  const handleAdd = useCallback(
-    (afterIndex: number) => {
-      addWaypoint(afterIndex);
-      setInputValues((prev) => {
-        const next = [...prev];
-        next.splice(afterIndex + 1, 0, "");
-        return next;
-      });
-    },
-    [addWaypoint],
+    [waypoints, clearDraft, removeWaypoint],
   );
 
   const focusWaypoint = (index: number) => {
@@ -1112,9 +1102,9 @@ export function DirectionsPanelContent() {
           onFocus={handleWaypointFocus}
           onBlur={handleWaypointBlur}
           onReorder={reorderWaypoints}
-          onAdd={handleAdd}
+          onAdd={addWaypoint}
           onRemove={handleRemove}
-          onReverse={handleReverse}
+          onReverse={reverseWaypoints}
           onUseMyLocation={userLocation ? handleUseMyLocation : undefined}
           onEditSchedule={isEvMode || isFlightMode ? undefined : setScheduleEditIndex}
           isEvMode={isEvMode}
