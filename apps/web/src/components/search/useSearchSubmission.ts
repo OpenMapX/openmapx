@@ -158,10 +158,13 @@ export function useSearchSubmission({
   }, [cancelPendingSubmit, cancelNlpSubmission, surface]);
   const disclosures = useIntegrationDisclosures();
   const aiSearchDisclosure = useAiSearchDisclosure();
-  const { data: session } = useSession();
+  const { data: session, isPending: sessionPending } = useSession();
   // Where the server offers cloud parsing only to signed-in users, an
   // anonymous visitor's consent could never be used, so it is not asked for.
-  const cloudOutOfReach = aiSearchDisclosure?.cloudRequiresSignIn === true && !session?.user;
+  // Until the session is known the usual prompt stands; the server decides
+  // cloud use either way.
+  const cloudOutOfReach =
+    aiSearchDisclosure?.cloudRequiresSignIn === true && !sessionPending && !session?.user;
   const storedConsent = hasNlpConsent();
   const cloudDeclined = consentDeclined || isNlpCloudDeclined();
   const waitingForConsent =

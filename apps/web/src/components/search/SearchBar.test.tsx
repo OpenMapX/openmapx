@@ -1796,13 +1796,14 @@ describe("SearchBar", () => {
     await screen.findByText("Accessible cafés with outdoor seating");
   });
 
-  it.each<[string, { user: { id: string } } | null, boolean]>([
-    ["does not ask an anonymous visitor", null, false],
-    ["asks a signed-in user", { user: { id: "test-user" } }, true],
+  it.each<[string, { data: { user: { id: string } } | null; isPending?: boolean }, boolean]>([
+    ["does not ask an anonymous visitor", { data: null, isPending: false }, false],
+    ["asks a signed-in user", { data: { user: { id: "test-user" } }, isPending: false }, true],
+    ["keeps the usual prompt while the session is loading", { data: null, isPending: true }, true],
   ])(
     "%s for consent the server could not use when cloud requires sign-in",
     async (_label, session, asked) => {
-      useSessionMock.mockReturnValue({ data: session });
+      useSessionMock.mockReturnValue(session);
       useNlpSearchMock.mockReturnValue({ data: undefined, isFetching: false });
       renderBar([
         {
