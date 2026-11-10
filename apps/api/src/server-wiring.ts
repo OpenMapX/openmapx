@@ -261,9 +261,9 @@ export async function shutdownServer(
   try {
     const result = await Promise.race([closing, gaveUp]);
     if (result === settled) {
-      options.log.error(
+      options.log.warn(
         { graceMs: options.graceMs, forceMs: options.forceMs },
-        "The listener did not close in time; continuing shutdown",
+        "Server close hooks were still running after open connections were cut; releasing integrations anyway",
       );
     }
   } finally {

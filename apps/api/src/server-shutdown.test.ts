@@ -193,10 +193,13 @@ describe("shutdownServer", () => {
     expect(elapsed).toBeGreaterThanOrEqual(230);
     expect(elapsed).toBeLessThan(1_500);
     expect(afterClose).toHaveBeenCalledTimes(1);
-    expect(log.error).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.stringMatching(/did not close/),
+    // One warning for the cut connections, one naming the close hooks still running.
+    expect(log.warn).toHaveBeenCalledTimes(2);
+    expect(log.warn).toHaveBeenLastCalledWith(
+      { graceMs: 100, forceMs: 150 },
+      expect.stringMatching(/close hooks were still running/),
     );
+    expect(log.error).not.toHaveBeenCalled();
   });
 
   it("still releases integrations when closing the server fails", async () => {
