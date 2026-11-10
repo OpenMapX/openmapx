@@ -1,4 +1,4 @@
-import { fetchJson } from "@openmapx/core";
+import { fetchJson, isoWithOffsetInZone } from "@openmapx/core";
 import type {
   Departure,
   TransitStop,
@@ -17,6 +17,19 @@ interface IrailStation {
   name: string;
   locationX: string; // longitude
   locationY: string; // latitude
+}
+
+const BELGIAN_TIME_ZONE = "Europe/Brussels";
+
+/**
+ * iRail reads `date` and `time` as Belgian local time. Render the planning
+ * instant on the Brussels wall clock, including across daylight-saving changes.
+ */
+export function brusselsWallClock(instant: Date): { date: string; time: string } {
+  if (!Number.isFinite(instant.getTime()))
+    throw Object.assign(new Error("invalid planning time"), { code: "invalid_request" });
+  const local = isoWithOffsetInZone(instant, BELGIAN_TIME_ZONE);
+  return { date: local.slice(0, 10), time: local.slice(11, 19) };
 }
 
 let stationsCache: IrailStation[] | null = null;

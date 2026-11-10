@@ -222,7 +222,13 @@ The canonical model types (`TransitStop`, `Departure`, `TransitRoute`,
 don't invent your own. `planTrip` takes a `TripPlanRequest` that already mirrors
 the routing engine's knobs (mode allow-list, wheelchair routing, first- and
 last-mile access modes), so a planning provider can pass them through rather than
-re-deriving them.
+re-deriving them. `modes` defaults to `["TRANSIT"]`, which means every transit
+mode. A planner whose upstream has no mode filter checks
+`isTransitModeRestriction(modes)` and steps aside only for a real subset.
+`departureTime` and `arrivalTime` are UTC instants; render them on the upstream's
+local clock when its API takes an offset-less date and time, as iRail
+(`Europe/Brussels`) and RIS::Routing (`Europe/Berlin`) do. `GET /plan` rejects an
+unparsable `time` or `date` with 400.
 
 `getRoutesInBbox` and `getStopTransfers` remain optional methods outside the
 base capability flags. `refreshTrip` is advertised through

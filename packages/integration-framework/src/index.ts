@@ -278,7 +278,10 @@ export type {
 // build catches this.
 export { RoutingProviderError } from "./contracts/routing-provider";
 export { isPlausibleNlSearch, NL_CONFIDENCE_FLOOR } from "./contracts/search-nlp-provider";
-export { TransitTripResolutionUnsupportedError } from "./contracts/transit-provider";
+export {
+  isTransitModeRestriction,
+  TransitTripResolutionUnsupportedError,
+} from "./contracts/transit-provider";
 export * from "./contributors";
 export {
   type OpaqueCursorCodec,
