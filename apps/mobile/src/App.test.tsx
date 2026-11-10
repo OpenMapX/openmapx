@@ -52,6 +52,8 @@ jest.mock("./lifecycle/createNavigationRecoveryController", () => ({
 /** A composed foreground navigation graph, standing in for the native one. */
 const mockNavigation = {
   coordinator: { dispatch: jest.fn(), stopFromSurface: jest.fn() },
+  // The composition routes navigation commands to its coordinator.
+  dispatch: (message: unknown) => mockNavigation.coordinator.dispatch(message),
   capabilities: jest.fn(),
   activeSession: jest.fn(),
   reviewKeepAwake: jest.fn(async () => undefined),

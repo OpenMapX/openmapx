@@ -10,6 +10,7 @@ import {
   type SpeakRequest,
   type SpeakResult,
 } from "../../audio/navigationAudio";
+import type { AuxiliaryCommandHandler } from "../../bridge/answerCommand";
 import type { ConnectivityDriver, ConnectivityState } from "../../connectivity/ConnectivityDriver";
 import { type AppActivity, withBackgroundSafeProfiles } from "../../location/backgroundSafeDriver";
 import type {
@@ -448,7 +449,7 @@ export interface ForegroundHarness {
   sent: SentMessage[];
   /** Each guidance start or end the shell was told about. */
   navigatingReports: boolean[];
-  /** Sends a page command through the coordinator and returns the reply the page received. */
+  /** Sends a page command as the shell dispatches it and returns the reply the page received. */
   command(
     type: WebToNativeMessage["type"],
     payload?: unknown,
@@ -483,6 +484,8 @@ export interface ForegroundHarness {
 
 export interface HarnessOptions {
   phone?: FakePhone;
+  /** Answers the page's one-shot requests; declines them by default. */
+  auxiliary?: AuxiliaryCommandHandler;
   locale?: "en" | "de";
   apiOrigin?: string;
 }
@@ -536,7 +539,7 @@ export async function startForegroundHarness(
     },
     permissionUi: phone.permissionScreens,
     isAppActive: () => phone.app.visible,
-    auxiliary: async () => null,
+    auxiliary: options.auxiliary ?? (async () => null),
     onNavigatingChanged: (navigating) => navigatingReports.push(navigating),
     device,
   });
@@ -567,7 +570,7 @@ export async function startForegroundHarness(
         ...(stamp.sessionId === undefined ? {} : { sessionId: stamp.sessionId }),
         ...(stamp.revision === undefined ? {} : { revision: stamp.revision }),
       });
-      await navigation.coordinator.dispatch(command);
+      await navigation.dispatch(command);
       await settle();
       return sent.find((message) => message.forMessageId === messageId) ?? null;
     },

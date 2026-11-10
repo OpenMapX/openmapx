@@ -3,7 +3,6 @@ import { SessionRepository } from "../storage/SessionRepository";
 import { type EffectPorts, EffectRunner } from "./effects";
 import { GroundNavigationProcessor } from "./ground/GroundNavigationProcessor";
 import {
-  type AuxiliaryCommandHandler,
   type BridgePort,
   type ConnectivityPort,
   type CoordinatorDeps,
@@ -42,8 +41,6 @@ export interface CoordinatorOverrides {
   schedule?: (callback: () => void, delayMs: number) => () => void;
   newSessionId?: () => string;
   connectivity?: ConnectivityPort;
-  /** Answers the page's one-shot requests; absent in the headless task. */
-  auxiliary?: AuxiliaryCommandHandler;
   /**
    * Opens the durable store, if this composition is the first in the process.
    * Later compositions share whatever the first one opened.
@@ -109,7 +106,6 @@ export async function createCoordinator(
     ...(overrides.schedule ? { schedule: overrides.schedule } : {}),
     newSessionId: overrides.newSessionId ?? randomSessionId,
     ...(overrides.connectivity ? { connectivity: overrides.connectivity } : {}),
-    ...(overrides.auxiliary ? { auxiliary: overrides.auxiliary } : {}),
   };
 
   return {

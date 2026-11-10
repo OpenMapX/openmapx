@@ -1,10 +1,15 @@
-import type { MobileNavigationSession } from "@openmapx/core/navigation";
+import type { MobileNavigationSession, WebToNativeMessage } from "@openmapx/core/navigation";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import * as Notifications from "expo-notifications";
 import type { MobileLocale } from "../../config/nativeCopy";
 import type { NavigationAudio } from "../audio/navigationAudio";
 import { getNavigationAudio, isNavigationAudioAvailable } from "../audio/navigationAudioModule";
 import { currentPlatform } from "../background/createHeadlessCoordinator";
+import {
+  type AuxiliaryCommandHandler,
+  answerCommand,
+  isAuxiliaryCommand,
+} from "../bridge/answerCommand";
 import type { ShellDescription } from "../bridge/nativeBridge";
 import { ConfirmedConnectivity } from "../connectivity/ConfirmedConnectivity";
 import type { ConnectivityDriver } from "../connectivity/ConnectivityDriver";
@@ -24,11 +29,7 @@ import { createCoordinator } from "./createCoordinator";
 import { createRemoteWork } from "./createRemoteWork";
 import { registerForegroundCoordinator } from "./foregroundCoordinator";
 import { GroundRerouteService } from "./ground/GroundRerouteService";
-import type {
-  AuxiliaryCommandHandler,
-  BridgePort,
-  NavigationCoordinator,
-} from "./NavigationCoordinator";
+import type { BridgePort, NavigationCoordinator } from "./NavigationCoordinator";
 import { createPublishPort } from "./snapshots/createPublishPort";
 import type { NavigationStartContext } from "./startContext";
 import { reconcileNavigationSurface } from "./surfaces/createSurfacePort";
@@ -58,6 +59,7 @@ export interface ForegroundNavigationOptions {
   ): "sent" | "queued" | "dropped" | "invalid";
   permissionUi: PermissionUi;
   isAppActive(): boolean;
+  /** Answers the page's one-shot requests, beside the navigation queue. */
   auxiliary: AuxiliaryCommandHandler;
   /** Told when guidance starts or ends, for the shell states. */
   onNavigatingChanged(navigating: boolean): void;
@@ -142,6 +144,12 @@ function productionDevice(): ForegroundDevice {
 
 export interface ForegroundNavigation {
   coordinator: NavigationCoordinator;
+  /**
+   * Handles a command from the page. Navigation commands enter the
+   * coordinator's queue; one-shot requests are answered beside it, so a
+   * permission prompt or a sign-in never holds up location batches.
+   */
+  dispatch(command: WebToNativeMessage): Promise<void>;
   capabilities(): ShellDescription["capabilities"];
   activeSession(): Promise<ShellDescription["activeSession"]>;
   /**
@@ -282,8 +290,6 @@ export async function createForegroundNavigation(
       },
     },
     driver: { isRunning: () => driver.isRunning() },
-    // The page's one-shot requests ride the same command path.
-    auxiliary: options.auxiliary,
     ports: {
       reconcileSurface: async () => {
         if (repositoryRef) await reconcileNavigationSurface(repositoryRef);
@@ -403,6 +409,15 @@ export async function createForegroundNavigation(
 
   return {
     coordinator,
+    dispatch: async (command) => {
+      if (isAuxiliaryCommand(command.type)) {
+        await answerCommand(command, options.auxiliary, (type, payload, sendOptions) =>
+          options.send(type, payload, sendOptions),
+        );
+        return;
+      }
+      await coordinator.dispatch(command);
+    },
     capabilities: () => ({
       groundNavigation: true,
       transitNavigation: true,

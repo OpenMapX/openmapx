@@ -13,9 +13,13 @@ system-browser sign-in) and runs native ground and transit navigation sessions.
 
 `apps/mobile/src/App.tsx` composes `createShellServices` (`src/shell/shellServices.ts`)
 and `createForegroundNavigation` (`src/navigation/createForegroundNavigation.ts`)
-into `createShellBridge`. Navigation commands go to the `NavigationCoordinator`;
-everything else falls back to the shell services, and a command neither handles
-receives `unsupported-capability`. The handshake reports ground and transit
+into `createShellBridge`. The composition's `dispatch` sends navigation commands
+to the `NavigationCoordinator`'s serial queue. It answers the one-shot location,
+settings and sign-in requests (`bridge/answerCommand.ts`) through the shell
+services beside that queue, because each can wait on the user for as long as a
+prompt or a browser is open, and location batches must not wait with it. The
+permission flow of `session.start` stays in the queue, because it guards the
+prepared session. A command nothing handles receives `unsupported-capability`. The handshake reports ground and transit
 navigation and background location as available, local notifications once the
 notification permission is granted, and speech when the native audio module is
 present. Installed-device evidence covers Android only; see

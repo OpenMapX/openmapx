@@ -19,6 +19,7 @@ import {
 } from "react-native";
 import { WebView } from "react-native-webview";
 import { getNavigationAudio } from "./audio/navigationAudioModule";
+import { answerCommand } from "./bridge/answerCommand";
 import { createShellBridge, type ShellBridge } from "./bridge/createShellBridge";
 import { buildChannelBootstrapScript } from "./bridge/outboundScript";
 import { getRuntimeConfig, type MobileRuntimeConfig } from "./config/runtimeConfig";
@@ -45,7 +46,7 @@ import { LoadingOverlay } from "./shell/ShellOverlays";
 import type { ShellAction } from "./shell/ShellState";
 import { deviceMobileLocale } from "./shell/shellCopy";
 import { INITIAL_SHELL, shellReducer } from "./shell/shellReducer";
-import { answerCommand, createShellServices } from "./shell/shellServices";
+import { createShellServices } from "./shell/shellServices";
 import { useHardwareBack } from "./shell/useHardwareBack";
 import { createUserIntentGate } from "./voice/userIntentGate";
 import { VoiceInputController } from "./voice/VoiceInputController";
@@ -161,9 +162,10 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
     const composed: ShellBridge = createShellBridge({
       webOrigin: config.webOrigin,
       inject: (script) => webViewRef.current?.injectJavaScript(script),
-      // Navigation commands go through the coordinator, which also
-      // answers the one-shot location, settings and sign-in requests. A build
-      // without it (the feasibility probe) answers only those.
+      // Navigation commands go through the coordinator's queue; the
+      // composition answers the one-shot location, settings and sign-in
+      // requests beside it. A build without it (the feasibility probe) answers
+      // only those.
       dispatch: async (message) => {
         if (message.type.startsWith("intake.")) {
           await intake.dispatch(message);
@@ -201,7 +203,7 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
         }
         const composedNavigation = await navigation;
         if (composedNavigation) {
-          await composedNavigation.coordinator.dispatch(message);
+          await composedNavigation.dispatch(message);
           return;
         }
         await answerCommand(message, services.auxiliary, (type, payload, options) =>

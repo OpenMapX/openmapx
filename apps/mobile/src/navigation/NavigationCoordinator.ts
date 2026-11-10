@@ -90,21 +90,7 @@ export interface CoordinatorDeps {
    * without it a session's connectivity stays as it was committed.
    */
   connectivity?: ConnectivityPort;
-  /**
-   * Handles commands that are not about a navigation session —
-   * a one-off location fix, opening OS settings, a system-browser sign-in.
-   *
-   * Optional so focused session tests need no stand-in. When absent the command
-   * is refused rather than dropped: a page waiting on a reply that never comes
-   * cannot tell "unsupported" from "broken".
-   */
-  auxiliary?: AuxiliaryCommandHandler;
 }
-
-/** Answers an auxiliary command the coordinator does not own, or declines it. */
-export type AuxiliaryCommandHandler = (
-  command: WebToNativeMessage,
-) => Promise<CommandResponse | null>;
 
 /** Commands whose response must survive a replay unchanged. */
 const MUTATING = new Set<WebToNativeMessage["type"]>([
@@ -319,10 +305,11 @@ export class NavigationCoordinator {
         return null;
       case "location.request":
       case "settings.open":
-      case "auth.open": {
-        const handled = await this.deps.auxiliary?.(command);
-        return handled ?? errorResponse("unsupported-capability", command.messageId);
-      }
+      case "auth.open":
+        // Answered by the composition beside this queue (`isAuxiliaryCommand`):
+        // a prompt or a sign-in must not hold up location batches. One that
+        // reaches a coordinator with no such handler is refused, not dropped.
+        return errorResponse("unsupported-capability", command.messageId);
     }
   }
 
