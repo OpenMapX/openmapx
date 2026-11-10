@@ -42,4 +42,36 @@ describe("createShellServices", () => {
     await answer;
     expect(requestForegroundPermission).toHaveBeenCalledTimes(1);
   });
+
+  it("does not ask again when the prompt it waited for already answered", async () => {
+    let state: "not-determined" | "denied" = "not-determined";
+    const requestForegroundPermission = jest.fn(async () => "foreground" as const);
+    const driver = {
+      getPermissionState: async () => state,
+      requestForegroundPermission,
+      getCurrentFix: async () => null,
+    } as unknown as LocationDriver;
+    const services = createShellServices({
+      config: { webOrigin: "https://openmapx.test" },
+      isAppActive: () => true,
+      driver,
+    });
+    let releaseStartPrompt: () => void = () => {};
+    const startPrompt = withPermissionPrompt(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseStartPrompt = resolve;
+        }),
+    );
+
+    const answer = services.auxiliary(locationRequest);
+    await new Promise((resolve) => setImmediate(resolve));
+    // The start flow's system dialog is refused while the request waits.
+    state = "denied";
+    releaseStartPrompt();
+    await startPrompt;
+    await answer;
+
+    expect(requestForegroundPermission).not.toHaveBeenCalled();
+  });
 });

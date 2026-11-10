@@ -28,7 +28,7 @@ export interface RecoverySessionStore {
  * inside, this controller's own steps on the shared executor.
  */
 export interface RecoverySessions {
-  /** Ends the session if it is finished; keeps an arrival inside its release window. */
+  /** Ends the session if it is finished; keeps an arrival for the page until it is completed or expires. */
   closeFinished(sessionId: string): Promise<"ended" | "kept" | "active" | "gone">;
   /** Ends the session the user chose to end. */
   stop(sessionId: string): Promise<boolean>;
@@ -74,7 +74,7 @@ export class NavigationRecoveryController {
       // Undone back to an active trip since it was read: look again, once.
       if ((await this.deps.sessions.closeFinished(step.close)) !== "active") break;
     }
-    // Ended, kept for its release window, or already gone: guidance is over.
+    // Ended, kept as an arrival for the page, or already gone: guidance is over.
     return "session-ended";
   }
 

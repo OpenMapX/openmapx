@@ -33,10 +33,14 @@ export function createShellServices(options: ShellServicesOptions): ShellService
   const location = new ForegroundLocationService({
     driver,
     clock: () => Date.now(),
+    // The grant is read again once the prompt's turn comes: a prompt shown
+    // meanwhile, such as the start flow's, may already have answered it.
     requestForegroundPermission: () =>
-      withPermissionPrompt(async () =>
-        options.isAppActive() ? driver.requestForegroundPermission() : driver.getPermissionState(),
-      ),
+      withPermissionPrompt(async () => {
+        const current = await driver.getPermissionState();
+        if (current !== "not-determined" || !options.isAppActive()) return current;
+        return driver.requestForegroundPermission();
+      }),
   });
   const auth = createSystemAuthSession({ webOrigin: options.config.webOrigin });
 
