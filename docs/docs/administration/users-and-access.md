@@ -220,6 +220,11 @@ Password reset runs over a one-time code sent by email, and so does changing an
 account's email. Whether verification is enforced and the minimum password
 length are set under **Settings → Authentication policy**.
 
+Addresses in the reserved `.invalid` domain are refused at sign-up, email change
+and administrator account creation. OpenStreetMap and Mapillary sign-ins give
+their accounts placeholder addresses such as `<id>@osm.invalid`, and nobody else
+can register one to block that person's first provider sign-in.
+
 This path depends on a configured email provider for verification and reset
 messages. See **Settings → Email** and
 [Configuration](../install/configuration.md).

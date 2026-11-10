@@ -17,6 +17,30 @@ const EMAIL_ONLY_SIGN_IN_PATHS = new Set([
   "/two-factor/verify-otp",
 ]);
 
+/**
+ * The request field that names a new account address, per route. Provider
+ * sign-in gives OpenStreetMap and Mapillary accounts `<id>@osm.invalid` and
+ * `<id>@mapillary.invalid`, so nobody may claim an address in the reserved
+ * `.invalid` domain directly. The refusal comes before any account lookup, so
+ * it reads the same whether a placeholder account exists or not.
+ */
+const NEW_ADDRESS_FIELDS: Readonly<Record<string, string>> = {
+  "/sign-up/email": "email",
+  "/admin/create-user": "email",
+  "/email-otp/request-email-change": "newEmail",
+  "/email-otp/change-email": "newEmail",
+  "/change-email": "newEmail",
+};
+
+export function isReservedInvalidAddress(address: string): boolean {
+  const domain = address
+    .slice(address.lastIndexOf("@") + 1)
+    .trim()
+    .toLowerCase()
+    .replace(/\.+$/, "");
+  return domain === "invalid" || domain.endsWith(".invalid");
+}
+
 /** Paths where Better Auth signs someone in on the strength of their email alone. */
 const EMAIL_PROVEN_SESSION_PATHS = new Set(["/verify-email", ...EMAIL_ONLY_SIGN_IN_PATHS]);
 
@@ -66,6 +90,10 @@ export function applyPasswordVerificationPolicy(policy: AuthPolicySnapshot) {
   const before = createAuthMiddleware(async (ctx) => {
     if (EMAIL_ONLY_SIGN_IN_PATHS.has(ctx.path))
       throw new APIError("NOT_FOUND", { code: "NOT_FOUND", message: "Not found" });
+    const addressField = NEW_ADDRESS_FIELDS[ctx.path];
+    const address = addressField ? ctx.body?.[addressField] : undefined;
+    if (typeof address === "string" && isReservedInvalidAddress(address))
+      throw new APIError("BAD_REQUEST", { code: "INVALID_EMAIL", message: "Invalid email" });
     if (ctx.path === "/two-factor/enable" && !policy.twoFaEnabled)
       throw new APIError("FORBIDDEN", {
         code: "TWO_FACTOR_ENROLLMENT_DISABLED",

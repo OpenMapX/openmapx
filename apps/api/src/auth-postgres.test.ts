@@ -33,6 +33,8 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
     vi.stubEnv("BETTER_AUTH_URL", BASE_URL);
     vi.stubEnv("BETTER_AUTH_SECRET", SECRET);
     vi.stubEnv("CORS_ORIGIN", "http://localhost:3000");
+    vi.stubEnv("OSM_CLIENT_ID", "fixture-osm-client");
+    vi.stubEnv("OSM_CLIENT_SECRET", "fixture-osm-secret");
     vi.stubEnv("OSM_API_URL", "https://osm-fixture.example.test");
     vi.stubEnv("OSM_WEB_URL", "https://osm-fixture.example.test");
     vi.stubEnv(
@@ -56,6 +58,16 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
             authorization_endpoint: "https://osm-fixture.example.test/oauth2/authorize",
             token_endpoint: "https://osm-fixture.example.test/oauth2/token",
           });
+        }
+        if (url === "https://osm-fixture.example.test/oauth2/token") {
+          return Response.json({
+            access_token: "fixture-osm-access-token",
+            token_type: "Bearer",
+            expires_in: 3600,
+          });
+        }
+        if (url === "https://osm-fixture.example.test/api/0.6/user/details.json") {
+          return Response.json({ user: { id: 4242, display_name: "Fixture Mapper" } });
         }
         throw new Error("External network forbidden in auth fixture");
       }),
@@ -396,6 +408,85 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
       email: changedEmail,
       emailVerified: true,
     });
+  });
+
+  it("refuses reserved .invalid addresses at sign-up without revealing existing placeholders", async () => {
+    // Fixture input: the account an OpenStreetMap sign-in would already own.
+    await fixture.db.insert(user).values({
+      id: "existing-osm-placeholder",
+      name: "Existing Mapper",
+      email: "777@osm.invalid",
+      emailVerified: false,
+    });
+    for (const email of [
+      "777@osm.invalid",
+      "778@osm.invalid",
+      "779@mapillary.invalid",
+      "Person@OSM.INVALID",
+      "person@invalid",
+      "person@deeper.example.invalid",
+    ]) {
+      const response = await request("/api/auth/sign-up/email", {
+        email,
+        name: "Squatter",
+        password: PASSWORD,
+      });
+      expect(response.statusCode, `${email}: ${response.body}`).toBe(400);
+      expect(response.json(), email).toMatchObject({ code: "INVALID_EMAIL" });
+    }
+    const rows = await fixture.db.select({ email: user.email }).from(user);
+    expect(rows.map((row) => row.email.toLowerCase()).filter((e) => e.endsWith("invalid"))).toEqual(
+      ["777@osm.invalid"],
+    );
+  });
+
+  it("refuses reserved .invalid addresses for email change and administrator creation", async () => {
+    const email = "invalid-change-fixture@example.test";
+    const { userId, cookie } = await verifiedUser(email);
+    const mailBefore = mail.length;
+    for (const [path, body] of [
+      ["/api/auth/email-otp/request-email-change", { newEmail: "9000@osm.invalid" }],
+      ["/api/auth/email-otp/change-email", { newEmail: "9000@osm.invalid", otp: "123456" }],
+      ["/api/auth/change-email", { newEmail: "9000@osm.invalid" }],
+    ] as const) {
+      const response = await request(path, body, cookie);
+      expect(response.statusCode, `${path}: ${response.body}`).toBe(400);
+      expect(response.json(), path).toMatchObject({ code: "INVALID_EMAIL" });
+    }
+    expect(mail.length).toBe(mailBefore);
+    expect((await fixture.db.select().from(user).where(eq(user.id, userId)))[0]?.email).toBe(email);
+
+    await expect(
+      auth.api.createUser({
+        body: { email: "9001@osm.invalid", name: "Created", password: PASSWORD },
+      }),
+    ).rejects.toMatchObject({ body: { code: "INVALID_EMAIL" } });
+    expect(
+      await fixture.db.select().from(user).where(eq(user.email, "9001@osm.invalid")),
+    ).toHaveLength(0);
+  });
+
+  it("still creates the OpenStreetMap placeholder address on a first provider sign-in", async () => {
+    const started = await request("/api/auth/sign-in/social", {
+      provider: "openstreetmap",
+      callbackURL: "http://localhost:3000/",
+    });
+    expect(started.statusCode, started.body).toBe(200);
+    const authorization = new URL(started.json().url as string);
+    const redirect = new URL(authorization.searchParams.get("redirect_uri") ?? "");
+    const callback = await request(
+      `${redirect.pathname}?code=fixture-code&state=${authorization.searchParams.get("state")}`,
+      undefined,
+      cookies(started),
+    );
+    expect(callback.statusCode, callback.body).toBe(302);
+    expect(callback.headers.location).not.toContain("error");
+    const [created] = await fixture.db
+      .select()
+      .from(user)
+      .where(eq(user.email, "4242@osm.invalid"));
+    expect(created).toMatchObject({ name: "Fixture Mapper", emailVerified: false });
+    expect(await sessions(created?.id ?? "")).toHaveLength(1);
   });
 
   it("persists managed OIDC consent and signed PKCE tokens while rejecting invalid and reused codes", async () => {
