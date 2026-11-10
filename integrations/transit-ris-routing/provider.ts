@@ -251,9 +251,10 @@ export function risCanHonor(params: {
 const GERMAN_TIME_ZONE = "Europe/Berlin";
 
 /**
- * RIS::Routing takes a date-time without an offset, read as German local time
- * like the DB journey planners it backs. Render the planning instant on the
- * Berlin wall clock, including across daylight-saving changes.
+ * RIS::Routing takes a date-time without an offset. Its public documentation
+ * does not name the zone; this assumes German local time, as for the DB journey
+ * planners it backs, and renders the planning instant on the Berlin wall clock,
+ * including across daylight-saving changes. Confirm with a keyed request.
  */
 export function germanWallClock(instant: Date): { date: string; time: string } {
   if (!Number.isFinite(instant.getTime()))

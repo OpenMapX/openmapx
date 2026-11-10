@@ -239,9 +239,11 @@ re-deriving them. `modes` defaults to `["TRANSIT"]`, which means every transit
 mode. A planner whose upstream has no mode filter checks
 `isTransitModeRestriction(modes)` and steps aside only for a real subset.
 `departureTime` and `arrivalTime` are UTC instants; render them on the upstream's
-local clock when its API takes an offset-less date and time, as iRail
-(`Europe/Brussels`) and RIS::Routing (`Europe/Berlin`) do. `GET /plan` rejects an
-unparsable `time` or `date` with 400.
+local clock when its API takes an offset-less date and time. iRail documents
+Belgian local time, so it receives `Europe/Brussels`. RIS::Routing's public
+documentation does not state the zone of its offset-less request time; the
+adapter assumes German local time (`Europe/Berlin`), which still needs a check
+against a keyed request. `GET /plan` rejects an unparsable `time` or `date` with 400.
 
 `getRoutesInBbox` and `getStopTransfers` remain optional methods outside the
 base capability flags. `refreshTrip` is advertised through
