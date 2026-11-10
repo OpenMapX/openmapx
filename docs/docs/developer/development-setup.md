@@ -258,7 +258,8 @@ Tooling notes:
   source files. In `apps/web` and `integrations`, a Biome plugin
   (`scripts/biome-plugins/noClickableLayoutElement.grit`) rejects a click
   handler on an MUI layout component such as `Box` or `Typography`, which has
-  no keyboard access. Use `ClickableRow` (`apps/web/src/components/ui`), a
+  no keyboard access, unless the element has a literal interactive `role` such
+  as `button` or `link`. Use `ClickableRow` (`apps/web/src/components/ui`), a
   `Button` or `ButtonBase` instead. For a background tap or a pointer shortcut
   that has another keyboard path, suppress it with
   `biome-ignore lint/plugin/noClickableLayoutElement:` and the reason.

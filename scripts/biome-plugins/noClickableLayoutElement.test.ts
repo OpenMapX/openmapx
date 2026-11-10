@@ -68,6 +68,23 @@ describe("noClickableLayoutElement", () => {
     ).toEqual([]);
   });
 
+  it("exempts only literal interactive roles", () => {
+    expect(
+      reportedLines(`export const A = ({ f, r }: { f: () => void; r: string }) => (
+  <div>
+    <Box role="presentation" onClick={f}>row</Box>
+    <Box role="none" onClick={f}>row</Box>
+    <Box role="region" onClick={f}>row</Box>
+    <Box role={r} onClick={f}>row</Box>
+    <Box role="link" tabIndex={0} onClick={f} onKeyDown={f}>row</Box>
+    <Box role="tab" tabIndex={0} onClick={f} onKeyDown={f}>row</Box>
+    <Box role="menuitem" tabIndex={0} onClick={f} onKeyDown={f}>row</Box>
+  </div>
+);
+`),
+    ).toEqual([3, 4, 5, 6]);
+  });
+
   it("honours a suppression with a reason", () => {
     expect(
       reportedLines(`export const A = ({ f }: { f: () => void }) => (

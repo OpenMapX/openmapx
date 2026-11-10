@@ -2,7 +2,9 @@ language js
 
 // MUI layout components render static elements, so Biome's own a11y rules do
 // not see a click handler on them. Such an element has no keyboard path and no
-// role. Use ClickableRow, a Button or ButtonBase instead; for a genuine
+// role. A literal interactive role (with the keyboard handling it implies) or
+// an interactive `component` exempts it; `presentation`, `none` or a computed
+// role does not. Use ClickableRow, a Button or ButtonBase instead; for a genuine
 // background tap that has another keyboard path, suppress with the reason.
 or {
   jsx_opening_element(name=$name, attributes=$attrs),
@@ -25,7 +27,9 @@ or {
     `Typography`
   },
   $attrs <: some jsx_attribute(name=`onClick`),
-  not $attrs <: some jsx_attribute(name=`role`),
+  not $attrs <: some jsx_attribute(name=`role`, value=$role) where {
+    $role <: r"=\"(?:button|checkbox|combobox|gridcell|link|menuitem|menuitemcheckbox|menuitemradio|option|radio|searchbox|slider|spinbutton|switch|tab|textbox|treeitem)\""
+  },
   not $attrs <: some jsx_attribute(name=`component`, value=$component) where {
     $component <: r"=\"(?:a|button|input|label|select|summary|textarea)\"|=\{(?:Link|ButtonBase)\}"
   },
