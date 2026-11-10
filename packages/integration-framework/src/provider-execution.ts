@@ -27,6 +27,18 @@ export class ProviderCancelledError extends Error {
   }
 }
 
+/**
+ * The host retired the setup generation serving a call, as on reload or
+ * shutdown. Hosts abort generation-owned signals with this reason so the
+ * interrupted call reads as a cancellation, never as a provider failure.
+ */
+export class ProviderRetiredError extends Error {
+  constructor() {
+    super("provider generation retired");
+    this.name = "ProviderRetiredError";
+  }
+}
+
 /** A provider answered, but the fields it consumes were missing or malformed. */
 export class ProviderPayloadError extends Error {
   readonly code = "invalid_payload";
@@ -106,7 +118,7 @@ function numericField(error: unknown, field: "status" | "statusCode"): number | 
   return typeof value === "number" && Number.isInteger(value) ? value : null;
 }
 
-function stringField(error: unknown, field: "code" | "name"): string | null {
+function stringField(error: unknown, field: "code" | "kind" | "name"): string | null {
   if (!error || typeof error !== "object" || !(field in error)) return null;
   const value = (error as Record<string, unknown>)[field];
   return typeof value === "string" ? value : null;
@@ -116,13 +128,12 @@ const CODE_OUTCOMES: Readonly<Record<string, ProviderHealthFailureOutcome>> = {
   quota_exhausted: "quota",
   invalid_response: "invalid_payload",
   invalid_payload: "invalid_payload",
+  // The adapter rejected the caller's request itself, before any upstream call.
   invalid_request: "input",
   unauthorized: "auth",
   forbidden: "auth",
   upstream_failure: "connection",
   ACCESS_DENIED: "auth",
-  INVALID_REQUEST: "input",
-  NOT_FOUND: "input",
   SERVER_ERROR: "upstream_5xx",
   ETIMEDOUT: "timeout",
   UND_ERR_CONNECT_TIMEOUT: "timeout",
@@ -131,15 +142,31 @@ const CODE_OUTCOMES: Readonly<Record<string, ProviderHealthFailureOutcome>> = {
 };
 
 /**
+ * Adapter clients that convert an aborted signal into their own error carry
+ * `kind: "cancelled"` or `kind: "timeout"` (the OTP and MBTA clients do).
+ */
+const KIND_OUTCOMES: Readonly<Record<string, ProviderHealthFailureOutcome>> = {
+  cancelled: "caller_cancelled",
+  timeout: "timeout",
+};
+
+/**
  * Map a failed provider call to the health outcome it should record.
  *
- * The error that settled the call decides. A caller abort becomes
- * `caller_cancelled`, which provider health never counts, only when the error
- * itself is that abort (directly, by name or through its cause chain) while the
- * caller's signal is aborted. An upstream failure that settled first keeps its
- * own outcome even if the caller aborts before it is classified. Deadlines are
- * timeouts, whoever set them, and an abort the caller did not request is the
- * provider's own deadline.
+ * The error that settled the call decides. A cancellation becomes
+ * `caller_cancelled`, which orchestrators record in metrics only and never in
+ * provider health. That covers the caller's abort when the error itself is that
+ * abort (directly, by name or through its cause chain) while the caller's
+ * signal is aborted, the host retiring the generation (`ProviderRetiredError`),
+ * and an adapter error of kind `cancelled`. An upstream failure that settled
+ * first keeps its own outcome even if the caller aborts before it is
+ * classified. Deadlines are timeouts, whoever set them, and an abort neither
+ * the caller nor the host requested is the provider's own deadline.
+ *
+ * Upstream 4xx responses other than 401, 403 and 429 count as `connection`
+ * failures: a retired endpoint or a broken request builder must be able to open
+ * the circuit. Only a request the adapter itself knows is bad caller input
+ * (code `invalid_request`) is the non-counted `input`.
  */
 export function classifyProviderFailure(
   error: unknown,
@@ -147,7 +174,12 @@ export function classifyProviderFailure(
 ): ProviderHealthFailureOutcome {
   const chain = causeChain(error);
   if (chain.some(isDeadline)) return "timeout";
-  if (chain.some((item) => item instanceof ProviderCancelledError)) return "caller_cancelled";
+  if (
+    chain.some(
+      (item) => item instanceof ProviderCancelledError || item instanceof ProviderRetiredError,
+    )
+  )
+    return "caller_cancelled";
   const isAbort = chain.some(
     (item) =>
       (signal?.aborted && item === signal.reason) || stringField(item, "name") === "AbortError",
@@ -163,12 +195,14 @@ export function classifyProviderFailure(
     const code = stringField(item, "code");
     const byCode = code ? CODE_OUTCOMES[code] : undefined;
     if (byCode) return byCode;
+    const kind = stringField(item, "kind");
+    const byKind = kind ? KIND_OUTCOMES[kind] : undefined;
+    if (byKind) return byKind;
     const status = numericField(item, "status") ?? numericField(item, "statusCode");
     if (status !== null) {
       if (status === 401 || status === 403) return "auth";
       if (status === 429) return "quota";
       if (status >= 500) return "upstream_5xx";
-      if (status >= 400) return "input";
     }
   }
   return "connection";

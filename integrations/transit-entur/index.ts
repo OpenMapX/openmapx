@@ -2,6 +2,7 @@ import { createEnturClient, createEnturGeocoderSources } from "@openmapx/entur-c
 import {
   captureTransitContributors,
   type IntegrationContext,
+  ProviderRetiredError,
   resolveIntegrationContributors,
   snapshotContributors,
 } from "@openmapx/integration-framework";
@@ -54,7 +55,7 @@ export function setup(ctx: IntegrationContext): void {
     multiModal: ctx.config.multiModal as "parent" | "child" | "all" | undefined,
   });
   ctx.onShutdown(async () => {
-    generation.abort(new Error("Entur transit generation retired"));
+    generation.abort(new ProviderRetiredError());
   });
   const receipts = (ids: readonly string[]) =>
     snapshotContributors(...ids.map((id) => client.contributors[id] ?? []));

@@ -4,6 +4,7 @@ import {
   classifyProviderFailure,
   ProviderCancelledError,
   ProviderPayloadError,
+  ProviderRetiredError,
   ProviderTimeoutError,
   parseProviderPayload,
   parseProviderRecords,
@@ -91,7 +92,6 @@ describe("classifyProviderFailure", () => {
     expect(classifyProviderFailure(status(401))).toBe("auth");
     expect(classifyProviderFailure(status(403))).toBe("auth");
     expect(classifyProviderFailure(status(429))).toBe("quota");
-    expect(classifyProviderFailure(status(404))).toBe("input");
     expect(classifyProviderFailure(status(502))).toBe("upstream_5xx");
     expect(classifyProviderFailure(Object.assign(new Error("bad"), { statusCode: 500 }))).toBe(
       "upstream_5xx",
@@ -171,6 +171,39 @@ describe("parseProviderRecords", () => {
     expect(() => parseProviderRecords(stop, [{ id: "a" }, {}], "Stops")).toThrow(
       "Stops: no usable records at lat",
     );
+  });
+});
+
+describe("classifyProviderFailure for upstream 4xx and host retirement", () => {
+  it("counts generic upstream 4xx responses so a retired endpoint can open the circuit", () => {
+    for (const value of [400, 404, 410, 422]) {
+      const error = Object.assign(new Error(`HTTP ${value}`), { status: value });
+      expect(classifyProviderFailure(error)).toBe("connection");
+      expect(classifyProviderFailure(new Error("wrapped", { cause: error }))).toBe("connection");
+    }
+    for (const code of ["NOT_FOUND", "INVALID_REQUEST"])
+      expect(classifyProviderFailure(Object.assign(new Error(code), { code }))).toBe("connection");
+  });
+
+  it("keeps only adapter-rejected caller input as non-counted input", () => {
+    const input = Object.assign(new Error("invalid planning time"), { code: "invalid_request" });
+    expect(classifyProviderFailure(input)).toBe("input");
+  });
+
+  it("treats the host retiring a generation as a cancellation, not a provider failure", () => {
+    const generation = new AbortController();
+    generation.abort(new ProviderRetiredError());
+    expect(classifyProviderFailure(generation.signal.reason)).toBe("caller_cancelled");
+    const wrapped = new TypeError("fetch failed", { cause: generation.signal.reason });
+    expect(classifyProviderFailure(wrapped)).toBe("caller_cancelled");
+    expect(classifyProviderFailure(wrapped, new AbortController().signal)).toBe("caller_cancelled");
+  });
+
+  it("reads cancellation and deadline kinds that adapter clients convert aborts into", () => {
+    const kind = (value: string) => Object.assign(new Error(value), { kind: value });
+    expect(classifyProviderFailure(kind("cancelled"))).toBe("caller_cancelled");
+    expect(classifyProviderFailure(kind("timeout"))).toBe("timeout");
+    expect(classifyProviderFailure(kind("payload"))).toBe("connection");
   });
 });
 

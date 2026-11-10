@@ -367,6 +367,7 @@ export {
   ProviderCancelledError,
   type ProviderDeadlineOptions,
   ProviderPayloadError,
+  ProviderRetiredError,
   ProviderTimeoutError,
   parseProviderPayload,
   parseProviderRecords,

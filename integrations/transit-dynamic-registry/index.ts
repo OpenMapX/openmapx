@@ -2,6 +2,7 @@ import type { BBox } from "@openmapx/core";
 import {
   captureTransitContributors,
   type IntegrationContext,
+  ProviderRetiredError,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
@@ -202,7 +203,7 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
     releaseRefresh = registry.startRefresh();
   });
   ctx.onShutdown(async () => {
-    generation.abort();
+    generation.abort(new ProviderRetiredError());
     releaseRefresh?.();
   });
 }
