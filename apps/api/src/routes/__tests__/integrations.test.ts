@@ -170,7 +170,7 @@ describe("public integration metadata route", () => {
   it("serves an AI-search disclosure that does not state cloudRequiresSignIn", async () => {
     const isolated = Fastify({ logger: false });
     const row = integration();
-    const { cloudRequiresSignIn: _omitted, ...withoutSignIn } = row.disclosures[0] as Record<
+    const { cloudRequiresSignIn: _omitted, ...withoutSignIn } = row.disclosures?.[0] as Record<
       string,
       unknown
     >;
