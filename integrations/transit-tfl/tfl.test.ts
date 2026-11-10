@@ -1,8 +1,12 @@
+import { classifyProviderFailure, ProviderPayloadError } from "@openmapx/integration-framework";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import arrivalsFixture from "./__fixtures__/arrivals.json";
+import stopPointsFixture from "./__fixtures__/stop-points.json";
 import {
   getAlerts,
   getDepartures,
   getRouteStopSequence,
+  getStop,
   getStopAlerts,
   getStops,
   searchByName,
@@ -25,6 +29,83 @@ afterEach(() => {
   setTflApiKey(undefined);
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe("TfL payload validation", () => {
+  it("maps the documented prediction shape and requests the stop's arrivals", async () => {
+    mockFetch.mockResolvedValueOnce(mockOk(arrivalsFixture));
+
+    const board = await getDepartures("tfl:940GZZLUOXC", 30);
+
+    expect(board.departures.map((d) => [d.route.id, d.expectedAt, d.platform])).toEqual([
+      ["tfl:central", "2026-11-10T09:00:42Z", "Westbound - Platform 1"],
+      ["tfl:victoria", "2026-11-10T09:01:39Z", "Southbound - Platform 5"],
+    ]);
+    expect(board.dataAsOf).toBe("2026-11-10T09:00:01.765Z");
+    const url = new URL(String(mockFetch.mock.calls[0]?.[0]));
+    expect(url.pathname).toBe("/StopPoint/940GZZLUOXC/Arrivals");
+    expect(url.searchParams.get("app_key")).toBe("test-tfl-key");
+  });
+
+  it("drops a prediction without an expected arrival and keeps its neighbours", async () => {
+    const [first, second] = arrivalsFixture;
+    mockFetch.mockResolvedValueOnce(mockOk([{ ...first, expectedArrival: null }, second]));
+
+    const board = await getDepartures("tfl:940GZZLUOXC", 30);
+
+    expect(board.departures.map((d) => d.tripId)).toEqual(["214"]);
+  });
+
+  it.each([
+    ["an object instead of predictions", { message: "ok" }],
+    ["predictions without times", [{ lineId: "central" }]],
+  ])("reports %s as an invalid payload", async (_case, body) => {
+    mockFetch.mockResolvedValueOnce(mockOk(body));
+
+    const failure = await getDepartures("tfl:940GZZLUOXC", 30).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(ProviderPayloadError);
+    expect(classifyProviderFailure(failure)).toBe("invalid_payload");
+  });
+
+  it("never places a stop without coordinates at null island", async () => {
+    const [stop] = stopPointsFixture.stopPoints;
+    mockFetch.mockResolvedValueOnce(
+      mockOk({ stopPoints: [stop, { ...stop, naptanId: "940GZZLUXXX", lat: null, lon: null }] }),
+    );
+
+    const stops = await getStops(51.515, -0.142, 400);
+
+    expect(stops.map((s) => [s.id, s.lat, s.lng])).toEqual([
+      ["tfl:940GZZLUOXC", 51.515224, -0.141903],
+    ]);
+    const url = new URL(String(mockFetch.mock.calls[0]?.[0]));
+    expect(url.searchParams.get("radius")).toBe("400");
+    expect(url.searchParams.get("lat")).toBe("51.515");
+  });
+
+  it("reports failed stop, alert and sequence requests instead of empty results", async () => {
+    mockFetch.mockImplementation(async () => new Response("busy", { status: 503 }));
+
+    for (const call of [
+      () => getStops(51.5, -0.1, 300),
+      () => getAlerts(),
+      () => getRouteStopSequence("tfl:victoria"),
+    ]) {
+      const failure = await call().catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(Error);
+      expect((failure as Error).message).not.toContain("test-tfl-key");
+      expect(classifyProviderFailure(failure)).toBe("upstream_5xx");
+    }
+  });
+
+  it("answers no stop for an unknown NaPTAN id and rejects a stop without coordinates", async () => {
+    mockFetch.mockResolvedValueOnce(new Response("missing", { status: 404 }));
+    await expect(getStop("tfl:940GZZLUNOPE")).resolves.toBeNull();
+
+    mockFetch.mockResolvedValueOnce(mockOk({ naptanId: "940GZZLUOXC", commonName: "Oxford" }));
+    await expect(getStop("tfl:940GZZLUOXC")).rejects.toBeInstanceOf(ProviderPayloadError);
+  });
 });
 
 describe("TfL transit provider", () => {

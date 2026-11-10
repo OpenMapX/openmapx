@@ -1,0 +1,49 @@
+{
+  "version": "1.1",
+  "timestamp": 1489621902,
+  "vehicle": "BE.NMBS.IC3033",
+  "vehicleinfo": {
+    "name": "BE.NMBS.IC3033",
+    "locationX": 4.421101,
+    "locationY": 51.2172,
+    "shortname": "IC3033",
+    "@id": "http://irail.be/vehicle/IC3033"
+  },
+  "stops": {
+    "number": 10,
+    "stop": [
+      {
+        "id": 0,
+        "station": "Antwerp-central",
+        "stationinfo": {
+          "id": "BE.NMBS.008821006",
+          "@id": "http://irail.be/stations/NMBS/008821006",
+          "locationX": 4.421101,
+          "locationY": 51.2172,
+          "standardname": "Antwerpen-Centraal",
+          "name": "Antwerp-Central"
+        },
+        "time": 1489658760,
+        "delay": 0,
+        "platform": 4,
+        "platforminfo": {
+          "name": "4",
+          "normal": "1"
+        },
+        "canceled": 0,
+        "departureDelay": 0,
+        "departureCanceled": 0,
+        "scheduledDepartureTime": 1489658760,
+        "arrivalDelay": 0,
+        "arrivalCanceled": 0,
+        "isExtraStop": 0,
+        "scheduledArrivalTime": 1489658760,
+        "departureConnection": "http://irail.be/connections/8821006/20170316/IC3033",
+        "occupancy": {
+          "@id": "http://api.irail.be/terms/unknown",
+          "name": "unknown"
+        }
+      }
+    ]
+  }
+}

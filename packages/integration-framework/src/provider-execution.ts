@@ -1,3 +1,4 @@
+import type { ZodType } from "zod";
 import type { ProviderHealthFailureOutcome } from "./context";
 
 export interface ProviderCallContext {
@@ -34,6 +35,46 @@ export class ProviderPayloadError extends Error {
     super(message, options);
     this.name = "ProviderPayloadError";
   }
+}
+
+function issuePath(error: unknown): string {
+  const issues = (error as { issues?: Array<{ path?: PropertyKey[] }> } | null)?.issues;
+  const path = issues?.[0]?.path?.map(String).join(".");
+  return path ? ` at ${path}` : "";
+}
+
+/** Parse the fields a provider consumes, or throw a `ProviderPayloadError`. */
+export function parseProviderPayload<T>(schema: ZodType<T>, data: unknown, what: string): T {
+  const parsed = schema.safeParse(data);
+  if (!parsed.success)
+    throw new ProviderPayloadError(`${what}: unexpected response shape${issuePath(parsed.error)}`, {
+      cause: parsed.error,
+    });
+  return parsed.data;
+}
+
+/**
+ * Keep the records that carry every consumed field and drop the rest, so one
+ * malformed row does not hide its valid neighbours. A non-empty list with no
+ * usable record is a malformed payload, not an empty result.
+ */
+export function parseProviderRecords<T>(
+  schema: ZodType<T>,
+  records: readonly unknown[],
+  what: string,
+): T[] {
+  const kept: T[] = [];
+  let firstError: unknown;
+  for (const record of records) {
+    const parsed = schema.safeParse(record);
+    if (parsed.success) kept.push(parsed.data);
+    else firstError ??= parsed.error;
+  }
+  if (records.length > 0 && kept.length === 0)
+    throw new ProviderPayloadError(`${what}: no usable records${issuePath(firstError)}`, {
+      cause: firstError,
+    });
+  return kept;
 }
 
 function abortError(signal: AbortSignal): Error {
@@ -79,6 +120,10 @@ const CODE_OUTCOMES: Readonly<Record<string, ProviderHealthFailureOutcome>> = {
   unauthorized: "auth",
   forbidden: "auth",
   upstream_failure: "connection",
+  ACCESS_DENIED: "auth",
+  INVALID_REQUEST: "input",
+  NOT_FOUND: "input",
+  SERVER_ERROR: "upstream_5xx",
   ETIMEDOUT: "timeout",
   UND_ERR_CONNECT_TIMEOUT: "timeout",
   UND_ERR_HEADERS_TIMEOUT: "timeout",
@@ -111,16 +156,20 @@ export function classifyProviderFailure(
     if (!signal?.aborted || isDeadline(signal.reason)) return "timeout";
     return "caller_cancelled";
   }
-  if (stringField(error, "name") === "ZodError") return "invalid_payload";
-  const code = stringField(error, "code");
-  const byCode = code ? CODE_OUTCOMES[code] : undefined;
-  if (byCode) return byCode;
-  const status = numericField(error, "status") ?? numericField(error, "statusCode");
-  if (status !== null) {
-    if (status === 401 || status === 403) return "auth";
-    if (status === 429) return "quota";
-    if (status >= 500) return "upstream_5xx";
-    if (status >= 400) return "input";
+  // Adapters wrap upstream errors to keep credential-bearing URLs out of
+  // messages, so the structured code or status may sit on a cause.
+  for (const item of chain) {
+    if (stringField(item, "name") === "ZodError") return "invalid_payload";
+    const code = stringField(item, "code");
+    const byCode = code ? CODE_OUTCOMES[code] : undefined;
+    if (byCode) return byCode;
+    const status = numericField(item, "status") ?? numericField(item, "statusCode");
+    if (status !== null) {
+      if (status === 401 || status === 403) return "auth";
+      if (status === 429) return "quota";
+      if (status >= 500) return "upstream_5xx";
+      if (status >= 400) return "input";
+    }
   }
   return "connection";
 }

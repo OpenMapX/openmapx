@@ -295,13 +295,13 @@ describe("irail provider", () => {
       expect(stop.expectedArrival).toBe(new Date((arrTime + 60) * 1000).toISOString());
     });
 
-    it("returns null on non-ok response", async () => {
+    it("reports a failed lookup as unavailable and an unknown vehicle as none", async () => {
       mockFetch.mockResolvedValueOnce(mockNotOk());
-
       const { getVehicleJourney } = await loadModule();
-      const journey = await getVehicleJourney("ir:test");
+      await expect(getVehicleJourney("ir:test")).rejects.toThrow("iRail vehicle unavailable");
 
-      expect(journey).toBeNull();
+      mockFetch.mockResolvedValueOnce(new Response("not found", { status: 404 }));
+      await expect(getVehicleJourney("ir:test")).resolves.toBeNull();
     });
   });
 
@@ -491,27 +491,33 @@ describe("irail provider", () => {
       ]);
     });
 
-    it("returns null on fetch error", async () => {
+    it("reports a failed connections request instead of answering no plan", async () => {
       mockStationsResponse();
       mockFetch.mockRejectedValueOnce(new Error("network error"));
 
       const { planConnections } = await loadModule();
-      const plan = await planConnections(50.835, 4.336, 50.881, 4.715, "2026-03-10", "10:00");
-
-      expect(plan).toBeNull();
+      await expect(
+        planConnections(50.835, 4.336, 50.881, 4.715, "2026-03-10", "10:00"),
+      ).rejects.toThrow("iRail connections unavailable");
     });
 
-    it("returns null outside Belgium or when no stations are available", async () => {
-      mockFetch.mockResolvedValueOnce(mockOk({ station: [] }));
-
+    it("returns null outside Belgium without calling iRail", async () => {
       const { planConnections } = await loadModule();
       expect(await planConnections(0, 0, 1, 1, "2026-03-10", "10:00")).toBeNull();
       expect(mockFetch).not.toHaveBeenCalled();
+    });
 
-      const plan = await planConnections(50.835, 4.336, 50.881, 4.715, "2026-03-10", "10:00");
-      expect(plan).toBeNull();
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      expect(mockFetch.mock.calls[0][0]).toContain("/stations/");
+    it("rejects an empty station list instead of caching it", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk({ station: [] }));
+      mockStationsResponse();
+
+      const { getStops } = await loadModule();
+      await expect(getStops(50.835, 4.336, 5000)).rejects.toMatchObject({
+        code: "invalid_payload",
+      });
+      const stops = await getStops(50.835, 4.336, 5000);
+      expect(stops.map((s) => s.id)).toEqual(["ir:BE.NMBS.008814001"]);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
     });
   });
 });

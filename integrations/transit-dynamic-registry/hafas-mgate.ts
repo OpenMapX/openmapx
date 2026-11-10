@@ -6,6 +6,11 @@ import {
   productToMode,
   USER_AGENT,
 } from "@openmapx/core";
+import {
+  ProviderTimeoutError,
+  parseProviderPayload,
+  parseProviderRecords,
+} from "@openmapx/integration-framework";
 import { upstreamDataAsOf } from "@openmapx/mobility-core/freshness";
 import type {
   Departure,
@@ -23,6 +28,7 @@ import type {
 import { createCachedHafasClient } from "cached-hafas-client";
 import { createRedisStore } from "cached-hafas-client/stores/redis.js";
 import { createClient } from "hafas-client";
+import { z } from "zod";
 import type { ProtocolAdapter } from "./adapter-types";
 import type { RegistryEntry } from "./registry-types";
 import { registryEndpointIsUsable } from "./validate-endpoint";
@@ -162,7 +168,7 @@ function getClient(entry: RegistryEntry): any {
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("timeout")), ms);
+    const timer = setTimeout(() => reject(new ProviderTimeoutError()), ms);
     promise.then(
       (v) => {
         clearTimeout(timer);
@@ -184,16 +190,71 @@ function rawId(stopId: string, entry: RegistryEntry): string {
 
 // Normalisation helpers
 
-// biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF stop
-function normalizeStop(s: any, entry: RegistryEntry): TransitStop {
+/** FPTF stop and station fields the adapter maps; a stop needs real coordinates. */
+const fptfStopSchema = z.object({
+  type: z.string().optional(),
+  id: z.string().min(1),
+  name: z.string().nullish(),
+  location: z.object({
+    latitude: z.number().finite().min(-90).max(90),
+    longitude: z.number().finite().min(-180).max(180),
+  }),
+  products: z.record(z.string(), z.boolean()).nullish(),
+});
+type FptfStop = z.infer<typeof fptfStopSchema>;
+
+const isoInstant = z.iso.datetime({ offset: true });
+
+/**
+ * A departure needs a planned or current time; the rest passes through to the
+ * shared FPTF mapper, which reads optional line, platform and remark fields.
+ */
+const fptfDepartureSchema = z
+  .looseObject({
+    tripId: z.string().nullish(),
+    plannedWhen: isoInstant.nullish(),
+    when: isoInstant.nullish(),
+    delay: z.number().finite().nullish(),
+  })
+  .refine((departure) => Boolean(departure.plannedWhen || departure.when), {
+    message: "departure has no time",
+    path: ["plannedWhen"],
+  });
+
+const fptfBoardSchema = z.union([
+  z.array(z.unknown()),
+  z.object({ departures: z.array(z.unknown()) }).transform((board) => board.departures),
+  z.object({ arrivals: z.array(z.unknown()) }).transform((board) => board.arrivals),
+]);
+
+function normalizeStop(s: FptfStop, entry: RegistryEntry): TransitStop {
   return {
     id: `${entry.prefix}${s.id}`,
     name: s.name ?? "Unknown",
-    lat: s.location?.latitude ?? 0,
-    lng: s.location?.longitude ?? 0,
-    modes: mapProducts(s.products),
+    lat: s.location.latitude,
+    lng: s.location.longitude,
+    modes: mapProducts(s.products ?? undefined),
     provider: entry.slug,
   };
+}
+
+function parseStops(raw: unknown, entry: RegistryEntry, what: string): TransitStop[] {
+  const results = parseProviderPayload(z.array(z.unknown()), raw, `HAFAS ${what}`);
+  return parseProviderRecords(fptfStopSchema, results, `HAFAS ${what}`).map((s) =>
+    normalizeStop(s, entry),
+  );
+}
+
+function parseBoard(raw: unknown, entry: RegistryEntry, what: string): Departure[] {
+  const records = parseProviderPayload(fptfBoardSchema, raw, `HAFAS ${what}`);
+  return parseProviderRecords(fptfDepartureSchema, records, `HAFAS ${what}`).map((d) =>
+    normalizeDeparture(d, entry),
+  );
+}
+
+/** Keep the library's error code on the cause, where provider health reads it. */
+function unavailable(what: string, error: unknown): Error {
+  return new Error(`HAFAS ${what} unavailable`, { cause: error });
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF remark
@@ -276,61 +337,54 @@ function legToTripLeg(leg: any, entry: RegistryEntry): TripLeg {
 
 export const hafasMgateAdapter: ProtocolAdapter = {
   async getStopsNearby(entry, lat, lng, radiusMeters) {
+    let results: unknown;
     try {
-      const client = getClient(entry);
-      const results = await withTimeout(
-        client.nearby(
+      results = await withTimeout(
+        getClient(entry).nearby(
           { type: "location", latitude: lat, longitude: lng },
           { results: 30, distance: Math.round(radiusMeters) },
         ),
         TIMEOUT_MS,
       );
-      // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF response
-      return (results as any[]).map((s: any) => normalizeStop(s, entry));
-    } catch {
-      return [];
+    } catch (error) {
+      // A failed lookup must not read as "no stops here".
+      throw unavailable("nearby stops", error);
     }
+    return parseStops(results, entry, "nearby stops");
   },
 
   async getStopById(entry, stopId) {
     try {
       const client = getClient(entry);
-      // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF stop
-      const result = (await withTimeout(client.stop(rawId(stopId, entry)), TIMEOUT_MS)) as any;
+      const result = await withTimeout(client.stop(rawId(stopId, entry)), TIMEOUT_MS);
       if (!result) return null;
-      return normalizeStop(result, entry);
+      return normalizeStop(parseProviderPayload(fptfStopSchema, result, "HAFAS stop"), entry);
     } catch {
       return null;
     }
   },
 
   async getDepartures(entry, stopId, minutes) {
+    let result: unknown;
     try {
-      const client = getClient(entry);
-      const result = await withTimeout(
-        client.departures(rawId(stopId, entry), {
+      result = await withTimeout(
+        getClient(entry).departures(rawId(stopId, entry), {
           duration: minutes,
           results: Math.min(500, Math.max(50, minutes * 3)),
           remarks: true,
         }),
         TIMEOUT_MS,
       );
-      // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF response
-      const deps = (result as any).departures ?? result;
-      if (!Array.isArray(deps)) throw new Error("malformed departures response");
-      // HAFAS's planrtTS: the latest realtime update in this answer. A cached answer has none.
-      const dataAsOf = upstreamDataAsOf(
-        (result as { realtimeDataUpdatedAt?: number | null }).realtimeDataUpdatedAt,
-      );
-      return {
-        // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF departure
-        departures: deps.map((d: any) => normalizeDeparture(d, entry)),
-        ...(dataAsOf ? { dataAsOf } : {}),
-      };
-    } catch {
+    } catch (error) {
       // A failed board must not read as "no departures".
-      throw new Error("HAFAS timetable unavailable");
+      throw unavailable("timetable", error);
     }
+    const departures = parseBoard(result, entry, "timetable");
+    // HAFAS's planrtTS: the latest realtime update in this answer. A cached answer has none.
+    const dataAsOf = upstreamDataAsOf(
+      (result as { realtimeDataUpdatedAt?: number | null } | null)?.realtimeDataUpdatedAt,
+    );
+    return { departures, ...(dataAsOf ? { dataAsOf } : {}) };
   },
 
   async getArrivals(entry, stopId, minutes) {
@@ -344,17 +398,11 @@ export const hafasMgateAdapter: ProtocolAdapter = {
         }),
         TIMEOUT_MS,
       );
-      // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF response
-      const arrs = (result as any).arrivals ?? result;
-      if (!Array.isArray(arrs)) throw new Error("malformed arrivals response");
+      const departures = parseBoard(result, entry, "arrivals");
       const dataAsOf = upstreamDataAsOf(
-        (result as { realtimeDataUpdatedAt?: number | null }).realtimeDataUpdatedAt,
+        (result as { realtimeDataUpdatedAt?: number | null } | null)?.realtimeDataUpdatedAt,
       );
-      return {
-        // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF departure
-        departures: arrs.map((d: any) => normalizeDeparture(d, entry)),
-        ...(dataAsOf ? { dataAsOf } : {}),
-      };
+      return { departures, ...(dataAsOf ? { dataAsOf } : {}) };
     } catch {
       // A failed board must not read as "no departures".
       throw new Error("HAFAS timetable unavailable");
@@ -362,10 +410,10 @@ export const hafasMgateAdapter: ProtocolAdapter = {
   },
 
   async searchByName(entry, query, limit) {
+    let results: unknown;
     try {
-      const client = getClient(entry);
-      const results = await withTimeout(
-        client.locations(query, {
+      results = await withTimeout(
+        getClient(entry).locations(query, {
           results: limit,
           stops: true,
           addresses: false,
@@ -373,14 +421,21 @@ export const hafasMgateAdapter: ProtocolAdapter = {
         }),
         TIMEOUT_MS,
       );
-      // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF response
-      return (results as any[])
-        .filter((s) => s.type === "stop" || s.type === "station")
-        .map((s) => normalizeStop(s, entry));
-    } catch {
+    } catch (error) {
       // A failed search must not read as "no stop by that name".
-      throw new Error("HAFAS stop search unavailable");
+      throw unavailable("stop search", error);
     }
+    const locations = parseProviderPayload(z.array(z.unknown()), results, "HAFAS stop search");
+    const stops = locations.filter(
+      (location) =>
+        typeof location === "object" &&
+        location !== null &&
+        "type" in location &&
+        (location.type === "stop" || location.type === "station"),
+    );
+    return parseProviderRecords(fptfStopSchema, stops, "HAFAS stop search").map((s) =>
+      normalizeStop(s, entry),
+    );
   },
 
   async getAlerts(entry, params) {

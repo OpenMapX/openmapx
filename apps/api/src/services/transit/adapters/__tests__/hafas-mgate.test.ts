@@ -75,15 +75,15 @@ describe("getStopsNearby", () => {
     expect(stops[0].provider).toBe("oebb");
   });
 
-  it("returns empty array when nearby() throws", async () => {
+  it("reports a failed nearby() instead of answering no stops", async () => {
     mockHafasClient.nearby.mockRejectedValue(new Error("Network error"));
 
     const { hafasMgateAdapter } = await import(
       "@integrations/transit-dynamic-registry/hafas-mgate"
     );
-    const stops = await hafasMgateAdapter.getStopsNearby(MOCK_ENTRY, 48.185, 16.376, 1000);
-
-    expect(stops).toEqual([]);
+    await expect(
+      hafasMgateAdapter.getStopsNearby(MOCK_ENTRY, 48.185, 16.376, 1000),
+    ).rejects.toThrow("HAFAS nearby stops unavailable");
   });
 });
 

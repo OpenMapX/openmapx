@@ -1,4 +1,5 @@
-import { fetchJson, isoWithOffsetInZone } from "@openmapx/core";
+import { FetchJsonHttpError, fetchJson, isoWithOffsetInZone } from "@openmapx/core";
+import { parseProviderPayload, parseProviderRecords } from "@openmapx/integration-framework";
 import type {
   Departure,
   TransitStop,
@@ -8,17 +9,10 @@ import type {
   VehicleJourney,
   VehicleJourneyStop,
 } from "@openmapx/mobility-core/transit";
+import { z } from "zod";
 
 const BASE_URL = "https://api.irail.be";
 const STATIONS_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-interface IrailStation {
-  id: string;
-  name: string;
-  locationX: string; // longitude
-  locationY: string; // latitude
-}
-
 const BELGIAN_TIME_ZONE = "Europe/Brussels";
 
 /**
@@ -32,19 +26,159 @@ export function brusselsWallClock(instant: Date): { date: string; time: string }
   return { date: local.slice(0, 10), time: local.slice(11, 19) };
 }
 
+/** iRail sends numbers as JSON strings in practice and as numbers in its docs. */
+const numeric = z.union([
+  z.number().finite(),
+  z
+    .string()
+    .trim()
+    .regex(/^-?\d+(\.\d+)?$/)
+    .transform(Number),
+]);
+const latitude = numeric.pipe(z.number().min(-90).max(90));
+const longitude = numeric.pipe(z.number().min(-180).max(180));
+const flag = z.union([z.literal(0), z.literal(1), z.literal("0"), z.literal("1")]);
+const optionalText = z.string().nullish();
+
+const stationSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  locationX: longitude,
+  locationY: latitude,
+});
+const stationListSchema = z.object({ station: z.array(z.unknown()).min(1) });
+
+interface IrailStation {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+}
+
+function toStation(s: z.infer<typeof stationSchema>): IrailStation {
+  return { id: s.id, name: s.name, lat: s.locationY, lng: s.locationX };
+}
+
+/** One element or a list: iRail collapses single-entry lists in some responses. */
+function oneOrMany<T extends z.ZodType>(item: T) {
+  return z
+    .union([z.array(item), item])
+    .transform((value) => (Array.isArray(value) ? value : [value]));
+}
+
+const liveboardEntrySchema = z.object({
+  time: numeric,
+  delay: numeric.nullish(),
+  vehicle: z.string().min(1),
+  vehicleinfo: z.object({ shortname: optionalText, name: optionalText }).nullish(),
+  station: optionalText,
+  stationinfo: z.object({ name: optionalText }).nullish(),
+  platform: z.union([z.string(), z.number()]).nullish(),
+  platforminfo: z.object({ name: optionalText }).nullish(),
+  canceled: flag.nullish(),
+  occupancy: z.object({ name: optionalText }).nullish(),
+});
+type LiveboardEntry = z.infer<typeof liveboardEntrySchema>;
+
+const departuresBoardSchema = z.object({
+  departures: z.object({ departure: oneOrMany(z.unknown()).optional() }),
+});
+const arrivalsBoardSchema = z.object({
+  arrivals: z.object({ arrival: oneOrMany(z.unknown()).optional() }),
+});
+
+const stationInfoSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  locationX: longitude,
+  locationY: latitude,
+});
+
+const vehicleStopSchema = z.object({
+  station: optionalText,
+  stationinfo: stationInfoSchema,
+  delay: numeric.nullish(),
+  scheduledDepartureTime: numeric.nullish(),
+  scheduledArrivalTime: numeric.nullish(),
+  platform: z.union([z.string(), z.number()]).nullish(),
+  platforminfo: z.object({ name: optionalText }).nullish(),
+  canceled: flag.nullish(),
+  left: flag.nullish(),
+});
+
+const vehicleSchema = z.object({
+  vehicle: z.string().min(1),
+  stops: z.object({ stop: oneOrMany(vehicleStopSchema) }),
+  occupancy: z.object({ name: optionalText }).nullish(),
+});
+
+const connectionVehicleSchema = z.object({
+  vehicle: optionalText,
+  vehicleinfo: z.object({ shortname: optionalText }).nullish(),
+  direction: z.object({ name: optionalText }).nullish(),
+});
+const coordinatesSchema = z.object({ locationX: longitude, locationY: latitude });
+const connectionEndSchema = connectionVehicleSchema.extend({
+  time: numeric,
+  stationinfo: coordinatesSchema.nullish(),
+});
+const viaSchema = z.object({
+  station: optionalText,
+  stationinfo: coordinatesSchema.extend({ id: z.string().min(1), name: optionalText }),
+  arrival: z.object({ time: numeric }),
+  departure: connectionVehicleSchema.extend({ time: numeric }),
+});
+const connectionSchema = z.object({
+  duration: numeric,
+  departure: connectionEndSchema,
+  arrival: connectionEndSchema,
+  vias: z.object({ number: numeric.nullish(), via: oneOrMany(viaSchema).optional() }).nullish(),
+});
+type IrailConnection = z.infer<typeof connectionSchema>;
+
+function flagSet(value: z.infer<typeof flag> | null | undefined): boolean {
+  return value === 1 || value === "1";
+}
+
+function epochIso(seconds: number): string {
+  return new Date(seconds * 1000).toISOString();
+}
+
+function isNotFound(error: unknown): boolean {
+  return error instanceof FetchJsonHttpError && error.status === 404;
+}
+
+/** Fetch an iRail resource; failures throw so they never read as an empty answer. */
+async function irailJson(url: string, what: string, signal?: AbortSignal): Promise<unknown> {
+  try {
+    return await fetchJson<unknown>(url, { signal });
+  } catch (error) {
+    if (signal?.aborted || isNotFound(error)) throw error;
+    throw new Error(`iRail ${what} unavailable`, { cause: error });
+  }
+}
+
 let stationsCache: IrailStation[] | null = null;
 let stationsCachedAt = 0;
 
+/**
+ * The national station list, cached for a day. A failed refresh serves the
+ * previous list when there is one and otherwise throws; a malformed or empty
+ * list is never cached.
+ */
 async function getAllStations(signal?: AbortSignal): Promise<IrailStation[]> {
   if (stationsCache && Date.now() - stationsCachedAt < STATIONS_TTL_MS) {
     return stationsCache;
   }
-  const data = await fetchJson<{ station?: IrailStation[] }>(
-    `${BASE_URL}/stations/?format=json&lang=en`,
-    { nullOnError: true, signal },
-  );
-  if (!data) return stationsCache ?? [];
-  stationsCache = data.station ?? [];
+  let data: unknown;
+  try {
+    data = await irailJson(`${BASE_URL}/stations/?format=json&lang=en`, "stations", signal);
+  } catch (error) {
+    if (stationsCache && !signal?.aborted) return stationsCache;
+    throw error;
+  }
+  const { station } = parseProviderPayload(stationListSchema, data, "iRail stations");
+  stationsCache = parseProviderRecords(stationSchema, station, "iRail stations").map(toStation);
   stationsCachedAt = Date.now();
   return stationsCache;
 }
@@ -53,8 +187,8 @@ function stationToStop(s: IrailStation): TransitStop {
   return {
     id: `ir:${s.id}`,
     name: s.name,
-    lat: Number.parseFloat(s.locationY),
-    lng: Number.parseFloat(s.locationX),
+    lat: s.lat,
+    lng: s.lng,
     modes: ["rail"],
     provider: "irail",
   };
@@ -69,14 +203,11 @@ export async function getStops(
   const radiusDeg = radiusMeters / 111_320;
 
   return stations
-    .filter((s) => {
-      const sLat = Number.parseFloat(s.locationY);
-      const sLng = Number.parseFloat(s.locationX);
-      return (
-        Math.abs(sLat - lat) <= radiusDeg &&
-        Math.abs(sLng - lng) <= radiusDeg / Math.max(Math.cos((lat * Math.PI) / 180), 0.01)
-      );
-    })
+    .filter(
+      (s) =>
+        Math.abs(s.lat - lat) <= radiusDeg &&
+        Math.abs(s.lng - lng) <= radiusDeg / Math.max(Math.cos((lat * Math.PI) / 180), 0.01),
+    )
     .map(stationToStop);
 }
 
@@ -100,29 +231,27 @@ export async function searchByName(
     .map(stationToStop);
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: iRail liveboard entry
-function normalizeLiveboardEntry(d: any): Departure {
-  const delaySeconds = Number.parseInt(d.delay ?? "0", 10);
-  const scheduledAt = new Date(Number.parseInt(d.time, 10) * 1000).toISOString();
-  const expectedAt =
-    delaySeconds !== 0
-      ? new Date(new Date(scheduledAt).getTime() + delaySeconds * 1000).toISOString()
-      : undefined;
+function normalizeLiveboardEntry(d: LiveboardEntry): Departure {
+  const delaySeconds = d.delay ?? 0;
+  const scheduledAt = epochIso(d.time);
+  const expectedAt = delaySeconds !== 0 ? epochIso(d.time + delaySeconds) : undefined;
+  const occupancy = d.occupancy?.name;
   return {
-    tripId: d.vehicle ?? d.vehicleinfo?.name ?? "",
+    tripId: d.vehicle,
     route: {
-      id: `ir:${d.vehicle ?? ""}`,
-      shortName: d.vehicle?.split(".").pop() ?? "",
-      longName: d.vehicleinfo?.shortname ?? d.vehicle ?? "",
+      id: `ir:${d.vehicle}`,
+      shortName: d.vehicle.split(".").pop() ?? "",
+      longName: d.vehicleinfo?.shortname ?? d.vehicle,
       mode: "rail",
     },
     headsign: d.stationinfo?.name ?? d.station ?? "",
     scheduledAt,
     expectedAt,
     delaySeconds: delaySeconds || undefined,
-    platform: d.platforminfo?.name ?? d.platform ?? undefined,
-    canceled: d.canceled === "1",
-    occupancy: d.occupancy?.name as "low" | "medium" | "high" | undefined,
+    platform: d.platforminfo?.name ?? (d.platform != null ? String(d.platform) : undefined),
+    canceled: flagSet(d.canceled),
+    occupancy:
+      occupancy === "low" || occupancy === "medium" || occupancy === "high" ? occupancy : undefined,
   };
 }
 
@@ -138,21 +267,15 @@ async function fetchLiveboard(
     lang: "en",
     arrdep,
   });
-  // A failed board must not read as "no departures"; callers decide how to degrade.
-  const data = await fetchJson<{
-    // biome-ignore lint/suspicious/noExplicitAny: external API response
-    departures?: { departure?: any };
-    // biome-ignore lint/suspicious/noExplicitAny: external API response
-    arrivals?: { arrival?: any };
-  }>(`${BASE_URL}/liveboard/?${params}`).catch(() => {
-    throw new Error("iRail timetable unavailable");
-  });
-  const raw2 = arrdep === "departure" ? data.departures?.departure : data.arrivals?.arrival;
-  // biome-ignore lint/suspicious/noExplicitAny: external API response
-  const entries: any[] = Array.isArray(raw2) ? raw2 : raw2 ? [raw2] : [];
+  // A failed or malformed board throws; it must not read as "no departures".
+  const data = await irailJson(`${BASE_URL}/liveboard/?${params}`, "timetable");
+  const entries =
+    arrdep === "departure"
+      ? parseProviderPayload(departuresBoardSchema, data, "iRail timetable").departures.departure
+      : parseProviderPayload(arrivalsBoardSchema, data, "iRail timetable").arrivals.arrival;
   const cutoffMs = Date.now() + minutes * 60 * 1000;
-  return entries
-    .filter((d) => Number.parseInt(d.time, 10) * 1000 <= cutoffMs)
+  return parseProviderRecords(liveboardEntrySchema, entries ?? [], "iRail timetable")
+    .filter((d) => d.time * 1000 <= cutoffMs)
     .map(normalizeLiveboardEntry);
 }
 
@@ -166,71 +289,222 @@ export async function getArrivals(stopId: string, minutes: number): Promise<Depa
 
 export async function getVehicleJourney(vehicleId: string): Promise<VehicleJourney | null> {
   const rawId = vehicleId.startsWith("ir:") ? vehicleId.slice(3) : vehicleId;
+  const params = new URLSearchParams({
+    id: rawId,
+    format: "json",
+    lang: "en",
+  });
+  let data: unknown;
   try {
-    const params = new URLSearchParams({
-      id: rawId,
-      format: "json",
-      lang: "en",
-    });
-    const data = await fetchJson<{
-      vehicle: string;
-      // biome-ignore lint/suspicious/noExplicitAny: external API response
-      stops?: { stop?: any };
-      occupancy?: { name: string };
-    }>(`${BASE_URL}/vehicle/?${params}`, { nullOnError: true });
-    if (!data) return null;
-
-    const rawStops = data.stops?.stop;
-    // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const stopsArr: any[] = Array.isArray(rawStops) ? rawStops : rawStops ? [rawStops] : [];
-
-    const stops: VehicleJourneyStop[] = stopsArr.map(
-      // biome-ignore lint/suspicious/noExplicitAny: external API response
-      (s: any): VehicleJourneyStop => {
-        const delaySeconds = Number.parseInt(s.delay ?? "0", 10);
-        const scheduledDepTime = Number.parseInt(s.scheduledDepartureTime ?? "0", 10);
-        const scheduledArrTime = Number.parseInt(s.scheduledArrivalTime ?? "0", 10);
-        const scheduledDeparture =
-          scheduledDepTime !== 0 ? new Date(scheduledDepTime * 1000).toISOString() : undefined;
-        const scheduledArrival =
-          scheduledArrTime !== 0 ? new Date(scheduledArrTime * 1000).toISOString() : undefined;
-        const expectedDeparture =
-          scheduledDeparture && delaySeconds !== 0
-            ? new Date(scheduledDepTime * 1000 + delaySeconds * 1000).toISOString()
-            : undefined;
-        const expectedArrival =
-          scheduledArrival && delaySeconds !== 0
-            ? new Date(scheduledArrTime * 1000 + delaySeconds * 1000).toISOString()
-            : undefined;
-        return {
-          stopId: `ir:${s.stationinfo?.id ?? s.station}`,
-          name: s.stationinfo?.name ?? s.station,
-          lat: Number.parseFloat(s.stationinfo?.locationY ?? "0"),
-          lng: Number.parseFloat(s.stationinfo?.locationX ?? "0"),
-          platform: s.platforminfo?.name ?? s.platform ?? undefined,
-          scheduledDeparture,
-          scheduledArrival,
-          expectedDeparture,
-          expectedArrival,
-          delaySeconds: delaySeconds || undefined,
-          canceled: s.canceled === "1",
-          departed: s.left === "1",
-        };
-      },
-    );
-
-    return {
-      id: `ir:${data.vehicle}`,
-      name: data.vehicle,
-      provider: "irail",
-      occupancy: data.occupancy?.name as "low" | "medium" | "high" | undefined,
-      stops,
-    };
-  } catch {
-    return null;
+    data = await irailJson(`${BASE_URL}/vehicle/?${params}`, "vehicle");
+  } catch (error) {
+    if (isNotFound(error)) return null;
+    throw error;
   }
+  // A journey is one ordered stop sequence; a stop without coordinates breaks it.
+  const vehicle = parseProviderPayload(vehicleSchema, data, "iRail vehicle");
+  const stops = vehicle.stops.stop.map((s): VehicleJourneyStop => {
+    const delaySeconds = s.delay ?? 0;
+    const scheduledDep = s.scheduledDepartureTime ?? 0;
+    const scheduledArr = s.scheduledArrivalTime ?? 0;
+    return {
+      stopId: `ir:${s.stationinfo.id}`,
+      name: s.stationinfo.name,
+      lat: s.stationinfo.locationY,
+      lng: s.stationinfo.locationX,
+      platform: s.platforminfo?.name ?? (s.platform != null ? String(s.platform) : undefined),
+      scheduledDeparture: scheduledDep !== 0 ? epochIso(scheduledDep) : undefined,
+      scheduledArrival: scheduledArr !== 0 ? epochIso(scheduledArr) : undefined,
+      expectedDeparture:
+        scheduledDep !== 0 && delaySeconds !== 0
+          ? epochIso(scheduledDep + delaySeconds)
+          : undefined,
+      expectedArrival:
+        scheduledArr !== 0 && delaySeconds !== 0
+          ? epochIso(scheduledArr + delaySeconds)
+          : undefined,
+      delaySeconds: delaySeconds || undefined,
+      canceled: flagSet(s.canceled),
+      departed: flagSet(s.left),
+    };
+  });
+  const occupancy = vehicle.occupancy?.name;
+  return {
+    id: `ir:${vehicle.vehicle}`,
+    name: vehicle.vehicle,
+    provider: "irail",
+    occupancy:
+      occupancy === "low" || occupancy === "medium" || occupancy === "high" ? occupancy : undefined,
+    stops,
+  };
 }
 
+// Estimate straight-line distance in meters
+function walkMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const dLat = (lat2 - lat1) * 111_320;
+  const dLng = (lng2 - lng1) * 111_320 * Math.cos(((lat1 + lat2) / 2) * (Math.PI / 180));
+  return Math.sqrt(dLat * dLat + dLng * dLng);
+}
+
+function lineName(part: z.infer<typeof connectionVehicleSchema>): TripLeg["route"] {
+  return {
+    shortName: part.vehicleinfo?.shortname ?? part.vehicle?.split(".").pop() ?? "",
+    longName: part.direction?.name ?? "",
+  };
+}
+
+function railLeg(
+  startTime: string,
+  endTime: string,
+  from: TripLeg["from"],
+  to: TripLeg["to"],
+  route: TripLeg["route"],
+): TripLeg {
+  return {
+    mode: "rail",
+    startTime,
+    endTime,
+    from,
+    to,
+    route,
+    geometry: {
+      type: "LineString",
+      coordinates: [
+        [from.lng, from.lat],
+        [to.lng, to.lat],
+      ],
+    },
+  };
+}
+
+function connectionToItinerary(
+  conn: IrailConnection,
+  fromStation: IrailStation,
+  toStation: IrailStation,
+  origin: { lat: number; lng: number },
+  destination: { lat: number; lng: number },
+): TripItinerary {
+  const startTime = epochIso(conn.departure.time);
+  const endTime = epochIso(conn.arrival.time);
+  const vias = conn.vias?.via ?? [];
+  const transfers = conn.vias?.number ?? vias.length;
+
+  const depStation = conn.departure.stationinfo
+    ? { lat: conn.departure.stationinfo.locationY, lng: conn.departure.stationinfo.locationX }
+    : origin;
+  const arrStation = conn.arrival.stationinfo
+    ? { lat: conn.arrival.stationinfo.locationY, lng: conn.arrival.stationinfo.locationX }
+    : destination;
+  // Use the rider's coordinates when close to the station so the line connects to the map pin
+  const dep =
+    walkMeters(origin.lat, origin.lng, depStation.lat, depStation.lng) <= 1000
+      ? origin
+      : depStation;
+  const arr =
+    walkMeters(destination.lat, destination.lng, arrStation.lat, arrStation.lng) <= 1000
+      ? destination
+      : arrStation;
+  const fromStop = { name: fromStation.name, ...dep, stopId: `ir:${fromStation.id}` };
+  const toStop = { name: toStation.name, ...arr, stopId: `ir:${toStation.id}` };
+  const viaStop = (via: (typeof vias)[number]) => ({
+    name: via.station ?? via.stationinfo.name ?? "",
+    lat: via.stationinfo.locationY,
+    lng: via.stationinfo.locationX,
+    stopId: `ir:${via.stationinfo.id}`,
+  });
+
+  const legs: TripLeg[] = [];
+  const firstVia = vias[0];
+  const lastVia = vias[vias.length - 1];
+  if (!firstVia || !lastVia) {
+    legs.push(railLeg(startTime, endTime, fromStop, toStop, lineName(conn.departure)));
+  } else {
+    legs.push(
+      railLeg(
+        startTime,
+        epochIso(firstVia.arrival.time),
+        fromStop,
+        viaStop(firstVia),
+        lineName(conn.departure),
+      ),
+    );
+    for (let i = 0; i < vias.length - 1; i++) {
+      const fromVia = vias[i] as (typeof vias)[number];
+      const toVia = vias[i + 1] as (typeof vias)[number];
+      legs.push(
+        railLeg(
+          epochIso(fromVia.departure.time),
+          epochIso(toVia.arrival.time),
+          viaStop(fromVia),
+          viaStop(toVia),
+          lineName(fromVia.departure),
+        ),
+      );
+    }
+    legs.push(
+      railLeg(
+        epochIso(lastVia.departure.time),
+        endTime,
+        viaStop(lastVia),
+        toStop,
+        lineName(lastVia.departure),
+      ),
+    );
+  }
+
+  // Add walking legs from the origin to the departure station and from the arrival station
+  const originMeters = walkMeters(origin.lat, origin.lng, fromStation.lat, fromStation.lng);
+  const destMeters = walkMeters(toStation.lat, toStation.lng, destination.lat, destination.lng);
+
+  if (originMeters > 100) {
+    const walkMin = Math.ceil(originMeters / 80); // ~80m/min walking speed
+    const walkStartMs = Date.parse(startTime) - walkMin * 60_000;
+    legs.unshift({
+      mode: "walking",
+      startTime: new Date(walkStartMs).toISOString(),
+      endTime: startTime,
+      from: { name: "Start", ...origin },
+      to: fromStop,
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [origin.lng, origin.lat],
+          [dep.lng, dep.lat],
+        ],
+      },
+    });
+  }
+
+  if (destMeters > 100) {
+    const walkMin = Math.ceil(destMeters / 80);
+    const walkEndMs = Date.parse(endTime) + walkMin * 60_000;
+    legs.push({
+      mode: "walking",
+      startTime: endTime,
+      endTime: new Date(walkEndMs).toISOString(),
+      from: toStop,
+      to: { name: "End", ...destination },
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [arr.lng, arr.lat],
+          [destination.lng, destination.lat],
+        ],
+      },
+    });
+  }
+
+  const walkDistance = Math.round(
+    (originMeters > 100 ? originMeters : 0) + (destMeters > 100 ? destMeters : 0),
+  );
+  return { duration: conn.duration, startTime, endTime, transfers, walkDistance, legs };
+}
+
+/**
+ * Plan between the stations nearest to two points. Null means iRail cannot
+ * serve the trip (outside Belgium, no nearby station, no connection); upstream
+ * failures and malformed answers throw.
+ */
 export async function planConnections(
   fromLat: number,
   fromLng: number,
@@ -241,335 +515,75 @@ export async function planConnections(
   arriveBy?: boolean,
   numItineraries?: number,
 ): Promise<TripPlan | null> {
-  try {
-    // iRail only covers Belgium — at least one endpoint must be within Belgium
-    const BE_BBOX = { west: 2.54, south: 49.49, east: 5.92, north: 51.51 };
-    const inBelgium = (lat: number, lng: number) =>
-      lat >= BE_BBOX.south && lat <= BE_BBOX.north && lng >= BE_BBOX.west && lng <= BE_BBOX.east;
-    if (!inBelgium(fromLat, fromLng) && !inBelgium(toLat, toLng)) return null;
+  // iRail only covers Belgium — at least one endpoint must be within Belgium
+  const BE_BBOX = { west: 2.54, south: 49.49, east: 5.92, north: 51.51 };
+  const inBelgium = (lat: number, lng: number) =>
+    lat >= BE_BBOX.south && lat <= BE_BBOX.north && lng >= BE_BBOX.west && lng <= BE_BBOX.east;
+  if (!inBelgium(fromLat, fromLng) && !inBelgium(toLat, toLng)) return null;
 
-    const stations = await getAllStations();
-    if (stations.length === 0) return null;
+  const stations = await getAllStations();
 
-    // Max snap distance ~20 km — keep results relevant to the Belgian rail network
-    const MAX_SNAP_DIST_DEG = 0.18; // ~20 km at European latitudes
+  // Max snap distance ~20 km — keep results relevant to the Belgian rail network
+  const MAX_SNAP_DIST_DEG = 0.18; // ~20 km at European latitudes
 
-    function nearestStation(lat: number, lng: number): IrailStation | null {
-      let best: IrailStation | null = null;
-      let bestDist = Number.POSITIVE_INFINITY;
-      for (const s of stations) {
-        const sLat = Number.parseFloat(s.locationY);
-        const sLng = Number.parseFloat(s.locationX);
-        const dist = (sLat - lat) ** 2 + (sLng - lng) ** 2;
-        if (dist < bestDist) {
-          bestDist = dist;
-          best = s;
-        }
+  function nearestStation(lat: number, lng: number): IrailStation | null {
+    let best: IrailStation | null = null;
+    let bestDist = Number.POSITIVE_INFINITY;
+    for (const s of stations) {
+      const dist = (s.lat - lat) ** 2 + (s.lng - lng) ** 2;
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = s;
       }
-      // Reject if the nearest station is too far away
-      if (bestDist > MAX_SNAP_DIST_DEG ** 2) return null;
-      return best;
     }
-
-    const fromStation = nearestStation(fromLat, fromLng);
-    const toStation = nearestStation(toLat, toLng);
-    if (!fromStation || !toStation) return null;
-
-    // Format date: YYYY-MM-DD → DDMMYY
-    const [year, month, day] = date.split("-");
-    const dateFormatted = `${day}${month}${year.slice(2)}`;
-    // Format time: HH:MM → HHMM
-    const timeFormatted = time.slice(0, 5).replace(":", "");
-
-    const params = new URLSearchParams({
-      from: fromStation.id,
-      to: toStation.id,
-      date: dateFormatted,
-      time: timeFormatted,
-      timeSel: arriveBy ? "arrival" : "departure",
-      format: "json",
-      lang: "en",
-      results: String(numItineraries ?? 3),
-    });
-    // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = await fetchJson<{ connection?: any[] }>(`${BASE_URL}/connections/?${params}`, {
-      nullOnError: true,
-    });
-    if (!data || !Array.isArray(data.connection)) return null;
-
-    // Estimate straight-line distance in meters
-    function walkMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
-      const dLat = (lat2 - lat1) * 111_320;
-      const dLng = (lng2 - lng1) * 111_320 * Math.cos(((lat1 + lat2) / 2) * (Math.PI / 180));
-      return Math.sqrt(dLat * dLat + dLng * dLng);
-    }
-
-    const itineraries: TripItinerary[] = data.connection.map(
-      // biome-ignore lint/suspicious/noExplicitAny: external API response
-      (conn: any): TripItinerary => {
-        const duration = Number.parseInt(conn.duration, 10);
-        const startTime = new Date(Number.parseInt(conn.departure.time, 10) * 1000).toISOString();
-        const endTime = new Date(Number.parseInt(conn.arrival.time, 10) * 1000).toISOString();
-        const transfers = Number.parseInt(conn.vias?.number ?? "0", 10);
-
-        const rawVias = conn.vias?.via;
-        // biome-ignore lint/suspicious/noExplicitAny: external API response
-        const vias: any[] = Array.isArray(rawVias) ? rawVias : rawVias ? [rawVias] : [];
-
-        const legs: TripLeg[] = [];
-
-        const stationDepLat = Number.parseFloat(
-          conn.departure.stationinfo?.locationY ?? String(fromLat),
-        );
-        const stationDepLng = Number.parseFloat(
-          conn.departure.stationinfo?.locationX ?? String(fromLng),
-        );
-        const stationArrLat = Number.parseFloat(
-          conn.arrival.stationinfo?.locationY ?? String(toLat),
-        );
-        const stationArrLng = Number.parseFloat(
-          conn.arrival.stationinfo?.locationX ?? String(toLng),
-        );
-        // Use user's coordinates when close to the station so the line connects to the map pin
-        const depLat =
-          walkMeters(fromLat, fromLng, stationDepLat, stationDepLng) <= 1000
-            ? fromLat
-            : stationDepLat;
-        const depLng =
-          walkMeters(fromLat, fromLng, stationDepLat, stationDepLng) <= 1000
-            ? fromLng
-            : stationDepLng;
-        const arrLat =
-          walkMeters(toLat, toLng, stationArrLat, stationArrLng) <= 1000 ? toLat : stationArrLat;
-        const arrLng =
-          walkMeters(toLat, toLng, stationArrLat, stationArrLng) <= 1000 ? toLng : stationArrLng;
-
-        if (vias.length === 0) {
-          legs.push({
-            mode: "rail",
-            startTime,
-            endTime,
-            from: {
-              name: fromStation.name,
-              lat: depLat,
-              lng: depLng,
-              stopId: `ir:${fromStation.id}`,
-            },
-            to: {
-              name: toStation.name,
-              lat: arrLat,
-              lng: arrLng,
-              stopId: `ir:${toStation.id}`,
-            },
-            route: {
-              shortName:
-                conn.departure.vehicleinfo?.shortname ??
-                conn.departure.vehicle?.split(".").pop() ??
-                "",
-              longName: (conn.departure.direction?.name as string) ?? "",
-            },
-            geometry: {
-              type: "LineString",
-              coordinates: [
-                [depLng, depLat],
-                [arrLng, arrLat],
-              ],
-            },
-          });
-        } else {
-          // First leg: departure → first via
-          const firstVia = vias[0];
-          const firstViaLat = Number.parseFloat(firstVia.stationinfo?.locationY ?? "0");
-          const firstViaLng = Number.parseFloat(firstVia.stationinfo?.locationX ?? "0");
-          legs.push({
-            mode: "rail",
-            startTime,
-            endTime: new Date(
-              Number.parseInt(firstVia.arrival?.time ?? conn.departure.time, 10) * 1000,
-            ).toISOString(),
-            from: {
-              name: fromStation.name,
-              lat: depLat,
-              lng: depLng,
-              stopId: `ir:${fromStation.id}`,
-            },
-            to: {
-              name: firstVia.station ?? "",
-              lat: firstViaLat,
-              lng: firstViaLng,
-              stopId: `ir:${firstVia.stationinfo?.id ?? ""}`,
-            },
-            route: {
-              shortName:
-                conn.departure.vehicleinfo?.shortname ??
-                conn.departure.vehicle?.split(".").pop() ??
-                "",
-              longName: (conn.departure.direction?.name as string) ?? "",
-            },
-            geometry: {
-              type: "LineString",
-              coordinates: [
-                [depLng, depLat],
-                [firstViaLng, firstViaLat],
-              ],
-            },
-          });
-
-          // Middle legs: via[i] → via[i+1]
-          for (let i = 0; i < vias.length - 1; i++) {
-            const fromVia = vias[i];
-            const toVia = vias[i + 1];
-            const fromViaLat = Number.parseFloat(fromVia.stationinfo?.locationY ?? "0");
-            const fromViaLng = Number.parseFloat(fromVia.stationinfo?.locationX ?? "0");
-            const toViaLat = Number.parseFloat(toVia.stationinfo?.locationY ?? "0");
-            const toViaLng = Number.parseFloat(toVia.stationinfo?.locationX ?? "0");
-            legs.push({
-              mode: "rail",
-              startTime: new Date(
-                Number.parseInt(fromVia.departure?.time ?? "0", 10) * 1000,
-              ).toISOString(),
-              endTime: new Date(
-                Number.parseInt(toVia.arrival?.time ?? "0", 10) * 1000,
-              ).toISOString(),
-              from: {
-                name: fromVia.station ?? "",
-                lat: fromViaLat,
-                lng: fromViaLng,
-                stopId: `ir:${fromVia.stationinfo?.id ?? ""}`,
-              },
-              to: {
-                name: toVia.station ?? "",
-                lat: toViaLat,
-                lng: toViaLng,
-                stopId: `ir:${toVia.stationinfo?.id ?? ""}`,
-              },
-              route: {
-                shortName:
-                  fromVia.departure?.vehicleinfo?.shortname ??
-                  fromVia.departure?.vehicle?.split(".").pop() ??
-                  "",
-                longName: (fromVia.departure?.direction?.name as string) ?? "",
-              },
-              geometry: {
-                type: "LineString",
-                coordinates: [
-                  [fromViaLng, fromViaLat],
-                  [toViaLng, toViaLat],
-                ],
-              },
-            });
-          }
-
-          // Last leg: last via → arrival
-          const lastVia = vias[vias.length - 1];
-          const lastViaLat = Number.parseFloat(lastVia.stationinfo?.locationY ?? "0");
-          const lastViaLng = Number.parseFloat(lastVia.stationinfo?.locationX ?? "0");
-          legs.push({
-            mode: "rail",
-            startTime: new Date(
-              Number.parseInt(lastVia.departure?.time ?? "0", 10) * 1000,
-            ).toISOString(),
-            endTime,
-            from: {
-              name: lastVia.station ?? "",
-              lat: lastViaLat,
-              lng: lastViaLng,
-              stopId: `ir:${lastVia.stationinfo?.id ?? ""}`,
-            },
-            to: {
-              name: toStation.name,
-              lat: arrLat,
-              lng: arrLng,
-              stopId: `ir:${toStation.id}`,
-            },
-            route: {
-              shortName:
-                lastVia.departure?.vehicleinfo?.shortname ??
-                lastVia.departure?.vehicle?.split(".").pop() ??
-                "",
-              longName: (lastVia.departure?.direction?.name as string) ?? "",
-            },
-            geometry: {
-              type: "LineString",
-              coordinates: [
-                [lastViaLng, lastViaLat],
-                [arrLng, arrLat],
-              ],
-            },
-          });
-        }
-
-        // Add walking legs from user origin to departure station / arrival station to destination
-        const fromStationLat = Number.parseFloat(fromStation.locationY);
-        const fromStationLng = Number.parseFloat(fromStation.locationX);
-        const toStationLat = Number.parseFloat(toStation.locationY);
-        const toStationLng = Number.parseFloat(toStation.locationX);
-
-        const originMeters = walkMeters(fromLat, fromLng, fromStationLat, fromStationLng);
-        const destMeters = walkMeters(toStationLat, toStationLng, toLat, toLng);
-
-        if (originMeters > 100) {
-          const walkMin = Math.ceil(originMeters / 80); // ~80m/min walking speed
-          const walkStartMs = new Date(startTime).getTime() - walkMin * 60_000;
-          legs.unshift({
-            mode: "walking",
-            startTime: new Date(walkStartMs).toISOString(),
-            endTime: startTime,
-            from: { name: "Start", lat: fromLat, lng: fromLng },
-            to: {
-              name: fromStation.name,
-              lat: depLat,
-              lng: depLng,
-              stopId: `ir:${fromStation.id}`,
-            },
-            geometry: {
-              type: "LineString",
-              coordinates: [
-                [fromLng, fromLat],
-                [depLng, depLat],
-              ],
-            },
-          });
-        }
-
-        if (destMeters > 100) {
-          const walkMin = Math.ceil(destMeters / 80);
-          const walkEndMs = new Date(endTime).getTime() + walkMin * 60_000;
-          legs.push({
-            mode: "walking",
-            startTime: endTime,
-            endTime: new Date(walkEndMs).toISOString(),
-            from: {
-              name: toStation.name,
-              lat: arrLat,
-              lng: arrLng,
-              stopId: `ir:${toStation.id}`,
-            },
-            to: { name: "End", lat: toLat, lng: toLng },
-            geometry: {
-              type: "LineString",
-              coordinates: [
-                [arrLng, arrLat],
-                [toLng, toLat],
-              ],
-            },
-          });
-        }
-
-        const walkDistance = Math.round(
-          (originMeters > 100 ? originMeters : 0) + (destMeters > 100 ? destMeters : 0),
-        );
-
-        return { duration, startTime, endTime, transfers, walkDistance, legs };
-      },
-    );
-
-    return {
-      from: { name: fromStation.name, lat: fromLat, lng: fromLng },
-      to: { name: toStation.name, lat: toLat, lng: toLng },
-      itineraries,
-    };
-  } catch {
-    return null;
+    // Reject if the nearest station is too far away
+    if (bestDist > MAX_SNAP_DIST_DEG ** 2) return null;
+    return best;
   }
+
+  const fromStation = nearestStation(fromLat, fromLng);
+  const toStation = nearestStation(toLat, toLng);
+  if (!fromStation || !toStation) return null;
+
+  // Format date: YYYY-MM-DD → DDMMYY
+  const [year = "", month = "", day = ""] = date.split("-");
+  const dateFormatted = `${day}${month}${year.slice(2)}`;
+  // Format time: HH:MM → HHMM
+  const timeFormatted = time.slice(0, 5).replace(":", "");
+
+  const params = new URLSearchParams({
+    from: fromStation.id,
+    to: toStation.id,
+    date: dateFormatted,
+    time: timeFormatted,
+    timeSel: arriveBy ? "arrival" : "departure",
+    format: "json",
+    lang: "en",
+    results: String(numItineraries ?? 3),
+  });
+  let data: unknown;
+  try {
+    data = await irailJson(`${BASE_URL}/connections/?${params}`, "connections");
+  } catch (error) {
+    // iRail answers 404 when it finds no connection between the stations.
+    if (isNotFound(error)) return null;
+    throw error;
+  }
+  const { connection } = parseProviderPayload(
+    z.object({ connection: z.array(z.unknown()) }),
+    data,
+    "iRail connections",
+  );
+  const connections = parseProviderRecords(connectionSchema, connection, "iRail connections");
+  if (connections.length === 0) return null;
+
+  const origin = { lat: fromLat, lng: fromLng };
+  const destination = { lat: toLat, lng: toLng };
+  return {
+    from: { name: fromStation.name, ...origin },
+    to: { name: toStation.name, ...destination },
+    itineraries: connections.map((conn) =>
+      connectionToItinerary(conn, fromStation, toStation, origin, destination),
+    ),
+  };
 }

@@ -1,0 +1,221 @@
+{
+  "version": "1.1",
+  "timestamp": 1489622781,
+  "connection": [
+    {
+      "id": 0,
+      "departure": {
+        "delay": 0,
+        "station": "Antwerp-Central",
+        "stationinfo": {
+          "id": "BE.NMBS.008821006",
+          "@id": "http://irail.be/stations/NMBS/008821006",
+          "locationX": 4.421101,
+          "locationY": 51.2172,
+          "standardname": "Antwerpen-Centraal",
+          "name": "Antwerp-Central"
+        },
+        "time": 1497783600,
+        "vehicle": "BE.NMBS.IC3033",
+        "vehicleinfo": {
+          "name": "BE.NMBS.IC3033",
+          "shortname": "IC3033",
+          "@id": "http://irail.be/vehicle/IC3033"
+        },
+        "platform": 4,
+        "platforminfo": {
+          "name": "4",
+          "normal": "1"
+        },
+        "left": 0,
+        "canceled": 0,
+        "direction": {
+          "name": "Mechelen"
+        },
+        "stops": {
+          "number": 1,
+          "stop": [
+            {
+              "id": 0,
+              "station": "Antwerp-central",
+              "stationinfo": {
+                "id": "BE.NMBS.008821006",
+                "@id": "http://irail.be/stations/NMBS/008821006",
+                "locationX": 4.421101,
+                "locationY": 51.2172,
+                "standardname": "Antwerpen-Centraal",
+                "name": "Antwerp-Central"
+              },
+              "time": 1489658760,
+              "delay": 0,
+              "canceled": 0,
+              "departureDelay": 0,
+              "departureCanceled": 0,
+              "scheduledDepartureTime": 1489658760,
+              "arrivalDelay": 0,
+              "arrivalCanceled": 0,
+              "isExtraStop": 0,
+              "scheduledArrivalTime": 1489658760,
+              "departureConnection": "http://irail.be/connections/8821006/20170316/IC3033"
+            }
+          ]
+        },
+        "alerts": {
+          "number": 1,
+          "alert": [
+            {
+              "id": 0,
+              "header": "L 50: We are conducting work for you between Ghent and Aalst.",
+              "lead": "We are conducting work for you between Ghent and Aalst",
+              "link": "http%3A%2F%2Fwww.belgianrail.be%2Fjp%2Fdownload%2Fbrail_him%2F1509444366969_NL-11015.pdf",
+              "startTime": 1509441420,
+              "endTime": 1510527540
+            }
+          ]
+        },
+        "walking": 0,
+        "departureConnection": "http://irail.be/connections/8821006/20170316/IC1832"
+      },
+      "arrival": {
+        "delay": 0,
+        "station": "Antwerp-Central",
+        "stationinfo": {
+          "id": "BE.NMBS.008821006",
+          "@id": "http://irail.be/stations/NMBS/008821006",
+          "locationX": 4.421101,
+          "locationY": 51.2172,
+          "standardname": "Antwerpen-Centraal",
+          "name": "Antwerp-Central"
+        },
+        "time": 1497786840,
+        "vehicle": "BE.NMBS.IC3033",
+        "vehicleinfo": {
+          "name": "BE.NMBS.IC3033",
+          "shortname": "IC3033",
+          "@id": "http://irail.be/vehicle/IC3033"
+        },
+        "platform": 4,
+        "platforminfo": {
+          "name": "4",
+          "normal": "1"
+        },
+        "arrived": 0,
+        "canceled": 0,
+        "walking": 0,
+        "direction": {
+          "name": "Mechelen"
+        }
+      },
+      "duration": 3240,
+      "alerts": {
+        "number": 1,
+        "alert": [
+          {
+            "id": 0,
+            "header": "L 50: We are conducting work for you between Ghent and Aalst.",
+            "lead": "We are conducting work for you between Ghent and Aalst",
+            "link": "http%3A%2F%2Fwww.belgianrail.be%2Fjp%2Fdownload%2Fbrail_him%2F1509444366969_NL-11015.pdf",
+            "startTime": 1509441420,
+            "endTime": 1510527540
+          }
+        ]
+      },
+      "vias": {
+        "number": 1,
+        "via": [
+          {
+            "id": "Hello, world!",
+            "arrival": {
+              "time": 1497783600,
+              "platform": 4,
+              "platforminfo": {
+                "name": "4",
+                "normal": "1"
+              },
+              "arrived": 0,
+              "delay": 0,
+              "canceled": 0,
+              "vehicle": "BE.NMBS.IC3033",
+              "walking": 0,
+              "direction": {
+                "name": "Mechelen"
+              }
+            },
+            "departure": {
+              "time": 1497783600,
+              "platform": 4,
+              "platforminfo": {
+                "name": "4",
+                "normal": "1"
+              },
+              "left": 0,
+              "delay": 0,
+              "canceled": 0,
+              "departureConnection": "http://irail.be/connections/8821006/20170316/IC1832",
+              "vehicle": "BE.NMBS.IC3033",
+              "walking": 0,
+              "alerts": {
+                "number": 1,
+                "alert": [
+                  {
+                    "id": 0,
+                    "header": "L 50: We are conducting work for you between Ghent and Aalst.",
+                    "lead": "We are conducting work for you between Ghent and Aalst",
+                    "link": "http%3A%2F%2Fwww.belgianrail.be%2Fjp%2Fdownload%2Fbrail_him%2F1509444366969_NL-11015.pdf",
+                    "startTime": 1509441420,
+                    "endTime": 1510527540
+                  }
+                ]
+              },
+              "direction": {
+                "name": "Mechelen"
+              },
+              "stops": {
+                "number": 1,
+                "stop": [
+                  {
+                    "id": 0,
+                    "station": "Antwerp-central",
+                    "stationinfo": {
+                      "id": "BE.NMBS.008821006",
+                      "@id": "http://irail.be/stations/NMBS/008821006",
+                      "locationX": 4.421101,
+                      "locationY": 51.2172,
+                      "standardname": "Antwerpen-Centraal",
+                      "name": "Antwerp-Central"
+                    },
+                    "time": 1489658760,
+                    "delay": 0,
+                    "canceled": 0,
+                    "departureDelay": 0,
+                    "departureCanceled": 0,
+                    "scheduledDepartureTime": 1489658760,
+                    "arrivalDelay": 0,
+                    "arrivalCanceled": 0,
+                    "isExtraStop": 0,
+                    "scheduledArrivalTime": 1489658760,
+                    "departureConnection": "http://irail.be/connections/8821006/20170316/IC3033"
+                  }
+                ]
+              }
+            },
+            "timeBetween": 360,
+            "station": "Antwerp-Central",
+            "stationinfo": {
+              "id": "BE.NMBS.008821006",
+              "@id": "http://irail.be/stations/NMBS/008821006",
+              "locationX": 4.421101,
+              "locationY": 51.2172,
+              "standardname": "Antwerpen-Centraal",
+              "name": "Antwerp-Central"
+            },
+            "vehicle": "BE.NMBS.IC3033",
+            "direction": {
+              "name": "Mechelen"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

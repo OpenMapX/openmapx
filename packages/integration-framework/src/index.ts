@@ -368,6 +368,8 @@ export {
   type ProviderDeadlineOptions,
   ProviderPayloadError,
   ProviderTimeoutError,
+  parseProviderPayload,
+  parseProviderRecords,
   raceCallerAbort,
   runWithProviderDeadline,
 } from "./provider-execution";

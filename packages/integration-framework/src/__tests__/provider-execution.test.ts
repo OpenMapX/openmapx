@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import {
   classifyProviderFailure,
   ProviderCancelledError,
   ProviderPayloadError,
   ProviderTimeoutError,
+  parseProviderPayload,
+  parseProviderRecords,
   raceCallerAbort,
   runWithProviderDeadline,
 } from "../provider-execution";
@@ -107,6 +110,67 @@ describe("classifyProviderFailure", () => {
       "invalid_payload",
     );
     expect(classifyProviderFailure("boom")).toBe("connection");
+  });
+});
+
+describe("classifyProviderFailure through causes", () => {
+  it("reads a status or code from the cause of a wrapped upstream error", () => {
+    const upstream = Object.assign(new Error("HTTP 401"), { status: 401 });
+    expect(
+      classifyProviderFailure(new Error("TfL stop search unavailable", { cause: upstream })),
+    ).toBe("auth");
+    const busy = Object.assign(new Error("HTTP 503"), { status: 503 });
+    expect(classifyProviderFailure(new Error("iRail unavailable", { cause: busy }))).toBe(
+      "upstream_5xx",
+    );
+  });
+});
+
+describe("parseProviderPayload", () => {
+  const schema = z.object({ items: z.array(z.unknown()) });
+
+  it("returns the parsed fields", () => {
+    expect(parseProviderPayload(schema, { items: [1], extra: true }, "Feed")).toEqual({
+      items: [1],
+    });
+  });
+
+  it("throws an invalid-payload error naming the first bad field", () => {
+    const parse = () => parseProviderPayload(schema, { items: null }, "Feed departures");
+    expect(parse).toThrow(ProviderPayloadError);
+    expect(parse).toThrow("Feed departures: unexpected response shape at items");
+    try {
+      parse();
+    } catch (error) {
+      expect(classifyProviderFailure(error)).toBe("invalid_payload");
+    }
+  });
+});
+
+describe("parseProviderRecords", () => {
+  const stop = z.object({ id: z.string(), lat: z.number() });
+
+  it("keeps valid records and drops malformed neighbours", () => {
+    expect(
+      parseProviderRecords(
+        stop,
+        [{ id: "a", lat: 1 }, { id: "b" }, null, { id: "c", lat: 2 }],
+        "Stops",
+      ),
+    ).toEqual([
+      { id: "a", lat: 1 },
+      { id: "c", lat: 2 },
+    ]);
+  });
+
+  it("accepts an empty list as a valid empty result", () => {
+    expect(parseProviderRecords(stop, [], "Stops")).toEqual([]);
+  });
+
+  it("rejects a non-empty list without one usable record", () => {
+    expect(() => parseProviderRecords(stop, [{ id: "a" }, {}], "Stops")).toThrow(
+      "Stops: no usable records at lat",
+    );
   });
 });
 

@@ -160,7 +160,20 @@ body. Don't return an empty list for a failure. An empty result means "nothing
 here", so the board would show "No departures" or no lines, and caches would keep
 it. The orchestrator turns a thrown error into a partial or failed board and
 records it in provider health. Keep thrown messages generic when request URLs
-carry credentials.
+carry credentials, and keep the upstream error as the `cause` so provider health
+can still classify its status or code.
+
+Validate only the fields the adapter consumes, with a zod schema, through
+`parseProviderPayload` and `parseProviderRecords` from
+`@openmapx/integration-framework`. A malformed envelope throws a
+`ProviderPayloadError`, which provider health records as `invalid_payload`.
+For lists of independent records (stops, departures, alerts), a record missing a
+consumed field is dropped and its valid neighbours kept; a non-empty list with no
+usable record is malformed. Reject a stop without coordinates rather than placing
+it at 0,0. An ordered structure such as a journey's stop sequence is valid only as
+a whole. Use recorded or documented example responses as fixtures, note their
+source in a `PROVENANCE.md`, and have test doubles assert the request they
+receive.
 
 ### Methods
 
