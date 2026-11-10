@@ -9,8 +9,10 @@ import {
   registerIntegrationRoute,
   registerIntegrationRouteDispatcher,
   resetIntegrationRoutes,
+  setIntegrationRouteRateLimits,
 } from "../../integration-routes.js";
 import { uniformErrorHandler } from "../../server-wiring.js";
+import { RateLimiter } from "../../utils/rate-limit.js";
 
 let app: FastifyInstance;
 
@@ -41,6 +43,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await app.close();
   resetIntegrationRoutes();
+  setIntegrationRouteRateLimits(null);
 });
 
 async function caller(remoteAddress: string, path = "/caller", headers = {}) {
@@ -88,5 +91,29 @@ describe("integration route caller identity", () => {
 
     expect(signedIn.userId).toBe("user-1");
     expect(stale.userId).toBeNull();
+  });
+
+  it("charges a path that matches no integration route to the unmatched bucket", async () => {
+    const unmatched = new RateLimiter({ max: 2, windowMs: 60_000 });
+    const routeTier = vi.fn(async () => {});
+    setIntegrationRouteRateLimits({
+      public: routeTier,
+      expensive: routeTier,
+      typeahead: routeTier,
+      tile: routeTier,
+      unmatched: unmatched.preHandler(),
+    });
+    const statuses: number[] = [];
+    for (const url of [
+      "/api/integrations/demo/missing",
+      "/api/integrations/unknown/anything",
+      "/api/integrations/demo/missing",
+    ]) {
+      statuses.push((await app.inject({ url, remoteAddress: "198.51.100.7" })).statusCode);
+    }
+
+    expect(statuses).toEqual([404, 404, 429]);
+    expect(routeTier).not.toHaveBeenCalled();
+    unmatched.destroy();
   });
 });

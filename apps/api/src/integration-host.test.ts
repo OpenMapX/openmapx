@@ -102,6 +102,7 @@ describe("integration route rate tiers", () => {
       expensive: expensiveLimit,
       tile: tileLimit,
       typeahead: typeaheadLimit,
+      unmatched: vi.fn(async () => undefined),
     });
     const app = makeApp();
     await initIntegrations(app, [FIXTURES_DIR]);

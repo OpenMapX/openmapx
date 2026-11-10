@@ -93,7 +93,10 @@ let stagedIntegrationRoutes: RegisteredIntegrationRoute[] | null = null;
 export const ROUTE_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"] as const;
 // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
 let _routeDispatcherFastify: FastifyInstance<any, any, any, any> | null = null;
-type IntegrationRouteTiers = Pick<RateLimitTiers, "public" | "expensive" | "typeahead" | "tile">;
+type IntegrationRouteTiers = Pick<
+  RateLimitTiers,
+  "public" | "expensive" | "typeahead" | "tile" | "unmatched"
+>;
 
 let routeRateLimits: IntegrationRouteTiers | null = null;
 
@@ -309,11 +312,18 @@ export function registerIntegrationRouteDispatcher(
   // authentication, so an anonymous caller never has a body read for them.
   const admit = async (request: FastifyRequest, reply: FastifyReply) => {
     const id = (request.params as { id?: string }).id;
-    if (!id || !integrations.get(id)?.enabled) return;
-
     const routePath = rawIntegrationPath(request);
-    const matched = findIntegrationRoute(id, request.method, routePath);
-    if (!matched) return;
+    const matched =
+      id && integrations.get(id)?.enabled
+        ? findIntegrationRoute(id, request.method, routePath)
+        : undefined;
+    // The global hook leaves dispatcher requests to the matched route's tier.
+    // A request that matches no enabled integration route has no tier of its
+    // own, so it is charged to the unmatched-route bucket before its 404.
+    if (!id || !matched) {
+      await routeRateLimits?.unmatched(request, reply);
+      return reply.sent ? reply : undefined;
+    }
 
     const rateLimitTier = matched.route.options?.rateLimitTier ?? "public";
     const limiter = routeRateLimits?.[rateLimitTier];
