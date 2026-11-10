@@ -18,6 +18,23 @@ import type {
 const DEFAULT_OSRM_URL = "https://router.project-osrm.org";
 let OSRM_URL = DEFAULT_OSRM_URL;
 
+/**
+ * The public demo's usage policy allows at most one request a second, and it
+ * is a shared community service, so routing admission holds calls to it to
+ * 60 a minute and 10,000 a day whatever the deployment-wide budget allows.
+ * A self-hosted or other endpoint has no ceiling of its own.
+ */
+const PUBLIC_DEMO_HOST = new URL(DEFAULT_OSRM_URL).hostname;
+const PUBLIC_DEMO_CEILING = Object.freeze({ perMinute: 60, perDay: 10_000 });
+
+function usesPublicDemo(): boolean {
+  try {
+    return new URL(OSRM_URL).hostname === PUBLIC_DEMO_HOST;
+  } catch {
+    return false;
+  }
+}
+
 /** The instance to query; undefined restores the default. */
 export function setOsrmUrl(url: string | undefined): void {
   OSRM_URL = url ?? DEFAULT_OSRM_URL;
@@ -361,6 +378,7 @@ function visitOrderFromTripWaypoints(
 export const osrmService: RoutingProvider = {
   id: "osrm",
   priority: 20,
+  admissionCeiling: () => (usesPublicDemo() ? PUBLIC_DEMO_CEILING : undefined),
   supportedModes: ["driving"] as TravelMode[],
   // OSRM's durations do not vary with the departure instant, so the schedule
   // arithmetic is exact but the wall clocks it produces are estimates. Declaring

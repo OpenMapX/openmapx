@@ -17,7 +17,8 @@ geocoding use a new `typeahead` limit sized for typing. The TomTom traffic proxy
 shares a daily budget of 50,000 tiles across all clients. The MapTiler proxy can
 be given one with `MAPTILER_DAILY_REQUEST_LIMIT`; it has none unless you set it.
 Each routing engine has a shared budget of 3,000 calls a minute and 500,000 a
-day.
+day. Calls to the public OSRM demo, the default driving fallback, are held to
+its usage policy: 60 a minute and 10,000 a day.
 
 Natural-language search counts its hourly limit per client network, ignores the
 old `ip` query parameter, rejects queries over 500 characters and gives cloud
@@ -36,6 +37,11 @@ routing engines and any configured MapTiler budget are counted in each API
 process instead, and natural-language search uses only its keyword parser.
 
 ## Required action
+
+The routing engine budget protects capacity, not spending: 500,000 calls a day
+is far above most paid plans. If a routing engine uses a metered key, such as
+Valhalla through Stadia's hosted API, set the routing integration's
+`providerRequestsPerDay` to what your plan allows.
 
 To cap what visitors can spend on your MapTiler key, set
 `MAPTILER_DAILY_REQUEST_LIMIT`, sized for every visitor's basemap tiles and

@@ -237,8 +237,26 @@ To use an external endpoint, stop and remove the corresponding local service
 from the selection, configure the integration endpoint, and recreate `app-api`
 so its applied service selection is current. Valhalla's hosted Stadia fallback
 requires its provider API key; self-hosted Valhalla does not. The OSRM public demo
-is an external dependency with its own usage policy. Review permitted use before
-sending application traffic. BRouter has no automatic public fallback.
+is an external dependency with its own [usage policy](https://github.com/Project-OSRM/osrm-backend/wiki/Api-usage-policy),
+which allows at most one request a second. Review permitted use before sending
+application traffic. BRouter has no automatic public fallback.
+
+### Engine request budgets
+
+The routing integration admits every engine call against a per-engine budget
+shared by all clients and API replicas: by default 3,000 calls a minute and
+500,000 a day, set by its `providerRequestsPerMinute` and
+`providerRequestsPerDay`. An adapter can lower that for its current upstream.
+While `routing-osrm` points at the public demo (`router.project-osrm.org`, the
+default when no OSRM service or endpoint is configured), its calls are held to
+60 a minute and 10,000 a day. A self-hosted or other endpoint uses the
+deployment budget.
+
+These defaults protect an engine's capacity from a flood of requests. They are
+not a spending guard: 500,000 calls a day is far above most paid plans. With a
+metered upstream, such as Valhalla through Stadia's hosted API, set
+`providerRequestsPerDay` (and, if needed, `providerRequestsPerMinute`) to what
+your plan and budget allow.
 
 The direct API helpers using `VALHALLA_URL` or `OSRM_URL` have separate endpoint
 configuration. See [Configuration](../install/configuration.md#backend-endpoint-overrides)

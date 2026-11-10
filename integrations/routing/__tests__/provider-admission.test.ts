@@ -167,4 +167,30 @@ describe("routing provider admission", () => {
       ],
     });
   });
+
+  it("charges the lower of the deployment budget and the engine's own ceiling", async () => {
+    const engine = provider("routing-osrm", 1);
+    const { runtime, consumeQuota } = fakeRuntime(1);
+    const environment = createRoutingHandlerEnvironment({
+      routingProviders: [
+        { ...engine.fixture, admissionCeiling: () => ({ perMinute: 60, perDay: 10_000 }) },
+      ],
+      contextOverrides: { upstreamRuntime: runtime },
+    });
+    const directions = environment.getHandler("/directions");
+    const first = createRoutingTestReply();
+    const second = createRoutingTestReply();
+
+    await directions({ query: { waypoints: WAYPOINTS, mode: "driving" } }, first);
+    await directions({ query: { waypoints: WAYPOINTS, mode: "driving" } }, second);
+
+    expect(consumeQuota.mock.calls[0]?.[0]).toMatchObject({
+      windows: [
+        { id: "minute", limit: 60 },
+        { id: "day", limit: 10_000 },
+      ],
+    });
+    expect([first.code, second.code]).toEqual([200, 429]);
+    expect(engine.getRoute).toHaveBeenCalledOnce();
+  });
 });

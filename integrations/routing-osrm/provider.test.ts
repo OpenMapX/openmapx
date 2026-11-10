@@ -1,9 +1,11 @@
+import { withRoutingContributors } from "@openmapx/integration-framework";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   joinSegmentSpeedLimits,
   osrmRouteSegmentSpeedLimits,
   osrmSegmentSpeedLimits,
   osrmService,
+  setOsrmUrl,
   transformOsrmStep,
 } from "./provider.js";
 
@@ -385,4 +387,23 @@ describe("osrmService requests", () => {
       expect(result.routes[0].segmentSpeedLimits).toEqual([50]);
     },
   );
+});
+
+describe("osrmService admission ceiling", () => {
+  afterEach(() => setOsrmUrl(undefined));
+
+  it("holds the public demo to its usage policy and leaves other endpoints to the deployment budget", () => {
+    setOsrmUrl(undefined);
+    expect(osrmService.admissionCeiling?.()).toEqual({ perMinute: 60, perDay: 10_000 });
+    setOsrmUrl("https://router.project-osrm.org/");
+    expect(osrmService.admissionCeiling?.()).toEqual({ perMinute: 60, perDay: 10_000 });
+    setOsrmUrl("http://osrm:5000");
+    expect(osrmService.admissionCeiling?.()).toBeUndefined();
+  });
+
+  it("keeps the ceiling through the contributor wrapper the integration registers", () => {
+    const wrapped = withRoutingContributors(osrmService, () => []);
+    setOsrmUrl(undefined);
+    expect(wrapped.admissionCeiling?.()).toEqual({ perMinute: 60, perDay: 10_000 });
+  });
 });

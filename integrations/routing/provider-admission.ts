@@ -75,15 +75,20 @@ export function createRoutingProviderAdmission(ctx: IntegrationContext) {
   const perDay = positiveInteger(ctx.config?.providerRequestsPerDay, DEFAULT_REQUESTS_PER_DAY);
 
   const admitFor =
-    (integrationId: string): Admit =>
+    (integrationId: string, provider: RoutingProvider): Admit =>
     async () => {
       if (!runtime) return;
+      const ceiling = provider.admissionCeiling?.();
       const request = {
         bucket: `routing-provider:${integrationId}`,
         cost: 1,
         windows: [
-          { id: "minute", limit: perMinute, durationMs: 60_000 },
-          { id: "day", limit: perDay, durationMs: 86_400_000 },
+          {
+            id: "minute",
+            limit: Math.min(perMinute, ceiling?.perMinute ?? perMinute),
+            durationMs: 60_000,
+          },
+          { id: "day", limit: Math.min(perDay, ceiling?.perDay ?? perDay), durationMs: 86_400_000 },
         ],
       };
       let decision: QuotaDecision = await runtime.consumeQuota(request);
@@ -100,7 +105,7 @@ export function createRoutingProviderAdmission(ctx: IntegrationContext) {
    */
   function admitted(provider: RoutingProvider, integrationId: string): RoutingProvider {
     if (!runtime) return provider;
-    const admit = admitFor(integrationId);
+    const admit = admitFor(integrationId, provider);
     const wrapped = Object.create(provider) as {
       -readonly [K in keyof RoutingProvider]: RoutingProvider[K];
     };
