@@ -23,6 +23,7 @@ vi.mock("../trusted-config-operations", () => ({ applyTrustedConfiguration: vi.f
 import { isIntegrationHostInitialized, reloadIntegrations } from "../../integration-host";
 import { recoverAgentIntegrations } from "../agent-integrations";
 import { reconcileCommunityRepositoryTransactions } from "../community-repositories";
+import type { JobContext } from "../job-runner";
 
 let recovery: typeof import("../extension-recovery.js");
 beforeAll(async () => {
@@ -76,7 +77,7 @@ describe("recoverInterruptedExtensionChanges", () => {
     },
   );
 
-  it("leaves adoption to the background pass when asked to", async () => {
+  it("runs startup recovery without a job, so nothing is adopted", async () => {
     integrationsMock.mockResolvedValue(integrationOutcome());
     repositoriesMock.mockResolvedValue({
       runtimeRecoveryNeeded: false,
@@ -84,9 +85,24 @@ describe("recoverInterruptedExtensionChanges", () => {
       restartServiceIds: [],
     });
 
-    await recovery.recoverInterruptedExtensionChanges(undefined, { adoptIntegrations: false });
+    await recovery.recoverInterruptedExtensionChanges();
 
-    expect(integrationsMock).toHaveBeenCalledWith(expect.objectContaining({ adopt: false }));
+    expect(integrationsMock).toHaveBeenCalledTimes(1);
+    expect(integrationsMock.mock.calls[0]?.[0]).toMatchObject({ ctx: undefined });
+  });
+
+  it("hands the running job to integration recovery so it can adopt", async () => {
+    integrationsMock.mockResolvedValue(integrationOutcome());
+    repositoriesMock.mockResolvedValue({
+      runtimeRecoveryNeeded: false,
+      orphanedServiceIds: [],
+      restartServiceIds: [],
+    });
+    const ctx = { jobId: "job-1" } as unknown as JobContext;
+
+    await recovery.recoverInterruptedExtensionChanges(undefined, { ctx });
+
+    expect(integrationsMock.mock.calls[0]?.[0]).toMatchObject({ ctx });
   });
 
   it("leaves the reload to startup when the integration host is not loaded yet", async () => {
@@ -109,20 +125,6 @@ describe("recoverInterruptedExtensionChanges", () => {
     await expect(recovery.recoverInterruptedExtensionChanges()).rejects.toThrow(
       "agent unavailable",
     );
-    expect(repositoriesMock).not.toHaveBeenCalled();
-  });
-});
-
-describe("adoptUnrecordedIntegrations", () => {
-  it("adopts, then reloads only when something was recorded", async () => {
-    integrationsMock.mockResolvedValueOnce(integrationOutcome({ adopted: ["intg-one"] }));
-    await recovery.adoptUnrecordedIntegrations();
-    expect(integrationsMock).toHaveBeenCalledWith(expect.not.objectContaining({ adopt: false }));
-    expect(reloadMock).toHaveBeenCalledTimes(1);
-
-    integrationsMock.mockResolvedValueOnce(integrationOutcome());
-    await recovery.adoptUnrecordedIntegrations();
-    expect(reloadMock).toHaveBeenCalledTimes(1);
     expect(repositoriesMock).not.toHaveBeenCalled();
   });
 });
