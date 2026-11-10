@@ -107,7 +107,8 @@ function readSpaced(items: Item[]): { lat: number; lng: number }[] {
  * the two readings differ.
  */
 export function parseCoordinateInput(input: string): { lngLat: LngLat; label: string } | null {
-  const trimmed = input.trim();
+  // A comma left at the end, as when the pair is pasted from a list, is not a separator.
+  const trimmed = input.trim().replace(/\s*,$/, "");
   if (!trimmed) return null;
 
   const halves = trimmed.split(",");
