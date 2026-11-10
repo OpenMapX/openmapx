@@ -299,7 +299,12 @@ export function DirectionsPanelContent() {
 
   const myLocationLabel = t("myLocation");
   const requestFix = useForegroundLocation();
+  // A fix that arrived while the origin held typed text. If that text is
+  // emptied the fix still answers where the person is, so it fills the origin
+  // then.
+  const withheldFix = useRef<{ originId: string; location: LngLat } | null>(null);
   useEffect(() => {
+    withheldFix.current = null;
     if (!isOpen) return;
     const requestedOrigin = useDirectionsStore.getState().waypoints[0];
     if (!requestedOrigin || requestedOrigin.coords !== null) return;
@@ -315,7 +320,10 @@ export function DirectionsPanelContent() {
       const location: LngLat = [result.fix.lng, result.fix.lat];
       useMapStore.getState().setUserLocation(location);
       // Text being typed into the origin is the person's own choice of start.
-      if (hasDraft(origin.id)) return;
+      if (hasDraft(origin.id)) {
+        withheldFix.current = { originId: origin.id, location };
+        return;
+      }
       setWaypoint(0, location, myLocationLabel);
     });
 
@@ -786,6 +794,13 @@ export function DirectionsPanelContent() {
     (index: number, value: string) => {
       const waypoint = waypoints[index];
       if (!waypoint) return;
+      const withheld = withheldFix.current;
+      if (value.trim() === "" && withheld?.originId === waypoint.id && waypoint.coords === null) {
+        withheldFix.current = null;
+        clearDraft(waypoint.id);
+        setWaypoint(index, withheld.location, myLocationLabel);
+        return;
+      }
       if (value) {
         setDraft(waypoint, value);
         return;
@@ -793,7 +808,7 @@ export function DirectionsPanelContent() {
       clearDraft(waypoint.id);
       setWaypoint(index, null, "");
     },
-    [waypoints, setDraft, clearDraft, setWaypoint],
+    [waypoints, setDraft, clearDraft, setWaypoint, myLocationLabel],
   );
 
   const handleSuggestionSelect = (result: AutocompleteResult) => {

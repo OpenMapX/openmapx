@@ -1890,6 +1890,96 @@ describe("directions input behaviour", () => {
         expect(useMapStore.getState().userLocation).toEqual([13.405, 52.52]);
       });
 
+      it("fills the origin when the text typed into it is cleared before the fix arrives", async () => {
+        const deliverFix = stubFix();
+        act(() => useDirectionsStore.getState().open());
+        renderPanel();
+        const origin = screen.getByPlaceholderText("directions.chooseOrigin");
+        fireEvent.focus(origin);
+        fireEvent.change(origin, { target: { value: "Alexan" } });
+        fireEvent.change(origin, { target: { value: "" } });
+
+        await deliverFix();
+
+        expect(useDirectionsStore.getState().waypoints[0]).toMatchObject({
+          coords: [13.405, 52.52],
+          label: "directions.myLocation",
+        });
+        expect(screen.getByDisplayValue("directions.myLocation")).toBeVisible();
+      });
+
+      it("fills the origin from a fix that arrived while text was typed once that text is cleared", async () => {
+        const deliverFix = stubFix();
+        act(() => useDirectionsStore.getState().open());
+        renderPanel();
+        const origin = screen.getByPlaceholderText("directions.chooseOrigin");
+        fireEvent.focus(origin);
+        fireEvent.change(origin, { target: { value: "Alexan" } });
+        await deliverFix();
+        expect(useDirectionsStore.getState().waypoints[0].coords).toBeNull();
+
+        fireEvent.change(screen.getByPlaceholderText("directions.chooseOrigin"), {
+          target: { value: "" },
+        });
+
+        expect(useDirectionsStore.getState().waypoints[0]).toMatchObject({
+          coords: [13.405, 52.52],
+          label: "directions.myLocation",
+        });
+        expect(screen.getByDisplayValue("directions.myLocation")).toBeVisible();
+      });
+
+      it("does not refill an origin the person picked after typing", async () => {
+        const deliverFix = stubFix();
+        act(() => useDirectionsStore.getState().open());
+        renderPanel();
+        const origin = screen.getByPlaceholderText("directions.chooseOrigin");
+        fireEvent.focus(origin);
+        fireEvent.change(origin, { target: { value: "Alexan" } });
+        await deliverFix();
+        act(() => useDirectionsStore.getState().setWaypoint(0, [13.4, 52.52], "Alexanderplatz"));
+
+        fireEvent.change(screen.getByDisplayValue("Alexanderplatz"), { target: { value: "" } });
+
+        expect(useDirectionsStore.getState().waypoints[0]).toMatchObject({
+          coords: null,
+          label: "",
+        });
+      });
+
+      it("treats whitespace typed into the origin as no choice when the fix arrives", async () => {
+        const deliverFix = stubFix();
+        act(() => useDirectionsStore.getState().open());
+        renderPanel();
+        const origin = screen.getByPlaceholderText("directions.chooseOrigin");
+        fireEvent.focus(origin);
+        fireEvent.change(origin, { target: { value: "  " } });
+
+        await deliverFix();
+
+        expect(useDirectionsStore.getState().waypoints[0]).toMatchObject({
+          coords: [13.405, 52.52],
+          label: "directions.myLocation",
+        });
+        expect(screen.getByDisplayValue("directions.myLocation")).toBeVisible();
+      });
+
+      it("fills the origin when text is replaced by whitespace after the fix was withheld", async () => {
+        const deliverFix = stubFix();
+        act(() => useDirectionsStore.getState().open());
+        renderPanel();
+        const origin = screen.getByPlaceholderText("directions.chooseOrigin");
+        fireEvent.focus(origin);
+        fireEvent.change(origin, { target: { value: "Alexan" } });
+        await deliverFix();
+
+        fireEvent.change(screen.getByPlaceholderText("directions.chooseOrigin"), {
+          target: { value: " " },
+        });
+
+        expect(useDirectionsStore.getState().waypoints[0].coords).toEqual([13.405, 52.52]);
+      });
+
       it("keeps a typed stop with that stop when another one is removed", () => {
         seedThreeStops();
         renderPanel();

@@ -14,7 +14,7 @@ export interface WaypointDrafts {
   setDraft: (waypoint: Waypoint, text: string) => void;
   /** Forget a waypoint's typed text, so the field shows its stored label again. */
   clearDraft: (waypointId: string) => void;
-  /** Whether the waypoint's field currently holds text the store does not have. */
+  /** Whether the waypoint's field currently holds typed text; blank text is not a choice. */
   hasDraft: (waypointId: string) => boolean;
 }
 
@@ -72,7 +72,10 @@ export function useWaypointDrafts(waypoints: Waypoint[]): WaypointDrafts {
     });
   }, []);
 
-  const hasDraft = useCallback((waypointId: string) => waypointId in standingRef.current, []);
+  const hasDraft = useCallback(
+    (waypointId: string) => (standingRef.current[waypointId]?.text.trim() ?? "") !== "",
+    [],
+  );
 
   return { values, setDraft, clearDraft, hasDraft };
 }
