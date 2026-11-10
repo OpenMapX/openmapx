@@ -440,7 +440,7 @@ Keys and overrides for the `app-api` traffic and tile proxies.
 
 ## Email
 
-Used for email verification, 2FA, and email-change flows. The provider is
+Used for email verification, password reset, and email-change flows. The provider is
 auto-detected by priority: **EmailLabs > Lettermint > SMTP**. These are also
 settable in `/admin/settings/email`; env always wins.
 

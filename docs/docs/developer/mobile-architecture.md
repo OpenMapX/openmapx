@@ -217,7 +217,7 @@ associations, origin and trademark-compliant name.
 
 ## Authentication
 
-Email/password, verification, email OTP and TOTP use the web UI and its session
+Email/password, verification, email-code password reset and TOTP use the web UI and its session
 cookie. OAuth and passkeys go through `auth.open`: the shell opens `/mobile-auth`
 with `expo-web-browser` (a Custom Tab on Android, `ASWebAuthenticationSession`
 on iOS). That page signs the user in inside the real browser when needed and

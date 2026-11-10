@@ -2,7 +2,42 @@ import type { AuthPolicySnapshot } from "@openmapx/core/api-contracts";
 import type { BetterAuthOptions } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { accountRoleSchema } from "./account-mutations";
+
+/**
+ * Better Auth routes that let a mailbox alone produce a session, or stand in
+ * for an enrolled authenticator app. No client uses them. Password reset and
+ * email change keep their own email-code routes, and a reset still ends at
+ * the ordinary sign-in with its second factor.
+ */
+const EMAIL_ONLY_SIGN_IN_PATHS = new Set([
+  "/sign-in/email-otp",
+  "/email-otp/send-verification-otp",
+  "/email-otp/verify-email",
+  "/two-factor/send-otp",
+  "/two-factor/verify-otp",
+]);
+
+/** Paths where Better Auth signs someone in on the strength of their email alone. */
+const EMAIL_PROVEN_SESSION_PATHS = new Set(["/verify-email", ...EMAIL_ONLY_SIGN_IN_PATHS]);
+
 export function applyPasswordVerificationPolicy(policy: AuthPolicySnapshot) {
+  const sessionHooks: NonNullable<NonNullable<BetterAuthOptions["databaseHooks"]>["session"]> = {
+    create: {
+      // A verification link still verifies the address, but it does not sign
+      // in an account that has enrolled a second factor.
+      before: async (session, context) => {
+        if (!context?.path || !EMAIL_PROVEN_SESSION_PATHS.has(context.path)) return;
+        const owner = (await context.context.internalAdapter.findUserById(session.userId)) as {
+          twoFactorEnabled?: boolean | null;
+        } | null;
+        if (!owner || owner.twoFactorEnabled === true)
+          throw new APIError("FORBIDDEN", {
+            code: "TWO_FACTOR_REQUIRED",
+            message: "Sign in with your password and second factor",
+          });
+      },
+    },
+  };
   const userHooks: NonNullable<NonNullable<BetterAuthOptions["databaseHooks"]>["user"]> = {
     create: {
       before: async (user, context) => {
@@ -29,6 +64,8 @@ export function applyPasswordVerificationPolicy(policy: AuthPolicySnapshot) {
     },
   };
   const before = createAuthMiddleware(async (ctx) => {
+    if (EMAIL_ONLY_SIGN_IN_PATHS.has(ctx.path))
+      throw new APIError("NOT_FOUND", { code: "NOT_FOUND", message: "Not found" });
     if (ctx.path === "/two-factor/enable" && !policy.twoFaEnabled)
       throw new APIError("FORBIDDEN", {
         code: "TWO_FACTOR_ENROLLMENT_DISABLED",
@@ -44,5 +81,5 @@ export function applyPasswordVerificationPolicy(policy: AuthPolicySnapshot) {
         message: "Password does not meet the instance policy",
       });
   });
-  return { userHooks, before };
+  return { userHooks, sessionHooks, before };
 }

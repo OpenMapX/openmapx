@@ -42,7 +42,6 @@ import {
   emailOtpEmail,
   resetPasswordEmail,
   setupPasswordEmail,
-  twoFactorOtpEmail,
   verifyEmailEmail,
 } from "./utils/emailTemplates";
 import { getOsmConfig } from "./utils/osm-config";
@@ -187,6 +186,7 @@ function createPolicyAuth(
     databaseHooks: {
       session: {
         create: {
+          ...passwordPolicy.sessionHooks.create,
           // This hook runs after Better Auth has created the usable session. It
           // intentionally records nothing for unrecognised endpoints.
           after: async (createdSession, context) => {
@@ -397,19 +397,9 @@ function createPolicyAuth(
           },
         ],
       }),
-      twoFactor({
-        issuer: "OpenMapX",
-        otpOptions: {
-          async sendOTP({ user, otp }) {
-            const mail = twoFactorOtpEmail(otp);
-            await sendMail({
-              to: user.email,
-              ...mail,
-              disclosure: { userId: user.id, operationCode: "auth.two-factor.email" },
-            });
-          },
-        },
-      }),
+      // Authenticator apps and backup codes only. Without `otpOptions`, Better
+      // Auth also refuses to enroll emailed codes as a second factor.
+      twoFactor({ issuer: "OpenMapX" }),
       emailOTP({
         async sendVerificationOTP({ email, otp, type }) {
           const mail = emailOtpEmail(otp, type);
