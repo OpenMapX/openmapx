@@ -88,6 +88,8 @@ export function createRideOrchestrator(ctx: IntegrationContext) {
     fn: () => Promise<T>,
   ): Promise<T | null> {
     const start = Date.now();
+    // A half-open lease held now belongs to this call: the probe.
+    const probe = ctx.providerHealth?.heldProbe?.(provider.id);
     try {
       const value = await fn();
       const latency = Date.now() - start;
@@ -105,9 +107,23 @@ export function createRideOrchestrator(ctx: IntegrationContext) {
       const reason = redactUrlsInReason(raw);
       ctx.log.warn(`ride provider call failed: ${provider.id}.${method}`, reason);
       const outcome = classifyProviderFailure(err);
-      await ctx.providerHealth?.recordFailure(provider.id, latency, outcome, reason);
+      // A cancellation (the request left, or a reload retired the provider)
+      // says nothing about the provider: metrics only, and a cancelled probe
+      // gives its lease back so the next request can probe.
+      if (outcome !== "caller_cancelled")
+        await ctx.providerHealth?.recordFailure(provider.id, latency, outcome, reason);
+      else if (probe) await ctx.providerHealth?.releaseProbe?.(provider.id, probe);
       ctx.metricsRecorder?.recordProviderCall(
-        { providerId: provider.id, method, outcome: outcome === "timeout" ? "timeout" : "error" },
+        {
+          providerId: provider.id,
+          method,
+          outcome:
+            outcome === "caller_cancelled"
+              ? "cancelled"
+              : outcome === "timeout"
+                ? "timeout"
+                : "error",
+        },
         latency,
       );
       return null;

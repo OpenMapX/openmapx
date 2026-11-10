@@ -1,4 +1,4 @@
-import type { RideProvider } from "@openmapx/integration-framework";
+import { ProviderRetiredError, type RideProvider } from "@openmapx/integration-framework";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { createRideOrchestrator, redactUrlsInReason } from "./orchestrator.js";
@@ -93,6 +93,67 @@ describe("listProviders", () => {
     };
     await createRideOrchestrator(ctx).listProviders(request);
     expect(recordFailure).toHaveBeenCalledWith("rejected", expect.any(Number), "auth", "HTTP 401");
+  });
+
+  it("releases a cancelled half-open probe's lease without recording an outcome", async () => {
+    const retired = makeProvider({
+      id: "retired",
+      getAvailability: async () => {
+        throw new TypeError("fetch failed", { cause: new ProviderRetiredError() });
+      },
+    });
+    const ctx = ctxWith([retired]);
+    const recordFailure = vi.fn(async () => {});
+    const releaseProbe = vi.fn(async () => {});
+    const recordProviderCall = vi.fn();
+    ctx.metricsRecorder = { recordProviderCall };
+    ctx.providerHealth = {
+      isHealthy: async () => true,
+      recordSuccess: async () => {},
+      recordFailure,
+      getSnapshot: vi.fn(),
+      heldProbe: (id: string) => (id === "retired" ? "probe-token" : undefined),
+      releaseProbe,
+    };
+
+    await createRideOrchestrator(ctx).listProviders(request);
+
+    expect(recordFailure).not.toHaveBeenCalled();
+    expect(releaseProbe).toHaveBeenCalledWith("retired", "probe-token");
+    expect(recordProviderCall).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: "retired", outcome: "cancelled" }),
+      expect.any(Number),
+    );
+  });
+
+  it("keeps the lease and records the failure when the probe really fails", async () => {
+    const broken = makeProvider({
+      id: "broken",
+      getAvailability: async () => {
+        throw Object.assign(new Error("HTTP 503"), { status: 503 });
+      },
+    });
+    const ctx = ctxWith([broken]);
+    const recordFailure = vi.fn(async () => {});
+    const releaseProbe = vi.fn(async () => {});
+    ctx.providerHealth = {
+      isHealthy: async () => true,
+      recordSuccess: async () => {},
+      recordFailure,
+      getSnapshot: vi.fn(),
+      heldProbe: () => "probe-token",
+      releaseProbe,
+    };
+
+    await createRideOrchestrator(ctx).listProviders(request);
+
+    expect(recordFailure).toHaveBeenCalledWith(
+      "broken",
+      expect.any(Number),
+      "upstream_5xx",
+      "HTTP 503",
+    );
+    expect(releaseProbe).not.toHaveBeenCalled();
   });
 
   it("skips providers whose source the operator policy disallows", async () => {
