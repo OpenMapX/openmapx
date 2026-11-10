@@ -6,7 +6,7 @@ import {
   MAP_QUERY_POLICY,
   OFFLINE_RETENTION_GC_TIME_MS,
   RAPID_QUERY_POLICY,
-  RATE_LIMIT_AWARE_RETRY,
+  rateLimitAwareRetry,
 } from "./queryPolicy";
 
 afterEach(() => configureOfflineQueryRetention(false));
@@ -25,21 +25,26 @@ describe("query policies", () => {
 describe("rate-limit-aware retry", () => {
   const limited = (retryAfterSeconds: number | null) =>
     new ApiClientError(429, null, retryAfterSeconds);
+  const failure = new ApiClientError(502, null, null);
 
-  it("retries a 429 up to five times and anything else once", () => {
-    expect([0, 4, 5].map((count) => RATE_LIMIT_AWARE_RETRY.retry(count, limited(2)))).toEqual([
-      true,
-      true,
-      false,
-    ]);
-    const failure = new ApiClientError(502, null, null);
-    expect(RATE_LIMIT_AWARE_RETRY.retry(0, failure)).toBe(true);
-    expect(RATE_LIMIT_AWARE_RETRY.retry(1, failure)).toBe(false);
+  it("retries a 429 up to five times whatever the client default", () => {
+    const policy = rateLimitAwareRetry(false);
+    expect([0, 4, 5].map((count) => policy.retry(count, limited(2)))).toEqual([true, true, false]);
+  });
+
+  it("leaves every other failure to the client's own retry default", () => {
+    expect(rateLimitAwareRetry(false).retry(0, failure)).toBe(false);
+    expect(rateLimitAwareRetry(1).retry(0, failure)).toBe(true);
+    expect(rateLimitAwareRetry(1).retry(1, failure)).toBe(false);
+    expect(rateLimitAwareRetry((count) => count < 2).retry(1, failure)).toBe(true);
+    expect(rateLimitAwareRetry(undefined).retry(2, failure)).toBe(true);
+    expect(rateLimitAwareRetry(undefined).retry(3, failure)).toBe(false);
   });
 
   it("waits the advertised Retry-After, bounded to a minute", () => {
-    expect(RATE_LIMIT_AWARE_RETRY.retryDelay(0, limited(7))).toBe(7_000);
-    expect(RATE_LIMIT_AWARE_RETRY.retryDelay(0, limited(3_600))).toBe(60_000);
-    expect(RATE_LIMIT_AWARE_RETRY.retryDelay(2, limited(null))).toBe(4_000);
+    const policy = rateLimitAwareRetry(1);
+    expect(policy.retryDelay(0, limited(7))).toBe(7_000);
+    expect(policy.retryDelay(0, limited(3_600))).toBe(60_000);
+    expect(policy.retryDelay(2, limited(null))).toBe(4_000);
   });
 });
