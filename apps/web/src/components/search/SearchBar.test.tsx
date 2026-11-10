@@ -1796,7 +1796,7 @@ describe("SearchBar", () => {
     await screen.findByText("Accessible cafés with outdoor seating");
   });
 
-  it.each([
+  it.each<[string, { user: { id: string } } | null, boolean]>([
     ["does not ask an anonymous visitor", null, false],
     ["asks a signed-in user", { user: { id: "test-user" } }, true],
   ])(
