@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import type { LocationProfile } from "./LocationDriver";
 
 /**
@@ -11,6 +12,15 @@ import type { LocationProfile } from "./LocationDriver";
  *
  * Deferred updates are not requested anywhere: they may delay a cue, and no
  * physical-device evidence yet exists to show they are safe.
+ *
+ * The distance filters below are iOS's. Android requests every profile with no
+ * distance filter, so updates arrive on the time interval even while the user
+ * stands still. A backgrounded Android app's JavaScript timers do not fire, even
+ * under the location foreground service, and changing the profile there is not
+ * allowed (see `backgroundSafeDriver.ts`), so a time-driven batch is the only
+ * dependable wake-up: it is what releases the stream after an arrival. iOS
+ * ignores the time interval, and keeps JavaScript timers running while the
+ * location stream runs, so it keeps its filters.
  */
 
 export const LOCATION_PROFILE_KINDS = [
@@ -20,7 +30,6 @@ export const LOCATION_PROFILE_KINDS = [
   "walking",
   "transit-cruise",
   "transit-near-event",
-  "arrival-release",
 ] as const;
 
 export type LocationProfileKind = (typeof LOCATION_PROFILE_KINDS)[number];
@@ -72,23 +81,20 @@ const PROFILES: Record<LocationProfileKind, LocationProfile> = {
     activityType: "other-navigation",
     pausesUpdatesAutomatically: false,
   }),
-  // After arrival, until the stream is released. Every other profile filters by
-  // distance, so a user standing still at the destination gets no update, and
-  // on Android a backgrounded app's JavaScript timers do not fire either. With
-  // no distance filter the stream delivers on time alone, which guarantees the
-  // batch that releases it. Five seconds closes the window promptly once it is
-  // due without waking the device more than a few times.
-  "arrival-release": Object.freeze({
-    accuracy: "high",
-    timeIntervalMs: 5_000,
-    distanceIntervalMeters: 0,
-    activityType: "other-navigation",
-    pausesUpdatesAutomatically: false,
-  }),
 };
 
-export function profileFor(kind: LocationProfileKind): LocationProfile {
-  const profile = PROFILES[kind];
+const ANDROID_PROFILES = Object.fromEntries(
+  Object.entries(PROFILES).map(([kind, profile]) => [
+    kind,
+    Object.freeze({ ...profile, distanceIntervalMeters: 0 }),
+  ]),
+) as Record<LocationProfileKind, LocationProfile>;
+
+export function profileFor(
+  kind: LocationProfileKind,
+  os: "ios" | "android" = Platform.OS === "android" ? "android" : "ios",
+): LocationProfile {
+  const profile = (os === "android" ? ANDROID_PROFILES : PROFILES)[kind];
   if (!profile) throw new Error(`unknown location profile: ${String(kind)}`);
   return profile;
 }

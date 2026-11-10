@@ -10,6 +10,7 @@ import {
   type SpeakRequest,
   type SpeakResult,
 } from "../../audio/navigationAudio";
+import { type AppActivity, withBackgroundSafeProfiles } from "../../location/backgroundSafeDriver";
 import type {
   LocationDriver,
   LocationPermissionState,
@@ -118,8 +119,15 @@ export class FakeLocation implements LocationDriver {
   readonly calls: Array<"start" | "stop"> = [];
   locale: "en" | "de" | null = null;
 
-  /** `timeline` is shared with other fakes, so a test can see what happened first. */
-  constructor(private readonly timeline: string[] = []) {}
+  /**
+   * `timeline` is shared with other fakes, so a test can see what happened
+   * first. On Android, starting the stream needs the app in the foreground.
+   */
+  constructor(
+    private readonly timeline: string[] = [],
+    private readonly os: "ios" | "android" = "ios",
+    private readonly app: { visible: boolean } = { visible: true },
+  ) {}
 
   setLocale(locale: "en" | "de"): void {
     this.locale = locale;
@@ -137,7 +145,18 @@ export class FakeLocation implements LocationDriver {
     return this.permission;
   }
 
+  /**
+   * Behaves like expo-location under `ExpoLocationDriver`: the same profile is
+   * a no-op, a different one stops the stream and starts it again, and on
+   * Android the start throws `ForegroundServiceStartNotAllowedException` unless
+   * the app is in the foreground, after the stop has already happened.
+   */
   async start(profile: LocationProfile): Promise<void> {
+    if (this.running && this.profile && sameProfile(this.profile, profile)) return;
+    if (this.running) await this.stop();
+    if (this.os === "android" && !this.app.visible) {
+      throw new Error("ForegroundServiceStartNotAllowedException");
+    }
     this.calls.push("start");
     this.timeline.push("location:start");
     this.running = true;
@@ -269,8 +288,32 @@ export class FakeStorage {
 }
 
 /** Whether the user can see the app, which the start flow and keep-awake ask. */
-export class FakeApp {
+export class FakeApp implements AppActivity {
   visible = true;
+  private listeners = new Set<() => void>();
+
+  isActive(): boolean {
+    return this.visible;
+  }
+
+  onActive(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  /** Brings the app to the front or sends it away, telling listeners on activation. */
+  setVisible(visible: boolean): void {
+    const activated = visible && !this.visible;
+    this.visible = visible;
+    if (activated) for (const listener of this.listeners) listener();
+  }
+
+  /** A killed process takes its listeners with it. */
+  dropListeners(): void {
+    this.listeners.clear();
+  }
 }
 
 /** The screen's wake lock. */
@@ -320,6 +363,7 @@ export class FakePermissionScreens implements PermissionUi {
 }
 
 export interface FakePhone {
+  os: "ios" | "android";
   /** Location starts and stops and spoken cues, in the order they happened. */
   timeline: string[];
   clock: FakeClock;
@@ -333,17 +377,20 @@ export interface FakePhone {
   permissionScreens: FakePermissionScreens;
 }
 
-export function createFakePhone(): FakePhone {
+export function createFakePhone(options: { os?: "ios" | "android" } = {}): FakePhone {
   const timeline: string[] = [];
+  const os = options.os ?? "ios";
+  const app = new FakeApp();
   return {
+    os,
     timeline,
     clock: new FakeClock(),
-    location: new FakeLocation(timeline),
+    location: new FakeLocation(timeline, os, app),
     speech: new FakeSpeech(timeline),
     notifications: new FakeNotifications(),
     network: new FakeNetwork(),
     storage: new FakeStorage(),
-    app: new FakeApp(),
+    app,
     keepAwake: new FakeKeepAwake(),
     permissionScreens: new FakePermissionScreens(),
   };
@@ -422,7 +469,9 @@ export async function startForegroundHarness(
   const sent: SentMessage[] = [];
   const navigatingReports: boolean[] = [];
   const device: ForegroundDevice = {
-    driver: phone.location,
+    // The wrapper `createLocationDriver` puts around the platform driver.
+    driver: withBackgroundSafeProfiles(phone.location, phone.os, phone.app),
+    platform: phone.os === "android" ? { os: "android", sdkInt: 34 } : { os: "ios" },
     readLocationPermission: () => phone.location.readPermission(),
     audio: createNavigationAudio(phone.speech),
     speechAvailable: () => phone.speech.available,
@@ -505,7 +554,10 @@ export async function startForegroundHarness(
       return true;
     },
     async setVisible(visible) {
-      phone.app.visible = visible;
+      phone.app.setVisible(visible);
+      // Work started by an activation listener is not awaited by anyone.
+      await new Promise((resolve) => setImmediate(resolve));
+      await settle();
       await navigation.reviewKeepAwake();
     },
     session: () => repository.loadActive(phone.clock.now()),
@@ -529,6 +581,7 @@ export async function startForegroundHarness(
     async relaunch() {
       navigation.dispose();
       phone.clock.dropTimers();
+      phone.app.dropListeners();
       return startForegroundHarness({ ...options, phone });
     },
     async shutdown() {
@@ -627,4 +680,13 @@ export async function driveStraightRoute(
     harness.phone.clock.advance(1_000);
     await harness.deliver([rawFix(harness.phone.clock, STRAIGHT_ROUTE[index])]);
   }
+}
+
+function sameProfile(a: LocationProfile, b: LocationProfile): boolean {
+  return (
+    a.accuracy === b.accuracy &&
+    a.timeIntervalMs === b.timeIntervalMs &&
+    a.distanceIntervalMeters === b.distanceIntervalMeters &&
+    a.activityType === b.activityType
+  );
 }

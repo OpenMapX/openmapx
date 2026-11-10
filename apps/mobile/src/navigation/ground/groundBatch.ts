@@ -265,12 +265,6 @@ export function processGroundBatch(input: ProcessGroundBatchInput): GroundBatchO
     }
   }
 
-  // Nothing after arrival needs a position. The stream stays only until the
-  // arrival announcement has played, on a cadence that still delivers while
-  // the user stands still, so the batch that releases it is sure to come; the
-  // row stays for the page.
-  if (arrived) effects.push({ kind: "update-location-profile", profile: "arrival-release" });
-
   // One snapshot for the batch, not one per historical fix.
   effects.push({ kind: "publish-snapshot", immediate: arrived || offRouteEpisodeStart !== null });
 

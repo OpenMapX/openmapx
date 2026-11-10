@@ -213,17 +213,13 @@ export function processTransitBatch(input: ProcessTransitBatchInput): TransitBat
   };
 
   // The cadence follows the phase, and a change is a profile update on the one
-  // existing stream — never a second one. Between an arrival and its release
-  // the stream runs on a cadence that delivers while the rider stands still, so
-  // the batch that releases it is sure to come; an undo restores the phase's own.
-  if (next.status === "arrived") {
-    effects.push({ kind: "update-location-profile", profile: "arrival-release" });
-  } else {
-    const profile = transitProfileForTime(next, nowMs);
-    const previousProfile = transitProfileForTime(session, nowMs);
-    if (profile !== previousProfile || session.status === "arrived") {
-      effects.push({ kind: "update-location-profile", profile });
-    }
+  // existing stream — never a second one. On Android the driver holds a change
+  // back while the app is in the background, where restarting the stream is
+  // refused, and applies it when the app is next opened.
+  const profile = transitProfileForTime(next, nowMs);
+  const previousProfile = transitProfileForTime(session, nowMs);
+  if (profile !== previousProfile) {
+    effects.push({ kind: "update-location-profile", profile });
   }
 
   effects.push({ kind: "reconcile-alerts", sessionId: session.sessionId });

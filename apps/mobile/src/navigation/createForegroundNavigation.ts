@@ -71,7 +71,11 @@ export interface ForegroundNavigationOptions {
  * processors and effect ports above it stay the shipped ones.
  */
 export interface ForegroundDevice {
-  /** The location stream and the permission grants it reports. */
+  /**
+   * The location stream and the permission grants it reports. Production's
+   * driver already holds back Android profile changes the platform would refuse
+   * in the background (`withBackgroundSafeProfiles`).
+   */
   driver: LocationDriver;
   /** Reads the location grant, including whether it is precise. */
   readLocationPermission(): Promise<PermissionSnapshot>;
@@ -85,6 +89,8 @@ export interface ForegroundDevice {
   };
   /** Opens the durable store when this is the first composition in the process. */
   openStorage(): Promise<Database>;
+  /** Which platform's location profiles and permission flow apply. */
+  platform: ReturnType<typeof currentPlatform>;
   /** The screen's wake lock. Both calls are idempotent. */
   keepAwake: { activate(): Promise<void>; deactivate(): Promise<void> };
   clock(): number;
@@ -110,6 +116,7 @@ function productionDevice(): ForegroundDevice {
       request: async () => (await Notifications.requestPermissionsAsync()).granted,
     },
     openStorage: getDatabase,
+    platform: currentPlatform(),
     keepAwake: {
       activate: () => activateKeepAwakeAsync(KEEP_AWAKE_TAG),
       deactivate: () => deactivateKeepAwake(KEEP_AWAKE_TAG),
@@ -211,7 +218,7 @@ export async function createForegroundNavigation(
 
   const permissions = new PermissionController({
     driver,
-    platform: currentPlatform(),
+    platform: device.platform,
     ui: options.permissionUi,
     isAppActive: options.isAppActive,
     snapshot: () => device.readLocationPermission(),
@@ -265,13 +272,13 @@ export async function createForegroundNavigation(
         start: async () => {
           const session = repositoryRef ? await repositoryRef.loadActive(now()) : null;
           driver.setLocale?.(session?.locale ?? options.locale);
-          await driver.start(profileFor(initialProfileFor(session)));
+          await driver.start(profileFor(initialProfileFor(session), device.platform.os));
         },
         stop: () => driver.stop(),
         updateProfile: async (profile) => {
           const session = repositoryRef ? await repositoryRef.loadActive(now()) : null;
           driver.setLocale?.(session?.locale ?? options.locale);
-          await driver.start(profileFor(profile as LocationProfileKind));
+          await driver.start(profileFor(profile as LocationProfileKind, device.platform.os));
         },
         isRunning: () => driver.isRunning(),
       },

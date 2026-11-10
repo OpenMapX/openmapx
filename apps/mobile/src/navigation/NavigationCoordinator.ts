@@ -686,9 +686,9 @@ export class NavigationCoordinator {
       return;
     }
     if (session.status !== "active") {
-      // After an arrival the stream delivers on time alone until it is released,
-      // so a batch is what closes the window wherever a timer cannot: a
-      // backgrounded Android app, or a process that did not survive it.
+      // A batch closes the release window wherever a timer cannot: a
+      // backgrounded Android app, whose profiles have no distance filter so a
+      // user standing still still gets one, or a process that did not survive.
       const releaseAt = locationReleaseAtMs(session);
       if (releaseAt !== null && releaseAt <= now) {
         await this.deps.effects.run([{ kind: "stop-location" }, { kind: "reconcile-surface" }]);
@@ -922,8 +922,9 @@ export class NavigationCoordinator {
    * the foreground, and on iOS while background location keeps the app running.
    * Android pauses a backgrounded app's JavaScript timers even under a
    * foreground service, so there the release comes from the next batch, which
-   * the time-only arrival profile guarantees. A process that dies first is
-   * covered the same way, or by recovery when the app opens.
+   * Android's profiles guarantee by requesting updates on time with no distance
+   * filter. A process that dies first is covered the same way, or by recovery
+   * when the app opens.
    */
   private scheduleLocationRelease(session: MobileNavigationSession, now: number): void {
     const releaseAt = locationReleaseAtMs(session);

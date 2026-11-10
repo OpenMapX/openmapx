@@ -71,6 +71,19 @@ only when the OS starts the task without the app.
   `defineNavigationTask.ts`. expo-task-manager schedules a persisted job, so the
   app holds `RECEIVE_BOOT_COMPLETED`; without it the first location update
   crashes the process. The app does not start anything at boot.
+- **Location profiles.** Each phase asks for a cadence (`location/profiles.ts`).
+  On Android every profile has no distance filter, so updates arrive on the
+  time interval even while the user stands still. iOS keeps its distance
+  filters, because it ignores the time interval. Changing a profile restarts
+  the stream, and restarting it starts the location foreground service.
+  Android 12 and later forbid starting a foreground service from the
+  background, and expo-location enforces this on every Android version: it
+  throws `ForegroundServiceStartNotAllowedException` unless its activity is in
+  the foreground, and a locked screen or a headless process does not count. The
+  stream would then already be stopped. On Android the shared driver
+  (`location/backgroundSafeDriver.ts`) therefore keeps a running stream while
+  the app is not active, and applies the latest requested profile when the app
+  next becomes active. iOS changes profiles at any time.
 - **Storage.** expo-sqlite runs each exclusive transaction on its own
   connection, so `getDatabase` queues writes on the one handle and sets a busy
   timeout. Without the queue a diagnostic write and a batch commit collide with
@@ -91,13 +104,14 @@ only when the OS starts the task without the app.
   `ARRIVAL_CUE_GRACE_MS` (10 s), so iOS does not suspend a backgrounded app
   before the arrival announcement plays. A transit arrival keeps it until the
   last rider confirmation can no longer be undone, if that is later, so an undo
-  resumes a tracked trip. During the window the stream switches to the
-  `arrival-release` profile, which has no distance filter and delivers every
-  5 s while the user stands still. A coordinator timer releases the stream
-  where JavaScript timers run: in the foreground, and on iOS while background
+  resumes a tracked trip. The profile does not change at arrival, so nothing
+  restarts the stream. A coordinator timer releases the stream where
+  JavaScript timers run: in the foreground, and on iOS while background
   location keeps the app running. Android pauses a backgrounded app's timers
-  even under a foreground service, so there the next batch after the window
-  releases it, as it does after a process restart.
+  even under a foreground service. There the first batch after the window
+  releases the stream, and the time-driven Android profiles guarantee that
+  batch while the user stands still. A batch also releases the stream after a
+  process restart.
 - **Keep-awake.** The composition holds the screen only while the app is
   visible, the location stream runs for an active session, and that session's
   keep-screen-on setting is on. It re-checks after every published change and

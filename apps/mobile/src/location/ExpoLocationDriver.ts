@@ -109,7 +109,9 @@ export class ExpoLocationDriver implements LocationDriver {
       const running = await Location.hasStartedLocationUpdatesAsync(NAVIGATION_LOCATION_TASK);
       if (running) {
         if (this.sameProfile(profile)) return;
-        // A profile change replaces the stream rather than adding one.
+        // A profile change replaces the stream rather than adding one. On
+        // Android the restart needs the app in the foreground, so the shared
+        // driver (`withBackgroundSafeProfiles`) only lets one through then.
         await Location.stopLocationUpdatesAsync(NAVIGATION_LOCATION_TASK);
       }
       await Location.startLocationUpdatesAsync(NAVIGATION_LOCATION_TASK, {

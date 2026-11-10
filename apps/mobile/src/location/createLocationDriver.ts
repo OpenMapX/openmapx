@@ -1,4 +1,6 @@
+import { AppState, Platform } from "react-native";
 import { deviceMobileLocale } from "../shell/shellCopy";
+import { type AppActivity, withBackgroundSafeProfiles } from "./backgroundSafeDriver";
 import { ExpoLocationDriver } from "./ExpoLocationDriver";
 import type { LocationDriver } from "./LocationDriver";
 
@@ -16,7 +18,7 @@ import type { LocationDriver } from "./LocationDriver";
 
 let driver: ExpoLocationDriver | null = null;
 let debugDriver: LocationDriver | null = null;
-const sharedDriver: LocationDriver = {
+const platformDriver: LocationDriver = {
   setLocale: (locale) => productionDriver().setLocale(locale),
   getPermissionState: () => productionDriver().getPermissionState(),
   requestForegroundPermission: () => productionDriver().requestForegroundPermission(),
@@ -49,6 +51,28 @@ export async function setDebugLocationDriver(
   await (debugDriver ?? productionDriver()).stop();
   debugDriver = replacement;
 }
+
+/** The app's foreground state as React Native reports it; never active in a headless process. */
+export const appActivity: AppActivity = {
+  isActive: () => AppState.currentState === "active",
+  onActive: (listener) => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") listener();
+    });
+    return () => subscription.remove();
+  },
+};
+
+/**
+ * Every composition — foreground, car, headless, recovery — shares this one
+ * driver, so a profile change Android would refuse in the background is held
+ * back in one place for all of them.
+ */
+const sharedDriver: LocationDriver = withBackgroundSafeProfiles(
+  platformDriver,
+  Platform.OS === "android" ? "android" : "ios",
+  appActivity,
+);
 
 export function createLocationDriver(): LocationDriver {
   return sharedDriver;

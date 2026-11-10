@@ -1,6 +1,7 @@
 import { TRANSIT_UNDO_WINDOW_MS } from "@openmapx/core/navigation";
 import { ARRIVAL_CUE_GRACE_MS } from "./arrival";
 import {
+  createFakePhone,
   driveStraightRoute,
   type ForegroundHarness,
   groundStartPackage,
@@ -27,8 +28,8 @@ afterEach(async () => {
 describe("arriving by road", () => {
   const DESTINATION = STRAIGHT_ROUTE[STRAIGHT_ROUTE.length - 1];
 
-  async function arrive() {
-    harness = await startForegroundHarness();
+  async function arrive(os: "ios" | "android" = "ios") {
+    harness = await startForegroundHarness({ phone: createFakePhone({ os }) });
     const trip = await harness.start(groundStartPackage());
     await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
     expect((await harness.session())?.status).toBe("arrived");
@@ -40,7 +41,6 @@ describe("arriving by road", () => {
     const arrivalCue = harness.phone.speech.cueIds.at(-1) ?? "";
     expect(arrivalCue).toMatch(/arriv/);
     expect(harness.phone.location.running).toBe(true);
-    expect(harness.phone.location.profile?.distanceIntervalMeters).toBe(0);
     expect(harness.phone.keepAwake.held).toBe(false);
     expect(harness.navigatingReports.at(-1)).toBe(false);
 
@@ -57,7 +57,7 @@ describe("arriving by road", () => {
   });
 
   it("releases location by batches alone when the app's timers are paused", async () => {
-    await arrive();
+    await arrive("android");
     // A backgrounded Android app: no JavaScript timer fires, and the user stands
     // still at the destination.
     harness.phone.clock.timersPaused = true;
@@ -112,8 +112,8 @@ describe("arriving by transit", () => {
     );
   }
 
-  async function alightAtTheEnd() {
-    harness = await startForegroundHarness();
+  async function alightAtTheEnd(os: "ios" | "android" = "ios") {
+    harness = await startForegroundHarness({ phone: createFakePhone({ os }) });
     const trip = await harness.start(rideToTheEnd());
     await riderAction(trip.sessionId, "board", "walking", "board-1");
     harness.phone.clock.advance(60_000);
@@ -137,7 +137,7 @@ describe("arriving by transit", () => {
   });
 
   it("closes the undo window by batches alone when the app's timers are paused", async () => {
-    await alightAtTheEnd();
+    await alightAtTheEnd("android");
     harness.phone.clock.timersPaused = true;
     expect(harness.phone.location.profile?.distanceIntervalMeters).toBe(0);
 
@@ -160,12 +160,10 @@ describe("arriving by transit", () => {
     expect(session?.status).toBe("active");
     expect(session?.kind === "transit" && session.payload.tickState.phase).toBe("riding");
     expect(harness.phone.location.running).toBe(true);
-    expect(harness.phone.location.profile?.distanceIntervalMeters).toBeGreaterThan(0);
     expect(harness.phone.clock.pendingTimers).toBe(0);
 
     await harness.elapse(TRANSIT_UNDO_WINDOW_MS);
     expect(harness.phone.location.running).toBe(true);
-    expect(harness.phone.location.calls).not.toContain("stop");
   });
 
   it("refuses an undo once the window has closed and location has stopped", async () => {
