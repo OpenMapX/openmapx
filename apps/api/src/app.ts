@@ -84,6 +84,7 @@ import {
   makeTimelineAwareRateLimit,
   registerBodyReadDeadline,
   registerControlledRequestLogging,
+  shutdownServer,
   trustProxyConfig,
   uniformErrorHandler,
 } from "./server-wiring";
@@ -161,6 +162,14 @@ export interface AppStartupControl {
   migrationStarted(run: MigrationRun): void;
   stopRequested(): boolean;
 }
+
+/**
+ * Open event streams never end on their own, so shutdown cuts the connections
+ * still open after this long. Both together stay under the ten seconds a
+ * container runtime allows before it kills the process.
+ */
+const SHUTDOWN_GRACE_MS = 5_000;
+const SHUTDOWN_FORCE_MS = 2_000;
 
 export interface CreateAppOptions {
   /** Shared with the entry point's fatal handlers, which must exist before startup begins. */
@@ -895,9 +904,15 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
       stopMigrationStagePruning();
       stopIntegrationHealthRefresh();
       stopDataUsePolicyRefresh();
-      await shutdownIntegrations();
-      await server.close();
-      await cacheInvalidation.stop();
+      await shutdownServer(server, {
+        graceMs: SHUTDOWN_GRACE_MS,
+        forceMs: SHUTDOWN_FORCE_MS,
+        log: server.log,
+        afterClose: async () => {
+          await shutdownIntegrations();
+          await cacheInvalidation.stop();
+        },
+      });
     })();
     return stopping;
   }

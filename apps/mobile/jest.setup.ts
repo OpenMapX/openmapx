@@ -13,6 +13,15 @@ jest.mock("@react-native-community/netinfo", () => ({
   addEventListener: () => () => undefined,
 }));
 
+// Importing the real module registers push-token listeners and warns about Expo
+// Go. Nothing here may schedule or ask for notifications for real; suites that
+// need them pass a fake scheduler.
+jest.mock("expo-notifications", () => ({
+  __esModule: true,
+  getPermissionsAsync: jest.fn(async () => ({ granted: false, canAskAgain: false })),
+  requestPermissionsAsync: jest.fn(async () => ({ granted: false, canAskAgain: false })),
+}));
+
 jest.mock("expo-keep-awake", () => ({
   __esModule: true,
   activateKeepAwakeAsync: jest.fn(async () => undefined),

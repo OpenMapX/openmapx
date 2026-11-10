@@ -1,8 +1,9 @@
 "use client";
 
-import { useNavigationStore } from "@openmapx/core";
+import { useNavigationStore, useSettingsStore, type VoiceGuidanceTiming } from "@openmapx/core";
 import { useCallback } from "react";
 import { useMobileRuntimeContext } from "./MobileRuntimeProvider";
+import type { NavigationSettingsPatch } from "./navigationCommands";
 
 /**
  * Ending a trip and changing its settings, under whichever authority owns it.
@@ -56,31 +57,50 @@ export function useNavigationMutations() {
     }
   }, [browserAuthority, commands]);
 
+  /**
+   * Tells the native session about a preference the page just stored.
+   *
+   * The preference is the user's and is always stored locally first; the
+   * session holds its own copy because guidance runs natively, so any page that
+   * changes one of these preferences (the in-trip menus, the settings dialog,
+   * the preferences page) goes through here. It is sent whether or not the page
+   * has seen the session yet: a change made while a start is in flight waits
+   * behind it in the command queue and lands on the new session, and one made
+   * with no session is refused by native while the next start reads the stored
+   * value.
+   */
+  const tellNativeSession = useCallback(
+    async (patch: NavigationSettingsPatch) => {
+      if (browserAuthority || !commands) return;
+      await commands.updateSettings(patch).catch(() => undefined);
+    },
+    [browserAuthority, commands],
+  );
+
   const toggleVoice = useCallback(async () => {
-    const store = useNavigationStore.getState();
-    if (browserAuthority || !commands) {
-      store.toggleVoice();
-      return;
-    }
-    // The preference is still stored locally — it is the user's, not the
-    // session's — but the speaking is native, so native has to be told.
-    store.toggleVoice();
-    await commands
-      .updateSettings({ voiceEnabled: useNavigationStore.getState().voiceEnabled })
-      .catch(() => undefined);
-  }, [browserAuthority, commands]);
+    useNavigationStore.getState().toggleVoice();
+    await tellNativeSession({ voiceEnabled: useNavigationStore.getState().voiceEnabled });
+  }, [tellNativeSession]);
 
   const toggleKeepScreenOn = useCallback(async () => {
-    const store = useNavigationStore.getState();
-    if (browserAuthority || !commands) {
-      store.toggleKeepScreenOn();
-      return;
-    }
-    store.toggleKeepScreenOn();
-    await commands
-      .updateSettings({ keepScreenOn: useNavigationStore.getState().keepScreenOn })
-      .catch(() => undefined);
-  }, [browserAuthority, commands]);
+    useNavigationStore.getState().toggleKeepScreenOn();
+    await tellNativeSession({ keepScreenOn: useNavigationStore.getState().keepScreenOn });
+  }, [tellNativeSession]);
 
-  return { endNavigation, completeArrival, toggleVoice, toggleKeepScreenOn } as const;
+  const setVoiceTiming = useCallback(
+    async (timing: VoiceGuidanceTiming) => {
+      // The browser engine reads the preference on every cue.
+      useSettingsStore.getState().setVoiceGuidanceTiming(timing);
+      await tellNativeSession({ voiceTiming: timing });
+    },
+    [tellNativeSession],
+  );
+
+  return {
+    endNavigation,
+    completeArrival,
+    toggleVoice,
+    toggleKeepScreenOn,
+    setVoiceTiming,
+  } as const;
 }

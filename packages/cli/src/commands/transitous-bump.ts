@@ -1,7 +1,10 @@
 import { createInterface } from "node:readline/promises";
 import { readCatalogPinSet } from "@openmapx/core/catalog-pins";
 import type { GbfsCatalogLock, TransitousLock } from "@openmapx/core/catalog-pins/types";
-import { transitBumpResultSchema } from "@openmapx/core/data-manager-contracts";
+import {
+  DEFAULT_CATALOG_BRANCH,
+  transitBumpResultSchema,
+} from "@openmapx/core/data-manager-contracts";
 import * as dm from "@openmapx/core/data-manager-sdk";
 import { diffCatalogFeeds, parseRefShaPair } from "@openmapx/transitous-core";
 import type { Command } from "commander";
@@ -76,7 +79,11 @@ export function registerTransitousCommands(program: Command): void {
     .command("bump")
     .description("Create a paired Transitous/GBFS proposal through the installed Data Manager")
     .option("--yes", "Skip the interactive confirmation prompt", false)
-    .option("--branch <name>", "Branch to track (default: main)", "main")
+    .option(
+      "--branch <name>",
+      `Branch to track (default: ${DEFAULT_CATALOG_BRANCH})`,
+      DEFAULT_CATALOG_BRANCH,
+    )
     .action(async (options: { yes: boolean; branch: string }) => {
       if (
         !options.yes &&

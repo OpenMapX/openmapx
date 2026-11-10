@@ -1,11 +1,11 @@
 import { isGooglePhotosImageUrl, resolveGooglePhotosLink } from "@integrations/photos/orchestrator";
 import { fetchWithRedirects, USER_AGENT } from "@openmapx/core";
-import { envString } from "@openmapx/core/server-env";
 import {
   createPinnedFetchTransport,
   resolvePublicConnectionAddresses,
 } from "@openmapx/core/utils/safe-download";
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
+import { configuredTrustedWebOrigins } from "../utils/csrf.js";
 import { requestNetworkKey } from "../utils/rate-limit.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 import { safeErrorClass, summarizeExternalUrl } from "../utils/safe-log-fields.js";
@@ -47,13 +47,6 @@ const CAMERA_CACHE_CONTROL = "no-store";
 function isCameraStill(requested: string, final: string): boolean {
   if (isCameraHost(new URL(requested))) return true;
   return URL.canParse(final) && isCameraHost(new URL(final));
-}
-
-/** Allowed frontend origins that may use the proxy. */
-function getAllowedOrigins(): string[] {
-  return envString("CORS_ORIGIN", "http://localhost:3000")
-    .split(",")
-    .map((o) => o.trim());
 }
 
 const MAX_SIZE = 15 * 1024 * 1024; // 15 MB
@@ -137,7 +130,7 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
       // turn the proxy into an unmetered image-fetch relay for allowlisted
       // upstreams.
       const refererHeader = req.headers.referer ?? req.headers.origin;
-      const origins = getAllowedOrigins();
+      const origins = configuredTrustedWebOrigins();
       let refererOrigin: string | null = null;
       if (refererHeader) {
         try {

@@ -10,6 +10,7 @@ import {
   type TransitReplanOptions,
   type TravelMode,
   useNavigationStore,
+  useSettingsStore,
 } from "@openmapx/core";
 import type { ApiClient } from "@openmapx/core/navigation/api";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
@@ -105,7 +106,7 @@ export function useStartNavigation() {
       const settings: GroundNavigationSettings = {
         voiceEnabled: store.voiceEnabled,
         keepScreenOn: store.keepScreenOn,
-        voiceTiming: "normal",
+        voiceTiming: useSettingsStore.getState().voiceGuidanceTiming,
       };
 
       const built = buildGroundNavigationPackage({

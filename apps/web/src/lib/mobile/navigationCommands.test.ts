@@ -182,6 +182,28 @@ describe("NativeNavigationCommands serialization", () => {
     ]);
   });
 
+  it("sends a settings change made during a start once the session exists", async () => {
+    const { client, calls, answers, reply } = fakeClient();
+    const slow = deferred<unknown>();
+    answers.set("session.prepare", () => slow.promise);
+
+    // Before the first snapshot the page knows no session to stamp.
+    const commands = new NativeNavigationCommands(client, acknowledged(null, null));
+    const starting = commands.start({});
+    const settings = commands.updateSettings({ keepScreenOn: false });
+    await Promise.resolve();
+    slow.settle(reply("session.prepared", {}));
+    await starting;
+    await settings;
+
+    expect(calls.map((call) => call.type)).toEqual([
+      "session.prepare",
+      "session.start",
+      "settings.update",
+    ]);
+    expect(calls[2].options.sessionId).toBeUndefined();
+  });
+
   it("does not strand later mutations behind a failed one", async () => {
     const { client, calls, answers } = fakeClient();
     answers.set("session.prepare", async () => {

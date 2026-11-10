@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildTestApp } from "../../test/app.js";
 import { mockRequireAuth } from "../../test/auth.js";
-import { createDbMock } from "../../test/db.js";
+import { createDbMock, orderByArgs } from "../../test/db.js";
 
 const USER_ID = "user-1";
 const authMock = mockRequireAuth(USER_ID);
@@ -126,6 +126,12 @@ describe("POST /api/shares", () => {
       ],
     });
     expect(JSON.stringify(row.snapshot)).not.toMatch(/place-1|list-1|user-1/);
+    const { PLACE_ORDER } = await import("../saved.js");
+    const order = orderByArgs(dbMock, "select", 3);
+    expect(order).toHaveLength(PLACE_ORDER.length);
+    order.forEach((column, index) => {
+      expect(column).toBe(PLACE_ORDER[index]);
+    });
     expect(row.expiresAt).toBeInstanceOf(Date);
   });
 
@@ -284,6 +290,13 @@ describe("GET /api/shares/:token (public)", () => {
       ],
     });
     expect(res.payload).not.toMatch(/user-1|share-1|list-1|place-1|tokenHash/);
+    // Places read in the owner's order, ties included, and the cut-off keeps the same ones.
+    const { PLACE_ORDER } = await import("../saved.js");
+    const order = orderByArgs(dbMock, "select", 2);
+    expect(order).toHaveLength(PLACE_ORDER.length);
+    order.forEach((column, index) => {
+      expect(column).toBe(PLACE_ORDER[index]);
+    });
   });
 
   it("resolves a snapshot list share from the frozen payload", async () => {

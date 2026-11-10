@@ -615,6 +615,34 @@ describe("setupCron", () => {
         handles.stop();
       }
     });
+    it.each([
+      ["no branch is configured", "", "main"],
+      ["a branch is configured", "release", "release"],
+    ])("proposes from the right branch when %s", async (_name, configured, expected) => {
+      vi.stubEnv("TRANSITOUS_AUTO_BUMP_BRANCH", configured);
+      const resolveCatalogProposal = vi.fn(async () => ({
+        proposalId: "00000000-0000-4000-8000-000000000001",
+      })) as unknown as NonNullable<CronSetupOptions["catalogReview"]>["resolveCatalogProposal"];
+      const handles = setupCron({
+        dataDir,
+        countries: [],
+        store: {} as never,
+        singleFlight: makeController(),
+        logger: { info: () => {}, warn: () => {}, error: () => {} },
+        syncCronExpression: "disabled",
+        feedProxyReloadCronExpression: "disabled",
+        stalenessCheckCronExpression: "disabled",
+        autoBumpCronExpression: "0 0 1 1 *",
+        catalogReview: { resolveCatalogProposal },
+      });
+      try {
+        await handles.runAutoBumpNow();
+        expect(resolveCatalogProposal).toHaveBeenCalledWith({ branch: expected });
+      } finally {
+        handles.stop();
+        vi.unstubAllEnvs();
+      }
+    });
     it("refuses scheduled proposals when the installed paired resolver is unavailable", async () => {
       seedLocks();
       const handles = setupCron({
