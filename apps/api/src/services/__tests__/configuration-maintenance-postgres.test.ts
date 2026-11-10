@@ -40,6 +40,48 @@ import { createConfigurationPostgresFixture } from "../../test/configuration-pos
 import type { JobContext } from "../job-runner";
 import { postgresCommitRelay } from "./fixtures/postgres-commit-relay";
 
+/**
+ * The application name of the spawned native API's database pool (`apps/api/src/db`).
+ * This test process replaces that module with the fixture's pool and opens no
+ * session with this name, so such sessions belong to the spawned API.
+ */
+const NATIVE_API_APPLICATION_NAME = "openmapx-api";
+
+/**
+ * A lease renewal a native API sent before it was killed can still commit after
+ * the kill, for example when it was waiting on a row lock that the API's open
+ * transaction held until PostgreSQL noticed the death. The lease is final only
+ * once PostgreSQL has ended every session of the killed API.
+ */
+async function nativeApiSessionsEnded(sql: import("postgres").Sql): Promise<void> {
+  const endBy = Date.now() + 30_000;
+  while (
+    (
+      await sql`SELECT 1 FROM pg_stat_activity
+        WHERE datname = current_database() AND application_name = ${NATIVE_API_APPLICATION_NAME}`
+    ).length
+  ) {
+    if (Date.now() > endBy) throw Error("Killed native API sessions did not end");
+    await nativeDelay(20);
+  }
+}
+
+/** Resolves once the native API's lease renewal is waiting on a row lock. */
+async function nativeApiRenewalBlocked(sql: import("postgres").Sql): Promise<void> {
+  const endBy = Date.now() + 30_000;
+  while (
+    !(
+      await sql`SELECT 1 FROM pg_stat_activity
+        WHERE datname = current_database() AND application_name = ${NATIVE_API_APPLICATION_NAME}
+          AND wait_event_type = 'Lock'
+          AND query LIKE ${'update "admin_job" set "result" = coalesce("admin_job"."result", %'}`
+    ).length
+  ) {
+    if (Date.now() > endBy) throw Error("No native API lease renewal waited on a row lock");
+    await nativeDelay(20);
+  }
+}
+
 type Fixture = Awaited<ReturnType<typeof createConfigurationPostgresFixture>>;
 const state = vi.hoisted(() => ({
   fixture: null as unknown as Fixture,
@@ -496,6 +538,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           first.child.kill("SIGKILL");
           expect((await first.exited).signal).toBe("SIGKILL");
           relay.release();
+          await nativeApiSessionsEnded(fixture.sql);
           if (mode === "missing") rmSync(path);
           if (mode === "corrupt") {
             const value = JSON.parse(bytes.toString());
@@ -890,6 +933,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 },
                 {
                   ...(knownRollback ? { observeFrontend: "service-secret-insert" as const } : {}),
+                  ...(mode === "before-retirement-daemon" ? { lateHeldClose: true } : {}),
                   holdCommand: retirement
                     ? retired
                       ? "API_TERMINAL_UPDATE"
@@ -1184,6 +1228,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           expect(savedRows).toHaveLength(
             beforeSave || preRootHelper || mode === "during-save" ? 0 : 1,
           );
+          // The held update keeps its transaction open on the job row. A renewal
+          // sent during the hold waits on that row and commits only once
+          // PostgreSQL has ended the killed API's transaction.
+          if (mode === "before-retirement-daemon") await nativeApiRenewalBlocked(fixture.sql);
           first.child.kill("SIGKILL");
           expect((await first.exited).signal).toBe("SIGKILL");
           if (mode.endsWith("-cancel-daemon")) {
@@ -1202,6 +1250,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           holdPreparedReply = false;
           releaseReply.resolve();
           sqlRelay?.release();
+          await nativeApiSessionsEnded(fixture.sql);
           const [retained] = await fixture.db
             .select()
             .from(schema.adminJob)

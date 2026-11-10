@@ -7,6 +7,8 @@ import { connect, createServer, type Socket } from "node:net";
 const LEASE_RENEWAL_PARAMETER = Buffer.from('{"_observationLeaseUntil"');
 /** How long after its client is gone a withheld renewal reaches PostgreSQL. */
 const LATE_RENEWAL_DELAY_MS = 1000;
+/** How long after its client is gone a held session stays connected to PostgreSQL. */
+const LATE_HELD_CLOSE_DELAY_MS = 1000;
 
 export async function postgresCommitRelay(
   database: URL,
@@ -20,6 +22,13 @@ export async function postgresCommitRelay(
      * as a renewal sent just before the process died can still commit.
      */
     withholdLateRenewal?: boolean;
+    /**
+     * Keep the session whose reply is held connected to PostgreSQL for a while
+     * after its client has gone. PostgreSQL ends that session's open
+     * transaction, and releases its row locks, only once it sees the closed
+     * connection.
+     */
+    lateHeldClose?: boolean;
   } = {},
 ) {
   if (database.hostname !== "127.0.0.1" || !/^\d+$/.test(database.port))
@@ -39,6 +48,7 @@ export async function postgresCommitRelay(
     let pending = Buffer.alloc(0),
       suspended = false,
       held: Buffer[] = [],
+      heldReply = false,
       backendPid: number | undefined;
     const flush = () => {
       if (!client.destroyed && held.length) client.write(Buffer.concat(held));
@@ -47,6 +57,7 @@ export async function postgresCommitRelay(
       if (!backend.destroyed) backend.resume();
     };
     releases.add(flush);
+    const lateClose = () => options.lateHeldClose === true && heldReply;
     let frontend = Buffer.alloc(0),
       startup = true,
       frontendSuspended = false,
@@ -139,9 +150,16 @@ export async function postgresCommitRelay(
         }, LATE_RENEWAL_DELAY_MS);
         return;
       }
+      if (lateClose()) {
+        setTimeout(() => backend.destroy(), LATE_HELD_CLOSE_DELAY_MS);
+        return;
+      }
       backend.destroy();
     });
-    client.on("error", () => backend.destroy());
+    // A socket emits `close` after `error`, which then ends a held session late.
+    client.on("error", () => {
+      if (!lateClose()) backend.destroy();
+    });
     backend.on("error", () => client.destroy());
     backend.on("close", () => {
       sockets.delete(backend);
@@ -186,6 +204,7 @@ export async function postgresCommitRelay(
             .then((yes) => {
               if (yes && !retained && !released) {
                 retained = true;
+                heldReply = true;
                 reached.resolve();
               } else flush();
             })
