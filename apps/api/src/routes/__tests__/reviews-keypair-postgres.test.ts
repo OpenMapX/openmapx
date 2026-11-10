@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { mangroveKeypair, mangroveKeypairWrap, user } from "../../db/schema";
@@ -8,6 +8,8 @@ import { createMigratedPostgresFixture } from "../../test/postgres-fixture";
 
 const connection = vi.hoisted(() => ({
   db: null as unknown as Awaited<ReturnType<typeof createMigratedPostgresFixture>>["db"],
+  /** The signed-in account for the next request. */
+  userId: "mangrove-test",
 }));
 vi.mock("../../db/index", () => ({
   get db() {
@@ -16,7 +18,7 @@ vi.mock("../../db/index", () => ({
 }));
 vi.mock("../../utils/require-auth", () => ({
   requireAuthHook: async () => {},
-  getUserId: () => "mangrove-test",
+  getUserId: () => connection.userId,
 }));
 
 // This fixture always starts its own PostGIS container and never reads DATABASE_URL.
@@ -29,9 +31,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       connection.db = fixture.db;
       const { reviewsKeypairRoute } = await import("../reviews-keypair");
       app = await buildTestApp(reviewsKeypairRoute, { prefix: "/api" });
-      await fixture.db
-        .insert(user)
-        .values({ id: "mangrove-test", name: "Mangrove Test", email: "mangrove@example.test" });
+      await fixture.db.insert(user).values([
+        { id: "mangrove-test", name: "Mangrove Test", email: "mangrove@example.test" },
+        { id: "mangrove-other", name: "Mangrove Other", email: "mangrove-other@example.test" },
+      ]);
     }, 120_000);
     afterAll(async () => {
       try {
@@ -41,7 +44,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       }
     });
     beforeEach(async () => {
-      await fixture.db.delete(mangroveKeypair).where(eq(mangroveKeypair.userId, "mangrove-test"));
+      connection.userId = "mangrove-test";
+      await fixture.db
+        .delete(mangroveKeypair)
+        .where(inArray(mangroveKeypair.userId, ["mangrove-test", "mangrove-other"]));
     });
     const initial = {
       publicJwk: { kty: "EC", crv: "P-256", x: "x", y: "y" },
@@ -214,6 +220,69 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(env.revision).toBe(recreated);
       expect(env.wraps[0].label).toBe("Original");
     });
+    function as<T>(userId: string, run: () => Promise<T>): Promise<T> {
+      connection.userId = userId;
+      return run().finally(() => {
+        connection.userId = "mangrove-test";
+      });
+    }
+    async function storedKeyMaterial(userId: string) {
+      const [row] = await fixture.db
+        .select()
+        .from(mangroveKeypair)
+        .where(eq(mangroveKeypair.userId, userId));
+      const wraps = await fixture.db
+        .select()
+        .from(mangroveKeypairWrap)
+        .where(eq(mangroveKeypairWrap.userId, userId));
+      return { row, wraps: wraps.sort((a, b) => a.id.localeCompare(b.id)) };
+    }
+    const otherAccount = {
+      publicJwk: { kty: "EC", crv: "P-256", x: "other-x", y: "other-y" },
+      passphraseCiphertext: "other-account-ciphertext",
+      wraps: [{ wrapType: "passphrase", label: "Other account passphrase" }],
+    };
+
+    it("never reads, replaces or deletes another account's key material when the caller has none", async () => {
+      const otherRevision = (await as("mangrove-other", () => create(otherAccount))).json()
+        .revision as string;
+      const before = await storedKeyMaterial("mangrove-other");
+      expect(before.row?.passphraseCiphertext).toBe("other-account-ciphertext");
+
+      expect((await get()).statusCode).toBe(204);
+      expect((await update(otherRevision, "taken-over")).statusCode).toBe(409);
+      expect((await remove(otherRevision)).statusCode).toBe(409);
+
+      expect(await storedKeyMaterial("mangrove-other")).toEqual(before);
+      expect(await storedKeyMaterial("mangrove-test")).toEqual({ row: undefined, wraps: [] });
+    });
+
+    it("confines each account's create, read, replace and delete to its own key material", async () => {
+      const otherRevision = (await as("mangrove-other", () => create(otherAccount))).json()
+        .revision as string;
+      const otherEnvelope = (await as("mangrove-other", get)).json();
+      const before = await storedKeyMaterial("mangrove-other");
+
+      const created = await create();
+      expect(created.statusCode).toBe(201);
+      const own = (await get()).json();
+      expect(own.passphraseCiphertext).toBe("original");
+      expect(own.wraps.map((wrap: { label: string }) => wrap.label)).toEqual(["Original"]);
+      expect(JSON.stringify(own)).not.toContain("other-account");
+
+      // The other account's revision never authorizes a write to the caller's row.
+      expect((await update(otherRevision, "cross-account")).statusCode).toBe(409);
+      const replaced = await update(created.json().revision, "replacement");
+      expect(replaced.statusCode).toBe(200);
+      expect(await storedKeyMaterial("mangrove-other")).toEqual(before);
+
+      expect((await remove(replaced.json().revision)).statusCode).toBe(200);
+      expect(await storedKeyMaterial("mangrove-test")).toEqual({ row: undefined, wraps: [] });
+      expect(await storedKeyMaterial("mangrove-other")).toEqual(before);
+      expect((await as("mangrove-other", get)).json()).toEqual(otherEnvelope);
+      expect((await as("mangrove-other", () => remove(otherRevision))).statusCode).toBe(200);
+    });
+
     it("rolls back parent revision, ciphertext and removed wraps when wrap insertion fails", async () => {
       const revision = (await create()).json().revision;
       const before = (await get()).json();
