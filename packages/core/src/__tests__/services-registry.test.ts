@@ -24,7 +24,7 @@ const baseManifest = {
   name: "Test",
   version: "1.0.0",
   quality: "built-in",
-  container: { image: "test/image", tag: "latest", expose: [80] },
+  container: { image: "test/image", tag: "latest", expose: [80], memory: "256m" },
 };
 
 describe("ServiceRegistry.load", () => {

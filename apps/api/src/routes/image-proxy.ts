@@ -58,6 +58,20 @@ function getAllowedOrigins(): string[] {
 
 const MAX_SIZE = 15 * 1024 * 1024; // 15 MB
 
+/** A registered `image/*` media type: one `type/subtype` pair of RFC 9110 token characters. */
+const IMAGE_MEDIA_TYPE = /^image\/[a-z0-9][a-z0-9!#$&^_.+-]*$/;
+
+/**
+ * The media type a response may be served as, from its Content-Type header: the
+ * lowercase `image/*` essence without parameters. Anything else is refused: a
+ * list of types, a type that is not an image, and SVG, which can carry script.
+ */
+function servableImageType(header: string | null): string | null {
+  const essence = (header ?? "").split(";")[0].trim().toLowerCase();
+  if (!IMAGE_MEDIA_TYPE.test(essence) || essence === "image/svg+xml") return null;
+  return essence;
+}
+
 function parseContentLength(value: string | null): number | null {
   if (value === null || !/^\d+$/.test(value)) return null;
   const parsed = Number(value);
@@ -221,8 +235,8 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
             return reply.status(upstream.status).send({ message: "Upstream error" });
           }
 
-          const contentType = upstream.headers.get("content-type") ?? "application/octet-stream";
-          if (!contentType.startsWith("image/")) {
+          const contentType = servableImageType(upstream.headers.get("content-type"));
+          if (!contentType) {
             await cancelResponseBody(upstream);
             return reply.status(415).send({ message: "Not an image" });
           }

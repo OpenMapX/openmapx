@@ -10,6 +10,7 @@ const validMinimal = {
     image: "ghcr.io/valhalla/valhalla-scripted",
     tag: "latest",
     expose: [8002],
+    memory: "256m",
   },
   provides: ["routing-engine"],
 };

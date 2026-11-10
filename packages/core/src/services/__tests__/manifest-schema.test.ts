@@ -6,7 +6,7 @@ const minimalManifest = {
   name: "Conditions Ingest",
   version: "1.0.0",
   quality: "community" as const,
-  container: { image: "ghcr.io/openconditions/ingest", tag: "latest" },
+  container: { image: "ghcr.io/openconditions/ingest", tag: "latest", memory: "256m" },
 };
 
 describe("service manifest ownsSchema field", () => {

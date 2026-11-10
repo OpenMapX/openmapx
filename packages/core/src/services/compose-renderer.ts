@@ -473,6 +473,7 @@ export interface ComposeServiceSnippet {
   shm_size?: string;
   cap_add?: string[];
   cap_drop?: string[];
+  security_opt?: string[];
   devices?: string[];
   privileged?: boolean;
   network_mode?: string;
@@ -487,13 +488,20 @@ export interface ComposeServiceSnippet {
   logging?: { driver: string; options?: Record<string, string> };
   deploy?: {
     resources?: {
-      limits?: { memory?: string; cpus?: string };
+      limits?: { memory?: string; cpus?: string; pids?: number };
       reservations?: {
         devices?: Array<{ driver: string; count: number | "all"; capabilities: string[] }>;
       };
     };
   };
 }
+
+/**
+ * The most processes and threads one community container may hold. It is far
+ * above what a small service needs and well below what a fork loop takes to
+ * starve the host.
+ */
+const COMMUNITY_PIDS_LIMIT = 512;
 
 export function escapeComposeInterpolation(value: string): string {
   return value.replaceAll("$", () => "$$");
@@ -919,7 +927,17 @@ export function renderServiceSnippet(
     snippet.deploy = { resources };
   }
 
-  if (!service.isBuiltIn) deepEscapeCommunitySnippet(snippet);
+  if (!service.isBuiltIn) {
+    // The memory ceiling comes from the manifest, which the sandbox check
+    // requires; the process ceiling and privilege lock are the platform's own.
+    // Compose refuses a service-level pids_limit beside deploy limits, so the
+    // process ceiling joins the memory limit under deploy.resources.limits.
+    const resources = snippet.deploy?.resources ?? {};
+    resources.limits = { ...resources.limits, pids: COMMUNITY_PIDS_LIMIT };
+    snippet.deploy = { ...snippet.deploy, resources };
+    snippet.security_opt = ["no-new-privileges:true"];
+    deepEscapeCommunitySnippet(snippet);
+  }
   writeServiceConfigEnvReferences(snippet, m, ctx.serviceConfigEnvKeys?.get(m.id) ?? []);
 
   return snippet;

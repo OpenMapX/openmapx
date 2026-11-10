@@ -338,6 +338,47 @@ describe("image-proxy route", () => {
     expect(cancelled).toBe(true);
   });
 
+  it.each([
+    "image/svg+xml",
+    "IMAGE/SVG+XML; charset=utf-8",
+    "image/svg+xml;charset=utf-8",
+    "Image/Svg+Xml",
+    "image/x, text/html",
+    "image/png, image/svg+xml",
+    "text/html; image/png",
+    "image/",
+    "image",
+    "",
+  ])("rejects the content-type %j with 415", async (contentType) => {
+    let cancelled = false;
+    mockFetchWithRedirects.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": contentType }),
+      body: new ReadableStream({
+        cancel: () => {
+          cancelled = true;
+        },
+      }),
+    });
+    const res = await inject({ referer: ALLOWED_REFERER });
+    expect(res.statusCode).toBe(415);
+    expect(cancelled).toBe(true);
+  });
+
+  it("serves a raster image whatever the case or parameters of its content-type", async () => {
+    mockFetchWithRedirects.mockResolvedValue({
+      ok: true,
+      status: 200,
+      url: ALLOWED,
+      headers: new Headers({ "content-type": "IMAGE/PNG; Foo=bar" }),
+      body: new Response(new Uint8Array(4)).body,
+    });
+    const res = await inject({ referer: ALLOWED_REFERER });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toBe("image/png");
+  });
+
   it("rejects an over-large image (by Content-Length) with 413", async () => {
     mockFetchWithRedirects.mockResolvedValue({
       ok: true,

@@ -211,11 +211,11 @@ function confidenceLabel(conf: string): string | null {
   if (conf === "low") return "Low";
   const num = Number.parseInt(conf, 10);
   if (!Number.isNaN(num)) return `${num}%`;
-  return conf ? escapeHtml(conf) : null;
+  return conf || null;
 }
 
 function popupLine(label: string, value: string): string {
-  return `<div style="font-size:12px;color:#666">${label}: ${value}</div>`;
+  return `<div style="font-size:12px;color:#666">${escapeHtml(label)}: ${escapeHtml(value)}</div>`;
 }
 
 function frpColor(frp: number): string {
@@ -230,10 +230,10 @@ export function buildHotspotPopupHtml(
   const frp = Number(p.frp ?? 0);
   const brightness = p.brightness == null ? null : Number(p.brightness);
   const confidence = p.confidence == null ? null : confidenceLabel(String(p.confidence));
-  const satellite = p.satellite == null ? null : escapeHtml(String(p.satellite));
+  const satellite = p.satellite == null ? null : String(p.satellite);
   const ageMs = Number(p.ageMs ?? 0);
   const dayNight = p.dayNight == null ? null : String(p.dayNight);
-  const acqDate = escapeHtml(String(p.acqDate ?? ""));
+  const acqDate = String(p.acqDate ?? "");
   const timeStr = String(p.acqTime ?? "").padStart(4, "0");
   const formattedTime = `${timeStr.slice(0, 2)}:${timeStr.slice(2, 4)} UTC`;
 

@@ -26,6 +26,7 @@ function communityService(id: string, repository: string) {
         image: `registry.example.test/${id}`,
         tag: "1.0.0",
         digest: `sha256:${"c".repeat(64)}`,
+        memory: "256m",
       },
     },
   };

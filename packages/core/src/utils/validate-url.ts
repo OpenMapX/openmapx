@@ -17,6 +17,43 @@ export function assertHttpProtocol(url: string): URL {
   return parsed;
 }
 
+/** The eight 16-bit groups of an IPv6 literal without brackets, or null when it is not one. */
+function ipv6Groups(literal: string): number[] | null {
+  const halves = literal.split("::");
+  if (halves.length > 2) return null;
+  const parse = (part: string): number[] | null => {
+    if (part === "") return [];
+    const groups = part.split(":");
+    return groups.every((group) => /^[0-9a-f]{1,4}$/i.test(group))
+      ? groups.map((group) => Number.parseInt(group, 16))
+      : null;
+  };
+  const head = parse(halves[0]);
+  const tail = halves.length === 2 ? parse(halves[1]) : [];
+  if (!head || !tail) return null;
+  if (halves.length === 1) return head.length === 8 ? head : null;
+  const gap = 8 - head.length - tail.length;
+  return gap >= 1 ? [...head, ...new Array<number>(gap).fill(0), ...tail] : null;
+}
+
+/**
+ * Whether an IPv6 literal carries an IPv4 address in its last 32 bits in one of
+ * the three forms that reach IPv4 hosts: mapped (`::ffff:a.b.c.d`), compatible
+ * (`::a.b.c.d`, which includes `::` and `::1`) and translated (`::ffff:0:a.b.c.d`).
+ * Node's URL parser writes these as hex groups such as `[::ffff:7f00:1]`, so
+ * the textual IPv4 patterns never see them. A literal that cannot be read as
+ * IPv6 is treated the same way.
+ */
+function embedsIpv4(literal: string): boolean {
+  const groups = ipv6Groups(literal);
+  if (!groups) return true;
+  const zeros = (from: number, to: number) => groups.slice(from, to).every((group) => group === 0);
+  const mapped = zeros(0, 5) && groups[5] === 0xffff;
+  const compatible = zeros(0, 6);
+  const translated = zeros(0, 4) && groups[4] === 0xffff && groups[5] === 0;
+  return mapped || compatible || translated;
+}
+
 /**
  * Validates that a URL is a public HTTP(S) URL (not targeting internal/private addresses).
  * Used to prevent SSRF attacks when fetching user-supplied or externally-sourced URLs.
@@ -44,7 +81,8 @@ export function validatePublicUrl(url: string): void {
   if (
     hostname === "localhost" ||
     hostname === "" ||
-    privateRanges.some((re) => re.test(hostname))
+    privateRanges.some((re) => re.test(hostname)) ||
+    (hostname.includes(":") && embedsIpv4(hostname))
   ) {
     throw new Error("URLs targeting internal/private addresses are not allowed");
   }

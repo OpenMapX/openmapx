@@ -60,6 +60,7 @@ function manifest(id: string, version: string, overrides: Record<string, unknown
       image: `registry.example.test/${id}`,
       tag: version,
       digest: `sha256:${"a".repeat(64)}`,
+      memory: "256m",
     },
     ...overrides,
   });
@@ -133,7 +134,7 @@ describe("community repository store", () => {
         files: {
           "a/service.json": manifest("postgis", "1.0.0"),
           "b/service.json": manifest("unpinned", "1.0.0", {
-            container: { image: "registry.example.test/unpinned", tag: "1" },
+            container: { image: "registry.example.test/unpinned", tag: "1", memory: "256m" },
           }),
         },
       },

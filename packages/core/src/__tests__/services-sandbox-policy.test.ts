@@ -31,7 +31,7 @@ function externalService(
       name: id,
       version: "1.0.0",
       quality: "community",
-      container: { image: `t/${id}`, tag: "latest", expose: [80] },
+      container: { image: `t/${id}`, tag: "latest", expose: [80], memory: "256m" },
       ...overrides,
     },
     directory,
@@ -59,7 +59,7 @@ describe("third-party static sandbox policy", () => {
       name: "Community Proxy",
       version: "1.0.0",
       quality: "community",
-      container: { image: "alpine", tag: "latest", expose: [8080] },
+      container: { image: "alpine", tag: "latest", memory: "256m", expose: [8080] },
       exposure: { proxy: { enabled: true } },
     });
 
@@ -75,7 +75,7 @@ describe("third-party static sandbox policy", () => {
       name: "Community Private",
       version: "1.0.0",
       quality: "community",
-      container: { image: "alpine", tag: "latest", expose: [8080] },
+      container: { image: "alpine", tag: "latest", memory: "256m", expose: [8080] },
     });
 
     expect(result.valid).toBe(true);
@@ -87,7 +87,7 @@ describe("third-party static sandbox policy", () => {
       name: "Community Writable Bind",
       version: "1.0.0",
       quality: "community",
-      container: { image: "alpine", tag: "latest" },
+      container: { image: "alpine", tag: "latest", memory: "256m" },
       bindMounts: [{ source: "runtime/state", target: "/state", readOnly: false }],
     });
 
@@ -103,7 +103,7 @@ describe("third-party static sandbox policy", () => {
       name: "Community Readonly Bind",
       version: "1.0.0",
       quality: "community",
-      container: { image: "alpine", tag: "latest" },
+      container: { image: "alpine", tag: "latest", memory: "256m" },
       bindMounts: [
         { source: "config/settings.json", target: "/etc/settings.json", readOnly: true },
       ],
@@ -121,7 +121,7 @@ describe("third-party static sandbox policy", () => {
       name: "Community State",
       version: "1.0.0",
       quality: "community",
-      container: { image: "alpine", tag: "latest" },
+      container: { image: "alpine", tag: "latest", memory: "256m" },
       volumes: [{ name: "openmapx-community-state-data", mountAt: "/state" }],
     });
 
@@ -134,7 +134,7 @@ describe("third-party static sandbox policy", () => {
       name: "App API",
       version: "1.0.0",
       quality: "built-in",
-      container: { image: "alpine", tag: "latest" },
+      container: { image: "alpine", tag: "latest", memory: "256m" },
       bindMounts: [
         {
           source: "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}",
@@ -152,7 +152,7 @@ describe("third-party static sandbox policy", () => {
       name: "Evil",
       version: "1.0.0",
       quality: "community",
-      container: { image: "alpine", tag: "latest", envFile: [".env"] },
+      container: { image: "alpine", tag: "latest", memory: "256m", envFile: [".env"] },
     });
     expect(result.valid).toBe(false);
     expect(result.errors.join(" ")).toMatch(/container\.envFile/);
@@ -162,7 +162,7 @@ describe("third-party static sandbox policy", () => {
       name: "App API",
       version: "1.0.0",
       quality: "built-in",
-      container: { image: "alpine", tag: "latest", envFile: [".env"] },
+      container: { image: "alpine", tag: "latest", memory: "256m", envFile: [".env"] },
     });
     expect(firstParty.valid).toBe(true);
   });
@@ -173,7 +173,7 @@ describe("third-party static sandbox policy", () => {
       name: "Evil",
       version: "1.0.0",
       quality: "community",
-      container: { image: "alpine", tag: "latest" },
+      container: { image: "alpine", tag: "latest", memory: "256m" },
       volumes: [{ name: "openmapx-pgdata", mountAt: "/steal" }],
     });
     expect(stolen.valid).toBe(false);
@@ -184,7 +184,7 @@ describe("third-party static sandbox policy", () => {
       name: "Evil",
       version: "1.0.0",
       quality: "community",
-      container: { image: "alpine", tag: "latest" },
+      container: { image: "alpine", tag: "latest", memory: "256m" },
       volumes: [{ name: "openmapx-evil-state", mountAt: "/state" }],
     });
     expect(namespaced.valid).toBe(true);
@@ -215,7 +215,7 @@ describe("third-party static sandbox policy", () => {
       name: "Reader",
       version: "1.0.0",
       quality,
-      container: { image: "alpine", tag: "latest" },
+      container: { image: "alpine", tag: "latest", memory: "256m" },
       consumes: [
         {
           type: "osm-pbf",
@@ -239,7 +239,7 @@ describe("third-party static sandbox policy", () => {
       name: "Listener",
       version: "1.0.0",
       quality: "community",
-      container: { image: "alpine", tag: "latest" },
+      container: { image: "alpine", tag: "latest", memory: "256m" },
       exposure: { hostPorts: [{ container: 80, host: 8080, bindAddress }] },
     });
 
@@ -274,12 +274,12 @@ describe("third-party render sandbox", () => {
     const directory = tempServiceDir();
     const database = firstPartyService("postgis", directory);
     const impostor = externalService("evil", directory, {
-      container: { image: "alpine", tag: "latest", networkAliases: ["postgis"] },
+      container: { image: "alpine", tag: "latest", memory: "256m", networkAliases: ["postgis"] },
     });
     expect(() => renderCompose([database, impostor], {})).toThrow(/postgis/);
 
     const selfAlias = externalService("evil", directory, {
-      container: { image: "alpine", tag: "latest", networkAliases: ["evil"] },
+      container: { image: "alpine", tag: "latest", memory: "256m", networkAliases: ["evil"] },
     });
     expect(() => renderCompose([selfAlias], {})).not.toThrow();
   });
@@ -298,7 +298,7 @@ describe("third-party render sandbox", () => {
 
   it("re-checks a hand-built LoadedService at renderServiceSnippet", () => {
     const service = externalService("evil", tempServiceDir(), {
-      container: { image: "alpine", tag: "latest", privileged: true },
+      container: { image: "alpine", tag: "latest", memory: "256m", privileged: true },
     });
     expect(() => renderServiceSnippet(service, {})).toThrow(/privileged/);
   });

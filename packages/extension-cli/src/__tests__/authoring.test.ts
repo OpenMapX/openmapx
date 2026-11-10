@@ -55,6 +55,16 @@ describe("complete authoring input", () => {
     expect(result.valid).toBe(false);
     expect(result.errors.join(" ")).toMatch(/privileged/);
   });
+  it("requires the service scaffold to keep its memory limit", async () => {
+    const source = scaffoldService({ id: "demo-service", outDir: dir });
+    const manifest = JSON.parse(readFileSync(source, "utf8"));
+    expect(manifest.container.memory).toMatch(/^[1-9][0-9]*[kmg]$/);
+    delete manifest.container.memory;
+    writeFileSync(source, JSON.stringify(manifest));
+    const result = await validateAuthoringInput(source, "service");
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(" ")).toMatch(/community_memory_limit_required/);
+  });
   it("rejects malformed JSON and malformed contributor receipts", async () => {
     const source = join(dir, "input.json");
     writeFileSync(source, "{");

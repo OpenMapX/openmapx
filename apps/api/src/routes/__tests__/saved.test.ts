@@ -118,6 +118,21 @@ describe("saved routes — authentication", () => {
     expect(dbMock.db.select).not.toHaveBeenCalled();
   });
 
+  it("never lets a shared cache keep a saved-places response", async () => {
+    dbMock.queueSelect([]);
+    const ok = await app.inject({ method: "GET", url: "/api/saved/lists" });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.headers["cache-control"]).toBe("no-store");
+
+    const { httpError } = await import("@openmapx/integration-framework");
+    authMock.requireAuthHook.mockImplementation(async () => {
+      throw httpError(401, "Authentication required");
+    });
+    const refused = await app.inject({ method: "GET", url: "/api/saved/lists" });
+    expect(refused.statusCode).toBe(401);
+    expect(refused.headers["cache-control"]).toBe("no-store");
+  });
+
   it("401 surfaces for a write route too (preHandler runs before the handler)", async () => {
     const { httpError } = await import("@openmapx/integration-framework");
     authMock.requireAuthHook.mockImplementation(async () => {

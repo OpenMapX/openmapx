@@ -82,7 +82,7 @@ const PISTE_TYPE_LABELS: Record<string, string> = {
   connection: "Connection",
 };
 
-function pistePopupHtml(props: Record<string, string | number | boolean>): string {
+export function pistePopupHtml(props: Record<string, string | number | boolean>): string {
   const name = escapeHtml(String(props.name || "Unnamed piste"));
   const difficulty = escapeHtml(String(props.difficulty || ""));
   const type = String(props.pisteType || "");
@@ -93,7 +93,7 @@ function pistePopupHtml(props: Record<string, string | number | boolean>): strin
 
   const diffColor = PISTE_DIFFICULTY_COLORS[difficulty] || "#888";
   const diffLabel = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
-  const typeLabel = PISTE_TYPE_LABELS[type] || type;
+  const typeLabel = escapeHtml(PISTE_TYPE_LABELS[type] || type);
 
   let details = "";
   if (ref) details += `Ref: #${ref}`;
@@ -111,7 +111,7 @@ function pistePopupHtml(props: Record<string, string | number | boolean>): strin
   </div>`;
 }
 
-function liftPopupHtml(props: Record<string, string | number | boolean>): string {
+export function liftPopupHtml(props: Record<string, string | number | boolean>): string {
   const name = escapeHtml(String(props.name || "Unnamed lift"));
   const aerialway = String(props.aerialway || "");
   const typeLabel = escapeHtml(AERIALWAY_LABELS[aerialway] || aerialway);
