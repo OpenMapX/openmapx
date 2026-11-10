@@ -2,9 +2,13 @@ import { isApiClientError, isApiRequestAbortedError } from "@openmapx/core";
 import { garageConflictSchema } from "@openmapx/core/garage-sdk";
 import { savedWriteError } from "./savedWriteError";
 
-/** A namespaced message key, with its values, explaining a failed mutation. */
+/**
+ * A namespaced message key, with its values, explaining a failed mutation, and
+ * the action that lets the user recover.
+ */
 export type MutationErrorMessage =
-  | { namespace: "common"; key: "signedOutRetry" | "actionFailed"; values?: undefined }
+  | { namespace: "common"; key: "signedOutRetry"; values?: undefined; action: "signIn" }
+  | { namespace: "common"; key: "actionFailed"; values?: undefined }
   | { namespace: "vehicles"; key: "nameTaken"; values?: undefined }
   | {
       namespace: "saved";
@@ -26,7 +30,7 @@ function isCancellation(error: unknown): boolean {
 export function mutationErrorMessage(error: unknown): MutationErrorMessage | null {
   if (isCancellation(error)) return null;
   if (isApiClientError(error) && error.status === 401) {
-    return { namespace: "common", key: "signedOutRetry" };
+    return { namespace: "common", key: "signedOutRetry", action: "signIn" };
   }
   const saved = savedWriteError(error);
   if (saved.key !== "saveFailed") return { namespace: "saved", ...saved };

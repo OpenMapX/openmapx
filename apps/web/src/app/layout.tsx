@@ -12,7 +12,6 @@ import "@fontsource-variable/plus-jakarta-sans";
 import "./reset.css";
 import "./globals.css";
 import { headers } from "next/headers";
-import { MutationErrorNotice } from "@/components/MutationErrorNotice";
 import { OfflineNotice } from "@/components/OfflineNotice";
 import { FileOpenHandler } from "@/components/pwa/FileOpenHandler";
 import { PersistentStorageRequest } from "@/components/pwa/PersistentStorageRequest";
@@ -85,7 +84,6 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                 <PhoneOnly>
                   <AttributionLabelsSync />
                   <OfflineNotice />
-                  <MutationErrorNotice />
                   <SwUpdateNotice />
                   <InstallPromptCapture />
                   <PersistentStorageRequest />

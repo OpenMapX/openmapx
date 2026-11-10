@@ -14,6 +14,7 @@ import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useAuthPromptStore } from "@/stores/authPromptStore";
 import { createQueryWrapper, createTestQueryClient } from "@/test/query";
 
 const state = vi.hoisted(() => ({
@@ -24,6 +25,7 @@ const state = vi.hoisted(() => ({
   labels: [] as LabeledPlace[],
   vehicles: [] as unknown[],
   shares: [] as unknown[],
+  refreshSession: vi.fn(),
 }));
 
 vi.mock("next/navigation", async (importOriginal) => ({
@@ -53,6 +55,7 @@ vi.mock("@openmapx/core", async (importOriginal) => ({
   useLabeledPlaces: () => ({ data: state.labels, isLoading: false }),
   useVehicles: () => ({ data: state.vehicles }),
   useShares: () => ({ data: state.shares }),
+  refreshSession: () => state.refreshSession(),
 }));
 
 const { MutationErrorNotice } = await import("./MutationErrorNotice");
@@ -85,6 +88,8 @@ function json(status: number, body: unknown) {
 
 beforeEach(() => {
   state.pathname = "/";
+  state.refreshSession.mockReset();
+  useAuthPromptStore.getState().close();
   state.writes = [];
   state.lists = [];
   state.places = [];
@@ -147,6 +152,29 @@ describe("the failed-change notice", () => {
     renderWithNotice(<FailingAction error={error} />);
     await userEvent.click(screen.getByRole("button", { name: "Act" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(message);
+  });
+
+  it("offers sign-in after the session has ended and stops presenting the user as signed in", async () => {
+    renderWithNotice(
+      <FailingAction error={new ApiClientError(401, { error: "Authentication required" }, null)} />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Act" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(en.common.signedOutRetry);
+    expect(state.refreshSession).toHaveBeenCalledTimes(1);
+    await userEvent.click(within(alert).getByRole("button", { name: en.auth.signIn }));
+
+    expect(useAuthPromptStore.getState().open).toBe(true);
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  });
+
+  it("does not refresh the session for other failures", async () => {
+    renderWithNotice(<FailingAction error={new Error("boom")} />);
+    await userEvent.click(screen.getByRole("button", { name: "Act" }));
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).queryByRole("button", { name: en.auth.signIn })).not.toBeInTheDocument();
+    expect(state.refreshSession).not.toHaveBeenCalled();
   });
 
   it("shows one notice for several failures at once", async () => {
