@@ -123,6 +123,20 @@ describe("arriving by transit", () => {
     return trip;
   }
 
+  it("does not change the location profile at the arrival", async () => {
+    harness = await startForegroundHarness();
+    const trip = await harness.start(rideToTheEnd());
+    await riderAction(trip.sessionId, "board", "walking", "board-1");
+    const riding = harness.phone.location.profile;
+    const calls = harness.phone.location.calls.length;
+
+    await riderAction(trip.sessionId, "alight", "riding", "alight-1");
+
+    expect((await harness.session())?.status).toBe("arrived");
+    expect(harness.phone.location.profile).toBe(riding);
+    expect(harness.phone.location.calls).toHaveLength(calls);
+  });
+
   it("keeps location through the undo window, then stops it", async () => {
     await alightAtTheEnd();
     expect(harness.phone.location.running).toBe(true);

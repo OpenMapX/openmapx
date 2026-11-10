@@ -104,8 +104,8 @@ only when the OS starts the task without the app.
   `ARRIVAL_CUE_GRACE_MS` (10 s), so iOS does not suspend a backgrounded app
   before the arrival announcement plays. A transit arrival keeps it until the
   last rider confirmation can no longer be undone, if that is later, so an undo
-  resumes a tracked trip. The profile does not change at arrival, so nothing
-  restarts the stream. A coordinator timer releases the stream where
+  resumes a tracked trip. Neither a road nor a transit arrival changes the
+  profile, so nothing restarts the stream. A coordinator timer releases the stream where
   JavaScript timers run: in the foreground, and on iOS while background
   location keeps the app running. Android pauses a backgrounded app's timers
   even under a foreground service. There the first batch after the window
