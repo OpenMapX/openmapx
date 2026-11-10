@@ -1,4 +1,4 @@
-import { getDatabase } from "../storage/database";
+import { type Database, getDatabase } from "../storage/database";
 import { SessionRepository } from "../storage/SessionRepository";
 import { type EffectPorts, EffectRunner } from "./effects";
 import { GroundNavigationProcessor } from "./ground/GroundNavigationProcessor";
@@ -41,6 +41,11 @@ export interface CoordinatorOverrides {
   newSessionId?: () => string;
   /** Answers the page's one-shot requests; absent in the headless task. */
   auxiliary?: AuxiliaryCommandHandler;
+  /**
+   * Opens the durable store, if this composition is the first in the process.
+   * Later compositions share whatever the first one opened.
+   */
+  openStorage?: () => Promise<Database>;
 }
 
 /** Random enough to be unique, and meaningless on its own. */
@@ -57,9 +62,11 @@ export interface SharedCoordinatorCore {
 
 let sharedCore: Promise<SharedCoordinatorCore> | null = null;
 
-export function getSharedCoordinatorCore(): Promise<SharedCoordinatorCore> {
+export function getSharedCoordinatorCore(
+  openStorage: () => Promise<Database> = getDatabase,
+): Promise<SharedCoordinatorCore> {
   sharedCore ??= (async () => {
-    const repository = new SessionRepository(await getDatabase());
+    const repository = new SessionRepository(await openStorage());
     const processors = new ProcessorRegistry();
     for (const mode of registeredModes()) {
       const factory = PROCESSOR_FACTORIES[mode];
@@ -84,7 +91,9 @@ export function getSharedCoordinatorCore(): Promise<SharedCoordinatorCore> {
 export async function createCoordinator(
   overrides: CoordinatorOverrides,
 ): Promise<CoordinatorComposition> {
-  const { repository, processors, executor } = await getSharedCoordinatorCore();
+  const { repository, processors, executor } = await getSharedCoordinatorCore(
+    overrides.openStorage,
+  );
   const deps: CoordinatorDeps = {
     repository,
     processors,

@@ -1,5 +1,6 @@
 import * as Notifications from "expo-notifications";
 import type { MobileLocale } from "../../config/nativeCopy";
+import type { NavigationAudio } from "../audio/navigationAudio";
 import { getNavigationAudio, isNavigationAudioAvailable } from "../audio/navigationAudioModule";
 import { currentPlatform } from "../background/createHeadlessCoordinator";
 import type { ShellDescription } from "../bridge/nativeBridge";
@@ -9,7 +10,10 @@ import { readLocationPermissionSnapshot } from "../location/ExpoLocationDriver";
 import type { LocationDriver } from "../location/LocationDriver";
 import { initialProfileFor, type LocationProfileKind, profileFor } from "../location/profiles";
 import { ExpoNotificationScheduler } from "../notifications/ExpoNotificationScheduler";
+import type { NotificationScheduler } from "../notifications/NotificationScheduler";
 import { PermissionController, type PermissionUi } from "../permissions/permissionController";
+import type { PermissionSnapshot } from "../permissions/permissionMachine";
+import { type Database, getDatabase } from "../storage/database";
 import { createCoordinator } from "./createCoordinator";
 import { createRemoteWork } from "./createRemoteWork";
 import { registerForegroundCoordinator } from "./foregroundCoordinator";
@@ -51,9 +55,54 @@ export interface ForegroundNavigationOptions {
   auxiliary: AuxiliaryCommandHandler;
   /** Told when guidance starts or ends, for keep-awake and the shell states. */
   onNavigatingChanged(navigating: boolean): void;
-  driver?: LocationDriver;
   registerAsForeground?: boolean;
   startContext?(): NavigationStartContext;
+  /** Replaces device services; production binds the Expo modules. */
+  device?: Partial<ForegroundDevice>;
+}
+
+/**
+ * Everything this composition needs from the phone itself.
+ *
+ * Each member is the narrowest boundary the composition already depended on,
+ * so a test can substitute the device while the coordinator, repository,
+ * processors and effect ports above it stay the shipped ones.
+ */
+export interface ForegroundDevice {
+  /** The location stream and the permission grants it reports. */
+  driver: LocationDriver;
+  /** Reads the location grant, including whether it is precise. */
+  readLocationPermission(): Promise<PermissionSnapshot>;
+  audio: Pick<NavigationAudio, "speak" | "stop">;
+  speechAvailable(): boolean;
+  notifications: {
+    scheduler: NotificationScheduler;
+    permission(): Promise<{ granted: boolean; canAskAgain: boolean }>;
+    /** Asks the user; resolves with whether the grant now exists. */
+    request(): Promise<boolean>;
+  };
+  /** Opens the durable store when this is the first composition in the process. */
+  openStorage(): Promise<Database>;
+  clock(): number;
+}
+
+function productionDevice(): ForegroundDevice {
+  return {
+    driver: createLocationDriver(),
+    readLocationPermission: readLocationPermissionSnapshot,
+    audio: getNavigationAudio(),
+    speechAvailable: isNavigationAudioAvailable,
+    notifications: {
+      scheduler: new ExpoNotificationScheduler(),
+      permission: async () => {
+        const current = await Notifications.getPermissionsAsync();
+        return { granted: current.granted, canAskAgain: current.canAskAgain };
+      },
+      request: async () => (await Notifications.requestPermissionsAsync()).granted,
+    },
+    openStorage: getDatabase,
+    clock: () => Date.now(),
+  };
 }
 
 export interface ForegroundNavigation {
@@ -66,15 +115,15 @@ export interface ForegroundNavigation {
 export async function createForegroundNavigation(
   options: ForegroundNavigationOptions,
 ): Promise<ForegroundNavigation> {
-  const driver = options.driver ?? createLocationDriver();
-  const audio = getNavigationAudio();
-  const scheduler = new ExpoNotificationScheduler();
-  const now = () => Date.now();
+  const device: ForegroundDevice = { ...productionDevice(), ...options.device };
+  const { driver, audio } = device;
+  const scheduler = device.notifications.scheduler;
+  const now = () => device.clock();
 
   let notificationsGranted = false;
   const refreshNotificationGrant = async () => {
     try {
-      notificationsGranted = (await Notifications.getPermissionsAsync()).granted;
+      notificationsGranted = (await device.notifications.permission()).granted;
     } catch {
       notificationsGranted = false;
     }
@@ -95,7 +144,7 @@ export async function createForegroundNavigation(
     platform: currentPlatform(),
     ui: options.permissionUi,
     isAppActive: options.isAppActive,
-    snapshot: readLocationPermissionSnapshot,
+    snapshot: () => device.readLocationPermission(),
   });
 
   const rerouteService = new GroundRerouteService({ apiOrigin: options.apiOrigin, now });
@@ -111,6 +160,8 @@ export async function createForegroundNavigation(
   };
 
   const composition = await createCoordinator({
+    openStorage: () => device.openStorage(),
+    clock: now,
     bridge,
     permissions: {
       state: () => driver.getPermissionState(),
@@ -123,10 +174,8 @@ export async function createForegroundNavigation(
         // moment it is asked for, once.
         if (decision !== "denied" && !(await refreshNotificationGrant())) {
           try {
-            const asked = await Notifications.getPermissionsAsync();
-            if (asked.canAskAgain) {
-              notificationsGranted = (await Notifications.requestPermissionsAsync()).granted;
-            }
+            const asked = await device.notifications.permission();
+            if (asked.canAskAgain) notificationsGranted = await device.notifications.request();
           } catch {
             // Navigation proceeds without alerts.
           }
@@ -244,7 +293,7 @@ export async function createForegroundNavigation(
       transitActions: true,
       backgroundLocation: true,
       localNotifications: notificationsGranted,
-      speech: isNavigationAudioAvailable(),
+      speech: device.speechAvailable(),
     }),
     activeSession: async () => {
       const session = await repository.loadActive(now());

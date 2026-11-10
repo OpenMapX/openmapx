@@ -292,10 +292,15 @@ Source and policy tests alone do not prove a deployed browser enforced it.
 
 Captured-route processing and storage tests exercise progress without network
 access, with external location, audio and networking ports replaced by test
-implementations. They do not establish installed background guidance because the
-foreground command composition is missing. A complete OS callback blackout also
-prevents real-time processing; foreground coasting does not create a background
-wake source.
+implementations. `foregroundNavigation.harness.test.ts` runs the shipped
+`createForegroundNavigation` composition on a fake phone
+(`navigation/testing/foregroundHarness.ts`): only location, audio, notifications,
+storage, network and clock are replaced, through the composition's `device`
+option. That covers the wiring between page commands, location batches, the
+durable session and device effects, including a process restart. It does not
+establish OS delivery, background execution or audio behaviour on a device. A
+complete OS callback blackout also prevents real-time processing; foreground
+coasting does not create a background wake source.
 
 The remotely served UI has no guaranteed offline cold start. If no cached page is
 available, native loading and recovery UI must remain usable. Physical-device
