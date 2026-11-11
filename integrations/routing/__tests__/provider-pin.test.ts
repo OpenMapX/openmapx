@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createDirectionsCacheIdentity,
   DIRECTIONS_REQUEST_POLICY,
@@ -9,6 +9,11 @@ import {
   createRoutingHandlerEnvironment,
   createRoutingTestReply,
 } from "./support/routing-handler-contract";
+
+vi.mock("../closures.js", async (importOriginal) => {
+  const { withStubbedClosureExclusions } = await import("./support/closure-exclusion-stub.js");
+  return withStubbedClosureExclusions(await importOriginal<typeof import("../closures.js")>());
+});
 
 const query = { waypoints: "0,0;0.002,0", mode: "driving", provider: "routing-second" };
 

@@ -30,7 +30,7 @@ describe("roadConditionRouteNotice", () => {
   });
 
   it("flags reported conditions the route may not reflect", () => {
-    expect(roadConditionRouteNotice(impact("limited", ["legacy_geometry_unverified"]))).toBe(
+    expect(roadConditionRouteNotice(impact("limited", ["planned_closure_on_route"]))).toBe(
       "notApplied",
     );
     expect(

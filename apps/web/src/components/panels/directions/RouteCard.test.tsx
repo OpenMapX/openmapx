@@ -196,7 +196,7 @@ describe("RouteCard road-condition context", () => {
   }> = [
     {
       availability: "limited",
-      reasons: ["legacy_geometry_unverified"],
+      reasons: ["planned_closure_on_route"],
       en: "Reported road conditions nearby may not be reflected in this route",
       de: "Gemeldete Straßenbedingungen in der Nähe sind in dieser Route möglicherweise nicht berücksichtigt",
     },
@@ -669,7 +669,7 @@ describe("RouteCard Start under browser authority", () => {
       availability: "limited",
       evaluatedAt: "2026-09-12T12:00:00Z",
       validUntil: null,
-      reasons: ["legacy_geometry_unverified"],
+      reasons: ["planned_closure_on_route"],
     };
     const view = render(
       <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">

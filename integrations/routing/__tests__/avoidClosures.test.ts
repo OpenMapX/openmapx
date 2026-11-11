@@ -1,14 +1,19 @@
 import type { RoutingOptions } from "@openmapx/core";
 import { RoutingProviderError } from "@openmapx/integration-framework";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DirectionsResult } from "../types.js";
-import { effect, roadConditionEvent } from "./support/road-condition.js";
+import { boundEvent, effect, roadConditionEvent } from "./support/road-condition.js";
 import {
   closureRoutingContract,
   createDirectionsResult,
   createRoutingHandlerEnvironment,
   createRoutingTestReply,
 } from "./support/routing-handler-contract.js";
+
+vi.mock("../closures.js", async (importOriginal) => {
+  const { withStubbedClosureExclusions } = await import("./support/closure-exclusion-stub.js");
+  return withStubbedClosureExclusions(await importOriginal<typeof import("../closures.js")>());
+});
 
 const WAYPOINTS_QUERY = "0.1,51.1;0.2,51.2";
 
@@ -74,7 +79,8 @@ describe("/directions handler — avoidClosures=true with active closures", () =
     expect(reply.body).toEqual({ error: "Closure avoidance unavailable for this route" });
   });
 
-  it("returns an explicit limited assessment and disables HTTP caching", async () => {
+  it("reports routing evidence as unsupported without engine proof and disables HTTP caching", async () => {
+    vi.useFakeTimers({ now: Date.parse("2026-09-12T12:00:00Z") });
     const environment = createRoutingHandlerEnvironment({
       routingProviders: [
         {
@@ -84,7 +90,7 @@ describe("/directions handler — avoidClosures=true with active closures", () =
           getRoute: vi.fn(async () => createDirectionsResult()),
         },
       ],
-      closurePoints: [[0.15, 51.15]],
+      closureEvents: [boundEvent()],
     });
     const reply = createRoutingTestReply();
 
@@ -96,10 +102,38 @@ describe("/directions handler — avoidClosures=true with active closures", () =
     expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
     expect(reply.body).toMatchObject({
       roadConditionImpact: {
-        availability: "limited",
+        availability: "unsupported",
         evaluatedAt: expect.any(String),
-        validUntil: null,
-        reasons: ["legacy_geometry_unverified", "unverified_engine_application"],
+        reasons: expect.arrayContaining(["unverified_engine_application"]),
+      },
+    });
+  });
+
+  it("never turns a situation without routing evidence into an exclusion", async () => {
+    const getRoute = vi.fn(async () => createDirectionsResult());
+    const environment = createRoutingHandlerEnvironment({
+      routingProviders: [
+        {
+          integrationId: "routing-closure-aware",
+          providerId: "engine-b",
+          supportsExclusions: true,
+          getRoute,
+        },
+      ],
+      closureEvents: [roadConditionEvent()],
+    });
+    const reply = createRoutingTestReply();
+
+    await environment.getHandler("/directions")(
+      { query: { waypoints: WAYPOINTS_QUERY, avoidClosures: "true" } },
+      reply,
+    );
+
+    expect(getRoute.mock.calls[0]?.[2]).not.toHaveProperty("excludeLocations");
+    expect(reply.body).toMatchObject({
+      roadConditionImpact: {
+        availability: "unsupported",
+        reasons: expect.arrayContaining(["missing_routing_evidence"]),
       },
     });
   });
@@ -169,19 +203,21 @@ describe("/directions handler — a road closed to all but local access", () => 
     [13.485, 52.437],
     [13.487, 52.437],
   ];
-  const localAccessClosure = roadConditionEvent({
-    id: "local:1",
-    geometry: { type: "LineString", coordinates: street },
-    effects: [
-      effect("local:1/closure", "closure", {
-        applicability: { kind: "all", except: [{ usage: "local_access" }] },
-      }),
-    ],
+  const localAccessOnly = { kind: "all" as const, except: [{ usage: "local_access" as const }] };
+  const localAccessClosure = boundEvent(
+    { id: "local:1", geometry: { type: "LineString", coordinates: street } },
+    effect("local:1/closure", "closure", { applicability: localAccessOnly }),
+    { applicability: localAccessOnly },
+  );
+  afterEach(() => {
+    vi.useRealTimers();
   });
+
   const route = (geometry: [number, number][]) =>
     ({ distance: 1, duration: 1, geometry, legs: [], steps: [] }) as DirectionsResult["routes"][0];
 
   it("plans the destination onto it and marks only the route that drives it", async () => {
+    vi.useFakeTimers({ now: Date.parse("2026-09-12T12:00:00Z") });
     const getRoute = vi.fn(async () =>
       createDirectionsResult([
         route([

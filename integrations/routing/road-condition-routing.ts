@@ -16,7 +16,6 @@ export interface RoadConditionRouteContext {
   travelAt: number;
   mode: TravelMode;
   sharedTrafficApplied: boolean;
-  allowLegacyGeometry?: boolean;
   disallowedSources?: ReadonlySet<string>;
   /** The operator's data-use policy; routing takes no unclear or non-commercial rights without it. */
   rightsPolicy?: RoadConditionRightsPolicy;
@@ -62,7 +61,7 @@ export function roadConditionImpactForRequest(
 }
 
 export interface RoadConditionRouteDecision {
-  disposition: "legacy-geometry" | "shared-traffic" | "ignore";
+  disposition: "shared-traffic" | "ignore";
   reasons: string[];
   validUntil: string | null;
 }
@@ -76,27 +75,19 @@ export function assessRoadConditionForRoute(
   effect: RoadConditionEffect,
   context: RoadConditionRouteContext,
 ): RoadConditionRouteDecision {
-  // Restriction evidence outranks every other disposition, including the
-  // legacy-geometry path, which would otherwise let a vehicle-conditioned
-  // rule steer a route without any routing evidence at all. A rule naming
-  // cars outright still closes or caps the road for them, as the shared
-  // routing decision holds, but binds no route that is not driven by car.
+  // Restriction evidence outranks every other disposition, so a
+  // vehicle-conditioned rule never steers a route. A rule naming cars
+  // outright still closes or caps the road for them, as the shared routing
+  // decision holds, but binds no route that is not driven by car.
   const bindsThisCar =
     context.mode === "driving" && (closesRoadForCars(effect) || speedCapKph(effect) !== undefined);
   if (isRestrictionEvidence(effect) || (isVehicleSpecific(effect) && !bindsThisCar)) {
     return { disposition: "ignore", reasons: ["vehicle_specific_restriction"], validUntil: null };
   }
+  // An effect without routing evidence is unbound: its raw geometry never
+  // stands in for a graph binding.
   if (!event.routingEvidence?.[effect.id]) {
-    // A provider that publishes evidence for some effects declares the others
-    // unbound: their raw geometry must not stand in for a graph binding.
-    if (event.routingEvidence || !context.allowLegacyGeometry) {
-      return { disposition: "ignore", reasons: ["missing_routing_evidence"], validUntil: null };
-    }
-    return {
-      disposition: "legacy-geometry",
-      reasons: ["legacy_geometry_unverified"],
-      validUntil: null,
-    };
+    return { disposition: "ignore", reasons: ["missing_routing_evidence"], validUntil: null };
   }
 
   const eligibility = getRoadConditionRoutingDecision(event, effect, {

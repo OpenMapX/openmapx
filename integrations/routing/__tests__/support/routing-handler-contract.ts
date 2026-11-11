@@ -3,7 +3,7 @@ import type { IntegrationContext } from "@openmapx/integration-framework";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../../index.js";
 import type { DirectionsResult, RoutingProvider, TravelMode } from "../../types.js";
-import { roadConditionEvent } from "./road-condition.js";
+import { stubClosureExclusions } from "./closure-exclusion-stub.js";
 
 export interface RoutingProviderFixture {
   integrationId: string;
@@ -59,6 +59,7 @@ export function createDirectionsResult(routes: DirectionsResult["routes"] = []):
 interface RoutingHandlerEnvironmentOptions {
   contextOverrides?: Partial<IntegrationContext>;
   routingProviders: RoutingProviderFixture[];
+  /** Exclusion points every closure lookup returns, whatever the road-condition events say. */
   closurePoints?: [number, number][];
   closureEvents?: RoadConditionEvent[];
   additionalIntegrations?: Record<string, unknown[]>;
@@ -69,16 +70,10 @@ export function createRoutingHandlerEnvironment(options: RoutingHandlerEnvironme
   getHandler(path: string): RoutingTestHandler;
 } {
   const handlers = new Map<string, RoutingTestHandler>();
-  const closureEvents = [
-    ...(options.closurePoints ?? []).map((coordinates, index) =>
-      roadConditionEvent({
-        id: `closure:${index}`,
-        provider: "road-conditions-stub",
-        geometry: { type: "Point", coordinates },
-      }),
-    ),
-    ...(options.closureEvents ?? []),
-  ];
+  const closureEvents = options.closureEvents ?? [];
+  stubClosureExclusions(
+    options.closurePoints?.length ? { points: options.closurePoints } : undefined,
+  );
 
   const context = {
     getIntegrationsByDomain(domain: string) {
@@ -204,13 +199,6 @@ export function closureRoutingContract(options: ClosureRoutingContractOptions): 
         excludePolygons: [],
       });
       expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
-      expect(reply.body).toMatchObject({
-        roadConditionImpact: {
-          availability: "limited",
-          evaluatedAt: expect.any(String),
-          validUntil: null,
-        },
-      });
     });
 
     it.each([

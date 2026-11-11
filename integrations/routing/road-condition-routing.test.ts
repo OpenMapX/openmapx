@@ -62,38 +62,22 @@ describe("assessRoadConditionForRoute", () => {
     ).toContain("unsupported_mode");
   });
 
-  it("keeps a provider that publishes no evidence on the explicit limited geometry path", () => {
-    const legacy = roadConditionEvent({ provider: "road-conditions-legacy", source: "legacy" });
-    expect(
-      assessRoadConditionForRoute(legacy, firstEffect(legacy), {
-        ...context,
-        allowLegacyGeometry: true,
-      }),
-    ).toEqual({
-      disposition: "legacy-geometry",
-      reasons: ["legacy_geometry_unverified"],
-      validUntil: null,
-    });
-  });
-
   it("does not fall back to geometry for an effect its evidence-publishing provider left unbound", () => {
     const unbound = effect("oc:1/speed_limit", "speed_limit", {
       limit: { value: 60, unit: "km/h" },
     });
     const event = boundEvent();
     event.effects.push(unbound);
-    expect(
-      assessRoadConditionForRoute(event, unbound, { ...context, allowLegacyGeometry: true }),
-    ).toEqual({
+    expect(assessRoadConditionForRoute(event, unbound, context)).toEqual({
       disposition: "ignore",
       reasons: ["missing_routing_evidence"],
       validUntil: null,
     });
   });
 
-  it("refuses the geometry path without explicit permission", () => {
-    const legacy = roadConditionEvent();
-    expect(assessRoadConditionForRoute(legacy, firstEffect(legacy), context)).toEqual({
+  it("never lets the raw geometry of a situation without routing evidence bind a route", () => {
+    const unbound = roadConditionEvent();
+    expect(assessRoadConditionForRoute(unbound, firstEffect(unbound), context)).toEqual({
       disposition: "ignore",
       reasons: ["missing_routing_evidence"],
       validUntil: null,
@@ -123,23 +107,25 @@ describe("assessRoadConditionForRoute", () => {
     });
   });
 
-  it("ignores restriction evidence on the legacy-geometry path as well", () => {
-    const legacy = roadConditionEvent({ effects: [weightLimit] });
-    expect(
-      assessRoadConditionForRoute(legacy, weightLimit, { ...context, allowLegacyGeometry: true })
-        .disposition,
-    ).toBe("ignore");
+  it("reads restriction evidence before the missing routing evidence of its situation", () => {
+    const unbound = roadConditionEvent({ effects: [weightLimit] });
+    expect(assessRoadConditionForRoute(unbound, weightLimit, context)).toEqual({
+      disposition: "ignore",
+      reasons: ["vehicle_specific_restriction"],
+      validUntil: null,
+    });
   });
 
-  it("keeps the geometry of a closure that names cars outright", () => {
+  it("leaves a closure that names cars outright unbound without routing evidence", () => {
     const carClosure = effect("test:1/closure", "closure", {
       applicability: { kind: "classes", include: [{ class: "car" }] },
     });
-    const legacy = roadConditionEvent({ effects: [carClosure] });
-    expect(
-      assessRoadConditionForRoute(legacy, carClosure, { ...context, allowLegacyGeometry: true })
-        .disposition,
-    ).toBe("legacy-geometry");
+    const unbound = roadConditionEvent({ effects: [carClosure] });
+    expect(assessRoadConditionForRoute(unbound, carClosure, context)).toEqual({
+      disposition: "ignore",
+      reasons: ["missing_routing_evidence"],
+      validUntil: null,
+    });
   });
 
   it.each(["cycling", "walking"] as const)(
@@ -148,14 +134,8 @@ describe("assessRoadConditionForRoute", () => {
       const carClosure = effect("test:1/closure", "closure", {
         applicability: { kind: "classes", include: [{ class: "car" }] },
       });
-      const legacy = roadConditionEvent({ effects: [carClosure] });
-      expect(
-        assessRoadConditionForRoute(legacy, carClosure, {
-          ...context,
-          mode,
-          allowLegacyGeometry: true,
-        }),
-      ).toEqual({
+      const unbound = roadConditionEvent({ effects: [carClosure] });
+      expect(assessRoadConditionForRoute(unbound, carClosure, { ...context, mode })).toEqual({
         disposition: "ignore",
         reasons: ["vehicle_specific_restriction"],
         validUntil: null,

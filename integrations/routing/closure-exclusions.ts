@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import type { LngLat, RoadConditionRouteImpact, RoutingOptions, TravelMode } from "@openmapx/core";
 import { timeZoneAt, zonedWallClockToInstant } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { activeClosuresForBbox, geometryLines, geometryToExclusions } from "./closures.js";
-import { clearOfEndpoints, nearbyLines, planLocalAccess } from "./local-access.js";
+import { activeClosuresForBbox } from "./closures.js";
+import { nearbyLines, planLocalAccess } from "./local-access.js";
 
 /**
  * Resolve the travel instant for closure-time evaluation: the chosen
@@ -94,19 +94,10 @@ export async function applyClosureExclusions(
   try {
     const collected = await activeClosuresForBbox(ctx, bbox, at, mode);
     exclusions = { points: [...collected.points], polygons: [...collected.polygons] };
-    // Without routing evidence a road open to local access stays open only
-    // where an end of the route lies on it; elsewhere it closes like any other.
-    const localLines = [...collected.localAccessLines];
-    for (const geometry of collected.legacyLocalAccess) {
-      const lines = geometryLines(geometry);
-      if (lines.every((line) => clearOfEndpoints(line, waypoints))) {
-        geometryToExclusions(geometry, exclusions.points, exclusions.polygons, ctx);
-      } else {
-        localLines.push(...lines);
-      }
+    const plan = planLocalAccess(waypoints, collected.localAccessLines, collected.hardLines);
+    if (plan) {
+      localAccess = { plan, lines: nearbyLines(waypoints, collected.localAccessLines) };
     }
-    const plan = planLocalAccess(waypoints, localLines, collected.hardLines);
-    if (plan) localAccess = { plan, lines: nearbyLines(waypoints, localLines) };
     roadConditionImpact = collected.roadConditionImpact;
   } catch (err) {
     ctx.log.warn("[routing] failed to fetch closures; routing without exclusions", err as Error);
