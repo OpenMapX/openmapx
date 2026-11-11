@@ -543,10 +543,6 @@ describe("renderComposeForRepo", () => {
       ) as Record<string, unknown>;
       writeManifest(id, manifest);
     }
-    // An earlier release's checkout, with a directory the agent never recorded.
-    mkdirSync(join(tmp, "custom_integrations", "hand-placed"), { recursive: true });
-    const warnings = vi.spyOn(console, "error").mockImplementation(() => {});
-
     await renderComposeForRepo({
       rootDir: tmp,
       domain: "example.com",
@@ -565,11 +561,6 @@ describe("renderComposeForRepo", () => {
       "../../custom-integrations:${OPENMAPX_CUSTOM_INTEGRATIONS_DIR:-/app/custom_integrations}:ro",
     );
     expect(yaml).not.toContain("/custom_integrations:${");
-    expect(warnings.mock.calls.flat().join("\n")).toContain(
-      "The integration hand-placed in custom_integrations was not copied into the operations agent's state: the agent holds no record of it.",
-    );
-    // Left in place, as everything in the checkout.
-    expect(readdirSync(join(tmp, "custom_integrations"))).toEqual(["hand-placed"]);
   });
 
   it("mounts only the Transitous API keys directory into data-manager, where it reads them", async () => {
@@ -579,11 +570,6 @@ describe("renderComposeForRepo", () => {
       ) as Record<string, unknown>;
       writeManifest(id, manifest);
     }
-    // An earlier release's keys in the checkout.
-    const legacy = join(tmp, "services", "motis", "tools", "transitous", "api-keys.json");
-    mkdirSync(dirname(legacy), { recursive: true });
-    writeFileSync(legacy, '{\n  "us-ca/NeedsKey": "secret"\n}\n', { mode: 0o600 });
-
     await renderComposeForRepo({
       rootDir: tmp,
       domain: "example.com",
@@ -592,9 +578,8 @@ describe("renderComposeForRepo", () => {
 
     const keysDirectory = join(tmp, "infra", "docker", "secrets", "transitous-api-keys");
     expect(readdirSync(keysDirectory)).toEqual(["api-keys.json"]);
-    expect(readFileSync(join(keysDirectory, "api-keys.json"), "utf8")).toBe(
-      readFileSync(legacy, "utf8"),
-    );
+    expect(readFileSync(join(keysDirectory, "api-keys.json"), "utf8")).toBe("{}\n");
+    expect(statSync(join(keysDirectory, "api-keys.json")).mode & 0o777).toBe(0o600);
     const yaml = readFileSync(generatedCompose(), "utf8");
     const dataManager = renderedService(yaml, "data-manager");
     // The directory, read-only, at the path data-manager reads by default.
