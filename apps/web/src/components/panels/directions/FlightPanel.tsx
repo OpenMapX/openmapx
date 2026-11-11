@@ -30,6 +30,7 @@ import {
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { type ChangeEvent, type ReactNode, useEffect, useId, useMemo, useState } from "react";
+import { ClickableRow } from "@/components/ui/ClickableRow";
 import { BRAND } from "@/integration-api/runtime/theme";
 
 type T = ReturnType<typeof useTranslations>;
@@ -105,7 +106,10 @@ function AirportField({
         {showInput ? (
           <Box
             component="input"
-            autoFocus
+            // Only after the user asked to change the airport: when the nearest
+            // lookup finds nothing, the field appears without taking focus.
+            autoFocus={editing}
+            aria-label={label}
             placeholder={`${label} — ${t("searchAirport")}`}
             value={query}
             onChange={(e: ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
@@ -498,16 +502,16 @@ export function FlightPanel() {
             ["oneWay", false],
           ] as const
         ).map(([key, val]) => (
-          <Box
+          <ClickableRow
             key={key}
+            aria-pressed={roundTrip === val}
             onClick={() => handleRoundTripChange(val)}
             sx={{
+              width: "auto",
               px: 1.5,
               py: 0.5,
               borderRadius: 99,
-              cursor: "pointer",
               display: "inline-flex",
-              alignItems: "center",
               justifyContent: "center",
               border: "1px solid",
               borderColor: roundTrip === val ? BRAND : "divider",
@@ -523,7 +527,7 @@ export function FlightPanel() {
             >
               {t(key)}
             </Typography>
-          </Box>
+          </ClickableRow>
         ))}
       </Box>
 
@@ -534,6 +538,7 @@ export function FlightPanel() {
           <Box
             component="input"
             type="date"
+            aria-label={t("departDate")}
             min={todayStr}
             value={departDate}
             onChange={(e: ChangeEvent<HTMLInputElement>) => handleDepartDateChange(e.target.value)}
@@ -546,6 +551,7 @@ export function FlightPanel() {
             <Box
               component="input"
               type="date"
+              aria-label={t("returnDateLabel")}
               min={departDate || todayStr}
               value={returnDate}
               onChange={(e: ChangeEvent<HTMLInputElement>) =>
@@ -596,6 +602,7 @@ export function FlightPanel() {
         <Box
           component="select"
           id={cabinSelectId}
+          aria-label={t("cabin")}
           value={cabin}
           onChange={(e: ChangeEvent<HTMLSelectElement>) => setCabin(e.target.value as CabinClass)}
           sx={inputSx}
@@ -609,13 +616,12 @@ export function FlightPanel() {
       </Box>
 
       {/* Direct only */}
-      <Box
+      <ClickableRow
+        role="checkbox"
+        aria-checked={directOnly}
         onClick={() => setDirectOnly((v) => !v)}
         sx={{
-          display: "flex",
-          alignItems: "center",
           gap: 1,
-          cursor: "pointer",
           opacity: supports("directOnly") ? 1 : 0.5,
           "&:hover": { color: BRAND },
         }}
@@ -626,7 +632,7 @@ export function FlightPanel() {
           <CheckBoxOutlineBlankIcon sx={{ fontSize: 20, color: "text.secondary" }} />
         )}
         <Typography variant="body2">{t("directOnly")}</Typography>
-      </Box>
+      </ClickableRow>
 
       {/* Provider selector */}
       <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
@@ -635,16 +641,16 @@ export function FlightPanel() {
           {providers.map((p) => {
             const selected = p.id === providerId;
             return (
-              <Box
+              <ClickableRow
                 key={p.id}
+                aria-pressed={selected}
                 onClick={() => setProviderId(p.id)}
                 sx={{
+                  width: "auto",
                   px: 1.5,
                   py: 0.5,
                   borderRadius: 99,
-                  cursor: "pointer",
                   display: "inline-flex",
-                  alignItems: "center",
                   justifyContent: "center",
                   border: "1px solid",
                   borderColor: selected ? BRAND : "divider",
@@ -660,7 +666,7 @@ export function FlightPanel() {
                 >
                   {p.name}
                 </Typography>
-              </Box>
+              </ClickableRow>
             );
           })}
         </Box>

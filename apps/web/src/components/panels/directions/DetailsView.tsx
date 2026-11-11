@@ -25,6 +25,7 @@ import { ElevationProfile } from "@/components/elevation/ElevationProfile";
 import { DirectionsDetailHeader } from "@/components/panels/directions/DirectionsDetailHeader";
 import { StepRow } from "@/components/panels/directions/StepRow";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { ClickableRow } from "@/components/ui/ClickableRow";
 
 /**
  * The sign-palette country for each step, where the step's maneuver sits
@@ -263,15 +264,16 @@ function LegByLegView({
         return (
           // biome-ignore lint/suspicious/noArrayIndexKey: legs have no stable id
           <Box key={i}>
-            <Box
+            <ClickableRow
+              aria-expanded={isExpanded}
               onClick={() => toggleLeg(i)}
               sx={{
                 display: "flex",
                 alignItems: "center",
                 gap: 1,
+                borderRadius: 0,
                 px: 2,
                 py: 1.25,
-                cursor: "pointer",
                 bgcolor: "action.hover",
                 "&:hover": { bgcolor: "action.selected" },
                 transition: "background-color 0.15s",
@@ -307,7 +309,7 @@ function LegByLegView({
                   {formatDuration(leg.duration, locale)} · {legDist}
                 </Typography>
               </Box>
-            </Box>
+            </ClickableRow>
             <Collapse in={isExpanded}>
               <Box sx={{ px: 2, py: 1 }}>
                 <Typography

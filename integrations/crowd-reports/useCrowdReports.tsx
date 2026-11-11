@@ -1,6 +1,6 @@
 "use client";
 
-import { API_ENDPOINTS } from "@openmapx/core";
+import { API_ENDPOINTS, type MutationHookOptions } from "@openmapx/core";
 import {
   type DeviceKey,
   loadOrCreateDeviceKey,
@@ -144,12 +144,14 @@ export type VoteResult =
  * sign the claim with the device key, then POST `{ report, reportingGrant }` to
  * the `crowd-reports` relay (which forwards it to the contributions-api). The
  * mutation input is the fully-built {@link ReportClaim} (see `buildReportClaim`).
+ * A caller that shows the failure itself passes `CALLER_SHOWS_ERRORS`.
  */
-export function useSubmitReport() {
+export function useSubmitReport(options: MutationHookOptions = {}) {
   const { apiUrl } = useEnv();
   const { ensureKey, ensureGrant } = useContributorSession();
 
   return useMutation({
+    ...options,
     mutationFn: async (claim: ReportClaim): Promise<SubmitReportResult> => {
       const key = await ensureKey();
       const reportingGrant = await ensureGrant();

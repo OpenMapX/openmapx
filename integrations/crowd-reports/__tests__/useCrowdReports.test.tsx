@@ -1,3 +1,4 @@
+import { CALLER_SHOWS_ERRORS, isErrorShownByCaller } from "@openmapx/core";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { renderHookWithQuery, waitFor } from "@/test";
 
@@ -91,6 +92,18 @@ describe("useSubmitReport", () => {
     const [submitUrl, submitInit] = fetchMock.mock.calls[0];
     expect(submitUrl).toBe(REPORTS_URL);
     expect(JSON.parse(submitInit.body as string).reportingGrant).toBe("CACHED-GRANT");
+  });
+
+  it("carries a caller's error display choice to the mutation", async () => {
+    seedGrant("CACHED-GRANT", Date.now());
+    fetchMock.mockResolvedValue({ ok: false, status: 503, json: async () => ({}) });
+    const { result, queryClient } = renderHookWithQuery(() => useSubmitReport(CALLER_SHOWS_ERRORS));
+
+    result.current.mutate(CLAIM);
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    const [mutation] = queryClient.getMutationCache().getAll();
+    expect(isErrorShownByCaller(mutation.options.meta)).toBe(true);
   });
 
   it("passes on a landed record that has no evidence state", async () => {

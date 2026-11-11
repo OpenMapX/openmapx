@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { type MutationMeta, useMutation } from "@tanstack/react-query";
 import { useMangroveTransport } from "./provider";
 
 /**
@@ -75,9 +75,10 @@ function fileToDataUrl(file: File): Promise<string> {
  * client-side to strip EXIF/location/camera metadata before leaving the
  * browser. Returns the absolute URL ready to plug into a review's `images[]`.
  */
-export function useUploadReviewImage() {
+export function useUploadReviewImage(options: { meta?: MutationMeta } = {}) {
   const transport = useMangroveTransport();
   return useMutation({
+    ...options,
     mutationFn: async (file: File): Promise<{ src: string }> => {
       if (file.size > 5 * 1024 * 1024) {
         throw new Error("Image exceeds 5 MB");

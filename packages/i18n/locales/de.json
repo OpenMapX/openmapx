@@ -328,7 +328,9 @@
     "panelAriaLabel": "Panel",
     "resultsPanelAriaLabel": "Suchergebnisse",
     "detailsPanelAriaLabel": "Ortsdetails",
-    "dataModified": "Daten verändert"
+    "dataModified": "Daten verändert",
+    "signedOutRetry": "Du wurdest abgemeldet. Melde dich erneut an und versuche es dann noch einmal.",
+    "actionFailed": "Das hat nicht geklappt. Versuche es erneut."
   },
   "timePicker": {
     "select": "Uhrzeit auswählen",
@@ -1532,7 +1534,8 @@
     "heritageYes": "Denkmalgeschützt",
     "minAge": "Mindestalter {age}",
     "source": "Quelle",
-    "dataSources": "Datenquellen"
+    "dataSources": "Datenquellen",
+    "removeReviewPhoto": "Foto entfernen"
   },
   "airportsOverlay": {
     "title": "Flughäfen",
@@ -2711,7 +2714,9 @@
     "viewOriginal": "Original anzeigen",
     "noPhotos": "Keine Fotos verfügbar",
     "viewPhotos": "Fotos ansehen",
-    "viewPhotosAccessible": "Fotos von {placeName} ansehen"
+    "viewPhotosAccessible": "Fotos von {placeName} ansehen",
+    "showPhoto": "Foto {number} anzeigen",
+    "showOnMap": "Auf der Karte anzeigen"
   },
   "sidebar": {
     "showSidebar": "Seitenleiste einblenden",
@@ -3304,7 +3309,9 @@
     "placeLimitReached": "Du kannst insgesamt bis zu {count, number} Orte speichern.",
     "saveFailed": "Speichern fehlgeschlagen. Versuche es erneut.",
     "importListLimit": "Diese Liste wurde nicht angelegt, weil du bereits {count, number} Listen hast. Bereits importierte Orte bleiben erhalten.",
-    "importPlaceLimit": "Der Import wurde am Limit von {count, number} gespeicherten Orten angehalten. Bereits importierte Orte bleiben erhalten."
+    "importPlaceLimit": "Der Import wurde am Limit von {count, number} gespeicherten Orten angehalten. Bereits importierte Orte bleiben erhalten.",
+    "itemOptions": "Optionen für {name}",
+    "changeIcon": "Listensymbol ändern"
   },
   "share": {
     "sharedList": "Geteilte Liste",

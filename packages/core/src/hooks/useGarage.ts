@@ -11,6 +11,7 @@ import {
   writeLocalParked,
   writeLocalVehicles,
 } from "../vehicles";
+import type { MutationHookOptions } from "./mutationErrorDisplay";
 
 export const GARAGE_QUERY_KEY = "garage";
 
@@ -70,10 +71,11 @@ function useInvalidateGarage() {
   return () => queryClient.invalidateQueries({ queryKey: [GARAGE_QUERY_KEY] });
 }
 
-export function useCreateVehicle() {
+export function useCreateVehicle(options: MutationHookOptions = {}) {
   const identity = useGarageIdentity();
   const invalidate = useInvalidateGarage();
   return useMutation({
+    ...options,
     mutationFn: async (draft: VehicleDraft) => {
       if (identity !== "local") {
         return sdk.createGarageVehicle(draft).then(sdk.unwrapGarageResponse);
@@ -96,10 +98,11 @@ export function useCreateVehicle() {
   });
 }
 
-export function useUpdateVehicle() {
+export function useUpdateVehicle(options: MutationHookOptions = {}) {
   const identity = useGarageIdentity();
   const invalidate = useInvalidateGarage();
   return useMutation({
+    ...options,
     mutationFn: async ({ id, ...patch }: Partial<VehicleDraft> & { id: string }) => {
       if (identity !== "local") {
         return sdk.updateGarageVehicle(id, patch).then(sdk.unwrapGarageResponse);
@@ -117,10 +120,11 @@ export function useUpdateVehicle() {
   });
 }
 
-export function useDeleteVehicle() {
+export function useDeleteVehicle(options: MutationHookOptions = {}) {
   const identity = useGarageIdentity();
   const invalidate = useInvalidateGarage();
   return useMutation({
+    ...options,
     mutationFn: async (id: string) => {
       if (identity !== "local") {
         return sdk.deleteGarageVehicle(id).then(sdk.unwrapGarageResponse);
@@ -140,10 +144,11 @@ export function useDeleteVehicle() {
   });
 }
 
-export function useSaveParkedLocation() {
+export function useSaveParkedLocation(options: MutationHookOptions = {}) {
   const identity = useGarageIdentity();
   const invalidate = useInvalidateGarage();
   return useMutation({
+    ...options,
     mutationFn: async (draft: ParkedDraft) => {
       if (identity !== "local") {
         return sdk.saveGarageParking(draft).then(sdk.unwrapGarageResponse);
@@ -164,10 +169,11 @@ export function useSaveParkedLocation() {
   });
 }
 
-export function useUpdateParkedLocation() {
+export function useUpdateParkedLocation(options: MutationHookOptions = {}) {
   const identity = useGarageIdentity();
   const invalidate = useInvalidateGarage();
   return useMutation({
+    ...options,
     mutationFn: async ({
       id,
       ...patch
@@ -188,10 +194,11 @@ export function useUpdateParkedLocation() {
   });
 }
 
-export function useClearParkedLocation() {
+export function useClearParkedLocation(options: MutationHookOptions = {}) {
   const identity = useGarageIdentity();
   const invalidate = useInvalidateGarage();
   return useMutation({
+    ...options,
     mutationFn: async (id: string) => {
       if (identity !== "local") {
         return sdk.deleteGarageParking(id).then(sdk.unwrapGarageResponse);

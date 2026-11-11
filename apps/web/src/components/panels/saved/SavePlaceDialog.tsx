@@ -12,6 +12,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
 import {
+  CALLER_SHOWS_ERRORS,
   isSystemSavedList,
   useCreateList,
   useIsSaved,
@@ -44,9 +45,9 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
   const { data: lists, isLoading: listsLoading } = useSavedLists();
   const { data: savedInListIds } = useIsSaved(open ? place.id : null);
 
-  const savePlaceMutation = useSavePlace();
-  const removePlaceMutation = useRemovePlace();
-  const createListMutation = useCreateList();
+  const savePlaceMutation = useSavePlace(CALLER_SHOWS_ERRORS);
+  const removePlaceMutation = useRemovePlace(CALLER_SHOWS_ERRORS);
+  const createListMutation = useCreateList(CALLER_SHOWS_ERRORS);
 
   const [checkedLists, setCheckedLists] = useState<Set<string>>(new Set());
   const [creating, setCreating] = useState(false);
@@ -252,7 +253,7 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
             {lists?.map((list) => (
               <Box
                 key={list.id}
-                onClick={() => handleToggle(list.id)}
+                component="label"
                 sx={{
                   display: "flex",
                   alignItems: "center",
@@ -265,12 +266,12 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
               >
                 <Checkbox
                   checked={checkedLists.has(list.id)}
+                  onChange={() => handleToggle(list.id)}
                   sx={{
                     color: "text.secondary",
                     "&.Mui-checked": { color: BRAND },
                   }}
                   size="small"
-                  tabIndex={-1}
                 />
                 {resolveListIcon(list.icon, 20)}
                 <Typography

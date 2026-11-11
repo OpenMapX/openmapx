@@ -13,6 +13,7 @@ import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { ClickableRow } from "@/components/ui/ClickableRow";
 import { stopTransitTime } from "@/lib/transitTime";
 import { DepartureTime } from "./DepartureTime";
 
@@ -73,13 +74,14 @@ export function TransitLegStops({ tripId, stopCount, fromStopId, toStopId }: Tra
 
   return (
     <Box sx={{ mt: 0.5 }}>
-      <Box
+      <ClickableRow
+        aria-expanded={expanded}
         onClick={() => setExpanded((e) => !e)}
         sx={{
+          width: "auto",
           display: "inline-flex",
           alignItems: "center",
           gap: 0.25,
-          cursor: "pointer",
           color: "text.secondary",
           userSelect: "none",
           "&:hover": { color: "text.primary" },
@@ -91,7 +93,7 @@ export function TransitLegStops({ tripId, stopCount, fromStopId, toStopId }: Tra
           <ExpandMoreIcon sx={{ fontSize: 14 }} />
         )}
         <Typography variant="caption">{label}</Typography>
-      </Box>
+      </ClickableRow>
       <AttributionStrip attributions={contributorsForRecords(legStops)} variant="inline" />
       <Collapse in={expanded}>
         <Box sx={{ mt: 0.25, mb: 0.25 }}>

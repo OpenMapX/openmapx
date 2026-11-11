@@ -1,5 +1,13 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -49,6 +57,12 @@ if (code.length) {
     for (const config of ["biome.json", "turbo.json", "package.json"]) {
       if (existsSync(config)) copyFileSync(config, join(snapshot, config));
     }
+    // Lint plugins named by the configuration must load from the snapshot too.
+    for (const plugin of biomePlugins()) {
+      const destination = join(snapshot, plugin);
+      mkdirSync(dirname(destination), { recursive: true });
+      copyFileSync(plugin, destination);
+    }
     for (const { path, content } of code) {
       const destination = join(snapshot, path);
       mkdirSync(dirname(destination), { recursive: true });
@@ -74,3 +88,12 @@ if (code.length) {
   }
 }
 if (failed) process.exitCode = 1;
+
+/** Plugin files referenced by the root Biome configuration and its overrides. */
+function biomePlugins() {
+  if (!existsSync("biome.json")) return [];
+  const config = JSON.parse(readFileSync("biome.json", "utf8"));
+  return [config, ...(config.overrides ?? [])]
+    .flatMap((scope) => scope.plugins ?? [])
+    .map((plugin) => (typeof plugin === "string" ? plugin : plugin.path));
+}

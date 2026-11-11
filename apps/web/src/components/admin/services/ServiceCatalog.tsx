@@ -487,13 +487,9 @@ function ServiceCatalogView() {
             severity="error"
             variant="outlined"
             action={
-              <Typography
-                variant="body2"
-                sx={{ cursor: "pointer", textDecoration: "underline" }}
-                onClick={() => refetch()}
-              >
+              <Button color="inherit" size="small" onClick={() => refetch()}>
                 Retry
-              </Typography>
+              </Button>
             }
           >
             Failed to load services. The backend may not be running yet.

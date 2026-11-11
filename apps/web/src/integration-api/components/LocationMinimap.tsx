@@ -7,20 +7,27 @@ import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type { StyleSpecification } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
 import { MapCredits } from "@/components/map/MapCredits";
+import { ClickableRow } from "@/components/ui/ClickableRow";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
 import { loadMapLibreRuntime } from "@/lib/maplibreRuntime";
 import { captureNativeBasemapRequest } from "@/lib/nativeBasemapAcquisition";
 
-interface LocationMinimapProps {
+type LocationMinimapProps = {
   lng: number;
   lat: number;
   zoom?: number;
-  onClick?: () => void;
   sx?: SxProps<Theme>;
   /** Transfers credit placement to the caller, using the installed style receipt. */
   onCreditsChange?: (credits: readonly Attribution[]) => void;
-}
+} & (
+  | {
+      onClick: () => void;
+      /** Accessible name of the minimap's click action. */
+      clickLabel: string;
+    }
+  | { onClick?: undefined; clickLabel?: undefined }
+);
 
 interface MinimapInstance {
   map: {
@@ -41,6 +48,7 @@ export function LocationMinimap({
   lat,
   zoom = 16,
   onClick,
+  clickLabel,
   sx,
   onCreditsChange,
 }: LocationMinimapProps) {
@@ -137,11 +145,16 @@ export function LocationMinimap({
   // pinned to whatever the caller set (they all position the minimap
   // absolutely), falling back to `relative` so the credits stay contained.
   return (
-    <Box
-      onClick={onClick}
-      sx={[{ position: "relative" }, ...(Array.isArray(sx) ? sx : [sx])] as SxProps<Theme>}
-    >
+    <Box sx={[{ position: "relative" }, ...(Array.isArray(sx) ? sx : [sx])] as SxProps<Theme>}>
       <Box ref={containerRef} sx={{ position: "absolute", inset: 0 }} />
+      {onClick && (
+        // Above the map canvas and below the credits, whose links stay their own controls.
+        <ClickableRow
+          aria-label={clickLabel}
+          onClick={onClick}
+          sx={{ position: "absolute", inset: 0, borderRadius: "inherit" }}
+        />
+      )}
       {!onCreditsChange && credits.length > 0 && <MapCredits attributions={credits} />}
     </Box>
   );

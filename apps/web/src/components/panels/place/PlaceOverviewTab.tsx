@@ -65,6 +65,7 @@ import { useLocale, useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
+import { ClickableRow } from "@/components/ui/ClickableRow";
 import Dialog from "@/components/ui/Dialog";
 import { SectionAttribution } from "@/components/ui/SectionAttribution";
 import { BRAND } from "@/integration-api/runtime/theme";
@@ -385,11 +386,11 @@ export function PlaceOverviewTab({
     if (existingLabel?.label === label) {
       deleteLabelMutation.mutate(label);
     } else {
-      if (existingLabel) {
-        deleteLabelMutation.mutate(existingLabel.label);
-      }
+      // The server removes the place's previous label in the same write, so a
+      // failure keeps the old label instead of leaving the place unlabelled.
       updateLabelMutation.mutate({
         label,
+        ...(existingLabel ? { replaces: existingLabel.label } : {}),
         name: place.name,
         address: place.address ?? undefined,
         lat: place.coordinates[1],
@@ -627,6 +628,8 @@ export function PlaceOverviewTab({
                   {savedInLists.length > 1 && sl.id === savedInLists[0].id && (
                     <IconButton
                       size="small"
+                      aria-label={tc("showLess")}
+                      aria-expanded
                       onClick={() => setSavedExpanded(false)}
                       sx={{ flexShrink: 0 }}
                     >
@@ -636,9 +639,10 @@ export function PlaceOverviewTab({
                 </Box>
               ))
             ) : (
-              <Box
+              <ClickableRow
+                aria-expanded={false}
                 onClick={() => setSavedExpanded(true)}
-                sx={{ display: "flex", gap: 1.5, alignItems: "center", py: 1, cursor: "pointer" }}
+                sx={{ gap: 1.5, py: 1 }}
               >
                 <Box sx={{ flexShrink: 0, display: "flex" }}>{resolveListIcon("bookmark")}</Box>
                 <Typography
@@ -659,7 +663,7 @@ export function PlaceOverviewTab({
                       })}
                 </Typography>
                 <ExpandMoreIcon sx={{ fontSize: 20, color: "text.secondary", flexShrink: 0 }} />
-              </Box>
+              </ClickableRow>
             )}
           </>
         )}
@@ -955,24 +959,15 @@ export function PlaceOverviewTab({
           )}
 
           {/* Label row */}
-          <Box
-            role="button"
-            tabIndex={0}
+          <ClickableRow
             onClick={handleAddLabel}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                handleAddLabel();
-              }
-            }}
             sx={{
-              display: "flex",
               gap: 2,
-              alignItems: "center",
               py: 1.25,
-              cursor: "pointer",
               mx: -2,
               px: 2,
+              width: (theme) => `calc(100% + ${theme.spacing(4)})`,
+              borderRadius: 0,
               "&:hover": { bgcolor: "action.hover" },
             }}
           >
@@ -1008,7 +1003,7 @@ export function PlaceOverviewTab({
                 {tSaved("addLabel")}
               </Typography>
             )}
-          </Box>
+          </ClickableRow>
 
           {showGroupedConditions ? (
             <ExpandableDetailRow
@@ -1085,6 +1080,7 @@ export function PlaceOverviewTab({
             fullWidth
             size="small"
             placeholder={tSaved("enterLabelName")}
+            slotProps={{ htmlInput: { "aria-label": tSaved("label") } }}
             value={labelName}
             onChange={(e) => setLabelName(e.target.value)}
             onKeyDown={(e) => {

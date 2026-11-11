@@ -12,6 +12,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import Divider from "@mui/material/Divider";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { CALLER_SHOWS_ERRORS } from "@openmapx/core";
 import { type KeypairEnvelope, useKeypairState, useUnlockKeypair } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
@@ -27,7 +28,7 @@ interface Props {
 export function MangroveUnlockDialog({ open, onClose, onUnlocked, rpId }: Props) {
   const t = useTranslations("account");
   const tc = useTranslations("common");
-  const unlock = useUnlockKeypair();
+  const unlock = useUnlockKeypair(CALLER_SHOWS_ERRORS);
   const state = useKeypairState();
   const [passphrase, setPassphrase] = useState("");
   const [error, setError] = useState<string | null>(null);

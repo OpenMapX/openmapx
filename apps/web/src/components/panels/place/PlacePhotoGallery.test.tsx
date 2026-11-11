@@ -156,7 +156,7 @@ it.each(["selected", "thumbnail"] as const)(
 it("updates the full selected-photo caption when a clean thumbnail is selected", () => {
   photos.items = [photo("One", "CC BY 4.0"), photo("Two", "CC BY-SA 4.0")];
   open();
-  fireEvent.click(screen.getAllByTestId("gallery-thumbnail")[1]);
+  fireEvent.click(screen.getAllByRole("button", { name: "Show photo 2" })[0]);
   expect(screen.getByTestId("gallery-information")).toHaveTextContent("Two artist");
   expect(screen.getByTestId("gallery-information")).not.toHaveTextContent("One artist");
 });

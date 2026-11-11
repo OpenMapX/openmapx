@@ -4,9 +4,11 @@ import CloseIcon from "@mui/icons-material/Close";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import { useDataSourceStore, useMergedPlace, usePlaceStore, useSidebarStore } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import { PlaceDetailContent } from "./PlaceDetailContent";
 
 export function PlaceDetailCard() {
+  const tc = useTranslations("common");
   const selectedPlace = usePlaceStore((s) => s.selectedPlace);
   const { place, isLoading } = useMergedPlace(selectedPlace);
   const setSelectedPlace = usePlaceStore((s) => s.setSelectedPlace);
@@ -19,6 +21,7 @@ export function PlaceDetailCard() {
     <Box sx={{ position: "relative" }}>
       <IconButton
         size="small"
+        aria-label={tc("close")}
         onClick={() => {
           setSelectedPlace(null);
           clearSelection();

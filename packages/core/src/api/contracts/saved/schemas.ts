@@ -125,6 +125,8 @@ export const savedUpdatePlaceSchema = savedCreatePlaceSchema
 export const savedWriteLabelSchema = z.object({
   ...placeInput,
   icon: z.string().max(50).optional(),
+  /** Another of the caller's labels that this write removes in the same transaction. */
+  replaces: z.string().min(1).optional(),
 });
 export const savedImportSchema = z.strictObject({
   target: z.union([

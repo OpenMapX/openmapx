@@ -6,7 +6,7 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import Typography from "@mui/material/Typography";
 import type { RouteSharePayload } from "@openmapx/core";
-import { useCreateShare, useDirectionsStore } from "@openmapx/core";
+import { CALLER_SHOWS_ERRORS, useCreateShare, useDirectionsStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { ShareLinkCreated } from "@/components/share/ShareLinkCreated";
@@ -20,7 +20,7 @@ export function ShareRouteDialog({ open, onClose }: { open: boolean; onClose: ()
   const tCommon = useTranslations("common");
   const [mintedToken, setMintedToken] = useState<string | null>(null);
   const [error, setError] = useState(false);
-  const createShare = useCreateShare();
+  const createShare = useCreateShare(CALLER_SHOWS_ERRORS);
 
   const buildPayload = (): RouteSharePayload | null => {
     const state = useDirectionsStore.getState();

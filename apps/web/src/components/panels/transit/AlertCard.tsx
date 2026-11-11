@@ -8,6 +8,7 @@ import Typography from "@mui/material/Typography";
 import type { AlertSeverity, ServiceAlert } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { ClickableRow } from "@/components/ui/ClickableRow";
 
 const SEVERITY_CONFIG: Record<
   AlertSeverity,
@@ -103,29 +104,41 @@ export function AlertCard({ alert, compact = false, expandable = true }: AlertCa
         >
           {alert.title}
         </Typography>
-        {!compact && alert.description && (
-          <Typography
-            variant="caption"
-            onClick={expandable ? () => setDescExpanded((e) => !e) : undefined}
-            sx={{
-              color: "text.secondary",
-              display: "block",
-              mt: 0.25,
-              lineHeight: 1.4,
-              cursor: expandable ? "pointer" : "default",
-
-              ...(!descExpanded &&
-                expandable && {
-                  display: "-webkit-box",
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: "vertical",
-                  overflow: "hidden",
-                }),
-            }}
-          >
-            {alert.description}
-          </Typography>
-        )}
+        {!compact &&
+          alert.description &&
+          (() => {
+            const description = (
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                  display: "block",
+                  mt: 0.25,
+                  lineHeight: 1.4,
+                  ...(!descExpanded &&
+                    expandable && {
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                    }),
+                }}
+              >
+                {alert.description}
+              </Typography>
+            );
+            return expandable ? (
+              <ClickableRow
+                aria-expanded={descExpanded}
+                onClick={() => setDescExpanded((e) => !e)}
+                sx={{ display: "block" }}
+              >
+                {description}
+              </ClickableRow>
+            ) : (
+              description
+            );
+          })()}
       </Box>
     </Box>
   );

@@ -694,7 +694,9 @@ function StructuredSectionCard({
   return (
     <Box sx={{ px: 2, py: 1.25 }}>
       {/* Header row — icon, title and chevron share one center-aligned row so
-          the title sits vertically in line with the icon. */}
+          the title sits vertically in line with the icon. A click anywhere in it
+          toggles the section; the chevron button is the keyboard path. */}
+      {/* biome-ignore lint/plugin/noClickableLayoutElement: pointer shortcut for the chevron button */}
       <Box
         sx={{
           display: "flex",
@@ -722,7 +724,12 @@ function StructuredSectionCard({
           </Typography>
         </Box>
         {collapsed && (
-          <IconButton size="small" sx={{ ml: 0.5, p: 0, flexShrink: 0 }}>
+          <IconButton
+            size="small"
+            aria-label={section.title}
+            aria-expanded={expanded}
+            sx={{ ml: 0.5, p: 0, flexShrink: 0 }}
+          >
             <ExpandMoreIcon
               sx={{
                 fontSize: 18,

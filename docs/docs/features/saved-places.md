@@ -29,6 +29,11 @@ An account can hold up to 500 lists, counting the built-in ones, and up to
 50,000 saved places across all of its lists. When a limit is reached, the app
 says so and saves nothing further until lists or places are removed.
 
+Giving a place a different label replaces its previous label in one step: if
+the change fails, the place keeps its old label. When any change to saved
+places, labels, vehicles or share links does not go through, the app shows a
+message saying so, or asks you to sign in again if your session has ended.
+
 ## Importing places
 
 In **Saved → Lists**, choose **Import** and select one or more files. To add

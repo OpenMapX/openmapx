@@ -21,6 +21,7 @@ import type {
   VehiclePowertrain,
 } from "@openmapx/core";
 import {
+  CALLER_SHOWS_ERRORS,
   CONNECTOR_STANDARDS,
   isApiClientError,
   MAX_VEHICLES_PER_USER,
@@ -152,8 +153,9 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
   const tEv = useTranslations("directions.ev");
   const fullScreen = useFullScreenOnMobile();
   const { data: vehicles } = useVehicles();
-  const create = useCreateVehicle();
-  const update = useUpdateVehicle();
+  const create = useCreateVehicle(CALLER_SHOWS_ERRORS);
+  const update = useUpdateVehicle(CALLER_SHOWS_ERRORS);
+  const setDefault = useUpdateVehicle();
   const remove = useDeleteVehicle();
 
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -248,7 +250,7 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
           <Box key={vehicle.id} sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.5 }}>
             <Radio
               checked={vehicle.isDefault}
-              onChange={() => update.mutate({ id: vehicle.id, isDefault: true })}
+              onChange={() => setDefault.mutate({ id: vehicle.id, isDefault: true })}
               slotProps={{ input: { "aria-label": t("makeDefault") } }}
             />
             <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>

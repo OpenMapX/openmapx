@@ -654,6 +654,38 @@ describe("PUT /api/saved/labels/:label", () => {
     expect(dbMock.db.update).toHaveBeenCalledTimes(1);
     expect(dbMock.db.insert).not.toHaveBeenCalled();
   });
+
+  it("removes the replaced label inside the same transaction as the write", async () => {
+    dbMock.queueSelect([]);
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/api/saved/labels/gym",
+      payload: { name: "Gym", lat: 1, lng: 2, replaces: "office" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(dbMock.db.transaction).toHaveBeenCalledTimes(1);
+    const removed = whereArgs(dbMock, "delete");
+    expect(removed).toContain("labeled_place.user_id");
+    expect(removed).toContain(USER_ID);
+    expect(removed).toContain("office");
+    expect(dbMock.db.insert).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the label when it names itself as replaced", async () => {
+    dbMock.queueSelect([{ id: "lab-1" }]);
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/api/saved/labels/home",
+      payload: { name: "Home", lat: 1, lng: 2, replaces: "home" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(dbMock.db.delete).not.toHaveBeenCalled();
+    expect(dbMock.db.update).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("DELETE /api/saved/labels/:label", () => {

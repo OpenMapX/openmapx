@@ -638,34 +638,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
         : parseSavedPlaceContributors(body.fieldContributors);
     if (body.fieldContributors !== undefined && captured === undefined)
       return reply.status(400).send({ error: "Invalid fieldContributors" });
-    const existing = await db
-      .select({ id: labeledPlace.id })
-      .from(labeledPlace)
-      .where(and(eq(labeledPlace.userId, userId), eq(labeledPlace.label, label)))
-      .limit(1);
-
-    if (existing.length > 0) {
-      await db
-        .update(labeledPlace)
-        .set({
-          name: body.name,
-          address: body.address ?? null,
-          lat: body.lat,
-          lng: body.lng,
-          placeId: body.placeId ?? null,
-          fieldContributors: captured ?? null,
-          icon: body.icon ?? null,
-        })
-        .where(eq(labeledPlace.id, existing[0].id));
-
-      return { id: existing[0].id, label };
-    }
-
-    const id = crypto.randomUUID();
-    await db.insert(labeledPlace).values({
-      id,
-      userId,
-      label,
+    const fields = {
       name: body.name,
       address: body.address ?? null,
       lat: body.lat,
@@ -673,9 +646,32 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
       placeId: body.placeId ?? null,
       fieldContributors: captured ?? null,
       icon: body.icon ?? null,
-    });
+    };
 
-    return { id, label };
+    // Renaming a place's label removes the old one in the same transaction,
+    // so a failed write never leaves the place without either label.
+    return db.transaction(async (tx) => {
+      if (body.replaces !== undefined && body.replaces !== label) {
+        await tx
+          .delete(labeledPlace)
+          .where(and(eq(labeledPlace.userId, userId), eq(labeledPlace.label, body.replaces)));
+      }
+
+      const existing = await tx
+        .select({ id: labeledPlace.id })
+        .from(labeledPlace)
+        .where(and(eq(labeledPlace.userId, userId), eq(labeledPlace.label, label)))
+        .limit(1);
+
+      if (existing.length > 0) {
+        await tx.update(labeledPlace).set(fields).where(eq(labeledPlace.id, existing[0].id));
+        return { id: existing[0].id, label };
+      }
+
+      const id = crypto.randomUUID();
+      await tx.insert(labeledPlace).values({ id, userId, label, ...fields });
+      return { id, label };
+    });
   });
 
   registerSavedRoute(fastify, "deleteSavedLabel", async (req, reply) => {

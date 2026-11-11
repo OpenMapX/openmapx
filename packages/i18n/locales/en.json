@@ -328,7 +328,9 @@
     "panelAriaLabel": "Panel",
     "resultsPanelAriaLabel": "Search results",
     "detailsPanelAriaLabel": "Place details",
-    "dataModified": "data modified"
+    "dataModified": "data modified",
+    "signedOutRetry": "You've been signed out. Sign in again, then try once more.",
+    "actionFailed": "That didn't go through. Try again."
   },
   "timePicker": {
     "select": "Select time",
@@ -1532,7 +1534,8 @@
     "heritageYes": "Heritage site",
     "minAge": "Min. age {age}",
     "source": "Source",
-    "dataSources": "Data sources"
+    "dataSources": "Data sources",
+    "removeReviewPhoto": "Remove photo"
   },
   "airportsOverlay": {
     "title": "Airports",
@@ -2711,7 +2714,9 @@
     "viewOriginal": "View original",
     "noPhotos": "No photos available",
     "viewPhotos": "View photos",
-    "viewPhotosAccessible": "View photos of {placeName}"
+    "viewPhotosAccessible": "View photos of {placeName}",
+    "showPhoto": "Show photo {number}",
+    "showOnMap": "Show on map"
   },
   "sidebar": {
     "showSidebar": "Show sidebar",
@@ -3304,7 +3309,9 @@
     "placeLimitReached": "You can save up to {count, number} places in total.",
     "saveFailed": "Could not save. Try again.",
     "importListLimit": "This list was not created because you already have {count, number} lists. Places already imported have been kept.",
-    "importPlaceLimit": "Import stopped at the limit of {count, number} saved places. Places already imported have been kept."
+    "importPlaceLimit": "Import stopped at the limit of {count, number} saved places. Places already imported have been kept.",
+    "itemOptions": "Options for {name}",
+    "changeIcon": "Change list icon"
   },
   "share": {
     "sharedList": "Shared list",

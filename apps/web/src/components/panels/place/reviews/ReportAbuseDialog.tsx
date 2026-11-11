@@ -8,6 +8,7 @@ import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
 import TextField from "@mui/material/TextField";
 import type { Review } from "@openmapx/core";
+import { CALLER_SHOWS_ERRORS } from "@openmapx/core";
 import { useReviewIdentity, useSubmitReview } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
@@ -22,7 +23,7 @@ interface Props {
 export function ReportAbuseDialog({ open, onClose, review }: Props) {
   const t = useTranslations("place");
   const tc = useTranslations("common");
-  const submit = useSubmitReview();
+  const submit = useSubmitReview(CALLER_SHOWS_ERRORS);
   const { canSign, isLoading: keypairLoading } = useReviewIdentity();
   const [reason, setReason] = useState("");
 

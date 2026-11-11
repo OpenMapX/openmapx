@@ -43,6 +43,7 @@ function fixture() {
     "scripts/check-staged.mjs",
     "scripts/verify-full.sh",
     "biome.json",
+    "scripts/biome-plugins/noClickableLayoutElement.grit",
     ".prettierrc.json",
     ".prettierignore",
   ]) {

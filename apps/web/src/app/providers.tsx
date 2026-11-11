@@ -14,6 +14,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AdminDraftRoot } from "@/lib/admin/AdminDraftProvider";
 import { ImpersonationBanner } from "../components/admin/ImpersonationBanner";
+import { AuthPromptHost } from "../components/auth/AuthPromptHost";
+import { MutationErrorNotice } from "../components/MutationErrorNotice";
 import { SavedPlacesMirror } from "../components/pwa/SavedPlacesMirror";
 import { ThemeColorSync } from "../components/pwa/ThemeColorSync";
 import { createAppQueryClient } from "../lib/appQueryClient";
@@ -98,6 +100,9 @@ function PhoneProviders({ children }: { children: React.ReactNode }) {
       */}
       <MangroveSignerSessionGuard />
       <PersonalTimelineSessionGuard />
+      {/* Outside the session boundary: a refused session refreshes the session,
+          which remounts the private tree, and the notice must outlive that. */}
+      <MutationErrorNotice />
       <AdminDraftRoot>
         <SessionAuthorityBoundary>
           <KeypairSessionGuard />
@@ -111,6 +116,7 @@ function PhoneProviders({ children }: { children: React.ReactNode }) {
           */}
             <MobileRuntimeProvider webBuildId={WEB_BUILD_ID}>
               <CarDestinationsPublisher />
+              <AuthPromptHost />
               <IntegrationProvider>{children}</IntegrationProvider>
             </MobileRuntimeProvider>
           </MangroveTransportProvider>

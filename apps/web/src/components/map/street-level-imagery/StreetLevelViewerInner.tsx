@@ -312,6 +312,7 @@ export default function StreetLevelViewerInner() {
             lat={node.image.lngLat[1]}
             zoom={17}
             onClick={handleMinimapClick}
+            clickLabel={t("showOnMap")}
             onCreditsChange={setMinimapCredits}
             sx={{
               width: "100%",

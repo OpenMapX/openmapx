@@ -57,7 +57,7 @@ import type {
 } from "@openmapx/mobility-core/transit";
 import { composeTransitAlternative } from "@openmapx/mobility-core/transit-alternative";
 import { useLocale, useTranslations } from "next-intl";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { DirectionsDetailHeader } from "@/components/panels/directions/DirectionsDetailHeader";
 import {
   LegBadge,
@@ -74,6 +74,7 @@ import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { TransitLegStops } from "@/components/panels/transit/TransitLegStops";
 import { TripDetailView } from "@/components/panels/transit/TripDetailView";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { ClickableRow } from "@/components/ui/ClickableRow";
 import { usePlaceEnrichment } from "@/hooks/usePlaceEnrichment";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
@@ -146,13 +147,14 @@ function LegStatusDetails({ leg, itinerary }: { leg: TripLeg; itinerary: TripIti
         <Box sx={{ mt: 0.5 }}>
           {/* Collapsed by default: show the total walking distance, expand for the
               turn-by-turn steps — mirrors the intermediate-stops toggle on rides. */}
-          <Box
+          <ClickableRow
+            aria-expanded={stepsExpanded}
             onClick={() => setStepsExpanded((e) => !e)}
             sx={{
+              width: "auto",
               display: "inline-flex",
               alignItems: "center",
               gap: 0.25,
-              cursor: "pointer",
               color: "text.secondary",
               userSelect: "none",
               "&:hover": { color: "text.primary" },
@@ -171,7 +173,7 @@ function LegStatusDetails({ leg, itinerary }: { leg: TripLeg; itinerary: TripIti
                 ),
               })}
             </Typography>
-          </Box>
+          </ClickableRow>
           <Collapse in={stepsExpanded}>
             <Box component="ol" sx={{ pl: 2.5, my: 0.75 }} aria-label={t("routeInstructions")}>
               {leg.steps.map((step, stepIndex) => (
@@ -437,11 +439,10 @@ export function TransitDetailsView({
                     flexShrink: 0,
                   }}
                 />
-                <Box
+                <ClickableRow
                   sx={{
                     flex: 1,
                     minWidth: 0,
-                    cursor: "pointer",
                     "&:hover": { opacity: 0.7 },
                   }}
                   onClick={() =>
@@ -464,7 +465,7 @@ export function TransitDetailsView({
                       </Typography>
                     )}
                   </Box>
-                </Box>
+                </ClickableRow>
               </Box>
               {/* Leg details */}
               <Box sx={{ display: "flex", gap: 1.5, py: 0.25 }}>
@@ -563,20 +564,12 @@ export function TransitDetailsView({
                                       : DirectionsBusIcon;
                           return <ModeIcon sx={{ fontSize: 16, color: "text.secondary" }} />;
                         })()}
-                        <Box
-                          onClick={
+                        <LegLineLabel
+                          onOpen={
                             leg.tripId
                               ? () => setActiveLegDep(legToMergedDeparture(leg, provider))
                               : undefined
                           }
-                          sx={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 0.5,
-                            ...(leg.tripId
-                              ? { cursor: "pointer", "&:hover": { opacity: 0.75 } }
-                              : {}),
-                          }}
                         >
                           {leg.route && (
                             <RouteBadge
@@ -590,7 +583,7 @@ export function TransitDetailsView({
                           <Typography variant="body2" sx={{ minWidth: 0, wordBreak: "break-word" }}>
                             {leg.route?.longName ?? leg.to.name}
                           </Typography>
-                        </Box>
+                        </LegLineLabel>
                         {leg.tripId && <TransitLiveBadge tripId={leg.tripId} />}
                         {leg.occupancy && <OccupancyIndicator level={leg.occupancy} size={14} />}
                       </Box>
@@ -760,11 +753,10 @@ export function TransitDetailsView({
                       flexShrink: 0,
                     }}
                   />
-                  <Box
+                  <ClickableRow
                     sx={{
                       flex: 1,
                       minWidth: 0,
-                      cursor: "pointer",
                       "&:hover": { opacity: 0.7 },
                     }}
                     onClick={() =>
@@ -789,7 +781,7 @@ export function TransitDetailsView({
                         </Typography>
                       )}
                     </Box>
-                  </Box>
+                  </ClickableRow>
                 </Box>
               )}
             </Box>
@@ -878,5 +870,17 @@ export function TransitDetailsView({
         label={tc("dataSources")}
       />
     </Box>
+  );
+}
+
+/** A transit leg's line name, which opens the trip's departures when it has a known trip. */
+function LegLineLabel({ onOpen, children }: { onOpen?: () => void; children: ReactNode }) {
+  const sx = { display: "inline-flex", alignItems: "center", gap: 0.5 } as const;
+  return onOpen ? (
+    <ClickableRow onClick={onOpen} sx={{ ...sx, width: "auto", "&:hover": { opacity: 0.75 } }}>
+      {children}
+    </ClickableRow>
+  ) : (
+    <Box sx={sx}>{children}</Box>
   );
 }

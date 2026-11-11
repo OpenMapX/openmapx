@@ -14,7 +14,13 @@ import TextField from "@mui/material/TextField";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
-import { useCreateShare, useRevokeShare, useRotateShare, useShares } from "@openmapx/core";
+import {
+  CALLER_SHOWS_ERRORS,
+  useCreateShare,
+  useRevokeShare,
+  useRotateShare,
+  useShares,
+} from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { ShareLinkCreated } from "@/components/share/ShareLinkCreated";
@@ -43,8 +49,8 @@ export function ShareListDialog({ open, listId, listName, onClose }: Props) {
   const [error, setError] = useState(false);
 
   const { data: shares } = useShares(open);
-  const createShare = useCreateShare();
-  const rotateShare = useRotateShare();
+  const createShare = useCreateShare(CALLER_SHOWS_ERRORS);
+  const rotateShare = useRotateShare(CALLER_SHOWS_ERRORS);
   const revokeShare = useRevokeShare();
 
   const listShares = (shares ?? []).filter((s) => s.targetId === listId);

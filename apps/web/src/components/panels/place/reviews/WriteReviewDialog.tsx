@@ -17,7 +17,7 @@ import Rating from "@mui/material/Rating";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { proxyImageUrl, type Review, useSession } from "@openmapx/core";
+import { CALLER_SHOWS_ERRORS, proxyImageUrl, type Review, useSession } from "@openmapx/core";
 import {
   EXPERIENCE_CONTEXT_GEO,
   fingerprintPem,
@@ -111,8 +111,8 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
   const [localOpen, setLocalOpen] = useState(false);
   const ta = useTranslations("account");
   const draftKey = JSON.stringify([session?.user?.id, session?.session?.id, subject, initial?.id]);
-  const submit = useSubmitReview();
-  const upload = useUploadReviewImage();
+  const submit = useSubmitReview(CALLER_SHOWS_ERRORS);
+  const upload = useUploadReviewImage(CALLER_SHOWS_ERRORS);
 
   const [stars, setStars] = useState<number | null>(initial?.stars ?? null);
   const [opinion, setOpinion] = useState(initial?.opinion ?? "");
@@ -386,6 +386,7 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
                 >
                   <IconButton
                     size="small"
+                    aria-label={t("removeReviewPhoto")}
                     onClick={() => removeImage(img.src)}
                     sx={{
                       position: "absolute",

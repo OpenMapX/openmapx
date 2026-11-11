@@ -12,7 +12,7 @@ import {
   type MangroveKeypair,
   publicKeyToPem,
 } from "@openmapx/mangrove-client";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type MutationMeta, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { type KeypairSigningSnapshot, keypairOwner, useKeypairStore } from "./keypairStore";
 import {
@@ -243,12 +243,13 @@ function publishSetup(
   )
     throw new MangroveConflictError();
 }
-export function useSetupKeypair() {
+export function useSetupKeypair(options: { meta?: MutationMeta } = {}) {
   const qc = useQueryClient(),
     transport = useMangroveTransport(),
     begin = useKeypairOperation(),
     name = useMangroveWebauthnKeyName();
   return useMutation({
+    ...options,
     mutationKey: ["mangrovePrivate"],
     gcTime: 0,
     retry: false,
@@ -272,11 +273,12 @@ export interface UnlockWebAuthnInput {
   identityString?: string;
 }
 export type UnlockInput = UnlockPassphraseInput | UnlockWebAuthnInput;
-export function useUnlockKeypair() {
+export function useUnlockKeypair(options: { meta?: MutationMeta } = {}) {
   const qc = useQueryClient(),
     transport = useMangroveTransport(),
     begin = useKeypairOperation();
   return useMutation({
+    ...options,
     mutationKey: ["mangrovePrivate"],
     gcTime: 0,
     retry: false,
@@ -379,12 +381,13 @@ export interface AddWebAuthnWrapInput {
   rpId?: string;
 }
 export type AddWrapInput = AddPassphraseWrapInput | AddWebAuthnWrapInput;
-export function useAddWrap() {
+export function useAddWrap(options: { meta?: MutationMeta } = {}) {
   const qc = useQueryClient(),
     transport = useMangroveTransport(),
     begin = useKeypairOperation(),
     name = useMangroveWebauthnKeyName();
   return useMutation({
+    ...options,
     mutationKey: ["mangrovePrivate"],
     gcTime: 0,
     retry: false,
@@ -472,11 +475,12 @@ export function useRemoveWrap() {
     },
   });
 }
-export function useChangePassphrase() {
+export function useChangePassphrase(options: { meta?: MutationMeta } = {}) {
   const qc = useQueryClient(),
     transport = useMangroveTransport(),
     begin = useKeypairOperation();
   return useMutation({
+    ...options,
     mutationKey: ["mangrovePrivate"],
     gcTime: 0,
     retry: false,
@@ -511,12 +515,13 @@ async function deletionEnvelope(
   }
   return env;
 }
-export function useRegenerateMangroveKeypair() {
+export function useRegenerateMangroveKeypair(options: { meta?: MutationMeta } = {}) {
   const qc = useQueryClient(),
     transport = useMangroveTransport(),
     begin = useKeypairOperation();
   const state = useKeypairState();
   return useMutation({
+    ...options,
     mutationKey: ["mangrovePrivate"],
     gcTime: 0,
     retry: false,

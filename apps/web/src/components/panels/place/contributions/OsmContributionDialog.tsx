@@ -13,6 +13,7 @@ import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import {
+  CALLER_SHOWS_ERRORS,
   type OsmContributionContext,
   type OsmContributionErrorCode,
   type OsmContributionLocale,
@@ -99,9 +100,9 @@ export function OsmContributionDialog({ open, ref_, onClose }: Props) {
 
   const capabilities = useOsmContributionCapabilities(open);
   const context = useOsmContributionContext(ref_, locale, open);
-  const preview = usePreviewOsmContribution();
-  const publish = usePublishOsmContribution();
-  const createNote = useCreateOsmNote();
+  const preview = usePreviewOsmContribution(CALLER_SHOWS_ERRORS);
+  const publish = usePublishOsmContribution(CALLER_SHOWS_ERRORS);
+  const createNote = useCreateOsmNote(CALLER_SHOWS_ERRORS);
   const invalidate = useInvalidateAfterContribution();
 
   // A new place means a new flow: never carry a draft across references.

@@ -23,6 +23,7 @@ import Typography from "@mui/material/Typography";
 import { MAX_DIRECTIONS_WAYPOINTS, type Waypoint } from "@openmapx/core";
 import type { useTranslations } from "next-intl";
 import { WaypointRow } from "@/components/panels/directions/WaypointRow";
+import { ClickableRow } from "@/components/ui/ClickableRow";
 import { BRAND } from "@/integration-api/runtime/theme";
 
 interface WaypointListProps {
@@ -122,30 +123,27 @@ export function WaypointList({
 
         {/* Swap / reverse button */}
         <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-          <IconButton size="small" onClick={onReverse}>
+          <IconButton size="small" onClick={onReverse} aria-label={t("swap")}>
             <SwapVertIcon sx={{ fontSize: 22 }} />
           </IconButton>
         </Box>
       </Box>
       {/* Add stop button */}
       {canAddMore && (
-        <Box
+        <ClickableRow
           onClick={() => onAdd(waypoints.length - 2)}
           sx={{
-            display: "flex",
-            alignItems: "center",
             gap: 1.5,
             mt: 0.5,
             py: 0.75,
             px: 0.25,
-            cursor: "pointer",
             color: "text.secondary",
             "&:hover": { color: BRAND },
           }}
         >
           <AddCircleOutlineIcon sx={{ fontSize: 18, ml: 3 }} />
           <Typography variant="body2">{t("addStop")}</Typography>
-        </Box>
+        </ClickableRow>
       )}
     </Box>
   );

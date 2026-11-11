@@ -12,6 +12,7 @@ import type {
   PersonalTimelineDayV1,
   TimelineConnectionView,
 } from "../types/personalTimeline";
+import type { MutationHookOptions } from "./mutationErrorDisplay";
 
 export const PERSONAL_TIMELINE_QUERY_KEY = ["personalTimeline"] as const;
 
@@ -31,7 +32,7 @@ export function useTimelineConnection(ownerId: string) {
   });
 }
 
-export function useConnectTimeline(ownerId: string) {
+export function useConnectTimeline(ownerId: string, options: MutationHookOptions = {}) {
   const queryClient = useQueryClient();
   const mutationKey = [...personalTimelineOwnerQueryKey(ownerId), "connect"] as const;
   const mutation = useMutation<
@@ -39,6 +40,7 @@ export function useConnectTimeline(ownerId: string) {
     PersonalTimelineApiError,
     ConnectPersonalTimelineRequest
   >({
+    ...options,
     mutationKey,
     mutationFn: connectTimeline,
     networkMode: "always",
@@ -61,9 +63,10 @@ export function useConnectTimeline(ownerId: string) {
   };
 }
 
-export function useTestTimelineConnection(ownerId: string) {
+export function useTestTimelineConnection(ownerId: string, options: MutationHookOptions = {}) {
   const queryClient = useQueryClient();
   return useMutation<TimelineConnectionView, PersonalTimelineApiError, void>({
+    ...options,
     mutationKey: [...personalTimelineOwnerQueryKey(ownerId), "test"],
     mutationFn: testTimelineConnection,
     networkMode: "always",
@@ -72,9 +75,10 @@ export function useTestTimelineConnection(ownerId: string) {
   });
 }
 
-export function useDisconnectTimeline(ownerId: string) {
+export function useDisconnectTimeline(ownerId: string, options: MutationHookOptions = {}) {
   const queryClient = useQueryClient();
   return useMutation<{ ok: true }, PersonalTimelineApiError, void>({
+    ...options,
     mutationKey: [...personalTimelineOwnerQueryKey(ownerId), "disconnect"],
     mutationFn: disconnectTimeline,
     networkMode: "always",

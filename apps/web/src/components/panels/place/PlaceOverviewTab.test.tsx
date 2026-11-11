@@ -1,7 +1,7 @@
 import { computePlusCode, type Place } from "@openmapx/core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createQueryWrapper } from "@/test/query";
 import { MobileSheetContext } from "../sheet/sheetState";
 
@@ -13,9 +13,10 @@ vi.mock("next-intl", () => ({
 // Keep signed-out place rendering independent of Better Auth's session fetch
 // and delayed listener cleanup, which can outlive this file's jsdom environment.
 // Mock at the shared hook so the real saved-place hooks use the same session.
+const session = vi.hoisted(() => ({ data: null as { user: { id: string } } | null }));
 vi.mock("../../../../../../packages/core/src/auth/useSession", () => ({
   useSession: () => ({
-    data: null,
+    data: session.data,
     error: null,
     isPending: false,
     isRefetching: false,
@@ -58,6 +59,7 @@ class StubIntersectionObserver {
 vi.stubGlobal("IntersectionObserver", StubIntersectionObserver);
 
 const { PlaceOverviewTab } = await import("./PlaceOverviewTab");
+const { MutationErrorNotice } = await import("../../MutationErrorNotice");
 
 /**
  * A place carrying exactly the kind of merged/enriched values that must never
@@ -465,4 +467,78 @@ it("does not credit a raw schedule without a displayed hours status", () => {
     },
   });
   expect(screen.queryByText("Hidden schedule supplier")).toBeNull();
+});
+
+describe("replacing a place's label", () => {
+  afterEach(() => {
+    session.data = null;
+    vi.unstubAllGlobals();
+    vi.stubGlobal("IntersectionObserver", StubIntersectionObserver);
+  });
+
+  it("sends one replacing write and keeps the old label when that write fails", async () => {
+    session.data = { user: { id: "user-1" } };
+    const writes: { method: string; path: string; body: unknown }[] = [];
+    const json = (status: number, body: unknown) =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { "content-type": "application/json" },
+      });
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      const path = new URL(request.url).pathname;
+      if (request.method !== "GET") {
+        const text = await request.text();
+        writes.push({ method: request.method, path, body: text ? JSON.parse(text) : null });
+        return json(503, { error: "Service unavailable" });
+      }
+      if (path === "/api/saved/labels") {
+        return json(200, {
+          labels: [
+            {
+              id: "label-1",
+              label: "office",
+              icon: null,
+              name: ENRICHED.name,
+              address: null,
+              lat: 52.5,
+              lng: 13.4,
+              placeId: ENRICHED.id,
+              fieldContributors: null,
+            },
+          ],
+        });
+      }
+      if (path === "/api/saved/lists") return json(200, { lists: [] });
+      if (path === "/api/saved/check") return json(200, { listIds: [] });
+      return json(404, { error: "Not found" });
+    });
+    const user = userEvent.setup();
+    render(
+      <>
+        <PlaceOverviewTab
+          place={ENRICHED}
+          isLoading={false}
+          onNavigateToInfo={() => {}}
+          onOpenDepartures={() => {}}
+          onOpenLineDetail={() => {}}
+        />
+        <MutationErrorNotice />
+      </>,
+      { wrapper: createQueryWrapper() },
+    );
+
+    await user.click(await screen.findByText("Office"));
+    await user.click(screen.getByRole("button", { name: "home" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("common.actionFailed");
+    expect(writes).toEqual([
+      {
+        method: "PUT",
+        path: "/api/saved/labels/home",
+        body: expect.objectContaining({ replaces: "office", placeId: ENRICHED.id }),
+      },
+    ]);
+    expect(screen.getByText("Office")).toBeInTheDocument();
+  });
 });

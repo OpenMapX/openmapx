@@ -3,6 +3,7 @@
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { useTranslations } from "next-intl";
+import { ClickableRow } from "@/components/ui/ClickableRow";
 import { DateTimeField } from "@/components/ui/DateTimeField";
 import { BRAND } from "@/integration-api/runtime/theme";
 
@@ -37,14 +38,15 @@ export function TimeModePicker({
     <Box sx={{ px: 2, pb: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
       <Box sx={{ display: "flex", gap: 0.5 }}>
         {(["now", "depart", "arrive"] as const).map((m) => (
-          <Box
+          <ClickableRow
+            aria-pressed={timeMode === m}
             key={m}
             onClick={() => onTimeModeChange(m)}
             sx={{
+              width: "auto",
               px: 1.5,
               py: 0.5,
               borderRadius: "8px",
-              cursor: "pointer",
               display: "flex",
               alignItems: "center",
               bgcolor: timeMode === m ? BRAND : "action.hover",
@@ -59,7 +61,7 @@ export function TimeModePicker({
             >
               {m === "now" ? t("departNow") : m === "depart" ? t("departAt") : t("arriveBy")}
             </Typography>
-          </Box>
+          </ClickableRow>
         ))}
       </Box>
       {timeMode !== "now" && (
