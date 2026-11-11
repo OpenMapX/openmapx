@@ -77,8 +77,35 @@ async function nativeApiRenewalBlocked(sql: import("postgres").Sql): Promise<voi
           AND query LIKE ${'update "admin_job" set "result" = coalesce("admin_job"."result", %'}`
     ).length
   ) {
-    if (Date.now() > endBy) throw Error("No native API lease renewal waited on a row lock");
+    if (Date.now() > endBy) {
+      const sessions = await sql`SELECT state, wait_event_type, left(query, 80) AS query
+        FROM pg_stat_activity
+        WHERE datname = current_database() AND application_name = ${NATIVE_API_APPLICATION_NAME}`;
+      throw Error(`No native API lease renewal waited on a row lock: ${JSON.stringify(sessions)}`);
+    }
     await nativeDelay(20);
+  }
+}
+
+/**
+ * Whether the session whose UPDATE reply the relay holds is still inside its
+ * transaction, so the update keeps its row lock while the reply is held. An
+ * autocommit UPDATE, such as a lease renewal, has committed before its reply
+ * arrives and holds no lock.
+ */
+async function heldUpdateInTransaction(
+  sql: import("postgres").Sql,
+  backendPid: number,
+): Promise<boolean> {
+  const endBy = Date.now() + 5_000;
+  for (;;) {
+    const [session] = await sql<{ state: string | null }[]>`SELECT state
+      FROM pg_stat_activity WHERE pid = ${backendPid}`;
+    // A backend reports its idle state when it finishes the request, which can
+    // be after the relay has seen the command's completion message.
+    if (session?.state !== "active" || Date.now() > endBy)
+      return session?.state === "idle in transaction";
+    await nativeDelay(5);
   }
 }
 
@@ -904,6 +931,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   }
                   if (retirement) {
                     const c = rows[0]!.result?._configurationCandidate;
+                    // The first UPDATE after the retirement checkpoint can be a lease
+                    // renewal, which runs outside a transaction. Only the API's own
+                    // transactional update keeps the job row locked while it is held.
                     return (
                       c?.phase === "settled" &&
                       (retired
@@ -913,7 +943,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                         : c.retirement?.version === 1 &&
                           existsSync(
                             join(host.queue, ".candidates", `${c.sealedOperationKey}.json`),
-                          ))
+                          ) &&
+                          (await heldUpdateInTransaction(fixture.sql, observation.backendPid)))
                     );
                   }
                   if (mode === "during-save") {
