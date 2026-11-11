@@ -5,10 +5,11 @@ impacts: [migration]
 ## What changes
 
 The operations agent now fetches, installs and removes the community service
-repositories that extensions bring, under `services/.community/`. Extensions
-with community services can be installed in Docker deployments again; app-api
-could not write that directory. An interrupted install or update is finished
-or rolled back automatically by the next app-api start or extension change.
+repositories that extensions bring, in its own state directory under
+`infra/docker/state/ops-agent/community/`. Extensions with community services
+can be installed in Docker deployments again, which app-api could not do
+itself. An interrupted install or update is finished or rolled back
+automatically by the next app-api start or extension change.
 
 Database migration 0041 reshapes `service_repository`: it drops the unused
 `display_name`, `last_fetched_at` and `auto_update` columns and records which

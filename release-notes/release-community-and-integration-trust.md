@@ -25,9 +25,9 @@ clone and pull with umask `022`.
 - The configuration writer removes group and other write access from
   `infra/docker`, which holds the current configuration pointer, when its own
   user owns it, instead of refusing to render.
-- Installed integrations under `custom_integrations/` are trusted by the
-  digests the operations agent records when it installs them; see
-  `agent-owned-integrations.md`.
+- Installed integrations under `infra/docker/state/ops-agent/custom-integrations/`
+  are trusted by the digests the operations agent records when it installs
+  them; see `agent-owned-integrations.md`.
 
 It also fixes trusted configuration requests (applying settings, the service
 selection or secrets from the admin panel): the agent bound each request to one
@@ -44,4 +44,4 @@ digests in their records; no deployment is known to have one.
 None. If the agent refuses to start with "Trusted configuration authority
 rejected" because of a repository installed by an earlier release, delete that
 repository's directory and its `.repository-<hash>.json` under
-`services/.community/` and install the extension again.
+`infra/docker/state/ops-agent/community/` and install the extension again.
