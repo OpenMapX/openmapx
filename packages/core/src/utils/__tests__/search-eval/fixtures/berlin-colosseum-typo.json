@@ -163,6 +163,7 @@
       "description": "German company",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Colloseum",
       "presence": "here"
     }
   ],

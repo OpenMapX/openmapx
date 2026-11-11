@@ -307,6 +307,7 @@
       "description": "German health insurance company",
       "kind": ["brand"],
       "matchedOn": "alias",
+      "matchedValue": "hamburg munchener krankenkasse",
       "presence": "here"
     }
   ],

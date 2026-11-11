@@ -31,7 +31,6 @@ export interface TransitPlanParams {
   numItineraries?: number;
   lang?: string;
   modes?: string[];
-  wheelchair?: boolean;
   wheelchairRequired?: boolean;
   maxTransfers?: number;
   transferBuffer?: "standard" | "relaxed" | "extra";
@@ -128,7 +127,7 @@ export function buildTransitPlanParams(params: TransitPlanParams): Record<string
 
   const modes = listParam(params.modes);
   if (modes) query.modes = modes;
-  if (params.wheelchair || params.wheelchairRequired) query.wheelchair = "true";
+  if (params.wheelchairRequired) query.wheelchair = "true";
   if (params.maxTransfers !== undefined) query.max_transfers = String(params.maxTransfers);
   if (params.transferBuffer && params.transferBuffer !== "standard") {
     query.transfer_buffer = params.transferBuffer;
@@ -172,7 +171,6 @@ export interface TransitChainPlanRequest {
   departureTime?: string;
   arrivalTime?: string;
   modes?: string[];
-  wheelchair?: boolean;
   wheelchairRequired?: boolean;
   maxTransfers?: number;
   transferBuffer?: "standard" | "relaxed" | "extra";

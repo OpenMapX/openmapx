@@ -145,6 +145,7 @@
       "description": "American multinational coffee company",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Starbucks",
       "presence": "global"
     },
     {
@@ -153,6 +154,7 @@
       "description": "Russian coffee cafe chain network",
       "kind": ["brand"],
       "matchedOn": "alias",
+      "matchedValue": "starbucks",
       "presence": "elsewhere"
     },
     {
@@ -161,6 +163,7 @@
       "description": "International café chain and brand",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Starbucks Reserve",
       "presence": "elsewhere"
     }
   ],

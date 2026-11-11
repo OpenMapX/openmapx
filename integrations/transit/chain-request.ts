@@ -135,8 +135,6 @@ export function parseChainRequest(body: unknown): ParsedChainRequest {
       ? Math.min(Math.max(1, Math.floor(numItinerariesRaw)), 10)
       : undefined;
 
-  const wheelchair = raw.wheelchair === true || raw.wheelchairRequired === true;
-
   return {
     waypoints,
     schedules,
@@ -144,8 +142,7 @@ export function parseChainRequest(body: unknown): ParsedChainRequest {
     ...(numItineraries !== undefined ? { numItineraries } : {}),
     baseRequest: {
       modes: stringArray(raw.modes, "modes") ?? ["TRANSIT"],
-      wheelchair,
-      wheelchairRequired: wheelchair,
+      wheelchairRequired: raw.wheelchairRequired === true,
       ...(maxTransfers !== undefined ? { maxTransfers: maxTransfers as number } : {}),
       transferBuffer: (transferBuffer ?? "standard") as "standard" | "relaxed" | "extra",
       requireBikeTransport: raw.requireBikeTransport === true,

@@ -6,28 +6,28 @@ import {
 } from "./disclosures.js";
 
 describe("disclosure ledger", () => {
-  it("accepts controlled recipient facts and rejects payload-like fields", () => {
+  it("snapshots recipient facts from the registry and rejects payload-like fields", () => {
     const value = sanitizeDisclosureInput({
       userId: "u",
       occurredAt: new Date(),
       recipientId: "osm",
-      recipientName: "OpenStreetMap",
-      recipientRole: "independent-controller",
-      recipientCountry: "GB",
       operationCode: "publish",
       categoryCode: "osm-publication",
       purposeCode: "publication",
       legalBasisCode: "consent",
     });
     expect(value).not.toHaveProperty("payload");
-    expect(value.recipientId).toBe("osm");
+    expect(value).toMatchObject({
+      userId: "u",
+      recipientId: "osm",
+      recipientName: TRUSTED_RECIPIENTS.osm?.name,
+      recipientRole: "independent-controller",
+    });
     expect(() =>
       sanitizeDisclosureInput({
         userId: "u",
         occurredAt: new Date(),
         recipientId: "osm",
-        recipientName: "OpenStreetMap",
-        recipientRole: "independent-controller",
         operationCode: "publish",
         categoryCode: "osm-publication",
         purposeCode: "publication",
@@ -37,14 +37,33 @@ describe("disclosure ledger", () => {
     ).toThrow();
   });
 
+  it("does not accept caller-supplied recipient facts or a second subject field", () => {
+    const base = {
+      userId: "u",
+      occurredAt: new Date(),
+      recipientId: "osm",
+      operationCode: "publish",
+      categoryCode: "osm-publication",
+      purposeCode: "publication",
+      legalBasisCode: "consent",
+    };
+    for (const extra of [
+      { recipientName: "OpenStreetMap" },
+      { recipientRole: "independent-controller" },
+      { recipientCountry: "GB" },
+      { recipientPrivacyUrl: "https://www.openstreetmap.org/privacy" },
+      { subjectUserId: "u" },
+    ]) {
+      expect(() => sanitizeDisclosureInput({ ...base, ...extra } as never)).toThrow();
+    }
+  });
+
   it("rejects free-form identifiers", () => {
     expect(() =>
       disclosureInputSchema.parse({
         userId: "u",
         occurredAt: new Date(),
         recipientId: "bad id",
-        recipientName: "x",
-        recipientRole: "processor",
         operationCode: "op",
         categoryCode: "cat",
         purposeCode: "purpose",

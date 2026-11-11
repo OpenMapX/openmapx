@@ -147,7 +147,6 @@ export interface TripPlanRequest {
    */
   modes?: string[];
   /** When true, request wheelchair-accessible routing (MOTIS pedestrianProfile=WHEELCHAIR). */
-  wheelchair?: boolean;
   wheelchairRequired?: boolean;
   maxTransfers?: number;
   transferBuffer?: "standard" | "relaxed" | "extra";

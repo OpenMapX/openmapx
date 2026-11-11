@@ -286,6 +286,7 @@
       "description": "Savings Bank in Germany",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Hamburger Sparkasse",
       "presence": "unknown"
     },
     {
@@ -294,6 +295,7 @@
       "description": "Colombian restaurant chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Hamburguesas El Corral",
       "presence": "elsewhere"
     },
     {
@@ -302,6 +304,7 @@
       "description": "German health insurance company",
       "kind": ["brand"],
       "matchedOn": "alias",
+      "matchedValue": "hamburg munchener krankenkasse",
       "presence": "here"
     },
     {
@@ -310,6 +313,7 @@
       "description": "cooperative bank headquartered in Hamburg, Germany",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Sparda-Bank Hamburg",
       "presence": "unknown"
     },
     {
@@ -318,6 +322,7 @@
       "description": "American restaurant chain founded in California",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Nation's Giant Hamburgers",
       "presence": "unknown"
     },
     {
@@ -326,6 +331,7 @@
       "description": "bicycle-sharing system in Hamburg, Germany",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "StadtRAD Hamburg",
       "presence": "unknown"
     },
     {
@@ -334,6 +340,7 @@
       "description": "fast food chain in Alabama, US",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Milo's Hamburgers",
       "presence": "unknown"
     },
     {
@@ -342,6 +349,7 @@
       "description": "British restaurant chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Byron Hamburgers",
       "presence": "elsewhere"
     }
   ],
@@ -353,7 +361,8 @@
         "amenity": "fast_food",
         "cuisine": "burger"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "hamburgerstand"
     },
     {
       "id": "amenity/restaurant",
@@ -361,7 +370,8 @@
       "tags": {
         "amenity": "restaurant"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "hamburgerstand"
     }
   ]
 }

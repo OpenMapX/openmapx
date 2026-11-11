@@ -764,7 +764,14 @@ describe("SearchBar", () => {
     useBrandSuggestMock.mockReturnValue({
       data: {
         matches: [
-          { qid: "Q6", name: "París", kind: ["brand"], matchedOn: "name", presence: "elsewhere" },
+          {
+            qid: "Q6",
+            name: "París",
+            kind: ["brand"],
+            matchedOn: "name",
+            matchedValue: "París",
+            presence: "elsewhere",
+          },
         ],
       },
     });
@@ -904,6 +911,7 @@ describe("SearchBar", () => {
       description: "Coffee shops",
       kind: ["brand" as const],
       matchedOn: "name" as const,
+      matchedValue: "Cafe Chain",
     };
     useBrandSuggestMock.mockReturnValue({ data: { matches: [brand] } });
     useAutocompleteMock.mockReturnValue({
@@ -948,8 +956,14 @@ describe("SearchBar", () => {
     useBrandSuggestMock.mockReturnValue({
       data: {
         matches: [
-          { qid: "Q1", name: "Aachen", kind: ["brand"], matchedOn: "name" },
-          { qid: "Q2", name: "Aachener Verkehrsverbund", kind: ["brand"], matchedOn: "name" },
+          { qid: "Q1", name: "Aachen", kind: ["brand"], matchedOn: "name", matchedValue: "Aachen" },
+          {
+            qid: "Q2",
+            name: "Aachener Verkehrsverbund",
+            kind: ["brand"],
+            matchedOn: "name",
+            matchedValue: "Aachener Verkehrsverbund",
+          },
         ],
       },
     });
@@ -987,6 +1001,7 @@ describe("SearchBar", () => {
           name,
           kind: ["brand"],
           matchedOn: "name",
+          matchedValue: name,
           presence: "elsewhere",
         })),
       },
@@ -1134,7 +1149,15 @@ describe("SearchBar", () => {
   it("plain Enter selects an exact brand name", async () => {
     useBrandSuggestMock.mockReturnValue({
       data: {
-        matches: [{ qid: "Q37158", name: "Starbucks", kind: ["brand"], matchedOn: "name" }],
+        matches: [
+          {
+            qid: "Q37158",
+            name: "Starbucks",
+            kind: ["brand"],
+            matchedOn: "name",
+            matchedValue: "Starbucks",
+          },
+        ],
       },
     });
 
@@ -1206,6 +1229,7 @@ describe("SearchBar", () => {
             name: "Ice cream",
             tags: { amenity: "ice_cream" },
             matchedOn: "name",
+            matchedValue: "Ice cream",
           },
         ],
       },
@@ -1275,7 +1299,11 @@ describe("SearchBar", () => {
       data: { cafes: { name: "Cafes", terms: ["coffee"] } },
     });
     useBrandSuggestMock.mockReturnValue({
-      data: { matches: [{ qid: "Q1", name: "Coffee", kind: ["brand"], matchedOn: "name" }] },
+      data: {
+        matches: [
+          { qid: "Q1", name: "Coffee", kind: ["brand"], matchedOn: "name", matchedValue: "Coffee" },
+        ],
+      },
     });
     useSearchSuggestionsMock.mockReturnValue({
       data: aggregateResponse([
@@ -1687,7 +1715,18 @@ describe("SearchBar", () => {
       isFetching: false,
     });
     useBrandSuggestMock.mockReturnValue({
-      data: { matches: [{ qid: "Q1", name: "Bar Louie", tags: {} }] },
+      data: {
+        matches: [
+          {
+            qid: "Q1",
+            name: "Bar Louie",
+            kind: ["brand"],
+            matchedOn: "name",
+            matchedValue: "Bar Louie",
+            presence: "here",
+          },
+        ],
+      },
     });
 
     renderBar();
@@ -2887,6 +2926,7 @@ describe("SearchBar credit focus ownership", () => {
               kind: ["brand"],
               logoFile: "Brand.svg",
               matchedOn: "name",
+              matchedValue: "Brand",
               presence: "here",
             },
           ],

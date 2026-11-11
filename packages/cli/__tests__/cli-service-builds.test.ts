@@ -6,7 +6,6 @@ import { readBuildRecord } from "../src/lib/build-artifacts";
 import {
   buildServices,
   planServiceBuilds,
-  resolveDataBuildServiceId,
   type ServiceBuildHandler,
 } from "../src/lib/service-builds";
 
@@ -246,15 +245,6 @@ describe("buildServices", () => {
     });
 
     expect(seenRegion).toBe("planet");
-  });
-});
-
-describe("resolveDataBuildServiceId", () => {
-  it("accepts canonical service ids only", () => {
-    expect(resolveDataBuildServiceId("tiles")).toBeUndefined();
-    expect(resolveDataBuildServiceId("tileserver")).toBe("tileserver");
-    expect(resolveDataBuildServiceId("osrm")).toBe("osrm");
-    expect(resolveDataBuildServiceId("unknown")).toBeUndefined();
   });
 });
 

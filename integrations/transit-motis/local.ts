@@ -140,7 +140,7 @@ async function planWithInstance(
     params.numItineraries,
     {
       modes,
-      wheelchair: params.wheelchairRequired ?? params.wheelchair,
+      wheelchair: params.wheelchairRequired,
       preTransitModes: params.preTransitModes,
       postTransitModes: params.postTransitModes,
       directModes: params.directModes,

@@ -247,6 +247,7 @@
       "description": "regional cooperative bank in Germany",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Berliner Volksbank",
       "presence": "unknown"
     },
     {
@@ -255,6 +256,7 @@
       "description": "chain of kebab fast food shops in Poland",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Berlin Döner Kebap",
       "presence": "elsewhere"
     },
     {
@@ -263,6 +265,7 @@
       "description": "German fashion brand and retailer",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Liebeskind Berlin",
       "presence": "here"
     },
     {
@@ -271,6 +274,7 @@
       "description": "German medical laboratory chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "IMD Berlin",
       "presence": "here"
     },
     {
@@ -279,6 +283,7 @@
       "description": "cooperative bank headquartered in Berlin, Germany",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Sparda-Bank Berlin",
       "presence": "unknown"
     },
     {
@@ -287,6 +292,7 @@
       "description": "health insurance company in Germany",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Innungskrankenkasse Brandenburg und Berlin",
       "presence": "unknown"
     },
     {
@@ -295,6 +301,7 @@
       "description": "German bicycle-sharing company and franchise",
       "kind": ["brand", "operator"],
       "matchedOn": "alias",
+      "matchedValue": "nextbike berlin",
       "presence": "global"
     },
     {
@@ -303,6 +310,7 @@
       "description": "carsharing network in Germany",
       "kind": ["brand"],
       "matchedOn": "alias",
+      "matchedValue": "stadtmobil berlin",
       "presence": "unknown"
     }
   ],
@@ -313,7 +321,8 @@
       "tags": {
         "traffic_calming": "cushion"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "berliner kissen"
     }
   ]
 }

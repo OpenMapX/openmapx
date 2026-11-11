@@ -255,6 +255,7 @@
       "description": "international sandwich shop chain based in the United Kingdom",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Pret a Manger",
       "presence": "here"
     },
     {
@@ -263,6 +264,7 @@
       "description": "US bakery chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Pretzelmaker",
       "presence": "elsewhere"
     },
     {
@@ -271,6 +273,7 @@
       "description": "Brand of Pret a Manger",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Petit Pret",
       "presence": "here"
     },
     {
@@ -279,6 +282,7 @@
       "description": "chain of pretzel kiosks and stores",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Mr. Pretzels",
       "presence": "here"
     },
     {
@@ -287,6 +291,7 @@
       "description": "interior decoration retail chain based in Portugal",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Gato Preto",
       "presence": "elsewhere"
     },
     {
@@ -295,6 +300,7 @@
       "description": "American soft pretzel franchise",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Philly Pretzel Factory",
       "presence": "elsewhere"
     },
     {
@@ -303,6 +309,7 @@
       "description": "U.S. restaurant chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Wetzel's Pretzels",
       "presence": "elsewhere"
     },
     {
@@ -311,6 +318,7 @@
       "description": "American pretzel shops",
       "kind": ["brand"],
       "matchedOn": "alias",
+      "matchedValue": "auntie annes pretzels",
       "presence": "global"
     }
   ],
@@ -323,7 +331,8 @@
         "vending": "food",
         "food": "snacks"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "pretzel"
     }
   ]
 }

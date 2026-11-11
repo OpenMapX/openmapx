@@ -172,6 +172,7 @@
       "description": "German supermarket chain",
       "kind": ["brand", "operator"],
       "matchedOn": "name",
+      "matchedValue": "REWE",
       "presence": "here"
     },
     {
@@ -180,6 +181,7 @@
       "description": "chain of beverage stores",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "REWE Getränkemarkt",
       "presence": "here"
     },
     {
@@ -188,6 +190,7 @@
       "description": "German convenience store chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "REWE To Go",
       "presence": "here"
     }
   ],
@@ -198,7 +201,8 @@
       "tags": {
         "craft": "brewery"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Craft Brewery"
     },
     {
       "id": "man_made/works/brewery",
@@ -207,7 +211,8 @@
         "man_made": "works",
         "product": "beer"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Industrial Brewery"
     },
     {
       "id": "amenity/pub/microbrewery",
@@ -216,7 +221,8 @@
         "amenity": "pub",
         "microbrewery": "yes"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "craft brewery"
     },
     {
       "id": "man_made/works",
@@ -224,7 +230,8 @@
       "tags": {
         "man_made": "works"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "brewery"
     }
   ]
 }

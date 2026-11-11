@@ -244,6 +244,7 @@
       "description": "state-owned bank in China",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Bank of China",
       "presence": "global"
     },
     {
@@ -252,6 +253,7 @@
       "description": "Indian public sector multinational banking company",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Bank of Baroda",
       "presence": "global"
     },
     {
@@ -260,6 +262,7 @@
       "description": "Public sector bank in India",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Bank of India",
       "presence": "global"
     },
     {
@@ -268,6 +271,7 @@
       "description": "German cooperative bank",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Bank 1 Saar",
       "presence": "here"
     },
     {
@@ -276,6 +280,7 @@
       "description": "public company",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Bank für Tirol und Vorarlberg",
       "presence": "here"
     },
     {
@@ -284,6 +289,7 @@
       "description": "bank with locations in New Hampshire and Maine, USA",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Bank of New Hampshire",
       "presence": "unknown"
     },
     {
@@ -292,6 +298,7 @@
       "description": "regional bank in California",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Bank of the Sierra",
       "presence": "unknown"
     },
     {
@@ -300,6 +307,7 @@
       "description": "American financial services brand",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Bank of Oklahoma",
       "presence": "unknown"
     }
   ],
@@ -310,7 +318,8 @@
       "tags": {
         "amenity": "bench"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Sitzbank"
     },
     {
       "id": "highway/hitchhiking",
@@ -318,7 +327,8 @@
       "tags": {
         "highway": "hitchhiking"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Mitfahrbank"
     },
     {
       "id": "leisure/fitness_station/hyperextension",
@@ -327,7 +337,8 @@
         "leisure": "fitness_station",
         "fitness_station": "hyperextension"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Hyperextension-Bank"
     },
     {
       "id": "amenity/lounger",
@@ -335,7 +346,8 @@
       "tags": {
         "amenity": "lounger"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "bank"
     },
     {
       "id": "amenity/casino",
@@ -343,7 +355,8 @@
       "tags": {
         "amenity": "casino"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "spielbank"
     },
     {
       "id": "amenity/public_bookcase",
@@ -351,7 +364,8 @@
       "tags": {
         "amenity": "public_bookcase"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "lesebank"
     },
     {
       "id": "man_made/milk_churn_stand",
@@ -359,7 +373,8 @@
       "tags": {
         "man_made": "milk_churn_stand"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "milchbank"
     },
     {
       "id": "natural/reef",
@@ -367,7 +382,8 @@
       "tags": {
         "natural": "reef"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "unterwassersandbank"
     }
   ]
 }

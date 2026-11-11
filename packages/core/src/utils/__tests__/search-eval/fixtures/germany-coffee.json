@@ -244,6 +244,7 @@
       "description": "coffee shop / cafe chain based in Athens, Greece",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Coffee Lab",
       "presence": "here"
     },
     {
@@ -252,6 +253,7 @@
       "description": "German coffee shop chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Coffee Fellows",
       "presence": "here"
     },
     {
@@ -260,6 +262,7 @@
       "description": "British coffee bar and deli franchise",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Coffee Republic",
       "presence": "global"
     },
     {
@@ -268,6 +271,7 @@
       "description": "Canadian chain of snack and coffee shops",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Coffee Time",
       "presence": "global"
     },
     {
@@ -276,6 +280,7 @@
       "description": "coffee franchise company",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Coffeeshop Company",
       "presence": "global"
     },
     {
@@ -284,6 +289,7 @@
       "description": "Canadian coffee shop chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Coffee Culture",
       "presence": "unknown"
     },
     {
@@ -292,6 +298,7 @@
       "description": "coffee shop chain located in New Zealand",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Coffee Culture",
       "presence": "elsewhere"
     },
     {
@@ -300,6 +307,7 @@
       "description": "Dutch cafe chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Coffee Company",
       "presence": "elsewhere"
     }
   ],
@@ -311,7 +319,8 @@
         "amenity": "cafe",
         "cuisine": "coffee_shop"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Coffeehouse"
     },
     {
       "id": "amenity/vending_machine/coffee",
@@ -320,7 +329,8 @@
         "amenity": "vending_machine",
         "vending": "coffee"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Coffee Vending Machine"
     },
     {
       "id": "shop/coffee",
@@ -328,7 +338,8 @@
       "tags": {
         "shop": "coffee"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Coffee Store"
     },
     {
       "id": "amenity/fast_food/donut",
@@ -337,7 +348,8 @@
         "amenity": "fast_food",
         "cuisine": "donut"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "coffee"
     },
     {
       "id": "amenity/internet_cafe",
@@ -345,7 +357,8 @@
       "tags": {
         "amenity": "internet_cafe"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "coffee"
     },
     {
       "id": "amenity/restaurant",
@@ -353,7 +366,8 @@
       "tags": {
         "amenity": "restaurant"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "coffee"
     },
     {
       "id": "amenity/restaurant/american",
@@ -362,7 +376,8 @@
         "amenity": "restaurant",
         "cuisine": "american"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "coffee"
     }
   ]
 }

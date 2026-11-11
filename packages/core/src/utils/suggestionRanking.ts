@@ -345,11 +345,7 @@ export function matchCategorySuggestions({
 }
 
 /** Relevance travels with the winning candidate while the row keeps its canonical label. */
-function shortcutMatch(
-  matchedOn: "name" | "alias" | "term",
-  value: string | undefined,
-): SearchSuggestionMatch | undefined {
-  if (!value) return undefined;
+function shortcutMatch(matchedOn: "name" | "alias" | "term", value: string): SearchSuggestionMatch {
   return {
     kind: matchedOn === "alias" ? "explicit_alias" : matchedOn === "term" ? "keyword" : "name",
     value,

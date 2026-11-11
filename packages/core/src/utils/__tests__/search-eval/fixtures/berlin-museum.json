@@ -281,7 +281,8 @@
       "tags": {
         "tourism": "museum"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Museum"
     },
     {
       "id": "tourism/museum/history",
@@ -290,7 +291,8 @@
         "tourism": "museum",
         "museum": "history"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "History Museum"
     },
     {
       "id": "amenity/planetarium",
@@ -298,7 +300,8 @@
       "tags": {
         "amenity": "planetarium"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "museum"
     }
   ]
 }

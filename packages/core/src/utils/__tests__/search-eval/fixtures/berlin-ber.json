@@ -251,6 +251,7 @@
       "description": "language education franchise with headquarters in Princeton, New Jersey",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Berlitz Corporation",
       "presence": "global"
     },
     {
@@ -259,6 +260,7 @@
       "description": "Spanish clothing retailer",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Bershka",
       "presence": "global"
     },
     {
@@ -267,6 +269,7 @@
       "description": "bank in the Northeastern United States",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Berkshire Bank",
       "presence": "unknown"
     },
     {
@@ -275,6 +278,7 @@
       "description": "regional cooperative bank in Germany",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Berliner Volksbank",
       "presence": "unknown"
     },
     {
@@ -283,6 +287,7 @@
       "description": "British company making bike lights and bike sharing systems",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Beryl",
       "presence": "unknown"
     },
     {
@@ -291,6 +296,7 @@
       "description": "supermarket chain in Northern Illinois and Southern Wisconsin",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Berkot's Super Foods",
       "presence": "unknown"
     },
     {
@@ -299,6 +305,7 @@
       "description": "Dutch chain of petrol stations",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Berkman",
       "presence": "elsewhere"
     },
     {
@@ -307,6 +314,7 @@
       "description": "bank in Kazakhstan",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Bereke Bank",
       "presence": "elsewhere"
     }
   ],
@@ -317,7 +325,8 @@
       "tags": {
         "craft": "plumber"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Plumber"
     },
     {
       "id": "leisure/marina_no_facilities",
@@ -325,7 +334,8 @@
       "tags": {
         "seamark:harbour:category": "marina_no_facilities"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Yacht Berths"
     },
     {
       "id": "shop/hairdresser/barber",
@@ -334,7 +344,8 @@
         "shop": "hairdresser",
         "hairdresser": "barber"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Barber"
     },
     {
       "id": "amenity/internet_cafe",
@@ -342,7 +353,8 @@
       "tags": {
         "amenity": "internet_cafe"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "cybercafe"
     },
     {
       "id": "amenity/monastery",
@@ -350,7 +362,8 @@
       "tags": {
         "amenity": "monastery"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "tabernacle"
     },
     {
       "id": "amenity/place_of_worship",
@@ -358,7 +371,8 @@
       "tags": {
         "amenity": "place_of_worship"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "tabernacle"
     },
     {
       "id": "amenity/place_of_worship/christian",
@@ -367,7 +381,8 @@
         "amenity": "place_of_worship",
         "religion": "christian"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "tabernacle"
     },
     {
       "id": "craft/sawmill",
@@ -375,7 +390,8 @@
       "tags": {
         "craft": "sawmill"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "lumber"
     }
   ]
 }

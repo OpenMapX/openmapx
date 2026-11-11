@@ -446,7 +446,8 @@
       "tags": {
         "building": "train_station"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "hauptbahnhof"
     }
   ]
 }

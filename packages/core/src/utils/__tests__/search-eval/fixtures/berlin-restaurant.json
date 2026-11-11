@@ -280,6 +280,7 @@
       "description": "global chain of hotels and restaurants",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Romantik Hotels & Restaurants",
       "presence": "global"
     },
     {
@@ -288,6 +289,7 @@
       "description": "boutique hotel chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Kimpton Hotels & Restaurants",
       "presence": "global"
     },
     {
@@ -296,6 +298,7 @@
       "description": "American restaurant chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Lazy Dog Restaurant & Bar",
       "presence": "unknown"
     },
     {
@@ -304,6 +307,7 @@
       "description": "US restaurant chain located on the Oregon Coast",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Mo's Restaurants",
       "presence": "unknown"
     },
     {
@@ -312,6 +316,7 @@
       "description": "American restaurant chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Piccadilly Restaurants",
       "presence": "unknown"
     },
     {
@@ -320,6 +325,7 @@
       "description": "restaurant chain founded by Bob Wian in California, United States",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Big Boy Restaurants",
       "presence": "elsewhere"
     },
     {
@@ -328,6 +334,7 @@
       "description": "United Kingdom restaurant and cafe chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Giraffe Restaurants",
       "presence": "elsewhere"
     },
     {
@@ -336,6 +343,7 @@
       "description": "fast food chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Leon Restaurants",
       "presence": "elsewhere"
     }
   ],
@@ -346,7 +354,8 @@
       "tags": {
         "amenity": "restaurant"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Restaurant"
     },
     {
       "id": "amenity/restaurant/american",
@@ -355,7 +364,8 @@
         "amenity": "restaurant",
         "cuisine": "american"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "American Restaurant"
     },
     {
       "id": "amenity/restaurant/asian",
@@ -364,7 +374,8 @@
         "amenity": "restaurant",
         "cuisine": "asian"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Asian Restaurant"
     },
     {
       "id": "amenity/restaurant/barbecue",
@@ -373,7 +384,8 @@
         "amenity": "restaurant",
         "cuisine": "barbecue"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Barbecue Restaurant"
     },
     {
       "id": "amenity/restaurant/chinese",
@@ -382,7 +394,8 @@
         "amenity": "restaurant",
         "cuisine": "chinese"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Chinese Restaurant"
     },
     {
       "id": "amenity/restaurant/french",
@@ -391,7 +404,8 @@
         "amenity": "restaurant",
         "cuisine": "french"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "French Restaurant"
     },
     {
       "id": "amenity/restaurant/georgian",
@@ -400,7 +414,8 @@
         "amenity": "restaurant",
         "cuisine": "georgian"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Georgian Restaurant"
     },
     {
       "id": "amenity/restaurant/german",
@@ -409,7 +424,8 @@
         "amenity": "restaurant",
         "cuisine": "german"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "German Restaurant"
     }
   ]
 }

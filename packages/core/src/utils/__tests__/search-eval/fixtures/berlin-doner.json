@@ -163,6 +163,7 @@
       "description": "Ukrainian fast food chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Döner Market",
       "presence": "elsewhere"
     },
     {
@@ -171,6 +172,7 @@
       "description": "Dutch fast food chain",
       "kind": ["brand"],
       "matchedOn": "alias",
+      "matchedValue": "doner company",
       "presence": "elsewhere"
     },
     {
@@ -179,6 +181,7 @@
       "description": "German fast food restaurant chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Haus des Döners",
       "presence": "here"
     },
     {
@@ -187,6 +190,7 @@
       "description": "fast food chain in Turkey",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Usta Dönerci",
       "presence": "elsewhere"
     },
     {
@@ -195,6 +199,7 @@
       "description": "kebab chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "German Doner Kebab",
       "presence": "elsewhere"
     },
     {
@@ -203,6 +208,7 @@
       "description": "chain of kebab fast food shops in Poland",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Berlin Döner Kebap",
       "presence": "elsewhere"
     }
   ],
@@ -214,7 +220,8 @@
         "amenity": "fast_food",
         "cuisine": "kebab"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "doner"
     }
   ]
 }

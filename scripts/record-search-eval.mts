@@ -100,9 +100,11 @@ async function recordCase(evalCase: EvalCase, capture: ReturnType<typeof capture
     autocomplete: autocomplete.map((item) => pick(item, PLACE_FIELDS)),
     aggregate: aggregate.suggestions.map((item) => pick(item, PLACE_FIELDS)),
     brands: brands.matches.map((item) =>
-      pick(item, ["qid", "name", "description", "kind", "matchedOn", "presence"]),
+      pick(item, ["qid", "name", "description", "kind", "matchedOn", "matchedValue", "presence"]),
     ),
-    presets: presets.matches.map((item) => pick(item, ["id", "name", "tags", "matchedOn"])),
+    presets: presets.matches.map((item) =>
+      pick(item, ["id", "name", "tags", "matchedOn", "matchedValue"]),
+    ),
   };
 }
 

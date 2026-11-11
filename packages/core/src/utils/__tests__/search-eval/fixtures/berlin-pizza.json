@@ -289,6 +289,7 @@
       "description": "American restaurant chain and international franchise",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Pizza Hut",
       "presence": "global"
     },
     {
@@ -297,6 +298,7 @@
       "description": "German fast food chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Pizza Max",
       "presence": "here"
     },
     {
@@ -305,6 +307,7 @@
       "description": "Canadian pizza restaurant chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Pizza Nova",
       "presence": "global"
     },
     {
@@ -313,6 +316,7 @@
       "description": "American fast food chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Pizza Schmizza",
       "presence": "unknown"
     },
     {
@@ -321,6 +325,7 @@
       "description": "UK pizza restaurant chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Pizza Pilgrims",
       "presence": "unknown"
     },
     {
@@ -329,6 +334,7 @@
       "description": "UK pizzeria chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Pizza Union",
       "presence": "unknown"
     },
     {
@@ -337,6 +343,7 @@
       "description": "Canadian pizzeria chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Pizza Depot",
       "presence": "unknown"
     },
     {
@@ -345,6 +352,7 @@
       "description": "pizzeria chain in California",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Pizza My Heart",
       "presence": "unknown"
     }
   ],
@@ -356,7 +364,8 @@
         "amenity": "fast_food",
         "cuisine": "pizza"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Pizza Fast Food"
     },
     {
       "id": "amenity/restaurant/pizza",
@@ -365,7 +374,8 @@
         "amenity": "restaurant",
         "cuisine": "pizza"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Pizza Restaurant"
     },
     {
       "id": "amenity/vending_machine/pizza",
@@ -374,7 +384,8 @@
         "amenity": "vending_machine",
         "vending": "pizza"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Pizza Vending Machine"
     },
     {
       "id": "amenity/restaurant/italian",
@@ -383,7 +394,8 @@
         "amenity": "restaurant",
         "cuisine": "italian"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "pizza"
     },
     {
       "id": "amenity/baking_oven",
@@ -391,7 +403,8 @@
       "tags": {
         "amenity": "baking_oven"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "pizza oven"
     }
   ]
 }

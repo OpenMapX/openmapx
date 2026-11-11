@@ -136,6 +136,7 @@
       "description": "German petroleum company",
       "kind": ["brand", "operator"],
       "matchedOn": "alias",
+      "matchedValue": "aral tankstelle",
       "presence": "here"
     },
     {
@@ -144,6 +145,7 @@
       "description": "German association for independent petrol stations operators",
       "kind": ["brand"],
       "matchedOn": "alias",
+      "matchedValue": "freie tankstelle",
       "presence": "here"
     }
   ],
@@ -154,7 +156,8 @@
       "tags": {
         "shop": "fuel"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Tankstelle"
     },
     {
       "id": "highway/rest_area",
@@ -162,7 +165,8 @@
       "tags": {
         "highway": "rest_area"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Rastplatz ohne Tankstelle/Restaurant"
     },
     {
       "id": "highway/services",
@@ -170,7 +174,8 @@
       "tags": {
         "highway": "services"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Raststätte mit Tankstelle/Restaurant"
     },
     {
       "id": "waterway/fuel",
@@ -178,7 +183,8 @@
       "tags": {
         "waterway": "fuel"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Bootstankstelle"
     },
     {
       "id": "man_made/fuel_pump",
@@ -186,7 +192,8 @@
       "tags": {
         "man_made": "fuel_pump"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "tankstellensaule"
     },
     {
       "id": "shop/convenience",
@@ -194,7 +201,8 @@
       "tags": {
         "shop": "convenience"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "tankstellenverkauf"
     }
   ]
 }

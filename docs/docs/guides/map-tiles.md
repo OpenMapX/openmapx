@@ -77,12 +77,6 @@ pnpm openmapx data download osm europe/germany
 pnpm openmapx services build tileserver --region europe/germany
 ```
 
-The equivalent data alias is:
-
-```bash
-pnpm openmapx data build tileserver europe/germany
-```
-
 Planetiler writes `data/tile-mbtiles/tiles.mbtiles`. It builds into
 `data/tile-mbtiles.next/` and only replaces the archive once the build succeeds,
 so a failed build keeps the old tiles. Its JVM heap defaults to half the PBF

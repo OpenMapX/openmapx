@@ -146,7 +146,6 @@ const DEFAULT_ROUTE_OPTIONS: NavigationRouteOptions = {
  */
 export interface TransitReplanOptions {
   modes?: string[];
-  wheelchair?: boolean;
   wheelchairRequired?: boolean;
   maxTransfers?: number;
   transferBuffer?: "standard" | "relaxed" | "extra";

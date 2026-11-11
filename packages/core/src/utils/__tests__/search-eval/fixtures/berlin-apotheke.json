@@ -173,7 +173,8 @@
       "tags": {
         "amenity": "veterinary_pharmacy"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Tierapotheke"
     },
     {
       "id": "shop/chemist",
@@ -181,7 +182,8 @@
       "tags": {
         "shop": "chemist"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "apotheke"
     }
   ]
 }

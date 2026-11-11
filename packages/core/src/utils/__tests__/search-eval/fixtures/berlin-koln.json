@@ -345,6 +345,7 @@
       "description": "German cooperative banking institution",
       "kind": ["brand"],
       "matchedOn": "alias",
+      "matchedValue": "volksbank koln bonn eg",
       "presence": "unknown"
     }
   ],
@@ -355,7 +356,8 @@
       "tags": {
         "traffic_calming": "mini_bumps"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "kolner teller"
     }
   ]
 }

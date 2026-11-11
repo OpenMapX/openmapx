@@ -128,7 +128,7 @@ export function requiredPlanningCapabilities(
   if (request.transferBuffer && request.transferBuffer !== "standard") {
     required.push("transferBuffer");
   }
-  if (request.wheelchairRequired || request.wheelchair) required.push("wheelchairRequired");
+  if (request.wheelchairRequired) required.push("wheelchairRequired");
   if (request.requireBikeTransport) required.push("bikeTransport");
   if (request.bikeHillPreference && request.bikeHillPreference !== "default") {
     required.push("elevation");

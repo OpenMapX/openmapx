@@ -127,6 +127,7 @@
       "description": "supermarket chain and online marketplace",
       "kind": ["brand", "operator"],
       "matchedOn": "name",
+      "matchedValue": "Kaufland",
       "presence": "here"
     }
   ],
