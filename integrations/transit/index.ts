@@ -33,7 +33,6 @@ import type {
   TransitStop,
   TransitTripResolveRequest,
   TripItinerary,
-  VehicleJourney,
 } from "@openmapx/mobility-core/transit";
 import {
   parseTransitIsochroneRequest,
@@ -261,8 +260,29 @@ function utcDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function utcTime(): string {
-  return new Date().toISOString().slice(11, 19);
+/**
+ * The requested planning instant as a UTC ISO string, or null when the input is
+ * malformed. A `time` containing `T` is a full date-time; otherwise `date`
+ * (default today) and `time` (default now) are a UTC calendar date and clock.
+ */
+export function planInstant(
+  date: string | undefined,
+  time: string | undefined,
+  now = new Date(),
+): string | null {
+  if (time?.includes("T")) {
+    const instant = new Date(time);
+    return Number.isFinite(instant.getTime()) ? `${instant.toISOString().slice(0, 19)}Z` : null;
+  }
+  if (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  if (time !== undefined && !/^\d{2}:\d{2}(:\d{2})?$/.test(time)) return null;
+  const day = date ?? now.toISOString().slice(0, 10);
+  const clock = time ? (time.length === 5 ? `${time}:00` : time) : now.toISOString().slice(11, 19);
+  const instant = new Date(`${day}T${clock}Z`);
+  if (!Number.isFinite(instant.getTime())) return null;
+  // Reject calendar or clock values the parser would roll over, such as 02-30 or 24:00.
+  if (instant.toISOString().slice(0, 19) !== `${day}T${clock}`) return null;
+  return `${day}T${clock}Z`;
 }
 
 function reachabilityFailure(error: unknown, signal?: AbortSignal) {
@@ -318,6 +338,7 @@ export function setup(ctx: IntegrationContext): void {
     if (!isRefreshEligible(itinerary) || !refreshSecret) return undefined;
     const id = randomUUID();
     const state: ReferenceRefreshState = { kind: "reference", request };
+    // Refresh-token session state, not cached upstream data.
     await ctx.cache.set(`transit-refresh:${id}`, state, refreshTtlSeconds);
     return signRefreshHandle(id, refreshSecret, Math.floor(Date.now() / 1000) + refreshTtlSeconds);
   }
@@ -341,6 +362,7 @@ export function setup(ctx: IntegrationContext): void {
       itineraryId: itinerary.id,
       request,
     };
+    // Refresh-token session state, not cached upstream data.
     await ctx.cache.set(`transit-refresh:${id}`, state, refreshTtlSeconds);
     return signRefreshHandle(id, refreshSecret, expiresAt);
   }
@@ -452,12 +474,9 @@ export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/stops/:id/transfers", async (req, reply) => {
     const stopId = req.params.id;
     const cacheKey = `stop-transfers:${stopId}`;
-    let env = (await ctx.cache.get(cacheKey)) as MobilityEnvelope<unknown> | null;
-    if (!env) {
-      const res = await orchestrator.getStopTransfers(stopId);
-      env = toEnvelope(res);
-      await ctx.cache.set(cacheKey, env, 3600);
-    }
+    const env = await ctx.cache.withCache(cacheKey, 3600, async () =>
+      toEnvelope(await orchestrator.getStopTransfers(stopId)),
+    );
     reply.header("Cache-Control", "public, max-age=600, s-maxage=3600");
     reply.send(env);
   });
@@ -671,15 +690,14 @@ export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/routes/:id", async (req, reply) => {
     const routeId = req.params.id;
     const cacheKey = `transit:route:${routeId}`;
-    let env = (await ctx.cache.get(cacheKey)) as MobilityEnvelope<unknown> | null;
-    if (!env) {
-      const res = await orchestrator.getRoute(routeId);
-      if (res.data) {
-        env = toEnvelope(res);
-        await ctx.cache.set(cacheKey, env, 3600);
-      }
-    }
-    if (!env?.data) {
+    const env = await ctx.cache.withCache(
+      cacheKey,
+      3600,
+      async () => toEnvelope(await orchestrator.getRoute(routeId)),
+      undefined,
+      (found) => Boolean(found.data),
+    );
+    if (!env.data) {
       reply.status(404).send({ error: "Route not found" });
       return;
     }
@@ -691,14 +709,13 @@ export function setup(ctx: IntegrationContext): void {
     const routeId = req.params.id;
     const hintStopId = scalarQueries(req.query).hint_stop_id || undefined;
     const cacheKey = `transit:route-stops:${routeId}:${hintStopId ?? ""}`;
-    let env = (await ctx.cache.get(cacheKey)) as MobilityEnvelope<unknown[]> | null;
-    if (!env) {
-      const res = await orchestrator.getRouteStops(routeId, hintStopId);
-      env = toEnvelope(res) as MobilityEnvelope<unknown[]>;
-      if (Array.isArray(env.data) && env.data.length > 0) {
-        await ctx.cache.set(cacheKey, env, 3600);
-      }
-    }
+    const env = await ctx.cache.withCache(
+      cacheKey,
+      3600,
+      async () => toEnvelope(await orchestrator.getRouteStops(routeId, hintStopId)),
+      undefined,
+      (stops) => Array.isArray(stops.data) && stops.data.length > 0,
+    );
     reply.send(env);
   });
 
@@ -785,20 +802,17 @@ export function setup(ctx: IntegrationContext): void {
       }
       const [fromLng, fromLat] = from;
       const [toLng, toLat] = to;
-      reply.header("Cache-Control", "private, max-age=60");
-      let date: string;
-      let time: string;
-      if (q.time?.includes("T")) {
-        const d = new Date(q.time);
-        date = d.toISOString().slice(0, 10);
-        time = d.toISOString().slice(11, 19);
-      } else {
-        date = q.date ?? utcDate();
-        time = q.time ? (q.time.split(":").length >= 3 ? q.time : `${q.time}:00`) : utcTime();
+      const when = planInstant(q.date, q.time);
+      if (!when) {
+        reply.status(400).send({
+          error:
+            "time must be an ISO 8601 date-time, or HH:MM[:SS] with an optional YYYY-MM-DD date",
+        });
+        return;
       }
+      reply.header("Cache-Control", "private, max-age=60");
       // `time` is an arrival deadline when arrive_by is set, otherwise a departure.
       const arriveBy = q.arrive_by === "true";
-      const when = `${date}T${time}Z`;
       const numItinerariesRaw = Number(q.num_itineraries);
       const numItineraries =
         Number.isFinite(numItinerariesRaw) && numItinerariesRaw > 0
@@ -1503,15 +1517,14 @@ export function setup(ctx: IntegrationContext): void {
     const nonEmptyFallbackIds = listQuery(req.query, "fallback_ids")?.filter((id) => id !== "");
     const fallbackIds = nonEmptyFallbackIds?.length ? nonEmptyFallbackIds : undefined;
     const cacheKey = `transit:vehicle-journey:${JSON.stringify([tripId, fallbackIds ?? []])}`;
-    let env = (await ctx.cache.get(cacheKey)) as MobilityEnvelope<VehicleJourney | null> | null;
-    if (!env) {
-      const res = await orchestrator.getVehicleJourney(tripId, fallbackIds);
-      if (res.data) {
-        env = toEnvelope(res);
-        await ctx.cache.set(cacheKey, env, 30);
-      }
-    }
-    if (!env?.data) {
+    const env = await ctx.cache.withCache(
+      cacheKey,
+      30,
+      async () => toEnvelope(await orchestrator.getVehicleJourney(tripId, fallbackIds)),
+      undefined,
+      (journey) => Boolean(journey.data),
+    );
+    if (!env.data) {
       reply.status(404).send({ error: "Vehicle journey not found" });
       return;
     }

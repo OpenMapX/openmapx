@@ -41,11 +41,18 @@ describe("ReviewCard image safety", () => {
     expect(markup).not.toContain('url("https://images.example/review.png")');
   });
 
-  it("drops a protocol-relative image instead of rendering it in CSS", () => {
-    const markup = renderReviewImage("//evil.example/x.png");
+  it("routes a protocol-relative review image through the backend proxy", () => {
+    const markup = renderReviewImage("//cdn.example/shared-review.png");
+
+    expect(markup).toContain("/api/image-proxy?url=https%3A%2F%2Fcdn.example%2Fshared-review.png");
+    expect(markup).not.toContain('url("//cdn.example');
+  });
+
+  it("drops a relative review image instead of rendering it in CSS", () => {
+    const markup = renderReviewImage("/uploads/review.png");
 
     expect(markup).not.toContain("background-image");
-    expect(markup).not.toContain("evil.example");
+    expect(markup).not.toContain("uploads/review.png");
   });
 
   it("drops a CSS-breakout image instead of serializing attacker CSS", () => {

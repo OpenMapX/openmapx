@@ -1,6 +1,7 @@
+import { DEFAULT_CATALOG_BRANCH } from "@openmapx/core/data-manager-contracts";
 import * as dm from "@openmapx/core/data-manager-sdk";
 import { envString } from "@openmapx/core/server-env";
-import { and, asc, count, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../db/index.js";
 import { dataManagerFeedState, dataManagerJobStages, dataManagerJobs } from "../db/schema.js";
@@ -31,6 +32,10 @@ import { registerDataManagerAdminRoute } from "./data-manager-admin-contract.js"
 const DATA_MANAGER_URL_DEFAULT = "http://localhost:4000";
 const DATA_MANAGER_PROXY_TIMEOUT_MS = 15_000;
 const DATA_MANAGER_PROXY_MAX_BYTES = 4 * 1024 * 1024;
+/** The job kind the durable transit pipeline writes for each sync. */
+const TRANSIT_SYNC_JOB_KIND = "transit-sync";
+/** Durable job states that have not finished yet. */
+const ACTIVE_JOB_STATUSES = ["queued", "running", "cancel_pending"];
 
 interface AuthResult {
   kind: "session" | "token" | "denied";
@@ -164,11 +169,21 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     const lock = await readLockSummary();
 
     const [lastJobRow, feedCountRow, regionRows, statusRows, currentRows] = await Promise.all([
+      // The last sync is the latest finished run; a queued or running job
+      // must not blank the previous result.
       db
         .select()
         .from(dataManagerJobs)
-        .where(eq(dataManagerJobs.kind, "transitous-sync"))
-        .orderBy(desc(dataManagerJobs.startedAt))
+        .where(
+          and(
+            eq(dataManagerJobs.kind, TRANSIT_SYNC_JOB_KIND),
+            notInArray(dataManagerJobs.status, ACTIVE_JOB_STATUSES),
+          ),
+        )
+        .orderBy(
+          sql`${dataManagerJobs.finishedAt} desc nulls last`,
+          desc(dataManagerJobs.startedAt),
+        )
         .limit(1),
       db.select({ total: count() }).from(dataManagerFeedState),
       db
@@ -183,7 +198,10 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
         .select()
         .from(dataManagerJobs)
         .where(
-          and(eq(dataManagerJobs.kind, "transitous-sync"), eq(dataManagerJobs.status, "running")),
+          and(
+            eq(dataManagerJobs.kind, TRANSIT_SYNC_JOB_KIND),
+            inArray(dataManagerJobs.status, ACTIVE_JOB_STATUSES),
+          ),
         )
         .orderBy(desc(dataManagerJobs.startedAt))
         .limit(1),
@@ -202,7 +220,7 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
       transitousLockedAt: lock.lockedAt,
       transitousLockedBy: lock.lockedBy,
       lastSyncAt: lastJob?.finishedAt ? lastJob.finishedAt.toISOString() : null,
-      lastSyncStatus: lastJob && lastJob.status !== "running" ? lastJob.status : null,
+      lastSyncStatus: lastJob?.status ?? null,
       currentJob: current
         ? { jobId: current.id, startedAt: current.startedAt.toISOString() }
         : null,
@@ -252,7 +270,7 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
   registerDataManagerAdminRoute(app, "getApiDataManagerTransitJobs", async (req) => {
     const limit = req.query.limit ?? 50;
     const offset = req.query.offset ?? 0;
-    const kind = req.query.kind ?? "transitous-sync";
+    const kind = req.query.kind ?? TRANSIT_SYNC_JOB_KIND;
 
     const [jobs, [totalRow]] = await Promise.all([
       db
@@ -517,7 +535,7 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
       const auth = await authenticateDataManager(req);
 
       const body = req.body ?? {};
-      const branch = body.branch?.trim() || "main";
+      const branch = body.branch?.trim() || DEFAULT_CATALOG_BRANCH;
       if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/.test(branch) || branch.includes("..")) {
         return reply.code(400).send({ error: "Invalid Transitous branch name" });
       }

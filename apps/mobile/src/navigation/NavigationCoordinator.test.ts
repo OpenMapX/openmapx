@@ -1062,3 +1062,42 @@ it("updates hosted captures without resurrecting an itinerary refresh handle", a
   expect(updated.payload.refresh.status).toBe("ready");
   await context.close();
 });
+
+describe("NavigationCoordinator settings changes", () => {
+  it("applies the patch on top of a revision committed by a writer outside the queue", async () => {
+    const context = await harness();
+    const { sessionId } = await running(context);
+    const swap = context.repository.compareAndSwap.bind(context.repository);
+    let interleaved = false;
+    jest.spyOn(context.repository, "compareAndSwap").mockImplementation(async (...args) => {
+      if (!interleaved) {
+        interleaved = true;
+        // Another writer commits progress between the read and the swap.
+        const current = await context.repository.loadActive(NOW);
+        if (!current) throw new Error("Missing session");
+        await swap(
+          current.sessionId,
+          current.revision,
+          (session) => ({ session: { ...session, revision: session.revision + 1 } }),
+          NOW,
+        );
+      }
+      return swap(...args);
+    });
+
+    const response = await context.coordinator.dispatch(
+      cmd("settings.update", { voiceEnabled: false, keepScreenOn: false }, { sessionId }),
+    );
+
+    expect(code(response)).toBe("snapshot.update");
+    const session = await context.repository.loadActive(NOW);
+    if (session?.kind !== "ground") throw new Error("Missing session");
+    expect(session.revision).toBe(4);
+    expect(session.payload.startPackage.settings).toMatchObject({
+      voiceEnabled: false,
+      keepScreenOn: false,
+    });
+    expect(context.effectLog).toContain("audio.stop");
+    await context.close();
+  });
+});

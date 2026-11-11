@@ -6,7 +6,7 @@ import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 import { formatDuration, formatMeasurementDistance } from "@openmapx/core";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 
@@ -42,6 +42,7 @@ export function NavBottomBar({
   secondary,
 }: Props) {
   const t = useTranslations("navigation");
+  const locale = useLocale();
   const fmt = useDateTimeFormat();
   // Just the arrival time — no "ETA"/"Ankunft" label, to keep the bar terse.
   const etaTime = fmt.time(etaEpochMs);
@@ -77,7 +78,7 @@ export function NavBottomBar({
         aria-live="polite"
       >
         <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.15 }}>
-          {formatDuration(durationRemaining)}
+          {formatDuration(durationRemaining, locale)}
         </Typography>
         <Typography variant="body2" color="text.secondary" noWrap>
           {secondaryLine}

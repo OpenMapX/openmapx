@@ -6,7 +6,7 @@ import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import { formatDuration } from "@openmapx/core";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 
 /**
@@ -22,6 +22,7 @@ export function TransitArrivalCard({
   onClose: () => void;
 }) {
   const t = useTranslations("navigation");
+  const locale = useLocale();
   const fmt = useDateTimeFormat();
   const destination = itinerary.legs[itinerary.legs.length - 1]?.to.name;
 
@@ -35,7 +36,7 @@ export function TransitArrivalCard({
         </Typography>
       )}
       <Typography variant="body2" color="text.secondary">
-        {formatDuration(itinerary.duration)} · {fmt.time(itinerary.endTime)}
+        {formatDuration(itinerary.duration, locale)} · {fmt.time(itinerary.endTime)}
       </Typography>
       <Button variant="contained" onClick={onClose} sx={{ mt: 1 }}>
         {t("done")}

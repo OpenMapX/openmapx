@@ -6,6 +6,12 @@ import {
   productToMode,
   USER_AGENT,
 } from "@openmapx/core";
+import {
+  ProviderInputError,
+  ProviderTimeoutError,
+  parseProviderPayload,
+  parseProviderRecords,
+} from "@openmapx/integration-framework";
 import { upstreamDataAsOf } from "@openmapx/mobility-core/freshness";
 import type {
   Departure,
@@ -20,26 +26,13 @@ import type {
   VehicleJourneyStop,
   VehiclePosition,
 } from "@openmapx/mobility-core/transit";
-import { createCachedHafasClient } from "cached-hafas-client";
-import { createRedisStore } from "cached-hafas-client/stores/redis.js";
 import { createClient } from "hafas-client";
+import { z } from "zod";
 import type { ProtocolAdapter } from "./adapter-types";
 import type { RegistryEntry } from "./registry-types";
 import { registryEndpointIsUsable } from "./validate-endpoint";
 
 const TIMEOUT_MS = 8_000;
-
-/** Injectable Redis instance for cached-hafas-client. Set via setRedis(). */
-// biome-ignore lint/suspicious/noExplicitAny: Redis client type varies
-let _redis: any = null;
-// biome-ignore lint/suspicious/noExplicitAny: cached-hafas-client store
-let _redisStore: any = null;
-
-// biome-ignore lint/suspicious/noExplicitAny: Redis client type varies
-export function setRedis(redis: any): void {
-  _redis = redis;
-  _redisStore = redis ? createRedisStore(redis) : null;
-}
 
 // Mode mappings
 
@@ -143,26 +136,9 @@ function buildProfile(entry: RegistryEntry): Record<string, any> {
   return profile;
 }
 
-// Client cache
-
-// biome-ignore lint/suspicious/noExplicitAny: hafas-client client type
-const clientCache = new Map<string, any>();
-
-// biome-ignore lint/suspicious/noExplicitAny: hafas-client client type
-function getClient(entry: RegistryEntry): any {
-  let client = clientCache.get(entry.id);
-  if (!client) {
-    const profile = buildProfile(entry);
-    const rawClient = createClient(profile, USER_AGENT);
-    client = _redisStore ? createCachedHafasClient(rawClient, _redisStore) : rawClient;
-    clientCache.set(entry.id, client);
-  }
-  return client;
-}
-
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("timeout")), ms);
+    const timer = setTimeout(() => reject(new ProviderTimeoutError()), ms);
     promise.then(
       (v) => {
         clearTimeout(timer);
@@ -184,16 +160,83 @@ function rawId(stopId: string, entry: RegistryEntry): string {
 
 // Normalisation helpers
 
-// biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF stop
-function normalizeStop(s: any, entry: RegistryEntry): TransitStop {
+/** FPTF stop and station fields the adapter maps; a stop needs real coordinates. */
+const fptfStopSchema = z.object({
+  type: z.string().optional(),
+  id: z.string().min(1),
+  name: z.string().nullish(),
+  location: z.object({
+    latitude: z.number().finite().min(-90).max(90),
+    longitude: z.number().finite().min(-180).max(180),
+  }),
+  products: z.record(z.string(), z.boolean()).nullish(),
+});
+type FptfStop = z.infer<typeof fptfStopSchema>;
+
+const isoInstant = z.iso.datetime({ offset: true });
+
+/**
+ * A departure needs a planned or current time; the rest passes through to the
+ * shared FPTF mapper, which reads optional line, platform and remark fields.
+ */
+const fptfDepartureSchema = z
+  .looseObject({
+    tripId: z.string().nullish(),
+    plannedWhen: isoInstant.nullish(),
+    when: isoInstant.nullish(),
+    delay: z.number().finite().nullish(),
+  })
+  .refine((departure) => Boolean(departure.plannedWhen || departure.when), {
+    message: "departure has no time",
+    path: ["plannedWhen"],
+  });
+
+const fptfBoardSchema = z.union([
+  z.array(z.unknown()),
+  z.object({ departures: z.array(z.unknown()) }).transform((board) => board.departures),
+  z.object({ arrivals: z.array(z.unknown()) }).transform((board) => board.arrivals),
+]);
+
+function normalizeStop(s: FptfStop, entry: RegistryEntry): TransitStop {
   return {
     id: `${entry.prefix}${s.id}`,
     name: s.name ?? "Unknown",
-    lat: s.location?.latitude ?? 0,
-    lng: s.location?.longitude ?? 0,
-    modes: mapProducts(s.products),
+    lat: s.location.latitude,
+    lng: s.location.longitude,
+    modes: mapProducts(s.products ?? undefined),
     provider: entry.slug,
   };
+}
+
+function parseStops(raw: unknown, entry: RegistryEntry, what: string): TransitStop[] {
+  const results = parseProviderPayload(z.array(z.unknown()), raw, `HAFAS ${what}`);
+  return parseProviderRecords(fptfStopSchema, results, `HAFAS ${what}`).map((s) =>
+    normalizeStop(s, entry),
+  );
+}
+
+function parseBoard(raw: unknown, entry: RegistryEntry, what: string): Departure[] {
+  const records = parseProviderPayload(fptfBoardSchema, raw, `HAFAS ${what}`);
+  return parseProviderRecords(fptfDepartureSchema, records, `HAFAS ${what}`).map((d) =>
+    normalizeDeparture(d, entry),
+  );
+}
+
+/** Keep the library's error code on the cause, where provider health reads it. */
+function unavailable(what: string, error: unknown): Error {
+  return new Error(`HAFAS ${what} unavailable`, { cause: error });
+}
+
+/**
+ * A board is keyed by a stop id the caller supplied, so HAFAS's NOT_FOUND
+ * (unknown stop) or INVALID_REQUEST (a malformed stop id, HAFAS `PARAMETER`)
+ * there is bad caller input, not a provider failure.
+ */
+function boardUnavailable(error: unknown): Error {
+  const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+  return code === "NOT_FOUND" || code === "INVALID_REQUEST"
+    ? new ProviderInputError("Unknown HAFAS stop identifier", { cause: error })
+    : unavailable("timetable", error);
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF remark
@@ -274,332 +317,348 @@ function legToTripLeg(leg: any, entry: RegistryEntry): TripLeg {
 
 // Adapter
 
-export const hafasMgateAdapter: ProtocolAdapter = {
-  async getStopsNearby(entry, lat, lng, radiusMeters) {
-    try {
-      const client = getClient(entry);
-      const results = await withTimeout(
-        client.nearby(
-          { type: "location", latitude: lat, longitude: lng },
-          { results: 30, distance: Math.round(radiusMeters) },
-        ),
-        TIMEOUT_MS,
-      );
-      // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF response
-      return (results as any[]).map((s: any) => normalizeStop(s, entry));
-    } catch {
-      return [];
+/**
+ * A HAFAS adapter that owns its library clients. Create one per setup
+ * generation: a reload builds new clients from the new registry entries, and a
+ * retired generation's clients go with it.
+ */
+export function createHafasMgateAdapter(): ProtocolAdapter {
+  // biome-ignore lint/suspicious/noExplicitAny: hafas-client client type
+  const clients = new WeakMap<RegistryEntry, any>();
+  // biome-ignore lint/suspicious/noExplicitAny: hafas-client client type
+  function getClient(entry: RegistryEntry): any {
+    let client = clients.get(entry);
+    if (!client) {
+      client = createClient(buildProfile(entry), USER_AGENT);
+      clients.set(entry, client);
     }
-  },
+    return client;
+  }
 
-  async getStopById(entry, stopId) {
-    try {
-      const client = getClient(entry);
-      // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF stop
-      const result = (await withTimeout(client.stop(rawId(stopId, entry)), TIMEOUT_MS)) as any;
-      if (!result) return null;
-      return normalizeStop(result, entry);
-    } catch {
-      return null;
-    }
-  },
+  return {
+    async getStopsNearby(entry, lat, lng, radiusMeters) {
+      let results: unknown;
+      try {
+        results = await withTimeout(
+          getClient(entry).nearby(
+            { type: "location", latitude: lat, longitude: lng },
+            { results: 30, distance: Math.round(radiusMeters) },
+          ),
+          TIMEOUT_MS,
+        );
+      } catch (error) {
+        // A failed lookup must not read as "no stops here".
+        throw unavailable("nearby stops", error);
+      }
+      return parseStops(results, entry, "nearby stops");
+    },
 
-  async getDepartures(entry, stopId, minutes) {
-    try {
-      const client = getClient(entry);
-      const result = await withTimeout(
-        client.departures(rawId(stopId, entry), {
-          duration: minutes,
-          results: Math.min(500, Math.max(50, minutes * 3)),
-          remarks: true,
-        }),
-        TIMEOUT_MS,
-      );
-      // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF response
-      const deps = (result as any).departures ?? result;
-      if (!Array.isArray(deps)) throw new Error("malformed departures response");
+    async getStopById(entry, stopId) {
+      try {
+        const client = getClient(entry);
+        const result = await withTimeout(client.stop(rawId(stopId, entry)), TIMEOUT_MS);
+        if (!result) return null;
+        return normalizeStop(parseProviderPayload(fptfStopSchema, result, "HAFAS stop"), entry);
+      } catch {
+        return null;
+      }
+    },
+
+    async getDepartures(entry, stopId, minutes) {
+      let result: unknown;
+      try {
+        result = await withTimeout(
+          getClient(entry).departures(rawId(stopId, entry), {
+            duration: minutes,
+            results: Math.min(500, Math.max(50, minutes * 3)),
+            remarks: true,
+          }),
+          TIMEOUT_MS,
+        );
+      } catch (error) {
+        // A failed board must not read as "no departures".
+        throw boardUnavailable(error);
+      }
+      const departures = parseBoard(result, entry, "timetable");
       // HAFAS's planrtTS: the latest realtime update in this answer. A cached answer has none.
       const dataAsOf = upstreamDataAsOf(
-        (result as { realtimeDataUpdatedAt?: number | null }).realtimeDataUpdatedAt,
+        (result as { realtimeDataUpdatedAt?: number | null } | null)?.realtimeDataUpdatedAt,
       );
-      return {
-        // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF departure
-        departures: deps.map((d: any) => normalizeDeparture(d, entry)),
-        ...(dataAsOf ? { dataAsOf } : {}),
-      };
-    } catch {
-      // A failed board must not read as "no departures".
-      throw new Error("HAFAS timetable unavailable");
-    }
-  },
+      return { departures, ...(dataAsOf ? { dataAsOf } : {}) };
+    },
 
-  async getArrivals(entry, stopId, minutes) {
-    try {
-      const client = getClient(entry);
-      const result = await withTimeout(
-        client.arrivals(rawId(stopId, entry), {
-          duration: minutes,
-          results: Math.min(500, Math.max(50, minutes * 3)),
-          remarks: true,
-        }),
-        TIMEOUT_MS,
-      );
-      // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF response
-      const arrs = (result as any).arrivals ?? result;
-      if (!Array.isArray(arrs)) throw new Error("malformed arrivals response");
-      const dataAsOf = upstreamDataAsOf(
-        (result as { realtimeDataUpdatedAt?: number | null }).realtimeDataUpdatedAt,
-      );
-      return {
-        // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF departure
-        departures: arrs.map((d: any) => normalizeDeparture(d, entry)),
-        ...(dataAsOf ? { dataAsOf } : {}),
-      };
-    } catch {
-      // A failed board must not read as "no departures".
-      throw new Error("HAFAS timetable unavailable");
-    }
-  },
-
-  async searchByName(entry, query, limit) {
-    try {
-      const client = getClient(entry);
-      const results = await withTimeout(
-        client.locations(query, {
-          results: limit,
-          stops: true,
-          addresses: false,
-          poi: false,
-        }),
-        TIMEOUT_MS,
-      );
-      // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF response
-      return (results as any[])
-        .filter((s) => s.type === "stop" || s.type === "station")
-        .map((s) => normalizeStop(s, entry));
-    } catch {
-      // A failed search must not read as "no stop by that name".
-      throw new Error("HAFAS stop search unavailable");
-    }
-  },
-
-  async getAlerts(entry, params) {
-    try {
-      const client = getClient(entry);
-      // client.remarks() fetches all regional service alerts known to the endpoint.
-      // Not all HAFAS endpoints support this method — the catch handles that.
-      // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF remarks response
-      const result = (await withTimeout(client.remarks(), TIMEOUT_MS)) as any;
-      // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF remark
-      const remarks: any[] = result?.remarks ?? (Array.isArray(result) ? result : []);
-
-      const filterRouteId = params?.routeId ? rawId(params.routeId, entry) : undefined;
-
-      return remarks
-        .filter((r) => {
-          if (r.type !== "warning") return false;
-          // If a routeId filter is requested, only include alerts affecting that line
-          if (filterRouteId && Array.isArray(r.affectedLines) && r.affectedLines.length > 0) {
-            return r.affectedLines.some(
-              // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF line
-              (l: any) => l.id === filterRouteId || l.fahrtNr === filterRouteId,
-            );
-          }
-          return true;
-        })
-        .map(
-          // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF remark
-          (r: any): ServiceAlert => ({
-            // Prefer the server-assigned ID; fall back to a hash of the text
-            id: r.id ?? `${entry.slug}:${(r.summary ?? r.text ?? "").slice(0, 40)}`,
-            providers: [entry.slug],
-            // HAFAS priority: lower number = higher priority. Treat priority < 50 as severe.
-            severity: typeof r.priority === "number" && r.priority < 50 ? "severe" : "warning",
-            title: r.summary ?? (r.text ?? "").slice(0, 120),
-            description: r.text,
-            affectedRouteIds: (r.affectedLines ?? [])
-              // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF line
-              .map((l: any) => {
-                const id = l.id ?? l.fahrtNr ?? "";
-                return id ? `${entry.prefix}${id}` : "";
-              })
-              .filter(Boolean),
-            affectedStopIds: [],
-            activePeriods: r.validFrom
-              ? [{ start: r.validFrom as string, end: r.validUntil as string | undefined }]
-              : [],
-          }),
-        );
-    } catch {
-      return [];
-    }
-  },
-
-  async getTrip(entry, tripId): Promise<VehicleJourney | null> {
-    try {
-      const client = getClient(entry);
-      const raw = rawId(tripId, entry);
-      const data = (await withTimeout(
-        client.trip(raw, { stopovers: true, remarks: true }),
-        TIMEOUT_MS,
-        // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF response
-      )) as any;
-      const trip = data?.trip ?? data;
-      if (!trip) return null;
-      // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF stopover
-      const stopovers: any[] = trip.stopovers ?? [];
-      const stops: VehicleJourneyStop[] = stopovers.map(
-        // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF stopover
-        (s: any): VehicleJourneyStop => ({
-          stopId: `${entry.prefix}${s.stop?.id ?? ""}`,
-          name: s.stop?.name ?? "",
-          lat: s.stop?.location?.latitude ?? 0,
-          lng: s.stop?.location?.longitude ?? 0,
-          platform: s.platform ?? s.plannedPlatform ?? undefined,
-          scheduledPlatform: s.plannedPlatform ?? undefined,
-          scheduledArrival: s.plannedArrival ?? undefined,
-          scheduledDeparture: s.plannedDeparture ?? undefined,
-          expectedArrival: s.arrival ?? undefined,
-          expectedDeparture: s.departure ?? undefined,
-          delaySeconds:
-            typeof s.arrivalDelay === "number"
-              ? s.arrivalDelay
-              : typeof s.departureDelay === "number"
-                ? s.departureDelay
-                : undefined,
-          canceled: s.cancelled ?? false,
-          departed: s.departure != null && new Date(s.departure).getTime() < Date.now(),
-        }),
-      );
-      const remarks: TripRemark[] | undefined =
-        Array.isArray(trip.remarks) && trip.remarks.length > 0
-          ? trip.remarks.map(mapRemark).filter((r: TripRemark) => r.text.length > 0)
-          : undefined;
-      return {
-        id: `${entry.prefix}${trip.id ?? raw}`,
-        name: (trip.line?.name ? fptfLineName(trip.line).name : undefined) ?? trip.direction ?? "",
-        provider: entry.slug,
-        remarks: remarks?.length ? remarks : undefined,
-        stops,
-      };
-    } catch {
-      return null;
-    }
-  },
-
-  async getVehicleRadar(entry, bbox) {
-    try {
-      const client = getClient(entry);
-      const [west, south, east, north] = bbox as BBox;
-      const rawRadarResult = await withTimeout(
-        client.radar(
-          { north, west, south, east },
-          // duration:30 computes one position snapshot 30 s ahead; frames:1 keeps payload small
-          { results: 256, duration: 30, frames: 1 },
-        ),
-        TIMEOUT_MS,
-      );
-      // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF radar response
-      const result = rawRadarResult as any;
-      // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF movement
-      const movements: any[] = result?.movements ?? [];
-      return movements
-        .filter((m) => m.location?.latitude != null && m.location?.longitude != null)
-        .map(
-          // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF movement
-          (m: any, idx: number): VehiclePosition => ({
-            id: `${entry.prefix}${m.tripId ?? m.trip ?? `r${idx}`}`,
-            provider: entry.slug,
-            tripId:
-              m.tripId != null
-                ? `${entry.prefix}${m.tripId}`
-                : m.trip != null
-                  ? `${entry.prefix}${m.trip}`
-                  : undefined,
-            routeId: m.line?.id ? `${entry.prefix}${m.line.id}` : undefined,
-            lat: m.location.latitude as number,
-            lng: m.location.longitude as number,
-            // HAFAS does not return bearing or speed in the radar response
-            label: (m.line?.name ? fptfLineName(m.line).name : undefined) ?? m.direction,
-            currentStopId: m.nextStopovers?.[0]?.stop?.id
-              ? `${entry.prefix}${m.nextStopovers[0].stop.id as string}`
-              : undefined,
-            updatedAt: new Date().toISOString(),
-          }),
-        );
-    } catch {
-      return [];
-    }
-  },
-
-  async planJourney(entry, fromLat, fromLng, toLat, toLng, date, time, arriveBy, numItineraries) {
-    try {
-      const client = getClient(entry);
-      const dt = new Date(`${date}T${time}Z`);
-      const result = await withTimeout(
-        client.journeys(
-          { type: "location", address: "Origin", latitude: fromLat, longitude: fromLng },
-          { type: "location", address: "Destination", latitude: toLat, longitude: toLng },
-          {
-            ...(arriveBy ? { arrival: dt } : { departure: dt }),
-            results: numItineraries ?? 3,
-            stopovers: true,
-            polylines: true,
+    async getArrivals(entry, stopId, minutes) {
+      let result: unknown;
+      try {
+        result = await withTimeout(
+          getClient(entry).arrivals(rawId(stopId, entry), {
+            duration: minutes,
+            results: Math.min(500, Math.max(50, minutes * 3)),
             remarks: true,
+          }),
+          TIMEOUT_MS,
+        );
+      } catch (error) {
+        // A failed board must not read as "no departures".
+        throw boardUnavailable(error);
+      }
+      const departures = parseBoard(result, entry, "arrivals");
+      const dataAsOf = upstreamDataAsOf(
+        (result as { realtimeDataUpdatedAt?: number | null } | null)?.realtimeDataUpdatedAt,
+      );
+      return { departures, ...(dataAsOf ? { dataAsOf } : {}) };
+    },
+
+    async searchByName(entry, query, limit) {
+      let results: unknown;
+      try {
+        results = await withTimeout(
+          getClient(entry).locations(query, {
+            results: limit,
+            stops: true,
+            addresses: false,
+            poi: false,
+          }),
+          TIMEOUT_MS,
+        );
+      } catch (error) {
+        // A failed search must not read as "no stop by that name".
+        throw unavailable("stop search", error);
+      }
+      const locations = parseProviderPayload(z.array(z.unknown()), results, "HAFAS stop search");
+      const stops = locations.filter(
+        (location) =>
+          typeof location === "object" &&
+          location !== null &&
+          "type" in location &&
+          (location.type === "stop" || location.type === "station"),
+      );
+      return parseProviderRecords(fptfStopSchema, stops, "HAFAS stop search").map((s) =>
+        normalizeStop(s, entry),
+      );
+    },
+
+    async getAlerts(entry, params) {
+      try {
+        const client = getClient(entry);
+        // client.remarks() fetches all regional service alerts known to the endpoint.
+        // Not all HAFAS endpoints support this method — the catch handles that.
+        // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF remarks response
+        const result = (await withTimeout(client.remarks(), TIMEOUT_MS)) as any;
+        // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF remark
+        const remarks: any[] = result?.remarks ?? (Array.isArray(result) ? result : []);
+
+        const filterRouteId = params?.routeId ? rawId(params.routeId, entry) : undefined;
+
+        return remarks
+          .filter((r) => {
+            if (r.type !== "warning") return false;
+            // If a routeId filter is requested, only include alerts affecting that line
+            if (filterRouteId && Array.isArray(r.affectedLines) && r.affectedLines.length > 0) {
+              return r.affectedLines.some(
+                // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF line
+                (l: any) => l.id === filterRouteId || l.fahrtNr === filterRouteId,
+              );
+            }
+            return true;
+          })
+          .map(
+            // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF remark
+            (r: any): ServiceAlert => ({
+              // Prefer the server-assigned ID; fall back to a hash of the text
+              id: r.id ?? `${entry.slug}:${(r.summary ?? r.text ?? "").slice(0, 40)}`,
+              providers: [entry.slug],
+              // HAFAS priority: lower number = higher priority. Treat priority < 50 as severe.
+              severity: typeof r.priority === "number" && r.priority < 50 ? "severe" : "warning",
+              title: r.summary ?? (r.text ?? "").slice(0, 120),
+              description: r.text,
+              affectedRouteIds: (r.affectedLines ?? [])
+                // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF line
+                .map((l: any) => {
+                  const id = l.id ?? l.fahrtNr ?? "";
+                  return id ? `${entry.prefix}${id}` : "";
+                })
+                .filter(Boolean),
+              affectedStopIds: [],
+              activePeriods: r.validFrom
+                ? [{ start: r.validFrom as string, end: r.validUntil as string | undefined }]
+                : [],
+            }),
+          );
+      } catch {
+        return [];
+      }
+    },
+
+    async getTrip(entry, tripId): Promise<VehicleJourney | null> {
+      try {
+        const client = getClient(entry);
+        const raw = rawId(tripId, entry);
+        const data = (await withTimeout(
+          client.trip(raw, { stopovers: true, remarks: true }),
+          TIMEOUT_MS,
+          // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF response
+        )) as any;
+        const trip = data?.trip ?? data;
+        if (!trip) return null;
+        // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF stopover
+        const stopovers: any[] = trip.stopovers ?? [];
+        const stops: VehicleJourneyStop[] = stopovers.map(
+          // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF stopover
+          (s: any): VehicleJourneyStop => ({
+            stopId: `${entry.prefix}${s.stop?.id ?? ""}`,
+            name: s.stop?.name ?? "",
+            lat: s.stop?.location?.latitude ?? 0,
+            lng: s.stop?.location?.longitude ?? 0,
+            platform: s.platform ?? s.plannedPlatform ?? undefined,
+            scheduledPlatform: s.plannedPlatform ?? undefined,
+            scheduledArrival: s.plannedArrival ?? undefined,
+            scheduledDeparture: s.plannedDeparture ?? undefined,
+            expectedArrival: s.arrival ?? undefined,
+            expectedDeparture: s.departure ?? undefined,
+            delaySeconds:
+              typeof s.arrivalDelay === "number"
+                ? s.arrivalDelay
+                : typeof s.departureDelay === "number"
+                  ? s.departureDelay
+                  : undefined,
+            canceled: s.cancelled ?? false,
+            departed: s.departure != null && new Date(s.departure).getTime() < Date.now(),
+          }),
+        );
+        const remarks: TripRemark[] | undefined =
+          Array.isArray(trip.remarks) && trip.remarks.length > 0
+            ? trip.remarks.map(mapRemark).filter((r: TripRemark) => r.text.length > 0)
+            : undefined;
+        return {
+          id: `${entry.prefix}${trip.id ?? raw}`,
+          name:
+            (trip.line?.name ? fptfLineName(trip.line).name : undefined) ?? trip.direction ?? "",
+          provider: entry.slug,
+          remarks: remarks?.length ? remarks : undefined,
+          stops,
+        };
+      } catch {
+        return null;
+      }
+    },
+
+    async getVehicleRadar(entry, bbox) {
+      try {
+        const client = getClient(entry);
+        const [west, south, east, north] = bbox as BBox;
+        const rawRadarResult = await withTimeout(
+          client.radar(
+            { north, west, south, east },
+            // duration:30 computes one position snapshot 30 s ahead; frames:1 keeps payload small
+            { results: 256, duration: 30, frames: 1 },
+          ),
+          TIMEOUT_MS,
+        );
+        // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF radar response
+        const result = rawRadarResult as any;
+        // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF movement
+        const movements: any[] = result?.movements ?? [];
+        return movements
+          .filter((m) => m.location?.latitude != null && m.location?.longitude != null)
+          .map(
+            // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF movement
+            (m: any, idx: number): VehiclePosition => ({
+              id: `${entry.prefix}${m.tripId ?? m.trip ?? `r${idx}`}`,
+              provider: entry.slug,
+              tripId:
+                m.tripId != null
+                  ? `${entry.prefix}${m.tripId}`
+                  : m.trip != null
+                    ? `${entry.prefix}${m.trip}`
+                    : undefined,
+              routeId: m.line?.id ? `${entry.prefix}${m.line.id}` : undefined,
+              lat: m.location.latitude as number,
+              lng: m.location.longitude as number,
+              // HAFAS does not return bearing or speed in the radar response
+              label: (m.line?.name ? fptfLineName(m.line).name : undefined) ?? m.direction,
+              currentStopId: m.nextStopovers?.[0]?.stop?.id
+                ? `${entry.prefix}${m.nextStopovers[0].stop.id as string}`
+                : undefined,
+              updatedAt: new Date().toISOString(),
+            }),
+          );
+      } catch {
+        return [];
+      }
+    },
+
+    async planJourney(entry, fromLat, fromLng, toLat, toLng, date, time, arriveBy, numItineraries) {
+      try {
+        const client = getClient(entry);
+        const dt = new Date(`${date}T${time}Z`);
+        const result = await withTimeout(
+          client.journeys(
+            { type: "location", address: "Origin", latitude: fromLat, longitude: fromLng },
+            { type: "location", address: "Destination", latitude: toLat, longitude: toLng },
+            {
+              ...(arriveBy ? { arrival: dt } : { departure: dt }),
+              results: numItineraries ?? 3,
+              stopovers: true,
+              polylines: true,
+              remarks: true,
+            },
+          ),
+          TIMEOUT_MS,
+        );
+
+        // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF response
+        const journeys = (result as any).journeys ?? [];
+        if (!journeys.length) return null;
+
+        const itineraries: TripItinerary[] = journeys.map(
+          // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF journey
+          (j: any): TripItinerary => {
+            const rawLegs = j.legs ?? [];
+            // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF leg
+            const legs: TripLeg[] = rawLegs.map((l: any) => legToTripLeg(l, entry));
+            const startTime = legs[0]?.startTime ?? "";
+            const endTime = legs[legs.length - 1]?.endTime ?? "";
+            const durationMs =
+              startTime && endTime
+                ? new Date(endTime).getTime() - new Date(startTime).getTime()
+                : 0;
+            const transfers = Math.max(0, legs.filter((l) => l.route !== undefined).length - 1);
+            // Walk distance: use the distance field from raw legs
+            const walkDistance = (rawLegs as Array<{ walking?: boolean; distance?: number }>)
+              .filter((l) => l.walking === true)
+              .reduce((sum, l) => sum + (l.distance ?? 0), 0);
+            return {
+              duration: Math.round(durationMs / 1000),
+              startTime,
+              endTime,
+              transfers,
+              walkDistance: Math.round(walkDistance),
+              legs,
+            };
           },
-        ),
-        TIMEOUT_MS,
-      );
+        );
 
-      // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF response
-      const journeys = (result as any).journeys ?? [];
-      if (!journeys.length) return null;
+        const firstLeg = itineraries[0]?.legs[0];
+        const lastItinerary = itineraries[0];
+        const lastLeg = lastItinerary?.legs[lastItinerary.legs.length - 1];
 
-      const itineraries: TripItinerary[] = journeys.map(
-        // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF journey
-        (j: any): TripItinerary => {
-          const rawLegs = j.legs ?? [];
-          // biome-ignore lint/suspicious/noExplicitAny: hafas-client FPTF leg
-          const legs: TripLeg[] = rawLegs.map((l: any) => legToTripLeg(l, entry));
-          const startTime = legs[0]?.startTime ?? "";
-          const endTime = legs[legs.length - 1]?.endTime ?? "";
-          const durationMs =
-            startTime && endTime ? new Date(endTime).getTime() - new Date(startTime).getTime() : 0;
-          const transfers = Math.max(0, legs.filter((l) => l.route !== undefined).length - 1);
-          // Walk distance: use the distance field from raw legs
-          const walkDistance = (rawLegs as Array<{ walking?: boolean; distance?: number }>)
-            .filter((l) => l.walking === true)
-            .reduce((sum, l) => sum + (l.distance ?? 0), 0);
-          return {
-            duration: Math.round(durationMs / 1000),
-            startTime,
-            endTime,
-            transfers,
-            walkDistance: Math.round(walkDistance),
-            legs,
-          };
-        },
-      );
-
-      const firstLeg = itineraries[0]?.legs[0];
-      const lastItinerary = itineraries[0];
-      const lastLeg = lastItinerary?.legs[lastItinerary.legs.length - 1];
-
-      return {
-        from: {
-          name: firstLeg?.from.name ?? "",
-          lat: firstLeg?.from.lat ?? fromLat,
-          lng: firstLeg?.from.lng ?? fromLng,
-        },
-        to: {
-          name: lastLeg?.to.name ?? "",
-          lat: lastLeg?.to.lat ?? toLat,
-          lng: lastLeg?.to.lng ?? toLng,
-        },
-        itineraries,
-      };
-    } catch {
-      return null;
-    }
-  },
-};
+        return {
+          from: {
+            name: firstLeg?.from.name ?? "",
+            lat: firstLeg?.from.lat ?? fromLat,
+            lng: firstLeg?.from.lng ?? fromLng,
+          },
+          to: {
+            name: lastLeg?.to.name ?? "",
+            lat: lastLeg?.to.lat ?? toLat,
+            lng: lastLeg?.to.lng ?? toLng,
+          },
+          itineraries,
+        };
+      } catch {
+        return null;
+      }
+    },
+  };
+}

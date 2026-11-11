@@ -14,7 +14,7 @@ import {
   apiClient,
   fetchTransitPlan,
   formatDuration,
-  formatMeasurementDistance,
+  formatOverviewDistance,
   haversineDistance,
   useNavigationStore,
   useSettingsStore,
@@ -235,7 +235,7 @@ export function TransitAlternativesDialog({
                   {fmt.time(trip.startTime)} – {fmt.time(trip.endTime)}
                 </Typography>
                 <Typography variant="body1" sx={{ fontWeight: 700 }}>
-                  {formatDuration(trip.duration)}
+                  {formatDuration(trip.duration, locale)}
                 </Typography>
               </Box>
               <Box
@@ -257,7 +257,7 @@ export function TransitAlternativesDialog({
                   <Typography variant="caption" color="text.secondary">
                     ·{" "}
                     {td("walkDistance", {
-                      distance: formatMeasurementDistance(trip.walkDistance, units),
+                      distance: formatOverviewDistance(trip.walkDistance, units),
                     })}
                   </Typography>
                 )}

@@ -1,10 +1,12 @@
-import { defineTransitProvider, type IntegrationContext } from "@openmapx/integration-framework";
+import {
+  defineTransitProvider,
+  type IntegrationContext,
+  isTransitModeRestriction,
+} from "@openmapx/integration-framework";
 import * as irail from "./provider.js";
 
-const { attribution, wrap, wrapRT, init } = defineTransitProvider();
-
 export function setup(ctx: IntegrationContext): void {
-  init(ctx);
+  const { attribution, wrap, wrapRT } = defineTransitProvider(ctx);
   ctx.registerTransitProvider({
     id: "transit-irail",
     prefix: "ir:",
@@ -53,12 +55,10 @@ export function setup(ctx: IntegrationContext): void {
     async planTrip(params) {
       // iRail is rail-only with no mode filter on its API, so it can't enforce a
       // mode allow-list — defer to a provider that can when one is requested.
-      if (params.modes?.length) return wrapRT([]);
-      const now = new Date();
+      if (isTransitModeRestriction(params.modes)) return wrapRT([]);
       const arriveBy = params.arrivalTime != null;
       const when = arriveBy ? params.arrivalTime : params.departureTime;
-      const date = when?.slice(0, 10) ?? now.toISOString().slice(0, 10);
-      const time = when?.slice(11, 19) ?? now.toISOString().slice(11, 19);
+      const { date, time } = irail.brusselsWallClock(when ? new Date(when) : new Date());
       const plan = await irail.planConnections(
         params.from.lat,
         params.from.lng,

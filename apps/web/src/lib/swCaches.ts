@@ -1,5 +1,16 @@
 export const MAPLIBRE_RUNTIME_CACHE = "maplibre-runtimes";
 
+export const MAP_TILE_CACHE = "map-tiles";
+export const STREET_LEVEL_IMAGERY_TILE_CACHE = "street-level-imagery-tiles";
+export const VECTOR_TILE_CACHE = "vector-tiles";
+
+/** The tile caches the worker fills and "Clear cached tiles" empties. */
+export const CLEARABLE_TILE_CACHES = [
+  MAP_TILE_CACHE,
+  STREET_LEVEL_IMAGERY_TILE_CACHE,
+  VECTOR_TILE_CACHE,
+] as const;
+
 export const STATIC_OFFLINE_FALLBACK_URL = "/offline";
 
 /** Navigation responses are never cache candidates, regardless of their URL. */

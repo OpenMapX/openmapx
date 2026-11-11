@@ -89,6 +89,70 @@ describe("ProviderHealth", () => {
     expect(redis.store).toEqual(before);
   });
 
+  it("reports the state each stored circuit presents to the next request", async () => {
+    const now = 1_700_000_000_000;
+    const redis = new FakeRedis();
+    const health = await ProviderHealth.init({ redis: asRedis(redis), now: () => now });
+    const base: ProviderHealthState = {
+      schema: 2,
+      state: "healthy",
+      successCount: 9,
+      failureCount: 3,
+      countedFailureCount: 2,
+      consecutiveSuccesses: 0,
+      consecutiveFailures: 2,
+      reopenCount: 0,
+      emaLatencyMs: 40,
+      window: [
+        { outcome: "ok", at: new Date(now - 2_000).toISOString(), latencyMs: 30 },
+        { outcome: "error", at: new Date(now - 1_000).toISOString(), latencyMs: 50 },
+      ],
+      lastSuccessAt: null,
+      lastFailureAt: new Date(now - 1_000).toISOString(),
+      lastFailureOutcome: "upstream_5xx",
+      lastOperatorMessage: "HTTP 503",
+      retryAt: null,
+    };
+    const records: Record<string, ProviderHealthState> = {
+      healthy: { ...base, consecutiveFailures: 0 },
+      degraded: { ...base, state: "degraded" },
+      cooling: { ...base, state: "open", retryAt: new Date(now + 60_000).toISOString() },
+      due: { ...base, state: "open", retryAt: new Date(now - 1).toISOString() },
+      "due-now": { ...base, state: "open", retryAt: new Date(now).toISOString() },
+    };
+    for (const [id, record] of Object.entries(records))
+      redis.store.set(`provider:health:${id}`, JSON.stringify(record));
+    const before = new Map(redis.store);
+
+    const all = await health.getAll();
+
+    expect(Object.fromEntries(Object.entries(all).map(([id, entry]) => [id, entry.state]))).toEqual(
+      {
+        cooling: "open",
+        degraded: "degraded",
+        due: "half-open",
+        "due-now": "half-open",
+        healthy: "healthy",
+      },
+    );
+    expect(all.cooling).toMatchObject({
+      retryAt: records.cooling?.retryAt,
+      windowFailureRate: 0.5,
+    });
+    for (const legacy of [
+      "success",
+      "failure",
+      "disabledUntil",
+      "disabledReason",
+      "lastFailureReason",
+    ])
+      expect(all.due).not.toHaveProperty(legacy);
+    await expect(health.getState("due")).resolves.toMatchObject({ state: "half-open" });
+    await expect(health.getState("missing")).resolves.toBeNull();
+    // Admin reads observe; they never claim the half-open probe lease.
+    expect(redis.store).toEqual(before);
+  });
+
   it("accepts the empty-object window that Lua encodes but rejects other non-array windows", async () => {
     const redis = new FakeRedis();
     const stored = {

@@ -61,7 +61,8 @@ const itineraryWith = (legs: TripItinerary["legs"]): TripItinerary => ({
 const railLeg = SAMPLE_TRANSIT_ITINERARY.legs[0];
 
 vi.mock("@openmapx/core", () => ({
-  formatDistance: (distance: number) => `${distance} m`,
+  formatMeasurementDistance: (distance: number) => `${distance} m`,
+  formatOverviewDistance: (distance: number) => `${distance} m`,
   formatDuration: (duration: number) => `${duration}s`,
   timeZoneAt: () => null,
   useVehicleJourney: () => ({ data: null }),

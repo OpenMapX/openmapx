@@ -22,6 +22,8 @@ interface TileReceipt {
 }
 interface SourceReceipts {
   current: Attribution[];
+  /** The source credits every tile alike, so its credit can be read from `current` at query time. */
+  uniform: boolean;
   tiles: WeakMap<object, TileReceipt>;
   instrumented: boolean;
 }
@@ -40,6 +42,7 @@ function receiptState(
   if (!state) {
     state = {
       current: snapshotContributors(contributors),
+      uniform: false,
       tiles: new WeakMap(),
       instrumented: false,
     };
@@ -67,6 +70,7 @@ export function addAttributedRasterSource(
   const state = receiptState(map, sourceId, contributors);
   if (!source || !state || typeof source.loadTile !== "function") return;
   state.instrumented = true;
+  state.uniform = receiptMode === "uniform";
   const loadTile = source.loadTile;
   source.loadTile = function (tile) {
     const response =
@@ -127,7 +131,22 @@ function retainTile(state: SourceReceipts, tile: RasterTile): TileReceipt {
   return receipt;
 }
 
-/** Update only future acquisitions; capture existing pending/retained objects first. */
+/**
+ * What a tile's receipt credits. A tile of a uniformly credited source that was
+ * acquired before any credit was known (the integration registry had not loaded)
+ * holds an empty receipt; it takes the source's current credit rather than
+ * displaying uncredited. A receipt that names contributors is never replaced.
+ */
+function receiptContributors(state: SourceReceipts, receipt: TileReceipt): Attribution[] {
+  const held = receipt.contributors ?? [];
+  return state.uniform && held.length === 0 ? snapshotContributors(state.current) : held;
+}
+
+/**
+ * Update the credit of future acquisitions in place, with no source or layer
+ * rebuild. Capture existing pending/retained objects first: tiles that already
+ * hold a credit keep it, and only tiles acquired uncredited take the new one.
+ */
 export function updateRasterAcquisitionContributors(
   map: Pick<MapLibreMap, "getSource"> & Partial<Pick<MapLibreMap, "style">>,
   sourceId: string,
@@ -206,7 +225,7 @@ export function rasterMapContributors(
       receipt.texture === tile.texture &&
       receipt.opacity !== "transparent"
     )
-      receipts.push(receipt.contributors ?? []);
+      receipts.push(receiptContributors(state, receipt));
     // drawRaster samples both textures during a fade, including the retained
     // parent when the incoming child starts at zero opacity.
     const parent =
@@ -214,7 +233,7 @@ export function rasterMapContributors(
     if (tile.fadeOpacity < 1 && parent?.hasData() && parent.texture) {
       const parentReceipt = retainTile(state, parent);
       if (parentReceipt.texture === parent.texture && parentReceipt.opacity !== "transparent")
-        receipts.push(parentReceipt.contributors ?? []);
+        receipts.push(receiptContributors(state, parentReceipt));
     }
   }
   return snapshotContributors(...receipts);

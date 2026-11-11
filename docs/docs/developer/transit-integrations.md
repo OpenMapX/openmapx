@@ -160,7 +160,33 @@ body. Don't return an empty list for a failure. An empty result means "nothing
 here", so the board would show "No departures" or no lines, and caches would keep
 it. The orchestrator turns a thrown error into a partial or failed board and
 records it in provider health. Keep thrown messages generic when request URLs
-carry credentials.
+carry credentials, and keep the upstream error as the `cause` so provider health
+can still classify its status or code. When a lookup is keyed by a stop or line
+identifier (a stop's board, a line's status or route) and the upstream answers
+404, "unknown stop" or "malformed stop id", throw `ProviderInputError`: when
+the identifier came from the request, that is bad caller input and does not
+count against the provider. A 404 on a fixed endpoint, or on search text, is a
+provider failure.
+
+The orchestrator decides whose input it was. A route that passes the request's
+identifier keeps the default `idOrigin: "request"`. Calls whose identifiers the
+server took from provider results, such as the place fan-outs for departures,
+arrivals, alerts, routes and facilities, and realtime enrichment, pass
+`{ idOrigin: "derived" }`. Their bad-input answers then count as provider
+failures, so a provider whose stop lookups break for stops its own search
+returned still opens its circuit.
+
+Validate only the fields the adapter consumes, with a zod schema, through
+`parseProviderPayload` and `parseProviderRecords` from
+`@openmapx/integration-framework`. A malformed envelope throws a
+`ProviderPayloadError`, which provider health records as `invalid_payload`.
+For lists of independent records (stops, departures, alerts), a record missing a
+consumed field is dropped and its valid neighbours kept; a non-empty list with no
+usable record is malformed. Reject a stop without coordinates rather than placing
+it at 0,0. An ordered structure such as a journey's stop sequence is valid only as
+a whole. Use recorded or documented example responses as fixtures, note their
+source in a `PROVENANCE.md`, and have test doubles assert the request they
+receive.
 
 ### Methods
 
@@ -222,7 +248,15 @@ The canonical model types (`TransitStop`, `Departure`, `TransitRoute`,
 don't invent your own. `planTrip` takes a `TripPlanRequest` that already mirrors
 the routing engine's knobs (mode allow-list, wheelchair routing, first- and
 last-mile access modes), so a planning provider can pass them through rather than
-re-deriving them.
+re-deriving them. `modes` defaults to `["TRANSIT"]`, which means every transit
+mode. A planner whose upstream has no mode filter checks
+`isTransitModeRestriction(modes)` and steps aside only for a real subset.
+`departureTime` and `arrivalTime` are UTC instants; render them on the upstream's
+local clock when its API takes an offset-less date and time. iRail documents
+Belgian local time, so it receives `Europe/Brussels`. RIS::Routing's public
+documentation does not state the zone of its offset-less request time; the
+adapter assumes German local time (`Europe/Berlin`), which still needs a check
+against a keyed request. `GET /plan` rejects an unparsable `time` or `date` with 400.
 
 `getRoutesInBbox` and `getStopTransfers` remain optional methods outside the
 base capability flags. `refreshTrip` is advertised through
@@ -294,8 +328,8 @@ selects among them with two strategies, depending on the request:
 Coverage overlap is a plain rectangle-intersection test, so a tight `coverage.bbox`
 scopes a provider out of unrelated requests. Provider calls are timed and recorded in the host health tracker. Counted
 failures can open its circuit; eligible half-open probes allow recovery. Valid
-empty results, input/policy rejection, quota denial and caller cancellation must
-not count as upstream failures.
+empty results, input/policy rejection and quota denial must not count as
+upstream failures, and a cancelled call never reaches provider health.
 
 ## The `RealtimeProvider` contract
 
@@ -339,17 +373,20 @@ enrichment pass, so a real-time provider only does work that adds something.
 
 ## The provider factory
 
-The framework offers shared attribution storage and response wrappers through `defineTransitProvider()`, exported from
-`@openmapx/integration-framework`:
+The framework offers attribution storage and response wrappers through `defineTransitProvider(ctx)`, exported from
+`@openmapx/integration-framework`. Call it inside `setup`:
 
 ```ts
-const { attribution, wrap, wrapRT, init } = defineTransitProvider();
+export function setup(ctx: IntegrationContext): void {
+  const { attribution, wrap, wrapRT } = defineTransitProvider(ctx);
+  // register the provider with attribution.all() and wrap its results
+}
 ```
 
-- **`init(ctx)`** schedules the attribution-store update with `ctx.onActivate`.
-  It runs immediately on initial startup and is deferred until activation on
-  reload. Do not read it during staging to capture a new generation's receipts;
-  capture those directly from `ctx` before acquisition.
+- **Generation ownership**: the scaffold reads `ctx.manifest.dataSources` when
+  it is created and never changes afterwards. A request that started before a
+  reload keeps crediting the generation that served it, even if the reload
+  changes the declared sources. Never create the scaffold at module level.
 - **`attribution.all()`**: the resolved `Attribution[]` to put on the provider.
 - **`wrap(data, sourceIds?)` / `wrapRT(data, sourceIds?)`**: retain captured
   record contributors and derive envelope credits from those records, with a

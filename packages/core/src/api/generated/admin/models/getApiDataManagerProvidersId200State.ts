@@ -8,4 +8,5 @@ export const GetApiDataManagerProvidersId200State = {
   healthy: "healthy",
   degraded: "degraded",
   open: "open",
+  "half-open": "half-open",
 } as const;

@@ -28,7 +28,7 @@ import {
   useFlightStore,
   useNearestAirports,
 } from "@openmapx/core";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { type ChangeEvent, type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import { BRAND } from "@/integration-api/runtime/theme";
 
@@ -324,6 +324,7 @@ function SectionLabel({ children }: { children: ReactNode }) {
  */
 export function FlightPanel() {
   const t = useTranslations("directions");
+  const locale = useLocale();
   const origin = useDirectionsStore((s) => s.waypoints[0]?.coords ?? null);
   const destination = useDirectionsStore((s) => s.waypoints.at(-1)?.coords ?? null);
   const setFlightEndpoints = useFlightStore((s) => s.setEndpoints);
@@ -485,7 +486,7 @@ export function FlightPanel() {
 
       {estMinutes !== null && (
         <Typography variant="caption" sx={{ color: BRAND, fontWeight: 600 }}>
-          {t("estFlightTime", { duration: formatDuration(estMinutes * 60) })}
+          {t("estFlightTime", { duration: formatDuration(estMinutes * 60, locale) })}
         </Typography>
       )}
 

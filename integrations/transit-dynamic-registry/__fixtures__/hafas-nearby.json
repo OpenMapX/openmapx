@@ -1,0 +1,25 @@
+[
+  {
+    "type": "stop",
+    "id": "900000120001",
+    "name": "S+U Frankfurter Allee",
+    "location": { "type": "location", "latitude": 52.513616, "longitude": 13.475298 },
+    "products": {
+      "suburban": true,
+      "subway": true,
+      "tram": true,
+      "bus": true,
+      "ferry": false,
+      "express": false,
+      "regional": false
+    },
+    "distance": 56
+  },
+  {
+    "type": "stop",
+    "id": "900000120540",
+    "name": "Scharnweberstr./Weichselstr.",
+    "location": { "type": "location", "latitude": 52.512339, "longitude": 13.470174 },
+    "distance": 330
+  }
+]

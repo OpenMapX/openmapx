@@ -38,6 +38,11 @@ export function WeatherLayer() {
   const env = useEnv();
   const layerVisible = useWeatherStore((s) => s.layerVisible);
   const resolve = useContributorResolver();
+  // Sources are added from effects that must not rerun when the registry loads:
+  // a new resolver reaches existing sources through the attribution hook below,
+  // which updates their credit in place.
+  const resolveRef = useRef(resolve);
+  resolveRef.current = resolve;
   // What to render, not what was asked for: an OWM layer requested while OWM
   // is unavailable (deep link, key removed) renders radar instead of 503 tiles.
   const activeSubLayer = useWeatherStore(effectiveWeatherSubLayer);
@@ -181,7 +186,7 @@ export function WeatherLayer() {
               tileSize: 256,
               maxzoom: 7,
             },
-            resolve({ sourceIds: ["rainviewer"] }),
+            resolveRef.current({ sourceIds: ["rainviewer"] }),
           );
         }
 
@@ -225,11 +230,9 @@ export function WeatherLayer() {
     radarFrameIndex,
     radarPlaying,
     env.apiUrl,
-    resolve,
   ]);
 
   // Manage OWM tile layer
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `resolve` only supplies attribution for the source. A new resolver must not tear down and re-add the tile source, so attribution is captured when the source is installed.
   useEffect(() => {
     void styleVersion;
     const map = currentMap;
@@ -263,7 +266,7 @@ export function WeatherLayer() {
           tiles: [tileUrl],
           tileSize: 256,
         },
-        resolve({ sourceIds: ["openweathermap"] }),
+        resolveRef.current({ sourceIds: ["openweathermap"] }),
       );
 
       addLayerInSlot(

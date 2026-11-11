@@ -1,8 +1,11 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import openApiDocument from "../../../api/openapi.json";
 import { createNavigationRuntimeRoute } from "./serviceWorkerNavigation";
 import {
   appShellCacheNames,
+  CLEARABLE_TILE_CACHES,
   handleNetworkOnlyNavigation,
   isDirectionsApiPath,
   isMapLibreRuntimeAssetPath,
@@ -11,6 +14,7 @@ import {
   isOnlineStyleReachabilityProbe,
   isPublicCacheableApiPath,
   isStalePrecacheName,
+  MAP_TILE_CACHE,
   MAPLIBRE_RUNTIME_CACHE,
   navigationCachePolicy,
   navigationFirstRuntimeCaching,
@@ -18,6 +22,8 @@ import {
   offlineGlyphVersionFromPath,
   PUBLIC_CACHEABLE_API_PATH_TEMPLATES,
   responseAllowsStorage,
+  STREET_LEVEL_IMAGERY_TILE_CACHE,
+  VECTOR_TILE_CACHE,
 } from "./swCaches";
 
 afterEach(() => {
@@ -386,5 +392,19 @@ describe("directions caching", () => {
     expect(responseAllowsStorage(response(200, "public, No-Store"))).toBe(false);
     expect(responseAllowsStorage(response(200, "private, max-age=60"))).toBe(false);
     expect(responseAllowsStorage(response(502))).toBe(false);
+  });
+});
+
+describe("tile caches", () => {
+  it("are the ones the worker's tile routes write to", () => {
+    const worker = readFileSync(join(import.meta.dirname, "../sw.ts"), "utf8");
+    expect([...CLEARABLE_TILE_CACHES].sort()).toEqual(
+      [MAP_TILE_CACHE, STREET_LEVEL_IMAGERY_TILE_CACHE, VECTOR_TILE_CACHE].sort(),
+    );
+    expect(worker).toContain("cacheName: MAP_TILE_CACHE,");
+    expect(worker).toContain("cacheName: STREET_LEVEL_IMAGERY_TILE_CACHE,");
+    expect(worker).toContain("cacheName: VECTOR_TILE_CACHE,");
+    // The worker names no tile cache by a literal that could drift from the constant.
+    expect(worker).not.toMatch(/cacheName: "(?:map-tiles|vector-tiles|[a-z-]*-tiles)"/);
   });
 });

@@ -22,7 +22,7 @@ import {
   useVehicles,
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DateTimeField } from "@/components/ui/DateTimeField";
 import { buildLocationShareUrl, shareUrl } from "@/lib/deepLink";
 
@@ -65,13 +65,32 @@ export function ParkingPanelContent() {
   const [toast, setToast] = useState<string | null>(null);
   const [tick, setTick] = useState(() => Date.now());
   const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A typed note the server has not been sent yet, with the record it belongs to.
+  const pendingNote = useRef<{ id: string; note: string | null } | null>(null);
+  const updateRef = useRef(update.mutate);
+  updateRef.current = update.mutate;
   const recordId = record?.id ?? null;
+
+  const cancelPendingNote = useCallback(() => {
+    if (noteTimer.current !== null) clearTimeout(noteTimer.current);
+    noteTimer.current = null;
+    pendingNote.current = null;
+  }, []);
+  // Sends the waiting note now. Clearing it first means the debounce timer and
+  // the unmount flush can never both send it, and a note already saved is not
+  // sent again.
+  const flushPendingNote = useCallback(() => {
+    const pending = pendingNote.current;
+    cancelPendingNote();
+    if (pending) updateRef.current(pending);
+  }, [cancelPendingNote]);
 
   useEffect(() => {
     setNoteDraft(record?.note ?? "");
   }, [record?.note]);
 
-  useEffect(() => () => clearTimeout(noteTimer.current ?? undefined), []);
+  // Closing the panel inside the debounce window must not drop the note.
+  useEffect(() => flushPendingNote, [flushPendingNote]);
 
   useEffect(() => {
     const id = setInterval(() => setTick(Date.now()), COUNTDOWN_TICK_MS);
@@ -102,11 +121,10 @@ export function ParkingPanelContent() {
 
   const commitNote = (value: string) => {
     setNoteDraft(value);
-    clearTimeout(noteTimer.current ?? undefined);
-    noteTimer.current = setTimeout(
-      () => update.mutate({ id: record.id, note: value.trim() === "" ? null : value }),
-      NOTE_COMMIT_DEBOUNCE_MS,
-    );
+    if (pendingNote.current && pendingNote.current.id !== record.id) flushPendingNote();
+    if (noteTimer.current !== null) clearTimeout(noteTimer.current);
+    pendingNote.current = { id: record.id, note: value.trim() === "" ? null : value };
+    noteTimer.current = setTimeout(flushPendingNote, NOTE_COMMIT_DEBOUNCE_MS);
   };
 
   const handleDirections = () => {
@@ -131,6 +149,8 @@ export function ParkingPanelContent() {
   };
 
   const handleClear = () => {
+    // The record is going away; a note for it would only be written to nothing.
+    cancelPendingNote();
     clear.mutate(record.id);
     useSidebarStore.getState().closeAll();
   };

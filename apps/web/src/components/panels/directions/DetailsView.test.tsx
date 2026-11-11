@@ -4,7 +4,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { DetailsView } from "./DetailsView";
 
-vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
+vi.mock("next-intl", () => ({
+  useLocale: () => "en",
+  useTranslations: () => (key: string) => key,
+}));
 vi.mock("@openmapx/core", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@openmapx/core")>()),
   useCountryFromCoordinates: () => ({ data: null }),
@@ -33,13 +36,13 @@ const route: Route = {
 };
 const selected = { sourceId: "selected", name: "Selected supplier" };
 const unrelated = { sourceId: "unrelated", name: "Other query supplier" };
-function render(route: Route) {
+function render(route: Route, units: "metric" | "imperial" = "metric") {
   return renderToStaticMarkup(
     <DetailsView
       route={route}
       originLabel="Origin"
       destinationLabel="Destination"
-      units="metric"
+      units={units}
       onBack={() => {}}
       attributions={[unrelated]}
     />,
@@ -205,4 +208,18 @@ it("projects displayed legacy nested rows through the composed indexed field tre
   const markup = render(joined);
   expect(markup).toContain("Selected supplier");
   expect(markup).not.toContain("Other query supplier");
+});
+
+describe("route totals in the preferred unit system", () => {
+  const long = { ...route, distance: 400_000, duration: 45 };
+
+  it("writes an imperial total in whole miles from 10 up, a metric one in whole kilometres", () => {
+    expect(render(long, "imperial")).toContain("249 mi");
+    expect(render(long, "imperial")).not.toContain("248.55");
+    expect(render(long, "metric")).toContain("400 km");
+  });
+
+  it("writes the duration with locale unit names", () => {
+    expect(render(long)).toContain("45 sec");
+  });
 });

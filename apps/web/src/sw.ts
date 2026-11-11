@@ -31,12 +31,15 @@ import {
   isOfflinePackageArchivePath,
   isOnlineStyleReachabilityProbe,
   isStalePrecacheName,
+  MAP_TILE_CACHE,
   MAPLIBRE_RUNTIME_CACHE,
   navigationFirstRuntimeCaching,
   offlineGlyphCacheNameForVersion,
   offlineGlyphVersionFromPath,
   responseAllowsStorage,
   STATIC_OFFLINE_FALLBACK_URL,
+  STREET_LEVEL_IMAGERY_TILE_CACHE,
+  VECTOR_TILE_CACHE,
 } from "./lib/swCaches";
 
 declare const self: ServiceWorkerGlobalScope;
@@ -242,7 +245,7 @@ const serwist = new Serwist({
       {
         matcher: /\/api\/maptiler\//i,
         handler: new StaleWhileRevalidate({
-          cacheName: "map-tiles",
+          cacheName: MAP_TILE_CACHE,
           plugins: [new ExpirationPlugin({ maxEntries: 1000, maxAgeSeconds: 7 * 24 * 60 * 60 })],
         }),
       },
@@ -251,7 +254,7 @@ const serwist = new Serwist({
       {
         matcher: /\/api\/integrations\/street-level-imagery-[a-z0-9-]+\/tiles\//i,
         handler: new StaleWhileRevalidate({
-          cacheName: "street-level-imagery-tiles",
+          cacheName: STREET_LEVEL_IMAGERY_TILE_CACHE,
           plugins: [new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 3 * 24 * 60 * 60 })],
         }),
       },
@@ -362,7 +365,7 @@ const serwist = new Serwist({
       {
         matcher: /\.pbf(\?.*)?$/i,
         handler: new CacheFirst({
-          cacheName: "vector-tiles",
+          cacheName: VECTOR_TILE_CACHE,
           plugins: [new ExpirationPlugin({ maxEntries: 5000, maxAgeSeconds: 30 * 24 * 60 * 60 })],
         }),
       },

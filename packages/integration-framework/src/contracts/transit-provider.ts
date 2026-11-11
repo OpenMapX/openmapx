@@ -140,7 +140,11 @@ export interface TripPlanRequest {
   to: { lat: number; lng: number };
   departureTime?: string;
   arrivalTime?: string;
-  /** Transit mode allow-list passed to MOTIS `transitModes` (e.g. ["BUS", "TRAM"]). */
+  /**
+   * Transit mode allow-list passed to MOTIS `transitModes` (e.g. ["BUS", "TRAM"]).
+   * Absent, empty or containing `TRANSIT` means every transit mode; use
+   * {@link isTransitModeRestriction} to tell a real restriction apart.
+   */
   modes?: string[];
   /** When true, request wheelchair-accessible routing (MOTIS pedestrianProfile=WHEELCHAIR). */
   wheelchair?: boolean;
@@ -167,6 +171,16 @@ export interface TripPlanRequest {
    * returns no itineraries or steps aside.
    */
   deutschlandticketOnly?: boolean;
+}
+
+/**
+ * Whether a plan request's `modes` restricts transit to a subset. `TRANSIT`
+ * stands for every transit mode, so a list containing it is unrestricted, as is
+ * an absent or empty list. Planners that cannot filter by mode serve only
+ * unrestricted requests.
+ */
+export function isTransitModeRestriction(modes: readonly string[] | undefined): boolean {
+  return Boolean(modes?.length) && !modes?.includes("TRANSIT");
 }
 
 export interface TripRefreshRequest {

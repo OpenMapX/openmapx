@@ -63,4 +63,15 @@ describe("profileFor", () => {
       /unknown location profile/i,
     );
   });
+
+  it("keeps iOS distance filters and drops them on Android, keeping the time interval", () => {
+    for (const kind of LOCATION_PROFILE_KINDS) {
+      const ios = profileFor(kind, "ios");
+      const android = profileFor(kind, "android");
+      expect(ios.distanceIntervalMeters).toBeGreaterThan(0);
+      expect(android.distanceIntervalMeters).toBe(0);
+      expect(android.timeIntervalMs).toBe(ios.timeIntervalMs);
+      expect(android.accuracy).toBe(ios.accuracy);
+    }
+  });
 });

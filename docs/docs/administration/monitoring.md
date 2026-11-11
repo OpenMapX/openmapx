@@ -88,9 +88,23 @@ inspect a container's lifecycle state, use the service catalog under
 ## Transit provider health
 
 Open **Admin → Transit → Provider health**. The table shows success/failure
-counts, recent failure rate, latency and cooldown state from shared Redis/Valkey
+counts, recent failure rate, latency and circuit state from shared Redis/Valkey
 records. The shared circuit distinguishes `healthy`, `degraded` and `open`;
 after cooldown, one process can acquire the half-open probe lease.
+
+The **Status** column and the read API's `state` field show what the next
+request meets:
+
+| State       | Meaning                                                                   |
+| ----------- | ------------------------------------------------------------------------- |
+| `healthy`   | No recent counted failures that degrade the provider                      |
+| `degraded`  | Recent counted failures; requests still reach the provider                |
+| `open`      | Requests skip the provider until `retryAt`, shown as "open until"         |
+| `half-open` | The cooldown has ended; the next request is a trial probe that decides it |
+
+Reading the table never claims the probe lease, so a provider can stay
+`half-open` until real traffic arrives. The last error shows the bounded
+operator message, or the failure outcome when none was recorded.
 
 | Transition or limit   | Default                                                                                    |
 | --------------------- | ------------------------------------------------------------------------------------------ |
@@ -103,10 +117,17 @@ after cooldown, one process can acquire the half-open probe lease.
 | EMA latency weighting | 0.2                                                                                        |
 | Record expiry         | 30 days since last write                                                                   |
 
-Timeouts, connection failures, upstream 5xx, authentication failures and invalid
-payloads count toward opening. Valid empty responses, policy/input rejections,
-quota denial and caller cancellation do not. Lifetime failure totals can
-therefore differ from counted failures in the recent window.
+Timeouts, connection failures, upstream 5xx and other 4xx responses,
+authentication failures and invalid payloads count toward opening. Valid empty
+responses, policy rejections, bad caller input and quota denial do not. Bad
+caller input includes a "not found" answer for a stop, station or line
+identifier a user supplied, so requests for bogus identifiers cannot open a
+provider's circuit; a "not found" on a fixed endpoint still counts. Lifetime
+failure totals can therefore differ from counted failures in the recent window.
+A cancelled call, whether the user left or a reload retired the provider, is
+not recorded here at all: it appears only in metrics, so it never hides the last
+real error. A cancelled half-open probe gives its lease back, so the next
+request can probe immediately instead of waiting for the lease to expire.
 
 If Redis is unavailable, the circuit returns a diagnostic and leaves provider
 requests enabled. This differs from the quota-bound upstream runtime, which

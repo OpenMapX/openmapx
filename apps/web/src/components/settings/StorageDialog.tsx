@@ -30,6 +30,12 @@ import {
   setRecentMapDataCacheEnabled,
 } from "@/lib/recentMapDataCache";
 import { formatBytes } from "@/lib/storageFormat";
+import {
+  CLEARABLE_TILE_CACHES,
+  MAP_TILE_CACHE,
+  STREET_LEVEL_IMAGERY_TILE_CACHE,
+  VECTOR_TILE_CACHE,
+} from "@/lib/swCaches";
 
 interface CacheRow {
   cacheName: string;
@@ -48,9 +54,9 @@ const ROW_LABELS: Record<string, string> = {
   pages: "appShell",
   "app-shell-v1": "appShell",
   "openmapx-preferences": "preferences",
-  "map-tiles": "mapTiles",
-  "mapillary-tiles": "mapTiles",
-  "vector-tiles": "vectorTiles",
+  [MAP_TILE_CACHE]: "mapTiles",
+  [STREET_LEVEL_IMAGERY_TILE_CACHE]: "mapTiles",
+  [VECTOR_TILE_CACHE]: "vectorTiles",
   "api-geodata": "apiResponses",
   "api-category-search": "apiResponses",
   "api-autocomplete": "apiResponses",
@@ -58,10 +64,8 @@ const ROW_LABELS: Record<string, string> = {
   "api-photos": "apiResponses",
 };
 
-// Caches we let "Clear cached tiles" wipe. Downloaded package archives live
-// in OPFS/IndexedDB and are intentionally preserved.
-const CLEARABLE_TILE_CACHES = ["map-tiles", "mapillary-tiles", "vector-tiles"];
-
+// "Clear cached tiles" empties the worker's tile caches (CLEARABLE_TILE_CACHES).
+// Downloaded package archives live in OPFS/IndexedDB and are intentionally preserved.
 async function inspectStorage(t: (key: string) => string): Promise<StorageInfo> {
   const total = { used: 0, quota: 0, percent: 0 };
   if (typeof navigator !== "undefined" && navigator.storage?.estimate) {

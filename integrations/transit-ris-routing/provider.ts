@@ -6,8 +6,9 @@
  * Uses the shared DB RIS client for authentication.
  */
 
-import { decodePolyline } from "@openmapx/core";
+import { decodePolyline, isoWithOffsetInZone } from "@openmapx/core";
 import { mobilityHttpTransport } from "@openmapx/core/mobility-http-transport";
+import { isTransitModeRestriction } from "@openmapx/integration-framework";
 import { parseElapsedDurationSeconds } from "@openmapx/mobility-core/duration";
 import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
 import { createRisClient, type RisCredentials } from "@openmapx/mobility-core/ris-client";
@@ -236,7 +237,7 @@ export function isConfigured(): boolean {
 /**
  * RIS::Routing's request schema for a mode allow-list or the Deutschlandticket
  * filter is undocumented, so the provider can't enforce either constraint. When
- * a request carries one, RIS must step aside so a provider that can honour it
+ * a request carries one (the all-transit default is not a restriction), RIS must step aside so a provider that can honour it
  * (MOTIS's mode intersection) serves instead — RIS is
  * priority 1, so otherwise it would preempt them and return non-compliant trips.
  */
@@ -244,7 +245,22 @@ export function risCanHonor(params: {
   modes?: string[];
   deutschlandticketOnly?: boolean;
 }): boolean {
-  return !(params.modes && params.modes.length > 0) && !params.deutschlandticketOnly;
+  return !isTransitModeRestriction(params.modes) && !params.deutschlandticketOnly;
+}
+
+const GERMAN_TIME_ZONE = "Europe/Berlin";
+
+/**
+ * RIS::Routing takes a date-time without an offset. Its public documentation
+ * does not name the zone; this assumes German local time, as for the DB journey
+ * planners it backs, and renders the planning instant on the Berlin wall clock,
+ * including across daylight-saving changes. Confirm with a keyed request.
+ */
+export function germanWallClock(instant: Date): { date: string; time: string } {
+  if (!Number.isFinite(instant.getTime()))
+    throw Object.assign(new Error("invalid planning time"), { code: "invalid_request" });
+  const local = isoWithOffsetInZone(instant, GERMAN_TIME_ZONE);
+  return { date: local.slice(0, 10), time: local.slice(11, 16) };
 }
 
 export async function planJourney(

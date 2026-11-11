@@ -92,7 +92,7 @@ export function RideQuoteList({
             </Typography>
             {quote.pickupEtaSeconds !== undefined && (
               <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
-                {t("rideEta", { duration: formatDuration(quote.pickupEtaSeconds) })}
+                {t("rideEta", { duration: formatDuration(quote.pickupEtaSeconds, locale) })}
               </Typography>
             )}
             {quote.fare?.basis === "estimated" && (

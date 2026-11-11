@@ -1,6 +1,6 @@
 import { useParkingStore, useSidebarStore } from "@openmapx/core";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, userEvent, waitFor, within } from "@/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, userEvent, waitFor, within } from "@/test";
 import { enterDateTime } from "@/test/dateTimeField";
 
 const state = vi.hoisted(() => ({
@@ -131,5 +131,99 @@ describe("ParkingPanelContent", () => {
     state.parked = [{ ...RECORD, vehicleId: "v1" }];
     render(<ParkingPanelContent />);
     expect(screen.getByText("parking.forVehicle:Blue Golf")).toBeInTheDocument();
+  });
+  describe("note", () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    const typeNote = (value: string) =>
+      fireEvent.change(screen.getByRole("textbox", { name: "parking.note" }), {
+        target: { value },
+      });
+
+    it("saves a note after the typing pause", () => {
+      render(<ParkingPanelContent />);
+
+      typeNote("Level 3, row F");
+      expect(state.update).not.toHaveBeenCalled();
+      act(() => {
+        vi.advanceTimersByTime(600);
+      });
+
+      expect(state.update).toHaveBeenCalledTimes(1);
+      expect(state.update).toHaveBeenCalledWith({ id: "p1", note: "Level 3, row F" });
+    });
+
+    it("saves a note typed just before the panel closes", () => {
+      const { unmount } = render(<ParkingPanelContent />);
+
+      typeNote("Level 3, row F");
+      act(() => {
+        vi.advanceTimersByTime(599);
+      });
+      unmount();
+
+      expect(state.update).toHaveBeenCalledTimes(1);
+      expect(state.update).toHaveBeenCalledWith({ id: "p1", note: "Level 3, row F" });
+      act(() => {
+        vi.advanceTimersByTime(5_000);
+      });
+      expect(state.update).toHaveBeenCalledTimes(1);
+    });
+
+    it("saves only the last text when several edits precede closing", () => {
+      const { unmount } = render(<ParkingPanelContent />);
+
+      typeNote("Lev");
+      typeNote("Level 3");
+      unmount();
+
+      expect(state.update).toHaveBeenCalledTimes(1);
+      expect(state.update).toHaveBeenCalledWith({ id: "p1", note: "Level 3" });
+    });
+
+    it("does not save the note again when closing after it was saved", () => {
+      const { unmount } = render(<ParkingPanelContent />);
+      typeNote("Level 3");
+      act(() => {
+        vi.advanceTimersByTime(600);
+      });
+
+      unmount();
+
+      expect(state.update).toHaveBeenCalledTimes(1);
+    });
+
+    it("sends nothing when closing without typing", () => {
+      const { unmount } = render(<ParkingPanelContent />);
+
+      unmount();
+
+      expect(state.update).not.toHaveBeenCalled();
+    });
+
+    it("stores an emptied note as none", () => {
+      state.parked = [{ ...RECORD, note: "Level 3" }];
+      const { unmount } = render(<ParkingPanelContent />);
+
+      typeNote("  ");
+      unmount();
+
+      expect(state.update).toHaveBeenCalledWith({ id: "p1", note: null });
+    });
+
+    it("drops the waiting note when the record is cleared", () => {
+      const { unmount } = render(<ParkingPanelContent />);
+      typeNote("Level 3");
+
+      fireEvent.click(screen.getByRole("button", { name: /parking.clear/ }));
+      unmount();
+      act(() => {
+        vi.advanceTimersByTime(5_000);
+      });
+
+      expect(state.clear).toHaveBeenCalledWith("p1");
+      expect(state.update).not.toHaveBeenCalled();
+    });
   });
 });

@@ -9,7 +9,7 @@ const registryMock = vi.hoisted(() => ({
   stopRefresh: vi.fn(),
   replaceWith: vi.fn(),
 }));
-const hafasMock = vi.hoisted(() => ({ setRedis: vi.fn() }));
+const hafasMock = vi.hoisted(() => ({ createHafasMgateAdapter: vi.fn(() => ({})) }));
 
 vi.mock("../registry.js", () => ({
   registry: registryMock,
@@ -19,19 +19,19 @@ vi.mock("../registry.js", () => ({
   },
 }));
 vi.mock("../hafas-mgate.js", () => ({
-  hafasMgateAdapter: {},
-  setRedis: hafasMock.setRedis,
+  createHafasMgateAdapter: hafasMock.createHafasMgateAdapter,
 }));
 
 import { setup } from "../index.js";
 
 describe("dynamic transit registry lifecycle", () => {
-  it("clears the retired Redis adapter when the replacement has no Redis configuration", async () => {
-    const context = createMockIntegrationContext({ config: {} });
+  it("gives each setup generation its own HAFAS adapter", async () => {
+    hafasMock.createHafasMgateAdapter.mockClear();
 
-    await setup(context);
+    await setup(createMockIntegrationContext({ config: {} }));
+    await setup(createMockIntegrationContext({ config: {} }));
 
-    expect(hafasMock.setRedis).toHaveBeenCalledWith(null);
+    expect(hafasMock.createHafasMgateAdapter).toHaveBeenCalledTimes(2);
   });
 
   it("shutdown releases only the refresh ownership acquired by that setup", async () => {

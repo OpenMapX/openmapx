@@ -7,6 +7,7 @@ import {
   configureApiClient,
   createApiClient,
   isApiRequestAbortedError,
+  proxyImageUrl,
 } from "./client";
 
 /** Records every fetch the client makes, so isolation can be asserted. */
@@ -381,4 +382,39 @@ describe("SDK response-consumer cancellation", () => {
       expect(vi.getTimerCount()).toBe(0);
     },
   );
+});
+
+describe("proxyImageUrl", () => {
+  const proxied = (target: string) =>
+    `https://web.example/api/image-proxy?url=${encodeURIComponent(target)}`;
+
+  it.each([
+    ["https://img.example/a.png", "https://img.example/a.png"],
+    ["http://img.example/a.png", "http://img.example/a.png"],
+    ["HTTPS://img.example/a.png", "https://img.example/a.png"],
+    ["Http://IMG.example/a.png", "http://img.example/a.png"],
+    ["//img.example/a.png", "https://img.example/a.png"],
+    ["  https://img.example/a.png", "https://img.example/a.png"],
+    ["https://img.example/a b.png?x=1&y=2", "https://img.example/a%20b.png?x=1&y=2"],
+  ])("sends %j through the proxy", (input, target) => {
+    configureApiClient({ baseUrl: "https://web.example", credentials: "include" });
+    expect(proxyImageUrl(input)).toBe(proxied(target));
+  });
+
+  it.each([
+    "/static/pin.png",
+    "pin.png",
+    "./pin.png",
+    "../pin.png",
+    "?size=2",
+    "#fragment",
+    "data:image/png;base64,iVBORw0KGgo=",
+    "blob:https://web.example/1b2c3d",
+    "javascript:alert(1)",
+    "ftp://img.example/a.png",
+    "",
+  ])("returns %j unchanged", (input) => {
+    configureApiClient({ baseUrl: "https://web.example", credentials: "include" });
+    expect(proxyImageUrl(input)).toBe(input);
+  });
 });

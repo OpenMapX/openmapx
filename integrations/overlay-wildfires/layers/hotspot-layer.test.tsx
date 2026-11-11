@@ -26,6 +26,7 @@ vi.mock("@/integration-api/runtime/EnvProvider", () => ({
 }));
 
 vi.mock("next-intl", () => ({
+  useLocale: () => "en",
   useTranslations: () => translations.t,
 }));
 

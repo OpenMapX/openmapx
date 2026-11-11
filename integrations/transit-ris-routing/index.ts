@@ -1,10 +1,8 @@
 import { defineTransitProvider, type IntegrationContext } from "@openmapx/integration-framework";
 import * as ris from "./provider.js";
 
-const { attribution, wrapRT, init } = defineTransitProvider();
-
 export function setup(ctx: IntegrationContext): void {
-  init(ctx);
+  const { attribution, wrapRT } = defineTransitProvider(ctx);
   const clientId = ctx.config.clientId as string | undefined;
   const apiKey = ctx.config.apiKey as string | undefined;
   ctx.onActivate(() => {
@@ -43,9 +41,7 @@ export function setup(ctx: IntegrationContext): void {
       if (!ris.risCanHonor(params)) return wrapRT([]);
       const arriveBy = params.arrivalTime != null;
       const when = arriveBy ? params.arrivalTime : params.departureTime;
-      const dt = when ? new Date(when) : new Date();
-      const date = dt.toISOString().slice(0, 10);
-      const time = dt.toISOString().slice(11, 16);
+      const { date, time } = ris.germanWallClock(when ? new Date(when) : new Date());
 
       const plan = await ris.planJourney(
         params.from.lat,
