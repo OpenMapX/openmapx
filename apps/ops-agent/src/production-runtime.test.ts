@@ -26,6 +26,7 @@ import { services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parse as parseYaml } from "yaml";
 import { installedCompose } from "../../../packages/core/src/services/__fixtures__/compose-path-host";
+import { releaseProvenance } from "../../../packages/core/src/services/__fixtures__/release-provenance";
 import { ownedComposePathRuntime } from "./__fixtures__/owned-compose-path-runtime";
 import { ownedServiceHost } from "./__fixtures__/owned-service-host";
 import { readProductionFixtureCompose } from "./__fixtures__/production-compose-config";
@@ -119,27 +120,24 @@ describe("assembled production service authority", () => {
   it("clears only the exact selected pin through the production runtime without Docker mutation", async () => {
     const host = await fixture(),
       path = services.releaseStatePaths(host.infraDir).overlay;
-    const manifest = {
-      schemaVersion: 1 as const,
+    const manifest: services.ReleaseManifest = {
+      schemaVersion: 1,
       release: "checked-pin",
       images: Object.fromEntries(
         services.RELEASE_IMAGE_NAMES.map((name) => [
           name,
           `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`,
         ]),
-      ),
+      ) as services.ReleaseManifest["images"],
       privacyReleaseValidation: {
-        version: 1 as const,
+        version: 1,
         sourceBuildFingerprint: "a".repeat(64),
         validatedAt: "2026-09-05T12:00:00.000Z",
-        checks: {
-          translationsConsistent: true as const,
-          openApiConsistent: true as const,
-          policyConsistent: true as const,
-        },
+        checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
       },
+      ...releaseProvenance(),
     };
-    services.writeReleaseComposeArtifacts(manifest as services.ReleaseManifest, host.infraDir);
+    services.writeReleaseComposeArtifacts(manifest, host.infraDir);
     expect(await productionReleaseEffects(host.runtime).inspect()).toMatchObject({
       selectedReleaseId: "checked-pin",
     });
@@ -292,6 +290,7 @@ describe("assembled production service authority", () => {
           validatedAt: "2026-09-05T12:00:00.000Z",
           checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
         },
+        ...releaseProvenance(),
       }),
     );
     writeFileSync(
@@ -691,7 +690,7 @@ describe("assembled production service authority", () => {
     }
   });
 
-  it("preserves legacy retained generations at startup before the first owned inventory acquisition", async () => {
+  it("preserves every generation at startup before the first owned inventory acquisition", async () => {
     const host = await fixture();
     for (let i = 0; i < 15; i++)
       await services.commitConfigurationGeneration({
@@ -705,7 +704,7 @@ describe("assembled production service authority", () => {
           serviceSecrets: [],
         },
       });
-    // Deployments predating owned retention have complete generations but no new metadata file.
+    // Until an inventory is recorded, complete generations have no ownership observation file.
     rmSync(join(host.infraDir, "state/ops-agent/configuration/.owned-service-generations.json"));
     await initializeTrustedConfigurationRuntime(host.infraDir);
     expect(existsSync(host.firstCompose)).toBe(true);
@@ -713,30 +712,6 @@ describe("assembled production service authority", () => {
     await expect(
       dispatchOpsOperation(host.runtime, logs, await host.context(logs)),
     ).resolves.toMatchObject({ lines: ["retained log"] });
-  });
-
-  it("retains the original generation for a live legacy current-alias container and releases it only after cleanup", async () => {
-    const host = await fixture();
-    host.row.Labels["com.docker.compose.project.config_files"] = host.stack.composePath;
-    host.row.Labels["com.docker.compose.project.working_dir"] = host.stack.composePath.slice(
-      0,
-      host.stack.composePath.lastIndexOf("/"),
-    );
-    expect(await host.deselect()).toMatchObject({ outcome: "committed" });
-    for (let i = 0; i < 18; i++)
-      expect(await host.select([])).toMatchObject({ outcome: "committed" });
-    expect(existsSync(host.firstCompose)).toBe(true);
-    const logs = { kind: "service.logs", serviceId: "motis", tail: 20 } as const;
-    await expect(
-      dispatchOpsOperation(host.runtime, logs, await host.context(logs)),
-    ).resolves.toMatchObject({ lines: ["retained log"] });
-    host.row.Image = `sha256:${"c".repeat(64)}`;
-    expect(await host.select([])).toMatchObject({ outcome: "committed" });
-    expect(existsSync(host.firstCompose)).toBe(true);
-    host.setRows([]);
-    expect(await host.select([])).toMatchObject({ outcome: "committed" });
-    expect(existsSync(host.firstCompose)).toBe(false);
-    await expect(host.context(logs)).rejects.toThrow("Admission denied");
   });
 
   it("rechecks deselection after admission before invoking a lifecycle effect", async () => {

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { services } from "@openmapx/core/server";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { releaseProvenance } from "../../core/src/services/__fixtures__/release-provenance";
 import { registerComposeCommands } from "../src/commands/compose";
 import * as release from "../src/lib/release";
 
@@ -33,6 +34,7 @@ function manifest(id: string): services.ReleaseManifest {
       validatedAt: "2026-11-06T00:00:00.000Z",
       checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
     },
+    ...releaseProvenance(),
   };
 }
 function fixture(onCopy?: (path: string) => void) {

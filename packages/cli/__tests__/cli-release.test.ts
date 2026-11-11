@@ -14,6 +14,7 @@ import { dirname, join } from "node:path";
 import { services } from "@openmapx/core/server";
 import { Command } from "commander";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { releaseProvenance } from "../../core/src/services/__fixtures__/release-provenance";
 import { registerComposeCommands } from "../src/commands/compose";
 import {
   clearReleaseSelection as clearReleaseSelectionFromCli,
@@ -58,6 +59,7 @@ const manifestJson = JSON.stringify({
       policyConsistent: true,
     },
   },
+  ...releaseProvenance(),
 });
 
 function fakeDocker(manifest = manifestJson): ReleaseDockerRunner {

@@ -179,19 +179,12 @@ describe("docs PR validation input coverage", () => {
 });
 
 describe("selective release planning", () => {
-  it("bootstraps every published image without a previous release or legacy build metadata", () => {
+  it("bootstraps every published image without a previous release", () => {
     expect(createReleasePlan(options).images.map((image: { app: string }) => image.app)).toEqual(
       targets.map((target: { app: string }) => target.app),
     );
     expect(
       createReleasePlan(options).images.every((image: { rebuild: boolean }) => image.rebuild),
-    ).toBe(true);
-    const previous = baseline();
-    delete (previous as { buildMetadata?: unknown }).buildMetadata;
-    expect(
-      createReleasePlan({ ...options, previous }).images.every(
-        (image: { rebuild: boolean }) => image.rebuild,
-      ),
     ).toBe(true);
   });
   it.each([`ghcr.io/openmapx/docs@sha256:${"a".repeat(64)}`, "ghcr.io/openmapx/docs:latest"])(
@@ -353,18 +346,10 @@ describe("selective release planning", () => {
     expect(next.images.every((image: { rebuild: boolean }) => !image.rebuild)).toBe(true);
     expect(next.buildMetadata.images.api.coldRefreshedAt).toBe("2026-09-20T12:00:00.000Z");
   });
-  it("cold-builds bootstrap and legacy metadata without guessing a refresh date", () => {
+  it("cold-builds a bootstrap release and records its refresh date", () => {
     const bootstrap = createReleasePlan(options);
     expect(bootstrap.images.every((image: { refresh: boolean }) => image.refresh)).toBe(true);
-    const previous = baseline();
-    for (const metadata of Object.values(previous.buildMetadata.images) as {
-      coldRefreshedAt?: string;
-    }[]) {
-      delete metadata.coldRefreshedAt;
-    }
-    const migrated = createReleasePlan({ ...options, previous });
-    expect(migrated.images.every((image: { refresh: boolean }) => image.refresh)).toBe(true);
-    expect(migrated.buildMetadata.images.api.coldRefreshedAt).toBe(now);
+    expect(bootstrap.buildMetadata.images.api.coldRefreshedAt).toBe(now);
   });
   it("refreshes an image with a future cold-refresh clock", () => {
     const previous = baseline();
@@ -376,19 +361,26 @@ describe("selective release planning", () => {
         .map((image: { app: string }) => image.app),
     ).toEqual(["api"]);
   });
-  it.each(["tomorrow", null, ""])("rejects malformed cold-refresh metadata: %s", (value) => {
-    const previous = baseline();
-    previous.buildMetadata.images.api.coldRefreshedAt = value;
-    expect(() => createReleasePlan({ ...options, previous })).toThrow();
-  });
-  it.each(["tag", "missing", "metadata", "timestamp"])("rejects invalid baseline %s", (kind) => {
-    const previous = baseline();
-    if (kind === "tag") previous.images.api = "ghcr.io/openmapx/api:latest";
-    if (kind === "missing") delete previous.images.api;
-    if (kind === "metadata") previous.buildMetadata.images.api.inputHash = "bad";
-    if (kind === "timestamp") previous.buildMetadata.images.api.builtAt = "tomorrow";
-    expect(() => createReleasePlan({ ...options, previous })).toThrow();
-  });
+  it.each(["tomorrow", null, "", undefined])(
+    "rejects malformed cold-refresh metadata: %s",
+    (value) => {
+      const previous = baseline();
+      previous.buildMetadata.images.api.coldRefreshedAt = value;
+      expect(() => createReleasePlan({ ...options, previous })).toThrow();
+    },
+  );
+  it.each(["tag", "missing", "metadata", "timestamp", "build metadata"])(
+    "rejects invalid baseline %s",
+    (kind) => {
+      const previous = baseline();
+      if (kind === "tag") previous.images.api = "ghcr.io/openmapx/api:latest";
+      if (kind === "missing") delete previous.images.api;
+      if (kind === "build metadata") delete (previous as { buildMetadata?: unknown }).buildMetadata;
+      if (kind === "metadata") previous.buildMetadata.images.api.inputHash = "bad";
+      if (kind === "timestamp") previous.buildMetadata.images.api.builtAt = "tomorrow";
+      expect(() => createReleasePlan({ ...options, previous })).toThrow();
+    },
+  );
   it("includes file names and modes, so renames and executable changes invalidate inputs", () => {
     const target = targets[0];
     const hash = imageFingerprint({ ...options, target });

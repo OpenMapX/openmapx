@@ -1,3 +1,6 @@
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { services } from "@openmapx/core/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -45,8 +48,23 @@ describe("service selection summary", () => {
       selectedRoots: ["valhalla"],
       effectiveIds: ["valhalla", "postgis"],
       envVarValue: null,
-      selectionFilePath: "infra/docker/service-selection.json",
+      selectionFilePath: "infra/docker/state/ops-agent/service-selection.json",
     });
+  });
+
+  it("names the file a render writes the selection to", async () => {
+    readDesiredSelection.mockResolvedValue({ source: "default", roots: [] });
+    const { selectionFilePath } = await getServiceSelectionSummary(registry());
+    const root = mkdtempSync(join(tmpdir(), "openmapx-selection-path-"));
+    try {
+      const infraDir = join(root, "infra", "docker");
+      mkdirSync(join(infraDir, "state", "ops-agent"), { recursive: true, mode: 0o700 });
+      services.writeServiceSelectionFile(infraDir, ["valhalla"]);
+      expect(existsSync(join(root, selectionFilePath))).toBe(true);
+      expect(existsSync(join(root, "infra", "docker", "service-selection.json"))).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("leaves the selection to the operator's override while it is set", async () => {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { releaseProvenance } from "../__fixtures__/release-provenance";
 import * as releases from "../release-manifest";
 
 const digest = `sha256:${"a".repeat(64)}`;
@@ -67,6 +68,7 @@ const manifest = {
       policyConsistent: true as const,
     },
   },
+  ...releaseProvenance(),
 };
 it("retains producer and actual reused image metadata in canonical authority", () => {
   const input = {
@@ -86,6 +88,7 @@ it("retains producer and actual reused image metadata in canonical authority", (
           sourceRevision: "c".repeat(40),
           inputHash: "d".repeat(64),
           builtAt: "2026-10-17T10:00:00Z",
+          coldRefreshedAt: "2026-10-17T10:00:00Z",
         },
       },
     },
@@ -114,24 +117,4 @@ it("rejects selected named versions when the registry returns a different releas
       digest,
     ),
   ).toThrow(/digest/);
-});
-
-it("keeps producerless legacy build metadata from changing a previously stored canonical identity", () => {
-  const legacy = {
-    ...manifest,
-    buildMetadata: {
-      version: 1 as const,
-      images: {
-        api: {
-          sourceRevision: "c".repeat(40),
-          inputHash: "d".repeat(64),
-          builtAt: "2026-10-17T10:00:00Z",
-        },
-      },
-    },
-  };
-  // The previous serializer stored these bytes, omitting then non-authoritative metadata.
-  expect(
-    releases.canonicalReleaseManifest(releases.parseReleaseManifest(JSON.stringify(legacy))),
-  ).toBe(JSON.stringify(manifest));
 });

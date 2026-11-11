@@ -1,6 +1,7 @@
 /** Actual API/SDK -> production registry/agent -> real DM HTTP/SQL guard and
  * separate native helper. Only the session provider and Docker executable I/O
  * are substituted; image/container replacement acceptance remains separate. */
+
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -38,6 +39,7 @@ import { repoPaths, services } from "@openmapx/core/server";
 import { eq, sql } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { releaseProvenance } from "../../../../../packages/core/src/services/__fixtures__/release-provenance";
 import { ownedDataManager } from "../../../../ops-agent/src/__fixtures__/owned-data-manager";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
 import { openOpsJobJournal } from "../../../../ops-agent/src/journal";
@@ -604,6 +606,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   policyConsistent: true,
                 },
               },
+              ...releaseProvenance(),
             }),
           );
           const raw = services.canonicalReleaseManifest(manifest);

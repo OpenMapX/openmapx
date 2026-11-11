@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
 import { afterEach, expect, it, vi } from "vitest";
+import { releaseProvenance } from "../../core/src/services/__fixtures__/release-provenance";
 import { runSystemUpdate } from "../src/lib/system-update";
 import { SystemUpdateReceiptStore } from "../src/lib/system-update-receipt";
 
@@ -34,6 +35,7 @@ async function fixture(mode = "success") {
       validatedAt: "2026-11-06T00:00:00.000Z",
       checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
     },
+    ...releaseProvenance(),
   };
   const lock = await services.acquireReleaseStoreLock(paths.store, {}, { failIfBusy: true });
   const checked = services.cacheCheckedReleaseManifest({

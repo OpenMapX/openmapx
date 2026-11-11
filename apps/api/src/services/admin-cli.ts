@@ -21,7 +21,8 @@ export interface ServiceSelectionSummary {
   selectionFilePath: string;
 }
 
-const SELECTION_FILE_PATH = `infra/docker/${coreServices.SERVICE_SELECTION_FILE}`;
+/** Where renders keep the operator's selection, relative to the checkout. */
+const SELECTION_FILE_PATH = coreServices.serviceSelectionPath("infra/docker");
 
 /**
  * The operator's selection, as the CLI's `services selected` reports it: the

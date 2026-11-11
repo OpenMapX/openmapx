@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { releaseProvenance } from "../../core/src/services/__fixtures__/release-provenance";
 import {
   BUNDLE_MANIFEST_PATH,
   type BuildRecord,
@@ -122,6 +123,7 @@ describe("build provenance", () => {
       validatedAt: "2026-09-05T12:00:00.000Z",
       checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
     },
+    ...releaseProvenance(),
   };
 
   function checkoutAtCommit(): string {

@@ -60,9 +60,6 @@ import {
 } from "./trusted-config-source";
 import { createTrustedConfigurationAuthorityLoader } from "./trusted-configuration-authority";
 
-/** How often the agent checks again whether the earlier releases' lock can be retired. */
-const LEGACY_WRITER_RETRY_MS = 10_000;
-
 async function main(): Promise<void> {
   const config = loadOpsAgentConfig();
   // Privacy scratch, like the trusted-configuration queue, is reached through
@@ -191,17 +188,6 @@ async function main(): Promise<void> {
     for (const line of describeDeploymentUserAtStart(paths.infraDir)) {
       process.stderr.write(`${line}\n`);
     }
-    // Releases before this one kept the applied configuration, the selection
-    // and the release state in infra/docker itself. After a panel self-update
-    // this agent starts before anything has rendered with its code, so it
-    // renders once now: the render carries them into the agent's state and
-    // nothing reads the earlier files again. A failure stops the agent, so a
-    // self-update rolls back to the agent that still uses them.
-    if (services.configurationMigrationPending(paths.infraDir)) {
-      process.stderr.write(
-        "Applied configuration migration requires a host render before mutations\n",
-      );
-    }
     // Compose interpolates infra/docker/.env into every service; one that is
     // not the operator's alone is refused by every stack command.
     const environmentProblem = services.deploymentEnvironmentFileProblem(
@@ -262,28 +248,6 @@ async function main(): Promise<void> {
       );
     }
     await retireLegacyAgentState(legacyState).catch(() => false);
-    // Writers stop also taking the earlier releases' lock in infra/docker
-    // once no agent of an earlier release can run: this one has started, and
-    // no handoff helper runs that could roll back to one. After a panel
-    // self-update the helper that started this agent is still running, so
-    // the check repeats until it has exited.
-    const retireLegacyWriter = async (): Promise<boolean> => {
-      if (!services.legacyConfigurationWriterActive(paths.infraDir)) return true;
-      if (await handoffHelperRunning()) return false;
-      services.retireLegacyConfigurationWriter(paths.infraDir);
-      process.stderr.write("Writers no longer take the earlier releases' lock in infra/docker\n");
-      return true;
-    };
-    if (!(await retireLegacyWriter().catch(() => false))) {
-      const retry = setInterval(() => {
-        retireLegacyWriter()
-          .then((retired) => {
-            if (retired) clearInterval(retry);
-          })
-          .catch(() => undefined);
-      }, LEGACY_WRITER_RETRY_MS);
-      retry.unref();
-    }
     const journal = await openOpsJobJournal(config.journalFile);
     // A maintenance job this agent was stopped in left its fence behind, and
     // with it a quiesced data-manager worker that would never ask again.
@@ -373,7 +337,6 @@ async function main(): Promise<void> {
       releaseRuntimeOptions: {
         afterHandoffSettled: async () => {
           await retireLegacyAgentState(legacyState);
-          await retireLegacyWriter();
         },
       },
       runFixedCli: administrativeCli,

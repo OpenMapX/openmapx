@@ -103,13 +103,31 @@ export function validateProducerManifest(manifest, repository, run) {
     "Missing privacy evidence",
   );
   assert(manifest.buildMetadata?.version === 1, "Missing build metadata");
+  // The timestamp form the core release parser accepts: seconds, an optional
+  // fraction, Z or a +HH:MM offset, and a date that exists in the calendar.
+  const timestamp = (value) => {
+    const match =
+      typeof value === "string" &&
+      /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.exec(
+        value,
+      );
+    if (!match) return false;
+    const [year, month, day] = match.slice(1).map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return (
+      date.getUTCFullYear() === year &&
+      date.getUTCMonth() === month - 1 &&
+      date.getUTCDate() === day
+    );
+  };
   for (const name of productImageNames) {
     const metadata = manifest.buildMetadata.images?.[name];
     assert(
       metadata &&
         /^[a-f0-9]{40}$/.test(metadata.sourceRevision) &&
         /^[a-f0-9]{64}$/.test(metadata.inputHash) &&
-        Number.isFinite(Date.parse(metadata.builtAt)),
+        timestamp(metadata.builtAt) &&
+        timestamp(metadata.coldRefreshedAt),
       `Missing actual build metadata for ${name}`,
     );
   }

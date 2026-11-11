@@ -51,6 +51,7 @@ import {
   stagedCoordinatorRetirementDomain,
   stagedCoordinatorRetirementPayloadSchema,
 } from "../../../../../packages/core/src/build-artifacts/coordinator-pull-records";
+import { releaseProvenance } from "../../../../../packages/core/src/services/__fixtures__/release-provenance";
 import { ownedDataManager } from "../../../../ops-agent/src/__fixtures__/owned-data-manager";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
 import { configurationPolicyRevision } from "../../../../ops-agent/src/configured-resource-authority";
@@ -1273,6 +1274,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 policyConsistent: true,
               },
             },
+            ...releaseProvenance(),
           }),
         );
       writeFileSync(
