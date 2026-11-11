@@ -55,15 +55,6 @@ export function releaseStatePaths(infraDir: string): ReleaseStatePaths {
   };
 }
 
-/** Where releases before this one kept them, in `infra/docker` itself. */
-export function legacyReleaseStatePaths(infraDir: string) {
-  return {
-    store: join(infraDir, ".ops-agent-releases"),
-    overlay: join(infraDir, RELEASE_OVERLAY_FILE),
-    evidence: join(infraDir, ".release-evidence"),
-  };
-}
-
 /**
  * The overlay's `file:` reference to an evidence file. Compose resolves an
  * overlay's paths against the project directory, the directory of the first

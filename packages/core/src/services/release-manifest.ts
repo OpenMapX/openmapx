@@ -480,14 +480,7 @@ export function writeReleaseComposeArtifacts(
   infraDir: string,
   options: ReleaseStateOptions = {},
 ): { evidencePath: string; overlayPath: string } {
-  return writeOverlayArtifacts(overlaySource(manifest), infraDir, options);
-}
-
-function writeOverlayArtifacts(
-  source: ReleaseOverlaySource,
-  infraDir: string,
-  options: ReleaseStateOptions,
-): { evidencePath: string; overlayPath: string } {
+  const source = overlaySource(manifest);
   const {
     directory,
     evidence: evidenceDirectory,
@@ -552,83 +545,6 @@ function writeOverlayArtifacts(
     rmSync(temporaryOverlay, { force: true });
   }
   return { evidencePath, overlayPath };
-}
-
-const LEGACY_EVIDENCE_REFERENCE =
-  /^ {4}file: \.\.\/\.release-evidence\/(privacy-release-validation-[a-f0-9]{64}\.json)$/m;
-
-/**
- * Write an overlay an earlier release left in `infra/docker` again, in the
- * release state of `infraDir`, when its release's manifest is not at hand:
- * the host CLI selected that release without storing the manifest. `raw` must
- * be read as the store's own files are, and is accepted only if it is exactly
- * what that release rendered: the overlay rendered from its own metadata and
- * from the evidence it names, which must be an immutable file of this user
- * under its own content's digest, gives the same bytes. Throws otherwise.
- */
-export function carryLegacyReleaseOverlay(
-  raw: string,
-  legacyEvidenceDirectory: string,
-  infraDir: string,
-  options: ReleaseStateOptions = {},
-): { evidencePath: string; overlayPath: string } {
-  const [firstLine] = raw.split("\n", 1);
-  const metadata = firstLine?.startsWith("x-openmapx-release: ")
-    ? firstLine.slice("x-openmapx-release: ".length)
-    : "";
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(metadata);
-  } catch {
-    throw new Error("it has no release metadata");
-  }
-  const images = (parsed as { images?: unknown } | null)?.images as
-    | Record<string, unknown>
-    | undefined;
-  const release = (parsed as { release?: unknown }).release;
-  const digest = (parsed as { digest?: unknown }).digest;
-  if (
-    typeof release !== "string" ||
-    !RELEASE_ID_PATTERN.test(release) ||
-    typeof digest !== "string" ||
-    !/^[a-f0-9]{64}$/.test(digest) ||
-    !images ||
-    typeof images !== "object" ||
-    !RELEASE_IMAGE_NAMES.every(
-      (name) =>
-        typeof images[name] === "string" &&
-        new RegExp(`^[a-z0-9][a-z0-9._/-]*/${name}@${DIGEST}$`).test(images[name] as string),
-    )
-  ) {
-    throw new Error("its release metadata is malformed");
-  }
-  const evidenceName = LEGACY_EVIDENCE_REFERENCE.exec(raw)?.[1];
-  if (!evidenceName) throw new Error("it names no release validation evidence");
-  const evidence = readImmutableEvidence(join(legacyEvidenceDirectory, evidenceName), options);
-  if (evidenceFilename(evidence) !== evidenceName) {
-    throw new Error("its release validation evidence does not match its name");
-  }
-  let validation: unknown;
-  try {
-    validation = JSON.parse(evidence);
-  } catch {
-    throw new Error("its release validation evidence is malformed");
-  }
-  if (
-    !privacyReleaseValidationSchema.safeParse(validation).success ||
-    evidence !== `${JSON.stringify(validation)}\n`
-  ) {
-    throw new Error("its release validation evidence is malformed");
-  }
-  const source: ReleaseOverlaySource = {
-    metadata,
-    images: images as ReleaseManifest["images"],
-    evidence,
-  };
-  if (renderOverlay(source, `../.release-evidence/${evidenceName}`) !== raw) {
-    throw new Error("it is not an overlay a release rendered");
-  }
-  return writeOverlayArtifacts(source, infraDir, options);
 }
 
 /**
