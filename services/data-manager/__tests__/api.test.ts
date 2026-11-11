@@ -35,6 +35,31 @@ vi.mock("../src/jobs/download-osm.js", () => ({
   downloadOsm: vi.fn(),
 }));
 
+const mockInspectOvertureRecovery = vi.hoisted(() =>
+  vi.fn(async (_dataDir: string, region: string) => {
+    const action = { allowed: false, reason: "fixture" };
+    return {
+      region,
+      busy: false,
+      osmAvailable: false,
+      downloadedRelease: null,
+      installedRelease: null,
+      actions: {
+        "overture-pull": action,
+        "overture-ingest": action,
+        "overture-extract": action,
+        "overture-conflate": action,
+        "overture-restart": action,
+      },
+    };
+  }),
+);
+
+vi.mock("../src/jobs/overture/recovery.js", async (original) => ({
+  ...(await original<typeof import("../src/jobs/overture/recovery.js")>()),
+  inspectOvertureRecovery: mockInspectOvertureRecovery,
+}));
+
 describe("data-manager API", () => {
   let fixtureRoot: string;
   let apps: FastifyInstance[];
@@ -499,6 +524,44 @@ describe("data-manager API", () => {
       { legacyTransitKey: "legacy-test-key", triggeredBy: "api:synthetic-user" },
     );
   });
+
+  it.each(["../etc", "Europe/Germany"])(
+    "GET /overture/recovery rejects an invalid region: %s",
+    async (region) => {
+      mockInspectOvertureRecovery.mockClear();
+      const app = createTestApp();
+      registerApi(app, { dataDir: createDataDir() });
+
+      const res = await app.inject({
+        method: "GET",
+        url: "/overture/recovery",
+        query: { region },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(mockInspectOvertureRecovery).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["europe/germany/berlin", "planet"])(
+    "GET /overture/recovery accepts a valid region: %s",
+    async (region) => {
+      mockInspectOvertureRecovery.mockClear();
+      const app = createTestApp();
+      const dataDir = createDataDir();
+      registerApi(app, { dataDir });
+
+      const res = await app.inject({
+        method: "GET",
+        url: "/overture/recovery",
+        query: { region },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ region });
+      expect(mockInspectOvertureRecovery).toHaveBeenCalledWith(dataDir, region);
+    },
+  );
 
   it("POST /link rejects a plan entry with a traversing targetFilename", async () => {
     const dataDir = createDataDir();
