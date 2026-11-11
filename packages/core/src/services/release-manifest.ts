@@ -159,7 +159,7 @@ export interface ReleaseBuildMetadata {
   images: Partial<
     Record<
       (typeof RELEASE_IMAGE_NAMES)[number],
-      { sourceRevision: string; inputHash: string; builtAt: string; coldRefreshedAt?: string }
+      { sourceRevision: string; inputHash: string; builtAt: string; coldRefreshedAt: string }
     >
   >;
 }
@@ -178,8 +178,8 @@ export interface ReleaseManifest {
   release: string;
   images: Record<(typeof RELEASE_IMAGE_NAMES)[number], string>;
   privacyReleaseValidation: PrivacyReleaseValidationEvidence;
-  producer?: ReleaseProducer;
-  buildMetadata?: ReleaseBuildMetadata;
+  producer: ReleaseProducer;
+  buildMetadata: ReleaseBuildMetadata;
   product?: ProductReleaseMetadata;
 }
 
@@ -225,7 +225,7 @@ const buildMetadataSchema = z.strictObject({
       sourceRevision: z.string().regex(/^[a-f0-9]{40}$/),
       inputHash: z.string().regex(/^[a-f0-9]{64}$/),
       builtAt: z.iso.datetime({ offset: true }),
-      coldRefreshedAt: z.iso.datetime({ offset: true }).optional(),
+      coldRefreshedAt: z.iso.datetime({ offset: true }),
     }),
   ),
 });
@@ -311,11 +311,12 @@ export function parseReleaseManifest(
   for (const [field, schema] of [
     ["producer", producerSchema],
     ["buildMetadata", buildMetadataSchema],
-    ["product", productSchema],
   ] as const) {
-    if (candidate[field] !== undefined && !schema.safeParse(candidate[field]).success)
+    if (!schema.safeParse(candidate[field]).success)
       throw new Error(`Release lockfile ${field} is invalid`);
   }
+  if (candidate.product !== undefined && !productSchema.safeParse(candidate.product).success)
+    throw new Error("Release lockfile product is invalid");
   const product = candidate.product as ProductReleaseMetadata | undefined;
   if (
     product &&
@@ -355,12 +356,8 @@ export function canonicalReleaseManifest(manifest: ReleaseManifest): string {
         policyConsistent: manifest.privacyReleaseValidation.checks.policyConsistent,
       },
     },
-    ...(manifest.producer ? { producer: stableObject(manifest.producer) } : {}),
-    // Legacy producerless manifests were stored without this then-informational
-    // field. Preserve their bytes/IDs; producer-bound manifests make it authority.
-    ...(manifest.producer && manifest.buildMetadata
-      ? { buildMetadata: stableObject(manifest.buildMetadata) }
-      : {}),
+    producer: stableObject(manifest.producer),
+    buildMetadata: stableObject(manifest.buildMetadata),
     ...(manifest.product ? { product: stableObject(manifest.product) } : {}),
   });
 }

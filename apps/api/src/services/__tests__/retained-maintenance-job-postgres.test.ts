@@ -29,6 +29,7 @@ import {
 import { services } from "@openmapx/core/server";
 import { eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { releaseProvenance } from "../../../../../packages/core/src/services/__fixtures__/release-provenance";
 import { ownedServiceHost } from "../../../../ops-agent/src/__fixtures__/owned-service-host";
 import { openOpsJobJournal } from "../../../../ops-agent/src/journal";
 import {
@@ -860,6 +861,7 @@ dbDescribe("retained finite maintenance requests", () => {
           validatedAt: "2026-10-30T00:00:00.000Z",
           checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
         },
+        ...releaseProvenance(),
       }),
     );
     const overlay = services.releaseStatePaths(host.infraDir).overlay;
@@ -1015,6 +1017,7 @@ dbDescribe("retained finite maintenance requests", () => {
                   policyConsistent: true,
                 },
               },
+              ...releaseProvenance(),
             }),
           ),
           host.infraDir,

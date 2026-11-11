@@ -32,6 +32,7 @@ import { ownedDataManager } from "../../../../../apps/ops-agent/src/__fixtures__
 import { ownedServiceHost } from "../../../../../apps/ops-agent/src/__fixtures__/owned-service-host";
 import { openOpsJobJournal } from "../../../../../apps/ops-agent/src/journal";
 import { buildOpsAgentServer } from "../../../../../apps/ops-agent/src/server";
+import { releaseProvenance } from "../../../../../packages/core/src/services/__fixtures__/release-provenance";
 
 // Keep real filesystem checks and writes; expose only the publication boundary
 // so an acknowledged rename can lose its reply in the recovery tests.
@@ -1149,6 +1150,7 @@ async function ownedFenceFixture(
           validatedAt: "2026-10-30T00:00:00.000Z",
           checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
         },
+        ...releaseProvenance(),
       }),
     );
     const raw = services.canonicalReleaseManifest(manifest);

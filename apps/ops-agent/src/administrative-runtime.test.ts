@@ -14,6 +14,7 @@ import { join } from "node:path";
 import type { OpsOperation, ServiceBatchResult } from "@openmapx/core/ops";
 import { services as coreServices, services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { releaseProvenance } from "../../../packages/core/src/services/__fixtures__/release-provenance";
 import { testExecution } from "./__fixtures__/execution";
 import {
   createAdministrativeRuntime,
@@ -878,6 +879,7 @@ describe("administrative release runtime", () => {
         ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${digit.repeat(64)}`]),
       ),
       privacyReleaseValidation,
+      ...releaseProvenance(),
     });
     let manifestText = JSON.stringify(makeManifest("4"));
     const dockerCalls: string[][] = [];
@@ -972,6 +974,7 @@ describe("administrative release runtime", () => {
         ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${String(attempt).repeat(64)}`]),
       ),
       privacyReleaseValidation,
+      ...releaseProvenance(),
       producer: {
         repository: "OpenMapX/openmapx",
         workflowPath: ".github/workflows/ci.yml",
@@ -1024,6 +1027,7 @@ describe("administrative release runtime", () => {
         ]),
       ),
       privacyReleaseValidation,
+      ...releaseProvenance(),
     });
     writeFileSync(join(store, "release-1.json"), manifest, { mode: 0o600 });
     chmodSync(join(store, "release-1.json"), 0o660);
@@ -1066,6 +1070,7 @@ describe("administrative release runtime", () => {
             ]),
           ),
           privacyReleaseValidation,
+          ...releaseProvenance(),
         }),
       ),
     );
@@ -1115,6 +1120,7 @@ describe("administrative release runtime", () => {
         ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${digit.repeat(64)}`]),
       ),
       privacyReleaseValidation,
+      ...releaseProvenance(),
     });
     const latest = makeManifest("a-new", "1");
     writeFileSync(join(directory, "z-old.json"), JSON.stringify(makeManifest("z-old", "2")), {
@@ -1168,6 +1174,7 @@ describe("administrative release runtime", () => {
           ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"3".repeat(64)}`]),
         ),
         privacyReleaseValidation,
+        ...releaseProvenance(),
       });
     for (let index = 0; index < 63; index += 1) {
       writeFileSync(join(directory, `release-${index}.json`), stored(`release-${index}`), {
@@ -1247,6 +1254,7 @@ describe("administrative release runtime", () => {
           ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"3".repeat(64)}`]),
         ),
         privacyReleaseValidation,
+        ...releaseProvenance(),
       };
       writeFileSync(join(directory, `${releaseId}.json`), JSON.stringify(manifest), {
         mode: 0o600,
@@ -1321,6 +1329,7 @@ describe("administrative release runtime", () => {
             ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"3".repeat(64)}`]),
           ),
           privacyReleaseValidation,
+          ...releaseProvenance(),
         }),
         { mode: 0o600 },
       );
@@ -1373,6 +1382,7 @@ describe("administrative release runtime", () => {
           ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${tag.repeat(64)}`]),
         ),
         privacyReleaseValidation,
+        ...releaseProvenance(),
       });
     writeFileSync(join(directory, `${releaseId}.json`), manifestFor("3"), { mode: 0o600 });
 
@@ -1426,6 +1436,7 @@ describe("administrative release runtime", () => {
             ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"5".repeat(64)}`]),
           ),
           privacyReleaseValidation,
+          ...releaseProvenance(),
         }),
         { mode: 0o600 },
       );
@@ -1500,6 +1511,7 @@ describe("administrative release runtime", () => {
         ]),
       ),
       privacyReleaseValidation,
+      ...releaseProvenance(),
     };
     writeFileSync(join(releaseDirectory, `${releaseId}.json`), JSON.stringify(manifest), {
       mode: 0o600,
@@ -1588,6 +1600,7 @@ describe("administrative release runtime", () => {
             ]),
           ),
           privacyReleaseValidation,
+          ...releaseProvenance(),
         }),
         { mode: 0o600 },
       );
@@ -1720,6 +1733,7 @@ describe("administrative release runtime", () => {
           ]),
         ),
         privacyReleaseValidation,
+        ...releaseProvenance(),
       }),
       { mode: 0o600 },
     );
@@ -1987,6 +2001,7 @@ it("never gives release recovery a fresh execution budget after restart expiry",
         ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`]),
       ),
       privacyReleaseValidation,
+      ...releaseProvenance(),
     }),
     { mode: 0o600 },
   );
@@ -2043,6 +2058,7 @@ describe("fix1 legacy release recovery", () => {
             ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`]),
           ),
           privacyReleaseValidation,
+          ...releaseProvenance(),
         }),
         { mode: 0o600 },
       );
@@ -2101,6 +2117,7 @@ it("fix1 recovery cannot publish after verification consumes the remaining deadl
         ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`]),
       ),
       privacyReleaseValidation,
+      ...releaseProvenance(),
     }),
     { mode: 0o600 },
   );

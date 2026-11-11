@@ -296,7 +296,8 @@ function validatePrevious(previous, imagePrefix) {
   if (
     previous.schemaVersion !== 1 ||
     !previousReleasePattern.test(previous.release ?? "") ||
-    !hashPattern.test(previous.privacyReleaseValidation?.sourceBuildFingerprint ?? "")
+    !hashPattern.test(previous.privacyReleaseValidation?.sourceBuildFingerprint ?? "") ||
+    previous.buildMetadata?.version !== 1
   )
     throw new Error("Invalid previous release manifest");
   for (const { app } of targets) {
@@ -309,7 +310,6 @@ function validatePrevious(previous, imagePrefix) {
     )
       throw new Error(`Invalid previous release image: ${app}`);
   }
-  if (previous.buildMetadata?.version !== 1) return;
   for (const { app } of targets) {
     const metadata = previous.buildMetadata.images?.[app];
     if (
@@ -319,8 +319,7 @@ function validatePrevious(previous, imagePrefix) {
     )
       throw new Error(`Invalid previous build metadata: ${app}`);
     timestamp(metadata.builtAt);
-    // Legacy manifests lack this field; their next release must cold-build.
-    if (metadata.coldRefreshedAt !== undefined) timestamp(metadata.coldRefreshedAt);
+    timestamp(metadata.coldRefreshedAt);
   }
 }
 
@@ -360,14 +359,10 @@ export function createReleasePlan({
       bundleDigest: bundleDigests[target.app],
       readFile,
     });
-    const old =
-      previous?.buildMetadata?.version === 1
-        ? previous.buildMetadata.images[target.app]
-        : undefined;
+    const old = previous?.buildMetadata.images[target.app];
     const refresh =
       force ||
       !old ||
-      old.coldRefreshedAt === undefined ||
       currentTime - timestamp(old.coldRefreshedAt) >= maxColdRefreshAge ||
       timestamp(old.coldRefreshedAt) > currentTime ||
       timestamp(old.builtAt) > currentTime;

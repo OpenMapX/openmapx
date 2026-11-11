@@ -4,6 +4,7 @@ import {
   executionFingerprint,
   opsOperationFingerprint,
 } from "../ops";
+import { releaseProvenance } from "../services/__fixtures__/release-provenance";
 import { renderConfiguration } from "../services/configuration-generation";
 import type { LoadedService } from "../services/types";
 import { assertProspectiveConfigurationMaintenanceBudget } from "./configuration-maintenance-budget";
@@ -224,6 +225,7 @@ it("freezes the checked release helper graph and budgets a complete 13-service s
         validatedAt: "2026-10-30T00:00:00Z",
         checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
       },
+      ...releaseProvenance(),
     }),
   );
   const canonicalManifest = canonicalReleaseManifest(manifest),

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { releaseProvenance } from "../../../packages/core/src/services/__fixtures__/release-provenance";
 import { testExecution } from "./__fixtures__/execution";
 import { createAdministrativeRuntime, createDefaultReleaseEffects } from "./administrative-runtime";
 import { type AgentHandoffRecord, readAgentHandoff, writeAgentHandoff } from "./agent-handoff";
@@ -38,6 +39,7 @@ const manifestText = JSON.stringify({
     validatedAt: "2026-09-05T12:00:00.000Z",
     checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
   },
+  ...releaseProvenance(),
 });
 const digest = createHash("sha256").update(manifestText).digest("hex");
 const agentContainer = "c".repeat(64);

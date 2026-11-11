@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { CONFIGURATION_RELEASE_IMAGE_NAMES } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { releaseProvenance } from "../../../packages/core/src/services/__fixtures__/release-provenance";
 import { readCheckedConfigurationRelease } from "./configuration-release";
 import { inspectConfigurationReleaseDownloads } from "./configuration-release-downloads";
 
@@ -41,6 +42,7 @@ beforeEach(() => {
           validatedAt: "2026-10-30T00:00:00.000Z",
           checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
         },
+        ...releaseProvenance(),
       }),
     ),
   );

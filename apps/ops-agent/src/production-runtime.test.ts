@@ -26,6 +26,7 @@ import { services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parse as parseYaml } from "yaml";
 import { installedCompose } from "../../../packages/core/src/services/__fixtures__/compose-path-host";
+import { releaseProvenance } from "../../../packages/core/src/services/__fixtures__/release-provenance";
 import { ownedComposePathRuntime } from "./__fixtures__/owned-compose-path-runtime";
 import { ownedServiceHost } from "./__fixtures__/owned-service-host";
 import { readProductionFixtureCompose } from "./__fixtures__/production-compose-config";
@@ -292,6 +293,7 @@ describe("assembled production service authority", () => {
           validatedAt: "2026-09-05T12:00:00.000Z",
           checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
         },
+        ...releaseProvenance(),
       }),
     );
     writeFileSync(

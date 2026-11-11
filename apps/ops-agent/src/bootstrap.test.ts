@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
 import { expect, it, vi } from "vitest";
+import { releaseProvenance } from "../../../packages/core/src/services/__fixtures__/release-provenance";
 import { testExecution } from "./__fixtures__/execution";
 import { createDefaultReleaseEffects } from "./administrative-runtime";
 import { startOpsAgentServer } from "./bootstrap";
@@ -120,6 +121,7 @@ it.each(["legacy", "expired"])(
         validatedAt: "2026-09-05T12:00:00.000Z",
         checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
       },
+      ...releaseProvenance(),
     };
     writeFileSync(join(directory, "release-bootstrap.json"), JSON.stringify(manifest), {
       mode: 0o600,

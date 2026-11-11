@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { releaseProvenance } from "../../core/src/services/__fixtures__/release-provenance";
 import {
   clearReleaseSelection,
   ensureReleaseOverlay,
@@ -45,6 +46,7 @@ function manifest(release: string, dmDigest = "c"): ReleaseManifest {
         policyConsistent: true,
       },
     },
+    ...releaseProvenance(),
   };
 }
 

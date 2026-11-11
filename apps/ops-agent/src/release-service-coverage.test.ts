@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { releaseProvenance } from "../../../packages/core/src/services/__fixtures__/release-provenance";
 import { testExecution } from "./__fixtures__/execution";
 import {
   buildControlTestServer as buildOpsAgentServer,
@@ -34,6 +35,7 @@ function fixture(mode = "matching", crash = false) {
         validatedAt: "2026-09-12T12:00:00.000Z",
         checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
       },
+      ...releaseProvenance(),
     }),
   );
   writeFileSync(join(directory, "test-release.json"), services.canonicalReleaseManifest(manifest), {

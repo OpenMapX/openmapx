@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { load } from "js-yaml";
 import { describe, expect, it } from "vitest";
+import { releaseProvenance } from "../__fixtures__/release-provenance";
 import { CURRENT_CONFIGURATION } from "../deployment";
 import {
   canonicalReleaseManifest,
@@ -49,6 +50,7 @@ const manifest: ReleaseManifest = {
       policyConsistent: true,
     },
   },
+  ...releaseProvenance(),
 };
 
 describe("shared release manifest", () => {
@@ -63,6 +65,7 @@ describe("shared release manifest", () => {
             sourceRevision: "b".repeat(40),
             inputHash: "c".repeat(64),
             builtAt: "2026-09-05T12:00:00.000Z",
+            coldRefreshedAt: "2026-09-05T12:00:00.000Z",
           },
         },
       },

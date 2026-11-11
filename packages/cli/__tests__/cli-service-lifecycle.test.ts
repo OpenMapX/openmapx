@@ -14,6 +14,7 @@ import * as control from "@openmapx/core/build-artifacts";
 import { services } from "@openmapx/core/server";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { releaseProvenance } from "../../core/src/services/__fixtures__/release-provenance";
 import { renderComposeForRepo } from "../src/commands/compose";
 import { registerServicesCommands } from "../src/commands/services";
 import { migrateBeforeApiUpdate } from "../src/lib/api-migrations";
@@ -424,6 +425,7 @@ describe("actual CLI service lifecycle preparation", () => {
           validatedAt: "2026-09-05T12:00:00.000Z",
           checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
         },
+        ...releaseProvenance(),
       }),
       "ghcr.io/openmapx",
     );

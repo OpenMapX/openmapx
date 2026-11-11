@@ -13,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { releaseProvenance } from "../__fixtures__/release-provenance";
 import * as services from "../index";
 
 const roots: string[] = [];
@@ -34,6 +35,7 @@ function manifest(release = "checked-release"): services.ReleaseManifest {
       validatedAt: "2026-11-06T00:00:00.000Z",
       checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
     },
+    ...releaseProvenance(),
   };
 }
 async function fixture() {
