@@ -171,37 +171,6 @@ describe("retained generation hardlinks", () => {
     ).rejects.toThrow();
     expect(inspect).not.toHaveBeenCalled();
   });
-  it("observes an old unknown link attempt without another coordinator or leaf call", async () => {
-    const ctx = context();
-    ctx.checkpointResult = {
-      _hardlinkAttempts: { retained: { revisionId: REVISION, phase: "attempted" } },
-    };
-    const options = {
-      ctx,
-      revisionId: REVISION,
-      operationIdentity: "retained",
-      coordinatorMode: "ensure-running" as const,
-    };
-    await expect(applyGenerationHardlinks(options)).rejects.toBeInstanceOf(JobObservationPending);
-    await expect(applyGenerationHardlinks(options)).rejects.toBeInstanceOf(JobObservationPending);
-    expect(inspect).not.toHaveBeenCalled();
-    expect(broker).not.toHaveBeenCalled();
-  });
-  it("returns only the exact completed legacy link receipt", async () => {
-    const ctx = context();
-    ctx.checkpointResult = {
-      _hardlinkAttempts: { retained: { revisionId: REVISION, phase: "complete", result: summary } },
-    };
-    expect(
-      await applyGenerationHardlinks({
-        ctx,
-        revisionId: REVISION,
-        operationIdentity: "retained",
-        coordinatorMode: "require-running",
-      }),
-    ).toEqual(summary);
-    expect(inspect).not.toHaveBeenCalled();
-  });
   it("single Start uses shared full preparation and targets only its final revision", async () => {
     const ctx = context();
     await serviceStart("valhalla", ctx);

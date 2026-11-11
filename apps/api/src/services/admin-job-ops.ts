@@ -111,7 +111,6 @@ export async function ensureAdminJobReceiptDelivery(
   if (
     projected.phase === "refused" ||
     projected.phase === "unissued" ||
-    projection.version !== 3 ||
     !projected.attempt ||
     !Object.values(projection.steps).some((s) => s.operationKey === projected.operationKey) ||
     !opsKindRequiresControlAuthority(projected.kind)
@@ -744,7 +743,6 @@ export async function resumeAdminJobObservation(
     }
   }
   const evidence = { ...ctx.checkpointResult };
-  if (hasUnsettledHardlinks(evidence)) throw new JobObservationPending("recovery_required");
   if (failure)
     throw new AdminJobFailure(failure.message, { ...evidence, ...failure.failureResult });
   const settled = evidence._settled as
@@ -792,12 +790,6 @@ export async function resumeAdminJobObservation(
     },
     "recovery_required",
   );
-}
-
-function hasUnsettledHardlinks(result: unknown): boolean {
-  const attempts = (result as { _hardlinkAttempts?: Record<string, { phase?: string }> } | null)
-    ?._hardlinkAttempts;
-  return !!attempts && Object.values(attempts).some((attempt) => attempt?.phase !== "complete");
 }
 
 export interface CancelAdminJobOperationsOptions {
@@ -1157,7 +1149,7 @@ export async function cancelAdminJobOperations(
       operation.errorClass = status.errorClass;
       operation.failureResult = status.failureResult;
     }
-    if (projection.version === 3 && opsKindRequiresControlAuthority(operation.kind)) {
+    if (opsKindRequiresControlAuthority(operation.kind)) {
       if (!options.context) return "pending";
       try {
         await ensureAdminJobReceiptDelivery(
@@ -1190,7 +1182,6 @@ export async function cancelAdminJobOperations(
   if (backend === "contained" || latestBackend === "contained") outcomes.push("contained");
   else if (backend === "already_terminal" || latestBackend === "already_terminal")
     outcomes.push("already_terminal");
-  if (hasUnsettledHardlinks(result)) return "pending";
   if (recoveredFailure) return "recovered_failure";
   const standaloneResult = options.context?.checkpointResult ?? result;
   if (

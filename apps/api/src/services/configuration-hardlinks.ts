@@ -1,5 +1,4 @@
 import type { CoordinatorMode, HardlinkApplySummary } from "@openmapx/core/ops";
-import { JobObservationPending } from "./admin-job-failure";
 import { executeAdminJobOperation } from "./admin-job-ops";
 import type { JobContext } from "./job-runner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-client";
@@ -14,16 +13,6 @@ export async function applyGenerationHardlinks(options: {
 }): Promise<HardlinkApplySummary> {
   const ctx = options.ctx;
   if (!ctx) throw Error("A retained configuration job is required");
-  const legacy = (
-    ctx.checkpointResult?._hardlinkAttempts as
-      | Record<string, { revisionId?: string; phase?: string; result?: HardlinkApplySummary }>
-      | undefined
-  )?.[options.operationIdentity];
-  if (legacy) {
-    if (legacy.revisionId !== options.revisionId || legacy.phase !== "complete" || !legacy.result)
-      throw new JobObservationPending("recovery_required");
-    return legacy.result;
-  }
   const { plan } = await executeAndWait(
     createApiOpsClient(),
     { kind: "configuration.hardlinks.inspect", revisionId: options.revisionId },

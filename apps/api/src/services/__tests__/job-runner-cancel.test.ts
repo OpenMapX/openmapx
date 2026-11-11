@@ -7,7 +7,8 @@ const database = vi.hoisted(() => {
   const updates: Array<Record<string, unknown>> = [];
   const result = {
     opsProjection: {
-      version: 1,
+      version: 3,
+      steps: {},
       eventTotal: 0,
       byteTotal: 0,
       truncated: false,

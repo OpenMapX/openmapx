@@ -34,7 +34,14 @@ it("keeps the real runner's durable pending outcome observable through Fastify a
     status: "running",
     payload: { operation: "link" },
     result: {
-      opsProjection: { version: 1, eventTotal: 0, byteTotal: 0, truncated: false, operations: {} },
+      opsProjection: {
+        version: 3,
+        steps: {},
+        eventTotal: 0,
+        byteTotal: 0,
+        truncated: false,
+        operations: {},
+      },
     },
     error: null,
     progress: 10,

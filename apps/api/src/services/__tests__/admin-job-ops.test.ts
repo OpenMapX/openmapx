@@ -47,10 +47,11 @@ function context(): JobContext {
   };
   return ctx;
 }
-function legacy(ctx: JobContext, key: string, kind: OpsOperation["kind"], id?: string) {
+function seedProjection(ctx: JobContext, key: string, kind: OpsOperation["kind"], id?: string) {
   ctx.checkpointResult = {
     opsProjection: {
-      version: 2,
+      version: 3,
+      steps: {},
       eventTotal: 0,
       byteTotal: 0,
       truncated: false,
@@ -189,7 +190,7 @@ describe("administrative job operations broker", () => {
     const ctx = context();
     const operationKey = "opk1_abcdefghijklmnop";
     const operationId = "job1_abcdefghijklmnop";
-    legacy(ctx, operationKey, "system.update", operationId);
+    seedProjection(ctx, operationKey, "system.update", operationId);
     const client = {
       execute: vi.fn().mockResolvedValue({
         execution: "async",
@@ -250,7 +251,7 @@ describe("administrative job operations broker", () => {
     };
     const operationKey = "opk1_abcdefghijklmnop";
     const operationId = "job1_abcdefghijklmnop";
-    legacy(ctx, operationKey, operation.kind, operationId);
+    seedProjection(ctx, operationKey, operation.kind, operationId);
     const cancel = vi.fn();
     const client = {
       execute: vi.fn().mockResolvedValue({
@@ -301,7 +302,7 @@ describe("administrative job operations broker", () => {
     expect(ctx.checkpoint).toHaveBeenCalledWith(
       expect.objectContaining({
         opsProjection: expect.objectContaining({
-          version: 2,
+          version: 3,
           eventTotal: 1,
           byteTotal: 4,
           operations: expect.objectContaining({
@@ -323,7 +324,8 @@ describe("administrative job operations broker", () => {
     const ctx = context();
     ctx.checkpointResult = {
       opsProjection: {
-        version: 1,
+        version: 3,
+        steps: {},
         eventTotal: 1,
         byteTotal: 4,
         truncated: false,
@@ -332,6 +334,7 @@ describe("administrative job operations broker", () => {
             kind: operation.kind,
             operationKey,
             operationId,
+            phase: "observing",
             cursor: 1,
             events: 1,
             bytes: 4,
@@ -395,15 +398,17 @@ describe("administrative job operations broker", () => {
     const operationId = "job1_abcdefghijklmnop";
     const projection = {
       opsProjection: {
-        version: 1,
+        version: 3,
+        steps: {},
         eventTotal: 0,
         byteTotal: 0,
         truncated: false,
         operations: {
           opk1_abcdefghijklmnop: {
-            kind: "backup.create",
+            kind: "system.diagnostics",
             operationKey: "opk1_abcdefghijklmnop",
             operationId,
+            phase: "observing",
             cursor: 0,
             events: 0,
             bytes: 0,
@@ -419,13 +424,13 @@ describe("administrative job operations broker", () => {
         .fn()
         .mockResolvedValueOnce({
           state: "termination_pending",
-          kind: "backup.create",
+          kind: "system.diagnostics",
           operationId,
           operationKey: "opk1_abcdefghijklmnop",
         })
         .mockResolvedValueOnce({
           state: "failed",
-          kind: "backup.create",
+          kind: "system.diagnostics",
           operationId,
           operationKey: "opk1_abcdefghijklmnop",
           errorClass: "runtime",
@@ -448,15 +453,17 @@ describe("administrative job operations broker", () => {
     const canceledId = "job1_bbbbbbbbbbbbbbbb";
     const projection = {
       opsProjection: {
-        version: 1,
+        version: 3,
+        steps: {},
         eventTotal: 0,
         byteTotal: 0,
         truncated: false,
         operations: {
           opk1_abcdefghijklmnop: {
-            kind: "backup.create",
+            kind: "system.diagnostics",
             operationKey: "opk1_abcdefghijklmnop",
             operationId: succeededId,
+            phase: "observing",
             cursor: 0,
             events: 0,
             bytes: 0,
@@ -464,9 +471,10 @@ describe("administrative job operations broker", () => {
             terminal: false,
           },
           opk1_bbbbbbbbbbbbbbbb: {
-            kind: "backup.create",
+            kind: "system.diagnostics",
             operationKey: "opk1_bbbbbbbbbbbbbbbb",
             operationId: canceledId,
+            phase: "observing",
             cursor: 0,
             events: 0,
             bytes: 0,
@@ -481,14 +489,14 @@ describe("administrative job operations broker", () => {
         operationId === succeededId
           ? {
               state: "succeeded",
-              kind: "backup.create",
+              kind: "system.diagnostics",
               operationId: succeededId,
               operationKey: "opk1_abcdefghijklmnop",
               result: {},
             }
           : {
               state: "failed",
-              kind: "backup.create",
+              kind: "system.diagnostics",
               operationId: canceledId,
               operationKey: "opk1_bbbbbbbbbbbbbbbb",
               errorClass: "runtime",
@@ -514,15 +522,17 @@ describe("administrative job operations broker", () => {
     const operationId = "job1_abcdefghijklmnop";
     const projection = {
       opsProjection: {
-        version: 1,
+        version: 3,
+        steps: {},
         eventTotal: 0,
         byteTotal: 0,
         truncated: false,
         operations: {
           opk1_abcdefghijklmnop: {
-            kind: "backup.create",
+            kind: "system.diagnostics",
             operationKey: "opk1_abcdefghijklmnop",
             operationId,
+            phase: "observing",
             cursor: 0,
             events: 0,
             bytes: 0,
@@ -537,7 +547,7 @@ describe("administrative job operations broker", () => {
     const client = {
       cancel: vi.fn().mockResolvedValue({
         state: "failed",
-        kind: "backup.create",
+        kind: "system.diagnostics",
         operationId,
         operationKey: "opk1_abcdefghijklmnop",
         errorClass: "runtime",
@@ -622,7 +632,8 @@ it("validates a resumed operation identity before reading its event stream", asy
   const operationId = "job1_abcdefghijklmnop";
   ctx.checkpointResult = {
     opsProjection: {
-      version: 1,
+      version: 3,
+      steps: {},
       eventTotal: 0,
       byteTotal: 0,
       truncated: false,
@@ -631,6 +642,7 @@ it("validates a resumed operation identity before reading its event stream", asy
           kind: "backup.delete",
           operationKey,
           operationId,
+          phase: "observing",
           cursor: 0,
           events: 0,
           bytes: 0,
@@ -871,7 +883,8 @@ it("does not read or cancel an attempted child belonging to another API job", as
   const { opsOperationFingerprint } = await import("@openmapx/core/ops");
   ctx.checkpointResult = {
     opsProjection: {
-      version: 2,
+      version: 3,
+      steps: {},
       eventTotal: 0,
       byteTotal: 0,
       truncated: false,
@@ -949,7 +962,7 @@ it.each(["log", "checkpoint", "output"])(
       };
     const key = "opk1_displacedObserver1";
     const id = "job1_displacedObserver1";
-    legacy(ctx, key, "backup.delete");
+    seedProjection(ctx, key, "backup.delete");
     const client = {
       execute: vi.fn().mockResolvedValue({
         execution: "async",

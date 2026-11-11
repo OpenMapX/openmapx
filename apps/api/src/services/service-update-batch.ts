@@ -68,10 +68,6 @@ export async function prepareServiceUpdateBatch(ctx: JobContext) {
       retained = result;
       return parseServiceUpdateBatch(row.payload, result);
     }
-    // An older partially attempted batch has no trustworthy original revision.
-    // Never infer that input from the current pointer on recovery.
-    if (result.opsProjection || result._configurationCandidate)
-      throw new JobObservationPending("recovery_required");
     retained = { ...result, _serviceUpdateBatch: original };
     const rows = await tx
       .update(adminJob)
