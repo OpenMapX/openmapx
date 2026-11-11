@@ -114,16 +114,18 @@ describe("the ops-agent's fixed CLI", () => {
     const checkout = hostileCheckout();
     const checked = await cli(checkout, "check", "--no-probe");
     const output = `${checked.stdout}\n${checked.stderr}`;
-    // The checkout's manifests don't matter to the agent any more; its edits
-    // to service files become overrides at the next render.
-    expect(output).toContain("The next render imports, once");
+    // The checkout's manifests and service files don't matter to the agent.
     expect(output).not.toContain("missing brouter");
+    expect(output).not.toContain("services/valhalla/service.json");
 
     const printed = await cli(checkout, "compose", "release-files");
     const index = JSON.parse(printed.stdout) as {
+      version: number;
       manifests: Record<string, string>;
       files: Array<{ serviceId: string; path: string; executable: boolean }>;
     };
+    expect(index.version).toBe(2);
+    expect(Object.keys(index).sort()).toEqual(["files", "manifests", "version"]);
     // The release's manifests, brouter included, not the tampered valhalla.
     expect(index.manifests.valhalla).toBe(
       createHash("sha256")

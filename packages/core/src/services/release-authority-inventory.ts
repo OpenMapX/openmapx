@@ -125,7 +125,7 @@ export function readBuiltInServices(
     });
   }
   // The release's service files are part of what it runs: a bundle covers
-  // their bytes, executable bits and every earlier version the import knows.
+  // their paths, bytes and executable bits.
   // (Run from source, only tests pass an embedded source, without files.)
   const files =
     options.serviceFiles !== undefined
@@ -142,14 +142,6 @@ export function readBuiltInServices(
         .update(file.executable ? "x" : "-")
         .update("\0")
         .update(file.sha256)
-        .update("\0");
-    }
-    digest.update("history\0");
-    for (const [key, hashes] of [...files.history].sort(([a], [b]) => a.localeCompare(b))) {
-      digest
-        .update(key)
-        .update("\0")
-        .update([...hashes].sort().join(","))
         .update("\0");
     }
   }

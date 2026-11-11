@@ -37,10 +37,7 @@ export {
   checkoutDifferencesFromRelease,
   describeCheckoutDifferences,
 } from "./checkout-differences";
-export {
-  checkoutMounted,
-  checkoutMountedAt,
-} from "./checkout-layout";
+export { checkoutMountedAt } from "./checkout-layout";
 export { communityServiceManifestProblems } from "./community-manifest";
 export {
   COMMUNITY_RECORD_VERSION,
@@ -347,21 +344,8 @@ export {
   parseServiceIdList,
   SERVICE_SELECTION_ENV,
 } from "./selection";
-export {
-  type CheckoutPosition,
-  checkoutPositionFromHistory,
-  describeDeferredServiceFileImport,
-  describeServiceFileImport,
-  describeWaitingTraefikEdits,
-  importCheckoutServiceFiles,
-  planServiceFileImport,
-  type ServiceFileImport,
-  type ServiceFileImportPlan,
-  serviceFilesImported,
-  waitingTraefikEdits,
-} from "./service-file-import";
 export { describeServiceFiles, type ServiceFileReportLine } from "./service-file-report";
-export { readGenerationServiceFiles, serviceFileStore } from "./service-file-store";
+export { serviceFileStore } from "./service-file-store";
 export * from "./service-lifecycle-receipt";
 export { readServiceOverrides, staleOverrides } from "./service-overrides";
 export {

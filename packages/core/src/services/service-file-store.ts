@@ -381,7 +381,7 @@ export function serializeGenerationServiceFiles(
   })}\n`;
 }
 
-/** The trees a generation directory records, or null when it records none (an earlier release's). */
+/** The trees a generation directory records, or null when it has no record of them. */
 export function readGenerationServiceFiles(generation: string): Map<string, string> | null {
   let raw: string;
   try {

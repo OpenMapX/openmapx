@@ -127,14 +127,9 @@ jobs:
         # advisories are narrowly versioned and expire for explicit review.
         run: pnpm check-production-audits
 
-      - name: Check the release's service files and their history
-        # The bundle embeds every file a built-in mounts; the history of each,
-        # generated from Git, tells an operator's edit from an older release.
-        run: |
-          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
-            git fetch --no-tags --unshallow origin
-          fi
-          pnpm check-service-files
+      - name: Check the release's service file list
+        # The bundle embeds every file a built-in mounts.
+        run: pnpm check-service-files
 
       - name: Check the committed OpenAPI document matches the API surface
         # Mounts the route table in-process — no database, cache or network.

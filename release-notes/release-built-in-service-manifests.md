@@ -26,11 +26,12 @@ checkout should know that the ops-agent now ignores those edits; the host
 
 ## Required action
 
-None. Keep the checkout at the selected release: services still mount their
-configuration files from it. The agent's startup log and **Run diagnostics**
-under Maintenance in the admin panel report built-in services that are missing
-from, changed in or not in the release. The host `pnpm openmapx check` runs the
-checkout's own manifests and does not compare them. Together with
+None. Keep the checkout at the selected release. Services mount their
+configuration files from the release, not from the checkout. The agent has no
+checkout, so its startup log does not compare it. The host
+`pnpm openmapx check` compares the checkout's built-in manifests and service
+files with the selected release's, and a host render refuses while they
+differ. Together with
 `release-community-and-integration-trust.md`, the agent checks no file
 permissions on the checkout's tracked files, so a checkout written under a
 umask of `002` needs no repair. Only the operator's account may write the

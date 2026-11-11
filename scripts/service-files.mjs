@@ -1,30 +1,23 @@
 // biome-ignore-all lint/suspicious/noConsole: Standalone generator script.
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
  * The release's built-in service files, from the repository:
+ * `packages/core/src/services/embedded-service-files.bundle.ts` lists every
+ * file a built-in mount names (and Traefik's configuration) with a literal
+ * `new URL(…)`, so the ops-agent's runtime bundle embeds each one and its
+ * digest covers them.
  *
- * - `packages/core/src/services/embedded-service-files.bundle.ts`, which lists
- *   every file a built-in mount names (and Traefik's configuration) with a
- *   literal `new URL(…)`, so the ops-agent's runtime bundle embeds each one
- *   and its digest covers them;
- * - `services/service-file-history.json`, the sha256 of every version each of
- *   those files had in the repository's history, so the one-time overrides
- *   import tells an operator's edit from a checkout an earlier release left.
- *
- * Both are generated, never edited by hand: `pnpm generate:service-files`.
- * `--check` fails when either is stale or the history lacks a version,
- * including the current one. The history needs the full Git history.
+ * It is generated, never edited by hand: `pnpm generate:service-files`.
+ * `--check` fails when it is stale.
  */
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MODULE = "packages/core/src/services/embedded-service-files.bundle.ts";
 const MANIFEST_MODULE = "packages/core/src/services/embedded-built-in-services.bundle.ts";
-export const HISTORY = "services/service-file-history.json";
 const TRAEFIK_RELEASE_PATHS = ["config/traefik.yml", "config/dynamic"];
 
 function git(args, options = {}) {
@@ -104,45 +97,9 @@ export function embeddedBuiltInServiceFiles(): EmbeddedServiceFiles | null {
     files: [
 ${entries}
     ],
-    history: new URL("../../../../${HISTORY}", import.meta.url),
   };
 }
 `;
-}
-
-const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
-
-/** Every version each file had in the history of HEAD, and its current bytes. */
-export function historyOf(files) {
-  if (git(["rev-parse", "--is-shallow-repository"], { encoding: "utf8" }).trim() === "true") {
-    throw new Error("The service file history needs the full Git history (git fetch --unshallow).");
-  }
-  const history = {};
-  for (const file of files) {
-    const path = `services/${file.serviceId}/${file.path}`;
-    const hashes = new Set([sha256(readFileSync(join(ROOT, path)))]);
-    const commits = git(["rev-list", "HEAD", "--", path], { encoding: "utf8" })
-      .split("\n")
-      .filter(Boolean);
-    for (const commit of commits) {
-      try {
-        hashes.add(
-          sha256(
-            git(["cat-file", "blob", `${commit}:${path}`], { stdio: ["ignore", "pipe", "ignore"] }),
-          ),
-        );
-      } catch {
-        // The commit removed the file.
-      }
-    }
-    history[`${file.serviceId}/${file.path}`] = [...hashes].sort();
-  }
-  return history;
-}
-
-export function renderHistory(history) {
-  const files = Object.fromEntries(Object.entries(history).sort(([a], [b]) => a.localeCompare(b)));
-  return `${JSON.stringify({ version: 1, files }, null, 2)}\n`;
 }
 
 /** `text` as the repository's formatter writes `path`, so the files pass its check. */
@@ -161,50 +118,17 @@ function formatted(path, text) {
 function main() {
   const files = releaseServiceFiles();
   const module = formatted(MODULE, renderModule(files));
-  const history = historyOf(files);
   if (!process.argv.includes("--check")) {
     writeFileSync(join(ROOT, MODULE), module);
-    // Versions recorded before stay: a squash merge drops a branch's commits.
-    let recorded = {};
-    try {
-      recorded = JSON.parse(readFileSync(join(ROOT, HISTORY), "utf8")).files ?? {};
-    } catch {
-      // First run.
-    }
-    for (const [key, hashes] of Object.entries(history)) {
-      history[key] = [...new Set([...(recorded[key] ?? []), ...hashes])].sort();
-    }
-    writeFileSync(join(ROOT, HISTORY), formatted(HISTORY, renderHistory(history)));
-    console.log(`${files.length} service files, ${MODULE} and ${HISTORY} written.`);
+    console.log(`${files.length} service files, ${MODULE} written.`);
     return;
   }
-  const problems = [];
-  if (readFileSync(join(ROOT, MODULE), "utf8") !== module) problems.push(`${MODULE} is stale`);
-  let recorded = {};
-  try {
-    recorded = JSON.parse(readFileSync(join(ROOT, HISTORY), "utf8")).files ?? {};
-  } catch {
-    problems.push(`${HISTORY} is missing or malformed`);
-  }
-  for (const [key, hashes] of Object.entries(history)) {
-    const known = new Set(recorded[key] ?? []);
-    const current = sha256(readFileSync(join(ROOT, "services", key)));
-    if (!known.has(current))
-      problems.push(`${HISTORY} lacks the current version of services/${key}`);
-    else if (hashes.some((hash) => !known.has(hash))) {
-      problems.push(`${HISTORY} lacks earlier versions of services/${key}`);
-    }
-  }
-  for (const key of Object.keys(recorded)) {
-    if (!(key in history))
-      problems.push(`${HISTORY} lists services/${key}, which no built-in names`);
-  }
-  if (problems.length > 0) {
-    for (const problem of problems) console.error(problem);
+  if (readFileSync(join(ROOT, MODULE), "utf8") !== module) {
+    console.error(`${MODULE} is stale`);
     console.error("Run `pnpm generate:service-files` and commit the result.");
     process.exit(1);
   }
-  console.log(`${files.length} service files: the bundle list and their history are current.`);
+  console.log(`${files.length} service files: the bundle list is current.`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

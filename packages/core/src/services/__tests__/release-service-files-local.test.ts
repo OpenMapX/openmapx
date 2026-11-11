@@ -19,7 +19,6 @@ import {
   releaseServiceFiles,
   renderedEmbeddedReleaseServiceFiles,
 } from "../release-service-files";
-import { serviceFilesImported } from "../service-file-import";
 import { SERVICE_FILES_BUILT_INTO_IMAGE } from "../service-file-report";
 import type { LoadedService, ServiceManifest } from "../types";
 
@@ -80,7 +79,7 @@ function agentRender(root: string) {
   return { infraDir, commit, mountedMartin };
 }
 
-it("renders an agent without a checkout under OPENMAPX_RELEASE=local from its bundle, importing nothing", async () => {
+it("renders an agent without a checkout under OPENMAPX_RELEASE=local from its bundle", async () => {
   const root = mkdtempSync(join(tmpdir(), "openmapx-local-agent-render-"));
   roots.push(root);
   const { infraDir, commit, mountedMartin } = agentRender(root);
@@ -91,7 +90,6 @@ it("renders an agent without a checkout under OPENMAPX_RELEASE=local from its bu
   expect(mountedMartin()).toBe(
     readFileSync(join(REPOSITORY, "services", "martin", "config", "martin.yaml"), "utf8"),
   );
-  expect(serviceFilesImported(infraDir)).toBe(false);
   expect(existsSync(join(infraDir, "overrides"))).toBe(false);
   // Said where render messages go: the agent's log, its CLI's render output and check.
   expect(local.serviceFileReport).toEqual([
@@ -99,7 +97,7 @@ it("renders an agent without a checkout under OPENMAPX_RELEASE=local from its bu
   ]);
 }, 60_000);
 
-it("imports nothing under OPENMAPX_RELEASE=local, rendering the bundle's files; a release's render imports the checkout's edit", async () => {
+it("renders the bundle's files over a checkout's edit, under OPENMAPX_RELEASE=local and for a release, making no override of it", async () => {
   const root = mkdtempSync(join(tmpdir(), "openmapx-local-render-"));
   roots.push(root);
   cpSync(join(REPOSITORY, "services"), join(root, "services"), {
@@ -117,7 +115,6 @@ it("imports nothing under OPENMAPX_RELEASE=local, rendering the bundle's files; 
   expect(mountedMartin()).toBe(
     readFileSync(join(REPOSITORY, "services", "martin", "config", "martin.yaml"), "utf8"),
   );
-  expect(serviceFilesImported(infraDir)).toBe(false);
   expect(existsSync(join(infraDir, "overrides"))).toBe(false);
   // Said where render messages go: the agent's log, its CLI's render output and check.
   expect(local.serviceFileReport).toEqual([
@@ -129,19 +126,11 @@ it("imports nothing under OPENMAPX_RELEASE=local, rendering the bundle's files; 
   expect(released.serviceFileReport.map((line) => line.message)).not.toContain(
     SERVICE_FILES_BUILT_INTO_IMAGE,
   );
-  expect(released.serviceFileReport[0]).toEqual({
-    level: "info",
-    message: expect.stringContaining(
-      "Imported 1 checkout service file that differs from every version a release shipped as overrides",
-    ),
-  });
-  expect(mountedMartin()).toBe(edited);
-  expect(
-    readFileSync(
-      join(infraDir, "overrides", "services", "martin", "config", "martin.yaml"),
-      "utf8",
-    ),
-  ).toBe(edited);
+  expect(released.serviceFileReport).toEqual([]);
+  expect(mountedMartin()).toBe(
+    readFileSync(join(REPOSITORY, "services", "martin", "config", "martin.yaml"), "utf8"),
+  );
+  expect(existsSync(join(infraDir, "overrides"))).toBe(false);
 }, 60_000);
 
 it("renders the bundle's files, which under OPENMAPX_RELEASE=local count as the checkout's", () => {
@@ -159,7 +148,6 @@ it("renders the bundle's files, which under OPENMAPX_RELEASE=local count as the 
   expect(renderedEmbeddedReleaseServiceFiles()).toBeNull();
   const local = releaseServiceFiles([martin]);
   expect(local.origin).toBe("checkout");
-  expect(local.history.size).toBe(0);
   expect(local.builtIntoImage).toBe(true);
   expect(released.builtIntoImage).toBeUndefined();
   // What the host CLI reads under local: the checkout itself, so no such line.

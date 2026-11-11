@@ -55,12 +55,8 @@ export interface ServiceOverrides {
   readonly ignored: readonly IgnoredOverride[];
 }
 
-export function overridesDirectory(infraDir: string): string {
-  return join(infraDir, OVERRIDES_DIRECTORY, "services");
-}
-
 /** Whether a release-relative `path` of `serviceId` may be overridden although the release doesn't ship it. */
-export function overridableWithoutRelease(serviceId: string, path: string): boolean {
+function overridableWithoutRelease(serviceId: string, path: string): boolean {
   return serviceId === "traefik" && TRAEFIK_DYNAMIC.test(path) && path !== TRAEFIK_ROUTES;
 }
 
@@ -223,11 +219,6 @@ function readRecords(infraDir: string): OverrideRecords {
 
 function writeRecords(infraDir: string, records: OverrideRecords): void {
   writeAgentStateFile(infraDir, RECORDS, `${JSON.stringify({ version: 1, overrides: records })}\n`);
-}
-
-/** Records overrides render made itself (the import), each with the release file it replaced. */
-export function addOverrideRecords(infraDir: string, records: OverrideRecords): void {
-  writeRecords(infraDir, { ...readRecords(infraDir), ...records });
 }
 
 /**

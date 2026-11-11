@@ -478,8 +478,7 @@ export function registerCheckCommand(program: Command): void {
           ? envFilePermissionWarning(envPath, envMode)
           : null;
       if (permissionWarning) log.warn(permissionWarning);
-      // The service files: overrides, the import, checkout edits and
-      // containers still on them, and what a host render would refuse.
+      // The service files: the overrides in use and what a host render would refuse.
       for (const { level, message } of await serviceFileReport()) log[level](message);
       // Integrations the operations agent installed are trusted by its records;
       // only its fixed CLI reads them, so a check from source has none to report.

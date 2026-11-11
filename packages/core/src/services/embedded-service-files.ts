@@ -9,8 +9,6 @@ export interface EmbeddedServiceFile {
 
 export interface EmbeddedServiceFiles {
   files: readonly EmbeddedServiceFile[];
-  /** `services/service-file-history.json`: every version each file had in a release. */
-  history: URL;
 }
 
 /**

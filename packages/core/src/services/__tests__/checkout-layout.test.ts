@@ -10,19 +10,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { agentStatePaths, writeAgentStateFile } from "../agent-state";
+import { agentStatePaths } from "../agent-state";
 import { prepareAgentStores } from "../agent-stores";
-import { checkoutMounted } from "../checkout-layout";
+import { checkoutMountedAt } from "../checkout-layout";
 import { acquireConfigurationOwnership } from "../configuration-ownership";
-import type { ReleaseServiceFiles } from "../release-service-files";
-import {
-  checkoutPositionFromHistory,
-  describeServiceFileImport,
-  importCheckoutServiceFiles,
-  serviceFilesImported,
-} from "../service-file-import";
-import { describeServiceFiles } from "../service-file-report";
-import { readServiceOverrides } from "../service-overrides";
 import { writeLegacyTraefikRoutes } from "../traefik-files";
 
 const roots: string[] = [];
@@ -48,63 +39,13 @@ function stack(layout: "checkout" | "narrow") {
   return { root, infraDir };
 }
 
-const release: ReleaseServiceFiles = {
-  origin: "release",
-  files: new Map(),
-  history: new Map(),
-  manifests: new Map(),
-  missing: [],
-};
-
 describe("the checkout, as the operations agent tells", () => {
   it("is there when its services directory is, and not through a link", () => {
-    expect(checkoutMounted(stack("checkout").root)).toBe(true);
+    expect(checkoutMountedAt(stack("checkout").infraDir)).toBe(true);
     const narrow = stack("narrow");
-    expect(checkoutMounted(narrow.root)).toBe(false);
+    expect(checkoutMountedAt(narrow.infraDir)).toBe(false);
     symlinkSync(stack("checkout").root, join(narrow.root, "services"));
-    expect(checkoutMounted(narrow.root)).toBe(false);
-  });
-
-  it("without it, the one-time import waits for a host render, records nothing and says so", () => {
-    const { root, infraDir } = stack("narrow");
-    expect(checkoutPositionFromHistory(root, release)).toEqual({
-      atOrBehindRelease: false,
-      reason: expect.stringContaining("runs without the checkout"),
-    });
-    const result = importCheckoutServiceFiles({ infraDir, services: [], release });
-    expect(result).toEqual({ deferred: expect.any(String), pending: [] });
-    expect(serviceFilesImported(infraDir)).toBe(false);
-    expect(describeServiceFileImport(result)).toEqual([
-      expect.stringMatching(
-        /^The one-time import of your edits in the checkout's service files has not run, .*run `pnpm openmapx compose render` on the host/,
-      ),
-    ]);
-  });
-
-  it("without it, an import already recorded is said to have run, and nothing is compared", () => {
-    const { infraDir } = stack("narrow");
-    writeAgentStateFile(
-      infraDir,
-      "overrides-import.json",
-      `${JSON.stringify({ version: 1, importedAt: "2026-10-26T00:00:00Z", imported: [] })}\n`,
-    );
-    expect(importCheckoutServiceFiles({ infraDir, services: [], release })).toBeNull();
-    expect(
-      describeServiceFiles({
-        infraDir,
-        services: [],
-        release,
-        overrides: readServiceOverrides(infraDir, release),
-        stale: [],
-      }),
-    ).toEqual([
-      // The healthy state after the switch: information, not a warning.
-      {
-        level: "info",
-        message:
-          "The one-time import of your edits in the checkout's service files has run (infra/docker/state/ops-agent/overrides-import.json). This operations agent runs without the checkout, so it doesn't compare the checkout's service files with the release's; `pnpm openmapx check` on the host does.",
-      },
-    ]);
+    expect(checkoutMountedAt(narrow.infraDir)).toBe(false);
   });
 
   it("without it, the agent's stores start empty and owner-only, and a link is refused", () => {

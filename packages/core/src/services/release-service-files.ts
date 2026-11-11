@@ -114,8 +114,6 @@ export interface ReleaseServiceFiles {
   readonly origin: "release" | "checkout";
   /** By `<serviceId>/<path>`. */
   readonly files: ReadonlyMap<string, ReleaseServiceFile>;
-  /** Every version each file had in a release, by `<serviceId>/<path>`; empty for the checkout. */
-  readonly history: ReadonlyMap<string, ReadonlySet<string>>;
   /** The sha256 of each built-in's `service.json`; empty for the checkout. */
   readonly manifests: ReadonlyMap<string, string>;
   /** Referenced paths the checkout lacks; always empty for a release. */
@@ -142,17 +140,6 @@ export function releaseFilesAt(
   return [...set.files.entries()].filter(([key]) => key.startsWith(prefix)).map(([, file]) => file);
 }
 
-const historySchema = z.strictObject({
-  version: z.literal(1),
-  files: z.record(z.string(), z.array(z.string().regex(/^[a-f0-9]{64}$/))),
-});
-
-/** `services/service-file-history.json`: every version of each file, by `<serviceId>/<path>`. */
-export function parseServiceFileHistory(raw: string): Map<string, Set<string>> {
-  const parsed = historySchema.parse(JSON.parse(raw));
-  return new Map(Object.entries(parsed.files).map(([key, hashes]) => [key, new Set(hashes)]));
-}
-
 /** The release's files embedded in this runtime bundle, or `null` when running from source. */
 export function readEmbeddedReleaseServiceFiles(): ReleaseServiceFiles | null {
   const embedded = embeddedBuiltInServiceFiles();
@@ -176,13 +163,7 @@ export function readEmbeddedReleaseServiceFiles(): ReleaseServiceFiles | null {
       sha256(readRegularFileBytes(manifestSource.manifestPath(id), MAX_MANIFEST_BYTES)),
     );
   }
-  return {
-    origin: "release",
-    files,
-    history: parseServiceFileHistory(readFileSync(fileURLToPath(embedded.history), "utf8")),
-    manifests,
-    missing: [],
-  };
+  return { origin: "release", files, manifests, missing: [] };
 }
 
 /** Thrown when a file render must read can't be used; its message names the file, never its contents. */
@@ -293,7 +274,7 @@ export function readCheckoutServiceFiles(
     if (!directory) continue;
     visit(reference.serviceId, directory, reference.path, true);
   }
-  return { origin: "checkout", files, history: new Map(), manifests: new Map(), missing };
+  return { origin: "checkout", files, manifests: new Map(), missing };
 }
 
 /**
@@ -311,7 +292,7 @@ export function renderedEmbeddedReleaseServiceFiles(): ReleaseServiceFiles | nul
  * bundled (the operations agent and its fixed CLI), otherwise the checkout's.
  * Under `OPENMAPX_RELEASE=local` the agent's image was built from the
  * checkout, so its bundle holds the checkout's files as of that build, and
- * they count as the checkout's: there is no release to import edits against.
+ * they count as the checkout's.
  */
 export function releaseServiceFiles(
   services: readonly LoadedService[],
@@ -323,15 +304,17 @@ export function releaseServiceFiles(
   return {
     origin: "checkout",
     files: embedded.files,
-    history: new Map(),
     manifests: new Map(),
     missing: [],
     builtIntoImage: true,
   };
 }
 
+/** The `compose release-files` index version this CLI reads and writes. */
+const INDEX_VERSION = 2;
+
 const indexSchema = z.strictObject({
-  version: z.literal(1),
+  version: z.literal(INDEX_VERSION),
   manifests: z.record(z.string(), z.string().regex(/^[a-f0-9]{64}$/)),
   files: z
     .array(
@@ -353,13 +336,12 @@ const indexSchema = z.strictObject({
       }),
     )
     .max(1024),
-  history: z.record(z.string(), z.array(z.string().regex(/^[a-f0-9]{64}$/))),
 });
 
 /** The index `openmapx compose release-files` prints from a release's bundle. */
 export function serializeReleaseServiceFiles(set: ReleaseServiceFiles): string {
   return `${JSON.stringify({
-    version: 1,
+    version: INDEX_VERSION,
     manifests: Object.fromEntries([...set.manifests].sort(([a], [b]) => a.localeCompare(b))),
     files: [...set.files.values()].map((file) => ({
       serviceId: file.serviceId,
@@ -368,17 +350,22 @@ export function serializeReleaseServiceFiles(set: ReleaseServiceFiles): string {
       sha256: file.sha256,
       bytes: file.bytes.toString("base64"),
     })),
-    history: Object.fromEntries(
-      [...set.history]
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, hashes]) => [key, [...hashes].sort()]),
-    ),
   })}\n`;
 }
 
-/** Parses a release's index, checking each file's bytes against its hash. */
+/**
+ * Parses a release's index, checking each file's bytes against its hash. A
+ * version 1 index comes from an image built before this checkout, whose CLI
+ * reads only the current version.
+ */
 export function parseReleaseServiceFiles(raw: string): ReleaseServiceFiles {
-  const parsed = indexSchema.parse(JSON.parse(raw));
+  const json: unknown = JSON.parse(raw);
+  if (z.object({ version: z.literal(1) }).safeParse(json).success) {
+    throw new Error(
+      `its service file index is version 1, which this checkout no longer reads (it reads version ${INDEX_VERSION}): the selected release's image predates this checkout. Rebuild the image from this checkout, or select a newer release`,
+    );
+  }
+  const parsed = indexSchema.parse(json);
   const files = new Map<string, ReleaseServiceFile>();
   for (const file of parsed.files) {
     const bytes = Buffer.from(file.bytes, "base64");
@@ -389,7 +376,6 @@ export function parseReleaseServiceFiles(raw: string): ReleaseServiceFiles {
   return {
     origin: "release",
     files,
-    history: new Map(Object.entries(parsed.history).map(([key, hashes]) => [key, new Set(hashes)])),
     manifests: new Map(Object.entries(parsed.manifests)),
     missing: [],
   };
