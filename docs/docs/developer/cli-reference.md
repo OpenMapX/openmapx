@@ -121,7 +121,6 @@ hardlinks, authenticated feeds — lives in
 | Command                            | Description                                                                                                                                                                                                                                                                      |
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `data download <kind> [region]`    | Download source data. `kind` is `osm` (takes `[region]`), `fonts`, or `gtfs`. The `gtfs` spelling starts the same transactional sync as `data sync`; its only feed flag is `--countries <list>`.                                                                                 |
-| `data build <kind> [region]`       | Build prepared artifacts (alias for `services build`). `kind` is `motis`, `osrm`, `otp`, `pelias`, or `tileserver`.                                                                                                                                                              |
 | `data convert <kind> [region]`     | Derive a secondary format from a download. `kind` is `overpass` (OSM PBF → bzip2).                                                                                                                                                                                               |
 | `data update [region]`             | Run the full refresh: download OSM, transactionally sync transit sources, download glyph fonts, build artifacts, render, and link. Flags: `--countries <list>`, `--fail-fast`.                                                                                                   |
 | `data sync`                        | Queue a transactional transit-source sync. Flag: `--countries <list>`. The command returns a job id; promotion changes the active set only after the candidate passes.                                                                                                           |
@@ -147,12 +146,12 @@ hardlinks, authenticated feeds — lives in
 | `data notable-places build`        | Fetch the places many Wikipedias cover from Wikidata and publish them atomically for search ranking.                                                                                                                                                                             |
 | `data notable-places status`       | Show the published notable-places snapshot: counts, sitelink threshold, source endpoint, epoch, and last error.                                                                                                                                                                  |
 
-`data link`, `data build` and `services build` use the same `/link` route as
+`data link` and `services build` use the same `/link` route as
 `compose up` and refuse the same way when the plan has links to make or prune;
 a build's artifacts are complete by then. `services start` and `services update`
 apply the plan through a signed execution.
 
-`data download osm`, `data build`, `data convert`, and `data update` fall back to
+`data download osm`, `data convert`, and `data update` fall back to
 `$OPENMAPX_REGION` when you omit the region; without either, the region-bearing
 commands error out asking for one. Regions use Geofabrik's path naming
 (`europe/germany`, `north-america/us/california`, or `planet`).

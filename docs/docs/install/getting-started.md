@@ -192,7 +192,7 @@ with `A signed generation-hardlinks execution is required` when the hardlink
 plan has links to make or prune. With no prepared data they have nothing to link
 and succeed. Once engines have built data, apply the plan with
 `pnpm openmapx services start <ids>`, which applies it through a signed
-execution. `services build` and `data build` link through the same route, so
+execution. `services build` links through the same route, so
 with a nonempty plan they report the refusal after the build has finished;
 start the consumers with `services start` instead of `data link`.
 :::

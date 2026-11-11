@@ -105,11 +105,7 @@ pnpm openmapx services start osrm
 
 The build runs extract, partition, and customize in Docker, then publishes
 `data/osrm-graph/region.osrm` and companion files. It renders and links the
-result. The equivalent positional-region alias is:
-
-```bash
-pnpm openmapx data build osrm europe/germany
-```
+result.
 
 The runtime uses `osrm-routed --algorithm mld` and listens internally at
 `http://osrm:5000`, published as `127.0.0.1:5000`.

@@ -148,8 +148,6 @@ need this step. OpenMapX styles and sprites already ship with the web app.
 
 ```bash
 pnpm openmapx services build osrm --region europe/germany
-# Equivalent positional-region alias:
-pnpm openmapx data build osrm europe/germany
 ```
 
 The build prepares files, records provenance, renders configuration, and applies
@@ -271,7 +269,7 @@ pnpm openmapx data link
 
 `data link` goes through a data-manager route that refuses with
 `A signed generation-hardlinks execution is required` when the plan has links to
-make or prune, as do the link steps of `services build` and `data build`. Only
+make or prune, as do the link steps of `services build`. Only
 `services start` and `services update` apply a nonempty plan through a signed
 execution, so start consumers with them after preparing data; the same applies
 to the `data link` that follows `data convert overpass` above. With nothing

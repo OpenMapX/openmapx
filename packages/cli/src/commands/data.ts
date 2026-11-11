@@ -32,7 +32,6 @@ import { applyGeneratedHardlinks, logAppliedHardlinks } from "../lib/hardlinks";
 
 import { log, routeLogsToStderr, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
-import { buildServices, resolveDataBuildServiceId } from "../lib/service-builds";
 import {
   describeTransitousApiKeysMigration,
   generateTransitousApiKeys,
@@ -192,12 +191,6 @@ async function runFontDownload(transport: ReturnType<typeof createCliTransport>)
   log.ok("Downloaded map glyphs");
 }
 
-async function renderAndApplyHardlinks(): Promise<void> {
-  const rendered = await renderComposeForRepo({});
-  for (const warning of rendered.selectionWarnings) log.warn(warning);
-  logAppliedHardlinks(await applyGeneratedHardlinks({ prune: true, requirePlan: true }));
-}
-
 function dataManagerHint(): void {
   log.dim(`(is data-manager running? expected at ${dataManagerUrl()})`);
 }
@@ -230,31 +223,6 @@ export function registerDataCommands(program: Command): void {
         if (!(err as Error).message.startsWith("region required")) {
           dataManagerHint();
         }
-        completeCliCommand(1);
-      }
-    });
-
-  data
-    .command("build <kind> [region]")
-    .description(
-      "Build prepared artifacts from downloaded data (compatibility alias for `services build`; kind: motis | osrm | otp | pelias | tileserver)",
-    )
-    .action(async (kind: string, region: string | undefined) => {
-      try {
-        const serviceId = resolveDataBuildServiceId(kind);
-        if (!serviceId) {
-          log.err(`Unknown kind: ${kind} (use: motis | osrm | otp | pelias | tileserver)`);
-          completeCliCommand(1);
-        }
-        const result = await buildServices({
-          mode: "explicit",
-          serviceIds: [serviceId],
-          region,
-        });
-        if (result.completedIds.length === 0) return;
-        await renderAndApplyHardlinks();
-      } catch (err) {
-        log.err(`build failed: ${(err as Error).message}`);
         completeCliCommand(1);
       }
     });

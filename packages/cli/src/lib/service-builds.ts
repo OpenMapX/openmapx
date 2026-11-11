@@ -327,12 +327,6 @@ export function getManifestBuildTarget(buildCommand: string | undefined): string
   return match?.[1];
 }
 
-export function resolveDataBuildServiceId(kind: string): string | undefined {
-  const normalized = kind.trim().toLowerCase();
-  if (normalized in BUILT_IN_SERVICE_BUILD_HANDLERS) return normalized;
-  return undefined;
-}
-
 function dedupe(ids: string[]): string[] {
   const seen = new Set<string>();
   const ordered: string[] = [];

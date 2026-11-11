@@ -97,7 +97,6 @@ feeds, license, and local feed-proxy configuration:
 pnpm openmapx services build motis --region europe/germany
 ```
 
-The positional-region alias is `pnpm openmapx data build motis europe/germany`.
 `MOTIS_REGION` and `OPENMAPX_REGION` provide build defaults, independently of the
 daemon's `MOTIS_OSM_REGION`. Keep them consistent with the selected dataset.
 
