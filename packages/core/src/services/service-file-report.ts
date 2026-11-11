@@ -37,6 +37,10 @@ export interface ServiceFileReportLine {
 const info = (message: string): ServiceFileReportLine => ({ level: "info", message });
 const warn = (message: string): ServiceFileReportLine => ({ level: "warn", message });
 
+/** Said by a render under `OPENMAPX_RELEASE=local` that took the files built into the agent's image. */
+export const SERVICE_FILES_BUILT_INTO_IMAGE =
+  "Under OPENMAPX_RELEASE=local this operations agent rendered the service files built into its image, which a render on the host reads from the checkout's services/ instead. An edit made there since the image was built is not used here: rebuild the ops-agent image from the checkout and recreate the agent, or render on the host.";
+
 /**
  * What render's output, the agent's log, `check` and Run diagnostics say
  * about the service files: the import, once, or why it waits; the overrides in use, those
@@ -58,6 +62,7 @@ export function describeServiceFiles(options: {
   // The import's own report: what it made overrides of, or why it waits.
   const importLevel = imported && "deferred" in imported ? warn : info;
   const lines = [
+    ...(release.builtIntoImage ? [info(SERVICE_FILES_BUILT_INTO_IMAGE)] : []),
     ...describeServiceFileImport(imported).map(importLevel),
     ...describeServiceOverrides(overrides, options.stale),
   ];

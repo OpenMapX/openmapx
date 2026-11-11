@@ -520,7 +520,16 @@ configuration change, use the files embedded in its image, which a local build
 took from the checkout as it was then. After you edit a file under
 `services/`, a host render uses the edit at once; the agent uses it only once
 you rebuild the ops-agent image from the checkout and recreate the agent from
-that image. Overrides apply to both, and nothing is imported.
+that image. Each such agent render says so in its output. Overrides apply to
+both, and nothing is imported.
+
+The agent's files are the checkout's only when its image is a local build.
+`OPENMAPX_RELEASE=local` does not clear an existing release overlay, which
+keeps pinning the release's images until you clear it with
+`pnpm openmapx compose release --clear`. And an ops-agent image pulled by its
+tag, such as `ghcr.io/openmapx/ops-agent:main`, is a published build, not
+yours. In either case the agent renders that release's service files, not your
+checkout's.
 
 ## Exposure: what's reachable from outside
 

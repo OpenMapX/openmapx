@@ -120,6 +120,12 @@ export interface ReleaseServiceFiles {
   readonly manifests: ReadonlyMap<string, string>;
   /** Referenced paths the checkout lacks; always empty for a release. */
   readonly missing: readonly string[];
+  /**
+   * The checkout's files as the agent's image holds them, under
+   * `OPENMAPX_RELEASE=local`: an edit made in `services/` since the image was
+   * built is not among them.
+   */
+  readonly builtIntoImage?: true;
 }
 
 export const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
@@ -320,6 +326,7 @@ export function releaseServiceFiles(
     history: new Map(),
     manifests: new Map(),
     missing: [],
+    builtIntoImage: true,
   };
 }
 

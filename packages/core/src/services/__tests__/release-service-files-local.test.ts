@@ -14,8 +14,13 @@ import { afterEach, expect, it, vi } from "vitest";
 import { commitConfigurationGeneration } from "../configuration-generation";
 import { CURRENT_CONFIGURATION } from "../deployment";
 import { readBuiltInServices } from "../release-authority-inventory";
-import { releaseServiceFiles, renderedEmbeddedReleaseServiceFiles } from "../release-service-files";
+import {
+  readCheckoutServiceFiles,
+  releaseServiceFiles,
+  renderedEmbeddedReleaseServiceFiles,
+} from "../release-service-files";
 import { serviceFilesImported } from "../service-file-import";
+import { SERVICE_FILES_BUILT_INTO_IMAGE } from "../service-file-report";
 import type { LoadedService, ServiceManifest } from "../types";
 
 // As the ops-agent's runtime bundle runs: its release's files embedded.
@@ -88,7 +93,10 @@ it("renders an agent without a checkout under OPENMAPX_RELEASE=local from its bu
   );
   expect(serviceFilesImported(infraDir)).toBe(false);
   expect(existsSync(join(infraDir, "overrides"))).toBe(false);
-  expect(local.serviceFileReport).toEqual([]);
+  // Said where render messages go: the agent's log, its CLI's render output and check.
+  expect(local.serviceFileReport).toEqual([
+    { level: "info", message: SERVICE_FILES_BUILT_INTO_IMAGE },
+  ]);
 }, 60_000);
 
 it("imports nothing under OPENMAPX_RELEASE=local, rendering the bundle's files; a release's render imports the checkout's edit", async () => {
@@ -111,10 +119,16 @@ it("imports nothing under OPENMAPX_RELEASE=local, rendering the bundle's files; 
   );
   expect(serviceFilesImported(infraDir)).toBe(false);
   expect(existsSync(join(infraDir, "overrides"))).toBe(false);
-  expect(local.serviceFileReport).toEqual([]);
+  // Said where render messages go: the agent's log, its CLI's render output and check.
+  expect(local.serviceFileReport).toEqual([
+    { level: "info", message: SERVICE_FILES_BUILT_INTO_IMAGE },
+  ]);
 
   vi.unstubAllEnvs();
   const released = await commit();
+  expect(released.serviceFileReport.map((line) => line.message)).not.toContain(
+    SERVICE_FILES_BUILT_INTO_IMAGE,
+  );
   expect(released.serviceFileReport[0]).toEqual({
     level: "info",
     message: expect.stringContaining(
@@ -146,6 +160,12 @@ it("renders the bundle's files, which under OPENMAPX_RELEASE=local count as the 
   const local = releaseServiceFiles([martin]);
   expect(local.origin).toBe("checkout");
   expect(local.history.size).toBe(0);
+  expect(local.builtIntoImage).toBe(true);
+  expect(released.builtIntoImage).toBeUndefined();
+  // What the host CLI reads under local: the checkout itself, so no such line.
+  expect(
+    readCheckoutServiceFiles([martin], process.geteuid?.() ?? 0).builtIntoImage,
+  ).toBeUndefined();
   expect(local.files.get("martin/config/martin.yaml")?.bytes).toEqual(
     released.files.get("martin/config/martin.yaml")?.bytes,
   );
