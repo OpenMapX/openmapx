@@ -196,40 +196,37 @@ describe("renderComposeForRepo", () => {
     expect(coreServices.currentConfigurationGeneration(join(tmp, "infra", "docker"))).toBe(before);
   });
 
-  it("on the host moves the operations agent to its narrow mounts once nothing is missing, and says what is", async () => {
-    writeManifest(
-      "ops-agent",
-      JSON.parse(readFileSync(join(REPO_ROOT, "services/ops-agent/service.json"), "utf8")),
-    );
-    const infraDir = join(tmp, "infra", "docker");
-    // log.warn writes to stderr.
-    const warnings = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("mounts the operations agent as its manifest declares, from the first render, on the host and in the agent", async () => {
+    const manifest = JSON.parse(
+      readFileSync(join(REPO_ROOT, "services/ops-agent/service.json"), "utf8"),
+    ) as { bindMounts: { source: string; target: string }[] };
+    writeManifest("ops-agent", manifest);
+    const hostDir = (path: string) => path.startsWith("${OPENMAPX_HOST_DIR");
+    const declared = manifest.bindMounts
+      .filter((mount) => hostDir(mount.source))
+      .map((mount) => `${mount.source}:${mount.target}`);
+    expect(declared.length).toBeGreaterThan(0);
+    const agentVolumes = (): string[] =>
+      parseYaml(readFileSync(generatedCompose(), "utf8")).services["ops-agent"].volumes;
+    const atHostDir = () => agentVolumes().filter((volume) => hostDir(volume));
     const render = () =>
       renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["ops-agent"] });
-    await render();
-    // Without the import, the retired earlier lock and an applied generation.
-    expect(coreServices.generationAgentMountLayout(infraDir)).toBe("checkout");
-    const said = warnings.mock.calls.flat().join("\n");
-    expect(said).toContain("The operations agent keeps the whole checkout mounted.");
-    expect(said).toMatch(/- The one-time import of your edits .*overrides-import\.json is missing/);
-    expect(said).toMatch(/- Writers still take the earlier releases' configuration lock/);
+    // log.warn writes to stderr.
+    const warnings = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    writeFileSync(
-      join(infraDir, "state/ops-agent/overrides-import.json"),
-      `${JSON.stringify({ version: 1, importedAt: "2026-10-26T00:00:00Z", imported: [] })}\n`,
-      { mode: 0o600 },
-    );
-    coreServices.retireLegacyConfigurationWriter(infraDir);
-    warnings.mockClear();
     await render();
-    expect(coreServices.generationAgentMountLayout(infraDir)).toBe("narrow");
-    expect(warnings.mock.calls.flat().join("\n")).not.toContain("keeps the whole checkout");
+    expect(atHostDir().map((volume) => volume.replace(/:(ro|rw)$/, ""))).toEqual(declared);
+    // Nothing mounts the whole checkout.
+    expect(
+      agentVolumes().filter((volume) => /^\$\{OPENMAPX_HOST_DIR[^}]*\}:/.test(volume)),
+    ).toEqual([]);
+    expect(warnings.mock.calls.flat().join("\n")).not.toContain("checkout mounted");
 
-    // The agent's own render, with the whole checkout mounted, keeps it.
     vi.mocked(runsInAgent).mockReturnValue(true);
     try {
+      const host = agentVolumes();
       await render();
-      expect(coreServices.generationAgentMountLayout(infraDir)).toBe("checkout");
+      expect(agentVolumes()).toEqual(host);
     } finally {
       vi.mocked(runsInAgent).mockReturnValue(false);
     }

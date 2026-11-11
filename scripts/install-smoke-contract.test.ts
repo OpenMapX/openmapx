@@ -5,6 +5,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -116,7 +117,12 @@ describe("install smoke script", () => {
       "assert_check_clean",
       "openmapx compose up",
       "assert_stack_healthy",
+      "assert_agent_without_checkout",
       "assert_check_clean",
+    ]);
+    inOrder(body("assert_agent_without_checkout"), [
+      "label=com.docker.compose.service=ops-agent",
+      "docker inspect --format '{{range .Mounts}}{{.Source}}",
     ]);
   });
 
@@ -269,6 +275,81 @@ exit 0
       template: readFileSync(join(dir, "infra/docker/.env.example"), "utf8"),
     };
   }
+
+  /**
+   * Runs assert_agent_without_checkout from the sourced script, whose
+   * checkout is the temporary tree, against a docker that lists `containers`
+   * and answers each inspect with the mounts `mounts` gives for that tree.
+   */
+  function agentMountCheck(
+    containers: string,
+    mounts: (root: string) => string[],
+    inspectExit = 0,
+  ) {
+    const dir = tree();
+    const bin = join(dir, "bin");
+    mkdirSync(bin);
+    writeFileSync(
+      join(dir, "mounts"),
+      mounts(dir)
+        .map((mount) => `${mount}\n`)
+        .join(""),
+    );
+    writeFileSync(
+      join(bin, "docker"),
+      `#!/bin/sh
+case "$1" in
+  ps) printf '%s' "${containers}" ;;
+  inspect) cat "${join(dir, "mounts")}"; exit ${inspectExit} ;;
+esac
+`,
+      { mode: 0o755 },
+    );
+    return spawnSync(
+      "bash",
+      [
+        "-c",
+        'source "$1"; assert_agent_without_checkout',
+        "bash",
+        join(dir, "scripts/ci/install-smoke.sh"),
+      ],
+      { cwd: dir, encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } },
+    );
+  }
+
+  it("passes when the ops-agent mounts only directories below the checkout", () => {
+    const result = agentMountCheck("agent1\n", (root) => [
+      "/var/run/docker.sock\t/var/run/docker.sock",
+      `${root}/infra/docker\t${root}/infra/docker`,
+      `${root}/infra/docker/state\t${root}/infra/docker/state`,
+    ]);
+    expect(result.status, result.stderr).toBe(0);
+  });
+
+  it.each([
+    ["source", (root: string) => `${root}\t/srv/elsewhere`],
+    ["destination", (root: string) => `/srv/elsewhere\t${root}`],
+    ["resolved source", (root: string) => `${realpathSync(root)}\t/srv/elsewhere`],
+  ])("fails when an ops-agent mount's %s is the checkout", (_name, mount) => {
+    const result = agentMountCheck("agent1\n", (root) => [
+      "/var/run/docker.sock\t/var/run/docker.sock",
+      mount(root),
+    ]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("the ops-agent container mounts the checkout");
+  });
+
+  it("fails when docker inspect fails, rather than reading no mounts", () => {
+    const result = agentMountCheck("agent1\n", () => [], 1);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("docker inspect could not read the mounts");
+  });
+
+  it("fails when no ops-agent container is running", () => {
+    const result = agentMountCheck("", () => []);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("no ops-agent container is running");
+  });
 
   it("writes a clean 64-hex secret and masks it on stdout under GitHub Actions", () => {
     const { result, env, template } = writeSecret(true);

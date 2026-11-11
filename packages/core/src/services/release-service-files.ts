@@ -9,11 +9,10 @@ import {
   readFileSync,
   type Stats,
 } from "node:fs";
-import { posix, resolve } from "node:path";
+import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import z from "zod/v4";
 import { readRegularFileBytes } from "./built-in-service-source";
-import { CheckoutRequiredError, checkoutMounted } from "./checkout-layout";
 import { embeddedBuiltInServiceManifests } from "./embedded-built-in-services";
 import { embeddedBuiltInServiceFiles } from "./embedded-service-files";
 import { RELEASE_SELECTOR_ENV } from "./release-manifest";
@@ -24,8 +23,8 @@ import type { LoadedService, ServiceManifest } from "./types";
  * another built-in's, through `@service:`), which the release supplies.
  *
  * The ops-agent's runtime bundle embeds them, so the agent and its fixed CLI
- * render the release's bytes. Run from source (tests, the host CLI), and
- * under `OPENMAPX_RELEASE=local` even when bundled, they are the checkout's.
+ * render the bytes of their image. Run from source (tests, the host CLI),
+ * they are the checkout's.
  */
 
 /** Traefik's files, which its mounts no longer name (they come through the agent's state). */
@@ -107,7 +106,11 @@ export interface ReleaseServiceFile {
 }
 
 export interface ReleaseServiceFiles {
-  /** The release's own files (its bundle or its image), or the checkout's. */
+  /**
+   * The release's own files (its bundle or its image), or the checkout's:
+   * read from it, or, under `OPENMAPX_RELEASE=local`, from the agent's
+   * bundle, which its image took from the checkout when it was built.
+   */
   readonly origin: "release" | "checkout";
   /** By `<serviceId>/<path>`. */
   readonly files: ReadonlyMap<string, ReleaseServiceFile>;
@@ -117,6 +120,12 @@ export interface ReleaseServiceFiles {
   readonly manifests: ReadonlyMap<string, string>;
   /** Referenced paths the checkout lacks; always empty for a release. */
   readonly missing: readonly string[];
+  /**
+   * The checkout's files as the agent's image holds them, under
+   * `OPENMAPX_RELEASE=local`: an edit made in `services/` since the image was
+   * built is not among them.
+   */
+  readonly builtIntoImage?: true;
 }
 
 export const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
@@ -288,9 +297,9 @@ export function readCheckoutServiceFiles(
 }
 
 /**
- * The release's files this process renders, when it renders them: those its
- * bundle embeds, unless `OPENMAPX_RELEASE=local` makes the checkout's files
- * the release's, as for the host CLI.
+ * The release's files this process renders, when it renders a release's:
+ * those its bundle embeds, unless `OPENMAPX_RELEASE=local` makes them the
+ * checkout's (see {@link releaseServiceFiles}).
  */
 export function renderedEmbeddedReleaseServiceFiles(): ReleaseServiceFiles | null {
   if (process.env[RELEASE_SELECTOR_ENV] === "local") return null;
@@ -298,28 +307,27 @@ export function renderedEmbeddedReleaseServiceFiles(): ReleaseServiceFiles | nul
 }
 
 /**
- * The service files this process renders: its release's when bundled,
- * otherwise the checkout's. An operations agent without the checkout that is
- * told to use the checkout's (`OPENMAPX_RELEASE=local`) refuses, rather than
- * render every one of them as missing.
+ * The service files this process renders: those its bundle embeds when
+ * bundled (the operations agent and its fixed CLI), otherwise the checkout's.
+ * Under `OPENMAPX_RELEASE=local` the agent's image was built from the
+ * checkout, so its bundle holds the checkout's files as of that build, and
+ * they count as the checkout's: there is no release to import edits against.
  */
 export function releaseServiceFiles(
   services: readonly LoadedService[],
   uid: number = process.geteuid?.() ?? 0,
 ): ReleaseServiceFiles {
-  const embedded = renderedEmbeddedReleaseServiceFiles();
-  if (embedded) return embedded;
-  // Only the bundle has files of its own to use instead.
-  for (const service of readEmbeddedReleaseServiceFiles() ? services : []) {
-    if (!service.isBuiltIn) continue;
-    const root = resolve(service.directory, "..", "..");
-    if (!checkoutMounted(root)) {
-      throw new CheckoutRequiredError(
-        `${RELEASE_SELECTOR_ENV}=local renders the checkout's own service files, and this operations agent runs without the checkout at ${root}: select a release instead, or run the render on the host.`,
-      );
-    }
-  }
-  return readCheckoutServiceFiles(services, uid);
+  const embedded = readEmbeddedReleaseServiceFiles();
+  if (!embedded) return readCheckoutServiceFiles(services, uid);
+  if (process.env[RELEASE_SELECTOR_ENV] !== "local") return embedded;
+  return {
+    origin: "checkout",
+    files: embedded.files,
+    history: new Map(),
+    manifests: new Map(),
+    missing: [],
+    builtIntoImage: true,
+  };
 }
 
 const indexSchema = z.strictObject({

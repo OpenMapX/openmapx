@@ -25,7 +25,6 @@ import {
   type TrustedConfigurationPayload,
   trustedConfigurationPayloadSchema,
 } from "../ops/trusted-config";
-import { type AgentMountLayout, runningAgentMountLayout } from "./agent-mounts";
 import { ensureTraefikDynamicDirectory } from "./agent-state";
 import { withBackupRetentionPolicyChange } from "./backup-retention-store";
 import {
@@ -159,12 +158,6 @@ export interface CommitConfigurationOptions {
    * are reported. Omitted (Docker can't tell), no tree is removed.
    */
   containerBindMounts?: readonly ContainerBindMounts[];
-  /**
-   * How the generation mounts the operations agent, asked once the one-time
-   * import has run: only a render on the host may choose the narrow layout.
-   * Omitted, it keeps the layout this process has (see agent-mounts.ts).
-   */
-  agentMountLayout?: () => AgentMountLayout;
 }
 
 export interface CommittedConfiguration {
@@ -1407,9 +1400,7 @@ export type RenderConfigurationOptions = Pick<
  * every apply render through here. The release's service files, with the
  * operator's overrides in their place.
  */
-export function renderConfiguration(
-  options: RenderConfigurationOptions & { agentMountLayout?: AgentMountLayout },
-) {
+export function renderConfiguration(options: RenderConfigurationOptions) {
   const { infraDir, input } = options;
   const resolved = resolveInput(
     options.services,
@@ -1433,7 +1424,6 @@ export function renderConfiguration(
       : {}),
     // Runtime supplies a fixed generation alias at this same directory depth.
     // Keep these bytes compatible with existing current/retained generations.
-    agentMountLayout: options.agentMountLayout ?? runningAgentMountLayout(infraDir),
     composeOutDir: join(infraDir, CURRENT_CONFIGURATION),
     infraDir,
     allServices: resolved.allServices,
@@ -1492,11 +1482,7 @@ async function commitOwnedConfigurationGeneration(
     release,
     ...(options.checkoutPosition ? { position: options.checkoutPosition } : {}),
   });
-  const rendered = renderConfiguration({
-    ...options,
-    releaseServiceFiles: release,
-    agentMountLayout: options.agentMountLayout?.(),
-  });
+  const rendered = renderConfiguration({ ...options, releaseServiceFiles: release });
   // This store lock concerns retention only. An invocation-level domain
   // override has already been validated by renderConfiguration above; parsing
   // unrelated host fields again would incorrectly discard that override.

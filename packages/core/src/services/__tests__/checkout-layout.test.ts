@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { agentStatePaths, writeAgentStateFile } from "../agent-state";
 import { prepareAgentStores } from "../agent-stores";
-import { CheckoutRequiredError, checkoutMounted, describeMountLayout } from "../checkout-layout";
+import { CheckoutRequiredError, checkoutMounted } from "../checkout-layout";
 import {
   acquireConfigurationOwnership,
   retireLegacyConfigurationWriter,
@@ -29,8 +29,9 @@ afterEach(() => {
 });
 
 /**
- * What the operations agent sees in either layout: the whole checkout, or
- * only infra/docker with its runtime directories at the same paths.
+ * What a process sees: the host CLI's whole checkout, or the operations
+ * agent's mounts, only infra/docker with its runtime directories at the same
+ * paths.
  */
 function stack(layout: "checkout" | "narrow") {
   const root = mkdtempSync(join(tmpdir(), `openmapx-layout-${layout}-`));
@@ -55,7 +56,6 @@ describe("the checkout, as the operations agent tells", () => {
     expect(checkoutMounted(stack("checkout").root)).toBe(true);
     const narrow = stack("narrow");
     expect(checkoutMounted(narrow.root)).toBe(false);
-    expect(describeMountLayout(narrow.root)).toMatch(/^The checkout is not mounted: only /);
     symlinkSync(stack("checkout").root, join(narrow.root, "services"));
     expect(checkoutMounted(narrow.root)).toBe(false);
   });

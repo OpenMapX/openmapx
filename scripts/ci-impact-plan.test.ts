@@ -53,7 +53,7 @@ describe("CI applicability and required result enforcement", () => {
       types: false,
       "test-node": true,
       "test-linux-user": false,
-      "test-agent-mounts": false,
+      "test-agent-image": false,
       "test-web": false,
       mobile: false,
       database: false,

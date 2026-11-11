@@ -97,7 +97,6 @@ export async function runCliServiceLifecycle(options: {
   const { dockerComposeStream, dockerCompose } = await import("./docker");
   const { readGeneratedHardlinkPlan } = await import("./hardlinks");
   const release = await import("./release");
-  const { refuseAgentSwitchOrExit } = await import("./agent-layout");
   const { API_SERVICE_ID, migrateBeforeApiUpdate } = await import("./api-migrations");
   const paths = repoPaths();
   assertCliDeploymentSecrets();
@@ -531,7 +530,6 @@ export async function runCliServiceLifecycle(options: {
       const revisionId = committedRevisionId();
       const conflict = "Lifecycle generation changed before recreation";
       await assertNativeCreation();
-      await refuseAgentSwitchOrExit(noDeps ? [...selected] : "all");
       if (selected.includes(API_SERVICE_ID)) {
         await beforeDockerEffect(revisionId, conflict, signal);
         const migrationCode = await migrateBeforeApiUpdate({ deps: !noDeps });
@@ -625,7 +623,6 @@ export async function runCliServiceLifecycle(options: {
         await prepareServiceLifecycle({ ...request, coordinatorMode: "ensure-running" }, effects);
         const revisionId = committedRevisionId();
         await assertNativeCreation();
-        await refuseAgentSwitchOrExit([...ids]);
         await beforeDockerEffect(revisionId, "Lifecycle generation changed before Start");
         const code = await dockerComposeStream([
           "up",

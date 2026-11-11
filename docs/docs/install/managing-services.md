@@ -513,9 +513,23 @@ The host CLI asks git; the operations agent goes by the checkout's
 `services/service-file-history.json`, which each commit keeps current. A
 checkout without that file predates it and is taken to be behind.
 
-Under `OPENMAPX_RELEASE=local`, for development, the checkout's files are the
-release's, for the host CLI and the operations agent alike. Overrides still
-apply, and nothing is imported.
+Under `OPENMAPX_RELEASE=local`, for development, no release supplies the
+files. A render on the host reads the checkout's own `services/` files. The
+operations agent has no checkout: its renders, such as an admin-panel
+configuration change, use the files embedded in its image, which a local build
+took from the checkout as it was then. After you edit a file under
+`services/`, a host render uses the edit at once; the agent uses it only once
+you rebuild the ops-agent image from the checkout and recreate the agent from
+that image. Each such agent render says so in its output. Overrides apply to
+both, and nothing is imported.
+
+The agent's files are the checkout's only when its image is a local build.
+`OPENMAPX_RELEASE=local` does not clear an existing release overlay, which
+keeps pinning the release's images until you clear it with
+`pnpm openmapx compose release --clear`. And an ops-agent image pulled by its
+tag, such as `ghcr.io/openmapx/ops-agent:main`, is a published build, not
+yours. In either case the agent renders that release's service files, not your
+checkout's.
 
 ## Exposure: what's reachable from outside
 

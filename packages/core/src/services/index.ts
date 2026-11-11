@@ -1,11 +1,6 @@
 export { openAdminDataWorkflow } from "./admin-data-workflow";
 export * from "./agent-handoff-record";
 export {
-  type AgentMountLayout,
-  generationAgentMountLayout,
-  runningAgentMountLayout,
-} from "./agent-mounts";
-export {
   type AgentStatePaths,
   agentStatePaths,
   legacyAgentStatePaths,
@@ -55,7 +50,6 @@ export {
   CheckoutRequiredError,
   checkoutMounted,
   checkoutMountedAt,
-  describeMountLayout,
 } from "./checkout-layout";
 export { communityServiceManifestProblems } from "./community-manifest";
 export {

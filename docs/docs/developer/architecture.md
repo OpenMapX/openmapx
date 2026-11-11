@@ -202,24 +202,20 @@ image. The helper has only the socket and the agent's own mounts at the
 checkout's path, no network and no capabilities. It replaces the agent
 container from the applied generation, verifies the new agent and exits.
 
-The agent works under two mount layouts, both at the same host paths, because
-Compose's bind sources must resolve the same inside and outside it. Its
-manifest mounts only `infra/docker` read-only (for `.env`, through the
+The agent has one mount layout, the one its manifest declares, at the same
+host paths as outside it, because Compose's bind sources must resolve the same
+inside and outside it: `infra/docker` read-only (for `.env`, through the
 directory so an editor's atomic save is seen, and the overrides) and
-`infra/docker/state`, `data`, `secrets` and `backups` read-write. Everything
-the agent needs comes from its image and its state. Until a render on the
-host has found nothing missing for that, the renderer gives the agent the
-whole checkout in their place, the layout of earlier releases; only a host
-render moves it, and every render by the agent keeps the layout it runs with
-(`packages/core/src/services/agent-mounts.ts`). It tells the layouts apart by one test, whether the
-checkout's `services` directory is there, and logs which it has when it
-starts. Without the checkout, a one-time step only a checkout allows (the
-import of service file edits, the copy of the stores and of the Transitous
-API keys) is refused or waits, and says that `pnpm openmapx compose render`
-on the host does it. It is never recorded as done. CI runs the agent's image
-under both layouts (`test (ops-agent image, both mount layouts)`). Traefik consumes generated configuration rather
-than discovering containers through the Docker socket, so there is no duplicate
-host-control path outside the broker.
+`infra/docker/state`, `data`, `secrets`, `backups` and `catalog-pins`
+read-write. It never has the checkout: everything it needs comes from its
+image and its state. A one-time step only a checkout allows (the import of
+service file edits, the copy of the stores and of the Transitous API keys) is
+refused or waits in the agent, and says that `pnpm openmapx compose render` on
+the host does it. It is never recorded as done. CI runs the agent's image with
+these mounts (`test (ops-agent image)`), and the install smoke check requires
+the running agent to mount nothing at the checkout's root. Traefik consumes
+generated configuration rather than discovering containers through the Docker
+socket, so there is no duplicate host-control path outside the broker.
 
 `app-api` runs the integration host alongside core routes, service discovery,
 and asynchronous jobs:

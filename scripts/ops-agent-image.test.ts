@@ -1,0 +1,460 @@
+import { execFile } from "node:child_process";
+import { randomBytes, randomUUID } from "node:crypto";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { promisify } from "node:util";
+import {
+  createControlRootOperationKey,
+  OpsClient,
+  type OpsOperation,
+  type OpsOperationKind,
+  type OpsResultFor,
+  opsExecutionBudget,
+} from "@openmapx/core/ops";
+import { services } from "@openmapx/core/server";
+import { afterAll, describe, expect, it } from "vitest";
+import { parse as parseYaml } from "yaml";
+import { waitForOpsResult } from "../apps/api/src/services/ops-client";
+import {
+  consumePublishedTrustedConfiguration,
+  publishTrustedConfigurationSnapshot,
+} from "../apps/api/src/services/trusted-config-publisher";
+import {
+  agentHandoffRunArgs,
+  inspectAgentContainer,
+  writeAgentHandoff,
+} from "../apps/ops-agent/src/agent-handoff";
+import { readCatalogPinSet } from "../packages/core/src/catalog-pins";
+
+/**
+ * The operations agent's own image with the mounts its manifest declares, at
+ * the checkout's host paths:
+ *
+ * - `infra/docker`, read-only: `.env` (through the directory, so an editor's
+ *   atomic save is seen) and the overrides;
+ * - `infra/docker/{state,data,secrets,backups,catalog-pins}`, read-write;
+ * - nothing else of the checkout. The checkout itself is gone from the host
+ *   too, apart from those, so what the agent would read from it is absent,
+ *   not empty.
+ *
+ * The run starts the agent from the generation a host render wrote, commits a
+ * sealed configuration change through the supported local bearer root with a
+ * service file override, runs its fixed CLI's check and render, reads the
+ * stack's status and a handoff record, and inspects what its self-update
+ * helper would mount.
+ *
+ * Runs only on Linux where `OPENMAPX_TEST_AGENT_IMAGE` names a built image of
+ * apps/ops-agent/Dockerfile from this commit, with Docker reachable.
+ */
+const IMAGE = process.env.OPENMAPX_TEST_AGENT_IMAGE ?? "";
+const run = promisify(execFile);
+const ROOT = resolve(import.meta.dirname, "..");
+const roots: string[] = [];
+const containers: string[] = [];
+const OVERRIDE_MARK = "# openmapx-ci: an operator's override";
+
+const RUNTIME_DIRECTORIES = ["state", "data", "secrets", "backups", "catalog-pins"] as const;
+/** The stack's network, which `docker compose up` of the generation creates. */
+const COMPOSE_NETWORK = `${services.STACK_PROJECT}_openmapx`;
+
+async function docker(...args: string[]): Promise<string> {
+  return (await run("docker", args, { maxBuffer: 16 * 1024 * 1024 })).stdout;
+}
+
+/** The agent's mounts at or under the checkout's path. */
+function agentMounts(root: string) {
+  const infra = join(root, "infra", "docker");
+  return [
+    { source: infra, target: infra, readOnly: true },
+    ...RUNTIME_DIRECTORIES.map((name) => ({
+      source: join(infra, name),
+      target: join(infra, name),
+      readOnly: false,
+    })),
+    ...["data-manager", "host-cli"].flatMap((role) => [
+      {
+        source: join(infra, "control-private/hidden-key"),
+        target: join(infra, `secrets/control-${role}.key`),
+        readOnly: true,
+      },
+      {
+        source: join(infra, "control-private/empty"),
+        target: join(infra, `control-private/${role}`),
+        readOnly: true,
+      },
+    ]),
+  ];
+}
+
+describe.skipIf(process.platform !== "linux" || !IMAGE)(
+  "the operations agent's image with its declared mounts",
+  () => {
+    afterAll(async () => {
+      for (const id of containers.splice(0)) await docker("rm", "--force", id).catch(() => "");
+      await docker("network", "rm", COMPOSE_NETWORK).catch(() => "");
+      for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+    });
+
+    const secret = () => randomBytes(24).toString("base64url");
+    const uid = process.geteuid?.() ?? 0;
+    const gid = process.getegid?.() ?? 0;
+
+    /** `pnpm openmapx compose render` on the host: the CLI from source. */
+    async function hostRender(root: string): Promise<string> {
+      const cli = join(ROOT, "packages", "cli");
+      const { stdout, stderr } = await run(
+        join(cli, "node_modules", ".bin", "tsx"),
+        [
+          "--tsconfig",
+          join(cli, "tsconfig.json"),
+          join(cli, "src", "index.ts"),
+          "compose",
+          "render",
+        ],
+        {
+          cwd: root,
+          env: { PATH: process.env.PATH, HOME: process.env.HOME, OPENMAPX_ROOT_DIR: root },
+        },
+      );
+      return `${stdout}${stderr}`;
+    }
+
+    /** A host: a checkout, its .env and a render on the host. */
+    async function host(): Promise<string> {
+      const parent = mkdtempSync(join(tmpdir(), "openmapx-agent-image-"));
+      roots.push(parent);
+      const root = join(parent, "checkout");
+      await run("git", ["clone", "-q", "--no-local", ROOT, root]);
+      const socketGroup = statSync("/var/run/docker.sock").gid;
+      const dockerConfig = join(parent, "docker-config");
+      mkdirSync(dockerConfig, { mode: 0o700 });
+      writeFileSync(
+        join(root, "infra", "docker", ".env"),
+        [
+          `UID=${uid}`,
+          `GID=${gid}`,
+          `DOCKER_GID=${socketGroup}`,
+          `POSTGRES_PASSWORD=${secret()}`,
+          `BETTER_AUTH_SECRET=${secret()}`,
+          `DATA_MANAGER_AUTH_TOKEN=${secret()}`,
+          `OPENMAPX_HOST_DIR=${root}`,
+          `OPENMAPX_DOCKER_CONFIG_DIR=${dockerConfig}`,
+          "",
+        ].join("\n"),
+        { mode: 0o600 },
+      );
+      await hostRender(root);
+      // The first generation already mounts the agent without the checkout.
+      const generated = parseYaml(
+        readFileSync(
+          join(
+            root,
+            "infra",
+            "docker",
+            services.CURRENT_CONFIGURATION,
+            "docker-compose.generated.yml",
+          ),
+          "utf8",
+        ),
+      ) as { services: Record<string, { volumes: string[] }> };
+      expect(
+        generated.services["ops-agent"].volumes.filter((volume) =>
+          /^\$\{OPENMAPX_HOST_DIR[^}]*\}:/.test(volume),
+        ),
+      ).toEqual([]);
+      return root;
+    }
+
+    /** Takes the checkout away, keeping only what the agent mounts. */
+    function removeCheckout(root: string): void {
+      for (const name of readdirSync(root)) {
+        if (name !== "infra") rmSync(join(root, name), { recursive: true, force: true });
+      }
+      for (const name of readdirSync(join(root, "infra"))) {
+        if (name !== "docker") rmSync(join(root, "infra", name), { recursive: true, force: true });
+      }
+      const keep = new Set([".env", "overrides", "control-private", ...RUNTIME_DIRECTORIES]);
+      for (const name of readdirSync(join(root, "infra", "docker"))) {
+        if (!keep.has(name))
+          rmSync(join(root, "infra", "docker", name), { recursive: true, force: true });
+      }
+    }
+
+    async function startAgent(root: string) {
+      const infra = join(root, "infra", "docker");
+      const { id, baseUrl } = await composeAgent(root);
+      containers.push(id);
+      const logs = async () => {
+        const { stdout, stderr } = await run("docker", ["logs", id]).catch((error) => error);
+        return `${stdout ?? ""}${stderr ?? ""}`;
+      };
+      const deadline = Date.now() + 90_000;
+      for (;;) {
+        const healthy = await fetch(`${baseUrl}/health`)
+          .then((response) => response.ok)
+          .catch(() => false);
+        if (healthy) break;
+        const state = (await docker("inspect", "--format", "{{.State.Status}}", id)).trim();
+        if (state !== "running") throw new Error(`The agent exited: ${await logs()}`);
+        if (Date.now() > deadline)
+          throw new Error(`The agent never became healthy: ${await logs()}`);
+        await new Promise((done) => setTimeout(done, 250));
+      }
+      const tokenFile = join(infra, "secrets", "ops-agent-api-token");
+      return {
+        id,
+        logs,
+        client: new OpsClient({ baseUrl, tokenFile }),
+        dataManagerClient: new OpsClient({
+          baseUrl,
+          tokenFile: join(infra, "secrets", "ops-agent-data-manager-token"),
+        }),
+        token: readFileSync(tokenFile, "utf8").trim(),
+        exec: (...args: string[]) =>
+          run("docker", ["exec", id, ...args], { maxBuffer: 16 * 1024 * 1024 }).catch(
+            (error: { stdout?: string; stderr?: string; code?: number }) => ({
+              stdout: error.stdout ?? "",
+              stderr: error.stderr ?? "",
+              failed: error.code ?? 1,
+            }),
+          ),
+        stop: () => docker("rm", "--force", id),
+      };
+    }
+    type Agent = Awaited<ReturnType<typeof startAgent>>;
+
+    /**
+     * The agent as this release's manifest has it, from the generation the
+     * host render wrote: Compose creates it from that service's definition,
+     * its mounts, user, groups, environment and secrets, as
+     * `services update ops-agent` does. The one addition is a loopback port,
+     * since the ops client only talks to `ops-agent` or loopback.
+     */
+    async function composeAgent(root: string): Promise<{ id: string; baseUrl: string }> {
+      const infra = join(root, "infra", "docker");
+      const compose = [
+        "compose",
+        "--env-file",
+        join(infra, ".env"),
+        "-f",
+        join(infra, services.CURRENT_CONFIGURATION, "docker-compose.generated.yml"),
+      ];
+      await docker("tag", IMAGE, "ghcr.io/openmapx/ops-agent:main");
+      const id = (
+        await docker(
+          ...compose,
+          "run",
+          "--detach",
+          "--no-deps",
+          "--publish",
+          "127.0.0.1::4300",
+          "ops-agent",
+        )
+      )
+        .trim()
+        .split("\n")
+        .at(-1) as string;
+      const port = Number((await docker("port", id, "4300/tcp")).trim().split(":").at(-1));
+      return { id, baseUrl: `http://127.0.0.1:${port}` };
+    }
+
+    /** A truthful timed local bearer root, without inventing an API job parent. */
+    function localRootIdentity(kind: OpsOperationKind) {
+      const requestedDeadlineAt = Date.now() + opsExecutionBudget(kind).processMs;
+      return {
+        operationKey: createControlRootOperationKey({
+          notAfter: requestedDeadlineAt,
+          nonce: randomBytes(16),
+        }),
+        execution: { requestedDeadlineAt },
+      };
+    }
+
+    async function operate<K extends OpsOperationKind>(
+      agent: Agent,
+      operation: Extract<OpsOperation, { kind: K }>,
+      identity = localRootIdentity(operation.kind),
+    ): Promise<OpsResultFor<K>> {
+      const submitted = await agent.client.execute<K>(operation, identity);
+      if (submitted.execution === "sync") return submitted.value;
+      return waitForOpsResult<K>(agent.client, operation.kind, submitted, {
+        execution: identity.execution,
+        observerDeadlineAt: identity.execution.requestedDeadlineAt,
+      });
+    }
+
+    /** The actual sealed configuration body and current source witness over agent HTTP. */
+    async function commit(root: string, agent: Agent, name: string): Promise<void> {
+      const infra = join(root, "infra", "docker");
+      const inspected = await agent.client.execute({ kind: "configuration.sources.inspect" });
+      if (inspected.execution !== "sync") throw Error("Expected a synchronous source inspection");
+      const identity = localRootIdentity("stack.render");
+      const { operationKey } = identity;
+      const before = services.currentConfigurationGeneration(infra);
+      const sealed = await publishTrustedConfigurationSnapshot({
+        directory: services.agentStatePaths(infra).trustedConfig,
+        token: agent.token,
+        ownerUid: uid,
+        ownerGid: gid,
+        operationKey,
+        operationForRevision: (revisionId) => ({
+          kind: "stack.render",
+          revisionId,
+          expectedCurrentRevisionId: before,
+          expectedSourceRevision: inspected.value.sourceRevision,
+          coordinatorMode: "require-running",
+        }),
+        payload: {
+          domain: `${name}.example.test`,
+          serviceConfigs: [],
+          integrationConfigs: [],
+          serviceSecrets: [],
+        },
+      });
+      const consumed = await consumePublishedTrustedConfiguration(sealed, () =>
+        operate(agent, sealed.operation, identity),
+      );
+      expect(consumed.submission.status, await agent.logs()).toBe("fulfilled");
+      const result =
+        consumed.submission.status === "fulfilled" ? consumed.submission.value : undefined;
+      expect(result, `${JSON.stringify(result)}\n${await agent.logs()}`).toMatchObject({
+        outcome: "committed",
+        revisionId: sealed.operation.revisionId,
+      });
+      expect(services.currentConfigurationGeneration(infra)).not.toBe(before);
+    }
+
+    it("with only infra/docker and its runtime directories: starts, commits with an override, checks, renders, and reports its handoffs", async () => {
+      const root = await host();
+      const infra = join(root, "infra", "docker");
+      // Its first start pairs the catalog pins from infra/docker's lock files.
+      const first = await startAgent(root);
+      await first.stop();
+      const pins = readCatalogPinSet(root);
+      if (!pins) throw new Error("Expected the initialized managed catalog pair");
+
+      const shipped = readFileSync(join(ROOT, "services/traefik/config/dynamic/middlewares.yml"));
+      const override = join(infra, "overrides/services/traefik/config/dynamic/middlewares.yml");
+      mkdirSync(dirname(override), { recursive: true, mode: 0o755 });
+      writeFileSync(override, `${shipped}\n${OVERRIDE_MARK}\n`, { mode: 0o644 });
+      removeCheckout(root);
+      const env = readFileSync(join(infra, ".env"));
+
+      const agent = await startAgent(root);
+      // What the agent sees of the checkout: infra/docker's .env, the
+      // overrides and the runtime directories, and nothing else.
+      const listing = await agent.exec(
+        "sh",
+        "-c",
+        `ls -A ${root}; ls -A ${root}/infra; ls -A ${infra}`,
+      );
+      expect(listing.stdout.split("\n").filter(Boolean)).toEqual([
+        "infra",
+        "docker",
+        ...[
+          ".env",
+          "backups",
+          "catalog-pins",
+          "control-private",
+          "data",
+          "overrides",
+          "secrets",
+          "state",
+        ],
+      ]);
+      for (const absent of ["services", "packages", "apps", "integrations", ".git"]) {
+        const probe = await agent.exec("test", "-e", join(root, absent));
+        expect(probe, absent).toMatchObject({ failed: 1 });
+      }
+
+      // Docker owns the unmounted ancestors. Catalog reads and signed
+      // proposals use the actual trusted infra/docker mount.
+      await expect(operate(agent, { kind: "catalogPins.inspect" })).resolves.toEqual({
+        active: pins,
+        catalogRevisionId: pins.generationId,
+      });
+      const proposalId = randomUUID();
+      await expect(
+        agent.dataManagerClient.execute({
+          kind: "transitousLock.propose",
+          proposalId,
+          baseGenerationId: pins.generationId,
+          pins,
+          diffDigest: "a".repeat(64),
+          sourcePolicyRevision: "b".repeat(64),
+        }),
+      ).resolves.toMatchObject({
+        execution: "sync",
+        value: { proposalId, proposed: true, catalogRevisionId: pins.generationId },
+      });
+      await expect(
+        agent.dataManagerClient.execute({ kind: "transitousLock.inspect", proposalId }),
+      ).resolves.toMatchObject({
+        value: { active: pins.transitous, proposal: { proposalId, pins } },
+      });
+
+      // A configuration change through the admin panel's path, with the
+      // override in place of the release's file.
+      await commit(root, agent, "agent");
+      expect(
+        readFileSync(
+          join(services.agentStatePaths(infra).directory, "traefik/dynamic/middlewares.yml"),
+          "utf8",
+        ),
+      ).toContain(OVERRIDE_MARK);
+
+      // check, as Run diagnostics runs it, and the render services.update
+      // starts with.
+      const checked = await agent.exec("node", "dist/cli.mjs", "check");
+      expect(`${checked.stdout}${checked.stderr}`).not.toMatch(/ENOENT/);
+      const rendered = await agent.exec("node", "dist/cli.mjs", "compose", "render");
+      expect(rendered, `${rendered.stdout}${rendered.stderr}`).not.toHaveProperty("failed");
+      expect(rendered.stdout).toContain("Rendered");
+
+      // The stack as Compose sees it from the agent, and a handoff record.
+      await expect(operate(agent, { kind: "stack.status" })).resolves.toHaveProperty("services");
+      const now = new Date().toISOString();
+      writeAgentHandoff(root, {
+        version: 1,
+        handoffId: "handoff-agent-image",
+        releaseId: "main",
+        digest: "a".repeat(64),
+        phase: "applied",
+        previousOverlay: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await expect(
+        operate(agent, { kind: "agent.handoff.inspect", handoffId: "handoff-agent-image" }),
+      ).resolves.toEqual({ handoffId: "handoff-agent-image", phase: "applied" });
+
+      // What its self-update helper would mount: the agent's own mounts.
+      const facts = await inspectAgentContainer(
+        async (args) => docker(...args),
+        agent.id,
+        root,
+        new AbortController().signal,
+      );
+      // The same mounts, the outermost first so a nested one isn't hidden.
+      const byTarget = (mounts: Array<{ target: string }>) =>
+        [...mounts].sort((left, right) => left.target.localeCompare(right.target));
+      expect(byTarget(facts.rootMounts)).toEqual(byTarget(agentMounts(root)));
+      expect(facts.rootMounts[0]).toEqual(agentMounts(root)[0]);
+      const helper = agentHandoffRunArgs(facts, root, "handoff-agent-image").join("\n");
+      expect(helper).not.toContain(`target=${root}\n`);
+
+      // The agent read .env and never wrote it.
+      expect(readFileSync(join(infra, ".env")).equals(env)).toBe(true);
+      await agent.stop();
+    }, 600_000);
+  },
+);
