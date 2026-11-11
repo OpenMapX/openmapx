@@ -76,11 +76,7 @@ import {
 import { isContentAddressedPackageId } from "./offline-packages/storage.js";
 import { runOpsOperation } from "./ops-client.js";
 import type { DataManagerReadinessSnapshot } from "./readiness.js";
-import {
-  registerDataManagerRoute,
-  validateDataManagerEvent,
-  validateDataManagerResponseHeaders,
-} from "./route-contract.js";
+import { registerDataManagerRoute } from "./route-contract.js";
 import { StateStore } from "./state.js";
 import {
   listPinnedTransitCatalog,
@@ -149,57 +145,6 @@ export interface ApiOptions {
 }
 
 const startedAt = Date.now();
-
-interface NdjsonStream {
-  writeLine: (obj: Record<string, unknown>) => void;
-  end: () => void;
-}
-
-/**
- * Opens a long-lived NDJSON response and keeps it active across quiet database
- * stages. Undici terminates a response body after roughly five minutes with no
- * bytes; country-scale Overture H3/index work can legitimately be silent for
- * longer than that. Safe writes also let the server-side operation finish if a
- * client disconnects for an unrelated reason.
- */
-function openNdjsonStream(
-  reply: FastifyReply,
-  operationId: import("@openmapx/core/data-manager-contracts").DataManagerOperationKey,
-): NdjsonStream {
-  const headers = {
-    "Content-Type": "application/x-ndjson",
-    "Cache-Control": "no-cache",
-    "X-Accel-Buffering": "no",
-  };
-  validateDataManagerResponseHeaders(operationId, 200, headers);
-  reply.hijack();
-  reply.raw.writeHead(200, headers);
-
-  const write = (chunk: string): void => {
-    if (reply.raw.destroyed || reply.raw.writableEnded) return;
-    try {
-      reply.raw.write(chunk);
-    } catch {
-      // The operation is independently durable; a disconnected observer must
-      // not abort a schema swap or leave a completed staging build unpublished.
-    }
-  };
-  const keepalive = setInterval(() => write(" \n"), 10_000);
-  keepalive.unref();
-
-  return {
-    writeLine: (obj) => write(`${JSON.stringify(validateDataManagerEvent(operationId, obj))}\n`),
-    end: () => {
-      clearInterval(keepalive);
-      if (reply.raw.destroyed || reply.raw.writableEnded) return;
-      try {
-        reply.raw.end();
-      } catch {
-        // Client already disconnected.
-      }
-    },
-  };
-}
 
 interface ByteRange {
   start: number;
@@ -541,11 +486,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       throw Object.assign(Error("Durable data receiver is unavailable"), { statusCode: 503 });
     return opts.executionReceiver.admitLocal(input, source);
   }
-  async function observeLegacyData(
-    status: DataExecutionStatus,
-    reply: FastifyReply,
-    operationId?: import("@openmapx/core/data-manager-contracts").DataManagerOperationKey,
-  ) {
+  async function observeLegacyData(status: DataExecutionStatus, reply: FastifyReply) {
     const receiver = opts.executionReceiver;
     if (!receiver)
       throw Object.assign(Error("Durable data receiver is unavailable"), { statusCode: 503 });
@@ -553,8 +494,6 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       closed = () => observer.abort();
     reply.raw.once("close", closed);
     reply.request.raw.once("aborted", closed);
-    const stream = operationId ? openNdjsonStream(reply, operationId) : undefined;
-    const unsubscribe = receiver.subscribe(status.id, (event) => stream?.writeLine(event));
     try {
       let current = status;
       while (!isDataExecutionTerminal(current) || current.publication === "unknown") {
@@ -578,19 +517,13 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       }
       if (current.status !== "ok" && current.status !== "partial")
         throw Error(`Execution ${status.id} ${current.status}`);
-      if (stream) stream.writeLine(receiver.legacyResult(status.id) ?? { event: "done", ok: true });
       return current;
     } catch (error) {
-      if (!observer.signal.aborted) {
-        if (stream) stream.writeLine({ event: "error", message: (error as Error).message });
-        else throw error;
-      }
+      if (!observer.signal.aborted) throw error;
       return undefined;
     } finally {
-      unsubscribe();
       reply.raw.removeListener("close", closed);
       reply.request.raw.removeListener("aborted", closed);
-      stream?.end();
     }
   }
 
@@ -992,11 +925,6 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     return planned;
   });
 
-  registerDataManagerRoute(app, "downloadOsm", async (req, reply) => {
-    const admitted = await admitLegacyData({ kind: "download-osm", region: req.body.region });
-    await observeLegacyData(admitted, reply, "downloadOsm");
-  });
-
   registerDataManagerRoute(app, "getSearchIndexStatus", async (_req, reply) => {
     const status = await getSearchIndexStatus({
       dataDir,
@@ -1010,11 +938,6 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     return reply.send({ ok: true, ...status });
   });
 
-  registerDataManagerRoute(app, "buildSearchIndex", async (req, reply) => {
-    const admitted = await admitLegacyData({ kind: "search-index-build", region: req.body.region });
-    await observeLegacyData(admitted, reply, "buildSearchIndex");
-  });
-
   registerDataManagerRoute(app, "getNotablePlacesStatus", async (_req, reply) => {
     const status = await getNotablePlacesStatus({
       sql: searchIndexSql,
@@ -1026,35 +949,9 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     return reply.send({ ok: true, ...status });
   });
 
-  registerDataManagerRoute(app, "buildNotablePlaces", async (_req, reply) => {
-    const admitted = await admitLegacyData({ kind: "notable-places-build" });
-    await observeLegacyData(admitted, reply, "buildNotablePlaces");
-  });
-
-  registerDataManagerRoute(app, "downloadFonts", async (_req, reply) => {
-    const admitted = await admitLegacyData({ kind: "download-fonts" });
-    await observeLegacyData(admitted, reply);
-    if (!reply.raw.destroyed) return { ok: true };
-    return undefined;
-  });
-
   registerDataManagerRoute(app, "link", async (_req, reply) =>
     reply.code(503).send({ error: "A signed generation-hardlinks execution is required" }),
   );
-
-  registerDataManagerRoute(app, "convertOverpass", async (req, reply) => {
-    const admitted = await admitLegacyData({
-      kind: "convert-overpass",
-      region:
-        req.body?.region ?? store.getAll().find((entry) => entry.type === "osm-pbf")?.region ?? "",
-    });
-    await observeLegacyData(admitted, reply, "convertOverpass");
-  });
-
-  registerDataManagerRoute(app, "pullOverture", async (req, reply) => {
-    const admitted = await admitLegacyData({ kind: "overture-pull", region: req.body.region });
-    await observeLegacyData(admitted, reply, "pullOverture");
-  });
 
   registerDataManagerRoute(app, "getOvertureRecovery", async (req, reply) => {
     reply.header("cache-control", "no-store");
@@ -1079,30 +976,6 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       heartbeatAgeMs,
       stalled: state.status === "running" && heartbeatAgeMs > 30 * 60 * 1000,
     };
-  });
-
-  registerDataManagerRoute(app, "syncOverture", async (req, reply) => {
-    const admitted = await admitLegacyData({ kind: "overture-sync", region: req.body.region });
-    await observeLegacyData(admitted, reply, "syncOverture");
-  });
-
-  registerDataManagerRoute(app, "ingestOverture", async (req, reply) => {
-    const admitted = await admitLegacyData({ kind: "overture-ingest", region: req.body.region });
-    await observeLegacyData(admitted, reply, "ingestOverture");
-  });
-
-  registerDataManagerRoute(app, "extractOverture", async (req, reply) => {
-    const admitted = await admitLegacyData({ kind: "overture-extract", region: req.body.region });
-    await observeLegacyData(admitted, reply, "extractOverture");
-  });
-
-  registerDataManagerRoute(app, "conflateOverture", async (req, reply) => {
-    const admitted = await admitLegacyData({
-      kind: "overture-conflate",
-      region: req.body.region,
-      restart: req.body.restart,
-    });
-    await observeLegacyData(admitted, reply, "conflateOverture");
   });
 
   // POST /transit/sync — fire-and-forget Transitous pipeline trigger. Honours

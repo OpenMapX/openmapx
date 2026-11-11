@@ -1,5 +1,5 @@
 import z from "zod/v4";
-import { countSchema, streamErrorSchema, timestampSchema } from "./common";
+import { countSchema, timestampSchema } from "./common";
 
 const sharedStatus = {
   ok: z.literal(true),
@@ -41,40 +41,24 @@ export const notablePlacesBuildResultSchema = z.strictObject({
   placeCount: countSchema,
   nameCount: countSchema,
 });
-export const searchIndexEventSchema = z.union([
-  streamErrorSchema,
-  z.strictObject({
-    event: z.literal("progress"),
-    stage: z.enum(["resolve", "extract", "insert", "index", "validate", "publish", "complete"]),
-    message: z.string(),
-    placeCount: countSchema.optional(),
-    termCount: countSchema.optional(),
-  }),
-  searchIndexBuildResultSchema.extend({ event: z.literal("done"), ok: z.literal(true) }),
-]);
-export const notablePlacesEventSchema = z.union([
-  streamErrorSchema,
-  z.strictObject({
-    event: z.literal("progress"),
-    stage: z.enum(["places", "names", "descriptions", "index", "validate", "publish", "complete"]),
-    message: z.string(),
-    placeCount: countSchema.optional(),
-    nameCount: countSchema.optional(),
-  }),
-  notablePlacesBuildResultSchema.extend({ event: z.literal("done"), ok: z.literal(true) }),
-]);
+const searchIndexBuildProgressSchema = z.strictObject({
+  stage: z.enum(["resolve", "extract", "insert", "index", "validate", "publish", "complete"]),
+  message: z.string(),
+  placeCount: countSchema.optional(),
+  termCount: countSchema.optional(),
+});
+const notablePlacesBuildProgressSchema = z.strictObject({
+  stage: z.enum(["places", "names", "descriptions", "index", "validate", "publish", "complete"]),
+  message: z.string(),
+  placeCount: countSchema.optional(),
+  nameCount: countSchema.optional(),
+});
 export type SearchIndexStatus = z.infer<typeof searchIndexStatusSchema>;
 export type NotablePlacesStatus = z.infer<typeof notablePlacesStatusSchema>;
 export type SearchIndexBuildResult = z.infer<typeof searchIndexBuildResultSchema>;
 export type NotablePlacesBuildResult = z.infer<typeof notablePlacesBuildResultSchema>;
 
-export type SearchIndexBuildProgress = Omit<
-  Extract<z.infer<typeof searchIndexEventSchema>, { event: "progress" }>,
-  "event"
->;
+export type SearchIndexBuildProgress = z.infer<typeof searchIndexBuildProgressSchema>;
 export type SearchIndexBuildStage = SearchIndexBuildProgress["stage"];
-export type NotablePlacesBuildProgress = Omit<
-  Extract<z.infer<typeof notablePlacesEventSchema>, { event: "progress" }>,
-  "event"
->;
+export type NotablePlacesBuildProgress = z.infer<typeof notablePlacesBuildProgressSchema>;
 export type NotablePlacesBuildStage = NotablePlacesBuildProgress["stage"];

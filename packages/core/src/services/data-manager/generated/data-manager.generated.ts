@@ -44,25 +44,6 @@ import type {
   BuildAmbientPlaces500,
   BuildAmbientPlaces503,
   BuildAmbientPlacesBody,
-  BuildNotablePlaces200,
-  BuildNotablePlaces400,
-  BuildNotablePlaces401,
-  BuildNotablePlaces409,
-  BuildNotablePlaces413,
-  BuildNotablePlaces415,
-  BuildNotablePlaces429,
-  BuildNotablePlaces500,
-  BuildNotablePlaces503,
-  BuildSearchIndex200,
-  BuildSearchIndex400,
-  BuildSearchIndex401,
-  BuildSearchIndex409,
-  BuildSearchIndex413,
-  BuildSearchIndex415,
-  BuildSearchIndex429,
-  BuildSearchIndex500,
-  BuildSearchIndex503,
-  BuildSearchIndexBody,
   CancelDataExecution200,
   CancelDataExecution400,
   CancelDataExecution401,
@@ -74,26 +55,6 @@ import type {
   CancelDataExecution500,
   CancelDataExecution503,
   CancelDataExecutionBody,
-  ConflateOverture200,
-  ConflateOverture400,
-  ConflateOverture401,
-  ConflateOverture409,
-  ConflateOverture413,
-  ConflateOverture415,
-  ConflateOverture429,
-  ConflateOverture500,
-  ConflateOverture503,
-  ConflateOvertureBody,
-  ConvertOverpass200,
-  ConvertOverpass400,
-  ConvertOverpass401,
-  ConvertOverpass409,
-  ConvertOverpass413,
-  ConvertOverpass415,
-  ConvertOverpass429,
-  ConvertOverpass500,
-  ConvertOverpass503,
-  ConvertOverpassBody,
   DisableTransitSource202,
   DisableTransitSource400,
   DisableTransitSource401,
@@ -115,25 +76,6 @@ import type {
   DiscardAmbientPlaces500,
   DiscardAmbientPlaces503,
   DiscardAmbientPlacesBody,
-  DownloadFonts200,
-  DownloadFonts400,
-  DownloadFonts401,
-  DownloadFonts409,
-  DownloadFonts413,
-  DownloadFonts415,
-  DownloadFonts429,
-  DownloadFonts500,
-  DownloadFonts503,
-  DownloadOsm200,
-  DownloadOsm400,
-  DownloadOsm401,
-  DownloadOsm409,
-  DownloadOsm413,
-  DownloadOsm415,
-  DownloadOsm429,
-  DownloadOsm500,
-  DownloadOsm503,
-  DownloadOsmBody,
   EnableTransitSource202,
   EnableTransitSource400,
   EnableTransitSource401,
@@ -145,16 +87,6 @@ import type {
   EnableTransitSource500,
   EnableTransitSource503,
   EnableTransitSourceBody,
-  ExtractOverture200,
-  ExtractOverture400,
-  ExtractOverture401,
-  ExtractOverture409,
-  ExtractOverture413,
-  ExtractOverture415,
-  ExtractOverture429,
-  ExtractOverture500,
-  ExtractOverture503,
-  ExtractOvertureBody,
   GetAmbientPlacesStatus200,
   GetAmbientPlacesStatus400,
   GetAmbientPlacesStatus401,
@@ -339,16 +271,6 @@ import type {
   GetTransitSources500,
   GetTransitSourcesParams,
   HeadOfflinePackageArchiveHeaders,
-  IngestOverture200,
-  IngestOverture400,
-  IngestOverture401,
-  IngestOverture409,
-  IngestOverture413,
-  IngestOverture415,
-  IngestOverture429,
-  IngestOverture500,
-  IngestOverture503,
-  IngestOvertureBody,
   InspectCatalogReview200,
   InspectCatalogReview400,
   InspectCatalogReview401,
@@ -446,16 +368,6 @@ import type {
   ProposeTransitBump502,
   ProposeTransitBump503,
   ProposeTransitBumpBody,
-  PullOverture200,
-  PullOverture400,
-  PullOverture401,
-  PullOverture409,
-  PullOverture413,
-  PullOverture415,
-  PullOverture429,
-  PullOverture500,
-  PullOverture503,
-  PullOvertureBody,
   RecoverUnadmittedConfigurationPreparation200,
   RecoverUnadmittedConfigurationPreparation400,
   RecoverUnadmittedConfigurationPreparation401,
@@ -570,16 +482,6 @@ import type {
   StartGenerationHardlinksExecution500,
   StartGenerationHardlinksExecution503,
   StartGenerationHardlinksExecutionBody,
-  SyncOverture200,
-  SyncOverture400,
-  SyncOverture401,
-  SyncOverture409,
-  SyncOverture413,
-  SyncOverture415,
-  SyncOverture429,
-  SyncOverture500,
-  SyncOverture503,
-  SyncOvertureBody,
   SyncTransit202,
   SyncTransit400,
   SyncTransit401,
@@ -597,17 +499,10 @@ import {
   approveTransitBumpRequest,
   bakePredictedTrafficRequest,
   buildAmbientPlacesRequest,
-  buildNotablePlacesRequest,
-  buildSearchIndexRequest,
   cancelDataExecutionRequest,
-  conflateOvertureRequest,
-  convertOverpassRequest,
   disableTransitSourceRequest,
   discardAmbientPlacesRequest,
-  downloadFontsRequest,
-  downloadOsmRequest,
   enableTransitSourceRequest,
-  extractOvertureRequest,
   getAmbientPlacesStatusRequest,
   getAppliedTrafficConditionsRequest,
   getCoverageEvidenceRequest,
@@ -632,7 +527,6 @@ import {
   getTransitSourcesRequest,
   headOfflineGlyphRequest,
   headOfflinePackageArchiveRequest,
-  ingestOvertureRequest,
   inspectCatalogReviewRequest,
   inspectDataConfigurationFenceRequest,
   inspectTransitSyncPreflightRequest,
@@ -642,7 +536,6 @@ import {
   prepareDataConfigurationFenceRequest,
   prepareOfflinePackageRequest,
   proposeTransitBumpRequest,
-  pullOvertureRequest,
   recoverUnadmittedConfigurationPreparationRequest,
   recoverUnadmittedGenerationHardlinksRequest,
   reloadDatasetsRequest,
@@ -654,14 +547,8 @@ import {
   settleDataConfigurationFenceRequest,
   startDataExecutionRequest,
   startGenerationHardlinksExecutionRequest,
-  syncOvertureRequest,
   syncTransitRequest,
 } from "./operation-bindings.generated";
-
-interface TypedResponse<T> extends Response {
-  json(): Promise<T>;
-}
-
 export type startDataExecutionResponse202 = {
   data: StartDataExecution202;
   status: 202;
@@ -4524,104 +4411,6 @@ export const getPlannedTrafficClosures = async (
   );
 };
 
-export type downloadOsmResponse200 = {
-  stream: TypedResponse<DownloadOsm200>;
-  status: 200;
-};
-
-export type downloadOsmResponse400 = {
-  data: DownloadOsm400;
-  status: 400;
-};
-
-export type downloadOsmResponse401 = {
-  data: DownloadOsm401;
-  status: 401;
-};
-
-export type downloadOsmResponse409 = {
-  data: DownloadOsm409;
-  status: 409;
-};
-
-export type downloadOsmResponse413 = {
-  data: DownloadOsm413;
-  status: 413;
-};
-
-export type downloadOsmResponse415 = {
-  data: DownloadOsm415;
-  status: 415;
-};
-
-export type downloadOsmResponse429 = {
-  data: DownloadOsm429;
-  status: 429;
-};
-
-export type downloadOsmResponse500 = {
-  data: DownloadOsm500;
-  status: 500;
-};
-
-export type downloadOsmResponse503 = {
-  data: DownloadOsm503;
-  status: 503;
-};
-
-export type downloadOsmResponseSuccess = downloadOsmResponse200 & {
-  headers: Headers;
-};
-export type downloadOsmResponseError = (
-  | downloadOsmResponse400
-  | downloadOsmResponse401
-  | downloadOsmResponse409
-  | downloadOsmResponse413
-  | downloadOsmResponse415
-  | downloadOsmResponse429
-  | downloadOsmResponse500
-  | downloadOsmResponse503
-) & {
-  headers: Headers;
-};
-
-export type downloadOsmResponse = downloadOsmResponseSuccess | downloadOsmResponseError;
-
-export const getDownloadOsmUrl = () => {
-  return `/download/osm`;
-};
-
-export const downloadOsm = async (
-  downloadOsmBody: DownloadOsmBody,
-  options?: Parameters<typeof downloadOsmRequest>[1],
-): Promise<downloadOsmResponse> => {
-  const getHeaders = (
-    h?: NonNullable<RequestInit["headers"]>,
-  ): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(
-          h as Iterable<Iterable<string>>,
-          (entry) => Array.from(entry) as [string, string],
-        ),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-  return downloadOsmRequest<downloadOsmResponse>(getDownloadOsmUrl(), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
-    body: JSON.stringify(downloadOsmBody),
-  });
-};
-
 export type getSearchIndexStatusResponse200 = {
   data: GetSearchIndexStatus200;
   status: 200;
@@ -4691,106 +4480,6 @@ export const getSearchIndexStatus = async (
   return getSearchIndexStatusRequest<getSearchIndexStatusResponse>(getGetSearchIndexStatusUrl(), {
     ...options,
     method: "GET",
-  });
-};
-
-export type buildSearchIndexResponse200 = {
-  stream: TypedResponse<BuildSearchIndex200>;
-  status: 200;
-};
-
-export type buildSearchIndexResponse400 = {
-  data: BuildSearchIndex400;
-  status: 400;
-};
-
-export type buildSearchIndexResponse401 = {
-  data: BuildSearchIndex401;
-  status: 401;
-};
-
-export type buildSearchIndexResponse409 = {
-  data: BuildSearchIndex409;
-  status: 409;
-};
-
-export type buildSearchIndexResponse413 = {
-  data: BuildSearchIndex413;
-  status: 413;
-};
-
-export type buildSearchIndexResponse415 = {
-  data: BuildSearchIndex415;
-  status: 415;
-};
-
-export type buildSearchIndexResponse429 = {
-  data: BuildSearchIndex429;
-  status: 429;
-};
-
-export type buildSearchIndexResponse500 = {
-  data: BuildSearchIndex500;
-  status: 500;
-};
-
-export type buildSearchIndexResponse503 = {
-  data: BuildSearchIndex503;
-  status: 503;
-};
-
-export type buildSearchIndexResponseSuccess = buildSearchIndexResponse200 & {
-  headers: Headers;
-};
-export type buildSearchIndexResponseError = (
-  | buildSearchIndexResponse400
-  | buildSearchIndexResponse401
-  | buildSearchIndexResponse409
-  | buildSearchIndexResponse413
-  | buildSearchIndexResponse415
-  | buildSearchIndexResponse429
-  | buildSearchIndexResponse500
-  | buildSearchIndexResponse503
-) & {
-  headers: Headers;
-};
-
-export type buildSearchIndexResponse =
-  | buildSearchIndexResponseSuccess
-  | buildSearchIndexResponseError;
-
-export const getBuildSearchIndexUrl = () => {
-  return `/search-index/build`;
-};
-
-export const buildSearchIndex = async (
-  buildSearchIndexBody: BuildSearchIndexBody,
-  options?: Parameters<typeof buildSearchIndexRequest>[1],
-): Promise<buildSearchIndexResponse> => {
-  const getHeaders = (
-    h?: NonNullable<RequestInit["headers"]>,
-  ): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(
-          h as Iterable<Iterable<string>>,
-          (entry) => Array.from(entry) as [string, string],
-        ),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-  return buildSearchIndexRequest<buildSearchIndexResponse>(getBuildSearchIndexUrl(), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
-    body: JSON.stringify(buildSearchIndexBody),
   });
 };
 
@@ -4867,160 +4556,6 @@ export const getNotablePlacesStatus = async (
       method: "GET",
     },
   );
-};
-
-export type buildNotablePlacesResponse200 = {
-  stream: TypedResponse<BuildNotablePlaces200>;
-  status: 200;
-};
-
-export type buildNotablePlacesResponse400 = {
-  data: BuildNotablePlaces400;
-  status: 400;
-};
-
-export type buildNotablePlacesResponse401 = {
-  data: BuildNotablePlaces401;
-  status: 401;
-};
-
-export type buildNotablePlacesResponse409 = {
-  data: BuildNotablePlaces409;
-  status: 409;
-};
-
-export type buildNotablePlacesResponse413 = {
-  data: BuildNotablePlaces413;
-  status: 413;
-};
-
-export type buildNotablePlacesResponse415 = {
-  data: BuildNotablePlaces415;
-  status: 415;
-};
-
-export type buildNotablePlacesResponse429 = {
-  data: BuildNotablePlaces429;
-  status: 429;
-};
-
-export type buildNotablePlacesResponse500 = {
-  data: BuildNotablePlaces500;
-  status: 500;
-};
-
-export type buildNotablePlacesResponse503 = {
-  data: BuildNotablePlaces503;
-  status: 503;
-};
-
-export type buildNotablePlacesResponseSuccess = buildNotablePlacesResponse200 & {
-  headers: Headers;
-};
-export type buildNotablePlacesResponseError = (
-  | buildNotablePlacesResponse400
-  | buildNotablePlacesResponse401
-  | buildNotablePlacesResponse409
-  | buildNotablePlacesResponse413
-  | buildNotablePlacesResponse415
-  | buildNotablePlacesResponse429
-  | buildNotablePlacesResponse500
-  | buildNotablePlacesResponse503
-) & {
-  headers: Headers;
-};
-
-export type buildNotablePlacesResponse =
-  | buildNotablePlacesResponseSuccess
-  | buildNotablePlacesResponseError;
-
-export const getBuildNotablePlacesUrl = () => {
-  return `/notable-places/build`;
-};
-
-export const buildNotablePlaces = async (
-  options?: Parameters<typeof buildNotablePlacesRequest>[1],
-): Promise<buildNotablePlacesResponse> => {
-  return buildNotablePlacesRequest<buildNotablePlacesResponse>(getBuildNotablePlacesUrl(), {
-    ...options,
-    method: "POST",
-  });
-};
-
-export type downloadFontsResponse200 = {
-  data: DownloadFonts200;
-  status: 200;
-};
-
-export type downloadFontsResponse400 = {
-  data: DownloadFonts400;
-  status: 400;
-};
-
-export type downloadFontsResponse401 = {
-  data: DownloadFonts401;
-  status: 401;
-};
-
-export type downloadFontsResponse409 = {
-  data: DownloadFonts409;
-  status: 409;
-};
-
-export type downloadFontsResponse413 = {
-  data: DownloadFonts413;
-  status: 413;
-};
-
-export type downloadFontsResponse415 = {
-  data: DownloadFonts415;
-  status: 415;
-};
-
-export type downloadFontsResponse429 = {
-  data: DownloadFonts429;
-  status: 429;
-};
-
-export type downloadFontsResponse500 = {
-  data: DownloadFonts500;
-  status: 500;
-};
-
-export type downloadFontsResponse503 = {
-  data: DownloadFonts503;
-  status: 503;
-};
-
-export type downloadFontsResponseSuccess = downloadFontsResponse200 & {
-  headers: Headers;
-};
-export type downloadFontsResponseError = (
-  | downloadFontsResponse400
-  | downloadFontsResponse401
-  | downloadFontsResponse409
-  | downloadFontsResponse413
-  | downloadFontsResponse415
-  | downloadFontsResponse429
-  | downloadFontsResponse500
-  | downloadFontsResponse503
-) & {
-  headers: Headers;
-};
-
-export type downloadFontsResponse = downloadFontsResponseSuccess | downloadFontsResponseError;
-
-export const getDownloadFontsUrl = () => {
-  return `/download/fonts`;
-};
-
-export const downloadFonts = async (
-  options?: Parameters<typeof downloadFontsRequest>[1],
-): Promise<downloadFontsResponse> => {
-  return downloadFontsRequest<downloadFontsResponse>(getDownloadFontsUrl(), {
-    ...options,
-    method: "POST",
-  });
 };
 
 export type linkResponse200 = {
@@ -5118,202 +4653,6 @@ export const link = async (
     method: "POST",
     headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
     body: JSON.stringify(linkBody),
-  });
-};
-
-export type convertOverpassResponse200 = {
-  stream: TypedResponse<ConvertOverpass200>;
-  status: 200;
-};
-
-export type convertOverpassResponse400 = {
-  data: ConvertOverpass400;
-  status: 400;
-};
-
-export type convertOverpassResponse401 = {
-  data: ConvertOverpass401;
-  status: 401;
-};
-
-export type convertOverpassResponse409 = {
-  data: ConvertOverpass409;
-  status: 409;
-};
-
-export type convertOverpassResponse413 = {
-  data: ConvertOverpass413;
-  status: 413;
-};
-
-export type convertOverpassResponse415 = {
-  data: ConvertOverpass415;
-  status: 415;
-};
-
-export type convertOverpassResponse429 = {
-  data: ConvertOverpass429;
-  status: 429;
-};
-
-export type convertOverpassResponse500 = {
-  data: ConvertOverpass500;
-  status: 500;
-};
-
-export type convertOverpassResponse503 = {
-  data: ConvertOverpass503;
-  status: 503;
-};
-
-export type convertOverpassResponseSuccess = convertOverpassResponse200 & {
-  headers: Headers;
-};
-export type convertOverpassResponseError = (
-  | convertOverpassResponse400
-  | convertOverpassResponse401
-  | convertOverpassResponse409
-  | convertOverpassResponse413
-  | convertOverpassResponse415
-  | convertOverpassResponse429
-  | convertOverpassResponse500
-  | convertOverpassResponse503
-) & {
-  headers: Headers;
-};
-
-export type convertOverpassResponse = convertOverpassResponseSuccess | convertOverpassResponseError;
-
-export const getConvertOverpassUrl = () => {
-  return `/convert/overpass`;
-};
-
-export const convertOverpass = async (
-  convertOverpassBody: ConvertOverpassBody,
-  options?: Parameters<typeof convertOverpassRequest>[1],
-): Promise<convertOverpassResponse> => {
-  const getHeaders = (
-    h?: NonNullable<RequestInit["headers"]>,
-  ): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(
-          h as Iterable<Iterable<string>>,
-          (entry) => Array.from(entry) as [string, string],
-        ),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-  return convertOverpassRequest<convertOverpassResponse>(getConvertOverpassUrl(), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
-    body: JSON.stringify(convertOverpassBody),
-  });
-};
-
-export type pullOvertureResponse200 = {
-  stream: TypedResponse<PullOverture200>;
-  status: 200;
-};
-
-export type pullOvertureResponse400 = {
-  data: PullOverture400;
-  status: 400;
-};
-
-export type pullOvertureResponse401 = {
-  data: PullOverture401;
-  status: 401;
-};
-
-export type pullOvertureResponse409 = {
-  data: PullOverture409;
-  status: 409;
-};
-
-export type pullOvertureResponse413 = {
-  data: PullOverture413;
-  status: 413;
-};
-
-export type pullOvertureResponse415 = {
-  data: PullOverture415;
-  status: 415;
-};
-
-export type pullOvertureResponse429 = {
-  data: PullOverture429;
-  status: 429;
-};
-
-export type pullOvertureResponse500 = {
-  data: PullOverture500;
-  status: 500;
-};
-
-export type pullOvertureResponse503 = {
-  data: PullOverture503;
-  status: 503;
-};
-
-export type pullOvertureResponseSuccess = pullOvertureResponse200 & {
-  headers: Headers;
-};
-export type pullOvertureResponseError = (
-  | pullOvertureResponse400
-  | pullOvertureResponse401
-  | pullOvertureResponse409
-  | pullOvertureResponse413
-  | pullOvertureResponse415
-  | pullOvertureResponse429
-  | pullOvertureResponse500
-  | pullOvertureResponse503
-) & {
-  headers: Headers;
-};
-
-export type pullOvertureResponse = pullOvertureResponseSuccess | pullOvertureResponseError;
-
-export const getPullOvertureUrl = () => {
-  return `/overture/pull`;
-};
-
-export const pullOverture = async (
-  pullOvertureBody: PullOvertureBody,
-  options?: Parameters<typeof pullOvertureRequest>[1],
-): Promise<pullOvertureResponse> => {
-  const getHeaders = (
-    h?: NonNullable<RequestInit["headers"]>,
-  ): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(
-          h as Iterable<Iterable<string>>,
-          (entry) => Array.from(entry) as [string, string],
-        ),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-  return pullOvertureRequest<pullOvertureResponse>(getPullOvertureUrl(), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
-    body: JSON.stringify(pullOvertureBody),
   });
 };
 
@@ -5474,400 +4813,6 @@ export const getOvertureStatus = async (
   return getOvertureStatusRequest<getOvertureStatusResponse>(getGetOvertureStatusUrl(), {
     ...options,
     method: "GET",
-  });
-};
-
-export type syncOvertureResponse200 = {
-  stream: TypedResponse<SyncOverture200>;
-  status: 200;
-};
-
-export type syncOvertureResponse400 = {
-  data: SyncOverture400;
-  status: 400;
-};
-
-export type syncOvertureResponse401 = {
-  data: SyncOverture401;
-  status: 401;
-};
-
-export type syncOvertureResponse409 = {
-  data: SyncOverture409;
-  status: 409;
-};
-
-export type syncOvertureResponse413 = {
-  data: SyncOverture413;
-  status: 413;
-};
-
-export type syncOvertureResponse415 = {
-  data: SyncOverture415;
-  status: 415;
-};
-
-export type syncOvertureResponse429 = {
-  data: SyncOverture429;
-  status: 429;
-};
-
-export type syncOvertureResponse500 = {
-  data: SyncOverture500;
-  status: 500;
-};
-
-export type syncOvertureResponse503 = {
-  data: SyncOverture503;
-  status: 503;
-};
-
-export type syncOvertureResponseSuccess = syncOvertureResponse200 & {
-  headers: Headers;
-};
-export type syncOvertureResponseError = (
-  | syncOvertureResponse400
-  | syncOvertureResponse401
-  | syncOvertureResponse409
-  | syncOvertureResponse413
-  | syncOvertureResponse415
-  | syncOvertureResponse429
-  | syncOvertureResponse500
-  | syncOvertureResponse503
-) & {
-  headers: Headers;
-};
-
-export type syncOvertureResponse = syncOvertureResponseSuccess | syncOvertureResponseError;
-
-export const getSyncOvertureUrl = () => {
-  return `/overture/sync`;
-};
-
-export const syncOverture = async (
-  syncOvertureBody: SyncOvertureBody,
-  options?: Parameters<typeof syncOvertureRequest>[1],
-): Promise<syncOvertureResponse> => {
-  const getHeaders = (
-    h?: NonNullable<RequestInit["headers"]>,
-  ): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(
-          h as Iterable<Iterable<string>>,
-          (entry) => Array.from(entry) as [string, string],
-        ),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-  return syncOvertureRequest<syncOvertureResponse>(getSyncOvertureUrl(), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
-    body: JSON.stringify(syncOvertureBody),
-  });
-};
-
-export type ingestOvertureResponse200 = {
-  stream: TypedResponse<IngestOverture200>;
-  status: 200;
-};
-
-export type ingestOvertureResponse400 = {
-  data: IngestOverture400;
-  status: 400;
-};
-
-export type ingestOvertureResponse401 = {
-  data: IngestOverture401;
-  status: 401;
-};
-
-export type ingestOvertureResponse409 = {
-  data: IngestOverture409;
-  status: 409;
-};
-
-export type ingestOvertureResponse413 = {
-  data: IngestOverture413;
-  status: 413;
-};
-
-export type ingestOvertureResponse415 = {
-  data: IngestOverture415;
-  status: 415;
-};
-
-export type ingestOvertureResponse429 = {
-  data: IngestOverture429;
-  status: 429;
-};
-
-export type ingestOvertureResponse500 = {
-  data: IngestOverture500;
-  status: 500;
-};
-
-export type ingestOvertureResponse503 = {
-  data: IngestOverture503;
-  status: 503;
-};
-
-export type ingestOvertureResponseSuccess = ingestOvertureResponse200 & {
-  headers: Headers;
-};
-export type ingestOvertureResponseError = (
-  | ingestOvertureResponse400
-  | ingestOvertureResponse401
-  | ingestOvertureResponse409
-  | ingestOvertureResponse413
-  | ingestOvertureResponse415
-  | ingestOvertureResponse429
-  | ingestOvertureResponse500
-  | ingestOvertureResponse503
-) & {
-  headers: Headers;
-};
-
-export type ingestOvertureResponse = ingestOvertureResponseSuccess | ingestOvertureResponseError;
-
-export const getIngestOvertureUrl = () => {
-  return `/overture/ingest`;
-};
-
-export const ingestOverture = async (
-  ingestOvertureBody: IngestOvertureBody,
-  options?: Parameters<typeof ingestOvertureRequest>[1],
-): Promise<ingestOvertureResponse> => {
-  const getHeaders = (
-    h?: NonNullable<RequestInit["headers"]>,
-  ): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(
-          h as Iterable<Iterable<string>>,
-          (entry) => Array.from(entry) as [string, string],
-        ),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-  return ingestOvertureRequest<ingestOvertureResponse>(getIngestOvertureUrl(), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
-    body: JSON.stringify(ingestOvertureBody),
-  });
-};
-
-export type extractOvertureResponse200 = {
-  stream: TypedResponse<ExtractOverture200>;
-  status: 200;
-};
-
-export type extractOvertureResponse400 = {
-  data: ExtractOverture400;
-  status: 400;
-};
-
-export type extractOvertureResponse401 = {
-  data: ExtractOverture401;
-  status: 401;
-};
-
-export type extractOvertureResponse409 = {
-  data: ExtractOverture409;
-  status: 409;
-};
-
-export type extractOvertureResponse413 = {
-  data: ExtractOverture413;
-  status: 413;
-};
-
-export type extractOvertureResponse415 = {
-  data: ExtractOverture415;
-  status: 415;
-};
-
-export type extractOvertureResponse429 = {
-  data: ExtractOverture429;
-  status: 429;
-};
-
-export type extractOvertureResponse500 = {
-  data: ExtractOverture500;
-  status: 500;
-};
-
-export type extractOvertureResponse503 = {
-  data: ExtractOverture503;
-  status: 503;
-};
-
-export type extractOvertureResponseSuccess = extractOvertureResponse200 & {
-  headers: Headers;
-};
-export type extractOvertureResponseError = (
-  | extractOvertureResponse400
-  | extractOvertureResponse401
-  | extractOvertureResponse409
-  | extractOvertureResponse413
-  | extractOvertureResponse415
-  | extractOvertureResponse429
-  | extractOvertureResponse500
-  | extractOvertureResponse503
-) & {
-  headers: Headers;
-};
-
-export type extractOvertureResponse = extractOvertureResponseSuccess | extractOvertureResponseError;
-
-export const getExtractOvertureUrl = () => {
-  return `/overture/extract`;
-};
-
-export const extractOverture = async (
-  extractOvertureBody: ExtractOvertureBody,
-  options?: Parameters<typeof extractOvertureRequest>[1],
-): Promise<extractOvertureResponse> => {
-  const getHeaders = (
-    h?: NonNullable<RequestInit["headers"]>,
-  ): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(
-          h as Iterable<Iterable<string>>,
-          (entry) => Array.from(entry) as [string, string],
-        ),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-  return extractOvertureRequest<extractOvertureResponse>(getExtractOvertureUrl(), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
-    body: JSON.stringify(extractOvertureBody),
-  });
-};
-
-export type conflateOvertureResponse200 = {
-  stream: TypedResponse<ConflateOverture200>;
-  status: 200;
-};
-
-export type conflateOvertureResponse400 = {
-  data: ConflateOverture400;
-  status: 400;
-};
-
-export type conflateOvertureResponse401 = {
-  data: ConflateOverture401;
-  status: 401;
-};
-
-export type conflateOvertureResponse409 = {
-  data: ConflateOverture409;
-  status: 409;
-};
-
-export type conflateOvertureResponse413 = {
-  data: ConflateOverture413;
-  status: 413;
-};
-
-export type conflateOvertureResponse415 = {
-  data: ConflateOverture415;
-  status: 415;
-};
-
-export type conflateOvertureResponse429 = {
-  data: ConflateOverture429;
-  status: 429;
-};
-
-export type conflateOvertureResponse500 = {
-  data: ConflateOverture500;
-  status: 500;
-};
-
-export type conflateOvertureResponse503 = {
-  data: ConflateOverture503;
-  status: 503;
-};
-
-export type conflateOvertureResponseSuccess = conflateOvertureResponse200 & {
-  headers: Headers;
-};
-export type conflateOvertureResponseError = (
-  | conflateOvertureResponse400
-  | conflateOvertureResponse401
-  | conflateOvertureResponse409
-  | conflateOvertureResponse413
-  | conflateOvertureResponse415
-  | conflateOvertureResponse429
-  | conflateOvertureResponse500
-  | conflateOvertureResponse503
-) & {
-  headers: Headers;
-};
-
-export type conflateOvertureResponse =
-  | conflateOvertureResponseSuccess
-  | conflateOvertureResponseError;
-
-export const getConflateOvertureUrl = () => {
-  return `/overture/conflate`;
-};
-
-export const conflateOverture = async (
-  conflateOvertureBody: ConflateOvertureBody,
-  options?: Parameters<typeof conflateOvertureRequest>[1],
-): Promise<conflateOvertureResponse> => {
-  const getHeaders = (
-    h?: NonNullable<RequestInit["headers"]>,
-  ): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(
-          h as Iterable<Iterable<string>>,
-          (entry) => Array.from(entry) as [string, string],
-        ),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-  return conflateOvertureRequest<conflateOvertureResponse>(getConflateOvertureUrl(), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
-    body: JSON.stringify(conflateOvertureBody),
   });
 };
 

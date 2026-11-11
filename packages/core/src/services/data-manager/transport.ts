@@ -70,26 +70,12 @@ export interface DataManagerTransportOptions {
   signal?: AbortSignal;
   requestTimeoutMs?: number;
   maxJsonBytes?: number;
-  maxStreamBytes?: number;
-  streamIdleTimeoutMs?: number;
   allowPlaintextHosts?: readonly string[];
 }
 export type DataManagerRequestOptions = RequestInit & { transport?: DataManagerTransport };
 export interface DataManagerTransport {
   request<T>(operationId: OperationId, url: string, options?: RequestInit): Promise<T>;
 }
-export interface DataManagerStreamContext {
-  signal: AbortSignal;
-  maxBytes: number;
-  idleTimeoutMs: number;
-}
-const streamContexts = new WeakMap<Response, DataManagerStreamContext>();
-export function getDataManagerStreamContext(
-  response: Response,
-): DataManagerStreamContext | undefined {
-  return streamContexts.get(response);
-}
-
 function positive(value: number | undefined, fallback: number): number {
   const actual = value ?? fallback;
   if (!Number.isFinite(actual) || actual <= 0)
@@ -153,8 +139,6 @@ export function createDataManagerTransport(
   const acquire = options.fetch ?? globalThis.fetch;
   const timeoutMs = positive(options.requestTimeoutMs, 15_000);
   const maxJsonBytes = positive(options.maxJsonBytes, 8 * 1024 * 1024);
-  const maxBytes = positive(options.maxStreamBytes, 8 * 1024 * 1024);
-  const idleTimeoutMs = positive(options.streamIdleTimeoutMs, 5 * 60_000);
   return {
     async request<T>(operationId: OperationId, url: string, init: RequestInit = {}): Promise<T> {
       const operation: DataManagerOperation = dataManagerOperations[operationId];
@@ -233,9 +217,8 @@ export function createDataManagerTransport(
           await cancel(response);
           return { status: response.status, headers: response.headers, data: undefined } as T;
         }
-        if (contract.kind === "raw" || contract.kind === "ndjson") {
-          const accepted =
-            contract.kind === "raw" ? contract.contentTypes : ["application/x-ndjson"];
+        if (contract.kind === "raw") {
+          const accepted = contract.contentTypes;
           if (
             !mediaType(response) ||
             (!accepted.includes("*/*") && !accepted.includes(mediaType(response)))
@@ -245,13 +228,7 @@ export function createDataManagerTransport(
               response.status,
               "unexpected content type",
             );
-          if (contract.kind === "ndjson")
-            streamContexts.set(response, { signal: callerSignal, maxBytes, idleTimeoutMs });
-          return {
-            status: response.status,
-            headers: response.headers,
-            ...(contract.kind === "ndjson" ? { stream: response } : { data: response }),
-          } as T;
+          return { status: response.status, headers: response.headers, data: response } as T;
         }
         if (mediaType(response) !== "application/json")
           throw new DataManagerContractError(

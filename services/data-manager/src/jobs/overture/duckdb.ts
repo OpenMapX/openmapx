@@ -9,7 +9,7 @@ import { dataWorkerSignal } from "../execution/worker-scope.js";
  * Replaces the password in any embedded Postgres connection string with `***`.
  * The Overture DuckDB scripts ATTACH the database via its connection string, so
  * a failing `duckdb -c` would otherwise echo `postgres://user:<password>@host`
- * into execa's error message (and from there into logs / NDJSON error events).
+ * into execa's error message (and from there into logs and execution errors).
  */
 export function redactConnectionString(text: string): string {
   return text.replace(/(postgres(?:ql)?:\/\/[^:/@\s]+:)[^@\s'"]*@/gi, "$1***@");

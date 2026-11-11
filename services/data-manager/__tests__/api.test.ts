@@ -30,51 +30,10 @@ import { OperatorFeedRelayStore } from "../src/jobs/transitous/operator-feed-rel
 import type { SingleFlightController } from "../src/jobs/transitous/single-flight.js";
 import { dataReceipt, receiverFixture } from "./helpers/execution-receiver.js";
 
-const mockDownloadOsm = vi.hoisted(() =>
-  vi.fn(async ({ region }: { region: string }) => ({
-    path: `/data/osm/${region.replace(/\//g, "-")}.osm.pbf`,
-    url: `https://download.example/${region}`,
-    sizeBytes: 1,
-  })),
-);
-
 vi.mock("../src/jobs/download-osm.js", () => ({
   backfillOsmHeaders: () => 0,
-  downloadOsm: mockDownloadOsm,
+  downloadOsm: vi.fn(),
 }));
-
-function observedUnitReceiver(
-  kind: import("@openmapx/core/data-manager-contracts").DataExecutionInput["kind"],
-  run: (progress: (event: Record<string, unknown>) => void) => Promise<Record<string, unknown>>,
-) {
-  let current = dataReceipt({ kind, status: "running", publication: "unknown" }),
-    done: Record<string, unknown> | undefined,
-    listener: ((event: Record<string, unknown>) => void) | undefined;
-  return receiverFixture({
-    admitLocal: async () => {
-      setTimeout(() => {
-        void run((event) => listener?.({ event: "progress", ...event })).then(
-          (result) => {
-            done = { event: "done", ok: true, ...result };
-            current = { ...current, status: "ok", publication: "committed" };
-          },
-          () => {
-            current = { ...current, status: "error", publication: "not_started" };
-          },
-        );
-      }, 0);
-      return current;
-    },
-    inspect: async () => current,
-    subscribe: (_id, onEvent) => {
-      listener = onEvent;
-      return () => {
-        listener = undefined;
-      };
-    },
-    legacyResult: () => done,
-  });
-}
 
 describe("data-manager API", () => {
   let fixtureRoot: string;
@@ -213,7 +172,7 @@ describe("data-manager API", () => {
 
   it("continues a legacy observer through running unknown publication without canceling its worker", async () => {
     const status = dataReceipt({
-        kind: "download-fonts",
+        kind: "transit-maintenance",
         status: "running",
         publication: "unknown",
       }),
@@ -226,55 +185,16 @@ describe("data-manager API", () => {
     registerApi(app, {
       dataDir: createDataDir(),
       executionReceiver: receiverFixture({
-        admitLocal: async () => status,
+        admitMaintenance: async () => status,
         inspect,
         requestCancel: cancel,
       }),
     });
-    const response = await app.inject({ method: "POST", url: "/download/fonts" });
+    const response = await app.inject({ method: "POST", url: "/transit/restart-motis" });
     expect(response.statusCode).toBe(200);
     expect(inspect).toHaveBeenCalledTimes(2);
-    expect(response.json()).toEqual({ ok: true });
+    expect(response.json()).toEqual({ ok: true, status: "restart-initiated" });
     expect(cancel).not.toHaveBeenCalled();
-  });
-
-  it("POST /search-index/build streams progress and the final snapshot", async () => {
-    const dataDir = createDataDir();
-    const app = createTestApp();
-    const buildSearchIndex = vi.fn(
-      async (options: { onProgress?: (event: Record<string, unknown>) => void }) => {
-        options.onProgress?.({ stage: "extract", message: "streaming" });
-        return {
-          region: "europe/germany",
-          epoch: "new-epoch",
-          sourceFingerprint: "md5:abc",
-          placeCount: 2,
-          termCount: 3,
-        };
-      },
-    );
-    registerApi(app, {
-      dataDir,
-      searchIndexSql: { reserve: vi.fn() } as never,
-      executionReceiver: observedUnitReceiver("search-index-build", (onProgress) =>
-        buildSearchIndex({ onProgress }),
-      ),
-    });
-    const res = await app.inject({
-      method: "POST",
-      url: "/search-index/build",
-      payload: { region: "europe/germany" },
-    });
-    expect(res.statusCode).toBe(200);
-    const events = res.body
-      .trim()
-      .split("\n")
-      .map((line) => JSON.parse(line));
-    expect(events).toEqual([
-      expect.objectContaining({ event: "progress", stage: "extract" }),
-      expect.objectContaining({ event: "done", ok: true, epoch: "new-epoch" }),
-    ]);
-    expect(buildSearchIndex).toHaveBeenCalledOnce();
   });
 
   it("GET /notable-places/status returns 404 until a first snapshot is published", async () => {
@@ -287,82 +207,6 @@ describe("data-manager API", () => {
     const res = await app.inject({ method: "GET", url: "/notable-places/status" });
     expect(res.statusCode).toBe(404);
     expect(res.json()).toEqual({ ok: false, error: "notable_places index not built" });
-  });
-
-  it("POST /notable-places/build streams progress and the published snapshot", async () => {
-    const app = createTestApp();
-    const build = vi.fn(
-      async (options: { onProgress?: (event: Record<string, unknown>) => void }) => {
-        options.onProgress?.({ stage: "names", message: "Fetching labels in en" });
-        return {
-          epoch: "e1",
-          source: "https://sparql.test",
-          minSitelinks: 8,
-          placeCount: 5,
-          nameCount: 9,
-        };
-      },
-    );
-    registerApi(app, {
-      dataDir: join(fixtureRoot, "data"),
-      searchIndexSql: { reserve: vi.fn() } as never,
-      executionReceiver: observedUnitReceiver("notable-places-build", (onProgress) =>
-        build({ onProgress }),
-      ),
-      notablePlaces: {
-        runtimeState: { building: false, failure: null },
-        operationLock: { inFlight: false, run: (operation) => operation() },
-      },
-    });
-    const res = await app.inject({ method: "POST", url: "/notable-places/build" });
-    const events = res.body
-      .trim()
-      .split("\n")
-      .map((line) => JSON.parse(line));
-    expect(events).toEqual([
-      expect.objectContaining({ event: "progress", stage: "names" }),
-      expect.objectContaining({ event: "done", ok: true, placeCount: 5, nameCount: 9 }),
-    ]);
-  });
-
-  it("preserves a successful owned OSM receipt in the legacy observer", async () => {
-    const dataDir = createDataDir();
-    writeFileSync(
-      join(dataDir, ".data-manager-state.json"),
-      JSON.stringify({
-        datasets: [
-          {
-            type: "osm-pbf",
-            id: "europe/germany",
-            region: "europe/germany",
-            sizeBytes: 1,
-            downloadedAt: "2026-08-13T00:00:00.000Z",
-            path: "/data/osm/europe-germany.osm.pbf",
-            md5: "abc",
-          },
-        ],
-      }),
-    );
-    const unsafe = vi
-      .fn()
-      .mockResolvedValueOnce([{ exists: true }])
-      .mockRejectedValueOnce(new Error("database unavailable"));
-    const app = createTestApp();
-    registerApi(app, {
-      dataDir,
-      searchIndexSql: { unsafe, reserve: vi.fn() } as never,
-      executionReceiver: observedUnitReceiver("download-osm", () =>
-        mockDownloadOsm({ region: "europe/germany" }),
-      ),
-    });
-    const res = await app.inject({
-      method: "POST",
-      url: "/download/osm",
-      payload: { region: "europe/germany" },
-    });
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toContain('"event":"done"');
-    expect(res.body).not.toContain('"event":"error"');
   });
 
   it("POST /datasets/reload reloads state from disk", async () => {
@@ -655,51 +499,6 @@ describe("data-manager API", () => {
       { legacyTransitKey: "legacy-test-key", triggeredBy: "api:synthetic-user" },
     );
   });
-
-  it.each(["../etc", "Europe/Germany"])(
-    "POST /download/osm rejects an invalid region: %s",
-    async (region) => {
-      const dataDir = createDataDir();
-      mockDownloadOsm.mockClear();
-      const app = createTestApp();
-      registerApi(app, {
-        dataDir,
-        executionReceiver: observedUnitReceiver("download-osm", () => mockDownloadOsm({ region })),
-      });
-
-      const res = await app.inject({
-        method: "POST",
-        url: "/download/osm",
-        payload: { region },
-      });
-
-      expect(res.statusCode).toBe(400);
-      expect(mockDownloadOsm).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each(["europe/germany/berlin", "planet"])(
-    "POST /download/osm accepts a valid region: %s",
-    async (region) => {
-      const dataDir = createDataDir();
-      mockDownloadOsm.mockClear();
-      const app = createTestApp();
-      registerApi(app, {
-        dataDir,
-        executionReceiver: observedUnitReceiver("download-osm", () => mockDownloadOsm({ region })),
-      });
-
-      const res = await app.inject({
-        method: "POST",
-        url: "/download/osm",
-        payload: { region },
-      });
-
-      expect(res.statusCode).toBe(200);
-      expect(mockDownloadOsm).toHaveBeenCalledWith(expect.objectContaining({ region }));
-      expect(res.body).toContain('"event":"done"');
-    },
-  );
 
   it("POST /link rejects a plan entry with a traversing targetFilename", async () => {
     const dataDir = createDataDir();

@@ -1,10 +1,5 @@
 import z from "zod/v4";
 /** Header names are normalized to lowercase; values describe the HTTP wire. */
-export const ndjsonResponseHeadersSchema = z.object({
-  "content-type": z.string().regex(/^application\/x-ndjson(?:;|$)/i),
-  "cache-control": z.literal("no-cache"),
-  "x-accel-buffering": z.literal("no"),
-});
 export const immutableCacheHeadersSchema = z.object({
   "cache-control": z.literal("public, max-age=31536000, immutable"),
 });

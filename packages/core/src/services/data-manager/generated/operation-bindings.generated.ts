@@ -30,40 +30,12 @@ export async function buildAmbientPlacesRequest<T>(
 ): Promise<T> {
   return buildAmbientPlacesBound<T>(url, options);
 }
-const buildNotablePlacesBound = bindDataManagerOperation("buildNotablePlaces");
-export async function buildNotablePlacesRequest<T>(
-  url: string,
-  options?: DataManagerRequestOptions,
-): Promise<T> {
-  return buildNotablePlacesBound<T>(url, options);
-}
-const buildSearchIndexBound = bindDataManagerOperation("buildSearchIndex");
-export async function buildSearchIndexRequest<T>(
-  url: string,
-  options?: DataManagerRequestOptions,
-): Promise<T> {
-  return buildSearchIndexBound<T>(url, options);
-}
 const cancelDataExecutionBound = bindDataManagerOperation("cancelDataExecution");
 export async function cancelDataExecutionRequest<T>(
   url: string,
   options?: DataManagerRequestOptions,
 ): Promise<T> {
   return cancelDataExecutionBound<T>(url, options);
-}
-const conflateOvertureBound = bindDataManagerOperation("conflateOverture");
-export async function conflateOvertureRequest<T>(
-  url: string,
-  options?: DataManagerRequestOptions,
-): Promise<T> {
-  return conflateOvertureBound<T>(url, options);
-}
-const convertOverpassBound = bindDataManagerOperation("convertOverpass");
-export async function convertOverpassRequest<T>(
-  url: string,
-  options?: DataManagerRequestOptions,
-): Promise<T> {
-  return convertOverpassBound<T>(url, options);
 }
 const disableTransitSourceBound = bindDataManagerOperation("disableTransitSource");
 export async function disableTransitSourceRequest<T>(
@@ -79,33 +51,12 @@ export async function discardAmbientPlacesRequest<T>(
 ): Promise<T> {
   return discardAmbientPlacesBound<T>(url, options);
 }
-const downloadFontsBound = bindDataManagerOperation("downloadFonts");
-export async function downloadFontsRequest<T>(
-  url: string,
-  options?: DataManagerRequestOptions,
-): Promise<T> {
-  return downloadFontsBound<T>(url, options);
-}
-const downloadOsmBound = bindDataManagerOperation("downloadOsm");
-export async function downloadOsmRequest<T>(
-  url: string,
-  options?: DataManagerRequestOptions,
-): Promise<T> {
-  return downloadOsmBound<T>(url, options);
-}
 const enableTransitSourceBound = bindDataManagerOperation("enableTransitSource");
 export async function enableTransitSourceRequest<T>(
   url: string,
   options?: DataManagerRequestOptions,
 ): Promise<T> {
   return enableTransitSourceBound<T>(url, options);
-}
-const extractOvertureBound = bindDataManagerOperation("extractOverture");
-export async function extractOvertureRequest<T>(
-  url: string,
-  options?: DataManagerRequestOptions,
-): Promise<T> {
-  return extractOvertureBound<T>(url, options);
 }
 const getAmbientPlacesStatusBound = bindDataManagerOperation("getAmbientPlacesStatus");
 export async function getAmbientPlacesStatusRequest<T>(
@@ -275,13 +226,6 @@ export async function headOfflinePackageArchiveRequest<T>(
 ): Promise<T> {
   return headOfflinePackageArchiveBound<T>(url, options);
 }
-const ingestOvertureBound = bindDataManagerOperation("ingestOverture");
-export async function ingestOvertureRequest<T>(
-  url: string,
-  options?: DataManagerRequestOptions,
-): Promise<T> {
-  return ingestOvertureBound<T>(url, options);
-}
 const inspectCatalogReviewBound = bindDataManagerOperation("inspectCatalogReview");
 export async function inspectCatalogReviewRequest<T>(
   url: string,
@@ -345,13 +289,6 @@ export async function proposeTransitBumpRequest<T>(
   options?: DataManagerRequestOptions,
 ): Promise<T> {
   return proposeTransitBumpBound<T>(url, options);
-}
-const pullOvertureBound = bindDataManagerOperation("pullOverture");
-export async function pullOvertureRequest<T>(
-  url: string,
-  options?: DataManagerRequestOptions,
-): Promise<T> {
-  return pullOvertureBound<T>(url, options);
 }
 const recoverUnadmittedConfigurationPreparationBound = bindDataManagerOperation(
   "recoverUnadmittedConfigurationPreparation",
@@ -435,13 +372,6 @@ export async function startGenerationHardlinksExecutionRequest<T>(
   options?: DataManagerRequestOptions,
 ): Promise<T> {
   return startGenerationHardlinksExecutionBound<T>(url, options);
-}
-const syncOvertureBound = bindDataManagerOperation("syncOverture");
-export async function syncOvertureRequest<T>(
-  url: string,
-  options?: DataManagerRequestOptions,
-): Promise<T> {
-  return syncOvertureBound<T>(url, options);
 }
 const syncTransitBound = bindDataManagerOperation("syncTransit");
 export async function syncTransitRequest<T>(

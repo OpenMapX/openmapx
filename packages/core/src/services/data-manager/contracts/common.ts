@@ -18,16 +18,6 @@ export const frameworkErrorSchema = z.strictObject({
 export const httpErrorSchema = z.union([errorResponseSchema, frameworkErrorSchema]);
 export const okSchema = z.strictObject({ ok: z.literal(true) });
 export const acceptedSchema = z.strictObject({ accepted: z.literal(true) });
-export const streamErrorSchema = z.strictObject({ event: z.literal("error"), message: z.string() });
-export const messageProgressSchema = z.strictObject({
-  event: z.literal("progress"),
-  message: z.string(),
-});
-export const byteProgressSchema = z.strictObject({
-  event: z.literal("progress"),
-  bytes: countSchema,
-  totalBytes: countSchema.optional(),
-});
 export const regionSchema = z
   .string()
   .min(1)
@@ -37,11 +27,6 @@ export const regionSchema = z
 export const regionBodySchema = z.strictObject({ region: regionSchema });
 export const json = <S extends z.ZodType>(schema: S, headers?: z.ZodType) => ({
   kind: "json" as const,
-  schema,
-  ...(headers ? { headers } : {}),
-});
-export const ndjson = <S extends z.ZodType>(schema: S, headers?: z.ZodType) => ({
-  kind: "ndjson" as const,
   schema,
   ...(headers ? { headers } : {}),
 });
@@ -71,7 +56,7 @@ export interface DataManagerOperation {
   responses: Record<
     number,
     { headers?: z.ZodType } & (
-      | { kind: "json" | "ndjson"; schema: z.ZodType }
+      | { kind: "json"; schema: z.ZodType }
       | { kind: "raw"; contentTypes: readonly string[] }
       | { kind: "empty" }
     )
