@@ -267,6 +267,19 @@ describe("CoverageService", () => {
     );
   });
 
+  it("links a service-owned transit source to the canonical service and transit pages", async () => {
+    const stream = { ...makeStream("2026-09-10T13:00:00.000Z"), domain: "transit" as const };
+    const service = createCoverageService({
+      now: () => new Date("2026-09-10T12:00:00.000Z"),
+      collector: async () => makeCollection(stream),
+    });
+    const report = await service.report({ regionId: REGION.key });
+    expect(report.sources.find((source) => source.key === stream.key)?.correctiveLinks).toEqual([
+      { label: "Data services", href: "/admin/system/services" },
+      { label: "Transit sources", href: "/admin/data/transit" },
+    ]);
+  });
+
   it("requires pinned continuation pages and permits attention views on a matrix revision", async () => {
     const service = createCoverageService({
       now: () => new Date("2026-09-10T12:00:00.000Z"),

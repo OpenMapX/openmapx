@@ -706,9 +706,9 @@ function sourceRow(
     });
   }
   if (stream.owner.kind === "service")
-    correctiveLinks.push({ label: "Data services", href: "/admin/services" });
+    correctiveLinks.push({ label: "Data services", href: "/admin/system/services" });
   if (stream.domain === "transit") {
-    correctiveLinks.push({ label: "Transit sources", href: "/admin/transit" });
+    correctiveLinks.push({ label: "Transit sources", href: "/admin/data/transit" });
   }
   return {
     key: stream.key,

@@ -87,7 +87,7 @@ export async function adminOverviewRoute(app: FastifyInstance): Promise<void> {
         type: "control_plane_unavailable",
         severity: "warning",
         message: "Service status is unavailable. Check the operations agent.",
-        target: "/admin/services",
+        target: "/admin/system/services",
       });
 
     // Missing credentials — flag integrations where every declared secret is
