@@ -175,7 +175,6 @@ function PlatformForm({
     typeof adminPlatformPreviewRetainedSchema.parse
   > | null>(() => {
     try {
-      sessionStorage.removeItem(`openmapx-platform-preview:${apiUrl}:${actorId}`);
       const raw = sessionStorage.getItem(storageKey);
       if (!raw) return null;
       const parsed = adminPlatformPreviewRetainedSchema.parse(JSON.parse(raw));

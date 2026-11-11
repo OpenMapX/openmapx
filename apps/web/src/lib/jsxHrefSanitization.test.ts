@@ -52,9 +52,6 @@ const ALLOWED: Record<string, string[]> = {
     'adminJobHref({ id: lastAcceptedJobId, source: "application" })',
     `lastAcceptedJobId ? adminJobHref({ id: lastAcceptedJobId, source: "application" }) : "/admin/activity"`,
   ],
-  "components/admin/services/DataWorkflowsPage.tsx": [
-    'adminJobHref({ id: lastJobId, source: "application" })',
-  ],
   "components/admin/services/TransitSourcesSection.tsx": [
     'adminJobHref({ id: syncJob?.jobId ?? lastJobId ?? "", source: "data-manager" })',
   ],

@@ -12,6 +12,6 @@ const PIN_BLUE = { fill: "#4285F4", stroke: "#1967D2" };
  */
 export function ExploreAnchorMarker() {
   const anchor = useCategorySearchStore((s) => s.anchor);
-  usePinMarker(anchor?.coordinates ?? null, "", false, PIN_BLUE);
+  usePinMarker(anchor?.coordinates ?? null, "", false, PIN_BLUE, undefined, [], []);
   return null;
 }

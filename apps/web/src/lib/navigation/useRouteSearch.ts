@@ -11,7 +11,6 @@ import {
   fetchDirections,
   filterRoutePois,
   insertRouteStop,
-  type LngLat,
   type OverpassFilter,
   paddedRouteAheadBounds,
   positionAt,
@@ -72,8 +71,8 @@ export interface UseRouteSearch {
   results: AlongRoutePoi<CategoryPlace>[];
   isLoading: boolean;
   isError: boolean;
-  /** Re-plan the active route through `coord` as a new stop. Resolves to success. */
-  addStop: (candidate: RouteStopCandidate | LngLat) => Promise<boolean>;
+  /** Re-plan the active route through the selected candidate as a new stop. Resolves to success. */
+  addStop: (candidate: RouteStopCandidate) => Promise<boolean>;
   cancelAddStop: () => void;
 }
 
@@ -333,42 +332,37 @@ export function useRouteSearch(query: RouteSearchQuery | null): UseRouteSearch {
     [cancelAddStop],
   );
 
-  const addStop = async (selection: RouteStopCandidate | LngLat): Promise<boolean> => {
+  const addStop = async (selection: RouteStopCandidate): Promise<boolean> => {
     cancelAddStop();
     const store = useNavigationStore.getState();
     const { route: r, mode, destinationWaypoints, progress } = store;
     if (!r || store.navigationAuthority !== "browser" || store.status !== "navigating")
       return false;
     const controller = new AbortController();
-    const coord = Array.isArray(selection) ? selection : selection.coordinates;
-    const matches = results.filter((poi) =>
-      Array.isArray(selection)
-        ? poi.place.coordinates[0] === coord[0] && poi.place.coordinates[1] === coord[1]
-        : poi.place.id === selection.id,
-    );
-    // Coordinate-only compatibility callers cannot disambiguate co-located sites.
-    if (matches.length > 1 || (!Array.isArray(selection) && matches.length !== 1)) return false;
+    const matches = results.filter((poi) => poi.place.id === selection.id);
     const candidate = matches[0];
-    if (candidate?.detour?.kind === "unreachable") return false;
+    if (!candidate || matches.length !== 1) return false;
+    if (candidate.detour?.kind === "unreachable") return false;
     const requestedProvider =
       store.routeProvider ??
-      (candidate?.detour?.kind === "network" ? candidate.detour.provider : undefined);
+      (candidate.detour?.kind === "network" ? candidate.detour.provider : undefined);
     const captured = selectionScope.current;
-    const selectedTarget = candidate
-      ? JSON.stringify([candidate.place.coordinates, candidate.place.routingEntrance])
-      : undefined;
+    const selectedTarget = JSON.stringify([
+      candidate.place.coordinates,
+      candidate.place.routingEntrance,
+    ]);
     const selectionCurrent = () => {
       const current = selectionScope.current;
       return (
         current.scope === captured.scope &&
         current.enabled === captured.enabled &&
         current.locale === captured.locale &&
-        (!candidate || current.targets.get(candidate.place.id) === selectedTarget)
+        current.targets.get(candidate.place.id) === selectedTarget
       );
     };
     if (!selectionCurrent()) return false;
-    const target = candidate?.place.routingEntrance ?? candidate?.place.coordinates ?? coord;
-    const from = progress?.snapped ?? destinationWaypoints[0] ?? coord;
+    const target = candidate.place.routingEntrance ?? candidate.place.coordinates;
+    const from = progress?.snapped ?? destinationWaypoints[0] ?? selection.coordinates;
     // The store's route wins if a reroute landed since the last render, in which
     // case the memoized index no longer describes it and the geometry is used.
     const positions =

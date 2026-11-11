@@ -52,7 +52,6 @@ interface StorageInfo {
 const ROW_LABELS: Record<string, string> = {
   "static-assets": "appShell",
   pages: "appShell",
-  "app-shell-v1": "appShell",
   "openmapx-preferences": "preferences",
   [MAP_TILE_CACHE]: "mapTiles",
   [STREET_LEVEL_IMAGERY_TILE_CACHE]: "mapTiles",
@@ -106,7 +105,6 @@ async function inspectStorage(t: (key: string) => string): Promise<StorageInfo> 
 
   const names = await caches.keys();
   for (const name of names) {
-    if (name.startsWith("offline-area-") || name === "omx-offline-results") continue;
     const cache = await caches.open(name);
     const reqs = await cache.keys();
     let bytes = 0;

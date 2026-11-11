@@ -32,7 +32,6 @@ import { TerrainBaseLayer } from "@/components/map/layers/TerrainBaseLayer";
 import { TimelineMapLayer } from "@/components/map/layers/TimelineMapLayer";
 import { TransitItineraryLayer } from "@/components/map/layers/TransitItineraryLayer";
 import { TransitRouteLayer } from "@/components/map/layers/TransitRouteLayer";
-import { TransitVehicleLayer } from "@/components/map/layers/TransitVehicleLayer";
 import { VehicleLiveLayer } from "@/components/map/layers/VehicleLiveLayer";
 import { MapCanvas } from "@/components/map/MapCanvas";
 import { MapClickHandler } from "@/components/map/MapClickHandler";
@@ -118,7 +117,6 @@ export default function HomePage() {
             <TransitRouteLayer />
             <VehicleLiveLayer />
             <TransitItineraryLayer />
-            <TransitVehicleLayer />
             <ContextualOverlays />
             <CategoryResultMarkers />
             <DataSourceLayer />
