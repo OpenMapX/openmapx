@@ -281,7 +281,11 @@ exit 0
    * checkout is the temporary tree, against a docker that lists `containers`
    * and answers each inspect with the mounts `mounts` gives for that tree.
    */
-  function agentMountCheck(containers: string, mounts: (root: string) => string[]) {
+  function agentMountCheck(
+    containers: string,
+    mounts: (root: string) => string[],
+    inspectExit = 0,
+  ) {
     const dir = tree();
     const bin = join(dir, "bin");
     mkdirSync(bin);
@@ -296,7 +300,7 @@ exit 0
       `#!/bin/sh
 case "$1" in
   ps) printf '%s' "${containers}" ;;
-  inspect) cat "${join(dir, "mounts")}" ;;
+  inspect) cat "${join(dir, "mounts")}"; exit ${inspectExit} ;;
 esac
 `,
       { mode: 0o755 },
@@ -333,6 +337,12 @@ esac
     ]);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("the ops-agent container mounts the checkout");
+  });
+
+  it("fails when docker inspect fails, rather than reading no mounts", () => {
+    const result = agentMountCheck("agent1\n", () => [], 1);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("docker inspect could not read the mounts");
   });
 
   it("fails when no ops-agent container is running", () => {

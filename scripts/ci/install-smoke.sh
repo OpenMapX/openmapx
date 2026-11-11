@@ -290,13 +290,17 @@ assert_stack_healthy() {
 # and directories below it: no mount's source or destination is the checkout.
 assert_agent_without_checkout() {
   step "Check the operations agent does not mount the checkout"
-  local physical containers container source destination path
+  local physical containers container mounts source destination path
   physical="$(cd "$root" && pwd -P)"
   containers="$(docker ps --quiet --filter "label=com.docker.compose.project=$project" \
-    --filter "label=com.docker.compose.service=ops-agent")"
+    --filter "label=com.docker.compose.service=ops-agent")" ||
+    fail "docker ps could not list the ops-agent containers"
   [[ -n "$containers" ]] || fail "no ops-agent container is running"
   while IFS= read -r container; do
     [[ -n "$container" ]] || continue
+    # Captured first: a failing inspect must fail the check, not read as no mounts.
+    mounts="$(docker inspect --format '{{range .Mounts}}{{.Source}}{{"\t"}}{{.Destination}}{{"\n"}}{{end}}' "$container")" ||
+      fail "docker inspect could not read the mounts of ops-agent container $container"
     while IFS=$'\t' read -r source destination; do
       [[ -n "$source$destination" ]] || continue
       for path in "$source" "$destination"; do
@@ -304,7 +308,7 @@ assert_agent_without_checkout() {
           fail "the ops-agent container mounts the checkout: $source -> $destination"
         fi
       done
-    done < <(docker inspect --format '{{range .Mounts}}{{.Source}}{{"\t"}}{{.Destination}}{{"\n"}}{{end}}' "$container")
+    done <<<"$mounts"
   done <<<"$containers"
 }
 
