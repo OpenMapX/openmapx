@@ -108,23 +108,6 @@ function headerFields(
   };
 }
 
-/**
- * Record the header of every downloaded OSM PBF that has none recorded yet,
- * so a file fetched before the header was read still reports how current it
- * is. A file that is gone or unreadable is left as it is.
- */
-export function backfillOsmHeaders(store: StateStore): number {
-  let filled = 0;
-  for (const dataset of store.getAll()) {
-    if (dataset.type !== "osm-pbf" || dataset.osmTimestamp) continue;
-    const fields = headerFields(tryReadOsmPbfHeader(dataset.path));
-    if (!fields.osmTimestamp) continue;
-    store.upsert({ ...dataset, ...fields });
-    filled += 1;
-  }
-  return filled;
-}
-
 export async function downloadOsm(opts: DownloadOsmOptions): Promise<DownloadOsmResult> {
   opts.signal?.throwIfAborted();
   const url = resolveOsmUrl(opts.region);

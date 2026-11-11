@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  backfillOsmHeaders,
   downloadOsm,
   resolveOsmMd5Url,
   resolveOsmPolyUrl,
@@ -94,6 +93,32 @@ describe("downloadOsm extract time", () => {
     }
   });
 
+  it("records the header of an extract that is already current and not downloaded again", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-osm-header-"));
+    const store = new StateStore(dataDir);
+    try {
+      mkdirSync(join(dataDir, "osm"));
+      copyFileSync(STAMPED_PBF, join(dataDir, "osm", "europe-monaco.osm.pbf"));
+
+      await downloadOsm({
+        region: "europe/monaco",
+        dataDir,
+        store,
+        verifyChecksum: false,
+        downloadImpl: async () => ({ published: false }),
+      });
+
+      expect(store.getAll()[0]).toMatchObject({
+        type: "osm-pbf",
+        id: "europe/monaco",
+        osmTimestamp: "2026-10-31T20:21:42.000Z",
+        osmReplicationUrl: "https://download.geofabrik.de/europe/monaco-updates",
+      });
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
   it("records none for a file whose header carries no replication state", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "openmapx-osm-header-"));
     const store = new StateStore(dataDir);
@@ -111,37 +136,6 @@ describe("downloadOsm extract time", () => {
 
       expect(store.getAll()[0]?.osmTimestamp).toBeUndefined();
       expect(store.getAll()[0]?.osmReplicationUrl).toBeUndefined();
-    } finally {
-      rmSync(dataDir, { recursive: true, force: true });
-    }
-  });
-});
-
-describe("backfillOsmHeaders", () => {
-  it("fills the extract time of a PBF downloaded before it was recorded, and only that", () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-osm-backfill-"));
-    try {
-      mkdirSync(join(dataDir, "osm"));
-      const path = join(dataDir, "osm", "europe-monaco.osm.pbf");
-      copyFileSync(STAMPED_PBF, path);
-      const store = new StateStore(dataDir);
-      const base = { sizeBytes: 411, downloadedAt: "2026-10-01T00:00:00.000Z" };
-      store.upsert({ type: "osm-pbf", id: "europe/monaco", path, ...base });
-      store.upsert({
-        type: "osm-pbf",
-        id: "gone",
-        path: join(dataDir, "osm", "gone.osm.pbf"),
-        ...base,
-      });
-      store.upsert({ type: "tile-mbtiles", id: "tiles", path, ...base });
-
-      expect(backfillOsmHeaders(store)).toBe(1);
-
-      const byId = new Map(new StateStore(dataDir).getAll().map((d) => [d.id, d]));
-      expect(byId.get("europe/monaco")?.osmTimestamp).toBe("2026-10-31T20:21:42.000Z");
-      expect(byId.get("gone")?.osmTimestamp).toBeUndefined();
-      expect(byId.get("tiles")?.osmTimestamp).toBeUndefined();
-      expect(backfillOsmHeaders(store)).toBe(0);
     } finally {
       rmSync(dataDir, { recursive: true, force: true });
     }

@@ -52,7 +52,7 @@ export function createDataExecutionReceiver(deps: {
     attestUnadoptedHardlinks: (request, rawHeaders) =>
       configurationFence.attestUnadoptedGenerationHardlinks(request, rawHeaders),
     async observeReviewedTransit(request) {
-      const record = await runtime.lookupLegacyTransit?.(request.key);
+      const record = await runtime.lookupByIdempotencyKey?.(request.key);
       if (!record) return null;
       const input = record.input,
         countries = [...new Set(request.countries.map((c) => c.toLowerCase()))].sort();
@@ -63,7 +63,7 @@ export function createDataExecutionReceiver(deps: {
         input.preflight?.preflightId !== request.preflightId ||
         input.preflight.fingerprint !== request.fingerprint
       )
-        throw new DataExecutionConflict("Legacy transit key body or actor conflict");
+        throw new DataExecutionConflict("Idempotency key body or actor conflict");
       return runtime.inspect(record.status.id);
     },
     async admit(value, options) {

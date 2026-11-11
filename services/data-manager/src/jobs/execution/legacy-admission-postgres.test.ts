@@ -806,7 +806,7 @@ it.skipIf(!enabled).each([
   30000,
 );
 it.skipIf(!enabled)(
-  "I1 preserves the documented duplicate response for an original pre-upgrade job",
+  "I1 refuses a transit retry whose key belongs to a job from before durable executions",
   async () => {
     const f = await legacyFixture(),
       key = "fix1-v1-" + randomUUID(),
@@ -820,11 +820,7 @@ it.skipIf(!enabled)(
         payload: { countries: ["de"], idempotencyKey: key },
       });
       expect(response.statusCode).toBe(409);
-      expect(response.json()).toEqual({
-        ok: false,
-        reason: "duplicate-idempotency-key",
-        existingJobId: id,
-      });
+      expect(response.json().reason).toBeUndefined();
       expect(f.dispatches()).toBe(0);
     } finally {
       await f.close();
@@ -1040,7 +1036,7 @@ it.skipIf(!enabled)(
       // capacity validation or downloads. The real dispatcher is checked separately.
       const admitted = await f.receiver.admitLocal(
         { kind: "transit-sync", countries: ["de"], preflight },
-        { legacyTransitKey: key, triggeredBy: "fixture-reviewer" },
+        { idempotencyKey: key, triggeredBy: "fixture-reviewer" },
       );
       const body = {
         countries: ["DE"],

@@ -77,13 +77,13 @@ export interface DataExecutionRuntime {
       hardlinkPlan?: unknown;
       sourceJobId?: string;
       triggeredBy?: string;
-      legacyTransitKey?: string;
+      idempotencyKey?: string;
       adopt?: (execution: ExecutionRef) => Promise<BorrowedArtifactTargetLease | undefined>;
     },
   ): Promise<DataExecutionStatus>;
   inspect(id: string): Promise<DataExecutionStatus | null>;
   lookup(key: string): Promise<DataExecutionStatus | null>;
-  lookupLegacyTransit?(key: string): Promise<DataExecutionRecord | null>;
+  lookupByIdempotencyKey?(key: string): Promise<DataExecutionRecord | null>;
   requestCancel(identity: DataExecutionIdentity): Promise<DataExecutionStatus>;
   reconcile(): Promise<void>;
   close(): Promise<void>;
@@ -518,7 +518,7 @@ export function createDataExecutionRuntime(deps: {
     },
     inspect: async (id) => (await store.inspect(id))?.status ?? null,
     lookup: async (key) => (await store.lookup(key))?.status ?? null,
-    lookupLegacyTransit: async (key) => (await store.lookupLegacyTransit?.(key)) ?? null,
+    lookupByIdempotencyKey: async (key) => (await store.lookupByIdempotencyKey?.(key)) ?? null,
     requestCancel: cancel,
     async reconcile() {
       const owner = requireJournal();
