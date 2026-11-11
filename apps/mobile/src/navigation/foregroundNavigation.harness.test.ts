@@ -41,7 +41,9 @@ describe("foreground navigation on a fake phone", () => {
 
     expect(reply?.type).toBe("session.stopped");
     expect(harness.phone.location.running).toBe(false);
-    expect(harness.navigatingReports.at(-1)).toBe(false);
+    expect(harness.sessionEnds).toEqual([
+      expect.objectContaining({ sessionId: expect.any(String), finalStatus: "stopped" }),
+    ]);
     expect(await harness.session()).toBeNull();
     expect(await harness.deliver([])).toBe(false);
   });

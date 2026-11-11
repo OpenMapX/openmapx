@@ -111,7 +111,8 @@ describe("TransitRefreshService.request", () => {
     });
     expect((calls[0].body as { token: string }).token).toBe(FIXTURE_TOKEN);
     expect(calls[0].options.timeoutMs).toBe(15_000);
-    expect(calls[0].options.signal).toBeInstanceOf(AbortSignal);
+    // Never abandoned by this side: only the answer carries the rotated token.
+    expect(calls[0].options.signal).toBeUndefined();
   });
 
   it("retains captures when a hosted journey lookup fails", async () => {
@@ -189,46 +190,6 @@ describe("TransitRefreshService.request", () => {
 
       expect(outcome.ok).toBe(true);
       expect(outcome.ok && outcome.journeys["trip-1"]).toBeUndefined();
-    });
-  });
-
-  describe("cancellation", () => {
-    it("aborts a request whose session moved on", async () => {
-      let observed: AbortSignal | undefined;
-      const instance = service({
-        post: async (_path: string, _body: unknown, options: { signal?: AbortSignal }) => {
-          observed = options.signal;
-          return new Promise((_resolve, reject) => {
-            options.signal?.addEventListener("abort", () => reject(new Error("aborted")));
-          });
-        },
-      } as unknown as ApiClient);
-
-      const pending = instance.request(request());
-      instance.abort("r1");
-      await pending;
-
-      expect(observed?.aborted).toBe(true);
-    });
-
-    it("aborts everything in flight at once", async () => {
-      const signals: AbortSignal[] = [];
-      const instance = service({
-        post: async (_path: string, _body: unknown, options: { signal?: AbortSignal }) => {
-          if (options.signal) signals.push(options.signal);
-          return new Promise((_resolve, reject) => {
-            options.signal?.addEventListener("abort", () => reject(new Error("aborted")));
-          });
-        },
-      } as unknown as ApiClient);
-
-      const first = instance.request(request({ requestId: "r1" }));
-      const second = instance.request(request({ requestId: "r2" }));
-      instance.abortAll();
-      await Promise.all([first, second]);
-
-      expect(signals).toHaveLength(2);
-      for (const signal of signals) expect(signal.aborted).toBe(true);
     });
   });
 });

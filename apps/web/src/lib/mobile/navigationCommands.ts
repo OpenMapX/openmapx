@@ -17,7 +17,7 @@
  */
 
 import type { BridgeClient } from "./bridgeClient";
-import { BridgeError } from "./bridgeClient";
+import { BridgeError, NativeCommandError } from "./bridgeClient";
 
 /** How long a prepare may take, matching the client's slow-path budget. */
 export const PREPARE_TIMEOUT_MS = 15_000;
@@ -38,11 +38,14 @@ export type CommandFailure =
 
 export class CommandError extends Error {
   readonly code: CommandFailure;
+  /** The shell's own reason, when it refused rather than failed to answer. */
+  readonly nativeCode?: string;
 
-  constructor(code: CommandFailure) {
+  constructor(code: CommandFailure, nativeCode?: string) {
     super(`navigation command failed: ${code}`);
     this.name = "CommandError";
     this.code = code;
+    if (nativeCode !== undefined) this.nativeCode = nativeCode;
   }
 }
 
@@ -53,6 +56,15 @@ export interface NavigationSettingsPatch {
   alightAlertsEnabled?: boolean;
   locale?: "en" | "de";
   units?: "metric" | "imperial";
+}
+
+/**
+ * Whether the shell answered that there is no session. For a stop or a settings
+ * change that is an outcome, not a failure: there is nothing left to end, and
+ * the next start reads the stored preference.
+ */
+function isNoSession(error: unknown): boolean {
+  return error instanceof NativeCommandError && error.code === "no-session";
 }
 
 /** What the commands need to know about the session the page is rendering. */
@@ -68,6 +80,12 @@ export interface AcknowledgedRevision {
  * other means this shell will never do it.
  */
 function asCommandError(error: unknown): CommandError {
+  if (error instanceof NativeCommandError) {
+    return new CommandError(
+      error.code === "permission-denied" ? "permission-denied" : "rejected",
+      error.code,
+    );
+  }
   if (error instanceof BridgeError) {
     if (error.code === "incompatible") return new CommandError("incompatible");
     if (error.code === "timeout") return new CommandError("timeout");
@@ -202,23 +220,28 @@ export class NativeNavigationCommands {
     });
   }
 
-  /** Ends the session. `arrived` reports a trip that finished on its own. */
+  /**
+   * Ends the session. `arrived` reports a trip that finished on its own.
+   * Rejects when the shell refuses, because the trip is then still running.
+   */
   stop(arrived = false): Promise<void> {
     return this.serialize(async () => {
       try {
         await this.client.request(arrived ? "session.complete" : "session.stop", {}, this.stamp());
       } catch (error) {
+        if (isNoSession(error)) return;
         throw asCommandError(error);
       }
     });
   }
 
-  /** Applies a settings change to the native session. */
+  /** Applies a settings change to the native session, if there is one. */
   updateSettings(patch: NavigationSettingsPatch): Promise<void> {
     return this.serialize(async () => {
       try {
         await this.client.request("settings.update", patch, this.stamp());
       } catch (error) {
+        if (isNoSession(error)) return;
         throw asCommandError(error);
       }
     });

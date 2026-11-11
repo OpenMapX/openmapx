@@ -3,6 +3,7 @@ import {
   type MobileNavigationSession,
   type WebToNativeMessage,
 } from "@openmapx/core/navigation";
+import type { SendOutcome } from "../bridge/nativeBridge";
 import { migrateSessionSchema } from "../storage/migrations";
 import { SessionRepository } from "../storage/SessionRepository";
 import { openTestDatabase } from "../storage/testing/nodeSqliteDatabase";
@@ -74,6 +75,7 @@ async function harness(
     permission?: "background" | "foreground-only" | "denied";
     appActive?: boolean;
     failEffect?: string;
+    sendOutcome?: (type: string) => SendOutcome | undefined;
   } = {},
 ): Promise<Harness> {
   const database = openTestDatabase();
@@ -116,6 +118,7 @@ async function harness(
     bridge: {
       send: (type, payload, options) => {
         sent.push({ type, payload, options: options ?? {} });
+        return overrides.sendOutcome?.(type) ?? "sent";
       },
     },
     permissions: {
@@ -341,6 +344,32 @@ describe("NavigationCoordinator commands", () => {
     expect(await context.repository.loadActive(NOW)).toBeNull();
     expect(context.effectLog.filter((entry) => entry === "driver.stop")).toHaveLength(1);
     expect(context.effectLog.filter((entry) => entry === "driver.start")).toHaveLength(1);
+    await context.close();
+  });
+
+  it("answers a stop that names no trip, when there is none, with no-session", async () => {
+    const context = await harness();
+
+    const response = await context.coordinator.dispatch(cmd("session.stop", {}));
+
+    expect(response).toMatchObject({ type: "native.error", payload: { code: "no-session" } });
+    await context.close();
+  });
+
+  it("refuses instead when a reply fails its schema, so the page is not left waiting", async () => {
+    const context = await harness({
+      sendOutcome: (type) => (type === "session.prepared" ? "invalid" : undefined),
+    });
+
+    await context.coordinator.dispatch(
+      cmd("session.prepare", { startPackage: START_PACKAGE }, { messageId: "prep-1" }),
+    );
+
+    expect(context.sent.map((entry) => [entry.type, entry.options.forMessageId])).toEqual([
+      ["session.prepared", "prep-1"],
+      ["native.error", "prep-1"],
+    ]);
+    expect(context.sent[1].payload).toEqual({ code: "internal-error" });
     await context.close();
   });
 
@@ -934,20 +963,20 @@ describe("native rider action authority", () => {
   );
 });
 
-describe("native surface stop", () => {
+describe("native stop", () => {
   it("uses durable teardown and emits an unsolicited matching stopped event", async () => {
     const h = await harness();
     try {
       await h.repository.createPreparing(groundSessionFixture({ status: "active" }));
-      expect(await h.coordinator.stopFromSurface("old-session")).toBe(false);
+      expect(await h.coordinator.stopNatively("old-session")).toBe(false);
       expect((await h.repository.loadActive(NOW))?.sessionId).toBe("session-1");
-      expect(await h.coordinator.stopFromSurface("session-1")).toBe(true);
+      expect(await h.coordinator.stopNatively("session-1")).toBe(true);
       expect(await h.repository.loadActive(NOW)).toBeNull();
       expect(
         h.sent.some((m) => m.type === "session.stopped" && !("forMessageId" in m.options)),
       ).toBe(true);
       expect(h.effectLog).toContain("driver.stop");
-      expect(await h.coordinator.stopFromSurface("session-1")).toBe(false);
+      expect(await h.coordinator.stopNatively("session-1")).toBe(false);
     } finally {
       await h.close();
     }

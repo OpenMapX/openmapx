@@ -13,9 +13,16 @@ system-browser sign-in) and runs native ground and transit navigation sessions.
 
 `apps/mobile/src/App.tsx` composes `createShellServices` (`src/shell/shellServices.ts`)
 and `createForegroundNavigation` (`src/navigation/createForegroundNavigation.ts`)
-into `createShellBridge`. Navigation commands go to the `NavigationCoordinator`;
-everything else falls back to the shell services, and a command neither handles
-receives `unsupported-capability`. The handshake reports ground and transit
+into `createShellBridge`. The composition's `dispatch` sends navigation commands
+to the `NavigationCoordinator`'s serial queue. It answers the one-shot location,
+settings and sign-in requests (`bridge/answerCommand.ts`) through the shell
+services beside that queue, because each can wait on the user for as long as a
+prompt or a browser is open, and location batches must not wait with it. The
+permission flow of `session.start` stays in the queue, because it guards the
+prepared session. Permission prompts are serialized with each other beside the queue
+(`permissions/permissionPromptLock.ts`): the start flow, a one-shot location
+request and voice search's microphone prompt each wait for a prompt already
+showing, because Android rejects a permission request while another is open. A command nothing handles receives `unsupported-capability`. The handshake reports ground and transit
 navigation and background location as available, local notifications once the
 notification permission is granted, and speech when the native audio module is
 present. Installed-device evidence covers Android only; see
@@ -59,7 +66,16 @@ use that descriptor, so they apply during negotiation, incompatibility and error
 `createForegroundNavigation` builds one coordinator per foreground app and
 registers it, so the background location task feeds the same instance instead
 of opening a second, headless one beside it. The headless coordinator is used
-only when the OS starts the task without the app.
+only when the OS starts the task without the app. It is composed once per
+process by `createInvisibleNavigation`, the same factory over the same device
+ports (location driver and its Android background rule, audio, alerts,
+reroute and refresh, connectivity), with nothing sent to a page, no prompts
+and no keep-awake. An off-route driver in an OS-started process therefore gets
+a reroute, and the background task waits for that request
+(`settleRemoteWork`) before it reports the batch handled. When the visible
+app's composition registers, the headless one is disposed. A transit commit
+in that process reconciles the scheduled get-off alerts there, reading the
+notification grant through the same port.
 
 - **Start.** `session.start` runs the `PermissionController`. Its screens are
   native (`PermissionPrompts.tsx`) because the page may be suspended during the
@@ -117,12 +133,39 @@ only when the OS starts the task without the app.
   even under a foreground service. There the first batch after the window
   releases the stream, and the time-driven Android profiles guarantee that
   batch while the user stands still. A batch also releases the stream after a
-  process restart.
+  process restart. The window governs location only. The arrival itself, and
+  the page's arrival card, last until the page completes it ("Done") or the
+  session reaches its lifetime, whatever the app's visibility. Opening the app
+  runs recovery, which asks the coordinator (`closeFinishedSession`). Inside
+  the window, the coordinator keeps the arrival and its undo and schedules the
+  release in the current process. Past the window, it releases location and
+  the trip surface now and keeps the row.
+- **Session end.** Every end goes through one coordinator method: End or
+  arrival completion from the page, End on the trip card or the recovery
+  screen, a car trip replacing the current one, a refused permission or a
+  driver that could not start, and expiry. It removes the session row, runs
+  the device effects (location, audio, alerts, surface, a final snapshot) and
+  then notifies each consumer once. The page hears the end as the reply to its
+  own command, or, when native ended the trip, as one unsolicited
+  `session.stopped`, never both. A page that is not loaded learns it from the
+  next handshake, which reports no active session. The composition's
+  `onSessionEnded` tells the shell, which clears guidance and any recovery
+  screen, and keep-awake releases the screen. Guidance starting, or stopping
+  at an arrival, is derived from the committed row after each publish and
+  reported once per change. When recovery leaves an active session untracked
+  (Resume or permission lost), no publish reports guidance as running until
+  the user resumes or the session ends, so a connectivity change or a late
+  reroute or refresh answer cannot clear that screen. Recovery (`NavigationRecoveryController`) is part
+  of the composition. It inspects the session on every visibility change, but
+  it ends a session only through the coordinator, between its own steps on
+  the shared executor. It ends a session past its lifetime and a preparation
+  the page never started. It never ends an arrival.
 - **Keep-awake.** The composition holds the screen only while the app is
   visible, the location stream runs for an active session, and that session's
-  keep-screen-on setting is on. It re-checks after every published change and
-  when the shell reports a visibility change or a recovery outcome, so a
-  setting change, arrival or end releases the screen with the commit itself.
+  keep-screen-on setting is on. It re-checks after every published change,
+  after every session end and when the shell reports a visibility change or a
+  recovery outcome, so a setting change, arrival or end releases the screen
+  with the commit itself.
 - **Speech interruptions.** A call or another source that takes audio focus
   during a cue stops it, and later cues are not queued behind the interruption.
   iOS observes the end of an audio-session interruption. Android abandons its
@@ -131,8 +174,29 @@ only when the OS starts the task without the app.
   is skipped. Against another app's transient focus, such as a voice assistant
   or another navigation prompt, the request is usually granted and the cue
   speaks.
-- **Transit refresh and replan** are not wired yet. Their effects are no-ops,
-  and the session keeps running on its captured itinerary.
+- **Connectivity.** The composition follows NetInfo through
+  `connectivity/ConfirmedConnectivity.ts`. A reading counts once it has held
+  for 3 s, so a tunnel or a cell handover that flaps for a second changes
+  nothing. A timer confirms a reading that holds. Android pauses a backgrounded
+  app's timers, so each location batch also checks the reading against the
+  clock. The coordinator commits a confirmed change to the active session
+  (`connectivityChanged`) and publishes a full snapshot. While a session is
+  offline, reroutes and itinerary refreshes are not attempted, so a rider
+  underground keeps the one-time refresh token. When the network returns, the
+  processors ask at once for a reroute the outage held back or a refresh that
+  fell due. An `unknown` reading leaves the committed state alone. A request
+  already in flight when the network drops still counts as an ambiguous
+  attempt, because the server may have spent the token; such a token is
+  replayed only within the server's 120 s replay window.
+- **Transit refresh.** A refresh effect starts the request off the queue and
+  the answer re-enters as a queued `applyTransitRefresh`, like a reroute.
+  Unlike a reroute, a refresh is never abandoned, not even when its
+  composition is disposed (for example when the visible app takes over from a
+  headless process): the server may already have spent the one-time token,
+  and only the answer carries its replacement. The 15 s request timeout
+  bounds it.
+  Replanning a missed connection is not wired; the session keeps running on its
+  itinerary.
 
 ## Android Auto surface and runtime
 
@@ -145,8 +209,8 @@ The headless navigation bundle does not import the web renderer or MapLibre GL J
 
 `OpenMapXCarRuntime` runs through the application's existing ReactHost without
 requiring the phone Activity. It reuses the foreground coordinator when present,
-or composes car-capable reroute/audio ports over the same executor and SQLite
-repository. Committed snapshots fan out independently to phone and car; the car
+or composes its own with `createInvisibleNavigation`, over the same executor,
+SQLite repository and device ports. Committed snapshots fan out independently to phone and car; the car
 page is a passive projection, not another navigation engine. Car commands enter
 the same authority, including host stop. Car route planning uses the compiled
 public API and a bounded instance/account-scoped destinations cache from the phone.
@@ -196,6 +260,25 @@ does not cancel the native operation, and an authoritative snapshot can still
 show the trip as active later. A timed-out initial handshake requires a page
 reload to negotiate again.
 
+A correlated `native.error` rejects the page's request with a
+`NativeCommandError` that carries the shell's code; it never resolves as the
+reply the command expected. A refusal that arrives after the page's deadline
+finds no pending request and is ignored. The navigation commands treat
+`no-session` as done for End and for a settings change, because there is
+nothing left to end and the next start reads the stored preference. Every
+other refusal fails the command. A failed End asks for a fresh snapshot and
+shows a notice, a fresh one for each failure. A refusal says navigation is
+still running. No answer (a timeout or a lost channel) says the end could not
+be confirmed and asks the user to check the trip, because native may have
+ended it. A stop that
+names no session, sent when there is none, is answered with `no-session`.
+
+Every native send reports `sent`, `queued`, `dropped` or `invalid`. A message
+that fails its schema is not sent; the bridge records its type (never its
+payload) as a `typed.error` diagnostic. A correlated reply that fails its schema
+is followed by `native.error` with `internal-error`, so the page gets an answer
+instead of waiting out its deadline.
+
 ### Rollout order
 
 Before changing the protocol, identify the actually deployed shell and web
@@ -230,10 +313,14 @@ allow a single-use callback code, state and PKCE verifier in `auth.result`; the
 page needs them to redeem the handoff. Keep these out of persistence, diagnostics
 and URLs that should contain only a challenge.
 
-A full snapshot can rehydrate the page at the current revision. A delta applies
-only to its matching session, route and base revision; a gap requests a full
-snapshot. The snapshot reducer and tests implement this contract independently
-of the unfinished foreground composition.
+A full snapshot can rehydrate the page at the current revision. A progress delta
+is absolute: it carries the current position, status and health values read
+from the committed session, not a difference from the last delta. The route,
+itinerary and settings change only in commits that publish a full snapshot. The
+shell throttles progress to one delta a second and drops the ones
+in between, so the page applies any newer delta for its session and route or
+itinerary, even after a revision gap. A delta for another session or route asks
+for a full snapshot, and an older one is ignored.
 
 ### Voice input messages
 
@@ -347,9 +434,12 @@ access, with external location, audio and networking ports replaced by test
 implementations. `foregroundNavigation.harness.test.ts` runs the shipped
 `createForegroundNavigation` composition on a fake phone
 (`navigation/testing/foregroundHarness.ts`): only location, audio, notifications,
-storage, network and clock are replaced, through the composition's `device`
-option. That covers the wiring between page commands, location batches, the
-durable session and device effects, including a process restart. It does not
+storage, network, connectivity and clock are replaced, through the
+composition's `device` option. That covers the wiring between page commands,
+location batches, the durable session and device effects, including a process
+restart, recovery on a visibility change, and a process the OS starts for a
+location batch (`relaunchHeadless`), which composes the headless navigation
+over the same fake ports. It does not
 establish OS delivery, background execution or audio behaviour on a device. A
 complete OS callback blackout also prevents real-time processing; foreground
 coasting does not create a background wake source.
@@ -471,12 +561,11 @@ raw fix, refresh token or credential crosses into the surface payload.
 
 Tapping a card reopens native navigation. End opens an identity-bound native
 confirmation and requires unlocking/foregrounding the app. Only confirmation
-calls `NavigationCoordinator.stopFromSurface`, through the shared session
-executor and the same durable teardown used by the web command. Replayed links
-from Recents or an old card cannot stop a replacement trip. The existing
-`session.stopped` message also clears a matching web read model; older web
-versions may ignore the unsolicited message. Keep-awake is released by the
-same teardown, because it follows the durable session.
+calls `NavigationCoordinator.stopNatively`, through the shared session
+executor and the same terminal path as the web command. Replayed links from
+Recents or an old card cannot stop a replacement trip. The unsolicited
+`session.stopped` that path sends clears a matching web read model; older web
+versions may ignore it. Keep-awake is released by the same end notification.
 
 Lock-screen content follows system privacy settings. Android's private visibility
 and generic public version do not override a user's decision to show sensitive

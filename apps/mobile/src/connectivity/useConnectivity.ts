@@ -1,47 +1,24 @@
-import { useEffect, useRef, useState } from "react";
-import {
-  type ConnectivityState,
-  type DebouncedConnectivity,
-  foldConnectivity,
-  initialConnectivity,
-} from "./ConnectivityDriver";
+import { useEffect, useState } from "react";
+import type { ConnectivityState } from "./ConnectivityDriver";
 import { NetInfoConnectivityDriver } from "./NetInfoConnectivityDriver";
 
-export interface ConnectivityReading extends DebouncedConnectivity {
-  changedAtMs: number;
-  /** True on the tick where a confirmed offline-to-online transition happened. */
-  restored: boolean;
+export interface ConnectivityReading {
+  /** The state to show, updated as soon as the platform reports it. */
+  displayed: ConnectivityState;
 }
 
 /**
- * Subscribes to connectivity and splits it into what to show and what to act on.
- *
- * The displayed state updates immediately, because a user in a tunnel should
- * see the explanation at once. The confirmed state waits, because retrying a
- * request on every handover would be worse than not retrying at all.
+ * What the shell shows about connectivity: a user in a tunnel should see the
+ * explanation at once. Navigation acts on a confirmed state instead, which its
+ * composition derives through `ConfirmedConnectivity`.
  */
 export function useConnectivity(): ConnectivityReading {
-  const [reading, setReading] = useState<ConnectivityReading>(() => ({
-    ...initialConnectivity(Date.now()),
-    restored: false,
-  }));
-  const stateRef = useRef(initialConnectivity(Date.now()));
+  const [displayed, setDisplayed] = useState<ConnectivityState>("unknown");
 
   useEffect(() => {
     const driver = new NetInfoConnectivityDriver();
-    const apply = (observed: ConnectivityState) => {
-      const folded = foldConnectivity(stateRef.current, observed, Date.now());
-      stateRef.current = folded;
-      setReading({
-        displayed: folded.displayed,
-        confirmed: folded.confirmed,
-        changedAtMs: folded.changedAtMs,
-        restored: folded.confirmedTransition,
-      });
-    };
-    const unsubscribe = driver.subscribe(apply);
-    return unsubscribe;
+    return driver.subscribe(setDisplayed);
   }, []);
 
-  return reading;
+  return { displayed };
 }

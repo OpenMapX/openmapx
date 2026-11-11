@@ -54,6 +54,7 @@ import { HamburgerMenu } from "@/components/menu/HamburgerMenu";
 import { HideDuringNavigation } from "@/components/navigation/HideDuringNavigation";
 import { NavIncidentsProvider } from "@/components/navigation/NavIncidentsProvider";
 import { NavigationBackHandler } from "@/components/navigation/NavigationBackHandler";
+import { NavigationEndFailureNotice } from "@/components/navigation/NavigationEndFailureNotice";
 import { NavigationView } from "@/components/navigation/NavigationView";
 import { TransitNavigationView } from "@/components/navigation/TransitNavigationView";
 import { MapClickFloatingCard } from "@/components/panels/MapClickFloatingCard";
@@ -111,6 +112,7 @@ export default function HomePage() {
             <NavigationView />
             <TransitNavigationView />
             <NavigationBackHandler />
+            <NavigationEndFailureNotice />
             <FlightArcLayer />
             <TimelineMapLayer />
             <TransitRouteLayer />

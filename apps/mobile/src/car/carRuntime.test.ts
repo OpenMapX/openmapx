@@ -8,7 +8,7 @@ jest.mock("../navigation/createCoordinator", () => ({
   getSharedCoordinatorCore: async () => ({ repository: { loadActive: async () => null } }),
 }));
 jest.mock("../navigation/createForegroundNavigation", () => ({
-  createForegroundNavigation: jest.fn(),
+  createInvisibleNavigation: jest.fn(),
 }));
 jest.mock("./CarCommands", () => ({
   CarCommands: jest.fn(() => ({ handle: async () => false, disconnect: jest.fn() })),
@@ -22,7 +22,7 @@ jest.mock("./testDrive", () => ({
 }));
 jest.mock("./nativeCar", () => ({ nativeCar: jest.fn() }));
 
-import { createForegroundNavigation } from "../navigation/createForegroundNavigation";
+import { createInvisibleNavigation } from "../navigation/createForegroundNavigation";
 import { registerForegroundCoordinator } from "../navigation/foregroundCoordinator";
 import type { NavigationCoordinator } from "../navigation/NavigationCoordinator";
 import { startCarRuntime } from "./carRuntime";
@@ -50,7 +50,7 @@ it("uses the phone composition without constructing another chain and resolves o
   };
   (nativeCar as jest.Mock).mockReturnValue(native);
   await startCarRuntime();
-  expect(createForegroundNavigation).not.toHaveBeenCalled();
+  expect(createInvisibleNavigation).not.toHaveBeenCalled();
   expect(native.configure).toHaveBeenCalledWith("https://example.com", "de", "metric");
   expect(native.detach).toHaveBeenCalledTimes(1);
   expect(remove).toHaveBeenCalledTimes(1);
@@ -67,7 +67,7 @@ it("composes once without an Activity and disposes the car chain when the phone 
     wasDisposed = resolve;
   });
   const dispose = jest.fn(() => wasDisposed());
-  (createForegroundNavigation as jest.Mock).mockResolvedValue({ coordinator: {}, dispose });
+  (createInvisibleNavigation as jest.Mock).mockResolvedValue({ coordinator: {}, dispose });
   let connected = true;
   const native = {
     configure: jest.fn(),
@@ -85,7 +85,7 @@ it("composes once without an Activity and disposes the car chain when the phone 
   const task = startCarRuntime();
   await attached;
   const duplicate = startCarRuntime();
-  expect(createForegroundNavigation).toHaveBeenCalledTimes(1);
+  expect(createInvisibleNavigation).toHaveBeenCalledTimes(1);
   const unregister = registerForegroundCoordinator({} as NavigationCoordinator);
   await disposed;
   expect(dispose).toHaveBeenCalledTimes(1);

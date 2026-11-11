@@ -1,8 +1,9 @@
 import type { WebToNativeMessage } from "@openmapx/core/navigation";
 import type { AuthPurpose, SystemAuthResult } from "../auth/SystemAuthSession";
+import type { AuxiliaryCommandHandler } from "../bridge/answerCommand";
 import type { ForegroundFixResult } from "../location/ForegroundLocationService";
 import type { CurrentFixOptions, LocationFix } from "../location/LocationDriver";
-import type { AuxiliaryCommandHandler, CommandResponse } from "../navigation/NavigationCoordinator";
+import type { CommandResponse } from "../navigation/NavigationCoordinator";
 import type { SettingsOpenStatus, SettingsTarget } from "../settings/openAppSettings";
 
 /**

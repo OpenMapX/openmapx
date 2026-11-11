@@ -55,6 +55,23 @@ export class BridgeError extends Error {
   }
 }
 
+/**
+ * The shell answered a command with a refusal.
+ *
+ * Distinct from `BridgeError`, which says the command never got an answer: a
+ * refusal is an answer, and its `code` says why, so a caller can tell "this
+ * did not happen" from "it is not known whether this happened".
+ */
+export class NativeCommandError extends Error {
+  readonly code: string;
+
+  constructor(code: string) {
+    super(`native command refused: ${code}`);
+    this.name = "NativeCommandError";
+    this.code = code;
+  }
+}
+
 export interface HandshakeResult {
   selectedProtocolVersion: number | null;
   shellVersion: string;
@@ -84,7 +101,7 @@ export interface BridgeClientOptions {
 
 type Pending = {
   resolve: (message: NativeToWebMessage) => void;
-  reject: (error: BridgeError) => void;
+  reject: (error: BridgeError | NativeCommandError) => void;
   timer: unknown;
   requestType: WebToNativeMessage["type"];
 };
@@ -240,7 +257,9 @@ export class BridgeClient {
    * Sends one command and waits for the reply that names it.
    *
    * Correlation is by message id rather than by arrival order, because the shell
-   * may answer a snapshot request while a slower prepare is still running.
+   * may answer a snapshot request while a slower prepare is still running. A
+   * correlated `native.error` rejects with a `NativeCommandError`, so a refusal
+   * can never be mistaken for the reply the command expected.
    */
   request(
     type: WebToNativeMessage["type"],
@@ -351,8 +370,11 @@ export class BridgeClient {
     if (entry && key) {
       this.pending.delete(key);
       this.cancelTimeout(entry.timer);
-      const expectedType = EXPECTED_REPLY[entry.requestType];
-      if (message.type !== "native.error" && expectedType !== message.type) {
+      if (message.type === "native.error") {
+        entry.reject(new NativeCommandError(message.payload.code));
+        return;
+      }
+      if (EXPECTED_REPLY[entry.requestType] !== message.type) {
         entry.reject(new BridgeError("invalid-response"));
         return;
       }
