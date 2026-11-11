@@ -172,7 +172,7 @@ describe("RouteStopSearch", () => {
     expect(fixture.queries.at(-1)).toEqual({ category: "preset:amenity/fuel" });
     expect(chip("Fuel")).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("2 places along the route")).toBeInTheDocument();
-    expect(screen.getByText(/12\.0 km from start/)).toBeInTheDocument();
+    expect(screen.getByText(/12 km from start/)).toBeInTheDocument();
     fireEvent.click(chip("Fuel"));
     expect(fixture.queries.at(-1)).toBeNull();
     fireEvent.click(chip("Charging"));
@@ -285,7 +285,7 @@ describe("RouteStopSearch", () => {
       "aria-valuenow",
       "25",
     );
-    expect(screen.getByText("12.0 km from start · ~+1 min")).toBeInTheDocument();
+    expect(screen.getByText("12 km from start · ~+1 min")).toBeInTheDocument();
     fixture.search = {
       ...baseSearch(),
       capped: true,

@@ -46,12 +46,15 @@ const ALLOWED = new Set([
 
 /** Files whose URLs are examples rather than endpoints. */
 const SKIP_SUFFIXES = [".test.ts", ".test.tsx", ".md", ".json"];
+/** Directories of test-only helpers, which the app never imports. */
+const SKIP_DIRECTORIES = new Set(["testing"]);
 
 function sourceFiles(directory: string): string[] {
   const found: string[] = [];
   for (const entry of readdirSync(directory)) {
     const path = join(directory, entry);
     if (statSync(path).isDirectory()) {
+      if (SKIP_DIRECTORIES.has(entry)) continue;
       found.push(...sourceFiles(path));
       continue;
     }

@@ -17,8 +17,11 @@ undo. Timetables do not commit physical transitions.
   establish arrival. Walking steps reuse the ground navigation step gate and
   voice distance tiers. Repaired walking instructions preserve turn icons.
 - Boarding and alighting require rider confirmation. Undo restores the preceding
-  phase within 120 seconds. Adjacent rides require separate confirmation; an
-  explicit interline continuation supports staying aboard.
+  phase within 120 seconds (`TRANSIT_UNDO_WINDOW_MS`). In the installed app the
+  location stream keeps running after an arrival only until that window closes
+  for the last confirmation (at least 10 s, for the arrival announcement), so
+  an undo resumes a tracked trip. Adjacent rides require separate
+  confirmation; an explicit interline continuation supports staying aboard.
 - The stop cursor indexes occurrences, including repeated IDs on loops. Ordered
   geometry, sequential proximity, plausible movement and a bounded search prevent
   distant projections from skipping stops. The first aboard fix anchors progress;

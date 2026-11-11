@@ -34,7 +34,7 @@ export function FasterRouteBanner() {
   const autoSwitch =
     fasterRoutesEnabled && autoSwitchSetting && routeSelectionIntent === "automatic";
 
-  const savedText = proposal ? formatDuration(proposal.savedSeconds) : "";
+  const savedText = proposal ? formatDuration(proposal.savedSeconds, locale) : "";
 
   useEffect(() => {
     if (!proposal) {

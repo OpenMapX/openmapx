@@ -3,10 +3,10 @@
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
-import { relativeTime, useOverlayVisibilitySetter } from "@openmapx/core";
+import { formatRelativeTime, useOverlayVisibilitySetter } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { TransportMode } from "@openmapx/mobility-core/transit";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { modeColor } from "@/integration-api/map/transitMarkers";
 import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
@@ -40,6 +40,7 @@ function providerLabel(
 
 export function LiveTransitLegend() {
   const t = useTranslations("liveTransit");
+  const locale = useLocale();
   const transitT = useTranslations("transit");
   const registry = useIntegrationRegistry();
   const panelOpen = useLiveTransitStore((s) => s.panelOpen);
@@ -179,7 +180,7 @@ export function LiveTransitLegend() {
 
       {lastUpdated && (
         <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.25 }}>
-          {t("lastUpdated", { time: relativeTime(now - lastUpdated) })}
+          {t("lastUpdated", { time: formatRelativeTime(lastUpdated, { locale, now }) })}
         </Typography>
       )}
     </OverlayLegend>

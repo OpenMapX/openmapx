@@ -5,8 +5,8 @@ import Chip from "@mui/material/Chip";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
-import { relativeTime, useOverlayVisibilitySetter } from "@openmapx/core";
-import { useTranslations } from "next-intl";
+import { formatRelativeTime, useOverlayVisibilitySetter } from "@openmapx/core";
+import { useLocale, useTranslations } from "next-intl";
 import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
 import { CATEGORY_COLORS } from "./map-layer";
 import { ALL_CATEGORIES, useNaturalEventStore } from "./store";
@@ -27,6 +27,7 @@ const DAY_OPTIONS: { value: number; labelKey: string }[] = [
 
 export function NaturalEventLegend() {
   const t = useTranslations("naturalEvents");
+  const locale = useLocale();
   const panelOpen = useNaturalEventStore((s) => s.panelOpen);
   const layerVisible = useNaturalEventStore((s) => s.layerVisible);
   const setLayerVisible = useOverlayVisibilitySetter("natural-events");
@@ -143,7 +144,7 @@ export function NaturalEventLegend() {
       </Typography>
       {lastUpdated && (
         <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.25 }}>
-          {t("lastUpdated", { time: relativeTime(Date.now() - lastUpdated) })}
+          {t("lastUpdated", { time: formatRelativeTime(lastUpdated, { locale }) })}
         </Typography>
       )}
     </OverlayLegend>

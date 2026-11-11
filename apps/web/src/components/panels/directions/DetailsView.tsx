@@ -8,8 +8,8 @@ import Typography from "@mui/material/Typography";
 import type { Route, RouteCountrySpan, RouteStep } from "@openmapx/core";
 import {
   countryAtMeters,
-  formatDistance,
   formatDuration,
+  formatOverviewDistance,
   useCountryFromCoordinates,
   useNavigationStore,
 } from "@openmapx/core";
@@ -19,7 +19,7 @@ import {
   contributorsForRecordFields,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { ElevationProfile } from "@/components/elevation/ElevationProfile";
 import { DirectionsDetailHeader } from "@/components/panels/directions/DirectionsDetailHeader";
@@ -65,6 +65,7 @@ export function DetailsView({
   onBack: () => void;
 }) {
   const t = useTranslations("directions");
+  const locale = useLocale();
   const hasLegs = route.legs && route.legs.length > 1;
   const [expandedLegs, setExpandedLegs] = useState<Set<number>>(
     () => new Set(route.legs.map((_, i) => i)),
@@ -120,10 +121,7 @@ export function DetailsView({
         )
       : stepCredits(route.steps),
   );
-  const dist =
-    units === "imperial"
-      ? `${(route.distance / 1609.34).toFixed(1)} mi`
-      : formatDistance(route.distance);
+  const dist = formatOverviewDistance(route.distance, units);
 
   const intermediateLabels = waypointLabels ? waypointLabels.slice(1, -1).filter(Boolean) : [];
 
@@ -153,7 +151,7 @@ export function DetailsView({
             color: "success.main",
           }}
         >
-          {formatDuration(route.duration)}{" "}
+          {formatDuration(route.duration, locale)}{" "}
         </Typography>
         <Typography
           variant="body1"
@@ -250,6 +248,7 @@ function LegByLegView({
   routeCountries: RouteCountrySpan[] | null;
   t: ReturnType<typeof useTranslations>;
 }) {
+  const locale = useLocale();
   return (
     <>
       {route.legs.map((leg, i) => {
@@ -259,10 +258,7 @@ function LegByLegView({
         const legCountries = stepCountries(leg.steps, legStartMeters, routeCountries, country);
         const fromLabel = waypointLabels[i] || t("origin");
         const toLabel = waypointLabels[i + 1] || t("destination");
-        const legDist =
-          units === "imperial"
-            ? `${(leg.distance / 1609.34).toFixed(1)} mi`
-            : formatDistance(leg.distance);
+        const legDist = formatOverviewDistance(leg.distance, units);
         const isExpanded = expandedLegs.has(i);
 
         return (
@@ -310,7 +306,7 @@ function LegByLegView({
                     color: "text.secondary",
                   }}
                 >
-                  {formatDuration(leg.duration)} · {legDist}
+                  {formatDuration(leg.duration, locale)} · {legDist}
                 </Typography>
               </Box>
             </ClickableRow>

@@ -8,11 +8,12 @@ import Typography from "@mui/material/Typography";
 import type { LngLat, PublicShare, PublicSharePlace, Route } from "@openmapx/core";
 import {
   coordinateId,
-  formatDistance,
   formatDuration,
+  formatOverviewDistance,
   isSystemSavedList,
   makeId,
   useDirections,
+  useSettingsStore,
 } from "@openmapx/core";
 import { savedPlaceContributors } from "@openmapx/core/saved-place-contributors";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
@@ -186,6 +187,8 @@ function SharedRouteContent({
   isError: boolean;
 }) {
   const t = useTranslations("share");
+  const locale = useLocale();
+  const units = useSettingsStore((s) => s.units);
   const registry = useIntegrationRegistry();
   const routingAttributions = useMemo(
     () => routeAttributions(registry, provider, activeRoute),
@@ -220,7 +223,8 @@ function SharedRouteContent({
       ))}
       {activeRoute && (
         <Typography variant="body2" sx={{ color: "text.secondary", py: 0.5 }}>
-          {formatDistance(activeRoute.distance)} · {formatDuration(activeRoute.duration)}
+          {formatOverviewDistance(activeRoute.distance, units)} ·{" "}
+          {formatDuration(activeRoute.duration, locale)}
         </Typography>
       )}
       {isError && (

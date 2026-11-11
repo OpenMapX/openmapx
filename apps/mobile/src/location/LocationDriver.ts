@@ -50,12 +50,23 @@ export interface CurrentFixOptions {
   maxAgeMs: number;
 }
 
+export interface StartOptions {
+  mayRestart?: () => boolean;
+}
+
 export interface LocationDriver {
   setLocale?(locale: "en" | "de"): void;
   getPermissionState(): Promise<LocationPermissionState>;
   requestForegroundPermission(): Promise<LocationPermissionState>;
   requestBackgroundPermission(): Promise<LocationPermissionState>;
-  start(profile: LocationProfile): Promise<void>;
+  /**
+   * Starts the stream, or moves a running one to `profile`.
+   *
+   * Changing a running stream's profile means stopping and restarting it. A
+   * driver that does so asks `mayRestart` inside its serialized step,
+   * immediately before the stop; false keeps the running stream as it is.
+   */
+  start(profile: LocationProfile, options?: StartOptions): Promise<void>;
   stop(): Promise<void>;
   isRunning(): Promise<boolean>;
   /**

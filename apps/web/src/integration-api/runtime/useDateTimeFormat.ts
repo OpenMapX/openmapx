@@ -4,6 +4,7 @@ import {
   formatCalendarDate,
   formatClockTime,
   formatDateAndTime,
+  formatRecentOrDateTime,
   formatRelativeTime,
   useSettingsStore,
 } from "@openmapx/core";
@@ -24,6 +25,8 @@ export interface DateTimeFormatters {
   dateTime: (value: string | number | Date, opts?: FormatOpts) => string;
   /** Locale-aware relative time (e.g. "5 minutes ago" / "vor 5 Minuten"). */
   relative: (value: string | number | Date) => string;
+  /** Relative wording within the last day, the date and time per preference after that. */
+  recent: (value: string | number | Date) => string;
 }
 
 /**
@@ -45,6 +48,7 @@ export function useDateTimeFormat(): DateTimeFormatters {
       dateTime: (value, opts) =>
         formatDateAndTime(value, { locale, timeFormat, dateFormat, timeZone: opts?.timeZone }),
       relative: (value) => formatRelativeTime(value, { locale }),
+      recent: (value) => formatRecentOrDateTime(value, { locale, timeFormat, dateFormat }),
     }),
     [locale, timeFormat, dateFormat],
   );

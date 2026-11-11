@@ -9,6 +9,7 @@ import type {
   LocationFix,
   LocationPermissionState,
   LocationProfile,
+  StartOptions,
 } from "./LocationDriver";
 
 /**
@@ -104,12 +105,17 @@ export class ExpoLocationDriver implements LocationDriver {
     return Location.hasStartedLocationUpdatesAsync(NAVIGATION_LOCATION_TASK);
   }
 
-  async start(profile: LocationProfile): Promise<void> {
+  async start(profile: LocationProfile, options: StartOptions = {}): Promise<void> {
     await this.serialise(async () => {
       const running = await Location.hasStartedLocationUpdatesAsync(NAVIGATION_LOCATION_TASK);
       if (running) {
         if (this.sameProfile(profile)) return;
-        // A profile change replaces the stream rather than adding one.
+        // Asked here, after every earlier queued step, rather than when the call
+        // was made: the screen can lock in between.
+        if (options.mayRestart && !options.mayRestart()) return;
+        // A profile change replaces the stream rather than adding one. On
+        // Android the restart needs the app in the foreground, so the shared
+        // driver (`withBackgroundSafeProfiles`) only lets one through then.
         await Location.stopLocationUpdatesAsync(NAVIGATION_LOCATION_TASK);
       }
       await Location.startLocationUpdatesAsync(NAVIGATION_LOCATION_TASK, {

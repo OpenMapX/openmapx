@@ -21,9 +21,9 @@ import { listAdminActivityJobs, unwrapAdminResponse } from "@openmapx/core/api-a
 import type { AdminActivityJob, AdminActivityJobsResponse } from "@openmapx/core/api-contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { parseAdminJobSelection } from "@/lib/admin/adminJobNavigation";
 import { useAdminQueryState } from "@/lib/admin/useAdminQueryState";
-import { relativeTimeFromIso } from "@/lib/formatTime";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { JobStatusChip } from "../shared/JobStatusChip";
@@ -48,6 +48,7 @@ function formatPayload(payload: unknown): string | null {
 }
 
 function JobRow({ job, onSelect }: { job: AdminActivityJob; onSelect: () => void }) {
+  const dtf = useDateTimeFormat();
   const payload = formatPayload(job.payload);
 
   return (
@@ -98,14 +99,14 @@ function JobRow({ job, onSelect }: { job: AdminActivityJob; onSelect: () => void
           <ActorCell actorId={job.createdBy} actor={job.actor} fallbackLabel={job.actorLabel} />
         </TableCell>
         <TableCell>
-          <Tooltip title={new Date(job.createdAt).toLocaleString()}>
+          <Tooltip title={dtf.dateTime(job.createdAt)}>
             <Typography
               variant="caption"
               sx={{
                 color: "text.secondary",
               }}
             >
-              {relativeTimeFromIso(job.createdAt)}
+              {dtf.recent(job.createdAt)}
             </Typography>
           </Tooltip>
         </TableCell>

@@ -65,7 +65,9 @@ export {
   formatCalendarDate,
   formatClockTime,
   formatDateAndTime,
+  formatRecentOrDateTime,
   formatRelativeTime,
+  type RecentOrDateOptions,
   type RelativeTimeOptions,
   type TimeFormat,
 } from "./dateTimeFormat";
@@ -105,19 +107,12 @@ export {
 } from "./fetchWithRedirects";
 export { buildFlightOpenUrl } from "./flightLink";
 export { isFoodPlace, resolveOsmMenuUrl } from "./foodPlace";
-export {
-  escapeHtml,
-  formatTime,
-  isSafeHttpUrl,
-  relativeTime,
-  safeHref,
-  sanitizeUrl,
-} from "./format";
+export { escapeHtml, isSafeHttpUrl, safeHref, sanitizeUrl } from "./format";
 export {
   formatArea,
-  formatDistance,
   formatDuration,
   formatMeasurementDistance,
+  formatOverviewDistance,
   getInitials,
   type MeasurementDistanceParts,
   measurementDistanceParts,

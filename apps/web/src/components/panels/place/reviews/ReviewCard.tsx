@@ -15,7 +15,7 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
-import { proxyImageUrl, type Review, safeHref } from "@openmapx/core";
+import { formatRelativeTime, proxyImageUrl, type Review, safeHref } from "@openmapx/core";
 import { fingerprintPem } from "@openmapx/mangrove-client";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
@@ -39,21 +39,6 @@ interface Props {
   onEdit?: (review: Review) => void;
   onDelete?: (review: Review) => void;
   onReport?: (review: Review) => void;
-}
-
-function relativeTime(iso: string, locale: string): string {
-  const date = new Date(iso);
-  const diffMs = Date.now() - date.getTime();
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
-  const days = Math.round(diffMs / 86_400_000);
-  if (days < 1) {
-    const hours = Math.round(diffMs / 3_600_000);
-    if (hours < 1) return rtf.format(-Math.round(diffMs / 60_000), "minute");
-    return rtf.format(-hours, "hour");
-  }
-  if (days < 30) return rtf.format(-days, "day");
-  if (days < 365) return rtf.format(-Math.round(days / 30), "month");
-  return rtf.format(-Math.round(days / 365), "year");
 }
 
 /** Deterministic colour from a fingerprint so the same author always looks the same. */
@@ -121,7 +106,7 @@ export function ReviewCard({ review, currentUserPem, onEdit, onDelete, onReport 
                 color: "text.secondary",
               }}
             >
-              {relativeTime(review.createdAt, locale)}
+              {formatRelativeTime(review.createdAt, { locale })}
             </Typography>
           </Box>
         </Box>

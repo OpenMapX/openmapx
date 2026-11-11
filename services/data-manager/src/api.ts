@@ -11,6 +11,7 @@ import type { PlannedTrafficClosures } from "@openmapx/core/data-manager-contrac
 import {
   type DataExecutionInput,
   type DataExecutionStatus,
+  DEFAULT_CATALOG_BRANCH,
   isDataExecutionTerminal,
   normalizeDataExecutionInput,
   type TransitDesiredSourceMutation,
@@ -1238,7 +1239,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     try {
       const previous = await runOpsOperation({ kind: "catalogPins.inspect" });
       const proposal = await opts.catalogReview.resolveCatalogProposal({
-        branch: req.body?.branch?.trim() || "main",
+        branch: req.body?.branch?.trim() || DEFAULT_CATALOG_BRANCH,
         proposalId: req.body?.proposalId,
       });
       return {

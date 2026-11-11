@@ -3,14 +3,15 @@
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
-import { relativeTime, useOverlayVisibilitySetter } from "@openmapx/core";
-import { useTranslations } from "next-intl";
+import { formatRelativeTime, useOverlayVisibilitySetter } from "@openmapx/core";
+import { useLocale, useTranslations } from "next-intl";
 import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
 import { SEVERITY_COLORS } from "./map-layer";
 import { ALL_SEVERITIES, useWeatherAlertStore } from "./store";
 
 export function WeatherAlertLegend() {
   const t = useTranslations("weatherAlerts");
+  const locale = useLocale();
   const panelOpen = useWeatherAlertStore((s) => s.panelOpen);
   const layerVisible = useWeatherAlertStore((s) => s.layerVisible);
   const setLayerVisible = useOverlayVisibilitySetter("weather-alerts");
@@ -100,7 +101,7 @@ export function WeatherAlertLegend() {
 
       {lastUpdated && (
         <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.25 }}>
-          {t("lastUpdated", { time: relativeTime(Date.now() - lastUpdated) })}
+          {t("lastUpdated", { time: formatRelativeTime(lastUpdated, { locale }) })}
         </Typography>
       )}
     </OverlayLegend>
