@@ -398,7 +398,6 @@ describe("GET /maptiler/*", () => {
 
   it("returns 503 when no MapTiler key is configured", async () => {
     vi.stubEnv("MAPTILER_KEY", undefined);
-    vi.stubEnv("NEXT_PUBLIC_MAPTILER_KEY", undefined);
     vi.stubGlobal("fetch", vi.fn());
 
     const res = await app.inject({
@@ -491,7 +490,6 @@ describe("GET /maptiler/*", () => {
 describe("admin-configured MapTiler credentials", () => {
   it("authenticates upstream requests with the effective database key without returning it", async () => {
     vi.stubEnv("MAPTILER_KEY", "");
-    vi.stubEnv("NEXT_PUBLIC_MAPTILER_KEY", "");
     databaseState.rows = [{ key: "maptilerApiKey", value: "admin-secret-key" }];
     vi.stubGlobal("fetch", async (url: URL) => {
       expect(url.searchParams.get("key")).toBe("admin-secret-key");

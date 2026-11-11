@@ -33,13 +33,10 @@ describe("effective map settings", () => {
     vi.stubEnv("MAPTILER_KEY", "env-key");
     expect((await loadMapSettings()).maptilerApiKey).toBe("env-key");
   });
-  it("treats whitespace credentials as absent and supports the legacy environment key", async () => {
+  it("treats whitespace credentials as absent", async () => {
     state.rows = [{ key: "maptilerApiKey", value: "db-key" }];
     vi.stubEnv("MAPTILER_KEY", "  ");
-    vi.stubEnv("NEXT_PUBLIC_MAPTILER_KEY", "");
     expect((await loadMapSettings()).maptilerApiKey).toBe("db-key");
-    vi.stubEnv("NEXT_PUBLIC_MAPTILER_KEY", "legacy-key");
-    expect((await loadMapSettings()).maptilerApiKey).toBe("legacy-key");
   });
   it("reuses database settings until invalidated, then observes admin updates", async () => {
     state.rows = [{ key: "maptilerApiKey", value: "first" }];

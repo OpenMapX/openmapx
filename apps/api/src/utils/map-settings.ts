@@ -54,9 +54,6 @@ export async function loadMapSettings(): Promise<MapSettings> {
   const databaseKey = typeof values.maptilerApiKey === "string" ? values.maptilerApiKey.trim() : "";
   return {
     hostedBasemapProvider: provider.value,
-    maptilerApiKey: envString(
-      "MAPTILER_KEY",
-      envString("NEXT_PUBLIC_MAPTILER_KEY", databaseKey),
-    ).trim(),
+    maptilerApiKey: envString("MAPTILER_KEY", databaseKey).trim(),
   };
 }
