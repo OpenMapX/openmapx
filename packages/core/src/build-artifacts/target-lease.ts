@@ -3560,62 +3560,6 @@ export async function reconcileConfigurationPreEffectRoot(
     throw Error("Original pre-effect root remains fenced");
   verifyRetainedArtifactTargetRootRelease(authority);
 }
-export async function withArtifactTargetLease<T>(
-  options: {
-    dataRoot: string;
-    serviceIds: readonly string[];
-    owner: VerifiedExecutionAuthority;
-    inherited?: BorrowedArtifactTargetLease;
-    signal?: AbortSignal;
-  },
-  run: (lease: TargetLeaseAuthority) => Promise<T>,
-): Promise<T> {
-  if (options.inherited) {
-    assertControlExecutionForward(options.owner);
-    const state = stateOf(options.inherited);
-    const requestedRoot = new AnchoredDirectory(options.dataRoot);
-    try {
-      if (!sameInode(identity(requestedRoot.stat), state.certificate.dataRootIdentity))
-        throw Error("Inherited physical root mismatch");
-    } finally {
-      requestedRoot.close();
-    }
-    const authority = executionAuthorityState(options.owner);
-    if (
-      controlDigest(state.execution) !== controlDigest(authority.execution) ||
-      options.serviceIds.some((id) => !options.inherited?.serviceIds.includes(id))
-    )
-      throw Error("Inherited target closure cannot widen or reacquire");
-    assertArtifactTargetLeaseForward(options.inherited);
-    const inheritedGrant = state.node === null ? undefined : tree(state).grants.get(state.node);
-    if (inheritedGrant?.recipient === "configuration-helper")
-      verifyConfigurationHelperReady(options.inherited);
-    return run(options.inherited);
-  }
-  const lease = await acquireArtifactTargetLease(options);
-  try {
-    assertArtifactTargetLeaseForward(lease);
-    const result = await run(lease);
-    await releaseArtifactTargetLease(lease);
-    return result;
-  } catch (e) {
-    const s = stateOf(lease);
-    try {
-      await guarded(s, () => {
-        const root = readRoot(s);
-        if (root.phase !== "settled") {
-          root.phase = "recovery_required";
-          root.sequence++;
-          writeNode(s, root);
-        }
-      });
-    } finally {
-      closeState(s);
-    }
-    throw e;
-  }
-}
-
 /** Verification-only preview for fixed admission adapters. No adoption or effect authority. */
 export function inspectArtifactDelegation(options: {
   dataRoot: string;
