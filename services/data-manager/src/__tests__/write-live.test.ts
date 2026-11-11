@@ -923,9 +923,9 @@ describe.each(["direct", "worker"] as const)("writeLiveTraffic overrides %s", (m
 
   it("withdraws an observation whose edges were only PARTLY written", async () => {
     // One closure spanning two edges: the forward edge resolves, the second is
-    // past the tile's edge count. Crediting it would make the router drop the
-    // event's point exclusions entirely, leaving the unwritten edge both open
-    // in the graph and unexcluded on the request.
+    // past the tile's edge count. Crediting it would make the router report
+    // the event's traffic as applied, while the unwritten edge stays open in
+    // the graph.
     const warn = vi.fn();
     const res = await writeLiveTraffic({
       tarPath,

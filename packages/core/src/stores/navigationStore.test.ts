@@ -91,7 +91,7 @@ describe("navigationStore", () => {
           availability: "limited",
           evaluatedAt: "2026-09-12T12:00:00Z",
           validUntil: null,
-          reasons: ["legacy_geometry_unverified"],
+          reasons: ["planned_closure_on_route"],
         },
       },
     );

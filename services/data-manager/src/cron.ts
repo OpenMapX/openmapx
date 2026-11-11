@@ -372,10 +372,10 @@ export interface CronHandles {
    * sorted; `writtenAt`: when that cycle wrote them (null until the first
    * successful write). An observation with even one edge that failed to
    * resolve is absent, because a router treats presence here as "the graph
-   * already reflects this event" and drops ALL of its point exclusions — a
-   * partially-written event would leave its unwritten edges open and
-   * unexcluded. Cap-only observations are included too — harmless, since
-   * point exclusions exist only for closures.
+   * already reflects this event" and reports its shared traffic as applied to
+   * a route — a partially-written event would claim protection while its
+   * unwritten edges stay open. Cap-only observations are included too: their
+   * speed caps are written the same way.
    */
   getTrafficConditionsApplied: () => TrafficApplicationSnapshot;
   /**
@@ -904,8 +904,8 @@ export function setupCron(options: CronSetupOptions): CronHandles {
 
   // Last good conditions set, reused across a failing fetch for at most
   // `conditionsStaleMs` so one OpenConditions hiccup does not reopen every
-  // closed road for a cycle; after that the closures are dropped (and the
-  // router falls back to point exclusions via the applied set below).
+  // closed road for a cycle; after that the closures are dropped and the
+  // applied set below empties, so routes make no claim of applied traffic.
   let lastConditions: {
     conditions: BoundCondition[];
     resolverVersion: string | null;

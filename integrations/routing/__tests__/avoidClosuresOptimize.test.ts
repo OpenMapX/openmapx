@@ -6,6 +6,11 @@ import {
   createRoutingTestReply,
 } from "./support/routing-handler-contract.js";
 
+vi.mock("../closures.js", async (importOriginal) => {
+  const { withStubbedClosureExclusions } = await import("./support/closure-exclusion-stub.js");
+  return withStubbedClosureExclusions(await importOriginal<typeof import("../closures.js")>());
+});
+
 const WAYPOINTS_QUERY = "0.1,51.1;0.2,51.2;0.3,51.3";
 
 it("returns 503 when closure avoidance is requested but no optimizer supports exclusions", async () => {

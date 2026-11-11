@@ -5,9 +5,16 @@ import {
   type IntegrationContext,
 } from "@openmapx/integration-framework";
 import type { ChargingSite, EnergyTariff } from "@openmapx/mobility-core/ev-charging";
-import { describe, expect, it, vi } from "vitest";
-import { roadConditionEvent } from "./__tests__/support/road-condition.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { stubClosureExclusions } from "./__tests__/support/closure-exclusion-stub.js";
 import { type ResolvedRoutingProvider, runEvPlan } from "./ev-plan.js";
+
+vi.mock("./closures.js", async (importOriginal) => {
+  const { withStubbedClosureExclusions } = await import(
+    "./__tests__/support/closure-exclusion-stub.js"
+  );
+  return withStubbedClosureExclusions(await importOriginal<typeof import("./closures.js")>());
+});
 
 const SITE_ID = "oc:feature:nl-ndw-charging:NL-ABC-1";
 
@@ -110,6 +117,10 @@ function fakeCtx(overrides: Record<string, unknown> = {}) {
 }
 
 describe("runEvPlan", () => {
+  afterEach(() => {
+    stubClosureExclusions();
+  });
+
   it("does not cache or claim current road-condition protection without engine proof", async () => {
     const ctx = fakeCtx();
     const getProviders = (): ResolvedRoutingProvider[] => [
@@ -168,45 +179,12 @@ describe("runEvPlan", () => {
     expect(rerouteWps.length).toBe(3); // origin + charger + dest
   });
 
-  it("threads real closure exclusions into both routing calls", async () => {
+  it("threads closure exclusions into both routing calls", async () => {
     // Route runs along lat=50 from lng 0 to lng 2.7 (same fixture geometry as
-    // the other tests). Put an active road_closure right on the corridor so
-    // activeClosuresForBbox (integrations/routing/closures.ts) surfaces it as
-    // a Valhalla exclusion point. Fixture shape mirrors
-    // integrations/routing/__tests__/avoidClosures.test.ts's closureEvents.
+    // the other tests), with an exclusion point right on the corridor.
     const closurePoint: [number, number] = [1.35, 50];
-    const closureEvents = [
-      roadConditionEvent({
-        id: "closure:0",
-        provider: "road-conditions-stub",
-        geometry: { type: "Point", coordinates: closurePoint },
-      }),
-    ];
-
-    const ctx = fakeCtx({
-      getIntegrationsByDomain: (d: string) => {
-        if (d === "charging-sites") return chargingDomain(sitesProvider())(d);
-        if (d === "road-conditions") {
-          return [
-            {
-              id: "road-conditions-stub",
-              providers: new Map<string, unknown[]>([
-                [
-                  "road-conditions",
-                  [
-                    {
-                      id: "road-conditions-stub",
-                      getEvents: vi.fn().mockResolvedValue(closureEvents),
-                    },
-                  ],
-                ],
-              ]),
-            },
-          ];
-        }
-        return [];
-      },
-    });
+    stubClosureExclusions({ points: [closurePoint] });
+    const ctx = fakeCtx();
 
     const getProviders = (): ResolvedRoutingProvider[] => [
       { integrationId: "valhalla", provider: ctx._valhalla },
