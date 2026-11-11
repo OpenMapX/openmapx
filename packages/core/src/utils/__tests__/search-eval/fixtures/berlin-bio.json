@@ -294,6 +294,7 @@
       "description": "German organic supermarket chain",
       "kind": ["brand", "operator"],
       "matchedOn": "name",
+      "matchedValue": "BioMarkt",
       "presence": "here"
     },
     {
@@ -302,6 +303,7 @@
       "description": "German organic supermarket chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Bio Company",
       "presence": "here"
     },
     {
@@ -310,6 +312,7 @@
       "description": "French group of medical biology laboratories",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Biofutur",
       "presence": "unknown"
     },
     {
@@ -318,6 +321,7 @@
       "description": "French group of medical biology laboratories located in the Hauts-de-France region",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Biopath",
       "presence": "unknown"
     },
     {
@@ -326,6 +330,7 @@
       "description": "French group of medical biology laboratories located in the Île-de-France region",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Biopath Unilabs",
       "presence": "unknown"
     },
     {
@@ -334,6 +339,7 @@
       "description": "group of medical labs in France",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Bioclinic",
       "presence": "unknown"
     },
     {
@@ -342,6 +348,7 @@
       "description": "group of French medical biology laboratories located mainly in Maine-et-Loire",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Biosites",
       "presence": "unknown"
     },
     {
@@ -350,6 +357,7 @@
       "description": "French group of medical biology laboratories",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Biolaris",
       "presence": "unknown"
     }
   ],
@@ -362,7 +370,8 @@
         "recycling_type": "container",
         "recycling:green_waste": "yes"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Biomüllcontainer"
     },
     {
       "id": "shop/supermarket/organic",
@@ -371,7 +380,8 @@
         "shop": "supermarket",
         "organic": "only"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Bio-Supermarkt"
     },
     {
       "id": "power/plant/source/gas",
@@ -380,7 +390,8 @@
         "power": "plant",
         "plant:source": "gas"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Gaskraftwerk"
     },
     {
       "id": "type/boundary/protected_area",
@@ -389,7 +400,8 @@
         "type": "boundary",
         "boundary": "protected_area"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Schutzgebiet"
     },
     {
       "id": "amenity/vending_machine/fuel",
@@ -398,7 +410,8 @@
         "amenity": "vending_machine",
         "vending": "fuel"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Tankautomat"
     }
   ]
 }

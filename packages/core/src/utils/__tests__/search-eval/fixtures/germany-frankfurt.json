@@ -261,6 +261,7 @@
       "name": "Frankfurter Sparkasse",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Frankfurter Sparkasse",
       "presence": "unknown"
     },
     {
@@ -269,6 +270,7 @@
       "description": "German bank",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Frankfurter Volksbank",
       "presence": "unknown"
     }
   ],
@@ -280,7 +282,8 @@
         "amenity": "fast_food",
         "cuisine": "hot_dog"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Hot-Dog-Stand"
     }
   ]
 }

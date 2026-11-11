@@ -172,6 +172,7 @@
       "description": "German supermarket chain",
       "kind": ["brand", "operator"],
       "matchedOn": "name",
+      "matchedValue": "REWE",
       "presence": "here"
     },
     {
@@ -180,6 +181,7 @@
       "description": "chain of beverage stores",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "REWE Getränkemarkt",
       "presence": "here"
     },
     {
@@ -188,6 +190,7 @@
       "description": "German convenience store chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "REWE To Go",
       "presence": "here"
     }
   ],

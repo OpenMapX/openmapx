@@ -183,6 +183,7 @@
       "description": "Austrian vegan ice cream parlor chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Veganista",
       "presence": "elsewhere"
     },
     {
@@ -191,6 +192,7 @@
       "description": "plant based fast food chain in the UK",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Oowee Vegan",
       "presence": "unknown"
     }
   ],
@@ -201,7 +203,8 @@
       "tags": {
         "shop": "health_food"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Health Food Store"
     }
   ]
 }

@@ -46,7 +46,7 @@ export interface BrandSuggestResponse {
   matches: (BrandSummary & {
     matchedOn: "name" | "alias";
     presence: BrandPresence;
-    /** Actual winning name/alias. Optional for older servers and cached responses. */
-    matchedValue?: string;
+    /** Actual winning name/alias. */
+    matchedValue: string;
   })[];
 }

@@ -118,7 +118,8 @@
       "tags": {
         "shop": "convenience"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Minimarkt"
     }
   ]
 }

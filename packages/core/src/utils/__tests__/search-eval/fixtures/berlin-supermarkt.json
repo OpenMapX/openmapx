@@ -117,6 +117,7 @@
       "description": "Dutch supermarket chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Jan Linders Supermarkten",
       "presence": "elsewhere"
     },
     {
@@ -125,6 +126,7 @@
       "description": "Dutch supermarket chain",
       "kind": ["brand"],
       "matchedOn": "alias",
+      "matchedValue": "Jumbo",
       "presence": "elsewhere"
     }
   ],
@@ -135,7 +137,8 @@
       "tags": {
         "shop": "supermarket"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Supermarkt"
     },
     {
       "id": "shop/supermarket/organic",
@@ -144,7 +147,8 @@
         "shop": "supermarket",
         "organic": "only"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Bio-Supermarkt"
     }
   ]
 }

@@ -293,6 +293,7 @@
       "description": "global hotel chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Barceló Group",
       "presence": "here"
     },
     {
@@ -301,6 +302,7 @@
       "description": "British bank",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Barclays",
       "presence": "global"
     },
     {
@@ -309,6 +311,7 @@
       "description": "French real estate company",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Barnes",
       "presence": "global"
     },
     {
@@ -317,6 +320,7 @@
       "description": "German regional bakery chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Barbarossa Bäckerei",
       "presence": "here"
     },
     {
@@ -325,6 +329,7 @@
       "description": "German insurance company",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Barmenia",
       "presence": "here"
     },
     {
@@ -333,6 +338,7 @@
       "description": "statutory health insurance in Germany",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Barmer Ersatzkasse",
       "presence": "here"
     },
     {
@@ -341,6 +347,7 @@
       "description": "American fitness brand",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Barry's",
       "presence": "here"
     },
     {
@@ -349,6 +356,7 @@
       "description": "German gummy-bear store chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Bären-Treff",
       "presence": "here"
     }
   ],
@@ -359,7 +367,8 @@
       "tags": {
         "amenity": "bar"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Bar"
     },
     {
       "id": "amenity/bbq",
@@ -367,7 +376,8 @@
       "tags": {
         "amenity": "bbq"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Barbecue / Grill"
     },
     {
       "id": "amenity/restaurant/barbecue",
@@ -376,7 +386,8 @@
         "amenity": "restaurant",
         "cuisine": "barbecue"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Barbecue Restaurant"
     },
     {
       "id": "amenity/townhall/barangay-PH",
@@ -385,7 +396,8 @@
         "amenity": "townhall",
         "townhall:type": "barangay"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Barangay Hall"
     },
     {
       "id": "landuse/military/barracks",
@@ -393,7 +405,8 @@
       "tags": {
         "military": "barracks"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Barracks"
     },
     {
       "id": "natural/bare_rock",
@@ -401,7 +414,8 @@
       "tags": {
         "natural": "bare_rock"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Bare Rock"
     },
     {
       "id": "shop/bbq",
@@ -409,7 +423,8 @@
       "tags": {
         "shop": "bbq"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Barbecue Shop"
     },
     {
       "id": "shop/hairdresser/barber",
@@ -418,7 +433,8 @@
         "shop": "hairdresser",
         "hairdresser": "barber"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Barber"
     }
   ]
 }

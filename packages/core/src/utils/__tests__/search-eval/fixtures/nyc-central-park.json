@@ -226,6 +226,7 @@
       "description": "American parking facility operator",
       "kind": ["brand"],
       "matchedOn": "alias",
+      "matchedValue": "SP+",
       "presence": "here"
     }
   ],

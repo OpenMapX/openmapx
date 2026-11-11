@@ -279,6 +279,7 @@
       "description": "Chilean chain of department stores",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "París",
       "presence": "elsewhere"
     },
     {
@@ -287,6 +288,7 @@
       "description": "multinational bakery chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Paris Baguette",
       "presence": "elsewhere"
     },
     {
@@ -295,6 +297,7 @@
       "description": "Japanese optician and eyewear retail chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Paris Miki Holdings",
       "presence": "elsewhere"
     },
     {
@@ -303,6 +306,7 @@
       "description": "Indian restaurant chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Paris Panini",
       "presence": "elsewhere"
     },
     {
@@ -311,6 +315,7 @@
       "description": "chain of department stores in Mexico",
       "kind": ["brand"],
       "matchedOn": "alias",
+      "matchedValue": "La Parisina",
       "presence": "elsewhere"
     },
     {
@@ -319,6 +324,7 @@
       "description": "French ready-to-wear clothing store brand",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Riu Paris",
       "presence": "global"
     },
     {
@@ -327,6 +333,7 @@
       "description": "French women's ready-to-wear clothing brand",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Mes Demoiselles Paris",
       "presence": "elsewhere"
     },
     {
@@ -335,6 +342,7 @@
       "description": "Georgian cosmetic shop chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Ici Paris",
       "presence": "elsewhere"
     }
   ],
@@ -346,7 +354,8 @@
         "amenity": "community_centre",
         "community_centre": "parish_hall"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Parish Hall"
     },
     {
       "id": "amenity/monastery",
@@ -354,7 +363,8 @@
       "tags": {
         "amenity": "monastery"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Monastery Grounds"
     },
     {
       "id": "amenity/place_of_worship",
@@ -362,7 +372,8 @@
       "tags": {
         "amenity": "place_of_worship"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Place of Worship"
     },
     {
       "id": "amenity/place_of_worship/christian",
@@ -371,7 +382,8 @@
         "amenity": "place_of_worship",
         "religion": "christian"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Christian Church"
     }
   ]
 }

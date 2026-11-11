@@ -152,23 +152,6 @@ describe("rankAutocompleteRows", () => {
     },
   );
 
-  it("retains canonical scoring when legacy responses omit evidence", () => {
-    const rows = rankAutocompleteRows(
-      {
-        brands: brandSuggestionRows(
-          [{ qid: "Q524757", name: "KFC", kind: ["brand"], matchedOn: "alias", presence: "here" }],
-          "",
-        ),
-      },
-      { query: "KFC" },
-    );
-    expect(rows[0].searchMatch).toBeUndefined();
-    expect(enterAction(rows, { query: "KFC" })).toMatchObject({
-      kind: "open",
-      row: { label: "KFC" },
-    });
-  });
-
   it("normalizes curated alias case and diacritics using the client text rules", () => {
     const [row] = brandSuggestionRows(
       [

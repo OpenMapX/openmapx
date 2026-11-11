@@ -1,6 +1,5 @@
 /**
- * Wire shapes for the preset matcher's responses, including older responses
- * without match evidence. Kept local so that core
+ * Wire shapes for the preset matcher's responses. Kept local so that core
  * doesn't depend on presets (which itself depends on core).
  */
 
@@ -14,8 +13,8 @@ export interface PresetMatch {
   tags: Record<string, string>;
   /** Which field produced the highest score. */
   matchedOn: "name" | "alias" | "term";
-  /** Actual winning name/alias/term. Optional for older servers and cached responses. */
-  matchedValue?: string;
+  /** Actual winning name/alias/term. */
+  matchedValue: string;
 }
 
 export interface ChipTranslation {

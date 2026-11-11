@@ -251,6 +251,7 @@
       "description": "Spanish clothing company",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Springfield",
       "presence": "global"
     },
     {
@@ -259,6 +260,7 @@
       "description": "American electronics distribution company",
       "kind": ["brand"],
       "matchedOn": "alias",
+      "matchedValue": "Echo Electric",
       "presence": "unknown"
     }
   ],

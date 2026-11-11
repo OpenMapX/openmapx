@@ -153,6 +153,7 @@
       "description": "French bakery chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Boulangerie Ange",
       "presence": "here"
     },
     {
@@ -161,6 +162,7 @@
       "description": "artisanal bakery chain in France",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Boulangerie Louise",
       "presence": "elsewhere"
     },
     {
@@ -168,6 +170,7 @@
       "name": "Feuillette",
       "kind": ["brand"],
       "matchedOn": "alias",
+      "matchedValue": "Feuillette",
       "presence": "elsewhere"
     },
     {
@@ -176,6 +179,7 @@
       "description": "French bakery chain",
       "kind": ["brand"],
       "matchedOn": "alias",
+      "matchedValue": "Marie Blachère",
       "presence": "elsewhere"
     }
   ],

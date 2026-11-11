@@ -145,6 +145,7 @@
       "description": "Swedish multinational furniture store chain",
       "kind": ["brand", "operator"],
       "matchedOn": "name",
+      "matchedValue": "IKEA",
       "presence": "here"
     },
     {
@@ -153,6 +154,7 @@
       "description": "Hungarian parcel locker brand",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "IKEA parcel point",
       "presence": "elsewhere"
     }
   ],

@@ -326,6 +326,7 @@
       "description": "Italian automotive manufacturer",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Alfa Romeo",
       "presence": "global"
     },
     {
@@ -334,6 +335,7 @@
       "description": "Italian cooperative bank based in Rome",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Cooperative Credit Bank of Rome",
       "presence": "unknown"
     }
   ],
@@ -344,7 +346,8 @@
       "tags": {
         "aeroway": "spaceport"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Spaceport"
     },
     {
       "id": "aeroway/terminal",
@@ -352,7 +355,8 @@
       "tags": {
         "aeroway": "terminal"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Airport Terminal"
     },
     {
       "id": "highway/footway",
@@ -360,7 +364,8 @@
       "tags": {
         "highway": "footway"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Foot Path"
     },
     {
       "id": "landuse/military/airfield",
@@ -368,7 +373,8 @@
       "tags": {
         "military": "airfield"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Military Airfield"
     },
     {
       "id": "leisure/track/cycling",
@@ -377,7 +383,8 @@
         "leisure": "track",
         "sport": "cycling"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Cycling Track"
     },
     {
       "id": "man_made/pier",
@@ -385,7 +392,8 @@
       "tags": {
         "man_made": "pier"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Pier"
     },
     {
       "id": "man_made/pier/floating",
@@ -394,7 +402,8 @@
         "man_made": "pier",
         "floating": "yes"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Floating Pier"
     }
   ]
 }

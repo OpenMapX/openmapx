@@ -266,6 +266,7 @@
       "description": "German health insurance company",
       "kind": ["brand"],
       "matchedOn": "alias",
+      "matchedValue": "DAK-Gesundheit",
       "presence": "here"
     }
   ],

@@ -262,6 +262,7 @@
       "description": "Thai multinational coffeehouse chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Cafe Amazon",
       "presence": "global"
     },
     {
@@ -270,6 +271,7 @@
       "description": "German catering company",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Cafe & Bar Celona",
       "presence": "here"
     },
     {
@@ -278,6 +280,7 @@
       "description": "German company",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Cafe extrablatt",
       "presence": "here"
     },
     {
@@ -286,6 +289,7 @@
       "description": "French clothing brand and chain of men's shirt stores",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Café Coton",
       "presence": "global"
     },
     {
@@ -294,6 +298,7 @@
       "description": "German restaurant chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Cafe Del Sol",
       "presence": "here"
     },
     {
@@ -302,6 +307,7 @@
       "description": "Indian coffee company",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Café Coffee Day",
       "presence": "global"
     },
     {
@@ -310,6 +316,7 @@
       "description": "New Orleans café, famous for its beignets",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Café du Monde",
       "presence": "unknown"
     },
     {
@@ -318,6 +325,7 @@
       "description": "American fast casual restaurant chain",
       "kind": ["brand"],
       "matchedOn": "name",
+      "matchedValue": "Café Yumm!",
       "presence": "unknown"
     }
   ],
@@ -329,7 +337,8 @@
         "amenity": "fast_food",
         "fast_food": "cafeteria"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Cafeteria"
     },
     {
       "id": "amenity/cafe/bubble_tea",
@@ -338,7 +347,8 @@
         "amenity": "cafe",
         "cuisine": "bubble_tea"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Bubble Tea Cafe"
     },
     {
       "id": "amenity/internet_cafe",
@@ -346,7 +356,8 @@
       "tags": {
         "amenity": "internet_cafe"
       },
-      "matchedOn": "name"
+      "matchedOn": "name",
+      "matchedValue": "Internet Cafe"
     },
     {
       "id": "amenity/cafe/coffee_shop",
@@ -355,7 +366,8 @@
         "amenity": "cafe",
         "cuisine": "coffee_shop"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Coffeehouse"
     },
     {
       "id": "amenity/fast_food/donut",
@@ -364,7 +376,8 @@
         "amenity": "fast_food",
         "cuisine": "donut"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Donut Fast Food"
     },
     {
       "id": "amenity/fast_food/fish_and_chips",
@@ -373,7 +386,8 @@
         "amenity": "fast_food",
         "cuisine": "fish_and_chips"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Fish & Chips Fast Food"
     },
     {
       "id": "amenity/fast_food/juice",
@@ -382,7 +396,8 @@
         "amenity": "fast_food",
         "cuisine": "juice"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Juice Fast Food"
     },
     {
       "id": "amenity/fast_food/kebab",
@@ -391,7 +406,8 @@
         "amenity": "fast_food",
         "cuisine": "kebab"
       },
-      "matchedOn": "term"
+      "matchedOn": "term",
+      "matchedValue": "Kebab Fast Food"
     }
   ]
 }
