@@ -13,7 +13,7 @@ bridge tests do not establish binary or deployed-browser behavior.
 - [ ] Send the same message id twice. Expect the second to be refused.
 - [ ] Send a payload above the message ceiling. Expect refusal before parsing.
 - [ ] Send `{"__proto__": {...}}`. Expect refusal, and no polluted prototype.
-- [ ] Send a command outside negotiated v3. Expect `protocol-mismatch`; advertise
+- [ ] Send a command outside the negotiated version. Expect `protocol-mismatch`; advertise
       non-overlapping ranges and expect no negotiated channel.
 - [ ] Address the bridge from an iframe. Expect no channel at all.
 

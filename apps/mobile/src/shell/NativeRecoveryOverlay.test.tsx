@@ -13,7 +13,6 @@ const EXPLAINED: ShellState[] = [
   { kind: "load-error", offline: false },
   { kind: "load-error", offline: true },
   { kind: "offline-navigating" },
-  { kind: "incompatible-shell" },
   { kind: "corrupt-session" },
   { kind: "permission-lost" },
   { kind: "resume-offer" },

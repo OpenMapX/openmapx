@@ -1,3 +1,4 @@
+import { MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
 import { IntakeController } from "./IntakeController";
 import type { NativeIntakePort } from "./nativeIntakeModule";
 
@@ -43,7 +44,7 @@ const message = (type: string, payload = {}) => ({
   payload,
   messageId: "request1",
   channelNonce: "first",
-  protocolVersion: 4,
+  protocolVersion: MOBILE_PROTOCOL_MAX,
   sentAtMs: 0,
 });
 it("correlates an empty list without claiming apply authority", async () => {

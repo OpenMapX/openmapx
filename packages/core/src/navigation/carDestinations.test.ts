@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   carDestinationSchema,
   carDestinationsSchema,
+  MOBILE_PROTOCOL_MAX,
   parseMobileBridgeMessage,
 } from "./mobileProtocol";
 
@@ -55,7 +56,7 @@ describe("car destinations boundary", () => {
     };
     const result = parseMobileBridgeMessage(
       JSON.stringify({
-        protocolVersion: 3,
+        protocolVersion: MOBILE_PROTOCOL_MAX,
         type: "destinations.update",
         messageId: "m",
         channelNonce: "c",

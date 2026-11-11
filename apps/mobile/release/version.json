@@ -5,9 +5,9 @@
   "androidVersionCode": 1,
   "androidVersionName": "1.0.0",
   "protocol": {
-    "$comment": "Navigation overlaps protocol 3; native inbox commands and capability require protocol 4; transit platform evidence requires protocol 5.",
-    "min": 3,
-    "max": 5
+    "$comment": "Page and app must speak exactly one bridge version. An app and a web deploy built for different versions negotiate nothing, and the page asks for an app update instead of exchanging messages the other side cannot parse. Raise both bounds in the core protocol whenever a message shape changes.",
+    "min": 6,
+    "max": 6
   },
   "minimumWebBuild": null,
   "channel": "beta"

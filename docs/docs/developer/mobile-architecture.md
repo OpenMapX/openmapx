@@ -287,14 +287,14 @@ After a refusal it answers `denied` without prompting again.
 
 ## The bridge protocol
 
-Both sides support protocols **v3 through v5**. The constants in
+Both sides speak exactly one version, **v6**. The constants in
 `packages/core/src/navigation/mobileProtocol.ts` and the release descriptor in
-`apps/mobile/release/version.json` agree on `min: 3, max: 5`. Protocol 3 retains
-navigation; protocol 4 adds the optional `nativeIntake` capability. Protocol 5
-preserves transit platform evidence in captured journeys; web commands omit that
-evidence for older protocol-3/4 shells. A non-overlapping
-range leaves navigation disabled and requires an update. Protocol negotiation
-alone does not establish that a command is implemented.
+`apps/mobile/release/version.json` agree on `min: 6, max: 6`. Every message shape
+change raises both bounds, because a build speaking an earlier shape cannot parse
+the new one. A page and an installed app built for different versions negotiate
+no version: the shell still answers the hello with a null selection, navigation
+stays disabled and the page asks for an app update. Protocol negotiation alone
+does not establish that a command is implemented.
 
 Bridge requests use runtime timers by default. Preparation has a 15-second budget
 and ordinary reads have a five-second budget. Start's web request budget is ten
@@ -335,19 +335,14 @@ deadline.
 
 Before changing the protocol, identify the actually deployed shell and web
 versions. Define and test their overlap, deploy a compatible web build, then ship
-the native build and enable the new capability. New web builds accept older protocol-3 shells. New shells omit `nativeIntake`
-from protocol-3 hello replies and suppress intake events. Android Auto’s optional
-`carDestinations` key is also omitted for these older strict hello schemas; a
-protocol-4 peer receives both capabilities. Queued navigation
-messages are stamped only after negotiation, so a pre-handshake restore remains
-readable by the older page. Pending inbox items survive until a compatible page
-opens them, the user discards them, or their 24-hour expiry.
+the native build and enable the new capability. A protocol change ships the web
+build and the installed app together: an installed app whose range does not
+overlap the page shows the update prompt until it is replaced. Queued navigation
+messages are stamped only after negotiation. Pending inbox items survive until a
+compatible page opens them, the user discards them, or their 24-hour expiry.
 
 Voice input uses a correlated `voice.probe` / `voice.availability` exchange after
-negotiation, without changing either strict hello payload or the protocol version.
-New APK + old web: hello is unchanged and old web never probes. Old APK + new web:
-the unknown probe is silently rejected and times out, keeping voice hidden while
-navigation remains negotiated. iOS and Android below API 33 answer unavailable.
+negotiation. iOS and Android below API 33 answer unavailable.
 
 ### What crosses, and what does not
 
@@ -791,11 +786,9 @@ and eight content items/20 MiB for the owned inbox. Two bounded error descriptor
 remain available when content is full. Multi-file copies commit individually: if
 a later attachment fails, earlier successful entries remain alongside an error
 notice. Items expire after 24 hours. Names are
-bounded display labels; only opaque UUIDs address immutable entries. Protocol-4
-list/read/complete commands transfer stateless 24 KiB chunks through the existing
+bounded display labels; only opaque UUIDs address immutable entries. List/read/complete commands transfer stateless 24 KiB chunks through the existing
 origin/nonce-authenticated bridge. No native path, sender URI or server authority
 crosses it. Reads never acknowledge an item; explicit Open/Import or Discard does.
-Older pages receive a native update notice and preserve their pending items.
 
 The web preview validates UTF-8 and exact chunk boundaries with a 60-second total
 transfer limit. Text is classified locally; short URLs are never fetched. Users

@@ -1,5 +1,5 @@
 import { useNavigationStore } from "@openmapx/core";
-import type { GroundSnapshotWire } from "@openmapx/core/navigation";
+import { type GroundSnapshotWire, MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeMap } from "@/test";
 import {
@@ -124,7 +124,7 @@ describe("car surface", () => {
     if (fixture.type !== "car-snapshot") throw Error();
     receive(fixture.message);
     receive({
-      protocolVersion: 3,
+      protocolVersion: MOBILE_PROTOCOL_MAX,
       type: "session.stopped",
       messageId: "stop",
       channelNonce: "c",

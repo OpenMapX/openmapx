@@ -49,8 +49,14 @@ const MAX_TEXT_LENGTH = 512;
 
 // Versions.
 
-export const MOBILE_PROTOCOL_MIN = 3;
-export const MOBILE_PROTOCOL_MAX = 5;
+/**
+ * Both bounds are the single wire format this build speaks. A page and an
+ * installed app that disagree negotiate no version, and the page asks for an
+ * app update instead of exchanging messages the other side cannot parse. Raise
+ * both whenever a message shape changes.
+ */
+export const MOBILE_PROTOCOL_MIN = 6;
+export const MOBILE_PROTOCOL_MAX = 6;
 
 export interface ProtocolRange {
   min: number;

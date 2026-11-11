@@ -1,9 +1,10 @@
 # Web / native protocol matrix
 
-The shell and new web client support protocols 3–4. Navigation retains protocol 3;
-intake requires selected protocol 4 plus `nativeIntake`. This source matrix does
-not establish deployed build history. A non-overlapping pairing disables native
-navigation without allowing a second browser engine.
+The shell and the web client each speak exactly one protocol version (6), and the
+page negotiates it on every load. Intake additionally requires the `nativeIntake`
+capability. This source matrix does not establish deployed build history. A
+pairing built for different versions disables native navigation without allowing a
+second browser engine, and the page asks for an app update.
 
 ## Where this is enforced
 
@@ -20,17 +21,15 @@ The composed shell reports actual navigation and optional module capabilities.
 
 ## The matrix
 
-| Native | Web             | Handshake | Behavior                                                                    |
-| ------ | --------------- | --------- | --------------------------------------------------------------------------- |
-| 3      | 3–4             | 3         | Existing navigation; no intake commands.                                    |
-| 3–4    | 3               | 3         | Navigation and pre-hello snapshots/events use 3; intake capability omitted. |
-| 3–4    | 3–4             | 4         | Navigation plus bounded intake when the module is available.                |
-| 3–4    | No overlap      | Refused   | Update required; no browser navigation fallback.                            |
-| 3–4    | Malformed hello | Refused   | Channel stays unhandshaken.                                                 |
+| Native | Web        | Handshake | Behavior                                                     |
+| ------ | ---------- | --------- | ------------------------------------------------------------ |
+| 6      | 6          | 6         | Navigation plus bounded intake when the module is available. |
+| 6      | No overlap | Refused   | Update required; no browser navigation fallback.             |
+| 6      | Malformed  | Refused   | Channel stays unhandshaken.                                  |
 
-Deploy compatible web first, then ship rebuilt native apps. Older web builds
-retain navigation and receive a native notice about pending content. They do not
-drain the inbox. Unopened items expire after 24 hours.
+Ship the web build and the rebuilt native app together. Until an installed app is
+replaced, the page shows the update prompt. Unopened inbox items expire after 24
+hours.
 
 ## Manual checks on a virtual device
 
@@ -38,11 +37,11 @@ Run these when the protocol changes. Use a development identity for alternate
 local origins; the official release identity is bound to the official origin.
 Active-session checks require the normal composed dispatcher.
 
-- [ ] Point the app at a web build advertising a range below v3. Confirm the
+- [ ] Point the app at a web build advertising a range below v6. Confirm the
       update-required copy appears and that Start is disabled.
-- [ ] Point it at the current v3–4 web build. Confirm v3 is selected and the advertised capabilities match actual
+- [ ] Point it at the current v6 web build. Confirm v6 is selected and the advertised capabilities match actual
       composition. Capabilities must reflect the composed runtime.
-- [ ] Point it at a web build advertising a range above v4. Confirm the
+- [ ] Point it at a web build advertising a range above v6. Confirm the
       update-required copy appears, that Start is disabled, and that browsing and
       route planning still work.
 - [ ] Reload the WebView during an active session. Confirm a fresh handshake,
@@ -52,8 +51,5 @@ Active-session checks require the normal composed dispatcher.
       then reload. Confirm the session survives and renegotiates cleanly.
 - [ ] Confirm that in every refused case above, no browser geolocation watch, no
       browser voice, and no browser session record appears.
-
-- [ ] With protocol 3, share nine items: existing navigation remains usable,
-      content quota stays at eight, and overflow has an explanatory native notice.
-- [ ] With protocol 4, reload during a chunk transfer: content remains pending,
+- [ ] Reload during an intake chunk transfer: content remains pending,
       stale replies do not reach the next document, and explicit import can retry.

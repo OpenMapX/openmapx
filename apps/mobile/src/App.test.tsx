@@ -5,7 +5,6 @@ jest.mock("expo-speech-recognition", () => ({
 import { MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
 import { act, fireEvent, render } from "@testing-library/react-native";
 import { Alert, AppState, BackHandler, Linking, Platform } from "react-native";
-import { z } from "zod";
 import { App } from "./App";
 import { resetRuntimeConfigCache } from "./config/runtimeConfig";
 import { IntakeController } from "./intake/IntakeController";
@@ -617,54 +616,45 @@ describe("App bridge channel", () => {
     return nonce;
   };
 
-  it.each([3, 4, MOBILE_PROTOCOL_MAX])(
-    "announces Android inbox content according to negotiated protocol %s",
-    async (version) => {
-      jest.replaceProperty(Platform, "OS", "android");
-      let activate: (() => void) | undefined;
-      jest.spyOn(AppState, "addEventListener").mockImplementation((type, handler) => {
-        if (type === "change") activate = () => handler("active");
-        return { remove: jest.fn() };
+  it("announces Android inbox content once the handshake completes", async () => {
+    jest.replaceProperty(Platform, "OS", "android");
+    let activate: (() => void) | undefined;
+    jest.spyOn(AppState, "addEventListener").mockImplementation((type, handler) => {
+      if (type === "change") activate = () => handler("active");
+      return { remove: jest.fn() };
+    });
+    const alert = jest.spyOn(Alert, "alert");
+    jest.spyOn(intakeModule, "createNativeIntakePort").mockReturnValue({
+      available: async () => true,
+      list: async () => [
+        {
+          id: "f386e706-b728-40a3-9554-881d0ff0958a",
+          kind: "text",
+          name: "Shared trip",
+          createdAtMs: 1,
+          byteLength: 500,
+        },
+      ],
+      read: jest.fn(),
+      complete: jest.fn(),
+      listen: () => () => undefined,
+    });
+    try {
+      await hello();
+      await act(async () => activate?.());
+      expect(
+        decodedMessages().find((message) => message.type === "native.hello")?.payload
+          ?.selectedProtocolVersion,
+      ).toBe(MOBILE_PROTOCOL_MAX);
+      expect(decodedMessages().find((message) => message.type === "intake.changed")).toMatchObject({
+        type: "intake.changed",
+        payload: { pendingCount: 1 },
       });
-      const alert = jest.spyOn(Alert, "alert");
-      jest.spyOn(intakeModule, "createNativeIntakePort").mockReturnValue({
-        available: async () => true,
-        list: async () => [
-          {
-            id: "f386e706-b728-40a3-9554-881d0ff0958a",
-            kind: "text",
-            name: "Shared trip",
-            createdAtMs: 1,
-            byteLength: 500,
-          },
-        ],
-        read: jest.fn(),
-        complete: jest.fn(),
-        listen: () => () => undefined,
-      });
-      try {
-        await hello(version);
-        await act(async () => activate?.());
-        expect(
-          decodedMessages().find((message) => message.type === "native.hello")?.payload
-            ?.selectedProtocolVersion,
-        ).toBe(version);
-        const announcement = decodedMessages().find((message) => message.type === "intake.changed");
-        if (version === 3) {
-          expect(announcement).toBeUndefined();
-          expect(alert).toHaveBeenCalledWith("Shared items saved", expect.any(String));
-        } else {
-          expect(announcement).toMatchObject({
-            type: "intake.changed",
-            payload: { pendingCount: 1 },
-          });
-          expect(alert).not.toHaveBeenCalled();
-        }
-      } finally {
-        await shellView?.unmount();
-      }
-    },
-  );
+      expect(alert).not.toHaveBeenCalled();
+    } finally {
+      await shellView?.unmount();
+    }
+  });
 
   it.each(["failed", "feasibility", "idle", "active", "storage-failed"])(
     "checks intake authority when navigation is %s",
@@ -735,27 +725,13 @@ describe("App bridge channel", () => {
     await shellView.unmount();
   });
 
-  it("keeps the deployed v3 capability schema while advertising the navigation graph", async () => {
+  it("advertises the navigation graph in the hello", async () => {
     mockCreateForegroundNavigation.mockResolvedValue(mockNavigation);
-    await hello(3);
+    await hello();
 
     const reply = decodedMessages().find((message) => message.type === "native.hello");
-    expect(reply?.payload?.selectedProtocolVersion).toBe(3);
-    // Deployed v3 web rejects every unknown capability key.
-    const oldCapabilities = z
-      .object({
-        groundNavigation: z.boolean(),
-        transitNavigation: z.boolean(),
-        transitActions: z.boolean().optional(),
-        backgroundLocation: z.boolean(),
-        localNotifications: z.boolean(),
-        speech: z.boolean(),
-        carDestinations: z.boolean().optional(),
-      })
-      .strict();
-    expect(oldCapabilities.parse(reply?.payload?.capabilities)).toMatchObject(
-      NAVIGATION_CAPABILITIES,
-    );
+    expect(reply?.payload?.selectedProtocolVersion).toBe(MOBILE_PROTOCOL_MAX);
+    expect(reply?.payload?.capabilities).toMatchObject(NAVIGATION_CAPABILITIES);
     expect(mockCreateForegroundNavigation).toHaveBeenCalledTimes(1);
     expect(mockCreateForegroundNavigation.mock.calls[0]?.[0]).toMatchObject({
       apiOrigin: "https://openmapx.com",

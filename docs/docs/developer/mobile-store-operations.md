@@ -222,7 +222,7 @@ reviewers see the qualified UI and protocol pairing.
 
 Start with a limited rollout and review crash/ANR reports, background-guidance
 failures by device family and bridge handshake failures against the recorded beta
-budgets. The committed first-candidate pairing is protocol v3 only. A later
+budgets. The committed first-candidate pairing is protocol v6 only. A later
 release must define its tested overlap with actually deployed versions.
 
 ### Halting

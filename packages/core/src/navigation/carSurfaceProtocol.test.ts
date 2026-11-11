@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseCarSurfaceMessage } from "./carSurfaceProtocol";
-import { MAX_MESSAGE_BYTES, MAX_TOTAL_COORDINATES } from "./mobileProtocol";
+import { MAX_MESSAGE_BYTES, MAX_TOTAL_COORDINATES, MOBILE_PROTOCOL_MAX } from "./mobileProtocol";
 
 const parse = (v: unknown) => parseCarSurfaceMessage(JSON.stringify(v));
 describe("car surface protocol", () => {
@@ -37,7 +37,7 @@ describe("car surface protocol", () => {
     {
       type: "car-snapshot",
       message: {
-        protocolVersion: 3,
+        protocolVersion: MOBILE_PROTOCOL_MAX,
         type: "session.stopped",
         messageId: "m",
         channelNonce: "c",
@@ -109,7 +109,7 @@ describe("car surface protocol", () => {
         v: 1,
         type: "car-snapshot",
         message: {
-          protocolVersion: 3,
+          protocolVersion: MOBILE_PROTOCOL_MAX,
           type: "snapshot.update",
           messageId: "m",
           channelNonce: "c",
