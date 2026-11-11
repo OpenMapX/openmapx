@@ -903,10 +903,8 @@ describe.skipIf(
           await sql`SELECT id,metadata,status,finished_at FROM data_manager.jobs ORDER BY id`;
       try {
         for (const [url, payload] of [
-          ["/download/fonts", {}],
-          ["/download/osm", { region: "europe/germany/berlin" }],
-          ["/search-index/build", { region: "europe/germany/berlin" }],
-          ["/notable-places/build", {}],
+          ["/ambient-places/enabled", { enabled: false }],
+          ["/ambient-places/rollback", {}],
           ["/transit/sync", { countries: ["de"] }],
           ["/transit/restart-motis", {}],
           ["/traffic/predicted/bake", {}],

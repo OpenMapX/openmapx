@@ -7,8 +7,6 @@ import {
   dataManagerOperations,
   datasetMetadataSchema,
   offlinePackagePreparationSchema,
-  overtureConflateEventSchema,
-  searchIndexEventSchema,
 } from "./index";
 
 describe("data-manager wire contracts", () => {
@@ -65,37 +63,6 @@ describe("data-manager wire contracts", () => {
     expect(dataManagerOperations.getStatus.responses[200].schema.safeParse(body).success).toBe(
       false,
     );
-  });
-  it("requires build provenance and keeps unsuccessful conflation outcomes", () => {
-    expect(
-      searchIndexEventSchema.safeParse({
-        event: "done",
-        ok: true,
-        region: "de",
-        epoch: "x",
-        placeCount: 1,
-        termCount: 2,
-      }).success,
-    ).toBe(false);
-    expect(
-      overtureConflateEventSchema.parse({
-        event: "done",
-        ok: false,
-        status: "waiting_for_osm",
-        linked: 0,
-        pbfPath: "/data/a",
-        message: "missing",
-      }),
-    ).toMatchObject({ ok: false });
-    expect(
-      overtureConflateEventSchema.safeParse({
-        event: "done",
-        ok: true,
-        status: "waiting_for_osm",
-        linked: 0,
-        pbfPath: "/data/a",
-      }).success,
-    ).toBe(false);
   });
   it("retains durable ambient cursor provenance", () => {
     const checkpoint = {

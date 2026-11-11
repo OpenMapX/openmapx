@@ -6,9 +6,7 @@ export function dataManagerResponseTypes(verb, bodylessStatuses = new Set()) {
   const transform = (entry) =>
     bodylessStatuses.has(String(entry.key))
       ? { ...entry, value: "void", schemas: [], isRef: false }
-      : entry.contentType &&
-          entry.contentType !== "application/json" &&
-          entry.contentType !== "application/x-ndjson"
+      : entry.contentType && entry.contentType !== "application/json"
         ? { ...entry, value: "globalThis.Response", schemas: [] }
         : entry;
   return {

@@ -8,11 +8,9 @@ import {
   empty,
   httpErrorSchema,
   json,
-  ndjson,
   okSchema,
   publicErrors,
   regionBodySchema,
-  regionSchema,
   serviceErrors,
 } from "./common";
 import * as cm from "./configuration-maintenance";
@@ -230,38 +228,12 @@ export const dataManagerOperations = {
     auth: service,
     responses: { ...dataMutationErrors, 200: json(d.reloadDatasetsSchema) },
   },
-  downloadFonts: {
-    method: "POST",
-    path: "/download/fonts",
-    auth: service,
-    responses: { ...dataMutationErrors, 200: json(okSchema) },
-  },
   link: {
     method: "POST",
     path: "/link",
     auth: service,
     request: { body: d.linkRequestSchema },
     responses: { ...dataMutationErrors, 200: json(d.linkResultSchema) },
-  },
-  downloadOsm: {
-    method: "POST",
-    path: "/download/osm",
-    auth: service,
-    request: { body: regionBodySchema },
-    responses: {
-      ...dataMutationErrors,
-      200: ndjson(d.downloadOsmEventSchema, h.ndjsonResponseHeadersSchema),
-    },
-  },
-  convertOverpass: {
-    method: "POST",
-    path: "/convert/overpass",
-    auth: service,
-    request: { body: z.strictObject({ region: regionSchema.optional() }).optional() },
-    responses: {
-      ...dataMutationErrors,
-      200: ndjson(d.convertOverpassEventSchema, h.ndjsonResponseHeadersSchema),
-    },
   },
   getSearchIndexStatus: {
     method: "GET",
@@ -273,16 +245,6 @@ export const dataManagerOperations = {
       404: json(httpErrorSchema),
     },
   },
-  buildSearchIndex: {
-    method: "POST",
-    path: "/search-index/build",
-    auth: service,
-    request: { body: regionBodySchema },
-    responses: {
-      ...dataMutationErrors,
-      200: ndjson(i.searchIndexEventSchema, h.ndjsonResponseHeadersSchema),
-    },
-  },
   getNotablePlacesStatus: {
     method: "GET",
     path: "/notable-places/status",
@@ -291,15 +253,6 @@ export const dataManagerOperations = {
       ...serviceErrors,
       200: json(i.notablePlacesStatusSchema),
       404: json(httpErrorSchema),
-    },
-  },
-  buildNotablePlaces: {
-    method: "POST",
-    path: "/notable-places/build",
-    auth: service,
-    responses: {
-      ...dataMutationErrors,
-      200: ndjson(i.notablePlacesEventSchema, h.ndjsonResponseHeadersSchema),
     },
   },
   getOvertureRecovery: {
@@ -318,56 +271,6 @@ export const dataManagerOperations = {
     path: "/overture/status",
     auth: service,
     responses: { ...serviceErrors, 200: json(o.overtureStatusSchema), 404: json(httpErrorSchema) },
-  },
-  pullOverture: {
-    method: "POST",
-    path: "/overture/pull",
-    auth: service,
-    request: { body: regionBodySchema },
-    responses: {
-      ...dataMutationErrors,
-      200: ndjson(o.overturePullEventSchema, h.ndjsonResponseHeadersSchema),
-    },
-  },
-  syncOverture: {
-    method: "POST",
-    path: "/overture/sync",
-    auth: service,
-    request: { body: regionBodySchema },
-    responses: {
-      ...dataMutationErrors,
-      200: ndjson(o.overtureSyncEventSchema, h.ndjsonResponseHeadersSchema),
-    },
-  },
-  ingestOverture: {
-    method: "POST",
-    path: "/overture/ingest",
-    auth: service,
-    request: { body: regionBodySchema },
-    responses: {
-      ...dataMutationErrors,
-      200: ndjson(o.overtureSimpleEventSchema, h.ndjsonResponseHeadersSchema),
-    },
-  },
-  extractOverture: {
-    method: "POST",
-    path: "/overture/extract",
-    auth: service,
-    request: { body: regionBodySchema },
-    responses: {
-      ...dataMutationErrors,
-      200: ndjson(o.overtureSimpleEventSchema, h.ndjsonResponseHeadersSchema),
-    },
-  },
-  conflateOverture: {
-    method: "POST",
-    path: "/overture/conflate",
-    auth: service,
-    request: { body: regionBodySchema.extend({ restart: z.boolean().optional() }) },
-    responses: {
-      ...dataMutationErrors,
-      200: ndjson(o.overtureConflateEventSchema, h.ndjsonResponseHeadersSchema),
-    },
   },
   getTransitProfile: {
     method: "GET",

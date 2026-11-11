@@ -51,13 +51,13 @@ describe("data-manager producer contracts", () => {
       else expect(response.statusCode, `${operation.method} ${url}`).not.toBe(401);
     }
   });
-  it("rejects a malformed download before starting work", async () => {
+  it("rejects a malformed transit sync before starting work", async () => {
     const { app, dataDir } = fixture();
     registerApi(app, { dataDir });
     const response = await app.inject({
       method: "POST",
-      url: "/download/osm",
-      payload: { region: 12 },
+      url: "/transit/sync",
+      payload: { countries: 12 },
     });
     expect(response.statusCode).toBe(400);
   });

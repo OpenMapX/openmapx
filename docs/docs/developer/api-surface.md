@@ -356,7 +356,7 @@ closed codes `INVALID_QUERY`, `DOMAIN_DISABLED`, `CURSOR_EXPIRED`,
 ## Internal data-manager service
 
 `services/data-manager/openapi.json` describes all explicit internal operations,
-including progress streams, binary downloads and HEAD responses. It is collected
+including binary downloads and HEAD responses. It is collected
 from the actual `registerApi` route registrations without starting jobs or
 connecting to a database. Optional offline-package routes are included using an
 inert collaborator. Automatic HEAD routes are excluded; explicit HEAD operations
@@ -366,8 +366,8 @@ The canonical Zod operation table lives in
 `packages/core/src/services/data-manager/contracts`. It owns method, path,
 authentication, request validation, response statuses, wire schemas and required
 headers. Register producer handlers through `registerDataManagerRoute` so runtime
-validation and documentation use that same definition. Validate each hijacked
-NDJSON event before writing it; these streams bypass Fastify serialization.
+validation and documentation use that same definition. JSON bodies are checked
+again after serialization, so string and buffer replies cannot bypass validation.
 
 ```bash
 pnpm data-manager:openapi:generate
@@ -384,8 +384,9 @@ Do not edit generated files or introduce a separate handwritten endpoint map.
 Server consumers import `@openmapx/core/data-manager-sdk`, explicitly construct a
 transport with their service URL and credentials, and call its generated functions.
 The transport enforces destination policy, deadlines, response sizes, declared
-statuses, media types, headers and payloads. Workflow adapters consume bounded,
-validated NDJSON progress and require a terminal event. Binary operations return an
+statuses, media types, headers and payloads. No operation streams progress:
+long-running data work is admitted as a durable execution, and callers poll its
+retained status with `observeDataExecution`. Binary operations return an
 unconsumed `Response`; callers own streaming and release. This internal SDK must
 never receive browser credentials or replace the browser-facing API client.
 

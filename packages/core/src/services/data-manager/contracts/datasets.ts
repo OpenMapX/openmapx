@@ -1,5 +1,5 @@
 import z from "zod/v4";
-import { byteProgressSchema, countSchema, streamErrorSchema } from "./common";
+import { countSchema } from "./common";
 export const datasetTypeSchema = z.enum([
   "osm-pbf",
   "osm-pbf-bz2",
@@ -50,29 +50,6 @@ export const linkResultSchema = z.strictObject({
   skipped: countSchema,
   pruned: countSchema,
 });
-export const downloadOsmEventSchema = z.union([
-  byteProgressSchema,
-  streamErrorSchema,
-  z.strictObject({
-    event: z.literal("done"),
-    ok: z.literal(true),
-    path: z.string(),
-    url: z.string(),
-    md5: z.string().optional(),
-    sizeBytes: countSchema,
-  }),
-]);
-export const convertOverpassEventSchema = z.union([
-  byteProgressSchema,
-  streamErrorSchema,
-  z.strictObject({
-    event: z.literal("done"),
-    ok: z.literal(true),
-    sourcePbf: z.string(),
-    targetBz2: z.string(),
-    sizeBytes: countSchema,
-  }),
-]);
 const phase = z.enum(["offline-storage", "job-reconciliation", "cron-schedulers", "complete"]);
 export const readyStatusSchema = z.strictObject({
   ok: z.literal(true),

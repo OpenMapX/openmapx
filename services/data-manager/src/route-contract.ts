@@ -24,7 +24,7 @@ interface RuntimeSchema {
   safeParse(value: unknown): { success: true; data: unknown } | { success: false };
 }
 interface ResponseContract {
-  kind: "json" | "ndjson" | "raw" | "empty";
+  kind: "json" | "raw" | "empty";
   schema?: z.ZodType;
   contentTypes?: readonly string[];
   headers?: z.ZodType;
@@ -77,17 +77,12 @@ export function registerDataManagerRoute<K extends OperationId>(
   }
   for (const [status, contract] of Object.entries(responses)) {
     const mediaTypes =
-      contract.kind === "json"
-        ? ["application/json"]
-        : contract.kind === "ndjson"
-          ? ["application/x-ndjson"]
-          : (contract.contentTypes ?? []);
+      contract.kind === "json" ? ["application/json"] : (contract.contentTypes ?? []);
     (schema.response as Record<string, unknown>)[status] =
       contract.kind === "empty"
         ? { type: "null", description: "No response body" }
         : {
-            description:
-              contract.kind === "ndjson" ? "Progress, completion or error events" : "Response",
+            description: "Response",
             content: Object.fromEntries(
               mediaTypes.map((mediaType) => [
                 mediaType,
@@ -207,18 +202,7 @@ export function registerDataManagerRoute<K extends OperationId>(
   });
 }
 
-/** Hijacked NDJSON bypasses Fastify's serializer and must validate each write. */
-export function validateDataManagerEvent(operationId: OperationId, event: unknown): unknown {
-  const contract = (
-    dataManagerOperations[operationId].responses as Record<number, ResponseContract>
-  )[200];
-  if (contract?.kind !== "ndjson" || !contract.schema) throw invalidResponse();
-  const parsed = contract.schema.safeParse(event);
-  if (!parsed.success) throw invalidResponse();
-  return parsed.data;
-}
-
-/** Validates normalized wire metadata, including hijacked stream headers. */
+/** Validates normalized wire metadata against the operation's declared headers. */
 export function validateDataManagerResponseHeaders(
   operationId: OperationId,
   status: number,

@@ -19,24 +19,13 @@ it.each(["overture-pull", "overture-ingest", "overture-extract"] as const)(
   async (kind) => {
     step.mockResolvedValue({ id: "synthetic-observer-dto" });
     vi.spyOn(console, "log").mockImplementation(() => {});
-    vi.spyOn(globalThis, "fetch").mockImplementation(
-      async (url) =>
-        new Response(
-          `${JSON.stringify({ event: "done", ok: true, ...(String(url).includes("/overture/pull") ? { path: "/synthetic/pull" } : {}) })}\n`,
-          {
-            headers: {
-              "content-type": "application/x-ndjson",
-              "cache-control": "no-cache",
-              "x-accel-buffering": "no",
-            },
-          },
-        ),
-    );
+    const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(Error("unexpected fetch"));
     const app = new Command();
     app.exitOverride();
     registerDataCommands(app);
     await app.parseAsync(["data", kind, "europe/germany"], { from: "user" });
     expect(step).toHaveBeenCalledTimes(1);
     expect(step.mock.calls[0]?.[0]).toEqual({ kind, region: "europe/germany" });
+    expect(fetch).not.toHaveBeenCalled();
   },
 );

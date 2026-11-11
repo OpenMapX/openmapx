@@ -185,17 +185,15 @@ describe("data-manager producer contract metadata", () => {
     expect(invalid.statusCode).toBe(400);
     expect(invalid.body).toBe("");
   });
-  it("validates hijacked stream metadata before ownership leaves Fastify", () => {
+  it("validates normalized response metadata against the declared headers", () => {
     expect(() =>
-      validateDataManagerResponseHeaders("downloadOsm", 200, {
-        "content-type": "application/x-ndjson",
+      validateDataManagerResponseHeaders("getAppliedTrafficConditions", 200, {
+        "cache-control": "public, max-age=60",
       }),
     ).toThrow(/response/);
     expect(() =>
-      validateDataManagerResponseHeaders("downloadOsm", 200, {
-        "Content-Type": "application/x-ndjson",
-        "Cache-Control": "no-cache",
-        "X-Accel-Buffering": "no",
+      validateDataManagerResponseHeaders("getAppliedTrafficConditions", 200, {
+        "Cache-Control": "no-store",
         extra: "retained",
       }),
     ).not.toThrow();
