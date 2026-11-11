@@ -106,7 +106,7 @@ describe("Gate C — host authority", () => {
   });
 
   it("keeps the operations agent's state out of every other service's reach in the rendered stack", () => {
-    // The journal, handoff record, trusted-config queue and privacy scratch
+    // The journal, trusted-config queue and privacy scratch
     // live in infra/docker/state/ops-agent. data-manager, which mounts the
     // data directory read-write as the same uid, must not reach any of it.
     const state = "./state/ops-agent";
