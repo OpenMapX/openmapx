@@ -12,10 +12,9 @@ import {
   type Stats,
   writeSync,
 } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { fsyncDirectory } from "../release-files";
 import { ensureTraefikDynamicDirectory } from "./agent-state";
-import { checkoutMountedAt } from "./checkout-layout";
 
 /**
  * Traefik's configuration outside the checkout. Traefik watches its dynamic
@@ -43,11 +42,6 @@ const DYNAMIC_FILE = /\.(?:ya?ml|toml)$/;
 /** The temporaries `replaceFile` writes; one a stopped render left is removed by the next. */
 const TEMPORARY_FILE = /^\..+\.[0-9a-f]{12}\.tmp$/;
 const FILE_MODE = 0o600;
-
-/** Where releases before this one wrote the routes, and Traefik still reads them until it is recreated. */
-export function legacyTraefikDynamicDirectory(infraDir: string): string {
-  return join(resolve(infraDir, "..", ".."), "services", "traefik", "config", "dynamic");
-}
 
 function lstatOrUndefined(path: string): Stats | undefined {
   try {
@@ -128,46 +122,3 @@ export function writeTraefikDynamicDirectory(
   }
   fsyncDirectory(target);
 }
-
-/**
- * Writes the routes where an earlier release kept them, for a Traefik not yet
- * recreated, and returns what to report when that fails; the render goes on.
- * A directory that isn't there is mounted by no one and is not created,
- * unless the operations agent runs without the checkout while a Traefik is
- * known to mount it (`mounted`): then the routes can't reach that Traefik.
- */
-export function writeLegacyTraefikRoutes(
-  infraDir: string,
-  routes: string,
-  mounted?: boolean,
-): string | null {
-  const directory = legacyTraefikDynamicDirectory(infraDir);
-  const failed = (reason: string) =>
-    `The routes could not be written to services/traefik/config/dynamic, where a Traefik started by an earlier release still reads them: ${reason}. That Traefik keeps the routes of an earlier render. Recreate Traefik so it reads infra/docker/state/ops-agent/traefik/dynamic: pnpm openmapx services update traefik, or Recreate on Admin → Services → Traefik.`;
-  const code = (error: unknown) => (error as NodeJS.ErrnoException).code ?? "an unexpected error";
-  let stats: Stats | undefined;
-  try {
-    stats = lstatOrUndefined(directory);
-  } catch (error) {
-    return failed(code(error));
-  }
-  if (!stats) {
-    return mounted === true && !checkoutMountedAt(infraDir)
-      ? failed("this operations agent runs without the checkout")
-      : null;
-  }
-  if (!stats.isDirectory()) return failed("it is not a directory");
-  let temporary: string | undefined;
-  try {
-    temporary = writeTemporary(directory, TRAEFIK_ROUTES_FILE, Buffer.from(routes), 0o644);
-    renameSync(temporary, join(directory, TRAEFIK_ROUTES_FILE));
-    return null;
-  } catch (error) {
-    if (temporary) rmSync(temporary, { force: true });
-    return failed(code(error));
-  }
-}
-
-/** Said while a container still mounts the checkout's dynamic directory. */
-export const LEGACY_TRAEFIK_MOUNT_NOTICE =
-  "Traefik still reads its routes from services/traefik/config/dynamic, where render keeps writing them until no container mounts that directory. Recreate Traefik to move it to infra/docker/state/ops-agent/traefik/dynamic: pnpm openmapx services update traefik, or Recreate on Admin → Services → Traefik. That restarts the proxy for a few seconds.";

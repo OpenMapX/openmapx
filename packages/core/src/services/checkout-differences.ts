@@ -24,8 +24,6 @@ export interface CheckoutDifference {
   readonly reason: string;
 }
 
-const TRAEFIK_ROUTES = "traefik/config/dynamic/generated-routes.yml";
-
 function lstatOrUndefined(path: string): Stats | undefined {
   try {
     return lstatSync(path);
@@ -85,7 +83,7 @@ export function checkoutDifferencesFromRelease(options: {
       if (name.startsWith(".")) continue;
       const child = `${key}/${name}`;
       if (lstatOrUndefined(join(servicesDir, child))?.isDirectory()) visit(child);
-      else if (!release.files.has(child) && !overrides.has(child) && child !== TRAEFIK_ROUTES) {
+      else if (!release.files.has(child) && !overrides.has(child)) {
         differences.push({ path: `services/${child}`, reason: "not in this release" });
       }
     }

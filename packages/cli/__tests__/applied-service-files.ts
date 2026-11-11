@@ -32,7 +32,6 @@ export async function applyServiceFile(root: string, id: string, path: string): 
       integrationConfigs: [],
       serviceSecrets: [],
     },
-    legacyTraefikDynamicMounted: false,
   });
   return coreServices.appliedServiceFile(infraDir, id, path);
 }

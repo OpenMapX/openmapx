@@ -1,5 +1,4 @@
 import {
-  chmodSync,
   existsSync,
   linkSync,
   lstatSync,
@@ -97,7 +96,6 @@ describe("Traefik's files outside the checkout", () => {
       infraDir: f.infraDir,
       services: f.services,
       input: input(["traefik", "web"]),
-      legacyTraefikDynamicMounted: false,
     });
 
     expect(committed.stackFileProblems).toEqual([]);
@@ -115,58 +113,19 @@ describe("Traefik's files outside the checkout", () => {
     const generated = join(f.infraDir, CURRENT_CONFIGURATION, TRAEFIK_STATIC_GENERATION_FILE);
     expect(readFileSync(generated, "utf8")).toBe(STATIC);
     expect(mode(generated)).toBe(0o400);
-    // Nothing more is written into the checkout once no container mounts it.
     expect(existsSync(join(f.dynamic, "generated-routes.yml"))).toBe(false);
   });
 
-  it("keeps writing the checkout's routes while a container mounts them, or when that is not known", async () => {
+  it("drops a dynamic file removed from the checkout", async () => {
     const f = checkout();
-    await commitConfigurationGeneration({
-      infraDir: f.infraDir,
-      services: f.services,
-      input: input(["traefik", "web"]),
-      legacyTraefikDynamicMounted: true,
-    });
-    const legacy = join(f.dynamic, "generated-routes.yml");
-    expect(readFileSync(legacy, "utf8")).toBe(
-      readFileSync(join(f.dynamicTarget, "generated-routes.yml"), "utf8"),
-    );
-
-    rmSync(legacy);
-    await commitConfigurationGeneration({
-      infraDir: f.infraDir,
-      services: f.services,
-      input: input(["traefik"]),
-    });
-    expect(existsSync(legacy)).toBe(true);
-
-    // Left as it was, for a rollback, once none does.
-    const before = readFileSync(legacy, "utf8");
-    await commitConfigurationGeneration({
-      infraDir: f.infraDir,
-      services: f.services,
-      input: input(["traefik", "web"]),
-      legacyTraefikDynamicMounted: false,
-    });
-    expect(readFileSync(legacy, "utf8")).toBe(before);
-  });
-
-  it("never copies the checkout's stale routes, and drops a dynamic file removed there", async () => {
-    const f = checkout();
-    writeFileSync(join(f.dynamic, "generated-routes.yml"), "stale: routes\n");
     writeFileSync(join(f.dynamic, "auth.yml"), AUTH);
     const commit = () =>
       commitConfigurationGeneration({
         infraDir: f.infraDir,
         services: f.services,
         input: input(["traefik", "web"]),
-        legacyTraefikDynamicMounted: false,
       });
     await commit();
-    expect(readFileSync(join(f.dynamicTarget, "generated-routes.yml"), "utf8")).not.toContain(
-      "stale",
-    );
-    expect(readFileSync(join(f.dynamic, "generated-routes.yml"), "utf8")).toBe("stale: routes\n");
 
     // An unchanged file is not replaced, so Traefik has nothing to reload.
     const inode = lstatSync(join(f.dynamicTarget, "middlewares.yml")).ino;
@@ -187,7 +146,6 @@ describe("Traefik's files outside the checkout", () => {
         infraDir: f.infraDir,
         services: f.services,
         input: input(["traefik", "web"]),
-        legacyTraefikDynamicMounted: false,
       });
     await commit();
 
@@ -230,7 +188,6 @@ describe("Traefik's files outside the checkout", () => {
         infraDir: f.infraDir,
         services: f.services,
         input: input(["traefik", "web"]),
-        legacyTraefikDynamicMounted: false,
       });
     await commit();
     writeFileSync(join(f.dynamicTarget, ".auth.yml.0123456789ab.tmp"), AUTH);
@@ -239,38 +196,6 @@ describe("Traefik's files outside the checkout", () => {
       "generated-routes.yml",
       "middlewares.yml",
     ]);
-  });
-
-  it("reports routes it could not write for an earlier Traefik and finishes the render", async () => {
-    const f = checkout();
-    chmodSync(f.dynamic, 0o500);
-    try {
-      const committed = await commitConfigurationGeneration({
-        infraDir: f.infraDir,
-        services: f.services,
-        input: input(["traefik", "web"]),
-        legacyTraefikDynamicMounted: true,
-      });
-      expect(committed.stackFileProblems).toEqual([
-        expect.stringContaining(
-          "The routes could not be written to services/traefik/config/dynamic, where a Traefik started by an earlier release still reads them: EACCES.",
-        ),
-      ]);
-      expect(readdirSync(f.dynamic).sort()).toEqual(["auth.yml.example", "middlewares.yml"]);
-      expect(existsSync(join(f.dynamicTarget, "generated-routes.yml"))).toBe(true);
-    } finally {
-      chmodSync(f.dynamic, 0o700);
-    }
-
-    // A checkout without the directory is mounted by no one; it isn't created.
-    rmSync(f.dynamic, { recursive: true });
-    const committed = await commitConfigurationGeneration({
-      infraDir: f.infraDir,
-      services: f.services,
-      input: input(["traefik", "web"]),
-    });
-    expect(existsSync(f.dynamic)).toBe(false);
-    expect(committed.stackFileProblems).toEqual([]);
   });
 
   it("refuses a traefik.yml it may not read, rather than mount a missing one", async () => {
@@ -285,7 +210,6 @@ describe("Traefik's files outside the checkout", () => {
         infraDir: f.infraDir,
         services: f.services,
         input: input(["traefik"]),
-        legacyTraefikDynamicMounted: false,
       }),
     ).rejects.toThrow("services/traefik/config/traefik.yml can't be used: it is a symbolic link");
   });

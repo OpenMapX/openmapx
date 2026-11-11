@@ -200,13 +200,6 @@ The directory is owner-only (0700, files 0600, `auth.yml`'s password hashes
 included). The Traefik image runs as root, which reads it through the
 capabilities Docker grants by default.
 
-A Traefik started before this layout reads `services/traefik/config/dynamic`
-until it is recreated. Render keeps writing the routes there while any
-container still mounts that directory, and render, check and **Run
-diagnostics** say so. Recreate Traefik when a few seconds without the proxy
-suit you: `pnpm openmapx services update traefik`, or **Recreate** on
-**Admin → System → Services → Traefik**.
-
 | Public path         | Target                       |
 | ------------------- | ---------------------------- |
 | `/api/*`, `/health` | `app-api`                    |

@@ -52,7 +52,6 @@ describe("the agent's start", () => {
       services: [f.martin],
       input: input(["martin"]),
       releaseServiceFiles: f.release,
-      legacyTraefikDynamicMounted: false,
     });
     expect(committed.serviceFileReport).toEqual([]);
     // Services mount the files from the agent's store, not from the checkout.

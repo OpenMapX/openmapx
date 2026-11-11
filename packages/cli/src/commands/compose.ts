@@ -6,7 +6,7 @@ import { initializeErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
 import { type Command, Option } from "commander";
 import { runsInAgent } from "../lib/agent-integrations";
-import { containerBindMounts, legacyTraefikDynamicMounted } from "../lib/container-mounts";
+import { containerBindMounts } from "../lib/container-mounts";
 import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
 import { dockerComposeStream } from "../lib/docker";
 import { assertCliExecutionAvailable } from "../lib/execution-deadline";
@@ -347,9 +347,6 @@ export async function renderComposeWithWriter(
     if (Object.keys(values).length === 0 && envKeys.length === 0) return [];
     return [{ serviceId: id, values, ...(envKeys.length > 0 ? { envKeys } : {}) }];
   });
-  // A Traefik not recreated since an earlier release still reads its routes
-  // from the checkout, where they are written too until none does.
-  const legacyTraefik = await legacyTraefikDynamicMounted(paths.infraDir);
   const mounts = await containerBindMounts();
   // Run from the checkout with a release selected, render uses that
   // release's service files, read from its image, and refuses while the
@@ -380,7 +377,6 @@ export async function renderComposeWithWriter(
   }
   assertCliExecutionAvailable();
   const committed = await writer.commit({
-    legacyTraefikDynamicMounted: legacyTraefik,
     ...(mounts ? { containerBindMounts: mounts } : {}),
     ...(selected && selected !== "none" ? { releaseServiceFiles: selected.files } : {}),
     services,
@@ -410,12 +406,6 @@ export async function renderComposeWithWriter(
   });
   for (const problem of committed.stackFileProblems) log.warn(problem);
   for (const { level, message } of committed.serviceFileReport) log[level](message);
-  if (legacyTraefik === true) log.warn(coreServices.LEGACY_TRAEFIK_MOUNT_NOTICE);
-  else if (legacyTraefik === undefined) {
-    log.dim(
-      "Docker could not say whether a container still mounts services/traefik/config/dynamic; the routes were written there too.",
-    );
-  }
   return {
     servicesRendered: committed.enabledServiceIds.length,
     composePath: paths.composePath,

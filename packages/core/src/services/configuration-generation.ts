@@ -82,11 +82,7 @@ import {
   writeServiceFileTrees,
 } from "./service-file-store";
 import { overrideOverlay, readServiceOverrides, staleOverrides } from "./service-overrides";
-import {
-  TRAEFIK_STATIC_GENERATION_FILE,
-  writeLegacyTraefikRoutes,
-  writeTraefikDynamicDirectory,
-} from "./traefik-files";
+import { TRAEFIK_STATIC_GENERATION_FILE, writeTraefikDynamicDirectory } from "./traefik-files";
 import { renderTraefikDynamicConfiguration, renderTraefikDynamicYaml } from "./traefik-renderer";
 import type { LoadedService } from "./types";
 import { seedMissingWritableCopies, seedWritableCopies } from "./writable-copies";
@@ -129,12 +125,6 @@ export interface CommitConfigurationOptions {
   beforeCommit?: () => Promise<void>;
   afterGenerationRename?: () => Promise<void>;
   afterCommit?: () => Promise<void>;
-  /**
-   * Whether a container, running or stopped, still mounts the checkout's
-   * Traefik dynamic directory. The routes are written there too while one
-   * does, and when it is not known.
-   */
-  legacyTraefikDynamicMounted?: boolean;
   /**
    * The service files to render: the selected release's, which the host CLI
    * reads from its image. Omitted, this process's own (its bundle's when
@@ -1246,7 +1236,6 @@ function writeStackFiles(
   context: RenderContext,
   serviceFiles: ResolvedServiceFiles,
   writableBindDirs: readonly string[],
-  legacyTraefikDynamicMounted: boolean | undefined,
 ): string[] {
   const traefik = renderTraefikDynamicConfiguration(
     enabled.filter((service) => service.isBuiltIn).map((service) => service.manifest),
@@ -1261,17 +1250,10 @@ function writeStackFiles(
   writeTraefikDynamicDirectory(infraDir, serviceFiles.traefik.dynamic, routes);
   for (const dir of writableBindDirs) mkdirSync(dir, { recursive: true });
   const enabledIds = new Set(enabled.map((service) => service.manifest.id));
-  const problems = seedWritableCopies(
+  return seedWritableCopies(
     infraDir,
     serviceFiles.writableCopies.filter((seed) => enabledIds.has(seed.serviceId)),
   );
-  // A Traefik not recreated since an earlier release still reads them there.
-  const legacy =
-    legacyTraefikDynamicMounted === false
-      ? null
-      : writeLegacyTraefikRoutes(infraDir, routes, legacyTraefikDynamicMounted);
-  if (legacy) problems.push(legacy);
-  return problems;
 }
 
 export type RenderConfigurationOptions = Pick<
@@ -1560,7 +1542,6 @@ async function commitOwnedConfigurationFiles(
         context,
         serviceFiles,
         rendered.writableBindDirs ?? [],
-        options.legacyTraefikDynamicMounted,
       ),
     );
     try {

@@ -588,29 +588,6 @@ pnpm openmapx services update martin
 
 Without the password, rendering fails with `MARTIN_DB_PASSWORD must be set`.
 
-## Traefik's dynamic directory moves into the agent's state
-
-Traefik now reads its routes and middlewares from
-`infra/docker/state/ops-agent/traefik/dynamic`, and its `traefik.yml` from the
-configuration generation, both written by render from the release's files and
-your overrides.
-A Traefik started by an earlier release keeps reading
-`services/traefik/config/dynamic` until it is recreated, and render keeps
-writing the routes there too while any container still mounts it, so routing
-works either way. Render, `pnpm openmapx check` and **Run diagnostics** say
-while that is the case.
-
-Recreate Traefik when a few seconds without the proxy suit you:
-
-```bash
-pnpm openmapx services update traefik
-```
-
-or **Recreate** on **Admin → System → Services → Traefik**. OpenMapX does not recreate
-it for you. Once no container mounts the checkout's directory, render stops
-writing there and leaves the last `generated-routes.yml` in place for a
-rollback. See [where Traefik reads its configuration](../guides/supporting-infrastructure.md#where-traefik-reads-its-configuration).
-
 ## The operations agent stops mounting the checkout
 
 The operations agent's container does not mount the checkout. Every render,

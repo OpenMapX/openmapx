@@ -81,11 +81,6 @@ export interface TrustedConfigurationRuntimeOptions {
   afterGenerationRename?: () => Promise<void>;
   afterCommit?: () => Promise<void>;
   /**
-   * Whether a container still mounts the checkout's Traefik dynamic
-   * directory; `undefined` when Docker can't tell. Omitted, it is not known.
-   */
-  legacyTraefikDynamicMounted?: () => Promise<boolean | undefined>;
-  /**
    * Every container's bind mounts; `undefined` when Docker can't tell. A
    * service-file tree one of them mounts is kept. Omitted, it is not known.
    */
@@ -246,9 +241,6 @@ async function commitGeneration(
         coreServices.prepareAgentStateDirectories(options.infraDir);
         // And its stores, which the generation mounts into app-api.
         coreServices.prepareAgentStores(options.infraDir);
-        // A Traefik not recreated since an earlier release still reads its
-        // routes from the checkout, where they are written too until none does.
-        const legacyTraefik = await options.legacyTraefikDynamicMounted?.();
         const mounts = await options.containerBindMounts?.();
         const committed = await writer.commit({
           ...(mounts ? { containerBindMounts: mounts } : {}),
@@ -268,14 +260,10 @@ async function commitGeneration(
           beforeCommit: options.beforeCommit,
           afterGenerationRename: options.afterGenerationRename,
           afterCommit: options.afterCommit,
-          legacyTraefikDynamicMounted: legacyTraefik,
         });
         for (const problem of committed.stackFileProblems) process.stderr.write(`${problem}\n`);
         for (const line of committed.serviceFileReport) {
           process.stderr.write(`${agentLogLine(line)}\n`);
-        }
-        if (legacyTraefik === true) {
-          process.stderr.write(`${coreServices.LEGACY_TRAEFIK_MOUNT_NOTICE}\n`);
         }
         return {
           outcome: "committed",

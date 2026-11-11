@@ -27,15 +27,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parse as parseYaml } from "yaml";
 import { renderComposeForRepo, rotateRedisPasswordForRepo } from "../src/commands/compose";
 import { runsInAgent } from "../src/lib/agent-integrations";
-import { legacyTraefikDynamicMounted } from "../src/lib/container-mounts";
 import { loadInfraEnv } from "../src/lib/infra-env";
 import { rotatePlatformSecretFile } from "../src/lib/platform-secret-files";
 import { selectedReleaseServiceFiles } from "../src/lib/release-service-files";
 
-// Docker answers whether a container still mounts the checkout's Traefik
-// directory, and what containers mount; here, by default, none does.
+// Docker answers what containers mount; here, none does.
 vi.mock("../src/lib/container-mounts", () => ({
-  legacyTraefikDynamicMounted: vi.fn(async () => false),
   containerBindMounts: vi.fn(async () => []),
 }));
 // The selected release's files come from its image; by default none is selected.
@@ -598,16 +595,6 @@ describe("renderComposeForRepo", () => {
     mkdirSync(join(config, "dynamic"), { recursive: true });
     writeFileSync(join(config, "traefik.yml"), "log: {}\n");
     writeFileSync(join(config, "dynamic", "middlewares.yml"), "http: {}\n");
-    const legacyRoutes = join(config, "dynamic", "generated-routes.yml");
-    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-    const notices = () =>
-      errors.mock.calls
-        .flat()
-        .map(String)
-        .filter((line) => line.includes("Traefik still reads its routes"));
-
-    // A Traefik an earlier release started still reads the checkout's routes.
-    vi.mocked(legacyTraefikDynamicMounted).mockResolvedValueOnce(true);
     await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["traefik"] });
     const yaml = readFileSync(generatedCompose(), "utf8");
     expect(yaml).toContain("- ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro");
@@ -617,17 +604,7 @@ describe("renderComposeForRepo", () => {
     const dynamic = join(tmp, "infra", "docker", "state", "ops-agent", "traefik", "dynamic");
     expect(readdirSync(dynamic).sort()).toEqual(["generated-routes.yml", "middlewares.yml"]);
     expect(permissions(dynamic)).toBe(0o700);
-    expect(readFileSync(legacyRoutes, "utf8")).toBe(
-      readFileSync(join(dynamic, "generated-routes.yml"), "utf8"),
-    );
-    expect(notices()).toHaveLength(1);
-
-    // Once none does, the checkout's file is left as it was and render is quiet.
-    rmSync(legacyRoutes);
-    errors.mockClear();
-    await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["traefik"] });
-    expect(existsSync(legacyRoutes)).toBe(false);
-    expect(notices()).toEqual([]);
+    expect(existsSync(join(config, "dynamic", "generated-routes.yml"))).toBe(false);
   });
 
   /** Martin in a checkout, and a release of it as its operations-agent image prints it. */

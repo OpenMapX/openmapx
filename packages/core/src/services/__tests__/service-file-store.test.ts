@@ -121,7 +121,6 @@ describe("the release's service files in the store", () => {
       services,
       input: input(),
       releaseServiceFiles: release(services),
-      legacyTraefikDynamicMounted: false,
     });
 
     const script = mountOf(infraDir, "postgis", "/usr/local/bin/openmapx-postgis-entrypoint.sh");
@@ -160,7 +159,6 @@ describe("the release's service files in the store", () => {
       services,
       input: input([...SELECTED, "traefik"]),
       releaseServiceFiles: release(services),
-      legacyTraefikDynamicMounted: false,
     });
     const generations = join(infraDir, CONFIGURATION_GENERATIONS);
     for (const name of readdirSync(generations)) {
@@ -177,7 +175,6 @@ describe("the release's service files in the store", () => {
         services,
         input: input(),
         releaseServiceFiles: release(services, changes),
-        legacyTraefikDynamicMounted: false,
       });
     await commit();
     const martin = mountOf(infraDir, "martin", "/etc/martin/martin.yaml");
@@ -208,7 +205,6 @@ describe("the release's service files in the store", () => {
         services,
         input: input(),
         releaseServiceFiles: release(services),
-        legacyTraefikDynamicMounted: false,
         ...(sources ? { containerBindMounts: [{ name: "openmapx-postgis-1", sources }] } : {}),
       });
     await commit([]);
@@ -247,7 +243,6 @@ describe("the release's service files in the store", () => {
         services,
         input: input(),
         releaseServiceFiles: release(services),
-        legacyTraefikDynamicMounted: false,
       });
     await commit();
     const file = mountOf(infraDir, "martin", "/etc/martin/martin.yaml");
@@ -265,7 +260,6 @@ describe("the release's service files in the store", () => {
         services,
         input: input(),
         releaseServiceFiles: release(services, changes),
-        legacyTraefikDynamicMounted: false,
       });
     await commit();
     const copy = join(infraDir, "data", "valhalla", "config", "valhalla.json");
@@ -343,7 +337,6 @@ describe("the release's service files in the store", () => {
       services,
       input: input(),
       releaseServiceFiles: release(services, { "otp/config/build-config.json": '{"osm": []}\n' }),
-      legacyTraefikDynamicMounted: false,
     });
     const path = appliedServiceFile(infraDir, "otp", "config/build-config.json");
     expect(relative(serviceFileStore(infraDir), path)).toMatch(/^otp\/[a-f0-9]{64}\//);

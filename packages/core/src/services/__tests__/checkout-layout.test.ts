@@ -14,7 +14,6 @@ import { agentStatePaths } from "../agent-state";
 import { prepareAgentStores } from "../agent-stores";
 import { checkoutMountedAt } from "../checkout-layout";
 import { acquireConfigurationOwnership } from "../configuration-ownership";
-import { writeLegacyTraefikRoutes } from "../traefik-files";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -61,16 +60,6 @@ describe("the checkout, as the operations agent tells", () => {
     rmSync(paths.customIntegrations, { recursive: true });
     symlinkSync(stack("narrow").root, paths.customIntegrations);
     expect(() => prepareAgentStores(infraDir)).toThrow(/is not its own directory/);
-  });
-
-  it("without it, routes a Traefik still reads from the checkout are reported as unreachable", () => {
-    const narrow = stack("narrow");
-    expect(writeLegacyTraefikRoutes(narrow.infraDir, "http: {}\n", true)).toMatch(
-      /^The routes could not be written to services\/traefik\/config\/dynamic, .*: this operations agent runs without the checkout\./,
-    );
-    expect(writeLegacyTraefikRoutes(narrow.infraDir, "http: {}\n", undefined)).toBeNull();
-    const checkout = stack("checkout");
-    expect(writeLegacyTraefikRoutes(checkout.infraDir, "http: {}\n", true)).toBeNull();
   });
 
   it("without it, a writer takes only the lock in the agent's state, so a read-only infra/docker is no obstacle", async () => {

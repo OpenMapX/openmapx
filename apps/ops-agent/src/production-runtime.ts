@@ -264,24 +264,6 @@ export async function createProductionOpsRuntime(
     execFile: options.docker?.execFile ?? runContainedProcess,
     ownedServices: owned,
     candidateSource: options.candidateSource,
-    legacyTraefikDynamicMounted: async () => {
-      try {
-        const result = await (options.docker?.execFile ?? runContainedProcess)(
-          "docker",
-          [
-            "ps",
-            "--all",
-            "--quiet",
-            "--filter",
-            `volume=${services.legacyTraefikDynamicDirectory(options.stack.infraDir)}`,
-          ],
-          { signal: AbortSignal.timeout(30_000), timeout: 30_000, maxBuffer: 64 * 1024 },
-        );
-        return result.stdout.trim() !== "";
-      } catch {
-        return undefined;
-      }
-    },
     containerBindMounts: () =>
       services.readContainerBindMounts(
         async (args) =>

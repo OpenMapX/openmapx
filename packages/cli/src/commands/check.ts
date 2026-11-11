@@ -4,7 +4,6 @@ import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
 import { execa } from "execa";
 import { runsInAgent } from "../lib/agent-integrations";
-import { legacyTraefikDynamicMounted } from "../lib/container-mounts";
 import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
 import { dockerCompose, dockerRun } from "../lib/docker";
 import { log, table } from "../lib/output";
@@ -483,10 +482,6 @@ export function registerCheckCommand(program: Command): void {
       // Integrations the operations agent installed are trusted by its records;
       // only its fixed CLI reads them, so a check from source has none to report.
       for (const warning of installedIntegrationWarnings(repoPaths().root)) log.warn(warning);
-      // A Traefik still on the checkout's dynamic directory.
-      if ((await legacyTraefikDynamicMounted(repoPaths().infraDir)) === true) {
-        log.warn(coreServices.LEGACY_TRAEFIK_MOUNT_NOTICE);
-      }
 
       const result = await dockerComposeAfterDeploymentSecretCheck(["ps", "--format", "json"]);
       if (result.exitCode !== 0) {

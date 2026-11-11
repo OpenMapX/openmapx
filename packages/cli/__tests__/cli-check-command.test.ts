@@ -5,7 +5,6 @@ import { services } from "@openmapx/core/server";
 import { Command } from "commander";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { registerCheckCommand } from "../src/commands/check";
-import { legacyTraefikDynamicMounted } from "../src/lib/container-mounts";
 import { selectedReleaseServiceFiles } from "../src/lib/release-service-files";
 
 // The check stops at its first Docker call; what it reported before that is
@@ -13,9 +12,6 @@ import { selectedReleaseServiceFiles } from "../src/lib/release-service-files";
 vi.mock("../src/lib/docker", () => ({
   dockerCompose: vi.fn(async () => ({ exitCode: 1, stdout: "", stderr: "no Docker in this test" })),
   dockerRun: vi.fn(),
-}));
-vi.mock("../src/lib/container-mounts", () => ({
-  legacyTraefikDynamicMounted: vi.fn(async () => false),
 }));
 // No release is selected unless a test selects one.
 vi.mock("../src/lib/release-service-files", () => ({
@@ -44,34 +40,6 @@ afterEach(() => {
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
   rmSync(tmp, { recursive: true, force: true });
-});
-
-it("says while Traefik still reads the checkout's routes", async () => {
-  vi.mocked(legacyTraefikDynamicMounted).mockResolvedValue(true);
-  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-  const check = async () => {
-    const program = new Command();
-    registerCheckCommand(program);
-    await expect(program.parseAsync(["check"], { from: "user" })).rejects.toThrow("exit:1");
-  };
-  const traefikLines = () =>
-    errors.mock.calls
-      .flat()
-      .map(String)
-      .filter((line) => line.includes("Traefik"));
-
-  await check();
-  expect(traefikLines()).toEqual([
-    expect.stringContaining(
-      "Traefik still reads its routes from services/traefik/config/dynamic, where render keeps writing them until no container mounts that directory. Recreate Traefik to move it to infra/docker/state/ops-agent/traefik/dynamic: pnpm openmapx services update traefik, or Recreate on Admin → Services → Traefik. That restarts the proxy for a few seconds.",
-    ),
-  ]);
-
-  // Quiet once Traefik is recreated.
-  vi.mocked(legacyTraefikDynamicMounted).mockResolvedValue(false);
-  errors.mockClear();
-  await check();
-  expect(traefikLines()).toEqual([]);
 });
 
 it("reports the service files: the overrides in use and a host render's refusal", async () => {
