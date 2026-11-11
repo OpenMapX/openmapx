@@ -18,6 +18,10 @@ vi.mock("../closures.js", async (importOriginal) => {
 const WAYPOINTS_QUERY = "0.1,51.1;0.2,51.2";
 
 describe("/directions handler — avoidClosures=true with active closures", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("filters the chain to exclusion-capable providers", async () => {
     const fallbackSpy = vi.fn(async () => createDirectionsResult());
     const capableSpy = vi.fn(async () => createDirectionsResult());

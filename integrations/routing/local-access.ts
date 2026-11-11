@@ -108,10 +108,10 @@ const endsOf = (waypoints: readonly LngLat[]) =>
   [waypoints[0], waypoints[waypoints.length - 1]].filter((p): p is LngLat => p !== undefined);
 
 /**
- * Whether a road without routing evidence, closed to all but local access,
- * may be excluded: no end of the route lies on it. Excluded geometry has no
- * notion of a route's ends, so such a road stays open only where an end needs
- * it; a street behind it is then reached by the engine's own snapping.
+ * Whether a planned closure that is closed to all but local access may be
+ * excluded: no end of the route lies on it. Excluded geometry has no notion of
+ * a route's ends, so such a road stays open only where an end needs it; a
+ * street behind it is then reached by the engine's own snapping.
  */
 export function clearOfEndpoints(line: readonly LngLat[], waypoints: readonly LngLat[]): boolean {
   return endsOf(waypoints).every((end) => nearestOnLine(end, line).metres > SNAP_M);

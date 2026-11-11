@@ -1,6 +1,6 @@
 import type { BBox, RoadConditionEvent } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { activeClosuresForBbox } from "../closures";
 import { boundEvent, effect, roadConditionEvent } from "./support/road-condition";
 
@@ -153,7 +153,15 @@ describe("activeClosuresForBbox", () => {
   });
 
   describe("graph-bound effects (never projected back onto raw geometry)", () => {
-    const now = Date.now();
+    const now = Date.parse("2026-09-12T12:00:00Z");
+
+    beforeEach(() => {
+      vi.useFakeTimers({ now });
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     const currentEvidence = {
       source_checked_at: new Date(now - 1_000).toISOString(),
       fresh_until: new Date(now + 60_000).toISOString(),
@@ -226,7 +234,7 @@ describe("activeClosuresForBbox", () => {
   });
 
   describe("closures the engine's shared live traffic applies", () => {
-    const now = Date.now();
+    const now = Date.parse("2026-09-12T12:00:00Z");
     const currentEvidence = {
       source_checked_at: new Date(now - 1_000).toISOString(),
       fresh_until: new Date(now + 60_000).toISOString(),
@@ -235,17 +243,27 @@ describe("activeClosuresForBbox", () => {
       valid_to: new Date(now + 120_000).toISOString(),
       evaluated_at: new Date(now - 1_000).toISOString(),
     };
-    const line: RoadConditionEvent["geometry"] = {
-      type: "LineString",
-      coordinates: [
-        [0.1, 51.1],
-        [0.1001, 51.1001],
-      ],
-    };
     const lineCoordinates = [
       [0.1, 51.1],
       [0.1001, 51.1001],
     ];
+    const line: RoadConditionEvent["geometry"] = {
+      type: "LineString",
+      coordinates: lineCoordinates,
+    };
+    const ownCoordinates = [
+      [0.3, 51.3],
+      [0.3001, 51.3001],
+    ];
+    const ownLocation = { geometry: { type: "LineString", coordinates: ownCoordinates } };
+    const localAccessOnly = { kind: "all" as const, except: [{ usage: "local_access" as const }] };
+
+    beforeEach(() => {
+      vi.useFakeTimers({ now });
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
 
     it("hand over a full closure as a hard line", async () => {
       const event = boundEvent(
@@ -260,14 +278,38 @@ describe("activeClosuresForBbox", () => {
     });
 
     it("hand over a closure open to local access as a local-access line, not a hard one", async () => {
-      const applicability = { kind: "all" as const, except: [{ usage: "local_access" as const }] };
       const event = boundEvent(
         { id: "test:local", geometry: line },
-        effect("test:local/closure", "closure", { applicability }),
-        { ...currentEvidence, applicability },
+        effect("test:local/closure", "closure", { applicability: localAccessOnly }),
+        { ...currentEvidence, applicability: localAccessOnly },
       );
       const result = await run([event]);
       expect(result.localAccessLines).toEqual([lineCoordinates]);
+      expect(result.hardLines).toEqual([]);
+    });
+
+    it("hand over an effect's own location as its hard line, not its situation's", async () => {
+      const event = boundEvent(
+        { id: "test:own", geometry: line },
+        effect("test:own/closure", "closure", { location: ownLocation }),
+        currentEvidence,
+      );
+      const result = await run([event]);
+      expect(result.hardLines).toEqual([ownCoordinates]);
+      expect(result.localAccessLines).toEqual([]);
+    });
+
+    it("hand over an effect's own location as its local-access line, not its situation's", async () => {
+      const event = boundEvent(
+        { id: "test:own-local", geometry: line },
+        effect("test:own-local/closure", "closure", {
+          location: ownLocation,
+          applicability: localAccessOnly,
+        }),
+        { ...currentEvidence, applicability: localAccessOnly },
+      );
+      const result = await run([event]);
+      expect(result.localAccessLines).toEqual([ownCoordinates]);
       expect(result.hardLines).toEqual([]);
     });
   });
