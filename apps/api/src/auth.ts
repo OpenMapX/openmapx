@@ -216,7 +216,7 @@ function createPolicyAuth(
                 : null;
             if (recipient) {
               await recordDataDisclosureBestEffort({
-                subjectUserId: account.userId,
+                userId: account.userId,
                 occurredAt: new Date(),
                 recipientId: recipient,
                 operationCode: "auth.account.link",

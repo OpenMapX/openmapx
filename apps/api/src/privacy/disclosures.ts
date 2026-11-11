@@ -8,21 +8,9 @@ import { getSubjectDataRegistration } from "./catalogue.js";
 const code = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/);
 export const disclosureInputSchema = z
   .object({
-    /** `userId` is retained as a source-compatible alias for older call sites. */
     userId: z.string().min(1).max(256).nullable().optional(),
-    subjectUserId: z.string().min(1).max(256).nullable().optional(),
     occurredAt: z.coerce.date(),
     recipientId: code,
-    // The following legacy fields may be supplied only when they exactly match
-    // the trusted recipient snapshot. New code should not send them.
-    recipientName: z.string().min(1).max(256).optional(),
-    recipientRole: code.optional(),
-    recipientCountry: z
-      .string()
-      .regex(/^[A-Z]{2}$/)
-      .nullable()
-      .optional(),
-    recipientPrivacyUrl: z.url().nullable().optional(),
     integrationId: code.nullable().optional(),
     operationCode: code,
     categoryCode: code,
@@ -143,14 +131,7 @@ function validateAgainstCatalogue(value: {
 
 export function sanitizeDisclosureInput(value: DisclosureInput): Omit<
   DisclosureInput,
-  | "externalReference"
-  | "idempotencyKey"
-  | "subjectUserId"
-  | "userId"
-  | "recipientName"
-  | "recipientRole"
-  | "recipientCountry"
-  | "recipientPrivacyUrl"
+  "externalReference" | "idempotencyKey" | "userId"
 > & {
   userId: string | null;
   recipientName: string;
@@ -168,20 +149,8 @@ export function sanitizeDisclosureInput(value: DisclosureInput): Omit<
     purposeCode: parsed.purposeCode,
     legalBasisCode: parsed.legalBasisCode,
   });
-  const userId = parsed.subjectUserId ?? parsed.userId ?? null;
-  if (parsed.subjectUserId && parsed.userId && parsed.subjectUserId !== parsed.userId)
-    throw new Error("Conflicting subject user IDs");
-  for (const [provided, canonical] of [
-    [parsed.recipientName, recipient.name],
-    [parsed.recipientRole, recipient.role],
-    [parsed.recipientCountry, recipient.country],
-    [parsed.recipientPrivacyUrl, recipient.privacyUrl],
-  ] as const) {
-    if (provided !== undefined && provided !== canonical)
-      throw new Error("Recipient facts are controlled by the registry");
-  }
   return {
-    userId,
+    userId: parsed.userId ?? null,
     occurredAt: parsed.occurredAt,
     recipientId: parsed.recipientId,
     recipientName: recipient.name,
