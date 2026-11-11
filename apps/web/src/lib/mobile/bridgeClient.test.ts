@@ -551,27 +551,6 @@ describe("BridgeError", () => {
   });
 });
 
-describe("older native protocol negotiation", () => {
-  it("accepts version 3 and uses it for subsequent navigation requests", async () => {
-    const context = harness();
-    context.client.attach();
-    const promise = context.client.hello();
-    const sent = JSON.parse(context.sent[0]);
-    const reply = helloReply(sent.messageId, {
-      selectedProtocolVersion: 3,
-      minProtocolVersion: 3,
-      maxProtocolVersion: 3,
-    });
-    reply.protocolVersion = 3;
-    context.deliver(reply);
-    await expect(promise).resolves.toMatchObject({ selectedProtocolVersion: 3 });
-    const pending = context.client.request("snapshot.request", {});
-    expect(JSON.parse(context.sent[1]).protocolVersion).toBe(3);
-    context.client.close();
-    await expect(pending).rejects.toBeInstanceOf(BridgeError);
-  });
-});
-
 it("accepts a null selection using the incompatible native's declared envelope version", async () => {
   const context = harness();
   context.client.attach();

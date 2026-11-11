@@ -34,8 +34,6 @@ export type ShellCopyKey =
   | "permissionLostTitle"
   | "permissionLostBody"
   | "openAppSettings"
-  | "incompatibleTitle"
-  | "incompatibleBody"
   | "corruptSessionTitle"
   | "corruptSessionBody"
   | "dismiss";

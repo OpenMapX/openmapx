@@ -1,4 +1,4 @@
-import type { CarNativeToWebMessage } from "@openmapx/core/navigation";
+import { type CarNativeToWebMessage, MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
 
 // Synthetic Berlin street geometry, replayed through the wire/store path. No personal trace.
 export const fixtureRoute = {
@@ -22,7 +22,7 @@ export function fixtureSnapshot(): CarNativeToWebMessage {
     v: 1,
     type: "car-snapshot",
     message: {
-      protocolVersion: 3,
+      protocolVersion: MOBILE_PROTOCOL_MAX,
       type: "snapshot.update",
       messageId: "car-fixture",
       channelNonce: "car-fixture",

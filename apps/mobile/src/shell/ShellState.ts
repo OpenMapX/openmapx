@@ -25,8 +25,6 @@ export type ShellState =
   | { kind: "load-error"; offline: boolean }
   /** The page could not load, but native guidance is still active. */
   | { kind: "offline-navigating" }
-  /** The page negotiated no compatible protocol version. */
-  | { kind: "incompatible-shell" }
   /** A recorded session could not be read and was quarantined. */
   | { kind: "corrupt-session" }
   /** Location access was lost while a session was running. */
@@ -44,9 +42,6 @@ export const SHELL_ACTIONS: Record<ShellState["kind"], readonly ShellAction[]> =
   // Guidance is running, so ending it must be reachable even though the page is
   // not. Network settings help; a retry is offered because the page may recover.
   "offline-navigating": ["retry", "open-network-settings", "end"],
-  // Nothing native can fix a version mismatch, so the only honest action is to
-  // return to the page, which still works as an ordinary browser.
-  "incompatible-shell": ["dismiss"],
   "corrupt-session": ["dismiss"],
   // Re-prompting is exactly what must not happen; system settings is the route.
   "permission-lost": ["open-app-settings", "end"],

@@ -150,15 +150,6 @@ export class NativeBridge {
       return { status: "rejected", code: "protocol-mismatch" };
     }
 
-    if (command.type.startsWith("intake.") && handshake.protocolVersion < 4) {
-      this.send(
-        "native.error",
-        { code: "unsupported-capability" },
-        { forMessageId: command.messageId },
-      );
-      return { status: "rejected", code: "unsupported-capability" };
-    }
-
     try {
       await this.deps.dispatch(command);
     } catch {
@@ -212,20 +203,11 @@ export class NativeBridge {
         protocolVersion: selected,
       });
     }
-    // Pre-intake v3 clients use a strict capability schema. Neither new key
-    // may leak into their hello, including Android Auto's destination sync.
-    const {
-      nativeIntake: _intake,
-      carDestinations: _carDestinations,
-      ...legacyCapabilities
-    } = shell.capabilities;
     this.emit(
       {
         type: "native.hello",
         payload: {
           ...shell,
-          capabilities:
-            selected !== null && selected >= 4 ? shell.capabilities : legacyCapabilities,
           selectedProtocolVersion: selected,
           minProtocolVersion: MOBILE_PROTOCOL_MIN,
           maxProtocolVersion: MOBILE_PROTOCOL_MAX,
@@ -263,7 +245,6 @@ export class NativeBridge {
     const handshake = registry.handshake();
     const protocolVersion =
       options.protocolVersion ?? handshake?.protocolVersion ?? MOBILE_PROTOCOL_MAX;
-    if (handshake && protocolVersion < 4 && draft.type.startsWith("intake.")) return "dropped";
     const correlatedPayload =
       forMessageId &&
       draft.payload !== null &&

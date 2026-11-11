@@ -21,7 +21,7 @@ export class IntakeController {
   constructor(private readonly deps: Dependencies) {}
   async dispatch(message: WebToNativeMessage): Promise<void> {
     const current = () => this.deps.currentNonce() === message.channelNonce;
-    if (!current() || message.protocolVersion < 4) return;
+    if (!current()) return;
     const reply = <T extends NativeToWebType>(type: T, payload: NativeToWebPayload<T>) => {
       if (current()) this.deps.send(type, payload, { forMessageId: message.messageId });
     };

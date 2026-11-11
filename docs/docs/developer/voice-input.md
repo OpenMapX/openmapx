@@ -152,21 +152,14 @@ The native recogniser owns the microphone; only transcript text crosses into the
 
 ## Bridge and rollout
 
-Protocol v3 is unchanged.
 After a compatible handshake, web sends `voice.probe` with strict empty payload `{}`.
 Native replies with strict `voice.availability` payload `{ forMessageId, available: boolean }`,
 correlated to the probe's envelope message ID. The web button stays hidden until a true reply;
 false, rejection or the default five-second read deadline keeps it hidden.
 A new client or renegotiated handshake probes again. Ordinary websites never probe.
 
-Neither hello payload changes: deployed web and APK parsers are strict, so even an optional
-new capability key would break negotiation. New APK + old web keeps navigation working
-because hello is unchanged and old web never probes. Old APK + new web silently rejects
-the unknown probe before deduplication or dispatch (`NativeBridge.receive` on `origin/main`);
-the unanswered probe times out without changing navigation state. Protocol version stays unchanged.
-A web deployment can precede the APK because an unanswered probe only hides voice input.
-The current parser accepts `voice.probe`, so the old-parser rejection is verified against
-`origin/main` source rather than asserted against the new parser in a unit test.
+The probe only decides whether the voice button appears: an unanswered probe times out
+without changing navigation state.
 There is no browser-recognition fallback inside the shell.
 
 | Direction    | Message              | Payload                                              |

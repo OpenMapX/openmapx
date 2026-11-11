@@ -364,46 +364,17 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
     setPublishedNonce(shell.registry.mintNonce());
   }, [shell, connectivity.displayed, incomingLinks, voice]);
 
-  const legacyNoticed = useRef("");
   const announceIntake = useCallback(async () => {
     try {
       if (!(await intakePort.available())) return;
       const items = await intakePort.list();
-      if ((shell.registry.handshake()?.protocolVersion ?? 0) >= 4) {
+      if (shell.registry.handshake()) {
         shell.bridge.send("intake.changed", { pendingCount: items.length });
-      } else if (items.length && visibilityRef.current === "active" && shell.registry.handshake()) {
-        const key = items.map((item) => item.id).join(",");
-        if (legacyNoticed.current === key) return;
-        legacyNoticed.current = key;
-        const failed = items.some((item) => item.kind === "error");
-        const overflow = items.some(
-          (item) => item.kind === "error" && item.errorCode === "inbox-full",
-        );
-        Alert.alert(
-          failed
-            ? locale === "de"
-              ? "Inhalt konnte nicht hinzugefügt werden"
-              : "Shared item could not be added"
-            : locale === "de"
-              ? "Geteilte Inhalte gespeichert"
-              : "Shared items saved",
-          overflow
-            ? locale === "de"
-              ? "Der Eingang ist voll. Die Webansicht aktualisieren und gespeicherte Inhalte öffnen oder verwerfen. Danach erneut teilen. Die Navigation läuft weiter."
-              : "The inbox is full. Update the web view, open or discard saved items, then share again. Navigation continues."
-            : failed
-              ? locale === "de"
-                ? "Einen Ort oder bis zu fünf GPX-, GeoJSON- oder KML-Dateien mit jeweils höchstens 5 MiB teilen. Die Webansicht für die Inhaltsprüfung aktualisieren. Die Navigation läuft weiter."
-                : "Share a location or up to five GPX, GeoJSON or KML files of at most 5 MiB each. Update the web view to review saved items. Navigation continues."
-              : locale === "de"
-                ? "Die Webansicht benötigt ein Update. Gespeicherte Inhalte bleiben bis zu 24 Stunden auf diesem Gerät. Die Navigation läuft weiter."
-                : "The web view needs an update. Saved items stay on this device for up to 24 hours. Navigation continues.",
-        );
       }
     } catch {
       /* Optional module absence cannot interrupt navigation. */
     }
-  }, [intakePort, shell, locale]);
+  }, [intakePort, shell]);
   useEffect(
     () =>
       intakePort.listen(() => {

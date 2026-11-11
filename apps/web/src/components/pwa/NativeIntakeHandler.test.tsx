@@ -285,39 +285,28 @@ it("reports an item gone from the empty inbox as expired rather than an active t
   expect(f.complete).not.toHaveBeenCalled();
 });
 
-it.each([4, MOBILE_PROTOCOL_MAX])(
-  "automatically opens the provider trip on protocol %s without showing a confirmation dialog",
-  async (version) => {
-    f.protocolVersion = version;
-    const { dbNavigatorExamples } = await import(
-      "../../../../../packages/core/src/travel-plans/__fixtures__/dbNavigator"
-    );
-    const { useDirectionsStore } = await import("@openmapx/core");
-    f.list.mockResolvedValue({
-      items: [{ ...item, kind: "text", byteLength: 500 }],
-      canApply: true,
-      scheme: "openmapx",
-    });
-    f.text.mockResolvedValue(dbNavigatorExamples[3]);
-    render(<NativeIntakeHandler />);
-    expect(screen.queryByRole("dialog")).toBeNull();
-    await waitFor(() => expect(travel.resolve).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(f.complete).toHaveBeenCalledWith(item.id, "opened"));
-    expect(useDirectionsStore.getState().transitItineraries[0]).toMatchObject(
-      travelResult.plan.data.itineraries[0],
-    );
-    expect(queryClient.getQueryData(transitPlanQueryKey(travelResult.query))).toBe(
-      travelResult.plan,
-    );
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.queryByText("DB Navigator")).toBeNull();
-    expect(screen.queryByLabelText("tripText")).toBeNull();
-  },
-);
-it.each([3, null])("does not read the inbox on protocol %s", (version) => {
-  f.protocolVersion = version;
+it("automatically opens the provider trip without showing a confirmation dialog", async () => {
+  const { dbNavigatorExamples } = await import(
+    "../../../../../packages/core/src/travel-plans/__fixtures__/dbNavigator"
+  );
+  const { useDirectionsStore } = await import("@openmapx/core");
+  f.list.mockResolvedValue({
+    items: [{ ...item, kind: "text", byteLength: 500 }],
+    canApply: true,
+    scheme: "openmapx",
+  });
+  f.text.mockResolvedValue(dbNavigatorExamples[3]);
   render(<NativeIntakeHandler />);
-  expect(f.list).not.toHaveBeenCalled();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  await waitFor(() => expect(travel.resolve).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(f.complete).toHaveBeenCalledWith(item.id, "opened"));
+  expect(useDirectionsStore.getState().transitItineraries[0]).toMatchObject(
+    travelResult.plan.data.itineraries[0],
+  );
+  expect(queryClient.getQueryData(transitPlanQueryKey(travelResult.query))).toBe(travelResult.plan);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.queryByText("DB Navigator")).toBeNull();
+  expect(screen.queryByLabelText("tripText")).toBeNull();
 });
 it("keeps automatic resolution invisible and does not repeat it after inbox refreshes", async () => {
   const { dbNavigatorExamples } = await import(

@@ -2,6 +2,7 @@ import {
   EMPTY_REROUTE_CHURN,
   type FixInput,
   isMobileSessionExpired,
+  MOBILE_PROTOCOL_MAX,
   type MobileNavigationSession,
   mergeTransitRefresh,
   type NativeSnapshot,
@@ -251,7 +252,7 @@ export class NavigationCoordinator {
         return errorResponse("app-not-visible");
       const current = await this.deps.repository.loadActive(now);
       const base = {
-        protocolVersion: 3,
+        protocolVersion: MOBILE_PROTOCOL_MAX,
         messageId: `car-start-${this.deps.newSessionId()}`,
         channelNonce: "car-native",
         sentAtMs: now,

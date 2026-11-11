@@ -132,12 +132,13 @@ export function compareWithPrevious(
     });
   }
 
-  // Dropping support for a protocol version a deployed web build may still be
-  // speaking strands every user who has not yet updated.
-  if (next.protocol.min > previous.protocol.min) {
+  // The bridge speaks one version, so a message shape change raises both bounds
+  // together and that is allowed. Raising only the minimum of a wider range
+  // drops a version a deployed web build may still be speaking.
+  if (next.protocol.min > previous.protocol.min && next.protocol.min !== next.protocol.max) {
     issues.push({
       field: "protocol.min",
-      message: `raises the minimum from ${previous.protocol.min}; deployed web builds speaking ${previous.protocol.min} would stop working`,
+      message: `raises the minimum from ${previous.protocol.min} without raising the maximum to match; a single-version bridge moves both bounds together`,
     });
   }
 

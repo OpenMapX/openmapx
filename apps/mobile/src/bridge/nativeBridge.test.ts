@@ -609,8 +609,8 @@ describe("NativeBridge.send", () => {
   });
 });
 
-describe("intake protocol compatibility", () => {
-  it("stamps pre-handshake navigation output with the selected older version", async () => {
+describe("intake over the current protocol", () => {
+  it("stamps pre-handshake navigation output with the negotiated version", async () => {
     const { bridge, registry, injected } = harness();
     const channel = registry.beginDocumentLoad(NOW);
     expect(bridge.send("snapshot.update", { snapshot: progressSnapshot(1) })).toBe("queued");
@@ -621,7 +621,7 @@ describe("intake protocol compatibility", () => {
         revision: 1,
       }),
     ).toBe("queued");
-    await bridge.receive({ url: WEB_ORIGIN, data: hello(channel.nonce, { min: 3, max: 3 }) });
+    await bridge.receive({ url: WEB_ORIGIN, data: hello(channel.nonce) });
     const messages = injected.map(
       (s) => decodePayload(s) as unknown as { protocolVersion: number; type: string },
     );
@@ -630,48 +630,35 @@ describe("intake protocol compatibility", () => {
       "snapshot.update",
       "session.stopped",
     ]);
-    expect(messages.map((m) => m.protocolVersion)).toEqual([3, 3, 3]);
+    expect(messages.map((m) => m.protocolVersion)).toEqual([
+      MOBILE_PROTOCOL_MAX,
+      MOBILE_PROTOCOL_MAX,
+      MOBILE_PROTOCOL_MAX,
+    ]);
   });
 
-  it("omits new capabilities when an older web negotiates version 3", async () => {
-    const { bridge, registry, injected } = harness({
-      describeShell: () => ({
-        ...SHELL,
-        capabilities: { ...SHELL.capabilities, nativeIntake: true, carDestinations: true },
-      }),
-    });
-    const channel = registry.beginDocumentLoad(NOW);
-    await bridge.receive({ url: WEB_ORIGIN, data: hello(channel.nonce, { min: 3, max: 3 }) });
-    expect(injected).toHaveLength(1);
-    const payload = decodePayload(injected[0]).payload as unknown as {
-      capabilities: Record<string, unknown>;
-    };
-    expect(payload.capabilities).not.toHaveProperty("nativeIntake");
-    expect(payload.capabilities).not.toHaveProperty("carDestinations");
-  });
-});
-
-describe("intake protocol gates", () => {
-  it("drops version4-only queued events after a version3 negotiation", async () => {
+  it("delivers queued intake events after the handshake", async () => {
     const { bridge, registry, injected } = harness();
     const c = registry.beginDocumentLoad(NOW);
     expect(bridge.send("intake.changed", { pendingCount: 1 })).toBe("queued");
-    await bridge.receive({ url: WEB_ORIGIN, data: hello(c.nonce, { min: 3, max: 3 }) });
-    expect(injected).toHaveLength(1);
+    await bridge.receive({ url: WEB_ORIGIN, data: hello(c.nonce) });
+    expect(injected.map((s) => decodePayload(s).type)).toEqual(["native.hello", "intake.changed"]);
     expect(bridge.queuedCount).toBe(0);
   });
-  it("rejects intake commands on version3 before dispatch", async () => {
+
+  it("dispatches intake commands", async () => {
     const { bridge, registry, dispatched } = harness();
     const c = registry.beginDocumentLoad(NOW);
-    await bridge.receive({ url: WEB_ORIGIN, data: hello(c.nonce, { min: 3, max: 3 }) });
+    await bridge.receive({ url: WEB_ORIGIN, data: hello(c.nonce) });
     const result = await bridge.receive({
       url: WEB_ORIGIN,
-      data: command(c.nonce, { type: "intake.list", protocolVersion: 3 }),
+      data: command(c.nonce, { type: "intake.list" }),
     });
-    expect(result).toEqual({ status: "rejected", code: "unsupported-capability" });
-    expect(dispatched).toEqual([]);
+    expect(result).toEqual({ status: "handled", type: "intake.list" });
+    expect(dispatched).toHaveLength(1);
   });
-  it.each([4, 5])("advertises intake for a version%s peer", async (version) => {
+
+  it("advertises intake and car destinations in the hello", async () => {
     const { bridge, registry, injected } = harness({
       describeShell: () => ({
         ...SHELL,
@@ -679,10 +666,10 @@ describe("intake protocol gates", () => {
       }),
     });
     const c = registry.beginDocumentLoad(NOW);
-    await bridge.receive({ url: WEB_ORIGIN, data: hello(c.nonce, { min: version, max: version }) });
+    await bridge.receive({ url: WEB_ORIGIN, data: hello(c.nonce) });
     expect(decodePayload(injected[0]).payload).toMatchObject({
       capabilities: { nativeIntake: true, carDestinations: true },
-      selectedProtocolVersion: version,
+      selectedProtocolVersion: MOBILE_PROTOCOL_MAX,
     });
   });
 });

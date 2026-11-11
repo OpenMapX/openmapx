@@ -12,12 +12,13 @@ Extension saves locally and asks the user to open OpenMapX manually.
 ## Who is affected
 
 Native app users and mobile release operators. Browser file import, including
-`.json`, remains supported. Protocol-3 navigation remains compatible with newer
-web/native builds; native intake requires protocol 4 and rebuilt native apps.
+`.json`, remains supported. The page and the installed app speak one bridge
+protocol version; an app built for a different version shows "Update the app"
+until it is replaced.
 
 ## Required action
 
-Deploy the compatible web build before distributing the native update. Register
+Ship the web deploy and the rebuilt phone build together. Register
 `<appId>.ShareExtension` and `group.<appId>.intake`, provision the exact App Group
 for the host and Share Extension, and regenerate/build with CNG. Do not grant the
 navigation widget this group. Qualify Files/mail/cloud-provider delivery on the

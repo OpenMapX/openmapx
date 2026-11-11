@@ -24,7 +24,6 @@ export type ShellEvent =
   | { type: "permission-lost" }
   | { type: "resume-required" }
   | { type: "resume-accepted" }
-  | { type: "protocol-incompatible" }
   | { type: "config-invalid" }
   | { type: "dismissed" };
 
@@ -64,7 +63,6 @@ const STICKY = new Set<ShellState["kind"]>([
 
 function settle(context: ShellContext, current: ShellState): ShellState {
   if (STICKY.has(current.kind)) return current;
-  if (current.kind === "incompatible-shell") return current;
 
   if (context.page === "loaded") return { kind: "web" };
   // Guidance running behind a page that will not load is the case the user most
@@ -139,9 +137,6 @@ export function shellReducer(snapshot: ShellSnapshot, event: ShellEvent): ShellS
       const next = { ...context, navigating: true };
       return { state: settle(next, { kind: "loading" }), context: next };
     }
-
-    case "protocol-incompatible":
-      return { state: { kind: "incompatible-shell" }, context };
 
     case "dismissed": {
       // Dismissing an explanatory state returns to whatever the page is doing.

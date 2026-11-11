@@ -632,8 +632,7 @@ minutes. Older records can supply schedules/corrections for up to 24 hours, neve
 replace known MOTIS realtime platforms, and keep their original `recordedAt`.
 Conflicting realtime sources retain MOTIS. The shared selector drives timeline,
 boarding/alighting, transfer guidance and platform alerts. Captures carry this
-information in protocol v5; the web removes the new fields for installed v3/v4
-shells. Existing capture ownership remains unchanged. Browser capture queries refresh the
+information in the bridge protocol. Existing capture ownership remains unchanged. Browser capture queries refresh the
 current and up to three upcoming journeys every 30 seconds, so a feed warmed
 after navigation starts can update future boarding guidance too. The native refresh service also
 polls journey captures for hosted itineraries without an itinerary refresh

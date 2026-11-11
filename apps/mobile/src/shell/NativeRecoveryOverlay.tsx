@@ -57,7 +57,6 @@ const styles = StyleSheet.create({
 const COPY: Partial<Record<ShellState["kind"], { title: ShellCopyKey; body: ShellCopyKey }>> = {
   "load-error": { title: "loadErrorTitle", body: "loadErrorBody" },
   "offline-navigating": { title: "offlineNavigatingTitle", body: "offlineNavigatingBody" },
-  "incompatible-shell": { title: "incompatibleTitle", body: "incompatibleBody" },
   "corrupt-session": { title: "corruptSessionTitle", body: "corruptSessionBody" },
   "permission-lost": { title: "permissionLostTitle", body: "permissionLostBody" },
   "resume-offer": { title: "resumeTitle", body: "resumeBody" },

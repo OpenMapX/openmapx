@@ -158,9 +158,11 @@ another key, so uninstall the test build before installing a store build.
 ### Version and signing checks before building
 
 `release/version.json` records marketing `1.0.0`, iOS build `1`, Android code `1`
-and protocol v3 only. The release scripts compare it with the nearest reachable
+and protocol v6 only. The release scripts compare it with the nearest reachable
 `mobile-v*` tag to reject lower marketing versions, non-increasing build numbers
-and a raised protocol minimum. Fetch and inspect the relevant release tags;
+and a raised protocol minimum, except when the minimum equals the new maximum:
+the bridge speaks one version, and a message shape change moves both bounds
+together. Fetch and inspect the relevant release tags;
 absence or an unreadable tag is treated by the script as no previous release.
 
 The descriptor is **not wired into all native build inputs**: `app.config.ts`

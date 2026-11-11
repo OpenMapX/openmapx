@@ -52,4 +52,4 @@ they match observed installed behavior.
 - [ ] The uploaded artifact's SHA-256 matches the one in the release manifest.
 - [ ] The reviewed web build is frozen for the duration of review; a deploy
       mid-review changes what the reviewer sees.
-- [ ] The reviewed shell and frozen web build negotiate an overlapping protocol (3 for legacy navigation; 4 for native intake).
+- [ ] The reviewed shell and frozen web build negotiate the current protocol version.

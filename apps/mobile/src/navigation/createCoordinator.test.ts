@@ -1,4 +1,8 @@
-import type { NativeToWebMessage, WebToNativeMessage } from "@openmapx/core/navigation";
+import {
+  MOBILE_PROTOCOL_MAX,
+  type NativeToWebMessage,
+  type WebToNativeMessage,
+} from "@openmapx/core/navigation";
 import { getDatabase } from "../storage/database";
 import { migrateSessionSchema } from "../storage/migrations";
 import { openTestDatabase } from "../storage/testing/nodeSqliteDatabase";
@@ -12,7 +16,7 @@ const mockedGetDatabase = getDatabase as jest.MockedFunction<typeof getDatabase>
 
 function command(messageId: string): WebToNativeMessage {
   return {
-    protocolVersion: 3,
+    protocolVersion: MOBILE_PROTOCOL_MAX,
     type: "snapshot.request",
     messageId,
     channelNonce: "nonce",

@@ -156,15 +156,8 @@ describe("shellReducer", () => {
     expect(context.navigating).toBe(false);
   });
 
-  it("reports an incompatible protocol without offering a fix it does not have", () => {
-    const { state } = drive([...LOADED, { type: "protocol-incompatible" }]);
-
-    expect(state).toEqual({ kind: "incompatible-shell" });
-    expect(actionsFor(state)).toEqual(["dismiss"]);
-  });
-
   it("lets the user dismiss an explanation and go back to the page", () => {
-    const { state } = drive([...LOADED, { type: "protocol-incompatible" }, { type: "dismissed" }]);
+    const { state } = drive([...LOADED, { type: "session-quarantined" }, { type: "dismissed" }]);
 
     expect(state).toEqual({ kind: "web" });
   });

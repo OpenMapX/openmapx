@@ -1,4 +1,4 @@
-import { routeFingerprint } from "@openmapx/core/navigation";
+import { MOBILE_PROTOCOL_MAX, routeFingerprint } from "@openmapx/core/navigation";
 import { groundFullSnapshot, groundProgressSnapshot } from "../navigation/snapshots/groundSnapshot";
 import type { SessionRepository } from "../storage/SessionRepository";
 import { buildCarTripProjection } from "./CarTripProjection";
@@ -48,7 +48,7 @@ async function publish(
         projection: null,
         message: previous
           ? {
-              protocolVersion: 3,
+              protocolVersion: MOBILE_PROTOCOL_MAX,
               type: "session.stopped",
               messageId: `car-${++sequence}`,
               channelNonce: "car-native",
@@ -97,7 +97,7 @@ async function publish(
         now,
       ),
       message: {
-        protocolVersion: 3,
+        protocolVersion: MOBILE_PROTOCOL_MAX,
         type: "snapshot.update",
         messageId: `car-${++sequence}`,
         channelNonce: "car-native",
