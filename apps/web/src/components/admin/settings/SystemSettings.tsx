@@ -968,7 +968,7 @@ export function SettingsTransfer() {
     <Stack sx={{ gap: 2, maxWidth: 900 }}>
       <AdminPageHeader
         title="Configuration transfer"
-        subtitle="Export application settings, transfer integration configuration or migrate an instance"
+        subtitle="Export this instance's configuration or migrate it from another instance"
       />
       <ConfigurationMigrationPanel />
     </Stack>
