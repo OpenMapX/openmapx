@@ -5,6 +5,7 @@ import {
   readBoundedBinaryResponse,
 } from "@openmapx/core/server";
 import {
+  captureCacheWriter,
   dataSourceToAttribution,
   type IntegrationContext,
   scalarQueries,
@@ -148,7 +149,7 @@ interface HarborDetail extends ContributingRecord {
    * place panel uses this to surface a tides row without a second lookup.
    * Undefined when the harbor is outside US tidal waters.
    */
-  nearestTideStation?: {
+  nearestTideStation?: ContributingRecord & {
     id: string;
     name: string;
     distanceKm: number;
@@ -219,6 +220,7 @@ async function fetchAndCacheTile(
   if (cached?.data) {
     return Buffer.from(cached.data, "base64");
   }
+  const writer = await captureCacheWriter(ctx.cache);
   const res = await fetchWithTimeout(upstreamUrl, undefined, signal);
   if (!res?.ok) return null;
   try {
@@ -228,7 +230,7 @@ async function fetchAndCacheTile(
       fallbackContentType: "image/png",
       label: "nautical tile",
     });
-    await ctx.cache.set(cacheKey, { data: data.toString("base64") }, ttl);
+    await writer.set(cacheKey, { data: data.toString("base64") }, ttl);
     return data;
   } catch {
     return null;
@@ -274,6 +276,38 @@ interface OverpassResponse {
     center?: { lat: number; lon: number };
     tags?: Record<string, string>;
   }>;
+}
+
+type HarborSurroundings = Pick<HarborDetail, "facilities" | "nearestTideStation">;
+
+/** Facilities around a harbour position and the NOAA tide station nearest to it. */
+async function fetchHarborSurroundings(
+  ctx: IntegrationContext,
+  lat: number,
+  lng: number,
+): Promise<HarborSurroundings> {
+  // Facilities + nearest-tide-station lookups run in parallel — the
+  // station catalog is Redis-cached for a week so the second leg is cheap.
+  const [facilities, nearestTideStation] = await Promise.all([
+    fetchHarborFacilities(ctx, lat, lng),
+    (async () => {
+      try {
+        const credits = stationContributors("noaa");
+        const stations = await loadNoaaStations(ctx.cache, ctx.log, undefined, credits);
+        const hit = findNearestStation(stations, lat, lng, 5, "tide-predictions");
+        if (!hit) return undefined;
+        return {
+          id: hit.station.id,
+          name: hit.station.name,
+          distanceKm: Number(hit.distanceKm.toFixed(2)),
+          contributors: snapshotContributors(hit.station.contributors ?? credits),
+        };
+      } catch {
+        return undefined;
+      }
+    })(),
+  ]);
+  return { facilities, nearestTideStation };
 }
 
 async function fetchHarborFacilities(
@@ -441,6 +475,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.send(Buffer.from(cached.data, "base64"));
       return;
     }
+    const writer = await captureCacheWriter(ctx.cache);
     const res = await fetchWithTimeout(wmsUrl.toString(), undefined, req.signal);
     if (!res?.ok) {
       reply.status(502).send({ message: "GEBCO tile fetch failed" });
@@ -459,7 +494,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(502).send({ message: "GEBCO tile fetch failed" });
       return;
     }
-    await ctx.cache.set(
+    await writer.set(
       cacheKey,
       { data: buf.toString("base64"), contentType },
       DEPTH_RELIEF_CACHE_TTL,
@@ -577,6 +612,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
+    const writer = await captureCacheWriter(ctx.cache);
     const url = new URL(harbourApiUrl);
     url.searchParams.set("b", String(south));
     url.searchParams.set("t", String(north));
@@ -606,7 +642,7 @@ export function setup(ctx: IntegrationContext): void {
       properties: { ...f.properties, _mapAttributions: serializeContributors(receipts) },
     }));
     const collection: HarborCollection = { type: "FeatureCollection", features };
-    await ctx.cache.set(cacheKey, collection, HARBORS_CACHE_TTL);
+    await writer.set(cacheKey, collection, HARBORS_CACHE_TTL);
     reply.header("Cache-Control", "public, max-age=1800");
     reply.send(collection);
   });
@@ -623,40 +659,19 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const nearbyCredits = stationContributors("noaa");
-    const cacheKey = `harbor:contributors-v1:${id}`;
-    const cached = await ctx.cache.get<HarborDetail>(cacheKey);
-    if (cached) {
-      reply.header("Cache-Control", "public, max-age=3600");
-      reply.send(cached);
-      return;
+    // The upstream lookups depend only on the position, so they are cached by
+    // the rounded position they query. The id, name and category come from
+    // the caller and go on a detached copy, never into the shared entry.
+    const queryLat = Math.round(lat * 10_000) / 10_000;
+    const queryLng = Math.round(lng * 10_000) / 10_000;
+    const cacheKey = `harbor:surroundings-v1:${queryLat},${queryLng}`;
+    let surroundings = await ctx.cache.get<HarborSurroundings>(cacheKey);
+    if (!surroundings) {
+      const writer = await captureCacheWriter(ctx.cache);
+      surroundings = await fetchHarborSurroundings(ctx, queryLat, queryLng);
+      await writer.set(cacheKey, surroundings, HARBOR_DETAIL_CACHE_TTL);
     }
-
-    // Facilities + nearest-tide-station lookups run in parallel — the
-    // station catalog is Redis-cached for a week so the second leg is cheap.
-    const [facilities, nearestTideStation] = await Promise.all([
-      fetchHarborFacilities(ctx, lat, lng),
-      (async () => {
-        try {
-          const stations = await loadNoaaStations(
-            ctx.cache,
-            ctx.log,
-            undefined,
-            stationContributors("noaa"),
-          );
-          const hit = findNearestStation(stations, lat, lng, 5, "tide-predictions");
-          if (!hit) return undefined;
-          return {
-            id: hit.station.id,
-            name: hit.station.name,
-            distanceKm: Number(hit.distanceKm.toFixed(2)),
-            contributors: snapshotContributors(hit.station.contributors ?? nearbyCredits),
-          };
-        } catch {
-          return undefined;
-        }
-      })(),
-    ]);
+    const { facilities, nearestTideStation } = structuredClone(surroundings);
 
     const detail: HarborDetail = {
       harbor: {
@@ -678,7 +693,6 @@ export function setup(ctx: IntegrationContext): void {
       ),
     };
 
-    await ctx.cache.set(cacheKey, detail, HARBOR_DETAIL_CACHE_TTL);
     reply.header("Cache-Control", "public, max-age=3600");
     reply.send(detail);
   });
@@ -736,6 +750,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
+    const writer = await captureCacheWriter(ctx.cache);
     // Load NOAA via the existing typed loader; load non-NOAA networks via the
     // new merger module. Each catalog is Redis-cached for 7d behind its own key.
     const [noaaRaw, extraRaw] = await Promise.all([
@@ -812,7 +827,7 @@ export function setup(ctx: IntegrationContext): void {
       }),
     };
 
-    await ctx.cache.set(cacheKey, collection, STATIONS_CACHE_TTL);
+    await writer.set(cacheKey, collection, STATIONS_CACHE_TTL);
     reply.header("Cache-Control", "public, max-age=3600");
     reply.send(collection);
   });

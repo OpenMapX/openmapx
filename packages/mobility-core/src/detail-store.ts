@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { CacheClient } from "./cache.js";
+import type { CacheClient, CacheWriter } from "./cache.js";
 import type { SharedMobilityStation, SharedMobilityVehicle } from "./types/shared-mobility.js";
 
 export type SharedMobilityDetailItem = SharedMobilityStation | SharedMobilityVehicle;
@@ -102,6 +102,7 @@ export class SharedMobilityDetailStore {
   }
 
   private async mergeAndStore(
+    writer: CacheWriter,
     key: string,
     incoming: RetainedSharedMobilityDetail[],
   ): Promise<void> {
@@ -115,18 +116,18 @@ export class SharedMobilityDetailStore {
         (Math.max(...items.map((record) => record.expiresAt)) - Date.now()) / 1000,
       );
       if (remainingSeconds <= 0) return;
-      await this.cache.set(
-        key,
-        { schemaVersion: 2, items } satisfies DetailSnapshot,
-        remainingSeconds,
-      );
+      await writer.set(key, { schemaVersion: 2, items } satisfies DetailSnapshot, remainingSeconds);
     } catch {
       // Search remains available through bounded L1 when the shared cache is degraded.
     }
   }
 
-  /** Only a new inventory acquisition establishes a new deadline/token. */
-  async store(items: SharedMobilityDetailItem[]): Promise<void> {
+  /**
+   * Only a new inventory acquisition establishes a new deadline/token. Pass a
+   * writer captured with `captureCacheWriter` before the inventory request, so
+   * an admin clear during that request keeps its items out of the shared cache.
+   */
+  async store(items: SharedMobilityDetailItem[], writer: CacheWriter): Promise<void> {
     const byScope = new Map<string, RetainedSharedMobilityDetail[]>();
     const acquiredAt = Date.now();
     for (const item of items) {
@@ -145,7 +146,7 @@ export class SharedMobilityDetailStore {
       }
     }
     await Promise.all(
-      [...byScope].map(([scope, scoped]) => this.mergeAndStore(cacheKey(scope), scoped)),
+      [...byScope].map(([scope, scoped]) => this.mergeAndStore(writer, cacheKey(scope), scoped)),
     );
   }
 
@@ -153,10 +154,14 @@ export class SharedMobilityDetailStore {
     return `shared-mobility-detail:enrichment:v1:${encodeURIComponent(record.item.id)}:${record.acquisitionToken}`;
   }
 
-  /** Persist enrichment separately; an old read can never rewrite a newer inventory envelope. */
+  /**
+   * Persist enrichment separately; an old read can never rewrite a newer
+   * inventory envelope. The writer is captured before the enrichment request.
+   */
   async updateRetained(
     record: RetainedSharedMobilityDetail,
     item: SharedMobilityDetailItem,
+    writer: CacheWriter,
   ): Promise<boolean> {
     if (
       item.id !== record.item.id ||
@@ -168,7 +173,7 @@ export class SharedMobilityDetailStore {
     if (remainingSeconds <= 0) return false;
     const updated = { ...record, item: structuredClone(item) };
     try {
-      await this.cache.set(this.patchKey(record), updated, remainingSeconds);
+      await writer.set(this.patchKey(record), updated, remainingSeconds);
     } catch {
       // A degraded shared cache does not prevent this process retaining its bounded enrichment.
     }

@@ -25,6 +25,7 @@ import { fetchJson, haversineKm } from "@openmapx/core";
 import {
   type CacheClient,
   type ContributingRecord,
+  captureCacheWriter,
   dataSourceToAttribution,
   type Logger,
   snapshotContributors,
@@ -109,6 +110,7 @@ async function loadIocStations(
   const cacheKey = "catalog:contributors-v1:ioc";
   const cached = await cache.get<MergedTideStation[]>(cacheKey);
   if (cached) return cached;
+  const writer = await captureCacheWriter(cache);
 
   const raw = await fetchJsonWithTimeout<IocStationRaw[]>(IOC_URL, ua);
   if (!raw) {
@@ -135,7 +137,7 @@ async function loadIocStations(
   }
   const stations = Array.from(seenByCode.values());
   const captured = stations.map((s) => withContributors(s, stationContributors(s.network)));
-  await cache.set(cacheKey, captured, CATALOG_TTL);
+  await writer.set(cacheKey, captured, CATALOG_TTL);
   return captured;
 }
 
@@ -214,6 +216,7 @@ async function loadEmodnetStations(
   const cacheKey = "catalog:contributors-v1:emodnet";
   const cached = await cache.get<MergedTideStation[]>(cacheKey);
   if (cached) return cached;
+  const writer = await captureCacheWriter(cache);
 
   const raw = await fetchJsonWithTimeout<{ features: EmodnetFeature[] }>(EMODNET_WFS_URL, ua);
   if (!raw?.features) {
@@ -246,7 +249,7 @@ async function loadEmodnetStations(
     });
   }
   const captured = stations.map((s) => withContributors(s, stationContributors(s.network)));
-  await cache.set(cacheKey, captured, CATALOG_TTL);
+  await writer.set(cacheKey, captured, CATALOG_TTL);
   return captured;
 }
 
@@ -275,6 +278,7 @@ async function loadCanadaStations(
   const cacheKey = "catalog:contributors-v1:ca-iwls";
   const cached = await cache.get<MergedTideStation[]>(cacheKey);
   if (cached) return cached;
+  const writer = await captureCacheWriter(cache);
 
   const raw = await fetchJsonWithTimeout<IwlsStationRaw[]>(IWLS_URL, ua);
   if (!raw) {
@@ -302,7 +306,7 @@ async function loadCanadaStations(
       };
     });
   const captured = stations.map((s) => withContributors(s, stationContributors(s.network)));
-  await cache.set(cacheKey, captured, CATALOG_TTL);
+  await writer.set(cacheKey, captured, CATALOG_TTL);
   return captured;
 }
 
@@ -318,6 +322,7 @@ async function loadNorwayStations(
   const cacheKey = "catalog:contributors-v1:kartverket";
   const cached = await cache.get<MergedTideStation[]>(cacheKey);
   if (cached) return cached;
+  const writer = await captureCacheWriter(cache);
 
   try {
     const controller = new AbortController();
@@ -353,7 +358,7 @@ async function loadNorwayStations(
       });
     }
     const captured = stations.map((s) => withContributors(s, stationContributors(s.network)));
-    await cache.set(cacheKey, captured, CATALOG_TTL);
+    await writer.set(cacheKey, captured, CATALOG_TTL);
     return captured;
   } catch {
     return [];
@@ -381,6 +386,7 @@ async function loadPegelonlineStations(
   const cacheKey = "catalog:contributors-v1:pegel";
   const cached = await cache.get<MergedTideStation[]>(cacheKey);
   if (cached) return cached;
+  const writer = await captureCacheWriter(cache);
 
   const raw = await fetchJsonWithTimeout<PegelStationRaw[]>(PEGELONLINE_URL, ua);
   if (!raw) {
@@ -401,7 +407,7 @@ async function loadPegelonlineStations(
       country: "DE",
     }));
   const captured = stations.map((s) => withContributors(s, stationContributors(s.network)));
-  await cache.set(cacheKey, captured, CATALOG_TTL);
+  await writer.set(cacheKey, captured, CATALOG_TTL);
   return captured;
 }
 

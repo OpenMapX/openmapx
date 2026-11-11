@@ -7,12 +7,13 @@ import {
 } from "@openmapx/core";
 import {
   type ContributingRecord,
+  captureCacheWriter,
   createTidesIntegration,
   type IntegrationContext,
   resolveIntegrationContributors,
   snapshotContributors,
   type TideEvent,
-  type TidesResponse,
+  type TideStationResponse,
   withContributors,
 } from "@openmapx/integration-framework";
 
@@ -145,6 +146,7 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
   const cached = await ctx.cache.get<CachedStation[]>("catalog:contributors-v1");
   if (cached) return cached;
   const captured = resolveIntegrationContributors(ctx, ["ioc-sealevel"]);
+  const writer = await captureCacheWriter(ctx.cache);
 
   const raw = await fetchJson<IocStationRaw[]>(`${BASE}?query=stationlist&format=json`);
   if (!raw) {
@@ -167,7 +169,7 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
     });
   }
   const acquired = stations.map((station) => withContributors(station, captured));
-  await ctx.cache.set("catalog:contributors-v1", acquired, CATALOG_TTL);
+  await writer.set("catalog:contributors-v1", acquired, CATALOG_TTL);
   return acquired;
 }
 
@@ -211,13 +213,13 @@ export function deriveExtrema(curve: Array<{ time: string; value: number }>): Ti
 async function buildTidesResponse(
   ctx: IntegrationContext,
   station: CachedStation,
-  distanceKm: number,
-): Promise<TidesResponse | null> {
+): Promise<TideStationResponse | null> {
   const hourKey = new Date().toISOString().slice(0, 13);
   const cacheKey = `tides:${CACHE_GENERATION}:${station.code}:${hourKey}`;
-  const cached = await ctx.cache.get<TidesResponse>(cacheKey);
+  const cached = await ctx.cache.get<TideStationResponse>(cacheKey);
   if (cached) return cached;
   const captured = resolveIntegrationContributors(ctx, ["ioc-sealevel"]);
+  const writer = await captureCacheWriter(ctx.cache);
 
   const obs = await fetchObservations(station.code);
   if (obs.length === 0) return null;
@@ -239,7 +241,7 @@ async function buildTidesResponse(
 
   const last = curveRaw[curveRaw.length - 1];
 
-  const result: TidesResponse = {
+  const result: TideStationResponse = {
     contributors: snapshotContributors(station.contributors ?? [], captured),
     fieldContributors: {
       station: snapshotContributors(station.contributors ?? []),
@@ -252,7 +254,6 @@ async function buildTidesResponse(
       name: station.name,
       lat: station.lat,
       lng: station.lng,
-      distanceKm: Number(distanceKm.toFixed(2)),
     },
     events,
     curve,
@@ -265,7 +266,7 @@ async function buildTidesResponse(
       valueFt: Math.round(last.value * M_TO_FT * 100) / 100,
     },
   };
-  await ctx.cache.set(cacheKey, result, TIDES_TTL);
+  await writer.set(cacheKey, result, TIDES_TTL);
   return result;
 }
 

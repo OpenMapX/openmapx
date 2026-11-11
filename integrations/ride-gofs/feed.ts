@@ -1,5 +1,5 @@
 import { safeFetchJson } from "@openmapx/core/server";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { captureCacheWriter, type IntegrationContext } from "@openmapx/integration-framework";
 import {
   type GofsRealtimeBookingEntry,
   type GofsWaitTimeEntry,
@@ -97,13 +97,14 @@ export function createGofsFeedClient(
     }
     if (cached !== null && cached !== undefined) return cached;
 
+    const writer = await captureCacheWriter(ctx.cache);
     const doc = await authedFetch(url);
     const ttl = envelopeTtl(doc);
     // A feed declaring ttl 0 is telling us its data can change at any moment;
     // honour that by not caching it at all rather than picking a lifetime for it.
     if (ttl > 0) {
       try {
-        await ctx.cache.set(cacheKey(name), doc, ttl);
+        await writer.set(cacheKey(name), doc, ttl);
       } catch {
         // The document was fetched successfully; failing to cache it is not
         // a reason to fail the request.

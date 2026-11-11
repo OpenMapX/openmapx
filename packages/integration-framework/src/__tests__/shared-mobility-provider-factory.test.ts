@@ -11,6 +11,7 @@ import type { CacheClient } from "../context";
 import type { IntegrationDataSource } from "../manifest";
 import { buildSharedMobilityMapContext } from "../shared-mobility/context";
 import { createSharedMobilityProvider } from "../shared-mobility-provider-factory";
+import { createFencedMemoryCache } from "../testing";
 
 vi.mock("@openmapx/mobility-core/entur-mobility", () => ({
   enrichEnturMobilityItems: vi.fn(),
@@ -391,4 +392,33 @@ it("adds only newly supplied detail enrichment sources to cached receipts", asyn
   expect(response.data?.contributors?.map((a) => a.sourceId)).toEqual(["gbfs", "entur-mobility"]);
   const retained = await shared.getDetail("s:gbfs/provider/station-1");
   expect(retained.data?.contributors).toEqual(response.data?.contributors);
+});
+
+it("keeps an inventory fetched across an admin cache clear out of the detail snapshots", async () => {
+  const cache = createFencedMemoryCache();
+  let release!: () => void;
+  let loading!: () => void;
+  const started = new Promise<void>((resolve) => {
+    loading = resolve;
+  });
+  const provider = definition(
+    vi.fn(async () => {
+      loading();
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return { stations: [station()], vehicles: [] };
+    }),
+    { cache },
+  );
+
+  const searching = provider.search(BBOX);
+  await started;
+  cache.clear();
+  release();
+
+  expect((await searching).data).toHaveLength(1);
+  expect(
+    [...cache.values.keys()].filter((key) => key.startsWith("shared-mobility-detail")),
+  ).toEqual([]);
 });

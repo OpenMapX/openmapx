@@ -1,5 +1,5 @@
 import { type BBox, fetchJson } from "@openmapx/core";
-import type { CacheClient } from "@openmapx/integration-framework";
+import { type CacheClient, captureCacheWriter } from "@openmapx/integration-framework";
 import { COUNTRY_BBOXES } from "./country-bboxes";
 import {
   TRANSPORT_APIS_COMMIT,
@@ -317,6 +317,7 @@ export async function fetchRegistryEntries(
     if (cached.length > 0) return cached;
   }
 
+  const writer = cache ? await captureCacheWriter(cache) : null;
   // 1. Primary: jsDelivr CDN (no auth, no rate limits, no GitHub API calls)
   try {
     const paths = await fetchPathsFromJsdelivr(token);
@@ -342,8 +343,8 @@ export async function fetchRegistryEntries(
   }
 
   if (entries && entries.length > 0) {
-    if (cache) {
-      await cache.set(REGISTRY_CACHE_KEY, entries, REGISTRY_CACHE_TTL).catch(() => {});
+    if (writer) {
+      await writer.set(REGISTRY_CACHE_KEY, entries, REGISTRY_CACHE_TTL).catch(() => {});
     }
     return entries;
   }

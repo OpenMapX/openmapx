@@ -26,7 +26,7 @@
       "sourceId": "openstreetmap",
       "name": "OpenStreetMap contributors",
       "url": "https://www.openstreetmap.org/copyright",
-      "attributionText": "© OpenStreetMap contributors",
+      "attribution": "© OpenStreetMap contributors",
       "commercialUse": "yes",
       "providerCountry": "GB",
       "providerPrivacyUrl": "https://osmfoundation.org/wiki/Privacy_Policy",

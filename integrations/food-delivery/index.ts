@@ -3,7 +3,11 @@ import {
   type DeliveryLinkKind,
   type DeliveryProviderInfo,
 } from "@openmapx/core/server";
-import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
+import {
+  captureCacheWriter,
+  type IntegrationContext,
+  scalarQueries,
+} from "@openmapx/integration-framework";
 import { DELIVERY_PROVIDERS, getDeliveryProvider, providerServes } from "./providers/index.js";
 import { parseDeliveryQuery } from "./query.js";
 import type { DeliveryProvider, DeliveryProviderConfig, DeliveryQuery } from "./types.js";
@@ -99,16 +103,17 @@ export function setup(ctx: IntegrationContext): void {
         if (cached?.version === 2 && cached.kind === "not_found") {
           return { url: fallback(), linkKind: provider.fallbackKind };
         }
+        const writer = await captureCacheWriter(ctx.cache);
         const resolved = await provider.resolve(query, providerConfig);
         if (resolved.kind === "exact") {
-          await ctx.cache.set(
+          await writer.set(
             cacheKey,
             { version: 2, kind: "exact", url: resolved.url } satisfies CachedResolution,
             RESOLVE_TTL,
           );
           return { url: resolved.url, linkKind: "exact" };
         }
-        await ctx.cache.set(
+        await writer.set(
           cacheKey,
           { version: 2, kind: "not_found" } satisfies CachedResolution,
           RESOLVE_NEGATIVE_TTL,

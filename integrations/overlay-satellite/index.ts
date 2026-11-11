@@ -4,7 +4,7 @@ import {
   MAX_RASTER_TILE_BYTES,
   RASTER_IMAGE_MEDIA_TYPES,
 } from "@openmapx/core/server";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { captureCacheWriter, type IntegrationContext } from "@openmapx/integration-framework";
 import { assertNoXmlEntityDeclarations } from "@openmapx/mobility-formats";
 import { XMLParser } from "fast-xml-parser";
 import { type Capabilities, GIBS_LAYERS, type GibsLayerId } from "./store";
@@ -95,8 +95,10 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function setup(ctx: IntegrationContext): void {
   // Pre-warm capabilities cache on startup
-  fetchAndParseCapabilities()
-    .then((caps) => ctx.cache.set(CAPABILITIES_CACHE_KEY, caps, CAPABILITIES_CACHE_TTL))
+  captureCacheWriter(ctx.cache)
+    .then(async (writer) =>
+      writer.set(CAPABILITIES_CACHE_KEY, await fetchAndParseCapabilities(), CAPABILITIES_CACHE_TTL),
+    )
     .catch(() => {});
 
   ctx.registerRoute("GET", "/capabilities", async (_req, reply) => {
@@ -108,8 +110,9 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     try {
+      const writer = await captureCacheWriter(ctx.cache);
       const capabilities = await fetchAndParseCapabilities();
-      await ctx.cache.set(CAPABILITIES_CACHE_KEY, capabilities, CAPABILITIES_CACHE_TTL);
+      await writer.set(CAPABILITIES_CACHE_KEY, capabilities, CAPABILITIES_CACHE_TTL);
       reply.header("Cache-Control", "public, max-age=3600");
       reply.send(capabilities);
     } catch {

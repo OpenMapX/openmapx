@@ -5,6 +5,7 @@ export {
   type IntegrationActivation,
   runImmediateActivation,
 } from "./activation-transaction";
+export { type CacheWriter, captureCacheWriter } from "./cache-writer";
 export {
   type CollectionOrchestrator,
   type CollectionOrchestratorOptions,
@@ -418,6 +419,7 @@ export {
   type TideEvent,
   type TideResponseStation,
   type TideStationBase,
+  type TideStationResponse,
   type TidesIntegrationConfig,
   type TidesResponse,
   type WaterLevelObservation,

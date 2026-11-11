@@ -1,4 +1,8 @@
-import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
+import {
+  captureCacheWriter,
+  type IntegrationContext,
+  scalarQueries,
+} from "@openmapx/integration-framework";
 import { normalizeWebsite, resolveRestaurantLinks } from "./menu.js";
 
 const POSITIVE_TTL = 7 * 24 * 60 * 60; // 7 days — menus rarely move
@@ -41,6 +45,7 @@ export function setup(ctx: IntegrationContext): void {
       if (cached) {
         result = cached;
       } else {
+        const writer = await captureCacheWriter(ctx.cache);
         const resolved = await resolveRestaurantLinks(normalized, ctx.log);
         result =
           resolved.menu || resolved.orderUrl || resolved.providerOrderUrls.length > 0
@@ -53,7 +58,7 @@ export function setup(ctx: IntegrationContext): void {
                 providerOrderUrls: resolved.providerOrderUrls,
               }
             : { found: false };
-        await ctx.cache.set(cacheKey, result, result.found ? POSITIVE_TTL : NEGATIVE_TTL);
+        await writer.set(cacheKey, result, result.found ? POSITIVE_TTL : NEGATIVE_TTL);
       }
 
       if (!result.found) {

@@ -1,3 +1,4 @@
+import type { CacheWriter } from "./cache-writer.js";
 import { TTL as TTL_POLICY } from "./policy.js";
 
 // Local structural type that mirrors `CacheClient` from
@@ -11,6 +12,12 @@ import { TTL as TTL_POLICY } from "./policy.js";
 export interface CacheClient {
   /** Host administration capability; CLI and test caches may omit it. */
   onInvalidate?(listener: (event: { available: boolean }) => void): () => void;
+  /**
+   * Managed hosts capture the administrative write fence before acquisition;
+   * the returned writer refuses a write once an admin clear has intervened.
+   * CLI and test caches may omit it.
+   */
+  captureWriter?(): Promise<CacheWriter>;
   get<T = unknown>(key: string): Promise<T | null>;
   set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
   del(key: string): Promise<void>;
@@ -27,14 +34,7 @@ export async function cacheGet<T>(cache: CacheClient, key: string): Promise<T | 
   return cache.get<T>(key);
 }
 
-export async function cacheSet(
-  cache: CacheClient,
-  key: string,
-  value: unknown,
-  ttlSeconds: number,
-): Promise<void> {
-  await cache.set(key, value, ttlSeconds);
-}
+export { type CacheWriter, captureCacheWriter } from "./cache-writer.js";
 
 export async function withCache<T>(
   cache: CacheClient,

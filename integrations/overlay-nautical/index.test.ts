@@ -17,6 +17,7 @@ vi.mock("@openmapx/noaa-coops-data", () => ({
 }));
 
 import {
+  createFencedMemoryCache,
   createMockIntegrationContext,
   type MockIntegrationContext,
 } from "@openmapx/integration-framework/testing";
@@ -273,5 +274,58 @@ describe("nautical routes", () => {
       const body = result.body as { features: Array<{ properties: { id: string } }> };
       expect(body.features.map((f) => f.properties.id)).toEqual(["tide-only"]);
     });
+  });
+});
+
+describe("/harbor/:id", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("serves each caller its own harbour fields over one shared upstream lookup", async () => {
+    fetchJson.mockReset();
+    loadStations.mockReset().mockResolvedValue([]);
+    findNearestStation.mockReset().mockReturnValue(null);
+    fetchJson.mockResolvedValue({
+      elements: [
+        { type: "node", id: 7, lat: 53.5501, lon: 9.9501, tags: { "seamark:type": "berth" } },
+      ],
+    });
+    const cache = createFencedMemoryCache();
+    const ctx = createMockIntegrationContext({ cache });
+    ctx.getRequiredService = () => ({
+      serviceId: "overpass",
+      url: "https://overpass.test",
+      enabled: true,
+    });
+    setup(ctx);
+    const route = ctx.registered.routes.find((r) => r.path === "/harbor/:id");
+    if (!route) throw new Error("route /harbor/:id not registered");
+    const read = async (id: string, query: Record<string, string>) => {
+      let body: unknown;
+      const reply = {
+        header: () => reply,
+        status: () => reply,
+        type: () => reply,
+        send: (value: unknown) => {
+          body = value;
+        },
+      };
+      await route.handler(
+        { params: { id }, query, headers: {}, body: null, clientKey: "c" },
+        reply,
+      );
+      return body as { harbor: Record<string, unknown>; facilities: unknown[] };
+    };
+
+    const first = await read("101", { lat: "53.55", lng: "9.95", name: "Hamburg", category: "1" });
+    const second = await read("101", { lat: "53.55", lng: "9.95", name: "Spoofed", category: "4" });
+    first.harbor.name = "mutated by the first caller";
+    const third = await read("202", { lat: "53.55001", lng: "9.95", name: "Neighbour" });
+
+    expect(second.harbor).toMatchObject({ id: 101, name: "Spoofed", category: 4, type: "marina" });
+    expect(third.harbor).toMatchObject({ id: 202, name: "Neighbour", lat: 53.55001, lng: 9.95 });
+    expect(third.facilities).toHaveLength(1);
+    expect(fetchJson).toHaveBeenCalledTimes(1);
+    expect([...cache.values.keys()]).toEqual(["harbor:surroundings-v1:53.55,9.95"]);
+    expect(JSON.stringify([...cache.values.values()])).not.toMatch(/Hamburg|Spoofed|Neighbour/);
   });
 });

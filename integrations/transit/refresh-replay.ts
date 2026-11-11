@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { captureCacheWriter, type IntegrationContext } from "@openmapx/integration-framework";
 
 interface RefreshResponse {
   status: number;
@@ -57,7 +57,7 @@ export function createRefreshReplay(ctx: IntegrationContext) {
         const completed = await ctx.cache.get<RefreshResponse>(key);
         if (completed) return permitted(completed);
         const startedAt = Date.now();
-        const writer = (await ctx.cache.captureWriter?.()) ?? ctx.cache;
+        const writer = await captureCacheWriter(ctx.cache);
         const result = await permitted(await work());
         if (store && Date.now() - startedAt >= 25_000) return unavailable();
         if (result.status === 200) {

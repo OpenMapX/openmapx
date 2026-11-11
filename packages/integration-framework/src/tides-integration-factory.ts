@@ -1,7 +1,8 @@
-import type { TidesPayload } from "@openmapx/core";
+import type { TideResponseStation, TidesPayload } from "@openmapx/core";
 import { haversineKm } from "@openmapx/core";
 import type { PlaceResolverContext } from "@openmapx/place-ids";
 import { registerPlaceResolver } from "@openmapx/place-ids";
+import { captureCacheWriter } from "./cache-writer";
 import type { IntegrationContext } from "./context";
 import { scalarQuery } from "./query";
 
@@ -20,6 +21,15 @@ export type {
  * cache policy, and error message while the framework owns coordinate lookup,
  * negative caching, and the canonical response contract.
  */
+
+/**
+ * A tide payload as a provider builds and caches it for one station. It holds
+ * no caller distance, so one cached station response can serve every caller;
+ * the route adds each caller's distance to a detached copy.
+ */
+export type TideStationResponse = Omit<TidesPayload, "station"> & {
+  station: Omit<TideResponseStation, "distanceKm">;
+};
 
 /** A station record carrying at least coordinates — provider types extend this. */
 export interface TideStationBase {
@@ -55,12 +65,12 @@ export interface TidesIntegrationConfig<S extends TideStationBase> {
   /** Build the place object for the resolver. Returns the host place type. */
   createPlace(station: S, resolveCtx: PlaceResolverContext): unknown;
 
-  /** Build the canonical tide payload from provider-specific source data. */
-  buildTidesResponse(
-    ctx: IntegrationContext,
-    station: S,
-    distanceKm: number,
-  ): Promise<TidesPayload | null>;
+  /**
+   * Build the station's tide payload from provider-specific source data. The
+   * result may be cached by station and shared between callers, so it carries
+   * no caller distance.
+   */
+  buildTidesResponse(ctx: IntegrationContext, station: S): Promise<TideStationResponse | null>;
 
   /** Search radius for `findNearest` (km). */
   readonly maxStationDistanceKm: number;
@@ -90,6 +100,15 @@ export interface TidesIntegrationConfig<S extends TideStationBase> {
    * independently cached live `currentLevel` here.
    */
   onWarmNearestHit?(ctx: IntegrationContext, cached: TidesPayload): Promise<void> | void;
+}
+
+/** Detach a station response and give it this caller's distance to the station. */
+function forCaller(response: TideStationResponse, distanceKm: number): TidesPayload {
+  const detached = structuredClone(response);
+  return {
+    ...detached,
+    station: { ...detached.station, distanceKm: Number(distanceKm.toFixed(2)) },
+  };
 }
 
 function round4(n: number): number {
@@ -173,34 +192,36 @@ export function createTidesIntegration<S extends TideStationBase>(
         return;
       }
 
+      const writer = await captureCacheWriter(ctx.cache);
       const stations = await config.loadStations(ctx);
       const nearest = findNearest(stations, lat, lng, config.maxStationDistanceKm);
       if (!nearest) {
-        await ctx.cache.set(cacheKey, { notFound: true } as const, config.nearestCacheTtl);
+        await writer.set(cacheKey, { notFound: true } as const, config.nearestCacheTtl);
         reply.status(204).send(null);
         return;
       }
       resolvedStation = nearest.station;
       distanceKm = nearest.distanceKm;
 
-      const result = await config.buildTidesResponse(ctx, resolvedStation, distanceKm);
+      const result = await config.buildTidesResponse(ctx, resolvedStation);
       if (!result) {
-        await ctx.cache.set(cacheKey, { notFound: true } as const, config.nearestCacheTtl);
+        await writer.set(cacheKey, { notFound: true } as const, config.nearestCacheTtl);
         reply.status(204).send(null);
         return;
       }
-      await ctx.cache.set(cacheKey, structuredClone(result), config.nearestCacheTtl);
+      const response = forCaller(result, distanceKm);
+      await writer.set(cacheKey, response, config.nearestCacheTtl);
       reply.header("Cache-Control", `public, max-age=${config.cacheControlMaxAge}`);
-      reply.send(structuredClone(result));
+      reply.send(structuredClone(response));
       return;
     }
 
-    const result = await config.buildTidesResponse(ctx, resolvedStation, distanceKm);
+    const result = await config.buildTidesResponse(ctx, resolvedStation);
     if (!result) {
       reply.status(502).send({ message: config.unavailableMessage });
       return;
     }
     reply.header("Cache-Control", `public, max-age=${config.cacheControlMaxAge}`);
-    reply.send(structuredClone(result));
+    reply.send(forCaller(result, distanceKm));
   });
 }

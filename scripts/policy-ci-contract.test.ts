@@ -29,6 +29,7 @@ describe("repository policy gate", () => {
       "pnpm check-docker-context-secrets",
       "pnpm check-migration-order",
       "pnpm check-ops-authority",
+      "pnpm check-integration-cache-writes",
       "pnpm check-entur-graphql",
       "pnpm check-entur-geocoder",
       "pnpm check-mbta",
@@ -51,6 +52,7 @@ describe("repository policy gate", () => {
       "check-image-size-dos",
       "check-docker-context-secrets",
       "check-ops-authority",
+      "check-integration-cache-writes",
     ])
       expect(workflow).not.toContain(`run: pnpm ${name}`);
     const docsInstall = workflow.indexOf("- run: pnpm -C docs install --frozen-lockfile");

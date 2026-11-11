@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { normalizeFilter } from "@openmapx/core";
-import type { CacheClient } from "@openmapx/integration-framework";
+import { type CacheClient, captureCacheWriter } from "@openmapx/integration-framework";
 import { buildSemanticCategoryCatalog, type SemanticCategoryDocument } from "@openmapx/presets";
 import type { LocalEmbeddingClient } from "./ollama-embeddings.js";
 import {
@@ -266,23 +266,27 @@ export function createSemanticCategoryIndex(options: {
           }
         }
         if (!nextVectors) {
+          const writer = await cacheCircuit.run(() => captureCacheWriter(options.cache), signal);
           nextVectors = await options.client.embed(
             catalog.map(({ document }) => document),
             signal,
           );
-          await cacheCircuit.run(
-            () =>
-              options.cache.set(
-                indexCacheKey(identity),
-                {
-                  identity,
-                  catalogChecksum,
-                  vectors: nextVectors?.map((vector) => Array.from(vector)),
-                },
-                CATEGORY_VECTOR_TTL_SECONDS,
-              ),
-            signal,
-          );
+          const indexWriter = writer.available ? writer.value : undefined;
+          if (indexWriter) {
+            await cacheCircuit.run(
+              () =>
+                indexWriter.set(
+                  indexCacheKey(identity),
+                  {
+                    identity,
+                    catalogChecksum,
+                    vectors: nextVectors?.map((vector) => Array.from(vector)),
+                  },
+                  CATEGORY_VECTOR_TTL_SECONDS,
+                ),
+              signal,
+            );
+          }
         }
         vectors = nextVectors;
         prepared = {
@@ -319,6 +323,7 @@ export function createSemanticCategoryIndex(options: {
           signal,
         );
         if (afterWait) return afterWait;
+        const writer = await cacheCircuit.run(() => captureCacheWriter(options.cache), signal);
         const [queryVector] = await options.client.embed([input], signal);
         if (!queryVector) {
           throw new SemanticEmbeddingError("invalid-response", "Query embedding is missing");
@@ -344,15 +349,18 @@ export function createSemanticCategoryIndex(options: {
           );
         }
         const result = { top, second, margin: top.score - second.score };
-        await cacheCircuit.run(
-          () =>
-            options.cache.set(
-              scoreCacheKey(prepared?.modelIdentity ?? preparedIdentity(), input),
-              result,
-              QUERY_SCORE_TTL_SECONDS,
-            ),
-          signal,
-        );
+        const scoreWriter = writer.available ? writer.value : undefined;
+        if (scoreWriter) {
+          await cacheCircuit.run(
+            () =>
+              scoreWriter.set(
+                scoreCacheKey(prepared?.modelIdentity ?? preparedIdentity(), input),
+                result,
+                QUERY_SCORE_TTL_SECONDS,
+              ),
+            signal,
+          );
+        }
         return result;
       }, signal);
     },

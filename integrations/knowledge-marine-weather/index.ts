@@ -1,5 +1,6 @@
 import { fetchJson } from "@openmapx/core";
 import {
+  captureCacheWriter,
   type IntegrationContext,
   resolveIntegrationContributors,
   scalarQueries,
@@ -221,12 +222,13 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
+    const writer = await captureCacheWriter(ctx.cache);
     const data = await fetchMarine(lat, lng);
     if (!data || data.error || !data.hourly) {
       // Open-Meteo returns `error: true` for inland points outside any
       // marine model grid. Cache that result so we don't pound the upstream
       // every time the user opens an inland POI.
-      await ctx.cache.set(cacheKey, { notFound: true }, NOT_FOUND_TTL);
+      await writer.set(cacheKey, { notFound: true }, NOT_FOUND_TTL);
       reply.status(204).send(null);
       return;
     }
@@ -240,14 +242,14 @@ export function setup(ctx: IntegrationContext): void {
     // wave_height samples as inland.
     const hasMarineData = hourly.some((h) => h.waveHeightM !== undefined);
     if (!hasMarineData) {
-      await ctx.cache.set(cacheKey, { notFound: true }, NOT_FOUND_TTL);
+      await writer.set(cacheKey, { notFound: true }, NOT_FOUND_TTL);
       reply.status(204).send(null);
       return;
     }
 
     const current = buildCurrent(hourly);
     if (!current) {
-      await ctx.cache.set(cacheKey, { notFound: true }, NOT_FOUND_TTL);
+      await writer.set(cacheKey, { notFound: true }, NOT_FOUND_TTL);
       reply.status(204).send(null);
       return;
     }
@@ -259,7 +261,7 @@ export function setup(ctx: IntegrationContext): void {
       source: "open-meteo-marine",
       contributors: snapshotContributors(captured),
     };
-    await ctx.cache.set(cacheKey, result, CACHE_TTL);
+    await writer.set(cacheKey, result, CACHE_TTL);
     reply.header("Cache-Control", "public, max-age=1800");
     reply.send(result);
   });

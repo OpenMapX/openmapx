@@ -21,6 +21,7 @@ import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/re
 import type { VehicleFormFactor } from "@openmapx/mobility-core/shared-mobility";
 import type { SharedMobilityInventory } from "@openmapx/mobility-core/shared-mobility-orchestrator";
 import type { SharedMobilityRuntime } from "@openmapx/mobility-core/shared-mobility-runtime";
+import { captureCacheWriter } from "./cache-writer";
 import type { CacheClient } from "./context";
 import type { MobilityDataSourceProvider } from "./contracts/mobility-data-source-provider";
 import { createManifestAttribution, type IntegrationDataSource } from "./manifest";
@@ -101,6 +102,7 @@ export function createSharedMobilityProvider(
       return [];
     },
     async search(bbox: BoundingBox): Promise<MobilityResult<DataSourceResult[]>> {
+      const writer = await captureCacheWriter(config.cache);
       const inventory = await config.loadInventory(bbox);
 
       try {
@@ -117,7 +119,7 @@ export function createSharedMobilityProvider(
       // Capture the provider generation's metadata before detail caching or mapping.
       const stations = inventory.stations.map((item) => captureItem(item));
       const vehicles = inventory.vehicles.map((item) => captureItem(item));
-      await detailStore.store([...stations, ...vehicles]);
+      await detailStore.store([...stations, ...vehicles], writer);
       const results = [
         ...stations.map((station) => mapStationToResult(station)),
         ...vehicles.map((vehicle) => mapVehicleToResult(vehicle)),
@@ -125,6 +127,8 @@ export function createSharedMobilityProvider(
       return wrapRealtime(results, contributorsForRecords(results));
     },
     async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
+      // The enrichment patch derives from this read, so the fence precedes it.
+      const writer = await captureCacheWriter(config.cache);
       const retained = await detailStore.getRetained(stripMobilityKindPrefix(itemId));
       if (!retained) return wrapRealtime(null, []);
       const cached = structuredClone(retained.item);
@@ -141,7 +145,7 @@ export function createSharedMobilityProvider(
         .catch(() => undefined);
       const captured = captureItem(cached);
       // Preserve the inventory's original deadline; enrichment cannot renew availability.
-      await detailStore.updateRetained(retained, captured);
+      await detailStore.updateRetained(retained, captured, writer);
       if (retained.expiresAt <= Date.now()) return wrapRealtime(null, []);
       return wrapRealtime(
         "vehicleTypes" in captured ? mapStationToDetail(captured) : mapVehicleToDetail(captured),

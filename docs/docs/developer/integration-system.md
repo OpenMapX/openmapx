@@ -370,6 +370,11 @@ that every listed source supplied a result. Runtime integrations supply metadata
 with `setDataSources` (see [Runtime data sources](#runtime-data-sources));
 per-record receipts also retain exact runtime-feed and required notice metadata.
 
+Manifest validation refuses a data-source key the schema does not name. The
+credit text goes in `attribution`; `attributionText` is the name of that text
+on a receipt, and a manifest entry that uses it fails validation instead of
+losing the credit silently.
+
 Use the shared [licence metadata contract](./licensing.md): scoped subjects,
 registered SPDX expressions, captured custom definitions and explicit unknown
 or per-item states. The host derives labels and links; data sources do not
@@ -560,7 +565,9 @@ Manifest validation rejects the flag next to a non-empty static `dataSources`
 list. `setDataSources` throws for an integration without the flag. Each source
 in the list is validated like a static entry, with `validateDataSource` from
 `@openmapx/integration-framework`: the required fields must be present and
-`domain` must be one of the manifest's `domains`. The host drops an invalid
+`domain` must be one of the manifest's `domains`. Unlike a static entry, a
+runtime source keeps its credit when it carries a key the schema does not name;
+the key is dropped. The host drops an invalid
 source, a repeated `sourceId`, or a `sourceId` another live integration already
 declares, and logs a warning that names it (and, for the last, both
 integrations). It keeps the rest.
@@ -721,6 +728,9 @@ interface IntegrationContext {
   epoch before the read/loader and atomically refuses a fill whose epoch changed.
   Direct `set` captures its invocation epoch, so it cannot identify a provider
   request that began earlier. HTTP GET caching uses the same acquisition fence.
+  An entry that several callers share holds only what the upstream returned;
+  add caller-specific values, such as the distance from the caller to a tide
+  station, to a copy at the route.
 - **`db`** is present only when the manifest requires the `postgis` service;
   otherwise it is `undefined`.
 - **`log`** is a structured logger tagged with the integration id.
@@ -757,12 +767,34 @@ operations have a three-second deadline. A failed epoch capture skips the shared
 write; a failed clear control operation fails the clear request. These fences
 apply to host HTTP/cache acquisition, not the separate quota runtime's policy.
 
-For additional derived cache entries, managed hosts offer
-`const writer = await ctx.cache.captureWriter?.()` before acquisition. Use
-`writer?.set(key, value, ttlSeconds)` after the upstream await: it retains the
-original administrative invalidation fence. A direct `ctx.cache.set` captures
-its fence only when that write starts. Do not recapture after acquisition if the
-initial capture fails; hosts without this capability keep derived entries local.
+When `withCache` does not fit, for example when the TTL depends on the result
+(a shorter one for "not found") or for additional derived entries, capture a
+writer before acquisition with `const writer = await captureCacheWriter(ctx.cache)`
+from `@openmapx/integration-framework`, and call
+`writer.set(key, value, ttlSeconds)` after the upstream await. On a managed host
+it uses `ctx.cache.captureWriter()`, which retains the original administrative
+invalidation fence. A direct `ctx.cache.set` captures its fence only when that
+write starts, so after an upstream await it can refill a namespace an admin
+cleared during the request. If the capture fails, the writer stores nothing:
+the fence is never recaptured after acquisition. Hosts without shared cache
+administration, such as CLI and test fixtures, have no fence to capture, and
+the writer writes to their cache directly.
+
+Shared packages that receive an integration's cache use the same writer:
+`@openmapx/mobility-core/cache` exports `captureCacheWriter`, which the
+framework re-exports, because mobility-core cannot depend on the framework.
+
+`pnpm check-integration-cache-writes`, part of `pnpm check:policy`, refuses a
+direct `set` on an integration cache, before or after an await, since a helper
+that wraps the write hides the await. It scans `integrations/`,
+`packages/integration-framework/src`, `packages/mobility-core/src` and
+`packages/noaa-coops-data`. It also refuses `withCache(cache, …)` from
+`@openmapx/core`, which writes without the fence. The fenced `withCache` from
+`@openmapx/mobility-core/cache` delegates to `cache.withCache` and is allowed.
+The gate lists the files allowed to keep a direct write, each with its reason,
+such as an in-memory map named `cache` or a write that stores no upstream
+result, and the exact number of writes each may hold.
+
 The writer fences the captured Redis invalidation epoch; callers must also guard
 local state/lifetime through `onInvalidate` and disposal. It does not create a
 linearizable cross-worker read barrier. Shared cache reads must retain the

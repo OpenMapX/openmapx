@@ -1,5 +1,6 @@
 import { fetchJson } from "@openmapx/core";
 import {
+  captureCacheWriter,
   type IntegrationContext,
   resolveIntegrationContributors,
   scalarQueries,
@@ -84,6 +85,7 @@ export function setup(ctx: IntegrationContext): void {
       `&date=${encodeURIComponent(dateParam)}&formatted=0&tzid=${encodeURIComponent(tzid)}`;
 
     try {
+      const writer = await captureCacheWriter(ctx.cache);
       const body = await fetchJson<SunriseSunsetApiResponse>(url, {
         timeoutMs: FETCH_TIMEOUT_MS,
         nullOnError: true,
@@ -117,7 +119,7 @@ export function setup(ctx: IntegrationContext): void {
         contributors: snapshotContributors(captured, [OPENSTREETMAP_ATTRIBUTION]),
       };
 
-      await ctx.cache.set(cacheKey, result, CACHE_TTL);
+      await writer.set(cacheKey, result, CACHE_TTL);
       reply.header("Cache-Control", "public, max-age=3600");
       reply.send(result);
     } catch (err) {

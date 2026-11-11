@@ -7,7 +7,8 @@ import { snapshotContributors } from "@openmapx/mobility-core/contributors";
  */
 
 import { type BoundingBox, bboxContains, fetchJson, type LngLat } from "@openmapx/core";
-import { type CacheClient, cacheGet, cacheSet, TTL } from "@openmapx/mobility-core/cache";
+import { captureCacheWriter } from "@openmapx/integration-framework";
+import { type CacheClient, cacheGet, TTL } from "@openmapx/mobility-core/cache";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import type { RegionalCarSharingClient } from "./regional-client-types.js";
 
@@ -61,6 +62,7 @@ async function fetchData(
   if (cached) return cached;
 
   try {
+    const writer = await captureCacheWriter(cache);
     const [rawStations, rawVehicles] = await Promise.all([
       fetchJson<DeStadtteilautoStation[]>(STATIONS_URL, {
         timeoutMs: FETCH_TIMEOUT_MS,
@@ -137,7 +139,7 @@ async function fetchData(
       });
     }
 
-    await cacheSet(cache, CACHE_KEY, stations, TTL.sharedMobility.stations);
+    await writer.set(CACHE_KEY, stations, TTL.sharedMobility.stations);
     return stations;
   } catch {
     return [];

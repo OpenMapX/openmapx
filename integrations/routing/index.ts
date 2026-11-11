@@ -9,6 +9,7 @@ import {
   type TravelMode,
 } from "@openmapx/core";
 import {
+  captureCacheWriter,
   type IntegrationContext,
   parseWgs84BoundingBox,
   parseWgs84Point,
@@ -75,6 +76,12 @@ const NAVIGATION_ALERTS_CACHE_PREFIX = "cache:nav:alerts:v2";
 const NAVIGATION_ALERTS_TTL_SECONDS = 86_400;
 /** How long an answer Overpass could not give is held before asking again. */
 const NAVIGATION_ALERTS_RETRY_SECONDS = 60;
+/**
+ * Marks a box Overpass could not answer. It has its own key because the
+ * answer key only ever holds complete answers: `withCache` discards an
+ * incomplete value it reads there.
+ */
+const NAVIGATION_ALERTS_HOLD_PREFIX = "cache:nav:alerts-hold:v1";
 
 function routeMetricValues(result: DirectionsResult): {
   routeCount: number;
@@ -799,21 +806,29 @@ export function setup(ctx: IntegrationContext): void {
       east: grid(parsed[2], Math.ceil),
     };
 
-    const key = hashKey(NAVIGATION_ALERTS_CACHE_PREFIX, [
-      bounds.south,
-      bounds.west,
-      bounds.north,
-      bounds.east,
-    ]);
+    const box = [bounds.south, bounds.west, bounds.north, bounds.east];
+    const key = hashKey(NAVIGATION_ALERTS_CACHE_PREFIX, box);
+    const holdKey = hashKey(NAVIGATION_ALERTS_HOLD_PREFIX, box);
     try {
+      // A box Overpass just failed to answer is not re-queried by every
+      // client on every request until the hold expires.
+      if (await ctx.cache.get<true>(holdKey).catch(() => null)) {
+        reply.header("Cache-Control", "no-store");
+        reply.send({ alerts: [] });
+        return;
+      }
       const result = await ctx.cache.withCache(
         key,
         NAVIGATION_ALERTS_TTL_SECONDS,
         async () => {
+          const writer = await captureCacheWriter(ctx.cache);
           const data = await overpassQuerySafe(buildNavigationAlertsQuery(bounds), null);
           // Overpass reports a timeout or memory limit hit mid-query with a 200
           // and a `remark`, over elements that may be cut short: no answer.
-          if (!data || data.remark) return { alerts: [], complete: false };
+          if (!data || data.remark) {
+            await writer.set(holdKey, true, NAVIGATION_ALERTS_RETRY_SECONDS).catch(() => undefined);
+            return { alerts: [], complete: false };
+          }
           // `out geom` adds each way's node coordinates, which the shared
           // Overpass element type does not declare.
           const elements = (data.elements ?? []) as AlertOverpassElement[];
@@ -822,11 +837,6 @@ export function setup(ctx: IntegrationContext): void {
         undefined,
         (value) => value.complete,
       );
-      if (!result.complete) {
-        // Hold the miss briefly so a box Overpass cannot answer is not
-        // re-queried by every client on every request.
-        await ctx.cache.set(key, result, NAVIGATION_ALERTS_RETRY_SECONDS).catch(() => undefined);
-      }
       reply.header(
         "Cache-Control",
         result.complete ? `public, max-age=${NAVIGATION_ALERTS_TTL_SECONDS}` : "no-store",
@@ -869,6 +879,7 @@ export function setup(ctx: IntegrationContext): void {
       const missing = points.flatMap((point, index) => (cached[index] ? [] : [{ point, index }]));
       const fetched = new Map<number, Omit<JunctionLookupResult, "index">>();
       if (missing.length > 0) {
+        const writer = await captureCacheWriter(ctx.cache);
         const data = await overpassQuerySafe(
           buildJunctionsQuery(missing.map((entry) => entry.point)),
           null,
@@ -881,7 +892,7 @@ export function setup(ctx: IntegrationContext): void {
             missing.map(async ({ point, index }) => {
               const result = mapJunctionWays(data.elements ?? [], point);
               fetched.set(index, result);
-              await ctx.cache.set(keys[index], result, JUNCTION_CACHE_TTL_SECONDS);
+              await writer.set(keys[index], result, JUNCTION_CACHE_TTL_SECONDS);
             }),
           );
         }

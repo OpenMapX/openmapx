@@ -1,5 +1,7 @@
 import { createPlace, type Place } from "@openmapx/core";
 import {
+  type CacheWriter,
+  captureCacheWriter,
   type IntegrationContext,
   resolveIntegrationContributors,
   scalarQueries,
@@ -65,8 +67,9 @@ async function refreshLiveReadings(
   const livePromise = (async (): Promise<WaterLevelReading | undefined> => {
     const cached = await cache.get<WaterLevelReading | { notFound: true }>(`water:${stationId}`);
     if (cached) return "notFound" in cached ? undefined : cached;
+    const writer = await captureCacheWriter(cache);
     const fetched = await fetchLatestWaterLevel(stationId, log);
-    void cache.set(
+    void writer.set(
       `water:${stationId}`,
       fetched ?? { notFound: true as const },
       OBSERVATION_CACHE_TTL,
@@ -77,8 +80,9 @@ async function refreshLiveReadings(
   const metPromise = (async (): Promise<MetReadings | undefined> => {
     const cached = await cache.get<MetReadings | { notFound: true }>(`met:${stationId}`);
     if (cached) return "notFound" in cached ? undefined : cached;
+    const writer = await captureCacheWriter(cache);
     const fetched = await fetchLatestMet(stationId, log);
-    void cache.set(
+    void writer.set(
       `met:${stationId}`,
       fetched ?? { notFound: true as const },
       OBSERVATION_CACHE_TTL,
@@ -111,10 +115,11 @@ async function buildTidesResponse(
   const curveCached = await cache.get<TideCurvePoint[]>(`curve:${station.id}:${todayKey()}`);
   const curvePromise: Promise<TideCurvePoint[] | null> = curveCached
     ? Promise.resolve(curveCached)
-    : fetchTideCurve(station.id, log).then((c) => {
+    : captureCacheWriter(cache).then(async (writer) => {
+        const c = await fetchTideCurve(station.id, log);
         const compact = c?.map((e) => ({ time: e.time, valueFt: e.valueFt })) ?? [];
         if (compact.length) {
-          void cache.set(`curve:${station.id}:${todayKey()}`, compact, PREDICTIONS_CACHE_TTL);
+          void writer.set(`curve:${station.id}:${todayKey()}`, compact, PREDICTIONS_CACHE_TTL);
         }
         return compact;
       });
@@ -184,6 +189,7 @@ export function setup(ctx: IntegrationContext): void {
     // otherwise find the nearest tide-prediction station to the supplied coords.
     let resolvedStation: NoaaStation | null = null;
     let distanceKm = 0;
+    let coordinateEntry: { key: string; writer: CacheWriter } | null = null;
     if (stationParam) {
       const stations = await loadStations(ctx.cache, ctx.log);
       resolvedStation = findStationById(stations, stationParam);
@@ -218,6 +224,7 @@ export function setup(ctx: IntegrationContext): void {
         return;
       }
 
+      const writer = await captureCacheWriter(ctx.cache);
       const stations = await loadStations(ctx.cache, ctx.log);
       if (stations.length === 0) {
         reply.status(502).send({ message: "Tide station catalog unavailable" });
@@ -231,12 +238,13 @@ export function setup(ctx: IntegrationContext): void {
         "tide-predictions",
       );
       if (!nearest) {
-        await ctx.cache.set(cacheKey, { notFound: true }, PREDICTIONS_CACHE_TTL);
+        await writer.set(cacheKey, { notFound: true }, PREDICTIONS_CACHE_TTL);
         reply.status(204).send(null);
         return;
       }
       resolvedStation = nearest.station;
       distanceKm = nearest.distanceKm;
+      coordinateEntry = { key: cacheKey, writer };
     }
 
     const result = await buildTidesResponse(resolvedStation, distanceKm, ctx.log, ctx.cache);
@@ -247,11 +255,12 @@ export function setup(ctx: IntegrationContext): void {
 
     // Cache the by-coords response too so the next user at the same place
     // hits a fast Redis path.
-    if (!stationParam && lat && lng) {
-      const latNum = Number.parseFloat(lat);
-      const lngNum = Number.parseFloat(lng);
-      const cacheKey = `tides:height-source-v1:${round4(latNum)},${round4(lngNum)}:${todayKey()}`;
-      await ctx.cache.set(cacheKey, withContributors(result, captured), PREDICTIONS_CACHE_TTL);
+    if (coordinateEntry) {
+      await coordinateEntry.writer.set(
+        coordinateEntry.key,
+        withContributors(result, captured),
+        PREDICTIONS_CACHE_TTL,
+      );
     }
 
     reply.header("Cache-Control", "public, max-age=3600");

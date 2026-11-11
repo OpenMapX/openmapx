@@ -17,6 +17,10 @@
       "types": "./src/cache.ts",
       "default": "./src/cache.ts"
     },
+    "./cache-writer": {
+      "types": "./src/cache-writer.ts",
+      "default": "./src/cache-writer.ts"
+    },
     "./contributors": {
       "types": "./src/contributors.ts",
       "default": "./src/contributors.ts"
