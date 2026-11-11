@@ -112,10 +112,17 @@ describe.skipIf(skipE2e)("Overture schema in PostGIS", () => {
           validated: true,
         },
       ]);
-      await pg.sql.unsafe(`
+      // A place that cannot name its sources is refused rather than stored uncredited.
+      await expect(
+        pg.sql.unsafe(`
         INSERT INTO overture_places.places (gers_id, name, geom, release)
-        VALUES ('gers-a', 'Fixture A', ST_SetSRID(ST_Point(7, 51), 4326), 'fixture'),
-               ('gers-b', 'Fixture B', ST_SetSRID(ST_Point(8, 52), 4326), 'fixture');
+        VALUES ('gers-uncredited', 'Fixture', ST_SetSRID(ST_Point(7, 51), 4326), 'fixture')
+      `),
+      ).rejects.toMatchObject({ code: "23502", column_name: "sources_catalogue" });
+      await pg.sql.unsafe(`
+        INSERT INTO overture_places.places (gers_id, name, geom, sources_catalogue, release)
+        VALUES ('gers-a', 'Fixture A', ST_SetSRID(ST_Point(7, 51), 4326), '[{"sourceId":"overture","name":"Overture Maps"}]', 'fixture'),
+               ('gers-b', 'Fixture B', ST_SetSRID(ST_Point(8, 52), 4326), '[{"sourceId":"overture","name":"Overture Maps"}]', 'fixture');
         INSERT INTO overture_places.poi_conflation_link
           (osm_type, osm_id, gers_id, match_confidence, distance_m, method, evidence, release)
         VALUES ('node', 1, 'gers-a', 1, 0, 'fixture', '{}', 'fixture'),

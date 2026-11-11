@@ -8,9 +8,9 @@ const pg = await startPostgis();
 try {
   for (const algorithm of ["baseline", "keyset", "keyset", "baseline"]) {
     await pg.sql.unsafe(buildSchemaDDL("overture_bench", { deferPlacesIndexes: true }));
-    await pg.sql.unsafe(`INSERT INTO overture_bench.places (gers_id, geom, h3_r8, release)
+    await pg.sql.unsafe(`INSERT INTO overture_bench.places (gers_id, geom, h3_r8, sources_catalogue, release)
       SELECT lpad(i::text, 8, '0'), ST_SetSRID(ST_MakePoint(8 + (i % 100) / 10000.0, 50),4326),
-        CASE WHEN i % 7 = 0 THEN 'prefilled' ELSE NULL END, 'synthetic'
+        CASE WHEN i % 7 = 0 THEN 'prefilled' ELSE NULL END, '[{"sourceId":"overture","name":"Overture Maps"}]', 'synthetic'
       FROM generate_series(1,100000) i`);
     await pg.sql.unsafe("ANALYZE overture_bench.places");
     let cursor: string | undefined;

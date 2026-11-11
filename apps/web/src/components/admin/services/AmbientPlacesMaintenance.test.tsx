@@ -32,7 +32,6 @@ const checkpoint = {
 };
 const active = {
   version: 2,
-  attributionPrecision: "captured-fields",
   generation,
   policyVersion: 2,
   publishedAt: date,

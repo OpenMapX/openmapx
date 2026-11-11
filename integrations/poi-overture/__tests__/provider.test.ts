@@ -29,6 +29,7 @@ const FIXTURE_ROWS = [
     websites: ["https://starbucks.example/mitte"],
     socials: ["https://instagram.com/starbucks"],
     emails: ["mitte@starbucks.example"],
+    sources_catalogue: [{ sourceId: "overture", name: "Overture Maps" }],
     sources: [
       {
         property: "",
@@ -296,7 +297,7 @@ it("captures exact localized-name and contact suppliers before the database read
     "overture",
   ]);
 });
-it("does not invent historical publishers for legacy rows or replace explicit empty catalogues", async () => {
+it("credits the stored catalogue and keeps an explicit empty catalogue empty", async () => {
   const manifest = (await import("../manifest.json")).default;
   const db = makeFakeDb();
   db.execute.mockResolvedValue([

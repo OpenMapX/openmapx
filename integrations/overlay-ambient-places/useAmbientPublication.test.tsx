@@ -155,6 +155,10 @@ describe("useAmbientPublication discovery", () => {
       (i: number) => answer(i, { manifest: { ...publication(SECOND), version: 3 } }),
     ],
     [
+      "a previous format version",
+      (i: number) => answer(i, { manifest: { ...publication(SECOND), version: 1 } }),
+    ],
+    [
       "a publication without a generation",
       (i: number) => answer(i, { manifest: { ...publication(SECOND), generation: "" } }),
     ],

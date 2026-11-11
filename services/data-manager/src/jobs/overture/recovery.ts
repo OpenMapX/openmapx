@@ -19,14 +19,16 @@ export async function inspectOvertureRecovery(
   return {
     region,
     busy,
-    ...local,
+    osmAvailable: local.osmAvailable,
+    downloadedRelease: local.downloadedRelease,
     installedRelease: installed?.release ?? null,
     actions: {
       "overture-pull": action(null),
       "overture-ingest": action(
-        local.downloadedRelease
-          ? null
-          : "Download a completed release partition for this region first.",
+        local.catalogueRefusal ??
+          (local.downloadedRelease
+            ? null
+            : "Download a completed release partition for this region first."),
       ),
       "overture-extract": action(needInstalled ?? needOsm),
       "overture-conflate": action(
@@ -44,6 +46,7 @@ export async function assertOvertureRecoveryInputs(
 ): Promise<string | null> {
   const local = inspectOvertureLocalInputs(dataDir, region);
   if (kind === "overture-ingest") {
+    if (local.catalogueRefusal) throw Error(local.catalogueRefusal);
     if (!local.downloadedRelease)
       throw Error("Download a completed release partition for this region before ingesting it.");
     return local.downloadedRelease;

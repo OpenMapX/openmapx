@@ -83,9 +83,9 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
   it("backfills 25,000 rows in key order, preserves prefilled values, and restarts after a failed batch", async () => {
     await pg.sql.unsafe(buildSchemaDDL("overture_h3test", { deferPlacesIndexes: true }));
     await ingestModule.backfillDerivedColumns("overture_h3test");
-    await pg.sql.unsafe(`INSERT INTO overture_h3test.places (gers_id, geom, h3_r8, release)
+    await pg.sql.unsafe(`INSERT INTO overture_h3test.places (gers_id, geom, h3_r8, sources_catalogue, release)
       SELECT lpad(i::text, 8, '0'), ST_SetSRID(ST_MakePoint(8 + (i % 100) / 10000.0, 50),4326),
-        CASE WHEN i % 7 = 0 THEN 'prefilled' ELSE NULL END, 'synthetic'
+        CASE WHEN i % 7 = 0 THEN 'prefilled' ELSE NULL END, '[{"sourceId":"overture","name":"Overture Maps"}]', 'synthetic'
       FROM generate_series(25000,1,-1) i`);
     await pg.sql.unsafe(`CREATE FUNCTION overture_h3test.fail_late() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN IF NEW.gers_id > '00010000' THEN RAISE EXCEPTION 'injected late batch failure'; END IF; RETURN NEW; END $$;
@@ -120,12 +120,12 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
     await pg.sql.unsafe(
       `INSERT INTO overture_places.places
          (gers_id, name, basic_category, taxonomy_primary, taxonomy_hierarchy,
-          taxonomy_alternates, geom, h3_r8, release)
+          taxonomy_alternates, geom, h3_r8, sources_catalogue, release)
        VALUES
          ('gers-nearby', 'Café Aachen', 'cafe', 'cafe', ARRAY['cafe'], ARRAY[]::TEXT[],
-          ST_SetSRID(ST_MakePoint(6.0839, 50.7753), 4326), '881f1d4887fffff', '2026-07-22.0'),
+          ST_SetSRID(ST_MakePoint(6.0839, 50.7753), 4326), '881f1d4887fffff', '[{"sourceId":"overture","name":"Overture Maps"}]', '2026-07-22.0'),
          ('gers-far', 'Café Aachen', 'cafe', 'cafe', ARRAY['cafe'], ARRAY[]::TEXT[],
-          ST_SetSRID(ST_MakePoint(7.0000, 51.0000), 4326), '881f1d4887ffffe', '2026-07-22.0')`,
+          ST_SetSRID(ST_MakePoint(7.0000, 51.0000), 4326), '881f1d4887ffffe', '[{"sourceId":"overture","name":"Overture Maps"}]', '2026-07-22.0')`,
     );
     const database: DatabaseClient = {
       execute: (query, params = []) => pg.sql.unsafe(query, params as never[]),
@@ -147,7 +147,7 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
     await pg.sql.unsafe(
       `INSERT INTO overture_places.places
          (gers_id, name, basic_category, taxonomy_primary, taxonomy_hierarchy,
-          taxonomy_alternates, geom, h3_r8, release)
+          taxonomy_alternates, geom, h3_r8, sources_catalogue, release)
        VALUES
          ('gers-east-120m', 'Eastside Cafe', 'cafe', 'cafe', ARRAY['cafe'],
           ARRAY[]::TEXT[],
@@ -156,7 +156,7 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
             120,
             RADIANS(90)
           )::geometry,
-          '881f1d4887ffffd', '2026-07-22.0')`,
+          '881f1d4887ffffd', '[{"sourceId":"overture","name":"Overture Maps"}]', '2026-07-22.0')`,
     );
     const database: DatabaseClient = {
       execute: (query, params = []) => pg.sql.unsafe(query, params as never[]),

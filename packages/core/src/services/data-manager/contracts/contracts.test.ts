@@ -77,7 +77,6 @@ describe("data-manager wire contracts", () => {
       overtureProcessed: 5,
       osmCount: 6,
       overtureCount: 7,
-      legacyAttribution: true,
     };
     const body = {
       active: null,
@@ -95,6 +94,12 @@ describe("data-manager wire contracts", () => {
       },
     };
     expect(ambientPlacesStatusSchema.parse(body).candidate?.checkpoint).toEqual(checkpoint);
+    expect(
+      ambientPlacesStatusSchema.safeParse({
+        ...body,
+        attribution: { formatVersion: 2, precision: "captured-fields", rebuildRequired: false },
+      }).success,
+    ).toBe(false);
   });
   it("models pinned catalog rows independently from desired source state", () => {
     const body = {

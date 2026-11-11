@@ -4,7 +4,6 @@ import {
   AMBIENT_POLICY_VERSION,
   type AmbientManifest,
   type AmbientRegion,
-  ambientHasLegacyAttribution,
   validateAmbientRegion,
 } from "@openmapx/core/ambient-places";
 import postgres from "postgres";
@@ -89,7 +88,6 @@ async function planetTransaction<T>(
 }
 const initial: PlanetCheckpoint = {
   phase: "osm",
-  legacyAttribution: false,
   osmType: "",
   osmId: "0",
   gers: "",
@@ -121,7 +119,6 @@ export async function buildPlanetPlaces(
       const generation = await prepareAmbientGeneration(tx);
       manifest = {
         version: AMBIENT_FORMAT_VERSION,
-        attributionPrecision: "captured-fields",
         policyVersion: AMBIENT_POLICY_VERSION,
         generation,
         publishedAt: new Date().toISOString(),
@@ -225,8 +222,6 @@ async function runPlanet(
             : await planetOvertureBatch(tx, checkpoint, manifest.sources.overture!.release);
         const next = {
           ...batch.checkpoint,
-          legacyAttribution:
-            checkpoint.legacyAttribution || ambientHasLegacyAttribution(batch.places),
           processed: checkpoint.processed + batch.rows,
           batches: checkpoint.batches + (batch.rows ? 1 : 0),
           placeCount: checkpoint.placeCount + batch.places.length,
@@ -260,7 +255,6 @@ async function runPlanet(
     await connection.unsafe(`ANALYZE ${table}`);
     manifest = {
       ...manifest,
-      attributionPrecision: checkpoint.legacyAttribution ? "legacy-aggregate" : "captured-fields",
       placeCount: checkpoint.placeCount,
       publishedAt: new Date().toISOString(),
       sources: {

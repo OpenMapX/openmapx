@@ -139,8 +139,9 @@ export async function activateOvertureStagingSchema(
 }
 
 export async function ingestOverture(opts: IngestOvertureOptions): Promise<void> {
-  const localRelease =
-    opts.release ?? inspectOvertureLocalInputs(opts.dataDir, opts.region).downloadedRelease;
+  const local = opts.release ? null : inspectOvertureLocalInputs(opts.dataDir, opts.region);
+  if (local?.catalogueRefusal) throw Error(local.catalogueRefusal);
+  const localRelease = opts.release ?? local?.downloadedRelease;
   if (!localRelease)
     throw Error(
       "Download a completed local Overture partition for this region before ingesting it.",
@@ -164,10 +165,7 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
       estimateOvertureIngestBytes(
         statSync(parquetPath).size,
         activeSchemaBytes,
-        pullContract.sourcesCatalogue === undefined
-          ? 0
-          : Buffer.byteLength(JSON.stringify(pullContract.sourcesCatalogue)) *
-              pullContract.rowCount,
+        Buffer.byteLength(JSON.stringify(pullContract.sourcesCatalogue)) * pullContract.rowCount,
       ),
   });
 
@@ -212,7 +210,7 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
     `  confidence,`,
     `  operating_status,`,
     `  to_json(sources) AS sources,`,
-    `  ${pullContract.sourcesCatalogue === undefined ? "NULL" : duckDbSqlLiteral(JSON.stringify(pullContract.sourcesCatalogue))}::JSON AS sources_catalogue,`,
+    `  ${duckDbSqlLiteral(JSON.stringify(pullContract.sourcesCatalogue))}::JSON AS sources_catalogue,`,
     `  ${duckDbSqlLiteral(release)}::TEXT AS release`,
     `FROM read_parquet(${duckDbSqlLiteral(parquetPath)});`,
   ].join("\n");

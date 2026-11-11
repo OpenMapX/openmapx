@@ -1,5 +1,6 @@
 import type postgres from "postgres";
 import {
+  AMBIENT_FORMAT_VERSION,
   AMBIENT_LIMITS,
   AMBIENT_MAX_AGE_MS,
   type AmbientManifest,
@@ -7,15 +8,6 @@ import {
   ambientPlaceFromTile,
 } from "../ambient-places";
 
-async function featureStore(sql: Pick<postgres.Sql, "unsafe">) {
-  const [row] = await sql.unsafe<{ global: boolean }[]>(
-    "SELECT to_regclass('ambient_places.features_all') IS NOT NULL AS global",
-  );
-  return {
-    table: row.global ? "ambient_places.features_all" : "ambient_places.features",
-    published: row.global ? "AND g.publication_status='published'" : "",
-  };
-}
 function freshPublication(manifest: AmbientManifest): boolean {
   const dates = [
     manifest.publishedAt,
@@ -45,9 +37,8 @@ export async function readAmbientManifest(sql: postgres.Sql): Promise<AmbientMan
     `SELECT to_regclass('ambient_places.state') IS NOT NULL AS exists`,
   );
   if (!exists.exists) return null;
-  const store = await featureStore(sql);
   const [row] = await sql.unsafe<{ manifest: AmbientManifest; enabled: boolean }[]>(
-    `SELECT g.manifest,s.enabled FROM ambient_places.state s JOIN ambient_places.generations g ON g.id=s.active WHERE s.singleton=1 ${store.published}`,
+    `SELECT g.manifest,s.enabled FROM ambient_places.state s JOIN ambient_places.generations g ON g.id=s.active WHERE s.singleton=1 AND g.publication_status='published'`,
   );
   if (!row) return null;
   return { ...row.manifest, enabled: row.enabled && freshPublication(row.manifest) };
@@ -68,10 +59,10 @@ export async function readAmbientPlaceByGers(
       `SELECT to_regclass('ambient_places.state') IS NOT NULL AS exists`,
     );
     if (!exists.exists) return null;
-    const store = await featureStore(tx);
     const candidates = await tx.unsafe<{ generation: string; manifest: AmbientManifest }[]>(
       `SELECT g.id AS generation,g.manifest FROM ambient_places.generations g
-       CROSS JOIN ambient_places.state s WHERE s.singleton=1 ${store.published}
+       CROSS JOIN ambient_places.state s WHERE s.singleton=1 AND g.publication_status='published'
+         AND g.manifest->>'version'='${AMBIENT_FORMAT_VERSION}'
        ORDER BY (g.id=s.active) DESC,g.published_at DESC,g.id
        LIMIT ${AMBIENT_LIMITS.generations}`,
     );
@@ -83,21 +74,14 @@ export async function readAmbientPlaceByGers(
       (Record<string, unknown> & { generation: string; lng: number; lat: number })[]
     >(
       `SELECT generation,id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,
-        to_jsonb(f)->'contributors' AS "_mapAttributions",to_jsonb(f)->'field_contributors' AS field_contributors,to_jsonb(f)->'source_lineage' AS source_lineage,
+        contributors AS "_mapAttributions",field_contributors,source_lineage,
         ST_X(ST_Transform(ST_GeomFromEWKB(geom),4326)) AS lng,ST_Y(ST_Transform(ST_GeomFromEWKB(geom),4326)) AS lat
-        FROM ${store.table} f WHERE generation=ANY($1::UUID[]) AND gers_id=$2
+        FROM ambient_places.features_all f WHERE generation=ANY($1::UUID[]) AND gers_id=$2
         ORDER BY array_position($1::UUID[],generation),id COLLATE "C" LIMIT 1`,
       [generations, gers],
     );
     const place = row
-      ? ambientPlaceFromTile(
-          {
-            ...row,
-            format_version: candidates.find((candidate) => candidate.generation === row.generation)
-              ?.manifest.version,
-          },
-          [row.lng, row.lat],
-        )
+      ? ambientPlaceFromTile({ ...row, format_version: AMBIENT_FORMAT_VERSION }, [row.lng, row.lat])
       : null;
     return place ? { generation: row.generation, place } : null;
   });
@@ -116,61 +100,43 @@ export async function readAmbientTile(
       `SELECT to_regclass('ambient_places.generations') IS NOT NULL AS exists`,
     );
     if (!exists.exists) return null;
-    const store = await featureStore(tx);
     const [known] = await tx.unsafe<{ version: number }[]>(
-      `SELECT (manifest->>'version')::INT AS version FROM ambient_places.generations g WHERE id=$1 ${store.published}`,
+      `SELECT (manifest->>'version')::INT AS version FROM ambient_places.generations g WHERE id=$1 AND g.publication_status='published'`,
       [generation],
     );
-    if (!known || ![1, 2].includes(known.version)) return null;
-    // The v1 select order, budget and MVT attributes are deliberately preserved.
-    // Additive storage migration never changes a lease-addressable v1 encoder.
-    const lineage =
-      known.version === 2
-        ? ",2 AS format_version,coalesce(contributors,'[]'::JSONB)::TEXT AS \"_mapAttributions\",field_contributors::TEXT AS field_contributors,source_lineage::TEXT AS source_lineage"
-        : "";
-    const lineageBounded =
-      known.version === 2
-        ? ',format_version,"_mapAttributions",field_contributors,source_lineage'
-        : "";
-    // MVT interns string values. Charge each receipt/lineage string once, while
-    // retaining per-feature overhead; repeated notices must not displace POIs.
-    const lineageRanks =
-      known.version === 2
-        ? `, lineage_ranked AS (
-      SELECT *,row_number() OVER(PARTITION BY "_mapAttributions" ORDER BY rank DESC,id COLLATE "C") AS contributors_first,
-      row_number() OVER(PARTITION BY field_contributors ORDER BY rank DESC,id COLLATE "C") AS fields_first,
-      row_number() OVER(PARTITION BY source_lineage ORDER BY rank DESC,id COLLATE "C") AS lineage_first FROM candidates
-    )`
-        : "";
-    const budgetInput = known.version === 2 ? "lineage_ranked" : "candidates";
-    const lineageBytes =
-      known.version === 2
-        ? `+CASE WHEN contributors_first=1 THEN coalesce(octet_length("_mapAttributions"),0) ELSE 0 END
-      +CASE WHEN fields_first=1 THEN coalesce(octet_length(field_contributors),0) ELSE 0 END
-      +CASE WHEN lineage_first=1 THEN coalesce(octet_length(source_lineage),0) ELSE 0 END+160`
-        : "";
+    if (known?.version !== AMBIENT_FORMAT_VERSION) return null;
+    const lineage = `,${AMBIENT_FORMAT_VERSION} AS format_version,coalesce(contributors,'[]'::JSONB)::TEXT AS "_mapAttributions",field_contributors::TEXT AS field_contributors,source_lineage::TEXT AS source_lineage`;
     const worldWidth = 40075016.68557849;
     const shift = x === 0 ? worldWidth : x === 2 ** z - 1 ? -worldWidth : 0;
     const [result] = await tx.unsafe<{ tile: Buffer }[]>(
       `
       WITH spatial AS (
         SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources${lineage},ST_GeomFromEWKB(geom) AS geom
-        FROM ${store.table}
+        FROM ambient_places.features_all
         WHERE generation=$1 AND min_zoom<=$2 AND ST_GeomFromEWKB(geom) && ST_TileEnvelope($2,$3,$4,margin=>64.0/4096)
         UNION ALL
         SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources${lineage},ST_Translate(ST_GeomFromEWKB(geom),-$5::FLOAT8,0) AS geom
-        FROM ${store.table}
+        FROM ambient_places.features_all
         WHERE $5::FLOAT8<>0 AND generation=$1 AND min_zoom<=$2 AND ST_GeomFromEWKB(geom) && ST_Translate(ST_TileEnvelope($2,$3,$4,margin=>64.0/4096),$5::FLOAT8,0)
       ), candidates AS MATERIALIZED (
         SELECT * FROM spatial ORDER BY rank DESC,id COLLATE "C" LIMIT ${AMBIENT_LIMITS.tileFeatures}
-      )${lineageRanks}, budgeted AS (
+      ), lineage_ranked AS (
+        -- MVT interns string values. Charge each receipt/lineage string once, while
+        -- retaining per-feature overhead; repeated notices must not displace POIs.
+        SELECT *,row_number() OVER(PARTITION BY "_mapAttributions" ORDER BY rank DESC,id COLLATE "C") AS contributors_first,
+          row_number() OVER(PARTITION BY field_contributors ORDER BY rank DESC,id COLLATE "C") AS fields_first,
+          row_number() OVER(PARTITION BY source_lineage ORDER BY rank DESC,id COLLATE "C") AS lineage_first FROM candidates
+      ), budgeted AS (
         SELECT *, sum(octet_length(id)+coalesce(octet_length(gers_id),0)+octet_length(name)
           +coalesce(octet_length(name_de),0)+coalesce(octet_length(name_en),0)
-          +octet_length(category)+octet_length(sources)+160${lineageBytes})
+          +octet_length(category)+octet_length(sources)+160
+          +CASE WHEN contributors_first=1 THEN coalesce(octet_length("_mapAttributions"),0) ELSE 0 END
+          +CASE WHEN fields_first=1 THEN coalesce(octet_length(field_contributors),0) ELSE 0 END
+          +CASE WHEN lineage_first=1 THEN coalesce(octet_length(source_lineage),0) ELSE 0 END+160)
           OVER(ORDER BY rank DESC,id COLLATE "C" ROWS UNBOUNDED PRECEDING) AS bytes
-        FROM ${budgetInput}
+        FROM lineage_ranked
       ), bounded AS (
-        SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources${lineageBounded},
+        SELECT id,gers_id,name,name_de,name_en,category,rank,min_zoom,tenant,sources,format_version,"_mapAttributions",field_contributors,source_lineage,
           ST_AsMVTGeom(geom,ST_TileEnvelope($2,$3,$4),4096,64,true) AS geom
         FROM budgeted WHERE bytes<=${AMBIENT_LIMITS.tileBytes - 1024}
         ORDER BY rank DESC,id COLLATE "C"

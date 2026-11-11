@@ -1,4 +1,8 @@
-import { AMBIENT_MAX_AGE_MS, type AmbientManifest } from "@openmapx/core/ambient-places";
+import {
+  AMBIENT_FORMAT_VERSION,
+  AMBIENT_MAX_AGE_MS,
+  type AmbientManifest,
+} from "@openmapx/core/ambient-places";
 import { useEffect, useState } from "react";
 
 const REFRESH_MS = 60_000;
@@ -56,7 +60,7 @@ export function useAmbientPublication(apiUrl: string): AmbientManifest | null {
         const body = (await response.json()) as { manifest: AmbientManifest | null };
         if (
           body.manifest &&
-          (![1, 2].includes(body.manifest.version) ||
+          (body.manifest.version !== AMBIENT_FORMAT_VERSION ||
             !body.manifest.generation ||
             !body.manifest.region?.bounds ||
             !body.manifest.sources?.osm)

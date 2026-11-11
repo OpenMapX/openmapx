@@ -29,8 +29,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")("global ambient
         INSERT INTO osm_search.places(osm_type,osm_id,name,lat,lng,category,tags,importance) VALUES
         ('node',1,'病院 East',0,179.99999,'amenity/hospital','{}',0.8),('node',2,'病院 West',0,-179.99999,'amenity/hospital','{}',0.8),
         ('node',3,'Polar hospital',86,0,'amenity/hospital','{}',0.8),('way',9007199254740993,'東京病院',35.7,139.7,'amenity/hospital','{}',0.8);
-        INSERT INTO overture_places.places(gers_id,name,basic_category,geom,confidence,operating_status,release) VALUES
-        ('g-tokyo','Tokyo Clinic','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),0.9,'open','2026-09-23.1');
+        INSERT INTO overture_places.places(gers_id,name,basic_category,geom,confidence,operating_status,sources_catalogue,release) VALUES
+        ('g-tokyo','Tokyo Clinic','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),0.9,'open','[{"sourceId":"overture","name":"Overture Maps"}]','2026-09-23.1');
         INSERT INTO overture_places.conflation_state(release,region,place_count,places_published_at,status,phase,source_fingerprint,completed_at)
         VALUES('2026-09-23.1','planet',1,now(),'completed','complete','fixture-file',now());
         INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,match_confidence,distance_m,method,evidence,release)

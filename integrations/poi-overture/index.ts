@@ -8,7 +8,6 @@ import {
   overtureTaxonomyToOpenMapX,
   selectOvertureName,
 } from "@openmapx/core";
-import { AMBIENT_LEGACY_OVERTURE_ATTRIBUTION } from "@openmapx/core/ambient-places";
 import { overtureTaxonomyCategoryEvidence } from "@openmapx/core/utils/overtureCategoryMap";
 import type { DatabaseClient, IntegrationContext } from "@openmapx/integration-framework";
 import type {
@@ -20,7 +19,7 @@ import type {
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   contributorsForRecords,
-  readCapturedContributors,
+  parseContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import { registerPlaceResolver } from "@openmapx/place-ids";
@@ -43,7 +42,7 @@ interface OvertureRow {
   phones: string[] | null;
   brand: OvertureBrand | null;
   sources: OvertureSourceItem[] | null;
-  sources_catalogue?: Attribution[] | null;
+  sources_catalogue: Attribution[];
   release: string;
 }
 
@@ -168,9 +167,7 @@ function captureRowContributors<T extends PoiSearchResult | ReturnType<typeof cr
   namePointer: string,
   brandNamePointer?: string,
 ): T {
-  const catalogue = readCapturedContributors(row.sources_catalogue) ?? [
-    AMBIENT_LEGACY_OVERTURE_ATTRIBUTION,
-  ];
+  const catalogue = parseContributors(row.sources_catalogue) ?? [];
   const pointers: Record<string, string[]> = { coordinates: ["/geometry"], name: [namePointer] };
   const firstIndex = (values: string[] | null) =>
     values?.findIndex((value) => value.trim().length > 0) ?? -1;
@@ -286,7 +283,7 @@ async function queryOverturePlaces(
       phones,
       brand,
       sources,
-      to_jsonb(places)->'sources_catalogue' AS sources_catalogue,
+      sources_catalogue,
       release
     FROM overture_places.places
     WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
@@ -336,7 +333,7 @@ async function fetchOverturePlaceByGers(
        phones,
        brand,
        sources,
-       to_jsonb(places)->'sources_catalogue' AS sources_catalogue,
+       sources_catalogue,
        release
      FROM overture_places.places
      WHERE gers_id = $1
