@@ -208,8 +208,7 @@ function setup(
         root: "ops-agent-managed",
       });
     if (url.pathname.endsWith("/services/data")) return Response.json(inventory);
-    if (url.pathname.endsWith("/shared-mobility"))
-      return Response.json({ rollbackCategories: [], decisions: [] });
+    if (url.pathname.endsWith("/shared-mobility")) return Response.json({ decisions: [] });
     if (url.pathname.endsWith("/operations")) return Response.json({ operations: [operation] });
     if (url.pathname.endsWith("/preview")) return Response.json(preview);
     if (url.pathname.endsWith("/run")) return Response.json({ ok: true, jobId: "job-1" });
@@ -897,7 +896,6 @@ describe("wire intent, validation, polling and policy", () => {
     "overture-conflate",
     "search-index-build",
     "notable-places-build",
-    "policy",
   ])("never retries %s under retrying mutation defaults", async (kind) => {
     let calls = setup((_url, init) =>
       init.method === "POST" || init.method === "DELETE"
@@ -931,15 +929,11 @@ describe("wire intent, validation, polling and policy", () => {
       mount(card());
       fireEvent.click(screen.getByRole("button", { name: "Queue Update data" }));
       if (kind === "run") fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
-    } else if (kind === "policy") {
-      mount(<TransitMobilityView />);
-      fireEvent.click((await screen.findAllByLabelText("Fan-out rollback"))[0] as HTMLElement);
     } else {
       mount(embedded(kind));
       await queueEmbedded(kind, !kind.startsWith("overture"));
     }
-    if (kind === "policy") await screen.findByText("Synthetic refused");
-    else await waitFor(() => expect(toast).toHaveBeenCalledWith("Synthetic refused", "error"));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith("Synthetic refused", "error"));
     // All error handling has settled; retry:false must override the client's 2 retries.
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 15));
@@ -952,30 +946,15 @@ describe("wire intent, validation, polling and policy", () => {
         "/api/admin/services/backups",
       ]);
   });
-  it("keeps full MOTIS/GBFS evidence in the query and synchronously refreshes rollback without a job", async () => {
-    let rollback = false;
-    const calls = setup((url, init) => {
-      if (url.pathname.endsWith("/rollback")) {
-        rollback = JSON.parse(String(init.body)).enabled;
-        return Response.json({ rollbackCategories: ["bike"], decisions: [] });
-      }
+  it("keeps full MOTIS/GBFS evidence in the query and shows each category's source decision", async () => {
+    const calls = setup((url) => {
       if (url.pathname.endsWith("/shared-mobility"))
         return Response.json({
-          rollbackCategories: rollback ? ["bike"] : [],
           decisions: [
             {
               category: "bike",
               recordedAt: at,
-              decision: {
-                policy: "motis-first",
-                local: "partial",
-                served: "fanout",
-                partial: true,
-                calledAdapters: ["motis"],
-                skippedAdapters: ["fallback"],
-                stationDelta: 2,
-                vehicleDelta: -1,
-              },
+              decision: { local: "partial", partial: true, calledAdapters: ["motis", "direct"] },
             },
           ],
         });
@@ -984,15 +963,11 @@ describe("wire intent, validation, polling and policy", () => {
     const { qc } = mount(<TransitMobilityView />);
     await screen.findByText("1 schedule dataset(s)");
     expect(qc.getQueryData(["admin", "services", apiUrl, "data", "50", "0"])).toEqual(inventory);
-    expect(await screen.findByText(/called motis; skipped fallback/)).toBeInTheDocument();
-    const toggle = screen.getAllByLabelText("Fan-out rollback")[0] as HTMLElement;
-    expect(toggle).not.toBeChecked();
-    fireEvent.click(toggle);
-    await waitFor(() => expect(toggle).toBeChecked());
-    expect(calls.find((r) => r.url.pathname.endsWith("/rollback"))?.url.pathname).toBe(
-      "/api/admin/shared-mobility/bike/rollback",
-    );
-    expect(calls.filter((r) => r.url.pathname.includes("/jobs/"))).toHaveLength(0);
+    expect(await screen.findByText("queried motis, direct")).toBeInTheDocument();
+    expect(screen.getByText("MOTIS partial")).toBeInTheDocument();
+    expect(screen.getAllByText("no data")).toHaveLength(2);
+    expect(screen.queryByLabelText("Fan-out rollback")).toBeNull();
+    expect(calls.filter((r) => r.init.method === "POST")).toHaveLength(0);
   });
   it("polls displayed data every 30 seconds", async () => {
     vi.useFakeTimers();

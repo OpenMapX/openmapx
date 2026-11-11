@@ -82,9 +82,9 @@ export function serviceAdminQueries(client: ApiClient, apiUrl: string) {
         queryKey: [...key, "data", String(page.osmLimit ?? 50), String(page.osmOffset ?? 0)],
         queryFn: ({ signal }) => serviceOrThrow(sdk.getAdminServiceData(page, options(signal))),
       }),
-    policy: () =>
+    sharedMobility: () =>
       queryOptions({
-        queryKey: [...key, "policy"],
+        queryKey: [...key, "shared-mobility"],
         queryFn: ({ signal }) => serviceOrThrow(sdk.getAdminSharedMobility(options(signal))),
       }),
     operations: () =>
@@ -132,7 +132,7 @@ export function serviceAdminQueries(client: ApiClient, apiUrl: string) {
 
 export type ServiceAdministrationEffect = (
   | { kind: "service" | "configuration" | "credentials"; serviceId: string }
-  | { kind: "catalog" | "backups" | "data" | "policy" | "operations" | "compose" | "dawarich" }
+  | { kind: "catalog" | "backups" | "data" | "operations" | "compose" | "dawarich" }
 ) & {
   /** Origin-scoped status queries owned by the invoking feature (e.g. data-manager reads). */ refreshKeys?: readonly QueryKey[];
 };

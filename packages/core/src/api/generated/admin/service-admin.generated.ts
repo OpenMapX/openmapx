@@ -49,7 +49,6 @@ import {
   pullAdminServiceImagesRequest,
   renderAdminComposeConfigurationRequest,
   restoreAdminServiceBackupRequest,
-  rollbackAdminSharedMobilityRequest,
   rotateAdminDawarichOidcSecretRequest,
   runAdminOperationRequest,
   runAdminServiceActionRequest,
@@ -495,15 +494,6 @@ import type {
   RestoreAdminServiceBackup500,
   RestoreAdminServiceBackupBody,
   RestoreAdminServiceBackupHeaders,
-  RollbackAdminSharedMobility200,
-  RollbackAdminSharedMobility400,
-  RollbackAdminSharedMobility401,
-  RollbackAdminSharedMobility403,
-  RollbackAdminSharedMobility413,
-  RollbackAdminSharedMobility415,
-  RollbackAdminSharedMobility429,
-  RollbackAdminSharedMobility500,
-  RollbackAdminSharedMobilityBody,
   RotateAdminDawarichOidcSecret200,
   RotateAdminDawarichOidcSecret400,
   RotateAdminDawarichOidcSecret401,
@@ -5814,104 +5804,6 @@ export const getAdminSharedMobility = async (
     {
       ...options,
       method: "GET",
-    },
-  );
-};
-
-export type rollbackAdminSharedMobilityResponse200 = {
-  data: RollbackAdminSharedMobility200;
-  status: 200;
-};
-
-export type rollbackAdminSharedMobilityResponse400 = {
-  data: RollbackAdminSharedMobility400;
-  status: 400;
-};
-
-export type rollbackAdminSharedMobilityResponse401 = {
-  data: RollbackAdminSharedMobility401;
-  status: 401;
-};
-
-export type rollbackAdminSharedMobilityResponse403 = {
-  data: RollbackAdminSharedMobility403;
-  status: 403;
-};
-
-export type rollbackAdminSharedMobilityResponse413 = {
-  data: RollbackAdminSharedMobility413;
-  status: 413;
-};
-
-export type rollbackAdminSharedMobilityResponse415 = {
-  data: RollbackAdminSharedMobility415;
-  status: 415;
-};
-
-export type rollbackAdminSharedMobilityResponse429 = {
-  data: RollbackAdminSharedMobility429;
-  status: 429;
-};
-
-export type rollbackAdminSharedMobilityResponse500 = {
-  data: RollbackAdminSharedMobility500;
-  status: 500;
-};
-
-export type rollbackAdminSharedMobilityResponseSuccess = rollbackAdminSharedMobilityResponse200 & {
-  headers: Headers;
-};
-export type rollbackAdminSharedMobilityResponseError = (
-  | rollbackAdminSharedMobilityResponse400
-  | rollbackAdminSharedMobilityResponse401
-  | rollbackAdminSharedMobilityResponse403
-  | rollbackAdminSharedMobilityResponse413
-  | rollbackAdminSharedMobilityResponse415
-  | rollbackAdminSharedMobilityResponse429
-  | rollbackAdminSharedMobilityResponse500
-) & {
-  headers: Headers;
-};
-
-export type rollbackAdminSharedMobilityResponse =
-  | rollbackAdminSharedMobilityResponseSuccess
-  | rollbackAdminSharedMobilityResponseError;
-
-export const getRollbackAdminSharedMobilityUrl = (category: "bike" | "scooter" | "car") => {
-  return `/api/admin/shared-mobility/${encodeURIComponent(String(category))}/rollback`;
-};
-
-export const rollbackAdminSharedMobility = async (
-  category: "bike" | "scooter" | "car",
-  rollbackAdminSharedMobilityBody: RollbackAdminSharedMobilityBody,
-  options?: Parameters<typeof rollbackAdminSharedMobilityRequest>[1],
-): Promise<rollbackAdminSharedMobilityResponse> => {
-  const getHeaders = (
-    h?: NonNullable<RequestInit["headers"]>,
-  ): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(
-          h as Iterable<Iterable<string>>,
-          (entry) => Array.from(entry) as [string, string],
-        ),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-  return rollbackAdminSharedMobilityRequest<rollbackAdminSharedMobilityResponse>(
-    getRollbackAdminSharedMobilityUrl(category),
-    {
-      ...options,
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
-      body: JSON.stringify(rollbackAdminSharedMobilityBody),
     },
   );
 };

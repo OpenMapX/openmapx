@@ -59,7 +59,6 @@ export function createBikeSharingProvider(options: BikeSharingProviderOptions) {
       adapters: [
         {
           id: "nextbike",
-          kind: "fallback",
           fetch: async (bounds) => ({
             stations: await options.searchNextbike(
               bounds,
@@ -71,7 +70,6 @@ export function createBikeSharingProvider(options: BikeSharingProviderOptions) {
         },
         {
           id: "citybikes",
-          kind: "fallback",
           fetch: async (bounds) => ({
             stations: await options.searchCityBikes(
               bounds,
@@ -83,7 +81,6 @@ export function createBikeSharingProvider(options: BikeSharingProviderOptions) {
         },
         {
           id: "donkey",
-          kind: "fallback",
           fetch: async (bounds) => ({
             stations: await options.searchDonkey(bounds, resolveContributors(["donkey"])),
             vehicles: [],
@@ -91,18 +88,15 @@ export function createBikeSharingProvider(options: BikeSharingProviderOptions) {
         },
         {
           id: "direct-gbfs",
-          kind: "fallback",
           fetch: (bounds) => options.runtime.fetchGbfsData(bounds, BIKE_FORM_FACTORS),
         },
         {
           id: "swiss-gbfs",
-          kind: "fallback",
           fetch: (bounds) =>
             options.runtime.fetchSwissSharedMobilityDataForBbox(bounds, BIKE_FORM_FACTORS),
         },
         {
           id: "db-bike",
-          kind: "proprietary",
           fetch: options.searchDbBikes,
         },
       ],

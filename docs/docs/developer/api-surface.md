@@ -528,7 +528,7 @@ work; reload acceptance remains separate from Activity terminal completion.
 
 `serviceAdminOperations` owns service inventory/detail, configuration,
 credentials, actions, logs, selection, backups, deployment/Compose, operation
-catalogue, shared-mobility rollback and Dawarich provisioning/rotation contracts.
+catalogue, shared-mobility source decisions and Dawarich provisioning/rotation contracts.
 Producers use `registerServiceAdminRoute` after the runtime administrator guard.
 Import generated operations and canonical wire types from
 `@openmapx/core/api-admin-sdk`.

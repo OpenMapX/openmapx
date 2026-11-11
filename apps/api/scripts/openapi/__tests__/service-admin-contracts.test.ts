@@ -53,20 +53,19 @@ const inventory = [
   ["previewAdminOperation", "POST", "/operations/{id}/preview"],
   ["runAdminOperation", "POST", "/operations/{id}/run"],
   ["getAdminSharedMobility", "GET", "/shared-mobility"],
-  ["rollbackAdminSharedMobility", "POST", "/shared-mobility/{category}/rollback"],
   ["getAdminDawarich", "GET", "/dawarich"],
   ["provisionAdminDawarich", "POST", "/dawarich/provision"],
   ["rotateAdminDawarichOidcSecret", "POST", "/dawarich/rotate-oidc-secret"],
 ] as const;
 
-it("collects exactly 52 actual service producers with complete statuses, media, headers and auth", async () => {
+it("collects exactly 51 actual service producers with complete statuses, media, headers and auth", async () => {
   const network = vi.spyOn(globalThis, "fetch").mockRejectedValue(Error("Network denied"));
   try {
     const document = JSON.parse(await generateDocument());
     const tagged = Object.values(document.paths)
       .flatMap((item) => Object.values(item as object))
       .filter((value) => (value as { tags?: string[] }).tags?.includes("service-admin"));
-    expect(tagged).toHaveLength(52);
+    expect(tagged).toHaveLength(51);
     expect(Object.keys(serviceAdminOperations).sort()).toEqual(inventory.map(([id]) => id).sort());
     for (const [id, method, path] of inventory) {
       const contract = serviceAdminOperations[id];

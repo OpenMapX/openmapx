@@ -11,9 +11,6 @@ import type {
   VehicleFormFactor,
 } from "./types/shared-mobility.js";
 
-export type SharedMobilitySourcePolicy = "fanout" | "shadow" | "motis-first";
-export type SharedMobilityAdapterKind = "fallback" | "proprietary";
-
 export interface SharedMobilityInventory {
   stations: SharedMobilityStation[];
   vehicles: SharedMobilityVehicle[];
@@ -21,28 +18,19 @@ export interface SharedMobilityInventory {
 
 export interface SharedMobilityAdapter {
   id: string;
-  kind: SharedMobilityAdapterKind;
   fetch(bbox: BoundingBox): Promise<SharedMobilityInventory>;
 }
 
 export interface SharedMobilitySourceDecision {
-  policy: SharedMobilitySourcePolicy;
   local: "healthy" | "partial" | "error";
-  served: "motis-first" | "fanout";
   calledAdapters: string[];
-  skippedAdapters: string[];
   partial: boolean;
-  stationDelta?: number;
-  vehicleDelta?: number;
 }
 
 export interface SharedMobilityOrchestratorConfig {
   category: "bike" | "scooter" | "car";
   motisFormFactors: VehicleFormFactor[];
   adapters: SharedMobilityAdapter[];
-  policy?: SharedMobilitySourcePolicy;
-  /** Provider/region rollback IDs force fanout without a deployment. */
-  denylist?: ReadonlySet<string>;
   onDecision?: (decision: SharedMobilitySourceDecision) => void;
   fetchMotis: MotisRentalsClient["fetchMotisRentals"];
   resolveContributors?: (sourceIds: readonly string[]) => Attribution[];
@@ -61,47 +49,16 @@ interface SharedMobilityDecisionRecord {
   recordedAt: string;
 }
 
-const rollbackDenylist = new Set<SharedMobilityCategory>();
 const latestDecisions = new Map<SharedMobilityCategory, SharedMobilityDecisionRecord>();
 
-export function setSharedMobilityRollback(
-  category: SharedMobilityCategory,
-  enabled: boolean,
-): void {
-  if (enabled) rollbackDenylist.add(category);
-  else rollbackDenylist.delete(category);
-}
-
 export function getSharedMobilityOperationsState(): {
-  rollbackCategories: SharedMobilityCategory[];
   decisions: SharedMobilityDecisionRecord[];
 } {
   return {
-    rollbackCategories: [...rollbackDenylist].sort(),
     decisions: [...latestDecisions.values()].sort((left, right) =>
       left.category.localeCompare(right.category),
     ),
   };
-}
-
-const ALLOWED_POLICIES = new Set<SharedMobilitySourcePolicy>(["fanout", "shadow", "motis-first"]);
-
-export function resolveSharedMobilitySourcePolicy(
-  configured = process.env.SHARED_MOBILITY_SOURCE_POLICY,
-): SharedMobilitySourcePolicy {
-  // Default to `fanout`, not `motis-first`. MOTIS ingests only a curated subset
-  // of GBFS feeds (the pinned Transitous catalog), whereas the direct GBFS
-  // adapter covers the full MobilityData registry (hundreds of operators per
-  // country). Under `motis-first` the direct adapters are skipped whenever MOTIS
-  // reports "healthy" — including an empty-but-complete result for an area MOTIS
-  // has no feed for — which collapsed map coverage to MOTIS's handful of feeds.
-  // `fanout` queries MOTIS + all direct GBFS + proprietary adapters and dedups
-  // (MOTIS stays authoritative for the operators it does carry), restoring the
-  // broad coverage while keeping MOTIS's curated feeds for intermodal routing.
-  // Operators who genuinely want MOTIS-only can still set the env var.
-  return ALLOWED_POLICIES.has(configured as SharedMobilitySourcePolicy)
-    ? (configured as SharedMobilitySourcePolicy)
-    : "fanout";
 }
 
 function canonicalStationIdentity(station: SharedMobilityStation): string | null {
@@ -249,11 +206,6 @@ export async function orchestrateSharedMobility(
   bbox: BoundingBox,
   config: SharedMobilityOrchestratorConfig,
 ): Promise<SharedMobilityOrchestratorResult> {
-  const requestedPolicy = config.policy ?? resolveSharedMobilitySourcePolicy();
-  const policy =
-    config.denylist?.has(config.category) || rollbackDenylist.has(config.category)
-      ? "fanout"
-      : requestedPolicy;
   let snapshot: MotisRentalSnapshot | null = null;
   let local: SharedMobilitySourceDecision["local"] = "error";
   try {
@@ -276,14 +228,8 @@ export async function orchestrateSharedMobility(
     snapshot = null;
   }
 
-  const shouldCall = (adapter: SharedMobilityAdapter): boolean => {
-    if (adapter.kind === "proprietary") return true;
-    return policy !== "motis-first" || local !== "healthy";
-  };
-  const called = config.adapters.filter(shouldCall);
-  const skipped = config.adapters.filter((adapter) => !shouldCall(adapter));
   const settled = await Promise.allSettled(
-    called.map((adapter) =>
+    config.adapters.map((adapter) =>
       boundFetch(adapter.fetch(bbox), ADAPTER_FETCH_TIMEOUT_MS, { stations: [], vehicles: [] }),
     ),
   );
@@ -298,25 +244,14 @@ export async function orchestrateSharedMobility(
     stations: items.stations.map(capture),
     vehicles: items.vehicles.map(capture),
   });
-  const fanoutInventory = mergeMotisFirstInventory(
+  const resultInventory = mergeMotisFirstInventory(
     capturedInventory(inventory(snapshot)),
     supplements.map(capturedInventory),
   );
-  const served = policy === "fanout" ? "fanout" : "motis-first";
-  const resultInventory = fanoutInventory;
   const decision: SharedMobilitySourceDecision = {
-    policy,
     local,
-    served,
-    calledAdapters: called.map((adapter) => adapter.id),
-    skippedAdapters: skipped.map((adapter) => adapter.id),
+    calledAdapters: config.adapters.map((adapter) => adapter.id),
     partial: local !== "healthy" || settled.some((result) => result.status === "rejected"),
-    ...(policy === "shadow"
-      ? {
-          stationDelta: fanoutInventory.stations.length - inventory(snapshot).stations.length,
-          vehicleDelta: fanoutInventory.vehicles.length - inventory(snapshot).vehicles.length,
-        }
-      : {}),
   };
   latestDecisions.set(config.category, {
     category: config.category,

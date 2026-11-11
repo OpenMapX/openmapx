@@ -65,7 +65,6 @@ const inventory = [
   ["previewAdminOperation", "POST", "/operations/:id/preview"],
   ["runAdminOperation", "POST", "/operations/:id/run"],
   ["getAdminSharedMobility", "GET", "/shared-mobility"],
-  ["rollbackAdminSharedMobility", "POST", "/shared-mobility/:category/rollback"],
   ["getAdminDawarich", "GET", "/dawarich"],
   ["provisionAdminDawarich", "POST", "/dawarich/provision"],
   ["rotateAdminDawarichOidcSecret", "POST", "/dawarich/rotate-oidc-secret"],
@@ -609,7 +608,7 @@ describe("canonical complete service administration contracts", () => {
     ).toBe(true);
     expect(ops.runAdminServiceAction.responses[429].headers?.safeParse({}).success).toBe(false);
   });
-  it("keeps catalogue presentation, transformed preview JSON, issues and signed shared-mobility deltas", () => {
+  it("keeps catalogue presentation, transformed preview JSON, issues and shared-mobility decisions", () => {
     const operation = {
       id: "update",
       version: 1,
@@ -650,27 +649,16 @@ describe("canonical complete service administration contracts", () => {
     expect(
       response("previewAdminOperation", 404, { ok: false, error: "Unknown operation" }),
     ).toEqual({ ok: false, error: "Unknown operation" });
-    const policy = {
-      rollbackCategories: ["bike"],
+    const sharedMobility = {
       decisions: [
         {
           category: "bike",
           recordedAt: at,
-          decision: {
-            policy: "shadow",
-            local: "partial",
-            served: "fanout",
-            calledAdapters: ["one"],
-            skippedAdapters: ["two"],
-            partial: true,
-            stationDelta: -1,
-            vehicleDelta: 2,
-          },
+          decision: { local: "partial", calledAdapters: ["one", "two"], partial: true },
         },
       ],
     };
-    expect(response("getAdminSharedMobility", 200, policy)).toEqual(policy);
-    expect(response("rollbackAdminSharedMobility", 200, policy)).toEqual(policy);
+    expect(response("getAdminSharedMobility", 200, sharedMobility)).toEqual(sharedMobility);
     expect(
       response("checkAdminServices", 200, {
         acquisition,
