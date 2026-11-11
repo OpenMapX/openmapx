@@ -1,7 +1,6 @@
 import { createHmac, randomUUID } from "node:crypto";
 import {
-  adminIntegrationConfigImportedSchema,
-  adminIntegrationImportFailureSchema,
+  adminIntegrationReloadResultSchema,
   integrationApplyReceiptSchema,
 } from "@openmapx/core/api-contracts";
 import { canonicalJson, hardlinkApplySummarySchema, readOpsTokenFile } from "@openmapx/core/ops";
@@ -152,7 +151,6 @@ const IMMEDIATE_CONFIGURATION_JOB_TYPES = [
   "service.apply",
   "configuration.apply",
   "platform.apply",
-  "integration.config.import",
   "integration.binding.apply",
   "configuration.migration.apply",
   "credential.import",
@@ -422,7 +420,6 @@ class AdminJobRunner {
         | "platform.apply"
         | "service.apply"
         | "compose.start"
-        | "integration.config.import"
         | "integration.binding.apply"
         | "configuration.migration.preview"
         | "configuration.migration.apply"
@@ -729,7 +726,7 @@ class AdminJobRunner {
             | undefined;
           if (retained?.state === "failed") outcome = { ...outcome, followUp: "failed" };
           else if (retained?.state === "complete" && retained.revisionId === outcome.revisionId) {
-            const parsed = adminIntegrationConfigImportedSchema
+            const parsed = adminIntegrationReloadResultSchema
               .pick({ message: true, reloaded: true, enabled: true })
               .parse(retained.result);
             integrationReload = parsed;
@@ -833,33 +830,6 @@ class AdminJobRunner {
       (result) => ({ application: parseTrustedConfigurationApplyOutcome(result.configuration) }),
     ).catch(accepted.reject);
     return accepted.promise;
-  }
-
-  importImmediateIntegrationConfiguration(options: {
-    body: unknown;
-    actorId: string;
-    operationKey: string;
-    signal?: AbortSignal;
-  }) {
-    return this.immediate(
-      { ...options, type: "integration.config.import", intent: options.body },
-      async (ctx) => {
-        const { runLegacyIntegrationImport } = await import(
-          "./configuration-migration/legacy-integration-import"
-        );
-        const value = await runLegacyIntegrationImport(ctx, options);
-        return { value, result: { integrationImport: value }, failed: !value.ok };
-      },
-      (result) => {
-        // Only exact public, non-secret import evidence is retained/restored.
-        if (result.errorCode === "configuration_prerequisite")
-          throw new ConfigurationPrerequisiteFailure();
-        const success = adminIntegrationConfigImportedSchema.safeParse(result.integrationImport);
-        return success.success
-          ? success.data
-          : adminIntegrationImportFailureSchema.parse(result.integrationImport);
-      },
-    );
   }
 
   applyImmediateIntegrationCredential(

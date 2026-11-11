@@ -1,8 +1,6 @@
 import { adminIntegrationJsonObjectSchema } from "@openmapx/core/api-contracts";
 import { integrationEnvVarName } from "@openmapx/integration-framework";
 import type { FastifyInstance } from "fastify";
-import { db } from "../db";
-import { integrationConfig } from "../db/schema";
 import { getAllIntegrations, getIntegration, inspectIntegrationRuntime } from "../integration-host";
 import {
   createDirectAdminOpsKey,
@@ -10,11 +8,6 @@ import {
   parseDirectOpsIdempotency,
 } from "../services/direct-ops-idempotency";
 import { getTimeline } from "../services/health-history";
-import {
-  exportIntegrationConfigs,
-  IntegrationImportValidationError,
-  prepareIntegrationImport,
-} from "../services/integration-config-import";
 import {
   computeCredentialStatus,
   getIntegrationDisplayName,
@@ -28,10 +21,7 @@ import {
 } from "../services/integration-health";
 import { jobRunner } from "../services/job-runner";
 import { isSecretsConfigured } from "../services/secrets";
-import {
-  applyTrustedConfiguration,
-  integrationSchemas,
-} from "../services/trusted-config-operations";
+import { applyTrustedConfiguration } from "../services/trusted-config-operations";
 import { writeAuditLog } from "../utils/audit-log";
 import { maskSecretConfigValues } from "../utils/mask-config.js";
 import { healthCheckSweepLimit } from "../utils/rate-limit";
@@ -384,60 +374,5 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
         ).toISOString(),
       })),
     };
-  });
-
-  registerIntegrationAdminRoute(app, "exportAdminIntegrationConfigs", async (request, _reply) => {
-    const adminSession = getAdminSession(request);
-
-    const exported = exportIntegrationConfigs(
-      await db.select().from(integrationConfig),
-      integrationSchemas(),
-    );
-
-    await writeAuditLog({
-      actorId: adminSession.user.id,
-      targetType: "integration",
-      targetId: "all",
-      action: "integration.config.export",
-      request,
-    });
-
-    return exported;
-  });
-
-  registerIntegrationAdminRoute(app, "importAdminIntegrationConfigs", async (request, reply) => {
-    const adminSession = getAdminSession(request);
-
-    const schemas = integrationSchemas();
-    let entries: ReturnType<typeof prepareIntegrationImport>;
-    try {
-      entries = prepareIntegrationImport(request.body, schemas);
-    } catch (error) {
-      return reply.status(400).send({
-        errors:
-          error instanceof IntegrationImportValidationError
-            ? error.errors
-            : ["Invalid integration import"],
-      });
-    }
-    const operationKey = createDirectAdminOpsKey(
-      adminSession.user.id,
-      parseDirectOpsIdempotency(request.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
-    );
-    const result = await jobRunner.importImmediateIntegrationConfiguration({
-      body: { integrations: entries },
-      actorId: adminSession.user.id,
-      operationKey,
-    });
-    if (!result.ok) return reply.status(409).send(result);
-    await writeAuditLog({
-      actorId: adminSession.user.id,
-      targetType: "integration",
-      targetId: "all",
-      action: "integration.config.import",
-      details: { imported: result.imported },
-      request,
-    });
-    return result;
   });
 }

@@ -36,21 +36,12 @@ const mockImmediateCredential = vi.fn(async (intent: { integrationId: string }) 
   runtime: "applied",
   runtimeGenerationId: "11111111-1111-4111-8111-111111111111",
 }));
-const mockImmediateImport = vi.fn().mockResolvedValue({
-  ok: true,
-  imported: 1,
-  skipped: [],
-  message: "Integrations reloaded",
-  reloaded: 1,
-  enabled: 1,
-});
 vi.mock("../../services/job-runner.js", () => ({
   jobRunner: {
     enqueue: (...args: unknown[]) => mockJobRunnerEnqueue(...args),
     cancel: (...args: unknown[]) => mockJobRunnerCancel(...args),
     applyImmediateIntegrationCredential: (intent: { integrationId: string }) =>
       mockImmediateCredential(intent),
-    importImmediateIntegrationConfiguration: (...args: unknown[]) => mockImmediateImport(...args),
   },
 }));
 
@@ -763,31 +754,6 @@ describe("POST /admin/integrations/reload", () => {
     expect(mockWriteAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: "integration.reload.all" }),
     );
-  });
-});
-
-describe("POST /admin/integrations/import", () => {
-  it("reloads integrations after importing configuration", async () => {
-    const res = await app.inject({
-      method: "POST",
-      url: "/admin/integrations/import",
-      headers: { "idempotency-key": "admin-route-import-fixture-0001" },
-      payload: {
-        integrations: [{ integrationId: "geocoding-maptiler", config: { enabled: false } }],
-      },
-    });
-
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ ok: true, imported: 1, reloaded: 1 });
-    expect(mockImmediateImport).toHaveBeenCalledWith(
-      expect.objectContaining({
-        actorId: fakeSession.user.id,
-        body: {
-          integrations: [{ integrationId: "geocoding-maptiler", config: { enabled: false } }],
-        },
-      }),
-    );
-    expect(mockReloadIntegrations).not.toHaveBeenCalled();
   });
 });
 

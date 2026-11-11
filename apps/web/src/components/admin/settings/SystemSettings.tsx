@@ -14,7 +14,6 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
-import Divider from "@mui/material/Divider";
 import FormControl from "@mui/material/FormControl";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import FormHelperText from "@mui/material/FormHelperText";
@@ -33,7 +32,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { AdminDraftContext } from "@/lib/admin/AdminDraftProvider";
-import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 import { useAdminDraft } from "@/lib/admin/useAdminDraft";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { useActivityClient } from "../activity/activityQueries";
@@ -771,16 +769,6 @@ function ExportImportSection({
   const env = useEnv();
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
-  const integrationsFileRef = useRef<HTMLInputElement>(null);
-  const admin = useIntegrationAdmin();
-  const integrationExport = useQuery({ ...admin.queries.exportConfigs(), enabled: false });
-  const transferOwner = useMemo(() => ({ active: true, client: admin.client }), [admin.client]);
-  useEffect(() => {
-    transferOwner.active = true;
-    return () => {
-      transferOwner.active = false;
-    };
-  }, [transferOwner]);
 
   const doExport = async () => {
     try {
@@ -823,44 +811,6 @@ function ExportImportSection({
     }
   };
 
-  const exportIntegrations = async () => {
-    try {
-      const result = await integrationExport.refetch({ throwOnError: true });
-      if (!transferOwner.active) return;
-      const data = result.data;
-      if (!data) throw new Error("Export was interrupted");
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `openmapx-integrations-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      onMsg(`Exported ${data.count} integration configs`);
-    } catch {
-      if (transferOwner.active) onMsg("Export failed", "error");
-    }
-  };
-
-  const importIntegrations = async (file: File) => {
-    try {
-      const text = await file.text();
-      if (!transferOwner.active) return;
-      const data = await admin.importConfigs(JSON.parse(text));
-      if (transferOwner.active) onMsg(`Imported ${data.imported} integration config(s)`);
-    } catch (error) {
-      if (!transferOwner.active) return;
-      onMsg(
-        error instanceof SyntaxError
-          ? "Import failed — check the JSON file format"
-          : error instanceof Error
-            ? error.message
-            : "Integration import failed",
-        "error",
-      );
-    }
-  };
-
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Typography
@@ -900,23 +850,6 @@ function ExportImportSection({
         >
           Import Settings
         </Button>
-        <Divider orientation="vertical" flexItem />
-        <Button
-          variant="outlined"
-          startIcon={<DownloadIcon />}
-          size="small"
-          onClick={exportIntegrations}
-        >
-          Export Integration Configs
-        </Button>
-        <Button
-          variant="outlined"
-          startIcon={<UploadIcon />}
-          size="small"
-          onClick={() => integrationsFileRef.current?.click()}
-        >
-          Import Integration Configs
-        </Button>
         <input
           ref={fileRef}
           type="file"
@@ -925,17 +858,6 @@ function ExportImportSection({
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) void doImport(f);
-            e.target.value = "";
-          }}
-        />
-        <input
-          ref={integrationsFileRef}
-          type="file"
-          accept=".json"
-          style={{ display: "none" }}
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) void importIntegrations(f);
             e.target.value = "";
           }}
         />

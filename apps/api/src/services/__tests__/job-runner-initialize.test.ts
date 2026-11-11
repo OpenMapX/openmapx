@@ -86,7 +86,6 @@ describe("job runner restart initialization", () => {
       "service.apply",
       "configuration.apply",
       "platform.apply",
-      "integration.config.import",
       "integration.binding.apply",
       "configuration.migration.apply",
       "credential.import",

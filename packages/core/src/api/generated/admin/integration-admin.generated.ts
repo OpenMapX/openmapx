@@ -119,14 +119,6 @@ import type {
   ExportAdminCredentialTransfer500,
   ExportAdminCredentialTransfer503,
   ExportAdminCredentialTransferBody,
-  ExportAdminIntegrationConfigs200,
-  ExportAdminIntegrationConfigs400,
-  ExportAdminIntegrationConfigs401,
-  ExportAdminIntegrationConfigs403,
-  ExportAdminIntegrationConfigs413,
-  ExportAdminIntegrationConfigs415,
-  ExportAdminIntegrationConfigs429,
-  ExportAdminIntegrationConfigs500,
   GetAdminConfigurationMigrationInventory200,
   GetAdminConfigurationMigrationInventory400,
   GetAdminConfigurationMigrationInventory401,
@@ -182,17 +174,6 @@ import type {
   GetAdminOverview415,
   GetAdminOverview429,
   GetAdminOverview500,
-  ImportAdminIntegrationConfigs200,
-  ImportAdminIntegrationConfigs400,
-  ImportAdminIntegrationConfigs401,
-  ImportAdminIntegrationConfigs403,
-  ImportAdminIntegrationConfigs409,
-  ImportAdminIntegrationConfigs413,
-  ImportAdminIntegrationConfigs415,
-  ImportAdminIntegrationConfigs429,
-  ImportAdminIntegrationConfigs500,
-  ImportAdminIntegrationConfigsBody,
-  ImportAdminIntegrationConfigsHeaders,
   InstallAdminStandaloneIntegration202,
   InstallAdminStandaloneIntegration400,
   InstallAdminStandaloneIntegration401,
@@ -380,14 +361,12 @@ import {
   enableAdminIntegrationRequest,
   exportAdminConfigurationMigrationRequest,
   exportAdminCredentialTransferRequest,
-  exportAdminIntegrationConfigsRequest,
   getAdminConfigurationMigrationInventoryRequest,
   getAdminIntegrationCredentialsRequest,
   getAdminIntegrationHealthHistoryRequest,
   getAdminIntegrationHealthRequest,
   getAdminIntegrationRequest,
   getAdminOverviewRequest,
-  importAdminIntegrationConfigsRequest,
   installAdminStandaloneIntegrationRequest,
   listAdminCredentialsRequest,
   listAdminIntegrationBindingsRequest,
@@ -1896,82 +1875,6 @@ export const listAdminIntegrationEnvVars = async (
   );
 };
 
-export type exportAdminIntegrationConfigsResponse200 = {
-  data: ExportAdminIntegrationConfigs200;
-  status: 200;
-};
-
-export type exportAdminIntegrationConfigsResponse400 = {
-  data: ExportAdminIntegrationConfigs400;
-  status: 400;
-};
-
-export type exportAdminIntegrationConfigsResponse401 = {
-  data: ExportAdminIntegrationConfigs401;
-  status: 401;
-};
-
-export type exportAdminIntegrationConfigsResponse403 = {
-  data: ExportAdminIntegrationConfigs403;
-  status: 403;
-};
-
-export type exportAdminIntegrationConfigsResponse413 = {
-  data: ExportAdminIntegrationConfigs413;
-  status: 413;
-};
-
-export type exportAdminIntegrationConfigsResponse415 = {
-  data: ExportAdminIntegrationConfigs415;
-  status: 415;
-};
-
-export type exportAdminIntegrationConfigsResponse429 = {
-  data: ExportAdminIntegrationConfigs429;
-  status: 429;
-};
-
-export type exportAdminIntegrationConfigsResponse500 = {
-  data: ExportAdminIntegrationConfigs500;
-  status: 500;
-};
-
-export type exportAdminIntegrationConfigsResponseSuccess =
-  exportAdminIntegrationConfigsResponse200 & {
-    headers: Headers;
-  };
-export type exportAdminIntegrationConfigsResponseError = (
-  | exportAdminIntegrationConfigsResponse400
-  | exportAdminIntegrationConfigsResponse401
-  | exportAdminIntegrationConfigsResponse403
-  | exportAdminIntegrationConfigsResponse413
-  | exportAdminIntegrationConfigsResponse415
-  | exportAdminIntegrationConfigsResponse429
-  | exportAdminIntegrationConfigsResponse500
-) & {
-  headers: Headers;
-};
-
-export type exportAdminIntegrationConfigsResponse =
-  | exportAdminIntegrationConfigsResponseSuccess
-  | exportAdminIntegrationConfigsResponseError;
-
-export const getExportAdminIntegrationConfigsUrl = () => {
-  return `/api/admin/integrations/export`;
-};
-
-export const exportAdminIntegrationConfigs = async (
-  options?: Parameters<typeof exportAdminIntegrationConfigsRequest>[1],
-): Promise<exportAdminIntegrationConfigsResponse> => {
-  return exportAdminIntegrationConfigsRequest<exportAdminIntegrationConfigsResponse>(
-    getExportAdminIntegrationConfigsUrl(),
-    {
-      ...options,
-      method: "GET",
-    },
-  );
-};
-
 export type runAdminIntegrationHealthChecksResponse200 = {
   data: RunAdminIntegrationHealthChecks200;
   status: 200;
@@ -2066,111 +1969,6 @@ export const runAdminIntegrationHealthChecks = async (
       method: "POST",
       headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
       body: JSON.stringify(runAdminIntegrationHealthChecksBody),
-    },
-  );
-};
-
-export type importAdminIntegrationConfigsResponse200 = {
-  data: ImportAdminIntegrationConfigs200;
-  status: 200;
-};
-
-export type importAdminIntegrationConfigsResponse400 = {
-  data: ImportAdminIntegrationConfigs400;
-  status: 400;
-};
-
-export type importAdminIntegrationConfigsResponse401 = {
-  data: ImportAdminIntegrationConfigs401;
-  status: 401;
-};
-
-export type importAdminIntegrationConfigsResponse403 = {
-  data: ImportAdminIntegrationConfigs403;
-  status: 403;
-};
-
-export type importAdminIntegrationConfigsResponse409 = {
-  data: ImportAdminIntegrationConfigs409;
-  status: 409;
-};
-
-export type importAdminIntegrationConfigsResponse413 = {
-  data: ImportAdminIntegrationConfigs413;
-  status: 413;
-};
-
-export type importAdminIntegrationConfigsResponse415 = {
-  data: ImportAdminIntegrationConfigs415;
-  status: 415;
-};
-
-export type importAdminIntegrationConfigsResponse429 = {
-  data: ImportAdminIntegrationConfigs429;
-  status: 429;
-};
-
-export type importAdminIntegrationConfigsResponse500 = {
-  data: ImportAdminIntegrationConfigs500;
-  status: 500;
-};
-
-export type importAdminIntegrationConfigsResponseSuccess =
-  importAdminIntegrationConfigsResponse200 & {
-    headers: Headers;
-  };
-export type importAdminIntegrationConfigsResponseError = (
-  | importAdminIntegrationConfigsResponse400
-  | importAdminIntegrationConfigsResponse401
-  | importAdminIntegrationConfigsResponse403
-  | importAdminIntegrationConfigsResponse409
-  | importAdminIntegrationConfigsResponse413
-  | importAdminIntegrationConfigsResponse415
-  | importAdminIntegrationConfigsResponse429
-  | importAdminIntegrationConfigsResponse500
-) & {
-  headers: Headers;
-};
-
-export type importAdminIntegrationConfigsResponse =
-  | importAdminIntegrationConfigsResponseSuccess
-  | importAdminIntegrationConfigsResponseError;
-
-export const getImportAdminIntegrationConfigsUrl = () => {
-  return `/api/admin/integrations/import`;
-};
-
-export const importAdminIntegrationConfigs = async (
-  importAdminIntegrationConfigsBody: ImportAdminIntegrationConfigsBody,
-  headers: ImportAdminIntegrationConfigsHeaders,
-  options?: Parameters<typeof importAdminIntegrationConfigsRequest>[1],
-): Promise<importAdminIntegrationConfigsResponse> => {
-  const getHeaders = (
-    h?: NonNullable<RequestInit["headers"]>,
-  ): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(
-          h as Iterable<Iterable<string>>,
-          (entry) => Array.from(entry) as [string, string],
-        ),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-  return importAdminIntegrationConfigsRequest<importAdminIntegrationConfigsResponse>(
-    getImportAdminIntegrationConfigsUrl(),
-    {
-      ...options,
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...headers, ...getHeaders(options?.headers) },
-      body: JSON.stringify(importAdminIntegrationConfigsBody),
     },
   );
 };

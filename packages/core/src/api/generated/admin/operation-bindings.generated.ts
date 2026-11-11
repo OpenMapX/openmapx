@@ -323,13 +323,6 @@ export async function exportAdminCredentialTransferRequest<T>(
 ): Promise<T> {
   return exportAdminCredentialTransferBound<T>(url, options);
 }
-const exportAdminIntegrationConfigsBound = bindAdminOperation("exportAdminIntegrationConfigs");
-export async function exportAdminIntegrationConfigsRequest<T>(
-  url: string,
-  options?: AdminSdkRequestOptions,
-): Promise<T> {
-  return exportAdminIntegrationConfigsBound<T>(url, options);
-}
 const extendPrivacyAdminCaseBound = bindAdminOperation("extendPrivacyAdminCase");
 export async function extendPrivacyAdminCaseRequest<T>(
   url: string,
@@ -667,13 +660,6 @@ export async function importAdminArtifactTransferRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return importAdminArtifactTransferBound<T>(url, options);
-}
-const importAdminIntegrationConfigsBound = bindAdminOperation("importAdminIntegrationConfigs");
-export async function importAdminIntegrationConfigsRequest<T>(
-  url: string,
-  options?: AdminSdkRequestOptions,
-): Promise<T> {
-  return importAdminIntegrationConfigsBound<T>(url, options);
 }
 const installAdminExtensionBound = bindAdminOperation("installAdminExtension");
 export async function installAdminExtensionRequest<T>(

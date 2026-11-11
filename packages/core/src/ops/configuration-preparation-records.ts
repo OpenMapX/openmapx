@@ -169,14 +169,6 @@ export const preparedConfigurationRecordSchema = z.strictObject({
           integrationIds: z.array(id).max(256),
         })
         .optional(),
-      legacyImport: z
-        .strictObject({
-          version: z.literal(1),
-          kind: z.literal("legacy-integration-config"),
-          integrationIds: z.array(id).min(1).max(256),
-          changedIntegrationIds: z.array(id).min(1).max(256),
-        })
-        .optional(),
     })
     .optional(),
   maintenanceId: z.uuid().nullable(),

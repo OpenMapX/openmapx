@@ -18,7 +18,6 @@ const { requireAdmin: mockRequireAdmin, session: fakeSession } = installAdminRou
 // Job runner
 const mockJobRunnerEnqueue = vi.fn().mockResolvedValue("job-main-123");
 const mockJobRunnerCancel = vi.fn().mockResolvedValue(true);
-const mockImmediateImport = vi.fn();
 const mockImmediateBinding = vi.fn();
 const mockImmediateCredential = vi.fn();
 const expectedBinding = { expectedServiceId: null, expectedRevision: "a".repeat(64) };
@@ -32,7 +31,6 @@ vi.mock("../../services/job-runner.js", () => ({
     applyImmediateIntegrationBinding: (...args: unknown[]) => mockImmediateBinding(...args),
     enqueue: (...args: unknown[]) => mockJobRunnerEnqueue(...args),
     cancel: (...args: unknown[]) => mockJobRunnerCancel(...args),
-    importImmediateIntegrationConfiguration: (...args: unknown[]) => mockImmediateImport(...args),
   },
 }));
 
@@ -285,14 +283,6 @@ beforeEach(() => {
     revisionId: "revision_1",
     integrationReload: { message: "Integrations reloaded", reloaded: 1, enabled: 1 },
   });
-  mockImmediateImport.mockReset().mockImplementation(async ({ body }) => ({
-    ok: true,
-    imported: body.integrations.length,
-    skipped: [],
-    message: "Integrations reloaded",
-    reloaded: 1,
-    enabled: 1,
-  }));
   mockRequireAdmin.mockReset().mockResolvedValue(fakeSession);
   mockGetIntegration.mockReset().mockReturnValue(MOCK_INTEGRATION);
   mockGetAllIntegrations.mockReset().mockReturnValue([MOCK_INTEGRATION]);
@@ -365,7 +355,7 @@ async function wire() {
   return { app, registered, client };
 }
 describe("actual integration producers through generated SDK", () => {
-  it("exports all 35 registered operations and executes integration producers with full serialized fields", async () => {
+  it("exports all 33 registered operations and executes integration producers with full serialized fields", async () => {
     const sdk = await import("@openmapx/core/api-admin-sdk");
     for (const id of Object.keys(integrationAdminOperations))
       expect(sdk).toHaveProperty(id, expect.any(Function));
@@ -389,13 +379,6 @@ describe("actual integration producers through generated SDK", () => {
       const cases = [
         () => sdk.listAdminIntegrations(options),
         () => sdk.listAdminIntegrationEnvVars(options),
-        () => sdk.exportAdminIntegrationConfigs(options),
-        () =>
-          sdk.importAdminIntegrationConfigs(
-            { integrations: [{ integrationId: id, config: { label: "new" } }] },
-            { "idempotency-key": crypto.randomUUID() },
-            options,
-          ),
         () => sdk.runAdminIntegrationHealthChecks(undefined, options),
         () => sdk.reloadAdminIntegrations(undefined, options),
         () =>
@@ -471,7 +454,7 @@ describe("actual integration producers through generated SDK", () => {
       ];
       for (const call of cases)
         expect(await call(), call.toString()).toMatchObject({ status: 200 });
-      expect(cases).toHaveLength(21);
+      expect(cases).toHaveLength(19);
       mockGetIntegration.mockReturnValueOnce({
         ...MOCK_INTEGRATION,
         manifest: {
@@ -591,13 +574,6 @@ describe("actual integration producers through generated SDK", () => {
               );
       try {
         await reached.promise;
-        expect(
-          await sdk.importAdminIntegrationConfigs(
-            { integrations: [{ integrationId: id, config: { label: "imported", enabled: true } }] },
-            { "idempotency-key": crypto.randomUUID() },
-            { client },
-          ),
-        ).toMatchObject({ status: 200 });
         resume.resolve();
         expect(await ordinary).toMatchObject({ status: 500 });
         expect(configDb.rows[0].config).toEqual({ label: "old", enabled: kind === "disable" });
@@ -729,8 +705,8 @@ describe("actual integration producers through generated SDK", () => {
       expect(
         (
           await app.inject({
-            method: "POST",
-            url: "/api/admin/integrations/import",
+            method: "PATCH",
+            url: `/api/admin/integrations/${id}/config`,
             headers: { "content-type": "application/xml" },
             payload: "<test/>",
           })
@@ -739,8 +715,8 @@ describe("actual integration producers through generated SDK", () => {
       expect(
         (
           await app.inject({
-            method: "POST",
-            url: "/api/admin/integrations/import",
+            method: "PATCH",
+            url: `/api/admin/integrations/${id}/config`,
             payload: { oversized: "x".repeat(1024 * 1024) },
           })
         ).statusCode,
@@ -755,201 +731,6 @@ describe("actual integration producers through generated SDK", () => {
           })
         ).statusCode,
       ).toBe(400);
-    } finally {
-      await app.close();
-    }
-  });
-  it("carries bounded entry/field/rule diagnostics from the actual import producer through the SDK", async () => {
-    const sdk = await import("@openmapx/core/api-admin-sdk");
-    const { app, client } = await wire();
-    try {
-      const response = await sdk.importAdminIntegrationConfigs(
-        {
-          integrations: [
-            {
-              integrationId: "geocoding-maptiler",
-              config: { label: "synthetic-secret", nested: { count: 0 } },
-            },
-          ],
-        },
-        { "idempotency-key": crypto.randomUUID() },
-        { client },
-      );
-      expect(response.status).toBe(400);
-      expect(response.data).toMatchObject({
-        errors: [
-          expect.stringMatching(/entry 1.*geocoding-maptiler.*nested.*(constraint|minimum|range)/i),
-        ],
-      });
-      expect(JSON.stringify(response.data)).not.toContain("synthetic-secret");
-      const { integrationErrorMessage } = await import(
-        "../../../../web/src/lib/admin/integrationErrors"
-      );
-      let displayed = "";
-      try {
-        sdk.unwrapAdminResponse(response);
-      } catch (error) {
-        displayed = integrationErrorMessage(error, "Import failed");
-      }
-      expect(displayed).toMatch(/Entry 1.*geocoding-maptiler.*nested.*minimum/);
-      expect(configDb.writes).toBe(0);
-    } finally {
-      await app.close();
-    }
-  });
-  describe.each(["incomplete", "reload"] as const)(
-    "retained failure projection after %s",
-    (failure) => {
-      it.each(["conflict", "unknown", "retained"] as const)(
-        "carries retained %s evidence through the registered route, generated SDK and browser formatter",
-        async (database) => {
-          const sdk = await import("@openmapx/core/api-admin-sdk");
-          const { integrationErrorMessage } = await import(
-            "../../../../web/src/lib/admin/integrationErrors"
-          );
-          const { app, client } = await wire();
-          const id = MOCK_INTEGRATION.id;
-          configDb.reset([
-            { id: "row-alpha", integrationId: id, config: { label: "saved-before" }, version: "0" },
-          ]);
-          const outcome = {
-            outcome: "committed" as const,
-            revisionId: `cfg1_${"b".repeat(43)}`,
-            enabledServiceIds: [],
-            followUp: failure === "incomplete" ? ("failed" as const) : ("complete" as const),
-            cleanupFailed: false,
-            publisherCleanupFailed: false,
-            registryUpdateFailed: false,
-          };
-          mockImmediateImport.mockResolvedValueOnce({
-            ok: false,
-            error: "Integration import failed",
-            recovery: "reconciliation_required",
-            reason: "previous_applied_not_proven",
-            database,
-            phase: failure === "incomplete" ? "apply" : "reload",
-            runtime: failure === "incomplete" ? "unchanged" : "unknown",
-            apply: outcome,
-          });
-          try {
-            const response = await sdk.importAdminIntegrationConfigs(
-              { integrations: [{ integrationId: id, config: { label: "imported" } }] },
-              { "idempotency-key": crypto.randomUUID() },
-              { client },
-            );
-            expect(response.status).toBe(409);
-            expect(response.data).toEqual({
-              ok: false,
-              error: "Integration import failed",
-              recovery: "reconciliation_required",
-              reason: "previous_applied_not_proven",
-              database,
-              phase: failure === "incomplete" ? "apply" : "reload",
-              runtime: failure === "incomplete" ? "unchanged" : "unknown",
-              apply: outcome,
-            });
-            let displayed = "";
-            try {
-              sdk.unwrapAdminResponse(response);
-            } catch (error) {
-              displayed = integrationErrorMessage(error, "Import failed");
-            }
-            if (database === "retained")
-              expect(displayed).toContain("The imported configuration is saved.");
-            else {
-              expect(displayed).toContain(
-                database === "conflict"
-                  ? "newer edits were preserved"
-                  : "The saved configuration is uncertain.",
-              );
-              expect(displayed).not.toContain("The imported configuration is saved.");
-            }
-            expect(configDb.rows[0].config).toEqual({ label: "saved-before" });
-            expect(configDb.writes).toBe(0);
-            expect(mockImmediateImport).toHaveBeenCalledTimes(1);
-            expect(mockApplyWithEvidence).not.toHaveBeenCalled();
-            expect(mockReloadIntegrations).not.toHaveBeenCalled();
-          } finally {
-            await app.close();
-          }
-        },
-      );
-    },
-  );
-  it("validates the whole import before writes and carries explicit reconciliation evidence over generated transport", async () => {
-    const sdk = await import("@openmapx/core/api-admin-sdk");
-    const { app, client } = await wire();
-    try {
-      for (const body of [
-        null,
-        {},
-        { integrations: [] },
-        {
-          integrations: [
-            { integrationId: "geocoding-maptiler", config: { label: "valid" } },
-            { integrationId: "unknown", config: {} },
-          ],
-        },
-        {
-          integrations: [{ integrationId: "geocoding-maptiler", config: { nested: { count: 0 } } }],
-        },
-      ]) {
-        expect(
-          (
-            await app.inject({
-              method: "POST",
-              url: "/api/admin/integrations/import",
-              headers: { "content-type": "application/json" },
-              payload: JSON.stringify(body),
-            })
-          ).statusCode,
-        ).toBe(400);
-      }
-      expect(configDb.writes).toBe(0);
-      mockImmediateImport.mockResolvedValueOnce({
-        ok: false,
-        error: "Integration import failed",
-        phase: "persistence",
-        recovery: "reconciliation_required",
-        database: "unknown",
-        runtime: "unchanged",
-      });
-      const failed = await sdk.importAdminIntegrationConfigs(
-        { integrations: [{ integrationId: "geocoding-maptiler", config: {} }] },
-        { "idempotency-key": crypto.randomUUID() },
-        { client },
-      );
-      expect(failed).toMatchObject({
-        status: 409,
-        data: {
-          ok: false,
-          phase: "persistence",
-          recovery: "reconciliation_required",
-          database: "unknown",
-        },
-      });
-      expect(JSON.stringify(failed)).not.toContain("synthetic-secret");
-      const timestamp = "2026-10-20 10:00:00";
-      mockTimeline.mockResolvedValueOnce([
-        { hour: timestamp, total: 3, healthy: 2, uptimePercent: 67, avgResponseTime: 6 },
-      ]);
-      expect(
-        await sdk.getAdminIntegrationHealthHistory("geocoding-maptiler", undefined, { client }),
-      ).toMatchObject({
-        status: 200,
-        data: {
-          hours: 24,
-          timeline: [
-            {
-              hour: "2026-10-20T10:00:00.000Z",
-              total: 3,
-              healthy: 2,
-              uptimePercent: 67,
-              avgResponseTime: 6,
-            },
-          ],
-        },
-      });
     } finally {
       await app.close();
     }

@@ -51,7 +51,6 @@
   "apps/api/src/privacy/primary-db-archive-memory-postgres.test.ts": 20.13,
   "services/data-manager/src/jobs/execution/ops-children.test.ts": 126.78,
   "services/data-manager/__tests__/transitous/catalog-workflow-postgres.test.ts": 197.85,
-  "apps/api/src/services/configuration-migration/legacy-integration-import.test.ts": 403.08,
   "apps/api/src/services/transit-feed-credentials-postgres.test.ts": 212.44,
   "services/data-manager/__tests__/ambient-places/publish-postgres.test.ts": 42.83,
   "services/data-manager/src/jobs/execution/runner-cancellation.test.ts": 45.62,

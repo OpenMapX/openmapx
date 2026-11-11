@@ -10,9 +10,6 @@ import {
   adminIntegrationBindingParamsSchema,
   adminIntegrationBindingSetSchema,
   adminIntegrationBindingsSchema,
-  adminIntegrationConfigExportSchema,
-  adminIntegrationConfigImportedSchema,
-  adminIntegrationConfigImportSchema,
   adminIntegrationConfigPatchSchema,
   adminIntegrationConfigUpdatedSchema,
   adminIntegrationCredentialParamsSchema,
@@ -20,7 +17,6 @@ import {
   adminIntegrationEmptyMutationSchema,
   adminIntegrationEnvVarsSchema,
   adminIntegrationIdempotencyHeadersSchema,
-  adminIntegrationImportFailureSchema,
   adminIntegrationParamsSchema,
   adminIntegrationRefParamsSchema,
   adminIntegrationReloadAcceptedSchema,
@@ -88,34 +84,6 @@ export const integrationAdminOperations = {
     path: "/api/admin/integrations/env-vars",
     auth: "admin",
     responses: { ...common, 200: adminJson(adminIntegrationEnvVarsSchema) },
-  },
-  exportAdminIntegrationConfigs: {
-    method: "GET",
-    path: "/api/admin/integrations/export",
-    auth: "admin",
-    responses: { ...common, 200: adminJson(adminIntegrationConfigExportSchema) },
-  },
-  importAdminIntegrationConfigs: {
-    method: "POST",
-    path: "/api/admin/integrations/import",
-    auth: "admin",
-    request: {
-      body: adminIntegrationConfigImportSchema,
-      headers: adminIntegrationIdempotencyHeadersSchema,
-    },
-    responses: {
-      ...common,
-      400: configErrors,
-      200: adminJson(adminIntegrationConfigImportedSchema),
-      409: adminJson(
-        z.union([
-          adminIntegrationImportFailureSchema,
-          httpErrorSchema,
-          configurationSourceOwnedSchema,
-          configurationVersionConflictSchema,
-        ]),
-      ),
-    },
   },
   runAdminIntegrationHealthChecks: {
     method: "POST",
