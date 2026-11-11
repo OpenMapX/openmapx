@@ -6,11 +6,6 @@ import { initializeErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
 import { type Command, Option } from "commander";
 import { runsInAgent } from "../lib/agent-integrations";
-import {
-  describeAgentLayoutBlockers,
-  narrowAgentLayoutBlockers,
-  refuseAgentSwitchOrExit,
-} from "../lib/agent-layout";
 import { checkoutPositionFromGit } from "../lib/checkout-position";
 import { containerBindMounts, legacyTraefikDynamicMounted } from "../lib/container-mounts";
 import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
@@ -426,20 +421,8 @@ export async function renderComposeWithWriter(
       );
     }
   }
-  // Only a render on the host moves the operations agent to its narrow
-  // mounts, once nothing it needs is missing; asked after the one-time
-  // import. The agent's own renders keep the layout it runs with.
-  const agentMountLayout = runsInAgent()
-    ? undefined
-    : (): coreServices.AgentMountLayout => {
-        const blockers = narrowAgentLayoutBlockers({ rootDir: paths.root, mounts });
-        if (blockers.length === 0) return "narrow";
-        log.warn(describeAgentLayoutBlockers(blockers));
-        return "checkout";
-      };
   assertCliExecutionAvailable();
   const committed = await writer.commit({
-    ...(agentMountLayout ? { agentMountLayout } : {}),
     legacyTraefikDynamicMounted: legacyTraefik,
     ...(mounts ? { containerBindMounts: mounts } : {}),
     ...(selected && selected !== "none" ? { releaseServiceFiles: selected.files } : {}),
@@ -591,7 +574,6 @@ export function registerComposeCommands(program: Command): void {
         log.dim("No enabled services to start");
         process.exit(0);
       }
-      await refuseAgentSwitchOrExit("all");
       const code = await dockerComposeStream(["up", "-d", ...enabledServiceIds]);
 
       process.exit(code);

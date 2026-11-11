@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parse as parseYaml } from "yaml";
 import { renderComposeForRepo, renderComposeWithWriter } from "../src/commands/compose";
 import { registerServicesCommands } from "../src/commands/services";
-import { refuseAgentSwitchOrExit } from "../src/lib/agent-layout";
 import { migrateBeforeApiUpdate } from "../src/lib/api-migrations";
 import { dockerComposeStream } from "../src/lib/docker";
 import { ensureReleaseOverlay } from "../src/lib/release";
@@ -15,12 +14,6 @@ import { ensureReleaseOverlay } from "../src/lib/release";
 vi.setConfig({ testTimeout: 60000 });
 
 // Named external Docker/registry edges. Commands, files, renderer, locks and receipts are real.
-// Whether recreating the agent would switch it to its narrow mounts unready
-// is agent-layout.test.ts's; here it lets the update go on.
-vi.mock("../src/lib/agent-layout", async (original) => ({
-  ...(await original<typeof import("../src/lib/agent-layout")>()),
-  refuseAgentSwitchOrExit: vi.fn(async () => {}),
-}));
 vi.mock("../src/commands/compose", async (original) => {
   const actual = await original<typeof import("../src/commands/compose")>();
   return { ...actual, renderComposeWithWriter: vi.fn(actual.renderComposeWithWriter) };
@@ -209,7 +202,7 @@ describe("services update pull failures", () => {
   });
 });
 
-describe("services update and the operations agent's mounts", () => {
+describe("services update and the operations agent", () => {
   it("does not recreate when rendering after the pull cannot resolve the deployment user", async () => {
     vi.mocked(ensureReleaseOverlay).mockResolvedValue({ status: "present", path: "release.yml" });
     vi.mocked(renderComposeWithWriter).mockRejectedValueOnce(
@@ -220,22 +213,6 @@ describe("services update and the operations agent's mounts", () => {
     await expect(update("ops-agent")).rejects.toThrow("exit:1");
     expect(vi.mocked(dockerComposeStream).mock.calls).toEqual([[["pull", "ops-agent"]]]);
     expect(renderComposeWithWriter).toHaveBeenCalled();
-    expect(refuseAgentSwitchOrExit).not.toHaveBeenCalled();
-  });
-
-  it("asks before it could recreate the agent, and recreates nothing when the switch isn't ready", async () => {
-    vi.mocked(ensureReleaseOverlay).mockResolvedValue({ status: "present", path: "release.yml" });
-    await expect(update("--no-deps", "app-api")).rejects.toThrow("exit:0");
-    expect(refuseAgentSwitchOrExit).toHaveBeenLastCalledWith(["app-api"]);
-    await expect(update("app-api")).rejects.toThrow("exit:0");
-    expect(refuseAgentSwitchOrExit).toHaveBeenLastCalledWith("all");
-
-    vi.mocked(dockerComposeStream).mockClear();
-    vi.mocked(refuseAgentSwitchOrExit).mockImplementationOnce(async () => {
-      throw new Error("exit:1");
-    });
-    await expect(update("ops-agent")).rejects.toThrow("exit:1");
-    expect(vi.mocked(dockerComposeStream).mock.calls).toEqual([[["pull", "ops-agent"]]]);
   });
 });
 

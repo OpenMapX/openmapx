@@ -19,7 +19,7 @@ export function agentLogLine(line: services.ServiceFileReportLine): string {
  */
 export function describeServiceFilesAtStart(
   infraDir: string,
-  // Under OPENMAPX_RELEASE=local none: the checkout's files are the release's.
+  // Under OPENMAPX_RELEASE=local none: the bundle's files count as the checkout's.
   release: services.ReleaseServiceFiles | null = services.renderedEmbeddedReleaseServiceFiles(),
 ): services.ServiceFileReportLine[] {
   if (!release) return [];

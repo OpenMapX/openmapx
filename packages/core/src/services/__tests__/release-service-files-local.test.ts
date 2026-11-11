@@ -44,21 +44,11 @@ function checkoutMartin(): LoadedService {
   };
 }
 
-it("imports nothing under OPENMAPX_RELEASE=local, and mounts the checkout's edit; a release's render imports it", async () => {
-  const root = mkdtempSync(join(tmpdir(), "openmapx-local-render-"));
-  roots.push(root);
-  cpSync(join(REPOSITORY, "services"), join(root, "services"), {
-    recursive: true,
-    filter: (source) =>
-      !source.split(/[/\\]/).includes("node_modules") &&
-      !["generated-routes.yml", "auth.yml"].includes(basename(source)),
-  });
+/** The agent's render of martin and postgis at `root`, with its bundle's built-ins. */
+function agentRender(root: string) {
   const infraDir = join(root, "infra", "docker");
   mkdirSync(infraDir, { recursive: true });
-  // The agent's built-ins: the bundle's manifests, mounting from the checkout.
   const services = readBuiltInServices(root).services;
-  const edited = "listen_addresses: 0.0.0.0:3001\n";
-  writeFileSync(join(root, "services", "martin", "config", "martin.yaml"), edited);
   const commit = () =>
     commitConfigurationGeneration({
       infraDir,
@@ -82,10 +72,43 @@ it("imports nothing under OPENMAPX_RELEASE=local, and mounts the checkout's edit
     const source = line?.trim().replace(/^- /, "").split(":")[0] ?? "";
     return readFileSync(join(infraDir, CURRENT_CONFIGURATION, source), "utf8");
   };
+  return { infraDir, commit, mountedMartin };
+}
+
+it("renders an agent without a checkout under OPENMAPX_RELEASE=local from its bundle, importing nothing", async () => {
+  const root = mkdtempSync(join(tmpdir(), "openmapx-local-agent-render-"));
+  roots.push(root);
+  const { infraDir, commit, mountedMartin } = agentRender(root);
+  expect(existsSync(join(root, "services"))).toBe(false);
 
   vi.stubEnv("OPENMAPX_RELEASE", "local");
   const local = await commit();
-  expect(mountedMartin()).toBe(edited);
+  expect(mountedMartin()).toBe(
+    readFileSync(join(REPOSITORY, "services", "martin", "config", "martin.yaml"), "utf8"),
+  );
+  expect(serviceFilesImported(infraDir)).toBe(false);
+  expect(existsSync(join(infraDir, "overrides"))).toBe(false);
+  expect(local.serviceFileReport).toEqual([]);
+}, 60_000);
+
+it("imports nothing under OPENMAPX_RELEASE=local, rendering the bundle's files; a release's render imports the checkout's edit", async () => {
+  const root = mkdtempSync(join(tmpdir(), "openmapx-local-render-"));
+  roots.push(root);
+  cpSync(join(REPOSITORY, "services"), join(root, "services"), {
+    recursive: true,
+    filter: (source) =>
+      !source.split(/[/\\]/).includes("node_modules") &&
+      !["generated-routes.yml", "auth.yml"].includes(basename(source)),
+  });
+  const { infraDir, commit, mountedMartin } = agentRender(root);
+  const edited = "listen_addresses: 0.0.0.0:3001\n";
+  writeFileSync(join(root, "services", "martin", "config", "martin.yaml"), edited);
+
+  vi.stubEnv("OPENMAPX_RELEASE", "local");
+  const local = await commit();
+  expect(mountedMartin()).toBe(
+    readFileSync(join(REPOSITORY, "services", "martin", "config", "martin.yaml"), "utf8"),
+  );
   expect(serviceFilesImported(infraDir)).toBe(false);
   expect(existsSync(join(infraDir, "overrides"))).toBe(false);
   expect(local.serviceFileReport).toEqual([]);
@@ -105,9 +128,9 @@ it("imports nothing under OPENMAPX_RELEASE=local, and mounts the checkout's edit
       "utf8",
     ),
   ).toBe(edited);
-});
+}, 60_000);
 
-it("renders the bundle's files, unless OPENMAPX_RELEASE=local makes the checkout's the release's", () => {
+it("renders the bundle's files, which under OPENMAPX_RELEASE=local count as the checkout's", () => {
   const martin = checkoutMartin();
   const released = releaseServiceFiles([martin]);
   expect(released.origin).toBe("release");
@@ -118,11 +141,12 @@ it("renders the bundle's files, unless OPENMAPX_RELEASE=local makes the checkout
   expect(renderedEmbeddedReleaseServiceFiles()?.origin).toBe("release");
 
   vi.stubEnv("OPENMAPX_RELEASE", "local");
-  // What the agent's start-up report reads: none, the checkout's are the release's.
+  // What the agent's start-up report reads: none, there is no release to report against.
   expect(renderedEmbeddedReleaseServiceFiles()).toBeNull();
   const local = releaseServiceFiles([martin]);
   expect(local.origin).toBe("checkout");
-  expect(local.files.get("martin/config/martin.yaml")?.bytes.toString()).toBe(
-    "listen_addresses: 0.0.0.0:3001\n",
+  expect(local.history.size).toBe(0);
+  expect(local.files.get("martin/config/martin.yaml")?.bytes).toEqual(
+    released.files.get("martin/config/martin.yaml")?.bytes,
   );
 });

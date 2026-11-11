@@ -387,7 +387,7 @@ Anonymous GHCR build-cache manifests were readable, but the local emulated cold
 benchmark did not establish a net saving. Additional registry imports remain
 disabled pending controlled cold/unchanged/source-edit measurements. Same-run image
 reuse also remains a measured follow-up: transfer overhead is unknown, and both
-independent image scans and native mount layouts remain required. CodeQL keeps its
+independent image scans and the native ops-agent image test remain required. CodeQL keeps its
 existing required producer and cancellation policy; stale manual scans must not
 cancel current main's scan. No live ruleset change is part of this rollout.
 

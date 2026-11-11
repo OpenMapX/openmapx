@@ -114,7 +114,7 @@ function fixture() {
   roots.push(root);
   const infraDir = join(root, "infra", "docker");
   mkdirSync(infraDir, { recursive: true, mode: 0o700 });
-  // The whole checkout is mounted, as this release's manifest has it.
+  // The whole checkout at the agent's path, as earlier releases mounted it.
   mkdirSync(join(root, "services"), { mode: 0o755, recursive: true });
   // The deployment's user, which only a host render writes into .env.
   writeFileSync(join(infraDir, ".env"), deploymentUserEnv, { mode: 0o600 });

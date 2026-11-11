@@ -665,44 +665,14 @@ not apply there.
 
 ## The operations agent stops mounting the checkout
 
-The operations agent's container no longer mounts the whole checkout. It
-mounts `infra/docker` read-only (for `.env` and your overrides) and
-`infra/docker/state`, `data`, `secrets` and `backups` read-write, all at
-their host paths. Everything else it uses comes from its image and its state.
-
-**Use the coordinated update above** to apply the release. A later permitted host
-render/recreation can adopt the reduced mount layout when its prerequisites hold;
-do not change the running Data Manager pin with bare `compose release`.
-
-Its render moves the agent to the new mounts only once the host has
-everything an agent without the checkout needs. Otherwise it keeps the whole
-checkout for the agent, and says "The operations agent keeps the whole
-checkout mounted", listing each thing that is missing with its fix:
-
-- `.env` sets `UID` and `GID` (the render writes them from the checkout's owner);
-- the one-time import of your service file edits has run
-  (`infra/docker/state/ops-agent/overrides-import.json`), which needs a
-  selected release;
-- the agent's stores and the Transitous API keys have been copied out of the
-  checkout;
-- this release's agent has started once with no handoff helper running,
-  which retires the earlier releases' writer lock
-  (`legacy-configuration-writer-retired.json`);
-- an earlier release's release state in `infra/docker` has been carried over;
-- a configuration generation is applied;
-- no container, running or stopped, mounts anything from the checkout's
-  `services/`, Traefik's dynamic directory included. Recreate each one listed
-  with `pnpm openmapx services update <service>`.
-
-Fix what it lists and run the update again. `services update`, `services
-start` and `compose up` also check this before they recreate the agent: when
-something has gone missing since the render, they recreate nothing and say
-what. Nothing is ever half switched. A new installation switches at its
-second host update, once its agent has started.
-
-**A panel update** to this release keeps the whole checkout: the agent's own
-renders, and the admin panel's changes, keep whichever mounts the agent runs
-with. The next host update switches it.
+The operations agent's container does not mount the checkout. Every render,
+on the host or by the agent, mounts `infra/docker` read-only (for `.env` and
+your overrides) and `infra/docker/state`, `data`, `secrets`, `backups` and
+`catalog-pins` read-write, all at their host paths. Everything else it uses
+comes from its image and its state. A one-time step that needs the checkout
+(the import of your service file edits, the copy of the agent's stores and of
+the Transitous API keys) runs in a render on the host,
+`pnpm openmapx compose render`; the agent waits for it and says so.
 
 **Rollback needs a recovery decision.** Image selection does not reverse database
 migrations or a committed configuration change. Preserve the previous coherent
