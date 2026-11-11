@@ -46,9 +46,8 @@ export interface CacheWriteException {
 
 export const EXCEPTIONS: Readonly<Record<string, CacheWriteException>> = {
   "integrations/transit/index.ts": {
-    count: 6,
-    reason:
-      "Two writes store trip refresh-token session state, not upstream results. Four cache upstream transit responses (stop transfers, route, route stops, vehicle journey) and are still to move to captureCacheWriter; lower the count as each moves.",
+    count: 2,
+    reason: "Both writes store trip refresh-token session state, not upstream results.",
   },
   "integrations/transit-motis/rentals-capability.ts": {
     count: 1,
