@@ -222,9 +222,9 @@ export function ownedDirectoryProblem(stats: Stats | undefined, uid: number): st
 
 /**
  * The files the checkout's built-in services name, read as the release's
- * (running from source). A directory is read whole, skipping dot entries and
- * the routes earlier releases wrote into Traefik's. A file or directory that
- * is there but may not be used fails; one that is missing is listed.
+ * (running from source). A directory is read whole, skipping dot entries. A
+ * file or directory that is there but may not be used fails; one that is
+ * missing is listed.
  */
 export function readCheckoutServiceFiles(
   services: readonly LoadedService[],
