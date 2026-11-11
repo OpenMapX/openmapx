@@ -898,7 +898,6 @@ export function setup(ctx: IntegrationContext): void {
         ...(arriveBy ? { arrivalTime: when } : { departureTime: when }),
         numItineraries,
         modes: (q.modes ?? "TRANSIT").split(",").map((m) => m.trim()),
-        wheelchair: q.wheelchair === "true",
         wheelchairRequired: q.wheelchair === "true",
         maxTransfers: maxTransfersRaw,
         transferBuffer: transferBuffer as "standard" | "relaxed" | "extra",

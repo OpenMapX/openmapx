@@ -82,14 +82,13 @@ describe("parseChainRequest", () => {
     const parsed = parseChainRequest({
       waypoints: [COLOGNE, BONN],
       modes: ["BUS", "RAIL"],
-      wheelchair: true,
+      wheelchairRequired: true,
       maxTransfers: 2,
       transferBuffer: "relaxed",
       deutschlandticketOnly: true,
     });
     expect(parsed.baseRequest).toMatchObject({
       modes: ["BUS", "RAIL"],
-      wheelchair: true,
       wheelchairRequired: true,
       maxTransfers: 2,
       transferBuffer: "relaxed",

@@ -222,7 +222,7 @@ export function setupCloud(
           modes: params.deutschlandticketOnly
             ? applyDeutschlandticketFilter(params.modes)
             : params.modes,
-          wheelchair: params.wheelchairRequired ?? params.wheelchair,
+          wheelchair: params.wheelchairRequired,
           preTransitModes: params.preTransitModes,
           postTransitModes: params.postTransitModes,
           directModes: params.directModes,

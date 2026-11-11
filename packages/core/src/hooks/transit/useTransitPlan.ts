@@ -27,7 +27,6 @@ interface UseTransitPlanParams {
   /** MOTIS `transitModes` allow-list (e.g. ["BUS", "TRAM"]). Omit for all modes. */
   modes?: string[];
   /** When true, requests wheelchair-accessible routing (MOTIS pedestrianProfile=WHEELCHAIR). */
-  wheelchair?: boolean;
   wheelchairRequired?: boolean;
   maxTransfers?: number;
   transferBuffer?: "standard" | "relaxed" | "extra";
@@ -64,7 +63,6 @@ export function useTransitPlan({
   numItineraries,
   lang,
   modes,
-  wheelchair,
   wheelchairRequired,
   maxTransfers,
   transferBuffer,
@@ -102,7 +100,6 @@ export function useTransitPlan({
           numItineraries,
           lang,
           modes,
-          wheelchair,
           wheelchairRequired,
           maxTransfers,
           transferBuffer,

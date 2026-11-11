@@ -121,10 +121,13 @@ describe("buildTransitNavigationPackage", () => {
     if (!withoutOptions.ok) throw new Error("valid fixture rejected");
     expect(withoutOptions.startPackage.replanOptions).toBeUndefined();
 
-    const withOptions = build({ replanOptions: { wheelchair: true, maxTransfers: 2 } });
+    const withOptions = build({ replanOptions: { wheelchairRequired: true, maxTransfers: 2 } });
     expect(withOptions.ok).toBe(true);
     if (!withOptions.ok) return;
-    expect(withOptions.startPackage.replanOptions).toEqual({ wheelchair: true, maxTransfers: 2 });
+    expect(withOptions.startPackage.replanOptions).toEqual({
+      wheelchairRequired: true,
+      maxTransfers: 2,
+    });
   });
 
   it("refuses an itinerary with nowhere to go", () => {
