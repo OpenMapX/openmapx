@@ -97,7 +97,7 @@ describe("downloadOsm extract time", () => {
     const dataDir = mkdtempSync(join(tmpdir(), "openmapx-osm-header-"));
     const store = new StateStore(dataDir);
     try {
-      mkdirSync(join(dataDir, "osm"));
+      mkdirSync(join(dataDir, "osm"), { mode: 0o755 });
       copyFileSync(STAMPED_PBF, join(dataDir, "osm", "europe-monaco.osm.pbf"));
 
       await downloadOsm({
