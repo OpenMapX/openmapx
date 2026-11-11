@@ -18,7 +18,6 @@ interface PinColor {
   stroke: string;
 }
 
-const NO_CONTRIBUTORS: readonly Attribution[] = [];
 const PIN_RED: PinColor = { fill: "#EA4335", stroke: "#C5221F" };
 const LABEL_MAX_WIDTH = 200;
 const LABEL_GAP = 8;
@@ -67,15 +66,14 @@ export function usePinMarker(
   label: string,
   showLabel = true,
   color: PinColor = PIN_RED,
-  onActivate?: () => void,
-  contributors: readonly Attribution[] = NO_CONTRIBUTORS,
-  /** Native field-aware callers supply name receipts separately; undefined preserves legacy root ownership. */
-  labelContributors?: readonly Attribution[],
+  onActivate: (() => void) | undefined,
+  contributors: readonly Attribution[],
+  /** Name receipts, owned by the label element separately from the pin geometry's `contributors`. */
+  labelContributors: readonly Attribution[],
 ) {
   const { mapRef, mapReady, styleVersion } = useMap();
   const receiptKey = serializeContributors(contributors);
-  const labelReceiptKey = serializeContributors(labelContributors ?? []);
-  const separateChannels = labelContributors !== undefined;
+  const labelReceiptKey = serializeContributors(labelContributors);
   const [markerEvidence, setMarkerEvidence] = useState<{
     element: Element | null;
     labelElement: HTMLElement | null;
@@ -200,9 +198,9 @@ export function usePinMarker(
 
     const captured = readCapturedContributors(receiptKey) ?? [];
     const capturedLabel = readCapturedContributors(labelReceiptKey) ?? [];
-    const publishMarkerEvidence = (root: HTMLElement) => {
-      const element = separateChannels ? geometryRef.current : root;
-      const labelElement = separateChannels && showLabel ? labelRef.current : null;
+    const publishMarkerEvidence = () => {
+      const element = geometryRef.current;
+      const labelElement = showLabel ? labelRef.current : null;
       setMarkerEvidence((current) =>
         current.element === element &&
         current.labelElement === labelElement &&
@@ -253,7 +251,7 @@ export function usePinMarker(
             labelContainerRef.current.style.pointerEvents = onActivate ? "auto" : "none";
             labelContainerRef.current.style.cursor = onActivate ? "pointer" : "";
           }
-          if (elementRef.current) publishMarkerEvidence(elementRef.current);
+          if (elementRef.current) publishMarkerEvidence();
           scheduleLabelFitRef.current();
           return;
         }
@@ -312,7 +310,7 @@ export function usePinMarker(
           .setLngLat(coords)
           .addTo(mapRef.current);
         markerMapRef.current = mapRef.current;
-        publishMarkerEvidence(el);
+        publishMarkerEvidence();
         scheduleLabelFitRef.current();
       })
       .catch(() => undefined);
@@ -331,6 +329,5 @@ export function usePinMarker(
     onActivate,
     receiptKey,
     labelReceiptKey,
-    separateChannels,
   ]);
 }

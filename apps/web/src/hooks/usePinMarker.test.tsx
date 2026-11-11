@@ -39,7 +39,7 @@ function Pin({
   onClick,
   label = "Cafe",
   contributors = [],
-  labelContributors,
+  labelContributors = [],
 }: {
   onClick?: () => void;
   label?: string;
@@ -196,7 +196,9 @@ it("credits the actual DOM pin after async creation without querying features, t
     const pin = canvas.querySelector<HTMLElement>("[role='button']");
     expect(pin).not.toBeNull();
     let rect = new DOMRect(100, 100, 20, 32);
-    if (pin) pin.getBoundingClientRect = () => rect;
+    const geometry = pin?.querySelector("svg");
+    expect(geometry).not.toBeNull();
+    if (geometry) geometry.getBoundingClientRect = () => rect;
     fake.state.styleLoaded = false;
     await act(async () => {
       vi.advanceTimersByTime(300);

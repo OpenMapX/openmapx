@@ -28,7 +28,6 @@ import type { AdminOperationContract } from "../operations/adminOperationsApi";
 import { DataOperationLauncher } from "../operations/DataOperationLauncher";
 import { TransitMobilityView } from "../transit/TransitWorkspace";
 import { BackupsPage } from "./BackupsPage";
-import { DataWorkflowsPage } from "./DataWorkflowsPage";
 import { NotablePlacesMaintenance } from "./NotablePlacesMaintenance";
 import { OvertureMaintenance } from "./OvertureMaintenance";
 import { SearchIndexMaintenance } from "./SearchIndexMaintenance";
@@ -288,7 +287,7 @@ describe("service workflows through actual generated transport", () => {
           ? Response.json({ error: "Synthetic denied" }, { status })
           : undefined,
       );
-      mount(<DataWorkflowsPage />);
+      mount(<DataWorkspace topic="osm" />);
       expect(await screen.findByText("Failed to load data inventory.")).toBeInTheDocument();
       expect(screen.queryByText("Data Operations")).toBeNull();
     },
@@ -1010,7 +1009,7 @@ describe("wire intent, validation, polling and policy", () => {
             })
           : undefined,
       );
-      mount(<DataWorkflowsPage />);
+      mount(<DataWorkspace topic="osm" />);
       await act(async () => vi.advanceTimersByTimeAsync(1));
       expect(screen.getByText("poll-1")).toBeInTheDocument();
       await act(async () => vi.advanceTimersByTimeAsync(29_999));

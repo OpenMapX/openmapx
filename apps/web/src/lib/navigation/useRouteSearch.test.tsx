@@ -16,7 +16,7 @@ vi.mock("next-intl", () => ({ useLocale: () => "en" }));
 const directions = vi.hoisted(() => vi.fn());
 
 // POIs along the corridor, standing in for the category search response.
-const places = [
+const places: { id: string; name: string; coordinates: [number, number] }[] = [
   { id: "a", name: "A", coordinates: [0.001, 0.0002] },
   { id: "b", name: "B", coordinates: [0.002, -0.0003] },
   { id: "c", name: "C", coordinates: [0.003, 0.0001] },
@@ -29,7 +29,7 @@ let categoryPlaces: ((typeof places)[number] & { routingEntrance?: [number, numb
 // `active` inside useRouteSearch stopped selecting `useFilterSearch` — the
 // results would come back as 3 items with `places`' ids, not 2 with these,
 // and the assertions below would catch it.
-const filterPlaces = [
+const filterPlaces: typeof places = [
   { id: "x", name: "X", coordinates: [0.0015, 0.0004] },
   { id: "y", name: "Y", coordinates: [0.0035, -0.0002] },
 ];
@@ -132,9 +132,7 @@ describe("useRouteSearch route index ownership", () => {
       routes: [freshRoute()],
     });
     await act(async () => {
-      expect(await result.current.addStop({ id: "b", coordinates: [0.001, 0.0002] } as never)).toBe(
-        true,
-      );
+      expect(await result.current.addStop({ id: "b", coordinates: [0.001, 0.0002] })).toBe(true);
     });
     expect(useNavigationStore.getState().destinationWaypoints[1]).toEqual([0.0021, 0]);
   });
@@ -149,7 +147,7 @@ describe("useRouteSearch route index ownership", () => {
     await waitFor(() => expect(result.current.results[0].detour?.kind).toBe("network"));
     directions.mockClear();
     await act(async () => {
-      expect(await result.current.addStop([0.001, 0.0002])).toBe(true);
+      expect(await result.current.addStop(places[0])).toBe(true);
     });
     expect(directions.mock.calls[0][0]).toMatchObject({ provider: "routing-a" });
     expect(useNavigationStore.getState().routeProvider).toBe("routing-a");
@@ -167,7 +165,7 @@ describe("useRouteSearch route index ownership", () => {
     });
     let pending!: Promise<boolean>;
     act(() => {
-      pending = result.current.addStop([0.001, 0.0002]);
+      pending = result.current.addStop(places[0]);
     });
     const signal = (directions.mock.calls.at(-1)?.[2] as { signal: AbortSignal }).signal;
     categoryPlaces = places.map((p) => (p.id === "a" ? { ...p, coordinates: [0.0019, 0] } : p));
@@ -255,7 +253,9 @@ describe("useRouteSearch route index ownership", () => {
   });
 
   it("rejects a late added stop after another session starts with the same route", async () => {
-    const { result } = renderHook(() => useRouteSearch(null));
+    const { result } = renderHook(() => useRouteSearch({ category: "fuel" }));
+    await act(async () => {});
+    directions.mockClear();
     const original = useNavigationStore.getState().route!;
     let finish!: (result: DirectionsResult) => void;
     directions.mockImplementation(
@@ -266,14 +266,15 @@ describe("useRouteSearch route index ownership", () => {
     );
     let pending!: Promise<boolean>;
     act(() => {
-      pending = result.current.addStop([0.002, 0.0002]);
+      pending = result.current.addStop(places[1]);
     });
+    const finishStop = finish;
     act(() => {
       useNavigationStore.getState().stopNavigation();
       useNavigationStore.getState().startGroundNavigation(original, "driving", waypoints);
     });
     await act(async () => {
-      finish({
+      finishStop({
         waypoints,
         activeRouteIndex: 0,
         provider: "routing-fixture",
@@ -286,7 +287,9 @@ describe("useRouteSearch route index ownership", () => {
   });
 
   it("cancels its stop request and restores navigation without committing a late response", async () => {
-    const { result } = renderHook(() => useRouteSearch(null));
+    const { result } = renderHook(() => useRouteSearch({ category: "fuel" }));
+    await act(async () => {});
+    directions.mockClear();
     const original = useNavigationStore.getState().route;
     let finish!: (value: DirectionsResult) => void;
     directions.mockImplementation(
@@ -297,14 +300,15 @@ describe("useRouteSearch route index ownership", () => {
     );
     let pending!: Promise<boolean>;
     act(() => {
-      pending = result.current.addStop([0.002, 0.0002]);
+      pending = result.current.addStop(places[1]);
     });
+    const finishStop = finish;
     const signal = (directions.mock.calls[0][2] as { signal: AbortSignal } | undefined)?.signal;
     act(() => result.current.cancelAddStop());
     expect(signal?.aborted).toBe(true);
     expect(useNavigationStore.getState().status).toBe("navigating");
     await act(async () => {
-      finish({
+      finishStop({
         waypoints,
         activeRouteIndex: 0,
         provider: "routing-fixture",
@@ -316,7 +320,9 @@ describe("useRouteSearch route index ownership", () => {
   });
 
   it("lets only the latest competing stop selection commit", async () => {
-    const { result } = renderHook(() => useRouteSearch(null));
+    const { result } = renderHook(() => useRouteSearch({ category: "fuel" }));
+    await act(async () => {});
+    directions.mockClear();
     const finishes: ((value: DirectionsResult) => void)[] = [];
     directions.mockImplementation(
       () =>
@@ -327,10 +333,10 @@ describe("useRouteSearch route index ownership", () => {
     let first!: Promise<boolean>;
     let second!: Promise<boolean>;
     act(() => {
-      first = result.current.addStop([0.001, 0.0002]);
+      first = result.current.addStop(places[0]);
     });
     act(() => {
-      second = result.current.addStop([0.003, 0.0002]);
+      second = result.current.addStop(places[2]);
     });
     expect(directions).toHaveBeenCalledTimes(2);
     await act(async () => {
@@ -353,7 +359,7 @@ describe("useRouteSearch route index ownership", () => {
     });
     expect(useNavigationStore.getState().destinationWaypoints).toEqual([
       waypoints[0],
-      [0.003, 0.0002],
+      places[2].coordinates,
       waypoints[1],
     ]);
   });
@@ -382,7 +388,7 @@ describe("useRouteSearch route index ownership", () => {
   it("does not evaluate or add stops in a native-owned session", async () => {
     useNavigationStore.setState({ navigationAuthority: "native" });
     const { result } = renderHook(() => useRouteSearch({ category: "fuel" }));
-    expect(await result.current.addStop([0.002, 0.0002])).toBe(false);
+    expect(await result.current.addStop(places[1])).toBe(false);
     expect(directions).not.toHaveBeenCalled();
   });
 
@@ -489,7 +495,7 @@ describe("useRouteSearch route index ownership", () => {
     const initial = result.current.results[0].alongMeters;
     const refreshed = places.map((p) => ({
       ...p,
-      coordinates: [p.coordinates[0] + 0.0005, p.coordinates[1]],
+      coordinates: [p.coordinates[0] + 0.0005, p.coordinates[1]] as [number, number],
     }));
     filterSearchResult = { ...filterSearchResult, data: { results: refreshed } };
     rerender();

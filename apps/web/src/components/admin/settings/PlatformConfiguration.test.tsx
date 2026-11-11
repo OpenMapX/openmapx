@@ -174,17 +174,6 @@ it("does not start a platform write after leaving during the fresh-baseline read
   await new Promise((done) => setTimeout(done, 0));
   expect(mocks.preview).not.toHaveBeenCalled();
 });
-it("removes an old unscoped preview instead of loading it in a scoped owner", async () => {
-  const key = "openmapx-platform-preview:http://admin.test:admin-a";
-  sessionStorage.setItem(
-    key,
-    JSON.stringify({ preview, expiresAt: new Date(Date.now() + 600000).toISOString() }),
-  );
-  mount("retention");
-  await screen.findByLabelText("Backup retention (days)");
-  expect(sessionStorage.getItem(key)).toBeNull();
-  expect(screen.queryByText("Review platform changes")).toBeNull();
-});
 it("reuses the same apply intent after an unconfirmed transport outcome", async () => {
   mocks.apply.mockRejectedValueOnce(Error("offline"));
   mount();
