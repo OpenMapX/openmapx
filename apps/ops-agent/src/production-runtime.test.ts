@@ -120,27 +120,24 @@ describe("assembled production service authority", () => {
   it("clears only the exact selected pin through the production runtime without Docker mutation", async () => {
     const host = await fixture(),
       path = services.releaseStatePaths(host.infraDir).overlay;
-    const manifest = {
-      schemaVersion: 1 as const,
+    const manifest: services.ReleaseManifest = {
+      schemaVersion: 1,
       release: "checked-pin",
       images: Object.fromEntries(
         services.RELEASE_IMAGE_NAMES.map((name) => [
           name,
           `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`,
         ]),
-      ),
+      ) as services.ReleaseManifest["images"],
       privacyReleaseValidation: {
-        version: 1 as const,
+        version: 1,
         sourceBuildFingerprint: "a".repeat(64),
         validatedAt: "2026-09-05T12:00:00.000Z",
-        checks: {
-          translationsConsistent: true as const,
-          openApiConsistent: true as const,
-          policyConsistent: true as const,
-        },
+        checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
       },
+      ...releaseProvenance(),
     };
-    services.writeReleaseComposeArtifacts(manifest as services.ReleaseManifest, host.infraDir);
+    services.writeReleaseComposeArtifacts(manifest, host.infraDir);
     expect(await productionReleaseEffects(host.runtime).inspect()).toMatchObject({
       selectedReleaseId: "checked-pin",
     });
