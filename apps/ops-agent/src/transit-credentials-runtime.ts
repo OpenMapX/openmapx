@@ -20,6 +20,17 @@ import { OpsAgentBusyError, OpsNotWiredError, type OpsRuntime } from "./runtime"
 
 const MANAGED = "/run/secrets/TRANSITOUS_API_KEYS";
 const DEFAULT = "/config/transitous/api-keys.json";
+/**
+ * The host-owned keys directory, relative to the root the agent shares with
+ * the host, where a render keeps it and data-manager mounts it from at
+ * /config/transitous.
+ */
+const HOST_KEYS_DIRECTORY = [
+  "infra",
+  "docker",
+  ...services.TRANSITOUS_API_KEYS_DIRECTORY.split("/"),
+];
+const HOST_KEYS_FILE = [...HOST_KEYS_DIRECTORY, services.TRANSITOUS_API_KEYS_FILENAME];
 export function inspectAgentPinnedCredentialKeys(
   infraDir: string,
   pins: CatalogPinSet,
@@ -247,17 +258,17 @@ export function installTransitCredentialsRuntime(
           throw new OpsNotWiredError();
       } else {
         try {
-          const values = readMap(["services", "motis", "tools", "transitous", "api-keys.json"]);
+          const values = readMap(HOST_KEYS_FILE);
           owner = "file";
           configuredKeys = Object.keys(values)
             .filter((key) => values[key] !== "")
             .sort();
           reason = `The existing ${DEFAULT} file is host-owned. Manage it on the host; it is never adopted automatically.`;
         } catch (error) {
-          const entries = withDirectory(["services", "motis", "tools", "transitous"], (directory) =>
+          const entries = withDirectory(HOST_KEYS_DIRECTORY, (directory) =>
             directory.listBounded(1024),
           );
-          if (entries.includes("api-keys.json")) throw error;
+          if (entries.includes(services.TRANSITOUS_API_KEYS_FILENAME)) throw error;
           owner = "unset";
         }
       }
@@ -301,8 +312,7 @@ export function installTransitCredentialsRuntime(
                 value !== `TRANSITOUS_API_KEYS_FILE=${DEFAULT}`,
             )
           ) {
-            const components = ["services", "motis", "tools", "transitous"],
-              expectedDirectory = join(options.rootDir, ...components),
+            const expectedDirectory = join(options.rootDir, ...HOST_KEYS_DIRECTORY),
               mountedDirectory = matches[0]!.Source!;
             const source = lstatSync(expectedDirectory),
               target = lstatSync(mountedDirectory);
@@ -315,13 +325,13 @@ export function installTransitCredentialsRuntime(
               realpathSync(expectedDirectory) === realpathSync(mountedDirectory)
             ) {
               if (owner === "file") {
-                readMap([...components, "api-keys.json"]);
+                readMap(HOST_KEYS_FILE);
                 if (hostCredentialsRevision === initialHostRevision)
                   consumedCredentialsRevision = hostCredentialsRevision;
               } else if (
-                !withDirectory(components, (directory) => directory.listBounded(1024)).includes(
-                  "api-keys.json",
-                )
+                !withDirectory(HOST_KEYS_DIRECTORY, (directory) =>
+                  directory.listBounded(1024),
+                ).includes(services.TRANSITOUS_API_KEYS_FILENAME)
               )
                 consumedCredentialsRevision = TRANSIT_CREDENTIALS_ABSENT_REVISION;
             }

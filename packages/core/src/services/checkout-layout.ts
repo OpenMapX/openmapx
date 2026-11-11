@@ -23,11 +23,3 @@ export function checkoutMounted(rootDir: string): boolean {
 export function checkoutMountedAt(infraDir: string): boolean {
   return checkoutMounted(resolve(infraDir, "..", ".."));
 }
-
-/**
- * Something only a checkout can do once, which this operations agent can't,
- * having none: a render on the host does it. The admin panel shows the message.
- */
-export class CheckoutRequiredError extends Error {
-  override name = "CheckoutRequiredError";
-}

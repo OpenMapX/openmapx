@@ -134,38 +134,6 @@ async function main(): Promise<void> {
           services.checkoutBuiltInIntegrationManifests(config.rootDir)
         ).ids,
       );
-    // Releases before this one kept both stores in the checkout. The first
-    // time, a change they left unfinished is undone where it began, then the
-    // stores are copied into the agent's state, each entry verified against
-    // its record, before anything is installed there. After a panel
-    // self-update this runs before app-api is recreated with the new mount;
-    // until then app-api keeps reading the earlier copies, which stay.
-    // Without the checkout there is nothing to copy them from: said here, and
-    // every render and commit refuses until a host render has copied them.
-    const storesCopied = services.readAgentStoresMigration(paths.infraDir) !== null;
-    if (!storesCopied && !services.checkoutMounted(config.rootDir)) {
-      process.stderr.write(`${services.AGENT_STORES_NOT_COPIED}\n`);
-    } else if (!storesCopied) {
-      const legacy = services.legacyAgentStorePaths(paths.infraDir);
-      await new CommunityRepositoryStore({
-        rootDir: config.rootDir,
-        directory: legacy.community,
-        uid,
-        loadAuthority: () => authorityLoader(),
-      }).recover();
-      await new IntegrationStore({
-        rootDir: config.rootDir,
-        directory: legacy.customIntegrations,
-        uid,
-        builtInIds: builtInIntegrationIds,
-      }).recover();
-      const migration = await services.withConfigurationGenerationWriter(paths.infraDir, async () =>
-        services.prepareAgentStores(paths.infraDir, { uid }),
-      );
-      for (const { message } of services.describeAgentStoresMigration(migration, paths.infraDir)) {
-        process.stderr.write(`${message}\n`);
-      }
-    }
     // The agent is the only writer of its community store. An interrupted
     // repository transaction is undone before any authority load, which
     // refuses a checkout it cannot validate.

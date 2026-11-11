@@ -44,10 +44,7 @@ import {
 } from "../lib/release";
 import { selectedReleaseServiceFiles } from "../lib/release-service-files";
 import { applyServiceSelection } from "../lib/service-selection";
-import {
-  describeTransitousApiKeysMigration,
-  ensureTransitousApiKeysFile,
-} from "../lib/transitous-api-keys";
+import { ensureTransitousApiKeysFile } from "../lib/transitous-api-keys";
 
 const {
   agentStatePaths,
@@ -248,13 +245,8 @@ export async function renderComposeWithWriter(
   // first time a generation mounts it from its new place.
   prepareAgentStateDirectories(paths.infraDir);
   // The agent's stores, owner-only, before the generation mounts one into
-  // app-api; the first time, copied from the checkout and verified.
-  for (const { level, message } of coreServices.describeAgentStoresMigration(
-    coreServices.prepareAgentStores(paths.infraDir),
-    paths.infraDir,
-  )) {
-    log[level](message);
-  }
+  // app-api.
+  coreServices.prepareAgentStores(paths.infraDir);
   const agentState = agentStatePaths(paths.infraDir);
   ensurePlatformPrivateDirectory(agentState.trustedConfig);
   ensurePlatformPrivateDirectory(join(paths.infraDir, "catalog-pins"));
@@ -307,11 +299,7 @@ export async function renderComposeWithWriter(
   }
   reconcileRedisAuthFiles(redisPasswordPath, redisAclPath, opts.redisAuthHooks);
   // Before a generation mounts their directory into data-manager.
-  const transitousApiKeys = describeTransitousApiKeysMigration(
-    ensureTransitousApiKeysFile(paths.root),
-    paths.root,
-  );
-  if (transitousApiKeys) log[transitousApiKeys.level](transitousApiKeys.message);
+  ensureTransitousApiKeysFile(paths.root);
   const registry = new ServiceRegistry({ rootDir: paths.root });
   await registry.load();
   const applied = applyServiceSelection(registry, {

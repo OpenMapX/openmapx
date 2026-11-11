@@ -307,13 +307,11 @@ async function commitGeneration(
 
 /**
  * The message of a failure the operator can fix (a service file or override,
- * a one-time step only a render on the host can do, or .env without the
- * deployment's user), or null.
+ * or .env without the deployment's user), or null.
  */
 function operatorProblem(error: unknown): string | null {
   for (let cause = error; cause instanceof Error; cause = cause.cause) {
     if (cause instanceof coreServices.ServiceFileError) return cause.message;
-    if (cause instanceof coreServices.CheckoutRequiredError) return cause.message;
     if (cause instanceof coreServices.DeploymentUserError) return cause.message;
   }
   return null;

@@ -209,13 +209,13 @@ directory so an editor's atomic save is seen, and the overrides) and
 `infra/docker/state`, `data`, `secrets`, `backups` and `catalog-pins`
 read-write. It never has the checkout: everything it needs comes from its
 image and its state. A one-time step only a checkout allows (the import of
-service file edits, the copy of the stores and of the Transitous API keys) is
-refused or waits in the agent, and says that `pnpm openmapx compose render` on
-the host does it. It is never recorded as done. CI runs the agent's image with
-these mounts (`test (ops-agent image)`), and the install smoke check requires
-the running agent to mount nothing at the checkout's root. Traefik consumes
-generated configuration rather than discovering containers through the Docker
-socket, so there is no duplicate host-control path outside the broker.
+service file edits) waits in the agent, and says that
+`pnpm openmapx compose render` on the host does it. It is never recorded as
+done. CI runs the agent's image with these mounts (`test (ops-agent image)`),
+and the install smoke check requires the running agent to mount nothing at the
+checkout's root. Traefik consumes generated configuration rather than
+discovering containers through the Docker socket, so there is no duplicate
+host-control path outside the broker.
 
 `app-api` runs the integration host alongside core routes, service discovery,
 and asynchronous jobs:
