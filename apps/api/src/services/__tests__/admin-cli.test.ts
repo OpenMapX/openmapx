@@ -3,7 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 // admin-cli.ts destructures @openmapx/core/server at module load; stub it so the
 // test exercises only the pure validator without the real service registry.
 vi.mock("@openmapx/core/server", () => ({
-  services: {},
+  services: {
+    serviceSelectionPath: (infraDir: string) =>
+      `${infraDir}/state/ops-agent/service-selection.json`,
+  },
   findRepoRoot: () => "/repo",
   repoPaths: () => ({ infraDir: "/repo/infra/docker" }),
 }));
