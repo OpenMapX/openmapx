@@ -24,6 +24,7 @@ import {
 } from "@openmapx/core/catalog-pins";
 import * as sdk from "@openmapx/core/data-manager-sdk";
 import { createControlRootOperationKey, OpsClient } from "@openmapx/core/ops";
+import { services as coreServices } from "@openmapx/core/server";
 import {
   feedState,
   jobStages,
@@ -206,7 +207,7 @@ it
       const feeds = await buildTinyGtfsFeeds(join(f.root, "tiny-feeds"));
       mkdirSync(join(catalog, "feeds"), { recursive: true });
       mkdirSync(join(atlas, "feeds"), { recursive: true });
-      mkdirSync(join(f.root, "services/motis/tools/transitous"), { recursive: true });
+      mkdirSync(coreServices.transitousApiKeysDirectory(f.infraDir), { recursive: true });
       cpSync(
         resolve("services/data-manager/__tests__/transitous/fixtures/stub-catalog-scripts"),
         join(catalog, "src"),
@@ -358,7 +359,7 @@ it
                 row.Labels["com.docker.compose.service"] === "data-manager"
                   ? [
                       {
-                        Source: join(f.root, "services/motis/tools/transitous"),
+                        Source: coreServices.transitousApiKeysDirectory(f.infraDir),
                         Destination: "/config/transitous",
                         RW: false,
                       },

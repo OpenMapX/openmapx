@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -49,10 +50,12 @@ async function fixture() {
   const infraDir = join(root, "infra/docker"),
     catalog = join(infraDir, "data/.transitous-catalog"),
     atlas = join(catalog, "transitland-atlas"),
-    local = join(root, "services/motis/tools/transitous");
+    // Where a render keeps the keys and data-manager mounts them from. The
+    // agent has no checkout, so nothing else is there.
+    local = coreServices.transitousApiKeysDirectory(infraDir);
   mkdirSync(join(catalog, "feeds"), { mode: 0o755, recursive: true });
   mkdirSync(join(atlas, "feeds"), { mode: 0o755, recursive: true });
-  mkdirSync(local, { mode: 0o755, recursive: true });
+  mkdirSync(local, { mode: 0o700, recursive: true });
   git(atlas, ["init"]);
   writeFileSync(
     join(atlas, "feeds/a.dmfr.json"),
@@ -177,6 +180,7 @@ async function fixture() {
 }
 it("discovers pinned keys and masks host-file values without adopting or modifying them", async () => {
   const f = await fixture();
+  expect(existsSync(join(f.root, "services"))).toBe(false);
   expect(await f.inspect()).toMatchObject({
     requiredKeys: ["de/A"],
     owner: "unset",

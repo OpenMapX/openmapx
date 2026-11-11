@@ -24,12 +24,11 @@ import {
   readCatalogPinSet,
   retainCatalogProposal,
 } from "@openmapx/core/catalog-pins";
+import { services } from "@openmapx/core/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
 import {
   ensureTransitousApiKeysFile,
   generateTransitousApiKeys,
-  transitousApiKeysPath,
 } from "../src/lib/transitous-api-keys";
 
 let tmp: string;
@@ -81,7 +80,7 @@ afterEach(() => {
   rmSync(tmp, { recursive: true, force: true });
 });
 
-const keysPath = () => transitousApiKeysPath(join(tmp, "infra", "docker"));
+const keysPath = () => services.transitousApiKeysPath(join(tmp, "infra", "docker"));
 const mode = (path: string) => lstatSync(path).mode & 0o777;
 
 describe("generateTransitousApiKeys", () => {

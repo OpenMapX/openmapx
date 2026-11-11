@@ -377,6 +377,12 @@ export {
   type TraefikRenderContext,
 } from "./traefik-renderer";
 export {
+  TRANSITOUS_API_KEYS_DIRECTORY,
+  TRANSITOUS_API_KEYS_FILENAME,
+  transitousApiKeysDirectory,
+  transitousApiKeysPath,
+} from "./transitous-api-keys-path";
+export {
   TrustedAuthorityFilesystem,
   type TrustedAuthorityKind,
   type TrustedAuthorityReadHooks,

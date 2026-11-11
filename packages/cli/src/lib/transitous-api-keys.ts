@@ -21,6 +21,7 @@ import * as control from "@openmapx/core/build-artifacts";
 import { readCatalogPinSet, readCatalogProposal } from "@openmapx/core/catalog-pins";
 import { createControlRootOperationKey, executionFingerprint } from "@openmapx/core/ops";
 import { fsyncDirectory } from "@openmapx/core/release-files";
+import { services as coreServices } from "@openmapx/core/server";
 
 import {
   type CommandRunner,
@@ -43,21 +44,8 @@ import {
 export type { CommandRunner };
 export { DEFAULT_TRANSITOUS_REPO_URL };
 
-/**
- * The operator's Transitous API keys live alone in their own directory under
- * the secrets directory, which data-manager mounts read-only at
- * `/config/transitous`. A directory, not the file: data-manager reads the keys
- * at every run, and a file mount would keep showing the file a rename
- * replaced until the container is recreated.
- */
-export const TRANSITOUS_API_KEYS_DIRECTORY = "transitous-api-keys";
-export const TRANSITOUS_API_KEYS_FILENAME = "api-keys.json";
 const TRANSITOUS_API_KEYS_MODE = 0o600;
 const MAX_TRANSITOUS_API_KEYS_BYTES = 1024 * 1024;
-
-export function transitousApiKeysPath(infraDir: string): string {
-  return join(infraDir, "secrets", TRANSITOUS_API_KEYS_DIRECTORY, TRANSITOUS_API_KEYS_FILENAME);
-}
 
 export interface EnsureTransitousApiKeysResult {
   path: string;
@@ -145,7 +133,7 @@ export function ensureTransitousApiKeysFile(rootDir?: string): EnsureTransitousA
   const paths = repoPaths(rootDir);
   const uid = process.geteuid?.();
   if (uid === undefined) throw new Error("Transitous API keys ownership is unavailable");
-  const path = transitousApiKeysPath(paths.infraDir);
+  const path = coreServices.transitousApiKeysPath(paths.infraDir);
   // The secrets directory itself is protected by the platform secrets render
   // creates first; this one holds nothing but the keys.
   ensurePlatformPrivateDirectory(dirname(path));
