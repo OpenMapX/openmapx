@@ -22,8 +22,9 @@ import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
 import {
-  formatDistance,
   formatDuration,
+  formatMeasurementDistance,
+  formatOverviewDistance,
   geocodeStopAsPlace,
   makeSyntheticStopPlace,
   PANEL,
@@ -32,6 +33,7 @@ import {
   safeHref,
   tzOffsetLabel,
   usePlaceStore,
+  useSettingsStore,
   useSidebarStore,
 } from "@openmapx/core";
 import {
@@ -112,6 +114,7 @@ function isPerLegRedundant(
 
 function LegStatusDetails({ leg, itinerary }: { leg: TripLeg; itinerary: TripItinerary }) {
   const t = useTranslations("directions");
+  const units = useSettingsStore((s) => s.units);
   const tNav = useTranslations("navigation");
   const [stepsExpanded, setStepsExpanded] = useState(false);
   const statuses: string[] = [];
@@ -162,8 +165,9 @@ function LegStatusDetails({ leg, itinerary }: { leg: TripLeg; itinerary: TripIti
             )}
             <Typography variant="caption">
               {t("walkDistance", {
-                distance: formatDistance(
+                distance: formatMeasurementDistance(
                   leg.steps.reduce((sum, step) => sum + (step.distanceMeters ?? 0), 0),
+                  units,
                 ),
               })}
             </Typography>
@@ -178,7 +182,7 @@ function LegStatusDetails({ leg, itinerary }: { leg: TripLeg; itinerary: TripIti
                   key={`${stepIndex}-${step.instruction}-${step.fromLevel}-${step.toLevel}-${step.distanceMeters}-${step.streetName ?? ""}`}
                 >
                   {composeWalkInstruction(walkStepInfo(step), tNav)} ·{" "}
-                  {formatDistance(step.distanceMeters)}
+                  {formatMeasurementDistance(step.distanceMeters, units)}
                   {step.accessRestriction ? ` · ${t("accessRestricted")}` : ""}
                 </Typography>
               ))}
@@ -235,6 +239,7 @@ export function TransitDetailsView({
   const tNav = useTranslations("navigation");
   const locale = useLocale();
   const fmt = useDateTimeFormat();
+  const units = useSettingsStore((s) => s.units);
   const [activeLegDep, setActiveLegDep] = useState<MergedDeparture | null>(null);
   const { setSelectedPlace } = usePlaceStore();
   const { selectWithEnrichment } = usePlaceEnrichment();
@@ -297,7 +302,9 @@ export function TransitDetailsView({
   const summaryBits: string[] = [];
   if (itinerary.transfers > 0) summaryBits.push(t("transfers", { count: itinerary.transfers }));
   if (itinerary.walkDistance > 0) {
-    summaryBits.push(t("walkDistance", { distance: formatDistance(itinerary.walkDistance) }));
+    summaryBits.push(
+      t("walkDistance", { distance: formatOverviewDistance(itinerary.walkDistance, units) }),
+    );
   }
 
   if (activeLegDep) {
@@ -335,7 +342,7 @@ export function TransitDetailsView({
             color: "text.secondary",
           }}
         >
-          ({formatDuration(itinerary.duration)})
+          ({formatDuration(itinerary.duration, locale)})
         </Typography>
         {/* This view is an early return from the itinerary list, so the
             explanatory line the list renders below its cards never reaches
@@ -494,7 +501,7 @@ export function TransitDetailsView({
                         <street.Icon sx={{ fontSize: 16, color: "text.secondary" }} />
                         <Typography variant="body2" sx={{ color: "text.secondary" }}>
                           {t(street.durationKey, {
-                            duration: formatDuration(Math.round(duration) * 60),
+                            duration: formatDuration(Math.round(duration) * 60, locale),
                           })}
                         </Typography>
                       </Box>
@@ -596,7 +603,7 @@ export function TransitDetailsView({
                         }}
                       >
                         {t("transitDuration", {
-                          duration: formatDuration(Math.round(duration) * 60),
+                          duration: formatDuration(Math.round(duration) * 60, locale),
                         })}
                       </Typography>
                       {(() => {

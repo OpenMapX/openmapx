@@ -45,4 +45,12 @@ describe("StepRow", () => {
     expect(html).toContain('data-valid="true"');
     expect(html).toContain('data-valid="false"');
   });
+
+  it("writes the distance in the preferred unit system", () => {
+    const metric = renderToStaticMarkup(<StepRow {...base} distance={1500} />);
+    expect(metric).toContain("1.5 km");
+    const imperial = renderToStaticMarkup(<StepRow {...base} distance={1500} units="imperial" />);
+    expect(imperial).toContain("4921 ft");
+    expect(imperial).not.toContain("km");
+  });
 });

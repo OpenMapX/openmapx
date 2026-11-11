@@ -17,7 +17,7 @@ import ts from "typescript";
 const TRUSTED_CALLS = new Set([
   "escapeHtml",
   "sanitizeUrl",
-  "relativeTime",
+  "formatRelativeTime",
   "formatTime",
   "buildPopupCard",
   "buildStackedPopupCard",

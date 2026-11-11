@@ -9,7 +9,7 @@ import type {
   TripSchedule,
 } from "@openmapx/core";
 import { formatDuration, viewerTimeZone } from "@openmapx/core";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Fragment } from "react";
 
 /**
@@ -49,6 +49,7 @@ export function TripScheduleCard({
   waypointLabels,
 }: TripScheduleCardProps) {
   const t = useTranslations("directions");
+  const locale = useLocale();
   const localZone = viewerTimeZone();
   const labelFor = (index: number) => waypointLabels[index] ?? String(index + 1);
 
@@ -58,7 +59,7 @@ export function TripScheduleCard({
         return t("scheduleLateArrival", {
           required: clockOf(violation.requiredBy),
           stop: labelFor(violation.waypointIndex),
-          shortfall: formatDuration(violation.shortfallSeconds),
+          shortfall: formatDuration(violation.shortfallSeconds, locale),
         });
       case "early-departure":
         return t("scheduleEarlyDeparture", {
@@ -99,8 +100,8 @@ export function TripScheduleCard({
         {clockOf(schedule.departure)} – {clockOf(schedule.arrival)}
         {" · "}
         {t("scheduleTotals", {
-          travel: formatDuration(schedule.totalTravelSeconds),
-          stops: formatDuration(stopSeconds),
+          travel: formatDuration(schedule.totalTravelSeconds, locale),
+          stops: formatDuration(stopSeconds, locale),
         })}
       </Typography>
 
@@ -142,10 +143,10 @@ export function TripScheduleCard({
             {(stop.dwellSeconds > 0 || stop.waitSeconds > 0) && (
               <Typography variant="caption" color="text.secondary" sx={{ display: "block", pl: 1 }}>
                 {stop.dwellSeconds > 0 &&
-                  t("scheduleStay", { duration: formatDuration(stop.dwellSeconds) })}
+                  t("scheduleStay", { duration: formatDuration(stop.dwellSeconds, locale) })}
                 {stop.dwellSeconds > 0 && stop.waitSeconds > 0 ? " · " : ""}
                 {stop.waitSeconds > 0 &&
-                  t("scheduleWait", { duration: formatDuration(stop.waitSeconds) })}
+                  t("scheduleWait", { duration: formatDuration(stop.waitSeconds, locale) })}
               </Typography>
             )}
           </Fragment>

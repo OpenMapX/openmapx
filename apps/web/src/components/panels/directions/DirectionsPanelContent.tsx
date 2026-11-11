@@ -21,8 +21,8 @@ import Typography from "@mui/material/Typography";
 import type { AutocompleteResult, DirectionsResult, LngLat, TravelMode } from "@openmapx/core";
 import {
   directionsQueryKey,
-  formatDistance,
   formatDuration,
+  formatOverviewDistance,
   isApiClientError,
   timeZoneAt,
   tzDiffMinutes,
@@ -723,7 +723,7 @@ export function DirectionsPanelContent() {
     const route = cached?.routes[0];
     return route?.duration !== undefined
       ? {
-          time: formatDuration(route.duration),
+          time: formatDuration(route.duration, locale),
           contributors: contributorsForField(route, "duration"),
         }
       : undefined;
@@ -744,7 +744,7 @@ export function DirectionsPanelContent() {
       ? undefined
       : record?.duration !== undefined
         ? {
-            time: formatDuration(record.duration),
+            time: formatDuration(record.duration, locale),
             contributors: contributorsForField(record, "duration"),
           }
         : cached;
@@ -1557,7 +1557,7 @@ export function DirectionsPanelContent() {
                         color: "text.primary",
                       }}
                     >
-                      {formatDuration(data.routes[0].duration)}
+                      {formatDuration(data.routes[0].duration, locale)}
                     </Typography>
                     <Typography
                       variant="body2"
@@ -1565,9 +1565,7 @@ export function DirectionsPanelContent() {
                         color: "text.secondary",
                       }}
                     >
-                      {units === "imperial"
-                        ? `${(data.routes[0].distance / 1609.34).toFixed(1)} mi`
-                        : formatDistance(data.routes[0].distance)}
+                      {formatOverviewDistance(data.routes[0].distance, units)}
                     </Typography>
                   </Box>
                   {data.routes[0].legs.length > 1 && (
@@ -1588,11 +1586,9 @@ export function DirectionsPanelContent() {
                           >
                             {fromLabel}→ {toLabel}
                             {" · "}
-                            {formatDuration(leg.duration)}
+                            {formatDuration(leg.duration, locale)}
                             {" · "}
-                            {units === "imperial"
-                              ? `${(leg.distance / 1609.34).toFixed(1)} mi`
-                              : formatDistance(leg.distance)}
+                            {formatOverviewDistance(leg.distance, units)}
                           </Typography>
                         );
                       })}

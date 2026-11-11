@@ -300,6 +300,11 @@ export function NauticalLayer() {
 
   const layerVisible = useNauticalStore((s) => s.panelOpen && s.layerVisible);
   const resolve = useContributorResolver();
+  // Sources are added from an effect that must not rerun when the registry
+  // loads: a new resolver reaches existing sources through the attribution
+  // hook below, which updates their credit in place.
+  const resolveRef = useRef(resolve);
+  resolveRef.current = resolve;
   useRasterMapAttributions(
     "nautical",
     [
@@ -436,7 +441,6 @@ export function NauticalLayer() {
     setLoading,
   ]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `resolve` only supplies attribution for the chart sources. A new resolver must not rebuild every chart source and layer, so attribution is captured when each source is added.
   useEffect(() => {
     void styleVersion;
     const map = mapRef.current;
@@ -455,7 +459,7 @@ export function NauticalLayer() {
           minzoom: 3,
           maxzoom: 18,
         },
-        contributors: resolve({ sourceIds: ["noaa-ncds"] }),
+        contributors: resolveRef.current({ sourceIds: ["noaa-ncds"] }),
         layer: {
           id: NOAA_LAYER,
           type: "raster",
@@ -473,7 +477,7 @@ export function NauticalLayer() {
           minzoom: 3,
           maxzoom: 18,
         },
-        contributors: resolve({ sourceIds: ["kartverket-sjokart"] }),
+        contributors: resolveRef.current({ sourceIds: ["kartverket-sjokart"] }),
         layer: {
           id: KARTVERKET_LAYER,
           type: "raster",
@@ -495,7 +499,7 @@ export function NauticalLayer() {
           minzoom: 0,
           maxzoom: 8,
         },
-        contributors: resolve({ sourceIds: ["gebco"] }),
+        contributors: resolveRef.current({ sourceIds: ["gebco"] }),
         layer: {
           id: DEPTH_RELIEF_LAYER,
           type: "raster",
@@ -515,7 +519,7 @@ export function NauticalLayer() {
           tileSize: 256,
           minzoom: 6,
         },
-        contributors: resolve({ sourceIds: ["openseamap"] }),
+        contributors: resolveRef.current({ sourceIds: ["openseamap"] }),
         layer: {
           id: DEPTH_CONTOUR_LAYER,
           type: "raster",
@@ -537,7 +541,7 @@ export function NauticalLayer() {
           tileSize: 256,
           maxzoom: 18,
         },
-        contributors: resolve({ sourceIds: ["openseamap", "openstreetmap"] }),
+        contributors: resolveRef.current({ sourceIds: ["openseamap", "openstreetmap"] }),
         layer: {
           id: SEAMARK_LAYER,
           type: "raster",

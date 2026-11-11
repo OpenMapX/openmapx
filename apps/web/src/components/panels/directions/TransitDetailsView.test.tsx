@@ -43,7 +43,8 @@ vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();
   return {
     ...actual,
-    formatDistance: (d: number) => `${d} m`,
+    formatMeasurementDistance: (d: number) => `${d} m`,
+    formatOverviewDistance: (d: number) => `${d} m`,
     formatDuration: (d: number) => `${d}s`,
     geocodeStopAsPlace: vi.fn().mockResolvedValue(null),
     PANEL: { PLACE_CARD: "PLACE_CARD" },
