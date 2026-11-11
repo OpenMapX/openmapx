@@ -34,8 +34,10 @@ and, where shown, `jq`.
 ### Operating system
 
 Use a 64-bit Linux host for the managed deployment. The ops-agent needs a local
-Docker socket, a writable checkout mounted at the same absolute host path, and
-Unix file ownership and permissions. A remote Docker context, Kubernetes, or a
+Docker socket, the checkout's `infra/docker` directory mounted at the same
+absolute host path (read-only, with its `state`, `data`, `secrets`, `backups`
+and `catalog-pins` directories writable), and Unix file ownership and
+permissions. It does not mount the rest of the checkout. A remote Docker context, Kubernetes, or a
 split-host deployment is not the managed Compose workflow described here.
 
 Docker Desktop can be useful for exploration, but check image support for the
