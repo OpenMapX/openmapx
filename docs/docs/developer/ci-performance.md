@@ -136,8 +136,8 @@ all be followed, and a missed one would let a release reuse an image with stale 
 
 ops-agent, data-manager and transitous-runner run runtime bundles with plain
 `node` instead of workspace TypeScript under tsx. ops-agent ships its agent
-(`dist/agent.mjs`), its update helper (`dist/agent-handoff-main.mjs`) and its
-fixed CLI (`dist/cli.mjs`). A recorded local measurement put bundled CLI startup at about 0.2 s versus
+(`dist/agent.mjs`), its configuration helper (`dist/configuration-handoff-main.mjs`)
+and its fixed CLI (`dist/cli.mjs`). A recorded local measurement put bundled CLI startup at about 0.2 s versus
 about 0.8 s under tsx, and the agent starts it for every CLI-backed operation.
 data-manager ships its supervisor, the service it starts, and the live traffic
 writer and offline package extractor worker threads.
