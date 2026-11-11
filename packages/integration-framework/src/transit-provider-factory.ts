@@ -11,10 +11,12 @@ import type { IntegrationContext } from "./context";
 import { createManifestAttribution, type ManifestAttributionStore } from "./manifest";
 
 /**
- * Shared scaffolding for transit integrations. Owns ONLY the genuinely
- * identical boilerplate that every `integrations/transit-*` index repeats:
- * the `createManifestAttribution()` store, the `wrap`/`wrapRT` result builders,
- * and the `attribution.set(ctx.manifest.dataSources ?? [])` call.
+ * Shared scaffolding for transit integrations: the manifest attribution store
+ * and the `wrap`/`wrapRT` result builders.
+ *
+ * Create the scaffold inside `setup(ctx)`. Each setup generation then owns its
+ * attribution, built from that generation's manifest, so a request that started
+ * before a reload keeps crediting the sources of the generation that served it.
  *
  * Everything that genuinely diverges between providers stays explicit in each
  * integration's `setup`: the `id`/`prefix`/`coverage`/`priority`, the
@@ -22,11 +24,8 @@ import { createManifestAttribution, type ManifestAttributionStore } from "./mani
  * delegations.
  *
  * Typical wiring:
- *   const { attribution, wrap, wrapRT, init } = defineTransitProvider();
- *
  *   export function setup(ctx: IntegrationContext): void {
- *     init(ctx);
- *     provider.setApiKey(ctx.config.apiKey as string | undefined);
+ *     const { attribution, wrap, wrapRT } = defineTransitProvider(ctx);
  *     ctx.registerTransitProvider({
  *       id: "...",
  *       attribution: attribution.all(),
@@ -36,8 +35,8 @@ import { createManifestAttribution, type ManifestAttributionStore } from "./mani
  *   }
  */
 export interface TransitProviderScaffold {
-  /** Manifest-driven attribution store, shared with the provider registration. */
-  readonly attribution: ManifestAttributionStore;
+  /** This generation's manifest attribution, shared with the provider registration. */
+  readonly attribution: Pick<ManifestAttributionStore, "all" | "bySource" | "forResults">;
   /** Tag a result with manifest attribution and a non-realtime freshness stamp. */
   wrap<T>(data: T, sourceIds?: readonly string[]): MobilityResult<T>;
   /**
@@ -49,16 +48,11 @@ export interface TransitProviderScaffold {
     sourceIds?: readonly string[],
     options?: { dataAsOf?: string },
   ): MobilityResult<T>;
-  /**
-   * Populate the attribution store from the integration manifest. Call once at
-   * the top of `setup(ctx)`; equivalent to the repeated
-   * `attribution.set(ctx.manifest.dataSources ?? [])`.
-   */
-  init(ctx: IntegrationContext): void;
 }
 
-export function defineTransitProvider(): TransitProviderScaffold {
+export function defineTransitProvider(ctx: IntegrationContext): TransitProviderScaffold {
   const attribution = createManifestAttribution();
+  attribution.set(ctx.manifest.dataSources ?? []);
   const selected = (sourceIds?: readonly string[]) =>
     sourceIds === undefined
       ? attribution.all()
@@ -82,11 +76,12 @@ export function defineTransitProvider(): TransitProviderScaffold {
   };
 
   return {
-    attribution,
+    attribution: {
+      all: () => attribution.all(),
+      bySource: (sourceId) => attribution.bySource(sourceId),
+      forResults: (results, sourcesFor) => attribution.forResults(results, sourcesFor),
+    },
     wrap,
     wrapRT,
-    init(ctx: IntegrationContext): void {
-      ctx.onActivate(() => attribution.set(ctx.manifest.dataSources ?? []));
-    },
   };
 }

@@ -8,6 +8,7 @@ import type {
   ResponseOptions,
   UpstreamRuntime,
 } from "@openmapx/integration-framework";
+import { ProviderRetiredError } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import {
@@ -324,7 +325,7 @@ export function createSwissTransitClient(options: SwissClientOptions) {
       }
     },
     async dispose() {
-      lifetime.abort(new Error("Swiss client retired"));
+      lifetime.abort(new ProviderRetiredError());
     },
   };
 }

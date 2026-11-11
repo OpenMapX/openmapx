@@ -1,0 +1,27 @@
+{
+  "$type": "Tfl.Api.Presentation.Entities.StopPointsResponse, Tfl.Api.Presentation.Entities",
+  "centrePoint": [51.515, -0.142],
+  "stopPoints": [
+    {
+      "$type": "Tfl.Api.Presentation.Entities.StopPoint, Tfl.Api.Presentation.Entities",
+      "naptanId": "940GZZLUOXC",
+      "modes": ["bus", "tube"],
+      "icsCode": "1000173",
+      "stopType": "NaptanMetroStation",
+      "stationNaptan": "940GZZLUOXC",
+      "lines": [],
+      "status": true,
+      "id": "940GZZLUOXC",
+      "commonName": "Oxford Circus Underground Station",
+      "distance": 52.4,
+      "placeType": "StopPoint",
+      "additionalProperties": [],
+      "children": [],
+      "lat": 51.515224,
+      "lon": -0.141903
+    }
+  ],
+  "pageSize": 0,
+  "total": 0,
+  "page": 0
+}

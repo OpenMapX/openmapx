@@ -7,6 +7,18 @@ import * as freshness from "@openmapx/mobility-core/freshness";
 import { describe, expect, it, vi } from "vitest";
 import type { RegistryEntry } from "../registry-types";
 
+const hafasSpy = vi.hoisted(() => ({ searchByName: vi.fn() }));
+vi.mock("../hafas-mgate", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../hafas-mgate")>();
+  return {
+    ...actual,
+    createHafasMgateAdapter: () => ({
+      ...actual.createHafasMgateAdapter(),
+      searchByName: hafasSpy.searchByName,
+    }),
+  };
+});
+
 vi.mock("../fetcher", () => ({
   fetchRegistryEntries: vi.fn(),
   setCache: vi.fn(),
@@ -14,7 +26,6 @@ vi.mock("../fetcher", () => ({
 }));
 
 import { fetchRegistryEntries } from "../fetcher";
-import { hafasMgateAdapter } from "../hafas-mgate";
 import { setup } from "../index";
 import { RegistryManager, registry } from "../registry";
 
@@ -130,7 +141,7 @@ describe("captured registry generation", () => {
       options: { endpoint: "https://hafas.test/mgate", auth: { type: "fixture" } },
     };
     vi.mocked(fetchRegistryEntries).mockResolvedValue([original]);
-    const search = vi.spyOn(hafasMgateAdapter, "searchByName").mockResolvedValue([]);
+    const search = hafasSpy.searchByName.mockResolvedValue([]);
     const ctx = createMockIntegrationContext({ id: "transit-dynamic-registry" });
     await setup(ctx);
     original.options.endpoint = "https://changed.test";
@@ -142,7 +153,7 @@ describe("captured registry generation", () => {
         coverage: entry.coverage,
       });
     } finally {
-      search.mockRestore();
+      search.mockReset();
       registry.stopRefresh();
     }
   });

@@ -1,0 +1,187 @@
+{
+  "stops": [
+    {
+      "departures": [
+        {
+          "arrival": {
+            "delay": 0,
+            "estimated": "08:25:01",
+            "estimated_delay": 61,
+            "estimated_local": "2026-11-09T08:25:01-08:00",
+            "estimated_utc": "2026-11-09T16:25:01Z",
+            "scheduled": "08:24:00",
+            "scheduled_local": "2026-11-09T08:24:00-08:00",
+            "scheduled_utc": "2026-11-09T16:24:00Z",
+            "uncertainty": 30
+          },
+          "arrival_time": "08:24:00",
+          "continuous_drop_off": null,
+          "continuous_pickup": null,
+          "date": "2026-11-09",
+          "departure": {
+            "delay": 0,
+            "estimated": "08:25:19",
+            "estimated_delay": 79,
+            "estimated_local": "2026-11-09T08:25:19-08:00",
+            "estimated_utc": "2026-11-09T16:25:19Z",
+            "scheduled": "08:24:00",
+            "scheduled_local": "2026-11-09T08:24:00-08:00",
+            "scheduled_utc": "2026-11-09T16:24:00Z",
+            "uncertainty": 30
+          },
+          "departure_time": "08:24:00",
+          "drop_off_type": 0,
+          "interpolated": null,
+          "pickup_type": 0,
+          "schedule_relationship": "SCHEDULED",
+          "service_date": "2026-11-09",
+          "shape_dist_traveled": 12371.45131142899,
+          "stop_headsign": "SF / Daly City",
+          "stop_sequence": 7,
+          "timepoint": 1,
+          "trip": {
+            "bikes_allowed": 1,
+            "block_id": null,
+            "cars_allowed": null,
+            "direction_id": 1,
+            "frequencies": [],
+            "id": 13065299715,
+            "route": {
+              "agency": {
+                "agency_id": "BA",
+                "agency_name": "Bay Area Rapid Transit",
+                "id": 4008268,
+                "onestop_id": "o-9q9-bart"
+              },
+              "cemv_support": null,
+              "continuous_drop_off": null,
+              "continuous_pickup": null,
+              "id": 166635779,
+              "onestop_id": "r-9q9n-blue~s",
+              "route_color": "0099CC",
+              "route_desc": null,
+              "route_id": "BA:Blue-S",
+              "route_long_name": "Dublin/Pleasanton to Daly City",
+              "route_short_name": "Blue-S",
+              "route_text_color": "FFFFFF",
+              "route_type": 1,
+              "route_type_basic": 1,
+              "route_url": "https://www.bart.gov/schedules/bylineresults?route=11"
+            },
+            "schedule_relationship": "SCHEDULED",
+            "shape": {
+              "generated": false,
+              "id": 605864931,
+              "shape_id": "BA:011A_shp"
+            },
+            "stop_pattern_id": 295,
+            "timestamp": "2026-11-09T16:21:02Z",
+            "trip_headsign": "Daly City",
+            "trip_id": "BA:1965768",
+            "trip_short_name": null,
+            "wheelchair_accessible": 1
+          }
+        },
+        {
+          "arrival": {
+            "delay": 94,
+            "estimated": "08:31:05",
+            "estimated_delay": 125,
+            "estimated_local": "2026-11-09T08:31:05-08:00",
+            "estimated_utc": "2026-11-09T16:31:05Z",
+            "scheduled": "08:29:00",
+            "scheduled_local": "2026-11-09T08:29:00-08:00",
+            "scheduled_utc": "2026-11-09T16:29:00Z",
+            "uncertainty": 30
+          },
+          "arrival_time": "08:29:00",
+          "continuous_drop_off": null,
+          "continuous_pickup": null,
+          "date": "2026-11-09",
+          "departure": {
+            "delay": 94,
+            "estimated": "08:31:23",
+            "estimated_delay": 143,
+            "estimated_local": "2026-11-09T08:31:23-08:00",
+            "estimated_utc": "2026-11-09T16:31:23Z",
+            "scheduled": "08:29:00",
+            "scheduled_local": "2026-11-09T08:29:00-08:00",
+            "scheduled_utc": "2026-11-09T16:29:00Z",
+            "uncertainty": 30
+          },
+          "departure_time": "08:29:00",
+          "drop_off_type": 0,
+          "interpolated": null,
+          "pickup_type": 0,
+          "schedule_relationship": "SCHEDULED",
+          "service_date": "2026-11-09",
+          "shape_dist_traveled": 19914.688255085828,
+          "stop_headsign": "Richmond",
+          "stop_sequence": 12,
+          "timepoint": 1,
+          "trip": {
+            "bikes_allowed": 1,
+            "block_id": null,
+            "cars_allowed": null,
+            "direction_id": 0,
+            "frequencies": [],
+            "id": 13065321723,
+            "route": {
+              "agency": {
+                "agency_id": "BA",
+                "agency_name": "Bay Area Rapid Transit",
+                "id": 4008268,
+                "onestop_id": "o-9q9-bart"
+              },
+              "cemv_support": null,
+              "continuous_drop_off": null,
+              "continuous_pickup": null,
+              "id": 166635782,
+              "onestop_id": "r-9q9-orange~n",
+              "route_color": "FF9933",
+              "route_desc": null,
+              "route_id": "BA:Orange-N",
+              "route_long_name": "Berryessa/North San Jose to Richmond",
+              "route_short_name": "Orange-N",
+              "route_text_color": "000000",
+              "route_type": 1,
+              "route_type_basic": 1,
+              "route_url": "https://www.bart.gov/schedules/bylineresults?route=3"
+            },
+            "schedule_relationship": "SCHEDULED",
+            "shape": {
+              "generated": false,
+              "id": 605864923,
+              "shape_id": "BA:003C_shp"
+            },
+            "stop_pattern_id": 610,
+            "timestamp": "2026-11-09T16:21:02Z",
+            "trip_headsign": "Richmond",
+            "trip_id": "BA:1965375",
+            "trip_short_name": null,
+            "wheelchair_accessible": 1
+          }
+        }
+      ],
+      "geometry": {
+        "coordinates": [
+          -122.26523,
+          37.79736
+        ],
+        "type": "Point"
+      },
+      "id": 2665259088,
+      "location_type": 0,
+      "onestop_id": "s-9q9p1bc1td-lakemerritt",
+      "platform_code": "2",
+      "stop_id": "902102",
+      "stop_name": "Lake Merritt",
+      "parent": {
+        "id": 2665257031,
+        "onestop_id": "s-9q9p1bc1m5-lakemerritt",
+        "stop_id": "902109",
+        "stop_name": "Lake Merritt"
+      }
+    }
+  ]
+}

@@ -48,23 +48,17 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect((await streak.getSnapshot("streak")).state).toBe("open");
     });
 
-    it("excludes valid empty, policy, input, quota, and caller cancellation from circuit failures", async () => {
+    it("excludes valid empty, policy, input and quota from circuit failures", async () => {
       const health = await ProviderHealth.init({ redis: fixture.client });
       await health.recordSuccess("safe", 10);
-      for (const outcome of [
-        "valid_empty",
-        "policy",
-        "input",
-        "quota",
-        "caller_cancelled",
-      ] as const) {
+      for (const outcome of ["valid_empty", "policy", "input", "quota"] as const) {
         await health.recordFailure("safe", 10, outcome, "operator detail");
       }
       const snapshot = await health.getSnapshot("safe");
       expect(snapshot).toMatchObject({
         state: "healthy",
         successCount: 1,
-        failureCount: 5,
+        failureCount: 4,
         countedFailureCount: 0,
       });
       expect(snapshot.lastOperatorMessage).toBe("operator detail");
@@ -72,13 +66,51 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
 
     it("retains a provider's first non-counted outcome without an invalid-record fallback", async () => {
       const health = await ProviderHealth.init({ redis: fixture.client });
-      await health.recordFailure("fresh", 10, "caller_cancelled", "cancelled by caller");
+      await health.recordFailure("fresh", 10, "valid_empty", "no departures");
       expect(await health.getSnapshot("fresh")).toMatchObject({
         state: "healthy",
         failureCount: 1,
         countedFailureCount: 0,
-        lastOperatorMessage: "cancelled by caller",
+        lastOperatorMessage: "no departures",
       });
+    });
+
+    it("never opens the circuit on repeated caller input", async () => {
+      const health = await ProviderHealth.init({ redis: fixture.client });
+      for (let index = 0; index < 12; index++)
+        await health.recordFailure("lookup", 10, "input", "Unknown stop identifier");
+      expect(await health.getSnapshot("lookup")).toMatchObject({
+        state: "healthy",
+        failureCount: 12,
+        countedFailureCount: 0,
+      });
+      expect(await health.isHealthy("lookup")).toBe(true);
+    });
+
+    it("releases a cancelled probe's lease without recording an outcome", async () => {
+      let now = 1_700_000_000_000;
+      const options = { redis: fixture.client, now: () => now, cooldownsMs: [100] };
+      const health = await ProviderHealth.init(options);
+      const other = await ProviderHealth.init(options);
+      for (let index = 0; index < 5; index++)
+        await health.recordFailure("probe", 10, "auth", "credential rejected");
+      now += 101;
+      expect(await health.isHealthy("probe")).toBe(true);
+      expect(await other.isHealthy("probe")).toBe(false);
+      const before = await fixture.client.get("provider:health:probe");
+      const token = health.heldProbe("probe") as string;
+
+      await health.recordFailure("probe", 900, "caller_cancelled", "provider call cancelled");
+      expect(await fixture.client.get("provider:health:probe")).toBe(before);
+      await health.releaseProbe("probe", token);
+
+      expect(await fixture.client.get("provider:health:probe")).toBe(before);
+      expect(await fixture.client.exists("provider:health-probe:probe")).toBe(0);
+      // Another process can probe at once.
+      expect(await other.isHealthy("probe")).toBe(true);
+      // A stale token never deletes the new owner's lease.
+      await health.releaseProbe("probe", token);
+      expect(await fixture.client.exists("provider:health-probe:probe")).toBe(1);
     });
 
     it("leases one half-open probe, escalates cooldowns, and recovers after three successes", async () => {

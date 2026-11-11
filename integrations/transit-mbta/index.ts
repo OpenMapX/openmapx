@@ -1,6 +1,7 @@
 import {
   captureTransitContributors,
   type IntegrationContext,
+  ProviderRetiredError,
   resolveIntegrationContributors,
   snapshotContributors,
 } from "@openmapx/integration-framework";
@@ -26,7 +27,7 @@ export function setup(ctx: IntegrationContext): void {
   });
   const mbta = createMbtaProvider(client);
   ctx.onShutdown(async () => {
-    generation.abort();
+    generation.abort(new ProviderRetiredError());
   });
   const result = async <T>(acquire: () => Promise<T>, realtime = false) => {
     const captured = snapshotContributors(receipts);

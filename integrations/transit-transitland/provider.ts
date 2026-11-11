@@ -1,4 +1,9 @@
-import { type BBox, fetchJson } from "@openmapx/core";
+import { type BBox, FetchJsonHttpError, fetchJson } from "@openmapx/core";
+import {
+  ProviderInputError,
+  parseProviderPayload,
+  parseProviderRecords,
+} from "@openmapx/integration-framework";
 import type {
   Departure,
   TransitRoute,
@@ -6,6 +11,7 @@ import type {
   TransportMode,
 } from "@openmapx/mobility-core/transit";
 import { GTFS_ROUTE_TYPE_MODE, mapGtfsRouteTypeToMode } from "@openmapx/mobility-formats";
+import { z } from "zod";
 
 const BASE_URL = "https://transit.land/api/v2/rest";
 
@@ -19,7 +25,18 @@ function apiKey(): string | null {
   return transitlandApiKey;
 }
 
-async function tlFetch<T>(path: string, params: Record<string, string>): Promise<T | null> {
+/**
+ * Fetch a Transitland resource. Failures throw without the keyed request URL;
+ * the cause keeps the HTTP status for provider health. `callerKeyed` marks a path built from an
+ * identifier the caller supplied: a 404 there means that identifier is
+ * unknown, which is bad caller input rather than a provider failure.
+ */
+async function tlFetch(
+  path: string,
+  params: Record<string, string>,
+  what: string,
+  callerKeyed = false,
+): Promise<unknown> {
   const key = apiKey();
   if (!key) return null;
   const url = new URL(`${BASE_URL}${path}`);
@@ -27,77 +44,145 @@ async function tlFetch<T>(path: string, params: Record<string, string>): Promise
   for (const [k, v] of Object.entries(params)) {
     url.searchParams.set(k, v);
   }
-  return fetchJson<T>(url.toString(), {
-    errorMessage: ({ status }) => `TransitLand ${path} → HTTP ${status}`,
-  });
+  try {
+    return await fetchJson<unknown>(url.toString(), {
+      errorMessage: ({ status }) => `TransitLand ${path} → HTTP ${status}`,
+    });
+  } catch (error) {
+    if (callerKeyed && error instanceof FetchJsonHttpError && error.status === 404)
+      throw new ProviderInputError(`Unknown Transitland ${what} identifier`, { cause: error });
+    throw new Error(`Transitland ${what} unavailable`, { cause: error });
+  }
 }
 
-function mapModes(routeTypes?: number[]): TransportMode[] {
-  if (!routeTypes?.length) return ["bus"];
+const optionalText = z.string().nullish();
+const hexColor = optionalText.transform((value) => (value ? value.replace(/^#/, "") : undefined));
+const coordinate = z.number().finite();
+
+const stopSchema = z.object({
+  onestop_id: z.string().min(1),
+  stop_name: optionalText,
+  geometry: z.object({
+    coordinates: z
+      .tuple([coordinate.min(-180).max(180), coordinate.min(-90).max(90)])
+      .rest(z.unknown()),
+  }),
+  platform_code: optionalText,
+  parent: z.object({ onestop_id: optionalText }).nullish(),
+  route_stops: z
+    .array(z.object({ route: z.object({ route_type: z.number().int().nullish() }).nullish() }))
+    .nullish(),
+});
+type TransitlandStop = z.infer<typeof stopSchema>;
+const stopsEnvelope = z.object({ stops: z.array(z.unknown()) });
+
+const routeSchema = z.object({
+  onestop_id: z.string().min(1),
+  route_type: z.number().int(),
+  route_short_name: optionalText,
+  route_long_name: optionalText,
+  route_color: hexColor,
+  route_text_color: hexColor,
+  agency: z.object({ agency_name: optionalText }).nullish(),
+  geometry: z.unknown().optional(),
+});
+type TransitlandRoute = z.infer<typeof routeSchema>;
+const routesEnvelope = z.object({ routes: z.array(z.unknown()) });
+
+/** A departure's scheduled and realtime instants live in its `departure` event. */
+const departureSchema = z.object({
+  departure: z.object({
+    scheduled_utc: z.iso.datetime({ offset: true }),
+    estimated_utc: z.iso.datetime({ offset: true }).nullish(),
+  }),
+  schedule_relationship: optionalText,
+  stop_headsign: optionalText,
+  trip: z.object({
+    trip_id: z.string(),
+    trip_headsign: optionalText,
+    schedule_relationship: optionalText,
+    route: z.object({
+      onestop_id: optionalText,
+      route_type: z.number().int().nullish(),
+      route_short_name: optionalText,
+      route_long_name: optionalText,
+      route_color: hexColor,
+    }),
+  }),
+});
+type TransitlandDeparture = z.infer<typeof departureSchema>;
+const departuresEnvelope = z.object({
+  stops: z.array(
+    z.object({
+      platform_code: optionalText,
+      departures: z.array(z.unknown()),
+    }),
+  ),
+});
+
+function mapModes(routeTypes: number[]): TransportMode[] {
+  if (!routeTypes.length) return ["bus"];
   return routeTypes.map((t) => mapGtfsRouteTypeToMode(t));
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: external API response
-function normalizeStop(s: any): TransitStop {
-  const [lng, lat] = s.geometry?.coordinates ?? [0, 0];
-  const routeTypes: number[] =
-    // biome-ignore lint/suspicious/noExplicitAny: external API response
-    s.route_stops?.map((rs: any) => rs.route?.route_type) ?? [];
+function normalizeStop(s: TransitlandStop): TransitStop {
+  const [lng, lat] = s.geometry.coordinates;
+  const routeTypes = (s.route_stops ?? []).flatMap((rs) =>
+    typeof rs.route?.route_type === "number" ? [rs.route.route_type] : [],
+  );
   return {
     id: `tl:${s.onestop_id}`,
-    name: s.stop_name ?? s.name ?? "Unknown",
+    name: s.stop_name ?? "Unknown",
     lat,
     lng,
     modes: mapModes(routeTypes),
     platformCode: s.platform_code ?? undefined,
-    parentStationId: s.parent_station_onestop_id ? `tl:${s.parent_station_onestop_id}` : undefined,
+    parentStationId: s.parent?.onestop_id ? `tl:${s.parent.onestop_id}` : undefined,
     provider: "transitland",
   };
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: external API response
-function normalizeRoute(r: any): TransitRoute {
-  const mode: TransportMode = mapGtfsRouteTypeToMode(r.route_type as number);
-  const color = r.route_color ? r.route_color.replace(/^#/, "") : undefined;
-  const textColor = r.route_text_color ? r.route_text_color.replace(/^#/, "") : undefined;
+function normalizeRoute(r: TransitlandRoute): TransitRoute {
   return {
     id: `tl:${r.onestop_id}`,
     shortName: r.route_short_name ?? r.route_long_name ?? "",
     longName: r.route_long_name ?? r.route_short_name ?? "",
-    mode,
-    color,
-    textColor,
-    operatorName: r.operator?.name ?? r.agency?.agency_name ?? "",
-    geometry: r.geometry ?? undefined,
+    mode: mapGtfsRouteTypeToMode(r.route_type),
+    color: r.route_color,
+    textColor: r.route_text_color,
+    operatorName: r.agency?.agency_name ?? "",
+    geometry: (r.geometry ?? undefined) as TransitRoute["geometry"],
   };
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: external API response
-function normalizeDeparture(d: any): Departure {
-  const route = d.trip?.route ?? d.route ?? {};
-  const mode: TransportMode = mapGtfsRouteTypeToMode(route.route_type as number);
-  const color = route.route_color ? route.route_color.replace(/^#/, "") : undefined;
-  const scheduled = d.departure_time as string;
-  const expected = d.departure_time_actual as string | undefined;
-  const delaySeconds =
-    scheduled && expected
-      ? Math.round((new Date(expected).getTime() - new Date(scheduled).getTime()) / 1000)
-      : undefined;
+const CANCELED = new Set(["CANCELED", "DELETED", "SKIPPED"]);
+
+function normalizeDeparture(d: TransitlandDeparture, platform: string | undefined): Departure {
+  const route = d.trip.route;
+  const scheduledAt = new Date(d.departure.scheduled_utc).toISOString();
+  const expectedAt = d.departure.estimated_utc
+    ? new Date(d.departure.estimated_utc).toISOString()
+    : undefined;
+  const delaySeconds = expectedAt
+    ? Math.round((Date.parse(expectedAt) - Date.parse(scheduledAt)) / 1000)
+    : undefined;
   return {
-    tripId: d.trip?.trip_id ?? d.trip_id ?? "",
+    tripId: d.trip.trip_id,
     route: {
       id: route.onestop_id ? `tl:${route.onestop_id}` : "",
       shortName: route.route_short_name ?? "",
       longName: route.route_long_name ?? "",
-      mode,
-      color,
+      mode: mapGtfsRouteTypeToMode(route.route_type ?? 3),
+      color: route.route_color,
     },
-    headsign: d.trip?.trip_headsign ?? d.headsign ?? "",
-    scheduledAt: scheduled,
-    expectedAt: expected,
-    delaySeconds: delaySeconds !== undefined && delaySeconds !== 0 ? delaySeconds : undefined,
-    platform: d.stop_time?.stop?.platform_code ?? undefined,
-    canceled: false,
+    headsign: d.trip.trip_headsign ?? d.stop_headsign ?? "",
+    scheduledAt,
+    expectedAt,
+    delaySeconds: delaySeconds ? delaySeconds : undefined,
+    platform,
+    canceled:
+      CANCELED.has(d.schedule_relationship ?? "") ||
+      CANCELED.has(d.trip.schedule_relationship ?? ""),
   };
 }
 
@@ -116,40 +201,38 @@ export async function getStops(bbox: BBox, modes?: TransportMode[]): Promise<Tra
       params.served_by_route_types = routeTypes.join(",");
     }
   }
-  try {
-    // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = await tlFetch<{ stops: any[] }>("/stops", params);
-    return (data?.stops ?? []).map(normalizeStop);
-  } catch {
-    return [];
-  }
+  const data = await tlFetch("/stops", params, "stops");
+  if (data === null) return [];
+  const { stops } = parseProviderPayload(stopsEnvelope, data, "Transitland stops");
+  return parseProviderRecords(stopSchema, stops, "Transitland stops").map(normalizeStop);
 }
 
 export async function getStop(id: string): Promise<TransitStop | null> {
   const onestopId = id.startsWith("tl:") ? id.slice(3) : id;
-  try {
-    // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = await tlFetch<{ stops: any[] }>(`/stops`, { onestop_id: onestopId });
-    const stop = data?.stops?.[0];
-    return stop ? normalizeStop(stop) : null;
-  } catch {
-    return null;
-  }
+  const data = await tlFetch("/stops", { onestop_id: onestopId }, "stop");
+  if (data === null) return null;
+  const { stops } = parseProviderPayload(stopsEnvelope, data, "Transitland stop");
+  if (stops.length === 0) return null;
+  return normalizeStop(parseProviderPayload(stopSchema, stops[0], "Transitland stop"));
 }
 
 export async function getDepartures(stopId: string, minutes = 60): Promise<Departure[]> {
   const onestopId = stopId.startsWith("tl:") ? stopId.slice(3) : stopId;
-  try {
-    const data = await tlFetch<{ stops: { departures: unknown[] }[] }>(
-      `/stops/${onestopId}/departures`,
-      { next: String(minutes * 60) },
-    );
-    const departures = data?.stops?.[0]?.departures ?? [];
-    return departures.map((d) => normalizeDeparture(d));
-  } catch {
-    // A failed board must not read as "no departures"; callers decide how to degrade.
-    throw new Error("Transitland timetable unavailable");
-  }
+  // A failed or malformed board throws; it must not read as "no departures".
+  const data = await tlFetch(
+    `/stops/${encodeURIComponent(onestopId)}/departures`,
+    { next: String(minutes * 60) },
+    "timetable",
+    true,
+  );
+  if (data === null) return [];
+  const { stops } = parseProviderPayload(departuresEnvelope, data, "Transitland departures");
+  const stop = stops[0];
+  if (!stop) return [];
+  const platform = stop.platform_code ?? undefined;
+  return parseProviderRecords(departureSchema, stop.departures, "Transitland departures").map((d) =>
+    normalizeDeparture(d, platform),
+  );
 }
 
 export async function getRoutes(opts: { bbox?: BBox; stopId?: string }): Promise<TransitRoute[]> {
@@ -162,26 +245,21 @@ export async function getRoutes(opts: { bbox?: BBox; stopId?: string }): Promise
     const id = opts.stopId.startsWith("tl:") ? opts.stopId.slice(3) : opts.stopId;
     params.served_by_stops = id;
   }
-  try {
-    // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = await tlFetch<{ routes: any[] }>("/routes", params);
-    return (data?.routes ?? []).map(normalizeRoute);
-  } catch {
-    return [];
-  }
+  const data = await tlFetch("/routes", params, "routes");
+  if (data === null) return [];
+  const { routes } = parseProviderPayload(routesEnvelope, data, "Transitland routes");
+  return parseProviderRecords(routeSchema, routes, "Transitland routes").map(normalizeRoute);
 }
 
 export async function getRoute(id: string): Promise<TransitRoute | null> {
   const onestopId = id.startsWith("tl:") ? id.slice(3) : id;
-  try {
-    // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = await tlFetch<{ routes: any[] }>(`/routes`, {
-      onestop_id: onestopId,
-      include_geometry: "true",
-    });
-    const route = data?.routes?.[0];
-    return route ? normalizeRoute(route) : null;
-  } catch {
-    return null;
-  }
+  const data = await tlFetch(
+    "/routes",
+    { onestop_id: onestopId, include_geometry: "true" },
+    "route",
+  );
+  if (data === null) return null;
+  const { routes } = parseProviderPayload(routesEnvelope, data, "Transitland route");
+  if (routes.length === 0) return null;
+  return normalizeRoute(parseProviderPayload(routeSchema, routes[0], "Transitland route"));
 }

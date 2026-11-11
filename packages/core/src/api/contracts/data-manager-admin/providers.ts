@@ -1,10 +1,14 @@
 import z from "zod/v4";
 import { adminCountSchema as count, adminTimestampSchema as timestamp } from "./common";
-/** Persistent observations from getState/getAll, not the half-open lease-acquiring getSnapshot view. */
+/**
+ * Persistent observations from getState/getAll, not the half-open lease-acquiring
+ * getSnapshot view. `state` is what the next request meets: an open circuit whose
+ * cooldown has ended reads as `half-open`.
+ */
 export const providerHealthEntrySchema = z.strictObject({
   id: z.string(),
   schema: z.literal(2),
-  state: z.enum(["healthy", "degraded", "open"]),
+  state: z.enum(["healthy", "degraded", "open", "half-open"]),
   successCount: count,
   failureCount: count,
   countedFailureCount: count,
@@ -29,7 +33,6 @@ export const providerHealthEntrySchema = z.strictObject({
     .nullable()
     .optional(),
   lastOperatorMessage: z.string().nullable().optional(),
-  lastFailureReason: z.string().optional(),
   emaLatencyMs: z.number().finite().nonnegative(),
   window: z.array(
     z.strictObject({
@@ -39,11 +42,7 @@ export const providerHealthEntrySchema = z.strictObject({
     }),
   ),
   retryAt: timestamp.nullable().optional(),
-  success: count,
-  failure: count,
-  windowFailureRate: z.number().finite().min(0).max(1).optional(),
-  disabledUntil: timestamp.optional(),
-  disabledReason: z.string().optional(),
+  windowFailureRate: z.number().finite().min(0).max(1).nullable(),
 });
 export const providerHealthResponseSchema = z.strictObject({
   providers: z.array(providerHealthEntrySchema),

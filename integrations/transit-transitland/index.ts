@@ -1,10 +1,8 @@
 import { defineTransitProvider, type IntegrationContext } from "@openmapx/integration-framework";
 import * as transitland from "./provider.js";
 
-const { attribution, wrap, wrapRT, init } = defineTransitProvider();
-
 export function setup(ctx: IntegrationContext): void {
-  init(ctx);
+  const { attribution, wrap, wrapRT } = defineTransitProvider(ctx);
   ctx.onActivate(() => transitland.setTransitlandApiKey(ctx.config.apiKey as string | undefined));
   ctx.registerTransitProvider({
     id: "transit-transitland",

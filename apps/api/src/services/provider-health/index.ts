@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   Logger,
   ProviderHealthFailureOutcome,
@@ -25,15 +26,19 @@ export interface ProviderHealthState {
   lastFailureAt: string | null;
   lastFailureOutcome: ProviderHealthFailureOutcome | null;
   lastOperatorMessage: string | null;
-  lastFailureReason?: string;
   emaLatencyMs: number;
   window: ProviderHealthCall[];
   retryAt: string | null;
-  success?: number;
-  failure?: number;
-  windowFailureRate?: number;
-  disabledUntil?: string;
-  disabledReason?: string;
+}
+
+/** A stored record as operators see it, without claiming a half-open probe. */
+export interface ProviderHealthObservation extends Omit<ProviderHealthState, "state"> {
+  /**
+   * The circuit state the next request meets. An open circuit whose cooldown
+   * has ended is `half-open`: the next request is a trial probe.
+   */
+  state: ProviderHealthSnapshot["state"];
+  windowFailureRate: number | null;
 }
 
 export interface ProviderHealthOptions {
@@ -146,14 +151,27 @@ redis.call('SET', key, encoded, 'EX', ttl)
 return encoded
 `;
 
+/** Delete the half-open lease only while it still holds the caller's token. */
+const RELEASE_PROBE_SCRIPT = `
+if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end
+return 0
+`;
+
 interface RedisWithCommand extends Redis {
   providerHealthTransition(key: string, probeKey: string, ...args: string[]): Promise<string>;
+  providerHealthReleaseProbe(probeKey: string, token: string): Promise<number>;
 }
 
 function ensureCommandRegistered(redis: Redis): RedisWithCommand {
   const candidate = redis as RedisWithCommand;
   if (typeof candidate.providerHealthTransition !== "function") {
     redis.defineCommand("providerHealthTransition", { numberOfKeys: 2, lua: HEALTH_SCRIPT });
+  }
+  if (typeof candidate.providerHealthReleaseProbe !== "function") {
+    redis.defineCommand("providerHealthReleaseProbe", {
+      numberOfKeys: 1,
+      lua: RELEASE_PROBE_SCRIPT,
+    });
   }
   return candidate;
 }
@@ -171,16 +189,16 @@ function failureRate(state: ProviderHealthState): number | null {
   return state.window.filter((call) => call.outcome === "error").length / state.window.length;
 }
 
-function compatibilityState(state: ProviderHealthState): ProviderHealthState {
-  const rate = failureRate(state);
+export function observeProviderHealth(
+  stored: ProviderHealthState,
+  now: number,
+): ProviderHealthObservation {
+  const retryAtMs = stored.retryAt ? Date.parse(stored.retryAt) : Number.NaN;
+  const cooldownEnded = Number.isFinite(retryAtMs) && retryAtMs <= now;
   return {
-    ...state,
-    success: state.successCount,
-    failure: state.failureCount,
-    windowFailureRate: rate ?? undefined,
-    disabledUntil: state.state === "open" ? (state.retryAt ?? undefined) : undefined,
-    disabledReason: state.state === "open" ? "provider circuit open" : undefined,
-    lastFailureReason: state.lastOperatorMessage ?? undefined,
+    ...stored,
+    state: stored.state === "open" && cooldownEnded ? "half-open" : stored.state,
+    windowFailureRate: failureRate(stored),
   };
 }
 
@@ -254,6 +272,8 @@ export class ProviderHealth implements ProviderHealthHandle {
   private readonly cooldownsMs: readonly number[];
   private readonly halfOpenLeaseMs: number;
   private readonly now: () => number;
+  /** Half-open leases this instance claimed, by provider, with their owner tokens. */
+  private readonly heldProbes = new Map<string, string>();
 
   private constructor(options: ProviderHealthOptions) {
     this.redis = ensureCommandRegistered(options.redis);
@@ -281,6 +301,8 @@ export class ProviderHealth implements ProviderHealthHandle {
     operatorMessage: string,
   ): Promise<void> {
     const at = this.now();
+    // The transition deletes the lease; any token this instance held is spent.
+    this.heldProbes.delete(providerId);
     try {
       await this.redis.providerHealthTransition(
         keyFor(providerId),
@@ -317,7 +339,31 @@ export class ProviderHealth implements ProviderHealthHandle {
     outcome: ProviderHealthFailureOutcome,
     operatorMessage = "",
   ): Promise<void> {
+    // A cancellation says nothing about the provider. Recording it would bump
+    // the failure count, hide the last real error and skew latency, so it never
+    // reaches the stored state; a cancelled probe uses releaseProbe instead.
+    if (outcome === "caller_cancelled") return;
     await this.transition(providerId, "failure", latencyMs, outcome, operatorMessage);
+  }
+
+  heldProbe(providerId: string): string | undefined {
+    return this.heldProbes.get(providerId);
+  }
+
+  /**
+   * Give up a half-open lease without recording an outcome, as when the probe
+   * call was cancelled, so the next request can probe at once. The lease is
+   * deleted only while it still holds this token, never another owner's.
+   */
+  async releaseProbe(providerId: string, probeToken: string): Promise<void> {
+    if (this.heldProbes.get(providerId) === probeToken) this.heldProbes.delete(providerId);
+    try {
+      await this.redis.providerHealthReleaseProbe(probeKeyFor(providerId), probeToken);
+    } catch (error) {
+      this.log?.warn(
+        `[provider-health] failed to release the probe lease for ${providerId}: ${(error as Error).message}`,
+      );
+    }
   }
 
   async getSnapshot(providerId: string): Promise<ProviderHealthSnapshot> {
@@ -335,14 +381,16 @@ export class ProviderHealth implements ProviderHealthHandle {
     const retryAtMs = stored.retryAt ? Date.parse(stored.retryAt) : Number.NaN;
     if (stored.state === "open" && Number.isFinite(retryAtMs) && retryAtMs <= this.now()) {
       try {
+        const token = randomUUID();
         ownsHalfOpenProbe =
           (await this.redis.set(
             probeKeyFor(providerId),
-            String(this.now()),
+            token,
             "PX",
             this.halfOpenLeaseMs,
             "NX",
           )) === "OK";
+        if (ownsHalfOpenProbe) this.heldProbes.set(providerId, token);
         state = ownsHalfOpenProbe ? "half-open" : "open";
       } catch {
         return emptySnapshot("store_unavailable");
@@ -432,18 +480,18 @@ export class ProviderHealth implements ProviderHealthHandle {
     return snapshot.state !== "open" || snapshot.ownsHalfOpenProbe;
   }
 
-  async getState(providerId: string): Promise<ProviderHealthState | null> {
+  async getState(providerId: string): Promise<ProviderHealthObservation | null> {
     try {
       const raw = await this.redis.get(keyFor(providerId));
       if (!raw) return null;
       const state = parseState(raw);
-      return state ? compatibilityState(state) : null;
+      return state ? observeProviderHealth(state, this.now()) : null;
     } catch {
       return null;
     }
   }
 
-  async getAll(): Promise<Record<string, ProviderHealthState>> {
+  async getAll(): Promise<Record<string, ProviderHealthObservation>> {
     const keys: string[] = [];
     let cursor = "0";
     do {
@@ -460,13 +508,17 @@ export class ProviderHealth implements ProviderHealthHandle {
     if (keys.length === 0) return {};
     keys.sort();
     const values = await this.redis.mget(...keys);
-    const result: Record<string, ProviderHealthState> = {};
+    const result: Record<string, ProviderHealthObservation> = {};
+    const now = this.now();
     for (let index = 0; index < keys.length; index++) {
       const raw = values[index];
       if (!raw) continue;
       const state = parseState(raw);
       if (state)
-        result[(keys[index] as string).slice(REDIS_PREFIX.length)] = compatibilityState(state);
+        result[(keys[index] as string).slice(REDIS_PREFIX.length)] = observeProviderHealth(
+          state,
+          now,
+        );
     }
     return result;
   }

@@ -4,6 +4,7 @@ import {
 } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  germanWallClock,
   isConfigured,
   mapLang,
   mapLeg,
@@ -258,11 +259,33 @@ describe("risCanHonor", () => {
     expect(risCanHonor({ modes: [] })).toBe(true);
   });
 
+  it("serves the all-transit default as unrestricted", () => {
+    expect(risCanHonor({ modes: ["TRANSIT"] })).toBe(true);
+    expect(risCanHonor({ modes: ["TRANSIT", "BUS"] })).toBe(true);
+  });
+
   it("defers when a mode allow-list is requested (no API mode filter)", () => {
     expect(risCanHonor({ modes: ["REGIONAL_RAIL"] })).toBe(false);
   });
 
   it("defers when the Deutschlandticket filter is requested", () => {
     expect(risCanHonor({ deutschlandticketOnly: true })).toBe(false);
+  });
+});
+
+describe("germanWallClock", () => {
+  it.each([
+    ["winter", "2026-01-15T07:30:00Z", "2026-01-15", "08:30"],
+    ["summer", "2026-07-01T06:30:00Z", "2026-07-01", "08:30"],
+    ["the first minute after spring-forward", "2026-03-29T01:00:00Z", "2026-03-29", "03:00"],
+    ["the second pass through fall-back", "2026-10-25T01:30:00Z", "2026-10-25", "02:30"],
+    [
+      "a UTC evening that is already tomorrow in Germany",
+      "2026-11-10T23:15:00Z",
+      "2026-11-11",
+      "00:15",
+    ],
+  ])("renders %s on the Berlin clock", (_case, instant, date, time) => {
+    expect(germanWallClock(new Date(instant))).toEqual({ date, time });
   });
 });
