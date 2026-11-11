@@ -363,9 +363,6 @@ async function main(): Promise<void> {
     const dawarichCollector = dawarichInspector
       ? createDockerDawarichCollector({ inspect: dawarichInspector })
       : undefined;
-    const releaseMigration = await services.migrateLegacyReleaseState(paths.infraDir);
-    if (releaseMigration)
-      for (const problem of releaseMigration.problems) process.stderr.write(`${problem}\n`);
     const administrativeCli = createDefaultFixedCli(config.rootDir);
     const runtime = await createProductionOpsRuntime({
       rootDir: config.rootDir,
@@ -377,9 +374,6 @@ async function main(): Promise<void> {
         afterHandoffSettled: async () => {
           await retireLegacyAgentState(legacyState);
           await retireLegacyWriter();
-        },
-        onLegacyReleaseMigration: (migration) => {
-          for (const problem of migration.problems) process.stderr.write(`${problem}\n`);
         },
       },
       runFixedCli: administrativeCli,

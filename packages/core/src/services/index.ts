@@ -308,7 +308,6 @@ export {
   assertReleaseStateDirectory,
   ensureReleaseStateDirectories,
   ensureReleaseStateDirectory,
-  legacyReleaseStatePaths,
   parseReleasePointer,
   parseReleaseSelectionReceipts,
   RELEASE_ID_PATTERN,
@@ -329,14 +328,6 @@ export {
   releaseStateFileProblem,
   releaseStatePaths,
 } from "./release-state";
-export {
-  type LegacyReleaseStateMigration,
-  type LegacyReleaseStateMigrationOptions,
-  legacyReleaseStatePending,
-  migrateLegacyReleaseState,
-  releaseSelectionHold,
-  supersedeLegacyReleaseOverlay,
-} from "./release-state-migration";
 export {
   acquireReleaseStoreLock,
   acquireStoreLock,

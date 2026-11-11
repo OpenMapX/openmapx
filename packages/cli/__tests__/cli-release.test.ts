@@ -415,12 +415,12 @@ describe("clearReleaseSelection", () => {
     expect(readFileSync(join(outside, "sentinel"), "utf8")).toBe("retain");
   });
 
-  it("removes only the agent state's overlay, never an earlier release's in infra/docker", async () => {
+  it("removes only the agent state's overlay, never a same-named file in infra/docker", async () => {
     const { infraDir, path } = fixture();
-    const legacy = join(infraDir, "docker-compose.release.yml");
-    writeFileSync(legacy, "legacy overlay\n", { mode: 0o600 });
+    const sameName = join(infraDir, "docker-compose.release.yml");
+    writeFileSync(sameName, "unrelated file\n", { mode: 0o600 });
     expect(await clearReleaseSelection({ infraDir })).toEqual({ path, cleared: true });
-    expect(readFileSync(legacy, "utf8")).toBe("legacy overlay\n");
+    expect(readFileSync(sameName, "utf8")).toBe("unrelated file\n");
   });
 
   it("refuses an overlay that is group-writable or someone else's", async () => {
@@ -584,49 +584,4 @@ it("uses the applied UI selector on each invocation without changing process env
   } finally {
     vi.unstubAllEnvs();
   }
-});
-
-describe("an earlier release's selection that did not come over", () => {
-  /** An overlay in infra/docker that no migration can carry over. */
-  function heldInfra(prefix: string) {
-    const { infraDir, path } = releaseInfra(prefix);
-    const legacy = services.legacyReleaseStatePaths(infraDir);
-    writeFileSync(legacy.overlay, "services:\n  app-api:\n    image: hand-edited\n", {
-      mode: 0o600,
-    });
-    return { infraDir, path, legacy };
-  }
-
-  it("refuses to resolve a release itself, and lets an explicit selection decide", async () => {
-    const { infraDir, path } = heldInfra("omx-release-held-");
-    const docker = fakeDocker();
-    const held = await ensureReleaseOverlay({ infraDir, docker });
-    expect(held.status).toBe("held");
-    expect(held.status === "held" && held.reason).toContain("pnpm openmapx compose release");
-    expect(docker).not.toHaveBeenCalled();
-    expect(existsSync(path)).toBe(false);
-
-    await selectRelease({ infraDir, resolve: async () => JSON.parse(manifestJson) });
-    expect(await ensureReleaseOverlay({ infraDir, docker })).toMatchObject({ status: "present" });
-    // Clearing it later leaves resolution to the next start, as `--clear` says.
-    await clearReleaseSelection({ infraDir });
-    expect(await ensureReleaseOverlay({ infraDir, docker })).toMatchObject({
-      status: "resolved",
-      release: "deadbeef",
-    });
-  });
-
-  it("refuses while the previous agent's update is unfinished, until it is cleared", async () => {
-    const { infraDir, legacy } = heldInfra("omx-release-held-transaction-");
-    mkdirSync(legacy.store, { mode: 0o700 });
-    writeFileSync(join(legacy.store, "transaction.json"), "{}", { mode: 0o600 });
-    const docker = fakeDocker();
-    const held = await ensureReleaseOverlay({ infraDir, docker });
-    expect(held.status === "held" && held.reason).toContain(
-      "the previous agent's release update is unfinished",
-    );
-    expect(docker).not.toHaveBeenCalled();
-    await clearReleaseSelection({ infraDir });
-    expect((await ensureReleaseOverlay({ infraDir, docker })).status).toBe("resolved");
-  });
 });

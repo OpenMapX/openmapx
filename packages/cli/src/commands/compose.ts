@@ -317,9 +317,6 @@ export async function renderComposeWithWriter(
   // settings are carried by readAppliedConfiguration below. Nothing reads the
   // earlier files once this generation is committed.
   coreServices.migrateLegacyServiceSelection(paths.infraDir);
-  // And its release store and overlay, before anything selects a release.
-  const releaseMigration = await coreServices.migrateLegacyReleaseState(paths.infraDir);
-  for (const problem of releaseMigration?.problems ?? []) log.warn(problem);
   const registry = new ServiceRegistry({ rootDir: paths.root });
   await registry.load();
   const applied = applyServiceSelection(registry, {

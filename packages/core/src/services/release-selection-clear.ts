@@ -18,7 +18,6 @@ import {
   releaseStateFileProblem,
   releaseStatePaths,
 } from "./release-state";
-import { supersedeLegacyReleaseOverlay } from "./release-state-migration";
 import { acquireReleaseStoreLock } from "./release-store-lock";
 export async function clearReleaseComposeSelection(opts: {
   path: string;
@@ -54,7 +53,6 @@ export async function clearReleaseComposeSelection(opts: {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       if (opts.expectedReleaseId !== undefined || typeof opts.expectedOverlayDigest === "string")
         throw Error("Release selection changed");
-      supersedeLegacyReleaseOverlay(infraDir, stateOptions);
       return { path, cleared: false };
     }
     if (opts.expectedOverlayDigest === null) throw Error("Release selection changed");
@@ -114,7 +112,6 @@ export async function clearReleaseComposeSelection(opts: {
     } finally {
       closeSync(descriptor);
     }
-    supersedeLegacyReleaseOverlay(infraDir, stateOptions);
     return { path, cleared: true };
   } finally {
     lock.release();

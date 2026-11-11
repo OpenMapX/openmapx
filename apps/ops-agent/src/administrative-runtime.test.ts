@@ -27,12 +27,7 @@ import {
   loadConfiguredResourceAuthority,
   pruneBackupRetention,
 } from "./administrative-runtime";
-import {
-  createUnavailableRuntime,
-  dispatchOpsOperation,
-  OpsExecutionFailure,
-  OpsHostUpdateRequiredError,
-} from "./runtime";
+import { createUnavailableRuntime, dispatchOpsOperation, OpsExecutionFailure } from "./runtime";
 
 const temporaryRoots: string[] = [];
 const releaseState = (rootDir: string) =>
@@ -1013,72 +1008,6 @@ describe("administrative release runtime", () => {
           ),
         ).producer.runAttempt,
       ).toBe(n);
-  });
-
-  describe("release state of an earlier release", () => {
-    const stored = (release: string) =>
-      services.canonicalReleaseManifest(
-        services.parseReleaseManifest(
-          JSON.stringify({
-            schemaVersion: 1,
-            release,
-            images: Object.fromEntries(
-              services.RELEASE_IMAGE_NAMES.map((name) => [
-                name,
-                `ghcr.io/openmapx/${name}@sha256:${"6".repeat(64)}`,
-              ]),
-            ),
-            privacyReleaseValidation,
-          }),
-        ),
-      );
-
-    it("is migrated by initialization before anything reads the store or the overlay", async () => {
-      const rootDir = temporaryRoot();
-      const infraDir = join(rootDir, "infra", "docker");
-      const legacy = services.legacyReleaseStatePaths(infraDir);
-      mkdirSync(legacy.store, { mode: 0o700 });
-      const manifest = stored("release-legacy");
-      const digest = createHash("sha256").update(manifest).digest("hex");
-      writeFileSync(join(legacy.store, "release-legacy.json"), manifest, { mode: 0o600 });
-      writeFileSync(
-        join(legacy.store, "current.json"),
-        JSON.stringify({ releaseId: "release-legacy", digest }),
-        { mode: 0o600 },
-      );
-      const legacyOverlay = services.renderReleaseCompose(
-        services.parseReleaseManifest(manifest),
-        infraDir,
-      );
-      writeFileSync(legacy.overlay, legacyOverlay, { mode: 0o600 });
-      const migrations: unknown[] = [];
-      const effects = createDefaultReleaseEffects(rootDir, async () => undefined, {
-        onLegacyReleaseMigration: (migration) => migrations.push(migration),
-      });
-      // Constructing the effects reads nothing: the new store is still empty.
-      expect(readdirSync(releaseState(rootDir).store)).toEqual([]);
-      await effects.initialize?.();
-      await expect(effects.runtimeInspect?.()).resolves.toEqual({ releaseId: "release-legacy" });
-      expect(migrations).toEqual([
-        expect.objectContaining({ outcome: "migrated", overlay: "regenerated", problems: [] }),
-      ]);
-      expect(readFileSync(releaseState(rootDir).overlay, "utf8")).toBe(legacyOverlay);
-      expect(readFileSync(legacy.overlay, "utf8")).toBe(legacyOverlay);
-      expect(inspectReleaseAuthority(rootDir, "release-legacy")).toBe(true);
-    });
-
-    it("leaves a group-writable manifest behind", async () => {
-      const rootDir = temporaryRoot();
-      const legacy = services.legacyReleaseStatePaths(join(rootDir, "infra", "docker"));
-      mkdirSync(legacy.store, { mode: 0o700 });
-      writeFileSync(join(legacy.store, "release-legacy.json"), stored("release-legacy"), {
-        mode: 0o600,
-      });
-      chmodSync(join(legacy.store, "release-legacy.json"), 0o620);
-      const effects = createDefaultReleaseEffects(rootDir, async () => undefined);
-      await expect(effects.inspect()).resolves.toEqual({ configuredSelector: "main" });
-      expect(inspectReleaseAuthority(rootDir, "release-legacy")).toBe(false);
-    });
   });
 
   it("refuses store entries and an overlay its group or others could write", async () => {
@@ -2205,69 +2134,4 @@ it("fix1 recovery cannot publish after verification consumes the remaining deadl
   } finally {
     vi.useRealTimers();
   }
-});
-describe("release selection held by an earlier release's overlay", () => {
-  it("refuses to resolve or apply a release, naming the reason, until one is chosen", async () => {
-    const rootDir = temporaryRoot();
-    const infraDir = join(rootDir, "infra", "docker");
-    // An overlay the migration could not carry over.
-    writeFileSync(
-      services.legacyReleaseStatePaths(infraDir).overlay,
-      "services:\n  app-api:\n    image: hand-edited\n",
-      { mode: 0o600 },
-    );
-    await services.migrateLegacyReleaseState(infraDir);
-    const releaseEffects = {
-      resolve: vi.fn(async () => "candidate"),
-      pull: vi.fn(async () => undefined),
-      apply: vi.fn(async () => undefined),
-      inspect: vi.fn(),
-      validateCandidate: vi.fn(async () => undefined),
-      updateAgent: vi.fn(async () => ({ handoffId: "h", replaced: true })),
-    };
-    const runtime = createUnavailableRuntime();
-    createAdministrativeRuntime(runtime, {
-      rootDir,
-      runFixedCli: async () => undefined,
-      releaseEffects: releaseEffects as never,
-    });
-    const operations = [
-      { kind: "release.resolve" },
-      { kind: "release.apply", releaseId: "candidate" },
-      { kind: "appApi.replace", releaseId: "candidate", updateJobId: "job" },
-      {
-        kind: "agent.update",
-        releaseId: "candidate",
-        expectedDigest: "d".repeat(64),
-        handoffId: "h",
-      },
-      {
-        kind: "system.update",
-        releaseId: "candidate",
-        expectedDigest: "d".repeat(64),
-        createBackup: false,
-      },
-    ];
-    const handlers = runtime as unknown as Record<
-      string,
-      (operation: unknown, execution: ReturnType<typeof context>) => Promise<unknown>
-    >;
-    for (const operation of operations) {
-      const ctx = context(operation.kind);
-      await expect(handlers[operation.kind](operation, ctx), operation.kind).rejects.toBeInstanceOf(
-        OpsHostUpdateRequiredError,
-      );
-      expect(ctx.emitLog).toHaveBeenCalledWith(
-        "stderr",
-        expect.stringContaining("pnpm openmapx compose release"),
-      );
-    }
-    for (const effect of Object.values(releaseEffects)) expect(effect).not.toHaveBeenCalled();
-
-    // `pnpm openmapx compose release` on the host decides.
-    services.supersedeLegacyReleaseOverlay(infraDir);
-    await expect(
-      handlers["release.resolve"]({ kind: "release.resolve" }, context("release.resolve")),
-    ).resolves.toEqual({ releaseId: "candidate" });
-  });
 });

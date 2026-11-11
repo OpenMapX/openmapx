@@ -311,9 +311,6 @@ export async function ensureReleaseOverlay(
   } & ReleaseStateLocation = {},
 ): Promise<ReleaseOverlayState> {
   const infraDir = opts.infraDir ?? repoPaths().infraDir;
-  // An earlier release's selection is carried over first, if it can be.
-  if (!opts.releaseStoreLock)
-    await coreServices.migrateLegacyReleaseState(infraDir, { uid: opts.uid });
   const path = releaseState(opts).overlay;
   const selected = readSelection(path, opts);
   if (selected) {
@@ -338,8 +335,6 @@ export async function ensureReleaseOverlay(
       return { status: "present", path };
     }
     assertNoReleaseTransaction(paths.store);
-    const held = coreServices.releaseSelectionHold(infraDir, { uid: opts.uid });
-    if (held) return { status: "held", reason: held };
     let manifest: ReleaseManifest;
     try {
       manifest = await resolveReleaseManifest(opts.docker, infraDir);

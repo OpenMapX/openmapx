@@ -7,7 +7,6 @@ import {
   cpSync,
   existsSync,
   fstatSync,
-  lstatSync,
   mkdirSync,
   mkdtempSync,
   openSync,
@@ -36,15 +35,6 @@ import {
   publishTrustedConfigurationSnapshot,
 } from "../apps/api/src/services/trusted-config-publisher";
 import {
-  canonicalReleaseManifest,
-  parseReleaseManifest,
-  renderReleaseCompose,
-} from "../packages/core/src/services/release-manifest";
-import {
-  legacyReleaseStatePaths,
-  releaseStatePaths,
-} from "../packages/core/src/services/release-state";
-import {
   buildRuntimeBundle,
   RUNTIME_BUNDLES,
   writeRuntimeBundle,
@@ -52,12 +42,10 @@ import {
 
 /**
  * The agent's trusted state moving out of `infra/docker` into its own state
- * directory on a running stack, from the state openmapx.com is in: release
- * 287020e6c, which the host's `compose release` selected, so its overlay names
- * a release `.ops-agent-releases` (0700) does not hold; that store with the
- * agent's thirteen earlier 0600 manifests and three pointers; a checkout
- * written under umask 002; and `.env` 0600. Covers the host update and the
- * panel self-update, with `infra/docker/data` on a filesystem of its own.
+ * directory on a running stack, from the applied configuration layout of
+ * release 287020e6c: a checkout written under umask 002, and `.env` 0600.
+ * Covers the host update and the panel self-update, with `infra/docker/data`
+ * on a filesystem of its own.
  *
  * Runs only where `OPENMAPX_TEST_SEPARATE_DATA_FS` names a directory holding
  * `host-update/infra/docker/data` and `self-update/infra/docker/data`, each a
@@ -71,42 +59,7 @@ const roots: string[] = [];
 const agents: ChildProcess[] = [];
 let outdir = "";
 
-/** The release the host selected: in the overlay, not in the agent's store. */
-const SELECTED = "287020e6cb521d8a8cc0216d115d47e8ffe5cc57-40136727952-1";
-/** The releases the earlier agents stored. */
-const RELEASE_DIGITS = [..."123456789abcd"];
-const RELEASES = RELEASE_DIGITS.map(
-  (digit, index) => `${digit.repeat(40)}-${39000000000 + index}-1`,
-);
 const digestOf = (contents: string) => createHash("sha256").update(contents).digest("hex");
-
-function manifestFor(release: string, digit: string) {
-  return parseReleaseManifest(
-    JSON.stringify({
-      schemaVersion: 1,
-      release,
-      images: Object.fromEntries(
-        [
-          "api",
-          "web",
-          "data-manager",
-          "ops-agent",
-          "privacy-backup",
-          "transitous-runner",
-          "transitous-tools",
-        ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${digit.repeat(64)}`]),
-      ),
-      privacyReleaseValidation: {
-        version: 1,
-        sourceBuildFingerprint: digit.repeat(64),
-        validatedAt: "2026-10-20T12:00:00.000Z",
-        checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
-      },
-    }),
-  );
-}
-
-const selectedManifest = manifestFor(SELECTED, "f");
 
 describe.skipIf(!SEPARATE || process.platform !== "linux")(
   "the agent's state moving out of infra/docker on a running stack",
@@ -172,54 +125,12 @@ describe.skipIf(!SEPARATE || process.platform !== "linux")(
         join(infra, ".trusted-config-current"),
       );
       rmSync(services.serviceSelectionPath(infra));
-      rmSync(releaseStatePaths(infra).directory, { recursive: true, force: true });
       // The earlier release's selection file, which another account of the
       // group could have written: never what is carried over.
       writeFileSync(
         join(infra, "service-selection.json"),
         JSON.stringify({ selected: ["app-api", "data-manager"] }),
       );
-      const legacy = legacyReleaseStatePaths(infra);
-      mkdirSync(legacy.store, { mode: 0o700 });
-      const manifests = new Map<string, string>();
-      RELEASES.forEach((release, index) => {
-        const canonical = canonicalReleaseManifest(manifestFor(release, RELEASE_DIGITS[index]));
-        manifests.set(release, canonical);
-        writeFileSync(join(legacy.store, `${release}.json`), canonical, { mode: 0o600 });
-      });
-      const pointer = (releaseId: string) =>
-        JSON.stringify({ releaseId, digest: digestOf(manifests.get(releaseId) as string) });
-      writeFileSync(join(legacy.store, "current.json"), pointer(RELEASES[10]), { mode: 0o600 });
-      writeFileSync(join(legacy.store, "latest.json"), pointer(RELEASES[12]), { mode: 0o600 });
-      writeFileSync(
-        join(legacy.store, "selections.json"),
-        JSON.stringify(
-          Object.fromEntries(
-            RELEASES.slice(8).map((release) => [
-              release,
-              {
-                configuration: "c".repeat(64),
-                ociDigest: `sha256:${"d".repeat(64)}`,
-                digest: digestOf(manifests.get(release) as string),
-              },
-            ]),
-          ),
-        ),
-        { mode: 0o600 },
-      );
-      // `compose release` wrote the overlay and its evidence, and no manifest.
-      const evidence = `${JSON.stringify(selectedManifest.privacyReleaseValidation)}\n`;
-      const evidenceName = `privacy-release-validation-${digestOf(evidence)}.json`;
-      writeFileSync(
-        legacy.overlay,
-        renderReleaseCompose(selectedManifest, infra).replace(
-          /file: \S+/,
-          `file: ../.release-evidence/${evidenceName}`,
-        ),
-        { mode: 0o600 },
-      );
-      mkdirSync(legacy.evidence, { mode: 0o700 });
-      writeFileSync(join(legacy.evidence, evidenceName), evidence, { mode: 0o444 });
       return { infra, legacyFiles: snapshotLegacy(infra) };
     }
 
@@ -250,9 +161,6 @@ describe.skipIf(!SEPARATE || process.platform !== "linux")(
         ".trusted-config-current",
         ".trusted-config-generations",
         "service-selection.json",
-        ".ops-agent-releases",
-        "docker-compose.release.yml",
-        ".release-evidence",
       ]) {
         walk(join(infra, name));
       }
@@ -263,25 +171,9 @@ describe.skipIf(!SEPARATE || process.platform !== "linux")(
       expect(services.currentConfigurationGeneration(infra)).toMatch(/^cfg1_/);
       // The selection came from the applied generation, not the group's file.
       expect(services.readServiceSelectionFile(infra)).toEqual(["app-api"]);
-      const releases = releaseStatePaths(infra);
-      expect(
-        readdirSync(releases.store)
-          .filter((name) => RELEASES.some((release) => name === `${release}.json`))
-          .sort(),
-      ).toEqual(RELEASES.map((release) => `${release}.json`).sort());
-      expect(readdirSync(releases.store)).toEqual(
-        expect.arrayContaining(["current.json", "latest.json", "selections.json"]),
-      );
-      // The host's selection stays selected, with its evidence beside it.
-      expect(readFileSync(releases.overlay, "utf8")).toBe(
-        renderReleaseCompose(selectedManifest, infra),
-      );
-      expect(readFileSync(releases.overlay, "utf8")).toContain("../../releases/evidence/");
       for (const directory of [
         join(infra, "state", "ops-agent"),
         join(infra, "state", "ops-agent", "configuration"),
-        releases.directory,
-        releases.store,
       ]) {
         expect(statSync(directory).mode & 0o077, directory).toBe(0);
       }

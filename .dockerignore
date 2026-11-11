@@ -33,7 +33,6 @@ infra/docker/data
 infra/docker/overrides
 infra/docker/.trusted-config-generations/
 infra/docker/.trusted-config-current
-infra/docker/.release-evidence/
 infra/docker/service-selection.json
 infra/docker/services/transitous/api-keys.json
 services/motis/tools/transitous/api-keys.json

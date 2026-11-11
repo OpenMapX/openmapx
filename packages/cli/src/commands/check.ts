@@ -188,16 +188,13 @@ export function installedIntegrationWarnings(rootDir: string): string[] {
 }
 
 /**
- * What stops stack commands or release updates until the operator acts: an
- * `.env` that is not the operator's alone, which every stack command refuses,
- * and an earlier release's selection that did not come over, which holds
- * automatic release selection.
+ * What stops stack commands until the operator acts: an `.env` that is not the
+ * operator's alone, which every stack command refuses.
  */
 export function deploymentStateErrors(infraDir: string): string[] {
-  return [
-    coreServices.deploymentEnvironmentFileProblem(join(infraDir, ".env")),
-    coreServices.releaseSelectionHold(infraDir),
-  ].filter((error): error is string => error !== null);
+  return [coreServices.deploymentEnvironmentFileProblem(join(infraDir, ".env"))].filter(
+    (error): error is string => error !== null,
+  );
 }
 
 interface ComposeConfigService {

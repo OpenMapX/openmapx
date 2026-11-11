@@ -12,7 +12,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { services } from "@openmapx/core/server";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildProbeArgs,
@@ -182,23 +181,15 @@ describe("DEEP_PROBES", () => {
 });
 
 describe("deploymentStateErrors", () => {
-  it("reports an unsafe .env and a held release selection", async () => {
+  it("reports an unsafe .env", () => {
     const infraDir = mkdtempSync(join(tmpdir(), "openmapx-check-state-"));
     try {
       expect(deploymentStateErrors(infraDir)).toEqual([]);
       writeFileSync(join(infraDir, ".env"), "DOMAIN=example.test\n", { mode: 0o600 });
       chmodSync(join(infraDir, ".env"), 0o664);
-      writeFileSync(
-        services.legacyReleaseStatePaths(infraDir).overlay,
-        "services:\n  app-api:\n    image: hand-edited\n",
-        { mode: 0o600 },
-      );
-      mkdirSync(join(infraDir, "state", "ops-agent"), { recursive: true, mode: 0o700 });
-      await services.migrateLegacyReleaseState(infraDir);
       const errors = deploymentStateErrors(infraDir);
-      expect(errors).toHaveLength(2);
+      expect(errors).toHaveLength(1);
       expect(errors[0]).toContain("no group or other write");
-      expect(errors[1]).toContain("pnpm openmapx compose release");
     } finally {
       rmSync(infraDir, { recursive: true, force: true });
     }

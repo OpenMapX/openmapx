@@ -182,8 +182,6 @@ export interface AdministrativeReleaseRuntimeOptions {
   afterHandoffSettled?: () => Promise<void>;
   /** The uid the release state must belong to; the effective uid unless a test injects one. */
   uid?: number;
-  /** Receives what the startup migration of an earlier release's state carried over. */
-  onLegacyReleaseMigration?: (migration: coreServices.LegacyReleaseStateMigration) => void;
 }
 
 type ReleaseTransactionPhase =
@@ -1242,13 +1240,6 @@ export function createDefaultReleaseEffects(
   let initialization: Promise<void> | undefined;
   const initialize = (): Promise<void> => {
     initialization ??= (async () => {
-      // The releases of earlier agents come first: everything below reads the
-      // store and the overlay. Once done, this is a no-op.
-      const migration = await coreServices.migrateLegacyReleaseState(infraDir, {
-        uid,
-        lockHooks: releaseStoreLockHooks,
-      });
-      if (migration) runtimeOptions.onLegacyReleaseMigration?.(migration);
       manifestNames();
       // Recovery reads the transaction and then reopens the manifest by release
       // ID. Holding the store lock across both keeps another agent process (or
@@ -1722,15 +1713,6 @@ export function createAdministrativeRuntime(
   const releaseEffects =
     options.releaseEffects ?? createDefaultReleaseEffects(options.rootDir, runFixedCli);
   const loadBuildAuthority = options.loadBuildAuthority ?? (async () => []);
-  // While an earlier release's selection did not come over, resolving or
-  // applying a release would upgrade to whatever is newest: the operator
-  // selects one on the host instead, which the panel's message says.
-  const assertReleaseSelectable = (context: { emitLog: FixedCliOptions["emitLog"] }) => {
-    const held = coreServices.releaseSelectionHold(infraDirectory(options.rootDir));
-    if (!held) return;
-    context.emitLog("stderr", held);
-    throw new OpsHostUpdateRequiredError();
-  };
   const buildArgs = (serviceId: string, regionId?: string, motisImport = false): string[] => [
     "services",
     "build",
@@ -2006,7 +1988,6 @@ export function createAdministrativeRuntime(
   };
   runtime["system.inspect"] = async (_operation, context) => releaseEffects.inspectSystem(context);
   runtime["release.resolve"] = async (_operation, context) => {
-    assertReleaseSelectable(context);
     return { releaseId: await releaseEffects.resolve(context) };
   };
   runtime["release.pull"] = async (operation, context) => {
@@ -2015,19 +1996,16 @@ export function createAdministrativeRuntime(
   };
   runtime["release.inspect"] = async () => releaseEffects.inspect();
   runtime["release.apply"] = async (operation, context) => {
-    assertReleaseSelectable(context);
     await releaseEffects.apply(operation.releaseId, [...ADMIN_RELEASE_SERVICE_IDS], context);
     return { releaseId: operation.releaseId };
   };
   runtime["appApi.replace"] = async (operation, context) => {
-    assertReleaseSelectable(context);
     await releaseEffects.apply(operation.releaseId, ["app-api"], context, operation.updateJobId);
     return { updateJobId: operation.updateJobId, replaced: true };
   };
   runtime["appApi.runtime.inspect"] = async () => releaseEffects.runtimeInspect?.() ?? {};
   runtime["agent.update"] = async (operation, context) => {
     if (!releaseEffects.updateAgent) throw new Error("Agent replacement unavailable");
-    assertReleaseSelectable(context);
     return releaseEffects.updateAgent(
       {
         releaseId: operation.releaseId,
@@ -2045,7 +2023,6 @@ export function createAdministrativeRuntime(
   runtime["system.update"] = async (operation, context) => {
     if (!releaseEffects.validateCandidate)
       throw new Error("Checked release validation unavailable");
-    assertReleaseSelectable(context);
     await releaseEffects.validateCandidate(operation.releaseId, operation.expectedDigest);
     if (operation.createBackup && operation.backupId) {
       await runFixedCli(["backup", "create", "--name", operation.backupId], context);
