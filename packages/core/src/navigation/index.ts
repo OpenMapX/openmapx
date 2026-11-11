@@ -261,7 +261,7 @@ export {
   type TransitTickState,
   transitProgressFromTick,
 } from "./processTransitFix";
-export { computeProgress, stepStartMeters, upcomingManeuverIndex } from "./progress";
+export { computeProgress, upcomingManeuverIndex } from "./progress";
 export {
   extractTimeline,
   freshNavTickState,
@@ -343,7 +343,6 @@ export {
   visibleToward,
 } from "./signFormat";
 export { simulatePositions } from "./simulatePositions";
-export { snapToRoute } from "./snap";
 export { isOverSpeed, OVER_SPEED_TOLERANCE_KMH } from "./speedAlert";
 export { matchSpeedLimitsByPoint, pickSpeedLimit } from "./speedLimits";
 export { spokenInstructionFor } from "./spokenInstruction";

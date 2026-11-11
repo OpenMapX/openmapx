@@ -236,7 +236,7 @@ export interface BuildJobContextOptions {
   source?: TransitSource;
   artifactBaseUrl?: string;
   feedProxyUrl?: string;
-  /** Mirror-mode archive downloader (default: curlAtomic). Injected by tests. */
+  /** Mirror-mode archive downloader (default: curlAtomicWithResult). Injected by tests. */
   artifactDownloader?: (url: string, dest: string) => Promise<void>;
   operationsPolicy?: MotisOperationsPolicy;
   operationsProfile?: string;

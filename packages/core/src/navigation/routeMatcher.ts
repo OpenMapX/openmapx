@@ -10,8 +10,8 @@ import type { SnapResult } from "./types";
  * is only valid for the exact array it was built from.
  *
  * The result of {@link snapPreparedRoute} is identical — coordinates, index and
- * both distances, to the last bit — to {@link snapToRoute} on the same
- * geometry. Edges are only skipped when a conservative spherical lower bound
+ * both distances, to the last bit — to the Turf reference that scans
+ * the whole line on the same geometry. Edges are only skipped when a conservative spherical lower bound
  * proves they cannot beat the best exact result found so far, and the survivors
  * are evaluated with the same Turf primitive.
  */
@@ -526,7 +526,7 @@ export function routeMatcherFor(
 
 /**
  * Project a raw fix onto a prepared route. Identical in every field to
- * {@link snapToRoute} on the same geometry.
+ * the Turf reference that scans the whole line on the same geometry.
  *
  * `seedSegmentIndex` may name an edge to evaluate first — typically the
  * previous result's `segmentIndex` — which tightens the bound early. It only

@@ -1,4 +1,4 @@
-import { fetchRoadConditions } from "@openmapx/core";
+import { fetchRoadConditionsWithStatus } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
@@ -85,16 +85,12 @@ vi.mock("@/integration-api/map/useDrawnDirectionsRoutes", () => ({
 }));
 vi.mock("@openmapx/core", async (importOriginal) => {
   const original = await importOriginal<Record<string, unknown>>();
-  const fetchRoadConditions = vi.fn(async () => events);
-  return {
-    ...original,
-    fetchRoadConditions,
-    fetchRoadConditionsWithStatus: vi.fn(async (bbox: unknown) => ({
-      ok: true,
-      events: await fetchRoadConditions(bbox as never),
-    })),
-  };
+  return { ...original, fetchRoadConditionsWithStatus: vi.fn() };
 });
+
+function ok<T>(roadEvents: T) {
+  return { ok: true as const, events: roadEvents };
+}
 
 const popupState = vi.hoisted(() => ({ html: "" }));
 vi.mock("maplibre-gl", () => ({
@@ -117,7 +113,7 @@ vi.mock("maplibre-gl", () => ({
 
 import { RouteConditionsLayer } from "../route-layer";
 
-const fetchMock = vi.mocked(fetchRoadConditions);
+const fetchMock = vi.mocked(fetchRoadConditionsWithStatus);
 const SOURCE = "omx-road-conditions-route";
 
 function sourceFeatures(geometryType: GeoJSON.Geometry["type"]): GeoJSON.Feature[] {
@@ -140,7 +136,7 @@ beforeEach(() => {
   // the zoom gate still see a fetch happen.
   fake = createFakeMap({ styleLoaded: true, zoom: 5 });
   fetchMock.mockClear();
-  fetchMock.mockResolvedValue(events);
+  fetchMock.mockResolvedValue(ok(events));
   useRoadConditionsStore.setState({ routeFetchStatus: "idle" });
   popupState.html = "";
   useMapAttributionStore.setState({ byLayer: {} });
@@ -159,7 +155,7 @@ describe("RouteConditionsLayer", () => {
   ])(
     "preserves cached canonical receipts during style republishing: $contributors",
     async ({ contributors }) => {
-      fetchMock.mockResolvedValue([{ ...events[0]!, contributors }]);
+      fetchMock.mockResolvedValue(ok([{ ...events[0]!, contributors }]));
       const view = render(<RouteConditionsLayer />);
       await waitFor(() => expect(sourceFeatures("LineString")).toHaveLength(1));
       expect(JSON.parse(sourceFeatures("LineString")[0]!.properties!._mapAttributions)).toEqual(
@@ -176,12 +172,14 @@ describe("RouteConditionsLayer", () => {
     },
   );
   it("credits a visible route line when its marker is offscreen, only in the route zoom band", async () => {
-    fetchMock.mockResolvedValue([
-      {
-        ...events[0]!,
-        attribution: { provider: "Route publisher", license: "CC0-1.0" },
-      },
-    ]);
+    fetchMock.mockResolvedValue(
+      ok([
+        {
+          ...events[0]!,
+          attribution: { provider: "Route publisher", license: "CC0-1.0" },
+        },
+      ]),
+    );
     const view = render(<RouteConditionsLayer />);
     await waitFor(() => expect(sourceFeatures("LineString")).toHaveLength(1));
     const line = sourceFeatures("LineString")[0]!;
@@ -250,23 +248,25 @@ describe("RouteConditionsLayer", () => {
   });
 
   it("uses the shared upcoming style for route markers and lines", async () => {
-    fetchMock.mockResolvedValueOnce([
-      situation({
-        id: "oc:future-route",
-        source: "autobahn",
-        ...works,
-        headline: text("Roadworks"),
-        temporality: "scheduled",
-        validity: { status: "planned", start: "2099-08-03T00:00:00Z" },
-        geometry: {
-          type: "LineString",
-          coordinates: [
-            [8, 50.001],
-            [8, 50.004],
-          ],
-        },
-      }),
-    ]);
+    fetchMock.mockResolvedValueOnce(
+      ok([
+        situation({
+          id: "oc:future-route",
+          source: "autobahn",
+          ...works,
+          headline: text("Roadworks"),
+          temporality: "scheduled",
+          validity: { status: "planned", start: "2099-08-03T00:00:00Z" },
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [8, 50.001],
+              [8, 50.004],
+            ],
+          },
+        }),
+      ]),
+    );
 
     render(<RouteConditionsLayer />);
     await waitFor(() => {
@@ -306,38 +306,40 @@ describe("RouteConditionsLayer", () => {
   });
 
   it("collapses explicitly grouped route line records into one marker and one line", async () => {
-    fetchMock.mockResolvedValueOnce([
-      situation({
-        id: "oc:route-1",
-        source: "autobahn",
-        groupId: "works-42",
-        ...works,
-        headline: text("Roadworks"),
-        geometry: {
-          type: "LineString",
-          coordinates: [
-            [8, 50.001],
-            [8, 50.004],
-          ],
-        },
-      }),
-      situation({
-        id: "oc:route-2",
-        source: "autobahn",
-        groupId: "works-42",
-        ...works,
-        severity: { label: "major" },
-        headline: text("Lane closure"),
-        effects: [effect("w/lanes", "lane_restriction", { vehicleImpact: "lane_closed" })],
-        geometry: {
-          type: "LineString",
-          coordinates: [
-            [8, 50.004],
-            [8, 50.007],
-          ],
-        },
-      }),
-    ]);
+    fetchMock.mockResolvedValueOnce(
+      ok([
+        situation({
+          id: "oc:route-1",
+          source: "autobahn",
+          groupId: "works-42",
+          ...works,
+          headline: text("Roadworks"),
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [8, 50.001],
+              [8, 50.004],
+            ],
+          },
+        }),
+        situation({
+          id: "oc:route-2",
+          source: "autobahn",
+          groupId: "works-42",
+          ...works,
+          severity: { label: "major" },
+          headline: text("Lane closure"),
+          effects: [effect("w/lanes", "lane_restriction", { vehicleImpact: "lane_closed" })],
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [8, 50.004],
+              [8, 50.007],
+            ],
+          },
+        }),
+      ]),
+    );
 
     render(<RouteConditionsLayer />);
     await waitFor(() => {
@@ -358,27 +360,29 @@ describe("RouteConditionsLayer", () => {
         [8, 50.004],
       ],
     };
-    fetchMock.mockResolvedValueOnce([
-      situation({
-        id: "oc:route-congestion",
-        source: "autobahn",
-        groupId: "congestion-group",
-        kind: "congestion",
-        type: "congestion",
-        severity: { label: "moderate" },
-        headline: text("Traffic congestion"),
-        geometry,
-      }),
-      situation({
-        id: "oc:route-roadworks",
-        source: "autobahn",
-        groupId: "roadworks-group",
-        ...works,
-        severity: { label: "minor" },
-        headline: text("Road works"),
-        geometry,
-      }),
-    ]);
+    fetchMock.mockResolvedValueOnce(
+      ok([
+        situation({
+          id: "oc:route-congestion",
+          source: "autobahn",
+          groupId: "congestion-group",
+          kind: "congestion",
+          type: "congestion",
+          severity: { label: "moderate" },
+          headline: text("Traffic congestion"),
+          geometry,
+        }),
+        situation({
+          id: "oc:route-roadworks",
+          source: "autobahn",
+          groupId: "roadworks-group",
+          ...works,
+          severity: { label: "minor" },
+          headline: text("Road works"),
+          geometry,
+        }),
+      ]),
+    );
 
     render(<RouteConditionsLayer />);
     await waitFor(() => expect(sourceFeatures("LineString")).toHaveLength(1));
@@ -390,26 +394,28 @@ describe("RouteConditionsLayer", () => {
   });
 
   it("keeps unrelated route alerts distinct even when their geometry and date match", async () => {
-    fetchMock.mockResolvedValueOnce([
-      situation({
-        id: "oc:point-1",
-        source: "autobahn",
-        groupId: "works-a",
-        ...works,
-        headline: text("Roadworks"),
-        geometry: { type: "Point", coordinates: [8, 50.004] },
-        validity: { status: "active", start: "2026-08-03T00:00:00Z" },
-      }),
-      situation({
-        id: "oc:point-2",
-        source: "autobahn",
-        groupId: "works-b",
-        ...works,
-        headline: text("Roadworks"),
-        geometry: { type: "Point", coordinates: [8, 50.004] },
-        validity: { status: "active", start: "2026-08-03T00:00:00Z" },
-      }),
-    ]);
+    fetchMock.mockResolvedValueOnce(
+      ok([
+        situation({
+          id: "oc:point-1",
+          source: "autobahn",
+          groupId: "works-a",
+          ...works,
+          headline: text("Roadworks"),
+          geometry: { type: "Point", coordinates: [8, 50.004] },
+          validity: { status: "active", start: "2026-08-03T00:00:00Z" },
+        }),
+        situation({
+          id: "oc:point-2",
+          source: "autobahn",
+          groupId: "works-b",
+          ...works,
+          headline: text("Roadworks"),
+          geometry: { type: "Point", coordinates: [8, 50.004] },
+          validity: { status: "active", start: "2026-08-03T00:00:00Z" },
+        }),
+      ]),
+    );
 
     render(<RouteConditionsLayer />);
     await waitFor(() => {
@@ -461,7 +467,7 @@ describe("RouteConditionsLayer", () => {
       expect(sourceFeatures("Point")).toHaveLength(1);
     });
 
-    fetchMock.mockRejectedValueOnce(new Error("temporary outage"));
+    fetchMock.mockResolvedValueOnce({ ok: false, events: [] });
     fake.state.zoom = 9;
     fake.emit("zoomend");
     fake.state.zoom = 5;
@@ -475,22 +481,24 @@ describe("RouteConditionsLayer", () => {
     vi.useFakeTimers();
     let unmount: (() => void) | undefined;
     try {
-      fetchMock.mockResolvedValueOnce([
-        situation({
-          ...events[0]!,
-          kind: "restriction",
-          type: "dimension",
-          effects: [
-            effect("w/height", "dimension_limit", {
-              applicability: { kind: "classes", include: [{ class: "truck" }] },
-              dimension: "height",
-              value: { value: 4, unit: "m" },
-              operator: "lte",
-              meaning: "maximum_permitted",
-            }),
-          ],
-        }),
-      ]);
+      fetchMock.mockResolvedValueOnce(
+        ok([
+          situation({
+            ...events[0]!,
+            kind: "restriction",
+            type: "dimension",
+            effects: [
+              effect("w/height", "dimension_limit", {
+                applicability: { kind: "classes", include: [{ class: "truck" }] },
+                dimension: "height",
+                value: { value: 4, unit: "m" },
+                operator: "lte",
+                meaning: "maximum_permitted",
+              }),
+            ],
+          }),
+        ]),
+      );
       ({ unmount } = render(<RouteConditionsLayer />));
       await act(async () => {
         await vi.advanceTimersByTimeAsync(0);
@@ -523,8 +531,8 @@ describe("RouteConditionsLayer", () => {
   });
 
   it("coalesces a refresh while the route request is still in flight", async () => {
-    let resolve: ((value: typeof events) => void) | undefined;
-    const pending = new Promise<typeof events>((done) => {
+    let resolve: ((value: ReturnType<typeof ok<typeof events>>) => void) | undefined;
+    const pending = new Promise<ReturnType<typeof ok<typeof events>>>((done) => {
       resolve = done;
     });
     fetchMock.mockImplementationOnce(() => pending);
@@ -538,7 +546,7 @@ describe("RouteConditionsLayer", () => {
     await Promise.resolve();
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    resolve?.(events);
+    resolve?.(ok(events));
   });
 
   it("places one marker per MultiPoint endpoint rather than their centroid", async () => {
@@ -547,21 +555,23 @@ describe("RouteConditionsLayer", () => {
     // would return for this geometry can land off the road; the layer must
     // place a marker at each real endpoint instead (matching the area
     // overlay's own placement in map-layer.tsx).
-    fetchMock.mockResolvedValueOnce([
-      situation({
-        id: "oc:2",
-        source: "autobahn",
-        ...closure,
-        headline: text("Vollsperrung", "de"),
-        geometry: {
-          type: "MultiPoint",
-          coordinates: [
-            [8, 50.002],
-            [8, 50.008],
-          ],
-        },
-      }),
-    ]);
+    fetchMock.mockResolvedValueOnce(
+      ok([
+        situation({
+          id: "oc:2",
+          source: "autobahn",
+          ...closure,
+          headline: text("Vollsperrung", "de"),
+          geometry: {
+            type: "MultiPoint",
+            coordinates: [
+              [8, 50.002],
+              [8, 50.008],
+            ],
+          },
+        }),
+      ]),
+    );
     render(<RouteConditionsLayer />);
     await waitFor(() => {
       expect(sourceFeatures("Point")).toHaveLength(2);

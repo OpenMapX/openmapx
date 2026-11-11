@@ -151,12 +151,3 @@ export async function curlAtomicWithResult(
     throw err;
   }
 }
-
-/** Backward-compatible convenience for callers that do not need publish status. */
-export async function curlAtomic(
-  url: string,
-  targetPath: string,
-  opts: CurlAtomicOptions = {},
-): Promise<void> {
-  await curlAtomicWithResult(url, targetPath, opts);
-}

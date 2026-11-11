@@ -56,8 +56,6 @@ COPY apps/ops-agent/ apps/ops-agent/
 # catalog pins: the agent and its CLI run the release's, not the host
 # checkout's.
 COPY --parents \
-    services/data-manager/src/transitous-lock.ts \
-    services/data-manager/src/gbfs-catalog-lock.ts \
     services/data-manager/src/jobs/transitous-feeds-overlay.ts \
     services/data-manager/src/utils/atomic-write.ts \
     integrations/transit-dynamic-registry/ \

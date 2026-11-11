@@ -83,10 +83,3 @@ export function upcomingManeuverIndex(currentStepIndex: number, stepCount: numbe
   if (stepCount <= 0) return 0;
   return Math.min(currentStepIndex + 1, stepCount - 1);
 }
-
-/** Legacy engine-distance metric; use maneuverStartMeters(route, index) for geometry positions. */
-export function stepStartMeters(steps: readonly { distance: number }[], stepIndex: number): number {
-  let along = 0;
-  for (let i = 0; i < stepIndex && i < steps.length; i += 1) along += steps[i].distance;
-  return along;
-}

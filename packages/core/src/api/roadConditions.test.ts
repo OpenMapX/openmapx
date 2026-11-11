@@ -2,7 +2,6 @@ import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "./client";
 import {
-  fetchRoadConditions,
   fetchRoadConditionsWithStatus,
   fetchRouteFlow,
   roadConditionFeatureToEvent,
@@ -19,7 +18,7 @@ const minimal = (properties: Record<string, unknown> = {}) => ({
 
 const point = { type: "Point" as const, coordinates: [13.4, 52.5] };
 
-describe("fetchRoadConditions", () => {
+describe("fetchRoadConditionsWithStatus", () => {
   beforeEach(() => vi.restoreAllMocks());
 
   it("returns parsed events with an explicit success status", async () => {
@@ -111,7 +110,7 @@ describe("fetchRoadConditions", () => {
       ],
     } as never);
 
-    const out = await fetchRoadConditions([13.39, 52.49, 13.41, 52.51], {
+    const { events: out } = await fetchRoadConditionsWithStatus([13.39, 52.49, 13.41, 52.51], {
       kinds: ["incident", "roadworks"],
       types: ["accident"],
       minSeverity: "moderate",
@@ -158,20 +157,20 @@ describe("fetchRoadConditions", () => {
   it("sends horizonDays only when set", async () => {
     const spy = vi.spyOn(apiClient, "get").mockResolvedValue({ features: [] } as never);
 
-    await fetchRoadConditions([0, 0, 1, 1], { horizonDays: 7 });
+    await fetchRoadConditionsWithStatus([0, 0, 1, 1], { horizonDays: 7 });
     expect(spy).toHaveBeenLastCalledWith(
       "/api/integrations/road-conditions/events",
       expect.objectContaining({ horizonDays: "7" }),
     );
 
     // `0` means "active now" — a falsy value that must still be sent.
-    await fetchRoadConditions([0, 0, 1, 1], { horizonDays: 0 });
+    await fetchRoadConditionsWithStatus([0, 0, 1, 1], { horizonDays: 0 });
     expect(spy).toHaveBeenLastCalledWith(
       "/api/integrations/road-conditions/events",
       expect.objectContaining({ horizonDays: "0" }),
     );
 
-    await fetchRoadConditions([0, 0, 1, 1]);
+    await fetchRoadConditionsWithStatus([0, 0, 1, 1]);
     expect(spy).toHaveBeenLastCalledWith(
       "/api/integrations/road-conditions/events",
       expect.not.objectContaining({ horizonDays: expect.anything() }),
@@ -190,14 +189,8 @@ describe("fetchRoadConditions", () => {
         { geometry: point, properties: minimal({ id: "kept" }) },
       ],
     } as never);
-    const out = await fetchRoadConditions([0, 0, 1, 1]);
+    const { events: out } = await fetchRoadConditionsWithStatus([0, 0, 1, 1]);
     expect(out.map((e) => e.id)).toEqual(["kept"]);
-  });
-
-  it("returns [] on transport error (never throws)", async () => {
-    vi.spyOn(apiClient, "get").mockRejectedValue(new Error("network"));
-    const out = await fetchRoadConditions([0, 0, 1, 1]);
-    expect(out).toEqual([]);
   });
 });
 

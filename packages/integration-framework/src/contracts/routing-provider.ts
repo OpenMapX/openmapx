@@ -1,6 +1,5 @@
 import type {
   DirectionsResult,
-  IsochroneResult,
   LngLat,
   MatchOptions,
   MatchResult,
@@ -90,7 +89,6 @@ export interface RoutingProvider {
     mode: TravelMode,
     options?: RoutingOptions,
   ): Promise<DirectionsResult>;
-  getIsochrone?(origin: LngLat, mode: TravelMode, minutes: number[]): Promise<IsochroneResult>;
   optimizeRoute?(
     waypoints: LngLat[],
     mode: TravelMode,

@@ -223,18 +223,6 @@ export async function fetchRoadConditionsWithStatus(
 }
 
 /**
- * Compatibility wrapper for optional callers that intentionally treat a
- * transport failure as an empty result.
- */
-export async function fetchRoadConditions(
-  bbox: BBox,
-  opts?: FetchRoadConditionsOptions,
-): Promise<RoadConditionEvent[]> {
-  const result = await fetchRoadConditionsWithStatus(bbox, opts);
-  return result.events;
-}
-
-/**
  * Live flow along each route, keyed by the id the caller submitted. Returns an
  * empty map on any failure: congestion is decoration on a route that has to
  * keep drawing without it.
