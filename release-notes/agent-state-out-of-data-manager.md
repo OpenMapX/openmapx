@@ -10,8 +10,9 @@ the trusted-configuration queue it shares with app-api, and its
 privacy-extraction scratch. data-manager mounts the data directory read-write
 as the same user, so state there could be rewritten by it: the journal, a
 handoff record whose previous overlay a rollback would restore, and queued
-configuration snapshots, including secrets. No other service can reach the
-agent's state; app-api mounts only the queue.
+configuration snapshots, including secrets. Only app-api (the queue, and the
+integration store read-only) and Traefik (its own files, read-only) mount
+parts of it.
 
 Related fixes:
 
