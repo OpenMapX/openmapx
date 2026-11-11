@@ -48,7 +48,7 @@ and `jq`.
 
 Docs publication does not wait for application CI or application container builds.
 The deployment example in `deploy/docker-compose.yml` is for the project's
-documentation host: it uses `docs.openmapx.org`, the external `docker_openmapx`
+documentation host: it uses `docs.openmapx.org`, the external `openmapx_openmapx`
 network, and an existing Traefik proxy with Docker discovery, a `websecure`
 entrypoint, and a `letsencrypt` certificate resolver. It does not create that
 proxy or its network. Adapt those values for another host.

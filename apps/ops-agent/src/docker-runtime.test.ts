@@ -101,7 +101,7 @@ const ownedSnapshot = (serviceId = "redis") => ({
   containerId: "a".repeat(64),
   state: "running" as const,
   provenance: {
-    project: "docker",
+    project: "openmapx",
     composeWorkingDirectory: "/trusted",
     composeConfigFiles: ["/trusted/compose.yml"],
     imageId: `sha256:${"b".repeat(64)}`,
@@ -1408,7 +1408,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         expect(calls[3]).toEqual(
           expect.arrayContaining([
             "--volumes-from",
-            "docker-valhalla-1",
+            "openmapx-valhalla-1",
             `sha256:${"c".repeat(64)}`,
           ]),
         );
@@ -1567,7 +1567,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           "inspect",
           "--format",
           "{{.State.Running}}",
-          "docker-valhalla-1",
+          "openmapx-valhalla-1",
         ]);
         expect(existsSync(join(dataRoot, "valhalla", "osm-pbf", ".traffic-maintenance.json"))).toBe(
           true,
@@ -1631,8 +1631,8 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         dispatchOpsOperation(runtime, { kind: "valhalla.traffic.disable" }, context()),
       ).resolves.toEqual({ changed: true });
       expect(calls).toEqual([
-        ["stop", "--time", "1", "docker-valhalla-1"],
-        ["inspect", "--format", "{{.State.Running}}", "docker-valhalla-1"],
+        ["stop", "--time", "1", "openmapx-valhalla-1"],
+        ["inspect", "--format", "{{.State.Running}}", "openmapx-valhalla-1"],
       ]);
     });
 
@@ -1751,14 +1751,14 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       expect(calls).toEqual([
         [
           "exec",
-          "docker-valhalla-1",
+          "openmapx-valhalla-1",
           "valhalla_ways_to_edges",
           "-c",
           "/custom_files/valhalla.json",
         ],
         [
           "exec",
-          "docker-valhalla-1",
+          "openmapx-valhalla-1",
           "chown",
           CHOWN_ID,
           "/custom_files/valhalla_tiles/way_edges.txt",
@@ -2462,8 +2462,8 @@ describe("recoverInterruptedTrafficMaintenance", () => {
             "--format",
             "{{.Names}}",
           ],
-          ["stop", "--time", "1", "docker-valhalla-1"],
-          ["inspect", "--format", "{{.State.Running}}", "docker-valhalla-1"],
+          ["stop", "--time", "1", "openmapx-valhalla-1"],
+          ["inspect", "--format", "{{.State.Running}}", "openmapx-valhalla-1"],
         ]);
         expect(calls.some((call) => call[0] === "start")).toBe(false);
         expect(readdirSync(shared).sort()).toEqual([

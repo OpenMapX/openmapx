@@ -162,7 +162,7 @@ async function installPrivateDockerProjectTransport(root: string, project: strin
   // SQL statement, image and volume still reaches the real engine unchanged.
   writeFileSync(
     shim,
-    `#!${process.execPath}\nconst {spawnSync}=require('node:child_process');const args=process.argv.slice(2);if(args[0]==='compose'){const at=args.indexOf('--project-name');if(at!==-1&&args[at+1]==='docker')args[at+1]=${JSON.stringify(project)};}const result=spawnSync(${JSON.stringify(docker)},args,{stdio:'inherit'});if(result.error)throw result.error;process.exit(result.status??1);\n`,
+    `#!${process.execPath}\nconst {spawnSync}=require('node:child_process');const args=process.argv.slice(2);if(args[0]==='compose'){const at=args.indexOf('--project-name');if(at!==-1&&args[at+1]==='openmapx')args[at+1]=${JSON.stringify(project)};}const result=spawnSync(${JSON.stringify(docker)},args,{stdio:'inherit'});if(result.error)throw result.error;process.exit(result.status??1);\n`,
     { mode: 0o700 },
   );
   process.env.PATH = `${bin}${delimiter}${originalPath ?? ""}`;

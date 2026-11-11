@@ -176,7 +176,7 @@ describe("the agent's configuration state", () => {
       join(infraDir, CURRENT_CONFIGURATION, "docker-compose.generated.yml"),
       "utf8",
     );
-    expect(compose).toContain("name: docker");
+    expect(compose).toContain("name: openmapx");
   });
 
   it("refuses state directories anyone else can reach instead of repairing them", async () => {

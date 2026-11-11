@@ -184,7 +184,7 @@ saved in the admin panel: it cannot read the database, so it takes those
 settings and credentials from the current generation. Settings in `.env`
 (`SERVICE_<ID>_<KEY>`) win over them in both.
 
-The stack is addressed as Compose project `docker` with `infra/docker/.env` as
+The stack is addressed as Compose project `openmapx` with `infra/docker/.env` as
 its environment. To run Compose by hand, name both:
 
 ```bash

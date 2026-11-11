@@ -169,7 +169,7 @@ it("reports the service files: overrides, the import to come, a host render's re
     revision: "a".repeat(40),
   });
   vi.mocked(containerBindMounts).mockResolvedValue([
-    { name: "docker-martin-1", sources: [join(directory, "config", "martin.yaml")] },
+    { name: "openmapx-martin-1", sources: [join(directory, "config", "martin.yaml")] },
   ]);
   const errors = vi.spyOn(console, "error").mockImplementation(() => {});
   // log.info: stdout, which Run diagnostics shows as information.
@@ -221,7 +221,7 @@ it("reports the service files: overrides, the import to come, a host render's re
     // Something to look at: a warning.
     expect(lines()).toContainEqual(
       expect.stringContaining(
-        "⚠ 1 container still mounts service files from the checkout: docker-martin-1.",
+        "⚠ 1 container still mounts service files from the checkout: openmapx-martin-1.",
       ),
     );
     expect([...lines(), ...information].join("\n")).not.toContain("secret-hash");

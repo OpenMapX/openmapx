@@ -423,7 +423,7 @@ it("freezes the checked release helper graph and budgets a complete 13-service s
     containerId: i.toString(16).padStart(64, "0"),
     state: "running" as const,
     provenance: {
-      project: "docker",
+      project: "openmapx",
       imageId: `sha256:${"1".repeat(64)}`,
       composeWorkingDirectory: `${infraDir}/state/ops-agent/configuration/.base-cfg1_${"a".repeat(43)}`,
       composeConfigFiles: [

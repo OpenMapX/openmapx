@@ -228,7 +228,7 @@ exit 0
 
   it.each([
     ["containers", { containers: "abc123" }, "already has containers"],
-    ["volumes", { volumes: "docker_openmapx-pgdata" }, "already has volumes"],
+    ["volumes", { volumes: "openmapx_openmapx-pgdata" }, "already has volumes"],
   ])("refuses when the project already has %s and removes nothing", (_name, answers, message) => {
     const dir = tree();
     const bin = stubs(dir, answers);
