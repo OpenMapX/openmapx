@@ -1,4 +1,3 @@
-import { adminQueryHref } from "./adminNavigationState";
 export const SETTINGS_TOPICS = ["general", "authentication", "email", "map", "data-use"] as const;
 
 export type AdminWorkspace =
@@ -248,43 +247,8 @@ export function adminPrimaryNavigation(access: AdminNavigationAccess) {
       : [];
   });
 }
-const LEGACY_PATHS: Record<string, string> = {
-  "/admin/services": "/admin/system/services",
-  "/admin/services/compose": "/admin/system/deployment",
-  "/admin/services/data": "/admin/data",
-  "/admin/services/backups": "/admin/system/backups",
-  "/admin/transit": "/admin/data/transit",
-  "/admin/coverage": "/admin/data/coverage",
-  "/admin/cache": "/admin/system/cache",
-  "/admin/settings": "/admin/settings/general",
-};
-export function legacyAdminHref(
-  path: string,
-  query: Record<string, string | string[] | undefined> = {},
-  selfHosted: boolean | null = null,
-) {
-  const target =
-    path === "/admin/system"
-      ? selfHosted === false
-        ? "/admin/system/cache"
-        : "/admin/system/updates"
-      : (LEGACY_PATHS[path] ?? path.replace(/^\/admin\/services\//, "/admin/system/services/"));
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(query))
-    if (typeof value === "string") params.set(key, value);
-  return adminQueryHref(target, params, {});
-}
 export function adminWorkspaceForPath(path: string): AdminWorkspace | null {
-  const canonical = legacyAdminHref(path);
-  return (
-    [...ADMIN_DESTINATIONS]
-      .sort((a, b) => b.href.length - a.href.length)
-      .find(
-        (entry) =>
-          canonical === entry.href ||
-          (entry.href !== "/admin" && canonical.startsWith(`${entry.href}/`)),
-      )?.workspace ?? null
-  );
+  return adminDestinationForPath(path)?.workspace ?? null;
 }
 export function adminDestinationForPath(path: string) {
   return [...ADMIN_DESTINATIONS]
@@ -296,13 +260,13 @@ export function adminDestinationForPath(path: string) {
 }
 const SERVICE_TABS = ["overview", "configuration", "credentials", "logs", "manifest"];
 export function adminTabsForPath(path: string): readonly string[] {
-  if (/^\/admin\/(system\/)?services\/[^/]+$/.test(path)) return SERVICE_TABS;
+  if (/^\/admin\/system\/services\/[^/]+$/.test(path)) return SERVICE_TABS;
   if (/^\/admin\/users\/[^/]+$/.test(path)) return ["profile", "sessions", "accounts"];
   if (/^\/admin\/integrations\/[^/]+$/.test(path))
     return ["overview", "configuration", "credentials", "health", "sources"];
   if (path === "/admin/activity") return ["jobs", "audit", "logs"];
   if (path === "/admin/extensions") return ["browse", "installed", "sources", "local"];
-  if (path === "/admin/data/transit" || path === "/admin/transit")
+  if (path === "/admin/data/transit")
     return ["sources", "catalog", "credentials", "pipeline", "mobility"];
   return [];
 }
@@ -313,14 +277,10 @@ export function safeAdminNavigationReturn(value: string | null | undefined): str
     const url = new URL(value, "https://admin.invalid");
     if (url.origin !== "https://admin.invalid" || url.hash || value.split("?")[0] !== url.pathname)
       return null;
-    const detail = /^\/admin\/(?:system\/services|services|integrations|users)\/([^/]+)$/.exec(
-      url.pathname,
-    );
+    const detail = /^\/admin\/(?:system\/services|integrations|users)\/([^/]+)$/.exec(url.pathname);
     const id = detail ? decodeURIComponent(detail[1]) : null;
     const known =
       ADMIN_DESTINATIONS.some((entry) => entry.href === url.pathname) ||
-      Object.hasOwn(LEGACY_PATHS, url.pathname) ||
-      url.pathname === "/admin/system" ||
       url.pathname === "/admin/integrations/bulk";
     if (
       !known &&

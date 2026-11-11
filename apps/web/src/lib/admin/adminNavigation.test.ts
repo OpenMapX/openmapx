@@ -3,7 +3,6 @@ import {
   adminDestinations,
   adminPrimaryNavigation,
   adminWorkspaceForPath,
-  legacyAdminHref,
   safeAdminNavigationReturn,
 } from "./adminNavigation";
 
@@ -59,41 +58,18 @@ it("registers the final Data topics and assigns one active workspace", () => {
     "/admin/data/transfers",
     "/admin/data/operations",
   ]);
-  for (const path of [
-    "/admin/services/api",
-    "/admin/system/services/api",
-    "/admin/services/compose",
-  ])
+  for (const path of ["/admin/system/services/api", "/admin/system/deployment"])
     expect(adminWorkspaceForPath(path)).toBe("system");
-  expect(adminWorkspaceForPath("/admin/services/data")).toBe("data");
+  expect(adminWorkspaceForPath("/admin/data/transit")).toBe("data");
   expect(adminWorkspaceForPath("/admin/privacy-setup")).toBe("privacy");
-});
-it.each([
-  ["/admin/services", "/admin/system/services"],
-  ["/admin/services/compose", "/admin/system/deployment"],
-  ["/admin/services/data", "/admin/data"],
-  ["/admin/services/backups", "/admin/system/backups"],
-  ["/admin/services/api", "/admin/system/services/api"],
-  ["/admin/transit", "/admin/data/transit"],
-  ["/admin/coverage", "/admin/data/coverage"],
-  ["/admin/cache", "/admin/system/cache"],
-])("redirects %s retaining only public query state", (path, target) => {
-  expect(legacyAdminHref(path, { tab: "configuration", page: "2", token: "secret" })).toBe(
-    `${target}?tab=configuration&page=2`,
-  );
-});
-it("distinguishes the System primary from the Maintenance root alias", () => {
-  expect(legacyAdminHref("/admin/system", {}, true)).toBe("/admin/system/updates");
-  expect(legacyAdminHref("/admin/system", {}, false)).toBe("/admin/system/cache");
 });
 it.each([
   "/admin/system/deployment",
   "/admin/system/configuration-transfer",
   "/admin/data/transit?tab=credentials",
-  "/admin/transit",
   "/admin/users/a?tab=accounts",
   "/admin/system/services/api?tab=configuration",
-])("accepts a canonical or legacy reauth destination %s", (path) => {
+])("accepts the canonical reauth destination %s", (path) => {
   expect(safeAdminNavigationReturn(path)).toBe(path);
 });
 it.each([
@@ -103,6 +79,13 @@ it.each([
   "/admin/users/../settings",
   "//evil.test/admin",
   "/admin/unknown",
+  "/admin/services",
+  "/admin/services/api",
+  "/admin/transit",
+  "/admin/coverage",
+  "/admin/cache",
+  "/admin/settings",
+  "/admin/system",
   "/admin/users/a?tab=profile&tab=sessions",
   "/admin/users/a#password",
 ])("rejects unsupported return state %s", (path) =>

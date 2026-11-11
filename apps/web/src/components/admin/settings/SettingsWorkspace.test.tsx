@@ -3,7 +3,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, createQueryWrapper, render, screen, waitFor } from "@/test";
 import { adminTestHistory } from "@/test/adminNavigation";
-import { LegacySettingsRedirect, SettingsWorkspace } from "./SettingsWorkspace";
+import { SettingsWorkspace } from "./SettingsWorkspace";
 
 vi.mock(
   "next/navigation",
@@ -74,13 +74,4 @@ it("reveals and focuses an addressable setting", async () => {
     { wrapper: createQueryWrapper() },
   );
   await waitFor(() => expect(screen.getByLabelText("email field")).toHaveFocus());
-});
-it("migrates the legacy retention fragment to the field's current owner", async () => {
-  window.history.replaceState(null, "", "/admin/settings#backup-retention");
-  const replace = vi.spyOn(adminTestHistory, "replace");
-  render(<LegacySettingsRedirect />);
-  await waitFor(() =>
-    expect(replace).toHaveBeenCalledWith("/admin/system/backups#backup-retention"),
-  );
-  window.history.replaceState(null, "", "/admin");
 });

@@ -2,8 +2,10 @@ import { expect, it } from "vitest";
 import { adminJobHref, parseAdminJobSelection } from "./adminJobNavigation";
 
 it("source-qualifies and encodes an exact job and safe return", () => {
-  expect(adminJobHref({ id: "job /1", source: "data-manager", returnTo: "/admin/transit" })).toBe(
-    "/admin/activity?tab=jobs&job=job+%2F1&source=data-manager&returnTo=%2Fadmin%2Ftransit",
+  expect(
+    adminJobHref({ id: "job /1", source: "data-manager", returnTo: "/admin/data/transit" }),
+  ).toBe(
+    "/admin/activity?tab=jobs&job=job+%2F1&source=data-manager&returnTo=%2Fadmin%2Fdata%2Ftransit",
   );
 });
 it.each([

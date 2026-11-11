@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mocks.replace }),
-  usePathname: () => "/admin/coverage",
+  usePathname: () => "/admin/data/coverage",
   useSearchParams: () => mocks.params,
 }));
 vi.mock("@/lib/admin/coverageHooks", () => ({
@@ -40,9 +40,12 @@ describe("CoveragePage snapshot coordination", () => {
     mocks.params = new URLSearchParams();
     render(<CoveragePage />);
     expect(mocks.report).toHaveBeenCalledWith(null);
-    expect(mocks.replace).toHaveBeenCalledWith("/admin/coverage?regionId=extract%3Atest&offset=0", {
-      scroll: false,
-    });
+    expect(mocks.replace).toHaveBeenCalledWith(
+      "/admin/data/coverage?regionId=extract%3Atest&offset=0",
+      {
+        scroll: false,
+      },
+    );
   });
 
   it("does not re-pin stale cached data while a fresh report is being fetched", () => {
