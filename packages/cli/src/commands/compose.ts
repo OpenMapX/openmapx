@@ -240,8 +240,7 @@ export async function renderComposeWithWriter(
       );
     }
   }
-  // Moves the agent's mounted state out of data-manager's data directory the
-  // first time a generation mounts it from its new place.
+  // The agent's state directories, owner-only, before a generation mounts one.
   prepareAgentStateDirectories(paths.infraDir);
   // The agent's stores, owner-only, before the generation mounts one into
   // app-api.

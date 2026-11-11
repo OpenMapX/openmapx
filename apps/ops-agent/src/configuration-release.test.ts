@@ -456,7 +456,6 @@ it.each(["transaction", "active-handoff", "consumed-handoff"])(
       legacy = join(store, "transaction.json");
       writeFileSync(legacy, JSON.stringify({ version: 1, phase: "prepared" }), { mode: 0o600 });
     } else {
-      mkdirSync(join(infraDir, "data/ops-agent"), { recursive: true, mode: 0o700 });
       writeAgentHandoff(checkout, {
         version: 1,
         handoffId: "legacy-handoff-01",

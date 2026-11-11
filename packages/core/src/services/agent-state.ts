@@ -24,8 +24,6 @@ export interface AgentStatePaths {
   handoff: string;
   trustedConfig: string;
   privacyExtraction: string;
-  /** Written once the agent has imported, or declined, what the old location held. */
-  legacyImport: string;
   /** The community service repositories the agent installed. */
   community: string;
   /** The integrations the agent installed; app-api mounts it read-only. */
@@ -42,22 +40,9 @@ export function agentStatePaths(infraDir: string): AgentStatePaths {
     handoff: join(directory, "agent-handoff.json"),
     trustedConfig: join(directory, "trusted-config"),
     privacyExtraction: join(directory, "privacy-extraction"),
-    legacyImport: join(directory, "legacy-import.json"),
     community: join(directory, "community"),
     customIntegrations: join(directory, "custom-integrations"),
     traefikDynamic: join(directory, "traefik", "dynamic"),
-  };
-}
-
-/** The same state where releases before it kept it, inside data-manager's mount. */
-export function legacyAgentStatePaths(infraDir: string) {
-  const directory = join(infraDir, "data", "ops-agent");
-  return {
-    directory,
-    journal: join(directory, "jobs-v1.json"),
-    handoff: join(directory, "agent-handoff.json"),
-    trustedConfig: join(directory, "trusted-config"),
-    privacyExtraction: join(infraDir, "data", "privacy-extraction"),
   };
 }
 
@@ -72,50 +57,27 @@ function entryKind(path: string): "missing" | "directory" | "other" {
 }
 
 /**
- * Prepares the directories containers bind-mount from the agent's state: the
- * trusted-configuration queue, the privacy-extraction scratch and Traefik's
- * dynamic configuration. Run under
- * the writer lock by every configuration generation commit, where their mounts
- * move from the old location to the new one, and by the agent at startup.
+ * Prepares the agent's state directories: the trusted-configuration queue
+ * app-api mounts, the privacy-extraction scratch and Traefik's dynamic
+ * configuration. Run under the writer lock by every configuration generation
+ * commit, and by the agent at startup.
  *
- * On the same filesystem an old directory is renamed: app-api, while it still
- * runs with the old mount, keeps the same directory as the agent. When the
- * data directory is a filesystem of its own the rename is impossible, and a
- * fresh, empty directory is created instead. Nothing is copied from the old
- * one: data-manager could have written it. The old directory is left for the
- * containers still mounting it, and a snapshot queued there is not carried
- * over; its request ends uncommitted, as any request interrupted by an update.
- * Anything other than a real directory at the old path is left alone, and a
- * missing target is created owner-only.
+ * Each must be a real directory of this user, owner-only. Compose would mount
+ * whatever a symlink here names, so anything else at the path is moved aside,
+ * never followed, and replaced by a fresh directory.
  */
 export function prepareAgentStateDirectories(infraDir: string): void {
   const current = agentStatePaths(infraDir);
-  const legacy = legacyAgentStatePaths(infraDir);
   mkdirSync(current.directory, { recursive: true, mode: 0o700 });
-  for (const [from, to] of [
-    [legacy.trustedConfig, current.trustedConfig],
-    [legacy.privacyExtraction, current.privacyExtraction],
-  ] as const) {
-    if (entryKind(to) === "missing" && entryKind(from) === "directory") {
-      try {
-        renameSync(from, to);
-      } catch (error) {
-        // A data directory on its own filesystem: start from an empty one below.
-        if ((error as NodeJS.ErrnoException).code !== "EXDEV") throw error;
+  for (const directory of [current.trustedConfig, current.privacyExtraction]) {
+    const kind = entryKind(directory);
+    if (kind !== "directory" || lstatSync(directory).uid !== process.geteuid?.()) {
+      if (kind !== "missing") {
+        renameSync(directory, `${directory}.rejected-${process.pid}-${Date.now()}`);
       }
+      mkdirSync(directory, { mode: 0o700 });
     }
-    // data-manager can swap the old path for a symlink between the check and
-    // the rename, and Compose would mount whatever a symlink here names. So
-    // what arrived is checked again: anything but a real directory of this
-    // user is moved aside, never followed, and replaced by a fresh one.
-    const arrived = entryKind(to) === "directory" ? lstatSync(to) : null;
-    if (!arrived || arrived.uid !== process.geteuid?.()) {
-      if (entryKind(to) !== "missing") {
-        renameSync(to, `${to}.rejected-${process.pid}-${Date.now()}`);
-      }
-      mkdirSync(to, { mode: 0o700 });
-    }
-    chmodSync(to, 0o700);
+    chmodSync(directory, 0o700);
   }
   ensureTraefikDynamicDirectory(infraDir);
 }

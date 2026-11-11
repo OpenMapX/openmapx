@@ -1,7 +1,7 @@
 /** Checked release data only. Reading this does not acquire targets or grant effects. */
 
 import { createHash } from "node:crypto";
-import { join, relative, sep } from "node:path";
+import { relative, sep } from "node:path";
 import { z } from "zod";
 import { AnchoredDirectory } from "../build-artifacts/filesystem";
 import { type AgentHandoffRecord, parseAgentHandoffRecord } from "./agent-handoff-record";
@@ -42,8 +42,7 @@ export function readCheckedConfigurationRelease(
   input: { releaseId: string; manifestDigest: string },
   channel: ReleaseSelection,
   readLegacyHandoff: () => AgentHandoffRecord | null = () =>
-    readPrivateHandoff(agentStatePaths(infraDir).handoff) ??
-    readPrivateHandoff(join(infraDir, "data", "ops-agent", "agent-handoff.json")),
+    readPrivateHandoff(agentStatePaths(infraDir).handoff),
 ) {
   const selected = selectionSchema.parse(input);
   if (channel.kind === "local") throw new ReleaseChannelDisabledError();

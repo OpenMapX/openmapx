@@ -22,12 +22,6 @@ export interface AgentHandoffRecord {
   reason?: string;
   /** Set once a release application has used this handoff's previous overlay. */
   consumed?: boolean;
-  /**
-   * Set on a handoff imported from an earlier release's state location. Its
-   * helper keeps recording there, so this agent settles it once that helper
-   * has exited.
-   */
-  importedFromLegacy?: boolean;
 }
 
 export function parseAgentHandoffRecord(raw: string): AgentHandoffRecord {
@@ -48,8 +42,7 @@ export function parseAgentHandoffRecord(raw: string): AgentHandoffRecord {
     typeof value.createdAt !== "string" ||
     typeof value.updatedAt !== "string" ||
     !(value.reason === undefined || typeof value.reason === "string") ||
-    !(value.consumed === undefined || typeof value.consumed === "boolean") ||
-    !(value.importedFromLegacy === undefined || typeof value.importedFromLegacy === "boolean")
+    !(value.consumed === undefined || typeof value.consumed === "boolean")
   ) {
     throw new Error("Agent handoff record rejected");
   }

@@ -43,7 +43,7 @@ afterEach(() => {
 
 describe("ensurePlatformPrivateDirectory", () => {
   it("pre-creates a private host queue owned by the invoking uid/gid", () => {
-    const directory = join(tempDir(), "data", "ops-agent", "trusted-config");
+    const directory = join(tempDir(), "state", "ops-agent", "trusted-config");
 
     const metadata = ensurePlatformPrivateDirectory(directory);
 

@@ -20,7 +20,7 @@ import {
  * the API, the new agent and a restarted agent can all see the outcome.
  */
 
-export const AGENT_HANDOFF_LABEL = "openmapx.ops-agent.handoff";
+const AGENT_HANDOFF_LABEL = "openmapx.ops-agent.handoff";
 export const AGENT_HANDOFF_ENTRYPOINT = "dist/agent-handoff-main.mjs";
 const MAX_HANDOFF_BYTES = 128 * 1024;
 const MAX_REASON_LENGTH = 256;
@@ -41,10 +41,6 @@ export function isTerminalHandoff(phase: AgentHandoffPhase): boolean {
 
 export function readAgentHandoff(rootDir: string): AgentHandoffRecord | null {
   return readAgentHandoffFile(agentHandoffPath(rootDir));
-}
-/** Existing legacy journal data, read without startup mutation or repair. */
-export function readAgentHandoffFromInfra(infraDir: string): AgentHandoffRecord | null {
-  return readAgentHandoffFile(join(infraDir, "data", "ops-agent", "agent-handoff.json"));
 }
 export function readAgentHandoffFile(path: string): AgentHandoffRecord | null {
   let raw: string;
@@ -539,17 +535,6 @@ export async function reconcileAgentHandoff(options: AgentHandoffReconcileOption
   }
   if (await options.runningRelease(record)) {
     advanceAgentHandoff(options.rootDir, record, { phase: "applied" }, options.now);
-    return;
-  }
-  if (record.importedFromLegacy) {
-    // Its helper, from the earlier release, restores the previous agent and
-    // overlay itself; an imported record carries no overlay to restore.
-    advanceAgentHandoff(
-      options.rootDir,
-      record,
-      { phase: "rolled_back", reason: "The replacement helper did not keep this agent" },
-      options.now,
-    );
     return;
   }
   await options.withStoreLock(() => options.restoreOverlay(record.previousOverlay));

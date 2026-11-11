@@ -178,8 +178,6 @@ export interface AdministrativeReleaseRuntimeOptions {
   ) => Promise<boolean>;
   /** Crash points inside release-store lock acquisition, for recovery tests. */
   releaseStoreLockHooks?: ReleaseStoreLockHooks;
-  /** Runs after an inspection settled a handoff whose helper had exited. */
-  afterHandoffSettled?: () => Promise<void>;
   /** The uid the release state must belong to; the effective uid unless a test injects one. */
   uid?: number;
 }
@@ -906,22 +904,6 @@ export function createDefaultReleaseEffects(
     };
   };
   const readState = () => readReleasePointer(paths.state, true);
-  /**
-   * The overlay of the release the agent last applied, from its own release
-   * store. A handoff imported from an earlier release's state location keeps
-   * no previous overlay, because data-manager could write that file; this is
-   * its rollback target instead. Without a recorded release it is the current
-   * overlay, which leaves the application services where they are.
-   */
-  const releaseStateOverlay = (): string | null => {
-    try {
-      const { releaseId } = readState();
-      if (releaseId) return coreServices.renderReleaseCompose(loadManifest(releaseId), infraDir);
-    } catch {
-      // Unreadable release state: no derived target.
-    }
-    return readOverlay();
-  };
   const configurationIdentity = () =>
     releaseDigest(
       JSON.stringify(coreServices.readAppliedReleaseSelection(join(rootDir, "infra", "docker"))),
@@ -1485,11 +1467,7 @@ export function createDefaultReleaseEffects(
           handoff?.phase === "applied" && handoff.releaseId === releaseId && !handoff.consumed
             ? handoff
             : undefined;
-        const previousOverlay = !afterHandoff
-          ? readOverlay()
-          : afterHandoff.importedFromLegacy
-            ? releaseStateOverlay()
-            : afterHandoff.previousOverlay;
+        const previousOverlay = afterHandoff ? afterHandoff.previousOverlay : readOverlay();
         const previousState = existsSync(paths.state)
           ? strictReadFile(paths.state, MAX_RELEASE_STATE_BYTES, { owner: uid })
           : null;
@@ -1585,21 +1563,7 @@ export function createDefaultReleaseEffects(
       return { handoffId: request.handoffId, replaced: true };
     },
     inspectAgentHandoff: async (handoffId) => {
-      let record = readAgentHandoff(rootDir);
-      // A helper from an earlier release records its outcome where that
-      // release kept its state, which this agent no longer reads. Once that
-      // helper has exited, settle the handoff here as a restart would.
-      if (
-        record?.handoffId === handoffId &&
-        record.importedFromLegacy === true &&
-        !isTerminalHandoff(record.phase)
-      ) {
-        await reconcileHandoff().catch(() => undefined);
-        record = readAgentHandoff(rootDir);
-        if (record && isTerminalHandoff(record.phase)) {
-          await runtimeOptions.afterHandoffSettled?.().catch(() => undefined);
-        }
-      }
+      const record = readAgentHandoff(rootDir);
       if (record?.handoffId !== handoffId) return { handoffId, phase: "none" };
       return {
         handoffId,

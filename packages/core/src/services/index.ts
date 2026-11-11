@@ -3,7 +3,6 @@ export * from "./agent-handoff-record";
 export {
   type AgentStatePaths,
   agentStatePaths,
-  legacyAgentStatePaths,
   prepareAgentStateDirectories,
 } from "./agent-state";
 export { prepareAgentStores } from "./agent-stores";
