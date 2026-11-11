@@ -49,7 +49,6 @@ it.each([
   "/admin/system/deployment",
   "/admin/system/configuration-transfer",
   "/admin/data/transit?tab=credentials",
-  "/admin/transit",
 ])("preserves the reauthentication return route %s", async (path) => {
   window.history.replaceState(null, "", path);
   await startStoredAdminReauthentication("http://api.test", [

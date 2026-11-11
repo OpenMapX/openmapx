@@ -253,9 +253,13 @@ vi.mock("../../services/administrative-configuration-writer-owner", async () => 
     },
   };
 });
+let mockInventoryAcquisition: { state: "available" | "unavailable"; reason: string | null } = {
+  state: "available",
+  reason: null,
+};
 vi.mock("../../services/service-inventory", () => ({
   readServiceInventory: async () => ({
-    acquisition: { state: "available", reason: null },
+    acquisition: mockInventoryAcquisition,
     services: [],
     capabilityInventory: { recognized: [], unrecognized: [] },
     summary: { running: 0, stopped: 0, unknown: 0, total: 0 },
@@ -300,6 +304,8 @@ afterAll(() => app?.close());
 afterEach(() => {
   vi.clearAllMocks();
   mockDbSelect.mockReset().mockImplementation(() => makeSelectChain());
+  mockInventoryAcquisition = { state: "available", reason: null };
+  vi.unstubAllEnvs();
 });
 
 describe("GET /admin/overview", () => {
@@ -348,6 +354,21 @@ describe("GET /admin/overview", () => {
     ]);
     expect(res.json().attention).toContainEqual(
       expect.objectContaining({ type: "job_failed", target: "job-dm" }),
+    );
+  });
+
+  it("points an unavailable service inventory at the canonical services page", async () => {
+    vi.stubEnv("OPS_AGENT_URL", "http://ops-agent.invalid");
+    mockInventoryAcquisition = { state: "unavailable", reason: "ops_unavailable" };
+
+    const res = await app.inject({ method: "GET", url: "/admin/overview" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().attention).toContainEqual(
+      expect.objectContaining({
+        type: "control_plane_unavailable",
+        target: "/admin/system/services",
+      }),
     );
   });
 

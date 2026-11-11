@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@/test";
 import { AdminSidebar } from "./AdminSidebar";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/admin/services" }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/admin/system/services" }));
 beforeEach(() =>
   vi.stubGlobal("matchMedia", () => ({
     matches: false,

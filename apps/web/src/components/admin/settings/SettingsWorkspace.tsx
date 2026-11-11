@@ -3,9 +3,8 @@ import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Stack from "@mui/material/Stack";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useEffect } from "react";
 import type { SETTINGS_TOPICS } from "@/lib/admin/adminNavigation";
 import { useAdminNavigationAccess } from "../shared/AdminNavigationContext";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
@@ -66,15 +65,4 @@ export function SettingsWorkspace({ topic }: { topic: (typeof SETTINGS_TOPICS)[n
       )}
     </Stack>
   );
-}
-export function LegacySettingsRedirect() {
-  const router = useRouter();
-  useEffect(() => {
-    router.replace(
-      window.location.hash === "#backup-retention"
-        ? "/admin/system/backups#backup-retention"
-        : "/admin/settings/general",
-    );
-  }, [router]);
-  return null;
 }

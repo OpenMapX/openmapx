@@ -315,8 +315,8 @@ vi.mock(
   async () => (await import("@/test/adminNavigation")).adminNavigationMock,
 );
 it("records the committed Next tab rather than the previous browser URL", async () => {
-  window.history.replaceState(null, "", "/admin/services/demo?tab=overview");
-  adminTestHistory.reset("/admin/services/demo?tab=overview");
+  window.history.replaceState(null, "", "/admin/system/services/demo?tab=overview");
+  adminTestHistory.reset("/admin/system/services/demo?tab=overview");
   vi.stubGlobal("fetch", async (raw: string) =>
     raw.endsWith("/action")
       ? Response.json({ ok: true, jobId: "tab-job" })
@@ -333,11 +333,11 @@ it("records the committed Next tab rather than the previous browser URL", async 
       </AdminJobEffectsProvider>
     </Wrapper>,
   );
-  act(() => adminTestHistory.push("/admin/services/demo?tab=configuration"));
+  act(() => adminTestHistory.push("/admin/system/services/demo?tab=configuration"));
   fireEvent.click(screen.getByText("Queue"));
   fireEvent.click(await screen.findByRole("button", { name: "Administration jobs, 1 active" }));
   const link = await screen.findByRole("link", { name: "demo · service" });
   expect(new URL(link.getAttribute("href") ?? "", "http://test").searchParams.get("returnTo")).toBe(
-    "/admin/services/demo?tab=configuration",
+    "/admin/system/services/demo?tab=configuration",
   );
 });

@@ -200,7 +200,7 @@ it("restores only a completed actor-scoped matching credential review", () => {
       ],
       challengeIds: ["11111111-1111-4111-8111-111111111111"],
       expiresAt: preview.expiresAt,
-      returnPath: "/admin/transit",
+      returnPath: "/admin/data/transit",
     }),
   );
   expect(readTransitCredentialContinuation(mocks.apiUrl, mocks.actorId)).toEqual({});

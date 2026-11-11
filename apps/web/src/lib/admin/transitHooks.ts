@@ -18,7 +18,7 @@ import { useMemo } from "react";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 
 /**
- * React Query hooks for the /admin/transit page.
+ * React Query hooks for the /admin/data/transit page.
  *
  * All endpoints live under `/api/data-manager/*` on the BFF and are documented
  * in apps/api/src/routes/data-manager.ts. The BFF owns session/service
