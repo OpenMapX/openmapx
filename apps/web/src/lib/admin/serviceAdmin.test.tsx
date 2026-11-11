@@ -38,7 +38,7 @@ const reads = [
   "selection",
   "backups",
   "data",
-  "policy",
+  "sharedMobility",
   "operations",
   "compose",
   "deployment",

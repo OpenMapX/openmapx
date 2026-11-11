@@ -54,18 +54,15 @@ export function createCarSharingProvider(options: {
       adapters: [
         {
           id: "direct-gbfs",
-          kind: "fallback",
           fetch: (bounds) => options.runtime.fetchGbfsData(bounds, CAR_FORM_FACTORS),
         },
         {
           id: "swiss-gbfs",
-          kind: "fallback",
           fetch: (bounds) =>
             options.runtime.fetchSwissSharedMobilityDataForBbox(bounds, CAR_FORM_FACTORS),
         },
         {
           id: "regional",
-          kind: "proprietary",
           fetch: async (bounds) => ({
             stations: mergeRegionalStations(await options.searchRegionalClients(bounds)),
             vehicles: [],

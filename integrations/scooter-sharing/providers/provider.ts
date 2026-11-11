@@ -61,12 +61,10 @@ export function createScooterSharingProvider(options: {
       adapters: [
         {
           id: "direct-gbfs",
-          kind: "fallback",
           fetch: (bounds) => options.runtime.fetchGbfsData(bounds, SCOOTER_FORM_FACTORS, "other"),
         },
         {
           id: "swiss-gbfs",
-          kind: "fallback",
           fetch: (bounds) =>
             options.runtime.fetchSwissSharedMobilityDataForBbox(
               bounds,
@@ -76,7 +74,6 @@ export function createScooterSharingProvider(options: {
         },
         {
           id: "felyx",
-          kind: "proprietary",
           fetch: async (bounds) => ({
             stations: [],
             vehicles: await options.searchFelyx(bounds, resolveContributors(["felyx"])),
@@ -84,7 +81,6 @@ export function createScooterSharingProvider(options: {
         },
         {
           id: "nrw-mobidrom",
-          kind: "proprietary",
           fetch: options.searchDeNwMobidromScooter,
         },
       ],

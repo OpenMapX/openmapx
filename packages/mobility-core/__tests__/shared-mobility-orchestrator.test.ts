@@ -3,8 +3,6 @@ import {
   getSharedMobilityOperationsState,
   mergeMotisFirstInventory,
   orchestrateSharedMobility,
-  resolveSharedMobilitySourcePolicy,
-  setSharedMobilityRollback,
 } from "../src/shared-mobility-orchestrator.js";
 import type {
   MotisRentalSnapshot,
@@ -120,34 +118,44 @@ describe("mergeMotisFirstInventory", () => {
 });
 
 describe("orchestrateSharedMobility", () => {
-  it("uses one local inventory call and skips direct fallbacks when complete", async () => {
+  it("queries MOTIS and every adapter even when the local inventory is complete", async () => {
     const fetchMotis = vi.fn().mockResolvedValue(snapshot());
-    const fallback = vi.fn();
+    const direct = vi.fn().mockResolvedValue({ stations: [], vehicles: [] });
+    const proprietary = vi.fn().mockResolvedValue({ stations: [], vehicles: [] });
     const result = await orchestrateSharedMobility(bbox, {
       category: "bike",
       motisFormFactors: ["bicycle"],
-      policy: "motis-first",
       fetchMotis,
-      adapters: [{ id: "direct-gbfs", kind: "fallback", fetch: fallback }],
+      adapters: [
+        { id: "direct-gbfs", fetch: direct },
+        { id: "felyx", fetch: proprietary },
+      ],
     });
     expect(fetchMotis).toHaveBeenCalledTimes(1);
-    expect(fallback).not.toHaveBeenCalled();
-    expect(result.decision).toMatchObject({ local: "healthy", skippedAdapters: ["direct-gbfs"] });
+    expect(direct).toHaveBeenCalledTimes(1);
+    expect(proprietary).toHaveBeenCalledTimes(1);
+    expect(result.decision).toEqual({
+      local: "healthy",
+      calledAdapters: ["direct-gbfs", "felyx"],
+      partial: false,
+    });
   });
 
-  it("treats healthy local empty inventory as authoritative", async () => {
-    const fallback = vi.fn();
-    await orchestrateSharedMobility(bbox, {
+  it("adds direct inventory to an empty but complete local result", async () => {
+    const direct = vi
+      .fn()
+      .mockResolvedValue({ stations: [station({ id: "direct" })], vehicles: [] });
+    const result = await orchestrateSharedMobility(bbox, {
       category: "bike",
       motisFormFactors: ["bicycle"],
-      policy: "motis-first",
       fetchMotis: vi.fn().mockResolvedValue(snapshot({ stations: [], vehicles: [] })),
-      adapters: [{ id: "direct-gbfs", kind: "fallback", fetch: fallback }],
+      adapters: [{ id: "direct-gbfs", fetch: direct }],
     });
-    expect(fallback).not.toHaveBeenCalled();
+    expect(direct).toHaveBeenCalledTimes(1);
+    expect(result.stations.map((entry) => entry.id)).toEqual(["direct"]);
   });
 
-  it("targets fallback on partial local capability and keeps proprietary adapters", async () => {
+  it("marks a partial local capability and still queries every adapter", async () => {
     const direct = vi.fn().mockResolvedValue({ stations: [], vehicles: [] });
     const proprietary = vi.fn().mockResolvedValue({ stations: [], vehicles: [] });
     const partial = snapshot();
@@ -155,91 +163,41 @@ describe("orchestrateSharedMobility", () => {
     const result = await orchestrateSharedMobility(bbox, {
       category: "scooter",
       motisFormFactors: ["scooter_standing"],
-      policy: "motis-first",
       fetchMotis: vi.fn().mockResolvedValue(partial),
       adapters: [
-        { id: "direct", kind: "fallback", fetch: direct },
-        { id: "felyx", kind: "proprietary", fetch: proprietary },
+        { id: "direct", fetch: direct },
+        { id: "felyx", fetch: proprietary },
       ],
     });
     expect(direct).toHaveBeenCalledTimes(1);
     expect(proprietary).toHaveBeenCalledTimes(1);
-    expect(result.decision.partial).toBe(true);
+    expect(result.decision).toMatchObject({ local: "partial", partial: true });
   });
 
-  it("restores fanout through the category denylist", async () => {
-    const fallback = vi.fn().mockResolvedValue({ stations: [], vehicles: [] });
-    const result = await orchestrateSharedMobility(bbox, {
-      category: "car",
-      motisFormFactors: ["car"],
-      policy: "motis-first",
-      denylist: new Set(["car"]),
-      fetchMotis: vi.fn().mockResolvedValue(snapshot()),
-      adapters: [{ id: "direct", kind: "fallback", fetch: fallback }],
-    });
-    expect(fallback).toHaveBeenCalled();
-    expect(result.decision.policy).toBe("fanout");
-  });
-
-  it("publishes bounded decision state and supports immediate rollback", async () => {
-    setSharedMobilityRollback("bike", true);
+  it("publishes bounded decision state per category", async () => {
     await orchestrateSharedMobility(bbox, {
       category: "bike",
       motisFormFactors: ["bicycle"],
-      policy: "motis-first",
       fetchMotis: vi.fn().mockResolvedValue(snapshot()),
       adapters: [
         {
           id: "direct",
-          kind: "fallback",
           fetch: vi.fn().mockResolvedValue({ stations: [], vehicles: [] }),
         },
       ],
     });
 
     const state = getSharedMobilityOperationsState();
-    expect(state.rollbackCategories).toContain("bike");
+    expect(Object.keys(state)).toEqual(["decisions"]);
     expect(state.decisions.find((record) => record.category === "bike")).toEqual({
       category: "bike",
-      decision: {
-        policy: "fanout",
-        local: "healthy",
-        served: "fanout",
-        calledAdapters: ["direct"],
-        skippedAdapters: [],
-        partial: false,
-      },
+      decision: { local: "healthy", calledAdapters: ["direct"], partial: false },
       recordedAt: expect.any(String),
     });
-    const boundedDecisionKeys = new Set([
-      "calledAdapters",
-      "local",
-      "partial",
-      "policy",
-      "served",
-      "skippedAdapters",
-      "stationDelta",
-      "vehicleDelta",
-    ]);
     for (const record of state.decisions) {
       expect(Object.keys(record).sort()).toEqual(["category", "decision", "recordedAt"]);
-      expect(Object.keys(record.decision).every((key) => boundedDecisionKeys.has(key))).toBe(true);
+      expect(Object.keys(record.decision).sort()).toEqual(["calledAdapters", "local", "partial"]);
     }
-    setSharedMobilityRollback("bike", false);
-  });
-});
-
-describe("resolveSharedMobilitySourcePolicy", () => {
-  it("defaults to fanout so direct GBFS coverage is not suppressed by MOTIS", () => {
-    expect(resolveSharedMobilitySourcePolicy(undefined)).toBe("fanout");
-    expect(resolveSharedMobilitySourcePolicy("")).toBe("fanout");
-    expect(resolveSharedMobilitySourcePolicy("not-a-policy")).toBe("fanout");
-  });
-
-  it("honours an explicit valid policy override", () => {
-    expect(resolveSharedMobilitySourcePolicy("motis-first")).toBe("motis-first");
-    expect(resolveSharedMobilitySourcePolicy("shadow")).toBe("shadow");
-    expect(resolveSharedMobilitySourcePolicy("fanout")).toBe("fanout");
   });
 });
 

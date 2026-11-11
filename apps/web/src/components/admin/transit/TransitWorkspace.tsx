@@ -16,7 +16,7 @@ import {
 import { TransitSourcesSection } from "../services/TransitSourcesSection";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { LockfileCard } from "./LockfileCard";
-import { MotisTransitousSection, SharedMobilityPolicySection } from "./TransitMobilitySections";
+import { MotisTransitousSection, SharedMobilitySourcesSection } from "./TransitMobilitySections";
 import { TransitPipelinePage } from "./TransitPipelinePage";
 
 const TABS = ["sources", "catalog", "credentials", "pipeline", "mobility"] as const;
@@ -98,7 +98,7 @@ function MobilityView() {
     <Stack sx={{ gap: 2 }}>
       {query.isError && <Alert severity="error">MOTIS evidence is unavailable.</Alert>}
       {query.data && <MotisTransitousSection status={query.data.motisTransitous} />}
-      <SharedMobilityPolicySection apiUrl={apiUrl} />
+      <SharedMobilitySourcesSection apiUrl={apiUrl} />
     </Stack>
   );
 }

@@ -1118,13 +1118,6 @@ export async function reviewPrivacyAdminIdentityRequest<T>(
 ): Promise<T> {
   return reviewPrivacyAdminIdentityBound<T>(url, options);
 }
-const rollbackAdminSharedMobilityBound = bindAdminOperation("rollbackAdminSharedMobility");
-export async function rollbackAdminSharedMobilityRequest<T>(
-  url: string,
-  options?: AdminSdkRequestOptions,
-): Promise<T> {
-  return rollbackAdminSharedMobilityBound<T>(url, options);
-}
 const rotateAdminDawarichOidcSecretBound = bindAdminOperation("rotateAdminDawarichOidcSecret");
 export async function rotateAdminDawarichOidcSecretRequest<T>(
   url: string,

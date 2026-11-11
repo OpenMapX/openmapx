@@ -3,11 +3,7 @@ import { SERVICE_RESOURCE_FIELDS } from "@openmapx/core/configuration-values";
 import { type OpsResultFor, trustedConfigurationPayloadSchema } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import { isValidSecretKey } from "@openmapx/core/services/secret-key";
-import {
-  getSharedMobilityOperationsState,
-  type SharedMobilityCategory,
-  setSharedMobilityRollback,
-} from "@openmapx/mobility-core/shared-mobility-orchestrator";
+import { getSharedMobilityOperationsState } from "@openmapx/mobility-core/shared-mobility-orchestrator";
 import type { FastifyInstance } from "fastify";
 import {
   assertValidBackupName,
@@ -103,28 +99,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   registerServiceAdminRoute(app, "getAdminSharedMobility", async () =>
     getSharedMobilityOperationsState(),
   );
-
-  registerServiceAdminRoute(app, "rollbackAdminSharedMobility", async (req, reply) => {
-    if (!(["bike", "scooter", "car"] as string[]).includes(req.params.category)) {
-      reply.status(400);
-      return { error: "Unknown shared-mobility category" };
-    }
-    if (typeof req.body?.enabled !== "boolean") {
-      reply.status(400);
-      return { error: "enabled must be a boolean" };
-    }
-    const category = req.params.category as SharedMobilityCategory;
-    setSharedMobilityRollback(category, req.body.enabled);
-    await writeAuditLog({
-      action: "shared-mobility.rollback",
-      actorId: getAdminSession(req).user.id,
-      targetId: category,
-      targetType: "shared-mobility-category",
-      details: { enabled: req.body.enabled },
-      request: req,
-    });
-    return getSharedMobilityOperationsState();
-  });
 
   // GET /admin/services — list all services from registry with docker ps status
   registerServiceAdminRoute(app, "listAdminServices", async () => {

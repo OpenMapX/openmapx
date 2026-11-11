@@ -81,8 +81,6 @@ import {
   adminDawarichUnavailableSchema,
   adminServiceComposeStartedSchema,
   adminServiceDeploymentSchema,
-  adminServiceSharedMobilityParamsSchema,
-  adminServiceSharedMobilityRollbackSchema,
   adminServiceSharedMobilitySchema,
 } from "./workflows";
 
@@ -430,16 +428,6 @@ export const serviceAdminOperations = {
     method: "GET",
     path: "/api/admin/shared-mobility",
     auth: "admin",
-    responses: { ...adminCommonResponses, 200: adminJson(adminServiceSharedMobilitySchema) },
-  },
-  rollbackAdminSharedMobility: {
-    method: "POST",
-    path: "/api/admin/shared-mobility/:category/rollback",
-    auth: "admin",
-    request: {
-      params: adminServiceSharedMobilityParamsSchema,
-      body: adminServiceSharedMobilityRollbackSchema,
-    },
     responses: { ...adminCommonResponses, 200: adminJson(adminServiceSharedMobilitySchema) },
   },
   getAdminDawarich: {

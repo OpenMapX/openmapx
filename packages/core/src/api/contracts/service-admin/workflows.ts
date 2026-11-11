@@ -87,17 +87,11 @@ export const adminDawarichConfirmationErrorSchema = z.strictObject({
 });
 export const adminServiceSharedMobilityCategorySchema = z.enum(["bike", "scooter", "car"]);
 export const adminServiceSharedMobilityDecisionSchema = z.strictObject({
-  policy: z.enum(["fanout", "shadow", "motis-first"]),
   local: z.enum(["healthy", "partial", "error"]),
-  served: z.enum(["motis-first", "fanout"]),
   calledAdapters: z.array(z.string()),
-  skippedAdapters: z.array(z.string()),
   partial: z.boolean(),
-  stationDelta: z.number().int().safe().optional(),
-  vehicleDelta: z.number().int().safe().optional(),
 });
 export const adminServiceSharedMobilitySchema = z.strictObject({
-  rollbackCategories: z.array(adminServiceSharedMobilityCategorySchema),
   decisions: z.array(
     z.strictObject({
       category: adminServiceSharedMobilityCategorySchema,
@@ -105,10 +99,6 @@ export const adminServiceSharedMobilitySchema = z.strictObject({
       decision: adminServiceSharedMobilityDecisionSchema,
     }),
   ),
-});
-export const adminServiceSharedMobilityRollbackSchema = z.strictObject({ enabled: z.boolean() });
-export const adminServiceSharedMobilityParamsSchema = z.strictObject({
-  category: adminServiceSharedMobilityCategorySchema,
 });
 
 export type AdminServiceDeployment = z.infer<typeof adminServiceDeploymentSchema>;
@@ -126,6 +116,3 @@ export type AdminServiceSharedMobilityDecision = z.infer<
   typeof adminServiceSharedMobilityDecisionSchema
 >;
 export type AdminServiceSharedMobility = z.infer<typeof adminServiceSharedMobilitySchema>;
-export type AdminServiceSharedMobilityRollback = z.infer<
-  typeof adminServiceSharedMobilityRollbackSchema
->;

@@ -2,22 +2,12 @@
 import StorageIcon from "@mui/icons-material/Storage";
 import Alert from "@mui/material/Alert";
 import Chip from "@mui/material/Chip";
-import FormControlLabel from "@mui/material/FormControlLabel";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
-import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
-import * as sdk from "@openmapx/core/api-admin-sdk";
-import type {
-  AdminServiceData,
-  AdminServiceSharedMobilityCategory,
-} from "@openmapx/core/api-contracts";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  invalidateServiceAdministration,
-  serviceAdminQueries,
-  serviceOrThrow,
-} from "@/lib/admin/serviceAdmin";
+import type { AdminServiceData } from "@openmapx/core/api-contracts";
+import { useQuery } from "@tanstack/react-query";
+import { serviceAdminQueries } from "@/lib/admin/serviceAdmin";
 import { formatBytes } from "@/lib/storageFormat";
 import { useActivityClient } from "../activity/activityQueries";
 
@@ -165,48 +155,27 @@ export function MotisTransitousSection({ status }: { status: MotisTransitousStat
   );
 }
 
-export function SharedMobilityPolicySection({ apiUrl }: { apiUrl: string }) {
-  const queryClient = useQueryClient();
+export function SharedMobilitySourcesSection({ apiUrl }: { apiUrl: string }) {
   const { client } = useActivityClient();
-  const policy = useQuery({
-    ...serviceAdminQueries(client, apiUrl).policy(),
+  const sources = useQuery({
+    ...serviceAdminQueries(client, apiUrl).sharedMobility(),
     refetchInterval: 30_000,
   });
-  const data = policy.data;
-  const rollback = useMutation({
-    retry: false,
-    mutationFn: async ({
-      category,
-      enabled,
-    }: {
-      category: AdminServiceSharedMobilityCategory;
-      enabled: boolean;
-    }) => {
-      const effect = { kind: "policy" } as const;
-      const result = await serviceOrThrow(
-        sdk.rollbackAdminSharedMobility(category, { enabled }, { client }),
-      );
-      // This response is the completed policy change, not a job acknowledgement.
-      await invalidateServiceAdministration(queryClient, apiUrl, effect);
-      return result;
-    },
-  });
+  const data = sources.data;
 
   return (
     <Paper variant="outlined" sx={{ p: 2.5 }}>
       <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
-        Shared mobility source policy
+        Shared mobility sources
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        MOTIS-first decisions contain category-level operational state only; no coordinates or
-        vehicle IDs are recorded. Enable rollback to restore fan-out immediately.
+        Every request queries MOTIS and all direct sources. Decisions contain category-level
+        operational state only; no coordinates or vehicle IDs are recorded.
       </Typography>
-      {policy.isError && <Alert severity="error">Failed to load shared mobility policy.</Alert>}
-      {rollback.isError && <Alert severity="error">{rollback.error.message}</Alert>}
+      {sources.isError && <Alert severity="error">Failed to load shared mobility sources.</Alert>}
       <Stack spacing={1.5}>
         {(["bike", "scooter", "car"] as const).map((category) => {
           const record = data?.decisions.find((decision) => decision.category === category);
-          const enabled = data?.rollbackCategories.includes(category) ?? false;
           return (
             <Stack
               key={category}
@@ -217,25 +186,14 @@ export function SharedMobilityPolicySection({ apiUrl }: { apiUrl: string }) {
               <Typography sx={{ minWidth: 80, textTransform: "capitalize" }}>{category}</Typography>
               <Chip
                 size="small"
-                label={record ? `${record.decision.policy} · ${record.decision.local}` : "no data"}
+                label={record ? `MOTIS ${record.decision.local}` : "no data"}
                 color={record ? (record.decision.partial ? "warning" : "success") : "default"}
               />
               {record && (
                 <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
-                  called {record.decision.calledAdapters.join(", ") || "MOTIS only"}; skipped{" "}
-                  {record.decision.skippedAdapters.join(", ") || "none"}
+                  queried {record.decision.calledAdapters.join(", ") || "MOTIS only"}
                 </Typography>
               )}
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={enabled}
-                    disabled={rollback.isPending || !data || policy.isError}
-                    onChange={(_, checked) => rollback.mutate({ category, enabled: checked })}
-                  />
-                }
-                label="Fan-out rollback"
-              />
             </Stack>
           );
         })}

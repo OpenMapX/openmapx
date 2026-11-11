@@ -709,7 +709,6 @@ describe("actual service producers through final exported SDK", () => {
         () => sdk.previewAdminOperation("download-fonts", null, options),
         () => sdk.runAdminOperation("download-fonts", undefined, options),
         () => sdk.getAdminSharedMobility(options),
-        () => sdk.rollbackAdminSharedMobility("bike", { enabled: false }, options),
         () => sdk.getAdminDawarich(options),
       ];
       for (const [index, call] of calls.entries())

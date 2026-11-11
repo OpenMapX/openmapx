@@ -150,13 +150,11 @@ describe("createSharedMobilityRuntime", () => {
       first.orchestrate(bbox, {
         category: "bike",
         motisFormFactors: ["bicycle"],
-        policy: "motis-first",
         adapters: [],
       }),
       second.orchestrate(bbox, {
         category: "car",
         motisFormFactors: ["car"],
-        policy: "motis-first",
         adapters: [],
       }),
     ]);
