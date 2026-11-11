@@ -16,7 +16,6 @@ const hazard: NaturalHazard = {
   start: "2026-10-09T00:00:00Z",
   ended: false,
   sources: ["native-child"],
-  attributions: [],
   contributors: receipt,
 };
 const alert: HazardAlert = {
@@ -29,7 +28,6 @@ const alert: HazardAlert = {
   certainty: "Likely",
   sent: "2026-10-09T00:00:00Z",
   sources: ["native-child"],
-  attributions: [],
   notices: ["Required notice"],
   contributors: receipt,
 };

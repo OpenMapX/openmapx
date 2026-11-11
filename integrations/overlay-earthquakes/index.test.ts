@@ -168,7 +168,6 @@ function quake(over: Partial<NaturalHazard> = {}): NaturalHazard {
     depthM: 8200,
     detailUrl: "https://earthquake.usgs.gov/earthquakes/eventpage/us7000abcd",
     sources: ["usgs-quakes"],
-    attributions: [],
     ...over,
   };
 }

@@ -17,7 +17,6 @@ function alert(id: string, sources = ["us-nws-alerts"]): HazardAlert {
     certainty: "Likely",
     sent: "2026-10-09T00:00:00Z",
     sources,
-    attributions: [],
     notices: [],
   };
 }
@@ -177,11 +176,11 @@ describe("hazard receipts", () => {
     const hazards = orchestratorOver([
       provider({
         id: "a",
-        getAlerts: async () => ({ alerts: [{ ...alert("same", ["a"]), attributions: [a] }] }),
+        getAlerts: async () => ({ alerts: [{ ...alert("same", ["a"]), contributors: [a] }] }),
       }),
       provider({
         id: "b",
-        getAlerts: async () => ({ alerts: [{ ...alert("same", ["b"]), attributions: [b] }] }),
+        getAlerts: async () => ({ alerts: [{ ...alert("same", ["b"]), contributors: [b] }] }),
       }),
     ]);
     const result = await hazards.alerts([0, 0, 1, 1]);

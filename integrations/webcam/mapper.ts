@@ -1,5 +1,4 @@
 import {
-  type Attribution,
   type DataSourceDetail,
   type DataSourceDetailSection,
   type DataSourceResult,
@@ -14,7 +13,6 @@ import {
   token,
 } from "@openmapx/integration-framework/strings";
 import type { Camera, CameraView } from "@openmapx/mobility-core/camera";
-import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 
 type Row = [I18nToken, Translatable];
 
@@ -61,16 +59,6 @@ function summaryOf(camera: Camera): I18nToken | undefined {
 /** A camera's title when its sources name it nothing. */
 function fallbackNameOf(camera: Camera): { fallbackName?: I18nToken } {
   return camera.name ? {} : { fallbackName: token("fallbackName") };
-}
-
-/**
- * The camera's credits as per-record attributions: the `webcam` manifest
- * declares no sources of its own, so every credit comes from the providers.
- * Their links come from upstream data, so only http(s) ones are kept.
- */
-function cameraCredits(camera: Camera): Attribution[] | undefined {
-  if (camera.attributions.length === 0) return undefined;
-  return snapshotContributors(camera.attributions);
 }
 
 /**
@@ -192,8 +180,6 @@ export function mapCameraToResult(camera: Camera): DataSourceResult {
     operator: camera.operator?.name,
     ...(observedAt ? { observedAt } : {}),
   };
-  const attributions = cameraCredits(camera);
-  if (attributions) result.attributions = attributions;
   return result;
 }
 
@@ -245,7 +231,5 @@ export function mapCameraToDetail(camera: Camera): DataSourceDetail {
     ...(link ? { website: link } : {}),
     sections,
   };
-  const attributions = cameraCredits(camera);
-  if (attributions) detail.attributions = attributions;
   return detail;
 }

@@ -1,5 +1,4 @@
 import type { ContributingRecord } from "../contributors.js";
-import type { Attribution } from "./attribution.js";
 
 /** CAP's severity scale. */
 export type CapSeverity = "Extreme" | "Severe" | "Moderate" | "Minor" | "Unknown";
@@ -32,7 +31,6 @@ export interface HazardAlert extends ContributingRecord {
   senderName?: string;
   web?: string;
   sources: string[];
-  attributions: Attribution[];
   /** Notices the publishers require to accompany any display of the alert. */
   notices: string[];
 }
@@ -94,7 +92,6 @@ export interface NaturalHazard extends ContributingRecord {
   locality?: string;
   detailUrl?: string;
   sources: string[];
-  attributions: Attribution[];
 }
 
 /** VIIRS (NOAA-20 and -21), MODIS (Terra and Aqua) or SLSTR (Sentinel-3A and -3B). */

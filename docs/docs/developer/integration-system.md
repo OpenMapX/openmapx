@@ -463,9 +463,8 @@ Compute result-envelope credits from the final retained records. A discarded
 duplicate contributes nothing; an actually merged field or external identity
 keeps its supplier's receipt. Clone cached bases before applying enrichment or
 realtime deltas. DTOs, validation, offline copies, GeoJSON and MVT must retain
-these snapshots. Legacy `attributions` fields remain at named compatibility
-boundaries; normalize their format with `legacyAttributionsToContributors`,
-rather than treating their presence as permission to overwrite `contributors`.
+these snapshots. Records carry their credits only in `contributors`; the
+envelope's `attributions` is the union computed from the retained records.
 
 Mixed records also carry `fieldContributors`, keyed by displayed fields such as
 `name`, `externalIds.wikidata`, or a structured container. Use

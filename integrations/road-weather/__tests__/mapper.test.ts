@@ -171,7 +171,7 @@ describe("mapStationToDetail", () => {
       ["Municipality", "Espoo"],
       ["Provider", "Fintraffic Digitraffic road weather stations"],
     ]);
-    expect(detail.attributions).toEqual([
+    expect(detail.contributors).toEqual([
       { sourceId: "fi-digitraffic-weather", name: "Fintraffic Digitraffic road weather stations" },
     ]);
   });

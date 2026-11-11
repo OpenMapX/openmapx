@@ -1,6 +1,5 @@
 import type { BBox, DataSourcePartialReason } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import {
   type CollectionOrchestrator,
   coversBbox,
@@ -102,31 +101,16 @@ export function createHazardsOrchestrator(ctx: IntegrationContext): HazardsOrche
     T extends {
       sources: readonly string[];
       contributors?: readonly Attribution[];
-      attributions?: readonly Attribution[];
-      notices?: readonly string[];
     },
   >(
     item: T,
-  ): T & { contributors: Attribution[] } => {
-    const contributors = resolveContributors(
-      {
-        contributors:
-          item.contributors ?? (item.attributions?.length ? item.attributions : undefined),
-        sourceIds: item.sources,
-      },
+  ): T & { contributors: Attribution[] } => ({
+    ...item,
+    contributors: resolveContributors(
+      { contributors: item.contributors, sourceIds: item.sources },
       (id) => ctx.attributionIndex?.getById(id),
-    );
-    // Legacy notices only belong to explicitly named suppliers. Authoritative receipts already carry their wording.
-    const notices =
-      item.contributors === undefined
-        ? (item.notices ?? []).flatMap((name) =>
-            item.sources.length === 1 && item.sources[0]
-              ? [{ sourceId: item.sources[0], name }]
-              : [],
-          )
-        : [];
-    return { ...item, contributors: snapshotContributors(contributors, notices) };
-  };
+    ),
+  });
   const alerts = createCollectionOrchestrator<
     HazardsProvider,
     HazardAlert,

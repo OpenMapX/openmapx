@@ -1,5 +1,4 @@
 import {
-  type Attribution,
   type DataSourceDetail,
   type DataSourceDetailSection,
   type DataSourceResult,
@@ -18,7 +17,6 @@ import type {
   BorderCrossingProgram,
   BorderCrossingQueue,
 } from "@openmapx/mobility-core/border-crossing";
-import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import strings from "./strings/en.json" with { type: "json" };
 
 type Row = [I18nToken, Translatable | Translatable[]];
@@ -170,11 +168,6 @@ function fallbackNameOf(crossing: BorderCrossing): { fallbackName?: I18nToken } 
   return crossing.name ? {} : { fallbackName: token("fallbackName") };
 }
 
-function crossingCredits(crossing: BorderCrossing): Attribution[] | undefined {
-  if (crossing.attributions.length === 0) return undefined;
-  return snapshotContributors(crossing.attributions);
-}
-
 const byQueueOrder = (a: BorderCrossingQueue, b: BorderCrossingQueue) =>
   MODE_ORDER.indexOf(a.mode) - MODE_ORDER.indexOf(b.mode) ||
   PROGRAM_ORDER.indexOf(programOf(a)) - PROGRAM_ORDER.indexOf(programOf(b));
@@ -247,8 +240,6 @@ export function mapCrossingToResult(crossing: BorderCrossing): DataSourceResult 
     ...(worst ? { sortValues: { waitMinutes: worst.waitMinutes ?? 0 } } : {}),
     ...(observedAt ? { observedAt } : {}),
   };
-  const attributions = crossingCredits(crossing);
-  if (attributions) result.attributions = attributions;
   return result;
 }
 
@@ -282,7 +273,5 @@ export function mapCrossingToDetail(crossing: BorderCrossing): DataSourceDetail 
     ...(crossing.openingHours ? { openingHours: crossing.openingHours } : {}),
     sections,
   };
-  const attributions = crossingCredits(crossing);
-  if (attributions) detail.attributions = attributions;
   return detail;
 }

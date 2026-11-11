@@ -53,7 +53,7 @@ export interface MobilityDataSourceProvider {
    * Declared integration-level attribution. Mirrors what the provider attaches
    * to every {@link MobilityResult} it returns. Per-result attribution for
    * results that aggregate multiple upstream sources is carried on each
-   * {@link DataSourceResult} via the `sources` / `attributions` fields.
+   * {@link DataSourceResult} via the `sources` / `contributors` fields.
    */
   readonly attribution: Attribution[];
 

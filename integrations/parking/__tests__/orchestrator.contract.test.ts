@@ -221,7 +221,7 @@ describe("parking orchestrator", () => {
     const result = await source.search(BBOX);
 
     expect(result.attributions.map((a) => a.sourceId)).toEqual(["src-a", "src-c"]);
-    expect(result.data[2].attributions).toEqual([
+    expect(result.data[2].contributors).toEqual([
       {
         sourceId: "src-c",
         name: "MobiData BW",

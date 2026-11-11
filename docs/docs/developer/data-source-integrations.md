@@ -149,7 +149,6 @@ export interface DataSourceResult {
   fee?: "free" | "paid"; // when the source says whether use costs money
   access?: "public" | "customers" | "permit" | "private" | "restricted"; // who may use it
   kind?: "station" | "vehicle"; // fixed vs free-floating; gates OSM snapping
-  attributions?: Attribution[]; // legacy per-record compatibility credit
   sortValues?: Record<string, number>; // for client-side sorting
 }
 ```
@@ -240,9 +239,7 @@ controls. A provider that acquires filters upstream owns its own cache.
 Because `fuel` aggregates providers rather than reading feeds itself, its
 manifest declares no `dataSources`. Credits come from each station's
 canonical `contributors`, captured before cache/aggregation and preserved by
-mapping. Older per-record `attributions` remain a compatibility format; do not
-round-trip canonical receipts through their text-only shape (see
-[Attribution and freshness](#attribution-and-freshness)).
+mapping (see [Attribution and freshness](#attribution-and-freshness)).
 
 ## Multi-source merging
 
@@ -307,10 +304,9 @@ context polygon. Shared-mobility parser child IDs require an explicitly proven
 canonical parent source, including its mandatory notices.
 
 Use `contributorsForRecords` from `@openmapx/integration-framework` for envelope
-credits after filtering/deduplication. The mapper retains canonical receipts;
-legacy `DataSourceResult.attributions` remain an explicit compatibility format.
-A discarded duplicate owes no credit unless a field/identity was actually
-merged. Canonical `[]` is authoritative. Missing mixed item provenance cannot
+credits after filtering/deduplication. The mapper retains canonical receipts
+in each record's `contributors`. A discarded duplicate owes no credit unless a
+field/identity was actually merged. Canonical `[]` is authoritative. Missing mixed item provenance cannot
 fall back to every declared source or a provider/domain catalogue.
 
 `DataSourceLayer` publishes per-feature snapshots and registers the actual

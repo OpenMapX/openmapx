@@ -109,7 +109,7 @@ describe("mapCameraToResult", () => {
     expect(result.sources).toEqual(["fi-digitraffic-cameras"]);
     expect(result.observedAt).toBe("2026-10-08T08:00:00Z");
     expect(result.status).toBe("operational");
-    expect(result.attributions).toEqual([
+    expect(result.contributors).toEqual([
       {
         sourceId: "fi-digitraffic-cameras",
         name: "Fintraffic / digitraffic.fi",
@@ -343,7 +343,7 @@ describe("mapCameraToDetail", () => {
     expect(detail.id).toBe("oc:feature:fi-digitraffic-cameras:C01502");
     expect(detail.sources).toEqual(["fi-digitraffic-cameras"]);
     expect(detail.website).toBe("https://www.digitraffic.fi/kelikamerat/C01502");
-    expect(detail.attributions?.[0]?.name).toBe("Fintraffic / digitraffic.fi");
+    expect(detail.contributors?.[0]?.name).toBe("Fintraffic / digitraffic.fi");
   });
 
   it("drops a link that is not http(s)", () => {

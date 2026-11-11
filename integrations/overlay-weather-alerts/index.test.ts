@@ -35,7 +35,6 @@ function alert(over: Partial<HazardAlert> = {}): HazardAlert {
     // MeteoAlarm's CAP `web` is the national service's page.
     web: "https://www.aemet.es/en/eltiempo/prediccion/avisos",
     sources: ["eu-meteoalarm-alerts"],
-    attributions: [],
     notices: [NOTICE],
     ...over,
   };

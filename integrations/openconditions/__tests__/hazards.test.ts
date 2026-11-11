@@ -160,7 +160,7 @@ describe("alerts", () => {
     });
     expect(austria.geometry.type).toBe("Polygon");
     expect(austria.description).toContain("Gewittern");
-    expect(austria.attributions).toEqual([
+    expect(austria.contributors).toContainEqual(
       expect.objectContaining({
         sourceId: METEOALARM,
         name: "EUMETNET - MeteoAlarm",
@@ -175,7 +175,7 @@ describe("alerts", () => {
           ],
         }),
       }),
-    ]);
+    );
     expect(juneau).toMatchObject({ severity: "Minor", notices: [] });
 
     expect(callParams(calls)).toMatchObject({
@@ -248,14 +248,12 @@ describe("alerts", () => {
     expect(meteoalarm(croatia).every((c) => c.modified === undefined)).toBe(true);
     // Austria's area is unioned and simplified from MeteoAlarm's own region shapes.
     expect(meteoalarm(austria).some((c) => c.modified === true)).toBe(true);
-    expect(croatia!.attributions).toContainEqual(credit);
     expect(croatia!.contributors!.filter((c) => c.attributionText === DGU)).toHaveLength(1);
     // The Open Licence's statement stays beside the drawn area, with its licence linked.
     const shown = buildAttributionPresentation(credit as Attribution, "map").visibleHtml;
     expect(shown).toContain("Državna geodetska uprava");
     expect(shown).toContain('href="https://data.gov.hr/otvorena-dozvola"');
     expect(austria!.contributors!.some((c) => c.name.startsWith("DGU"))).toBe(false);
-    expect(austria!.attributions.some((c) => c.name.startsWith("DGU"))).toBe(false);
   });
 
   test("asks for simplified geometries when the caller does", async () => {
@@ -360,7 +358,7 @@ describe("natural hazards", () => {
       severity: { label: "minor", declared: "green" },
       sources: ["usgs-quakes"],
     });
-    expect(quake.attributions[0]).toMatchObject({
+    expect(quake.contributors?.[0]).toMatchObject({
       sourceId: "usgs-quakes",
       name: "U.S. Geological Survey",
     });
