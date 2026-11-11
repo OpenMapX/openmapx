@@ -347,7 +347,7 @@
         "amenity": "lounger"
       },
       "matchedOn": "term",
-      "matchedValue": "Liege"
+      "matchedValue": "bank"
     },
     {
       "id": "amenity/casino",
@@ -356,7 +356,7 @@
         "amenity": "casino"
       },
       "matchedOn": "term",
-      "matchedValue": "Kasino"
+      "matchedValue": "spielbank"
     },
     {
       "id": "amenity/public_bookcase",
@@ -365,7 +365,7 @@
         "amenity": "public_bookcase"
       },
       "matchedOn": "term",
-      "matchedValue": "Öffentlicher Bücherschrank"
+      "matchedValue": "lesebank"
     },
     {
       "id": "man_made/milk_churn_stand",
@@ -374,7 +374,7 @@
         "man_made": "milk_churn_stand"
       },
       "matchedOn": "term",
-      "matchedValue": "Milchrampe"
+      "matchedValue": "milchbank"
     },
     {
       "id": "natural/reef",
@@ -383,7 +383,7 @@
         "natural": "reef"
       },
       "matchedOn": "term",
-      "matchedValue": "Riff"
+      "matchedValue": "unterwassersandbank"
     }
   ]
 }

@@ -126,7 +126,7 @@
       "description": "Cuban telecommunication company",
       "kind": ["brand", "operator"],
       "matchedOn": "alias",
-      "matchedValue": "ETECSA",
+      "matchedValue": "wifi_etecsa",
       "presence": "elsewhere"
     }
   ],
@@ -138,7 +138,7 @@
         "internet_access": "wlan"
       },
       "matchedOn": "term",
-      "matchedValue": "Wi-Fi Hotspot"
+      "matchedValue": "wifi"
     }
   ]
 }

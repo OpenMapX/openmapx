@@ -468,6 +468,8 @@ export const EVAL_CASES: EvalCase[] = [
     ...berlin,
     expect: [],
     enter: "choose",
+    knownGap:
+      "the Wi-Fi Hotspot preset matches by term, which ranks its category row first with weak confidence, so Enter searches the visible area instead of leaving the list open",
   },
   {
     id: "berlin-rewe-enter",

@@ -345,7 +345,7 @@
       "description": "German cooperative banking institution",
       "kind": ["brand"],
       "matchedOn": "alias",
-      "matchedValue": "Volksbank Cologne Bonn",
+      "matchedValue": "volksbank koln bonn eg",
       "presence": "unknown"
     }
   ],
@@ -357,7 +357,7 @@
         "traffic_calming": "mini_bumps"
       },
       "matchedOn": "term",
-      "matchedValue": "Bremsschwelle (kleine Teller)"
+      "matchedValue": "kolner teller"
     }
   ]
 }

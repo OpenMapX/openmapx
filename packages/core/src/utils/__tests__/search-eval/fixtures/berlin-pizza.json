@@ -395,7 +395,7 @@
         "cuisine": "italian"
       },
       "matchedOn": "term",
-      "matchedValue": "Italian Restaurant"
+      "matchedValue": "pizza"
     },
     {
       "id": "amenity/baking_oven",
@@ -404,7 +404,7 @@
         "amenity": "baking_oven"
       },
       "matchedOn": "term",
-      "matchedValue": "Baking Oven"
+      "matchedValue": "pizza oven"
     }
   ]
 }

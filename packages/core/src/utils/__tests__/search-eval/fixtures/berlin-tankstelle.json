@@ -136,7 +136,7 @@
       "description": "German petroleum company",
       "kind": ["brand", "operator"],
       "matchedOn": "alias",
-      "matchedValue": "Aral AG",
+      "matchedValue": "aral tankstelle",
       "presence": "here"
     },
     {
@@ -145,7 +145,7 @@
       "description": "German association for independent petrol stations operators",
       "kind": ["brand"],
       "matchedOn": "alias",
-      "matchedValue": "bft",
+      "matchedValue": "freie tankstelle",
       "presence": "here"
     }
   ],
@@ -193,7 +193,7 @@
         "man_made": "fuel_pump"
       },
       "matchedOn": "term",
-      "matchedValue": "Tanksäule"
+      "matchedValue": "tankstellensaule"
     },
     {
       "id": "shop/convenience",
@@ -202,7 +202,7 @@
         "shop": "convenience"
       },
       "matchedOn": "term",
-      "matchedValue": "Minimarkt"
+      "matchedValue": "tankstellenverkauf"
     }
   ]
 }

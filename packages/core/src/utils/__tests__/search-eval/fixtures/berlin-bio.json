@@ -391,7 +391,7 @@
         "plant:source": "gas"
       },
       "matchedOn": "term",
-      "matchedValue": "Gaskraftwerk"
+      "matchedValue": "biogas"
     },
     {
       "id": "type/boundary/protected_area",
@@ -401,7 +401,7 @@
         "boundary": "protected_area"
       },
       "matchedOn": "term",
-      "matchedValue": "Schutzgebiet"
+      "matchedValue": "biotop"
     },
     {
       "id": "amenity/vending_machine/fuel",
@@ -411,7 +411,7 @@
         "vending": "fuel"
       },
       "matchedOn": "term",
-      "matchedValue": "Tankautomat"
+      "matchedValue": "biodiesel"
     }
   ]
 }

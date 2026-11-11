@@ -170,7 +170,7 @@
       "name": "Feuillette",
       "kind": ["brand"],
       "matchedOn": "alias",
-      "matchedValue": "Feuillette",
+      "matchedValue": "boulangerie feuillette",
       "presence": "elsewhere"
     },
     {
@@ -179,7 +179,7 @@
       "description": "French bakery chain",
       "kind": ["brand"],
       "matchedOn": "alias",
-      "matchedValue": "Marie Blachère",
+      "matchedValue": "boulangerie marie blachere",
       "presence": "elsewhere"
     }
   ],

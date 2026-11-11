@@ -301,7 +301,7 @@
       "description": "German bicycle-sharing company and franchise",
       "kind": ["brand", "operator"],
       "matchedOn": "alias",
-      "matchedValue": "Nextbike",
+      "matchedValue": "nextbike berlin",
       "presence": "global"
     },
     {
@@ -310,7 +310,7 @@
       "description": "carsharing network in Germany",
       "kind": ["brand"],
       "matchedOn": "alias",
-      "matchedValue": "Stadtmobil",
+      "matchedValue": "stadtmobil berlin",
       "presence": "unknown"
     }
   ],
@@ -322,7 +322,7 @@
         "traffic_calming": "cushion"
       },
       "matchedOn": "term",
-      "matchedValue": "Bodenwelle mit Lücken"
+      "matchedValue": "berliner kissen"
     }
   ]
 }

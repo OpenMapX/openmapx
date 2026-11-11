@@ -426,7 +426,7 @@
         "aeroway": "spaceport"
       },
       "matchedOn": "term",
-      "matchedValue": "Spaceport"
+      "matchedValue": "cosmodrome"
     },
     {
       "id": "aeroway/terminal",
@@ -435,7 +435,7 @@
         "aeroway": "terminal"
       },
       "matchedOn": "term",
-      "matchedValue": "Airport Terminal"
+      "matchedValue": "aerodrome"
     },
     {
       "id": "amenity/love_hotel",
@@ -444,7 +444,7 @@
         "amenity": "love_hotel"
       },
       "matchedOn": "term",
-      "matchedValue": "Love Hotel"
+      "matchedValue": "romantic hotel"
     },
     {
       "id": "amenity/place_of_worship/christian",
@@ -454,7 +454,7 @@
         "religion": "christian"
       },
       "matchedOn": "term",
-      "matchedValue": "Christian Church"
+      "matchedValue": "roman catholic"
     },
     {
       "id": "healthcare/alternative",
@@ -463,7 +463,7 @@
         "healthcare": "alternative"
       },
       "matchedOn": "term",
-      "matchedValue": "Alternative Medicine"
+      "matchedValue": "aromatherapy"
     },
     {
       "id": "highway/footway",
@@ -472,7 +472,7 @@
         "highway": "footway"
       },
       "matchedOn": "term",
-      "matchedValue": "Foot Path"
+      "matchedValue": "promenade"
     },
     {
       "id": "landuse/military/airfield",
@@ -481,7 +481,7 @@
         "military": "airfield"
       },
       "matchedOn": "term",
-      "matchedValue": "Military Airfield"
+      "matchedValue": "aerodrome"
     },
     {
       "id": "leisure/fitness_station/hyperextension",
@@ -491,7 +491,7 @@
         "fitness_station": "hyperextension"
       },
       "matchedOn": "term",
-      "matchedValue": "Hyperextension Station"
+      "matchedValue": "roman chair"
     }
   ]
 }

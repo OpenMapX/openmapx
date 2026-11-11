@@ -367,7 +367,7 @@
         "cuisine": "coffee_shop"
       },
       "matchedOn": "term",
-      "matchedValue": "Coffeehouse"
+      "matchedValue": "cafe"
     },
     {
       "id": "amenity/fast_food/donut",
@@ -377,7 +377,7 @@
         "cuisine": "donut"
       },
       "matchedOn": "term",
-      "matchedValue": "Donut Fast Food"
+      "matchedValue": "cafe"
     },
     {
       "id": "amenity/fast_food/fish_and_chips",
@@ -387,7 +387,7 @@
         "cuisine": "fish_and_chips"
       },
       "matchedOn": "term",
-      "matchedValue": "Fish & Chips Fast Food"
+      "matchedValue": "cafe"
     },
     {
       "id": "amenity/fast_food/juice",
@@ -397,7 +397,7 @@
         "cuisine": "juice"
       },
       "matchedOn": "term",
-      "matchedValue": "Juice Fast Food"
+      "matchedValue": "cafe"
     },
     {
       "id": "amenity/fast_food/kebab",
@@ -407,7 +407,7 @@
         "cuisine": "kebab"
       },
       "matchedOn": "term",
-      "matchedValue": "Kebab Fast Food"
+      "matchedValue": "cafe"
     }
   ]
 }

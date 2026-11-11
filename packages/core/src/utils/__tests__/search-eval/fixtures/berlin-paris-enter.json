@@ -315,7 +315,7 @@
       "description": "chain of department stores in Mexico",
       "kind": ["brand"],
       "matchedOn": "alias",
-      "matchedValue": "La Parisina",
+      "matchedValue": "parisina",
       "presence": "elsewhere"
     },
     {
@@ -364,7 +364,7 @@
         "amenity": "monastery"
       },
       "matchedOn": "term",
-      "matchedValue": "Monastery Grounds"
+      "matchedValue": "parish"
     },
     {
       "id": "amenity/place_of_worship",
@@ -373,7 +373,7 @@
         "amenity": "place_of_worship"
       },
       "matchedOn": "term",
-      "matchedValue": "Place of Worship"
+      "matchedValue": "parish"
     },
     {
       "id": "amenity/place_of_worship/christian",
@@ -383,7 +383,7 @@
         "religion": "christian"
       },
       "matchedOn": "term",
-      "matchedValue": "Christian Church"
+      "matchedValue": "parish"
     }
   ]
 }

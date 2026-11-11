@@ -172,7 +172,7 @@
       "description": "Dutch fast food chain",
       "kind": ["brand"],
       "matchedOn": "alias",
-      "matchedValue": "The Döner Company",
+      "matchedValue": "doner company",
       "presence": "elsewhere"
     },
     {
@@ -221,7 +221,7 @@
         "cuisine": "kebab"
       },
       "matchedOn": "term",
-      "matchedValue": "Kebab Fast Food"
+      "matchedValue": "doner"
     }
   ]
 }

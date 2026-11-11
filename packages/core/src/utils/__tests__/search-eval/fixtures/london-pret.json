@@ -318,7 +318,7 @@
       "description": "American pretzel shops",
       "kind": ["brand"],
       "matchedOn": "alias",
-      "matchedValue": "Auntie Anne's",
+      "matchedValue": "auntie annes pretzels",
       "presence": "global"
     }
   ],
@@ -332,7 +332,7 @@
         "food": "snacks"
       },
       "matchedOn": "term",
-      "matchedValue": "Snack Vending Machine"
+      "matchedValue": "pretzel"
     }
   ]
 }

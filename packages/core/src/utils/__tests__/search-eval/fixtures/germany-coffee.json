@@ -349,7 +349,7 @@
         "cuisine": "donut"
       },
       "matchedOn": "term",
-      "matchedValue": "Donut Fast Food"
+      "matchedValue": "coffee"
     },
     {
       "id": "amenity/internet_cafe",
@@ -358,7 +358,7 @@
         "amenity": "internet_cafe"
       },
       "matchedOn": "term",
-      "matchedValue": "Internet Cafe"
+      "matchedValue": "coffee"
     },
     {
       "id": "amenity/restaurant",
@@ -367,7 +367,7 @@
         "amenity": "restaurant"
       },
       "matchedOn": "term",
-      "matchedValue": "Restaurant"
+      "matchedValue": "coffee"
     },
     {
       "id": "amenity/restaurant/american",
@@ -377,7 +377,7 @@
         "cuisine": "american"
       },
       "matchedOn": "term",
-      "matchedValue": "American Restaurant"
+      "matchedValue": "coffee"
     }
   ]
 }

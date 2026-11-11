@@ -347,7 +347,7 @@
         "aeroway": "spaceport"
       },
       "matchedOn": "term",
-      "matchedValue": "Spaceport"
+      "matchedValue": "cosmodrome"
     },
     {
       "id": "aeroway/terminal",
@@ -356,7 +356,7 @@
         "aeroway": "terminal"
       },
       "matchedOn": "term",
-      "matchedValue": "Airport Terminal"
+      "matchedValue": "aerodrome"
     },
     {
       "id": "highway/footway",
@@ -365,7 +365,7 @@
         "highway": "footway"
       },
       "matchedOn": "term",
-      "matchedValue": "Foot Path"
+      "matchedValue": "promenade"
     },
     {
       "id": "landuse/military/airfield",
@@ -374,7 +374,7 @@
         "military": "airfield"
       },
       "matchedOn": "term",
-      "matchedValue": "Military Airfield"
+      "matchedValue": "aerodrome"
     },
     {
       "id": "leisure/track/cycling",
@@ -384,7 +384,7 @@
         "sport": "cycling"
       },
       "matchedOn": "term",
-      "matchedValue": "Cycling Track"
+      "matchedValue": "velodrome"
     },
     {
       "id": "man_made/pier",
@@ -393,7 +393,7 @@
         "man_made": "pier"
       },
       "matchedOn": "term",
-      "matchedValue": "Pier"
+      "matchedValue": "promenade"
     },
     {
       "id": "man_made/pier/floating",
@@ -403,7 +403,7 @@
         "floating": "yes"
       },
       "matchedOn": "term",
-      "matchedValue": "Floating Pier"
+      "matchedValue": "promenade"
     }
   ]
 }

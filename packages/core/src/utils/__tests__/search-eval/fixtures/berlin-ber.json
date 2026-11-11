@@ -354,7 +354,7 @@
         "amenity": "internet_cafe"
       },
       "matchedOn": "term",
-      "matchedValue": "Internet Cafe"
+      "matchedValue": "cybercafe"
     },
     {
       "id": "amenity/monastery",
@@ -363,7 +363,7 @@
         "amenity": "monastery"
       },
       "matchedOn": "term",
-      "matchedValue": "Monastery Grounds"
+      "matchedValue": "tabernacle"
     },
     {
       "id": "amenity/place_of_worship",
@@ -372,7 +372,7 @@
         "amenity": "place_of_worship"
       },
       "matchedOn": "term",
-      "matchedValue": "Place of Worship"
+      "matchedValue": "tabernacle"
     },
     {
       "id": "amenity/place_of_worship/christian",
@@ -382,7 +382,7 @@
         "religion": "christian"
       },
       "matchedOn": "term",
-      "matchedValue": "Christian Church"
+      "matchedValue": "tabernacle"
     },
     {
       "id": "craft/sawmill",
@@ -391,7 +391,7 @@
         "craft": "sawmill"
       },
       "matchedOn": "term",
-      "matchedValue": "Sawmill"
+      "matchedValue": "lumber"
     }
   ]
 }
