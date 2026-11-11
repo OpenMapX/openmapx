@@ -4,8 +4,8 @@ import { TrafficMaintenancePreflightError } from "./preflight-error.js";
 
 /**
  * Default Valhalla container name under the default docker-compose project
- * naming (`<project>-<service>-1`). The stack's compose project is
- * `STACK_PROJECT` and `services/valhalla/service.json` pins no
+ * naming (`<project>-<service>-1`). The stack's compose project comes from
+ * the core services constants and `services/valhalla/service.json` pins no
  * `container.containerName`, so the runtime container falls back to this
  * convention. Overridable via `VALHALLA_CONTAINER` for non-default compose
  * project names.
