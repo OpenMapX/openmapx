@@ -113,7 +113,7 @@ export function createRoutingProviderAdmission(ctx: IntegrationContext) {
       await admit();
       return provider.getRoute(...args);
     };
-    const { optimizeRoute, getMatch, getMatrix, getIsochrone } = provider;
+    const { optimizeRoute, getMatch, getMatrix } = provider;
     if (optimizeRoute) {
       wrapped.optimizeRoute = async (...args) => {
         await admit();
@@ -130,12 +130,6 @@ export function createRoutingProviderAdmission(ctx: IntegrationContext) {
       wrapped.getMatrix = async (...args) => {
         await admit();
         return getMatrix.apply(provider, args);
-      };
-    }
-    if (getIsochrone) {
-      wrapped.getIsochrone = async (...args) => {
-        await admit();
-        return getIsochrone.apply(provider, args);
       };
     }
     return wrapped;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { snapToRoute } from "../snap";
+import { snapToRoute } from "./support/turfSnapOracle";
 
 // A 3-point line heading due east along the equator-ish latitude.
 const geometry: [number, number][] = [

@@ -4,7 +4,7 @@ import {
   mirrorArchives,
   TRANSITOUS_ARTIFACT_BASE_URL,
 } from "@openmapx/transitous-core";
-import { curlAtomic } from "../atomic-download.js";
+import { curlAtomicWithResult } from "../atomic-download.js";
 import { feedKeyForSource, recordFetchOutcome } from "./feed-state-writer.js";
 import type { FeedDownloadFailure, StageFn, StageResult, StageStatus } from "./types.js";
 
@@ -17,7 +17,7 @@ import type { FeedDownloadFailure, StageFn, StageResult, StageStatus } from "./t
  * build mode and runs against the catalog clone + the mirrored archives.
  *
  * The download itself is the shared `mirrorArchives` (direct per-archive by URL,
- * concurrent, gtfs→netex probe) — deterministic and incremental (curlAtomic
+ * concurrent, gtfs→netex probe) — deterministic and incremental (curlAtomicWithResult
  * sends If-Modified-Since for archives already on disk), unlike a recursive wget
  * that has to parse the multi-thousand-entry autoindex and silently fetched
  * nothing. `feed_state` records this attempt's result. A missing desired source
@@ -36,7 +36,11 @@ export const run: StageFn = async (ctx): Promise<StageResult> => {
       ctx.artifactBaseUrl ||
       process.env.TRANSITOUS_ARTIFACT_BASE_URL ||
       TRANSITOUS_ARTIFACT_BASE_URL;
-    const download = ctx.artifactDownloader ?? curlAtomic;
+    const download =
+      ctx.artifactDownloader ??
+      (async (url: string, dest: string) => {
+        await curlAtomicWithResult(url, dest);
+      });
     const selectedFeedFiles = ctx.state.selectedFeedFiles ?? [];
 
     // Download every selected source's archive concurrently via the shared

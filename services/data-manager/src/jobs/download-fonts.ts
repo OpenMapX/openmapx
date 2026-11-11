@@ -10,7 +10,7 @@ import {
 import { join } from "node:path";
 import { execa } from "execa";
 import type { StateStore } from "../state.js";
-import { curlAtomic } from "./atomic-download.js";
+import { curlAtomicWithResult } from "./atomic-download.js";
 import { assertDataPublication, publishDataChange } from "./execution/worker-scope.js";
 
 export const DEFAULT_OPENMAPTILES_FONTS_URL =
@@ -68,7 +68,7 @@ export async function downloadFonts(opts: DownloadFontsOptions): Promise<void> {
   let installedNew = false;
   let retainRecovery = false;
   try {
-    await curlAtomic(url, fontsZip, { signal: opts.signal });
+    await curlAtomicWithResult(url, fontsZip, { signal: opts.signal });
     const archive = await execa("unzip", ["-Z1", fontsZip], { cancelSignal: opts.signal });
     validateFontArchiveEntries(archive.stdout.split("\n").filter(Boolean));
     await execa("unzip", ["-qo", fontsZip, "-d", stagingFonts], {

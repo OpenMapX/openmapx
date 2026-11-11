@@ -18,7 +18,7 @@ import {
   resetRouteMatcherCounters,
   setRouteMatcherCounting,
 } from "../routeMatcher";
-import { snapToRoute } from "../snap";
+import { snapToRoute } from "./support/turfSnapOracle";
 
 // A straight ~6.85 km west→east route at latitude 52.
 const route: LngLat[] = [

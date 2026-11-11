@@ -172,7 +172,7 @@ export interface JobContext {
   slotLayout?: MotisSlotLayout;
   /** Mirror-mode: base URL of Transitous's published artifacts. */
   artifactBaseUrl?: string;
-  /** Mirror-mode: per-archive downloader (default curlAtomic); injected by tests. */
+  /** Mirror-mode: per-archive downloader (default curlAtomicWithResult); injected by tests. */
   artifactDownloader?: (url: string, dest: string) => Promise<void>;
   /** Mirror-mode: URL the live MOTIS config's RT feeds are rewritten to (our proxy). */
   feedProxyUrl?: string;

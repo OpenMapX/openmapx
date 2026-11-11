@@ -739,7 +739,10 @@ describe("setupCron", () => {
         logger: { info: () => {}, warn: () => {}, error: () => {} },
         syncCronExpression: "disabled",
         feedProxyReloadCronExpression: "disabled",
-        readTrafficGraphGeneration: async () => "fixture-engine-epoch",
+        readTrafficGraphState: async () => ({
+          generation: "fixture-engine-epoch",
+          engineBootId: "fixture-engine-boot",
+        }),
         ...extra,
       };
     }
@@ -849,7 +852,7 @@ describe("setupCron", () => {
             overridesUnresolved: 0,
             appliedObservationIds: [],
           }),
-          readTrafficGraphGeneration: async () => {
+          readTrafficGraphState: async () => {
             throw new Error("engine epoch missing");
           },
           isTrafficExtractStale: vi.fn().mockResolvedValue(true),

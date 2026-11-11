@@ -11,10 +11,10 @@ import {
   setRouteMatcherCounting,
   snapPreparedRoute,
 } from "../routeMatcher";
-import { snapToRoute } from "../snap";
+import { snapToRoute } from "./support/turfSnapOracle";
 
 /**
- * Every assertion in this file treats {@link snapToRoute} — the untouched Turf
+ * Every assertion in this file treats `snapToRoute` — the untouched Turf
  * path — as the oracle and requires the prepared matcher to reproduce all four
  * `SnapResult` fields exactly, including the distances. `toEqual` compares
  * numbers with `Object.is`, so a single differing bit fails.

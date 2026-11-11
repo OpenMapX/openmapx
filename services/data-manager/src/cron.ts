@@ -300,7 +300,6 @@ export interface CronSetupOptions {
    * `trafficTarPath` for in-place writes).
    */
   roadConditionsMode?: "shadow" | "active";
-  readTrafficGraphGeneration?: () => Promise<string>;
   readTrafficGraphState?: () => Promise<{ generation: string; engineBootId: string }>;
   /** Fatal worker lifecycle notification; production exits for supervisor recovery. */
   onTrafficWriterFailure?: (error: Error) => void;
@@ -1062,13 +1061,6 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       let engineGeneration: string | undefined;
       let engineBootId: string | undefined;
       const captureGraphState = async () => {
-        if (options.readTrafficGraphGeneration && !options.readTrafficGraphState) {
-          // Legacy test seam cannot attest a serving process.
-          return {
-            generation: await options.readTrafficGraphGeneration(),
-            engineBootId: undefined,
-          };
-        }
         return (
           options.readTrafficGraphState ?? (() => readTrafficGraphState(dirname(trafficTarPath)))
         )();
@@ -1199,10 +1191,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         tarPath: trafficTarPath,
         validUntil,
         graphGeneration: hostGraphGeneration,
-        expectedGraphGeneration:
-          options.readTrafficGraphGeneration || options.readTrafficGraphState
-            ? undefined
-            : engineGeneration,
+        expectedGraphGeneration: options.readTrafficGraphState ? undefined : engineGeneration,
         csv,
         waysToEdges,
         overrides,

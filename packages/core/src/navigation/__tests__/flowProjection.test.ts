@@ -17,7 +17,7 @@ import {
   resetRouteMatcherCounters,
   setRouteMatcherCounting,
 } from "../routeMatcher";
-import { snapToRoute } from "../snap";
+import { snapToRoute } from "./support/turfSnapOracle";
 
 /** ~111 m per 0.001° of latitude — used to build fixtures with round distances. */
 const M = 0.001 / 111.32;

@@ -79,7 +79,6 @@ export {
 export {
   type FetchRoadConditionsOptions,
   type FetchRoadConditionsResult,
-  fetchRoadConditions,
   fetchRoadConditionsWithStatus,
   fetchRouteFlow,
   roadConditionFeatureToEvent,

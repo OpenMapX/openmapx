@@ -414,14 +414,11 @@ export interface InstallOptions {
   /** Stream-style line callback for log output (stdout + stderr). */
   onLog?: (line: string, stream: "stdout" | "stderr") => void;
   signal?: AbortSignal;
-  /** Server-local bundle orchestration retains publication through reload/bookkeeping. */
-  retainPublication?: boolean;
   expectedId?: string;
   beforePublish?: (receipt: IntegrationPublicationReceipt) => void;
 }
 
 export interface InstallResult {
-  publication?: IntegrationPublication;
   id: string;
   directory: string;
   replaced: boolean;
@@ -539,12 +536,10 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
         signal,
         beforePublish: opts.beforePublish,
       });
-      if (opts.retainPublication)
-        return { id, directory: target, replaced: previous !== null, publication };
       // Publication is the CLI commit point; finish only its already-owned
       // cleanup even if cancellation arrives after the directory swap.
       await settleIntegrationPublication(publication, "commit", new AbortController().signal);
-      // This legacy CLI call returns no retained publication handle. Its exact
+      // This direct install returns no retained publication handle. Its exact
       // committed workspace can retire; API purpose journals retain theirs.
       normalizeCompletedCliInstallation(publication);
       retireCompletedCliPreparation(context);
@@ -1320,8 +1315,8 @@ export async function restorePreparedIntegration(options: {
     directory.close();
   }
 }
-/** Only legacy CLI installs expose the historical readable installed modes.
- * Modern retained/API publications keep their private preparation modes. */
+/** Only direct CLI installs expose the readable installed modes.
+ * Retained API publications keep their private preparation modes. */
 function normalizeCompletedCliInstallation(handle: IntegrationPublication): void {
   const publication = publicationState(handle),
     state = preparationState(publication.context);

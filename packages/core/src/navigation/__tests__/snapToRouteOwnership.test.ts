@@ -4,17 +4,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * `snapToRoute` scans a whole route per call and stays only as the public
- * compatibility/oracle surface. Every production caller has moved to a prepared
- * matcher except the ones below, which belong to later plans; each of those
- * plans deletes its entry here when it lands, and the gate fails the moment an
- * unlisted production module references the function again.
+ * `snapToRoute` scans a whole route per call. It lives only in test support as
+ * the numerical reference for the prepared matcher, so no production module may
+ * reference it.
  */
-const ALLOWED: Record<string, string> = {
-  "packages/core/src/navigation/snap.ts": "the compatibility/oracle function itself",
-  "packages/core/src/navigation/index.ts": "navigation barrel export (API exposure, not a caller)",
-  "packages/core/src/index.ts": "public barrel export (API exposure, not a caller)",
-};
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), "../../../../../..");
 const ROOTS = ["packages/core/src", "apps/web/src", "integrations"];
@@ -92,7 +85,7 @@ describe("snapToRoute production callers", () => {
     .map((path) => relative(REPO_ROOT, path).split(sep).join("/"))
     .sort();
 
-  it("finds only the allow-listed modules", () => {
-    expect(referencing).toEqual(Object.keys(ALLOWED).sort());
+  it("is not referenced by any production module", () => {
+    expect(referencing).toEqual([]);
   });
 });

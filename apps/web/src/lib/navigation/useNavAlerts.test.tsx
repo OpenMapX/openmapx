@@ -5,12 +5,13 @@ import {
   type BoundingBox,
   type LngLat,
   PROGRESS_BUCKET_METERS,
+  prepareRouteMatcher,
   progressBucket,
   progressBucketStartMeters,
   type RoadAlert,
   type RoadAlertType,
   selectActiveAlert,
-  snapToRoute,
+  snapPreparedRoute,
   useNavigationStore,
   useSettingsStore,
 } from "@openmapx/core";
@@ -64,6 +65,10 @@ const geometry: [number, number][] = [
   [0, 0],
   [0.02, 0],
 ];
+
+/** Where a point lands on a route, by the same prepared matcher the hook uses. */
+const snapOnRoute = (line: LngLat[], point: LngLat) =>
+  snapPreparedRoute(prepareRouteMatcher(line), point);
 
 /** ~33 m of longitude or latitude at the equator. */
 const ROAD_HALF = 0.0003;
@@ -249,7 +254,7 @@ describe("useNavAlerts — road-aware projection", () => {
 
   it("surfaces an alert on the route's road at the route's own alongMeters", async () => {
     const alert = onRoad("onroute", 0.01);
-    const expected = snapToRoute(geometry, [alert.lng, alert.lat]);
+    const expected = snapOnRoute(geometry, [alert.lng, alert.lat]);
     start(route, expected.alongMeters - 90, 20);
     fetchRoadAlerts.mockResolvedValue([alert]);
 
@@ -284,7 +289,7 @@ describe("useNavAlerts — road-aware projection", () => {
         },
       ],
     };
-    const junction = snapToRoute(geometry, [0.01, 0]);
+    const junction = snapOnRoute(geometry, [0.01, 0]);
     start(route, junction.alongMeters - 60, 20);
     fetchRoadAlerts.mockResolvedValue([sideStreet]);
 
@@ -296,7 +301,7 @@ describe("useNavAlerts — road-aware projection", () => {
 
   it("drops an alert on the route's road that applies only to the opposite direction", async () => {
     const alert = onRoad("oncoming", 0.01, "stop", { forward: false, backward: true });
-    const expected = snapToRoute(geometry, [alert.lng, alert.lat]);
+    const expected = snapOnRoute(geometry, [alert.lng, alert.lat]);
     start(route, expected.alongMeters - 90, 20);
     fetchRoadAlerts.mockResolvedValue([alert]);
 
@@ -308,7 +313,7 @@ describe("useNavAlerts — road-aware projection", () => {
 
   it("drops an alert whose answer carries no roads", async () => {
     const alert = { ...onRoad("no-roads", 0.01), roads: [] };
-    const expected = snapToRoute(geometry, [alert.lng, alert.lat]);
+    const expected = snapOnRoute(geometry, [alert.lng, alert.lat]);
     start(route, expected.alongMeters - 90, 20);
     fetchRoadAlerts.mockResolvedValue([alert]);
 
@@ -321,7 +326,7 @@ describe("useNavAlerts — road-aware projection", () => {
   it("resolves duplicate coordinates deterministically, in input order", async () => {
     const a = onRoad("dupA", 0.01);
     const b = onRoad("dupB", 0.01);
-    const expected = snapToRoute(geometry, [a.lng, a.lat]);
+    const expected = snapOnRoute(geometry, [a.lng, a.lat]);
     start(route, expected.alongMeters - 90, 20);
     fetchRoadAlerts.mockResolvedValue([a, b]);
 
@@ -340,7 +345,7 @@ describe("useNavAlerts — speed-camera country gate", () => {
   const camera = onRoad("cam1", 0.01, "speed_camera");
 
   beforeEach(() => {
-    const expected = snapToRoute(geometry, [camera.lng, camera.lat]);
+    const expected = snapOnRoute(geometry, [camera.lng, camera.lat]);
     start(route, expected.alongMeters - 90, 20);
     fetchRoadAlerts.mockResolvedValue([camera]);
   });
