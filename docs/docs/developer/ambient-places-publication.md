@@ -123,14 +123,13 @@ feature can carry ambient clickable label/GERS metadata after its duplicate
 ambient label is suppressed; that metadata is credited only while the matched
 basemap feature is rendered. The basemap retains its own geometry attribution.
 
-Readers serve and accept only format 2 generations. The encoder accounts for each
-distinct MVT metadata string and per-feature overhead within the
+Readers serve and accept only format 2 generations. The encoder accounts for
+each distinct MVT metadata string and per-feature overhead within the
 256-feature/128-KiB limits. Planet source signatures include the ambient format,
 and candidates staged under another format must be discarded and rebuilt.
-Capacity preflights
-allow 8 KiB per ambient input row for receipts and lineage; Overture ingest adds
-the captured catalogue's raw row bytes plus WAL headroom. These are admission
-allowances, not measured country or planet storage claims.
+Capacity preflights allow 8 KiB per ambient input row for receipts and lineage;
+Overture ingest adds the captured catalogue's raw row bytes plus WAL headroom.
+These are admission allowances, not measured country or planet storage claims.
 
 The Germany build body is:
 
