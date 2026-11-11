@@ -19,7 +19,7 @@ import {
 } from "../lib/data-local";
 import { dataManagerUrl } from "../lib/data-manager-url";
 import { runCliDataUpdate } from "../lib/data-update-command";
-import { runningComposeServices, runningComposeServicesStrict } from "../lib/docker";
+import { runningComposeServicesStrict } from "../lib/docker";
 import {
   OPENMAPX_REGION_ENV,
   resolveOsmRegion,
