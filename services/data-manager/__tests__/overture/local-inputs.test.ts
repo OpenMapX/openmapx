@@ -1,7 +1,16 @@
 /** Producer-contract metadata inspection, not a parquet ingestion proof. */
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { overtureRecoverySchema } from "@openmapx/core/data-manager-contracts";
 import { afterEach, expect, it, vi } from "vitest";
 import { captureOvertureCatalogue } from "../../src/jobs/overture/attribution-capture";
 import { inspectOvertureLocalInputs } from "../../src/jobs/overture/local-inputs";
@@ -9,6 +18,14 @@ import { buildOverturePullContract, pullContractPath } from "../../src/jobs/over
 
 const database = vi.hoisted(() => ({ sql: Object.assign(vi.fn(), { unsafe: vi.fn() }) }));
 vi.mock("../../src/db/index", () => ({ sql: database.sql, rawSql: database.sql, db: {} }));
+vi.mock("../../src/jobs/overture/operation-lock", async (original) => ({
+  ...(await original<object>()),
+  overtureOperationBusy: async () => false,
+}));
+vi.mock("../../src/jobs/overture/rebuild-links", async (original) => ({
+  ...(await original<object>()),
+  getOvertureConflationState: async () => null,
+}));
 const roots: string[] = [];
 afterEach(() => {
   vi.restoreAllMocks();
@@ -66,13 +83,53 @@ it("selects the newest completed local region contract, ignoring partial pulls w
   expect(inspectOvertureLocalInputs(path, "europe/germany")).toEqual({
     downloadedRelease: "2026-10-21.0",
     osmAvailable: true,
+    catalogueRefusal: null,
   });
   expect(inspectOvertureLocalInputs(path, "europe/france")).toEqual({
     downloadedRelease: null,
     osmAvailable: false,
+    catalogueRefusal: null,
   });
   writeFileSync(newest, "changed size", { mode: 0o600 });
   expect(inspectOvertureLocalInputs(path, "europe/germany").downloadedRelease).toBe("2026-10-01.0");
+});
+it("reports a complete pull without a valid catalogue instead of skipping to an older release", async () => {
+  const path = root();
+  snapshot(path, "2026-10-01.0");
+  snapshot(path, "2026-10-21.0");
+  const contractPath = pullContractPath(path, "2026-10-21.0", "europe/germany");
+  const { sourcesCatalogue: _, ...withoutCatalogue } = JSON.parse(
+    readFileSync(contractPath, "utf8"),
+  );
+  writeFileSync(contractPath, JSON.stringify({ ...withoutCatalogue, contractVersion: 1 }), {
+    mode: 0o600,
+  });
+  const refusal =
+    "Overture pull contract for 2026-10-21.0/europe/germany has no valid sources catalogue; re-pull the release so its places keep their attribution";
+  expect(inspectOvertureLocalInputs(path, "europe/germany")).toEqual({
+    downloadedRelease: null,
+    osmAvailable: false,
+    catalogueRefusal: refusal,
+  });
+  const fetch = vi
+    .spyOn(globalThis, "fetch")
+    .mockRejectedValue(Error("Unexpected network release discovery"));
+  const { ingestOverture } = await import("../../src/jobs/overture/ingest");
+  await expect(ingestOverture({ dataDir: path, region: "europe/germany" })).rejects.toThrow(
+    refusal,
+  );
+  const { assertOvertureRecoveryInputs, inspectOvertureRecovery } = await import(
+    "../../src/jobs/overture/recovery"
+  );
+  await expect(
+    assertOvertureRecoveryInputs(path, "europe/germany", "overture-ingest"),
+  ).rejects.toThrow(refusal);
+  const status = await inspectOvertureRecovery(path, "europe/germany");
+  expect(status.downloadedRelease).toBeNull();
+  expect(status.actions["overture-ingest"]).toEqual({ allowed: false, reason: refusal });
+  expect(overtureRecoverySchema.parse(status)).toEqual(status);
+  expect(fetch).not.toHaveBeenCalled();
+  expect(database.sql.unsafe).not.toHaveBeenCalled();
 });
 it("does not follow a release directory symlink or accept traversal regions", () => {
   const path = root(),

@@ -2,7 +2,11 @@
 import { closeSync, constants, fstatSync, lstatSync, openSync, realpathSync } from "node:fs";
 import { regionSchema } from "@openmapx/core/data-manager-contracts";
 import { AnchoredDirectory } from "../../../../../packages/core/src/build-artifacts/filesystem";
-import { assertValidOvertureRelease, validateOverturePullContract } from "./stac.js";
+import {
+  assertValidOvertureRelease,
+  OvertureCatalogueRefusedError,
+  validateOverturePullContract,
+} from "./stac.js";
 
 function availableFile(directory: AnchoredDirectory, name: string): boolean {
   let fd: number | undefined;
@@ -25,6 +29,7 @@ export function inspectOvertureLocalInputs(dataDir: string, selectedRegion: stri
   try {
     let osmAvailable = false,
       downloadedRelease: string | null = null,
+      catalogueRefusal: string | null = null,
       metadataBytes = 0;
     try {
       const osm = new AnchoredDirectory(root.name("osm"), root, false, true);
@@ -77,6 +82,12 @@ export function inspectOvertureLocalInputs(dataDir: string, selectedRegion: stri
           downloadedRelease = release;
           break;
         } catch (error) {
+          // A complete pull whose places cannot be credited is reported, never
+          // skipped in favour of an older release.
+          if (error instanceof OvertureCatalogueRefusedError) {
+            catalogueRefusal = error.message;
+            break;
+          }
           // Incomplete/malformed pulls cannot enable ingest. No content is exposed.
           const code = (error as NodeJS.ErrnoException).code;
           if (code && code !== "ENOENT") throw error;
@@ -88,7 +99,7 @@ export function inspectOvertureLocalInputs(dataDir: string, selectedRegion: stri
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
-    return { osmAvailable, downloadedRelease };
+    return { osmAvailable, downloadedRelease, catalogueRefusal };
   } finally {
     for (const directory of opened.reverse()) directory.close();
   }

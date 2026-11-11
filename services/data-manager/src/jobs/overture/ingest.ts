@@ -139,8 +139,9 @@ export async function activateOvertureStagingSchema(
 }
 
 export async function ingestOverture(opts: IngestOvertureOptions): Promise<void> {
-  const localRelease =
-    opts.release ?? inspectOvertureLocalInputs(opts.dataDir, opts.region).downloadedRelease;
+  const local = opts.release ? null : inspectOvertureLocalInputs(opts.dataDir, opts.region);
+  if (local?.catalogueRefusal) throw Error(local.catalogueRefusal);
+  const localRelease = opts.release ?? local?.downloadedRelease;
   if (!localRelease)
     throw Error(
       "Download a completed local Overture partition for this region before ingesting it.",
