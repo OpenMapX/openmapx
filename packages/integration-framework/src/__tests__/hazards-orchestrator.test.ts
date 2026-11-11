@@ -17,7 +17,6 @@ function alert(id: string, sources = ["us-nws-alerts"]): HazardAlert {
     certainty: "Likely",
     sent: "2026-10-09T00:00:00Z",
     sources,
-    attributions: [],
     notices: [],
   };
 }

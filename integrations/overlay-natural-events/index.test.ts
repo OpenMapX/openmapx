@@ -16,7 +16,6 @@ function hazard(over: Partial<NaturalHazard> = {}): NaturalHazard {
     maxWindKmh: 185,
     detailUrl: "https://www.gdacs.org/report.aspx?eventtype=TC&eventid=1001234",
     sources: ["gdacs-events"],
-    attributions: [],
     ...over,
   };
 }

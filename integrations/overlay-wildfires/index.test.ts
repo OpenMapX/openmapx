@@ -43,7 +43,6 @@ function hazard(over: Partial<NaturalHazard> = {}): NaturalHazard {
     name: "Pine Fire",
     ended: false,
     sources: ["us-nifc-fires"],
-    attributions: [],
     ...over,
   };
 }

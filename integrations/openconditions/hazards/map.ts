@@ -15,7 +15,6 @@ import {
   list,
   locationTableCredits,
   type Rec,
-  type RecordSource,
   rec,
   sourcesOf,
   str,
@@ -103,17 +102,6 @@ function contributorsOf(record: Rec, sources: LiveSources) {
   );
 }
 
-/** The credits of a record's own sources, as changed data where it shows a derived value. */
-function sourceCreditsOf(record: Rec, credits: readonly RecordSource[], sources: LiveSources) {
-  const own = credits.map((s) => credit(s, sources));
-  return derivedShown(record, { severity: true }) ? asModified(own) : own;
-}
-
-function creditsOf(record: Rec): { ids: string[]; credits: RecordSource[] } {
-  const credits = sourcesOf(record);
-  return { ids: credits.map((s) => s.id), credits };
-}
-
 function capSeverityOf(value: unknown): HazardAlert["severity"] {
   const word =
     typeof value === "string" ? value.charAt(0).toUpperCase() + value.slice(1).toLowerCase() : "";
@@ -140,7 +128,7 @@ export function situationToAlert(
   const provenance = rec(record["provenance"]);
   const sent = str(cap["sent"]) ?? str(provenance["sourceUpdatedAt"]) ?? str(validity["start"]);
   if (sent === undefined) return null;
-  const { ids, credits } = creditsOf(record);
+  const ids = sourcesOf(record).map((s) => s.id);
   const notices = [...new Set(ids.flatMap((id) => sources.noticeOf(id) ?? []))];
   const type = String(record["type"]);
   return {
@@ -164,7 +152,6 @@ export function situationToAlert(
     ...field("senderName", textOf(cap["senderName"], lang)),
     ...field("web", str(cap["web"])),
     sources: ids,
-    attributions: [...sourceCreditsOf(record, credits, sources), ...tableCreditsOf(record)],
     contributors: contributorsOf(record, sources),
     notices,
   };
@@ -271,7 +258,7 @@ export function situationToNaturalHazard(
   const maxWind = rec(details["maxWind"]);
   const cause = str(details["ignitionCause"]);
   const density = str(details["density"]);
-  const { ids, credits } = creditsOf(record);
+  const ids = sourcesOf(record).map((s) => s.id);
   const detectionFields = {
     ...field("satellite", str(detection["satellite"])),
     ...field("start", str(detection["start"])),
@@ -314,7 +301,6 @@ export function situationToNaturalHazard(
     ...field("locality", str(admin["municipality"])),
     ...field("detailUrl", str(details["detailUrl"])),
     sources: ids,
-    attributions: [...sourceCreditsOf(record, credits, sources), ...tableCreditsOf(record)],
     contributors: contributorsOf(record, sources),
   };
 }
