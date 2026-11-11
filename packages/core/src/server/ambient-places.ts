@@ -62,6 +62,7 @@ export async function readAmbientPlaceByGers(
     const candidates = await tx.unsafe<{ generation: string; manifest: AmbientManifest }[]>(
       `SELECT g.id AS generation,g.manifest FROM ambient_places.generations g
        CROSS JOIN ambient_places.state s WHERE s.singleton=1 AND g.publication_status='published'
+         AND g.manifest->>'version'='${AMBIENT_FORMAT_VERSION}'
        ORDER BY (g.id=s.active) DESC,g.published_at DESC,g.id
        LIMIT ${AMBIENT_LIMITS.generations}`,
     );
@@ -80,14 +81,7 @@ export async function readAmbientPlaceByGers(
       [generations, gers],
     );
     const place = row
-      ? ambientPlaceFromTile(
-          {
-            ...row,
-            format_version: candidates.find((candidate) => candidate.generation === row.generation)
-              ?.manifest.version,
-          },
-          [row.lng, row.lat],
-        )
+      ? ambientPlaceFromTile({ ...row, format_version: AMBIENT_FORMAT_VERSION }, [row.lng, row.lat])
       : null;
     return place ? { generation: row.generation, place } : null;
   });

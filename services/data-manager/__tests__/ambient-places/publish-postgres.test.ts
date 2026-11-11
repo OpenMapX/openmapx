@@ -66,12 +66,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           [unsupported.generation, JSON.stringify(unsupported)],
         );
         await pg.sql.unsafe(
-          `INSERT INTO ambient_places.features(generation,id,name,category,rank,min_zoom,tenant,sources,geom) VALUES($1,'osm:node/1','Clinic','hospital',3079,13,false,'osm',ST_AsEWKB(ST_Transform(ST_SetSRID(ST_MakePoint(6.08,50.77),4326),3857)))`,
+          `INSERT INTO ambient_places.features(generation,id,gers_id,name,category,rank,min_zoom,tenant,sources,geom) VALUES($1,'osm:node/1','gers-unsupported','Clinic','hospital',3079,13,false,'osm',ST_AsEWKB(ST_Transform(ST_SetSRID(ST_MakePoint(6.08,50.77),4326),3857)))`,
           [unsupported.generation],
         );
         expect(
           await readAmbientTile(pg.sql, unsupported.generation, tile.z, tile.x, tile.y),
         ).toBeNull();
+        // A fresh, published generation of another format owns no GERS identity either.
+        expect(await readAmbientPlaceByGers(pg.sql, "gers-unsupported")).toBeNull();
         await pg.sql.unsafe(buildSchemaDDL("overture_places"));
         await pg.sql.unsafe(
           `INSERT INTO overture_places.places(gers_id,name,names,geom,basic_category,confidence,operating_status,sources,sources_catalogue,release) VALUES('gers-receipt','Cafe','{"common":{"de":"Kaffee"}}',ST_SetSRID(ST_MakePoint(6.081,50.7701),4326),'cafe',0.8,'open','[{"property":"/names/primary","dataset":"meta"},{"property":"/names/common/de","dataset":"Microsoft"},{"property":"/phones","dataset":"Foursquare"}]',$1::JSONB,'2026-10-01.0')`,
