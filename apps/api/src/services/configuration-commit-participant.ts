@@ -13,9 +13,6 @@ export async function withConfigurationCommitParticipant<T>(
   run: () => Promise<T>,
 ): Promise<T> {
   const state = administrativeConfigurationState(writer);
-  const { isLegacyIntegrationImportParticipant } = await import(
-    "./configuration-migration/legacy-integration-import-intent"
-  );
   const { isIntegrationBindingParticipant } = await import("./integration-binding-participant");
   const { isTransitCredentialParticipant } = await import("./transit-feed-credential-participant");
   const { isPlatformConfigurationParticipant } = await import(
@@ -24,8 +21,7 @@ export async function withConfigurationCommitParticipant<T>(
   const { isStagedMigrationParticipant } = await import("./configuration-migration/participant");
   // Exact installed built-in issuer, never a registration or caller callback.
   if (
-    (!isLegacyIntegrationImportParticipant(participant, writer) &&
-      !isStagedMigrationParticipant(participant, writer) &&
+    (!isStagedMigrationParticipant(participant, writer) &&
       !isIntegrationBindingParticipant(participant, writer) &&
       !isTransitCredentialParticipant(participant, writer) &&
       !isPlatformConfigurationParticipant(participant, writer)) ||

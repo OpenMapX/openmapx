@@ -2,7 +2,7 @@ import { integrationAdminOperations } from "@openmapx/core/api-contracts";
 import { expect, it, vi } from "vitest";
 import { generateDocument } from "../document";
 
-it("collects exactly all 35 actual integration producers, complete statuses, headers and admin auth", async () => {
+it("collects exactly all 33 actual integration producers, complete statuses, headers and admin auth", async () => {
   const network = vi.spyOn(globalThis, "fetch").mockImplementation(() => {
     throw Error("Network denied");
   });
@@ -11,7 +11,7 @@ it("collects exactly all 35 actual integration producers, complete statuses, hea
     const tagged = Object.values(document.paths)
       .flatMap((item) => Object.values(item as object))
       .filter((value) => (value as { tags?: string[] }).tags?.includes("integration-admin"));
-    expect(tagged).toHaveLength(35);
+    expect(tagged).toHaveLength(33);
     for (const [id, contract] of Object.entries(integrationAdminOperations)) {
       const actual =
         document.paths[contract.path.replace(/:([^/]+)/g, "{$1}")][contract.method.toLowerCase()];
@@ -30,8 +30,9 @@ it("collects exactly all 35 actual integration producers, complete statuses, hea
       schema: { type: "integer", minimum: 1, maximum: 168, default: 24 },
     });
     expect(document.paths["/api/admin/integrations/reload"].post.requestBody.required).toBe(false);
-    expect(document.paths["/api/admin/integrations/import"].post.requestBody.required).toBe(true);
-    expect(document.paths["/api/admin/integrations/import"].post.responses).toHaveProperty("409");
+    expect(document.paths["/api/admin/integrations/{id}/config"].patch.requestBody.required).toBe(
+      true,
+    );
   } finally {
     network.mockRestore();
   }

@@ -1096,10 +1096,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await fixture.db
         .insert(schema.serviceConfig)
         .values({ id: randomUUID(), serviceId: "motis", config: { MODE: "old" } });
-      await fixture.db.insert(schema.integrationConfig).values([
-        { id: randomUUID(), integrationId: "alpha", config: { VALUE: "old", enabled: true } },
-        { id: randomUUID(), integrationId: "beta", config: { VALUE: "old", enabled: true } },
-      ]);
+      await fixture.db.insert(schema.integrationConfig).values({
+        id: randomUUID(),
+        integrationId: "alpha",
+        config: { VALUE: "old", enabled: true },
+      });
       const { pullPath } = await canceledSuccessfulCoordinatorStage(),
         original = readFileSync(pullPath),
         before = services.currentConfigurationGeneration(host.infraDir),
@@ -1194,33 +1195,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             "integration disable",
             (headers) => sdk.disableAdminIntegration("alpha", headers, undefined, options),
           ],
-          [
-            "ordinary batch import",
-            (headers) =>
-              sdk.importAdminIntegrationConfigs(
-                {
-                  integrations: [
-                    { integrationId: "alpha", config: { VALUE: "batch-a" } },
-                    { integrationId: "beta", config: { VALUE: "batch-b", enabled: false } },
-                  ],
-                },
-                headers,
-                options,
-              ),
-          ],
-          [
-            "unchanged ordinary import",
-            (headers) =>
-              sdk.importAdminIntegrationConfigs(
-                {
-                  integrations: [
-                    { integrationId: "alpha", config: { VALUE: "old", enabled: true } },
-                  ],
-                },
-                headers,
-                options,
-              ),
-          ],
           ["Compose Up", (headers) => sdk.startAdminCompose(headers, undefined, options)],
         ];
       let index = 0;
@@ -1263,23 +1237,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
       expect((await finished(repair.json().jobId)).status).toBe("success");
-      // Original failed requests remain failed after repair; only a NEW key
-      // can evaluate new source state. No old import proof/intent is replayed.
-      for (const index of [9, 10]) {
-        const [name, run] = mutations[index]!;
-        const replay = await run({ "idempotency-key": `task012-staged-current-${index}` });
-        expect(replay.status, name).toBe(409);
-        expect(JSON.stringify(replay.data)).toContain(
-          "Apply or update Data Manager before changing instance configuration.",
-        );
-      }
-      const resumed = await sdk.importAdminIntegrationConfigs(
-        { integrations: [{ integrationId: "alpha", config: { VALUE: "old", enabled: true } }] },
-        { "idempotency-key": "task012-staged-current-new-unchanged" },
-        options,
+      // An original failed request remains failed after repair; only a new key
+      // can evaluate new source state.
+      const [name, run] = mutations[4]!;
+      const replay = await run({ "idempotency-key": "task012-staged-current-4" });
+      expect(replay.status, name).toBe(409);
+      expect(JSON.stringify(replay.data)).toContain(
+        "Apply or update Data Manager before changing instance configuration.",
       );
-      expect(resumed.status, JSON.stringify(resumed.data)).toBe(200);
-      expect(resumed.data).toMatchObject({ ok: true, imported: 0 });
     }, 300000);
     it("checks the literal staged prerequisite before current release-source writes", async () => {
       const { pullPath } = await canceledSuccessfulCoordinatorStage(),

@@ -459,7 +459,7 @@ change, then run `pnpm check-openapi` and `pnpm check-api-sdk`.
 
 ## Integration administration
 
-`integrationAdminOperations` owns all 22 integration, binding, credential and
+`integrationAdminOperations` owns all 20 integration, binding, credential and
 `/api/admin/overview` operations. Import the generated functions and canonical
 wire types from `@openmapx/core/api-admin-sdk`. The focused producer plugins inherit
 the administrator guard before contract parsing. Binding POST retains its earlier

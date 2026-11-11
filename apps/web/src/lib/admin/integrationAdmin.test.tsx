@@ -56,7 +56,7 @@ afterEach(() => {
 });
 
 describe("integration query boundaries and reload observation", () => {
-  it.each(["patch", "set", "delete", "enable", "disable", "import"] as const)(
+  it.each(["patch", "set", "delete", "enable", "disable"] as const)(
     "sends the generated %s body and retained header in their actual positions",
     async (kind) => {
       const requests = fakeFetch(() =>
@@ -72,10 +72,6 @@ describe("integration query boundaries and reload observation", () => {
           delete: () => result.current.deleteCredential("demo", "TOKEN", "a".repeat(64)),
           enable: () => result.current.toggle("demo", true),
           disable: () => result.current.toggle("demo", false),
-          import: () =>
-            result.current.importConfigs({
-              integrations: [{ integrationId: "demo", config: { endpoint: "synthetic" } }],
-            }),
         };
         await expect(run[kind]()).rejects.toThrow();
       });
@@ -84,13 +80,11 @@ describe("integration query boundaries and reload observation", () => {
       expect(new Headers(init.headers).get("idempotency-key")).toMatch(
         /^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/,
       );
-      if (["patch", "set", "import"].includes(kind))
+      if (kind === "patch" || kind === "set")
         expect(JSON.parse(String(init.body))).toEqual(
           kind === "patch"
             ? { endpoint: "synthetic" }
-            : kind === "set"
-              ? { value: "synthetic-private", expectedRevision: "a".repeat(64) }
-              : { integrations: [{ integrationId: "demo", config: { endpoint: "synthetic" } }] },
+            : { value: "synthetic-private", expectedRevision: "a".repeat(64) },
         );
     },
   );
@@ -183,7 +177,6 @@ describe("integration query boundaries and reload observation", () => {
     "health",
     "credentials",
     "overview",
-    "exportConfigs",
   ] as const)("keeps the finite %s deadline through body consumption", async (read) => {
     vi.useFakeTimers();
     let canceled = false;
@@ -221,8 +214,6 @@ describe("integration query boundaries and reload observation", () => {
           return qc.fetchQuery(queries.credentials());
         case "overview":
           return qc.fetchQuery(queries.overview());
-        case "exportConfigs":
-          return qc.fetchQuery(queries.exportConfigs());
       }
     };
     const pendingRead = runRead();

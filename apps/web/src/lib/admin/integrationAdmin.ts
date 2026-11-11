@@ -93,13 +93,6 @@ export function integrationAdminQueries(client: ApiClient, apiUrl: string) {
         queryKey: ["admin", "overview", apiUrl],
         queryFn: ({ signal }) => integrationOrThrow(sdk.getAdminOverview(options(signal))),
       }),
-    exportConfigs: () =>
-      queryOptions({
-        queryKey: [...key, "export"],
-        staleTime: 0,
-        queryFn: ({ signal }) =>
-          integrationOrThrow(sdk.exportAdminIntegrationConfigs(options(signal))),
-      }),
   };
 }
 
@@ -199,24 +192,6 @@ export function useIntegrationAdmin() {
                 client,
               }),
         );
-      },
-      importConfigs: async (input: unknown) => {
-        const parsed = sdk.adminIntegrationConfigImportSchema.safeParse(input);
-        if (!parsed.success)
-          throw new Error(
-            "Import failed — check the file format, integration IDs and config objects. The file must contain at least one unique integration and only supported fields.",
-          );
-        try {
-          return await integrationOrThrow(
-            sdk.importAdminIntegrationConfigs(
-              parsed.data,
-              { "idempotency-key": crypto.randomUUID() },
-              { client },
-            ),
-          );
-        } finally {
-          void invalidateIntegrationAdmin(qc, apiUrl);
-        }
       },
     }),
     [client, apiUrl, qc],

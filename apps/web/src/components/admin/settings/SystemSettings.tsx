@@ -1,10 +1,8 @@
 "use client";
 
-import DownloadIcon from "@mui/icons-material/Download";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import MailOutlineIcon from "@mui/icons-material/MailOutlined";
 import SaveIcon from "@mui/icons-material/Save";
-import UploadIcon from "@mui/icons-material/Upload";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Accordion from "@mui/material/Accordion";
 import AccordionDetails from "@mui/material/AccordionDetails";
@@ -14,13 +12,11 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
-import Divider from "@mui/material/Divider";
 import FormControl from "@mui/material/FormControl";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import FormHelperText from "@mui/material/FormHelperText";
 import InputLabel from "@mui/material/InputLabel";
 import MenuItem from "@mui/material/MenuItem";
-import Paper from "@mui/material/Paper";
 import Select from "@mui/material/Select";
 import Skeleton from "@mui/material/Skeleton";
 import Snackbar from "@mui/material/Snackbar";
@@ -33,7 +29,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { AdminDraftContext } from "@/lib/admin/AdminDraftProvider";
-import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 import { useAdminDraft } from "@/lib/admin/useAdminDraft";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { useActivityClient } from "../activity/activityQueries";
@@ -763,187 +758,6 @@ function SettingsGroupPanel({
   );
 }
 
-function ExportImportSection({
-  onMsg,
-}: {
-  onMsg: (msg: string, sev?: "success" | "error") => void;
-}) {
-  const env = useEnv();
-  const qc = useQueryClient();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const integrationsFileRef = useRef<HTMLInputElement>(null);
-  const admin = useIntegrationAdmin();
-  const integrationExport = useQuery({ ...admin.queries.exportConfigs(), enabled: false });
-  const transferOwner = useMemo(() => ({ active: true, client: admin.client }), [admin.client]);
-  useEffect(() => {
-    transferOwner.active = true;
-    return () => {
-      transferOwner.active = false;
-    };
-  }, [transferOwner]);
-
-  const doExport = async () => {
-    try {
-      const res = await fetch(`${env.apiUrl}/api/admin/settings/export`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `openmapx-settings-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      onMsg("Settings exported");
-    } catch {
-      onMsg("Export failed", "error");
-    }
-  };
-
-  const doImport = async (file: File) => {
-    try {
-      const text = await file.text();
-      const parsed = JSON.parse(text) as { settings?: Record<string, unknown> };
-      const settings = parsed.settings ?? parsed;
-      const res = await fetch(`${env.apiUrl}/api/admin/settings/import`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ settings }),
-      });
-      if (!res.ok) throw new Error();
-      const data = (await res.json()) as { imported: number };
-      void qc.invalidateQueries({ queryKey: ["admin", "settings"] });
-      onMsg(`Imported ${data.imported} setting(s)`);
-    } catch {
-      onMsg("Import failed — check the file format", "error");
-    }
-  };
-
-  const exportIntegrations = async () => {
-    try {
-      const result = await integrationExport.refetch({ throwOnError: true });
-      if (!transferOwner.active) return;
-      const data = result.data;
-      if (!data) throw new Error("Export was interrupted");
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `openmapx-integrations-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      onMsg(`Exported ${data.count} integration configs`);
-    } catch {
-      if (transferOwner.active) onMsg("Export failed", "error");
-    }
-  };
-
-  const importIntegrations = async (file: File) => {
-    try {
-      const text = await file.text();
-      if (!transferOwner.active) return;
-      const data = await admin.importConfigs(JSON.parse(text));
-      if (transferOwner.active) onMsg(`Imported ${data.imported} integration config(s)`);
-    } catch (error) {
-      if (!transferOwner.active) return;
-      onMsg(
-        error instanceof SyntaxError
-          ? "Import failed — check the JSON file format"
-          : error instanceof Error
-            ? error.message
-            : "Integration import failed",
-        "error",
-      );
-    }
-  };
-
-  return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
-      <Typography
-        variant="subtitle1"
-        gutterBottom
-        sx={{
-          fontWeight: 600,
-        }}
-      >
-        Export / Import
-      </Typography>
-      <Typography
-        variant="body2"
-        sx={{
-          color: "text.secondary",
-          mb: 2,
-        }}
-      >
-        Export settings as JSON for backup or migration. Secrets and env-overridden values are
-        excluded.
-      </Typography>
-      <Stack
-        direction="row"
-        sx={{
-          gap: 1,
-          flexWrap: "wrap",
-        }}
-      >
-        <Button variant="outlined" startIcon={<DownloadIcon />} size="small" onClick={doExport}>
-          Export Settings
-        </Button>
-        <Button
-          variant="outlined"
-          startIcon={<UploadIcon />}
-          size="small"
-          onClick={() => fileRef.current?.click()}
-        >
-          Import Settings
-        </Button>
-        <Divider orientation="vertical" flexItem />
-        <Button
-          variant="outlined"
-          startIcon={<DownloadIcon />}
-          size="small"
-          onClick={exportIntegrations}
-        >
-          Export Integration Configs
-        </Button>
-        <Button
-          variant="outlined"
-          startIcon={<UploadIcon />}
-          size="small"
-          onClick={() => integrationsFileRef.current?.click()}
-        >
-          Import Integration Configs
-        </Button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".json"
-          style={{ display: "none" }}
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) void doImport(f);
-            e.target.value = "";
-          }}
-        />
-        <input
-          ref={integrationsFileRef}
-          type="file"
-          accept=".json"
-          style={{ display: "none" }}
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) void importIntegrations(f);
-            e.target.value = "";
-          }}
-        />
-      </Stack>
-    </Paper>
-  );
-}
-
 function TestEmailSection({
   onMsg,
   text,
@@ -1128,7 +942,6 @@ export function SystemSettings({
           }
         />
       ))}
-      {showTransfer && <ExportImportSection onMsg={showToast} />}
       {showTransfer && <ConfigurationMigrationPanel />}
       <Snackbar
         open={!!toast}
@@ -1151,21 +964,12 @@ export function SystemSettings({
 
 /** Transfer utilities intentionally fetch no settings values until an operator exports. */
 export function SettingsTransfer() {
-  const [message, setMessage] = useState<{ text: string; severity: "success" | "error" } | null>(
-    null,
-  );
   return (
     <Stack sx={{ gap: 2, maxWidth: 900 }}>
       <AdminPageHeader
         title="Configuration transfer"
-        subtitle="Export application settings, transfer integration configuration or migrate an instance"
+        subtitle="Export this instance's configuration or migrate it from another instance"
       />
-      {message && (
-        <Alert severity={message.severity} onClose={() => setMessage(null)}>
-          {message.text}
-        </Alert>
-      )}
-      <ExportImportSection onMsg={(text, severity = "success") => setMessage({ text, severity })} />
       <ConfigurationMigrationPanel />
     </Stack>
   );

@@ -56,8 +56,6 @@ const ACTION_GROUPS: Array<{ label: string; actions: Array<[action: string, labe
       ["integration.disabled", "Disabled"],
       ["integration.reload", "Reload"],
       ["integration.reload.all", "Reload All"],
-      ["integration.config.export", "Config Exported"],
-      ["integration.config.import", "Config Imported"],
     ],
   },
   {
@@ -111,8 +109,6 @@ const ACTION_GROUPS: Array<{ label: string; actions: Array<[action: string, labe
     actions: [
       ["settings.update", "Updated"],
       ["settings.test_email", "Test Email"],
-      ["settings.export", "Exported"],
-      ["settings.import", "Imported"],
     ],
   },
   {

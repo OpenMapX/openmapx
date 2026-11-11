@@ -36,8 +36,6 @@ const inventory = [
   ["listAdminIntegrations", "GET", "/api/admin/integrations"],
   ["getAdminIntegration", "GET", "/api/admin/integrations/:id"],
   ["listAdminIntegrationEnvVars", "GET", "/api/admin/integrations/env-vars"],
-  ["exportAdminIntegrationConfigs", "GET", "/api/admin/integrations/export"],
-  ["importAdminIntegrationConfigs", "POST", "/api/admin/integrations/import"],
   ["runAdminIntegrationHealthChecks", "POST", "/api/admin/integrations/health/run"],
   ["reloadAdminIntegrations", "POST", "/api/admin/integrations/reload"],
   ["patchAdminIntegrationConfig", "PATCH", "/api/admin/integrations/:id/config"],
@@ -244,14 +242,6 @@ describe("integration administration canonical producer contracts", () => {
           },
         ],
       },
-      exportAdminIntegrationConfigs: {
-        integrations: [
-          { integrationId: "sample", config: { nested: [null, true], enabled: false } },
-        ],
-        exportedAt: at,
-        count: 1,
-      },
-      importAdminIntegrationConfigs: { ...reload, imported: 1, skipped: [] },
       runAdminIntegrationHealthChecks: { timestamp: at, count: 1, results: [health] },
       reloadAdminIntegrations: { ok: true, jobId: "job" },
       patchAdminIntegrationConfig: { ...reload, updated: ["nested"] },
@@ -403,13 +393,6 @@ describe("integration administration canonical producer contracts", () => {
       ).success,
     ).toBe(false);
     expect(
-      contracts.adminIntegrationConfigExportSchema.safeParse({
-        integrations: [],
-        exportedAt: "yesterday",
-        count: 0,
-      }).success,
-    ).toBe(false);
-    expect(
       contracts.adminIntegrationCredentialSchema.safeParse({
         ...credential,
         updatedAt: "yesterday",
@@ -528,34 +511,6 @@ describe("integration administration canonical producer contracts", () => {
     ).toMatchObject({
       properties: { hours: { type: "integer", minimum: 1, maximum: 168, default: 24 } },
     });
-  });
-  it("validates all import entries before apply with unique syntactic IDs and JSON object configs", () => {
-    const entry = {
-      integrationId: "sample",
-      config: { nested: [null, { extra: true }], enabled: false },
-    };
-    expect(contracts.adminIntegrationConfigImportSchema.parse({ integrations: [entry] })).toEqual({
-      integrations: [entry],
-    });
-    const exported = { integrations: [entry], exportedAt: at, count: 1 };
-    expect(contracts.adminIntegrationConfigImportSchema.parse(exported)).toEqual(exported);
-    expect(
-      contracts.adminIntegrationConfigImportSchema.parse({
-        integrations: [{ integrationId: "sample", config: {} }],
-      }),
-    ).toEqual({ integrations: [{ integrationId: "sample", config: {} }] });
-    for (const body of [
-      {},
-      { integrations: [] },
-      { integrations: [entry, entry] },
-      { integrations: [{ ...entry, integrationId: "../sample" }] },
-      { integrations: [{ ...entry, config: null }] },
-      { integrations: [{ ...entry, config: [] }] },
-      { integrations: [{ ...entry, config: { enabled: "false" } }] },
-      { integrations: [{ ...entry, extra: true }] },
-      { integrations: [entry], extra: true },
-    ])
-      expect(contracts.adminIntegrationConfigImportSchema.safeParse(body).success).toBe(false);
   });
   it("rejects unknown mutation keys and malformed credential/binding/no-body shapes", () => {
     const ops = contracts.integrationAdminOperations;
