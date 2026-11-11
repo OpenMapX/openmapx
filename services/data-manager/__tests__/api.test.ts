@@ -31,7 +31,6 @@ import type { SingleFlightController } from "../src/jobs/transitous/single-fligh
 import { dataReceipt, receiverFixture } from "./helpers/execution-receiver.js";
 
 vi.mock("../src/jobs/download-osm.js", () => ({
-  backfillOsmHeaders: () => 0,
   downloadOsm: vi.fn(),
 }));
 
@@ -512,7 +511,7 @@ describe("data-manager API", () => {
       url: "/transit/sync",
       payload: {
         countries: ["DE"],
-        idempotencyKey: "legacy-test-key",
+        idempotencyKey: "transit-test-key",
         triggeredBy: "api:synthetic-user",
       },
     });
@@ -521,7 +520,7 @@ describe("data-manager API", () => {
     expect(res.json()).toEqual({ ok: true, jobId: dataReceipt().id, status: "started" });
     expect(admitLocal).toHaveBeenCalledWith(
       { kind: "transit-sync", countries: ["DE"] },
-      { legacyTransitKey: "legacy-test-key", triggeredBy: "api:synthetic-user" },
+      { idempotencyKey: "transit-test-key", triggeredBy: "api:synthetic-user" },
     );
   });
 

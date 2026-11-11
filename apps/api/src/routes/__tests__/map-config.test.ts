@@ -45,7 +45,6 @@ async function request() {
 describe("public map configuration", () => {
   it("returns keyless defaults without secret fields", async () => {
     vi.stubEnv("MAPTILER_KEY", "");
-    vi.stubEnv("NEXT_PUBLIC_MAPTILER_KEY", "");
     const res = await request();
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({

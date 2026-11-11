@@ -27,13 +27,11 @@ import { type CoverageApiOptions, registerCoverageEvidenceRoute } from "./covera
 import type { CoverageSnapshotStore } from "./coverage/snapshot-store.js";
 import { db, sql } from "./db/index.js";
 import { registerAmbientPlacesApi } from "./jobs/ambient-places/api.js";
-import { backfillOsmHeaders } from "./jobs/download-osm.js";
 import { type DataExecutionReceiver, registerDataExecutionApi } from "./jobs/execution/api.js";
 import {
   startLegacyDataMutation,
   withLegacyDataMutation,
 } from "./jobs/execution/legacy-mutation.js";
-import { LegacyTransitDuplicate } from "./jobs/execution/store.js";
 import {
   createNotablePlacesRuntimeState,
   getNotablePlacesStatus,
@@ -440,8 +438,6 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   const dataDir = opts.dataDir ?? process.env.DATA_DIR ?? "/data";
   const singleFlight = opts.singleFlight ?? getSingleFlightController();
   const store = new StateStore(dataDir);
-  // A PBF downloaded before its header was recorded still reports how current it is.
-  backfillOsmHeaders(store);
   const searchIndexSql = opts.searchIndexSql ?? sql;
   registerAmbientPlacesApi(app, searchIndexSql);
   const searchIndexRuntimeState = opts.searchIndexRuntimeState ?? createSearchIndexRuntimeState();
@@ -480,7 +476,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
 
   async function admitLegacyData(
     input: DataExecutionInput,
-    source?: { triggeredBy?: string; legacyTransitKey?: string },
+    source?: { triggeredBy?: string; idempotencyKey?: string },
   ) {
     if (!opts.executionReceiver)
       throw Object.assign(Error("Durable data receiver is unavailable"), { statusCode: 503 });
@@ -997,57 +993,47 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     }
   });
   registerDataManagerRoute(app, "syncTransit", async (req, reply) => {
-    try {
-      const countries = req.body?.countries ?? transitAllowedCountries(operationsPolicy);
-      const reviewed = req.body?.preflightId || req.body?.fingerprint;
-      if (req.body?.idempotencyKey && reviewed) {
-        const original = await opts.executionReceiver?.observeReviewedTransit?.({
-          key: req.body.idempotencyKey,
-          countries,
-          preflightId: req.body.preflightId ?? "",
-          fingerprint: req.body.fingerprint ?? "",
-          triggeredBy: req.body.triggeredBy,
-        });
-        if (original)
-          return reply.code(202).send({ ok: true, jobId: original.id, status: "started" });
-      }
-      let preflight:
-        | import("./jobs/transitous/admin-preflight.js").TransitPreflightBinding
-        | undefined;
-      if (reviewed) {
-        try {
-          preflight = await transitPreflight.verify({
-            countries,
-            preflightId: req.body?.preflightId ?? "",
-            fingerprint: req.body?.fingerprint ?? "",
-          });
-        } catch (error) {
-          const e = error as Error & { code?: string };
-          return e.code === "preflight_stale"
-            ? reply.code(409).send({ error: e.message, code: "preflight_stale" })
-            : reply.code(503).send({
-                error: "Transit preview is unavailable. Check instance status before retrying.",
-              });
-        }
-      }
-      const admitted = await admitLegacyData(
-        {
-          kind: "transit-sync",
-          countries,
-          ...(preflight ? { preflight } : {}),
-        },
-        { triggeredBy: req.body?.triggeredBy, legacyTransitKey: req.body?.idempotencyKey },
-      );
-      return reply.code(202).send({ ok: true, jobId: admitted.id, status: "started" });
-    } catch (error) {
-      if (error instanceof LegacyTransitDuplicate)
-        return reply.code(409).send({
-          ok: false,
-          reason: "duplicate-idempotency-key",
-          existingJobId: error.existingJobId,
-        });
-      throw error;
+    const countries = req.body?.countries ?? transitAllowedCountries(operationsPolicy);
+    const reviewed = req.body?.preflightId || req.body?.fingerprint;
+    if (req.body?.idempotencyKey && reviewed) {
+      const original = await opts.executionReceiver?.observeReviewedTransit?.({
+        key: req.body.idempotencyKey,
+        countries,
+        preflightId: req.body.preflightId ?? "",
+        fingerprint: req.body.fingerprint ?? "",
+        triggeredBy: req.body.triggeredBy,
+      });
+      if (original)
+        return reply.code(202).send({ ok: true, jobId: original.id, status: "started" });
     }
+    let preflight:
+      | import("./jobs/transitous/admin-preflight.js").TransitPreflightBinding
+      | undefined;
+    if (reviewed) {
+      try {
+        preflight = await transitPreflight.verify({
+          countries,
+          preflightId: req.body?.preflightId ?? "",
+          fingerprint: req.body?.fingerprint ?? "",
+        });
+      } catch (error) {
+        const e = error as Error & { code?: string };
+        return e.code === "preflight_stale"
+          ? reply.code(409).send({ error: e.message, code: "preflight_stale" })
+          : reply.code(503).send({
+              error: "Transit preview is unavailable. Check instance status before retrying.",
+            });
+      }
+    }
+    const admitted = await admitLegacyData(
+      {
+        kind: "transit-sync",
+        countries,
+        ...(preflight ? { preflight } : {}),
+      },
+      { triggeredBy: req.body?.triggeredBy, idempotencyKey: req.body?.idempotencyKey },
+    );
+    return reply.code(202).send({ ok: true, jobId: admitted.id, status: "started" });
   });
 
   // POST /transit/restart-motis — bounce the primary MOTIS container. Used

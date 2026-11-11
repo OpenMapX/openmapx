@@ -47,7 +47,7 @@ interface MaptilerTileMatch {
 }
 
 function maptilerKey(): string {
-  return envString("MAPTILER_KEY", envString("NEXT_PUBLIC_MAPTILER_KEY", "")).trim();
+  return envString("MAPTILER_KEY", "").trim();
 }
 
 function isAllowedMaptilerPath(path: string): boolean {

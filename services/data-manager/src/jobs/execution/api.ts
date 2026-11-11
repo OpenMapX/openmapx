@@ -33,7 +33,7 @@ export interface DataExecutionReceiver {
   }): Promise<DataExecutionStatus | null>;
   admitLocal(
     input: DataExecutionInput,
-    options?: { sourceJobId?: string; triggeredBy?: string; legacyTransitKey?: string },
+    options?: { sourceJobId?: string; triggeredBy?: string; idempotencyKey?: string },
   ): Promise<DataExecutionStatus>;
   admitMaintenance(
     action: "restart-primary" | "reload-feed-proxy",

@@ -80,6 +80,11 @@ describe("geocoding orchestrator served-provider tagging", () => {
     const res = await getGeocodingProvider(ctx).reverseGeocode(0, 0);
     expect(res?.provider).toBe("geocoding-maptiler");
   });
+
+  it("refuses the removed transitous name instead of treating it as the motis geocoder", () => {
+    const ctx = ctxWith([["geocoding-motis", provider([result("a")])]], "transitous");
+    expect(() => getGeocodingProvider(ctx)).toThrow(/Unknown GEOCODING_PROVIDER: "transitous"/);
+  });
 });
 
 it("captures only selected backend credits before cache and does not mutate provider-owned records", async () => {

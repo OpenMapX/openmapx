@@ -7,19 +7,11 @@ import {
 import { type ContributingRecord, withContributors } from "@openmapx/mobility-core/contributors";
 import type { GeocodingProvider } from "./types.js";
 
-type ProviderName =
-  | "entur"
-  | "maptiler"
-  | "nominatim"
-  | "pelias"
-  | "photon"
-  | "motis"
-  | "transitous"
-  | "db-ris";
+type ProviderName = "entur" | "maptiler" | "nominatim" | "pelias" | "photon" | "motis" | "db-ris";
 
 /**
- * Map provider names (as used in GEOCODING_PROVIDER env var) to integration IDs.
- * Most follow the "geocoding-<name>" convention; aliases are listed explicitly.
+ * Map provider names (as used in GEOCODING_PROVIDER env var) to integration IDs,
+ * each following the "geocoding-<name>" convention.
  */
 const NAME_TO_INTEGRATION: Record<ProviderName, string> = {
   entur: "geocoding-entur",
@@ -28,7 +20,6 @@ const NAME_TO_INTEGRATION: Record<ProviderName, string> = {
   pelias: "geocoding-pelias",
   photon: "geocoding-photon",
   motis: "geocoding-motis",
-  transitous: "geocoding-motis",
   "db-ris": "geocoding-db-ris",
 };
 

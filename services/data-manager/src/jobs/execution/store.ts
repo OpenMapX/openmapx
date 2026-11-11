@@ -48,12 +48,6 @@ export const DATA_ADMISSION_LOCK = [0x4f4d58, 2] as const;
 export class DataExecutionConflict extends Error {
   readonly statusCode = 409;
 }
-export class LegacyTransitDuplicate extends Error {
-  readonly statusCode = 409;
-  constructor(readonly existingJobId: string) {
-    super("duplicate-idempotency-key");
-  }
-}
 export class DataConfigurationMaintenanceBusy extends Error {
   readonly statusCode = 409;
   constructor() {
@@ -82,7 +76,7 @@ export interface DataExecutionAdmissionOptions {
   principal?: ExecutionRef["principal"];
   sourceJobId?: string;
   triggeredBy?: string;
-  legacyTransitKey?: string;
+  idempotencyKey?: string;
 }
 export type DataExecutionPatch = Partial<
   Pick<DataExecutionStatus, "status" | "progress" | "diagnostics" | "publication" | "result">
@@ -113,7 +107,7 @@ export interface DataExecutionStore {
   ): Promise<{ created: boolean; record: DataExecutionRecord }>;
   inspect(id: string): Promise<DataExecutionRecord | null>;
   lookup(operationKey: string): Promise<DataExecutionRecord | null>;
-  lookupLegacyTransit?(key: string): Promise<DataExecutionRecord | null>;
+  lookupByIdempotencyKey?(key: string): Promise<DataExecutionRecord | null>;
   checkpoint(
     id: string,
     expectedVersion: number,
@@ -286,7 +280,7 @@ export function createPostgresDataExecutionStore(
 ): DataExecutionStore {
   const now = options.now ?? Date.now;
   const storeIdentity = Symbol("data-store");
-  const findLegacyTransit = async (tx: postgres.Sql | postgres.TransactionSql, key: string) => {
+  const findByIdempotencyKey = async (tx: postgres.Sql | postgres.TransactionSql, key: string) => {
     const rows = await tx.unsafe<Row[]>(
       "SELECT * FROM data_manager.jobs WHERE idempotency_key=$1 AND (started_at >= $2::text::timestamptz OR finished_at IS NULL) ORDER BY started_at DESC,id LIMIT 1",
       [key, new Date(now() - 24 * 3600000).toISOString()],
@@ -421,27 +415,26 @@ export function createPostgresDataExecutionStore(
     async admit(value, admission) {
       const input = normalizeDataExecutionInput(value),
         operationFingerprint = dataExecutionInputFingerprint(input);
-      const legacyKey = admission.legacyTransitKey
-        ? z.string().max(200).parse(admission.legacyTransitKey)
+      const idempotencyKey = admission.idempotencyKey
+        ? z.string().max(200).parse(admission.idempotencyKey)
         : undefined;
-      if (legacyKey && (input.kind !== "transit-sync" || admission.parent))
-        throw new DataExecutionConflict(
-          "Legacy transit key is bound only to local transit admission",
-        );
-      const matchLegacy = (row: Row) => {
-        if (row.execution_version !== 2) throw new LegacyTransitDuplicate(row.id);
+      if (idempotencyKey && (input.kind !== "transit-sync" || admission.parent))
+        throw new DataExecutionConflict("Idempotency key is bound only to local transit admission");
+      const matchIdempotent = (row: Row) => {
+        if (row.execution_version !== 2)
+          throw new DataExecutionConflict("Idempotency key belongs to a different kind of job");
         const record = decode(row);
         if (
           record.input.kind !== "transit-sync" ||
           record.operationFingerprint !== operationFingerprint ||
           record.triggeredBy !== (admission.triggeredBy ?? null)
         )
-          throw new DataExecutionConflict("Legacy transit key body or actor conflict");
+          throw new DataExecutionConflict("Idempotency key body or actor conflict");
         return { created: false, record };
       };
-      if (legacyKey) {
-        const original = await findLegacyTransit(sql, legacyKey);
-        if (original) return matchLegacy(original);
+      if (idempotencyKey) {
+        const original = await findByIdempotencyKey(sql, idempotencyKey);
+        if (original) return matchIdempotent(original);
       }
       // Known duplicates are observations and remain available while fenced or expired.
       const existing = await find(sql, "operation_key", admission.operationKey);
@@ -497,9 +490,9 @@ export function createPostgresDataExecutionStore(
         return result.value;
       };
       return admitTransaction(async (tx) => {
-        if (legacyKey) {
-          const original = await findLegacyTransit(tx, legacyKey);
-          if (original) return matchLegacy(original);
+        if (idempotencyKey) {
+          const original = await findByIdempotencyKey(tx, idempotencyKey);
+          if (original) return matchIdempotent(original);
         }
         if (!admission.preparedGeneration) await options.configurationFence?.assertAdmission(tx);
         const retained = await find(tx, "operation_key", admission.operationKey);
@@ -548,7 +541,7 @@ export function createPostgresDataExecutionStore(
           Row[]
         >`INSERT INTO data_manager.jobs(id,kind,status,triggered_by,idempotency_key,started_at,execution_version,operation_key,operation_fingerprint,
           execution_fingerprint,admitted_at,deadline_at,requested_deadline_at,execution_parent,execution_input,execution_state,metadata)
-          VALUES(${status.id},${input.kind},'queued',${admission.triggeredBy ?? null},${legacyKey ?? null},${new Date(status.admittedAt).toISOString()}::text::timestamptz,2,${status.operationKey},${operationFingerprint},
+          VALUES(${status.id},${input.kind},'queued',${admission.triggeredBy ?? null},${idempotencyKey ?? null},${new Date(status.admittedAt).toISOString()}::text::timestamptz,2,${status.operationKey},${operationFingerprint},
           ${status.fingerprint},${status.admittedAt},${status.deadlineAt},${admission.requestedDeadlineAt ?? null},
           ${admission.parent ? canonicalJson(admission.parent) : null}::text::jsonb,${canonicalJson(input)}::text::jsonb,${canonicalJson({ cancellationRequestedAt: null, progress: null, diagnostics: status.diagnostics, publication: status.publication })}::text::jsonb,${canonicalJson({ dataExecution: { version: 1, execution, childReservations } })}::text::jsonb) RETURNING *`;
         if (!rows[0]) throw Error("Execution admission did not return its durable row");
@@ -556,22 +549,23 @@ export function createPostgresDataExecutionStore(
           await tx`UPDATE data_manager.jobs SET metadata=jsonb_set(coalesce(metadata,'{}'::jsonb),'{durableExecution}',${canonicalJson({ id: status.id, operationKey: status.operationKey, fingerprint: status.fingerprint })}::text::jsonb),ownership_version=ownership_version+1 WHERE id=${admission.sourceJobId}`;
         return { created: true, record: decode(rows[0]) };
       }).catch(async (error) => {
-        if (legacyKey && error instanceof DataConfigurationMaintenanceBusy) {
+        if (idempotencyKey && error instanceof DataConfigurationMaintenanceBusy) {
           // The competing admission may still be committing its mapping. Only
           // read the winner; never repeat a transaction or start another root.
           for (let n = 0; n < 10; n++) {
-            const original = await findLegacyTransit(sql, legacyKey);
-            if (original) return matchLegacy(original);
+            const original = await findByIdempotencyKey(sql, idempotencyKey);
+            if (original) return matchIdempotent(original);
             await new Promise((resolve) => setTimeout(resolve, 25));
           }
         }
         throw error;
       });
     },
-    async lookupLegacyTransit(key) {
-      const row = await findLegacyTransit(sql, z.string().max(200).parse(key));
+    async lookupByIdempotencyKey(key) {
+      const row = await findByIdempotencyKey(sql, z.string().max(200).parse(key));
       if (!row) return null;
-      if (row.execution_version !== 2) throw new LegacyTransitDuplicate(row.id);
+      if (row.execution_version !== 2)
+        throw new DataExecutionConflict("Idempotency key belongs to a different kind of job");
       return decode(row);
     },
     inspect: (id) => find(sql, "id", id),
