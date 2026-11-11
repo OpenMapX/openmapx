@@ -55,6 +55,14 @@ vi.mock("../admin-job-state", async (actual) => ({
     return true;
   }),
 }));
+// Projection-bearing checkpoints are merged by the owned-row transaction, which
+// the PostgreSQL suites cover; this suite records what the runner hands to it.
+vi.mock("../admin-job-checkpoint", () => ({
+  checkpointOwnedAdminJob: vi.fn(async (_id: string, _owner: unknown, result: object) => {
+    database.updates.push({ result });
+    return result;
+  }),
+}));
 vi.mock("../admin-job-ops", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../admin-job-ops")>()),
   cancelAdminJobOperations: vi.fn(),
@@ -162,6 +170,7 @@ describe("extension job durable boundaries", () => {
             kind: "backup.create",
             operationKey,
             operationId: `job1_key${suffix}`,
+            phase: "observing",
             cursor: 0,
             events: 0,
             bytes: 0,
@@ -173,7 +182,8 @@ describe("extension job durable boundaries", () => {
     );
     const checkpoint = {
       opsProjection: {
-        version: 1,
+        version: 3,
+        steps: {},
         eventTotal: 0,
         byteTotal: 0,
         truncated: false,

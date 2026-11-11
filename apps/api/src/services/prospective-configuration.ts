@@ -734,7 +734,6 @@ export async function discardNeverPreparedProspectiveConfiguration(
         !["prepared", "discarding_without_guard"].includes(String(retained.phase)) ||
         retained.rowVersions !== undefined ||
         maintenance?.decision !== undefined ||
-        result._configurationDecision !== undefined ||
         inspection?.state !== "complete" ||
         canonicalJson(inspection.receipt) !== canonicalJson(closed) ||
         !projected?.terminal ||

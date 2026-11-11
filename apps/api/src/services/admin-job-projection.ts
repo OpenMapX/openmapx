@@ -71,7 +71,7 @@ export interface ProjectedOperation {
 }
 
 export interface OpsProjection {
-  version: 1 | 2 | 3;
+  version: 3;
   steps: Record<string, { operationKey: string; requestedDeadlineAt: number }>;
   eventTotal: number;
   byteTotal: number;
@@ -96,7 +96,7 @@ export function readProjection(result: unknown): OpsProjection {
   }
   const value = candidate as Record<string, unknown>;
   if (
-    (value.version !== 1 && value.version !== 2 && value.version !== 3) ||
+    value.version !== 3 ||
     !boundedInteger(value.eventTotal, ADMIN_EVENT_LIMIT) ||
     !boundedInteger(value.byteTotal, ADMIN_EVENT_BYTE_LIMIT) ||
     typeof value.truncated !== "boolean" ||
@@ -119,7 +119,6 @@ export function readProjection(result: unknown): OpsProjection {
       operation.operationKey !== key ||
       (operation.operationId !== undefined &&
         (typeof operation.operationId !== "string" || !OPERATION_ID.test(operation.operationId))) ||
-      (value.version === 1 && operation.operationId === undefined) ||
       typeof operation.kind !== "string" ||
       !boundedInteger(operation.cursor, Number.MAX_SAFE_INTEGER) ||
       !boundedInteger(operation.events, ADMIN_EVENT_LIMIT) ||
@@ -132,13 +131,9 @@ export function readProjection(result: unknown): OpsProjection {
     if (!Object.hasOwn(OPS_KIND_POLICIES, operation.kind as string))
       throw new JobObservationPending("invalid_identity");
     if (
-      value.version !== 1 &&
-      ![
-        "admitting",
-        "observing",
-        "terminal",
-        ...(value.version === 3 ? ["refused", "prepared", "unissued"] : []),
-      ].includes(operation.phase as string)
+      !["admitting", "observing", "terminal", "refused", "prepared", "unissued"].includes(
+        operation.phase as string,
+      )
     )
       throw new JobObservationPending("invalid_identity");
     const checked =
@@ -242,7 +237,6 @@ export function readProjection(result: unknown): OpsProjection {
       const d = operation.receiptDelivery as ProjectedOperation["receiptDelivery"];
       try {
         if (
-          value.version !== 3 ||
           !operation.attempt ||
           operation.terminal !== true ||
           operation.phase !== "terminal" ||
@@ -277,47 +271,43 @@ export function readProjection(result: unknown): OpsProjection {
     operations[key] = {
       ...operation,
       ...(parsed ? { operation: parsed } : {}),
-      phase:
-        value.version === 1 ? (operation.terminal ? "terminal" : "observing") : operation.phase,
     } as ProjectedOperation;
   }
   const steps: OpsProjection["steps"] = {};
-  if (value.version === 3) {
+  if (
+    !value.steps ||
+    typeof value.steps !== "object" ||
+    Array.isArray(value.steps) ||
+    Object.keys(value.steps).length > 64
+  )
+    throw new JobObservationPending("invalid_identity");
+  for (const [address, raw] of Object.entries(value.steps)) {
+    const step = raw as { operationKey: string; requestedDeadlineAt: number };
     if (
-      !value.steps ||
-      typeof value.steps !== "object" ||
-      Array.isArray(value.steps) ||
-      Object.keys(value.steps).length > 64
+      !OPERATION_KEY.test(address) ||
+      !step ||
+      Object.keys(step).length !== 2 ||
+      !operations[step.operationKey] ||
+      operations[step.operationKey]?.attempt?.requestedDeadlineAt !== step.requestedDeadlineAt
     )
       throw new JobObservationPending("invalid_identity");
-    for (const [address, raw] of Object.entries(value.steps)) {
-      const step = raw as { operationKey: string; requestedDeadlineAt: number };
-      if (
-        !OPERATION_KEY.test(address) ||
-        !step ||
-        Object.keys(step).length !== 2 ||
-        !operations[step.operationKey] ||
-        operations[step.operationKey]?.attempt?.requestedDeadlineAt !== step.requestedDeadlineAt
-      )
-        throw new JobObservationPending("invalid_identity");
+    try {
+      if (parseControlRootOperationKey(step.operationKey).notAfter !== step.requestedDeadlineAt)
+        throw Error("Original managed root deadline changed");
+    } catch {
+      const operation = operations[step.operationKey]!;
       try {
-        if (parseControlRootOperationKey(step.operationKey).notAfter !== step.requestedDeadlineAt)
-          throw Error("Original managed root deadline changed");
+        assertConfigurationMaintenanceProjectedStep(
+          result as Record<string, unknown>,
+          step.operationKey,
+          operation.operation,
+          operation.attempt,
+        );
       } catch {
-        const operation = operations[step.operationKey]!;
-        try {
-          assertConfigurationMaintenanceProjectedStep(
-            result as Record<string, unknown>,
-            step.operationKey,
-            operation.operation,
-            operation.attempt,
-          );
-        } catch {
-          throw new JobObservationPending("invalid_identity");
-        }
+        throw new JobObservationPending("invalid_identity");
       }
-      steps[address] = step;
     }
+    steps[address] = step;
   }
   for (const mapping of Object.values(steps)) {
     const entry = operations[mapping.operationKey];
@@ -332,7 +322,7 @@ export function readProjection(result: unknown): OpsProjection {
       throw new JobObservationPending("recovery_required");
   }
   return {
-    version: value.version as 1 | 2 | 3,
+    version: 3,
     steps,
     eventTotal: value.eventTotal,
     byteTotal: value.byteTotal,
