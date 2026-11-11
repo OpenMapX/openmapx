@@ -68,7 +68,6 @@ import {
   ServiceFileError,
 } from "./release-service-files";
 import { buildAppApiServiceEnv, expandServiceSelection } from "./selection";
-import { type CheckoutPosition, importCheckoutServiceFiles } from "./service-file-import";
 import { describeServiceFiles, type ServiceFileReportLine } from "./service-file-report";
 import {
   appliedServiceFilePath,
@@ -143,15 +142,9 @@ export interface CommitConfigurationOptions {
    */
   releaseServiceFiles?: ReleaseServiceFiles;
   /**
-   * Where the checkout stands against the release, for the one-time import
-   * of its edits: the host CLI asks git. Omitted, the checkout's own service
-   * file history says (the agent, which has no git).
-   */
-  checkoutPosition?: CheckoutPosition;
-  /**
    * The bind mounts of every container, running or stopped: a service-file
-   * tree one of them mounts is kept, and those still on the checkout's files
-   * are reported. Omitted (Docker can't tell), no tree is removed.
+   * tree one of them mounts is kept. Omitted (Docker can't tell), no tree is
+   * removed.
    */
   containerBindMounts?: readonly ContainerBindMounts[];
 }
@@ -164,9 +157,9 @@ export interface CommittedConfiguration {
   /** Files beside the generation that were not written, and why; for every render's output. */
   stackFileProblems: string[];
   /**
-   * The service files: the one-time import, the overrides in use, flagged and
-   * ignored, unused checkout edits, containers still on the checkout's files.
-   * Each line has its level: render and the agent log it as such.
+   * The service files: their source under `OPENMAPX_RELEASE=local` and the
+   * overrides in use, flagged and ignored. Each line has its level: render
+   * and the agent log it as such.
    */
   serviceFileReport: ServiceFileReportLine[];
 }
@@ -1372,12 +1365,6 @@ async function commitOwnedConfigurationGeneration(
   const { infraDir } = options;
   ensureTraefikDynamicDirectory(infraDir);
   const release = options.releaseServiceFiles ?? releaseServiceFiles(options.services);
-  const imported = importCheckoutServiceFiles({
-    infraDir,
-    services: options.services,
-    release,
-    ...(options.checkoutPosition ? { position: options.checkoutPosition } : {}),
-  });
   const rendered = renderConfiguration({ ...options, releaseServiceFiles: release });
   // This store lock concerns retention only. An invocation-level domain
   // override has already been validated by renderConfiguration above; parsing
@@ -1401,14 +1388,13 @@ async function commitOwnedConfigurationGeneration(
       cleanupFailed: false,
     });
   return withBackupRetentionPolicyChange(options.infraDir, oldDays, newDays, () =>
-    commitOwnedConfigurationFiles(options, rendered, release, imported),
+    commitOwnedConfigurationFiles(options, rendered, release),
   );
 }
 async function commitOwnedConfigurationFiles(
   options: CommitConfigurationOptions,
   prepared: ReturnType<typeof renderConfiguration>,
   release: ReleaseServiceFiles,
-  imported: ReturnType<typeof importCheckoutServiceFiles>,
 ): Promise<CommittedConfiguration> {
   const { infraDir, input } = options;
   const { resolved, context, rendered, serviceFiles, overrides } = prepared;
@@ -1561,14 +1547,10 @@ async function commitOwnedConfigurationFiles(
     }
     committed.serviceFileReport.push(
       ...describeServiceFiles({
-        infraDir,
-        services: options.services,
         release,
         overrides,
         // This generation's overrides become the reviewed ones.
         stale: staleOverrides(infraDir, overrides, { record: true }),
-        imported,
-        ...(options.containerBindMounts ? { mounts: options.containerBindMounts } : {}),
       }),
     );
     committed.stackFileProblems.push(

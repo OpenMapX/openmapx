@@ -5,8 +5,7 @@ import { services } from "@openmapx/core/server";
 import { Command } from "commander";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { registerCheckCommand } from "../src/commands/check";
-import { checkoutPositionFromGit } from "../src/lib/checkout-position";
-import { containerBindMounts, legacyTraefikDynamicMounted } from "../src/lib/container-mounts";
+import { legacyTraefikDynamicMounted } from "../src/lib/container-mounts";
 import { selectedReleaseServiceFiles } from "../src/lib/release-service-files";
 
 // The check stops at its first Docker call; what it reported before that is
@@ -17,15 +16,10 @@ vi.mock("../src/lib/docker", () => ({
 }));
 vi.mock("../src/lib/container-mounts", () => ({
   legacyTraefikDynamicMounted: vi.fn(async () => false),
-  containerBindMounts: vi.fn(async () => []),
 }));
 // No release is selected unless a test selects one.
 vi.mock("../src/lib/release-service-files", () => ({
   selectedReleaseServiceFiles: vi.fn(async () => "none"),
-}));
-// Git says the checkout is at or behind the release unless a test says otherwise.
-vi.mock("../src/lib/checkout-position", () => ({
-  checkoutPositionFromGit: vi.fn(async () => ({ atOrBehindRelease: true })),
 }));
 
 let tmp: string;
@@ -80,7 +74,7 @@ it("says while Traefik still reads the checkout's routes", async () => {
   expect(traefikLines()).toEqual([]);
 });
 
-it("reports the service files: overrides, the import to come, a host render's refusal, containers on the checkout", async () => {
+it("reports the service files: the overrides in use and a host render's refusal", async () => {
   const directory = join(tmp, "services", "martin");
   mkdirSync(join(directory, "config"), { recursive: true });
   const manifest = {
@@ -107,9 +101,6 @@ it("reports the service files: overrides, the import to come, a host render's re
     image: "ghcr.io/openmapx/ops-agent@sha256:1",
     revision: "a".repeat(40),
   });
-  vi.mocked(containerBindMounts).mockResolvedValue([
-    { name: "openmapx-martin-1", sources: [join(directory, "config", "martin.yaml")] },
-  ]);
   const errors = vi.spyOn(console, "error").mockImplementation(() => {});
   // log.info: stdout, which Run diagnostics shows as information.
   const infos = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -120,23 +111,13 @@ it("reports the service files: overrides, the import to come, a host render's re
   };
   const lines = () => errors.mock.calls.flat().map(String);
   try {
-    // Ahead of the release, git says: the import waits, and a host render
-    // would refuse the differing file.
-    vi.mocked(checkoutPositionFromGit).mockResolvedValueOnce({
-      atOrBehindRelease: false,
-      reason: "the checkout's commit is neither the release's source revision r nor one before it",
-    });
+    // A changed checkout file without an override: a host render refuses it.
     writeFileSync(join(directory, "config", "martin.yaml"), "listen_addresses: 0.0.0.0:3001\n");
     rmSync(join(override, "martin.yaml"));
     await check();
     expect(lines()).toContainEqual(
       expect.stringContaining(
-        "The one-time import of your edits in the checkout's service files waits: the checkout's commit is neither",
-      ),
-    );
-    expect(lines()).toContainEqual(
-      expect.stringContaining(
-        "Your edits in the checkout's service files are not imported as overrides meanwhile",
+        "A host render refuses until this is resolved. The checkout's built-in services differ from the selected release r1",
       ),
     );
     expect(lines()).toContainEqual(
@@ -151,38 +132,17 @@ it("reports the service files: overrides, the import to come, a host render's re
     await check();
     // How things are, with nothing to do: information, on stdout, without ⚠.
     const information = infos.mock.calls.flat().map(String);
-    expect(information).toContainEqual(expect.stringMatching(/^The next render imports, once/));
     expect(information).toContainEqual(
       "Service file overrides in use, in place of the release's files (infra/docker/overrides/services): martin/config/martin.yaml.",
     );
-    expect(lines().join("\n")).not.toContain("The next render imports, once");
     expect(lines().join("\n")).not.toContain("Service file overrides in use");
-    // Something to look at: a warning.
-    expect(lines()).toContainEqual(
-      expect.stringContaining(
-        "⚠ 1 container still mounts service files from the checkout: openmapx-martin-1.",
-      ),
-    );
-    expect([...lines(), ...information].join("\n")).not.toContain("secret-hash");
-
-    // Once the import ran: what a host render would refuse.
-    services.importCheckoutServiceFiles({
-      infraDir: join(tmp, "infra", "docker"),
-      services: [],
-      release: { ...checkout, origin: "release" },
-    });
-    errors.mockClear();
-    await check();
-    expect(lines()).toContainEqual(
-      expect.stringContaining(
-        "A host render refuses until this is resolved. The checkout's built-in services differ from the selected release r1",
-      ),
-    );
+    // The overridden file is not a difference; the manifest the release doesn't have is.
+    expect(lines().join("\n")).not.toContain("services/martin/config/martin.yaml");
     expect(lines()).toContainEqual(
       expect.stringContaining("services/martin/service.json (changed)"),
     );
+    expect([...lines(), ...information].join("\n")).not.toContain("secret-hash");
   } finally {
     vi.mocked(selectedReleaseServiceFiles).mockResolvedValue("none");
-    vi.mocked(containerBindMounts).mockResolvedValue([]);
   }
 });

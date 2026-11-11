@@ -354,9 +354,6 @@ describe("the release's service files in the store", () => {
 describe("the runtime bundle's service files", () => {
   const bundled = embeddedBuiltInServiceFiles();
   const files = bundled?.files ?? [];
-  const history = JSON.parse(readFileSync(fileURLToPath(bundled?.history as URL), "utf8")) as {
-    files: Record<string, string[]>;
-  };
   const source = embeddedBuiltInServiceManifests();
   if (!source) throw new Error("The bundle variant names its manifests");
 
@@ -399,13 +396,14 @@ describe("the runtime bundle's service files", () => {
     );
   });
 
-  it("knows every file's current bytes as a version the release shipped", () => {
-    for (const file of files) {
-      expect(
-        history.files[`${file.serviceId}/${file.path}`],
-        `${file.serviceId}/${file.path}`,
-      ).toContain(sha256(readFileSync(fileURLToPath(file.url))));
-    }
+  it("refuses a version 1 index, from an image that predates this checkout", () => {
+    const index = JSON.parse(serializeReleaseServiceFiles(release(releaseServices())));
+    expect(index.version).toBe(2);
+    // As an image built before the index dropped the file history printed it.
+    const older = JSON.stringify({ ...index, version: 1, history: {} });
+    expect(() => parseReleaseServiceFiles(older)).toThrow(
+      "its service file index is version 1, which this checkout no longer reads (it reads version 2): the selected release's image predates this checkout. Rebuild the image from this checkout, or select a newer release",
+    );
   });
 
   it("covers each file's bytes, executable bit and path in the release authority digest", () => {

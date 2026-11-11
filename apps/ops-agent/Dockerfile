@@ -60,7 +60,6 @@ COPY --parents \
     services/data-manager/src/utils/atomic-write.ts \
     integrations/transit-dynamic-registry/ \
     services/*/service.json \
-    services/service-file-history.json \
     services/brouter/scripts/ \
     services/dawarich-app/scripts/ \
     services/dawarich-sidekiq/scripts/ \

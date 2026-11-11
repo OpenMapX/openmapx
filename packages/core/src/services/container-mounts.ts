@@ -32,36 +32,3 @@ export async function readContainerBindMounts(
     return undefined;
   }
 }
-
-/**
- * The containers, running or stopped, that still mount a file or directory
- * from the checkout's `services/`: created by a release before services
- * mounted the release's files. Traefik's dynamic directory has its own notice.
- */
-export function containersOnCheckoutServiceFiles(
-  rootDir: string,
-  mounts: readonly ContainerBindMounts[],
-): string[] {
-  let end = rootDir.length;
-  while (end > 0 && rootDir.charCodeAt(end - 1) === 47) end--;
-  const services = `${rootDir.slice(0, end)}/services/`;
-  const traefikDynamic = `${services}traefik/config/dynamic`;
-  return mounts
-    .filter((mount) =>
-      mount.sources.some(
-        (source) =>
-          source.startsWith(services) &&
-          source !== traefikDynamic &&
-          !source.startsWith(`${traefikDynamic}/`),
-      ),
-    )
-    .map((mount) => mount.name)
-    .sort();
-}
-
-export function describeContainersOnCheckoutServiceFiles(names: readonly string[]): string[] {
-  if (names.length === 0) return [];
-  return [
-    `${names.length} container${names.length === 1 ? "" : "s"} still mount${names.length === 1 ? "s" : ""} service files from the checkout: ${names.join(", ")}. They keep working with the checkout's files until recreated, which then mounts the release's files and your overrides; recreate each when a short restart suits you: pnpm openmapx services update <service>, or Recreate on Admin → Services. A later release stops mounting the checkout into the operations agent and waits for this.`,
-  ];
-}

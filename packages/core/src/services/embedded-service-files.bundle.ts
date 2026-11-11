@@ -150,6 +150,5 @@ export function embeddedBuiltInServiceFiles(): EmbeddedServiceFiles | null {
         url: new URL("../../../../services/well-known/config/nginx.conf", import.meta.url),
       },
     ],
-    history: new URL("../../../../services/service-file-history.json", import.meta.url),
   };
 }

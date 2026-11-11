@@ -611,63 +611,13 @@ it for you. Once no container mounts the checkout's directory, render stops
 writing there and leaves the last `generated-routes.yml` in place for a
 rollback. See [where Traefik reads its configuration](../guides/supporting-infrastructure.md#where-traefik-reads-its-configuration).
 
-## Service files come from the release
-
-Services mount the configuration files and scripts of the release the stack
-runs, copied into `infra/docker/state/ops-agent/service-files`, no longer the
-checkout's `services/`. Changes of your own go in
-[overrides](./managing-services.md#service-file-overrides) in
-`infra/docker/overrides/services`.
-
-- **Your edits are carried over.** The first render of this release imports,
-  once, every checkout service file that differs from every version a release
-  shipped, as an override, and lists them. This includes Traefik's `auth.yml`
-  and a `traefik.yml` naming `basic-auth@file`, so a basic-auth gate stays.
-  Files a container writes (Valhalla's `valhalla.json`) are never imported. A
-  checkout an earlier release left, after panel updates, imports nothing.
-- **Only from a checkout at or behind the release.** A checkout ahead of the
-  selected release's source revision can hold newer upstream files, which
-  match no version the release shipped either. There the import waits: render
-  imports and records nothing, says why each time, and uses the release's
-  files meanwhile, so an edit of yours is not applied until the import runs.
-  Traefik files are the exception: a checkout `auth.yml` (or another dynamic
-  file the release doesn't ship) or a changed `traefik.yml` makes render
-  refuse, by name, until you put it in
-  `infra/docker/overrides/services/traefik/`, so a basic-auth gate can't drop.
-  A host render asks git and refuses meanwhile. The operations agent, which
-  has no git, goes by the checkout's `services/service-file-history.json`. To
-  apply an edit sooner, put it in an override yourself.
-- **Valhalla** gets its writable copy in
-  `infra/docker/data/valhalla/config/valhalla.json`, seeded from the release's
-  file. Its own rewrite of the checkout's copy is left behind, unused. If the
-  copy is missing and can't be written, render fails and says why, rather than
-  let Docker create a directory in its place.
-- **Containers recreate when their mounts move.** Until a service is recreated,
-  its container keeps mounting the checkout's files, which still hold the same
-  bytes. Render, `check` and Run diagnostics list such containers. The
-  documented host update, `services update` with a list of services, recreates
-  only the services listed. The first stack-wide `pnpm openmapx compose up`
-  recreates every service whose mounts moved, PostGIS and Traefik included:
-  run it when a restart of the database and the proxy suits you. A panel update
-  recreates only the application services, which mount no service files.
-- **A host render refuses while the checkout differs from the selected
-  release** (see above). On a host that follows `main`, the newest commit's
-  release may not be published yet: wait for it and use the coordinated update
-  above.
-
-A rollback to the release before this one mounts the checkout's files again,
-which nothing here changed. Edits you made only in `overrides/` meanwhile do
-not apply there.
-
 ## The operations agent stops mounting the checkout
 
 The operations agent's container does not mount the checkout. Every render,
 on the host or by the agent, mounts `infra/docker` read-only (for `.env` and
 your overrides) and `infra/docker/state`, `data`, `secrets`, `backups` and
 `catalog-pins` read-write, all at their host paths. Everything else it uses
-comes from its image and its state. A one-time step that needs the checkout
-(the import of your service file edits) runs in a render on the host,
-`pnpm openmapx compose render`; the agent waits for it and says so.
+comes from its image and its state.
 
 **Rollback needs a recovery decision.** Image selection does not reverse database
 migrations or a committed configuration change. Preserve the previous coherent

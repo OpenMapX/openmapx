@@ -1,5 +1,5 @@
 ---
-impacts: [migration, operator-action]
+impacts: [operator-action]
 ---
 
 ## What changes
@@ -30,25 +30,6 @@ release's file.
 - This replaces the earlier warning that the checkout's built-in services
   differ from the release's.
 
-The first render of this release imports, once, every checkout service file
-that differs from every version a release shipped, as an override, and lists
-them. This covers Traefik's `auth.yml` and a `traefik.yml` naming
-`basic-auth@file`, so a basic-auth gate stays. A file a container writes
-(`valhalla.json`) is never imported, and nothing in the checkout is changed. A
-checkout an earlier release left after panel updates holds only released
-versions, so nothing is imported from it. Later checkout edits are reported as
-unused. The import runs only from a checkout at or behind the selected
-release's source revision, since one ahead of it can hold newer upstream files
-that also match no released version. Until then it waits, imports and records
-nothing, and render, `check` and Run diagnostics say why and list the checkout
-files not used meanwhile. The host CLI asks git; the operations agent goes by
-the checkout's `services/service-file-history.json`. Meanwhile render refuses
-if the checkout holds a Traefik file the import would carry over (an
-`auth.yml`, another dynamic file the release doesn't ship, or a changed
-`traefik.yml`), naming it, until it is an override, so a basic-auth gate
-can't drop. A configuration saved in the admin panel then fails with that
-reason.
-
 If Valhalla's writable copy is missing and can't be written, render fails with
 the reason, rather than let Docker create a root-owned directory in its place.
 
@@ -60,44 +41,21 @@ the release of the checkout's commit is published and run
 `pnpm openmapx compose release` again, or check out the release's source
 revision. With no release selected yet, render uses the checkout's files and
 says so. Under `OPENMAPX_RELEASE=local` the checkout's files are the
-release's, for the host CLI and the operations agent alike, and nothing is
-imported.
+release's, for the host CLI and the operations agent alike.
 
 ## Who is affected
 
-Every installation that runs built-in services. Operators who edited files
-under `services/` (Traefik basic auth, Martin sources, OTP configuration, and so
-on) find those edits as overrides after the first render. Hosts that follow
-`main` with the host CLI may see a render refused until the release of their
-commit is published.
+Every installation that runs built-in services. Changes to files under
+`services/` in the checkout are not used: they belong in overrides. Hosts that
+follow `main` with the host CLI may see a render refused until the release of
+their commit is published.
 
 ## Required action
 
-- **After the upgrade, check the render's output, or `pnpm openmapx check`,
-  for the files it imported, or why the import waits.** If it waits, an edit
-  of yours is not applied until it runs, and Traefik edits make render refuse:
-  put the file in an override yourself, or bring the checkout to the release's
-  source revision. From then on, edit those files in
-  `infra/docker/overrides/services`, not in the checkout. Create new
-  overrides under `umask 022`: Debian's and Ubuntu's default `002` makes
-  them group-writable, and render refuses those.
+- **Keep changes to service files in `infra/docker/overrides/services`**, not
+  in the checkout. Create overrides under `umask 022`: Debian's and Ubuntu's
+  default `002` makes them group-writable, and render refuses those.
 - **Select the release before rendering on a host.** The documented host
   update already does: `git pull`, `pnpm install`, `pnpm openmapx compose
-release`, `pnpm openmapx compose render`. A first installation now runs
+release`, `pnpm openmapx compose render`. A first installation runs
   `compose release` before `compose render`.
-- **Choose when services recreate.** A container keeps mounting the checkout's
-  files until it is recreated. Those files still hold the same bytes, and
-  render, `check` and Run diagnostics list such containers. The documented host
-  update, `services update` with a list of services, recreates only the
-  services listed. A panel update recreates only the application services,
-  which mount no service files. **The first stack-wide `pnpm openmapx compose
-up` recreates every service whose mounts moved, PostGIS and Traefik
-  included.** Run it when a restart of the database and the proxy suits you,
-  or recreate services one at a time with `pnpm openmapx services update
-<service>`. A later release stops mounting the checkout into the operations
-  agent, and waits until no container mounts the checkout's service files.
-
-Rollback: the release before this one mounts the checkout's files again,
-which this release leaves untouched. Edits made only in `overrides/` meanwhile
-do not apply there; carry them back to the checkout if you need them before
-upgrading again.

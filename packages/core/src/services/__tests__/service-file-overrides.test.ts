@@ -8,7 +8,6 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
-  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -24,12 +23,7 @@ import {
 } from "../configuration-generation";
 import { CURRENT_CONFIGURATION } from "../deployment";
 import { findServiceManifestDirs } from "../manifest-discovery";
-import {
-  parseServiceFileHistory,
-  type ReleaseServiceFiles,
-  readCheckoutServiceFiles,
-} from "../release-service-files";
-import { serviceFilesImported } from "../service-file-import";
+import { type ReleaseServiceFiles, readCheckoutServiceFiles } from "../release-service-files";
 import { TRAEFIK_STATIC_GENERATION_FILE } from "../traefik-files";
 import type { LoadedService, ServiceManifest } from "../types";
 
@@ -69,34 +63,16 @@ function checkout() {
       enabled: false,
     }),
   );
-  // The release: these same files, before any edit, built at the checkout's
-  // commit or later, so it knows every version the checkout's history lists.
+  // The release: these same files, before any edit.
   const shipped = readCheckoutServiceFiles(services, process.geteuid?.() ?? 0);
-  const listed = parseServiceFileHistory(
-    readFileSync(join(root, "services", "service-file-history.json"), "utf8"),
-  );
-  const release = (
-    changes: Record<string, string> = {},
-    history: Record<string, string[]> = {},
-  ): ReleaseServiceFiles => {
+  const release = (changes: Record<string, string> = {}): ReleaseServiceFiles => {
     const files = new Map(shipped.files);
     for (const [key, text] of Object.entries(changes)) {
       const file = files.get(key);
       if (!file) throw new Error(`no ${key}`);
       files.set(key, { ...file, bytes: Buffer.from(text), sha256: sha256(text) });
     }
-    return {
-      origin: "release",
-      files,
-      history: new Map(
-        [...files].map(([key, file]) => [
-          key,
-          new Set([file.sha256, ...(listed.get(key) ?? []), ...(history[key] ?? [])]),
-        ]),
-      ),
-      manifests: new Map(),
-      missing: [],
-    };
+    return { origin: "release", files, manifests: new Map(), missing: [] };
   };
   const override = (key: string, text: string, mode = 0o644) => {
     const path = join(infraDir, "overrides", "services", key);
@@ -292,232 +268,5 @@ describe("service file overrides", () => {
     // Editing the override acknowledges the release's change.
     writeFileSync(path, "listen_addresses: 0.0.0.0:3001\nworker_processes: 4\n");
     expect((await commit(newer)).serviceFileReport).not.toContainEqual(flag);
-  });
-});
-
-describe("the one-time import of checkout edits", () => {
-  const commit = (f: ReturnType<typeof checkout>, release: ReleaseServiceFiles) =>
-    commitConfigurationGeneration({
-      infraDir: f.infraDir,
-      services: f.services,
-      input: input(SELECTED),
-      releaseServiceFiles: release,
-      legacyTraefikDynamicMounted: false,
-    });
-
-  it("makes overrides of edits, Traefik's auth.yml and basic-auth reference included, once", async () => {
-    const f = checkout();
-    const traefik = join(f.root, "services", "traefik", "config");
-    const gated = readFileSync(join(traefik, "traefik.yml"), "utf8").replace(
-      "middlewares:",
-      "middlewares:\n          - basic-auth@file",
-    );
-    writeFileSync(join(traefik, "traefik.yml"), gated);
-    writeFileSync(join(traefik, "dynamic", "auth.yml"), AUTH);
-    writeFileSync(join(traefik, "dynamic", "generated-routes.yml"), "stale: routes\n");
-    writeFileSync(join(f.root, "services", "martin", "config", "martin.yaml"), "edited: true\n");
-    chmodSync(join(f.root, "services", "martin", "config", "martin.yaml"), 0o600);
-    // valhalla-scripted's own rewrite: a file a container writes.
-    writeFileSync(
-      join(f.root, "services", "valhalla", "config", "valhalla.json"),
-      '{"concurrency": "12"}\n',
-    );
-
-    const committed = await commit(f, f.release());
-    const overrides = join(f.infraDir, "overrides", "services");
-    expect(committed.serviceFileReport[0]).toEqual({
-      level: "info",
-      message: expect.stringContaining("Imported"),
-    });
-    expect(readFileSync(join(overrides, "traefik", "config", "traefik.yml"), "utf8")).toBe(gated);
-    expect(readFileSync(join(overrides, "traefik", "config", "dynamic", "auth.yml"), "utf8")).toBe(
-      AUTH,
-    );
-    expect(
-      existsSync(join(overrides, "traefik", "config", "dynamic", "generated-routes.yml")),
-    ).toBe(false);
-    expect(existsSync(join(overrides, "valhalla"))).toBe(false);
-    // Never more open than the checkout's file; Traefik's owner-only.
-    const mode = (path: string) => statSync(path).mode & 0o777;
-    expect(mode(join(overrides, "martin", "config", "martin.yaml"))).toBe(0o600);
-    expect(mode(join(overrides, "traefik", "config", "dynamic", "auth.yml"))).toBe(0o600);
-    expect(mode(join(overrides, "traefik", "config", "traefik.yml"))).toBe(0o600);
-    // The basic-auth gate survives the switch to the release's files.
-    expect(
-      readFileSync(join(f.infraDir, CURRENT_CONFIGURATION, TRAEFIK_STATIC_GENERATION_FILE), "utf8"),
-    ).toContain("basic-auth@file");
-    expect(readFileSync(join(agentStatePaths(f.infraDir).traefikDynamic, "auth.yml"), "utf8")).toBe(
-      AUTH,
-    );
-    // The checkout is untouched, for a rollback to the release before.
-    expect(readFileSync(join(traefik, "traefik.yml"), "utf8")).toBe(gated);
-    expect(JSON.stringify(committed)).not.toContain("secret-hash");
-
-    // Once: a later checkout edit is reported, not imported.
-    writeFileSync(
-      join(f.root, "services", "postgis", "scripts", "sync-password.sh"),
-      "#!/bin/sh\n",
-    );
-    const later = await commit(f, f.release());
-    expect(existsSync(join(overrides, "postgis"))).toBe(false);
-    expect(later.serviceFileReport).toContainEqual({
-      level: "warn",
-      message: expect.stringContaining("differs from every version"),
-    });
-    expect(later.serviceFileReport.map((line) => line.message).join("\n")).not.toContain(
-      "Imported",
-    );
-  });
-
-  it("imports nothing from a checkout an earlier release left, with only Valhalla's own rewrite (openmapx.com)", async () => {
-    const f = checkout();
-    // openmapx.com's checkout predates the service file history, which says
-    // it is behind the release.
-    rmSync(join(f.root, "services", "service-file-history.json"));
-    // The checkout is one release behind: martin.yaml and pelias.json hold
-    // that release's bytes, which the release's history knows.
-    const martin = readFileSync(
-      join(f.root, "services", "martin", "config", "martin.yaml"),
-      "utf8",
-    );
-    const pelias = readFileSync(
-      join(f.root, "services", "pelias", "config", "pelias.json"),
-      "utf8",
-    );
-    const release = f.release(
-      {
-        "martin/config/martin.yaml": `${martin}# newer\n`,
-        "pelias/config/pelias.json": `${pelias.trim()}\n\n`,
-      },
-      {
-        "martin/config/martin.yaml": [sha256(martin)],
-        "pelias/config/pelias.json": [sha256(pelias)],
-      },
-    );
-    writeFileSync(
-      join(f.root, "services", "valhalla", "config", "valhalla.json"),
-      '{"mjolnir": {"concurrency": "12"}}\n',
-    );
-    const committed = await commit(f, release);
-    expect(existsSync(join(f.infraDir, "overrides"))).toBe(false);
-    expect(committed.serviceFileReport).toEqual([]);
-    expect(serviceFilesImported(f.infraDir)).toBe(true);
-    expect(readFileSync(mounted(f.infraDir, "martin", "/etc/martin/martin.yaml"), "utf8")).toBe(
-      `${martin}# newer\n`,
-    );
-  });
-
-  /**
-   * A checkout one commit ahead of the release: upstream changed martin.yaml,
-   * and its regenerated history lists the new bytes.
-   */
-  function ahead(f: ReturnType<typeof checkout>) {
-    const newer = "listen_addresses: 0.0.0.0:3000\nworker_processes: 8\n";
-    const martin = join(f.root, "services", "martin", "config", "martin.yaml");
-    const shipped = readFileSync(martin, "utf8");
-    writeFileSync(martin, newer);
-    const historyPath = join(f.root, "services", "service-file-history.json");
-    const history = JSON.parse(readFileSync(historyPath, "utf8")) as {
-      files: Record<string, string[]>;
-    };
-    history.files["martin/config/martin.yaml"]?.push(sha256(newer));
-    writeFileSync(historyPath, JSON.stringify(history));
-    return { newer, shipped, historyPath, history };
-  }
-
-  it("waits, importing and recording nothing, while the checkout is ahead of the release", async () => {
-    const f = checkout();
-    const { newer, shipped, historyPath, history } = ahead(f);
-    // The operator changed OTP's build configuration.
-    const otp = join(f.root, "services", "otp", "config", "build-config.json");
-    writeFileSync(otp, '{"osm": []}\n');
-
-    const waiting = await commit(f, f.release());
-    expect(existsSync(join(f.infraDir, "overrides"))).toBe(false);
-    expect(serviceFilesImported(f.infraDir)).toBe(false);
-    expect(waiting.serviceFileReport[0]).toEqual({
-      level: "warn",
-      message: expect.stringContaining("one-time import"),
-    });
-    expect(readFileSync(mounted(f.infraDir, "martin", "/etc/martin/martin.yaml"), "utf8")).toBe(
-      shipped,
-    );
-    // Again on the next render, still without a record.
-    expect((await commit(f, f.release())).serviceFileReport[0]?.message).toContain("waits");
-    expect(serviceFilesImported(f.infraDir)).toBe(false);
-
-    // A history it can't read says nothing about where the checkout stands.
-    writeFileSync(historyPath, "{}");
-    expect((await commit(f, f.release())).serviceFileReport[0]?.message).toContain(
-      "waits: the checkout's services/service-file-history.json, which says whether it is ahead of the release, is not a service file history.",
-    );
-    writeFileSync(historyPath, JSON.stringify(history));
-
-    // The release of that commit: upstream's martin.yaml is its own, and only
-    // the operator's file is imported.
-    const caughtUp = await commit(f, f.release({ "martin/config/martin.yaml": newer }));
-    expect(caughtUp.serviceFileReport[0]).toEqual({
-      level: "info",
-      message: expect.stringContaining("Imported"),
-    });
-    expect(existsSync(join(f.infraDir, "overrides", "services", "martin"))).toBe(false);
-    expect(serviceFilesImported(f.infraDir)).toBe(true);
-  });
-
-  it("refuses, while the import waits, a basic-auth gate it would carry over, until it is in overrides", async () => {
-    const f = checkout();
-    ahead(f);
-    const traefik = join(f.root, "services", "traefik", "config");
-    const gated = readFileSync(join(traefik, "traefik.yml"), "utf8").replace(
-      "middlewares:",
-      "middlewares:\n          - basic-auth@file",
-    );
-    writeFileSync(join(traefik, "traefik.yml"), gated);
-    writeFileSync(join(traefik, "dynamic", "auth.yml"), AUTH);
-
-    const refused = await commit(f, f.release()).catch((error: Error) => error.message);
-    expect(refused).toEqual(expect.stringContaining("basic-auth gate"));
-    expect(refused).not.toContain("secret-hash");
-    expect(existsSync(join(f.infraDir, "overrides"))).toBe(false);
-    expect(serviceFilesImported(f.infraDir)).toBe(false);
-    expect(existsSync(join(f.infraDir, CURRENT_CONFIGURATION))).toBe(false);
-
-    // The same files, placed in overrides: render goes on and serves the gate.
-    f.override("traefik/config/dynamic/auth.yml", AUTH, 0o600);
-    f.override("traefik/config/traefik.yml", gated);
-    const committed = await commit(f, f.release());
-    expect(
-      readFileSync(join(f.infraDir, CURRENT_CONFIGURATION, TRAEFIK_STATIC_GENERATION_FILE), "utf8"),
-    ).toContain("basic-auth@file");
-    expect(readFileSync(join(agentStatePaths(f.infraDir).traefikDynamic, "auth.yml"), "utf8")).toBe(
-      AUTH,
-    );
-    // The rest still waits, reported: upstream's martin.yaml keeps the release's bytes.
-    expect(committed.serviceFileReport[0]).toEqual({
-      level: "warn",
-      message: expect.stringContaining(
-        "Meanwhile render uses the release's files, not these checkout files, which match no version it shipped: services/martin/config/martin.yaml.",
-      ),
-    });
-    expect(serviceFilesImported(f.infraDir)).toBe(false);
-  });
-
-  it("runs only for the release's files, and fails rather than lose an edit it may not read", async () => {
-    const f = checkout();
-    const martin = join(f.root, "services", "martin", "config", "martin.yaml");
-    // Running from the checkout, under OPENMAPX_RELEASE=local: its edits are
-    // the files, and nothing is imported.
-    writeFileSync(martin, "edited: true\n");
-    await commit(f, readCheckoutServiceFiles(f.services, process.geteuid?.() ?? 0));
-    expect(serviceFilesImported(f.infraDir)).toBe(false);
-    expect(existsSync(join(f.infraDir, "overrides"))).toBe(false);
-
-    writeFileSync(join(f.root, "elsewhere.yaml"), "edited: true\n");
-    rmSync(martin);
-    symlinkSync(join(f.root, "elsewhere.yaml"), martin);
-    await expect(commit(f, f.release())).rejects.toThrow(
-      "services/martin/config/martin.yaml can't be read for the one-time import of your service file edits: it is a symbolic link.",
-    );
-    expect(serviceFilesImported(f.infraDir)).toBe(false);
   });
 });

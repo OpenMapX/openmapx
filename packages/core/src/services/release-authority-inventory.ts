@@ -144,14 +144,6 @@ export function readBuiltInServices(
         .update(file.sha256)
         .update("\0");
     }
-    digest.update("history\0");
-    for (const [key, hashes] of [...files.history].sort(([a], [b]) => a.localeCompare(b))) {
-      digest
-        .update(key)
-        .update("\0")
-        .update([...hashes].sort().join(","))
-        .update("\0");
-    }
   }
   return { serviceIds, services, digest: `release1_${digest.digest("base64url")}` };
 }

@@ -461,12 +461,9 @@ back to the release's file.
   such as `traefik/config/dynamic/auth.yml`, is added to Traefik's
   configuration. `generated-routes.yml` is render's own.
 - Render's output, the operations agent's log, `pnpm openmapx check` and
-  **Run diagnostics** list the overrides in use, by name only. That list, the
-  files the one-time import carried over, and, for an agent without the
-  checkout, the note that it doesn't compare the checkout's files, are
-  information. A changed release file under an override, an ignored override,
-  an import that waits, or a container still on the checkout's files is a
-  warning (⚠), and so is shown apart in Run diagnostics.
+  **Run diagnostics** list the overrides in use, by name only. That list is
+  information. A changed release file under an override, or an ignored
+  override, is a warning (⚠), and so is shown apart in Run diagnostics.
 
 **When a release changes a file you override.** The agent's state records, for
 each override, the release file it replaced. When a later release changes that
@@ -488,31 +485,6 @@ in its place and Valhalla could not start.
 Override `services/valhalla/config/valhalla.json` to change what it starts
 from; editing the copy lasts only until the next seed.
 
-**Upgrading from a release before this.** The first render with the release's
-files imports, once, every service file in the checkout that differs from
-every version a release shipped, as an override. This includes an `auth.yml`
-and a changed `traefik.yml`. Files a container writes are never imported, and
-nothing in the checkout is changed. The render lists what it imported. A
-checkout service file you edit afterwards is reported as unused; move it into
-`infra/docker/overrides` to keep it.
-
-The import runs only from a checkout at or behind the selected release's
-source revision. A checkout ahead of it can hold newer upstream files, which
-also match no released version. Until then the import waits: render imports
-and records nothing, says why on every render, in `check` and in Run
-diagnostics, lists the checkout files it does not use, and uses the release's.
-Traefik is the exception: while the import waits, render refuses if the
-checkout holds a Traefik file the import would carry over, an `auth.yml` or
-another dynamic YAML or TOML file the release doesn't ship, or a changed
-`traefik.yml`. Using the release's files instead could drop a basic-auth gate.
-The refusal names the files. Put each in
-`infra/docker/overrides/services/traefik/` at the same path, under `umask 022`
-(`auth.yml` with mode 0600), and render goes on: an override ends the wait for
-that file.
-The host CLI asks git; the operations agent goes by the checkout's
-`services/service-file-history.json`, which each commit keeps current. A
-checkout without that file predates it and is taken to be behind.
-
 Under `OPENMAPX_RELEASE=local`, for development, no release supplies the
 files. A render on the host reads the checkout's own `services/` files. The
 operations agent has no checkout: its renders, such as an admin-panel
@@ -521,7 +493,7 @@ took from the checkout as it was then. After you edit a file under
 `services/`, a host render uses the edit at once; the agent uses it only once
 you rebuild the ops-agent image from the checkout and recreate the agent from
 that image. Each such agent render says so in its output. Overrides apply to
-both, and nothing is imported.
+both.
 
 The agent's files are the checkout's only when its image is a local build.
 `OPENMAPX_RELEASE=local` does not clear an existing release overlay, which
