@@ -37,6 +37,41 @@ describe("named product candidate", () => {
       expect(() => release.planProductRelease(input)).toThrow();
     },
   );
+  it.each([
+    undefined,
+    null,
+    "",
+    "tomorrow",
+    "2026-10-18",
+    "2026-10-18T10:00Z",
+    "2026-10-18T10:00:00",
+    "2026-10-18T10:00:00+0200",
+    "2026-10-18T24:00:00Z",
+    "2026-02-31T12:00:00Z",
+  ])("rejects build metadata whose cold-refresh date is %s", (coldRefreshedAt) => {
+    const input = fixture();
+    const images = input.producerManifest.buildMetadata.images as Record<
+      string,
+      Record<string, unknown>
+    >;
+    if (coldRefreshedAt === undefined) delete images.api.coldRefreshedAt;
+    else images.api.coldRefreshedAt = coldRefreshedAt;
+    expect(() => release.planProductRelease(input)).toThrow(
+      "Missing actual build metadata for api",
+    );
+  });
+  it.each(["2026-10-18T10:00:00Z", "2026-10-18T10:00:00.123456Z", "2026-10-18T12:00:00+02:00"])(
+    "accepts a cold-refresh date of %s",
+    (coldRefreshedAt) => {
+      const input = fixture();
+      const images = input.producerManifest.buildMetadata.images as Record<
+        string,
+        Record<string, unknown>
+      >;
+      images.api.coldRefreshedAt = coldRefreshedAt;
+      expect(() => release.planProductRelease(input)).not.toThrow();
+    },
+  );
   it("rejects skipped producer jobs and unapproved images", () => {
     const input = fixture();
     input.jobs[1].conclusion = "skipped";

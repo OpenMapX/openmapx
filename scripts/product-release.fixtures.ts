@@ -46,6 +46,7 @@ export function fixture() {
             sourceRevision: revision,
             inputHash: "d".repeat(64),
             builtAt: "2026-10-18T10:00:00.000Z",
+            coldRefreshedAt: "2026-10-18T10:00:00.000Z",
           },
         ]),
       ),
