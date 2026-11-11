@@ -90,7 +90,7 @@ System groups operational topics without mixing them into application Settings:
 - **Backups:** create, inspect, restore and delete snapshots, with backup retention in the same topic.
 - **Diagnostics:** readiness evidence and deep service probes.
 - **Cache:** inspect and clear application caches.
-- **Configuration transfer:** export, import, migration and protected credential transfer.
+- **Configuration transfer:** configuration migration export and import, and protected credential transfer.
 
 Services, Deployment, Updates, Backups and Diagnostics require self-hosted control. Cache and Configuration transfer remain available to hosted administrators.
 
@@ -198,7 +198,7 @@ data tasks. It navigates to a control without running the task or changing a val
 
 Settings owns General, Authentication, Email, Map and Data use. Operator details,
 legal facts and privacy retention belong to Privacy setup. The email readiness
-step links to Settings → Email. Configuration export, import, migration and
+step links to Settings → Email. Configuration migration export and import and
 protected credential transfer belong to System → Configuration transfer.
 
 System groups Services, Deployment, Updates, Backups, Diagnostics, Cache and

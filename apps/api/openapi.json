@@ -85587,34 +85587,6 @@
         "x-openmapx-auth": "admin"
       }
     },
-    "/api/admin/settings/export": {
-      "post": {
-        "operationId": "postApiAdminSettingsExport",
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "x-openmapx-auth": "admin"
-      }
-    },
-    "/api/admin/settings/import": {
-      "post": {
-        "operationId": "postApiAdminSettingsImport",
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "x-openmapx-auth": "admin"
-      }
-    },
     "/api/admin/settings/test-email": {
       "post": {
         "operationId": "postApiAdminSettingsTestEmail",

@@ -338,78 +338,6 @@ describe("PATCH /admin/settings", () => {
   });
 });
 
-describe("POST /admin/settings/export", () => {
-  it("returns exported settings and writes audit log", async () => {
-    const res = await app.inject({ method: "POST", url: "/admin/settings/export" });
-
-    expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(body.settings).toBeDefined();
-    expect(body.exportedAt).toBeTruthy();
-    expect(mockWriteAuditLog).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "settings.export" }),
-    );
-  });
-});
-
-describe("POST /admin/settings/import", () => {
-  it("imports non-secret settings and returns imported count", async () => {
-    const res = await app.inject({
-      method: "POST",
-      url: "/admin/settings/import",
-      payload: { settings: { instanceName: "Imported Name", defaultLocale: "de" } },
-    });
-
-    expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(body.ok).toBe(true);
-    expect(body.imported).toBe(2);
-    expect(
-      insertChain.values.mock.calls.map(([row]) => ({ key: row.key, value: row.value })),
-    ).toEqual([
-      { key: "instanceName", value: "Imported Name" },
-      { key: "defaultLocale", value: "de" },
-    ]);
-    expect(mockWriteAuditLog).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "settings.import" }),
-    );
-  });
-
-  it("returns 400 when body is missing settings object", async () => {
-    const res = await app.inject({
-      method: "POST",
-      url: "/admin/settings/import",
-      payload: { notSettings: {} },
-    });
-
-    expect(res.statusCode).toBe(400);
-    expect(res.json().error).toContain("settings");
-  });
-
-  it("silently skips secret keys (e.g. maptilerApiKey)", async () => {
-    const res = await app.inject({
-      method: "POST",
-      url: "/admin/settings/import",
-      payload: { settings: { maptilerApiKey: "should-not-import", instanceName: "ok" } },
-    });
-
-    expect(res.statusCode).toBe(200);
-    // Only the non-secret key should be counted
-    expect(res.json().imported).toBe(1);
-  });
-
-  it("rejects a malformed authentication draft atomically", async () => {
-    const res = await app.inject({
-      method: "POST",
-      url: "/admin/settings/import",
-      payload: { settings: { sessionDurationHours: "abc", instanceName: "good" } },
-    });
-    expect(res.statusCode).toBe(400);
-    expect(mockDbInsert).not.toHaveBeenCalled();
-    expect(mockWriteAuditLog).not.toHaveBeenCalled();
-  });
-});
-
 describe("GET /admin/logs", () => {
   it("returns entries and sources from appLogger", async () => {
     mockGetEntries.mockReturnValueOnce({ entries: [{ id: "log-1", level: "info" }], total: 1 });
@@ -491,17 +419,5 @@ describe("map settings review regressions", () => {
     expect(insertChain.values).toHaveBeenCalledWith(
       expect.objectContaining({ key: "hostedBasemapProvider", value: "openfreemap" }),
     );
-  });
-});
-
-describe("atomic authentication drafts", () => {
-  it("rejects an invalid auth import before writing another valid setting", async () => {
-    const result = await app.inject({
-      method: "POST",
-      url: "/admin/settings/import",
-      payload: { settings: { instanceName: "Must not be saved", sessionDurationHours: 0 } },
-    });
-    expect(result.statusCode).toBe(400);
-    expect(mockDbInsert).not.toHaveBeenCalled();
   });
 });

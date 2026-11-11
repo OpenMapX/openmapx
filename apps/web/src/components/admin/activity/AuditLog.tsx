@@ -109,8 +109,6 @@ const ACTION_GROUPS: Array<{ label: string; actions: Array<[action: string, labe
     actions: [
       ["settings.update", "Updated"],
       ["settings.test_email", "Test Email"],
-      ["settings.export", "Exported"],
-      ["settings.import", "Imported"],
     ],
   },
   {
