@@ -9,6 +9,8 @@ import {
   transitStartPackageSchema,
   type WebToNativeMessage,
 } from "@openmapx/core/navigation";
+import type { SendOutcome } from "../bridge/nativeBridge";
+import type { ConnectivityState } from "../connectivity/ConnectivityDriver";
 import { type RawLocation, sanitiseFixes } from "../location/sanitiseFixes";
 import type { CommitResult, SessionEffect, SessionRepository } from "../storage/SessionRepository";
 import { locationReleaseAtMs } from "./arrival";
@@ -44,11 +46,12 @@ export interface CommandResponse {
 }
 
 export interface BridgePort {
+  /** `invalid` means the message failed its schema and was not sent. */
   send(
     type: NativeToWebMessage["type"],
     payload: unknown,
     options?: { sessionId?: string; revision?: number; forMessageId?: string },
-  ): unknown;
+  ): SendOutcome;
 }
 
 export interface PermissionPort {
@@ -65,6 +68,18 @@ export interface DriverPort {
   isRunning(): Promise<boolean>;
 }
 
+/** What every consumer of a session's end is told, once per end. */
+export interface SessionEnded {
+  sessionId: string;
+  finalStatus: "arrived" | "stopped" | "expired" | "error";
+  revision: number;
+}
+
+/** The connectivity state that has held long enough to act on. */
+export interface ConnectivityPort {
+  confirmed(): ConnectivityState;
+}
+
 export interface CoordinatorDeps {
   repository: SessionRepository;
   processors: ProcessorRegistry;
@@ -78,20 +93,17 @@ export interface CoordinatorDeps {
   schedule?: (callback: () => void, delayMs: number) => () => void;
   newSessionId: () => string;
   /**
-   * Handles commands that are not about a navigation session —
-   * a one-off location fix, opening OS settings, a system-browser sign-in.
-   *
-   * Optional so focused session tests need no stand-in. When absent the command
-   * is refused rather than dropped: a page waiting on a reply that never comes
-   * cannot tell "unsupported" from "broken".
+   * Confirmed connectivity. Optional so focused session tests need no stand-in;
+   * without it a session's connectivity stays as it was committed.
    */
-  auxiliary?: AuxiliaryCommandHandler;
+  connectivity?: ConnectivityPort;
+  /**
+   * Told once after a session has ended and its device effects have run,
+   * whoever ended it. The shell state, keep-awake and recovery follow this
+   * rather than deciding for themselves that a trip is over.
+   */
+  onSessionEnded?(ended: SessionEnded): void;
 }
-
-/** Answers an auxiliary command the coordinator does not own, or declines it. */
-export type AuxiliaryCommandHandler = (
-  command: WebToNativeMessage,
-) => Promise<CommandResponse | null>;
 
 /** Commands whose response must survive a replay unchanged. */
 const MUTATING = new Set<WebToNativeMessage["type"]>([
@@ -137,18 +149,50 @@ export class NavigationCoordinator {
     private readonly queue = new SerialExecutor(),
   ) {}
 
-  /** A confirmed OS action cannot act on whichever trip happens to be current. */
-  stopFromSurface(expectedSessionId: string): Promise<boolean> {
+  /**
+   * Ends the trip the user confirmed natively: End on the trip card or on the
+   * recovery screen. Bound to the trip that was shown, so a stale confirmation
+   * cannot end whichever trip happens to be current.
+   */
+  stopNatively(expectedSessionId: string): Promise<boolean> {
     return this.queue.run(async () => {
-      const current = await this.deps.repository.loadActive(this.deps.clock());
+      const now = this.deps.clock();
+      const current = await this.deps.repository.loadActive(now);
       if (!current || current.sessionId !== expectedSessionId) return false;
-      const response = await this.terminate(
-        { sessionId: expectedSessionId, messageId: "native-surface" },
-        "stopped",
-        this.deps.clock(),
-      );
-      this.deps.bridge.send(response.type, response.payload, { sessionId: expectedSessionId });
-      return true;
+      return (await this.endSession(current, "stopped", now, "native")) !== null;
+    });
+  }
+
+  /**
+   * Ends a session that is no longer being guided, if it is finished: past its
+   * lifetime, or a preparation that was never started. An arrival is kept
+   * whatever the app's visibility: the page ends it when the user is done.
+   * Its release window governs location only. Inside the window (the
+   * announcement grace, or the transit undo window) the release is scheduled
+   * in this process, so opening the app neither cuts the window short nor lets
+   * it run past its end; past it, location is released now.
+   */
+  closeFinishedSession(expectedSessionId: string): Promise<"ended" | "kept" | "active" | "gone"> {
+    return this.queue.run(async () => {
+      const now = this.deps.clock();
+      const session = await this.deps.repository.loadActive(now);
+      if (!session || session.sessionId !== expectedSessionId) return "gone";
+      if (isMobileSessionExpired(session, now)) {
+        await this.endSession(session, "expired", now, "native");
+        return "ended";
+      }
+      if (session.status === "active") return "active";
+      if (session.status === "arrived") {
+        // The window governs location only. The arrival stays for the page,
+        // which ends it when the user is done; otherwise its lifetime ends it.
+        const releaseAt = locationReleaseAtMs(session);
+        if (releaseAt !== null && releaseAt > now) this.scheduleLocationRelease(session, now);
+        else
+          await this.deps.effects.run([{ kind: "stop-location" }, { kind: "reconcile-surface" }]);
+        return "kept";
+      }
+      await this.endSession(session, "stopped", now, "native");
+      return "ended";
     });
   }
 
@@ -179,11 +223,8 @@ export class NavigationCoordinator {
       };
       if (current && !this.isTerminal(current)) {
         if (current.sessionId !== replaceSessionId) return errorResponse("session-active");
-        await this.terminate(
-          { messageId: base.messageId, sessionId: current.sessionId },
-          "stopped",
-          now,
-        );
+        // The page did not ask for this end, so it is told.
+        await this.endSession(current, "stopped", now, "native");
       }
       if (!valid()) return errorResponse("invalid-state");
       const prepared = await this.prepare(
@@ -192,11 +233,10 @@ export class NavigationCoordinator {
       );
       if (prepared.type !== "session.prepared") return prepared;
       if (!valid()) {
-        await this.terminate(
-          { messageId: base.messageId, sessionId: prepared.sessionId },
-          "stopped",
-          now,
-        );
+        const preparing = await this.deps.repository.loadActive(now);
+        // Never shown to the page, so only the car's own answer reports it.
+        if (preparing && preparing.sessionId === prepared.sessionId)
+          await this.endSession(preparing, "stopped", now, "command");
         return errorResponse("invalid-state");
       }
       const response = await this.start(
@@ -253,11 +293,16 @@ export class NavigationCoordinator {
   }
 
   private reply(response: CommandResponse, forMessageId: string): void {
-    this.deps.bridge.send(response.type, response.payload, {
+    const outcome = this.deps.bridge.send(response.type, response.payload, {
       ...(response.sessionId === undefined ? {} : { sessionId: response.sessionId }),
       ...(response.revision === undefined ? {} : { revision: response.revision }),
       forMessageId,
     });
+    // A reply that fails its schema never leaves; the page would otherwise wait
+    // out its deadline for an answer that was refused here.
+    if (outcome === "invalid" && response.type !== "native.error") {
+      this.deps.bridge.send("native.error", { code: "internal-error" }, { forMessageId });
+    }
   }
 
   private async route(command: WebToNativeMessage, now: number): Promise<CommandResponse | null> {
@@ -301,10 +346,11 @@ export class NavigationCoordinator {
         return null;
       case "location.request":
       case "settings.open":
-      case "auth.open": {
-        const handled = await this.deps.auxiliary?.(command);
-        return handled ?? errorResponse("unsupported-capability", command.messageId);
-      }
+      case "auth.open":
+        // Answered by the composition beside this queue (`isAuxiliaryCommand`):
+        // a prompt or a sign-in must not hold up location batches. One that
+        // reaches a coordinator with no such handler is refused, not dropped.
+        return errorResponse("unsupported-capability", command.messageId);
     }
   }
 
@@ -382,7 +428,7 @@ export class NavigationCoordinator {
     const decision =
       startContext.kind === "car" ? "background" : await permissions.requestForStart();
     if (decision === "denied") {
-      await repository.terminate(current.sessionId, "error", now);
+      await this.endSession(current, "error", now, "command");
       return errorResponse("permission-denied", command.messageId);
     }
 
@@ -411,8 +457,7 @@ export class NavigationCoordinator {
     if (failed > 0) {
       // The driver could not be started, so the session must not claim it is
       // tracking. Terminalise atomically rather than leaving a phantom.
-      const cleanup = await repository.terminate(committed.session.sessionId, "error", now);
-      await this.deps.effects.run(cleanup.effects);
+      await this.endSession(committed.session, "error", now, "command");
       return errorResponse("driver-start-failed", command.messageId);
     }
 
@@ -612,35 +657,81 @@ export class NavigationCoordinator {
     const { repository } = this.deps;
     const current = await repository.loadActive(now);
     if (!current) {
-      // Stopping nothing is success, not an error: a retry after the process
-      // died must not surface as a failure the user has to act on.
+      // Stopping a named trip that already ended is success, not an error: a
+      // retry after the process died must not surface as a failure the user has
+      // to act on. With no trip named there is nothing to acknowledge, and the
+      // page treats `no-session` as already stopped.
       const sessionId = command.sessionId;
-      const ack = sessionId ? await repository.readTerminalAck(sessionId) : null;
+      if (!sessionId) return errorResponse("no-session", command.messageId);
+      const ack = await repository.readTerminalAck(sessionId);
       return {
         type: "session.stopped",
         payload: {
-          sessionId: sessionId ?? "",
+          sessionId,
           finalStatus: ack?.finalStatus ?? finalStatus,
           revision: ack?.finalRevision ?? 0,
         },
-        ...(sessionId ? { sessionId } : {}),
+        sessionId,
       };
     }
     if (command.sessionId !== undefined && command.sessionId !== current.sessionId) {
       return errorResponse("revision-conflict", command.messageId);
     }
 
-    const { ack, effects } = await repository.terminate(current.sessionId, finalStatus, now);
-    await this.deps.effects.run(effects);
+    // The reply to this command is the page's notice of the end.
+    const ended = await this.endSession(current, finalStatus, now, "command");
     return {
       type: "session.stopped",
       payload: {
         sessionId: current.sessionId,
-        finalStatus: ack?.finalStatus ?? finalStatus,
-        revision: ack?.finalRevision ?? current.revision,
+        finalStatus: ended?.finalStatus ?? finalStatus,
+        revision: ended?.revision ?? current.revision,
       },
       sessionId: current.sessionId,
     };
+  }
+
+  /**
+   * The one way a session ends. It removes the row, runs the device effects
+   * (location, audio, alerts, surface, snapshot), then tells every consumer
+   * once. The page hears it as the reply to its own command, or, when native
+   * ended the trip, as an unsolicited `session.stopped`: never both, so a page
+   * neither misses an end nor hears it twice. A page that is not loaded learns
+   * it from the next handshake, which reports no active session.
+   */
+  private async endSession(
+    session: MobileNavigationSession,
+    finalStatus: SessionEnded["finalStatus"],
+    now: number,
+    origin: "command" | "native",
+  ): Promise<SessionEnded | null> {
+    const { ack, effects } = await this.deps.repository.terminate(
+      session.sessionId,
+      finalStatus,
+      now,
+    );
+    if (!ack) return null;
+    this.cancelLocationRelease?.();
+    this.cancelLocationRelease = null;
+    await this.deps.effects.run(effects);
+    const ended: SessionEnded = {
+      sessionId: ack.sessionId,
+      finalStatus: ack.finalStatus,
+      revision: ack.finalRevision,
+    };
+    if (origin === "native") {
+      this.deps.bridge.send(
+        "session.stopped",
+        { sessionId: ended.sessionId, finalStatus: ended.finalStatus, revision: ended.revision },
+        { sessionId: ended.sessionId },
+      );
+    }
+    try {
+      this.deps.onSessionEnded?.(ended);
+    } catch {
+      this.deps.diagnostics.record("typed.error", { scope: "session-ended" });
+    }
+    return ended;
   }
 
   // Location input from the driver.
@@ -682,8 +773,7 @@ export class NavigationCoordinator {
     }
 
     if (isMobileSessionExpired(session, now)) {
-      const expired = await repository.terminate(session.sessionId, "expired", now);
-      await this.deps.effects.run(expired.effects);
+      await this.endSession(session, "expired", now, "native");
       return;
     }
     if (session.status !== "active") {
@@ -702,11 +792,18 @@ export class NavigationCoordinator {
 
     const processor = processors.get(session.kind);
     if (!processor) return;
+    // A batch is the one input a backgrounded Android app still receives, so it
+    // also carries a connectivity change no timer could deliver.
+    const current = await this.applyConnectivity(session, now);
+    if (!current) {
+      if (mayRetry) await this.processBatch(batch, false);
+      return;
+    }
 
     const { accepted, rejectedCount } = sanitiseFixes(
       batch.locations ?? [],
       now,
-      session.lastAcceptedFix?.timestampMs ?? null,
+      current.lastAcceptedFix?.timestampMs ?? null,
     );
     diagnostics.record("location.batch", {
       accepted: accepted.length,
@@ -720,11 +817,11 @@ export class NavigationCoordinator {
     if (accepted.length === 0 && !processor.needsScheduleTicks) return;
 
     const mutation = (processor as AnyNavigationProcessor).processFixes(
-      session as never,
+      current as never,
       accepted,
       now,
     );
-    const committed = await this.commit(session, mutation, now);
+    const committed = await this.commit(current, mutation, now);
     if (committed.ok) {
       await this.deps.effects.run(committed.effects);
       return;
@@ -732,6 +829,74 @@ export class NavigationCoordinator {
     if (committed.code === "revision-conflict" && mayRetry) {
       await this.processBatch(batch, false);
     }
+  }
+
+  // Connectivity.
+
+  /**
+   * Applies the confirmed connectivity to the active session. Called when the
+   * confirmed state changes; a location batch applies it too.
+   */
+  connectivityChanged(): Promise<void> {
+    return this.queue.run(async () => {
+      try {
+        const now = this.deps.clock();
+        const session = await this.deps.repository.loadActive(now);
+        if (session) await this.applyConnectivity(session, now);
+      } catch {
+        this.deps.diagnostics.record("typed.error", { scope: "connectivity" });
+      }
+    });
+  }
+
+  /**
+   * Commits a confirmed connectivity change and returns the session to continue
+   * from, or null when the commit lost a race and the caller should reload.
+   *
+   * Offline holds back reroutes and itinerary refreshes, so a rider underground
+   * does not spend the refresh token on requests that cannot arrive. Coming back
+   * online lets the processor retry what the outage held back. An `unknown`
+   * reading is no evidence either way and leaves the committed state alone.
+   */
+  private async applyConnectivity(
+    session: MobileNavigationSession,
+    now: number,
+  ): Promise<MobileNavigationSession | null> {
+    const confirmed = this.deps.connectivity?.confirmed();
+    if (
+      !confirmed ||
+      confirmed === "unknown" ||
+      confirmed === session.connectivity ||
+      session.status !== "active"
+    )
+      return session;
+    const processor = this.deps.processors.get(session.kind);
+    if (!processor) return session;
+    this.deps.diagnostics.record("network.transition", {
+      from: session.connectivity,
+      to: confirmed,
+      confirmed: true,
+    });
+    const marked = { ...session, connectivity: confirmed } as MobileNavigationSession;
+    const restored =
+      confirmed === "online"
+        ? await (processor as AnyNavigationProcessor).onConnectivityRestored(marked as never, now)
+        : null;
+    const mutation: ProcessorMutation = restored ?? {
+      session: { ...marked, revision: session.revision + 1, updatedAtMs: now },
+    };
+    const committed = await this.commit(
+      session,
+      {
+        ...mutation,
+        // Rare, and shown on the page, so the page hears it at once.
+        effects: [...(mutation.effects ?? []), { kind: "publish-snapshot", immediate: true }],
+      },
+      now,
+    );
+    if (!committed.ok) return null;
+    await this.deps.effects.run(committed.effects);
+    return committed.session;
   }
 
   // Answers from remote work.

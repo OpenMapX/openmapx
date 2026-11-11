@@ -1,0 +1,44 @@
+{
+  "stops": [
+    {
+      "feed_version": {
+        "feed": {
+          "id": 62,
+          "onestop_id": "f-c20-trimet"
+        },
+        "fetched_at": "2026-10-22T11:04:47.72119Z",
+        "id": 739793,
+        "sha1": "b3cd3c15ec4520c5880a1929307a2b8bb230c5ef"
+      },
+      "geometry": {
+        "coordinates": [
+          -122.683248,
+          45.514919
+        ],
+        "type": "Point"
+      },
+      "id": 2616792054,
+      "level": null,
+      "location_type": 0,
+      "onestop_id": "s-c20fbm8z95-swcolumbia~parkave",
+      "parent": null,
+      "place": {
+        "adm0_iso": "US",
+        "adm0_name": "United States of America",
+        "adm1_iso": "US-OR",
+        "adm1_name": "Oregon"
+      },
+      "platform_code": null,
+      "stop_access": null,
+      "stop_code": "1108",
+      "stop_desc": "Eastbound stop in Portland (Stop ID 1108)",
+      "stop_id": "1108",
+      "stop_name": "SW Columbia & Park Ave",
+      "stop_timezone": null,
+      "stop_url": "https://trimet.org/home/stop/1108",
+      "tts_stop_name": "southwest columbia & park avenue",
+      "wheelchair_boarding": 1,
+      "zone_id": "B"
+    }
+  ]
+}

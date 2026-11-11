@@ -10,13 +10,13 @@ export type PublishableSnapshot = GroundSnapshot | TransitSnapshot;
  * The engine produces a new position at up to 5 Hz; the page renders a puck
  * that a human is looking at. Five updates a second buys nothing visible and
  * costs a bridge round-trip each time, so ordinary progress is throttled to one
- * per second — while anything the user must not miss goes immediately.
+ * per second, while anything the user must not miss goes immediately.
  *
- * The other rule is that **stale progress is discarded, never queued**. If the
- * WebView is gone for ten seconds, delivering ten positions on reconnect would
- * animate the user backwards through where they used to be. Only the newest
- * survives, and after a reload the page gets a full snapshot built fresh from
- * storage rather than anything held in memory.
+ * A throttled progress snapshot is dropped, never held or queued. Progress
+ * snapshots are absolute: each carries every value a progress commit can
+ * change, read from the committed session, and the page accepts any newer one.
+ * The next one therefore says everything the dropped one would have, and a
+ * position held for later would only show where the user used to be.
  */
 
 export const PROGRESS_INTERVAL_MS = 1_000;
@@ -31,7 +31,6 @@ export type OfferOutcome = "sent" | "throttled" | "dropped";
 
 export class SnapshotPublisher {
   private lastProgressAtMs = Number.NEGATIVE_INFINITY;
-  private pending: PublishableSnapshot | null = null;
 
   constructor(private readonly ports: PublisherPorts) {}
 
@@ -43,70 +42,12 @@ export class SnapshotPublisher {
    */
   offer(snapshot: PublishableSnapshot, options: { immediate?: boolean } = {}): OfferOutcome {
     const now = this.ports.now();
-
-    if (snapshot.type === "full" || options.immediate) {
-      const delivered = this.ports.deliver(snapshot);
-      if (delivered) {
-        this.pending = null;
-        this.lastProgressAtMs = now;
-        return "sent";
-      }
-      // Even a full snapshot is not queued: after a reload the publisher builds
-      // a new one from the authoritative session, which cannot be stale.
-      return "dropped";
-    }
-
-    if (now - this.lastProgressAtMs < PROGRESS_INTERVAL_MS) {
-      // Replace rather than append. The newest position is the only one worth
-      // showing, and the older one describes somewhere the user has left.
-      this.pending = snapshot;
-      return "throttled";
-    }
-
-    if (!this.ports.deliver(snapshot)) {
-      this.pending = null;
-      return "dropped";
-    }
-    this.pending = null;
+    const urgent = snapshot.type === "full" || options.immediate === true;
+    if (!urgent && now - this.lastProgressAtMs < PROGRESS_INTERVAL_MS) return "throttled";
+    // Not queued when there is no page: after a reload the page gets a full
+    // snapshot built from the committed session, which cannot be stale.
+    if (!this.ports.deliver(snapshot)) return "dropped";
     this.lastProgressAtMs = now;
     return "sent";
-  }
-
-  /**
-   * Delivers a throttled snapshot once its interval has elapsed.
-   *
-   * Called from the foreground tick. Returns whether anything went out, so a
-   * caller can avoid scheduling itself again when there is nothing waiting.
-   */
-  flushPending(): boolean {
-    if (!this.pending) return false;
-    const now = this.ports.now();
-    if (now - this.lastProgressAtMs < PROGRESS_INTERVAL_MS) return false;
-
-    const snapshot = this.pending;
-    this.pending = null;
-    if (!this.ports.deliver(snapshot)) return false;
-    this.lastProgressAtMs = now;
-    return true;
-  }
-
-  /** Drops anything waiting, e.g. when the document that would receive it is gone. */
-  discard(): void {
-    this.pending = null;
-  }
-
-  /**
-   * Forgets the throttle window.
-   *
-   * Called after a handshake so the first snapshot of a new document is not
-   * held back by a timer belonging to the previous one.
-   */
-  reset(): void {
-    this.pending = null;
-    this.lastProgressAtMs = Number.NEGATIVE_INFINITY;
-  }
-
-  get hasPending(): boolean {
-    return this.pending !== null;
   }
 }

@@ -6,9 +6,9 @@ import {
   type SearchSuggestionsResponse,
 } from "@openmapx/core";
 import {
+  classifyProviderFailure,
   type IntegrationContext,
   ProviderCancelledError,
-  ProviderTimeoutError,
   runWithProviderDeadline,
   type SearchSuggestionProvider,
 } from "@openmapx/integration-framework";
@@ -58,6 +58,7 @@ async function invokeProvider(
     throw new Error("search suggestion provider unavailable");
   }
 
+  const probe = ctx.providerHealth?.heldProbe?.(entry.provider.id);
   try {
     const result = await runWithProviderDeadline(
       (providerContext) => entry.provider.searchSuggestions(query, providerContext),
@@ -77,21 +78,21 @@ async function invokeProvider(
   } catch (error) {
     const elapsed = Date.now() - startedAt;
     const reason = error instanceof Error ? error.message : "provider error";
-    const cancelled = error instanceof ProviderCancelledError;
-    const timedOut = error instanceof ProviderTimeoutError;
-    if (!cancelled) {
-      await ctx.providerHealth?.recordFailure(
-        entry.provider.id,
-        elapsed,
-        timedOut ? "timeout" : "connection",
-        reason,
-      );
-    }
+    const outcome = classifyProviderFailure(error, signal);
+    // A cancellation says nothing about the provider: metrics only, never health.
+    if (outcome !== "caller_cancelled")
+      await ctx.providerHealth?.recordFailure(entry.provider.id, elapsed, outcome, reason);
+    else if (probe) await ctx.providerHealth?.releaseProbe?.(entry.provider.id, probe);
     ctx.metricsRecorder?.recordProviderCall(
       {
         providerId: entry.provider.id,
         method: "searchSuggestions",
-        outcome: cancelled ? "cancelled" : timedOut ? "timeout" : "error",
+        outcome:
+          outcome === "caller_cancelled"
+            ? "cancelled"
+            : outcome === "timeout"
+              ? "timeout"
+              : "error",
       },
       elapsed,
     );

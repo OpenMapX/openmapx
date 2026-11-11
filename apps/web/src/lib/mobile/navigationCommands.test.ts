@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BridgeClient } from "./bridgeClient";
-import { BridgeError } from "./bridgeClient";
+import { BridgeError, NativeCommandError } from "./bridgeClient";
 import { CommandError, NativeNavigationCommands } from "./navigationCommands";
 
 interface Call {
@@ -154,6 +154,68 @@ describe("NativeNavigationCommands failure classification", () => {
     );
 
     expect(code).toBe(to);
+  });
+});
+
+describe("NativeNavigationCommands refusals", () => {
+  function refusing(type: string, code: string) {
+    const { client, answers } = fakeClient();
+    answers.set(type, async () => {
+      throw new NativeCommandError(code);
+    });
+    return new NativeNavigationCommands(client, acknowledged());
+  }
+
+  it("rejects End when the shell refuses, keeping the shell's reason", async () => {
+    const failure = await refusing("session.stop", "internal-error")
+      .stop()
+      .catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(CommandError);
+    expect(failure).toMatchObject({ code: "rejected", nativeCode: "internal-error" });
+  });
+
+  it.each(["transit.action", "transit.walk-route"])(
+    "rejects %s when the shell refuses",
+    async (type) => {
+      const commands = refusing(type, "invalid-state");
+      const action =
+        type === "transit.action"
+          ? commands.transitAction({
+              actionId: "a1",
+              itineraryFingerprint: "f",
+              expectedPhase: "riding",
+              type: "alight",
+              legIndex: 1,
+            })
+          : commands.repairTransitWalk("f", 0, {});
+
+      await expect(action).rejects.toMatchObject({ code: "rejected", nativeCode: "invalid-state" });
+    },
+  );
+
+  it("reports a denied permission at start as such", async () => {
+    const { client, answers } = fakeClient();
+    answers.set("session.start", async () => {
+      throw new NativeCommandError("permission-denied");
+    });
+
+    await expect(
+      new NativeNavigationCommands(client, acknowledged()).start({}),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+  });
+
+  it("treats no session as done for End and for a settings change", async () => {
+    await expect(refusing("session.stop", "no-session").stop()).resolves.toBeUndefined();
+    await expect(
+      refusing("settings.update", "no-session").updateSettings({ voiceEnabled: false }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("rejects a settings change the shell refuses for another reason", async () => {
+    await expect(
+      refusing("settings.update", "revision-conflict").updateSettings({ voiceEnabled: false }),
+    ).rejects.toMatchObject({ nativeCode: "revision-conflict" });
   });
 });
 

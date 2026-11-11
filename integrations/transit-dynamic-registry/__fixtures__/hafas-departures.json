@@ -1,0 +1,73 @@
+{
+  "departures": [
+    {
+      "tripId": "1|31431|28|86|17122017",
+      "trip": 31431,
+      "direction": "S Spandau",
+      "line": {
+        "type": "line",
+        "id": "18299",
+        "fahrtNr": "12345",
+        "mode": "train",
+        "product": "suburban",
+        "public": true,
+        "name": "S9",
+        "symbol": "S",
+        "nr": 9,
+        "metro": false,
+        "express": false,
+        "night": false,
+        "operator": { "type": "operator", "id": "s-bahn-berlin-gmbh", "name": "S-Bahn Berlin GmbH" }
+      },
+      "currentTripPosition": { "type": "location", "latitude": 52.500851, "longitude": 13.283755 },
+      "stop": {
+        "type": "station",
+        "id": "900000024101",
+        "name": "S Charlottenburg",
+        "location": { "type": "location", "latitude": 52.504806, "longitude": 13.303846 },
+        "products": {
+          "suburban": true,
+          "subway": false,
+          "tram": false,
+          "bus": true,
+          "ferry": false,
+          "express": false,
+          "regional": true
+        }
+      },
+      "when": "2017-12-17T19:32:00+01:00",
+      "plannedWhen": "2017-12-17T19:32:00+01:00",
+      "delay": null,
+      "platform": "2",
+      "plannedPlatform": "2"
+    },
+    {
+      "cancelled": true,
+      "tripId": "1|30977|8|86|17122017",
+      "trip": 30977,
+      "direction": "S Westkreuz",
+      "line": {
+        "type": "line",
+        "id": "16441",
+        "fahrtNr": "54321",
+        "mode": "train",
+        "product": "suburban",
+        "public": true,
+        "name": "S5",
+        "symbol": "S",
+        "nr": 5,
+        "metro": false,
+        "express": false,
+        "night": false
+      },
+      "currentTripPosition": { "type": "location", "latitude": 52.505004, "longitude": 13.322391 },
+      "when": null,
+      "plannedWhen": "2017-12-17T19:33:00+01:00",
+      "delay": null,
+      "platform": null,
+      "plannedPlatform": "2",
+      "prognosedPlatform": "2"
+    }
+  ],
+  "realtimeDataUpdatedAt": 1513535400
+}

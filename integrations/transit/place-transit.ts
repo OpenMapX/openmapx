@@ -32,9 +32,12 @@ import {
   normalizeHeadsign,
   normalizeShortName,
 } from "./dedup.js";
-import type { TransitOrchestrator } from "./orchestrator.js";
+import type { LookupOptions, TransitOrchestrator } from "./orchestrator.js";
 import { emptyResult, mergeFreshness } from "./result-merge.js";
 import { mainStopKey, stopNameKey, stopNameSpecificity, stopNameWords } from "./stop-names.js";
+
+/** Place fan-outs look up stops the server found through provider stop search. */
+const DERIVED_IDS: LookupOptions = { idOrigin: "derived" };
 
 /** Preserve scalar ownership when a weaker row supplies a missing field. */
 function retainFieldReceipt(
@@ -703,7 +706,7 @@ export function createPlaceTransit(
 
     // Fetch routes for all stops in parallel
     const routeResults = await Promise.allSettled(
-      stops.map((s) => orchestrator.getRoutesForStop(s.id)),
+      stops.map((s) => orchestrator.getRoutesForStop(s.id, DERIVED_IDS)),
     );
     const partialRoutes = partialLookups(routeResults, "route");
 
@@ -1020,7 +1023,7 @@ export function createPlaceTransit(
     const stopsRes = await linkedStops(link);
     const merged = await buildMergedTimetable(
       stopsRes.data,
-      (id, min) => orchestrator.getDepartures(id, min),
+      (id, min) => orchestrator.getDepartures(id, min, undefined, DERIVED_IDS),
       minutes,
       link.placeName,
       link.openedFor,
@@ -1041,7 +1044,7 @@ export function createPlaceTransit(
     const stopsRes = await linkedStops(link);
     const merged = await buildMergedTimetable(
       stopsRes.data,
-      (id, min) => orchestrator.getArrivals(id, min),
+      (id, min) => orchestrator.getArrivals(id, min, DERIVED_IDS),
       minutes,
       link.placeName,
       link.openedFor,
@@ -1091,7 +1094,7 @@ export function createPlaceTransit(
     }
 
     const alertResults = await Promise.allSettled(
-      stops.map((s) => orchestrator.getStopAlerts(s.id)),
+      stops.map((s) => orchestrator.getStopAlerts(s.id, DERIVED_IDS)),
     );
     const partialAlerts = partialLookups(alertResults, "alert");
     const byId = new Map<string, ServiceAlert>();
@@ -1170,7 +1173,9 @@ export function createPlaceTransit(
       return { data: [], attributions: [], freshness: stopsRes.freshness };
     }
 
-    const facResults = await Promise.allSettled(stops.map((s) => orchestrator.getFacilities(s.id)));
+    const facResults = await Promise.allSettled(
+      stops.map((s) => orchestrator.getFacilities(s.id, DERIVED_IDS)),
+    );
     const partialFacilities = partialLookups(facResults, "facility");
     const byId = new Map<string, Facility>();
     // Attribute only providers that returned facilities, not the stop-search fan-out.

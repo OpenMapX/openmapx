@@ -1,11 +1,11 @@
-import type { WebToNativeMessage } from "@openmapx/core/navigation";
 import { Linking } from "react-native";
 import { createSystemAuthSession } from "../auth/createSystemAuthSession";
+import type { AuxiliaryCommandHandler } from "../bridge/answerCommand";
 import type { MobileRuntimeConfig } from "../config/runtimeConfig";
 import { createLocationDriver } from "../location/createLocationDriver";
 import { ForegroundLocationService } from "../location/ForegroundLocationService";
 import type { LocationDriver, LocationPermissionState } from "../location/LocationDriver";
-import type { AuxiliaryCommandHandler, CommandResponse } from "../navigation/NavigationCoordinator";
+import { withPermissionPrompt } from "../permissions/permissionPromptLock";
 import { openAppSettings } from "../settings/openAppSettings";
 import { createAuxiliaryCommandHandler } from "./auxiliaryCommands";
 
@@ -33,8 +33,14 @@ export function createShellServices(options: ShellServicesOptions): ShellService
   const location = new ForegroundLocationService({
     driver,
     clock: () => Date.now(),
-    requestForegroundPermission: async () =>
-      options.isAppActive() ? driver.requestForegroundPermission() : driver.getPermissionState(),
+    // The grant is read again once the prompt's turn comes: a prompt shown
+    // meanwhile, such as the start flow's, may already have answered it.
+    requestForegroundPermission: () =>
+      withPermissionPrompt(async () => {
+        const current = await driver.getPermissionState();
+        if (current !== "not-determined" || !options.isAppActive()) return current;
+        return driver.requestForegroundPermission();
+      }),
   });
   const auth = createSystemAuthSession({ webOrigin: options.config.webOrigin });
 
@@ -53,32 +59,4 @@ export function createShellServices(options: ShellServicesOptions): ShellService
       }
     },
   };
-}
-
-/**
- * Turns a handler's answer into a reply on the bridge.
- *
- * A command nothing in this shell handles is refused explicitly, except an
- * event acknowledgement, which never has a reply.
- */
-export async function answerCommand(
-  message: WebToNativeMessage,
-  handle: (message: WebToNativeMessage) => Promise<CommandResponse | null>,
-  send: (
-    type: CommandResponse["type"],
-    payload: unknown,
-    options: { forMessageId: string; sessionId?: string; revision?: number },
-  ) => unknown,
-): Promise<void> {
-  if (message.type === "event.ack" || message.type === "web.hello") return;
-  const response = await handle(message);
-  if (!response) {
-    send("native.error", { code: "unsupported-capability" }, { forMessageId: message.messageId });
-    return;
-  }
-  send(response.type, response.payload, {
-    forMessageId: message.messageId,
-    ...(response.sessionId === undefined ? {} : { sessionId: response.sessionId }),
-    ...(response.revision === undefined ? {} : { revision: response.revision }),
-  });
 }

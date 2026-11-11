@@ -146,7 +146,33 @@ describe("TransitNavigationProcessor.onConnectivityRestored", () => {
     ]);
   });
 
-  it.each(["ready", "in-flight", "broken"] as const)(
+  it("asks for a refresh that fell due during the outage", async () => {
+    const current = session();
+    current.payload.refresh = {
+      status: "ready",
+      generation: 1,
+      attempts: 0,
+      nextAttemptAtMs: NOW - 1,
+    };
+
+    expect((await processor().onConnectivityRestored(current, NOW))?.effects).toEqual([
+      { kind: "request-transit-refresh", requestId: expect.any(String) },
+    ]);
+  });
+
+  it("leaves a refresh that is not yet due to its time", async () => {
+    const current = session();
+    current.payload.refresh = {
+      status: "ready",
+      generation: 1,
+      attempts: 0,
+      nextAttemptAtMs: NOW + 10_000,
+    };
+
+    expect(await processor().onConnectivityRestored(current, NOW)).toBeNull();
+  });
+
+  it.each(["in-flight", "broken"] as const)(
     "does nothing on reconnect when refresh is %s",
     async (status) => {
       const current = session();

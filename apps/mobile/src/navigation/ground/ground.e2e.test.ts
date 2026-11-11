@@ -160,6 +160,7 @@ function buildHarness(
     bridge: {
       send: (type, payload) => {
         carried.sent.push({ type, payload });
+        return "sent";
       },
     },
     permissions: {

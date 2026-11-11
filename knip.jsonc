@@ -70,7 +70,6 @@
       // import path from this workspace.
       "ignoreDependencies": [
         "@openmapx/mobility-formats",
-        "cached-hafas-client",
         "gtfs-realtime-bindings-transit",
         "hafas-client"
       ]

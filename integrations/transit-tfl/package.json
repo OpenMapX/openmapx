@@ -7,6 +7,7 @@
   "dependencies": {
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
-    "@openmapx/mobility-core": "workspace:^"
+    "@openmapx/mobility-core": "workspace:^",
+    "zod": "^4.6.7"
   }
 }

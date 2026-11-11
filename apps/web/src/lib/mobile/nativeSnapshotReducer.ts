@@ -6,11 +6,16 @@
  * contract: everything the user sees comes through it, and anything it accepts
  * wrongly is drawn on the map as if it were true.
  *
- * So it is deliberately unforgiving. A delta applies only to the exact state it
- * was computed from — same session, same route or itinerary, one revision
- * forward. Anything else is refused, and refusing means asking for a full
- * snapshot rather than guessing at the gap. A missing update is a moment of
- * staleness; a wrongly-applied one is a puck on the wrong road.
+ * So it is deliberately unforgiving about identity. A delta applies only to the
+ * session and route or itinerary it was computed for, and only if it is newer
+ * than what the page has. Anything else is refused, and refusing means asking
+ * for a full snapshot rather than guessing. A wrongly-applied update is a puck
+ * on the wrong road.
+ *
+ * A delta is absolute, not a difference: it carries every value a progress
+ * commit can change, read from the committed session. So a newer delta may
+ * follow a gap. The shell throttles progress and drops the deltas in between,
+ * and applying the newest one gives the same state as applying them all.
  */
 
 import type { NativeNavigationProjection } from "@openmapx/core";
@@ -39,10 +44,19 @@ export interface NativeReadModel {
 }
 
 export type ApplyOutcome =
-  | { ok: true; model: NativeReadModel; changed: boolean }
+  | {
+      ok: true;
+      model: NativeReadModel;
+      changed: boolean;
+      /** For a delta, the revision of the model it was folded onto. */
+      baseRevision?: number;
+    }
   | { ok: false; reason: "need-full-snapshot" | "stale" };
 
-/** Fields a progress snapshot is permitted to move. */
+/**
+ * Fields a progress snapshot is permitted to move. A commit that changes
+ * anything else publishes a full snapshot.
+ */
 const HOT_FIELDS = [
   "revision",
   "status",
@@ -135,11 +149,6 @@ export function applyNativeSnapshot(
     return { ok: false, reason: "need-full-snapshot" };
   }
   if (incoming.revision <= current.revision) return { ok: false, reason: "stale" };
-  if (incoming.revision !== current.revision + 1) {
-    // A gap means something was missed. Interpolating would invent a state that
-    // never existed.
-    return { ok: false, reason: "need-full-snapshot" };
-  }
 
   const merged: Record<string, unknown> = { ...current.snapshot };
   for (const field of HOT_FIELDS) {
@@ -160,6 +169,7 @@ export function applyNativeSnapshot(
     ok: true,
     changed: true,
     model: { ...current, revision: incoming.revision, snapshot: merged },
+    baseRevision: current.revision,
   };
 }
 
@@ -168,13 +178,14 @@ export function applyNativeSnapshot(
  *
  * The wire snapshot and the store's state are deliberately different vocabularies
  * — the shell speaks in session terms, the UI in route terms — and this is the
- * single place the two are reconciled. A delta declares the revision it was
- * computed from so the store can re-check the step it is being asked to take
- * against the one it actually rendered.
+ * single place the two are reconciled. A delta declares the revision of the
+ * model it was folded onto (`baseRevision` from `applyNativeSnapshot`), so the
+ * store can check that it rendered that same model.
  */
 export function projectionOf(
   model: NativeReadModel,
   type: SnapshotEnvelope["type"],
+  baseRevision?: number,
 ): NativeNavigationProjection {
   const raw = model.snapshot;
   const pick = <T>(key: string): T | undefined => (key in raw ? (raw[key] as T) : undefined);
@@ -185,7 +196,7 @@ export function projectionOf(
     fingerprint: model.fingerprint,
     kind: model.kind,
     status: nativeStatusToNavStatus(raw.status),
-    ...(type === "progress" ? { baseRevision: model.revision - 1 } : {}),
+    ...(type === "progress" && baseRevision !== undefined ? { baseRevision } : {}),
   };
 
   const assign = <K extends keyof NativeNavigationProjection>(

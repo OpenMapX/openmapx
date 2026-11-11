@@ -10,8 +10,7 @@ import { createOpenTransportDataChProvider } from "./provider.js";
 const SWITZERLAND_BBOX: [number, number, number, number] = [5.96, 45.82, 10.49, 47.81];
 
 export function setup(ctx: IntegrationContext): void {
-  const { attribution, wrap, wrapRT } = defineTransitProvider();
-  attribution.set(ctx.manifest.dataSources ?? []);
+  const { attribution, wrap, wrapRT } = defineTransitProvider(ctx);
   const contributors = Object.fromEntries(
     (ctx.manifest.dataSources ?? []).map((source) => [
       source.sourceId,

@@ -1,5 +1,6 @@
 import type { NativeToWebMessage } from "@openmapx/core/navigation";
 import type { ExpoSpeechRecognitionModule } from "expo-speech-recognition";
+import { withPermissionPrompt } from "../permissions/permissionPromptLock";
 import type { VoiceAudioLease } from "./audioArbiter";
 
 type SpeechModule = Pick<
@@ -304,7 +305,13 @@ export class VoiceInputController {
         if (!permission.granted && permission.canAskAgain) {
           s.prompting = true;
           try {
-            permission = await requestPermission();
+            // Read again once the prompt's turn comes: another prompt may have
+            // answered it, or the search may have been cancelled while waiting.
+            permission = await withPermissionPrompt(async () => {
+              const latest = await getPermission();
+              if (!this.current(s) || latest.granted || !latest.canAskAgain) return latest;
+              return requestPermission();
+            });
           } finally {
             s.prompting = false;
           }

@@ -3,7 +3,7 @@ import { readCarDestinations } from "../bridge/receiveCarDestinations";
 import { getRuntimeConfig } from "../config/runtimeConfig";
 import { getSharedCoordinatorCore } from "../navigation/createCoordinator";
 import {
-  createForegroundNavigation,
+  createInvisibleNavigation,
   type ForegroundNavigation,
 } from "../navigation/createForegroundNavigation";
 import {
@@ -44,23 +44,7 @@ async function runCarRuntime(): Promise<void> {
     locale,
     session?.units ?? preferences?.units ?? "metric",
   );
-  const compose = () =>
-    createForegroundNavigation({
-      apiOrigin: config.apiOrigin,
-      locale,
-      send: () => "dropped",
-      isAppActive: () => false,
-      permissionUi: {
-        showDisclosure: async () => "dismiss",
-        showSettingsRequired: async () => "dismiss",
-        offerForegroundOnly: async () => "dismiss",
-        showDenied: async () => {},
-        openSystemSettings: async () => {},
-      },
-      auxiliary: async () => null,
-      onNavigatingChanged: () => {},
-      registerAsForeground: false,
-    });
+  const compose = () => createInvisibleNavigation({ apiOrigin: config.apiOrigin, locale });
   let connected = true;
   const ensureOwner = async (): Promise<
     import("../navigation/NavigationCoordinator").NavigationCoordinator

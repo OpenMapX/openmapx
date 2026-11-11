@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { NativeCommandError } from "./bridgeClient";
 import { NativeIntakeClient } from "./nativeIntake";
 
 const id = "f386e706-b728-40a3-9554-881d0ff0958a";
@@ -108,27 +109,22 @@ it("reads every aligned chunk and verifies the short final chunk", async () => {
 });
 
 it("keeps closed native failure codes without exposing arbitrary native error text", async () => {
-  const request = vi.fn(async () => ({
-    type: "native.error",
-    payload: { code: "expired", forMessageId: "r1" },
-  }));
+  const request = vi.fn(async () => {
+    throw new NativeCommandError("expired");
+  });
   const client = new NativeIntakeClient({ request } as never);
   await expect(client.text(item, new AbortController().signal)).rejects.toMatchObject({
     code: "expired",
   });
-  request.mockResolvedValue({
-    type: "native.error",
-    payload: { code: "/private/sender-path", forMessageId: "r2" },
-  });
+  request.mockRejectedValue(new NativeCommandError("/private/sender-path"));
   await expect(client.list()).rejects.toMatchObject({ code: "unavailable" });
 });
 
 it("preserves unavailable navigation authority as a distinct bridge error", async () => {
   const client = new NativeIntakeClient({
-    request: async () => ({
-      type: "native.error",
-      payload: { code: "navigation-unavailable", forMessageId: "request" },
-    }),
+    request: async () => {
+      throw new NativeCommandError("navigation-unavailable");
+    },
   } as never);
   await expect(client.list()).rejects.toMatchObject({ code: "navigation-unavailable" });
 });

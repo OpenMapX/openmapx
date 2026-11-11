@@ -232,6 +232,8 @@
     "voiceDistanceFeet": "{feet} feet",
     "voiceDistanceMiles": "{miles} miles",
     "startFailed": "Navigation could not be started. Please try again.",
+    "endFailed": "Navigation could not be ended and is still running. Please try again.",
+    "endUnconfirmed": "OpenMapX could not confirm that navigation ended. Check the trip and end it again if it is still running.",
     "startUpdateRequired": "Update the app to start navigation.",
     "walkToDestination": "Walk to destination",
     "startWalking": "Start walking",

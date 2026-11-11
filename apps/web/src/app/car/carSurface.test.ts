@@ -63,7 +63,7 @@ describe("car surface", () => {
     expect(layout.padding.top + layout.padding.bottom).toBeLessThan(height - 40);
     if (width === 400 || height === 240) expect(layout.maxPitch).toBe(25);
   });
-  it("applies full/progress through phone store and refuses revision gaps", () => {
+  it("applies full/progress through phone store and refuses a delta for another route", () => {
     const error = vi.fn();
     const receive = createCarSnapshotReceiver(error);
     const fixture = fixtureSnapshot();
@@ -78,7 +78,7 @@ describe("car surface", () => {
           type: "progress",
           sessionId: "car-fixture",
           revision: 3,
-          routeFingerprint: "fixture-route",
+          routeFingerprint: "another-route",
         },
       },
     });
