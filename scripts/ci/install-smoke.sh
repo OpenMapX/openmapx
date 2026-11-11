@@ -286,6 +286,28 @@ assert_stack_healthy() {
   done
 }
 
+# The operations agent mounts only what its manifest declares, infra/docker
+# and directories below it: no mount's source or destination is the checkout.
+assert_agent_without_checkout() {
+  step "Check the operations agent does not mount the checkout"
+  local physical containers container source destination path
+  physical="$(cd "$root" && pwd -P)"
+  containers="$(docker ps --quiet --filter "label=com.docker.compose.project=$project" \
+    --filter "label=com.docker.compose.service=ops-agent")"
+  [[ -n "$containers" ]] || fail "no ops-agent container is running"
+  while IFS= read -r container; do
+    [[ -n "$container" ]] || continue
+    while IFS=$'\t' read -r source destination; do
+      [[ -n "$source$destination" ]] || continue
+      for path in "$source" "$destination"; do
+        if [[ "$path" == "$root" || "$path" == "$physical" ]]; then
+          fail "the ops-agent container mounts the checkout: $source -> $destination"
+        fi
+      done
+    done < <(docker inspect --format '{{range .Mounts}}{{.Source}}{{"\t"}}{{.Destination}}{{"\n"}}{{end}}' "$container")
+  done <<<"$containers"
+}
+
 start_infrastructure() {
   step "Start the infrastructure services"
   logged start openmapx services start postgis redis traefik app-api data-manager ||
@@ -304,6 +326,7 @@ case_install() {
   step "Bring up the full stack"
   logged up openmapx compose up || fail "compose up failed"
   assert_stack_healthy
+  assert_agent_without_checkout
   assert_check_clean
 }
 

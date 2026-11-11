@@ -186,7 +186,7 @@ function fixture(approvedScopes = ["docs", "web", "mobile"]) {
               "types",
               "test-node",
               "test-linux-user",
-              "test-agent-mounts",
+              "test-agent-image",
               "test-web",
               "mobile",
               "database",

@@ -17,7 +17,7 @@ export const validationJobs = [
   "types",
   "test-node",
   "test-linux-user",
-  "test-agent-mounts",
+  "test-agent-image",
   "test-web",
   "mobile",
   "database",
@@ -86,11 +86,11 @@ export function createImpactPlan({
     ) {
       // Keep node-side source/build contracts, all types and the actual web build.
       scope = "web";
-      for (const id of ["database", "mobile", "test-linux-user", "test-agent-mounts"])
+      for (const id of ["database", "mobile", "test-linux-user", "test-agent-image"])
         jobs[id] = false;
     } else if (paths.every((path) => /^apps\/mobile\/src\/.*\.[jt]sx?$/.test(path))) {
       scope = "mobile";
-      for (const id of ["database", "test-web", "test-linux-user", "test-agent-mounts"])
+      for (const id of ["database", "test-web", "test-linux-user", "test-agent-image"])
         jobs[id] = false;
     }
   }
@@ -176,10 +176,10 @@ export function verifyResults(plan, needs, event) {
   if (plan.scope === "docs")
     for (const id of validationJobs) expected[id] = ["lint", "test-node"].includes(id);
   else if (plan.scope === "web")
-    for (const id of ["database", "mobile", "test-linux-user", "test-agent-mounts"])
+    for (const id of ["database", "mobile", "test-linux-user", "test-agent-image"])
       expected[id] = false;
   else if (plan.scope === "mobile")
-    for (const id of ["database", "test-web", "test-linux-user", "test-agent-mounts"])
+    for (const id of ["database", "test-web", "test-linux-user", "test-agent-image"])
       expected[id] = false;
   else if (plan.scope !== "full") throw new Error("Unknown CI applicability scope");
   if (validationJobs.some((id) => plan.jobs[id] !== expected[id]))

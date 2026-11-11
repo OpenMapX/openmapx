@@ -49,7 +49,7 @@ jobs:
       types: ${{ steps.select.outputs['types'] }}
       test-node: ${{ steps.select.outputs['test-node'] }}
       test-linux-user: ${{ steps.select.outputs['test-linux-user'] }}
-      test-agent-mounts: ${{ steps.select.outputs['test-agent-mounts'] }}
+      test-agent-image: ${{ steps.select.outputs['test-agent-image'] }}
       test-web: ${{ steps.select.outputs['test-web'] }}
       mobile: ${{ steps.select.outputs['mobile'] }}
       database: ${{ steps.select.outputs['database'] }}
@@ -249,25 +249,24 @@ jobs:
       # gate exercises the real crypto path.
       - run: pnpm test --project node
 
-  # The operations agent's own image under both mount layouts it supports:
-  # the whole checkout at its host path, as its manifest mounts it, and only
-  # infra/docker (read-only) with its state, data, secrets and backups
-  # directories, with the rest of the checkout gone from the host
-  # (scripts/ops-agent-mount-layouts.test.ts, which only runs where
+  # The operations agent's own image with the mounts its manifest declares:
+  # only infra/docker (read-only) with its state, data, secrets, backups and
+  # catalog-pins directories, with the rest of the checkout gone from the host
+  # (scripts/ops-agent-image.test.ts, which only runs where
   # OPENMAPX_TEST_AGENT_IMAGE names the image built here).
-  test-agent-mounts:
+  test-agent-image:
     needs: select
-    if: needs.select.outputs.code == 'true' && needs.select.outputs['test-agent-mounts'] == 'true'
-    name: test (ops-agent image, both mount layouts)
+    if: needs.select.outputs.code == 'true' && needs.select.outputs['test-agent-image'] == 'true'
+    name: test (ops-agent image)
     concurrency:
-      group: ci-validation-test-agent-mounts-${{ github.run_attempt == 1 && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref || format('run-{0}-attempt-{1}', github.run_id, github.run_attempt) }}
+      group: ci-validation-test-agent-image-${{ github.run_attempt == 1 && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref || format('run-{0}-attempt-{1}', github.run_id, github.run_attempt) }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
       contents: read
     env:
-      OPENMAPX_TEST_AGENT_IMAGE: openmapx-ci:ops-agent-mounts
+      OPENMAPX_TEST_AGENT_IMAGE: openmapx-ci:ops-agent-image
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -303,7 +302,7 @@ jobs:
           tags: ${{ env.OPENMAPX_TEST_AGENT_IMAGE }}
           cache-from: type=gha,scope=ops-agent
 
-      - run: pnpm exec vitest run --project node scripts/ops-agent-mount-layouts.test.ts
+      - run: pnpm exec vitest run --project node scripts/ops-agent-image.test.ts
 
   # The agent, core and data-manager suites as a deployment whose operator is
   # not uid 1000 sees them: a non-root uid 1001 in a Debian Node container,
@@ -805,7 +804,7 @@ jobs:
         types,
         test-node,
         test-linux-user,
-        test-agent-mounts,
+        test-agent-image,
         test-web,
         mobile,
         database,
