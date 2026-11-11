@@ -1,6 +1,5 @@
 import { resolveBrandByName } from "@openmapx/brands";
 import {
-  type Attribution,
   type DataSourceBranding,
   type DataSourceDetail,
   type DataSourceDetailSection,
@@ -20,7 +19,6 @@ import {
   vocabularyLabels,
   wallClock,
 } from "@openmapx/integration-framework/strings";
-import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type {
   ParkingArea,
   ParkingRate,
@@ -145,17 +143,6 @@ function siteBranding(site: ParkingSite): DataSourceBranding | undefined {
   return gapFillBranding(undefined, undefined, () => entry);
 }
 
-/**
- * The site's credits as per-record attributions. The `parking` manifest
- * declares no sources of its own — every credit comes from the providers — so
- * each result and detail carries the credits of the sources it was built from.
- * Their links come from upstream data, so only http(s) ones are kept.
- */
-function siteCredits(site: ParkingSite): Attribution[] | undefined {
-  if (site.attributions.length === 0) return undefined;
-  return snapshotContributors(site.attributions);
-}
-
 /** A site's title when its sources name it nothing. */
 function fallbackNameOf(site: ParkingSite): { fallbackName?: I18nToken } {
   return site.name ? {} : { fallbackName: token("siteFallbackName") };
@@ -212,8 +199,6 @@ export function mapParkingSiteToResult(site: ParkingSite): DataSourceResult {
   };
   if (fee) result.fee = fee;
   if (access) result.access = access;
-  const attributions = siteCredits(site);
-  if (attributions) result.attributions = attributions;
   const branding = siteBranding(site);
   if (branding) result.branding = branding;
   return withBrandingContributors(result);
@@ -499,8 +484,6 @@ export function mapParkingSiteToDetail(site: ParkingSite): DataSourceDetail {
     sections,
     parkAndRide: site.type === "park_and_ride" ? true : undefined,
   };
-  const attributions = siteCredits(site);
-  if (attributions) detail.attributions = attributions;
   const branding = siteBranding(site);
   if (branding) detail.branding = branding;
   return withBrandingContributors(detail);

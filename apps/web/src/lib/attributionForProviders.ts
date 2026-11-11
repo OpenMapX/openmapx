@@ -11,7 +11,6 @@ export interface DataSourceRecordCredits {
   source?: string;
   sources?: readonly string[];
   contributors?: readonly Attribution[];
-  attributions?: Attribution[];
 }
 
 /** Capture an exact legacy record at the response boundary. Unknown IDs never expand. */
@@ -28,11 +27,7 @@ export function dataSourceRecordContributors(
   const declared = dataSources.filter(
     (source) => sourceIds.has(source.sourceId) && !matchedIds.has(source.sourceId),
   );
-  return snapshotContributors(
-    matched,
-    declared.map(dataSourceToAttribution),
-    snapshotContributors(record.attributions ?? []),
-  );
+  return snapshotContributors(matched, declared.map(dataSourceToAttribution));
 }
 
 /**

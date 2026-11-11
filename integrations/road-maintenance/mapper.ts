@@ -1,5 +1,4 @@
 import {
-  type Attribution,
   type DataSourceDetail,
   type DataSourceDetailSection,
   type DataSourceResult,
@@ -12,7 +11,6 @@ import {
   type Translatable,
   token,
 } from "@openmapx/integration-framework/strings";
-import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type { ServiceVehicle } from "@openmapx/mobility-core/service-vehicle";
 import strings from "./strings/en.json" with { type: "json" };
 
@@ -73,11 +71,6 @@ function summaryOf(vehicle: ServiceVehicle): I18nToken {
   if (first === undefined) return token("summary.noTask");
   if (rest.length === 0) return token("summary.task", { task: taskLabel(first) });
   return token("summary.tasks", { task: taskLabel(first), count: rest.length });
-}
-
-function vehicleCredits(vehicle: ServiceVehicle): Attribution[] | undefined {
-  if (vehicle.attributions.length === 0) return undefined;
-  return snapshotContributors(vehicle.attributions);
 }
 
 function headingOf(degrees: number): I18nToken {
@@ -144,8 +137,6 @@ export function mapVehicleToResult(vehicle: ServiceVehicle): DataSourceResult {
     summary: summaryOf(vehicle),
     ...(observedAt ? { observedAt } : {}),
   };
-  const attributions = vehicleCredits(vehicle);
-  if (attributions) result.attributions = attributions;
   return result;
 }
 
@@ -164,7 +155,5 @@ export function mapVehicleToDetail(vehicle: ServiceVehicle): DataSourceDetail {
     coordinates: vehicle.coordinates,
     sections: [workSection(vehicle), infoSection(vehicle)],
   };
-  const attributions = vehicleCredits(vehicle);
-  if (attributions) detail.attributions = attributions;
   return detail;
 }

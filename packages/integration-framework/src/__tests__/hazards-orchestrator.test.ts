@@ -177,11 +177,11 @@ describe("hazard receipts", () => {
     const hazards = orchestratorOver([
       provider({
         id: "a",
-        getAlerts: async () => ({ alerts: [{ ...alert("same", ["a"]), attributions: [a] }] }),
+        getAlerts: async () => ({ alerts: [{ ...alert("same", ["a"]), contributors: [a] }] }),
       }),
       provider({
         id: "b",
-        getAlerts: async () => ({ alerts: [{ ...alert("same", ["b"]), attributions: [b] }] }),
+        getAlerts: async () => ({ alerts: [{ ...alert("same", ["b"]), contributors: [b] }] }),
       }),
     ]);
     const result = await hazards.alerts([0, 0, 1, 1]);

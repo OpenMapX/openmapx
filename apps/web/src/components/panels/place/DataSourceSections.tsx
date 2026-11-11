@@ -181,7 +181,7 @@ export function translateStructuredSection(
 }
 
 function AttributionFooter({ detail }: { detail: DataSourceDetail }) {
-  const captured = detail.contributors ?? detail.attributions ?? [];
+  const captured = detail.contributors ?? [];
   if (captured.length === 0) return null;
   return (
     <Box sx={{ px: 2, py: 1.25 }}>

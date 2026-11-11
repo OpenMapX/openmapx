@@ -1,6 +1,5 @@
 import { resolveBrandByName } from "@openmapx/brands";
 import {
-  type Attribution,
   type DataSourceBranding,
   type DataSourceDetail,
   type DataSourceDetailSection,
@@ -23,7 +22,6 @@ import {
   vocabularyLabels,
   wallClock,
 } from "@openmapx/integration-framework/strings";
-import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import {
   availabilityOf,
   type ChargingConnector,
@@ -197,17 +195,6 @@ function siteBranding(site: ChargingSite): DataSourceBranding | undefined {
   return gapFillBranding(undefined, undefined, () => entry);
 }
 
-/**
- * The site's credits as per-record attributions. The `ev-charging` manifest
- * declares no sources of its own — every credit comes from the providers — so
- * each result and detail carries the credits of the sources it was built from.
- * Their links come from upstream data, so only http(s) ones are kept.
- */
-function siteCredits(site: ChargingSite): Attribution[] | undefined {
-  if (site.attributions.length === 0) return undefined;
-  return snapshotContributors(site.attributions);
-}
-
 /** A site's title when its sources name it nothing. */
 function fallbackNameOf(site: ChargingSite): { fallbackName?: I18nToken } {
   return site.name ? {} : { fallbackName: token("siteFallbackName") };
@@ -243,8 +230,6 @@ export function mapChargingSiteToResult(site: ChargingSite): DataSourceResult {
     operator: site.operator?.name,
     sortValues: Object.keys(sortValues).length > 0 ? sortValues : undefined,
   };
-  const attributions = siteCredits(site);
-  if (attributions) result.attributions = attributions;
   const branding = siteBranding(site);
   if (branding) result.branding = branding;
   return withBrandingContributors(result);
@@ -849,8 +834,6 @@ export function mapChargingSiteToDetail(site: ChargingSite): DataSourceDetail {
     openingHours: site.openingHours,
     sections,
   };
-  const attributions = siteCredits(site);
-  if (attributions) detail.attributions = attributions;
   const branding = siteBranding(site);
   if (branding) detail.branding = branding;
   return withBrandingContributors(detail);

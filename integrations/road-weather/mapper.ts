@@ -1,5 +1,4 @@
 import {
-  type Attribution,
   type DataSourceDetail,
   type DataSourceDetailSection,
   type DataSourceResult,
@@ -12,7 +11,6 @@ import {
   type Translatable,
   token,
 } from "@openmapx/integration-framework/strings";
-import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type {
   RoadSurfaceSensor,
   RoadSurfaceState,
@@ -115,11 +113,6 @@ function valuesSummaryOf(station: RoadWeatherStation): I18nToken {
 /** A station's title when its sources name it nothing. */
 function fallbackNameOf(station: RoadWeatherStation): { fallbackName?: I18nToken } {
   return station.name ? {} : { fallbackName: token("fallbackName") };
-}
-
-function stationCredits(station: RoadWeatherStation): Attribution[] | undefined {
-  if (station.attributions.length === 0) return undefined;
-  return snapshotContributors(station.attributions);
 }
 
 /** The newest time among measured values, as the section's caption states it. */
@@ -279,8 +272,6 @@ export function mapStationToResult(station: RoadWeatherStation): DataSourceResul
     ...(reporting(station) && road !== undefined ? { sortValues: { roadTemperature: road } } : {}),
     ...(observedAt ? { observedAt } : {}),
   };
-  const attributions = stationCredits(station);
-  if (attributions) result.attributions = attributions;
   return result;
 }
 
@@ -316,7 +307,5 @@ export function mapStationToDetail(station: RoadWeatherStation): DataSourceDetai
     coordinates: station.coordinates,
     sections,
   };
-  const attributions = stationCredits(station);
-  if (attributions) detail.attributions = attributions;
   return detail;
 }

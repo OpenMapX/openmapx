@@ -147,7 +147,7 @@ describe("mapVehicleToDetail", () => {
       ["Provider", "Fintraffic Digitraffic road maintenance tracking"],
     ]);
     expect(text(detail.sections[1]?.caption)).toMatch(/anonymous/);
-    expect(detail.attributions?.map((a) => a.name)).toEqual([
+    expect(detail.contributors?.map((a) => a.name)).toEqual([
       "Fintraffic Digitraffic road maintenance tracking",
       "Fintraffic Digitraffic road maintenance tracking – Harja/Väylävirasto",
     ]);

@@ -393,8 +393,8 @@ describe("fuel orchestrator", () => {
     ];
 
     const [result] = (await source.search(BBOX)).data;
-    expect(result.attributions).toEqual(expected);
-    expect((await source.getDetail("a:1")).data?.attributions).toEqual(expected);
+    expect(result.contributors).toEqual(expected);
+    expect((await source.getDetail("a:1")).data?.contributors).toEqual(expected);
   });
 
   test("a partial answer says why it is partial; a complete one is not partial", async () => {

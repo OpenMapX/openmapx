@@ -19,50 +19,13 @@ function ds(partial: Partial<IntegrationDataSource> & { sourceId: string }): Int
 }
 
 describe("dataSourceRecordContributors", () => {
-  it("retains complete per-record credits without a manifest declaration", () => {
-    const receipt = {
-      sourceId: "MTS-K via Tankerkönig",
-      name: "MTS-K via Tankerkönig",
-      url: "https://creativecommons.tankerkoenig.de/",
-      licensing: {
-        version: 1,
-        bindings: [
-          { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
-        ],
-      } as const,
-    };
-    expect(
-      dataSourceRecordContributors(
-        { attributions: [receipt] },
-        [{ sourceId: "de-mtsk", name: "MTS-K via Tankerkönig" }],
-        [],
-      ),
-    ).toEqual([
-      {
-        sourceId: "MTS-K via Tankerkönig",
-        name: "MTS-K via Tankerkönig",
-        url: "https://creativecommons.tankerkoenig.de/",
-        licensing: {
-          version: 1,
-          bindings: [
-            { scope: "data", subject: "Data", license: { kind: "spdx", expression: "CC-BY-4.0" } },
-          ],
-        },
-      },
-    ]);
-  });
-  it("narrows declared manifest credits to the record and appends its legacy credits", () => {
+  it("narrows declared manifest credits to the record's sources", () => {
     const credits = dataSourceRecordContributors(
-      {
-        source: "ocm",
-        attributions: [
-          { sourceId: "Ville de Paris", name: "Ville de Paris", url: "https://paris.fr" },
-        ],
-      },
-      [{ sourceId: "ocm", name: "Open Charge Map" }],
+      { source: "ocm" },
+      [],
       [ds({ sourceId: "ocm", name: "Open Charge Map" }), ds({ sourceId: "osm" })],
     );
-    expect(credits.map((c) => c.name)).toEqual(["Open Charge Map", "Ville de Paris"]);
+    expect(credits.map((c) => c.name)).toEqual(["Open Charge Map"]);
   });
   const a = { sourceId: "a", name: "A", attributionText: "Captured notice" };
   const b = { sourceId: "b", name: "B" };

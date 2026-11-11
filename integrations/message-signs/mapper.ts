@@ -1,5 +1,4 @@
 import {
-  type Attribution,
   type DataSourceDetail,
   type DataSourceDetailSection,
   type DataSourceResult,
@@ -12,7 +11,6 @@ import {
   type Translatable,
   token,
 } from "@openmapx/integration-framework/strings";
-import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type { MessageSign } from "@openmapx/mobility-core/message-sign";
 
 type Row = [I18nToken, Translatable];
@@ -56,12 +54,6 @@ function summaryOf(sign: MessageSign): I18nToken {
 /** A sign's title when its sources name it nothing. */
 function fallbackNameOf(sign: MessageSign): { fallbackName?: I18nToken } {
   return sign.name ? {} : { fallbackName: token("fallbackName") };
-}
-
-/** The sign's credits; every credit comes from the providers. */
-function signCredits(sign: MessageSign): Attribution[] | undefined {
-  if (sign.attributions.length === 0) return undefined;
-  return snapshotContributors(sign.attributions);
 }
 
 /**
@@ -129,8 +121,6 @@ export function mapSignToResult(sign: MessageSign): DataSourceResult {
     operator: sign.operator?.name,
     ...(observedAt ? { observedAt } : {}),
   };
-  const attributions = signCredits(sign);
-  if (attributions) result.attributions = attributions;
   return result;
 }
 
@@ -155,7 +145,5 @@ export function mapSignToDetail(sign: MessageSign): DataSourceDetail {
     operator: sign.operator ? { name: sign.operator.name } : undefined,
     sections,
   };
-  const attributions = signCredits(sign);
-  if (attributions) detail.attributions = attributions;
   return detail;
 }

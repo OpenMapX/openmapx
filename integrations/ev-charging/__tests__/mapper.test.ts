@@ -274,23 +274,25 @@ describe("mapChargingSiteToResult", () => {
     expect(
       mapChargingSiteToResult(makeSite({ operator: { name: "EWE Go" }, country: "FR" })).branding,
     ).toBeUndefined();
-    expect(result.attributions).toEqual([
-      {
-        sourceId: "de-bw-mobidata-charging",
-        name: "MobiData BW",
-        url: "https://mobidata-bw.de",
-        licensing: {
-          version: 1,
-          bindings: [
-            {
-              scope: "data",
-              subject: "Data",
-              license: { kind: "spdx", expression: "DL-DE-BY-2.0" },
-            },
-          ],
-        } as const,
-      },
-    ]);
+    expect(result.contributors).toEqual(
+      expect.arrayContaining([
+        {
+          sourceId: "de-bw-mobidata-charging",
+          name: "MobiData BW",
+          url: "https://mobidata-bw.de",
+          licensing: {
+            version: 1,
+            bindings: [
+              {
+                scope: "data",
+                subject: "Data",
+                license: { kind: "spdx", expression: "DL-DE-BY-2.0" },
+              },
+            ],
+          } as const,
+        },
+      ]),
+    );
   });
 });
 

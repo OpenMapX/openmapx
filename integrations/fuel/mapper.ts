@@ -1,6 +1,5 @@
 import { getBrandByQid, resolveBrandByName } from "@openmapx/brands";
 import {
-  type Attribution,
   type DataSourceBranding,
   type DataSourceDetail,
   type DataSourceDetailSection,
@@ -20,7 +19,6 @@ import {
   token,
   vocabularyLabels,
 } from "@openmapx/integration-framework/strings";
-import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import type { FuelProduct, FuelStation } from "@openmapx/mobility-core/fuel";
 import strings from "./strings/en.json" with { type: "json" };
 
@@ -255,17 +253,6 @@ function stationBranding(station: FuelStation): DataSourceBranding | undefined {
   return entry ? gapFillBranding(undefined, undefined, () => entry) : undefined;
 }
 
-/**
- * The station's credits as per-record attributions. The `fuel` manifest
- * declares no sources of its own — every credit comes from the providers — so
- * each result and detail carries the credits of the sources it was built from.
- * Their links come from upstream data, so only http(s) ones are kept.
- */
-function stationCredits(station: FuelStation): Attribution[] | undefined {
-  if (station.attributions.length === 0) return undefined;
-  return snapshotContributors(station.attributions);
-}
-
 /** A station's title when its sources name it nothing, not even by its brand. */
 function fallbackNameOf(station: FuelStation): { fallbackName?: I18nToken } {
   return station.name ? {} : { fallbackName: token("stationFallbackName") };
@@ -309,8 +296,6 @@ export function mapFuelStationToResult(
     observedAt: oldestPriceAt(station),
     currency: summary ? currency : undefined,
   };
-  const attributions = stationCredits(station);
-  if (attributions) result.attributions = attributions;
   const branding = stationBranding(station);
   if (branding) result.branding = branding;
   return withBrandingContributors(result);
@@ -396,8 +381,6 @@ export function mapFuelStationToDetail(station: FuelStation): DataSourceDetail {
     openingHours: station.openingHours,
     sections: [table, services].filter((s): s is DataSourceDetailSection => s !== null),
   };
-  const attributions = stationCredits(station);
-  if (attributions) detail.attributions = attributions;
   const branding = stationBranding(station);
   if (branding) detail.branding = branding;
   return withBrandingContributors(detail);

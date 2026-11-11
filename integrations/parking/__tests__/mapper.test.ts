@@ -197,23 +197,25 @@ describe("mapParkingSiteToResult", () => {
       qid: expect.stringMatching(/^Q\d+$/),
       file: expect.any(String),
     });
-    expect(result.attributions).toEqual([
-      {
-        sourceId: "de-bw-mobidata-parking",
-        name: "MobiData BW",
-        url: "https://mobidata-bw.de",
-        licensing: {
-          version: 1,
-          bindings: [
-            {
-              scope: "data",
-              subject: "Data",
-              license: { kind: "spdx", expression: "DL-DE-BY-2.0" },
-            },
-          ],
-        } as const,
-      },
-    ]);
+    expect(result.contributors).toEqual(
+      expect.arrayContaining([
+        {
+          sourceId: "de-bw-mobidata-parking",
+          name: "MobiData BW",
+          url: "https://mobidata-bw.de",
+          licensing: {
+            version: 1,
+            bindings: [
+              {
+                scope: "data",
+                subject: "Data",
+                license: { kind: "spdx", expression: "DL-DE-BY-2.0" },
+              },
+            ],
+          } as const,
+        },
+      ]),
+    );
     expect(result.fallbackName).toEqual({ $t: "siteFallbackName" });
     expect(mapParkingSiteToResult(makeSite())).not.toHaveProperty("fallbackName");
   });
