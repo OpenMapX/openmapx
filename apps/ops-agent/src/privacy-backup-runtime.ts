@@ -36,7 +36,6 @@ const SCRATCH_ROOT_RELATIVE = [
   "ops-agent",
   "privacy-extraction",
 ] as const;
-const DEPLOYMENT_SCRATCH_ROOT = "/var/lib/openmapx/privacy-extraction";
 const COLLECTOR_ENTRYPOINT = "/usr/local/bin/openmapx-backup-subject-export";
 const MAX_RUNTIME_SECONDS = 15 * 60;
 const SCRATCH_RETENTION_MS = 2 * 60 * 60 * 1_000;
@@ -89,7 +88,6 @@ function assertSafeDirectory(path: string): void {
 
 function assertScratchRootWithinRepository(rootDir: string, scratchRoot: string): void {
   const configured = relative(rootDir, scratchRoot);
-  if (scratchRoot === DEPLOYMENT_SCRATCH_ROOT) return;
   if (
     !configured ||
     configured.startsWith(`..${sep}`) ||

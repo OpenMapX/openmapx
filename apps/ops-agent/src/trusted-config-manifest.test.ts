@@ -23,18 +23,20 @@ describe("trusted configuration deployment handoff", () => {
     const user = `\${UID:?UID must be set, run pnpm openmapx compose render}:\${GID:?GID must be set, run pnpm openmapx compose render}`;
     expect(api.manifest.container.user).toBe(user);
     expect(agent.manifest.container.user).toBe(user);
-    // The agent opens the queue through the checkout, so only app-api is told where it is.
+    // The agent opens the queue and its privacy scratch through the checkout,
+    // so only app-api mounts the queue and is told where it is.
     expect(api.manifest.container.environment?.OPS_TRUSTED_CONFIG_DIR).toBe(
       "/var/lib/openmapx/trusted-config",
     );
     expect(agent.manifest.container.environment).not.toHaveProperty("OPS_TRUSTED_CONFIG_DIR");
-    for (const service of [api, agent]) {
-      expect(service.manifest.bindMounts).toContainEqual({
-        source: "@infra:state/ops-agent/trusted-config",
-        target: "/var/lib/openmapx/trusted-config",
-        readOnly: false,
-      });
-    }
+    expect(api.manifest.bindMounts).toContainEqual({
+      source: "@infra:state/ops-agent/trusted-config",
+      target: "/var/lib/openmapx/trusted-config",
+      readOnly: false,
+    });
+    const agentSources = (agent.manifest.bindMounts ?? []).map((mount) => mount.source);
+    expect(agentSources).not.toContain("@infra:state/ops-agent/trusted-config");
+    expect(agentSources).not.toContain("@infra:state/ops-agent/privacy-extraction");
     expect(api.manifest.container.environment?.OPS_TRUSTED_CONFIG_UID).toBe(
       `\${UID:?UID must be set, run pnpm openmapx compose render}`,
     );
@@ -44,10 +46,10 @@ describe("trusted configuration deployment handoff", () => {
   });
 
   it("renders the queue against the real infra root through the generation pointer", () => {
-    const rendered = services.renderCompose([manifest("ops-agent")], {
+    const rendered = services.renderCompose([manifest("app-api")], {
       composeOutDir: join(root, "infra", "docker", services.CURRENT_CONFIGURATION),
       infraDir: join(root, "infra", "docker"),
-      allServices: [manifest("ops-agent")],
+      allServices: [manifest("app-api")],
     });
     expect(rendered.composeYaml).toContain("../../trusted-config:/var/lib/openmapx/trusted-config");
     expect(rendered.composeYaml).not.toContain("current/state/ops-agent");
