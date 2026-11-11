@@ -648,7 +648,7 @@ export async function startForegroundHarness(
       // The shell reconciles on every visibility change, as App.tsx does.
       recoveryEvents.push(await navigation.recovery.reconcile(visible ? "active" : "background"));
       await settle();
-      await navigation.reviewKeepAwake();
+      await navigation.reviewForegroundWork();
     },
     session: () => repository.loadActive(phone.clock.now()),
     settle,
@@ -819,6 +819,14 @@ export function groundStartPackage(
     },
   };
 }
+
+/**
+ * The time a test that drives most or all of `STRAIGHT_ROUTE` may take. Each
+ * fix is a real SQLite commit, so a whole route is a few hundred of them:
+ * about 2.3 s alone, and over Jest's 5 s default once several workers share
+ * the machine. The work scales with load; nothing in it waits on time.
+ */
+export const WHOLE_ROUTE_TIMEOUT_MS = 30_000;
 
 /** Drives along `STRAIGHT_ROUTE` from index `from` up to (not including) `to`, one fix a second. */
 export async function driveStraightRoute(

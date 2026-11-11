@@ -957,37 +957,6 @@ describe("navigationStore native read model", () => {
     expect(state.alertAvailability).toBe("scheduled");
   });
 
-  it("deduplicates navigation events by ID", () => {
-    useNavigationStore.getState().applyNativeFullSnapshot(projection());
-
-    expect(
-      useNavigationStore.getState().applyNativeEvent({ eventId: "e1", type: "off-route" }),
-    ).toBe("applied");
-    // A reconnect replays what was never acknowledged; announcing it twice is
-    // the bug that makes riders distrust the alerts.
-    expect(
-      useNavigationStore.getState().applyNativeEvent({ eventId: "e1", type: "off-route" }),
-    ).toBe("duplicate");
-  });
-
-  it("keeps pending events across a full snapshot for the same session", () => {
-    useNavigationStore.getState().applyNativeFullSnapshot(projection());
-    useNavigationStore.getState().applyNativeEvent({ eventId: "e1", type: "off-route" });
-
-    useNavigationStore.getState().applyNativeFullSnapshot(projection({ revision: 7 }));
-
-    expect(useNavigationStore.getState().nativeEventIds).toEqual(["e1"]);
-  });
-
-  it("drops pending events when the session changes", () => {
-    useNavigationStore.getState().applyNativeFullSnapshot(projection());
-    useNavigationStore.getState().applyNativeEvent({ eventId: "e1", type: "off-route" });
-
-    useNavigationStore.getState().applyNativeFullSnapshot(projection({ sessionId: "s2" }));
-
-    expect(useNavigationStore.getState().nativeEventIds).toEqual([]);
-  });
-
   it("keeps native authority after the session it described ends", () => {
     useNavigationStore.getState().applyNativeFullSnapshot(projection());
 

@@ -431,8 +431,8 @@ describe("ground navigation end to end", () => {
       lastFailureCode: "no-route",
     });
     expect(after?.kind === "ground" && after.payload.reroute.attempts).toBeGreaterThan(0);
-    const events = await context.repository.listPendingEvents("journey-1");
-    expect(events.map((event) => event.payload)).toEqual([{ type: "off-route" }]);
+    // One off-route episode, announced once, however many failed attempts followed.
+    expect(after?.cueLedger.events.filter((id) => id.includes(":off-route:"))).toHaveLength(1);
   });
 
   it("applies a settings change without disturbing progress", async () => {
@@ -466,7 +466,6 @@ describe("ground navigation end to end", () => {
       (await context.repository.describeContents()).map((entry) => [entry.table, entry.rows]),
     );
     expect(rows.active_navigation).toBe(0);
-    expect(rows.navigation_events).toBe(0);
     expect(rows.terminal_ack).toBe(1);
   });
 

@@ -3,7 +3,16 @@ import type { LocationPermissionState } from "../location/LocationDriver";
 import type { LocationProfileKind } from "../location/profiles";
 import type { SerialExecutor } from "../navigation/serialExecutor";
 import { profileForSession } from "../navigation/sessionProfile";
-import type { AppVisibility } from "./lifecyclePolicy";
+import type { AppVisibility } from "./useAppLifecycle";
+
+/**
+ * How long a prepared trip that has not been started is left alone. Between
+ * prepare and start the page may show a system prompt of its own (the heading
+ * permission), and that prompt takes the app's focus, which reaches recovery
+ * as a visibility change. A preparation older than this was abandoned: its
+ * page reloaded or died before it could ask for the start.
+ */
+export const PREPARING_GRACE_MS = 5 * 60_000;
 
 export type RecoveryEvent =
   | "session-started"
@@ -55,14 +64,13 @@ export interface NavigationRecoveryDeps {
 }
 
 /**
- * Owns the small recovery surface that must work before the full foreground
- * navigation graph is shippable.
+ * Reconciles a session that outlived its process or the app's visibility.
  *
  * This controller cannot create or mutate a route. It can only reconcile an
  * already-active durable session, explicitly restart its one location stream,
  * ask the coordinator to end it, and release device resources nothing owns.
- * Keeping that boundary narrow lets recovery be truthful without advertising
- * native navigation to the web application prematurely.
+ * The shell never resumes tracking on its own: restarting a stream the system
+ * stopped is the user's decision (`resume`).
  */
 export class NavigationRecoveryController {
   constructor(private readonly deps: NavigationRecoveryDeps) {}
@@ -127,6 +135,10 @@ export class NavigationRecoveryController {
     }
 
     const { session } = inspected;
+    if (session.status === "preparing" && session.expiresAtMs > now && preparing(session, now)) {
+      // Nothing is guided yet, and the page that prepared it is still on its way to the start.
+      return "session-ended";
+    }
     if (session.status !== "active" || session.expiresAtMs <= now) {
       return { close: session.sessionId };
     }
@@ -158,6 +170,11 @@ export class NavigationRecoveryController {
       this.deps.clearSurface?.(),
     ]);
   }
+}
+
+function preparing(session: MobileNavigationSession, now: number): boolean {
+  const age = now - session.startedAtMs;
+  return age >= 0 && age < PREPARING_GRACE_MS;
 }
 
 function permissionAllows(

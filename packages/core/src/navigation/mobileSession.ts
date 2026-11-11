@@ -84,6 +84,7 @@ const groundRerouteStateSchema = z
   .object({
     status: z.enum(["idle", "pending", "in-flight", "unavailable", "failed"]),
     requestId: boundedId.optional(),
+    requestedAtMs: safeInteger.optional(),
     attempts: z.number().int().nonnegative().max(64).default(0),
     nextAttemptAtMs: safeInteger.optional(),
     lastFailureCode: z.string().max(64).optional(),
@@ -108,6 +109,14 @@ const groundPayloadSchema = z
       .strict()
       .optional(),
     reroute: groundRerouteStateSchema,
+    /** Recent successful reroutes and the pause they imposed, for the churn guard. */
+    rerouteChurn: z
+      .object({
+        successAtMs: z.array(safeInteger).max(16),
+        cooldownUntilMs: safeInteger.optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 

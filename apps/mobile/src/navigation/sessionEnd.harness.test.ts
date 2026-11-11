@@ -1,8 +1,10 @@
 import {
+  groundStartPackageSchema,
   MOBILE_NAVIGATION_SESSION_MAX_AGE_MS,
   TRANSIT_UNDO_WINDOW_MS,
 } from "@openmapx/core/navigation";
 import { CONNECTIVITY_DEBOUNCE_MS } from "../connectivity/ConnectivityDriver";
+import { PREPARING_GRACE_MS } from "../lifecycle/NavigationRecoveryController";
 import { ARRIVAL_CUE_GRACE_MS } from "./arrival";
 import {
   createFakePhone,
@@ -12,6 +14,7 @@ import {
   rawFix,
   STRAIGHT_ROUTE,
   startForegroundHarness,
+  WHOLE_ROUTE_TIMEOUT_MS,
 } from "./testing/foregroundHarness";
 import {
   FIXTURE_FINGERPRINT,
@@ -100,14 +103,18 @@ describe("one notice per end", () => {
     expect(await harness.session()).toBeNull();
   });
 
-  it("reports guidance stopping at an arrival without reporting an end", async () => {
-    harness = await startForegroundHarness();
-    await harness.start(groundStartPackage());
-    await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
+  it(
+    "reports guidance stopping at an arrival without reporting an end",
+    async () => {
+      harness = await startForegroundHarness();
+      await harness.start(groundStartPackage());
+      await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
 
-    expect(harness.navigatingReports).toEqual([true, false]);
-    expect(harness.sessionEnds).toEqual([]);
-  });
+      expect(harness.navigatingReports).toEqual([true, false]);
+      expect(harness.sessionEnds).toEqual([]);
+    },
+    WHOLE_ROUTE_TIMEOUT_MS,
+  );
 });
 
 describe("opening the app inside an arrival's release window", () => {
@@ -211,35 +218,43 @@ describe("opening the app inside an arrival's release window", () => {
     expect(harness.sessionEnds).toHaveLength(1);
   });
 
-  it("keeps a road arrival card when the user switches apps after the grace", async () => {
-    harness = await startForegroundHarness();
-    const { sessionId } = await harness.start(groundStartPackage());
-    await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
-    await harness.setVisible(false);
-    await harness.elapse(20_000);
+  it(
+    "keeps a road arrival card when the user switches apps after the grace",
+    async () => {
+      harness = await startForegroundHarness();
+      const { sessionId } = await harness.start(groundStartPackage());
+      await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
+      await harness.setVisible(false);
+      await harness.elapse(20_000);
 
-    await harness.setVisible(true);
+      await harness.setVisible(true);
 
-    expect(await harness.session()).toMatchObject({ sessionId, status: "arrived" });
-    expect(harness.phone.location.running).toBe(false);
-    expect(stoppedMessages()).toEqual([]);
-    expect(harness.sessionEnds).toEqual([]);
-  });
+      expect(await harness.session()).toMatchObject({ sessionId, status: "arrived" });
+      expect(harness.phone.location.running).toBe(false);
+      expect(stoppedMessages()).toEqual([]);
+      expect(harness.sessionEnds).toEqual([]);
+    },
+    WHOLE_ROUTE_TIMEOUT_MS,
+  );
 
-  it("keeps a road arrival through its announcement grace after the process died", async () => {
-    harness = await startForegroundHarness({ phone: createFakePhone() });
-    await harness.start(groundStartPackage());
-    await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
-    expect((await harness.session())?.status).toBe("arrived");
+  it(
+    "keeps a road arrival through its announcement grace after the process died",
+    async () => {
+      harness = await startForegroundHarness({ phone: createFakePhone() });
+      await harness.start(groundStartPackage());
+      await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
+      expect((await harness.session())?.status).toBe("arrived");
 
-    harness = await harness.relaunch();
-    await harness.setVisible(true);
+      harness = await harness.relaunch();
+      await harness.setVisible(true);
 
-    expect((await harness.session())?.status).toBe("arrived");
-    expect(harness.phone.location.running).toBe(true);
-    await harness.elapse(ARRIVAL_CUE_GRACE_MS);
-    expect(harness.phone.location.running).toBe(false);
-  });
+      expect((await harness.session())?.status).toBe("arrived");
+      expect(harness.phone.location.running).toBe(true);
+      await harness.elapse(ARRIVAL_CUE_GRACE_MS);
+      expect(harness.phone.location.running).toBe(false);
+    },
+    WHOLE_ROUTE_TIMEOUT_MS,
+  );
 });
 
 describe("a recovery hold on the shell", () => {
@@ -265,16 +280,131 @@ describe("a recovery hold on the shell", () => {
     expect(harness.navigatingReports).toEqual([]);
   });
 
-  it("reports guidance again once the user resumes", async () => {
-    await resumeRequiredAfterRestart();
+  it(
+    "reports guidance again once the user resumes",
+    async () => {
+      await resumeRequiredAfterRestart();
 
-    expect(await harness.navigation.recovery.resume()).toBe("session-started");
-    harness.phone.connectivity.set("offline");
-    await harness.elapse(CONNECTIVITY_DEBOUNCE_MS);
-    await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
+      expect(await harness.navigation.recovery.resume()).toBe("session-started");
+      harness.phone.connectivity.set("offline");
+      await harness.elapse(CONNECTIVITY_DEBOUNCE_MS);
+      await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length);
 
-    expect(harness.phone.location.running).toBe(true);
-    // Resume is dispatched by the shell itself; the arrival is the next change.
-    expect(harness.navigatingReports).toEqual([false]);
+      expect(harness.phone.location.running).toBe(true);
+      // Resume is dispatched by the shell itself; the arrival is the next change.
+      expect(harness.navigatingReports).toEqual([false]);
+    },
+    WHOLE_ROUTE_TIMEOUT_MS,
+  );
+});
+
+describe("a trip between prepare and start", () => {
+  async function prepare(): Promise<{ sessionId: string; revision: number }> {
+    const prepared = await harness.command("session.prepare", {
+      startPackage: groundStartPackage(),
+    });
+    if (prepared?.type !== "session.prepared") throw new Error("prepare refused");
+    return prepared.payload as { sessionId: string; revision: number };
+  }
+
+  it("survives the app losing focus to a prompt the page shows before start", async () => {
+    harness = await startForegroundHarness();
+    const prepared = await prepare();
+
+    // The page asks for another permission between prepare and start; the
+    // system prompt makes the app inactive, then hands focus back.
+    await harness.setVisible(false);
+    await harness.elapse(20_000);
+    await harness.setVisible(true);
+    // Nothing is guided yet, so nothing holds the screen.
+    expect(harness.phone.keepAwake.held).toBe(false);
+    const started = await harness.command("session.start", {}, prepared);
+
+    expect(started?.type).toBe("session.started");
+    expect(harness.phone.keepAwake.held).toBe(true);
+    expect(stoppedMessages()).toEqual([]);
+    expect(harness.sessionEnds).toEqual([]);
+  });
+
+  it("lets a reloaded page prepare and start a new trip over the one it abandoned", async () => {
+    harness = await startForegroundHarness();
+    const abandoned = await prepare();
+
+    // The page reloads and prepares again, without knowing the earlier trip.
+    const replacement = await prepare();
+    const started = await harness.command("session.start", {}, replacement);
+
+    expect(replacement.sessionId).not.toBe(abandoned.sessionId);
+    expect(started?.type).toBe("session.started");
+    expect((await harness.session())?.sessionId).toBe(replacement.sessionId);
+    // The abandoned page's own start cannot reach the new trip.
+    const late = await harness.command("session.start", {}, abandoned);
+    expect(late).toMatchObject({ type: "native.error", payload: { code: "revision-conflict" } });
+    // Nothing was guided, so the replaced preparation ends without a notice to the page.
+    expect(stoppedMessages()).toEqual([]);
+  });
+
+  it("lets a car start replace the phone's preparation, telling the page once", async () => {
+    harness = await startForegroundHarness();
+    const phone = await prepare();
+    const car = { kind: "car", hostAuthorized: true, locationServiceStartAllowed: true } as const;
+
+    const started = await harness.navigation.coordinator.startCarTrip(
+      groundStartPackageSchema.parse(groundStartPackage()),
+      () => car,
+      () => true,
+    );
+    await harness.settle();
+
+    expect(started?.type).toBe("session.started");
+    expect(started?.sessionId).not.toBe(phone.sessionId);
+    expect((await harness.session())?.status).toBe("active");
+    // The phone page may still be loaded, so it hears its preparation end, once.
+    expect(stoppedMessages()).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({ sessionId: phone.sessionId, finalStatus: "stopped" }),
+      }),
+    ]);
+    const late = await harness.command("session.start", {}, phone);
+    expect(late).toMatchObject({ type: "native.error", payload: { code: "revision-conflict" } });
+  });
+
+  it("still refuses a car start over a running trip it does not name", async () => {
+    harness = await startForegroundHarness();
+    await harness.start(groundStartPackage());
+    const car = { kind: "car", hostAuthorized: true, locationServiceStartAllowed: true } as const;
+
+    const refused = await harness.navigation.coordinator.startCarTrip(
+      groundStartPackageSchema.parse(groundStartPackage()),
+      () => car,
+      () => true,
+    );
+
+    expect(refused).toMatchObject({ type: "native.error", payload: { code: "session-active" } });
+  });
+
+  it("still refuses a new trip while one is running", async () => {
+    harness = await startForegroundHarness();
+    await harness.start(groundStartPackage());
+
+    const refused = await harness.command("session.prepare", {
+      startPackage: groundStartPackage(),
+    });
+
+    expect(refused).toMatchObject({ type: "native.error", payload: { code: "session-active" } });
+  });
+
+  it("ends a preparation that was never started once its grace is over", async () => {
+    harness = await startForegroundHarness();
+    const { sessionId } = await prepare();
+
+    await harness.elapse(PREPARING_GRACE_MS);
+    await harness.setVisible(false);
+
+    expect(await harness.session()).toBeNull();
+    expect(stoppedMessages()).toEqual([
+      expect.objectContaining({ payload: expect.objectContaining({ sessionId }) }),
+    ]);
+    expect(harness.sessionEnds).toHaveLength(1);
   });
 });

@@ -365,7 +365,6 @@ describe("transit navigation end to end", () => {
       (await context.repository.describeContents()).map((entry) => [entry.table, entry.rows]),
     );
     expect(rows.active_navigation).toBe(0);
-    expect(rows.navigation_events).toBe(0);
     expect(rows.scheduled_alerts).toBe(0);
     expect(rows.terminal_ack).toBe(1);
     const acknowledgment = await context.database.getAllAsync("SELECT * FROM terminal_ack");

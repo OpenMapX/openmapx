@@ -14,6 +14,7 @@ import {
   CREATE_SCHEDULED_ALERTS_INDEX,
   CREATE_SCHEMA_MIGRATIONS,
   CREATE_TERMINAL_ACK,
+  DROP_NAVIGATION_EVENTS,
   INSERT_APPLIED_MIGRATION,
   SELECT_APPLIED_MIGRATIONS,
 } from "./sql";
@@ -50,6 +51,9 @@ export const SESSION_MIGRATIONS: readonly Migration[] = [
       CREATE_QUARANTINED_SESSIONS,
     ],
   },
+  // The event outbox was written and never delivered; snapshots carry
+  // everything the page shows. Dropping its table also drops its index.
+  { version: 3, statements: [DROP_NAVIGATION_EVENTS] },
 ];
 
 export const LATEST_SCHEMA_VERSION = SESSION_MIGRATIONS[SESSION_MIGRATIONS.length - 1].version;

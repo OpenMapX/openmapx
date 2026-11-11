@@ -49,12 +49,11 @@ const message = (type: string, payload = {}) => ({
 it("correlates an empty list without claiming apply authority", async () => {
   const f = fixture();
   await f.controller.dispatch(message("intake.list") as never);
-  expect(f.send).toHaveBeenCalledWith("intake.items", {
-    items: [],
-    canApply: false,
-    scheme: "openmapx",
-    forMessageId: "request1",
-  });
+  expect(f.send).toHaveBeenCalledWith(
+    "intake.items",
+    { items: [], canApply: false, scheme: "openmapx" },
+    { forMessageId: "request1" },
+  );
 });
 it("drops replies after a document reload", async () => {
   const f = fixture();
@@ -91,5 +90,6 @@ it("does not query unavailable navigation authority for an empty inbox", async (
   expect(f.send).toHaveBeenCalledWith(
     "intake.items",
     expect.objectContaining({ items: [], canApply: false }),
+    { forMessageId: "request1" },
   );
 });

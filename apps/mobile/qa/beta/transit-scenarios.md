@@ -27,7 +27,7 @@ These are deterministic test contracts, not completed installed-app acceptance.
   schedule rather than GPS;
 - no duplicate cue when the coordinator and its prepared index are rebuilt
   between every tick;
-- the rotating token never appearing in a snapshot, an outbox row, a diagnostic
+- the rotating token never appearing in a snapshot, a stored row, a diagnostic
   or an error;
 - an ambiguous refresh timeout breaking the chain rather than gambling the token;
 - a replacement itinerary adopted whole, with its own token and a reset leg;

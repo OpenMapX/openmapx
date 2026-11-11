@@ -5,26 +5,19 @@ import {
 } from "@openmapx/core/navigation";
 import type { Database } from "./database";
 import {
-  COUNT_EVENTS,
   DELETE_ACTIVE,
   DELETE_ALL_DIAGNOSTICS,
-  DELETE_EVENT,
   DELETE_EXPIRED_COMMANDS,
-  DELETE_NON_CRITICAL_EVENTS,
   DELETE_OLDEST_DIAGNOSTICS,
   DELETE_SESSION_ALERTS,
   DELETE_SESSION_COMMANDS,
-  DELETE_SESSION_EVENTS,
   DIAGNOSTIC_USAGE,
   INSERT_DIAGNOSTIC,
-  INSERT_EVENT,
   INSERT_PROCESSED_COMMAND,
   INSERT_QUARANTINE,
   INSERT_SCHEDULED_ALERT,
-  NEXT_EVENT_SEQUENCE,
   SELECT_ACTIVE,
   SELECT_DIAGNOSTICS,
-  SELECT_EVENTS,
   SELECT_PROCESSED_COMMAND,
   SELECT_QUARANTINE,
   SELECT_SCHEDULED_ALERTS,
@@ -65,19 +58,8 @@ export type SessionEffect =
   | { kind: "reconcile-alerts"; sessionId: string }
   | { kind: "cancel-session-alerts"; sessionId: string }
   | { kind: "publish-snapshot"; immediate: boolean }
-  | { kind: "publish-event"; eventId: string }
   | { kind: "request-reroute"; requestId: string }
   | { kind: "request-transit-refresh"; requestId: string };
-
-export interface OutboxEvent {
-  eventId: string;
-  sessionId: string;
-  critical: boolean;
-  createdAtMs: number;
-  payload: unknown;
-}
-
-export type PendingEvent = OutboxEvent & { sequence: number };
 
 export interface ScheduledAlertInput {
   alertId: string;
@@ -88,8 +70,6 @@ export interface ScheduledAlertInput {
 export interface RepositoryMutation {
   session: MobileNavigationSession;
   effects?: SessionEffect[];
-  /** Durable events, replayed until the web document acknowledges them. */
-  enqueue?: ReadonlyArray<Omit<OutboxEvent, "sessionId" | "createdAtMs">>;
   /** Replaces the session's scheduled alert rows wholesale when present. */
   alerts?: readonly ScheduledAlertInput[];
 }
@@ -123,8 +103,6 @@ export interface DiagnosticRow {
   fields: Record<string, unknown>;
 }
 
-/** Unacknowledged events beyond this are compacted, then refused. */
-export const MAX_OUTBOX_EVENTS = 256;
 export const MAX_PROCESSED_COMMANDS = 1_024;
 export const PROCESSED_COMMAND_TTL_MS = 24 * 60 * 60 * 1000;
 export const MAX_DIAGNOSTIC_ROWS = 5_000;
@@ -259,9 +237,6 @@ export class SessionRepository {
       }
 
       await writeActive(tx, mutation.session);
-      for (const event of mutation.enqueue ?? []) {
-        await enqueueEventIn(tx, { ...event, sessionId, createdAtMs: nowMs });
-      }
       if (mutation.alerts) await replaceAlertsIn(tx, sessionId, mutation.alerts, nowMs);
       result = { ok: true, session: mutation.session, effects: mutation.effects ?? [] };
     });
@@ -319,38 +294,6 @@ export class SessionRepository {
           ]
         : [],
     };
-  }
-
-  /* -------------------------------------------------------------- outbox --- */
-
-  async enqueueEvent(event: OutboxEvent): Promise<void> {
-    await this.database.withExclusiveTransactionAsync((tx) => enqueueEventIn(tx, event));
-  }
-
-  async listPendingEvents(sessionId: string): Promise<PendingEvent[]> {
-    const rows = await this.database.getAllAsync<{
-      event_id: string;
-      session_id: string;
-      critical: number;
-      sequence: number;
-      created_at_ms: number;
-      payload_json: string;
-    }>(SELECT_EVENTS, [sessionId]);
-    return rows.map((row) => ({
-      eventId: row.event_id,
-      sessionId: row.session_id,
-      critical: row.critical === 1,
-      sequence: row.sequence,
-      createdAtMs: row.created_at_ms,
-      payload: JSON.parse(row.payload_json),
-    }));
-  }
-
-  async ackEvents(eventIds: readonly string[]): Promise<void> {
-    if (eventIds.length === 0) return;
-    await this.database.withExclusiveTransactionAsync(async (tx) => {
-      for (const id of eventIds) await tx.runAsync(DELETE_EVENT, [id]);
-    });
   }
 
   /* ----------------------------------------------------- command dedupe --- */
@@ -494,7 +437,6 @@ export class SessionRepository {
       ]);
       await tx.runAsync(DELETE_ACTIVE);
       if (sessionId) {
-        await tx.runAsync(DELETE_SESSION_EVENTS, [sessionId]);
         await tx.runAsync(DELETE_SESSION_ALERTS, [sessionId]);
         await tx.runAsync(DELETE_SESSION_COMMANDS, [sessionId]);
       }
@@ -557,29 +499,8 @@ async function writeActive(tx: Database, session: MobileNavigationSession): Prom
 /** Removes every location-bearing row belonging to a session. */
 async function deleteSessionRows(tx: Database, sessionId: string): Promise<void> {
   await tx.runAsync(DELETE_ACTIVE);
-  await tx.runAsync(DELETE_SESSION_EVENTS, [sessionId]);
   await tx.runAsync(DELETE_SESSION_ALERTS, [sessionId]);
   await tx.runAsync(DELETE_SESSION_COMMANDS, [sessionId]);
-}
-
-async function enqueueEventIn(tx: Database, event: OutboxEvent): Promise<void> {
-  const count = await tx.getFirstAsync<{ n: number }>(COUNT_EVENTS, [event.sessionId]);
-  if ((count?.n ?? 0) >= MAX_OUTBOX_EVENTS) {
-    // Superseded snapshot updates are the compressible part of the queue; a
-    // critical event is never dropped to make room for another one.
-    await tx.runAsync(DELETE_NON_CRITICAL_EVENTS, [event.sessionId]);
-    const after = await tx.getFirstAsync<{ n: number }>(COUNT_EVENTS, [event.sessionId]);
-    if ((after?.n ?? 0) >= MAX_OUTBOX_EVENTS) return;
-  }
-  const next = await tx.getFirstAsync<{ next: number }>(NEXT_EVENT_SEQUENCE, [event.sessionId]);
-  await tx.runAsync(INSERT_EVENT, [
-    event.eventId,
-    event.sessionId,
-    event.critical ? 1 : 0,
-    next?.next ?? 1,
-    event.createdAtMs,
-    JSON.stringify(event.payload),
-  ]);
 }
 
 async function replaceAlertsIn(

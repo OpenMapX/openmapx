@@ -74,17 +74,6 @@ export interface ProcessTransitBatchInput {
   action?: TransitRiderAction;
 }
 
-/** Events that must reach the rider even if the page is not there to show them. */
-const CRITICAL_EVENTS = new Set<TransitNavigationEvent["type"]>([
-  "board",
-  "platform-change",
-  "approaching-alight",
-  "alight",
-  "transfer",
-  "missed-connection",
-  "arrival",
-]);
-
 export function processTransitBatch(input: ProcessTransitBatchInput): TransitBatchOutcome {
   const { session, fixes, nowMs, cache } = input;
   const { startPackage } = session.payload;
@@ -133,7 +122,6 @@ export function processTransitBatch(input: ProcessTransitBatchInput): TransitBat
   );
 
   const effects: SessionEffect[] = [];
-  const enqueue: Array<{ eventId: string; critical: boolean; payload: unknown }> = [];
   const eventIds: string[] = [];
   const spokenCueIds: string[] = [];
   let arrived = false;
@@ -142,13 +130,6 @@ export function processTransitBatch(input: ProcessTransitBatchInput): TransitBat
     if (event.type === "arrival") arrived = true;
     if (session.cueLedger.events.includes(event.id)) continue;
     eventIds.push(event.id);
-    enqueue.push({
-      eventId: event.id,
-      critical: CRITICAL_EVENTS.has(event.type),
-      // Only the event's own structural fields travel: no stop name, no
-      // coordinate, nothing the outbox would still hold after the trip ended.
-      payload: { type: event.type, legIndex: "legIndex" in event ? event.legIndex : undefined },
-    });
 
     const cue = transitCueEffect(session, event);
     if (!cue) continue;
@@ -224,12 +205,12 @@ export function processTransitBatch(input: ProcessTransitBatchInput): TransitBat
   }
 
   effects.push({ kind: "reconcile-alerts", sessionId: session.sessionId });
-  effects.push({ kind: "publish-snapshot", immediate: arrived || enqueue.length > 0 });
+  // A new trip event (boarding, a transfer, a platform change) is shown at once.
+  effects.push({ kind: "publish-snapshot", immediate: arrived || eventIds.length > 0 });
 
   return {
     session: next,
     effects,
-    ...(enqueue.length > 0 ? { enqueue } : {}),
     arrived,
     needsReplan,
     actionRejected,

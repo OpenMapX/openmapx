@@ -36,7 +36,6 @@ export type {
   AlertAvailability,
   NativeApplyOutcome,
   NativeConfidence,
-  NativeNavigationEvent,
   NativeNavigationProjection,
   NativePermissionMode,
   NavigationAuthority,
@@ -81,10 +80,6 @@ export { usePlaceStore } from "./placeStore";
 export { useRideStore } from "./rideStore";
 export { useSavedPlacesStore } from "./savedPlacesStore";
 export { useSearchStore } from "./searchStore";
-export {
-  useSettingsStore,
-  VOICE_TIMING_MULTIPLIER,
-  type VoiceGuidanceTiming,
-} from "./settingsStore";
+export { useSettingsStore } from "./settingsStore";
 export { useSidebarStore } from "./sidebarStore";
 export { useStreetLevelStore } from "./streetLevelStore";

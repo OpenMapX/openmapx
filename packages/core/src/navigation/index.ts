@@ -69,6 +69,44 @@ export type {
 } from "./groundPackage";
 export { buildGroundNavigationPackage } from "./groundPackage";
 export {
+  COAST_START_DELAY_MS,
+  COAST_TICK_MS,
+  type CoastAnchor,
+  canRequestReroute,
+  coastedFix,
+  EMPTY_REROUTE_CHURN,
+  groundSpeedLimit,
+  IDLE_REROUTE,
+  MAX_COAST_METERS,
+  MAX_COAST_MS,
+  mayCoast,
+  onBackOnRoute,
+  onRerouteFailed,
+  onRerouteOffline,
+  onRerouteRequested,
+  onRerouteRetryRequested,
+  onRerouteSucceeded,
+  REROUTE_CHURN_COOLDOWN_MS,
+  REROUTE_CHURN_LIMIT,
+  REROUTE_CHURN_WINDOW_MS,
+  REROUTE_FAILURES_REPORTED,
+  REROUTE_IN_FLIGHT_STALE_MS,
+  REROUTE_REQUEST_TIMEOUT_MS,
+  REROUTE_RETRY_DELAYS_MS,
+  REROUTE_RETRY_JITTER_MS,
+  type RerouteChurn,
+  type RerouteDecision,
+  type RerouteRuntime,
+  type RerouteStatus,
+  recordRerouteSuccess,
+  rerouteCandidate,
+  rerouteRetryDelayMs,
+  type SpeedLimitRoute,
+  VOICE_TIMING_MULTIPLIER,
+  type VoiceTiming,
+  withheldReroute,
+} from "./groundSessionPolicy";
+export {
   type GuidanceIconName,
   type GuidanceLaneArrow,
   type GuidanceLaneCell,
@@ -138,6 +176,8 @@ export {
   NATIVE_TO_WEB_TYPES,
   type NativeCapabilities,
   type NativeToWebMessage,
+  type NativeToWebPayload,
+  type NativeToWebType,
   type NavigationStartPackage,
   nativeToWebSchema,
   navigationStartPackageSchema,
@@ -154,6 +194,8 @@ export {
   voiceEventSchema,
   WEB_TO_NATIVE_TYPES,
   type WebToNativeMessage,
+  type WebToNativePayload,
+  type WebToNativeType,
   webToNativeSchema,
 } from "./mobileProtocol";
 export {
@@ -174,6 +216,25 @@ export {
   type TransitMobileSession,
 } from "./mobileSession";
 export * from "./nativeIntake";
+export {
+  type GroundFullSnapshot,
+  type GroundProgressSnapshot,
+  type GroundSnapshotWire,
+  groundFullSnapshotSchema,
+  groundProgressSnapshotSchema,
+  groundSnapshotWireSchema,
+  NATIVE_SNAPSHOT_HOT_FIELDS,
+  NATIVE_SNAPSHOT_VERSION,
+  type NativeSnapshot,
+  type NativeSnapshotWire,
+  nativeSnapshotWireSchema,
+  type TransitFullSnapshot,
+  type TransitProgressSnapshot,
+  type TransitSnapshotWire,
+  transitFullSnapshotSchema,
+  transitProgressSnapshotSchema,
+  transitSnapshotWireSchema,
+} from "./nativeSnapshot";
 export {
   createNavigationSessionSnapshot,
   isNavigationSessionExpired,
@@ -214,8 +275,6 @@ export {
   type TimelineEventType,
 } from "./recording";
 export {
-  isReroutingTooOften,
-  pruneRerouteTimes,
   remainingWaypoints,
   shouldReroute,
   shouldRerouteForClosure,

@@ -181,8 +181,8 @@ actual candidate, disclosures and evidence separately.
 
 ### 1. Qualify the candidate locally
 
-Complete `apps/mobile/qa/release/matrix.md` on its required virtual paths. Missing
-foreground composition or a reproducible functional failure blocks beta upload.
+Complete `apps/mobile/qa/release/matrix.md` on its required virtual paths. A
+reproducible functional failure blocks beta upload.
 Use `pending-physical` only for cases a virtual device cannot establish, never
 for an unrun virtual case. A changed candidate needs a new build number and the
 affected plus core checks rerun.

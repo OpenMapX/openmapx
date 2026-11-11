@@ -3,8 +3,7 @@
 Run on both platforms against the identified local Release build and web build.
 Test the WebView and native overlays separately, including loading/error states
 where the overlay may be the only usable UI. Record actual results; this file
-contains no completed acceptance evidence. Navigation/notification cases require
-the foreground composition currently missing from `src/App.tsx`.
+contains no completed acceptance evidence.
 
 ## Screen readers
 

@@ -45,7 +45,7 @@ interface Timer {
   dueAtMs: number;
 }
 
-function harness(options: { scope?: unknown } = {}) {
+function harness(options: { scope?: unknown; reportInvalid?: (type: string) => void } = {}) {
   const shell = shellScope();
   const timers = new Map<number, Timer>();
   let nextHandle = 1;
@@ -63,6 +63,7 @@ function harness(options: { scope?: unknown } = {}) {
     clearTimeout: (handle) => {
       timers.delete(handle as number);
     },
+    ...(options.reportInvalid ? { reportInvalid: options.reportInvalid } : {}),
   });
 
   const advance = (ms: number) => {
@@ -116,6 +117,11 @@ function deliverHello(
   context.deliver(helloReply(forMessageId, overrides));
 }
 
+/** The least a snapshot carries for the page to place it. */
+function snapshotAt(revision: number) {
+  return { type: "progress", sessionId: "s1", revision, routeFingerprint: "2:abc" } as const;
+}
+
 function snapshotMessage(revision: number) {
   return {
     protocolVersion: MOBILE_PROTOCOL_MAX,
@@ -123,7 +129,7 @@ function snapshotMessage(revision: number) {
     messageId: `n-snap-${revision}`,
     channelNonce: NONCE,
     sentAtMs: 1_700_000_000_000,
-    payload: { snapshot: { revision } },
+    payload: { snapshot: snapshotAt(revision) },
   };
 }
 
@@ -187,6 +193,8 @@ describe("voice dispatch", () => {
     expect(() => h.client.send("voice.start", { requestId: "r", locale: "de_DE" })).toThrow(
       BridgeError,
     );
+    // @ts-expect-error A payload outside its command's schema does not compile.
+    expect(() => h.client.send("voice.stop", { requestId: 7 })).toThrow(BridgeError);
     const event = {
       ...snapshotMessage(1),
       type: "voice.event",
@@ -374,7 +382,7 @@ describe("BridgeClient.request", () => {
     context.deliver({
       ...snapshotMessage(2),
       protocolVersion: MOBILE_PROTOCOL_MAX,
-      payload: { snapshot: { revision: 2 }, forMessageId: secondMessageId },
+      payload: { snapshot: snapshotAt(2), forMessageId: secondMessageId },
     });
 
     expect(context.client.pendingCount).toBe(1);
@@ -383,7 +391,7 @@ describe("BridgeClient.request", () => {
     context.deliver({
       ...snapshotMessage(1),
       protocolVersion: MOBILE_PROTOCOL_MAX,
-      payload: { snapshot: { revision: 1 }, forMessageId: firstMessageId },
+      payload: { snapshot: snapshotAt(1), forMessageId: firstMessageId },
     });
 
     await expect(first).resolves.toMatchObject({ payload: { snapshot: { revision: 1 } } });
@@ -400,16 +408,47 @@ describe("BridgeClient.request", () => {
     context.deliver({
       ...snapshotMessage(7),
       protocolVersion: MOBILE_PROTOCOL_MAX,
-      payload: { snapshot: { revision: 7 }, forMessageId: messageId },
+      payload: { snapshot: snapshotAt(7), forMessageId: messageId },
     });
 
     await expect(pending).resolves.toMatchObject({ type: "snapshot.update" });
     expect(seen).toEqual([
       expect.objectContaining({
         type: "snapshot.update",
-        payload: expect.objectContaining({ snapshot: { revision: 7 } }),
+        payload: expect.objectContaining({ snapshot: snapshotAt(7) }),
       }),
     ]);
+  });
+
+  it("fails a request at once when its reply fails the schema, reporting only the type", async () => {
+    const reported: string[] = [];
+    const context = harness({ reportInvalid: (type) => reported.push(type) });
+    context.client.attach();
+    const ready = context.client.hello();
+    deliverHello(context);
+    await ready;
+    context.sent.length = 0;
+    const seen: unknown[] = [];
+    context.client.subscribe((message) => seen.push(message));
+
+    const pending = context.client.request("snapshot.request", {});
+    const messageId = JSON.parse(context.sent[0]).messageId as string;
+    const refused = {
+      ...snapshotMessage(7),
+      payload: { snapshot: { revision: 7 }, forMessageId: messageId },
+    };
+    context.deliver(refused);
+
+    await expect(pending).rejects.toMatchObject({ code: "invalid-response" });
+    expect(context.client.pendingCount).toBe(0);
+    expect(context.timerCount()).toBe(0);
+    expect(seen).toEqual([]);
+    expect(reported).toEqual(["snapshot.update"]);
+
+    // Reported once per type, and never for another document's message.
+    context.deliver(refused);
+    context.deliver({ ...refused, type: "voice.event", channelNonce: "some-other-document" });
+    expect(reported).toEqual(["snapshot.update"]);
   });
 
   it("rejects a correlated reply whose type cannot answer the named command", async () => {
@@ -432,24 +471,6 @@ describe("BridgeClient.request", () => {
 
     await expect(pending).rejects.toMatchObject({ code: "invalid-response" });
     expect(context.client.pendingCount).toBe(0);
-  });
-
-  it("does not retain a pending request for a fire-and-forget event acknowledgement", async () => {
-    const context = await negotiated();
-    const commands = new NativeNavigationCommands(context.client, () => ({
-      sessionId: "s1",
-      revision: 1,
-    }));
-
-    const acknowledgement = commands.acknowledgeEvents(["event-1"]);
-    await Promise.resolve();
-
-    expect(context.client.pendingCount).toBe(0);
-    expect(JSON.parse(context.sent[0])).toMatchObject({
-      type: "event.ack",
-      payload: { eventIds: ["event-1"] },
-    });
-    await acknowledgement;
   });
 
   it("times out a read-only command on the short deadline", async () => {

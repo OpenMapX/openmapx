@@ -1,9 +1,12 @@
 import {
   MOBILE_PROTOCOL_MAX,
   MOBILE_PROTOCOL_MIN,
+  NATIVE_TO_WEB_TYPES,
   type NativeToWebMessage,
   nativeToWebSchema,
   type WebToNativeMessage,
+  type WebToNativePayload,
+  type WebToNativeType,
   webToNativeSchema,
 } from "@openmapx/core/navigation";
 import {
@@ -97,6 +100,11 @@ export interface BridgeClientOptions {
   /** Injected so tests drive deadlines without waiting. */
   setTimeout?: (callback: () => void, delayMs: number) => unknown;
   clearTimeout?: (handle: unknown) => void;
+  /**
+   * Told the type of a message for this page that failed its schema, once per
+   * type. Never the payload. Defaults to a console warning.
+   */
+  reportInvalid?: (type: string) => void;
 }
 
 type Pending = {
@@ -149,6 +157,7 @@ export class BridgeClient {
   private closed = false;
   private messageCounter = 0;
   private detach: (() => void) | null = null;
+  private readonly reportedInvalid = new Set<string>();
 
   private readonly scheduleTimeout: NonNullable<BridgeClientOptions["setTimeout"]>;
   private readonly cancelTimeout: NonNullable<BridgeClientOptions["clearTimeout"]>;
@@ -262,7 +271,7 @@ export class BridgeClient {
    * can never be mistaken for the reply the command expected.
    */
   request(
-    type: WebToNativeMessage["type"],
+    type: WebToNativeType,
     payload: unknown,
     options: RequestOptions = {},
   ): Promise<NativeToWebMessage> {
@@ -313,7 +322,11 @@ export class BridgeClient {
   }
 
   /** Sends a command whose protocol contract intentionally has no direct reply. */
-  send(type: WebToNativeMessage["type"], payload: unknown, options: RequestOptions = {}): void {
+  send<T extends WebToNativeType>(
+    type: T,
+    payload: WebToNativePayload<T>,
+    options: RequestOptions = {},
+  ): void {
     if (this.closed) throw new BridgeError("channel-reset");
     if (!this.transport || !this.nonce) throw new BridgeError("no-transport");
     if (options.requireHandshake !== false) {
@@ -345,13 +358,16 @@ export class BridgeClient {
   /**
    * Handles one inbound message.
    *
-   * A message that does not parse is dropped rather than surfaced: the page
-   * cannot act on something it does not understand, and a reply that fails its
-   * own schema is not evidence about anything.
+   * A message that does not parse is not acted on: the page cannot act on
+   * something it does not understand, and a reply that fails its own schema is
+   * not evidence about anything. It is refused instead (`refuseInvalid`).
    */
   private receive(detail: unknown): void {
     const parsed = nativeToWebSchema.safeParse(detail);
-    if (!parsed.success) return;
+    if (!parsed.success) {
+      this.refuseInvalid(detail);
+      return;
+    }
     const message = parsed.data;
 
     // Wrong document. The shell rotates the nonce per load, so this is a message
@@ -390,6 +406,41 @@ export class BridgeClient {
     }
 
     for (const listener of this.listeners) listener(message);
+  }
+
+  /**
+   * Reports a message for this document that failed its schema, by type only,
+   * and fails the request it answers at once rather than leaving it to wait
+   * out its deadline. Only the envelope's own fields are read, and only to
+   * find this document and that request.
+   */
+  private refuseInvalid(detail: unknown): void {
+    if (!detail || typeof detail !== "object") return;
+    const raw = detail as { type?: unknown; channelNonce?: unknown; payload?: unknown };
+    if (!this.nonce || raw.channelNonce !== this.nonce) return;
+    const type =
+      typeof raw.type === "string" && (NATIVE_TO_WEB_TYPES as readonly string[]).includes(raw.type)
+        ? raw.type
+        : "unknown";
+    if (!this.reportedInvalid.has(type)) {
+      this.reportedInvalid.add(type);
+      const report =
+        this.options.reportInvalid ??
+        ((refused: string) =>
+          console.warn(`[mobile bridge] a "${refused}" message failed its schema and was refused`));
+      report(type);
+    }
+    const payload = raw.payload;
+    const forMessageId =
+      payload && typeof payload === "object"
+        ? (payload as { forMessageId?: unknown }).forMessageId
+        : undefined;
+    if (typeof forMessageId !== "string") return;
+    const entry = this.pending.get(forMessageId);
+    if (!entry) return;
+    this.pending.delete(forMessageId);
+    this.cancelTimeout(entry.timer);
+    entry.reject(new BridgeError("invalid-response"));
   }
 
   get pendingCount(): number {

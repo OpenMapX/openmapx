@@ -1,12 +1,12 @@
-import type { GroundMobileSession } from "@openmapx/core/navigation";
-import { groundSessionFixture } from "../../storage/testing/sessionFixture";
 import {
-  applyGroundSnapshot,
-  GROUND_SNAPSHOT_VERSION,
-  groundFullSnapshot,
-  groundProgressSnapshot,
-  type SnapshotView,
-} from "./groundSnapshot";
+  type GroundMobileSession,
+  groundFullSnapshotSchema,
+  groundProgressSnapshotSchema,
+  NATIVE_SNAPSHOT_VERSION,
+  nativeSnapshotWireSchema,
+} from "@openmapx/core/navigation";
+import { groundSessionFixture } from "../../storage/testing/sessionFixture";
+import { groundFullSnapshot, groundProgressSnapshot } from "./groundSnapshot";
 
 function session(overrides: Partial<GroundMobileSession> = {}): GroundMobileSession {
   return groundSessionFixture({
@@ -25,7 +25,7 @@ describe("groundFullSnapshot", () => {
   it("carries the identity and route a page needs to start rendering", () => {
     const snapshot = groundFullSnapshot(session());
 
-    expect(snapshot.version).toBe(GROUND_SNAPSHOT_VERSION);
+    expect(snapshot.version).toBe(NATIVE_SNAPSHOT_VERSION);
     expect(snapshot.type).toBe("full");
     expect(snapshot.sessionId).toBe("session-1");
     expect(snapshot.revision).toBe(4);
@@ -127,66 +127,21 @@ describe("groundProgressSnapshot", () => {
   });
 });
 
-describe("applyGroundSnapshot", () => {
-  const full = groundFullSnapshot(session());
-  const applied = applyGroundSnapshot(null, full);
-  const view = (applied as { view: SnapshotView }).view;
+describe("the shared snapshot contract", () => {
+  it("produces exactly the shared shapes, with nothing extra", () => {
+    const moving = session();
+    moving.payload.progress = { alongMeters: 120, speedMps: 12 } as never;
+    moving.payload.currentSpeedLimit = 50;
 
-  it("accepts a full snapshot from nothing", () => {
-    expect(applied.ok).toBe(true);
-    expect(view.revision).toBe(4);
+    expect(groundFullSnapshotSchema.safeParse(groundFullSnapshot(moving)).success).toBe(true);
+    expect(groundProgressSnapshotSchema.safeParse(groundProgressSnapshot(moving)).success).toBe(
+      true,
+    );
   });
 
-  it("applies a newer delta for the same route", () => {
-    const delta = groundProgressSnapshot({
-      ...session({ revision: 5 }),
-      payload: { ...session().payload, offRoute: true },
-    });
-
-    const result = applyGroundSnapshot(view, { ...delta, revision: 5 });
-
-    expect(result.ok).toBe(true);
-    expect((result as { view: SnapshotView }).view.revision).toBe(5);
-
-    expect((result as { view: SnapshotView }).view.full.route).toEqual(full.route);
-    expect((result as { view: SnapshotView }).view.full.offRoute).toBe(true);
-  });
-
-  it("asks for a full snapshot when there is nothing to apply a delta to", () => {
-    const delta = groundProgressSnapshot(session({ revision: 5 }));
-
-    expect(applyGroundSnapshot(null, delta)).toEqual({ ok: false, reason: "need-full-snapshot" });
-  });
-
-  it("refuses a delta for a different session", () => {
-    const delta = groundProgressSnapshot(session({ sessionId: "session-2", revision: 5 }));
-
-    expect(applyGroundSnapshot(view, delta)).toEqual({ ok: false, reason: "need-full-snapshot" });
-  });
-
-  it("refuses a delta whose route changed underneath it", () => {
-    const delta = {
-      ...groundProgressSnapshot(session({ revision: 5 })),
-      routeFingerprint: "a-different-road",
-    };
-
-    expect(applyGroundSnapshot(view, delta)).toEqual({ ok: false, reason: "need-full-snapshot" });
-  });
-
-  it.each([4, 3, 0])("refuses a delta at non-increasing revision %i", (revision) => {
-    const delta = { ...groundProgressSnapshot(session({ revision })), revision };
-
-    expect(applyGroundSnapshot(view, delta)).toEqual({ ok: false, reason: "need-full-snapshot" });
-  });
-
-  it("accepts a full snapshot even when it moves the revision backwards", () => {
-    // A full snapshot is authoritative by definition: it is what the session
-    // actually is, and a reload legitimately produces one at any revision.
-    const older = groundFullSnapshot(session({ revision: 2 }));
-
-    const result = applyGroundSnapshot(view, older);
-
-    expect(result.ok).toBe(true);
-    expect((result as { view: SnapshotView }).view.revision).toBe(2);
+  it("is accepted by the page", () => {
+    for (const snapshot of [groundFullSnapshot(session()), groundProgressSnapshot(session())]) {
+      expect(nativeSnapshotWireSchema.safeParse(snapshot).success).toBe(true);
+    }
   });
 });

@@ -1,4 +1,9 @@
-import { type GroundMobileSession, remainingWaypoints } from "@openmapx/core/navigation";
+import {
+  type GroundMobileSession,
+  REROUTE_REQUEST_TIMEOUT_MS,
+  remainingWaypoints,
+  rerouteCandidate,
+} from "@openmapx/core/navigation";
 import {
   type ApiClient,
   type ApiRequestOptions,
@@ -10,7 +15,6 @@ import {
   validBikeRoutingOptions,
 } from "@openmapx/core/navigation/api";
 import { validateGroundStartPackage } from "./groundSession";
-import { REQUEST_TIMEOUT_MS } from "./rerouteState";
 
 /**
  * Asking the server for a new route, from outside the coordinator's queue.
@@ -121,7 +125,7 @@ export class GroundRerouteService {
     this.inFlight.set(requestId, controller);
     const options: ApiRequestOptions = {
       signal: controller.signal,
-      timeoutMs: REQUEST_TIMEOUT_MS,
+      timeoutMs: REROUTE_REQUEST_TIMEOUT_MS,
     };
 
     try {
@@ -148,7 +152,10 @@ export class GroundRerouteService {
         options,
       );
 
-      const candidate = (result as { routes?: unknown[] })?.routes?.[0];
+      // The route the server marked active, as the browser follows it.
+      const candidate = rerouteCandidate(
+        result as { routes?: readonly unknown[]; activeRouteIndex?: number },
+      );
       if (!candidate) return { ...base, ok: false, code: "no-route" };
 
       // Validated through exactly the schema a captured package uses. A server

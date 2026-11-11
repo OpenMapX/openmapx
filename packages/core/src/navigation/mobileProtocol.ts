@@ -8,6 +8,7 @@ import {
   intakeItemSchema,
   MAX_INTAKE_FILE_BYTES,
 } from "./nativeIntake";
+import { nativeSnapshotWireSchema } from "./nativeSnapshot";
 
 /**
  * The complete wire contract between the OpenMapX web UI and the installed
@@ -84,7 +85,6 @@ export const WEB_TO_NATIVE_TYPES = [
   "snapshot.request",
   "session.stop",
   "session.complete",
-  "event.ack",
   "location.request",
   "settings.open",
   "auth.open",
@@ -106,7 +106,6 @@ export const NATIVE_TO_WEB_TYPES = [
   "session.replaced",
   "session.stopped",
   "snapshot.update",
-  "navigation.event",
   "native.error",
   "location.result",
   "settings.result",
@@ -520,7 +519,6 @@ export const webToNativeSchema = z.discriminatedUnion("type", [
   envelope("snapshot.request", z.object({}).strict()),
   envelope("session.stop", z.object({}).strict()),
   envelope("session.complete", z.object({}).strict()),
-  envelope("event.ack", z.object({ eventIds: z.array(boundedId).max(256) }).strict()),
   envelope(
     "location.request",
     z
@@ -678,7 +676,7 @@ export const nativeToWebSchema = z.discriminatedUnion("type", [
     "snapshot.update",
     z
       .object({
-        snapshot: z.record(z.string(), z.unknown()),
+        snapshot: nativeSnapshotWireSchema,
         forMessageId: boundedId.optional(),
       })
       .strict(),
@@ -745,15 +743,6 @@ export const nativeToWebSchema = z.discriminatedUnion("type", [
       })
       .strict(),
   ),
-  envelope(
-    "navigation.event",
-    z
-      .object({
-        eventId: boundedId,
-        event: z.record(z.string(), z.unknown()),
-      })
-      .strict(),
-  ),
   envelope("native.error", z.object({ code: boundedText, forMessageId: boundedId }).strict()),
 ]);
 
@@ -762,6 +751,23 @@ export const mobileBridgeMessageSchema = z.union([webToNativeSchema, nativeToWeb
 export type WebToNativeMessage = z.infer<typeof webToNativeSchema>;
 export type NativeToWebMessage = z.infer<typeof nativeToWebSchema>;
 export type MobileBridgeMessage = z.infer<typeof mobileBridgeMessageSchema>;
+
+type WithoutCorrelation<P> = P extends unknown ? Omit<P, "forMessageId"> : never;
+
+/**
+ * What a native sender supplies for one message type: the payload its schema
+ * accepts, without the correlation id, which the bridge adds from the command
+ * being answered.
+ */
+export type NativeToWebPayload<T extends NativeToWebType> = WithoutCorrelation<
+  Extract<z.input<typeof nativeToWebSchema>, { type: T }>["payload"]
+>;
+
+/** What the page supplies for one command type: the payload its schema accepts. */
+export type WebToNativePayload<T extends WebToNativeType> = Extract<
+  z.input<typeof webToNativeSchema>,
+  { type: T }
+>["payload"];
 
 // Parsing.
 

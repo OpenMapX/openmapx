@@ -113,18 +113,7 @@ export interface NativeNavigationProjection {
  * page is behind by more than one revision, or the route changed underneath it,
  * and rendering anything before the full snapshot arrives would be an invention.
  */
-export type NativeApplyOutcome =
-  | "applied"
-  | "duplicate"
-  | "stale"
-  | "needs-full-snapshot"
-  | "rejected";
-
-/** A native navigation event, deduplicated by an ID the shell assigns. */
-export interface NativeNavigationEvent {
-  eventId: string;
-  type: string;
-}
+export type NativeApplyOutcome = "applied" | "duplicate" | "stale" | "needs-full-snapshot";
 
 /** Route constraints that must survive every mid-trip directions request. */
 export interface NavigationRouteOptions extends BikeRoutingOptions {
@@ -294,8 +283,6 @@ interface NavigationState {
   permissionMode: NativePermissionMode | null;
   /** Whether the native get-off backup alert is in place. */
   alertAvailability: AlertAvailability;
-  /** Native event IDs already rendered, so a replay after reconnect is a no-op. */
-  nativeEventIds: string[];
 
   startGroundNavigation: (
     route: Route,
@@ -389,8 +376,6 @@ interface NavigationState {
    * and the answer to that is a full snapshot rather than a guess.
    */
   applyNativeDelta: (projection: NativeNavigationProjection) => NativeApplyOutcome;
-  /** Record a native navigation event, ignoring one already seen. */
-  applyNativeEvent: (event: NativeNavigationEvent) => NativeApplyOutcome;
   /** Return to browser authority and forget everything native told us. */
   clearNativeReadModel: () => void;
 }
@@ -526,7 +511,6 @@ const NATIVE_READ_MODEL_INITIAL = {
   nativeConfidence: "live" as NativeConfidence,
   permissionMode: null as NativePermissionMode | null,
   alertAvailability: "unknown" as AlertAvailability,
-  nativeEventIds: [] as string[],
 };
 
 /**
@@ -919,11 +903,10 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     ) {
       return "duplicate";
     }
-    // A different session invalidates the events pending against the old one,
-    // and the browser read model that a stale session left behind.
-    const carriedEvents = sameSession ? current.nativeEventIds : [];
+    // A full snapshot replaces whatever browser read model a stale session
+    // left behind.
     const patch = nativeStatePatch(projection);
-    resetSession(set, () => ({ ...patch, nativeEventIds: carriedEvents }));
+    resetSession(set, () => patch);
     return "applied";
   },
 
@@ -940,14 +923,6 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     // wrong road.
     if (base !== current.nativeRevision) return "needs-full-snapshot";
     setHoldingLease(set, nativeStatePatch(projection));
-    return "applied";
-  },
-
-  applyNativeEvent: (event) => {
-    const current = get();
-    if (current.navigationAuthority !== "native") return "rejected";
-    if (current.nativeEventIds.includes(event.eventId)) return "duplicate";
-    set({ nativeEventIds: [...current.nativeEventIds, event.eventId] });
     return "applied";
   },
 

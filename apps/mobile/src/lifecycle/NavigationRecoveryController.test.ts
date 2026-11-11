@@ -3,6 +3,7 @@ import { SerialExecutor } from "../navigation/serialExecutor";
 import { groundSessionFixture } from "../storage/testing/sessionFixture";
 import {
   NavigationRecoveryController,
+  PREPARING_GRACE_MS,
   type RecoverySessionStore,
 } from "./NavigationRecoveryController";
 
@@ -163,6 +164,42 @@ describe("NavigationRecoveryController", () => {
     await expect(context.controller.reconcile("active")).resolves.toBe("session-ended");
     await expect(context.controller.resume()).resolves.toBe("session-ended");
     expect(context.counts()).toEqual({ stopCount: 0, audioStopCount: 0, alertClearCount: 0 });
+  });
+
+  it.each(["background", "active"] as const)(
+    "leaves a trip still being prepared alone when the app turns %s",
+    async (visibility) => {
+      const context = setup({
+        session: activeSession({ status: "preparing", startedAtMs: NOW - 60_000 }),
+      });
+
+      await expect(context.controller.reconcile(visibility)).resolves.toBe("session-ended");
+      expect(context.closed).toEqual([]);
+      expect(context.counts()).toEqual({ stopCount: 0, audioStopCount: 0, alertClearCount: 0 });
+    },
+  );
+
+  it("closes a preparation that outlived its grace through the coordinator", async () => {
+    const context = setup({
+      session: activeSession({
+        status: "preparing",
+        startedAtMs: NOW - PREPARING_GRACE_MS,
+        updatedAtMs: NOW - PREPARING_GRACE_MS,
+      }),
+    });
+
+    await expect(context.controller.reconcile("background")).resolves.toBe("session-ended");
+    expect(context.closed).toEqual(["session-1"]);
+  });
+
+  it("does not let a clock set backwards stretch the grace", async () => {
+    const context = setup({
+      session: activeSession({ status: "preparing", startedAtMs: NOW + 1 }),
+    });
+
+    await context.controller.reconcile("background");
+
+    expect(context.closed).toEqual(["session-1"]);
   });
 
   it("closes an active session past its lifetime through the coordinator", async () => {

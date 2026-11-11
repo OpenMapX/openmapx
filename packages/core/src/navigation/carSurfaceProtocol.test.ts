@@ -115,7 +115,13 @@ describe("car surface protocol", () => {
           channelNonce: "c",
           sentAtMs: 0,
           payload: {
-            snapshot: { geometry: Array.from({ length: MAX_TOTAL_COORDINATES + 1 }, () => [0, 0]) },
+            snapshot: {
+              type: "full",
+              sessionId: "s",
+              revision: 1,
+              routeFingerprint: "f",
+              route: { geometry: Array.from({ length: MAX_TOTAL_COORDINATES + 1 }, () => [0, 0]) },
+            },
           },
         },
       }),

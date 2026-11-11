@@ -13,6 +13,7 @@ import {
   type CommandResponse,
   type CoordinatorDeps,
   NavigationCoordinator,
+  type SendStamp,
 } from "./NavigationCoordinator";
 import { type NavigationProcessor, ProcessorRegistry } from "./processor";
 
@@ -62,7 +63,7 @@ function fakeGroundProcessor(): NavigationProcessor<"ground"> {
 interface Harness {
   coordinator: NavigationCoordinator;
   repository: SessionRepository;
-  sent: Array<{ type: string; payload: unknown; options: Record<string, unknown> }>;
+  sent: Array<{ type: string; payload: unknown; options: SendStamp }>;
   effectLog: string[];
   observedAtStart: Array<MobileNavigationSession | null>;
   deps: CoordinatorDeps;
@@ -86,7 +87,7 @@ async function harness(
   const processor = overrides.processor === undefined ? fakeGroundProcessor() : overrides.processor;
   if (processor) processors.register(processor);
 
-  const sent: Array<{ type: string; payload: unknown; options: Record<string, unknown> }> = [];
+  const sent: Array<{ type: string; payload: unknown; options: SendStamp }> = [];
   const effectLog: string[] = [];
   const observedAtStart: Array<MobileNavigationSession | null> = [];
   const fail = (label: string) => async () => {
@@ -108,7 +109,7 @@ async function harness(
       },
       audio: { speak: fail("audio.speak"), stop: fail("audio.stop") },
       alerts: { reconcile: fail("alerts.reconcile"), cancelSession: fail("alerts.cancelSession") },
-      publish: { snapshot: fail("publish.snapshot"), event: fail("publish.event") },
+      publish: { snapshot: fail("publish.snapshot") },
       remote: {
         reroute: fail("remote.reroute"),
         transitRefresh: fail("remote.transitRefresh"),
@@ -372,26 +373,6 @@ describe("NavigationCoordinator commands", () => {
     expect(context.sent[1].payload).toEqual({ code: "internal-error" });
     await context.close();
   });
-
-  it("acknowledges durable events without a reply", async () => {
-    const context = await harness();
-    const { sessionId } = await running(context);
-    await context.repository.enqueueEvent({
-      eventId: "e1",
-      sessionId,
-      critical: true,
-      createdAtMs: NOW,
-      payload: {},
-    });
-
-    const response = await context.coordinator.dispatch(
-      cmd("event.ack", { eventIds: ["e1"] }, { sessionId }),
-    );
-
-    expect(response).toBeNull();
-    expect(await context.repository.listPendingEvents(sessionId)).toEqual([]);
-    await context.close();
-  });
 });
 
 describe("NavigationCoordinator command replay", () => {
@@ -523,13 +504,6 @@ describe("NavigationCoordinator location batches", () => {
     });
     await context.repository.terminate(sessionId, "stopped", NOW);
     await context.repository.createPreparing(stale as MobileNavigationSession);
-    await context.repository.enqueueEvent({
-      eventId: "expired-event",
-      sessionId,
-      critical: true,
-      createdAtMs: NOW - 10,
-      payload: { coords: [8.68, 50.11] },
-    });
     await context.repository.replaceScheduledAlerts(
       sessionId,
       [{ alertId: "expired-alert", legIndex: 0, triggerAtMs: NOW + 1000 }],
@@ -543,7 +517,6 @@ describe("NavigationCoordinator location batches", () => {
     const rows = Object.fromEntries(
       (await context.repository.describeContents()).map((row) => [row.table, row.rows]),
     );
-    expect(rows.navigation_events).toBe(0);
     expect(rows.scheduled_alerts).toBe(0);
     await context.close();
   });
@@ -670,13 +643,6 @@ describe("NavigationCoordinator storage cleanup", () => {
       const context = await harness();
       const { sessionId } = await running(context);
       await context.coordinator.handleLocationBatch({ locations: [fix(NOW)] });
-      await context.repository.enqueueEvent({
-        eventId: "e1",
-        sessionId,
-        critical: true,
-        createdAtMs: NOW,
-        payload: { coords: [8.68, 50.11] },
-      });
       await context.repository.replaceScheduledAlerts(
         sessionId,
         [{ alertId: "a1", legIndex: 0, triggerAtMs: NOW }],
@@ -687,7 +653,6 @@ describe("NavigationCoordinator storage cleanup", () => {
 
       const rows = Object.fromEntries((await dump(context)).map((e) => [e.table, e.rows]));
       expect(rows.active_navigation).toBe(0);
-      expect(rows.navigation_events).toBe(0);
       expect(rows.scheduled_alerts).toBe(0);
       // The acknowledgement survives, because a reloaded page needs an outcome.
       expect(rows.terminal_ack).toBe(1);

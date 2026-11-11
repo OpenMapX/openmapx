@@ -218,11 +218,15 @@ describe("answerCommand", () => {
     const send = jest.fn();
     await answerCommand(
       locationRequest(),
-      async () => ({ type: "location.result", payload: {} }),
+      async () => ({ type: "location.result", payload: { requestId: "r1", status: "timeout" } }),
       send,
     );
 
-    expect(send).toHaveBeenCalledWith("location.result", {}, { forMessageId: "m-1" });
+    expect(send).toHaveBeenCalledWith(
+      "location.result",
+      { requestId: "r1", status: "timeout" },
+      { forMessageId: "m-1" },
+    );
   });
 
   it("refuses a command nothing handles", async () => {
@@ -234,16 +238,5 @@ describe("answerCommand", () => {
       { code: "unsupported-capability" },
       { forMessageId: "m-1" },
     );
-  });
-
-  it("never answers an acknowledgement", async () => {
-    const send = jest.fn();
-    await answerCommand(
-      { ...envelope, type: "event.ack", payload: { eventIds: [] } } as WebToNativeMessage,
-      async () => null,
-      send,
-    );
-
-    expect(send).not.toHaveBeenCalled();
   });
 });

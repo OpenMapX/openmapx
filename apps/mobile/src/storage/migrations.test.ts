@@ -98,6 +98,30 @@ describe("migrateSessionSchema", () => {
     await database.closeAsync();
   });
 
+  it("drops the undelivered event outbox from a database that has one", async () => {
+    const database = openTestDatabase();
+    for (const migration of SESSION_MIGRATIONS.filter((entry) => entry.version <= 2)) {
+      for (const statement of migration.statements) await database.execAsync(statement);
+    }
+    await database.execAsync(
+      "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at_ms INTEGER NOT NULL)",
+    );
+    await database.runAsync("INSERT INTO schema_migrations VALUES (1, 500), (2, 500)");
+    await database.runAsync(
+      `INSERT INTO navigation_events (event_id, session_id, critical, sequence, created_at_ms, payload_json)
+       VALUES ('e1', 's1', 1, 1, 500, '{"type":"arrived"}')`,
+    );
+
+    expect(await migrateSessionSchema(database, 1_000)).toEqual([3]);
+
+    await expect(
+      database.getFirstAsync(
+        "SELECT name FROM sqlite_schema WHERE name LIKE '%navigation_events%'",
+      ),
+    ).resolves.toBeNull();
+    await database.closeAsync();
+  });
+
   it("leaves no partial migration behind when a statement fails", async () => {
     const database = openTestDatabase();
     await database.execAsync("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY)");

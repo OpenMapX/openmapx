@@ -3,7 +3,6 @@ import type { Database } from "./database";
 import { migrateSessionSchema } from "./migrations";
 import {
   MAX_DIAGNOSTIC_ROWS,
-  MAX_OUTBOX_EVENTS,
   MAX_PROCESSED_COMMANDS,
   MAX_QUARANTINE_RECORDS,
   type RepositoryMutation,
@@ -49,20 +48,18 @@ describe("SessionRepository", () => {
     it("replaces a finished session and clears its rows", async () => {
       const { repository, database } = await freshRepository();
       await repository.createPreparing(groundSessionFixture({ status: "stopped" }));
-      await repository.enqueueEvent({
-        eventId: "e1",
-        sessionId: "session-1",
-        critical: true,
-        createdAtMs: NOW,
-        payload: { type: "arrived" },
-      });
+      await repository.replaceScheduledAlerts(
+        "session-1",
+        [{ alertId: "a1", legIndex: 0, triggerAtMs: NOW }],
+        NOW,
+      );
 
       const result = await repository.createPreparing(
         groundSessionFixture({ sessionId: "session-2" }),
       );
 
       expect(result.ok).toBe(true);
-      expect(await repository.listPendingEvents("session-1")).toEqual([]);
+      expect(await repository.listScheduledAlerts("session-1")).toEqual([]);
     });
   });
 
@@ -91,7 +88,7 @@ describe("SessionRepository", () => {
           1,
           (current) => ({
             session: nextRevision(current, { status: "active" }),
-            enqueue: [{ eventId: "winner", critical: true, payload: { from: "first" } }],
+            alerts: [{ alertId: "winner", legIndex: 0, triggerAtMs: NOW }],
           }),
           NOW,
         ),
@@ -100,7 +97,7 @@ describe("SessionRepository", () => {
           1,
           (current) => ({
             session: nextRevision(current, { status: "error" }),
-            enqueue: [{ eventId: "loser", critical: true, payload: { from: "second" } }],
+            alerts: [{ alertId: "loser", legIndex: 0, triggerAtMs: NOW }],
           }),
           NOW,
         ),
@@ -115,10 +112,9 @@ describe("SessionRepository", () => {
       const loaded = await repository.loadActive(NOW);
       expect(loaded?.revision).toBe(2);
 
-      // The loser must leave nothing behind: no half-written outbox row.
-      const events = await repository.listPendingEvents("session-1");
-      expect(events).toHaveLength(1);
-      expect(events[0].eventId).toBe("winner");
+      // The loser must leave nothing behind: no half-written alert row.
+      const alerts = await repository.listScheduledAlerts("session-1");
+      expect(alerts.map((alert) => alert.alertId)).toEqual([first.ok ? "winner" : "loser"]);
     });
 
     it("reports a conflict for another session's revision", async () => {
@@ -188,10 +184,10 @@ describe("SessionRepository", () => {
       const loaded = await repository.loadActive(NOW);
       expect(loaded?.revision).toBe(1);
       expect(loaded?.status).toBe("preparing");
-      expect(await repository.listPendingEvents("session-1")).toEqual([]);
+      expect(await repository.listScheduledAlerts("session-1")).toEqual([]);
     });
 
-    it("retains the committed session, events and alerts for a new repository instance", async () => {
+    it("retains the committed session and alerts for a new repository instance", async () => {
       const { database, repository } = await freshRepository();
       await repository.createPreparing(groundSessionFixture());
 
@@ -200,7 +196,6 @@ describe("SessionRepository", () => {
         1,
         (current) => ({
           session: nextRevision(current, { status: "active" }),
-          enqueue: [{ eventId: "e1", critical: true, payload: { type: "started" } }],
           alerts: [{ alertId: "a1", legIndex: 0, triggerAtMs: NOW + 60_000 }],
           effects: [{ kind: "start-location", permissionMode: "background" }],
         }),
@@ -212,11 +207,10 @@ describe("SessionRepository", () => {
       // and side effect. A restart must still see the complete new state.
       const restarted = new SessionRepository(database);
       expect((await restarted.loadActive(NOW))?.status).toBe("active");
-      expect(await restarted.listPendingEvents("session-1")).toHaveLength(1);
       expect(await restarted.listScheduledAlerts("session-1")).toHaveLength(1);
     });
 
-    it("commits the session, its events and its alerts atomically", async () => {
+    it("commits the session and its alerts atomically", async () => {
       const { repository, database } = await freshRepository();
       await repository.createPreparing(groundSessionFixture());
 
@@ -226,10 +220,9 @@ describe("SessionRepository", () => {
           1,
           (current) => ({
             session: nextRevision(current, { status: "active" }),
-            enqueue: [{ eventId: "e1", critical: true, payload: { type: "started" } }],
             // The second alert violates the non-negative leg constraint, so the
-            // failure lands after the session row and the event have been
-            // written inside this same transaction.
+            // failure lands after the session row and the first alert have
+            // been written inside this same transaction.
             alerts: [
               { alertId: "a1", legIndex: 0, triggerAtMs: NOW },
               { alertId: "a2", legIndex: -1, triggerAtMs: NOW },
@@ -241,7 +234,6 @@ describe("SessionRepository", () => {
 
       const loaded = await repository.loadActive(NOW);
       expect(loaded?.status).toBe("preparing");
-      expect(await repository.listPendingEvents("session-1")).toEqual([]);
       expect(await repository.listScheduledAlerts("session-1")).toEqual([]);
     });
   });
@@ -322,97 +314,6 @@ describe("SessionRepository", () => {
     });
   });
 
-  describe("outbox", () => {
-    it("preserves enqueue order and survives acknowledgement of a subset", async () => {
-      const { database, repository } = await freshRepository();
-      for (const id of ["a", "b", "c"]) {
-        await repository.enqueueEvent({
-          eventId: id,
-          sessionId: "session-1",
-          critical: false,
-          createdAtMs: NOW,
-          payload: { id },
-        });
-      }
-
-      expect(
-        (await repository.listPendingEvents("session-1")).map((event) => event.eventId),
-      ).toEqual(["a", "b", "c"]);
-      await repository.ackEvents(["a", "c"]);
-
-      expect((await repository.listPendingEvents("session-1")).map((e) => e.eventId)).toEqual([
-        "b",
-      ]);
-    });
-
-    it("ignores a duplicate event id", async () => {
-      const { database, repository } = await freshRepository();
-      const event = {
-        eventId: "a",
-        sessionId: "session-1",
-        critical: true,
-        createdAtMs: NOW,
-        payload: { n: 1 },
-      };
-      await repository.enqueueEvent(event);
-      await repository.enqueueEvent({ ...event, payload: { n: 2 } });
-
-      const pending = await repository.listPendingEvents("session-1");
-      expect(pending).toHaveLength(1);
-      expect(pending[0].payload).toEqual({ n: 1 });
-    });
-
-    it("compacts non-critical events to make room rather than dropping a critical one", async () => {
-      const { database, repository } = await freshRepository();
-      for (let index = 0; index < MAX_OUTBOX_EVENTS; index += 1) {
-        await repository.enqueueEvent({
-          eventId: `snapshot-${index}`,
-          sessionId: "session-1",
-          // One critical event among the filler, to prove compaction spares it.
-          critical: index === 0,
-          createdAtMs: NOW + index,
-          payload: { index },
-        });
-      }
-
-      await repository.enqueueEvent({
-        eventId: "critical",
-        sessionId: "session-1",
-        critical: true,
-        createdAtMs: NOW + 1_000,
-        payload: { type: "missed-connection" },
-      });
-
-      const pending = await repository.listPendingEvents("session-1");
-      expect(pending.map((event) => event.eventId)).toEqual(["snapshot-0", "critical"]);
-    });
-
-    it("refuses a new event when the queue is full of critical ones", async () => {
-      const { database, repository } = await freshRepository();
-      for (let index = 0; index < MAX_OUTBOX_EVENTS; index += 1) {
-        await repository.enqueueEvent({
-          eventId: `critical-${index}`,
-          sessionId: "session-1",
-          critical: true,
-          createdAtMs: NOW + index,
-          payload: { index },
-        });
-      }
-
-      await repository.enqueueEvent({
-        eventId: "overflow",
-        sessionId: "session-1",
-        critical: true,
-        createdAtMs: NOW + 1_000,
-        payload: {},
-      });
-
-      const pending = await repository.listPendingEvents("session-1");
-      expect(pending).toHaveLength(MAX_OUTBOX_EVENTS);
-      expect(pending.map((event) => event.eventId)).not.toContain("overflow");
-    });
-  });
-
   describe("command dedupe", () => {
     it("does not overwrite a remembered response on replay", async () => {
       const { database, repository } = await freshRepository();
@@ -486,13 +387,6 @@ describe("SessionRepository", () => {
     it("writes a non-sensitive acknowledgement and removes everything else", async () => {
       const { database, repository } = await freshRepository();
       await repository.createPreparing(groundSessionFixture({ status: "active", revision: 4 }));
-      await repository.enqueueEvent({
-        eventId: "e1",
-        sessionId: "session-1",
-        critical: true,
-        createdAtMs: NOW,
-        payload: { coords: [8.68, 50.11] },
-      });
       await repository.replaceScheduledAlerts(
         "session-1",
         [{ alertId: "a1", legIndex: 0, triggerAtMs: NOW }],
@@ -517,7 +411,6 @@ describe("SessionRepository", () => {
         { kind: "publish-snapshot", immediate: true },
       ]);
       expect(await repository.loadActive(NOW)).toBeNull();
-      expect(await repository.listPendingEvents("session-1")).toEqual([]);
       expect(await repository.listScheduledAlerts("session-1")).toEqual([]);
       expect(await repository.lookupCommand("m1", NOW)).toBeNull();
     });

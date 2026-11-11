@@ -8,6 +8,7 @@ import {
   rawFix,
   STRAIGHT_ROUTE,
   startForegroundHarness,
+  WHOLE_ROUTE_TIMEOUT_MS,
 } from "./testing/foregroundHarness";
 import {
   FIXTURE_FINGERPRINT,
@@ -113,25 +114,29 @@ describe("a cadence held in a runtime that no longer exists", () => {
 });
 
 describe("arriving with the app in the background", () => {
-  it("keeps location for the announcement grace and releases it on a later batch", async () => {
-    await startOnAndroid();
-    await harness.start(groundStartPackage());
-    await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length - 5);
-    await harness.setVisible(false);
-    harness.phone.clock.timersPaused = true;
+  it(
+    "keeps location for the announcement grace and releases it on a later batch",
+    async () => {
+      await startOnAndroid();
+      await harness.start(groundStartPackage());
+      await driveStraightRoute(harness, 0, STRAIGHT_ROUTE.length - 5);
+      await harness.setVisible(false);
+      harness.phone.clock.timersPaused = true;
 
-    await driveStraightRoute(harness, STRAIGHT_ROUTE.length - 5, STRAIGHT_ROUTE.length);
-    expect((await harness.session())?.status).toBe("arrived");
-    expect(harness.phone.speech.cueIds.at(-1)).toMatch(/arriv/);
-    expect(harness.phone.location.running).toBe(true);
+      await driveStraightRoute(harness, STRAIGHT_ROUTE.length - 5, STRAIGHT_ROUTE.length);
+      expect((await harness.session())?.status).toBe("arrived");
+      expect(harness.phone.speech.cueIds.at(-1)).toMatch(/arriv/);
+      expect(harness.phone.location.running).toBe(true);
 
-    const destination = STRAIGHT_ROUTE[STRAIGHT_ROUTE.length - 1];
-    await harness.standStill(destination, ARRIVAL_CUE_GRACE_MS - 2_000);
-    expect(harness.phone.location.running).toBe(true);
-    await harness.standStill(destination, 4_000);
+      const destination = STRAIGHT_ROUTE[STRAIGHT_ROUTE.length - 1];
+      await harness.standStill(destination, ARRIVAL_CUE_GRACE_MS - 2_000);
+      expect(harness.phone.location.running).toBe(true);
+      await harness.standStill(destination, 4_000);
 
-    expect(harness.phone.location.running).toBe(false);
-    expect(harness.phone.location.calls).toEqual(["start", "stop"]);
-    expect((await harness.session())?.status).toBe("arrived");
-  });
+      expect(harness.phone.location.running).toBe(false);
+      expect(harness.phone.location.calls).toEqual(["start", "stop"]);
+      expect((await harness.session())?.status).toBe("arrived");
+    },
+    WHOLE_ROUTE_TIMEOUT_MS,
+  );
 });

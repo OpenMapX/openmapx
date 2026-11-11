@@ -31,7 +31,7 @@ function overrides(sent: Array<{ type: NativeToWebMessage["type"]; forMessageId?
     },
     audio: { speak: async () => undefined, stop: async () => undefined },
     alerts: { reconcile: async () => undefined, cancelSession: async () => undefined },
-    publish: { snapshot: async () => undefined, event: async () => undefined },
+    publish: { snapshot: async () => undefined },
     remote: {
       reroute: async () => undefined,
       transitRefresh: async () => undefined,

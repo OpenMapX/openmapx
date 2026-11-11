@@ -202,7 +202,7 @@ The driver decision schema requires all eight risks exactly once:
 
 ## The deferred volunteer-beta procedure
 
-After foreground composition and local candidate qualification, test the exact
+After local candidate qualification, test the exact
 processed TestFlight/Play build on current-iOS iPhone, API 36 Pixel-class Android
 and recent Samsung hardware with default battery management. Record installed
 version/build, source, web build and available artifact identity evidence.

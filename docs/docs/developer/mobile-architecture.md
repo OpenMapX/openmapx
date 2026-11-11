@@ -49,6 +49,8 @@ records.
 | Rendering, search and route planning                                  | Web UI                                    | Web UI                                                                                                          |
 | Browser geolocation, speech, notifications and navigation persistence | Browser facilities                        | Disabled by the shell descriptor                                                                                |
 | Ground and transit navigation                                         | Browser engine                            | Native coordinator, reported available                                                                          |
+| Ground session rules (cue timing, reroute guards, speed limit, coast) | Shared `groundSessionPolicy`              | Shared `groundSessionPolicy`                                                                                    |
+| Closure reroutes and faster-route offers                              | Browser engine                            | Not provided                                                                                                    |
 | Background location, local alerts and speech                          | Subject to browser limits                 | Native; alerts need the notification grant                                                                      |
 | Durable native session                                                | Not used                                  | SQLite session, resumed after a process restart                                                                 |
 | One-shot location, settings and authentication commands               | Browser flows                             | Answered by the shell services                                                                                  |
@@ -110,10 +112,43 @@ notification grant through the same port.
   connection, so `getDatabase` queues writes on the one handle and sets a busy
   timeout. Without the queue a diagnostic write and a batch commit collide with
   "database is locked".
-- **Reroute.** A `reroute` effect only starts the request
-  (`createRemoteWork.ts`). The answer re-enters the coordinator as a queued
-  `applyReroute`, which applies it only while the session and its pending
-  request id still match. A newer request aborts the one in flight.
+- **Shared ground rules.** The rules a road session wraps around the engine
+  live in `packages/core/src/navigation/groundSessionPolicy.ts`, which the
+  browser engine (`useNavigationEngine.ts`) imports too: cue timing for the
+  voice-timing setting (1.5, 1 and 0.6 times the trigger distances), the
+  reroute guards, the speed limit shown (driving and motorcycle, never walking
+  or cycling: the route's segment limit, then the limit matched for the
+  journey, then the step's), coasting,
+  and which route of a directions answer a reroute follows (the one the server
+  marked active). One difference is the shells' own: after a connection
+  failure the browser waits for the user's retry, which skips the failure
+  delay, while the native session asks again by itself once the connection is
+  confirmed.
+- **Reroute.** When the engine asks for a reroute, the guards decide whether
+  one is sent: one request at a time, nothing while the session is offline, a
+  30 s pause after three successful reroutes within two minutes, and a delay
+  after each failure (3, 6, 12, 24, then 30 s, repeating). A request whose
+  answer never came back, because its process died or its composition was
+  disposed, stops counting as open 20 s after it was sent. Each wait is also
+  bounded by its own length, so a clock set backwards cannot stretch it. A
+  refused reroute is withheld rather than spent (`withheldReroute`): the
+  engine keeps its score and does not grow its own backoff, so it asks again
+  on the next off-route fix and the reroute is sent as soon as the guard
+  allows. A reroute held back while offline
+  is asked for as soon as the connection is confirmed again. A `reroute`
+  effect only starts the request (`createRemoteWork.ts`). The answer re-enters
+  the coordinator as a queued `applyReroute`, which applies it only while the
+  session and its request id still match.
+- **Coasting.** While the app is visible and no fix arrives, the composition's
+  `GroundCoastingScheduler` estimates the position along the route from the
+  last real fix, starting 3 s after it and slowing to a stop over two minutes
+  and at most 3 km. Once a second the estimate enters the coordinator's queue
+  like a batch (`handleCoastedFix`) and is dropped if the session has moved on
+  from that fix. An estimate never replaces the last accepted fix or the
+  persisted anchor (`coastingAnchor`), so every estimate starts from a real
+  position, and the next real fix ends the coast. There is no coasting off
+  route, during a reroute, after an arrival or an end, or while the app is
+  out of sight.
 - **Settings.** `settings.update` changes the running session: voice guidance,
   keep-screen-on, voice timing (ground) and alight alerts (transit), plus locale
   and units. Only the session identity is checked, not the revision, because
@@ -143,7 +178,14 @@ notification grant through the same port.
 - **Session end.** Every end goes through one coordinator method: End or
   arrival completion from the page, End on the trip card or the recovery
   screen, a car trip replacing the current one, a refused permission or a
-  driver that could not start, and expiry. It removes the session row, runs
+  driver that could not start, and expiry. A new `session.prepare` also ends
+  a preparation that was never started, because the page that made it may
+  have reloaded; the latest intent wins, and a late start for the old one is
+  refused with `revision-conflict`. Such an end sends the page no notice,
+  since nothing was guided. A car start ends an unstarted phone preparation
+  the same way, but tells the page with `session.stopped`, because the phone
+  page may still be showing it. A running trip still refuses a new prepare
+  with `session-active`, and a car start unless the car names that trip. Every end removes the session row, runs
   the device effects (location, audio, alerts, surface, a final snapshot) and
   then notifies each consumer once. The page hears the end as the reply to its
   own command, or, when native ended the trip, as one unsolicited
@@ -159,13 +201,16 @@ notification grant through the same port.
   of the composition. It inspects the session on every visibility change, but
   it ends a session only through the coordinator, between its own steps on
   the shared executor. It ends a session past its lifetime and a preparation
-  the page never started. It never ends an arrival.
+  the page never started. A preparation is left alone for five minutes, because
+  between prepare and start the page may show a system prompt of its own (the
+  heading permission), which takes the app's focus. It never ends an arrival.
 - **Keep-awake.** The composition holds the screen only while the app is
   visible, the location stream runs for an active session, and that session's
-  keep-screen-on setting is on. It re-checks after every published change,
-  after every session end and when the shell reports a visibility change or a
-  recovery outcome, so a setting change, arrival or end releases the screen
-  with the commit itself.
+  keep-screen-on setting is on. It is the only holder of the wake lock. It
+  re-checks, together with coasting, after every published change, after every
+  session end and when the shell reports a visibility change or a recovery
+  outcome (`reviewForegroundWork`), so a setting change, arrival or end
+  releases the screen with the commit itself.
 - **Speech interruptions.** A call or another source that takes audio focus
   during a cue stops it, and later cues are not queued behind the interruption.
   iOS observes the end of an audio-session interruption. Android abandons its
@@ -263,7 +308,9 @@ reload to negotiate again.
 A correlated `native.error` rejects the page's request with a
 `NativeCommandError` that carries the shell's code; it never resolves as the
 reply the command expected. A refusal that arrives after the page's deadline
-finds no pending request and is ignored. The navigation commands treat
+finds no pending request and is ignored. A reply that fails the page's schema
+fails its request at once with `invalid-response` instead of leaving it to its
+deadline; the page logs the message type, never its payload, once per type. The navigation commands treat
 `no-session` as done for End and for a settings change, because there is
 nothing left to end and the next start reads the stored preference. Every
 other refusal fails the command. A failed End asks for a fresh snapshot and
@@ -273,11 +320,16 @@ be confirmed and asks the user to check the trip, because native may have
 ended it. A stop that
 names no session, sent when there is none, is answered with `no-session`.
 
-Every native send reports `sent`, `queued`, `dropped` or `invalid`. A message
-that fails its schema is not sent; the bridge records its type (never its
-payload) as a `typed.error` diagnostic. A correlated reply that fails its schema
-is followed by `native.error` with `internal-error`, so the page gets an answer
-instead of waiting out its deadline.
+Every native send reports `sent`, `queued`, `dropped` or `invalid`. Its
+payload is typed by the message type it names (`NativeToWebPayload`), so a
+wrong payload does not compile; the bridge adds the id of the command a reply
+answers. The page's fire-and-forget `send` is typed the same way
+(`WebToNativePayload`); its correlated `request` is checked against the same
+schema at run time. A message that fails its schema is not sent; the bridge
+records its type (never its payload) as a `typed.error` diagnostic. A
+correlated reply that fails its schema is followed by `native.error` with
+`internal-error`, so the page gets an answer instead of waiting out its
+deadline.
 
 ### Rollout order
 
@@ -313,6 +365,17 @@ allow a single-use callback code, state and PKCE verifier in `auth.result`; the
 page needs them to redeem the handoff. Keep these out of persistence, diagnostics
 and URLs that should contain only a challenge.
 
+Snapshots follow the shared contract in
+`packages/core/src/navigation/nativeSnapshot.ts`. The native builders are typed
+from its produced schemas, which are complete and strict, so a renamed field
+fails to compile and a field that must not reach the page fails their tests.
+The page accepts a snapshot through its wire schema. That schema requires only
+what places a snapshot (its type, session, revision and route or itinerary
+fingerprint), checks the type of each value it names and lets unknown fields
+and unknown values through, because the app and a self-hosted page update
+independently: an older page must not refuse every snapshot of a newer app. A
+request answered when there is no session carries an empty snapshot.
+
 A full snapshot can rehydrate the page at the current revision. A progress delta
 is absolute: it carries the current position, status and health values read
 from the committed session, not a difference from the last delta. The route,
@@ -320,7 +383,11 @@ itinerary and settings change only in commits that publish a full snapshot. The
 shell throttles progress to one delta a second and drops the ones
 in between, so the page applies any newer delta for its session and route or
 itinerary, even after a revision gap. A delta for another session or route asks
-for a full snapshot, and an older one is ignored.
+for a full snapshot, and an older one is ignored. The values a delta may move
+are derived from the produced progress schemas (`NATIVE_SNAPSHOT_HOT_FIELDS`).
+
+There is no separate event message: everything the page shows, an arrival or an
+off-route episode included, comes from snapshots.
 
 ### Voice input messages
 
@@ -439,8 +506,10 @@ composition's `device` option. That covers the wiring between page commands,
 location batches, the durable session and device effects, including a process
 restart, recovery on a visibility change, and a process the OS starts for a
 location batch (`relaunchHeadless`), which composes the headless navigation
-over the same fake ports. It does not
-establish OS delivery, background execution or audio behaviour on a device. A
+over the same fake ports. Its scenarios include coasting through a gap in
+delivery, the reroute guards and a preparation surviving a focus change. It
+does not establish OS delivery, background execution or audio behaviour on a
+device. A
 complete OS callback blackout also prevents real-time processing; foreground
 coasting does not create a background wake source.
 

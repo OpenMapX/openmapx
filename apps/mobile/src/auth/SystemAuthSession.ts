@@ -16,10 +16,10 @@
  * from opening `/mobile-auth` in its own browser session with its own verifier,
  * so the consent page and the user's tap remain part of the protection.
  *
- * Everything here is memory-only and single-attempt. There is no persistence, no
- * retry, and no outbox entry — a half-finished sign-in that survived a restart
- * would be a credential-shaped thing sitting in storage, and the honest answer
- * to an interrupted sign-in is to sign in again.
+ * Everything here is memory-only and single-attempt. There is no persistence and
+ * no retry: a half-finished sign-in that survived a restart would be a
+ * credential-shaped thing sitting in storage, and the honest answer to an
+ * interrupted sign-in is to sign in again.
  */
 
 export type AuthPurpose = "sign-in" | "link-provider" | "add-passkey";

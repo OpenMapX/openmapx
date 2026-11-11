@@ -1,7 +1,12 @@
-import type {
-  FixInput,
-  GroundMobileSession,
-  GroundNavigationStartPackage,
+import {
+  canRequestReroute,
+  EMPTY_REROUTE_CHURN,
+  type FixInput,
+  type GroundMobileSession,
+  type GroundNavigationStartPackage,
+  onBackOnRoute,
+  onRerouteOffline,
+  onRerouteRequested,
 } from "@openmapx/core/navigation";
 import type { NavigationProcessor, ProcessorMutation, ProcessorPreparation } from "../processor";
 import { GroundRouteCache, processGroundBatch } from "./groundBatch";
@@ -54,29 +59,46 @@ export class GroundNavigationProcessor implements NavigationProcessor<"ground"> 
     fixes: readonly FixInput[],
     nowMs: number,
   ): ProcessorMutation {
-    const outcome = processGroundBatch({ session, fixes, nowMs, cache: this.cache });
+    // The guards decide once for the batch. A refusal withholds the engine's
+    // reroute rather than spending it, so it is asked for again on the next
+    // off-route fix and sent as soon as the guard allows.
+    const current = session.payload.reroute;
+    const decision = canRequestReroute(
+      current,
+      session.payload.rerouteChurn ?? EMPTY_REROUTE_CHURN,
+      session.connectivity,
+      nowMs,
+    );
+    const outcome = processGroundBatch({
+      session,
+      fixes,
+      nowMs,
+      cache: this.cache,
+      rerouteAllowed: decision.allow,
+    });
     const { arrived, needsReroute, ...mutation } = outcome;
-
-    if (!needsReroute || arrived) return mutation;
-
-    // The engine asked for a reroute. Recording the intent is all that happens
-    // here: the request itself is network I/O, and running it inside the
-    // coordinator's queue would block every later fix behind a socket.
-    const requestId = `${session.sessionId}:reroute:${mutation.session.revision}`;
     const advanced = mutation.session as GroundMobileSession;
+
+    if (arrived) return mutation;
+    if (!needsReroute) {
+      const settled = advanced.payload.offRoute ? current : onBackOnRoute(current);
+      if (settled === current) return mutation;
+      return { ...mutation, session: withReroute(advanced, settled) };
+    }
+
+    if (!decision.allow) {
+      if (decision.reason !== "offline" || current.status === "unavailable") return mutation;
+      // Waiting for the network, which `onConnectivityRestored` retries.
+      return { ...mutation, session: withReroute(advanced, onRerouteOffline(current)) };
+    }
+
+    // Recording the intent is all that happens here: the request itself is
+    // network I/O, and running it inside the coordinator's queue would block
+    // every later fix behind a socket.
+    const requestId = `${session.sessionId}:reroute:${advanced.revision}`;
     return {
       ...mutation,
-      session: {
-        ...advanced,
-        payload: {
-          ...advanced.payload,
-          reroute: {
-            status: "pending",
-            requestId,
-            attempts: session.payload.reroute.attempts,
-          },
-        },
-      },
+      session: withReroute(advanced, onRerouteRequested(current, requestId, nowMs)),
       effects: [...(mutation.effects ?? []), { kind: "request-reroute", requestId }],
     };
   }
@@ -104,20 +126,31 @@ export class GroundNavigationProcessor implements NavigationProcessor<"ground"> 
     // Only a reroute the network prevented is worth retrying. An idle or
     // in-flight one needs nothing, and a failed one waits for a later fix.
     if (reroute.status !== "unavailable") return null;
+    const decision = canRequestReroute(
+      reroute,
+      session.payload.rerouteChurn ?? EMPTY_REROUTE_CHURN,
+      "online",
+      nowMs,
+    );
+    if (!decision.allow) return null;
 
-    const requestId = `${session.sessionId}:reroute:${session.revision + 1}`;
+    const revision = session.revision + 1;
+    const requestId = `${session.sessionId}:reroute:${revision}`;
     return {
       session: {
-        ...session,
-        revision: session.revision + 1,
+        ...withReroute(session, onRerouteRequested(reroute, requestId, nowMs)),
+        revision,
         updatedAtMs: nowMs,
         connectivity: "online",
-        payload: {
-          ...session.payload,
-          reroute: { status: "pending", requestId, attempts: reroute.attempts },
-        },
       },
       effects: [{ kind: "request-reroute", requestId }],
     };
   }
+}
+
+function withReroute(
+  session: GroundMobileSession,
+  reroute: GroundMobileSession["payload"]["reroute"],
+): GroundMobileSession {
+  return { ...session, payload: { ...session.payload, reroute } };
 }

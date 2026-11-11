@@ -1,12 +1,11 @@
+import { nativeSnapshotWireSchema } from "@openmapx/core/navigation";
 import { describe, expect, it } from "vitest";
 import {
   applyNativeSnapshot,
   browserEngineAllowed,
   envelopeOf,
-  forgetEvents,
   type NativeReadModel,
   projectionOf,
-  rememberEvent,
   type SnapshotEnvelope,
 } from "./nativeSnapshotReducer";
 
@@ -40,7 +39,9 @@ function progressSnapshot(overrides: Record<string, unknown> = {}) {
   };
 }
 
-const envelope = (raw: unknown) => envelopeOf(raw) as SnapshotEnvelope;
+/** A snapshot as the page receives it: checked by the bridge's wire schema, then placed. */
+const wire = (raw: unknown) => nativeSnapshotWireSchema.parse(raw);
+const envelope = (raw: unknown) => envelopeOf(wire(raw)) as SnapshotEnvelope;
 
 function seeded(): NativeReadModel {
   const outcome = applyNativeSnapshot(null, envelope(fullSnapshot()));
@@ -50,7 +51,7 @@ function seeded(): NativeReadModel {
 
 describe("envelopeOf", () => {
   it("normalises a ground fingerprint", () => {
-    expect(envelopeOf(fullSnapshot())).toMatchObject({
+    expect(envelopeOf(wire(fullSnapshot()))).toMatchObject({
       type: "full",
       sessionId: "s1",
       revision: 4,
@@ -65,7 +66,11 @@ describe("envelopeOf", () => {
     const transit = { ...fullSnapshot(), kind: "transit", itineraryFingerprint: "it-a" };
     delete (transit as Record<string, unknown>).routeFingerprint;
 
-    expect(envelopeOf(transit)).toMatchObject({ fingerprint: "it-a", kind: "transit" });
+    expect(envelopeOf(wire(transit))).toMatchObject({ fingerprint: "it-a", kind: "transit" });
+  });
+
+  it("places nothing for the empty answer that means there is no session", () => {
+    expect(envelopeOf(wire({}))).toBeNull();
   });
 
   it.each([
@@ -75,8 +80,8 @@ describe("envelopeOf", () => {
     { label: "no session", value: { ...fullSnapshot(), sessionId: "" } },
     { label: "a non-numeric revision", value: { ...fullSnapshot(), revision: "4" } },
     { label: "no fingerprint", value: { ...fullSnapshot(), routeFingerprint: "" } },
-  ])("refuses $label", ({ value }) => {
-    expect(envelopeOf(value)).toBeNull();
+  ])("is never handed $label: the bridge refuses it", ({ value }) => {
+    expect(nativeSnapshotWireSchema.safeParse(value).success).toBe(false);
   });
 });
 
@@ -165,49 +170,10 @@ describe("applyNativeSnapshot", () => {
     expect(outcome.model.snapshot).not.toHaveProperty("settings");
   });
 
-  it("keeps pending events across a delta", () => {
-    const model = rememberEvent(seeded(), "e1");
-
-    const outcome = applyNativeSnapshot(model, envelope(progressSnapshot()));
-
-    expect(outcome.ok && outcome.model.pendingEventIds).toEqual(["e1"]);
-  });
-
-  it("keeps pending events across a full snapshot for the same session", () => {
-    const model = rememberEvent(seeded(), "e1");
-
-    const outcome = applyNativeSnapshot(model, envelope(fullSnapshot({ revision: 9 })));
-
-    expect(outcome.ok && outcome.model.pendingEventIds).toEqual(["e1"]);
-  });
-
-  it("drops pending events when the session changes", () => {
-    const model = rememberEvent(seeded(), "e1");
-
-    const outcome = applyNativeSnapshot(model, envelope(fullSnapshot({ sessionId: "s2" })));
-
-    expect(outcome.ok && outcome.model.pendingEventIds).toEqual([]);
-  });
-
   it("reports an unchanged full snapshot as unchanged", () => {
     const outcome = applyNativeSnapshot(seeded(), envelope(fullSnapshot()));
 
     expect(outcome).toMatchObject({ ok: true, changed: false });
-  });
-});
-
-describe("event acknowledgement", () => {
-  it("remembers an event once", () => {
-    const model = rememberEvent(rememberEvent(seeded(), "e1"), "e1");
-
-    expect(model.pendingEventIds).toEqual(["e1"]);
-  });
-
-  it("forgets acknowledged events", () => {
-    const model = rememberEvent(rememberEvent(seeded(), "e1"), "e2");
-
-    expect(forgetEvents(model, ["somewhere-else"]).pendingEventIds).toEqual(["e1", "e2"]);
-    expect(forgetEvents(model, ["e1"]).pendingEventIds).toEqual(["e2"]);
   });
 });
 
@@ -294,7 +260,7 @@ it("projects consecutive transit producer deltas without requiring a resume snap
       currentLegIndex: 0,
       currentWalkStepIndex: 1,
       phase: "walking",
-      confidence: "live",
+      confidence: "gps",
       transitProgress: nextProgress,
       connectivity: "online",
       liveStatus: { refresh: "stale", hasLiveToken: true },

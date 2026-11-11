@@ -17,9 +17,8 @@ import { TransitNavigationProcessor } from "./transit/TransitNavigationProcessor
 /**
  * Production composition.
  *
- * Ground navigation is registered here; transit arrives with its own plan, and
- * until then the shell reports that capability as false rather than accept a
- * session it cannot actually run.
+ * The ground and transit processors are registered here, and the shell reports
+ * as available only the modes that are actually registered.
  *
  * The foreground app and the headless task both come through here, and both get
  * the same repository over the same single connection — that shared connection

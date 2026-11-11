@@ -71,7 +71,10 @@ export const CREATE_TERMINAL_ACK = `CREATE TABLE IF NOT EXISTS terminal_ack (
   completed_at_ms INTEGER NOT NULL
 )`;
 
-/** Durable outbox: events the web document has not acknowledged yet. */
+/**
+ * An event outbox that nothing ever delivered. Version 2 created it and version
+ * 3 drops it; the statements stay because the migration history is append-only.
+ */
 export const CREATE_NAVIGATION_EVENTS = `CREATE TABLE IF NOT EXISTS navigation_events (
   event_id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL,
@@ -83,6 +86,8 @@ export const CREATE_NAVIGATION_EVENTS = `CREATE TABLE IF NOT EXISTS navigation_e
 
 export const CREATE_NAVIGATION_EVENTS_INDEX = `CREATE INDEX IF NOT EXISTS idx_navigation_events_session
   ON navigation_events (session_id, sequence)`;
+
+export const DROP_NAVIGATION_EVENTS = "DROP TABLE IF EXISTS navigation_events";
 
 /**
  * Command dedupe. Stores the message ID, the exact response envelope and an
@@ -144,7 +149,6 @@ export const SESSION_TABLES = [
   "schema_migrations",
   "active_navigation",
   "terminal_ack",
-  "navigation_events",
   "processed_commands",
   "scheduled_alerts",
   "diagnostic_events",
@@ -185,21 +189,6 @@ ON CONFLICT(session_id) DO UPDATE SET
   completed_at_ms = excluded.completed_at_ms`;
 
 export const SELECT_TERMINAL_ACK = "SELECT * FROM terminal_ack WHERE session_id = ?";
-
-export const INSERT_EVENT = `INSERT INTO navigation_events (
-  event_id, session_id, critical, sequence, created_at_ms, payload_json
-) VALUES (?, ?, ?, ?, ?, ?)
-ON CONFLICT(event_id) DO NOTHING`;
-
-export const SELECT_EVENTS =
-  "SELECT * FROM navigation_events WHERE session_id = ? ORDER BY sequence ASC";
-export const COUNT_EVENTS = "SELECT COUNT(*) AS n FROM navigation_events WHERE session_id = ?";
-export const NEXT_EVENT_SEQUENCE =
-  "SELECT COALESCE(MAX(sequence), 0) + 1 AS next FROM navigation_events WHERE session_id = ?";
-export const DELETE_EVENT = "DELETE FROM navigation_events WHERE event_id = ?";
-export const DELETE_NON_CRITICAL_EVENTS =
-  "DELETE FROM navigation_events WHERE session_id = ? AND critical = 0";
-export const DELETE_SESSION_EVENTS = "DELETE FROM navigation_events WHERE session_id = ?";
 
 export const INSERT_PROCESSED_COMMAND = `INSERT INTO processed_commands (
   message_id, session_id, response_json, created_at_ms, expires_at_ms

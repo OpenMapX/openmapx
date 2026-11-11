@@ -1,16 +1,23 @@
-import type { FixInput, GroundMobileSession } from "@openmapx/core/navigation";
+import {
+  COAST_START_DELAY_MS,
+  cumulativeDistances,
+  type FixInput,
+  type GroundMobileSession,
+  MAX_COAST_MS,
+} from "@openmapx/core/navigation";
 import { groundSessionFixture } from "../../storage/testing/sessionFixture";
 import {
   anchorFor,
-  COAST_START_DELAY_MS,
-  COAST_TICK_MS,
+  COAST_DISPATCH_MS,
+  type CoastOrigin,
   canCoast,
-  catchUpFixes,
-  coastFixAt,
   GroundCoastingScheduler,
-  MAX_CATCH_UP_POINTS,
-  MAX_COAST_MS,
 } from "./GroundCoastingScheduler";
+
+jest.mock("@openmapx/core/navigation", () => {
+  const actual = jest.requireActual("@openmapx/core/navigation");
+  return { ...actual, cumulativeDistances: jest.fn(actual.cumulativeDistances) };
+});
 
 const NOW = 1_700_000_100_000;
 
@@ -33,6 +40,7 @@ function session(overrides: Partial<GroundMobileSession> = {}): GroundMobileSess
         route: { ...base.payload.startPackage.route, geometry: GEOMETRY } as never,
       },
       progress: { alongMeters: 500, speedMps: 20 } as never,
+      coastingAnchor: { acceptedAtMs: NOW, alongMeters: 500, speedMps: 20 },
       ...(overrides.payload ?? {}),
     },
   };
@@ -65,14 +73,14 @@ describe("canCoast", () => {
 
   it("refuses when stationary, where there is no motion to continue", () => {
     const current = session();
-    current.payload.progress = { alongMeters: 500, speedMps: 0 } as never;
+    current.payload.coastingAnchor = { acceptedAtMs: NOW, alongMeters: 500, speedMps: 0 };
 
     expect(canCoast(current, "active")).toBe(false);
   });
 
   it("refuses without a real fix to anchor to", () => {
     const current = session();
-    current.lastAcceptedFix = undefined;
+    current.payload.coastingAnchor = undefined;
 
     expect(canCoast(current, "active")).toBe(false);
   });
@@ -85,95 +93,11 @@ describe("canCoast", () => {
   );
 });
 
-describe("coastFixAt", () => {
-  const anchor = { alongMeters: 500, speedMps: 20, atMs: NOW };
-
-  it("produces nothing before the start delay", () => {
-    expect(coastFixAt(session(), anchor, NOW + COAST_START_DELAY_MS - 1)).toBeNull();
-    expect(coastFixAt(session(), anchor, NOW + COAST_START_DELAY_MS)).toMatchObject({
-      coasted: true,
-      timestampMs: NOW + COAST_START_DELAY_MS,
-      accuracy: 1,
-    });
-  });
-
-  it("moves further along the route as time passes", () => {
-    const early = coastFixAt(session(), anchor, NOW + 4_000);
-    const later = coastFixAt(session(), anchor, NOW + 20_000);
-
-    expect(later?.coords[0]).toBeGreaterThan(early?.coords[0] ?? 0);
-    const slow = coastFixAt(session(), anchor, NOW + 60_000);
-    expect(slow?.speed).toBeLessThan(early?.speed ?? 0);
-  });
-
-  it("stops entirely past the coast limit", () => {
-    expect(coastFixAt(session(), anchor, NOW + MAX_COAST_MS + 1)).toBeNull();
-  });
-});
-
-describe("catchUpFixes", () => {
-  const realFix = (timestampMs: number): FixInput => ({
-    coords: [8.75, 50.11],
-    accuracy: 5,
-    speed: 20,
-    timestampMs,
-  });
-
-  it("produces nothing for a normal one-second gap", () => {
-    expect(catchUpFixes(session(), realFix(NOW + 1_000))).toEqual([]);
-  });
-
-  it("fills a twenty-second gap at one point per second", () => {
-    const points = catchUpFixes(session(), realFix(NOW + 20_000));
-
-    expect(points.length).toBeGreaterThan(10);
-    for (let index = 1; index < points.length; index++)
-      expect(points[index].timestampMs - points[index - 1].timestampMs).toBe(1000);
-    for (const point of points) {
-      expect(point.coasted).toBe(true);
-      expect(point.timestampMs).toBeLessThan(NOW + 20_000);
-    }
-  });
-
-  it("never extrapolates to the real fix after a long blackout", () => {
-    // Five minutes of nothing. The coast runs out; it does not jump to wherever
-    // the user turned out to be.
-    const points = catchUpFixes(session(), realFix(NOW + 5 * 60_000));
-
-    expect(points.length).toBeLessThanOrEqual(MAX_CATCH_UP_POINTS);
-    const last = points[points.length - 1];
-    expect(last.timestampMs).toBeLessThanOrEqual(NOW + MAX_COAST_MS);
-  });
-
-  it.each([
-    ["off route", (s: GroundMobileSession) => (s.payload.offRoute = true)],
-    [
-      "stationary",
-      (s: GroundMobileSession) => (s.payload.progress = { alongMeters: 1, speedMps: 0 } as never),
-    ],
-    [
-      "rerouting",
-      (s: GroundMobileSession) => (s.payload.reroute = { status: "in-flight", attempts: 1 }),
-    ],
-  ])("synthesises nothing while %s", (_label, mutate) => {
-    const current = session();
-    mutate(current);
-
-    expect(catchUpFixes(current, realFix(NOW + 30_000))).toEqual([]);
-  });
-
-  it("synthesises nothing without an anchor", () => {
-    const current = session();
-    current.lastAcceptedFix = undefined;
-
-    expect(catchUpFixes(current, realFix(NOW + 30_000))).toEqual([]);
-  });
-});
-
 describe("GroundCoastingScheduler", () => {
   function harness() {
     let now = NOW;
     const dispatched: FixInput[] = [];
+    const origins: CoastOrigin[] = [];
     const timers = new Map<number, { callback: () => void; dueAtMs: number }>();
     let nextHandle = 1;
 
@@ -182,12 +106,14 @@ describe("GroundCoastingScheduler", () => {
       schedule: (callback, delayMs) => {
         const handle = nextHandle++;
         timers.set(handle, { callback, dueAtMs: now + delayMs });
-        return handle;
+        return () => {
+          timers.delete(handle);
+        };
       },
-      cancel: (handle) => {
-        timers.delete(handle as number);
+      dispatch: (fix, origin) => {
+        dispatched.push(fix);
+        origins.push(origin);
       },
-      dispatch: (fix) => dispatched.push(fix),
     });
 
     /** Advances the fake clock, firing due timers in order. */
@@ -205,7 +131,7 @@ describe("GroundCoastingScheduler", () => {
       now = target;
     };
 
-    return { scheduler, dispatched, advance, timerCount: () => timers.size };
+    return { scheduler, dispatched, origins, advance, timerCount: () => timers.size };
   }
 
   it("does not start for a session that cannot coast", () => {
@@ -217,19 +143,22 @@ describe("GroundCoastingScheduler", () => {
   });
 
   it("starts after the delay and dispatches synthetic fixes at most once per second", () => {
-    const { scheduler, dispatched, advance } = harness();
+    const { scheduler, dispatched, origins, advance } = harness();
     scheduler.sync(session(), "active");
     expect(scheduler.running).toBe(true);
-    advance(COAST_START_DELAY_MS - COAST_TICK_MS);
+    advance(COAST_START_DELAY_MS - 1);
     expect(dispatched).toEqual([]);
-    advance(10_000 - (COAST_START_DELAY_MS - COAST_TICK_MS));
+    advance(10_000 - (COAST_START_DELAY_MS - 1));
 
     expect(dispatched.length).toBeGreaterThan(0);
     for (const fix of dispatched) expect(fix.coasted).toBe(true);
+    expect(new Set(origins.map((origin) => JSON.stringify(origin)))).toEqual(
+      new Set([JSON.stringify({ sessionId: session().sessionId, anchorAtMs: NOW })]),
+    );
     for (let index = 1; index < dispatched.length; index++)
-      expect(
-        dispatched[index].timestampMs - dispatched[index - 1].timestampMs,
-      ).toBeGreaterThanOrEqual(1000);
+      expect(dispatched[index].timestampMs - dispatched[index - 1].timestampMs).toBe(
+        COAST_DISPATCH_MS,
+      );
   });
 
   it("stops itself when the coast runs out", () => {
@@ -302,31 +231,66 @@ describe("GroundCoastingScheduler", () => {
     const before = dispatched.length;
 
     const reanchored = session();
-    reanchored.lastAcceptedFix = { coords: [8.72, 50.11], accuracy: 5, timestampMs: NOW + 10_000 };
-    reanchored.payload.progress = { alongMeters: 900, speedMps: 20 } as never;
+    reanchored.payload.coastingAnchor = {
+      acceptedAtMs: NOW + 10_000,
+      alongMeters: 900,
+      speedMps: 20,
+    };
     scheduler.sync(reanchored, "active");
     advance(1_000);
 
     // The fresh anchor restarts the delay, so nothing is dispatched yet.
     expect(dispatched).toHaveLength(before);
   });
+
+  it("works out the route's distances once per route, not once per real fix", () => {
+    const { scheduler } = harness();
+    const measured = jest.mocked(cumulativeDistances);
+    measured.mockClear();
+    for (let fix = 0; fix < 5; fix += 1) {
+      const next = session();
+      next.payload.coastingAnchor = {
+        acceptedAtMs: NOW + fix * 1_000,
+        alongMeters: 500 + fix * 20,
+        speedMps: 20,
+      };
+      scheduler.sync(next, "active");
+    }
+    expect(measured).toHaveBeenCalledTimes(1);
+
+    const replaced = session();
+    replaced.payload.startPackage.route.geometry = GEOMETRY.slice(0, 150) as never;
+    replaced.payload.coastingAnchor = { acceptedAtMs: NOW + 9_000, alongMeters: 0, speedMps: 20 };
+    scheduler.sync(replaced, "active");
+
+    expect(measured).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps its coast when a coasted commit leaves the anchor unchanged", () => {
+    const { scheduler, dispatched, advance } = harness();
+    scheduler.sync(session(), "active");
+    advance(5_000);
+    const before = dispatched.length;
+
+    // The committed progress has moved on with the coast, the anchor has not.
+    const coasted = session();
+    coasted.payload.progress = { alongMeters: 560, speedMps: 19 } as never;
+    coasted.payload.coasting = true;
+    scheduler.sync(coasted, "active");
+    advance(1_000);
+
+    expect(dispatched.length).toBeGreaterThan(before);
+  });
 });
 
 describe("anchorFor", () => {
-  it("reads the anchor from progress and the last real fix", () => {
+  it("reads the anchor the last real fix left", () => {
     expect(anchorFor(session())).toEqual({ alongMeters: 500, speedMps: 20, atMs: NOW });
   });
 
-  it("has no anchor without progress", () => {
+  it("has no anchor before a real fix", () => {
     const current = session();
-    current.payload.progress = null;
-
-    expect(anchorFor(current)).toBeNull();
-  });
-
-  it("has no anchor without a fix", () => {
-    const current = session();
-    current.lastAcceptedFix = undefined;
+    current.payload.coastingAnchor = undefined;
 
     expect(anchorFor(current)).toBeNull();
   });

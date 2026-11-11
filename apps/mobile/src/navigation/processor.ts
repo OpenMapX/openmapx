@@ -22,7 +22,6 @@ import type { ScheduledAlertInput, SessionEffect } from "../storage/SessionRepos
 export interface ProcessorMutation {
   session: MobileNavigationSession;
   effects?: SessionEffect[];
-  enqueue?: ReadonlyArray<{ eventId: string; critical: boolean; payload: unknown }>;
   alerts?: readonly ScheduledAlertInput[];
 }
 

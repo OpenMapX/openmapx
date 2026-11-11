@@ -1,14 +1,16 @@
-import type { TransitMobileSession } from "@openmapx/core/navigation";
+import {
+  NATIVE_SNAPSHOT_VERSION,
+  nativeSnapshotWireSchema,
+  type TransitMobileSession,
+  transitFullSnapshotSchema,
+  transitProgressSnapshotSchema,
+} from "@openmapx/core/navigation";
 import {
   FIXTURE_FINGERPRINT,
   FIXTURE_TOKEN,
   transitSessionFixture,
 } from "../transit/testing/transitFixture";
-import {
-  TRANSIT_SNAPSHOT_VERSION,
-  transitFullSnapshot,
-  transitProgressSnapshot,
-} from "./transitSnapshot";
+import { transitFullSnapshot, transitProgressSnapshot } from "./transitSnapshot";
 
 function session(overrides: Partial<TransitMobileSession> = {}): TransitMobileSession {
   return transitSessionFixture({ revision: 6, ...overrides });
@@ -18,7 +20,7 @@ describe("transitFullSnapshot", () => {
   it("carries the identity and itinerary a page needs to render", () => {
     const snapshot = transitFullSnapshot(session());
 
-    expect(snapshot.version).toBe(TRANSIT_SNAPSHOT_VERSION);
+    expect(snapshot.version).toBe(NATIVE_SNAPSHOT_VERSION);
     expect(snapshot.type).toBe("full");
     expect(snapshot.sessionId).toBe("session-t1");
     expect(snapshot.revision).toBe(6);
@@ -142,5 +144,17 @@ describe("transitProgressSnapshot", () => {
       "type",
       "version",
     ]);
+  });
+});
+
+describe("the shared snapshot contract", () => {
+  it("produces exactly the shared shapes, with nothing extra, and the page accepts them", () => {
+    const full = transitFullSnapshot(session());
+    const progress = transitProgressSnapshot(session());
+
+    expect(transitFullSnapshotSchema.safeParse(full).success).toBe(true);
+    expect(transitProgressSnapshotSchema.safeParse(progress).success).toBe(true);
+    expect(nativeSnapshotWireSchema.safeParse(full).success).toBe(true);
+    expect(nativeSnapshotWireSchema.safeParse(progress).success).toBe(true);
   });
 });
