@@ -1,5 +1,9 @@
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import { contributorsForRecords, snapshotContributors } from "@openmapx/mobility-core/contributors";
+import {
+  contributorsForRecords,
+  parseContributors,
+  snapshotContributors,
+} from "@openmapx/mobility-core/contributors";
 import type { PlaceProvenance } from "../types/place";
 
 /**
@@ -52,6 +56,17 @@ export function overtureDatasetSourceId(dataset: string): string {
     );
   }
   return sourceId;
+}
+
+/**
+ * A captured Overture source catalogue that every reader can credit: a receipt
+ * array accepted by the shared contributor parser that names Overture itself,
+ * which credits each place's GERS identity. Anything else is `undefined`.
+ */
+export function parseOvertureSourceCatalogue(value: unknown): Attribution[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const catalogue = parseContributors(value);
+  return catalogue?.some((receipt) => receipt.sourceId === "overture") ? catalogue : undefined;
 }
 
 /** Fails closed when a release contains an unrepresented contributor. */
