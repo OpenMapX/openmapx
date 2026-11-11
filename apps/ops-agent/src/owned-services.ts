@@ -584,21 +584,6 @@ export function createOwnedServiceResolver(options: {
         try {
           configFiles = files.split(",").map(canonical);
           workingDirectory = canonical(working);
-          const legacyCurrentFiles = [infra, configuredInfra].map((root) =>
-            join(root, services.CURRENT_CONFIGURATION, services.GENERATED_COMPOSE_FILE),
-          );
-          if (legacyCurrentFiles.includes(files.split(",")[0] ?? "")) {
-            const retained = services.retainedContainerComposeFile(infra, row.Id as string);
-            if (retained) {
-              configFiles[0] = retained;
-              if (
-                [infra, configuredInfra].some(
-                  (root) => working === join(root, services.CURRENT_CONFIGURATION),
-                )
-              )
-                workingDirectory = dirname(retained);
-            }
-          }
         } catch {
           continue;
         }
@@ -607,10 +592,14 @@ export function createOwnedServiceResolver(options: {
         const generationFile =
           first?.startsWith(`${infra}/${services.CONFIGURATION_GENERATIONS}/`) &&
           /^cfg1_[A-Za-z0-9_-]{43}\/docker-compose.generated.yml$/.test(generation ?? "");
+        // Stack commands give Compose the generation's own path. A file recorded
+        // through a link, such as the movable current pointer, does not say
+        // which generation created the container.
         if (
           !first ||
-          (!generationFile && first !== join(infra, services.GENERATED_COMPOSE_FILE)) ||
-          ![infra, dirname(first)].includes(workingDirectory) ||
+          !generationFile ||
+          first !== files.split(",")[0] ||
+          workingDirectory !== dirname(first) ||
           configFiles.length > 2 ||
           new Set(configFiles).size !== configFiles.length ||
           (configFiles[1] !== undefined &&
@@ -619,11 +608,10 @@ export function createOwnedServiceResolver(options: {
         )
           continue;
         try {
-          if (generationFile)
-            services.configurationGenerationComposeFile(
-              infra,
-              dirname(first).split("/").at(-1) ?? "",
-            );
+          services.configurationGenerationComposeFile(
+            infra,
+            dirname(first).split("/").at(-1) ?? "",
+          );
           for (const file of configFiles) {
             const stat = lstatSync(file);
             if (

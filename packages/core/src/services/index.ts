@@ -98,11 +98,9 @@ export {
   commitConfigurationGeneration,
   configurationGenerationComposeFile,
   configurationGenerationWriterCommit,
-  configurationMigrationPending,
   currentConfigurationGeneration,
   initializeConfigurationGenerations,
   inspectAppliedConfiguration,
-  migrateLegacyServiceSelection,
   type RenderConfigurationOptions,
   readAppliedComposeServiceIds,
   readAppliedConfiguration,
@@ -112,14 +110,9 @@ export {
   readAppliedServiceIds,
   readAppliedTransitCredentialsRevision,
   renderConfiguration,
-  retainedContainerComposeFile,
   withConfigurationGenerationWriter,
 } from "./configuration-generation";
-export {
-  acquireConfigurationOwnership,
-  legacyConfigurationWriterActive,
-  retireLegacyConfigurationWriter,
-} from "./configuration-ownership";
+export { acquireConfigurationOwnership } from "./configuration-ownership";
 export {
   assertTrustedConfigurationSchema,
   validateTrustedConfigurationValues,
@@ -158,9 +151,6 @@ export {
   deploymentUserEnvironmentProblem,
   GENERATED_COMPOSE_FILE,
   GENERATED_HARDLINK_PLAN_FILE,
-  LEGACY_CONFIGURATION_GENERATIONS,
-  LEGACY_CURRENT_CONFIGURATION,
-  LEGACY_SERVICE_SELECTION_FILE,
   loadIntegrationSchemas,
   ownedStateFilePresent,
   readDesiredSelection,

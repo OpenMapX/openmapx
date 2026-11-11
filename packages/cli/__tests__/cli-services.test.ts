@@ -106,13 +106,12 @@ describe("service selection persistence", () => {
     release();
     expect((await edit).selected).toContain("valhalla");
     expect(readServiceSelection(tmp)?.selected).toContain("valhalla");
-    expect(existsSync(join(infraDir, ".trusted-config-writer"))).toBe(false);
     expect(existsSync(join(infraDir, "state", "ops-agent", "configuration", ".writer"))).toBe(
       false,
     );
   });
 
-  it("enables and disables root selections in infra/docker/service-selection.json", async () => {
+  it("enables and disables root selections in the agent's service-selection.json", async () => {
     writeManifest("traefik", { ...baseManifest, id: "traefik" });
     writeManifest("well-known", { ...baseManifest, id: "well-known" });
     writeManifest("app-api", { ...baseManifest, id: "app-api" });

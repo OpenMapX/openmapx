@@ -36,10 +36,6 @@ export const SERVICE_SELECTION_FILE = "service-selection.json";
 export const CONFIGURATION_DIRECTORY = "state/ops-agent/configuration";
 export const CURRENT_CONFIGURATION = `${CONFIGURATION_DIRECTORY}/current`;
 export const CONFIGURATION_GENERATIONS = `${CONFIGURATION_DIRECTORY}/generations`;
-/** Where releases before this one kept them, in `infra/docker` itself. */
-export const LEGACY_CURRENT_CONFIGURATION = ".trusted-config-current";
-export const LEGACY_CONFIGURATION_GENERATIONS = ".trusted-config-generations";
-export const LEGACY_SERVICE_SELECTION_FILE = SERVICE_SELECTION_FILE;
 export const GENERATED_COMPOSE_FILE = "docker-compose.generated.yml";
 export const GENERATED_HARDLINK_PLAN_FILE = "docker-compose.generated.hardlinks.json";
 export const CONFIGURATION_GENERATION_BASE_PREFIX = `${CONFIGURATION_DIRECTORY}/.base-`;

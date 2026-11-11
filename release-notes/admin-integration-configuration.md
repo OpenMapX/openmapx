@@ -41,7 +41,7 @@ preserve evidence and reconcile incomplete work. Plan explicit operator handling
 incompatible retained configuration results before restarting with matching components.
 No automatic journal conversion or deletion is supplied.
 
-A killed writer can leave `.trusted-config-writer` in the shared infra directory.
+A killed writer can leave its lock, `infra/docker/state/ops-agent/configuration/.writer`.
 Stop **all** writers before inspecting and, only after confirming abandonment, removing
 that lock. There is no stale-lock stealing, PID-based reclamation or automatic recovery;
 never remove a lock while another writer might still hold it.

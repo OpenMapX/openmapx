@@ -2,7 +2,6 @@ import {
   chmodSync,
   existsSync,
   linkSync,
-  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -19,24 +18,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type ConfigurationInput,
   commitConfigurationGeneration,
-  configurationMigrationPending,
   currentConfigurationGeneration,
-  migrateLegacyServiceSelection,
-  readAppliedConfiguration,
-  retainedContainerComposeFile,
-  withConfigurationGenerationWriter,
 } from "../configuration-generation";
+import { acquireConfigurationOwnership } from "../configuration-ownership";
 import {
-  acquireConfigurationOwnership,
-  legacyConfigurationWriterActive,
-  retireLegacyConfigurationWriter,
-} from "../configuration-ownership";
-import {
-  CONFIGURATION_GENERATIONS,
   CURRENT_CONFIGURATION,
   deploymentEnvironmentFileProblem,
-  LEGACY_CONFIGURATION_GENERATIONS,
-  LEGACY_CURRENT_CONFIGURATION,
   readDesiredSelection,
   readServiceSelectionFile,
   serviceSelectionPath,
@@ -85,69 +72,36 @@ function checkout() {
   return { root, infraDir };
 }
 
-/**
- * What an earlier release left: its applied generation in `infra/docker`
- * itself, with `beta` selected and a saved setting. Built from a real commit
- * whose generations are then moved where that release kept them.
- */
-async function legacyDeployment(infraDir: string) {
-  const { revisionId } = await commitConfigurationGeneration({
-    infraDir,
-    services,
-    input: input({
-      selectedRoots: ["beta"],
-      serviceConfigs: [{ serviceId: "beta", values: { PUBLIC_SETTING: "saved" } }],
-    }),
-  });
-  renameSync(
-    join(infraDir, CONFIGURATION_GENERATIONS),
-    join(infraDir, LEGACY_CONFIGURATION_GENERATIONS),
-  );
-  rmSync(join(infraDir, CURRENT_CONFIGURATION));
-  symlinkSync(
-    join(LEGACY_CONFIGURATION_GENERATIONS, revisionId),
-    join(infraDir, LEGACY_CURRENT_CONFIGURATION),
-  );
-  return revisionId;
-}
-
 describe("the agent's configuration state", () => {
-  it("retains legacy container generations while committing with read-only infra/docker", async () => {
+  it("keeps generation retention in the agent's state while infra/docker is read-only", async () => {
     const { infraDir } = checkout();
     const first = await commitConfigurationGeneration({ infraDir, services, input: input() });
     const containerId = "a".repeat(64);
-    const legacy = `${JSON.stringify({ conservative: [], containers: { [containerId]: [first.revisionId] } })}\n`;
-    writeFileSync(join(infraDir, ".owned-service-generations.json"), legacy, { mode: 0o600 });
-    rmSync(join(infraDir, "state/ops-agent/configuration/.owned-service-generations.json"), {
-      force: true,
-    });
-    retireLegacyConfigurationWriter(infraDir);
     chmodSync(infraDir, 0o555);
     try {
       await commitConfigurationGeneration({
         infraDir,
         services,
         input: input({ domain: "next.example.test" }),
-        ownedServiceGenerations: [],
+        ownedServiceGenerations: [{ containerId, revisionIds: [first.revisionId] }],
         observedServiceContainerIds: [containerId],
       });
-      expect(retainedContainerComposeFile(infraDir, containerId)).toBe(
-        join(infraDir, CONFIGURATION_GENERATIONS, first.revisionId, "docker-compose.generated.yml"),
+      const retained = JSON.parse(
+        readFileSync(
+          join(infraDir, "state/ops-agent/configuration/.owned-service-generations.json"),
+          "utf8",
+        ),
       );
-      expect(readFileSync(join(infraDir, ".owned-service-generations.json"), "utf8")).toBe(legacy);
+      expect(retained.containers).toEqual({ [containerId]: [first.revisionId] });
+      expect(existsSync(join(infraDir, ".owned-service-generations.json"))).toBe(false);
     } finally {
       chmodSync(infraDir, 0o775);
     }
   });
 
-  it("refuses malformed current retention evidence instead of falling back to legacy evidence", async () => {
+  it("refuses malformed retention evidence", async () => {
     const { infraDir } = checkout();
     const first = await commitConfigurationGeneration({ infraDir, services, input: input() });
-    writeFileSync(
-      join(infraDir, ".owned-service-generations.json"),
-      `${JSON.stringify({ conservative: [first.revisionId], containers: {} })}\n`,
-      { mode: 0o600 },
-    );
     writeFileSync(
       join(infraDir, "state/ops-agent/configuration/.owned-service-generations.json"),
       "{}\n",
@@ -196,20 +150,10 @@ describe("the agent's configuration state", () => {
       services,
       input: input(),
     });
-    // Another account of the group: a selection, and a pointer to a generation of its own.
+    // Another account of the group plants a selection of its own.
     writeFileSync(join(infraDir, "service-selection.json"), JSON.stringify({ selected: ["beta"] }));
-    mkdirSync(join(infraDir, LEGACY_CONFIGURATION_GENERATIONS, `cfg1_${"p".repeat(43)}`), {
-      recursive: true,
-      mode: 0o700,
-    });
-    symlinkSync(
-      join(LEGACY_CONFIGURATION_GENERATIONS, `cfg1_${"p".repeat(43)}`),
-      join(infraDir, LEGACY_CURRENT_CONFIGURATION),
-    );
     expect(currentConfigurationGeneration(infraDir)).toBe(revisionId);
-    expect(configurationMigrationPending(infraDir)).toBe(false);
     expect(readDesiredSelection(infraDir, {}).roots).not.toContain("beta");
-    expect(migrateLegacyServiceSelection(infraDir)).toBe(false);
     // A pointer in the state directory that is not this user's is refused.
     vi.spyOn(process, "geteuid").mockReturnValue((process.geteuid?.() ?? 0) + 1);
     expect(() => currentConfigurationGeneration(infraDir)).toThrow();
@@ -230,67 +174,15 @@ describe("the agent's configuration state", () => {
   });
 });
 
-describe("moving an earlier release's configuration", () => {
-  it("carries its applied settings and selection over once, then never reads it again", async () => {
-    const { infraDir } = checkout();
-    const legacy = await legacyDeployment(infraDir);
-    // The earlier release's group-writable selection file is never what carries over.
-    writeFileSync(
-      join(infraDir, "service-selection.json"),
-      JSON.stringify({ selected: ["alpha"] }),
-    );
-    expect(currentConfigurationGeneration(infraDir)).toBeNull();
-    expect(configurationMigrationPending(infraDir)).toBe(true);
-    expect(readAppliedConfiguration(infraDir).serviceConfigs).toEqual([
-      { serviceId: "beta", values: { PUBLIC_SETTING: "saved" } },
-    ]);
-
-    await withConfigurationGenerationWriter(infraDir, async (writer) => {
-      expect(migrateLegacyServiceSelection(infraDir)).toBe(true);
-      const desired = readDesiredSelection(infraDir, {});
-      expect(desired).toEqual({ source: "file", roots: ["beta"] });
-      await writer.commit({
-        services,
-        input: input({ selectedRoots: desired.roots, ...readAppliedConfiguration(infraDir) }),
-      });
-    });
-    expect(statSync(serviceSelectionPath(infraDir)).mode & 0o777).toBe(0o600);
-    expect(configurationMigrationPending(infraDir)).toBe(false);
-    expect(currentConfigurationGeneration(infraDir)).not.toBe(legacy);
-
-    // The earlier files stay, untouched, and are read no more.
-    expect(readlinkSync(join(infraDir, LEGACY_CURRENT_CONFIGURATION))).toContain(legacy);
-    rmSync(join(infraDir, LEGACY_CONFIGURATION_GENERATIONS), { recursive: true });
-    expect(readAppliedConfiguration(infraDir).serviceConfigs).toEqual([
-      { serviceId: "beta", values: { PUBLIC_SETTING: "saved" } },
-    ]);
-    expect(migrateLegacyServiceSelection(infraDir)).toBe(false);
-  });
-
-  it("refuses to render past an earlier pointer that is not this user's", async () => {
-    const { infraDir } = checkout();
-    await legacyDeployment(infraDir);
-    vi.spyOn(process, "geteuid").mockReturnValue((process.geteuid?.() ?? 0) + 1);
-    expect(() => configurationMigrationPending(infraDir)).toThrow("cannot be verified");
-    expect(() => readAppliedConfiguration(infraDir)).toThrow("cannot be verified");
-  });
-
-  it("takes the earlier releases' lock too until this release's agent retires it", async () => {
+describe("the writer lock", () => {
+  it("is taken in the agent's state directory and released", async () => {
     const { infraDir } = checkout();
     const release = await acquireConfigurationOwnership(infraDir);
-    expect(existsSync(join(infraDir, ".trusted-config-writer"))).toBe(true);
     expect(existsSync(join(infraDir, "state", "ops-agent", "configuration", ".writer"))).toBe(true);
-    // An agent of an earlier release, which knows only the old lock, waits.
-    expect(lstatSync(join(infraDir, ".trusted-config-writer")).isDirectory()).toBe(true);
     release();
-    expect(existsSync(join(infraDir, ".trusted-config-writer"))).toBe(false);
-
-    expect(legacyConfigurationWriterActive(infraDir)).toBe(true);
-    retireLegacyConfigurationWriter(infraDir);
-    expect(legacyConfigurationWriterActive(infraDir)).toBe(false);
-    const after = await acquireConfigurationOwnership(infraDir);
-    expect(existsSync(join(infraDir, ".trusted-config-writer"))).toBe(false);
-    after();
+    expect(existsSync(join(infraDir, "state", "ops-agent", "configuration", ".writer"))).toBe(
+      false,
+    );
   });
 });
 

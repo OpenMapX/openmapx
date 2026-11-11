@@ -86,8 +86,7 @@ afterEach(() => {
   if (root) rmSync(root, { recursive: true, force: true });
 });
 function expectConfigurationWriterFree() {
-  for (const lock of ["state/ops-agent/configuration/.writer", ".trusted-config-writer"])
-    expect(existsSync(join(root, "infra/docker", lock))).toBe(false);
+  expect(existsSync(join(root, "infra/docker/state/ops-agent/configuration/.writer"))).toBe(false);
   expect(
     existsSync(
       join(
@@ -332,7 +331,9 @@ describe("actual CLI service lifecycle preparation", () => {
     });
     await expect(command("start")).rejects.toThrow("exit:0");
     expect(dockerComposeStream).toHaveBeenCalledTimes(1);
-    expect(existsSync(join(root, "infra/docker/.trusted-config-writer"))).toBe(false);
+    expect(existsSync(join(root, "infra/docker/state/ops-agent/configuration/.writer"))).toBe(
+      false,
+    );
   });
   it("pulls under ownership before committing a full final generation and recreating only the target", async () => {
     const calls: string[][] = [];
@@ -482,7 +483,9 @@ describe("actual CLI service lifecycle preparation", () => {
       failure: { reason: "pull", failedServiceIds: ["alpha"] },
     });
     expect(targetLocks()).toEqual([]);
-    expect(existsSync(join(root, "infra/docker/.trusted-config-writer"))).toBe(false);
+    expect(existsSync(join(root, "infra/docker/state/ops-agent/configuration/.writer"))).toBe(
+      false,
+    );
   });
   it("records failure when the execution deadline passes during pull", async () => {
     vi.mocked(dockerComposeStream).mockImplementation(async () => {
@@ -534,7 +537,9 @@ describe("actual CLI service lifecycle preparation", () => {
     );
     expect(receipt.finalRevisionId).not.toBe(seed);
     expect(targetLocks()).toEqual([]);
-    expect(existsSync(join(root, "infra/docker/.trusted-config-writer"))).toBe(false);
+    expect(existsSync(join(root, "infra/docker/state/ops-agent/configuration/.writer"))).toBe(
+      false,
+    );
   });
   it("a failed compose up releases every target and the next start succeeds", async () => {
     vi.mocked(dockerComposeStream).mockResolvedValueOnce(1);

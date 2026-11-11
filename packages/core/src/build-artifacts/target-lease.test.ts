@@ -592,7 +592,7 @@ it("holds certified target, configuration writer and release-store locks togethe
   expect(existsSync(join(root, "data/.admin-target-control/locks/osrm"))).toBe(true);
   const releaseWriter = await acquireConfigurationOwnership(root);
   const store = await acquireReleaseStoreLock(root, {}, { failIfBusy: true });
-  expect(existsSync(join(root, ".trusted-config-writer"))).toBe(true);
+  expect(existsSync(join(root, "state/ops-agent/configuration/.writer"))).toBe(true);
   store.release();
   releaseWriter();
   c.retainControlEffectReceipt(authority, {

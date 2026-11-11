@@ -1,5 +1,5 @@
 import { rmSync } from "node:fs";
-import { basename, dirname } from "node:path";
+import { dirname } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { installedCompose } from "../../../packages/core/src/services/__fixtures__/compose-path-host";
 import { ownedComposePathRuntime } from "./__fixtures__/owned-compose-path-runtime";
@@ -134,7 +134,7 @@ it.runIf(installedCompose)(
 );
 
 it.runIf(installedCompose)(
-  "pins a known legacy current label to its retained generation during ownership config",
+  "denies a container whose labels name the current pointer instead of its generation",
   async () => {
     const fixture = await ownedComposePathRuntime();
     roots.push(fixture.host.root);
@@ -145,35 +145,6 @@ it.runIf(installedCompose)(
     fixture.row.Labels["com.docker.compose.project.working_dir"] = dirname(
       fixture.host.stack.composePath,
     );
-    const first = await fixture.owned.inspectOwnedServices(new AbortController().signal);
-    await fixture.host.commit(
-      "advanced",
-      first.map((snapshot) => ({
-        containerId: snapshot.containerId,
-        revisionIds: snapshot.provenance.composeConfigFiles
-          .map((file) => basename(dirname(file)))
-          .filter((id) => /^cfg1_/.test(id)),
-      })),
-    );
-    const retained = await fixture.owned.inspectOwnedServices(new AbortController().signal);
-    expect(retained[0]?.provenance.composeConfigFiles[0]).toBe(fixture.host.firstCompose);
-    expect(fixture.pathChecks.every((checks) => Object.values(checks).every(Boolean))).toBe(true);
-  },
-);
-
-it.runIf(installedCompose)(
-  "denies an ambiguous legacy current label without reading newer generation secrets",
-  async () => {
-    const fixture = await ownedComposePathRuntime();
-    roots.push(fixture.host.root);
-    fixture.row.Labels["com.docker.compose.project.config_files"] = [
-      fixture.host.stack.composePath,
-      fixture.host.stack.composeReleasePath,
-    ].join(",");
-    fixture.row.Labels["com.docker.compose.project.working_dir"] = dirname(
-      fixture.host.stack.composePath,
-    );
-    await fixture.host.commit("advanced-without-container-observation");
     const inventory = await fixture.owned.inspectInventory?.(new AbortController().signal);
     expect(inventory?.services).toEqual([]);
     expect(inventory?.unverifiedServiceIds).toEqual(["alpha"]);

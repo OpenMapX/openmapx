@@ -8892,7 +8892,9 @@ if(args[0]==="compose"&&args.includes("config")&&args.includes("--format")){impo
           ),
         ).selected,
       ).toEqual(["data-manager", "motis"]);
-      expect(existsSync(join(host.infraDir, ".trusted-config-writer"))).toBe(false);
+      expect(existsSync(join(host.infraDir, services.CONFIGURATION_DIRECTORY, ".writer"))).toBe(
+        false,
+      );
       for (const id of ["data-manager", "motis"])
         expect(existsSync(join(host.infraDir, "data/.admin-target-control/locks", id))).toBe(false);
     }, 60000);

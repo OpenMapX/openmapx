@@ -53,12 +53,8 @@ import {
   configurationGenerationBasePath,
   GENERATED_COMPOSE_FILE,
   GENERATED_HARDLINK_PLAN_FILE,
-  LEGACY_CONFIGURATION_GENERATIONS,
-  LEGACY_CURRENT_CONFIGURATION,
   readConfigurationGenerationBase,
-  readServiceSelectionFile,
   SERVICE_SELECTION_FILE,
-  writeServiceSelectionFile,
 } from "./deployment";
 import {
   type PlatformConfiguration,
@@ -678,24 +674,9 @@ function generationDigest(path: string): string {
   return digest.digest("base64url");
 }
 
-/** Where a pointer and its generations live, relative to `infra/docker`. */
-interface GenerationLayout {
-  pointer: string;
-  generations: string;
-}
-
-const LAYOUT: GenerationLayout = {
-  pointer: CURRENT_CONFIGURATION,
-  generations: CONFIGURATION_GENERATIONS,
-};
-const LEGACY_LAYOUT: GenerationLayout = {
-  pointer: LEGACY_CURRENT_CONFIGURATION,
-  generations: LEGACY_CONFIGURATION_GENERATIONS,
-};
-
-/** A pointer's link text: the generation, relative to the pointer's directory. */
-function pointerTarget(layout: GenerationLayout, revisionId: string): string {
-  return join(relativeTo(dirname(layout.pointer), layout.generations), revisionId);
+/** The current pointer's link text: the generation, relative to the pointer's directory. */
+function pointerTarget(revisionId: string): string {
+  return join(relativeTo(dirname(CURRENT_CONFIGURATION), CONFIGURATION_GENERATIONS), revisionId);
 }
 
 function relativeTo(from: string, to: string): string {
@@ -706,8 +687,9 @@ function relativeTo(from: string, to: string): string {
   return [...fromParts.slice(common).map(() => ".."), ...toParts.slice(common)].join("/");
 }
 
-function generationAt(infraDir: string, layout: GenerationLayout): string | null {
-  const current = join(infraDir, layout.pointer);
+/** The applied generation's name, or null before the first render. */
+export function currentConfigurationGeneration(infraDir: string): string | null {
+  const current = join(infraDir, CURRENT_CONFIGURATION);
   let target: string;
   try {
     const stats = lstatSync(current);
@@ -720,78 +702,25 @@ function generationAt(infraDir: string, layout: GenerationLayout): string | null
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   }
-  const expected = pointerTarget(layout, "cfg1_");
+  const expected = pointerTarget("cfg1_");
   if (
     !target.startsWith(expected) ||
     !/^cfg1_[A-Za-z0-9_-]{43}$/.test(target.slice(expected.length - "cfg1_".length))
   ) {
-    throw new Error(`${current} points outside ${layout.generations}`);
+    throw new Error(`${current} points outside ${CONFIGURATION_GENERATIONS}`);
   }
   const absolute = resolve(dirname(current), target);
-  if (!absolute.startsWith(`${resolve(infraDir, layout.generations)}/`)) {
-    throw new Error(`${current} points outside ${layout.generations}`);
+  if (!absolute.startsWith(`${resolve(infraDir, CONFIGURATION_GENERATIONS)}/`)) {
+    throw new Error(`${current} points outside ${CONFIGURATION_GENERATIONS}`);
   }
   safeGenerationTree(absolute);
   return basename(absolute);
 }
 
-/** The applied generation's name, or null before the first render. */
-export function currentConfigurationGeneration(infraDir: string): string | null {
-  return generationAt(infraDir, LAYOUT);
-}
-
-/**
- * Whether this is the first render since releases kept the configuration in
- * `infra/docker` itself: no current generation in the agent's state yet, and
- * one the earlier release applied. Only then is the earlier one read, once, to
- * carry the applied settings and selection over; afterwards nothing reads it.
- */
-export function configurationMigrationPending(infraDir: string): boolean {
-  if (currentConfigurationGeneration(infraDir) !== null) return false;
-  try {
-    return generationAt(infraDir, LEGACY_LAYOUT) !== null;
-  } catch (error) {
-    // Rendering without it would silently drop the settings it holds.
-    throw new Error(
-      `The earlier release's applied configuration (infra/docker/${LEGACY_CURRENT_CONFIGURATION}) cannot be verified as this user's own (${(error as Error).message}), so it is not carried over. Remove infra/docker/${LEGACY_CURRENT_CONFIGURATION} to render without it; the admin panel applies its saved settings again.`,
-    );
-  }
-}
-
-/** The generation readers carry settings from: the current one, or while migrating the earlier release's. */
+/** The applied generation's directory, or null before the first render. */
 function appliedGenerationDirectory(infraDir: string): string | null {
   const active = currentConfigurationGeneration(infraDir);
-  if (active) return join(infraDir, CONFIGURATION_GENERATIONS, active);
-  if (!configurationMigrationPending(infraDir)) return null;
-  const legacy = generationAt(infraDir, LEGACY_LAYOUT);
-  return legacy ? join(infraDir, LEGACY_CONFIGURATION_GENERATIONS, legacy) : null;
-}
-
-/**
- * On the first render of this release, carry the earlier release's applied
- * selection over as `service-selection.json` in the agent's state, unless one
- * exists there. It is taken from the applied generation, which only this user
- * can have written, never from the earlier `infra/docker/service-selection.json`.
- * Call under writer ownership.
- */
-export function migrateLegacyServiceSelection(infraDir: string): boolean {
-  if (!configurationMigrationPending(infraDir)) return false;
-  if (readServiceSelectionFile(infraDir) !== null) return false;
-  const directory = appliedGenerationDirectory(infraDir);
-  if (!directory) return false;
-  const path = join(directory, SERVICE_SELECTION_FILE);
-  const { contents } = readGenerationFile(path, lstatSync(path, { bigint: true }), 64 * 1024, [
-    0o400n,
-    0o600n,
-  ]);
-  const raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(contents)) as {
-    selected?: unknown;
-  };
-  if (!Array.isArray(raw.selected) || raw.selected.some((id) => typeof id !== "string")) {
-    throw new Error(`Malformed applied service selection at ${path}`);
-  }
-  writeServiceSelectionFile(infraDir, raw.selected as string[]);
-  return true;
+  return active ? join(infraDir, CONFIGURATION_GENERATIONS, active) : null;
 }
 
 function hasGenerations(infraDir: string): boolean {
@@ -892,8 +821,7 @@ export function readAppliedConfiguration(
   const generation = appliedGenerationDirectory(infraDir);
   if (!generation) return empty;
   // Each file is opened without following links and must be this user's
-  // own, as the generation's tree was checked: while migrating, the earlier
-  // generation sits below infra/docker, whose entries its group may rename.
+  // own, as the generation's tree was checked.
   const resolved = JSON.parse(
     readOwnGenerationFile(join(generation, RESOLVED_CONFIG_FILE), [0o400n, 0o600n]),
   ) as {
@@ -1016,25 +944,15 @@ export async function initializeConfigurationGenerations(infraDir: string): Prom
   );
 }
 
-const LEGACY_RETAINED_GENERATIONS = ".owned-service-generations.json";
-const RETAINED_GENERATIONS = `${CONFIGURATION_DIRECTORY}/${LEGACY_RETAINED_GENERATIONS}`;
+const RETAINED_GENERATIONS = `${CONFIGURATION_DIRECTORY}/.owned-service-generations.json`;
 interface GenerationRetention {
   conservative: string[];
   containers: Record<string, string[]>;
 }
 function readGenerationRetention(infraDir: string): GenerationRetention {
-  let path = join(infraDir, RETAINED_GENERATIONS);
+  const path = join(infraDir, RETAINED_GENERATIONS);
   try {
-    let metadata: BigIntStats;
-    try {
-      metadata = lstatSync(path, { bigint: true });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      // Earlier writers kept this observation in infra/docker. Read it until
-      // the next commit carries it into the agent's writable configuration store.
-      path = join(infraDir, LEGACY_RETAINED_GENERATIONS);
-      metadata = lstatSync(path, { bigint: true });
-    }
+    const metadata = lstatSync(path, { bigint: true });
     const { contents } = readGenerationFile(path, metadata, 64 * 1024, [0o600n]);
     const raw = JSON.parse(contents.toString("utf8")) as GenerationRetention;
     if (
@@ -1063,8 +981,8 @@ function readGenerationRetention(infraDir: string): GenerationRetention {
     return raw;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      // An upgraded deployment has no ownership observations yet. Startup and
-      // host-only renders must not prune its old containers' generation files.
+      // No ownership observation is recorded yet. Startup and host-only
+      // renders must not prune generations that running containers may use.
       const generations = join(infraDir, CONFIGURATION_GENERATIONS);
       let entries: string[];
       try {
@@ -1094,28 +1012,6 @@ function retainedConfigurationGenerations(infraDir: string): Set<string> {
   return new Set([...retained.conservative, ...Object.values(retained.containers).flat()]);
 }
 
-/**
- * Recover only the first recorded generation of a legacy container whose Docker
- * labels named the movable current alias. This is path selection, never an
- * ownership claim: callers must still verify registry, labels and image identity.
- */
-export function retainedContainerComposeFile(infraDir: string, containerId: string): string | null {
-  if (!/^[a-f0-9]{64}$/.test(containerId)) throw new Error(UNSAFE);
-  const retained = readGenerationRetention(infraDir);
-  const revisions = retained.containers[containerId];
-  if (!revisions) {
-    const current = currentConfigurationGeneration(infraDir);
-    if (
-      [...retained.conservative, ...Object.values(retained.containers).flat()].some(
-        (id) => id !== current,
-      )
-    )
-      throw new Error(UNSAFE);
-    return null;
-  }
-  if (revisions.length !== 1) throw new Error(UNSAFE);
-  return configurationGenerationComposeFile(infraDir, revisions[0] ?? "");
-}
 async function retainConfigurationGenerations(
   infraDir: string,
   owned?: CommitConfigurationOptions["ownedServiceGenerations"],
@@ -1147,13 +1043,13 @@ async function retainConfigurationGenerations(
         entry.revisionIds.some((id) => !REVISION.test(id))
       )
         throw new Error(UNSAFE);
-      // Labels on a live immutable Docker ID do not change. Remember the first
-      // resolved generation when older containers named the movable current alias.
+      // Labels on a live immutable Docker ID do not change, so the first
+      // recorded generation of a container stays its generation.
       containers[entry.containerId] = previous.containers[entry.containerId] ?? [
         ...new Set(entry.revisionIds),
       ];
     }
-    // Unobserved legacy/CLI generations have no per-container attribution.
+    // Generations applied by CLI renders have no per-container attribution.
     // Only a complete empty inventory proves that conservative group is unused.
     retained = { conservative: observed?.length === 0 ? [] : previous.conservative, containers };
   } else {
@@ -1267,7 +1163,7 @@ async function initializeOwnedConfigurationGenerations(infraDir: string): Promis
   const generationBases: { revisionId: string; path: string }[] = [];
   const pointerDirectory = dirname(join(infraDir, CURRENT_CONFIGURATION));
   const pointerName = new RegExp(`^\\.${basename(CURRENT_CONFIGURATION)}\\.[a-f0-9]{32}\\.tmp$`);
-  const targetName = new RegExp(`^${pointerTarget(LAYOUT, "cfg1_")}[A-Za-z0-9_-]{43}$`);
+  const targetName = new RegExp(`^${pointerTarget("cfg1_")}[A-Za-z0-9_-]{43}$`);
   for (const entry of readdirSync(pointerDirectory, { withFileTypes: true })) {
     if (entry.name.startsWith(basename(CONFIGURATION_GENERATION_BASE_PREFIX))) {
       const revisionId = entry.name.slice(basename(CONFIGURATION_GENERATION_BASE_PREFIX).length);
@@ -1643,7 +1539,7 @@ async function commitOwnedConfigurationFiles(
     if (currentRevisionId !== revisionId) {
       const pointer = join(infraDir, CURRENT_CONFIGURATION);
       const pointerTemporary = join(dirname(pointer), `.${basename(pointer)}.${nonce}.tmp`);
-      symlinkSync(pointerTarget(LAYOUT, revisionId), pointerTemporary);
+      symlinkSync(pointerTarget(revisionId), pointerTemporary);
       renameSync(pointerTemporary, pointer);
       // The rename is the commit point. Record evidence BEFORE any fallible sync/follow-up.
       committed = {

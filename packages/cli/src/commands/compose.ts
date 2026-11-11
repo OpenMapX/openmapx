@@ -312,11 +312,6 @@ export async function renderComposeWithWriter(
     paths.root,
   );
   if (transitousApiKeys) log[transitousApiKeys.level](transitousApiKeys.message);
-  // The first render of this release carries the earlier release's applied
-  // selection into the agent's state, from its applied generation; its
-  // settings are carried by readAppliedConfiguration below. Nothing reads the
-  // earlier files once this generation is committed.
-  coreServices.migrateLegacyServiceSelection(paths.infraDir);
   const registry = new ServiceRegistry({ rootDir: paths.root });
   await registry.load();
   const applied = applyServiceSelection(registry, {

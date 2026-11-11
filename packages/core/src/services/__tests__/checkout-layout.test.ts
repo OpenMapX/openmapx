@@ -5,10 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { agentStatePaths, writeAgentStateFile } from "../agent-state";
 import { prepareAgentStores } from "../agent-stores";
 import { CheckoutRequiredError, checkoutMounted } from "../checkout-layout";
-import {
-  acquireConfigurationOwnership,
-  retireLegacyConfigurationWriter,
-} from "../configuration-ownership";
+import { acquireConfigurationOwnership } from "../configuration-ownership";
 import type { ReleaseServiceFiles } from "../release-service-files";
 import {
   checkoutPositionFromHistory,
@@ -126,16 +123,9 @@ describe("the checkout, as the operations agent tells", () => {
     expect(writeLegacyTraefikRoutes(checkout.infraDir, "http: {}\n", true)).toBeNull();
   });
 
-  it("without it, a writer that still takes the earlier lock in a read-only infra/docker says why", async () => {
+  it("without it, a writer takes only the lock in the agent's state, so a read-only infra/docker is no obstacle", async () => {
     const { infraDir } = stack("narrow");
     chmodSync(infraDir, 0o555);
-    const refused = acquireConfigurationOwnership(infraDir);
-    await expect(refused).rejects.toThrow(CheckoutRequiredError);
-    await expect(acquireConfigurationOwnership(infraDir)).rejects.toThrow(
-      /legacy-configuration-writer-retired\.json is missing/,
-    );
-    // Once retired, only the lock in the agent's state is taken.
-    retireLegacyConfigurationWriter(infraDir);
     const release = await acquireConfigurationOwnership(infraDir);
     release();
   });

@@ -359,13 +359,9 @@ workflow above for the next application release. An already blocked installation
 may require a separately supervised upgrade before these fixes can run; changing
 the checkout alone does not update its running Data Manager.
 
-Rendering stops, with the reason, when:
-
-- `infra/docker/.trusted-config-current` is not the deployment user's own: inspect
-  ownership and the configuration recovery guidance before changing it;
-- `infra/docker/.env` is not the deployment user's own regular file, has more
-  than one link, or its group or others can write it: run
-  `chown "$(id -u)" infra/docker/.env && chmod 600 infra/docker/.env`.
+Rendering stops, with the reason, when `infra/docker/.env` is not the deployment
+user's own regular file, has more than one link, or its group or others can write
+it: run `chown "$(id -u)" infra/docker/.env && chmod 600 infra/docker/.env`.
 
 The retained configuration helper replaces the selected application services
 without restarting unrelated dependencies. A failure can require reconciliation;

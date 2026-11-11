@@ -691,7 +691,7 @@ describe("assembled production service authority", () => {
     }
   });
 
-  it("preserves legacy retained generations at startup before the first owned inventory acquisition", async () => {
+  it("preserves every generation at startup before the first owned inventory acquisition", async () => {
     const host = await fixture();
     for (let i = 0; i < 15; i++)
       await services.commitConfigurationGeneration({
@@ -705,7 +705,7 @@ describe("assembled production service authority", () => {
           serviceSecrets: [],
         },
       });
-    // Deployments predating owned retention have complete generations but no new metadata file.
+    // Until an inventory is recorded, complete generations have no ownership observation file.
     rmSync(join(host.infraDir, "state/ops-agent/configuration/.owned-service-generations.json"));
     await initializeTrustedConfigurationRuntime(host.infraDir);
     expect(existsSync(host.firstCompose)).toBe(true);
@@ -713,30 +713,6 @@ describe("assembled production service authority", () => {
     await expect(
       dispatchOpsOperation(host.runtime, logs, await host.context(logs)),
     ).resolves.toMatchObject({ lines: ["retained log"] });
-  });
-
-  it("retains the original generation for a live legacy current-alias container and releases it only after cleanup", async () => {
-    const host = await fixture();
-    host.row.Labels["com.docker.compose.project.config_files"] = host.stack.composePath;
-    host.row.Labels["com.docker.compose.project.working_dir"] = host.stack.composePath.slice(
-      0,
-      host.stack.composePath.lastIndexOf("/"),
-    );
-    expect(await host.deselect()).toMatchObject({ outcome: "committed" });
-    for (let i = 0; i < 18; i++)
-      expect(await host.select([])).toMatchObject({ outcome: "committed" });
-    expect(existsSync(host.firstCompose)).toBe(true);
-    const logs = { kind: "service.logs", serviceId: "motis", tail: 20 } as const;
-    await expect(
-      dispatchOpsOperation(host.runtime, logs, await host.context(logs)),
-    ).resolves.toMatchObject({ lines: ["retained log"] });
-    host.row.Image = `sha256:${"c".repeat(64)}`;
-    expect(await host.select([])).toMatchObject({ outcome: "committed" });
-    expect(existsSync(host.firstCompose)).toBe(true);
-    host.setRows([]);
-    expect(await host.select([])).toMatchObject({ outcome: "committed" });
-    expect(existsSync(host.firstCompose)).toBe(false);
-    await expect(host.context(logs)).rejects.toThrow("Admission denied");
   });
 
   it("rechecks deselection after admission before invoking a lifecycle effect", async () => {
