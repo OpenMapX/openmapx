@@ -19,7 +19,7 @@ describe("immutable execution admission", () => {
   it("retains long per-kind budgets without the old CLI/observer clamps", () => {
     expect(OPS_KIND_POLICIES["service.build"].timeoutMs).toBe(12 * 3600_000);
     expect(OPS_KIND_POLICIES["services.buildAll"].timeoutMs).toBe(24 * 3600_000);
-    expect(OPS_KIND_POLICIES["system.update"].timeoutMs).toBe(48 * 3600_000);
+    expect(opsExecutionBudget("system.update").processMs).toBe(48 * 3600_000);
     expect(opsExecutionBudget("artifactTransfer.import")).toEqual({
       processMs: 72 * 3600_000,
       settlementMs: 30_000,

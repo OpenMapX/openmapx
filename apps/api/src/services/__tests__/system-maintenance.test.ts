@@ -49,13 +49,6 @@ describe("guarded system maintenance routing", () => {
     expect(guardedRelease).toHaveBeenCalledExactlyOnceWith(ctx);
     expect(executeAdminOperation).not.toHaveBeenCalled();
   });
-  it("keeps historical unmarked updates observation-only", async () => {
-    await expect(handleSystemUpdateJob(context(applyPayload))).rejects.toBeInstanceOf(
-      JobObservationPending,
-    );
-    expect(guardedRelease).not.toHaveBeenCalled();
-    expect(executeAdminOperation).not.toHaveBeenCalled();
-  });
   it.each([
     { ...applyPayload, expectedDigest: "bad" },
     { ...applyPayload, releaseId: undefined },

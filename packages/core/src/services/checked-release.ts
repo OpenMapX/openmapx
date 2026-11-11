@@ -66,11 +66,9 @@ export function listReleaseStoreManifests(
     }
     if ((RELEASE_STORE_POINTER_FILES as readonly string[]).includes(name)) {
       const maximum =
-        name === "transaction.json"
-          ? RELEASE_STORE_LIMITS.transactionBytes
-          : name === "selections.json"
-            ? RELEASE_STORE_LIMITS.selectionsBytes
-            : RELEASE_STORE_LIMITS.stateBytes;
+        name === "selections.json"
+          ? RELEASE_STORE_LIMITS.selectionsBytes
+          : RELEASE_STORE_LIMITS.stateBytes;
       if (stat.size < 1 || releaseStateFileProblem(stat, maximum, options))
         throw Error("Release store contains an unsafe entry");
       continue;

@@ -69,6 +69,7 @@ const futureBudgets: Readonly<Record<string, number>> = {
   "generation-hardlinks": 10 * 60_000,
   "configuration-maintenance.prepare": 60_000,
   "transit-maintenance": 120_000,
+  "system.update": 48 * 3600_000,
 };
 /** Future policies are budgets only; they register no executable operations. */
 export function opsExecutionBudget(kind: string): { processMs: number; settlementMs: 30000 } {

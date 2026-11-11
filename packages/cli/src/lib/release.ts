@@ -78,15 +78,6 @@ const coordinatorGuidance =
   "(/admin/system/updates). " +
   "For recovery, reselect the exact immutable pin used by the existing Data Manager.";
 
-function assertNoReleaseTransaction(store: string): void {
-  try {
-    lstatSync(join(store, "transaction.json"));
-    throw Error("Release transaction is active; finish or recover the update first");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
-}
-
 /** A failed Docker read is never proof that an existing coordinator is absent. */
 async function inspectCoordinator(docker: ReleaseDockerRunner) {
   const listing = await docker([
@@ -245,7 +236,6 @@ export async function checkRelease(
 ) {
   const infraDir = opts.infraDir ?? repoPaths().infraDir;
   const paths = coreServices.ensureReleaseStateDirectories(infraDir, { uid: opts.uid });
-  assertNoReleaseTransaction(paths.store);
   const selection = coreServices.readAppliedReleaseSelection(infraDir);
   if (selection.kind === "local") throw new coreServices.ReleaseChannelDisabledError();
   const configurationIdentity = coreServices.releaseConfigurationIdentity(
@@ -254,7 +244,6 @@ export async function checkRelease(
   const candidate = await resolveReleaseCandidate(opts.docker, infraDir);
   const lock = await coreServices.acquireReleaseStoreLock(paths.store, {}, { failIfBusy: true });
   try {
-    assertNoReleaseTransaction(paths.store);
     if (
       coreServices.releaseConfigurationIdentity(
         coreServices.readAppliedReleaseSelection(infraDir),
@@ -334,7 +323,6 @@ export async function ensureReleaseOverlay(
       assertCompatibleSelection(current, infraDir);
       return { status: "present", path };
     }
-    assertNoReleaseTransaction(paths.store);
     let manifest: ReleaseManifest;
     try {
       manifest = await resolveReleaseManifest(opts.docker, infraDir);
@@ -428,7 +416,6 @@ export async function selectRelease(
   coreServices.ensureReleaseStateDirectory(store, { uid: opts.uid });
   const lock = await coreServices.acquireReleaseStoreLock(store, {}, { failIfBusy: true });
   try {
-    assertNoReleaseTransaction(store);
     const previous = readSelection(path, opts);
     const manifest = await (
       opts.resolve ?? (() => resolveReleaseManifest(defaultDocker, opts.infraDir))

@@ -1481,7 +1481,6 @@ export function verifyFiniteControlEdge(
     [
       "service.start",
       "service.update",
-      "system.update",
       "service.build",
       "services.buildAll",
       "data.link",

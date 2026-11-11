@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -881,9 +880,7 @@ describe("administrative release runtime", () => {
       ...releaseProvenance(),
     });
     let manifestText = JSON.stringify(makeManifest("4"));
-    const dockerCalls: string[][] = [];
     const docker = async (args: readonly string[]) => {
-      dockerCalls.push([...args]);
       if (args[0] === "pull") return `Digest: sha256:${"1".repeat(64)}`;
       if (args[0] === "image") return `sha256:${"2".repeat(64)}`;
       if (args[0] === "create") {
@@ -900,28 +897,10 @@ describe("administrative release runtime", () => {
       signal: new AbortController().signal,
       emitLog: vi.fn(),
     };
-    const first = createDefaultReleaseEffects(rootDir, async () => undefined, {
+    const first = createDefaultReleaseEffects(rootDir, {
       runDocker: docker,
     });
     await expect(first.resolve(context)).resolves.toBe(release);
-    const checkedDigest = createHash("sha256").update(manifestText).digest("hex");
-    await expect(first.validateCandidate?.(release, checkedDigest)).resolves.toBeUndefined();
-    await expect(first.validateCandidate?.(release, "0".repeat(64))).rejects.toThrow(
-      "Checked release",
-    );
-    vi.stubEnv("OPENMAPX_RELEASE", "preview");
-    try {
-      await expect(first.validateCandidate?.(release, checkedDigest)).rejects.toThrow(
-        "Checked release",
-      );
-    } finally {
-      vi.unstubAllEnvs();
-    }
-    await expect(first.pull(release, context)).resolves.toBeUndefined();
-    expect(dockerCalls).toContainEqual([
-      "pull",
-      `ghcr.io/openmapx/privacy-backup@sha256:${"4".repeat(64)}`,
-    ]);
     await expect(first.resolve(context)).resolves.toBe(release);
     manifestText = JSON.stringify(makeManifest("5"));
     await expect(first.resolve(context)).rejects.toThrow("Release authority rejected");
@@ -983,7 +962,7 @@ describe("administrative release runtime", () => {
         event: "push",
       },
     });
-    const runtime = createDefaultReleaseEffects(rootDir, async () => undefined, {
+    const runtime = createDefaultReleaseEffects(rootDir, {
       runDocker: async (args) => {
         if (args[0] === "pull") return `Digest: sha256:${String(attempt).repeat(64)}`;
         if (args[0] === "image") return `sha256:${"e".repeat(64)}`;
@@ -1031,25 +1010,19 @@ describe("administrative release runtime", () => {
     writeFileSync(join(store, "release-1.json"), manifest, { mode: 0o600 });
     chmodSync(join(store, "release-1.json"), 0o660);
     expect(inspectReleaseAuthority(rootDir, "release-1")).toBe(false);
-    await expect(
-      createDefaultReleaseEffects(rootDir, async () => undefined).initialize?.(),
-    ).rejects.toThrow("Release store contains an unsafe entry");
+    await expect(createDefaultReleaseEffects(rootDir).initialize?.()).rejects.toThrow(
+      "Release store contains an unsafe entry",
+    );
 
     chmodSync(join(store, "release-1.json"), 0o600);
     expect(inspectReleaseAuthority(rootDir, "release-1")).toBe(true);
     writeFileSync(overlay, "services: {}\n", { mode: 0o600 });
     chmodSync(overlay, 0o620);
-    const cli = vi.fn(async () => undefined);
-    const effects = createDefaultReleaseEffects(rootDir, cli, {
-      verifyAppliedRelease: async () => true,
-    });
+    const runDocker = vi.fn(async () => "");
+    const effects = createDefaultReleaseEffects(rootDir, { runDocker });
     await expect(
-      effects.apply("release-1", ["app-api"], {
-        signal: new AbortController().signal,
-        emitLog: vi.fn(),
-      }),
+      effects.inspectSystem({ signal: new AbortController().signal, emitLog: vi.fn() }),
     ).rejects.toThrow(/group or others/);
-    expect(cli).not.toHaveBeenCalled();
     expect(readFileSync(overlay, "utf8")).toBe("services: {}\n");
   });
 
@@ -1057,7 +1030,7 @@ describe("administrative release runtime", () => {
     const rootDir = temporaryRoot();
     // Tests cannot chown: inject the uid the state must belong to instead.
     const uid = (process.geteuid?.() ?? 0) + 1;
-    expect(() => createDefaultReleaseEffects(rootDir, async () => undefined, { uid })).toThrow(
+    expect(() => createDefaultReleaseEffects(rootDir, { uid })).toThrow(
       /Unsafe release state directory/,
     );
   });
@@ -1097,7 +1070,7 @@ describe("administrative release runtime", () => {
       }),
       { mode: 0o600 },
     );
-    const effects = createDefaultReleaseEffects(rootDir, async () => undefined);
+    const effects = createDefaultReleaseEffects(rootDir);
     await expect(effects.inspect()).resolves.toEqual({
       configuredSelector: "main",
       availableReleaseId: "a-new",
@@ -1111,7 +1084,7 @@ describe("administrative release runtime", () => {
     for (let index = 0; index < 65; index += 1) {
       writeFileSync(join(directory, `release-${index}.json`), "{}", { mode: 0o600 });
     }
-    const effects = createDefaultReleaseEffects(rootDir, async () => undefined);
+    const effects = createDefaultReleaseEffects(rootDir);
     await expect(effects.initialize?.()).rejects.toThrow("Release store limit exceeded");
   });
 
@@ -1147,7 +1120,7 @@ describe("administrative release runtime", () => {
     // each published against its own stale pre-await snapshot of 63.
     const resolveFor = (release: string) => {
       let copied = false;
-      return createDefaultReleaseEffects(rootDir, async () => undefined, {
+      return createDefaultReleaseEffects(rootDir, {
         runDocker: async (args) => {
           const joined = args.join(" ");
           if (joined.startsWith("pull")) return `Digest: sha256:${"1".repeat(64)}`;
@@ -1193,250 +1166,6 @@ describe("administrative release runtime", () => {
     }
   });
 
-  it.each(["prepared", "overlay_written", "services_applied", "state_published"] as const)(
-    "recovers a crash at the durable %s release boundary",
-    async (crashPhase) => {
-      const rootDir = temporaryRoot();
-      const directory = releaseState(rootDir).store;
-      mkdirSync(directory, { recursive: true, mode: 0o700 });
-      const releaseId = "release-recovery";
-      const manifest = {
-        schemaVersion: 1 as const,
-        release: releaseId,
-        images: Object.fromEntries(
-          [
-            "api",
-            "web",
-            "data-manager",
-            "ops-agent",
-            "privacy-backup",
-            "transitous-runner",
-            "transitous-tools",
-          ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"3".repeat(64)}`]),
-        ),
-        privacyReleaseValidation,
-        ...releaseProvenance(),
-      };
-      writeFileSync(join(directory, `${releaseId}.json`), JSON.stringify(manifest), {
-        mode: 0o600,
-      });
-      const appliedCalls: string[][] = [];
-      const first = createDefaultReleaseEffects(
-        rootDir,
-        async (args) => {
-          appliedCalls.push([...args]);
-        },
-        {
-          afterReleasePhase: (phase) => {
-            if (phase === crashPhase) throw new Error("injected crash");
-          },
-          verifyAppliedRelease: async () => true,
-        },
-      );
-      await expect(
-        first.apply(
-          releaseId,
-          ["app-api"],
-          { execution: testExecution(), signal: new AbortController().signal, emitLog: vi.fn() },
-          "job-recovery",
-        ),
-      ).rejects.toThrow("injected crash");
-      expect(existsSync(join(directory, "transaction.json"))).toBe(true);
-
-      const recoveredCalls: string[][] = [];
-      const recovered = createDefaultReleaseEffects(
-        rootDir,
-        async (args) => {
-          appliedCalls.push([...args]);
-          recoveredCalls.push([...args]);
-        },
-        { verifyAppliedRelease: async () => true },
-      );
-      await recovered.initialize?.();
-      expect(appliedCalls).toEqual([["services", "update", "--no-deps", "app-api"]]);
-      expect(recoveredCalls).toHaveLength(
-        crashPhase === "prepared" || crashPhase === "overlay_written" ? 1 : 0,
-      );
-      expect(JSON.parse(readFileSync(join(directory, "current.json"), "utf8"))).toEqual({
-        releaseId,
-        updateJobId: "job-recovery",
-        digest: expect.stringMatching(/^[a-f0-9]{64}$/),
-      });
-      expect(existsSync(join(directory, "transaction.json"))).toBe(false);
-    },
-  );
-
-  it.each(["prepared", "overlay_written", "services_applied", "state_published"] as const)(
-    "fails closed at the %s boundary when the runtime no longer matches the release",
-    async (crashPhase) => {
-      const rootDir = temporaryRoot();
-      const directory = releaseState(rootDir).store;
-      mkdirSync(directory, { recursive: true, mode: 0o700 });
-      const releaseId = "release-recovery";
-      writeFileSync(
-        join(directory, `${releaseId}.json`),
-        JSON.stringify({
-          schemaVersion: 1,
-          release: releaseId,
-          images: Object.fromEntries(
-            [
-              "api",
-              "web",
-              "data-manager",
-              "ops-agent",
-              "privacy-backup",
-              "transitous-runner",
-              "transitous-tools",
-            ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"3".repeat(64)}`]),
-          ),
-          privacyReleaseValidation,
-          ...releaseProvenance(),
-        }),
-        { mode: 0o600 },
-      );
-      const first = createDefaultReleaseEffects(rootDir, async () => undefined, {
-        afterReleasePhase: (phase) => {
-          if (phase === crashPhase) throw new Error("injected crash");
-        },
-        verifyAppliedRelease: async () => true,
-      });
-      await expect(
-        first.apply(
-          releaseId,
-          ["app-api"],
-          { execution: testExecution(), signal: new AbortController().signal, emitLog: vi.fn() },
-          "job-recovery",
-        ),
-      ).rejects.toThrow("injected crash");
-
-      // A reboot, container disappearance, digest drift, or unreachable Docker
-      // between the crash and this recovery.
-      const recovered = createDefaultReleaseEffects(rootDir, async () => undefined, {
-        verifyAppliedRelease: async () => false,
-      });
-      await expect(recovered.initialize?.()).rejects.toThrow(
-        "Release recovery verification failed",
-      );
-      // The transaction is retained so a later attempt can still reconcile.
-      expect(existsSync(join(directory, "transaction.json"))).toBe(true);
-    },
-  );
-
-  it("rejects a release manifest replaced after the transaction was admitted", async () => {
-    const rootDir = temporaryRoot();
-    const directory = releaseState(rootDir).store;
-    mkdirSync(directory, { recursive: true, mode: 0o700 });
-    const releaseId = "release-recovery";
-    const manifestFor = (tag: string) =>
-      JSON.stringify({
-        schemaVersion: 1,
-        release: releaseId,
-        images: Object.fromEntries(
-          [
-            "api",
-            "web",
-            "data-manager",
-            "ops-agent",
-            "privacy-backup",
-            "transitous-runner",
-            "transitous-tools",
-          ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${tag.repeat(64)}`]),
-        ),
-        privacyReleaseValidation,
-        ...releaseProvenance(),
-      });
-    writeFileSync(join(directory, `${releaseId}.json`), manifestFor("3"), { mode: 0o600 });
-
-    const first = createDefaultReleaseEffects(rootDir, async () => undefined, {
-      afterReleasePhase: (phase) => {
-        if (phase === "overlay_written") throw new Error("injected crash");
-      },
-      verifyAppliedRelease: async () => true,
-    });
-    await expect(
-      first.apply(releaseId, ["app-api"], {
-        execution: testExecution(),
-        signal: new AbortController().signal,
-        emitLog: vi.fn(),
-      }),
-    ).rejects.toThrow("injected crash");
-
-    // Swap the manifest under the same release ID before recovery reopens it.
-    writeFileSync(join(directory, `${releaseId}.json`), manifestFor("7"), { mode: 0o600 });
-
-    const recovered = createDefaultReleaseEffects(rootDir, async () => undefined, {
-      verifyAppliedRelease: async () => true,
-    });
-    // Either binding may fire first; both refuse to act on the swapped bytes.
-    await expect(recovered.initialize?.()).rejects.toThrow(
-      /Release (authority|transaction) rejected/,
-    );
-  });
-
-  it.each(["rollback_overlay", "rollback_services"] as const)(
-    "recovers a crash at the durable %s release boundary",
-    async (crashPhase) => {
-      const rootDir = temporaryRoot();
-      const directory = releaseState(rootDir).store;
-      mkdirSync(directory, { recursive: true, mode: 0o700 });
-      const releaseId = `release-${crashPhase}`;
-      writeFileSync(
-        join(directory, `${releaseId}.json`),
-        JSON.stringify({
-          schemaVersion: 1,
-          release: releaseId,
-          images: Object.fromEntries(
-            [
-              "api",
-              "web",
-              "data-manager",
-              "ops-agent",
-              "privacy-backup",
-              "transitous-runner",
-              "transitous-tools",
-            ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"5".repeat(64)}`]),
-          ),
-          privacyReleaseValidation,
-          ...releaseProvenance(),
-        }),
-        { mode: 0o600 },
-      );
-      const overlay = releaseState(rootDir).overlay;
-      writeFileSync(overlay, "previous-overlay\n", { mode: 0o600 });
-      let updateAttempts = 0;
-      const first = createDefaultReleaseEffects(
-        rootDir,
-        async () => {
-          updateAttempts += 1;
-          if (updateAttempts === 1) throw new Error("injected update failure");
-        },
-        {
-          afterReleasePhase: (phase) => {
-            if (phase === crashPhase) throw new Error("injected crash");
-          },
-        },
-      );
-      await expect(
-        first.apply(
-          releaseId,
-          ["app-api"],
-          { execution: testExecution(), signal: new AbortController().signal, emitLog: vi.fn() },
-          `job-${crashPhase}`,
-        ),
-      ).rejects.toThrow("injected crash");
-      expect(existsSync(join(directory, "transaction.json"))).toBe(true);
-
-      const recovered = createDefaultReleaseEffects(rootDir, async () => {
-        updateAttempts += 1;
-      });
-      await recovered.initialize?.();
-      expect(updateAttempts).toBe(2);
-      expect(readFileSync(overlay, "utf8")).toBe("previous-overlay\n");
-      expect(existsSync(join(directory, "current.json"))).toBe(false);
-      expect(existsSync(join(directory, "transaction.json"))).toBe(false);
-    },
-  );
-
   it("inspects old, current, missing, and partial core images from fixed Docker targets", async () => {
     const rootDir = temporaryRoot();
     const releaseDirectory = releaseState(rootDir).store;
@@ -1478,7 +1207,7 @@ describe("administrative release runtime", () => {
       mode: 0o600,
     });
     const calls: string[][] = [];
-    const effects = createDefaultReleaseEffects(rootDir, async () => undefined, {
+    const effects = createDefaultReleaseEffects(rootDir, {
       runDocker: async (args) => {
         calls.push([...args]);
         const joined = args.join(" ");
@@ -1565,7 +1294,7 @@ describe("administrative release runtime", () => {
         }),
         { mode: 0o600 },
       );
-      return createDefaultReleaseEffects(rootDir, async () => undefined, { runDocker });
+      return createDefaultReleaseEffects(rootDir, { runDocker });
     }
 
     const context = () => ({
@@ -1669,57 +1398,7 @@ describe("administrative release runtime", () => {
     });
   });
 
-  it("binds stored release IDs and restores the exact overlay when application fails", async () => {
-    const rootDir = temporaryRoot();
-    const releaseDirectory = releaseState(rootDir).store;
-    mkdirSync(releaseDirectory, { recursive: true, mode: 0o700 });
-    const releaseId = "release-123";
-    writeFileSync(
-      join(releaseDirectory, `${releaseId}.json`),
-      JSON.stringify({
-        schemaVersion: 1,
-        release: releaseId,
-        images: Object.fromEntries(
-          [
-            "api",
-            "web",
-            "data-manager",
-            "ops-agent",
-            "privacy-backup",
-            "transitous-runner",
-            "transitous-tools",
-          ].map((name, index) => [
-            name,
-            `ghcr.io/openmapx/${name}@sha256:${String(index + 1).repeat(64)}`,
-          ]),
-        ),
-        privacyReleaseValidation,
-        ...releaseProvenance(),
-      }),
-      { mode: 0o600 },
-    );
-    const overlay = releaseState(rootDir).overlay;
-    writeFileSync(overlay, "previous-overlay\n", { mode: 0o600 });
-    let attempts = 0;
-    const effects = createDefaultReleaseEffects(rootDir, async () => {
-      attempts += 1;
-      if (attempts === 1) throw new Error("injected update failure");
-    });
-    expect(inspectReleaseAuthority(rootDir, releaseId)).toBe(true);
-    await expect(
-      effects.apply(
-        releaseId,
-        ["app-api"],
-        { execution: testExecution(), signal: new AbortController().signal, emitLog: vi.fn() },
-        "job-1",
-      ),
-    ).rejects.toThrow("injected update failure");
-    expect(readFileSync(overlay, "utf8")).toBe("previous-overlay\n");
-    expect(existsSync(join(releaseDirectory, "current.json"))).toBe(false);
-    expect(attempts).toBe(2);
-  });
-
-  it("owns release resolution, pull, inspection, application, and API replacement", async () => {
+  it("owns release resolution, release inspection and system inspection", async () => {
     const calls: string[] = [];
     const cli: string[][] = [];
     const runtime = createUnavailableRuntime();
@@ -1729,13 +1408,9 @@ describe("administrative release runtime", () => {
         cli.push([...args]);
       },
       releaseEffects: {
-        validateCandidate: async () => undefined,
         resolve: async () => {
           calls.push("resolve");
           return "release-123";
-        },
-        pull: async (releaseId) => {
-          calls.push(`pull:${releaseId}`);
         },
         inspect: async () => ({
           currentReleaseId: "release-old",
@@ -1758,20 +1433,12 @@ describe("administrative release runtime", () => {
             },
           ],
         }),
-        apply: async (releaseId, serviceIds) => {
-          calls.push(`apply:${releaseId}:${serviceIds.join(",")}`);
-        },
       },
     });
 
     await expect(
       dispatchOpsOperation(runtime, { kind: "release.resolve" }, context("release.resolve")),
     ).resolves.toEqual({ releaseId: "release-123" });
-    await dispatchOpsOperation(
-      runtime,
-      { kind: "release.pull", releaseId: "release-123" },
-      context("release.pull"),
-    );
     await expect(
       dispatchOpsOperation(runtime, { kind: "release.inspect" }, context("release.inspect")),
     ).resolves.toEqual({
@@ -1784,108 +1451,8 @@ describe("administrative release runtime", () => {
       dockerReachable: true,
       services: [{ serviceId: "app-api", state: "update_available" }],
     });
-    await dispatchOpsOperation(
-      runtime,
-      { kind: "release.apply", releaseId: "release-123" },
-      context("release.apply"),
-    );
-    await dispatchOpsOperation(
-      runtime,
-      { kind: "appApi.replace", releaseId: "release-123", updateJobId: "job-1" },
-      context("appApi.replace"),
-    );
-    expect(calls).toEqual([
-      "resolve",
-      "pull:release-123",
-      "apply:release-123:data-manager,app-web,transitous-runner,app-api",
-      "apply:release-123:app-api",
-    ]);
+    expect(calls).toEqual(["resolve"]);
     expect(cli).toEqual([]);
-  });
-
-  it("runs the optional backup before a single agent-owned system update", async () => {
-    const order: string[] = [];
-    const runtime = createUnavailableRuntime();
-    createAdministrativeRuntime(runtime, {
-      rootDir: temporaryRoot(),
-      runFixedCli: async (args) => {
-        order.push(`cli:${args.join(" ")}`);
-      },
-      releaseEffects: {
-        validateCandidate: async () => undefined,
-        resolve: async () => "release-123",
-        pull: async (releaseId) => {
-          order.push(`pull:${releaseId}`);
-        },
-        inspect: async () => ({}),
-        inspectSystem: async () => ({
-          dockerReachable: true,
-          composeReady: true,
-          maintenanceReady: true,
-          release: {},
-          services: [],
-        }),
-        apply: async (releaseId, serviceIds) => {
-          order.push(`apply:${releaseId}:${serviceIds.join(",")}`);
-        },
-      },
-    });
-    await expect(
-      dispatchOpsOperation(
-        runtime,
-        {
-          kind: "system.update",
-          expectedDigest: "a".repeat(64),
-          releaseId: "release-123",
-          createBackup: true,
-          backupId: "pre-update-job-1",
-        },
-        context("system.update"),
-      ),
-    ).resolves.toEqual({ releaseId: "release-123" });
-    expect(order).toEqual([
-      "cli:backup create --name pre-update-job-1",
-      "pull:release-123",
-      "apply:release-123:data-manager,app-web,transitous-runner,app-api",
-    ]);
-  });
-
-  it("does not apply a system update when release pulling fails", async () => {
-    const apply = vi.fn(async () => undefined);
-    const runtime = createUnavailableRuntime();
-    createAdministrativeRuntime(runtime, {
-      rootDir: temporaryRoot(),
-      runFixedCli: async () => undefined,
-      releaseEffects: {
-        validateCandidate: async () => undefined,
-        resolve: async () => "release-123",
-        pull: async () => {
-          throw new Error("collector pull failed");
-        },
-        inspect: async () => ({}),
-        inspectSystem: async () => ({
-          dockerReachable: true,
-          composeReady: true,
-          maintenanceReady: true,
-          release: {},
-          services: [],
-        }),
-        apply,
-      },
-    });
-    await expect(
-      dispatchOpsOperation(
-        runtime,
-        {
-          kind: "system.update",
-          expectedDigest: "a".repeat(64),
-          releaseId: "release-123",
-          createBackup: false,
-        },
-        context("system.update"),
-      ),
-    ).rejects.toThrow("collector pull failed");
-    expect(apply).not.toHaveBeenCalled();
   });
 });
 
@@ -1937,179 +1504,4 @@ describe("fixed CLI execution context", () => {
       await completion.catch(() => undefined);
     }
   });
-});
-
-it("never gives release recovery a fresh execution budget after restart expiry", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  const rootDir = temporaryRoot();
-  const releaseId = "release-expired-recovery";
-  const directory = releaseState(rootDir).store;
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  writeFileSync(
-    join(directory, `${releaseId}.json`),
-    JSON.stringify({
-      schemaVersion: 1,
-      release: releaseId,
-      images: Object.fromEntries(
-        [
-          "api",
-          "web",
-          "data-manager",
-          "ops-agent",
-          "privacy-backup",
-          "transitous-runner",
-          "transitous-tools",
-        ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`]),
-      ),
-      privacyReleaseValidation,
-      ...releaseProvenance(),
-    }),
-    { mode: 0o600 },
-  );
-  const execution = { ...testExecution(), deadlineAt: Date.now() + 1000 };
-  const runFixedCli = vi.fn(async () => undefined);
-  try {
-    const first = createDefaultReleaseEffects(rootDir, runFixedCli, {
-      afterReleasePhase: (phase) => {
-        if (phase === "overlay_written") throw Error("crash");
-      },
-    });
-    await expect(
-      first.apply(releaseId, ["app-api"], {
-        signal: new AbortController().signal,
-        emitLog: () => undefined,
-        execution,
-      }),
-    ).rejects.toThrow("crash");
-    vi.setSystemTime(Date.now() + 2000);
-    const recovered = createDefaultReleaseEffects(rootDir, runFixedCli);
-    await expect(recovered.initialize?.()).rejects.toMatchObject({
-      name: "OpsExecutionFailure",
-      errorClass: "timeout",
-    });
-    expect(runFixedCli).not.toHaveBeenCalled();
-    expect(existsSync(join(directory, "transaction.json"))).toBe(true);
-  } finally {
-    vi.useRealTimers();
-  }
-});
-
-describe("fix1 legacy release recovery", () => {
-  it.each(["overlay_written", "rollback_services"])(
-    "refuses legacy %s effects without a retained deadline",
-    async (phase) => {
-      const rootDir = temporaryRoot();
-      const releaseId = "release-legacy-unknown";
-      const directory = releaseState(rootDir).store;
-      mkdirSync(directory, { recursive: true, mode: 0o700 });
-      writeFileSync(
-        join(directory, `${releaseId}.json`),
-        JSON.stringify({
-          schemaVersion: 1,
-          release: releaseId,
-          images: Object.fromEntries(
-            [
-              "api",
-              "web",
-              "data-manager",
-              "ops-agent",
-              "privacy-backup",
-              "transitous-runner",
-              "transitous-tools",
-            ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`]),
-          ),
-          privacyReleaseValidation,
-          ...releaseProvenance(),
-        }),
-        { mode: 0o600 },
-      );
-      const first = createDefaultReleaseEffects(rootDir, async () => undefined, {
-        afterReleasePhase: (p) => {
-          if (p === "overlay_written") throw Error("fixture crash");
-        },
-      });
-      await expect(
-        first.apply(releaseId, ["app-api"], {
-          signal: new AbortController().signal,
-          emitLog: () => undefined,
-        }),
-      ).rejects.toThrow("fixture crash");
-      const transaction = join(directory, "transaction.json");
-      const record = JSON.parse(readFileSync(transaction, "utf8"));
-      record.phase = phase;
-      writeFileSync(transaction, JSON.stringify(record), { mode: 0o644 });
-      const overlay = releaseState(rootDir).overlay;
-      writeFileSync(overlay, "operator-state\n", { mode: 0o644 });
-      const run = vi.fn(async () => undefined);
-      const recovered = createDefaultReleaseEffects(rootDir, run, {
-        verifyAppliedRelease: async () => true,
-      });
-      await expect(recovered.initialize?.()).rejects.toMatchObject({
-        name: "OpsExecutionFailure",
-        errorClass: "recovery_required",
-      });
-      expect(run).not.toHaveBeenCalled();
-      expect(readFileSync(overlay, "utf8")).toBe("operator-state\n");
-      expect(existsSync(transaction)).toBe(true);
-    },
-  );
-});
-
-it("fix1 recovery cannot publish after verification consumes the remaining deadline", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  const rootDir = temporaryRoot();
-  const releaseId = "release-verification-expiry";
-  const directory = releaseState(rootDir).store;
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  writeFileSync(
-    join(directory, `${releaseId}.json`),
-    JSON.stringify({
-      schemaVersion: 1,
-      release: releaseId,
-      images: Object.fromEntries(
-        [
-          "api",
-          "web",
-          "data-manager",
-          "ops-agent",
-          "privacy-backup",
-          "transitous-runner",
-          "transitous-tools",
-        ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`]),
-      ),
-      privacyReleaseValidation,
-      ...releaseProvenance(),
-    }),
-    { mode: 0o600 },
-  );
-  const execution = { ...testExecution(), deadlineAt: Date.now() + 1000 };
-  try {
-    const first = createDefaultReleaseEffects(rootDir, async () => undefined, {
-      afterReleasePhase: (phase) => {
-        if (phase === "overlay_written") throw Error("fixture crash");
-      },
-    });
-    await expect(
-      first.apply(releaseId, ["app-api"], {
-        execution,
-        signal: new AbortController().signal,
-        emitLog: () => undefined,
-      }),
-    ).rejects.toThrow("fixture crash");
-    const path = join(directory, "transaction.json");
-    const record = JSON.parse(readFileSync(path, "utf8"));
-    record.phase = "services_applied";
-    writeFileSync(path, JSON.stringify(record), { mode: 0o644 });
-    const recovered = createDefaultReleaseEffects(rootDir, async () => undefined, {
-      verifyAppliedRelease: async () => {
-        vi.setSystemTime(Date.now() + 2000);
-        return true;
-      },
-    });
-    await expect(recovered.initialize?.()).rejects.toMatchObject({ errorClass: "timeout" });
-    expect(existsSync(join(directory, "current.json"))).toBe(false);
-    expect(existsSync(path)).toBe(true);
-  } finally {
-    vi.useRealTimers();
-  }
 });

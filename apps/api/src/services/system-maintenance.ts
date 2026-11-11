@@ -33,10 +33,6 @@ export async function handleSystemUpdateJob(ctx: JobContext): Promise<Record<str
     !/^[a-f0-9]{64}$/.test(payload.expectedDigest)
   )
     throw new Error("Check a release before applying it");
-  if (ctx.payload.workflow !== "guarded-release") {
-    const { JobObservationPending } = await import("./admin-job-failure");
-    throw new JobObservationPending("recovery_required");
-  }
   const { runGuardedSystemRelease } = await import("./system-release-application");
   return runGuardedSystemRelease(ctx);
 }

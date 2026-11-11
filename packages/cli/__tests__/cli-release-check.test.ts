@@ -122,16 +122,6 @@ describe("CLI checked candidates without selection", () => {
     },
   );
 
-  it("refuses an active transaction before contacting the registry", async () => {
-    const f = fixture();
-    writeFileSync(join(f.paths.store, "transaction.json"), "{}", { mode: 0o600 });
-    await expect(release.checkRelease({ infraDir: f.infraDir, docker: f.docker })).rejects.toThrow(
-      /transaction/i,
-    );
-    expect(f.docker).not.toHaveBeenCalled();
-    expect(existsSync(join(f.paths.store, "candidate.json"))).toBe(false);
-  });
-
   it("refuses a configured selector that changes during resolution", async () => {
     const f = fixture(() => vi.stubEnv("OPENMAPX_RELEASE", "preview"));
     await expect(release.checkRelease({ infraDir: f.infraDir, docker: f.docker })).rejects.toThrow(

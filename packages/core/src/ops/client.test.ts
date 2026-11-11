@@ -149,7 +149,7 @@ describe("ops client", () => {
       });
       await expect(
         client.execute(
-          { kind: "release.apply", releaseId: "release-123" },
+          { kind: "release.clear", releaseId: "release-123" },
           { operationKey: "opk1_hostUpdateRequired" },
         ),
       ).rejects.toMatchObject({

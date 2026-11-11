@@ -1286,19 +1286,15 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         context = { signal: new AbortController().signal, emitLog() {} },
         before = services.currentConfigurationGeneration(host.infraDir),
         originalFiles = readdirSync(directory).sort(),
-        outcome = await effects.apply("interlock-release", ["app-api"], context).then(
+        outcome = await effects.resolve(context).then(
           () => null,
           (error) => error,
         );
       expect(existsSync(host.stack.composeReleasePath)).toBe(false);
-      expect(existsSync(join(directory, "transaction.json"))).toBe(false);
       expect(services.currentConfigurationGeneration(host.infraDir)).toBe(before);
       expect(readdirSync(directory).sort()).toEqual(originalFiles);
       expect(readFileSync(pullPath)).toEqual(originalPull);
       expect(outcome).toMatchObject({ errorClass: "configuration_prerequisite" });
-      await expect(effects.resolve(context)).rejects.toMatchObject({
-        errorClass: "configuration_prerequisite",
-      });
       const repair = await api.inject({
         method: "POST",
         url: "/api/admin/services/bulk-action",
@@ -1309,14 +1305,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
       expect((await finished(repair.json().jobId)).status).toBe("success");
-      const { OpsNotWiredError } = await import("../../../../ops-agent/src/runtime");
-      await expect(effects.apply("interlock-release", ["app-api"], context)).rejects.toBeInstanceOf(
-        OpsNotWiredError,
-      );
-      expect(existsSync(host.stack.composeReleasePath)).toBe(false);
-      expect(existsSync(join(directory, "transaction.json"))).toBe(false);
       // Local release selection keeps its existing refusal after the real DM
-      // prerequisite is resolved; no release/app update permission is added.
+      // prerequisite is resolved.
       await expect(effects.resolve(context)).rejects.toBeInstanceOf(
         services.ReleaseChannelDisabledError,
       );

@@ -7,8 +7,8 @@ import { CURRENT_CONFIGURATION } from "./deployment";
  * `infra/docker/state/ops-agent/releases`. It holds
  *
  * - `store/`, the release manifests the agent resolved and its pointers to
- *   them (`current.json`, `latest.json`, `transaction.json`,
- *   `selections.json`), with the store lock;
+ *   them (`current.json`, `latest.json`, `selections.json`), with the store
+ *   lock;
  * - `docker-compose.release.yml`, the overlay pinning the selected release;
  * - `evidence/`, the immutable privacy release-validation files the overlay
  *   mounts.
@@ -24,7 +24,6 @@ export const RELEASE_OVERLAY_FILE = "docker-compose.release.yml";
 export const RELEASE_STORE_POINTER_FILES = [
   "current.json",
   "latest.json",
-  "transaction.json",
   "selections.json",
 ] as const;
 export const RELEASE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
@@ -34,7 +33,6 @@ export const RELEASE_STORE_LIMITS = {
   entries: 64,
   manifestBytes: 32 * 1024,
   stateBytes: 4 * 1024,
-  transactionBytes: 128 * 1024,
   selectionsBytes: 32 * 1024,
 } as const;
 

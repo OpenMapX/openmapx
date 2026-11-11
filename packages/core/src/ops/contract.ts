@@ -144,13 +144,9 @@ export const OPS_OPERATION_KINDS = [
   "service.logs.follow",
   "dawarich.provisioning.inspect",
   "release.resolve",
-  "release.pull",
   "release.images.pull",
   "release.inspect",
   "release.clear",
-  "release.apply",
-  "appApi.replace",
-  "appApi.runtime.inspect",
   "backup.list",
   "backup.create",
   "backup.restore",
@@ -159,7 +155,6 @@ export const OPS_OPERATION_KINDS = [
   "backup.prune",
   "system.diagnostics",
   "system.inspect",
-  "system.update",
   "serviceRepository.inspect",
   "serviceRepository.publish",
   "serviceRepository.settle",
@@ -295,13 +290,9 @@ export const OPS_KIND_POLICIES = {
   "service.logs.follow": asyncEffect("api", 15 * 60_000, 64 * 1024),
   "dawarich.provisioning.inspect": sync("api", 30_000),
   "release.resolve": asyncEffect("api", 2 * 60_000),
-  "release.pull": asyncEffect("api", 15 * 60_000),
   "release.images.pull": asyncEffect("api", 30 * 60_000),
   "release.inspect": sync("api", 30_000, 256 * 1024),
   "release.clear": asyncEffect("api", 30_000),
-  "release.apply": asyncEffect("api", 30 * 60_000),
-  "appApi.replace": asyncEffect("api", 10 * 60_000),
-  "appApi.runtime.inspect": sync("api", 30_000),
   "backup.list": sync("api", 30_000, 256 * 1024),
   "backup.create": asyncEffect("api", 30 * 60_000),
   "backup.restore": asyncEffect("api", 30 * 60_000),
@@ -310,7 +301,6 @@ export const OPS_KIND_POLICIES = {
   "backup.prune": asyncEffect("api", 5 * 60_000, 16384),
   "system.diagnostics": asyncEffect("api", 10 * 60_000, 256 * 1024),
   "system.inspect": sync("api", 30_000, 256 * 1024),
-  "system.update": asyncEffect("api", 48 * 3600_000),
   "serviceRepository.inspect": asyncEffect("api", 5 * 60_000, 1024 * 1024),
   "serviceRepository.publish": asyncEffect("api", 10 * 60_000),
   "serviceRepository.settle": asyncEffect("api", 5 * 60_000),
@@ -572,7 +562,6 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   }),
   kindOnly("dawarich.provisioning.inspect"),
   kindOnly("release.resolve"),
-  z.strictObject({ kind: z.literal("release.pull"), releaseId: stableIdSchema }),
   // Downloads the checked release's images ahead of any maintenance, so a registry
   // outage fails an update before it has stopped or changed anything.
   z.strictObject({
@@ -582,13 +571,6 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   }),
   kindOnly("release.inspect"),
   z.strictObject({ kind: z.literal("release.clear"), releaseId: stableIdSchema }),
-  z.strictObject({ kind: z.literal("release.apply"), releaseId: stableIdSchema }),
-  z.strictObject({
-    kind: z.literal("appApi.replace"),
-    releaseId: stableIdSchema,
-    updateJobId: stableIdSchema,
-  }),
-  kindOnly("appApi.runtime.inspect"),
   kindOnly("backup.list"),
   z.strictObject({ kind: z.literal("backup.create"), backupId: backupIdSchema }),
   z.strictObject({
@@ -602,13 +584,6 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("backup.prune"), proof: backupPruneProofSchema }),
   kindOnly("system.diagnostics"),
   kindOnly("system.inspect"),
-  z.strictObject({
-    kind: z.literal("system.update"),
-    releaseId: stableIdSchema,
-    expectedDigest: z.string().regex(/^[a-f0-9]{64}$/),
-    createBackup: z.boolean(),
-    backupId: backupIdSchema.optional(),
-  }),
   // Clones a repository into staging, validates its services and discards the
   // clone. Validation problems are part of the result, not a failure.
   z.strictObject({
@@ -852,13 +827,6 @@ export function parseOpsRequest(input: unknown, options: { role: OpsRole }): Ops
     throw new OpsContractError("authorization", "Operation is not permitted for this role");
   const parsed = opsRequestSchema.safeParse(input);
   if (!parsed.success) throw new OpsContractError("validation", "Invalid operations request");
-  if (
-    parsed.data.operation.kind === "system.update" &&
-    ((parsed.data.operation.createBackup && parsed.data.operation.backupId === undefined) ||
-      (!parsed.data.operation.createBackup && parsed.data.operation.backupId !== undefined))
-  ) {
-    throw new OpsContractError("validation", "Invalid operations request");
-  }
   return parsed.data;
 }
 
@@ -873,16 +841,7 @@ export interface OpsResourcePolicy {
   ) => PolicyResult;
   allowPreparedRun?: (preparedRunId: string) => PolicyResult;
   allowCandidate?: (candidateId: string) => PolicyResult;
-  allowRelease?: (
-    kind:
-      | "release.pull"
-      | "release.images.pull"
-      | "release.apply"
-      | "appApi.replace"
-      | "system.update",
-    releaseId: string,
-  ) => PolicyResult;
-  allowUpdateJobId?: (updateJobId: string) => PolicyResult;
+  allowRelease?: (kind: "release.images.pull", releaseId: string) => PolicyResult;
   allowRegion?: (kind: OpsOperationKind, regionId: string) => PolicyResult;
   allowCountry?: (kind: "data.update", countryCode: string) => PolicyResult;
   allowDataType?: (dataTypeId: string) => PolicyResult;
@@ -930,22 +889,8 @@ export async function authorizeOpsResources(
       return allowed(policy.allowPreparedRun?.(operation.preparedRunId));
     case "feedProxy.validateAndReload":
       return allowed(policy.allowCandidate?.(operation.candidateId));
-    case "release.pull":
     case "release.images.pull":
-    case "release.apply":
       return allowed(policy.allowRelease?.(operation.kind, operation.releaseId));
-    case "appApi.replace":
-      return (
-        (await allowed(policy.allowRelease?.(operation.kind, operation.releaseId))) &&
-        allowed(policy.allowUpdateJobId?.(operation.updateJobId))
-      );
-    case "system.update":
-      return (
-        (await allowed(policy.allowRelease?.(operation.kind, operation.releaseId))) &&
-        (!operation.createBackup ||
-          (operation.backupId !== undefined &&
-            (await allowed(policy.allowBackup?.("backup.create", operation.backupId)))))
-      );
     case "stack.render":
     case "serviceSelection.apply":
       return allowed(policy.allowTrustedRevision?.(operation.kind, operation.revisionId));
@@ -1230,7 +1175,6 @@ export const OPS_RESULT_SCHEMAS = {
     }),
   }),
   "release.resolve": release,
-  "release.pull": release,
   "release.images.pull": z.strictObject({
     images: z
       .array(
@@ -1254,12 +1198,6 @@ export const OPS_RESULT_SCHEMAS = {
       .optional(),
   }),
   "release.clear": z.strictObject({ releaseId: stableIdSchema, cleared: z.literal(true) }),
-  "release.apply": release,
-  "appApi.replace": z.strictObject({ updateJobId: stableIdSchema, replaced: z.boolean() }),
-  "appApi.runtime.inspect": z.strictObject({
-    releaseId: stableIdSchema.optional(),
-    updateJobId: stableIdSchema.optional(),
-  }),
   "backup.list": z.strictObject({
     backups: z.array(backupInventoryEntry).max(OPS_MAX_BACKUP_INVENTORY_ENTRIES),
     warningCount: z.number().int().min(0).max(OPS_MAX_BACKUP_INVENTORY_ENTRIES),
@@ -1309,7 +1247,6 @@ export const OPS_RESULT_SCHEMAS = {
           new Set(services.map((service) => service.serviceId)).size === services.length,
       ),
   }),
-  "system.update": release,
   "serviceRepository.inspect": z.strictObject({
     url: gitRepositoryUrlSchema,
     repository: repositoryIdSchema,

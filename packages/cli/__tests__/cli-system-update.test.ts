@@ -318,17 +318,6 @@ it("resumes an observation timeout without making another backup, preview or app
   await runSystemUpdate({ ...f.options, resume: true, timeoutMs: 10000 });
   expect(f.counts()).toEqual(before);
 });
-it("refuses local release transaction evidence before the first POST", async () => {
-  const f = await fixture();
-  writeFileSync(
-    join(services.releaseStatePaths(f.options.infraDir).store, "transaction.json"),
-    "{}",
-    { mode: 0o600 },
-  );
-  await expect(runSystemUpdate(f.options)).rejects.toThrow();
-  expect(f.requests.every((r) => r.method !== "POST")).toBe(true);
-});
-
 it("replays an unknown apply acceptance with its original key and exact reviewed body", async () => {
   const f = await fixture("lost-apply");
   await runSystemUpdate(f.options);

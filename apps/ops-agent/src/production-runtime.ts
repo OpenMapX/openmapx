@@ -1,4 +1,4 @@
-import { existsSync, lstatSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { type OpsOperation, SERVICE_ACTIONS, type ServiceActionDecision } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
@@ -38,12 +38,7 @@ import { ServiceLifecycleExclusion } from "./lifecycle-exclusion";
 import { createOwnedServiceResolver, type OwnedServiceResolver } from "./owned-services";
 import { installPlatformConfigurationRuntime } from "./platform-configuration-runtime";
 import { serviceActionForOperation } from "./policy";
-import {
-  type OpsExecutionContext,
-  OpsExecutionFailure,
-  OpsNotWiredError,
-  type OpsRuntime,
-} from "./runtime";
+import { type OpsExecutionContext, OpsExecutionFailure, type OpsRuntime } from "./runtime";
 import { decideServiceAction, type ServiceAuthority } from "./service-action-policy";
 import { installServiceLifecycleRuntime } from "./service-lifecycle-runtime";
 import {
@@ -83,25 +78,17 @@ export async function productionRegisteredServiceIds(runtime: OpsRuntime): Promi
 const resolvers = new WeakMap<OpsRuntime, OwnedServiceResolver>();
 const releaseAdapters = new WeakMap<OpsRuntime, AdministrativeReleaseEffects>();
 
-/** The legacy engine remains an internal building block for08.3. Production
- * never runs its mutation/recovery branches without that guarded installer. */
+/** Release resolution and the selection clear run under the configuration
+ * generation writer, after the staged-coordinator release-write check. */
 function installReleaseCapabilityBoundary(
   runtime: OpsRuntime,
   rootDir: string,
   infraDir: string,
-  legacy: AdministrativeReleaseEffects,
+  base: AdministrativeReleaseEffects,
   owned: OwnedServiceResolver,
   execFile: NonNullable<DockerRuntimeOptions["execFile"]>,
 ): AdministrativeReleaseEffects {
   const directory = services.releaseStatePaths(infraDir).store;
-  const assertLegacyRecoveryComplete = () => {
-    try {
-      lstatSync(join(directory, "transaction.json"));
-      throw new OpsExecutionFailure("recovery_required", {});
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-  };
   const withSource = async <T>(signal: AbortSignal, action: () => Promise<T>): Promise<T> => {
     try {
       return await services.withConfigurationGenerationWriter(
@@ -129,7 +116,6 @@ function installReleaseCapabilityBoundary(
   };
   runtime["release.clear"] = async (operation, context) =>
     withSource(context.signal, async () => {
-      assertLegacyRecoveryComplete();
       context.signal.throwIfAborted();
       const result = await services.clearReleaseComposeSelection({
         path: services.releaseStatePaths(infraDir).overlay,
@@ -138,27 +124,14 @@ function installReleaseCapabilityBoundary(
       if (!result.cleared) throw Error("Release selection changed");
       return { releaseId: operation.releaseId, cleared: true as const };
     });
-  const unavailable = async (signal: AbortSignal): Promise<never> => {
-    // The successful observation grants no continuation authority. No legacy
-    // transaction, helper launch, backup or image pull follows this check.
-    await withSource(signal, async () => undefined);
-    throw new OpsNotWiredError();
-  };
   return {
-    ...legacy,
-    initialize: async () => {
-      // Inspection bypasses the legacy cached initializer, which may replay
-      // fixed CLI under the release lock or mutate handoff evidence.
-      await legacy.inspect();
-      assertLegacyRecoveryComplete();
-    },
-    resolve: (context) => withSource(context.signal, () => legacy.resolve(context)),
+    ...base,
+    resolve: (context) => withSource(context.signal, () => base.resolve(context)),
     inspectSystem: async (context) => {
-      const inspection = await legacy.inspectSystem(context);
+      const inspection = await base.inspectSystem(context);
       let maintenanceReady = false;
       if (inspection.dockerReachable && inspection.composeReady)
         try {
-          assertLegacyRecoveryComplete();
           const containers = await owned.inspectOwnedServices(context.signal),
             agent = containers.find((row) => row.serviceId === "ops-agent"),
             coordinator = containers.find((row) => row.serviceId === "data-manager");
@@ -185,8 +158,6 @@ function installReleaseCapabilityBoundary(
         }
       return { ...inspection, maintenanceReady };
     },
-    pull: (_releaseId, context) => unavailable(context.signal),
-    apply: (_releaseId, _serviceIds, context) => unavailable(context.signal),
   };
 }
 export function productionReleaseEffects(runtime: OpsRuntime): AdministrativeReleaseEffects {
@@ -313,7 +284,7 @@ export async function createProductionOpsRuntime(
     runtime,
     options.rootDir,
     options.stack.infraDir,
-    createDefaultReleaseEffects(options.rootDir, runFixedCli, options.releaseRuntimeOptions),
+    createDefaultReleaseEffects(options.rootDir, options.releaseRuntimeOptions),
     owned,
     options.docker?.execFile ?? runContainedProcess,
   );
@@ -352,12 +323,6 @@ export async function createProductionOpsRuntime(
       }));
     },
   });
-  // system.update's legacy handler performs backup/pull before apply. Refuse
-  // that entire branch through the same actual source boundary before effects.
-  runtime["system.update"] = async (_operation, context) => {
-    await releaseEffects.apply(_operation.releaseId, ["app-api"], context);
-    throw new OpsNotWiredError();
-  };
   runtime["services.inspect"] = async (_operation, context) => {
     const authority = serviceActionAuthority(await options.loadAuthority(), options.stack.infraDir);
     const snapshots = await owned.inspectOwnedServices(context.signal);

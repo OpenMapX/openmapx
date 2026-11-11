@@ -190,11 +190,11 @@ describe("administrative job operations broker", () => {
     const ctx = context();
     const operationKey = "opk1_abcdefghijklmnop";
     const operationId = "job1_abcdefghijklmnop";
-    seedProjection(ctx, operationKey, "system.update", operationId);
+    seedProjection(ctx, operationKey, "release.images.pull", operationId);
     const client = {
       execute: vi.fn().mockResolvedValue({
         execution: "async",
-        kind: "system.update",
+        kind: "release.images.pull",
         operationId,
         operationKey,
         state: "queued",
@@ -203,7 +203,7 @@ describe("administrative job operations broker", () => {
         version: 1,
         operationId,
         operationKey,
-        kind: "system.update",
+        kind: "release.images.pull",
         resourceId: "release-123",
         state: "failed",
         errorClass: "host_update_required",
@@ -225,12 +225,11 @@ describe("administrative job operations broker", () => {
       executeAdminJobOperation(
         ctx,
         {
-          kind: "system.update",
+          kind: "release.images.pull",
           releaseId: "release-123",
-          expectedDigest: "a".repeat(64),
-          createBackup: false,
+          manifestDigest: "a".repeat(64),
         },
-        "admin-job.system.update",
+        "admin-job.release.images.pull",
         { client: client as never, operationKey, pollIntervalMs: 1 },
       ),
     ).rejects.toMatchObject({

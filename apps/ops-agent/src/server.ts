@@ -224,7 +224,6 @@ const RELEASE_RECOVERY_READ_KINDS = new Set<OpsOperationKind>([
   "service.logs.follow",
   "dawarich.provisioning.inspect",
   "release.inspect",
-  "appApi.runtime.inspect",
   "backup.list",
   "system.inspect",
   "communityServices.inspect",

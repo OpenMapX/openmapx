@@ -34,7 +34,7 @@ export type ControlChildPhase =
   | "data-step"
   | "configuration-handoff";
 export const childPhaseKinds: Readonly<Record<ControlChildPhase, readonly string[]>> = {
-  lifecycle: ["service.start", "service.update", "system.update"],
+  lifecycle: ["service.start", "service.update"],
   build: ["service.build", "services.buildAll"],
   "data-link": ["data.link", "configuration.hardlinks.apply"],
   "data-clean": ["data.clean"],

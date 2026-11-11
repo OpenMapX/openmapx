@@ -1,13 +1,5 @@
 import { createHash } from "node:crypto";
-import {
-  linkSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { linkSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CONFIGURATION_RELEASE_IMAGE_NAMES } from "@openmapx/core/ops";
@@ -440,36 +432,6 @@ it.each([false, true])(
     expect(await run()).toMatchObject({ releaseId, manifestDigest });
   },
 );
-
-it("preserves an unfinished legacy release transaction during guarded preflight", async () => {
-  const { preflightConfigurationRelease } = await import("./configuration-release-preflight");
-  const checkout = join(root, "legacy-checkout"),
-    infraDir = join(checkout, "infra/docker"),
-    store = services.releaseStatePaths(infraDir).store;
-  mkdirSync(store, { recursive: true, mode: 0o700 });
-  writeFileSync(join(store, `${releaseId}.json`), raw, { mode: 0o600 });
-  const legacy = join(store, "transaction.json");
-  writeFileSync(legacy, JSON.stringify({ version: 1, phase: "prepared" }), { mode: 0o600 });
-  const before = readFileSync(legacy);
-  expect(() =>
-    services.readCheckedConfigurationRelease(
-      infraDir,
-      { releaseId, manifestDigest },
-      services.readAppliedReleaseSelection(infraDir),
-    ),
-  ).toThrow(/legacy/i);
-  const execFile = vi.fn(async () => ({ stdout: "", stderr: "" }));
-  await expect(
-    preflightConfigurationRelease({
-      infraDir,
-      selection: { releaseId, manifestDigest },
-      execFile,
-      signal: new AbortController().signal,
-    }),
-  ).rejects.toThrow(/legacy/i);
-  expect(execFile).not.toHaveBeenCalled();
-  expect(readFileSync(legacy)).toEqual(before);
-});
 
 function frozenIo(options: { missing?: boolean } = {}) {
   const calls: string[][] = [];

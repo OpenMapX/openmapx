@@ -188,7 +188,7 @@ describe("operation-specific authority policy", () => {
     expect(trustedClaims).toEqual([]);
   });
 
-  it("uses agent-owned release and update-job authority without a caller snapshot", async () => {
+  it("uses agent-owned release and backup authority without a caller snapshot", async () => {
     const trustedClaims: string[] = [];
     const claimer = createRegistryResourceClaimer({
       serviceIds: [],
@@ -196,7 +196,6 @@ describe("operation-specific authority policy", () => {
       resourceAuthority: {
         allowRelease: (_kind, releaseId) => releaseId === "release-123",
         allowBackup: (_kind, backupId) => backupId === "pre-update-job-1",
-        allowUpdateJobId: (updateJobId) => updateJobId === "job-1",
       },
       trustedData: {
         claim: async (operation) => {
@@ -207,23 +206,14 @@ describe("operation-specific authority policy", () => {
     });
     const signal = new AbortController().signal;
     for (const operation of [
-      { kind: "release.pull", releaseId: "release-123" },
       { kind: "release.images.pull", releaseId: "release-123", manifestDigest: "a".repeat(64) },
-      { kind: "release.apply", releaseId: "release-123" },
-      { kind: "appApi.replace", releaseId: "release-123", updateJobId: "job-1" },
-      {
-        kind: "system.update",
-        expectedDigest: "a".repeat(64),
-        releaseId: "release-123",
-        createBackup: true,
-        backupId: "pre-update-job-1",
-      },
+      { kind: "backup.create", backupId: "pre-update-job-1" },
     ] as const) {
       await expect(claimer.claim(operation, "r".repeat(64), signal)).resolves.not.toBeNull();
     }
     await expect(
       claimer.claim(
-        { kind: "appApi.replace", releaseId: "release-123", updateJobId: "other" },
+        { kind: "release.images.pull", releaseId: "other", manifestDigest: "a".repeat(64) },
         "s".repeat(64),
         signal,
       ),

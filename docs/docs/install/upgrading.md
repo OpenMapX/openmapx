@@ -210,7 +210,7 @@ The check pulls only the small metadata image, validates the seven immutable
 image pins and privacy evidence, and caches the canonical manifest. It prints a
 **Checked release** ID and a **Manifest digest**. It does not write the release
 overlay, download application images or replace containers. Configuration changes
-or an active release transaction require inspection before checking again.
+require inspection before checking again.
 
 Create a private directory for the client receipt and an operator-provided
 session file:

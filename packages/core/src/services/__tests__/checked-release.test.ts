@@ -170,14 +170,7 @@ describe("checked release cache publication", () => {
     },
   );
 
-  it("does not invent transaction policy inside the shared legacy cache publisher", async () => {
-    const f = await fixture();
-    writeFileSync(join(f.paths.store, "transaction.json"), "{}", { mode: 0o600 });
-    expect(services.cacheCheckedReleaseManifest(f.input).releaseId).toBe("checked-release");
-    expect(readFileSync(join(f.paths.store, "transaction.json"), "utf8")).toBe("{}");
-  });
-
-  it.each(["current", "latest", "selections", "transaction"])(
+  it.each(["current", "latest", "selections"])(
     "never publishes a manifest over reserved state (%s)",
     async (release) => {
       const f = await fixture();

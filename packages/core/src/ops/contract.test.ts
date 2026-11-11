@@ -305,7 +305,6 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   },
   "dawarich.provisioning.inspect": { kind: "dawarich.provisioning.inspect" },
   "release.resolve": { kind: "release.resolve" },
-  "release.pull": { kind: "release.pull", releaseId: "2026.08.23" },
   "release.images.pull": {
     kind: "release.images.pull",
     releaseId: "2026.08.23",
@@ -313,13 +312,6 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   },
   "release.inspect": { kind: "release.inspect" },
   "release.clear": { kind: "release.clear", releaseId: "checked-release" },
-  "release.apply": { kind: "release.apply", releaseId: "2026.08.23" },
-  "appApi.replace": {
-    kind: "appApi.replace",
-    releaseId: "2026.08.23",
-    updateJobId: "update_20260823",
-  },
-  "appApi.runtime.inspect": { kind: "appApi.runtime.inspect" },
   "backup.list": { kind: "backup.list" },
   "backup.create": { kind: "backup.create", backupId: "pre-update-20260823" },
   "backup.restore": {
@@ -342,13 +334,6 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
   },
   "system.diagnostics": { kind: "system.diagnostics" },
   "system.inspect": { kind: "system.inspect" },
-  "system.update": {
-    kind: "system.update",
-    expectedDigest: "a".repeat(64),
-    releaseId: "2026.08.23",
-    createBackup: true,
-    backupId: "pre-update-20260823",
-  },
   "serviceRepository.inspect": {
     kind: "serviceRepository.inspect",
     url: "https://github.com/example/maps-services",
@@ -744,69 +729,6 @@ describe("ops contract", () => {
         parseOpsResult("backup.list", { backups: [invalidEntry], warningCount: 0 }),
       ).toThrow();
     }
-  });
-
-  it("binds the system-update backup option without accepting an implicit path", () => {
-    expect(
-      parseOpsRequest(
-        request({
-          kind: "system.update",
-          expectedDigest: "a".repeat(64),
-          releaseId: "release-1",
-          createBackup: true,
-          backupId: "pre-update-job-1",
-        }),
-        { role: "api" },
-      ).operation,
-    ).toMatchObject({ createBackup: true, backupId: "pre-update-job-1" });
-    expect(
-      parseOpsRequest(
-        request({
-          kind: "system.update",
-          expectedDigest: "a".repeat(64),
-          releaseId: "release-1",
-          createBackup: false,
-        }),
-        { role: "api" },
-      ).operation,
-    ).toEqual({
-      kind: "system.update",
-      expectedDigest: "a".repeat(64),
-      releaseId: "release-1",
-      createBackup: false,
-    });
-    for (const operation of [
-      {
-        kind: "system.update",
-        expectedDigest: "a".repeat(64),
-        releaseId: "release-1",
-        createBackup: true,
-      },
-      {
-        kind: "system.update",
-        expectedDigest: "a".repeat(64),
-        releaseId: "release-1",
-        createBackup: false,
-        backupId: "unexpected",
-      },
-      {
-        kind: "system.update",
-        expectedDigest: "a".repeat(64),
-        releaseId: "release-1",
-        createBackup: false,
-        path: "/host",
-      },
-    ]) {
-      expect(() => parseOpsRequest(request(operation), { role: "api" })).toThrow();
-    }
-    expect(
-      opsResourceId({
-        kind: "system.update",
-        expectedDigest: "a".repeat(64),
-        releaseId: "release-1",
-        createBackup: false,
-      }),
-    ).toBe("release-1");
   });
 
   it("accepts bounded data inventory paging and validates its typed result", () => {

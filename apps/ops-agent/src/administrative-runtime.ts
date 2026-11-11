@@ -36,11 +36,9 @@ import {
   executionRefSchema,
   OPS_MAX_BACKUP_ID_LENGTH,
   OPS_MAX_BACKUP_INVENTORY_ENTRIES,
-  OPS_PUBLIC_ERROR_MESSAGES,
   type OpsOperationKind,
   type OpsResultFor,
 } from "@openmapx/core/ops";
-import { atomicWrite, durableUnlink } from "@openmapx/core/release-files";
 import { services as coreServices } from "@openmapx/core/server";
 import { inspectDataInventory } from "./data-inventory";
 import {
@@ -62,7 +60,6 @@ import {
 
 const { acquireStoreLock, acquireReleaseStoreLock } = coreServices;
 type ReleaseStoreLock = coreServices.ReleaseStoreLock;
-type ReleaseStoreLockHooks = coreServices.ReleaseStoreLockHooks;
 
 const MAX_BACKUP_MANIFEST_BYTES = 1024 * 1024;
 const MAX_BACKUP_SERVICES = 256;
@@ -73,12 +70,6 @@ const MAX_CLI_DURATION_MS = 30 * 60_000;
 // published loopback port, is the host's; inside this container it reaches
 // nothing.
 const FIXED_CLI_DATA_MANAGER_URL = "http://data-manager:4000";
-const ADMIN_RELEASE_SERVICE_IDS = [
-  "data-manager",
-  "app-web",
-  "transitous-runner",
-  "app-api",
-] as const;
 const INSPECT_RELEASE_SERVICE_IDS = [
   "app-api",
   "app-web",
@@ -88,7 +79,6 @@ const INSPECT_RELEASE_SERVICE_IDS = [
 ] as const;
 const MAX_RELEASE_MANIFEST_BYTES = coreServices.RELEASE_STORE_LIMITS.manifestBytes;
 const MAX_RELEASE_STATE_BYTES = coreServices.RELEASE_STORE_LIMITS.stateBytes;
-const MAX_RELEASE_TRANSACTION_BYTES = coreServices.RELEASE_STORE_LIMITS.transactionBytes;
 const MAX_RELEASE_SELECTIONS_BYTES = coreServices.RELEASE_STORE_LIMITS.selectionsBytes;
 const BACKUP_STORE_LOCK_NAME = ".backup-store.lock";
 const BACKUP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -135,40 +125,15 @@ interface BuildAuthorityService {
 export interface AdministrativeReleaseEffects {
   initialize?(): Promise<void>;
   resolve(context: FixedCliOptions): Promise<string>;
-  pull(releaseId: string, context: FixedCliOptions): Promise<void>;
   inspect(): Promise<OpsResultFor<"release.inspect">>;
-  validateCandidate?(releaseId: string, expectedDigest: string): Promise<void>;
   inspectSystem(context: FixedCliOptions): Promise<OpsResultFor<"system.inspect">>;
-  apply(
-    releaseId: string,
-    serviceIds: readonly [string, ...string[]],
-    context: FixedCliOptions,
-    updateJobId?: string,
-  ): Promise<void>;
-  runtimeInspect?(): Promise<{ releaseId?: string; updateJobId?: string }>;
 }
 
 export interface AdministrativeReleaseRuntimeOptions {
   runDocker?: (args: readonly string[], context: FixedCliOptions) => Promise<string>;
-  afterReleasePhase?: (phase: ReleaseTransactionPhase) => void | Promise<void>;
-  verifyAppliedRelease?: (
-    manifest: ReturnType<typeof coreServices.parseReleaseManifest>,
-    serviceIds: readonly string[],
-    context: FixedCliOptions,
-  ) => Promise<boolean>;
-  /** Crash points inside release-store lock acquisition, for recovery tests. */
-  releaseStoreLockHooks?: ReleaseStoreLockHooks;
   /** The uid the release state must belong to; the effective uid unless a test injects one. */
   uid?: number;
 }
-
-type ReleaseTransactionPhase =
-  | "prepared"
-  | "overlay_written"
-  | "services_applied"
-  | "state_published"
-  | "rollback_overlay"
-  | "rollback_services";
 
 export interface ParsedBackupManifest {
   name: string;
@@ -737,32 +702,24 @@ function releaseStoreBindings(rootDir: string, uid: number | undefined) {
       coreServices.stackComposeArgs(repositoryPaths, (path) =>
         path === overlay ? readOverlay() !== null : isRegularComposeFile(path),
       ),
-    readOverlay,
   };
 }
 
 export function createDefaultReleaseEffects(
   rootDir: string,
-  runFixedCli: FixedCliRunner,
   runtimeOptions: AdministrativeReleaseRuntimeOptions = {},
 ): AdministrativeReleaseEffects {
   const infraDir = infraDirectory(rootDir);
   const uid = stateOwner(runtimeOptions.uid);
   // `releases/`, `store/` and `evidence/`: created owner-only when missing,
-  // refused when they are anyone else's. Nothing is read before the legacy
-  // migration in `initialize`.
-  const { store: directory, overlay } = coreServices.ensureReleaseStateDirectories(infraDir, {
-    uid,
-  });
-  const releaseStoreLockHooks = runtimeOptions.releaseStoreLockHooks ?? {};
+  // refused when they are anyone else's.
+  const { store: directory } = coreServices.ensureReleaseStateDirectories(infraDir, { uid });
   const paths = {
-    overlay,
     state: join(directory, "current.json"),
     latest: join(directory, "latest.json"),
-    transaction: join(directory, "transaction.json"),
     selections: join(directory, "selections.json"),
   };
-  const { repositoryPaths, stackArgs, readOverlay } = releaseStoreBindings(rootDir, uid);
+  const { repositoryPaths, stackArgs } = releaseStoreBindings(rootDir, uid);
   const manifestNames = () => coreServices.listReleaseStoreManifests(directory, { uid });
   const loadManifest = (releaseId: string) => {
     manifestNames();
@@ -794,7 +751,7 @@ export function createDefaultReleaseEffects(
   const readReleasePointer = (
     path: string,
     optional: boolean,
-  ): { releaseId?: string; updateJobId?: string; digest?: string } => {
+  ): { releaseId?: string; digest?: string } => {
     try {
       const stat = lstatSync(path);
       if (coreServices.releaseStateFileProblem(stat, MAX_RELEASE_STATE_BYTES, { uid }) !== null) {
@@ -813,11 +770,7 @@ export function createDefaultReleaseEffects(
     if (value.digest !== undefined && digest !== value.digest) {
       throw new Error("Release authority rejected");
     }
-    return {
-      releaseId: value.releaseId,
-      digest,
-      ...(typeof value.updateJobId === "string" ? { updateJobId: value.updateJobId } : {}),
-    };
+    return { releaseId: value.releaseId, digest };
   };
   const readState = () => readReleasePointer(paths.state, true);
   const configurationIdentity = () =>
@@ -828,24 +781,6 @@ export function createDefaultReleaseEffects(
     if (!existsSync(paths.selections)) return {};
     return coreServices.parseReleaseSelectionReceipts(
       strictReadFile(paths.selections, MAX_RELEASE_SELECTIONS_BYTES, { owner: uid }),
-    );
-  };
-  const validateCandidate = async (releaseId: string, expectedDigest: string) => {
-    const manifest = loadManifest(releaseId);
-    const receipt = selectionReceipts()[releaseId];
-    if (
-      !receipt ||
-      receipt.configuration !== configurationIdentity() ||
-      receipt.digest !== expectedDigest ||
-      releaseDigest(coreServices.canonicalReleaseManifest(manifest)) !== expectedDigest
-    )
-      throw new Error(
-        "Checked release is unavailable, changed or belongs to another configuration; check again",
-      );
-    coreServices.validateResolvedSelection(
-      coreServices.readAppliedReleaseSelection(join(rootDir, "infra", "docker")),
-      manifest,
-      receipt.ociDigest,
     );
   };
   const inspectRelease = async (): Promise<OpsResultFor<"release.inspect">> => {
@@ -882,266 +817,12 @@ export function createDefaultReleaseEffects(
         : {}),
     };
   };
-  const { inspectImageId, observePinnedImage, inspectAgentHelper, agentMatchesRelease } =
+  const { inspectImageId, observePinnedImage, inspectAgentHelper } =
     createImageInspection(runDocker);
-  const agentPins = (manifest: ReturnType<typeof coreServices.parseReleaseManifest>) => ({
-    agentImage: manifest.images["ops-agent"],
-    helperImage: manifest.images["privacy-backup"],
-  });
-  const agentContainerId = async (context: FixedCliOptions): Promise<string | undefined> => {
-    const value = (await runDocker([...stackArgs(), "ps", "-q", "ops-agent"], context)).trim();
-    return /^[a-f0-9]{12,64}$/.test(value) ? value : undefined;
-  };
-  const requireCurrentAgent = async (
-    manifest: ReturnType<typeof coreServices.parseReleaseManifest>,
-    context: FixedCliOptions,
-  ): Promise<void> => {
-    let matches = false;
-    try {
-      const containerId = await agentContainerId(context);
-      matches =
-        containerId !== undefined &&
-        (await agentMatchesRelease(containerId, agentPins(manifest), context));
-    } catch {
-      /* Unknown state must not permit a partial system update. */
-    }
-    if (!matches) {
-      context.emitLog("stderr", OPS_PUBLIC_ERROR_MESSAGES.host_update_required);
-      throw new OpsHostUpdateRequiredError();
-    }
-  };
-  interface ReleaseTransaction {
-    version: 1;
-    phase: ReleaseTransactionPhase;
-    releaseId: string;
-    digest: string;
-    serviceIds: string[];
-    updateJobId?: string;
-    execution?: ExecutionRef;
-    previousOverlay: string | null;
-    previousState: string | null;
-  }
-  const readTransaction = (): ReleaseTransaction | null => {
-    try {
-      const stat = lstatSync(paths.transaction);
-      if (
-        coreServices.releaseStateFileProblem(stat, MAX_RELEASE_TRANSACTION_BYTES, { uid }) !== null
-      ) {
-        throw new Error("Release transaction rejected");
-      }
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-      throw new Error("Release transaction rejected");
-    }
-    const raw = strictReadFile(paths.transaction, MAX_RELEASE_TRANSACTION_BYTES, { owner: uid });
-    const candidate = JSON.parse(raw) as unknown;
-    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
-      throw new Error("Release transaction rejected");
-    }
-    const value = candidate as Record<string, unknown>;
-    const phases = new Set<ReleaseTransactionPhase>([
-      "prepared",
-      "overlay_written",
-      "services_applied",
-      "state_published",
-      "rollback_overlay",
-      "rollback_services",
-    ]);
-    if (
-      value.version !== 1 ||
-      typeof value.phase !== "string" ||
-      !phases.has(value.phase as ReleaseTransactionPhase) ||
-      typeof value.releaseId !== "string" ||
-      !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value.releaseId) ||
-      typeof value.digest !== "string" ||
-      !/^[a-f0-9]{64}$/.test(value.digest) ||
-      !Array.isArray(value.serviceIds) ||
-      value.serviceIds.length < 1 ||
-      value.serviceIds.length > ADMIN_RELEASE_SERVICE_IDS.length ||
-      value.serviceIds.some(
-        (serviceId) =>
-          typeof serviceId !== "string" ||
-          !(ADMIN_RELEASE_SERVICE_IDS as readonly string[]).includes(serviceId),
-      ) ||
-      new Set(value.serviceIds).size !== value.serviceIds.length ||
-      (value.updateJobId !== undefined &&
-        (typeof value.updateJobId !== "string" ||
-          !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value.updateJobId))) ||
-      (value.previousOverlay !== null &&
-        (typeof value.previousOverlay !== "string" ||
-          Buffer.byteLength(value.previousOverlay, "utf8") > MAX_RELEASE_MANIFEST_BYTES)) ||
-      (value.previousState !== null &&
-        (typeof value.previousState !== "string" ||
-          Buffer.byteLength(value.previousState, "utf8") > MAX_RELEASE_STATE_BYTES))
-    ) {
-      throw new Error("Release transaction rejected");
-    }
-    if (value.execution !== undefined) executionRefSchema.parse(value.execution);
-    const transaction = value as unknown as ReleaseTransaction;
-    const manifest = loadManifest(transaction.releaseId);
-    if (releaseDigest(coreServices.canonicalReleaseManifest(manifest)) !== transaction.digest) {
-      throw new Error("Release transaction rejected");
-    }
-    return transaction;
-  };
-  const writeTransaction = async (transaction: ReleaseTransaction): Promise<void> => {
-    atomicWrite(paths.transaction, JSON.stringify(transaction));
-    await runtimeOptions.afterReleasePhase?.(transaction.phase);
-  };
-  const publishState = (transaction: ReleaseTransaction): void => {
-    atomicWrite(
-      paths.state,
-      JSON.stringify({
-        releaseId: transaction.releaseId,
-        digest: transaction.digest,
-        ...(transaction.updateJobId ? { updateJobId: transaction.updateJobId } : {}),
-      }),
-    );
-  };
-  const verifyApplied =
-    runtimeOptions.verifyAppliedRelease ??
-    (async (
-      manifest: ReturnType<typeof coreServices.parseReleaseManifest>,
-      serviceIds: readonly string[],
-      context: FixedCliOptions,
-    ) => {
-      if (!existsSync(repositoryPaths.composePath)) return false;
-      const composeArgs = stackArgs();
-      const images: Record<string, string> = {
-        "app-api": manifest.images.api,
-        "app-web": manifest.images.web,
-        "data-manager": manifest.images["data-manager"],
-        "transitous-runner": manifest.images["transitous-runner"],
-      };
-      for (const serviceId of serviceIds) {
-        const expected = await inspectImageId(
-          ["image", "inspect", "--format", "{{.Id}}", images[serviceId] as string],
-          context,
-        );
-        const containerId = (
-          await runDocker([...composeArgs, "ps", "-q", serviceId], context)
-        ).trim();
-        if (!/^[a-f0-9]{12,64}$/.test(containerId) || !expected) return false;
-        const running = await inspectImageId(
-          ["container", "inspect", "--format", "{{.Image}}", containerId],
-          context,
-        );
-        if (running !== expected) return false;
-      }
-      return true;
-    });
-  const restorePrevious = async (
-    transaction: ReleaseTransaction,
-    context: FixedCliOptions,
-  ): Promise<void> => {
-    if (!transaction.execution) throw new OpsExecutionFailure("recovery_required", {});
-    context = { ...context, execution: transaction.execution };
-    remainingCliTime(context);
-    await writeTransaction({ ...transaction, phase: "rollback_overlay" });
-    remainingCliTime(context);
-    if (transaction.previousOverlay === null) durableUnlink(paths.overlay);
-    else atomicWrite(paths.overlay, transaction.previousOverlay);
-    await writeTransaction({ ...transaction, phase: "rollback_services" });
-    remainingCliTime(context);
-    await runFixedCli(["services", "update", "--no-deps", ...transaction.serviceIds], context);
-    remainingCliTime(context);
-    if (transaction.previousState === null) durableUnlink(paths.state);
-    else atomicWrite(paths.state, transaction.previousState);
-    durableUnlink(paths.transaction);
-  };
-  const completeForward = async (
-    transaction: ReleaseTransaction,
-    context: FixedCliOptions,
-  ): Promise<void> => {
-    if (!transaction.execution) throw new OpsExecutionFailure("recovery_required", {});
-    context = { ...context, execution: transaction.execution };
-    remainingCliTime(context);
-    const manifest = loadManifest(transaction.releaseId);
-    // The transaction's digest was taken from the exact bytes authorized when
-    // the apply was admitted. Reopening by release ID would otherwise let a
-    // manifest replaced after admission drive the compose render, the service
-    // update, and the published state under the same caller-visible ID.
-    if (releaseDigest(coreServices.canonicalReleaseManifest(manifest)) !== transaction.digest) {
-      throw new Error("Release authority rejected");
-    }
-    if (!transaction.phase.startsWith("rollback_") && transaction.serviceIds.length > 1) {
-      await requireCurrentAgent(manifest, context);
-    }
-    if (transaction.phase === "prepared") {
-      remainingCliTime(context);
-      coreServices.writeReleaseComposeArtifacts(manifest, infraDir, { uid });
-      transaction = { ...transaction, phase: "overlay_written" };
-      await writeTransaction(transaction);
-    }
-    if (transaction.phase === "overlay_written") {
-      remainingCliTime(context);
-      coreServices.writeReleaseComposeArtifacts(manifest, infraDir, { uid });
-      remainingCliTime(context);
-      await runFixedCli(["services", "update", "--no-deps", ...transaction.serviceIds], context);
-      if (!(await verifyApplied(manifest, transaction.serviceIds, context))) {
-        throw new Error("Release recovery verification failed");
-      }
-      transaction = { ...transaction, phase: "services_applied" };
-      await writeTransaction(transaction);
-    }
-    if (transaction.phase === "services_applied") {
-      // A reboot, container disappearance, digest drift, or an unreachable
-      // Docker between the apply and this recovery would otherwise publish a
-      // release the runtime is not actually running. `verifyApplied` reports
-      // false for ambiguous and unavailable observations, so this fails closed
-      // and leaves the transaction for a later attempt.
-      if (!(await verifyApplied(manifest, transaction.serviceIds, context))) {
-        throw new Error("Release recovery verification failed");
-      }
-      remainingCliTime(context);
-      publishState(transaction);
-      transaction = { ...transaction, phase: "state_published" };
-      await writeTransaction(transaction);
-    }
-    if (transaction.phase === "state_published") {
-      const state = readState();
-      if (state.releaseId !== transaction.releaseId || state.digest !== transaction.digest) {
-        throw new Error("Release recovery verification failed");
-      }
-      // The state pointer alone only proves what was written, not what runs.
-      if (!(await verifyApplied(manifest, transaction.serviceIds, context))) {
-        throw new Error("Release recovery verification failed");
-      }
-      remainingCliTime(context);
-      durableUnlink(paths.transaction);
-      return;
-    }
-    if (transaction.phase === "rollback_overlay" || transaction.phase === "rollback_services") {
-      await restorePrevious(transaction, context);
-    }
-  };
-  let initialization: Promise<void> | undefined;
-  const initialize = (): Promise<void> => {
-    initialization ??= (async () => {
-      manifestNames();
-      // Recovery reads the transaction and then reopens the manifest by release
-      // ID. Holding the store lock across both keeps another agent process (or
-      // a concurrent apply) from replacing those bytes in between, and makes
-      // the digest recheck in `completeForward` a real boundary rather than a
-      // second unsynchronized read.
-      const lock = await acquireReleaseStoreLock(directory, releaseStoreLockHooks);
-      try {
-        const transaction = readTransaction();
-        if (transaction) {
-          await completeForward(transaction, {
-            signal: new AbortController().signal,
-            emitLog: () => undefined,
-          });
-        }
-      } finally {
-        lock.release();
-      }
-    })();
-    return initialization;
-  };
   return {
-    initialize,
-    validateCandidate,
+    initialize: async () => {
+      await inspectRelease();
+    },
     resolve: async (context) => {
       manifestNames();
       const selection = coreServices.readAppliedReleaseSelection(join(rootDir, "infra", "docker"));
@@ -1182,7 +863,7 @@ export function createDefaultReleaseEffects(
         // Re-read the store under the lock. A snapshot taken before the Docker
         // pull/create/cp awaits is stale, so two concurrent resolutions could
         // each observe the same sub-limit count and both publish past it.
-        const lock = await acquireReleaseStoreLock(directory, releaseStoreLockHooks);
+        const lock = await acquireReleaseStoreLock(directory);
         try {
           coreServices.cacheCheckedReleaseManifest({
             infraDir,
@@ -1199,29 +880,6 @@ export function createDefaultReleaseEffects(
       } finally {
         await runDocker(["rm", "-f", containerId], context).catch(() => undefined);
         rmSync(temporaryDirectory, { recursive: true, force: true });
-      }
-    },
-    pull: async (releaseId, context) => {
-      const manifest = loadManifest(releaseId);
-      const names = [
-        "api",
-        "web",
-        "data-manager",
-        "ops-agent",
-        "privacy-backup",
-        "transitous-runner",
-        "transitous-tools",
-      ] as const;
-      for (const [index, name] of names.entries()) {
-        context.emitLog("stdout", `Downloading ${name} image (${index + 1}/${names.length})`);
-        if (runtimeOptions.runDocker) await runDocker(["pull", manifest.images[name]], context);
-        else
-          await runContainedStreamingProcess("docker", ["pull", manifest.images[name]], {
-            signal: context.signal,
-            timeout: remainingCliTime(context),
-            onLine: context.emitLog,
-            redact: safeProcessDiagnostic,
-          });
       }
     },
     inspect: async () => {
@@ -1333,65 +991,6 @@ export function createDefaultReleaseEffects(
         services,
       };
     },
-    apply: async (releaseId, serviceIds, context, updateJobId) => {
-      await initialize();
-      // The agent cannot replace the container executing this transaction. A
-      // complete admin apply requires its own image and helper to match already.
-      // Claiming the transaction is a read-then-write across processes. Without
-      // the lock two agents can both observe no active transaction and both
-      // write `transaction.json`, so the loser's rollback state is lost.
-      const claimLock = await acquireReleaseStoreLock(directory, releaseStoreLockHooks);
-      let manifest: ReturnType<typeof loadManifest>;
-      let transaction: ReleaseTransaction;
-      try {
-        if (readTransaction()) throw new Error("Release transaction already active");
-        manifest = loadManifest(releaseId);
-        if (serviceIds.length > 1) await requireCurrentAgent(manifest, context);
-        const previousOverlay = readOverlay();
-        const previousState = existsSync(paths.state)
-          ? strictReadFile(paths.state, MAX_RELEASE_STATE_BYTES, { owner: uid })
-          : null;
-        transaction = {
-          version: 1,
-          phase: "prepared",
-          releaseId,
-          digest: releaseDigest(coreServices.canonicalReleaseManifest(manifest)),
-          serviceIds: [...serviceIds],
-          ...(updateJobId ? { updateJobId } : {}),
-          previousOverlay,
-          previousState,
-          ...(context.execution ? { execution: context.execution } : {}),
-        };
-        await writeTransaction(transaction);
-      } finally {
-        claimLock.release();
-      }
-      coreServices.writeReleaseComposeArtifacts(manifest, infraDir, { uid });
-      transaction = { ...transaction, phase: "overlay_written" };
-      await writeTransaction(transaction);
-      try {
-        await runFixedCli(["services", "update", "--no-deps", ...serviceIds], context);
-        if (!(await verifyApplied(manifest, serviceIds, context))) {
-          throw new Error("Release application verification failed");
-        }
-      } catch (error) {
-        await restorePrevious(transaction, context);
-        throw error;
-      }
-      transaction = { ...transaction, phase: "services_applied" };
-      await writeTransaction(transaction);
-      publishState(transaction);
-      transaction = { ...transaction, phase: "state_published" };
-      await writeTransaction(transaction);
-      durableUnlink(paths.transaction);
-    },
-    runtimeInspect: async () => {
-      const state = readState();
-      return {
-        ...(state.releaseId ? { releaseId: state.releaseId } : {}),
-        ...(state.updateJobId ? { updateJobId: state.updateJobId } : {}),
-      };
-    },
   };
 }
 
@@ -1488,8 +1087,7 @@ export function createAdministrativeRuntime(
   options: AdministrativeRuntimeOptions,
 ): OpsRuntime {
   const runFixedCli = options.runFixedCli ?? createDefaultFixedCli(options.rootDir);
-  const releaseEffects =
-    options.releaseEffects ?? createDefaultReleaseEffects(options.rootDir, runFixedCli);
+  const releaseEffects = options.releaseEffects ?? createDefaultReleaseEffects(options.rootDir);
   const loadBuildAuthority = options.loadBuildAuthority ?? (async () => []);
   const buildArgs = (serviceId: string, regionId?: string, motisImport = false): string[] => [
     "services",
@@ -1768,30 +1366,6 @@ export function createAdministrativeRuntime(
   runtime["release.resolve"] = async (_operation, context) => {
     return { releaseId: await releaseEffects.resolve(context) };
   };
-  runtime["release.pull"] = async (operation, context) => {
-    await releaseEffects.pull(operation.releaseId, context);
-    return { releaseId: operation.releaseId };
-  };
   runtime["release.inspect"] = async () => releaseEffects.inspect();
-  runtime["release.apply"] = async (operation, context) => {
-    await releaseEffects.apply(operation.releaseId, [...ADMIN_RELEASE_SERVICE_IDS], context);
-    return { releaseId: operation.releaseId };
-  };
-  runtime["appApi.replace"] = async (operation, context) => {
-    await releaseEffects.apply(operation.releaseId, ["app-api"], context, operation.updateJobId);
-    return { updateJobId: operation.updateJobId, replaced: true };
-  };
-  runtime["appApi.runtime.inspect"] = async () => releaseEffects.runtimeInspect?.() ?? {};
-  runtime["system.update"] = async (operation, context) => {
-    if (!releaseEffects.validateCandidate)
-      throw new Error("Checked release validation unavailable");
-    await releaseEffects.validateCandidate(operation.releaseId, operation.expectedDigest);
-    if (operation.createBackup && operation.backupId) {
-      await runFixedCli(["backup", "create", "--name", operation.backupId], context);
-    }
-    await releaseEffects.pull(operation.releaseId, context);
-    await releaseEffects.apply(operation.releaseId, [...ADMIN_RELEASE_SERVICE_IDS], context);
-    return { releaseId: operation.releaseId };
-  };
   return runtime;
 }
