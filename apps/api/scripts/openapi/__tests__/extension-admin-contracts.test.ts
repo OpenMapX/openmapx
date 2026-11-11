@@ -10,13 +10,13 @@ it("collects all eleven actual extension producers in the current path inventory
     readFileSync(new URL("../../../openapi.json", import.meta.url), "utf8"),
   );
   expect(Object.keys(document.paths).sort()).toEqual(Object.keys(committed.paths).sort());
-  expect(Object.keys(document.paths)).toHaveLength(423);
+  expect(Object.keys(document.paths)).toHaveLength(419);
   expect(
     Object.values(document.paths).reduce(
       (count: number, item) => count + Object.keys(item as object).length,
       0,
     ),
-  ).toBe(455);
+  ).toBe(451);
   const tagged = Object.entries(document.paths).flatMap(([path, methods]) =>
     Object.entries(methods as object)
       .filter(([, operation]) => operation.tags?.includes("extension-admin"))
