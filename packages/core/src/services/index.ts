@@ -348,11 +348,7 @@ export { describeServiceFiles, type ServiceFileReportLine } from "./service-file
 export { serviceFileStore } from "./service-file-store";
 export * from "./service-lifecycle-receipt";
 export { readServiceOverrides, staleOverrides } from "./service-overrides";
-export {
-  LEGACY_TRAEFIK_MOUNT_NOTICE,
-  legacyTraefikDynamicDirectory,
-  TRAEFIK_ROUTES_FILE,
-} from "./traefik-files";
+export { TRAEFIK_ROUTES_FILE } from "./traefik-files";
 export {
   renderTraefikDynamicConfiguration,
   renderTraefikDynamicYaml,

@@ -87,7 +87,6 @@ async function render(selected: string[], changes: Record<string, string> = {}) 
     services,
     input: input(selected),
     releaseServiceFiles: release(changes),
-    legacyTraefikDynamicMounted: false,
   });
 }
 

@@ -163,7 +163,6 @@ async function startAgent(checkout: string): Promise<RunningAgent> {
       OPENMAPX_ROOT_DIR: checkout,
       OPS_AGENT_API_TOKEN_FILE: join(infra, "secrets", "ops-agent-api-token"),
       OPS_AGENT_DATA_MANAGER_TOKEN_FILE: join(infra, "secrets", "ops-agent-data-manager-token"),
-      OPS_TRUSTED_CONFIG_DIR: join(infra, "state", "ops-agent", "trusted-config"),
       HOST: "127.0.0.1",
       PORT: String(port),
     },
@@ -332,7 +331,7 @@ function tarGz(
 }
 
 describe("integrations installed through the operations agent", () => {
-  it("installs, refuses, adopts and authorizes them on a umask-002 checkout", async () => {
+  it("installs, refuses and authorizes them on a umask-002 checkout", async () => {
     const checkout = await umask002Checkout();
     const infra = join(checkout, "infra", "docker");
     const manifest = (id: string) =>
@@ -360,40 +359,40 @@ describe("integrations installed through the operations agent", () => {
 
     // The agent's integration store.
     const store = services.agentStatePaths(infra).customIntegrations;
-    // Files placed in the store by hand, as an earlier release's installer
-    // left them: extracted under umask 002, so group-writable, and no record.
-    const legacy = upload("legacy", [
-      { name: "manifest.json", data: manifest("legacy"), mode: 0o664 },
+    // Files placed in the store by hand: extracted under umask 002, so
+    // group-writable, and no record.
+    upload("by-hand", [
+      { name: "manifest.json", data: manifest("by-hand"), mode: 0o664 },
       { name: "strings/en.json", data: "{}", mode: 0o664 },
     ]);
     const previous = process.umask(0o002);
     try {
-      const work = join(artifacts, "legacy-extract");
+      const work = join(artifacts, "by-hand-extract");
       mkdirSync(work);
       mkdirSync(store, { recursive: true });
       renameSync(
         extractIntegrationArchive(
-          join(artifacts, "legacy.tar.gz"),
+          join(artifacts, "by-hand.tar.gz"),
           join(work, "x"),
           join(work, "y"),
         ),
-        join(store, "legacy"),
+        join(store, "by-hand"),
       );
-      chmodSync(join(store, "legacy"), 0o775);
+      chmodSync(join(store, "by-hand"), 0o775);
     } finally {
       process.umask(previous);
     }
-    expect(statSync(join(store, "legacy")).mode & 0o777).toBe(0o775);
+    expect(statSync(join(store, "by-hand")).mode & 0o777).toBe(0o775);
 
     // It does not stop a render or the agent: it is left out and reported.
     const rendered = await cli(checkout, "compose", "render");
     expect(rendered.stdout, rendered.stderr).toContain("Rendered");
     const agent = await startAgent(checkout);
-    expect(agent.output()).toContain('Integration "legacy" is not loaded');
+    expect(agent.output()).toContain('Integration "by-hand" is not loaded');
     // Run diagnostics runs the fixed CLI's check, which names it too.
     const checked = await cli(checkout, "check", "--no-probe");
     expect(`${checked.stdout}${checked.stderr}`).toContain(
-      'Integration "legacy" is not loaded: It was not installed through the operations agent.',
+      'Integration "by-hand" is not loaded: It was not installed through the operations agent.',
     );
 
     // The fixed CLI the host CLI runs in the agent's container.
@@ -445,21 +444,8 @@ describe("integrations installed through the operations agent", () => {
       expect(existsSync(join(store, name)), name).toBe(false);
     }
 
-    // The earlier install is recorded only after its files match its archive.
-    const tokenFile = join(infra, "secrets", "ops-agent-api-token");
-    const client = new OpsClient({ baseUrl: `http://127.0.0.1:${agent.port}`, tokenFile });
-    const adopted = await executeLocalRoot(client, {
-      kind: "catalogIntegration.adopt",
-      integrationId: "legacy",
-      source: { kind: "upload", sha256: legacy },
-    });
-    expect(adopted).toEqual({ integrationId: "legacy", status: "recorded", reason: null });
-
     await expectTrustedConfigurationCommitted(checkout, agent, "installed-integrations", {
-      integrationConfigs: [
-        { integrationId: "legacy", values: { region: "eu" } },
-        { integrationId: "loose-modes", values: { region: "us" } },
-      ],
+      integrationConfigs: [{ integrationId: "loose-modes", values: { region: "us" } }],
     });
     agent.stop();
   }, 120_000);

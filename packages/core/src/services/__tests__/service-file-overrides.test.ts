@@ -46,10 +46,9 @@ function checkout() {
   roots.push(root);
   cpSync(join(REPOSITORY, "services"), join(root, "services"), {
     recursive: true,
-    // Nothing a working checkout adds: dependencies, earlier routes, an operator's auth.yml.
+    // Nothing a working checkout adds: dependencies, an operator's auth.yml.
     filter: (source) =>
-      !source.split(/[/\\]/).includes("node_modules") &&
-      !["generated-routes.yml", "auth.yml"].includes(basename(source)),
+      !source.split(/[/\\]/).includes("node_modules") && basename(source) !== "auth.yml",
   });
   const infraDir = join(root, "infra", "docker");
   mkdirSync(infraDir, { recursive: true });
@@ -123,7 +122,6 @@ describe("service file overrides", () => {
       services: f.services,
       input: input(SELECTED),
       releaseServiceFiles: f.release(),
-      legacyTraefikDynamicMounted: false,
     });
 
     expect(readFileSync(mounted(f.infraDir, "martin", "/etc/martin/martin.yaml"), "utf8")).toBe(
@@ -152,7 +150,6 @@ describe("service file overrides", () => {
       services: f.services,
       input: input(SELECTED),
       releaseServiceFiles: f.release(),
-      legacyTraefikDynamicMounted: false,
     });
     expect(existsSync(join(dynamic, "auth.yml"))).toBe(false);
   });
@@ -165,7 +162,6 @@ describe("service file overrides", () => {
         services: f.services,
         input: input(SELECTED),
         releaseServiceFiles: f.release(),
-        legacyTraefikDynamicMounted: false,
       });
     const auth = f.override("traefik/config/dynamic/middlewares.yml", AUTH, 0o600);
 
@@ -226,7 +222,6 @@ describe("service file overrides", () => {
       services: f.services,
       input: input([...SELECTED, "well-known"]),
       releaseServiceFiles: f.release(),
-      legacyTraefikDynamicMounted: false,
     });
     expect(committed.serviceFileReport).toEqual(
       [
@@ -251,7 +246,6 @@ describe("service file overrides", () => {
         services: f.services,
         input: input(SELECTED),
         releaseServiceFiles: f.release(changes),
-        legacyTraefikDynamicMounted: false,
       });
     const flag = {
       level: "warn",

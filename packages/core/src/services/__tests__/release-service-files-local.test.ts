@@ -64,7 +64,6 @@ function agentRender(root: string) {
         integrationConfigs: [],
         serviceSecrets: [],
       },
-      legacyTraefikDynamicMounted: false,
     });
   const mountedMartin = () => {
     const compose = readFileSync(
@@ -103,8 +102,7 @@ it("renders the bundle's files over a checkout's edit, under OPENMAPX_RELEASE=lo
   cpSync(join(REPOSITORY, "services"), join(root, "services"), {
     recursive: true,
     filter: (source) =>
-      !source.split(/[/\\]/).includes("node_modules") &&
-      !["generated-routes.yml", "auth.yml"].includes(basename(source)),
+      !source.split(/[/\\]/).includes("node_modules") && basename(source) !== "auth.yml",
   });
   const { infraDir, commit, mountedMartin } = agentRender(root);
   const edited = "listen_addresses: 0.0.0.0:3001\n";

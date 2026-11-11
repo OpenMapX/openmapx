@@ -8,7 +8,6 @@ describe("ops-agent configuration", () => {
         OPS_AGENT_API_TOKEN_FILE: "/run/secrets/ops-agent-api-token",
         OPS_AGENT_DATA_MANAGER_TOKEN_FILE: "/run/secrets/ops-agent-data-manager-token",
         OPENMAPX_ROOT_DIR: "/srv/openmapx",
-        OPS_TRUSTED_CONFIG_DIR: "/var/lib/openmapx/trusted-config",
       }),
     ).toEqual({
       apiTokenFile: "/run/secrets/ops-agent-api-token",
@@ -26,7 +25,6 @@ describe("ops-agent configuration", () => {
         OPS_AGENT_API_TOKEN: "raw-secret",
         OPS_AGENT_DATA_MANAGER_TOKEN: "raw-secret",
         OPENMAPX_ROOT_DIR: "/srv/openmapx",
-        OPS_TRUSTED_CONFIG_DIR: "/var/lib/openmapx/trusted-config",
       }),
     ).toThrow("token file path");
   });

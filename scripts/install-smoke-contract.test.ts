@@ -102,6 +102,7 @@ describe("install smoke script", () => {
       "openmapx services selected",
       "openmapx compose release --status",
       "openmapx compose render",
+      "assert_no_legacy_warnings render",
     ]);
     inOrder(body("start_infrastructure"), [
       "openmapx services start postgis redis traefik app-api data-manager",
@@ -109,7 +110,10 @@ describe("install smoke script", () => {
       "assert_data_manager_status",
     ]);
     expect(body("assert_data_manager_status")).toContain("http://localhost:4000/status");
-    expect(body("assert_check_clean")).toContain("openmapx check --no-probe");
+    inOrder(body("assert_check_clean"), [
+      "openmapx check --no-probe",
+      "assert_no_legacy_warnings check",
+    ]);
     inOrder(body("case_install"), [
       "configure_environment",
       "render_stack",
@@ -124,6 +128,18 @@ describe("install smoke script", () => {
       "label=com.docker.compose.service=ops-agent",
       "docker inspect --format '{{range .Mounts}}{{.Source}}",
     ]);
+  });
+
+  it("fails on the messages earlier releases printed while converting an older installation", () => {
+    for (const phrase of [
+      "earlier release",
+      "keeps the whole checkout",
+      "one-time import",
+      "copied out of the checkout",
+      "routes were written there too",
+      "Traefik still reads its routes",
+    ])
+      expect(script).toContain(`  "${phrase}"\n`);
   });
 
   it("builds the five application images and selects the local release", () => {
@@ -349,6 +365,67 @@ esac
     const result = agentMountCheck("", () => []);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("no ops-agent container is running");
+  });
+
+  /** Runs assert_no_legacy_warnings from the sourced script on `name`.log holding `output`. */
+  function legacyWarningCheck(name: string, output: string | null) {
+    const dir = tree();
+    const work = join(dir, "work");
+    mkdirSync(work);
+    if (output !== null) writeFileSync(join(work, `${name}.log`), output);
+    return spawnSync(
+      "bash",
+      [
+        "-c",
+        'source "$1"; work="$2"; assert_no_legacy_warnings "$3"',
+        "bash",
+        join(dir, "scripts/ci/install-smoke.sh"),
+        work,
+        name,
+      ],
+      { cwd: dir, encoding: "utf8" },
+    );
+  }
+
+  it("passes a render that prints no message about an older installation", () => {
+    const result = legacyWarningCheck(
+      "render",
+      "Rendered 9 services into infra/docker/state/ops-agent/configurations/cfg1_x\n",
+    );
+    expect(result.status, result.stderr).toBe(0);
+  });
+
+  it.each([
+    [
+      "render",
+      "The operations agent keeps the whole checkout mounted. It moves to its narrow mounts in a render on the host once nothing it needs is missing.",
+    ],
+    [
+      "render",
+      "The routes could not be written to services/traefik/config/dynamic, where a Traefik started by an Earlier Release still reads them: EACCES.",
+    ],
+    [
+      "render",
+      "The Transitous API keys have not been copied out of the checkout (infra/docker/secrets/transitous-api-keys/api-keys.json is missing): render again.",
+    ],
+    [
+      "check",
+      "Traefik still reads its routes from services/traefik/config/dynamic, where render keeps writing them until no container mounts that directory.",
+    ],
+  ])("fails and shows the line when the %s output holds one", (name, message) => {
+    const result = legacyWarningCheck(name, `Rendered\n⚠ ${message}\nDone\n`);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(message);
+    expect(result.stderr).not.toContain("Done");
+    expect(result.stderr).toContain(
+      `${name} printed a message about converting an older installation`,
+    );
+  });
+
+  it("fails when the output it should read is missing", () => {
+    const result = legacyWarningCheck("check", null);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("check.log is missing");
   });
 
   it("writes a clean 64-hex secret and masks it on stdout under GitHub Actions", () => {

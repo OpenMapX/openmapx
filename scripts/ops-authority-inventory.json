@@ -91,7 +91,6 @@
       "integration.install",
       "integration.inventory",
       "installedIntegrations.inspect",
-      "catalogIntegration.adopt",
       "catalogIntegration.inspect",
       "catalogIntegration.publish",
       "catalogIntegration.remove",
@@ -345,7 +344,6 @@
         "apps/api/src/services/agent-integrations.ts#publishIntegration",
         "apps/api/src/services/agent-integrations.ts#settleIntegration",
         "apps/api/src/services/agent-integrations.ts#removeIntegration",
-        "apps/api/src/services/agent-integrations.ts#adoptIntegration",
         "apps/api/src/services/agent-integrations.ts#readInstalledIntegrations",
         "apps/api/src/services/agent-integrations.ts#readLoadableIntegrations",
         "apps/api/src/services/agent-integrations.ts#recoverAgentIntegrations",
@@ -357,7 +355,6 @@
         "catalogIntegration.publish",
         "catalogIntegration.remove",
         "catalogIntegration.settle",
-        "catalogIntegration.adopt",
         "installedIntegrations.inspect"
       ]
     },

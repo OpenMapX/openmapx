@@ -43,7 +43,6 @@ const CATALOG_KINDS = new Set([
   "catalogIntegration.publish",
   "catalogIntegration.settle",
   "catalogIntegration.remove",
-  "catalogIntegration.adopt",
 ]);
 async function run<K extends OpsOperationKind>(
   client: OpsClient,

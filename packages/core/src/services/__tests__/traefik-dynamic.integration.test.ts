@@ -88,7 +88,6 @@ function render(apps: readonly string[]) {
     infraDir,
     services,
     input: input(apps),
-    legacyTraefikDynamicMounted: false,
   });
 }
 

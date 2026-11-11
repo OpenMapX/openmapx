@@ -588,29 +588,6 @@ pnpm openmapx services update martin
 
 Without the password, rendering fails with `MARTIN_DB_PASSWORD must be set`.
 
-## Traefik's dynamic directory moves into the agent's state
-
-Traefik now reads its routes and middlewares from
-`infra/docker/state/ops-agent/traefik/dynamic`, and its `traefik.yml` from the
-configuration generation, both written by render from the release's files and
-your overrides.
-A Traefik started by an earlier release keeps reading
-`services/traefik/config/dynamic` until it is recreated, and render keeps
-writing the routes there too while any container still mounts it, so routing
-works either way. Render, `pnpm openmapx check` and **Run diagnostics** say
-while that is the case.
-
-Recreate Traefik when a few seconds without the proxy suit you:
-
-```bash
-pnpm openmapx services update traefik
-```
-
-or **Recreate** on **Admin → System → Services → Traefik**. OpenMapX does not recreate
-it for you. Once no container mounts the checkout's directory, render stops
-writing there and leaves the last `generated-routes.yml` in place for a
-rollback. See [where Traefik reads its configuration](../guides/supporting-infrastructure.md#where-traefik-reads-its-configuration).
-
 ## The operations agent stops mounting the checkout
 
 The operations agent's container does not mount the checkout. Every render,
@@ -655,23 +632,6 @@ invocation authenticates through the public proxy.
 
 An accepted request queues work; check admin activity for completion before
 retrying an interrupted request.
-
-### Integrations installed before the agent recorded them
-
-Releases before the operations agent owned `custom_integrations/` left
-installed integrations without a record. On its first start after the upgrade,
-`app-api` asks the agent to verify each integration an extension installed:
-the agent downloads that extension's pinned artifact again, checks its
-SHA-256, and records the integration only if the files on disk are exactly the
-artifact's files. Until then, and for any integration that fails the check, the
-agent leaves it out; its startup log and **Run diagnostics** name it, and why.
-Nothing on disk is trusted as it is:
-
-- an integration whose files differ from its artifact, or that was installed
-  with `pnpm openmapx integrations install` (nothing records where it came
-  from), needs to be installed again, from **Admin → Extensions** or with the
-  same command;
-- if the artifact could not be downloaded, the next `app-api` start tries again.
 
 ### After an interrupted extension update
 

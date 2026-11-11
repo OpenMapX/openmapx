@@ -29,8 +29,6 @@ import type { LoadedService, ServiceManifest } from "./types";
 
 /** Traefik's files, which its mounts no longer name (they come through the agent's state). */
 export const TRAEFIK_RELEASE_PATHS = Object.freeze(["config/traefik.yml", "config/dynamic"]);
-/** The routes earlier releases wrote into Traefik's dynamic directory; never a release file. */
-const TRAEFIK_STALE_ROUTES = "config/dynamic/generated-routes.yml";
 const MAX_SERVICE_FILE_BYTES = 1024 * 1024;
 const MAX_MANIFEST_BYTES = 1024 * 1024;
 const SERVICE_PREFIX = "@service:";
@@ -224,9 +222,9 @@ export function ownedDirectoryProblem(stats: Stats | undefined, uid: number): st
 
 /**
  * The files the checkout's built-in services name, read as the release's
- * (running from source). A directory is read whole, skipping dot entries and
- * the routes earlier releases wrote into Traefik's. A file or directory that
- * is there but may not be used fails; one that is missing is listed.
+ * (running from source). A directory is read whole, skipping dot entries. A
+ * file or directory that is there but may not be used fails; one that is
+ * missing is listed.
  */
 export function readCheckoutServiceFiles(
   services: readonly LoadedService[],
@@ -251,9 +249,7 @@ export function readCheckoutServiceFiles(
       if (problem) fail(serviceId, path, problem);
       for (const name of readdirSync(absolute).sort()) {
         if (name.startsWith(".")) continue;
-        const child = `${path}/${name}`;
-        if (serviceId === "traefik" && child === TRAEFIK_STALE_ROUTES) continue;
-        visit(serviceId, directory, child, false);
+        visit(serviceId, directory, `${path}/${name}`, false);
       }
       return;
     }

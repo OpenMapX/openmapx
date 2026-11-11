@@ -212,7 +212,6 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
           ...fixtureEnvironment(target),
           OPS_AGENT_API_TOKEN_FILE: join(infra, "secrets", "ops-agent-api-token"),
           OPS_AGENT_DATA_MANAGER_TOKEN_FILE: join(infra, "secrets", "ops-agent-data-manager-token"),
-          OPS_TRUSTED_CONFIG_DIR: services.agentStatePaths(infra).trustedConfig,
           HOST: "127.0.0.1",
           PORT: String(port),
         },

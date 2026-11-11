@@ -1,19 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { OpsOperation, OpsResultFor } from "@openmapx/core/ops";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { installedExtension, installedIntegration } from "../db/schema";
 import { JobObservationPending } from "./admin-job-failure";
 import { executeAdminJobOperation } from "./admin-job-ops";
 import { readProjection } from "./admin-job-projection";
-import { JobOwnershipLost } from "./admin-job-state";
 import type { JobContext } from "./job-runner";
-import {
-  createApiOpsClient,
-  createDurableOpsKey,
-  executeAndWait,
-  OpsObservationPending,
-} from "./ops-client";
+import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-client";
 
 /**
  * Installed integrations, as the operations agent holds them.
@@ -98,27 +92,6 @@ export async function removeIntegration(
   );
   if (result.integrationId !== request.integrationId) {
     throw new Error("The operations agent removed a different integration");
-  }
-  return result;
-}
-
-/**
- * Have the agent record an integration an earlier release installed. It is
- * recorded only when its files are exactly those of `source`, fetched again;
- * otherwise it is recorded as needing a reinstall.
- */
-export async function adoptIntegration(
-  request: { integrationId: string; extensionId?: string; source?: IntegrationSource },
-  options: OperationOptions,
-): Promise<OpsResultFor<"catalogIntegration.adopt">> {
-  const result = await executeAdminJobOperation(
-    options.ctx,
-    { kind: "catalogIntegration.adopt", ...request },
-    "extension.catalog.adopt",
-    { operationKey: options.operationKey },
-  );
-  if (result.integrationId !== request.integrationId) {
-    throw new Error("The operations agent adopted a different integration");
   }
   return result;
 }
@@ -234,54 +207,27 @@ export interface IntegrationRecoveryLog {
 export interface IntegrationRecoveryOutcome {
   committed: string[];
   rolledBack: string[];
-  adopted: string[];
-  needsReinstall: Array<{ integrationId: string; reason: string | null }>;
-}
-
-const SHA256 = /^[a-f0-9]{64}$/;
-
-/** The artifact an extension snapshot names for `integrationId`, if it names a usable one. */
-function snapshotArtifact(manifest: unknown, integrationId: string): IntegrationSource | undefined {
-  if (!manifest || typeof manifest !== "object") return undefined;
-  const integrations = (manifest as { integrations?: unknown }).integrations;
-  if (!Array.isArray(integrations)) return undefined;
-  for (const entry of integrations) {
-    if (!entry || typeof entry !== "object") continue;
-    const { id, artifact, sha256 } = entry as Record<string, unknown>;
-    if (id !== integrationId) continue;
-    if (
-      typeof artifact === "string" &&
-      artifact.length <= 2_048 &&
-      /^https:\/\/\S+$/.test(artifact) &&
-      typeof sha256 === "string" &&
-      SHA256.test(sha256)
-    ) {
-      return { kind: "artifact", url: artifact, sha256 };
-    }
-    return undefined;
-  }
-  return undefined;
 }
 
 /**
  * Settle every integration transaction an interrupted extension change left
- * pending, then have the agent adopt integrations earlier releases installed.
+ * pending, then report installed integrations the agent holds no record of.
  *
  * The extension's database transaction is the commit point: it records the
  * agent transaction on the integration's row. A pending transaction the row
  * records is committed; every other one is rolled back.
  *
- * Adoption covers every `installed_integration` row the agent holds no record
- * of. The agent verifies the files on disk against the artifact the owning
- * extension's snapshot names; one it cannot verify is recorded as needing a
- * reinstall, which is reported and never fails recovery. Must not run while an
+ * With a job, an `installed_integration` row the agent does not record is
+ * reported, and so is a directory in its store that no row names; neither is
+ * loaded until it is reinstalled. A standalone installation is managed outside
+ * the agent's store, so its row is never reported. Must not run while an
  * extension change is in progress.
  */
 export async function recoverAgentIntegrations(
   options: {
     signal?: AbortSignal;
     log?: IntegrationRecoveryLog;
-    /** The running job. Adoption needs one to own its operations; without it nothing is adopted. */
+    /** The running job. Settling needs one to own its operations; without it recovery only observes. */
     ctx?: JobContext;
   } = {},
 ): Promise<IntegrationRecoveryOutcome> {
@@ -289,12 +235,7 @@ export async function recoverAgentIntegrations(
     info: (message: string) => console.info(`[extension-recovery] ${message}`),
     warn: (message: string) => console.warn(`[extension-recovery] ${message}`),
   };
-  const outcome: IntegrationRecoveryOutcome = {
-    committed: [],
-    rolledBack: [],
-    adopted: [],
-    needsReinstall: [],
-  };
+  const outcome: IntegrationRecoveryOutcome = { committed: [], rolledBack: [] };
 
   let snapshot = await readInstalledIntegrations({ signal: options.signal });
   for (const entry of snapshot.integrations) {
@@ -357,7 +298,7 @@ export async function recoverAgentIntegrations(
       log.warn(`Rolled back the interrupted install of integration "${entry.integrationId}"`);
     }
   }
-  // A rollback of a fresh install drops its record; adopt from what is left.
+  // A rollback of a fresh install drops its record; report from what is left.
   if (outcome.rolledBack.length > 0) {
     snapshot = await readInstalledIntegrations({ signal: options.signal });
   }
@@ -367,76 +308,25 @@ export async function recoverAgentIntegrations(
   const rows = await db
     .select({
       id: installedIntegration.id,
-      managedByExtension: installedIntegration.managedByExtension,
+      installationKind: installedExtension.installationKind,
     })
-    .from(installedIntegration);
-  const candidates = rows.filter((row) => !recorded.has(row.id));
+    .from(installedIntegration)
+    .leftJoin(
+      installedExtension,
+      eq(installedExtension.id, installedIntegration.managedByExtension),
+    );
+  for (const row of rows) {
+    if (recorded.has(row.id) || row.installationKind === "standalone") continue;
+    log.warn(
+      `Integration "${row.id}" is not recorded by the operations agent; it is not loaded until it is reinstalled`,
+    );
+  }
   const rowIds = new Set(rows.map((row) => row.id));
   for (const integrationId of snapshot.unrecorded) {
     if (rowIds.has(integrationId)) continue;
     log.warn(
       `custom_integrations/${integrationId} is not recorded by the operations agent or by any installed extension; it is not loaded until it is reinstalled`,
     );
-  }
-  if (candidates.length === 0) return outcome;
-
-  const extensionIds = [
-    ...new Set(
-      candidates.flatMap((row) => (row.managedByExtension ? [row.managedByExtension] : [])),
-    ),
-  ];
-  const snapshots = new Map<string, unknown>();
-  if (extensionIds.length > 0) {
-    const extensions = await db
-      .select({ id: installedExtension.id, manifest: installedExtension.manifest })
-      .from(installedExtension)
-      .where(inArray(installedExtension.id, extensionIds));
-    for (const extension of extensions) snapshots.set(extension.id, extension.manifest);
-  }
-
-  for (const row of candidates) {
-    const source = row.managedByExtension
-      ? snapshotArtifact(snapshots.get(row.managedByExtension), row.id)
-      : undefined;
-    try {
-      const adopted = await adoptIntegration(
-        {
-          integrationId: row.id,
-          ...(row.managedByExtension ? { extensionId: row.managedByExtension } : {}),
-          ...(source ? { source } : {}),
-        },
-        {
-          ctx: options.ctx,
-          // The original job reuses this retained step; an attempted download
-          // is observed rather than redispatched under a fresh identity.
-          operationKey: createDurableOpsKey(
-            "extension.integration.adopt",
-            `${options.ctx.jobId}:${row.id}`,
-          ),
-          signal: options.signal,
-        },
-      );
-      if (adopted.status === "recorded") {
-        outcome.adopted.push(row.id);
-        log.info(`The operations agent adopted integration "${row.id}"`);
-      } else {
-        outcome.needsReinstall.push({ integrationId: row.id, reason: adopted.reason });
-        log.warn(
-          `Integration "${row.id}" needs to be reinstalled and is not loaded: ${adopted.reason ?? "its files could not be verified"}`,
-        );
-      }
-    } catch (error) {
-      if (
-        error instanceof JobObservationPending ||
-        error instanceof OpsObservationPending ||
-        error instanceof JobOwnershipLost ||
-        options.ctx.signal.aborted
-      )
-        throw error;
-      log.warn(
-        `The operations agent could not adopt integration "${row.id}" yet: ${(error as Error).message}`,
-      );
-    }
   }
   return outcome;
 }

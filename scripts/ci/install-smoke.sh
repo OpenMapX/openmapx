@@ -34,6 +34,17 @@ current_step="starting"
 built_services=(app-api app-web ops-agent data-manager transitous-runner)
 # The default selection and its dependencies.
 expected_services=(traefik well-known app-api app-web postgis redis data-manager ops-agent transitous-runner)
+# Phrases of messages earlier releases printed while they converted or worked
+# around an older installation's files. A fresh install has nothing to
+# convert, so render and check must print none of them.
+legacy_warning_phrases=(
+  "earlier release"
+  "keeps the whole checkout"
+  "one-time import"
+  "copied out of the checkout"
+  "routes were written there too"
+  "Traefik still reads its routes"
+)
 
 dockerfile_of() {
   case "$1" in
@@ -218,6 +229,22 @@ configure_environment() {
   set_env OPENMAPX_RELEASE local
 }
 
+# Fails when $work/$1.log holds a message about converting an older
+# installation, and prints those lines.
+assert_no_legacy_warnings() {
+  local log="$work/$1.log" phrase lines
+  local patterns=()
+  [[ -f "$log" ]] || fail "$log is missing"
+  for phrase in "${legacy_warning_phrases[@]}"; do
+    patterns+=(-e "$phrase")
+  done
+  if lines="$(grep --ignore-case --fixed-strings "${patterns[@]}" -- "$log")"; then
+    echo "--- messages about an older installation in the $1 output ---" >&2
+    printf '%s\n' "$lines" >&2
+    fail "$1 printed a message about converting an older installation"
+  fi
+}
+
 # Documented steps 3 and 4. The release selection is local, so there is no
 # release to resolve: the services use the images built above.
 render_stack() {
@@ -225,6 +252,7 @@ render_stack() {
   logged selected openmapx services selected || fail "services selected failed"
   logged release-status openmapx compose release --status || fail "compose release --status failed"
   logged render openmapx compose render || fail "compose render failed"
+  assert_no_legacy_warnings render
 }
 
 # Documented step 5, after the start itself.
@@ -256,6 +284,7 @@ assert_check_clean() {
     grep '✗' "$work/check.log" >&2
     fail "openmapx check reported problems"
   fi
+  assert_no_legacy_warnings check
 }
 
 # Every container of the project is running and, where it has a healthcheck,
