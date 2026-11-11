@@ -141,14 +141,14 @@ export function MobileRuntimeProvider({ children, webBuildId, scope }: MobileRun
         if (!incoming) return;
         const outcome = applyNativeSnapshot(readModelRef.current, incoming);
         if (!outcome.ok) {
-          // A gap or a changed route means the page is behind; ask for the
-          // whole thing rather than render an interpolation.
+          // A changed route or an unknown session means the page is behind;
+          // ask for the whole thing rather than guess.
           if (outcome.reason === "need-full-snapshot") void nativeCommands.requestSnapshot();
           return;
         }
         // The store re-checks the step against what it actually rendered,
         // which is what catches a batched render dropping one in between.
-        const projection = projectionOf(outcome.model, incoming.type);
+        const projection = projectionOf(outcome.model, incoming.type, outcome.baseRevision);
         const store = useNavigationStore.getState();
         const applied =
           incoming.type === "full"

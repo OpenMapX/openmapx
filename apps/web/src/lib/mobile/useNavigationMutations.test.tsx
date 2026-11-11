@@ -15,7 +15,62 @@ vi.mock("./MobileRuntimeProvider", () => ({
   useMobileRuntimeContext: () => runtime,
 }));
 
+import { useNativeEndFailure } from "./nativeEndFailure";
+import { CommandError } from "./navigationCommands";
 import { useNavigationMutations } from "./useNavigationMutations";
+
+describe("useNavigationMutations.endNavigation", () => {
+  beforeEach(() => {
+    runtime.browserAuthority = false;
+    useNativeEndFailure.getState().dismiss();
+  });
+
+  it("tells the user and reconciles when native refuses to end the trip", async () => {
+    const clear = vi.spyOn(useNavigationStore.getState(), "clearNativeReadModel");
+    const requestSnapshot = vi.fn(async () => undefined);
+    runtime.commands = {
+      stop: vi.fn(async () => {
+        throw new Error("native stop refused");
+      }),
+      requestSnapshot,
+    };
+    const { result } = renderHook(() => useNavigationMutations());
+
+    await act(() => result.current.endNavigation());
+
+    expect(useNativeEndFailure.getState().failure).toMatchObject({ kind: "refused" });
+    expect(requestSnapshot).toHaveBeenCalledTimes(1);
+    expect(clear).not.toHaveBeenCalled();
+    clear.mockRestore();
+  });
+
+  it("says the end is unconfirmed, not refused, when native did not answer", async () => {
+    runtime.commands = {
+      stop: vi.fn(async () => {
+        throw new CommandError("timeout");
+      }),
+      requestSnapshot: vi.fn(async () => undefined),
+    };
+    const { result } = renderHook(() => useNavigationMutations());
+
+    await act(() => result.current.endNavigation());
+    await act(() => result.current.endNavigation());
+
+    expect(useNativeEndFailure.getState().failure).toEqual({ id: 2, kind: "unconfirmed" });
+  });
+
+  it("clears the page's copy once native has ended the trip, reporting nothing", async () => {
+    const clear = vi.spyOn(useNavigationStore.getState(), "clearNativeReadModel");
+    runtime.commands = { stop: vi.fn(async () => undefined), requestSnapshot: vi.fn() };
+    const { result } = renderHook(() => useNavigationMutations());
+
+    await act(() => result.current.endNavigation());
+
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(useNativeEndFailure.getState().failure).toBeNull();
+    clear.mockRestore();
+  });
+});
 
 describe("useNavigationMutations.completeArrival", () => {
   beforeEach(() => {

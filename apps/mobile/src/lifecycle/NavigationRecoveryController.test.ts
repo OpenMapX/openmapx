@@ -23,6 +23,7 @@ function setup(
     driverRunning?: boolean;
     permission?: "not-determined" | "foreground" | "background" | "denied" | "limited";
     appActive?: boolean;
+    closeOutcome?: "ended" | "kept" | "active" | "gone";
   } = {},
 ) {
   let session = options.session === undefined ? activeSession() : options.session;
@@ -39,15 +40,24 @@ function setup(
       if (!session || options.loadKind === "none") return { kind: "none" };
       return { kind: "active", session };
     },
-    terminate: async (sessionId) => {
-      if (!session || session.sessionId !== sessionId) return false;
-      ended.push(sessionId);
-      session = null;
-      return true;
-    },
   };
+  const closed: string[] = [];
   const controller = new NavigationRecoveryController({
     store,
+    sessions: {
+      closeFinished: async (sessionId) => {
+        closed.push(sessionId);
+        const outcome = options.closeOutcome ?? "ended";
+        if (outcome === "ended") session = null;
+        return outcome;
+      },
+      stop: async (sessionId) => {
+        if (!session || session.sessionId !== sessionId) return false;
+        ended.push(sessionId);
+        session = null;
+        return true;
+      },
+    },
     driver: {
       permission: async () => options.permission ?? "background",
       running: async () => options.driverRunning ?? false,
@@ -77,6 +87,7 @@ function setup(
   return {
     controller,
     ended,
+    closed,
     starts,
     surfaceCounts: () => ({ surfaceClears, surfaceSyncs }),
     counts: () => ({ stopCount, audioStopCount, alertClearCount }),
@@ -134,6 +145,33 @@ describe("NavigationRecoveryController", () => {
     expect(context.counts()).toEqual({ stopCount: 2, audioStopCount: 2, alertClearCount: 2 });
   });
 
+  it("asks the coordinator to close a session that is no longer guided, leaving its device work to it", async () => {
+    const context = setup({ session: activeSession({ status: "arrived" }), driverRunning: true });
+
+    await expect(context.controller.reconcile("active")).resolves.toBe("session-ended");
+    expect(context.closed).toEqual(["session-1"]);
+    expect(context.counts()).toEqual({ stopCount: 0, audioStopCount: 0, alertClearCount: 0 });
+  });
+
+  it("keeps an arrival inside its release window, location and all", async () => {
+    const context = setup({
+      session: activeSession({ status: "arrived" }),
+      driverRunning: true,
+      closeOutcome: "kept",
+    });
+
+    await expect(context.controller.reconcile("active")).resolves.toBe("session-ended");
+    await expect(context.controller.resume()).resolves.toBe("session-ended");
+    expect(context.counts()).toEqual({ stopCount: 0, audioStopCount: 0, alertClearCount: 0 });
+  });
+
+  it("closes an active session past its lifetime through the coordinator", async () => {
+    const context = setup({ session: activeSession({ expiresAtMs: NOW }), driverRunning: true });
+
+    await expect(context.controller.reconcile("active")).resolves.toBe("session-ended");
+    expect(context.closed).toEqual(["session-1"]);
+  });
+
   it("cleans orphaned device work when storage has no active session", async () => {
     const context = setup({ session: null, driverRunning: true });
 
@@ -157,7 +195,8 @@ describe("NavigationRecoveryController", () => {
     const first = executor.run(() => held);
     const inspect = jest.fn(async () => ({ kind: "none" as const }));
     const controller = new NavigationRecoveryController({
-      store: { inspect, terminate: async () => false },
+      store: { inspect },
+      sessions: { closeFinished: async () => "gone", stop: async () => false },
       driver: {
         permission: async () => "background",
         running: async () => false,

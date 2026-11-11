@@ -27,18 +27,29 @@ export interface RemoteWorkDeps {
   repository: Pick<SessionRepository, "loadActive">;
   reroute: RerouteClient;
   applyReroute(outcome: RerouteOutcome): Promise<void>;
-  transitRefresh?: Pick<TransitRefreshService, "request" | "abortAll">;
+  transitRefresh?: Pick<TransitRefreshService, "request">;
   applyTransitRefresh?(outcome: RefreshOutcome): Promise<void>;
   now(): number;
   diagnostics: { record(type: string, fields: Record<string, unknown>): void };
+  /**
+   * Told about each request started, so whoever must not finish while one is
+   * in flight (the background task) can wait for it.
+   */
+  track?(work: Promise<void>): void;
 }
 
 export interface RemoteWork {
   port: RemoteWorkPort;
   /** Settles once every request started so far has been answered. Test seam. */
   idle(): Promise<void>;
-  /** Abandons everything in flight, e.g. when the composition is torn down. */
-  abortAll(): void;
+  /**
+   * Abandons reroutes in flight, e.g. when the composition is torn down; an
+   * abandoned answer is dropped. A transit refresh is left to finish: the
+   * server may already have spent the one-time token, and only the answer
+   * carries its replacement, so abandoning it would cost one of the token's
+   * replay attempts. The answer re-enters through the shared queue.
+   */
+  abortReroutes(): void;
 }
 
 export function createRemoteWork(deps: RemoteWorkDeps): RemoteWork {
@@ -47,6 +58,7 @@ export function createRemoteWork(deps: RemoteWorkDeps): RemoteWork {
   const track = (work: Promise<void>) => {
     inFlight.add(work);
     void work.finally(() => inFlight.delete(work));
+    deps.track?.(work);
   };
 
   const port: RemoteWorkPort = {
@@ -96,9 +108,8 @@ export function createRemoteWork(deps: RemoteWorkDeps): RemoteWork {
     idle: async () => {
       while (inFlight.size > 0) await Promise.allSettled([...inFlight]);
     },
-    abortAll: () => {
+    abortReroutes: () => {
       deps.reroute.abortAll();
-      deps.transitRefresh?.abortAll();
     },
   };
 }

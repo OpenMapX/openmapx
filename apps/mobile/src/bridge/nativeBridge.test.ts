@@ -33,7 +33,10 @@ const SHELL: ShellDescription = {
 
 function harness(
   overrides: Partial<
-    Pick<ConstructorParameters<typeof NativeBridge>[0], "dispatch" | "describeShell">
+    Pick<
+      ConstructorParameters<typeof NativeBridge>[0],
+      "dispatch" | "describeShell" | "reportInvalid"
+    >
   > = {},
 ) {
   // Deterministic but distinct per load, so a stale nonce is genuinely stale.
@@ -61,6 +64,7 @@ function harness(
         dispatched.push(message);
       }),
     describeShell: overrides.describeShell ?? (() => SHELL),
+    ...(overrides.reportInvalid ? { reportInvalid: overrides.reportInvalid } : {}),
   });
 
   return { registry, bridge, injected, dispatched };
@@ -495,6 +499,15 @@ describe("NativeBridge.send", () => {
 
     expect(bridge.send("permission.state", { permission: "omniscient" })).toBe("invalid");
     expect(injected).toHaveLength(1);
+  });
+
+  it("reports a refused message by type, without its payload", () => {
+    const reported: string[] = [];
+    const { bridge, registry } = harness({ reportInvalid: (type) => reported.push(type) });
+    registry.beginDocumentLoad(NOW);
+
+    expect(bridge.send("permission.state", { permission: "omniscient" })).toBe("invalid");
+    expect(reported).toEqual(["permission.state"]);
   });
 
   it("keeps only the freshest queued snapshot", async () => {

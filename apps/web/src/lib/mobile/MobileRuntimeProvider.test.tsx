@@ -209,7 +209,7 @@ describe("MobileRuntimeProvider read model", () => {
     },
   });
 
-  it("asks for a full snapshot rather than rendering across a gap", async () => {
+  it("renders a newer delta after a dropped one without asking for a full snapshot", async () => {
     const shell = await negotiated();
     shell.deliver(snapshot());
     await waitFor(() => expect(text("revision")).toBe("4"));
@@ -217,9 +217,22 @@ describe("MobileRuntimeProvider read model", () => {
 
     shell.deliver(snapshot({ type: "progress", revision: 20, kind: undefined }));
 
+    await waitFor(() => expect(text("revision")).toBe("20"));
+    expect(shell.sent).toEqual([]);
+  });
+
+  it("asks for a full snapshot when a delta belongs to another route", async () => {
+    const shell = await negotiated();
+    shell.deliver(snapshot());
+    await waitFor(() => expect(text("revision")).toBe("4"));
+    shell.sent.length = 0;
+
+    shell.deliver(
+      snapshot({ type: "progress", revision: 5, kind: undefined, routeFingerprint: "route-b" }),
+    );
+
     await waitFor(() => expect(shell.sent.length).toBeGreaterThan(0));
     expect(JSON.parse(shell.sent[0]).type).toBe("snapshot.request");
-    // The stale revision is kept until the real answer arrives.
     expect(text("revision")).toBe("4");
   });
 
@@ -400,7 +413,7 @@ describe("MobileRuntimeProvider store integration", () => {
     expect(renderPhaseUpdates).toEqual([]);
   });
 
-  it("updates displayed walking progress in order and heals a revision gap with a full snapshot", async () => {
+  it("updates displayed walking progress in order, across a dropped delta", async () => {
     function WalkSubscriber() {
       const p = useNavigationStore((s) => s.transitProgress);
       return (
@@ -466,16 +479,6 @@ describe("MobileRuntimeProvider store integration", () => {
       transit({
         type: "progress",
         revision: 8,
-        transitProgress: { ...p, currentWalkStepIndex: 2 },
-      }),
-    );
-    await waitFor(() =>
-      expect(shell.sent.some((raw) => JSON.parse(raw).type === "snapshot.request")).toBe(true),
-    );
-    expect(text("walking-readout")).toBe("1:90:8.002");
-    shell.deliver(
-      transit({
-        revision: 8,
         transitProgress: {
           ...p,
           currentWalkStepIndex: 2,
@@ -485,6 +488,7 @@ describe("MobileRuntimeProvider store integration", () => {
       }),
     );
     await waitFor(() => expect(text("walking-readout")).toBe("2:40:8.003"));
+    expect(shell.sent.some((raw) => JSON.parse(raw).type === "snapshot.request")).toBe(false);
   });
 
   it.each(["visibilitychange", "online"] as const)("reconciles once after %s", async (event) => {

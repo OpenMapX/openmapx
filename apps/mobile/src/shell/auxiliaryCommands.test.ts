@@ -1,10 +1,10 @@
 import { MOBILE_PROTOCOL_MAX, type WebToNativeMessage } from "@openmapx/core/navigation";
+import { answerCommand } from "../bridge/answerCommand";
 import {
   type AuxiliaryCommandDeps,
   createAuxiliaryCommandHandler,
   wireFix,
 } from "./auxiliaryCommands";
-import { answerCommand } from "./shellServices";
 
 const envelope = {
   protocolVersion: MOBILE_PROTOCOL_MAX,

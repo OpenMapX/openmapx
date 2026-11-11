@@ -123,9 +123,10 @@ The relevant owners are:
 React Native's `HeadlessJsTaskService`. It uses the application's existing
 `ReactHost` in the same Android process, without a second Hermes engine or phone
 WebView. `carRuntime.ts` reuses the registered foreground coordinator when present;
-otherwise it composes the shared coordinator core with real reroute and audio
-ports. It disposes that car composition on phone takeover or detach. It does not
-rely on the location-only headless composition's no-op remote ports.
+otherwise it composes its own with `createInvisibleNavigation`, the factory the
+headless location task also uses, over the shared coordinator core and the same
+device ports, including reroute and audio. It disposes that car composition on
+phone takeover or detach.
 
 Phone commands, car commands and location batches enter the shared executor and
 SQLite repository. Kotlin and the car page do not run another navigation engine.

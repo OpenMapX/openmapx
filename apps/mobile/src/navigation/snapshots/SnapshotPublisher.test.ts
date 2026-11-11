@@ -57,33 +57,23 @@ describe("SnapshotPublisher throttling", () => {
     for (let tick = 0; tick < 25; tick += 1) {
       publisher.offer(progressAt(tick + 1));
       advance(200);
-      publisher.flushPending();
     }
 
-    expect(delivered.length).toBeLessThanOrEqual(6);
+    expect(delivered.map((s) => s.revision)).toEqual([1, 6, 11, 16, 21]);
   });
 
-  it("delivers the newest snapshot, not the one that was throttled first", () => {
+  it("drops a throttled snapshot and sends the next one after the interval", () => {
     const { publisher, delivered, advance } = harness();
     publisher.offer(progressAt(1));
 
-    for (let revision = 2; revision < 50; revision += 1) publisher.offer(progressAt(revision));
-    advance(PROGRESS_INTERVAL_MS);
-    publisher.flushPending();
-
-    expect(delivered.map((s) => s.revision)).toEqual([1, 49]);
-    expect(publisher.hasPending).toBe(false);
-  });
-
-  it("does not deliver early when the interval has not elapsed", () => {
-    const { publisher, delivered, advance } = harness();
-    publisher.offer(progressAt(1));
-    publisher.offer(progressAt(2));
-
+    expect(publisher.offer(progressAt(2))).toBe("throttled");
     advance(PROGRESS_INTERVAL_MS - 1);
+    expect(publisher.offer(progressAt(3))).toBe("throttled");
+    advance(1);
+    expect(publisher.offer(progressAt(4))).toBe("sent");
 
-    expect(publisher.flushPending()).toBe(false);
-    expect(delivered).toHaveLength(1);
+    // The page accepts revision 4 after 1: progress snapshots are absolute.
+    expect(delivered.map((s) => s.revision)).toEqual([1, 4]);
   });
 });
 
@@ -103,16 +93,6 @@ describe("SnapshotPublisher immediate delivery", () => {
     expect(publisher.offer(progressAt(2), { immediate: true })).toBe("sent");
     expect(delivered).toHaveLength(2);
   });
-
-  it("clears anything throttled when an immediate snapshot supersedes it", () => {
-    const { publisher } = harness();
-    publisher.offer(progressAt(1));
-    publisher.offer(progressAt(2));
-
-    publisher.offer(fullAt(3));
-
-    expect(publisher.hasPending).toBe(false);
-  });
 });
 
 describe("SnapshotPublisher while the page is unavailable", () => {
@@ -123,14 +103,13 @@ describe("SnapshotPublisher while the page is unavailable", () => {
     for (let second = 0; second < 10; second += 1) {
       publisher.offer(progressAt(second + 1));
       advance(1_000);
-      publisher.flushPending();
     }
     reconnect();
-    publisher.flushPending();
 
     // Ten positions delivered on reconnect would animate the user backwards
     // through where they used to be.
     expect(delivered).toEqual([]);
+    expect(publisher.offer(progressAt(11))).toBe("sent");
   });
 
   it("reports a dropped snapshot rather than pretending it was sent", () => {
@@ -139,40 +118,5 @@ describe("SnapshotPublisher while the page is unavailable", () => {
 
     expect(publisher.offer(progressAt(1))).toBe("dropped");
     expect(publisher.offer(fullAt(2))).toBe("dropped");
-  });
-
-  it("sends a fresh full snapshot after the page comes back", () => {
-    const { publisher, delivered, disconnect, reconnect } = harness();
-    disconnect();
-    publisher.offer(progressAt(1));
-    reconnect();
-    publisher.reset();
-
-    publisher.offer(fullAt(9));
-
-    expect(delivered).toHaveLength(1);
-    expect(delivered[0].type).toBe("full");
-    expect(delivered[0].revision).toBe(9);
-  });
-
-  it("does not hold the first snapshot of a new document behind an old timer", () => {
-    const { publisher, delivered } = harness();
-    publisher.offer(progressAt(1));
-
-    publisher.reset();
-
-    expect(publisher.offer(progressAt(2))).toBe("sent");
-    expect(delivered).toHaveLength(2);
-  });
-
-  it("discards what was waiting when the document is gone", () => {
-    const { publisher } = harness();
-    publisher.offer(progressAt(1));
-    publisher.offer(progressAt(2));
-
-    publisher.discard();
-
-    expect(publisher.hasPending).toBe(false);
-    expect(publisher.flushPending()).toBe(false);
   });
 });

@@ -5,11 +5,12 @@ import {
   BridgeClient,
   BridgeError,
   MAX_PENDING,
+  NativeCommandError,
   PREPARE_TIMEOUT_MS,
   READ_TIMEOUT_MS,
 } from "./bridgeClient";
 import { CHANNEL_GLOBAL } from "./mobileShellEnvironment";
-import { NativeNavigationCommands } from "./navigationCommands";
+import { type CommandError, NativeNavigationCommands } from "./navigationCommands";
 
 const NONCE = "nonce-abc";
 
@@ -320,7 +321,7 @@ describe("BridgeClient.request", () => {
     expect(context.client.pendingCount).toBe(0);
   });
 
-  it("matches an error to the command that named it", async () => {
+  it("rejects the command an error names with the shell's reason", async () => {
     const context = await negotiated();
 
     const pending = context.client.request("session.stop", {}, { sessionId: "s1" });
@@ -334,7 +335,32 @@ describe("BridgeClient.request", () => {
       payload: { code: "revision-conflict", forMessageId: messageId },
     });
 
-    await expect(pending).resolves.toMatchObject({ type: "native.error" });
+    const failure = await pending.catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(NativeCommandError);
+    expect(failure).toMatchObject({ code: "revision-conflict" });
+    expect(context.client.pendingCount).toBe(0);
+  });
+
+  it("keeps the timeout when a refusal arrives after it", async () => {
+    const context = await negotiated();
+    const seen: unknown[] = [];
+    context.client.subscribe((message) => seen.push(message.type));
+
+    const pending = context.client.request("snapshot.request", {});
+    const messageId = JSON.parse(context.sent[0]).messageId;
+    context.advance(READ_TIMEOUT_MS);
+    await expect(pending).rejects.toMatchObject({ code: "timeout" });
+    context.deliver({
+      protocolVersion: MOBILE_PROTOCOL_MAX,
+      type: "native.error",
+      messageId: "n4",
+      channelNonce: NONCE,
+      sentAtMs: 1_700_000_000_000,
+      payload: { code: "internal-error", forMessageId: messageId },
+    });
+
+    expect(seen).toEqual(["native.error"]);
+    expect(context.client.pendingCount).toBe(0);
   });
 
   it("matches concurrent replies by request id even when they arrive out of order", async () => {
@@ -630,5 +656,35 @@ describe("navigation Start with production timers", () => {
       await pending;
       vi.useRealTimers();
     }
+  });
+});
+
+describe("navigation End against a refusing shell", () => {
+  it("fails, because the trip the shell refused to end is still running", async () => {
+    const shell = shellScope();
+    const client = new BridgeClient({ webBuildId: "production", scope: shell.scope });
+    client.attach();
+    const hello = client.hello();
+    shell.deliver(helloReply(JSON.parse(shell.sent[0]).messageId));
+    await hello;
+    const commands = new NativeNavigationCommands(client, () => ({
+      sessionId: "s1",
+      revision: 7,
+    }));
+
+    const stopping = commands.stop().then(
+      () => "ended",
+      (error: CommandError) => error.nativeCode,
+    );
+    await Promise.resolve();
+    const stopFor = JSON.parse(shell.sent.at(-1) ?? "").messageId;
+    shell.deliver({
+      ...helloReply(stopFor),
+      type: "native.error",
+      payload: { code: "internal-error", forMessageId: stopFor },
+    });
+
+    await expect(stopping).resolves.toBe("internal-error");
+    client.close();
   });
 });

@@ -72,7 +72,6 @@ export function journeysToRefetch(session: TransitMobileSession): string[] {
 
 export class TransitRefreshService {
   private readonly client: ApiClient;
-  private readonly inFlight = new Map<string, AbortController>();
 
   constructor(deps: RefreshServiceDeps) {
     this.client =
@@ -86,28 +85,15 @@ export class TransitRefreshService {
       });
   }
 
-  abort(requestId: string): void {
-    this.inFlight.get(requestId)?.abort();
-    this.inFlight.delete(requestId);
-  }
-
-  abortAll(): void {
-    for (const controller of this.inFlight.values()) controller.abort();
-    this.inFlight.clear();
-  }
-
   async request(request: RefreshRequest): Promise<RefreshOutcome> {
     const { requestId, generation, session } = request;
     const base = { requestId, generation, sessionId: session.sessionId };
 
     const token = session.payload.refreshToken;
 
-    const controller = new AbortController();
-    this.inFlight.set(requestId, controller);
-    const options: ApiRequestOptions = {
-      signal: controller.signal,
-      timeoutMs: REQUEST_TIMEOUT_MS,
-    };
+    // Never abandoned: the server may spend the one-time token on receipt,
+    // and only the answer carries its replacement. The timeout bounds it.
+    const options: ApiRequestOptions = { timeoutMs: REQUEST_TIMEOUT_MS };
 
     try {
       const [envelope, journeys] = await Promise.all([
@@ -141,8 +127,6 @@ export class TransitRefreshService {
       }
       // A lost response is ambiguous; the server replay window bounds retries.
       return { ...base, ok: false, failure: "ambiguous" };
-    } finally {
-      this.inFlight.delete(requestId);
     }
   }
 }
