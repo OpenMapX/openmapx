@@ -37,10 +37,7 @@ export {
   checkoutDifferencesFromRelease,
   describeCheckoutDifferences,
 } from "./checkout-differences";
-export {
-  checkoutMounted,
-  checkoutMountedAt,
-} from "./checkout-layout";
+export { checkoutMountedAt } from "./checkout-layout";
 export { communityServiceManifestProblems } from "./community-manifest";
 export {
   COMMUNITY_RECORD_VERSION,

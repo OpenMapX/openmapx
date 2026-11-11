@@ -125,7 +125,7 @@ export function readBuiltInServices(
     });
   }
   // The release's service files are part of what it runs: a bundle covers
-  // their bytes, executable bits and every earlier version the import knows.
+  // their paths, bytes and executable bits.
   // (Run from source, only tests pass an embedded source, without files.)
   const files =
     options.serviceFiles !== undefined

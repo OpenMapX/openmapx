@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { agentStatePaths } from "../agent-state";
 import { prepareAgentStores } from "../agent-stores";
-import { checkoutMounted } from "../checkout-layout";
+import { checkoutMountedAt } from "../checkout-layout";
 import { acquireConfigurationOwnership } from "../configuration-ownership";
 import { writeLegacyTraefikRoutes } from "../traefik-files";
 
@@ -41,11 +41,11 @@ function stack(layout: "checkout" | "narrow") {
 
 describe("the checkout, as the operations agent tells", () => {
   it("is there when its services directory is, and not through a link", () => {
-    expect(checkoutMounted(stack("checkout").root)).toBe(true);
+    expect(checkoutMountedAt(stack("checkout").infraDir)).toBe(true);
     const narrow = stack("narrow");
-    expect(checkoutMounted(narrow.root)).toBe(false);
+    expect(checkoutMountedAt(narrow.infraDir)).toBe(false);
     symlinkSync(stack("checkout").root, join(narrow.root, "services"));
-    expect(checkoutMounted(narrow.root)).toBe(false);
+    expect(checkoutMountedAt(narrow.infraDir)).toBe(false);
   });
 
   it("without it, the agent's stores start empty and owner-only, and a link is refused", () => {

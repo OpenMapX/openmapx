@@ -10,7 +10,7 @@ import { join, resolve } from "node:path";
  * the checkout's `services` directory, so that directory, a real one and not
  * a link, is the one test.
  */
-export function checkoutMounted(rootDir: string): boolean {
+function checkoutMounted(rootDir: string): boolean {
   try {
     const stats = lstatSync(join(rootDir, "services"));
     return stats.isDirectory();
