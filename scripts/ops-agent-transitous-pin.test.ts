@@ -16,7 +16,6 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { OpsClient } from "@openmapx/core/ops";
-import { services } from "@openmapx/core/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   closeControlInstallation,
@@ -164,7 +163,6 @@ describe.skipIf(!supported)("the agent's Transitous pin", () => {
         OPENMAPX_ROOT_DIR: target,
         OPS_AGENT_API_TOKEN_FILE: join(infra, "secrets", "ops-agent-api-token"),
         OPS_AGENT_DATA_MANAGER_TOKEN_FILE: join(infra, "secrets", "ops-agent-data-manager-token"),
-        OPS_TRUSTED_CONFIG_DIR: services.agentStatePaths(infra).trustedConfig,
         HOST: "127.0.0.1",
         PORT: String(port),
       },

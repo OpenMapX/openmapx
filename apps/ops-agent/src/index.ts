@@ -64,8 +64,7 @@ async function main(): Promise<void> {
   const config = loadOpsAgentConfig();
   // Privacy scratch, like the trusted-configuration queue, is reached through
   // the checkout: the container's own mount may still be the old location,
-  // which data-manager can read. OPS_PRIVACY_BACKUP_SCRATCH_ROOT stays set for
-  // agents of earlier releases.
+  // which data-manager can read.
   janitorPrivacyBackupScratch(config.rootDir);
   // The release's manifests and service files apply, with the operator's
   // overrides; the checkout's no longer do. Reported, never fatal at start.
