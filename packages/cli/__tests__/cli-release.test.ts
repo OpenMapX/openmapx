@@ -415,12 +415,12 @@ describe("clearReleaseSelection", () => {
     expect(readFileSync(join(outside, "sentinel"), "utf8")).toBe("retain");
   });
 
-  it("removes only the agent state's overlay, never an earlier release's in infra/docker", async () => {
+  it("removes only the agent state's overlay, never a same-named file in infra/docker", async () => {
     const { infraDir, path } = fixture();
-    const legacy = join(infraDir, "docker-compose.release.yml");
-    writeFileSync(legacy, "legacy overlay\n", { mode: 0o600 });
+    const sameName = join(infraDir, "docker-compose.release.yml");
+    writeFileSync(sameName, "unrelated file\n", { mode: 0o600 });
     expect(await clearReleaseSelection({ infraDir })).toEqual({ path, cleared: true });
-    expect(readFileSync(legacy, "utf8")).toBe("legacy overlay\n");
+    expect(readFileSync(sameName, "utf8")).toBe("unrelated file\n");
   });
 
   it("refuses an overlay that is group-writable or someone else's", async () => {
