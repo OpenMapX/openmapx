@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { readdirSync } from "node:fs";
 import { findRepoRoot } from "@openmapx/core/server";
 import { isIntegrationHostInitialized, reloadIntegrations } from "../integration-host";
 import { dockerComposeAction } from "../utils/docker-compose";
@@ -34,10 +33,9 @@ export function withExtensionChangeLock<T>(work: () => Promise<T>): Promise<T> {
  * Finish what an interrupted extension change left behind: settle its pending
  * integration and repository transactions in the operations agent, restore the
  * service selection the change touched, and repair the service runtimes it
- * touched. With the job that is running it, also have the agent adopt
- * integrations earlier releases installed; adoption needs a job to own its
- * operations, so startup recovery runs without one and never adopts. The
- * caller holds the extension change lock.
+ * touched. Settling an integration needs the job that is running it to own
+ * its operations, so startup recovery, which runs without one, only observes
+ * them. The caller holds the extension change lock.
  */
 export async function recoverInterruptedExtensionChanges(
   signal?: AbortSignal,
@@ -48,7 +46,7 @@ export async function recoverInterruptedExtensionChanges(
     ctx: options.ctx,
   });
   if (
-    (integrations.rolledBack.length > 0 || integrations.adopted.length > 0) &&
+    integrations.rolledBack.length > 0 &&
     // At startup the host loads what the agent now reports by itself.
     isIntegrationHostInitialized()
   ) {
@@ -117,31 +115,4 @@ export async function recoverInterruptedExtensionChanges(
       });
     },
   });
-}
-
-const LEGACY_INSTALL_JOURNAL = /^\.extension-install-journal-[a-f0-9]{24}\.json$/;
-
-/**
- * Earlier releases journaled integration installs in `custom_integrations`
- * themselves. The operations agent now owns that directory, and recovery has
- * it verify every integration such a change left behind by adoption, so a
- * leftover journal is only reported. Never throws.
- */
-export function warnAboutLegacyInstallJournals(
-  customIntegrationsDir: string,
-  warn: (message: string) => void,
-): void {
-  let journals: string[];
-  try {
-    journals = readdirSync(customIntegrationsDir).filter((name) =>
-      LEGACY_INSTALL_JOURNAL.test(name),
-    );
-  } catch {
-    return;
-  }
-  if (journals.length === 0) return;
-  warn(
-    `Found ${journals.length} extension install journal(s) from an earlier release in ${customIntegrationsDir} (${journals.join(", ")}). ` +
-      "Recovery requires the original publication and administrative job identity; startup observation does not settle these journals or authorize deleting them.",
-  );
 }

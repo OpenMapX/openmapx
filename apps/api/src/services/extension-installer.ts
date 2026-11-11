@@ -20,7 +20,6 @@ import { hasRetainedAdminJobOperation } from "./admin-job-ops";
 import { JobOwnershipLost } from "./admin-job-state";
 import { renderAndPersistCompose, serviceStart } from "./admin-ops";
 import {
-  adoptIntegration,
   publishIntegration,
   readInstalledIntegrations,
   removeIntegration,
@@ -288,16 +287,6 @@ export async function preflightExtensionInstall(
   return { manifest, components, serviceRepos: serviceRepos as never };
 }
 
-/** The extension the database records as owning an installed integration. */
-async function integrationManagedBy(id: string): Promise<string | null> {
-  const [row] = await db
-    .select({ managedByExtension: installedIntegration.managedByExtension })
-    .from(installedIntegration)
-    .where(eq(installedIntegration.id, id))
-    .limit(1);
-  return row?.managedByExtension ?? null;
-}
-
 /**
  * Make `roots` the operator's selection and apply it: the ops-agent writes
  * `service-selection.json`, which the CLI renders too, and the registry of the
@@ -361,13 +350,6 @@ function extensionEffects(workflow: ExtensionWorkflow, ctx: JobContext) {
           await assertNotRevoked(request.extensionId!);
         return publishIntegration(request, options);
       }),
-    adoptIntegration: (
-      request: Parameters<typeof adoptIntegration>[0],
-      options: Parameters<typeof adoptIntegration>[1],
-    ) =>
-      extensionStep(workflow, `integration.adopt:${options.operationKey}`, request, () =>
-        adoptIntegration(request, options),
-      ),
     settleIntegration: (
       request: Parameters<typeof settleIntegration>[0],
       options: Parameters<typeof settleIntegration>[1],
@@ -445,7 +427,6 @@ async function installExtensionNow(
     publishServiceRepository,
     settleServiceRepository,
     publishIntegration,
-    adoptIntegration,
     settleIntegration,
     dockerComposeAction,
     renderAndPersistCompose,
@@ -671,33 +652,8 @@ async function installExtensionNow(
       repository: string;
       transactionId: string;
     }> = [];
-    const agentIntegrations =
-      integrationComponents.length > 0
-        ? await extensionStep(workflow, "integrations.before", {}, () =>
-            readInstalledIntegrations({ signal: ctx.signal }),
-          )
-        : null;
     for (const intg of integrationComponents) {
       await ctx.log(`Installing integration ${intg.id}...`);
-      if (
-        agentIntegrations?.unrecorded.includes(intg.id) &&
-        (await integrationManagedBy(intg.id)) === manifest.id
-      ) {
-        // An earlier release installed it for this extension and the agent
-        // could not verify it. Recording it as this extension's, unverified,
-        // lets this install replace it with the archive it now verifies.
-        await adoptIntegration(
-          { integrationId: intg.id, extensionId: manifest.id },
-          {
-            ctx,
-            operationKey: createDurableOpsKey(
-              "extension.integration.adopt",
-              `${ctx.jobId}:${manifest.id}:${intg.id}`,
-            ),
-            signal: ctx.signal,
-          },
-        );
-      }
       const published = await publishIntegration(
         {
           integrationId: intg.id,
@@ -1108,7 +1064,6 @@ async function removeExtensionNow(
   const {
     removeServiceRepository,
     removeIntegration,
-    adoptIntegration,
     dockerComposeAction,
     renderAndPersistCompose,
   } = extensionEffects(workflow, ctx);
@@ -1223,7 +1178,6 @@ async function removeExtensionNow(
       readInstalledIntegrations({ signal: ctx.signal }),
     );
     const records = new Map(installed.integrations.map((entry) => [entry.integrationId, entry]));
-    const unrecorded = new Set(installed.unrecorded);
     for (const intgId of integrationIds) {
       await ctx.log(`Removing integration ${intgId}...`);
       const record = records.get(intgId);
@@ -1234,22 +1188,6 @@ async function removeExtensionNow(
           "stderr",
         );
       } else {
-        if (!record && unrecorded.has(intgId)) {
-          // An earlier release installed it and recovery could not verify it
-          // yet. Recording it as this extension's, unverified, lets the agent
-          // remove it.
-          await adoptIntegration(
-            { integrationId: intgId, extensionId: id },
-            {
-              ctx,
-              operationKey: createDurableOpsKey(
-                "extension.integration.adopt",
-                `${ctx.jobId}:${intgId}`,
-              ),
-              signal: ctx.signal,
-            },
-          );
-        }
         await removeIntegration(
           { integrationId: intgId, extensionId: id },
           {

@@ -127,7 +127,6 @@ import {
 } from "./services/extension-installer";
 import {
   recoverInterruptedExtensionChanges,
-  warnAboutLegacyInstallJournals,
   withExtensionChangeLock,
 } from "./services/extension-recovery";
 import { pruneOldRecords } from "./services/health-history";
@@ -683,7 +682,6 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
   const customIntegrationsDir =
     process.env.OPENMAPX_CUSTOM_INTEGRATIONS_DIR?.trim() ||
     join(runtimeRootDir, "infra", "docker", "state", "ops-agent", "custom-integrations");
-  warnAboutLegacyInstallJournals(customIntegrationsDir, (message) => server.log.warn(message));
   setInstalledIntegrationResolver(() =>
     readLoadableIntegrations({
       // The agent was unreachable and now reports a different set.

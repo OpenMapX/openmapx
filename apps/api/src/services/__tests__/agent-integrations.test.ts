@@ -107,14 +107,7 @@ interface Request {
 }
 
 /** Answer every operation; inspections come from `snapshots` in turn. */
-function agentAnswers(
-  snapshots: Array<ReturnType<typeof snapshot>>,
-  adopt: (request: Request) => unknown = (request) => ({
-    integrationId: request.integrationId,
-    status: "recorded",
-    reason: null,
-  }),
-) {
+function agentAnswers(snapshots: Array<ReturnType<typeof snapshot>>) {
   let read = 0;
   executeMock.mockImplementation(async (_client, operation) => {
     const request = operation as Request;
@@ -136,7 +129,6 @@ function agentAnswers(
         changed: true,
       } as never;
     }
-    if (request.kind === "catalogIntegration.adopt") return adopt(request) as never;
     throw new Error(`unexpected ${request.kind}`);
   });
 }
@@ -206,15 +198,6 @@ describe("agent integration client", () => {
         ),
       { integrationId: "intg-two", removed: true },
     ],
-    [
-      "adopt",
-      () =>
-        integrations.adoptIntegration(
-          { integrationId: "intg-one" },
-          { ctx: jobContext(), operationKey: "opk1_key" },
-        ),
-      { integrationId: "intg-two", status: "recorded", reason: null },
-    ],
   ])("refuses a %s answer about a different integration", async (_kind, call, answer) => {
     executeMock.mockResolvedValueOnce(answer as never);
     await expect(call()).rejects.toThrow(/different integration/);
@@ -243,7 +226,6 @@ describe("recoverAgentIntegrations", () => {
     const log = silentLog();
     const outcome = await integrations.recoverAgentIntegrations({ log });
     expect(requests("catalogIntegration.settle")).toEqual([]);
-    expect(requests("catalogIntegration.adopt")).toEqual([]);
     expect(outcome.committed).toEqual([]);
     expect(log.warn).toHaveBeenCalledWith(expect.stringContaining("original administrative job"));
   });
@@ -308,19 +290,19 @@ describe("recoverAgentIntegrations", () => {
     expect(requests("catalogIntegration.settle").map((request) => request.outcome)).toEqual([
       "rollback",
     ]);
-    // Adoption reads what the rollback left.
+    // The report reads what the rollback left.
     expect(requests("installedIntegrations.inspect")).toHaveLength(2);
     expect(outcome.rolledBack).toEqual(["intg-one"]);
   });
 
-  it("settles transactions before adopting anything", async () => {
+  it("settles transactions and changes nothing else", async () => {
     agentAnswers([
       snapshot([{ integrationId: "intg-one", pending: { transactionId: PENDING } }], ["intg-old"]),
     ]);
     dbMock.queueSelect([{ lastTransactionId: PENDING }]);
     dbMock.queueSelect([
-      { id: "intg-one", managedByExtension: "bundle-x" },
-      { id: "intg-old", managedByExtension: null },
+      { id: "intg-one", installationKind: "catalog" },
+      { id: "intg-old", installationKind: null },
     ]);
 
     await integrations.recoverAgentIntegrations({ ctx: jobContext(), log: silentLog() });
@@ -330,138 +312,58 @@ describe("recoverAgentIntegrations", () => {
       "installedIntegrations.inspect",
       "catalogIntegration.publish",
       "catalogIntegration.settle",
-      "catalogIntegration.adopt",
     ]);
   });
 
-  it("adopts an unrecorded row with the artifact its extension snapshot names", async () => {
-    agentAnswers([snapshot([{ integrationId: "intg-ok", extensionId: "bundle-y" }], ["intg-one"])]);
-    dbMock.queueSelect([
-      { id: "intg-ok", managedByExtension: "bundle-y" },
-      { id: "intg-one", managedByExtension: "bundle-x" },
+  it("reports rows the agent does not record, except a standalone installation's", async () => {
+    agentAnswers([
+      snapshot([{ integrationId: "intg-ok", extensionId: "bundle-y" }], ["intg-one", "local-only"]),
     ]);
     dbMock.queueSelect([
-      {
-        id: "bundle-x",
-        manifest: {
-          id: "bundle-x",
-          integrations: [{ id: "intg-one", artifact: ARTIFACT, sha256: SHA }],
-        },
-      },
+      { id: "intg-ok", installationKind: "catalog" },
+      { id: "intg-one", installationKind: "catalog" },
+      // No directory and no record in the agent's store.
+      { id: "intg-gone", installationKind: "catalog" },
+      // Installed outside the agent's store by a standalone installation.
+      { id: "local-only", installationKind: "standalone" },
+      { id: "local-elsewhere", installationKind: "standalone" },
     ]);
     const log = silentLog();
 
     const outcome = await integrations.recoverAgentIntegrations({ ctx: jobContext(), log });
 
-    expect(requests("catalogIntegration.adopt")).toEqual([
-      {
-        kind: "catalogIntegration.adopt",
-        integrationId: "intg-one",
-        extensionId: "bundle-x",
-        source: { kind: "artifact", url: ARTIFACT, sha256: SHA },
-      },
+    expect(outcome).toEqual({ committed: [], rolledBack: [] });
+    expect(log.warn.mock.calls.map(([message]) => message)).toEqual([
+      'Integration "intg-one" is not recorded by the operations agent; it is not loaded until it is reinstalled',
+      'Integration "intg-gone" is not recorded by the operations agent; it is not loaded until it is reinstalled',
     ]);
-    expect(outcome.adopted).toEqual(["intg-one"]);
-    expect(log.info).toHaveBeenCalledWith(
-      expect.stringContaining('adopted integration "intg-one"'),
-    );
+    expect(requests("installedIntegrations.inspect")).toHaveLength(1);
+    expect(executeMock).toHaveBeenCalledTimes(1);
   });
 
-  it("adopts without a source when nothing names a usable artifact, and reports needs_reinstall", async () => {
-    agentAnswers([snapshot([], ["intg-one"])], (request) => ({
-      integrationId: request.integrationId,
-      status: "needs_reinstall",
-      reason: "Nothing records the archive it was installed from.",
-    }));
-    dbMock.queueSelect([
-      // Absent from the agent entirely (no directory, no record).
-      { id: "intg-gone", managedByExtension: null },
-      { id: "intg-one", managedByExtension: "bundle-x" },
-    ]);
-    dbMock.queueSelect([
-      {
-        id: "bundle-x",
-        manifest: { integrations: [{ id: "intg-one", artifact: "http://insecure", sha256: SHA }] },
-      },
-    ]);
-    const log = silentLog();
-
-    const outcome = await integrations.recoverAgentIntegrations({ ctx: jobContext(), log });
-
-    expect(requests("catalogIntegration.adopt")).toEqual([
-      { kind: "catalogIntegration.adopt", integrationId: "intg-gone" },
-      { kind: "catalogIntegration.adopt", integrationId: "intg-one", extensionId: "bundle-x" },
-    ]);
-    expect(outcome.adopted).toEqual([]);
-    expect(outcome.needsReinstall.map((entry) => entry.integrationId)).toEqual([
-      "intg-gone",
-      "intg-one",
-    ]);
-    expect(log.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Integration "intg-one" needs to be reinstalled'),
-    );
-  });
-
-  it("keeps adoption on the original job step instead of assigning a new attempt key", async () => {
-    agentAnswers([snapshot([], ["intg-one"])]);
-    dbMock.queueSelect([{ id: "intg-one", managedByExtension: null }]);
-    dbMock.queueSelect([{ id: "intg-one", managedByExtension: null }]);
-
-    await integrations.recoverAgentIntegrations({ ctx: jobContext(), log: silentLog() });
-    await integrations.recoverAgentIntegrations({ ctx: jobContext(), log: silentLog() });
-
-    const keys = executeMock.mock.calls
-      .filter(([, operation]) => (operation as Request).kind === "catalogIntegration.adopt")
-      .map(([, , key]) => key);
-    expect(keys).toHaveLength(2);
-    expect(keys[0]).toBe(keys[1]);
-  });
-
-  it("never fails recovery when one adoption fails", async () => {
-    let adoptions = 0;
-    agentAnswers([snapshot([], ["intg-one", "intg-two"])], (request) => {
-      adoptions += 1;
-      if (adoptions === 1) throw new Error("agent busy");
-      return { integrationId: request.integrationId, status: "recorded", reason: null };
-    });
-    dbMock.queueSelect([
-      { id: "intg-one", managedByExtension: null },
-      { id: "intg-two", managedByExtension: null },
-    ]);
-    const log = silentLog();
-
-    const outcome = await integrations.recoverAgentIntegrations({ ctx: jobContext(), log });
-
-    expect(outcome.adopted).toEqual(["intg-two"]);
-    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining("could not adopt"));
-  });
-
-  it("reports unrecorded directories no row names, without adopting them", async () => {
+  it("reports unrecorded directories no row names", async () => {
     agentAnswers([snapshot([], ["stray"])]);
     dbMock.queueSelect([]);
     const log = silentLog();
 
     await integrations.recoverAgentIntegrations({ ctx: jobContext(), log });
 
-    expect(requests("catalogIntegration.adopt")).toEqual([]);
     expect(log.warn).toHaveBeenCalledWith(expect.stringContaining("custom_integrations/stray"));
   });
 
-  it("does not adopt what the agent already records, whatever its status", async () => {
+  it("reports nothing the agent records, whatever its status", async () => {
     agentAnswers([
       snapshot([
         { integrationId: "intg-one", status: "needs_reinstall", reason: "manifest changed" },
       ]),
     ]);
-    dbMock.queueSelect([{ id: "intg-one", managedByExtension: null }]);
+    dbMock.queueSelect([{ id: "intg-one", installationKind: "catalog" }]);
+    const log = silentLog();
 
-    const outcome = await integrations.recoverAgentIntegrations({
-      ctx: jobContext(),
-      log: silentLog(),
-    });
+    const outcome = await integrations.recoverAgentIntegrations({ ctx: jobContext(), log });
 
-    expect(requests("catalogIntegration.adopt")).toEqual([]);
-    expect(outcome).toEqual({ committed: [], rolledBack: [], adopted: [], needsReinstall: [] });
+    expect(outcome).toEqual({ committed: [], rolledBack: [] });
+    expect(log.warn).not.toHaveBeenCalled();
   });
 });
 

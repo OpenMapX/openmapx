@@ -1,6 +1,3 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 vi.mock("../agent-integrations", () => ({ recoverAgentIntegrations: vi.fn() }));
@@ -35,8 +32,8 @@ const repositoriesMock = vi.mocked(reconcileCommunityRepositoryTransactions);
 const reloadMock = vi.mocked(reloadIntegrations);
 const initializedMock = vi.mocked(isIntegrationHostInitialized);
 
-function integrationOutcome(overrides: { adopted?: string[]; rolledBack?: string[] } = {}) {
-  return { committed: [], rolledBack: [], adopted: [], needsReinstall: [], ...overrides };
+function integrationOutcome(overrides: { rolledBack?: string[] } = {}) {
+  return { committed: [], rolledBack: [], ...overrides };
 }
 
 afterEach(() => {
@@ -61,23 +58,20 @@ describe("recoverInterruptedExtensionChanges", () => {
     expect(reloadMock).not.toHaveBeenCalled();
   });
 
-  it.each([{ adopted: ["intg-one"] }, { rolledBack: ["intg-one"] }])(
-    "reloads integrations once when recovery changed what is loadable (%o)",
-    async (changed) => {
-      integrationsMock.mockResolvedValue(integrationOutcome(changed));
-      repositoriesMock.mockResolvedValue({
-        runtimeRecoveryNeeded: false,
-        orphanedServiceIds: [],
-        restartServiceIds: [],
-      });
+  it("reloads integrations once when a rollback changed what is loadable", async () => {
+    integrationsMock.mockResolvedValue(integrationOutcome({ rolledBack: ["intg-one"] }));
+    repositoriesMock.mockResolvedValue({
+      runtimeRecoveryNeeded: false,
+      orphanedServiceIds: [],
+      restartServiceIds: [],
+    });
 
-      await recovery.recoverInterruptedExtensionChanges();
+    await recovery.recoverInterruptedExtensionChanges();
 
-      expect(reloadMock).toHaveBeenCalledTimes(1);
-    },
-  );
+    expect(reloadMock).toHaveBeenCalledTimes(1);
+  });
 
-  it("runs startup recovery without a job, so nothing is adopted", async () => {
+  it("runs startup recovery without a job, so it only observes", async () => {
     integrationsMock.mockResolvedValue(integrationOutcome());
     repositoriesMock.mockResolvedValue({
       runtimeRecoveryNeeded: false,
@@ -91,7 +85,7 @@ describe("recoverInterruptedExtensionChanges", () => {
     expect(integrationsMock.mock.calls[0]?.[0]).toMatchObject({ ctx: undefined });
   });
 
-  it("hands the running job to integration recovery so it can adopt", async () => {
+  it("hands the running job to integration recovery so it can settle", async () => {
     integrationsMock.mockResolvedValue(integrationOutcome());
     repositoriesMock.mockResolvedValue({
       runtimeRecoveryNeeded: false,
@@ -106,7 +100,7 @@ describe("recoverInterruptedExtensionChanges", () => {
   });
 
   it("leaves the reload to startup when the integration host is not loaded yet", async () => {
-    integrationsMock.mockResolvedValue(integrationOutcome({ adopted: ["intg-one"] }));
+    integrationsMock.mockResolvedValue(integrationOutcome({ rolledBack: ["intg-one"] }));
     repositoriesMock.mockResolvedValue({
       runtimeRecoveryNeeded: false,
       orphanedServiceIds: [],
@@ -126,34 +120,5 @@ describe("recoverInterruptedExtensionChanges", () => {
       "agent unavailable",
     );
     expect(repositoriesMock).not.toHaveBeenCalled();
-  });
-});
-
-describe("warnAboutLegacyInstallJournals", () => {
-  it("warns about install journals an earlier release left, and nothing else", () => {
-    const directory = mkdtempSync(join(tmpdir(), "omx-legacy-journal-"));
-    try {
-      writeFileSync(join(directory, `.extension-install-journal-${"a".repeat(24)}.json`), "{}");
-      writeFileSync(join(directory, ".extension-install-journal-short.json"), "{}");
-      const warn = vi.fn();
-
-      recovery.warnAboutLegacyInstallJournals(directory, warn);
-
-      expect(warn).toHaveBeenCalledTimes(1);
-      expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining("original publication and administrative job identity"),
-      );
-      expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining(`.extension-install-journal-${"a".repeat(24)}.json`),
-      );
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
-    }
-  });
-
-  it("is silent without journals and never throws for a missing directory", () => {
-    const warn = vi.fn();
-    recovery.warnAboutLegacyInstallJournals(join(tmpdir(), "omx-missing-directory-x"), warn);
-    expect(warn).not.toHaveBeenCalled();
   });
 });

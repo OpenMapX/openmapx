@@ -171,7 +171,6 @@ export const OPS_OPERATION_KINDS = [
   "catalogIntegration.publish",
   "catalogIntegration.settle",
   "catalogIntegration.remove",
-  "catalogIntegration.adopt",
   "installedIntegrations.inspect",
   "serviceSelection.apply",
   "serviceSelection.inspect",
@@ -336,7 +335,6 @@ export const OPS_KIND_POLICIES = {
   "catalogIntegration.publish": asyncEffect("api", 10 * 60_000),
   "catalogIntegration.settle": asyncEffect("api", 5 * 60_000),
   "catalogIntegration.remove": asyncEffect("api", 5 * 60_000),
-  "catalogIntegration.adopt": asyncEffect("api", 10 * 60_000),
   "installedIntegrations.inspect": sync("api", 15_000, 1024 * 1024),
   "serviceSelection.apply": asyncEffect("api", 2 * 60_000),
   "serviceSelection.inspect": sync("api", 15_000),
@@ -692,15 +690,6 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
     kind: z.literal("catalogIntegration.remove"),
     integrationId: serviceIdSchema,
     extensionId: serviceIdSchema.optional(),
-  }),
-  // Records an integration installed before the agent kept records, but only
-  // when its files match `source` fetched again; anything else needs a
-  // reinstall. Without a source nothing can be verified.
-  z.strictObject({
-    kind: z.literal("catalogIntegration.adopt"),
-    integrationId: serviceIdSchema,
-    extensionId: serviceIdSchema.optional(),
-    source: integrationSourceSchema.optional(),
   }),
   kindOnly("installedIntegrations.inspect"),
   serviceSelectionApplyOperationSchema,
@@ -1418,11 +1407,6 @@ export const OPS_RESULT_SCHEMAS = {
   "catalogIntegration.remove": z.strictObject({
     integrationId: serviceIdSchema,
     removed: z.boolean(),
-  }),
-  "catalogIntegration.adopt": z.strictObject({
-    integrationId: serviceIdSchema,
-    status: z.enum(["recorded", "needs_reinstall"]),
-    reason: z.string().max(1_024).nullable(),
   }),
   "installedIntegrations.inspect": z.strictObject({
     integrations: z

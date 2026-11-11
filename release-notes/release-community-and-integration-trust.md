@@ -27,7 +27,8 @@ clone and pull with umask `022`.
   user owns it, instead of refusing to render.
 - Installed integrations under `infra/docker/state/ops-agent/custom-integrations/`
   are trusted by the digests the operations agent records when it installs
-  them; see `agent-owned-integrations.md`.
+  them. One it did not install, or whose files changed, is left out and
+  reported in the agent's startup log and in **Run diagnostics**.
 
 It also fixes trusted configuration requests (applying settings, the service
 selection or secrets from the admin panel): the agent bound each request to one

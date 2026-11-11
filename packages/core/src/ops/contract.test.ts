@@ -409,11 +409,6 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     integrationId: "weather-radar",
     extensionId: "maps-bundle",
   },
-  "catalogIntegration.adopt": {
-    kind: "catalogIntegration.adopt",
-    integrationId: "weather-radar",
-    extensionId: "maps-bundle",
-  },
   "installedIntegrations.inspect": { kind: "installedIntegrations.inspect" },
   "serviceSelection.apply": {
     expectedCurrentRevisionId: null,
@@ -628,7 +623,6 @@ describe("ops contract", () => {
     for (const operation of [
       { kind: "catalogIntegration.inspect", source },
       { kind: "catalogIntegration.publish", integrationId: "fixture", source },
-      { kind: "catalogIntegration.adopt", integrationId: "fixture", source },
     ]) {
       expect(() => parseOpsRequest(request(operation), { role: "api" })).toThrow(OpsContractError);
     }

@@ -37,9 +37,6 @@ import { OpsAgentBusyError, type OpsRuntime } from "./runtime";
  * Installing is a transaction: the previous copy moves to
  * `.agent-backup-<id>-<transaction>` until the API settles it, because only
  * the API knows whether the rest of the extension change committed.
- * Integrations installed before the agent kept records are adopted only when
- * their files match their original artifact fetched again; anything else is
- * recorded as needing a reinstall.
  */
 
 const INTEGRATION_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -102,9 +99,6 @@ export interface IntegrationStoreOptions {
   builtInIds: () => ReadonlySet<string>;
   download?: IntegrationArtifactDownload;
 }
-
-/** The archive could not be fetched; adopting may be retried later. */
-class ArtifactUnavailableError extends Error {}
 
 interface Staged {
   /** The staging directory holding everything below. */
@@ -169,15 +163,6 @@ function digestTree(directory: string): IntegrationFileDigest[] | null {
     return null;
   }
   return files.sort((left, right) => (left.path < right.path ? -1 : 1));
-}
-
-function sameFiles(left: IntegrationFileDigest[], right: IntegrationFileDigest[]): boolean {
-  return (
-    left.length === right.length &&
-    left.every(
-      (file, index) => file.path === right[index]?.path && file.sha256 === right[index]?.sha256,
-    )
-  );
 }
 
 function installation(record: IntegrationRecord): IntegrationInstallation {
@@ -309,7 +294,7 @@ export class IntegrationStore {
             signal,
           });
         } catch {
-          throw new ArtifactUnavailableError("The archive could not be downloaded");
+          throw new Error("The archive could not be downloaded");
         }
       } else {
         this.copyUpload(normalizedSource.sha256, archive);
@@ -585,89 +570,6 @@ export class IntegrationStore {
     });
   }
 
-  /**
-   * Record an integration an earlier release installed. Its files on disk are
-   * never recorded as they are: only when they are exactly the files of its
-   * original artifact, fetched and verified again, is it recorded. Otherwise it
-   * is recorded as needing a reinstall, except when the artifact could not be
-   * fetched, which a later attempt may retry.
-   */
-  adopt(
-    operation: Extract<OpsOperation, { kind: "catalogIntegration.adopt" }>,
-    signal: AbortSignal,
-  ): Promise<OpsResultFor<"catalogIntegration.adopt">> {
-    return this.serialize(async () => {
-      signal?.throwIfAborted();
-      const { integrationId } = operation;
-      const source = operation.source ? canonicalSource(operation.source) : undefined;
-      const extensionId = operation.extensionId ?? null;
-      const target = this.target(integrationId);
-      const existing = this.readRecord(integrationId);
-      if (existing) {
-        return {
-          integrationId,
-          status: existing.status === "ok" ? "recorded" : "needs_reinstall",
-          reason: existing.reason,
-        };
-      }
-      const needsReinstall = (reason: string) => {
-        this.ensureDirectories();
-        this.writeRecord({
-          version: INTEGRATION_RECORD_VERSION,
-          integrationId,
-          extensionId,
-          status: "needs_reinstall",
-          reason,
-          source: null,
-          files: [],
-          pending: null,
-        });
-        return { integrationId, status: "needs_reinstall" as const, reason };
-      };
-      if (!existsSync(target)) return needsReinstall("It is not installed.");
-      if (!source) {
-        return needsReinstall("Nothing records the archive it was installed from.");
-      }
-      let staged: Staged;
-      try {
-        staged = await this.stage(source, signal);
-      } catch (error) {
-        if (error instanceof ArtifactUnavailableError) {
-          return { integrationId, status: "needs_reinstall", reason: error.message };
-        }
-        return needsReinstall(
-          `Its archive no longer installs: ${(error as Error).message}`.slice(
-            0,
-            MAX_PROBLEM_LENGTH,
-          ),
-        );
-      }
-      try {
-        const installed = digestTree(target);
-        if (
-          staged.integrationId !== integrationId ||
-          !installed ||
-          !sameFiles(installed, staged.files)
-        ) {
-          return needsReinstall("Its files differ from the archive it was installed from.");
-        }
-        this.writeRecord({
-          version: INTEGRATION_RECORD_VERSION,
-          integrationId,
-          extensionId,
-          status: "ok",
-          reason: null,
-          source,
-          files: staged.files,
-          pending: null,
-        });
-        return { integrationId, status: "recorded", reason: null };
-      } finally {
-        rmSync(staged.work, { recursive: true, force: true });
-      }
-    });
-  }
-
   /** Every record, with its manifest checked now, and the directories without one. */
   async list(): Promise<OpsResultFor<"installedIntegrations.inspect">> {
     const { records, unreadable } = this.reading();
@@ -729,7 +631,5 @@ export function installIntegrationRuntime(runtime: OpsRuntime, store: Integratio
     store.settle(operation, context.signal);
   runtime["catalogIntegration.remove"] = (operation, context) =>
     store.remove(operation, context.signal);
-  runtime["catalogIntegration.adopt"] = (operation, context) =>
-    store.adopt(operation, context.signal);
   runtime["installedIntegrations.inspect"] = () => store.list();
 }

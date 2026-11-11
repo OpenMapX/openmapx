@@ -6,7 +6,6 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
-  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -561,7 +560,7 @@ describe("integration store", () => {
     ).toEqual([]);
   });
 
-  it("lets only an integration's owner change it, and never adopts an unrecorded copy", async () => {
+  it("lets only an integration's owner change it, and never hands an unrecorded copy to an extension", async () => {
     const f = fixture();
     const source = await artifact(f, "weather-radar");
     const publish = (extensionId?: string) =>
@@ -751,159 +750,5 @@ describe("integration store", () => {
       readdirSync(join(f.root, "infra", "docker", "state", "ops-agent", "custom-integrations")),
     ).toEqual(["weather-radar"]);
     expect(update.transactionId).toMatch(/^itx1_/);
-  });
-
-  describe("adopting an integration an earlier release installed", () => {
-    async function legacyInstall(f: Fixture, region = "eu") {
-      const source = await artifact(f, "weather-radar", { region });
-      // What the earlier installer left: the archive's files, modes as the umask made them.
-      const work = join(f.root, "..", `legacy-${Math.random()}`);
-      roots.push(work);
-      const { extractIntegrationArchive } = await import(
-        "@openmapx/integration-framework/installer"
-      );
-      mkdirSync(work);
-      const tree = extractIntegrationArchive(source.path, join(work, "x"), join(work, "y"));
-      mkdirSync(join(f.root, "infra", "docker", "state", "ops-agent", "custom-integrations"), {
-        recursive: true,
-      });
-      renameSync(
-        tree,
-        join(
-          f.root,
-          "infra",
-          "docker",
-          "state",
-          "ops-agent",
-          "custom-integrations",
-          "weather-radar",
-        ),
-      );
-      return source;
-    }
-    const adopt = (f: Fixture, source?: { url: string; sha256: string }) =>
-      f.store.adopt(
-        {
-          kind: "catalogIntegration.adopt",
-          integrationId: "weather-radar",
-          extensionId: "radar-bundle",
-          ...(source
-            ? { source: { kind: "artifact", url: source.url, sha256: source.sha256 } }
-            : {}),
-        } as Parameters<IntegrationStore["adopt"]>[0],
-        signal,
-      );
-
-    it("records it only when its files match the archive fetched again", async () => {
-      const f = fixture();
-      const source = await legacyInstall(f);
-      expect(loads(f)).toEqual([]);
-      await expect(adopt(f, source)).resolves.toEqual({
-        integrationId: "weather-radar",
-        status: "recorded",
-        reason: null,
-      });
-      expect(f.downloads).toEqual([source.url]);
-      expect(loads(f)).toEqual(["weather-radar"]);
-      // Adopting again changes nothing and fetches nothing.
-      await adopt(f, source);
-      expect(f.downloads).toHaveLength(1);
-    });
-
-    it("marks changed files, a missing source or a missing directory as needing a reinstall", async () => {
-      const f = fixture();
-      const source = await legacyInstall(f);
-      writeFileSync(
-        join(
-          f.root,
-          "infra",
-          "docker",
-          "state",
-          "ops-agent",
-          "custom-integrations",
-          "weather-radar",
-          "manifest.json",
-        ),
-        JSON.stringify(manifest("weather-radar", "us")),
-      );
-      await expect(adopt(f, source)).resolves.toMatchObject({ status: "needs_reinstall" });
-      expect(record(f, "weather-radar")).toMatchObject({
-        status: "needs_reinstall",
-        reason: "Its files differ from the archive it was installed from.",
-      });
-      expect(loads(f)).toEqual([]);
-
-      const g = fixture();
-      await legacyInstall(g);
-      await expect(adopt(g)).resolves.toMatchObject({
-        status: "needs_reinstall",
-        reason: "Nothing records the archive it was installed from.",
-      });
-
-      const h = fixture();
-      await expect(adopt(h, source)).resolves.toMatchObject({
-        status: "needs_reinstall",
-        reason: "It is not installed.",
-      });
-    });
-
-    it("retries later when the archive cannot be fetched", async () => {
-      const f = fixture();
-      const source = await legacyInstall(f);
-      f.artifacts.delete(source.url);
-      await expect(adopt(f, source)).resolves.toMatchObject({ status: "needs_reinstall" });
-      expect(record(f, "weather-radar")).toBeUndefined();
-      f.artifacts.set(source.url, source.path);
-      await expect(adopt(f, source)).resolves.toMatchObject({ status: "recorded" });
-    });
-
-    it("lets the owner reinstall it once marked", async () => {
-      const f = fixture();
-      const source = await legacyInstall(f);
-      writeFileSync(
-        join(
-          f.root,
-          "infra",
-          "docker",
-          "state",
-          "ops-agent",
-          "custom-integrations",
-          "weather-radar",
-          "extra.json",
-        ),
-        "{}",
-      );
-      await adopt(f, source);
-      const published = await f.store.publish(
-        {
-          kind: "catalogIntegration.publish",
-          integrationId: "weather-radar",
-          source,
-          extensionId: "radar-bundle",
-        },
-        signal,
-      );
-      await f.store.settle({
-        kind: "catalogIntegration.settle",
-        integrationId: "weather-radar",
-        transactionId: published.transactionId,
-        outcome: "commit",
-      });
-      expect(
-        existsSync(
-          join(
-            f.root,
-            "infra",
-            "docker",
-            "state",
-            "ops-agent",
-            "custom-integrations",
-            "weather-radar",
-            "extra.json",
-          ),
-        ),
-      ).toBe(false);
-      expect(loads(f)).toEqual(["weather-radar"]);
-    });
   });
 });

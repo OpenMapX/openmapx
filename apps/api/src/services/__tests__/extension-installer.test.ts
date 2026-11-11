@@ -53,7 +53,6 @@ vi.mock("../admin-ops", () => ({
 }));
 
 vi.mock("../agent-integrations", () => ({
-  adoptIntegration: vi.fn(),
   publishIntegration: vi.fn(),
   readInstalledIntegrations: vi.fn(),
   removeIntegration: vi.fn(),
@@ -132,7 +131,6 @@ import { dockerComposeAction } from "../../utils/docker-compose";
 import { getServiceSelectionSummary } from "../admin-cli";
 import { renderAndPersistCompose, serviceStart } from "../admin-ops";
 import {
-  adoptIntegration,
   publishIntegration,
   readInstalledIntegrations,
   removeIntegration,
@@ -269,7 +267,6 @@ const RECOVERY = {
 const publishIntegrationMock = vi.mocked(publishIntegration);
 const settleIntegrationMock = vi.mocked(settleIntegration);
 const removeIntegrationMock = vi.mocked(removeIntegration);
-const adoptIntegrationMock = vi.mocked(adoptIntegration);
 const readInstalledMock = vi.mocked(readInstalledIntegrations);
 const reloadMock = vi.mocked(reloadIntegrations);
 const composeMock = vi.mocked(dockerComposeAction);
@@ -355,11 +352,6 @@ afterEach(() => {
   removeIntegrationMock.mockImplementation(async (request) => ({
     integrationId: request.integrationId,
     removed: true,
-  }));
-  adoptIntegrationMock.mockImplementation(async (request) => ({
-    integrationId: request.integrationId,
-    status: "needs_reinstall",
-    reason: "Nothing records the archive it was installed from.",
   }));
   readInstalledMock.mockResolvedValue(
     installedSnapshot([{ integrationId: "intg-one", extensionId: "bundle-x" }]),
@@ -663,30 +655,6 @@ describe("installExtension", () => {
       managedByExtension: "bundle-x",
       lastTransactionId: transactionFor(REPO_ONE),
     });
-  });
-
-  it("takes over an earlier release's unverified install of this extension before replacing it", async () => {
-    readInstalledMock.mockResolvedValue(installedSnapshot([], ["intg-one"]));
-    dbMock.queueSelect([{ managedByExtension: "bundle-x" }]);
-
-    await installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" });
-
-    expect(adoptIntegrationMock).toHaveBeenCalledWith(
-      { integrationId: "intg-one", extensionId: "bundle-x" },
-      expect.anything(),
-    );
-    expect(adoptIntegrationMock.mock.invocationCallOrder[0]).toBeLessThan(
-      publishIntegrationMock.mock.invocationCallOrder[0] ?? 0,
-    );
-  });
-
-  it("never takes over an unrecorded integration another owner installed", async () => {
-    readInstalledMock.mockResolvedValue(installedSnapshot([], ["intg-one"]));
-    dbMock.queueSelect([{ managedByExtension: "another-bundle" }]);
-
-    await installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" });
-
-    expect(adoptIntegrationMock).not.toHaveBeenCalled();
   });
 
   it("records the integration's agent transaction on its row in the bookkeeping transaction", async () => {
@@ -1222,7 +1190,6 @@ describe("removeExtension", () => {
       { integrationId: "intg-one", extensionId: "bundle-x" },
       expect.objectContaining({ operationKey: expect.stringMatching(/^opk1_/) }),
     );
-    expect(adoptIntegrationMock).not.toHaveBeenCalled();
     // The integration row, then the extension record.
     expect(dbMock.db.delete).toHaveBeenCalledTimes(2);
     expect(removeIntegrationMock.mock.invocationCallOrder[0]).toBeLessThan(
@@ -1239,26 +1206,6 @@ describe("removeExtension", () => {
     await expect(removeExtension(makeCtx(), "bundle-x")).rejects.toThrow("busy");
 
     expect(dbMock.db.delete).not.toHaveBeenCalled();
-  });
-
-  it("records an integration an earlier release installed before removing it", async () => {
-    dbMock.queueSelect([{ id: "bundle-x" }]);
-    dbMock.queueSelect([{ extensionId: "bundle-x", kind: "integration", componentId: "intg-one" }]);
-    readInstalledMock.mockResolvedValueOnce(installedSnapshot([], ["intg-one"]));
-
-    await removeExtension(makeCtx(), "bundle-x");
-
-    expect(adoptIntegrationMock).toHaveBeenCalledWith(
-      { integrationId: "intg-one", extensionId: "bundle-x" },
-      expect.anything(),
-    );
-    expect(removeIntegrationMock).toHaveBeenCalledWith(
-      { integrationId: "intg-one", extensionId: "bundle-x" },
-      expect.anything(),
-    );
-    expect(adoptIntegrationMock.mock.invocationCallOrder[0]).toBeLessThan(
-      removeIntegrationMock.mock.invocationCallOrder[0] ?? 0,
-    );
   });
 
   it("leaves an integration someone else now installs in place", async () => {
