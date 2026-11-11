@@ -303,7 +303,7 @@ it("compares legacy pins and rejects malformed local overlays before resolution"
     resolve: async () => manifest,
     report: (line) => lines.push(line),
   });
-  expect(lines.join("\n")).toContain("Previous release: unknown (legacy or modified overlay)");
+  expect(lines.join("\n")).toContain("Previous release: unknown (modified overlay)");
   expect(lines.join("\n")).toContain("api: reused");
   writeFileSync(path, "services: [");
   const resolve = vi.fn(async () => manifest);

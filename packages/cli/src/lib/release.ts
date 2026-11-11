@@ -75,7 +75,7 @@ function expectOk(result: { exitCode: number; stderr: string }, what: string): v
 
 const coordinatorGuidance =
   "Data Manager already uses the selected release. Use System → Updates for a coordinated update " +
-  "(/admin/system/updates; older installations: /admin/system). " +
+  "(/admin/system/updates). " +
   "For recovery, reselect the exact immutable pin used by the existing Data Manager.";
 
 function assertNoReleaseTransaction(store: string): void {
@@ -413,7 +413,7 @@ export function releaseStatusLines(
   return [
     `Configured selection: ${process.env.OPENMAPX_RELEASE ?? "main"}; existing pins remain selected until explicit reselection.`,
     ...(disabled ? ["Release resolution disabled; existing overlay still applies."] : []),
-    `Selected release: ${selected.release ?? "unknown (legacy or modified overlay)"}`,
+    `Selected release: ${selected.release ?? "unknown (modified overlay)"}`,
     ...coreServices.RELEASE_IMAGE_NAMES.map(
       (name) => `${name}: ${selected.images[name] ?? "unknown"}`,
     ),
@@ -441,7 +441,7 @@ export async function selectRelease(
     await assertCoordinatorSelection(manifest, opts.docker ?? defaultDocker);
     const report = opts.report ?? (() => undefined);
     report(
-      `Previous release: ${previous ? (previous.release ?? "unknown (legacy or modified overlay)") : "none"}`,
+      `Previous release: ${previous ? (previous.release ?? "unknown (modified overlay)") : "none"}`,
     );
     report(`Candidate release: ${manifest.release}`);
     for (const name of coreServices.RELEASE_IMAGE_NAMES) {
