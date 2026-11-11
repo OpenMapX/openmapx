@@ -6,16 +6,7 @@ export {
   legacyAgentStatePaths,
   prepareAgentStateDirectories,
 } from "./agent-state";
-export {
-  AGENT_STORES_NOT_COPIED,
-  type AgentStoreCopyReport,
-  type AgentStoresMigration,
-  agentStoresLeftBehind,
-  describeAgentStoresMigration,
-  legacyAgentStorePaths,
-  prepareAgentStores,
-  readAgentStoresMigration,
-} from "./agent-stores";
+export { prepareAgentStores } from "./agent-stores";
 export { type BackupPruneCandidate, backupPruneInventory } from "./backup-prune-plan";
 export { backupRetentionExpiry } from "./backup-retention";
 export { BACKUP_STORE_LOCK_TTL_MS, retainBackupExpiryCeilings } from "./backup-retention-store";
@@ -47,7 +38,6 @@ export {
   describeCheckoutDifferences,
 } from "./checkout-differences";
 export {
-  CheckoutRequiredError,
   checkoutMounted,
   checkoutMountedAt,
 } from "./checkout-layout";
@@ -211,7 +201,6 @@ export {
   MAX_TOTAL_RECORDED_FILES,
   parseIntegrationRecord,
   readIntegrationRecords,
-  safeRelativePath,
   sha256Hex,
 } from "./integration-records";
 export { findServiceManifestDirs } from "./manifest-discovery";

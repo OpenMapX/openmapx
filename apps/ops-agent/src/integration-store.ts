@@ -96,11 +96,6 @@ const defaultDownload: IntegrationArtifactDownload = async ({
 
 export interface IntegrationStoreOptions {
   rootDir: string;
-  /**
-   * The store; the agent's own, in its state directory, unless named. Only
-   * the startup recovery of an earlier release's store names another.
-   */
-  directory?: string;
   /** Owner of the agent's records. */
   uid: number;
   /** Ids an installed integration may not take: the release's built-in integrations. */
@@ -215,8 +210,7 @@ export class IntegrationStore {
 
   constructor(private readonly options: IntegrationStoreOptions) {
     this.infraDir = join(options.rootDir, "infra", "docker");
-    this.custom =
-      options.directory ?? coreServices.agentStatePaths(this.infraDir).customIntegrations;
+    this.custom = coreServices.agentStatePaths(this.infraDir).customIntegrations;
     this.download = options.download ?? defaultDownload;
   }
 

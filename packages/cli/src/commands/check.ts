@@ -10,7 +10,6 @@ import { dockerCompose, dockerRun } from "../lib/docker";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { serviceFileReport } from "../lib/service-file-report";
-import { transitousApiKeysLeftBehindWarning } from "../lib/transitous-api-keys";
 
 interface PsLine {
   Service?: string;
@@ -485,19 +484,10 @@ export function registerCheckCommand(program: Command): void {
       // Integrations the operations agent installed are trusted by its records;
       // only its fixed CLI reads them, so a check from source has none to report.
       for (const warning of installedIntegrationWarnings(repoPaths().root)) log.warn(warning);
-      // What the one-time copy of the agent's stores left in the checkout, for
-      // as long as it is still there.
-      for (const warning of coreServices.agentStoresLeftBehind(repoPaths().infraDir)) {
-        log.warn(warning);
-      }
       // A Traefik still on the checkout's dynamic directory.
       if ((await legacyTraefikDynamicMounted(repoPaths().infraDir)) === true) {
         log.warn(coreServices.LEGACY_TRAEFIK_MOUNT_NOTICE);
       }
-      // The render reports a key file it did not copy once; this repeats it
-      // while the keys are still missing.
-      const keysLeftBehind = transitousApiKeysLeftBehindWarning();
-      if (keysLeftBehind) log.warn(keysLeftBehind);
 
       const result = await dockerComposeAfterDeploymentSecretCheck(["ps", "--format", "json"]);
       if (result.exitCode !== 0) {

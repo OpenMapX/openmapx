@@ -30,8 +30,6 @@ export interface AgentStatePaths {
   community: string;
   /** The integrations the agent installed; app-api mounts it read-only. */
   customIntegrations: string;
-  /** Written once both stores were copied from the checkout, with what was left behind. */
-  storesMigration: string;
   /** Traefik's dynamic configuration, which Traefik mounts read-only and watches. */
   traefikDynamic: string;
 }
@@ -47,7 +45,6 @@ export function agentStatePaths(infraDir: string): AgentStatePaths {
     legacyImport: join(directory, "legacy-import.json"),
     community: join(directory, "community"),
     customIntegrations: join(directory, "custom-integrations"),
-    storesMigration: join(directory, "stores-migration.json"),
     traefikDynamic: join(directory, "traefik", "dynamic"),
   };
 }

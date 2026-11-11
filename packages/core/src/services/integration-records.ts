@@ -163,7 +163,7 @@ function parseFiles(value: unknown): IntegrationFileDigest[] {
 }
 
 /** A relative POSIX path that stays inside the directory it is relative to. */
-export function safeRelativePath(path: string): boolean {
+function safeRelativePath(path: string): boolean {
   if (path.length === 0 || path.length > 1_024 || path.startsWith("/") || path.includes("\0")) {
     return false;
   }

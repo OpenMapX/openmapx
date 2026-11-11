@@ -31,11 +31,7 @@ import { cliAcquisitionOptions, constrainCliDataManagerTransport } from "../lib/
 import { applyGeneratedHardlinks, logAppliedHardlinks } from "../lib/hardlinks";
 
 import { log, routeLogsToStderr, table } from "../lib/output";
-import { repoPaths } from "../lib/paths";
-import {
-  describeTransitousApiKeysMigration,
-  generateTransitousApiKeys,
-} from "../lib/transitous-api-keys";
+import { generateTransitousApiKeys } from "../lib/transitous-api-keys";
 import { renderComposeForRepo } from "./compose";
 
 function createCliTransport() {
@@ -850,9 +846,6 @@ export function registerDataCommands(program: Command): void {
           outputPath: options.output,
           proposalId: options.proposal,
         });
-        const carried =
-          result.keysFile && describeTransitousApiKeysMigration(result.keysFile, repoPaths().root);
-        if (carried) log[carried.level](carried.message);
         const preserved =
           result.preservedCount > 0
             ? ` (${result.preservedCount} existing value${result.preservedCount === 1 ? "" : "s"} preserved)`

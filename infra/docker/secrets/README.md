@@ -204,18 +204,6 @@ none, and keeps the file owner-only. A file that is not a regular, single-link
 file of the deployment's user holding a JSON object of strings stops the render
 with the reason.
 
-Releases before this one kept the keys in the checkout, in
-`services/motis/tools/transitous/api-keys.json`. The first render copies that
-file and leaves it in place, so an earlier release still finds it after a
-rollback. It copies only a regular file of the deployment's user with one link
-that neither its group nor others can write, holding a JSON object of key
-strings; otherwise the new file starts empty and the render's output names the
-earlier file and the reason. Copy its keys over yourself after checking it, or
-run `generate-api-keys` and enter them again. The earlier file is not read
-again. For as long as it sets keys the new file doesn't, `pnpm openmapx check`
-and **Run diagnostics** in the admin panel say so, naming those keys (never their
-values), why the file was not copied and how to carry them over.
-
 ### `transitous-feed-proxy.age` (optional)
 
 An [age identity file](https://github.com/FiloSottile/age#usage), generated with

@@ -79,11 +79,6 @@ export type CommunityRepositoryClone = (
 
 export interface CommunityRepositoryStoreOptions {
   rootDir: string;
-  /**
-   * The store; the agent's own, in its state directory, unless named. Only
-   * the startup recovery of an earlier release's store names another.
-   */
-  directory?: string;
   /** Owner every checkout must have; the authority snapshot rejects anything else. */
   uid: number;
   loadAuthority: () => Promise<TrustedConfigurationAuthoritySnapshot>;
@@ -137,9 +132,9 @@ export class CommunityRepositoryStore {
   private needsRecovery = false;
 
   constructor(private readonly options: CommunityRepositoryStoreOptions) {
-    this.community =
-      options.directory ??
-      coreServices.agentStatePaths(join(options.rootDir, "infra", "docker")).community;
+    this.community = coreServices.agentStatePaths(
+      join(options.rootDir, "infra", "docker"),
+    ).community;
     this.clone = options.clone ?? gitShallowCloneSnapshot;
   }
 

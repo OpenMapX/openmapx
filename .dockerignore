@@ -31,9 +31,6 @@ apps/mobile/.expo/
 apps/mobile/.gradle/
 infra/docker/data
 infra/docker/overrides
-infra/docker/services/transitous/api-keys.json
-services/motis/tools/transitous/api-keys.json
-services/.community
 custom_integrations
 integrations/*/config.json
 **/.DS_Store

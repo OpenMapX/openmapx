@@ -123,7 +123,8 @@ export interface ServiceProduces {
  *  - Any quality: A relative path under the service's directory (no "..", no
  *    absolute paths). e.g. `config/valhalla.json`, `config/dynamic` — resolved
  *    against the service's install location at render time (`services/<slug>/`
- *    for built-ins; `services/.community/<hash>/<slug>/` for community).
+ *    for built-ins; `infra/docker/state/ops-agent/community/<hash>/<slug>/`
+ *    for community).
  *  - Built-in only: A `@`-prefixed special source from a known whitelist:
  *    - `@docker-socket` → `/var/run/docker.sock`
  *    - `@service:<other-slug>:<rel-path>` → mounts a file/dir from another
@@ -357,9 +358,9 @@ export interface ServiceManifest {
  * signal for host-level container privileges, and it is derived by the caller
  * from the manifest's location on disk — never from anything the manifest says
  * about itself. `firstParty` is true only for manifests shipped in the
- * monorepo's `services/` tree; manifests discovered under `services/.community/`
- * (cloned extension repos) are always false, whatever their source catalog
- * trust tier is.
+ * monorepo's `services/` tree; manifests discovered in the operations agent's
+ * community store (cloned extension repos) are always false, whatever their
+ * source catalog trust tier is.
  */
 export interface ManifestProvenance {
   firstParty: boolean;

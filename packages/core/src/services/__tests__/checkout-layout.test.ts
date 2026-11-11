@@ -1,10 +1,18 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { agentStatePaths, writeAgentStateFile } from "../agent-state";
 import { prepareAgentStores } from "../agent-stores";
-import { CheckoutRequiredError, checkoutMounted } from "../checkout-layout";
+import { checkoutMounted } from "../checkout-layout";
 import { acquireConfigurationOwnership } from "../configuration-ownership";
 import type { ReleaseServiceFiles } from "../release-service-files";
 import {
@@ -99,18 +107,19 @@ describe("the checkout, as the operations agent tells", () => {
     ]);
   });
 
-  it("without it, stores never copied from it are refused, not recorded as empty", () => {
+  it("without it, the agent's stores start empty and owner-only, and a link is refused", () => {
     const { infraDir } = stack("narrow");
-    expect(() => prepareAgentStores(infraDir)).toThrow(CheckoutRequiredError);
-    expect(() => prepareAgentStores(infraDir)).toThrow(
-      /stores were never copied from the checkout/,
-    );
-    expect(existsSync(agentStatePaths(infraDir).storesMigration)).toBe(false);
-    // Copied once, from the checkout: then nothing needs it.
-    const withCheckout = stack("checkout");
-    expect(prepareAgentStores(withCheckout.infraDir)).not.toBeNull();
-    rmSync(join(withCheckout.root, "services"), { recursive: true });
-    expect(prepareAgentStores(withCheckout.infraDir)).toBeNull();
+    const paths = agentStatePaths(infraDir);
+    prepareAgentStores(infraDir);
+    chmodSync(paths.community, 0o755);
+    prepareAgentStores(infraDir);
+    for (const store of [paths.community, paths.customIntegrations]) {
+      expect(readdirSync(store)).toEqual([]);
+      expect(statSync(store).mode & 0o777).toBe(0o700);
+    }
+    rmSync(paths.customIntegrations, { recursive: true });
+    symlinkSync(stack("narrow").root, paths.customIntegrations);
+    expect(() => prepareAgentStores(infraDir)).toThrow(/is not its own directory/);
   });
 
   it("without it, routes a Traefik still reads from the checkout are reported as unreachable", () => {
