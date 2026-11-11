@@ -143,7 +143,20 @@ describe("compareWithPrevious", () => {
     expect(fields(compareWithPrevious(VERSION, previous))).toContain("marketingVersion");
   });
 
-  it("rejects raising the protocol minimum", () => {
+  it("rejects raising the protocol minimum of a wider range", () => {
+    const next = {
+      ...VERSION,
+      protocol: { min: 4, max: 5 },
+      androidVersionCode: 2,
+      iosBuildNumber: "2",
+    };
+
+    // A range that drops its lowest version strands deployed web builds still
+    // speaking it.
+    expect(fields(compareWithPrevious(next, VERSION))).toContain("protocol.min");
+  });
+
+  it("accepts moving a single-version bridge to the next version", () => {
     const next = {
       ...VERSION,
       protocol: { min: 4, max: 4 },
@@ -151,9 +164,9 @@ describe("compareWithPrevious", () => {
       iosBuildNumber: "2",
     };
 
-    // Deployed web builds still speaking v3 would stop working, and they cannot
-    // be updated in lockstep with a store release.
-    expect(fields(compareWithPrevious(next, VERSION))).toContain("protocol.min");
+    // A message shape change raises both bounds together; the page asks an app
+    // on the old version to update.
+    expect(compareWithPrevious(next, VERSION)).toEqual([]);
   });
 });
 

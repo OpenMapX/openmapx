@@ -26,7 +26,7 @@ export function useNativeVoiceInput() {
           setAvailable(candidate);
       })
       .catch(() => {
-        /* Older shells silently reject unknown commands. */
+        /* A rejection, timeout or closed channel leaves voice input hidden. */
       });
     return () => {
       active = false;

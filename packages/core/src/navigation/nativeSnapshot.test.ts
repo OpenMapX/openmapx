@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { NativeToWebPayload } from "./mobileProtocol";
-import { nativeToWebSchema } from "./mobileProtocol";
+import { MOBILE_PROTOCOL_MAX, nativeToWebSchema } from "./mobileProtocol";
 import {
   groundFullSnapshotSchema,
   NATIVE_SNAPSHOT_HOT_FIELDS,
@@ -51,7 +51,7 @@ const transitProgress = {
 
 function snapshotUpdate(snapshot: unknown) {
   return nativeToWebSchema.safeParse({
-    protocolVersion: 5,
+    protocolVersion: MOBILE_PROTOCOL_MAX,
     type: "snapshot.update",
     messageId: "m1",
     channelNonce: "n1",

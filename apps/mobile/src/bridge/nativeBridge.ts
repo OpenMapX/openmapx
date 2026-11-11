@@ -208,7 +208,6 @@ export class NativeBridge {
         type: "native.hello",
         payload: {
           ...shell,
-          capabilities: shell.capabilities,
           selectedProtocolVersion: selected,
           minProtocolVersion: MOBILE_PROTOCOL_MIN,
           maxProtocolVersion: MOBILE_PROTOCOL_MAX,

@@ -333,11 +333,9 @@ deadline.
 
 ### Rollout order
 
-Before changing the protocol, identify the actually deployed shell and web
-versions. Define and test their overlap, deploy a compatible web build, then ship
-the native build and enable the new capability. A protocol change ships the web
-build and the installed app together: an installed app whose range does not
-overlap the page shows the update prompt until it is replaced. Queued navigation
+A protocol change ships the web build and the installed app together: an
+installed app whose version does not match the page shows the update prompt until
+it is replaced. Queued navigation
 messages are stamped only after negotiation. Pending inbox items survive until a
 compatible page opens them, the user discards them, or their 24-hour expiry.
 
