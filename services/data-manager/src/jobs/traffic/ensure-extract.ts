@@ -1,10 +1,11 @@
+import { services } from "@openmapx/core/server";
 import { runOpsOperation } from "../../ops-client.js";
 import { TrafficMaintenancePreflightError } from "./preflight-error.js";
 
 /**
  * Default Valhalla container name under the default docker-compose project
- * naming (`<project>-<service>-1`). `infra/docker`'s compose project is named
- * "docker" and `services/valhalla/service.json` pins no
+ * naming (`<project>-<service>-1`). The stack's compose project is
+ * `STACK_PROJECT` and `services/valhalla/service.json` pins no
  * `container.containerName`, so the runtime container falls back to this
  * convention. Overridable via `VALHALLA_CONTAINER` for non-default compose
  * project names.
@@ -12,7 +13,7 @@ import { TrafficMaintenancePreflightError } from "./preflight-error.js";
 // Exported so sibling traffic jobs (e.g. `ways-to-edges.ts`, which also shells
 // out to the Valhalla container) share these constants instead of duplicating
 // values that would silently drift.
-export const DEFAULT_VALHALLA_CONTAINER = "docker-valhalla-1";
+export const DEFAULT_VALHALLA_CONTAINER = `${services.STACK_PROJECT}-valhalla-1`;
 export const DEFAULT_VALHALLA_CONFIG_PATH = "/custom_files/valhalla.json";
 /** Must match `mjolnir.tile_dir` in services/valhalla/config/valhalla.json. */
 export const TILE_DIR_PATH = "/custom_files/valhalla_tiles";

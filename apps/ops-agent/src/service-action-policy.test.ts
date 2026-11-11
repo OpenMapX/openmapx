@@ -13,7 +13,7 @@ const snapshot: OwnedServiceSnapshot = {
   containerId: "a".repeat(64),
   state: "running",
   provenance: {
-    project: "docker",
+    project: "openmapx",
     composeWorkingDirectory: "/trusted",
     composeConfigFiles: ["/trusted/docker-compose.generated.yml"],
     imageId: `sha256:${"b".repeat(64)}`,

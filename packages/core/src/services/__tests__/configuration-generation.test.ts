@@ -126,7 +126,7 @@ describe("configuration generations", () => {
     );
     expect(compose).toContain("alpha:");
     // The project is the file's, not its generation directory's.
-    expect(compose.startsWith("name: docker\n")).toBe(true);
+    expect(compose.startsWith("name: openmapx\n")).toBe(true);
     expect(
       existsSync(join(root, "infra/docker/state/ops-agent/traefik/dynamic/generated-routes.yml")),
     ).toBe(true);

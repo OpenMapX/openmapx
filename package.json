@@ -19,7 +19,7 @@
     "test:watch": "vitest",
     "test:coverage": "OPENMAPX_SKIP_SLOW_CRYPTO=1 vitest run --coverage",
     "prepare": "husky",
-    "redis:flush": "docker exec docker-redis-1 redis-cli FLUSHALL",
+    "redis:flush": "docker exec openmapx-redis-1 redis-cli FLUSHALL",
     "mobile:doctor": "pnpm -C apps/mobile run doctor",
     "mobile:prebuild": "pnpm -C apps/mobile run prebuild",
     "mobile:verify": "pnpm -C apps/mobile run test && pnpm -C apps/mobile run test:native && pnpm -C apps/mobile run check-types && pnpm -C apps/mobile run doctor",

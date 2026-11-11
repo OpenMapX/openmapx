@@ -1,10 +1,10 @@
 # Deploy compose for the OpenMapX documentation (docs.openmapx.org).
 #
 # Runs as its OWN compose project, completely separate from the app stack in
-# ~/openmapx (Compose project "docker") and from the landing page in
+# ~/openmapx (Compose project "openmapx") and from the landing page in
 # ~/landing-page. It pulls the prebuilt image that the post-CI scan/promotion
 # workflow publishes to GHCR (.github/workflows/docs.yml) and only *joins*
-# the app Traefik network (docker_openmapx) so Traefik can route to it. Nothing
+# the app Traefik network (openmapx_openmapx) so Traefik can route to it. Nothing
 # in the app or landing deployment is touched.
 #
 # Deploy from the repo checkout on the server (e.g. ~/openmapx) after resolving
@@ -25,7 +25,7 @@ services:
     networks: [openmapx]
     labels:
       traefik.enable: "true"
-      traefik.docker.network: docker_openmapx
+      traefik.docker.network: openmapx_openmapx
       traefik.http.routers.openmapx-docs.rule: "Host(`docs.openmapx.org`)"
       traefik.http.routers.openmapx-docs.entrypoints: websecure
       traefik.http.routers.openmapx-docs.tls.certresolver: letsencrypt
@@ -43,5 +43,5 @@ services:
 
 networks:
   openmapx:
-    name: docker_openmapx
+    name: openmapx_openmapx
     external: true

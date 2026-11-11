@@ -209,7 +209,7 @@ describe("the release's service files in the store", () => {
         input: input(),
         releaseServiceFiles: release(services),
         legacyTraefikDynamicMounted: false,
-        ...(sources ? { containerBindMounts: [{ name: "docker-postgis-1", sources }] } : {}),
+        ...(sources ? { containerBindMounts: [{ name: "openmapx-postgis-1", sources }] } : {}),
       });
     await commit([]);
     // Trees a pruned generation recorded.

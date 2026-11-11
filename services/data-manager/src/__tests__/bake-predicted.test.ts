@@ -100,7 +100,7 @@ describe("bakePredicted", () => {
       openConditionsUrl: "http://openconditions.local",
       csvDir,
       preparedGeneration: "22222222-2222-4222-8222-222222222222",
-      container: "docker-valhalla-1",
+      container: "openmapx-valhalla-1",
       getCoveredWayIds: async () => new Set([3001]),
       fetchProfiles: async () => profiles,
       loadWaysToEdges: async () => waysToEdges,
@@ -177,7 +177,7 @@ describe("bakePredicted", () => {
       preparedGeneration: "22222222-2222-4222-8222-222222222222",
     });
     const serialized = JSON.stringify(opsCalls);
-    for (const forbidden of ["docker-valhalla-1", "/custom_files", "predicted-csv"]) {
+    for (const forbidden of ["openmapx-valhalla-1", "/custom_files", "predicted-csv"]) {
       expect(serialized).not.toContain(forbidden);
     }
   });

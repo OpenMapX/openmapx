@@ -171,7 +171,7 @@ for argument do
   previous=$argument
 done
 if [ "$1" = compose ]; then
-  if [ "$2" != --project-name ] || [ "$3" != docker ]; then
+  if [ "$2" != --project-name ] || [ "$3" != openmapx ]; then
     echo 'Refusing non-fixture Compose invocation' >&2
     exit 78
   fi
@@ -218,8 +218,8 @@ exec "$OPENMAPX_TEST_REAL_DOCKER" "$@"
   }, 60000);
 
   it.each([
-    ["compose", "-p", "docker"],
-    ["compose", "--project-name", "docker", "--project-name", "docker"],
+    ["compose", "-p", "openmapx"],
+    ["compose", "--project-name", "openmapx", "--project-name", "openmapx"],
   ])("refuses a Compose invocation outside the exact fixture namespace: %j", async (...prefix) => {
     // Read-only even if the guard regresses: only render our synthetic file.
     const result = await execa(

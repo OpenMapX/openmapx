@@ -91,7 +91,7 @@ function fixture(volumes = 3, secrets = 1, configs = 1) {
     containerId: id,
     state: "running" as const,
     provenance: {
-      project: "docker",
+      project: "openmapx",
       composeWorkingDirectory: generation,
       composeConfigFiles: [join(generation, services.GENERATED_COMPOSE_FILE)],
       imageId: image,

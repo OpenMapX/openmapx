@@ -166,7 +166,7 @@ async function detectComposeNetwork(): Promise<string> {
     const name = composeNetworkName(result.stdout);
     if (name) return name;
   }
-  return "docker_openmapx";
+  return `${coreServices.STACK_PROJECT}_openmapx`;
 }
 
 /**

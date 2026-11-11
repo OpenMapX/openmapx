@@ -67,7 +67,7 @@ const runtime = createDockerRuntime({
   execFile: async (file, args, options) => {
     assert.equal(file, "docker");
     const syntheticArgs = args.map((arg) =>
-      arg === "docker-valhalla-1" ? SYNTHETIC_CONTAINER : arg,
+      arg === "openmapx-valhalla-1" ? SYNTHETIC_CONTAINER : arg,
     );
     return execute(file, syntheticArgs, options);
   },

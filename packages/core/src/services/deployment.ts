@@ -64,10 +64,11 @@ export function readConfigurationGenerationBase(infraDir: string, revisionId: st
 }
 
 /**
- * The Compose project of the stack, written into the generated compose file:
- * the name Compose gave `infra/docker` before the file moved into generations.
+ * The Compose project of the stack, written into the generated compose file.
+ * It prefixes every container, network and named volume, so it is fixed
+ * rather than derived from the directory the file lives in.
  */
-export const STACK_PROJECT = "docker";
+export const STACK_PROJECT = "openmapx";
 
 export interface StackPaths {
   infraDir: string;

@@ -9,7 +9,7 @@
 # brings up the whole stack. The second occupies port 80, requires the start to
 # fail, frees the port and requires the retry to succeed.
 #
-# The script is destructive: it removes the compose project named "docker" and
+# The script is destructive: it removes the compose project named "openmapx" and
 # every ignored file under infra/docker when it finishes. It refuses to run
 # where infra/docker/.env or that project already exists. Run it on a Linux host
 # with Docker Engine; building the web image needs about 8 GiB of memory.
@@ -23,7 +23,7 @@ cd "$root"
 
 infra="infra/docker"
 env_file="$infra/.env"
-project="docker"
+project="openmapx"
 timeout_seconds="${INSTALL_SMOKE_TIMEOUT_SECONDS:-600}"
 work=""
 blocker="openmapx-install-smoke-port-80-$$"
