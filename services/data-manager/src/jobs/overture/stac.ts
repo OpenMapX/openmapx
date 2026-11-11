@@ -73,7 +73,7 @@ export interface OverturePullValidation {
 }
 
 export interface OverturePullContract extends OvertureStacReleaseContract {
-  contractVersion: 1 | typeof OVERTURE_PULL_CONTRACT_VERSION;
+  contractVersion: typeof OVERTURE_PULL_CONTRACT_VERSION;
   sourceCatalog: typeof OVERTURE_STAC_URL;
   theme: typeof OVERTURE_THEME;
   type: typeof OVERTURE_TYPE;
@@ -84,7 +84,7 @@ export interface OverturePullContract extends OvertureStacReleaseContract {
   parquetSizeBytes: number;
   rowCount: number;
   contributors: string[];
-  sourcesCatalogue?: ReturnType<typeof captureOvertureCatalogue>;
+  sourcesCatalogue: ReturnType<typeof captureOvertureCatalogue>;
 }
 
 export function assertValidOvertureRelease(release: string): void {
@@ -446,13 +446,21 @@ function assertPullContract(
     ) &&
     [...contract.contributors].sort().join("\0") === contract.contributors.join("\0") &&
     new Set(contract.contributors).size === contract.contributors.length;
+  // Every ingested row is credited from this catalogue; without it the snapshot
+  // would publish places that cannot name their sources.
   if (
-    ![1, OVERTURE_PULL_CONTRACT_VERSION].includes(contract.contractVersion) ||
-    (contract.contractVersion === 2 &&
-      (!Array.isArray(contract.sourcesCatalogue) ||
-        !contract.sourcesCatalogue.every(
-          (r) => typeof r.sourceId === "string" && typeof r.name === "string",
-        ))) ||
+    !Array.isArray(contract.sourcesCatalogue) ||
+    contract.sourcesCatalogue.length === 0 ||
+    !contract.sourcesCatalogue.every(
+      (r) => r && typeof r.sourceId === "string" && typeof r.name === "string",
+    )
+  ) {
+    throw new Error(
+      `Overture pull contract for ${release}/${region} has no sources catalogue; re-pull the release so its places keep their attribution`,
+    );
+  }
+  if (
+    contract.contractVersion !== OVERTURE_PULL_CONTRACT_VERSION ||
     contract.sourceCatalog !== OVERTURE_STAC_URL ||
     contract.release !== release ||
     contract.theme !== OVERTURE_THEME ||
@@ -477,12 +485,7 @@ function assertPullContract(
   if (statSync(parquetPath).size !== contract.parquetSizeBytes) {
     throw new Error("Overture parquet file size does not match its pull contract");
   }
-  // Version 1 never certified acquisition-time notices; do not accept a later
-  // metadata addition as historical producer evidence.
-  return {
-    ...contract,
-    sourcesCatalogue: contract.contractVersion === 2 ? contract.sourcesCatalogue : undefined,
-  };
+  return contract;
 }
 
 export function readOverturePullContract(

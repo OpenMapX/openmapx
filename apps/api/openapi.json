@@ -15460,26 +15460,9 @@
                           "type": "object",
                           "properties": {
                             "version": {
-                              "anyOf": [
-                                {
-                                  "type": "number",
-                                  "enum": [
-                                    1
-                                  ]
-                                },
-                                {
-                                  "type": "number",
-                                  "enum": [
-                                    2
-                                  ]
-                                }
-                              ]
-                            },
-                            "attributionPrecision": {
-                              "type": "string",
+                              "type": "number",
                               "enum": [
-                                "captured-fields",
-                                "legacy-aggregate"
+                                2
                               ]
                             },
                             "policyVersion": {
@@ -15633,50 +15616,6 @@
                         }
                       ]
                     },
-                    "attribution": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "formatVersion": {
-                              "anyOf": [
-                                {
-                                  "type": "number",
-                                  "enum": [
-                                    1
-                                  ]
-                                },
-                                {
-                                  "type": "number",
-                                  "enum": [
-                                    2
-                                  ]
-                                }
-                              ]
-                            },
-                            "precision": {
-                              "type": "string",
-                              "enum": [
-                                "captured-fields",
-                                "legacy-aggregate"
-                              ]
-                            },
-                            "rebuildRequired": {
-                              "type": "boolean"
-                            }
-                          },
-                          "required": [
-                            "formatVersion",
-                            "precision",
-                            "rebuildRequired"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
                     "previous": {
                       "type": [
                         "string",
@@ -15742,9 +15681,6 @@
                                 "placeCount": {
                                   "type": "number",
                                   "minimum": 0
-                                },
-                                "legacyAttribution": {
-                                  "type": "boolean"
                                 },
                                 "osmType": {
                                   "type": "string"
@@ -15865,9 +15801,6 @@
                                 "placeCount": {
                                   "type": "number",
                                   "minimum": 0
-                                },
-                                "legacyAttribution": {
-                                  "type": "boolean"
                                 },
                                 "osmType": {
                                   "type": "string"

@@ -11,12 +11,11 @@ import {
   normalizeOvertureProvenance,
   openMapXCategoryToOvertureConcepts,
 } from "@openmapx/core";
-import { AMBIENT_LEGACY_OVERTURE_ATTRIBUTION } from "@openmapx/core/ambient-places";
 import type { DatabaseClient, IntegrationContext } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   contributorsForRecords,
-  readCapturedContributors,
+  parseContributors,
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 
@@ -52,7 +51,7 @@ interface OvertureDetailRow {
     country?: string | null;
   }> | null;
   sources: OvertureSourceItem[] | null;
-  sources_catalogue?: Attribution[] | null;
+  sources_catalogue: Attribution[];
   release: string;
 }
 
@@ -205,7 +204,7 @@ async function fetchOverturePlaceByGers(
   const rows = await database.execute<OvertureDetailRow[]>(
     `
     SELECT gers_id, name, names, brand, phones, websites, socials, emails, addresses,
-           sources, to_jsonb(places)->'sources_catalogue' AS sources_catalogue, release
+           sources, sources_catalogue, release
     FROM overture_places.places
     WHERE gers_id = $1
     LIMIT 1
@@ -217,9 +216,7 @@ async function fetchOverturePlaceByGers(
 }
 
 function overtureRowToKnowledgeResult(row: OvertureDetailRow): KnowledgeResult | null {
-  const catalogue = readCapturedContributors(row.sources_catalogue) ?? [
-    AMBIENT_LEGACY_OVERTURE_ATTRIBUTION,
-  ];
+  const catalogue = parseContributors(row.sources_catalogue) ?? [];
   // A successful match always credits Overture as a source via its GERS id,
   // which surfaces as an "Overture Maps" external reference on the place card.
   const result: KnowledgeResult = {

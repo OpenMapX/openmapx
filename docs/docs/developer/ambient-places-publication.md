@@ -111,11 +111,10 @@ Format 2 feature properties include `format_version`, `_mapAttributions`
 (canonical JSON receipt array), `field_contributors` (JSON field receipt map),
 and `source_lineage` (public source properties plus release). Receipts retain
 their captured wording after registry reloads. A captured empty array is
-authoritative. Old snapshots without a producer catalogue can only establish
-the known Overture aggregate, never historical upstream publisher notices.
-The manifest's `attributionPrecision` and the operator status `attribution`
-diagnostic distinguish these legacy records from captured fields and identify
-when a fresh pull/ingest/publication is needed.
+authoritative. Attribution is never reconstructed: the Overture ingest refuses a
+pull contract without a source catalogue, `sources_catalogue` is `NOT NULL`, and
+ambient publication fails rather than publish an Overture place or accepted GERS
+identity whose catalogue is missing or malformed.
 
 The web layer selects the current locale's actual placed label receipts and
 uses the shared rendered-feature tracker. Unloaded, offscreen, collision-hidden,
@@ -124,13 +123,11 @@ feature can carry ambient clickable label/GERS metadata after its duplicate
 ambient label is suppressed; that metadata is credited only while the matched
 basemap feature is rendered. The basemap retains its own geometry attribution.
 
-Existing format 1 generations keep the previous MVT attribute order, encoder
-and byte budget for their lease-addressable URLs. The storage migration adds
-nullable receipt columns without rewriting these tiles. Format 2 separately
-accounts for each distinct MVT metadata string and per-feature overhead within
-the unchanged 256-feature/128-KiB limits. Planet source signatures include the
-ambient format, and pre-format candidates must be discarded and rebuilt.
-Upgrade the API and web reader before publishing format 2. Capacity preflights
+Readers serve and accept only format 2 generations. The encoder accounts for each
+distinct MVT metadata string and per-feature overhead within the
+256-feature/128-KiB limits. Planet source signatures include the ambient format,
+and candidates staged under another format must be discarded and rebuilt.
+Capacity preflights
 allow 8 KiB per ambient input row for receipts and lineage; Overture ingest adds
 the captured catalogue's raw row bytes plus WAL headroom. These are admission
 allowances, not measured country or planet storage claims.
@@ -259,11 +256,8 @@ There is no planet-sized final count/index rebuild under the activation lock.
 Leased generations remain available; expired unreferenced planet partitions are
 dropped instead of cascading millions of row deletes. Active/previous generations
 and the seven-day-plus-one-minute tile lease retain their existing guarantees.
-A legacy regional/Germany installation is migrated additively, without rewriting
-its existing feature rows; its previous tile URLs remain readable. New readers
-also support the old feature table before migration. Dateline tiles query the
-opposite edge through its spatial index and shift buffered geometries into the
-requested world copy. Latitude outside Web Mercator is excluded conservatively.
+Dateline tiles query the opposite edge through its spatial index and shift
+buffered geometries into the requested world copy. Latitude outside Web Mercator is excluded conservatively.
 Client decoding normalizes buffered world-copy longitudes before identity
 reconciliation and selection; this does not relax source coordinate validation.
 
@@ -356,9 +350,9 @@ export/distribution decision.
 ## Publication, retention and identity
 
 A dedicated `ambient_places` schema isolates snapshots from mutable source tables.
-The OSM index writer stores tag objects as JSONB; ambient policy also reads older
-serialized-object rows, and rejects malformed/non-object policy tags so closure
-and private-access checks cannot silently disappear.
+The OSM index writer stores tag objects as JSONB; ambient policy rejects
+serialized, malformed and non-object policy tags so closure and private-access
+checks cannot silently disappear.
 For regional/Germany publication, a repeatable-read transaction holds an advisory writer lock, reads bounded indexed
 source candidates, applies the shared policy and writes insert batches of 500 places.
 Generation and feature insertion, count validation and the active/previous pointer
@@ -448,8 +442,8 @@ retain their existing coordinate fallback.
   require a valid Wikidata/language-prefixed Wikipedia identity plus registered
   heritage or explicit cathedral/basilica designation. Ordinary worship buildings
   without that evidence stay at 16. Importance orders within utility tiers;
-  exact source ID breaks ties. Both indexed `amenity/hospital` and legacy
-  `amenity:hospital` categories normalize to the same tier.
+  exact source ID breaks ties. Indexed `key/value` categories such as
+  `amenity/hospital` normalize to their value.
 - Tenant handling: interior/node/building-part non-ground records stay at 18.
   A corroborated whole cultural-building footprint is a building destination;
   its level metadata does not imply an interior tenant or an entrance claim.

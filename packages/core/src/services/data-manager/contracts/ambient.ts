@@ -22,8 +22,7 @@ export const ambientRegionSchema = z
   }, "invalid ambient region");
 const generation = z.string().regex(new RegExp(AMBIENT_GENERATION_PATTERN));
 export const ambientManifestSchema = z.strictObject({
-  version: z.union([z.literal(1), z.literal(2)]),
-  attributionPrecision: z.enum(["captured-fields", "legacy-aggregate"]).optional(),
+  version: z.literal(2),
   policyVersion: countSchema,
   generation,
   publishedAt: timestampSchema,
@@ -54,7 +53,6 @@ export const ambientBuildProgressSchema = z.strictObject({
   placeCount: countSchema,
 });
 export const ambientPlanetCheckpointSchema = ambientBuildProgressSchema.extend({
-  legacyAttribution: z.boolean().optional(),
   osmType: z.string(),
   osmId: z.string(),
   gers: z.string(),
@@ -73,14 +71,6 @@ export const ambientPlanetCandidateSchema = z.strictObject({
 });
 export const ambientPlacesStatusSchema = z.strictObject({
   active: ambientManifestSchema.nullable(),
-  attribution: z
-    .strictObject({
-      formatVersion: z.union([z.literal(1), z.literal(2)]),
-      precision: z.enum(["captured-fields", "legacy-aggregate"]),
-      rebuildRequired: z.boolean(),
-    })
-    .nullable()
-    .optional(),
   previous: z.string().nullable(),
   building: z.boolean(),
   lastError: z.string().nullable(),

@@ -44,10 +44,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     it("publishes continents, native labels and canonical merged/Overture-only IDs", async () => {
       await seed();
       await pg.sql.unsafe(buildSchemaDDL("overture_places"));
-      await pg.sql.unsafe(`INSERT INTO overture_places.places(gers_id,name,names,basic_category,geom,confidence,operating_status,release) VALUES
-   ('g-tokyo','Tokyo Clinic','{"common":{"en":"Tokyo Clinic"}}','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),0.9,'open','2026-09-23.1'),
-   ('g-closed','Closed partner',NULL,'hospital',ST_SetSRID(ST_MakePoint(151.2,-33.86),4326),0.9,'open','2026-09-23.1'),
-   ('g-brazil','Café São Paulo',NULL,'cafe',ST_SetSRID(ST_MakePoint(-46.63,-23.55),4326),0.9,'open','2026-09-23.1');
+      await pg.sql.unsafe(`INSERT INTO overture_places.places(gers_id,name,names,basic_category,geom,confidence,operating_status,sources_catalogue,release) VALUES
+   ('g-tokyo','Tokyo Clinic','{"common":{"en":"Tokyo Clinic"}}','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),0.9,'open','[{"sourceId":"overture","name":"Overture Maps"}]','2026-09-23.1'),
+   ('g-closed','Closed partner',NULL,'hospital',ST_SetSRID(ST_MakePoint(151.2,-33.86),4326),0.9,'open','[{"sourceId":"overture","name":"Overture Maps"}]','2026-09-23.1'),
+   ('g-brazil','Café São Paulo',NULL,'cafe',ST_SetSRID(ST_MakePoint(-46.63,-23.55),4326),0.9,'open','[{"sourceId":"overture","name":"Overture Maps"}]','2026-09-23.1');
    INSERT INTO overture_places.conflation_state(release,region,place_count,places_published_at,status,phase,source_fingerprint,completed_at)
    VALUES('2026-09-23.1','planet',3,now(),'completed','complete','fixture-file',now());
    INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,match_confidence,distance_m,method,evidence,release)
@@ -88,17 +88,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await seed();
         await pg.sql.unsafe(buildSchemaDDL("overture_places"));
         await pg.sql.unsafe(
-          `INSERT INTO overture_places.places(gers_id,name,names,basic_category,geom,confidence,operating_status,release)
-        VALUES('g-excluded','Excluded partner','{"common":{"en":"Do not import"}}','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),$1,$2,'2026-09-23.1')`,
+          `INSERT INTO overture_places.places(gers_id,name,names,basic_category,geom,confidence,operating_status,sources,sources_catalogue,release)
+        VALUES('g-excluded','Excluded partner','{"common":{"en":"Do not import"}}','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),$1,$2,'[{"property":"/names/primary","dataset":"meta"}]','[{"sourceId":"overture","name":"Captured GERS identity"},{"sourceId":"meta-places","name":"Excluded name supplier"}]','2026-09-23.1')`,
           [confidence, status],
         );
         await pg.sql.unsafe(`INSERT INTO overture_places.conflation_state(release,region,place_count,places_published_at,status,phase,source_fingerprint,completed_at)
         VALUES('2026-09-23.1','planet',1,now(),'completed','complete','fixture-file',now());
         INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,match_confidence,distance_m,method,evidence,release)
         VALUES('node',1,'g-excluded',1,0,'fixture','{}','2026-09-23.1')`);
-        await pg.sql.unsafe(
-          `UPDATE overture_places.places SET sources='[{"property":"/names/primary","dataset":"meta"}]',sources_catalogue='[{"sourceId":"overture","name":"Captured GERS identity"},{"sourceId":"meta-places","name":"Excluded name supplier"}]'`,
-        );
         const result = await publisher.buildAmbientPlaces(
           pg.sql,
           AMBIENT_PLANET_REGION,
@@ -106,7 +103,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           { availableBytes: ample },
         );
         expect(result.placeCount).toBe(4);
-        expect(result.attributionPrecision).toBe("captured-fields");
         expect(await readAmbientPlaceByGers(pg.sql, "g-excluded")).toMatchObject({
           generation: result.generation,
           place: { id: "osm:node/1", gersId: "g-excluded", name: "世界 Clinic 1", sources: "osm" },
@@ -171,7 +167,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     it("refuses resume after a same-release link revision, then discards only unpublished storage", async () => {
       await seed();
       await pg.sql.unsafe(buildSchemaDDL("overture_places"));
-      await pg.sql.unsafe(`INSERT INTO overture_places.places(gers_id,name,basic_category,geom,release) VALUES('g','Tokyo','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),'2026-09-23.1');
+      await pg.sql.unsafe(`INSERT INTO overture_places.places(gers_id,name,basic_category,geom,sources_catalogue,release) VALUES('g','Tokyo','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),'[{"sourceId":"overture","name":"Overture Maps"}]','2026-09-23.1');
    INSERT INTO overture_places.conflation_state(release,region,place_count,places_published_at,status,phase,source_fingerprint,completed_at) VALUES('2026-09-23.1','planet',1,now(),'completed','complete','fixture-file',now())`);
       await expect(
         publisher.buildAmbientPlaces(pg.sql, AMBIENT_PLANET_REGION, undefined, {

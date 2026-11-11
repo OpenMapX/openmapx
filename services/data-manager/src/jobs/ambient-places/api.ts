@@ -61,14 +61,6 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
     );
     return {
       active,
-      attribution: active
-        ? {
-            formatVersion: active.version,
-            precision: active.attributionPrecision ?? "legacy-aggregate",
-            rebuildRequired:
-              active.version === 1 || active.attributionPrecision !== "captured-fields",
-          }
-        : null,
       previous: state.previous,
       building: Boolean(building) || writer.busy,
       lastError: state.last_build_error,

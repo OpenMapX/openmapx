@@ -203,11 +203,22 @@ describe("local Overture pull contract", () => {
       ]),
       parquetFile: "europe-germany-berlin.parquet",
     });
+    for (const sourcesCatalogue of [undefined, null, [], [{ sourceId: "overture" }]]) {
+      writeFileSync(
+        pullContractPath(dataDir, release, region),
+        JSON.stringify({ ...contract, sourcesCatalogue }),
+      );
+      expect(() => readOverturePullContract(dataDir, release, region)).toThrow(
+        `Overture pull contract for ${release}/${region} has no sources catalogue; re-pull the release so its places keep their attribution`,
+      );
+    }
     writeFileSync(
       pullContractPath(dataDir, release, region),
       JSON.stringify({ ...contract, contractVersion: 1 }),
     );
-    expect(readOverturePullContract(dataDir, release, region).sourcesCatalogue).toBeUndefined();
+    expect(() => readOverturePullContract(dataDir, release, region)).toThrow(
+      `Overture pull contract does not match ${release}/${region}`,
+    );
   });
 
   it("fails closed when the parquet no longer matches the contract", () => {

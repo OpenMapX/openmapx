@@ -11,24 +11,19 @@ CREATE EXTENSION IF NOT EXISTS btree_gist;
 CREATE SCHEMA IF NOT EXISTS ambient_places;
 CREATE TABLE IF NOT EXISTS ambient_places.generations (
   id UUID PRIMARY KEY, manifest JSONB NOT NULL, published_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  cache_lease_until TIMESTAMPTZ NOT NULL DEFAULT now()+interval '7 days 1 minute'
+  cache_lease_until TIMESTAMPTZ NOT NULL DEFAULT now()+interval '7 days 1 minute',
+  storage TEXT NOT NULL DEFAULT 'legacy', publication_status TEXT NOT NULL DEFAULT 'published'
 );
-ALTER TABLE ambient_places.generations ADD COLUMN IF NOT EXISTS cache_lease_until TIMESTAMPTZ NOT NULL DEFAULT now()+interval '7 days 1 minute';
-ALTER TABLE ambient_places.generations ADD COLUMN IF NOT EXISTS storage TEXT NOT NULL DEFAULT 'legacy';
-ALTER TABLE ambient_places.generations ADD COLUMN IF NOT EXISTS publication_status TEXT NOT NULL DEFAULT 'published';
 CREATE TABLE IF NOT EXISTS ambient_places.features (
   generation UUID NOT NULL REFERENCES ambient_places.generations(id) ON DELETE CASCADE,
   id TEXT NOT NULL, gers_id TEXT, name TEXT NOT NULL, name_de TEXT, name_en TEXT,
   category TEXT NOT NULL, rank INTEGER NOT NULL, min_zoom SMALLINT NOT NULL,
   tenant BOOLEAN NOT NULL, sources TEXT NOT NULL, geom BYTEA NOT NULL,
+  contributors JSONB, field_contributors JSONB, source_lineage JSONB,
   PRIMARY KEY(generation,id)
 );
-ALTER TABLE ambient_places.features ADD COLUMN IF NOT EXISTS contributors JSONB;
-ALTER TABLE ambient_places.features ADD COLUMN IF NOT EXISTS field_contributors JSONB;
-ALTER TABLE ambient_places.features ADD COLUMN IF NOT EXISTS source_lineage JSONB;
 -- EWKB keeps this internal store out of Martin's automatic geometry-table discovery.
 CREATE INDEX IF NOT EXISTS ambient_features_generation_geom ON ambient_places.features USING GIST(generation,ST_GeomFromEWKB(geom));
-DROP INDEX IF EXISTS ambient_places.ambient_features_geom;
 CREATE INDEX IF NOT EXISTS ambient_features_gers ON ambient_places.features(generation,gers_id) WHERE gers_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS ambient_places.state (
   singleton SMALLINT PRIMARY KEY CHECK(singleton=1),
@@ -36,14 +31,10 @@ CREATE TABLE IF NOT EXISTS ambient_places.state (
   enabled BOOLEAN NOT NULL DEFAULT true,
   last_build_id UUID, last_build_started_at TIMESTAMPTZ, last_build_finished_at TIMESTAMPTZ, last_build_error TEXT
 );
-ALTER TABLE ambient_places.state ADD COLUMN IF NOT EXISTS last_build_id UUID;
 CREATE TABLE IF NOT EXISTS ambient_places.planet_features (
   LIKE ambient_places.features INCLUDING DEFAULTS INCLUDING CONSTRAINTS,
   PRIMARY KEY(generation,id)
 ) PARTITION BY LIST(generation);
-ALTER TABLE ambient_places.planet_features ADD COLUMN IF NOT EXISTS contributors JSONB;
-ALTER TABLE ambient_places.planet_features ADD COLUMN IF NOT EXISTS field_contributors JSONB;
-ALTER TABLE ambient_places.planet_features ADD COLUMN IF NOT EXISTS source_lineage JSONB;
 CREATE INDEX IF NOT EXISTS ambient_planet_geom ON ambient_places.planet_features USING GIST(ST_GeomFromEWKB(geom));
 CREATE INDEX IF NOT EXISTS ambient_planet_gers ON ambient_places.planet_features(generation,gers_id) WHERE gers_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS ambient_places.planet_builds (

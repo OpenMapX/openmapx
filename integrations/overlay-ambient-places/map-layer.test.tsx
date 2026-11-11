@@ -77,7 +77,7 @@ import { localizeTextField } from "@/components/map/localizeTextField";
 import { AmbientPlacesLayer } from "./map-layer";
 
 const manifest = {
-  version: 1,
+  version: 2,
   policyVersion: 1,
   generation: "11111111-1111-4111-8111-111111111111",
   publishedAt: new Date().toISOString(),
@@ -503,7 +503,7 @@ describe("ambient generation lifecycle", () => {
         gers_id: "gers-a",
         name: "Clinic",
         name_de: "Klinik",
-        category: "amenity:hospital",
+        category: "amenity/hospital",
         rank: 800,
         min_zoom: 13,
         tenant: false,

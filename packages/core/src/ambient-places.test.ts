@@ -18,7 +18,7 @@ const osm = {
   name: "Klinik",
   lng: 6.08,
   lat: 50.77,
-  category: "amenity:hospital",
+  category: "amenity/hospital",
   importance: 0.8,
   tags: { "name:en": "Clinic" },
 };
@@ -31,6 +31,7 @@ const overture = {
   names: { common: { de: "Krankenhaus" } },
   confidence: 0.8,
   operating_status: "open",
+  sources_catalogue: [{ sourceId: "overture", name: "Overture Maps" }],
 };
 
 describe("ambient place policy", () => {
@@ -141,11 +142,10 @@ describe("ambient place policy", () => {
       "© OpenStreetMap contributors",
       "Captured historical GERS notice",
     ]);
-    expect(merged.legacyAttribution).toBe(false);
     expect(merged.sourceLineage?.sources).toEqual(row.sources);
   });
-  it("does not invent publisher receipts for legacy tiles and keeps explicit empty canonical receipts", () => {
-    const p = { id: "overture:old", name: "Legacy", sources: "overture" };
+  it("credits only the generic source for unversioned tile features and keeps explicit empty canonical receipts", () => {
+    const p = { id: "overture:unversioned", name: "Unversioned", sources: "overture" };
     expect(
       ambientPlaceContributors(ambientPlaceFromTile(p, [6, 50])!, "en").map((r) => r.sourceId),
     ).toEqual(["overture"]);
@@ -158,15 +158,17 @@ describe("ambient place policy", () => {
         "en",
       ),
     ).toEqual([]);
-    const legacy = ambientPlaceFromOverture({
-      ...overture,
-      sources: [{ property: "/phones", dataset: "Foursquare" }],
-      release: "2026-10-01.0",
-    })!;
-    expect(legacy.sourceLineage).toEqual({
-      sources: [{ property: "/phones", dataset: "Foursquare" }],
-      release: "2026-10-01.0",
-    });
+  });
+  it("refuses Overture rows and linked identities that carry no source catalogue", () => {
+    for (const sources_catalogue of [undefined, null, "not-json", [{ sourceId: "overture" }]]) {
+      const row = { ...overture, sources_catalogue: sources_catalogue as never };
+      expect(() => ambientPlaceFromOverture(row)).toThrow(/gers-a has no valid sources catalogue/);
+      expect(() => ambientOvertureIdentityEvidence(row)).toThrow(/no valid sources catalogue/);
+    }
+    const p = ambientPlaceFromOsm(osm)!;
+    expect(() => mergeAmbientPlaces([p], [], new Map([[p.id, "gers-a"]]))).toThrow(
+      /gers-a has no captured attribution/,
+    );
   });
   it("keeps strict source bounds and rejects non-finite/polar tile geometry", () => {
     for (const [lng, lat] of [
@@ -246,14 +248,13 @@ describe("ambient place policy", () => {
     }
     expect(ambientPlaceFromOverture({ ...overture, confidence: 0.5 })).not.toBeNull();
   });
-  it("normalizes indexed slash categories and legacy colon categories identically", () => {
-    for (const prefix of ["amenity/", "amenity:"]) {
-      expect(ambientCategory(`${prefix}hospital`)).toBe("hospital");
-      expect(ambientPlaceFromOsm({ ...osm, category: `${prefix}hospital` })!.minZoom).toBe(13);
-    }
+  it("normalizes indexed slash categories", () => {
+    expect(ambientCategory("amenity/hospital")).toBe("hospital");
+    expect(ambientCategory("hospitals")).toBe("hospital");
+    expect(ambientPlaceFromOsm({ ...osm, category: "amenity/hospital" })!.minZoom).toBe(13);
     expect(ambientPlaceFromOsm({ ...osm, category: "shop/bakery" })!.minZoom).toBe(15);
     expect(ambientPlaceFromOsm({ ...osm, category: "shop/books" })!.minZoom).toBe(15);
-    expect(ambientPlaceFromOsm({ ...osm, category: "tourism:artwork" })!.minZoom).toBe(16);
+    expect(ambientPlaceFromOsm({ ...osm, category: "tourism/artwork" })!.minZoom).toBe(16);
   });
   it("promotes only corroborated cultural landmarks and preserves exclusion/tenant policy", () => {
     const base = { ...osm, category: "amenity/place_of_worship" };
@@ -291,17 +292,13 @@ describe("ambient place policy", () => {
     );
     expect(landmark.rank).toBeLessThan(ambientPlaceFromOsm(osm)!.rank);
   });
-  it("reads legacy serialized tags and rejects malformed/non-object policy inputs", () => {
-    const legacy = {
-      ...osm,
-      category: "amenity/place_of_worship",
-      tags: JSON.stringify({ wikidata: "Q896410", basilica: "minor" }),
-    };
-    expect(ambientPlaceFromOsm(legacy as never)!.minZoom).toBe(14);
-    expect(
-      ambientPlaceFromOsm({ ...legacy, tags: JSON.stringify({ access: "private" }) } as never),
-    ).toBeNull();
-    for (const tags of ["not-json", "[]", "null", { access: true }]) {
+  it("rejects serialized, malformed and non-object policy tags", () => {
+    for (const tags of [
+      JSON.stringify({ wikidata: "Q896410", basilica: "minor" }),
+      "not-json",
+      [],
+      { access: true },
+    ]) {
       expect(ambientPlaceFromOsm({ ...osm, tags } as never)).toBeNull();
     }
   });
@@ -319,7 +316,10 @@ describe("ambient place policy", () => {
     });
     expect(fused[0].names.de).toBe("Krankenhaus");
     expect(mergeAmbientPlaces([a], [b], new Map())).toHaveLength(2);
-    expect(mergeAmbientPlaces([a], [], new Map([[a.id, "gers-a"]]))[0].gersId).toBe("gers-a");
+    const identity = new Map([["gers-a", ambientOvertureIdentityEvidence(overture)]]);
+    expect(
+      mergeAmbientPlaces([a], [], new Map([[a.id, "gers-a"]]), new Set(), identity)[0],
+    ).toMatchObject({ gersId: "gers-a", sources: "osm" });
   });
   it("never replaces an explicit different basemap OSM identity through proximity", () => {
     const a = ambientPlaceFromOsm(osm)!;

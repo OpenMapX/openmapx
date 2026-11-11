@@ -164,10 +164,7 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
       estimateOvertureIngestBytes(
         statSync(parquetPath).size,
         activeSchemaBytes,
-        pullContract.sourcesCatalogue === undefined
-          ? 0
-          : Buffer.byteLength(JSON.stringify(pullContract.sourcesCatalogue)) *
-              pullContract.rowCount,
+        Buffer.byteLength(JSON.stringify(pullContract.sourcesCatalogue)) * pullContract.rowCount,
       ),
   });
 
@@ -212,7 +209,7 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
     `  confidence,`,
     `  operating_status,`,
     `  to_json(sources) AS sources,`,
-    `  ${pullContract.sourcesCatalogue === undefined ? "NULL" : duckDbSqlLiteral(JSON.stringify(pullContract.sourcesCatalogue))}::JSON AS sources_catalogue,`,
+    `  ${duckDbSqlLiteral(JSON.stringify(pullContract.sourcesCatalogue))}::JSON AS sources_catalogue,`,
     `  ${duckDbSqlLiteral(release)}::TEXT AS release`,
     `FROM read_parquet(${duckDbSqlLiteral(parquetPath)});`,
   ].join("\n");

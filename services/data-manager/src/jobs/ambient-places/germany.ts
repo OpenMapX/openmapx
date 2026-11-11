@@ -9,7 +9,6 @@ import {
   type AmbientOvertureRow,
   type AmbientPlace,
   type AmbientRegion,
-  ambientHasLegacyAttribution,
   ambientOvertureIdentityEvidence,
   ambientPlaceFromOsm,
   ambientPlaceFromOverture,
@@ -37,7 +36,7 @@ interface OsmState {
   place_count: string;
 }
 type OvertureRow = AmbientOvertureRow & { sources: OvertureSourceItem[] | null; release: string };
-const OVERTURE_COLUMNS = `o.gers_id,o.name,ST_X(o.geom) AS longitude,ST_Y(o.geom) AS latitude,o.basic_category,o.taxonomy_primary,o.taxonomy_hierarchy,o.taxonomy_alternates,o.names,o.confidence,o.operating_status,o.sources,to_jsonb(o)->'sources_catalogue' AS sources_catalogue,o.release`;
+const OVERTURE_COLUMNS = `o.gers_id,o.name,ST_X(o.geom) AS longitude,ST_Y(o.geom) AS latitude,o.basic_category,o.taxonomy_primary,o.taxonomy_hierarchy,o.taxonomy_alternates,o.names,o.confidence,o.operating_status,o.sources,o.sources_catalogue,o.release`;
 function eligibleOverture(row: OvertureRow): AmbientPlace | null {
   const place = ambientPlaceFromOverture(row);
   if (place)
@@ -59,7 +58,6 @@ export async function buildGermanyPlaces(
   const generation = await prepareAmbientGeneration(tx);
   const manifest: AmbientManifest = {
     version: AMBIENT_FORMAT_VERSION,
-    attributionPrecision: "captured-fields",
     policyVersion: AMBIENT_POLICY_VERSION,
     generation,
     publishedAt: new Date().toISOString(),
@@ -136,7 +134,6 @@ export async function buildGermanyPlaces(
     inputRows: number,
   ) => {
     manifest.placeCount += places.length;
-    if (ambientHasLegacyAttribution(places)) manifest.attributionPrecision = "legacy-aggregate";
     if (manifest.placeCount > AMBIENT_LIMITS.countryPlaces)
       throw new Error("Germany output exceeds 20000000 places");
     await insertAmbientFeatures(tx, generation, places);

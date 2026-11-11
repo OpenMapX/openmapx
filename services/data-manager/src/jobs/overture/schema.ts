@@ -97,7 +97,7 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
       confidence        DOUBLE PRECISION,
       operating_status  TEXT,
       sources           JSONB,
-      sources_catalogue JSONB,
+      sources_catalogue JSONB NOT NULL,
       release           TEXT NOT NULL,
       imported_at       TIMESTAMPTZ DEFAULT NOW()
     );

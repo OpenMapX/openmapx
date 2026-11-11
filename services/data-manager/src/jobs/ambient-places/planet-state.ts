@@ -8,7 +8,6 @@ import type postgres from "postgres";
 import { fresh } from "./publication.js";
 
 export interface PlanetCheckpoint extends AmbientBuildProgress {
-  legacyAttribution?: boolean;
   osmType: string;
   osmId: string;
   gers: string;

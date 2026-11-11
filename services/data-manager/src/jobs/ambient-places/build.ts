@@ -10,7 +10,6 @@ import {
   type AmbientOsmRow,
   type AmbientOvertureRow,
   type AmbientRegion,
-  ambientHasLegacyAttribution,
   ambientOvertureIdentityEvidence,
   ambientPlaceFromOsm,
   ambientPlaceFromOverture,
@@ -121,7 +120,7 @@ export async function buildAmbientPlaces(
           const rows = await tx.unsafe<
             (AmbientOvertureRow & { sources: OvertureSourceItem[] | null })[]
           >(
-            `SELECT gers_id,name,ST_X(geom) AS longitude,ST_Y(geom) AS latitude,basic_category,taxonomy_primary,taxonomy_hierarchy,taxonomy_alternates,names,confidence,operating_status,sources,to_jsonb(places)->'sources_catalogue' AS sources_catalogue,release FROM overture_places.places WHERE geom && ST_MakeEnvelope($1,$2,$3,$4,4326) ORDER BY gers_id LIMIT ${AMBIENT_LIMITS.places + 1}`,
+            `SELECT gers_id,name,ST_X(geom) AS longitude,ST_Y(geom) AS latitude,basic_category,taxonomy_primary,taxonomy_hierarchy,taxonomy_alternates,names,confidence,operating_status,sources,sources_catalogue,release FROM overture_places.places WHERE geom && ST_MakeEnvelope($1,$2,$3,$4,4326) ORDER BY gers_id LIMIT ${AMBIENT_LIMITS.places + 1}`,
             params,
           );
           if (rows.length > AMBIENT_LIMITS.places)
@@ -156,12 +155,11 @@ export async function buildAmbientPlaces(
           ];
           if (missingIdentities.length) {
             const identities = await tx.unsafe<
-              (Pick<AmbientOvertureRow, "sources" | "sources_catalogue"> & {
-                gers_id: string;
+              (Pick<AmbientOvertureRow, "gers_id" | "sources" | "sources_catalogue"> & {
                 release: string;
               })[]
             >(
-              `SELECT gers_id,sources,to_jsonb(places)->'sources_catalogue' AS sources_catalogue,release FROM overture_places.places WHERE gers_id=ANY($1::TEXT[]) ORDER BY gers_id`,
+              `SELECT gers_id,sources,sources_catalogue,release FROM overture_places.places WHERE gers_id=ANY($1::TEXT[]) ORDER BY gers_id`,
               [missingIdentities],
             );
             if (
@@ -227,9 +225,6 @@ export async function buildAmbientPlaces(
       const generation = await prepareAmbientGeneration(tx);
       const manifest: AmbientManifest = {
         version: AMBIENT_FORMAT_VERSION,
-        attributionPrecision: ambientHasLegacyAttribution(places)
-          ? "legacy-aggregate"
-          : "captured-fields",
         policyVersion: AMBIENT_POLICY_VERSION,
         generation,
         publishedAt: new Date().toISOString(),

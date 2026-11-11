@@ -10,7 +10,6 @@ export type GetAmbientPlacesStatus200CandidateCheckpoint = {
   batches: number;
   /** @minimum 0 */
   placeCount: number;
-  legacyAttribution?: boolean;
   osmType: string;
   osmId: string;
   gers: string;

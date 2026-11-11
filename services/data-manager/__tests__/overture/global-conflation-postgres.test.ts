@@ -26,7 +26,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     async function edges(schema: string, count: number, chain: boolean) {
       await pg.sql.unsafe(buildSchemaDDL(schema));
       await pg.sql.unsafe(
-        `INSERT INTO "${schema}".places(gers_id,geom,release) SELECT 'g'||i,ST_SetSRID(ST_MakePoint(139.7,35.7),4326),'fixture' FROM generate_series(1,$1) i`,
+        `INSERT INTO "${schema}".places(gers_id,geom,sources_catalogue,release) SELECT 'g'||i,ST_SetSRID(ST_MakePoint(139.7,35.7),4326),'[{"sourceId":"overture","name":"Overture Maps"}]','fixture' FROM generate_series(1,$1) i`,
         [count],
       );
       await pg.sql.unsafe(

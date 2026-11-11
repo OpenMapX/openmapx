@@ -26,8 +26,8 @@ import { captureOvertureFieldContributors, type OvertureSourceItem } from "./uti
 
 export const AMBIENT_POLICY_VERSION = 2;
 export const AMBIENT_FORMAT_VERSION = 2;
-/** Honest aggregate receipt for pre-capture Overture snapshots. */
-export const AMBIENT_LEGACY_OVERTURE_ATTRIBUTION: Readonly<Attribution> = Object.freeze({
+/** Generic Overture receipt for an ambient record that carries no captured contributors. */
+const AMBIENT_OVERTURE_ATTRIBUTION: Readonly<Attribution> = Object.freeze({
   sourceId: "overture",
   name: "Overture Maps",
   url: "https://overturemaps.org",
@@ -72,12 +72,9 @@ export interface AmbientPlace {
   contributors?: Attribution[];
   fieldContributors?: FieldContributors;
   sourceLineage?: { sources: readonly OvertureSourceItem[]; release?: string };
-  /** Build-time precision diagnostic; raw lineage alone cannot prove notices. */
-  legacyAttribution?: boolean;
 }
 export interface AmbientManifest {
-  version: 1 | 2;
-  attributionPrecision?: "captured-fields" | "legacy-aggregate";
+  version: typeof AMBIENT_FORMAT_VERSION;
   policyVersion: number;
   generation: string;
   publishedAt: string;
@@ -127,7 +124,7 @@ export interface AmbientOvertureRow {
   confidence: number | null;
   operating_status: string | null;
   sources?: OvertureSourceItem[] | null;
-  sources_catalogue?: Attribution[] | null;
+  sources_catalogue: Attribution[];
   release?: string;
 }
 
@@ -147,7 +144,7 @@ const aliases: Record<string, string> = {
   townhall: "townhall",
 };
 export function ambientCategory(value: string): string {
-  const raw = value.split(/[:/]/).at(-1)!;
+  const raw = value.split("/").at(-1)!;
   return aliases[raw] ?? raw;
 }
 const essential = new Set([
@@ -219,7 +216,7 @@ function policy(
     ? 3
     : landmark
       ? 2.5
-      : everyday.has(c) || /^shop[:/]/.test(category)
+      : everyday.has(c) || category.startsWith("shop/")
         ? 2
         : 1;
   return {
@@ -230,14 +227,7 @@ function policy(
   };
 }
 export function ambientPlaceFromOsm(row: AmbientOsmRow): AmbientPlace | null {
-  let rawTags: unknown = row.tags ?? {};
-  if (typeof rawTags === "string") {
-    try {
-      rawTags = JSON.parse(rawTags);
-    } catch {
-      return null;
-    }
-  }
+  const rawTags: unknown = row.tags ?? {};
   if (
     !rawTags ||
     typeof rawTags !== "object" ||
@@ -333,15 +323,8 @@ export function ambientPlaceFromOverture(row: AmbientOvertureRow): AmbientPlace 
     tenant: false,
     sources: "overture",
   };
-  const catalogue = parseContributors(row.sources_catalogue);
+  const catalogue = overtureCatalogue(row);
   const sourceLineage = { sources: structuredClone(row.sources ?? []), release: row.release };
-  if (catalogue === undefined)
-    return {
-      ...place,
-      contributors: snapshotContributors([AMBIENT_LEGACY_OVERTURE_ATTRIBUTION]),
-      sourceLineage,
-      legacyAttribution: true,
-    };
   const captured = captureOvertureFieldContributors(place, row.sources, catalogue, {
     name: ["/names/primary"],
     ...Object.fromEntries(
@@ -377,6 +360,10 @@ export function mergeAmbientPlaces(
     consumed.add(gersId);
     const o = byGers.get(gersId);
     const identity = o ?? identityEvidence.get(gersId);
+    const gersContributors = identity?.fieldContributors?.gersId;
+    // An accepted GERS alias must keep the Overture receipt that identifies it.
+    if (gersContributors === undefined)
+      throw new Error(`Linked Overture identity ${gersId} has no captured attribution`);
     const fieldContributors =
       p.fieldContributors === undefined && o?.fieldContributors === undefined
         ? undefined
@@ -390,7 +377,7 @@ export function mergeAmbientPlaces(
                   o?.fieldContributors?.[`names.${lang}`] ?? o?.contributors ?? [],
                 ]),
             ),
-            gersId: identity?.fieldContributors?.gersId ?? [AMBIENT_LEGACY_OVERTURE_ATTRIBUTION],
+            gersId: gersContributors,
           };
     return {
       ...p,
@@ -402,12 +389,8 @@ export function mergeAmbientPlaces(
         ? contributorsForRecords(
             Object.values(fieldContributors).map((contributors) => ({ contributors })),
           )
-        : snapshotContributors(
-            p.contributors ?? [],
-            identity?.fieldContributors?.gersId ?? [AMBIENT_LEGACY_OVERTURE_ATTRIBUTION],
-          ),
+        : snapshotContributors(p.contributors ?? [], gersContributors),
       sourceLineage: identity?.sourceLineage,
-      legacyAttribution: identity?.legacyAttribution ?? !identity,
     };
   });
   const canonicalByGers = new Map([...links].map(([id, gers]) => [gers, id]));
@@ -421,24 +404,29 @@ export function mergeAmbientPlaces(
 }
 export type AmbientOvertureIdentityEvidence = Pick<
   AmbientPlace,
-  "fieldContributors" | "sourceLineage" | "legacyAttribution"
+  "fieldContributors" | "sourceLineage"
 >;
 /** Accepted GERS identity does not depend on eligibility of display fields. */
 export function ambientOvertureIdentityEvidence(
-  row: Pick<AmbientOvertureRow, "sources" | "sources_catalogue" | "release">,
+  row: Pick<AmbientOvertureRow, "gers_id" | "sources" | "sources_catalogue" | "release">,
 ): AmbientOvertureIdentityEvidence {
-  const catalogue = parseContributors(row.sources_catalogue);
   return {
     fieldContributors: {
       gersId: snapshotContributors(
-        catalogue === undefined
-          ? [AMBIENT_LEGACY_OVERTURE_ATTRIBUTION]
-          : catalogue.filter((receipt) => receipt.sourceId === "overture"),
+        overtureCatalogue(row).filter((receipt) => receipt.sourceId === "overture"),
       ),
     },
     sourceLineage: { sources: structuredClone(row.sources ?? []), release: row.release },
-    legacyAttribution: catalogue === undefined,
   };
+}
+/** Every ingested Overture row carries its source catalogue; a row without one is refused. */
+function overtureCatalogue(row: Pick<AmbientOvertureRow, "gers_id" | "sources_catalogue">) {
+  const catalogue = parseContributors(row.sources_catalogue);
+  if (catalogue === undefined)
+    throw new Error(
+      `Overture place ${row.gers_id} has no valid sources catalogue; re-pull and re-ingest the Overture release`,
+    );
+  return catalogue;
 }
 export function ambientPlaceToCategoryPlace(place: AmbientPlace, locale: string): CategoryPlace {
   return {
@@ -473,14 +461,7 @@ export function ambientPlaceContributors(place: AmbientPlace, locale: string): A
     ]);
   return snapshotContributors(
     ...(place.sources.includes("osm") ? [[OPENSTREETMAP_ATTRIBUTION]] : []),
-    ...(place.sources.includes("overture") ? [[AMBIENT_LEGACY_OVERTURE_ATTRIBUTION]] : []),
-  );
-}
-/** A v2 container may still carry honestly identified legacy source records. */
-export function ambientHasLegacyAttribution(places: readonly AmbientPlace[]): boolean {
-  return places.some(
-    (place) =>
-      place.legacyAttribution || (Boolean(place.gersId) && place.sourceLineage === undefined),
+    ...(place.sources.includes("overture") ? [[AMBIENT_OVERTURE_ATTRIBUTION]] : []),
   );
 }
 export function ambientIdentityKeys(
