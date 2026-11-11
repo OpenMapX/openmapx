@@ -44,7 +44,6 @@ export const RUNTIME_BUNDLES = {
     outdir: "apps/ops-agent/dist",
     entries: {
       agent: "apps/ops-agent/src/index.ts",
-      "agent-handoff-main": "apps/ops-agent/src/agent-handoff-main.ts",
       "configuration-handoff-main": "apps/ops-agent/src/configuration-handoff-main.ts",
       cli: "packages/cli/src/index.ts",
     },

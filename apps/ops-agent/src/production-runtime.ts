@@ -10,7 +10,6 @@ import {
   createDefaultReleaseEffects,
   type FixedCliRunner,
 } from "./administrative-runtime";
-import { readAgentHandoff } from "./agent-handoff";
 import { installBackupPruneRuntime } from "./backup-prune-runtime";
 import { installCatalogApprovalRuntime } from "./catalog-approval-runtime";
 import { installCatalogValidationInputsRuntime } from "./catalog-validation-inputs";
@@ -102,12 +101,6 @@ function installReleaseCapabilityBoundary(
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
-    const handoff = readAgentHandoff(rootDir);
-    if (
-      handoff &&
-      !(handoff.consumed === true && ["applied", "rolled_back"].includes(handoff.phase))
-    )
-      throw new OpsExecutionFailure("recovery_required", {});
   };
   const withSource = async <T>(signal: AbortSignal, action: () => Promise<T>): Promise<T> => {
     try {
@@ -194,7 +187,6 @@ function installReleaseCapabilityBoundary(
     },
     pull: (_releaseId, context) => unavailable(context.signal),
     apply: (_releaseId, _serviceIds, context) => unavailable(context.signal),
-    updateAgent: (_request, context) => unavailable(context.signal),
   };
 }
 export function productionReleaseEffects(runtime: OpsRuntime): AdministrativeReleaseEffects {

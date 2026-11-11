@@ -1,5 +1,4 @@
 export { openAdminDataWorkflow } from "./admin-data-workflow";
-export * from "./agent-handoff-record";
 export {
   type AgentStatePaths,
   agentStatePaths,

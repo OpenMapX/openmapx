@@ -29,10 +29,9 @@ import {
   publishTrustedConfigurationSnapshot,
 } from "../apps/api/src/services/trusted-config-publisher";
 import {
-  agentHandoffRunArgs,
+  configurationHandoffRunArgs,
   inspectAgentContainer,
-  writeAgentHandoff,
-} from "../apps/ops-agent/src/agent-handoff";
+} from "../apps/ops-agent/src/configuration-handoff";
 import { readCatalogPinSet } from "../packages/core/src/catalog-pins";
 
 /**
@@ -49,8 +48,7 @@ import { readCatalogPinSet } from "../packages/core/src/catalog-pins";
  * The run starts the agent from the generation a host render wrote, commits a
  * sealed configuration change through the supported local bearer root with a
  * service file override, runs its fixed CLI's check and render, reads the
- * stack's status and a handoff record, and inspects what its self-update
- * helper would mount.
+ * stack's status, and inspects what its configuration helper would mount.
  *
  * Runs only on Linux where `OPENMAPX_TEST_AGENT_IMAGE` names a built image of
  * apps/ops-agent/Dockerfile from this commit, with Docker reachable.
@@ -420,24 +418,10 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
       expect(rendered, `${rendered.stdout}${rendered.stderr}`).not.toHaveProperty("failed");
       expect(rendered.stdout).toContain("Rendered");
 
-      // The stack as Compose sees it from the agent, and a handoff record.
+      // The stack as Compose sees it from the agent.
       await expect(operate(agent, { kind: "stack.status" })).resolves.toHaveProperty("services");
-      const now = new Date().toISOString();
-      writeAgentHandoff(root, {
-        version: 1,
-        handoffId: "handoff-agent-image",
-        releaseId: "main",
-        digest: "a".repeat(64),
-        phase: "applied",
-        previousOverlay: null,
-        createdAt: now,
-        updatedAt: now,
-      });
-      await expect(
-        operate(agent, { kind: "agent.handoff.inspect", handoffId: "handoff-agent-image" }),
-      ).resolves.toEqual({ handoffId: "handoff-agent-image", phase: "applied" });
 
-      // What its self-update helper would mount: the agent's own mounts.
+      // What its configuration helper would mount: the agent's own mounts.
       const facts = await inspectAgentContainer(
         async (args) => docker(...args),
         agent.id,
@@ -449,7 +433,19 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
         [...mounts].sort((left, right) => left.target.localeCompare(right.target));
       expect(byTarget(facts.rootMounts)).toEqual(byTarget(agentMounts(root)));
       expect(facts.rootMounts[0]).toEqual(agentMounts(root)[0]);
-      const helper = agentHandoffRunArgs(facts, root, "handoff-agent-image").join("\n");
+      const helper = configurationHandoffRunArgs(facts, root, {
+        handoffId: "11111111-1111-4111-8111-111111111111",
+        assertion: "agent-image-assertion",
+        execution: {
+          executor: "host-cli",
+          principal: "api",
+          executionId: "22222222-2222-4222-8222-222222222222",
+          operationKey: "opk1_agentimagehelper",
+          operationFingerprint: "b".repeat(64),
+          fingerprint: "c".repeat(64),
+          deadlineAt: Date.now() + 60_000,
+        },
+      }).join("\n");
       expect(helper).not.toContain(`target=${root}\n`);
 
       // The agent read .env and never wrote it.

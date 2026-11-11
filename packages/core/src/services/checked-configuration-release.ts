@@ -4,24 +4,13 @@ import { createHash } from "node:crypto";
 import { relative, sep } from "node:path";
 import { z } from "zod";
 import { AnchoredDirectory } from "../build-artifacts/filesystem";
-import { type AgentHandoffRecord, parseAgentHandoffRecord } from "./agent-handoff-record";
-import { agentStatePaths } from "./agent-state";
 import {
   canonicalReleaseManifest,
   parseReleaseManifest,
   ReleaseChannelDisabledError,
 } from "./release-manifest";
 import type { ReleaseSelection } from "./release-selection";
-import { readReleaseStateFile, releaseStatePaths } from "./release-state";
-
-function readPrivateHandoff(path: string): AgentHandoffRecord | null {
-  try {
-    return parseAgentHandoffRecord(readReleaseStateFile(path, 128 * 1024));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw error;
-  }
-}
+import { releaseStatePaths } from "./release-state";
 
 const selectionSchema = z.strictObject({
   releaseId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
@@ -41,8 +30,6 @@ export function readCheckedConfigurationRelease(
   infraDir: string,
   input: { releaseId: string; manifestDigest: string },
   channel: ReleaseSelection,
-  readLegacyHandoff: () => AgentHandoffRecord | null = () =>
-    readPrivateHandoff(agentStatePaths(infraDir).handoff),
 ) {
   const selected = selectionSchema.parse(input);
   if (channel.kind === "local") throw new ReleaseChannelDisabledError();
@@ -60,8 +47,8 @@ export function readCheckedConfigurationRelease(
       throw error;
     }
     try {
-      // The legacy entrypoint has no owned handoff source for this new root.
-      // Preserve its journal; never reinterpret startup cleanup as authority.
+      // An unfinished release transaction must be recovered first; never
+      // reinterpret startup cleanup as authority.
       try {
         directory.read("transaction.json", 128 * 1024);
         throw Error("Legacy release transaction requires recovery");
@@ -69,12 +56,6 @@ export function readCheckedConfigurationRelease(
         if ((error as NodeJS.ErrnoException).code !== "ENOENT")
           throw Error("Legacy release transaction requires recovery");
       }
-      const legacy = readLegacyHandoff();
-      if (
-        legacy &&
-        !(legacy.consumed === true && ["applied", "rolled_back"].includes(legacy.phase))
-      )
-        throw Error("Legacy release handoff requires recovery");
       const raw = directory.read(`${selected.releaseId}.json`, 32 * 1024).toString("utf8"),
         manifest = parseReleaseManifest(raw, channel.imagePrefix),
         canonical = canonicalReleaseManifest(manifest),

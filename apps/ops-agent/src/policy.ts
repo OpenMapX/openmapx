@@ -197,7 +197,6 @@ function claimedResourcePolicy(
         operation.kind === "release.images.pull" ||
         operation.kind === "release.apply" ||
         operation.kind === "appApi.replace" ||
-        operation.kind === "agent.update" ||
         operation.kind === "system.update") &&
       kind === operation.kind &&
       id === operation.releaseId,
