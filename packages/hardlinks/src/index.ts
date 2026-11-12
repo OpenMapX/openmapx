@@ -434,11 +434,10 @@ export function applyHardlinkPlan(
           }
         }
         removeSentinel(sentinelPath);
-        // Only remove the target dir itself when it's empty; container state
-        // stays untouched even after a producer is deconfigured.
-        if (existsSync(target) && readdirSync(target).length === 0) {
-          rmSync(target, { recursive: true, force: true });
-        }
+        // The target directory itself stays, even when empty: a plan entry
+        // exists only while its consumer mounts the target, and removing it
+        // would let Docker recreate it as root, where this pipeline could no
+        // longer link into it.
       }
       continue;
     }

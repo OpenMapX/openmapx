@@ -281,7 +281,8 @@ export interface RenderContext {
    */
   warnings?: string[];
   /**
-   * Per-render sink for writable `@infra:data/...` bind-mount source dirs (as
+   * Per-render sink for writable `@infra:data/...` bind-mount source dirs and
+   * the hardlink targets consumers mount from the data directory (as
    * absolute host paths). The deploy step pre-creates these as the invoking
    * (data-owning) user before `docker compose up`, so docker doesn't auto-create
    * them as root — which would leave a non-root container (and the data-manager
@@ -1100,6 +1101,11 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
   // when present so multi-region setups keep separate dirs on disk.
   const hardlinkPlan: HardlinkEntry[] = [];
   const resolvedConsumesPathsByService = new Map<string, Map<string, string>>();
+  // Absolute host paths of each consumer's hardlink targets under the data
+  // directory, which render creates like the other writable data directories.
+  const consumerTargetsByService = new Map<string, string[]>();
+  const infraBase = ctx.infraDir ?? ctx.composeOutDir;
+  const dataRoot = infraBase ? resolve(infraBase, "data") : undefined;
   for (const s of services) {
     for (const c of s.manifest.consumes ?? []) {
       const producer = resolveProducer(c, s.manifest.id, producerIndex);
@@ -1120,6 +1126,11 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
         ctx.composeOutDir ? toComposePath(absoluteTarget, ctx.composeOutDir) : `./${target}`,
       );
       resolvedConsumesPathsByService.set(s.manifest.id, paths);
+      if (dataRoot && absoluteTarget.startsWith(`${dataRoot}/`)) {
+        const targets = consumerTargetsByService.get(s.manifest.id) ?? [];
+        targets.push(absoluteTarget);
+        consumerTargetsByService.set(s.manifest.id, targets);
+      }
     }
   }
 
@@ -1137,6 +1148,10 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
     // becoming empty local bind directories.
     const consumesPaths =
       resolvedConsumesPathsByService.get(s.manifest.id) ?? new Map<string, string>();
+    // A consumer can start before its producer has data. Docker would then
+    // create the mounted target as root, and data-manager, running as the
+    // deployment's user, could not link into or prune it.
+    bindDirSink.push(...(consumerTargetsByService.get(s.manifest.id) ?? []));
     composeServices[s.manifest.id] = renderServiceSnippet(s, {
       ...ctx,
       allServices: ctx.allServices ?? services,
