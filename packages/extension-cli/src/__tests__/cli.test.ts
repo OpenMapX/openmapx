@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { services } from "@openmapx/core/server";
+import { validateServiceManifest } from "@openmapx/extension-contracts/service";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { scaffoldIntegration, scaffoldService } from "../commands/scaffold.js";
 import { runValidate } from "../commands/validate.js";
@@ -123,7 +123,7 @@ describe("scaffold service", () => {
   it("produces a service.json that passes the OpenMapX service-manifest validator", () => {
     const destPath = scaffoldService({ id: "valid-svc", outDir: tmp });
     const parsed: unknown = JSON.parse(readFileSync(destPath, "utf-8"));
-    const result = services.validateServiceManifest(parsed, { firstParty: false });
+    const result = validateServiceManifest(parsed, { firstParty: false });
     expect(result.valid, `manifest validation failed: ${result.errors.join("; ")}`).toBe(true);
   });
 });

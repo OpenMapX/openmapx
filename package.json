@@ -91,6 +91,7 @@
     "@changesets/cli": "3.0.3",
     "@commitlint/cli": "^21.2.4",
     "@commitlint/config-conventional": "^21.2.4",
+    "@commitlint/types": "^21.2.3",
     "@graphql-codegen/typed-document-node": "7.2.0",
     "@graphql-codegen/typescript-operations": "6.2.0",
     "@vitest/coverage-v8": "^5.0.5",

@@ -7,5 +7,17 @@
   "dependencies": {
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^"
+  },
+  "peerDependencies": {
+    "@mui/material": "^9.5.0",
+    "maplibre-gl": "^6.16.0",
+    "next-intl": "^4.14.9",
+    "react-dom": ">=19"
+  },
+  "devDependencies": {
+    "@mui/material": "^9.5.0",
+    "maplibre-gl": "^6.16.0",
+    "next-intl": "^4.14.9",
+    "react-dom": "19.3.1"
   }
 }
