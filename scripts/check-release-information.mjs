@@ -21,7 +21,7 @@ const notePath = (path) =>
   /^\.changeset\/[a-z0-9][a-z0-9-]*\.md$/.test(path) && path !== ".changeset/README.md";
 const fragmentPath = (path) =>
   /^release-notes\/[a-z0-9][a-z0-9-]*\.md$/.test(path) && path !== "release-notes/README.md";
-const testsOnly = (path) =>
+export const testsOnly = (path) =>
   /(?:^|\/)(__tests__|__mocks__)\//.test(path) || /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path);
 
 export function git(cwd, ...args) {
@@ -134,12 +134,29 @@ function lockfileWideInputs({ environment, project }) {
 }
 const snapshotKey = (name, version) =>
   version.split("(")[0].indexOf("@", 1) > 0 ? version : `${name}@${version}`;
+/** The peer dependency names a workspace package declares in its manifest at this commit. */
+function declaredPeers(state, directory) {
+  const path = directory === "." ? "package.json" : `${directory}/package.json`;
+  let manifest;
+  try {
+    manifest = state.json(path);
+  } catch (error) {
+    throw new Error(`${path}: unreadable manifest (${error.message})`);
+  }
+  if (
+    !plainObject(manifest) ||
+    (manifest.peerDependencies !== undefined && !plainObject(manifest.peerDependencies))
+  )
+    throw new Error(`${path}: missing or invalid manifest`);
+  return new Set(Object.keys(manifest.peerDependencies ?? {}));
+}
 /**
  * Resolves every lockfile snapshot a package's build can use: its own importer's
- * dependencies (including build tools), linked workspace packages' production
- * dependencies, and their transitive snapshot dependencies.
+ * dependencies (including build tools); for linked workspace packages, their
+ * production dependencies and the devDependencies that provide their declared
+ * peers (their runtime imports); and all transitive snapshot dependencies.
  */
-function dependencyTree({ project }, directory) {
+function dependencyTree({ project }, directory, state) {
   const { importers, packages = {}, snapshots = {} } = project;
   const tree = { importers: {}, snapshots: {}, packages: {} };
   const pending = [];
@@ -150,9 +167,9 @@ function dependencyTree({ project }, directory) {
     const target = posix.normalize(posix.join(from, version.slice(5)));
     if (target === ".." || target.startsWith("../") || posix.isAbsolute(target))
       throw new Error(`${name}: link outside the workspace`);
-    visit(target, productionFields);
+    visit(target, true);
   };
-  const visit = (path, fields) => {
+  const visit = (path, linked) => {
     if (Object.hasOwn(tree.importers, path)) return;
     const importer = importers[path];
     if (!plainObject(importer)) throw new Error(`missing importer ${path}`);
@@ -160,17 +177,22 @@ function dependencyTree({ project }, directory) {
     tree.importers[path] = entry;
     for (const [key, value] of Object.entries(importer))
       if (!dependencyFields.includes(key)) entry[key] = value;
-    for (const field of fields) {
+    const peers = linked ? declaredPeers(state, path) : null;
+    for (const field of dependencyFields) {
       if (importer[field] === undefined) continue;
       if (!plainObject(importer[field])) throw new Error(`${path}: invalid ${field}`);
+      const followed = Object.entries(importer[field]).filter(
+        ([name]) => !linked || field !== "devDependencies" || peers.has(name),
+      );
+      if (!followed.length) continue;
       entry[field] = {};
-      for (const [name, value] of Object.entries(importer[field])) {
+      for (const [name, value] of followed) {
         entry[field][name] = value?.version;
         follow(path, name, value?.version);
       }
     }
   };
-  visit(directory, dependencyFields);
+  visit(directory, false);
   while (pending.length) {
     const key = pending.pop();
     if (Object.hasOwn(tree.snapshots, key)) continue;
@@ -202,7 +224,7 @@ function parseLockfiles(before, after) {
  * Decides, per public package, whether a dependency-only change can reach its
  * build. Anything that cannot be resolved counts as a change.
  */
-function dependencyTreeChanges(states, items) {
+function dependencyTreeChanges(states, items, refs) {
   const failure = states.find((state) => state.error)?.error;
   if (!failure && lockfileWideInputs(states[0].lockfile) !== lockfileWideInputs(states[1].lockfile))
     return new Map(
@@ -214,7 +236,7 @@ function dependencyTreeChanges(states, items) {
         if (failure) throw failure;
         if (!sides.before || !sides.after) throw new Error("not present at both commits");
         const trees = states.map((state, index) =>
-          dependencyTree(state.lockfile, [sides.before, sides.after][index].directory),
+          dependencyTree(state.lockfile, [sides.before, sides.after][index].directory, refs[index]),
         );
         return [name, trees[0] === trees[1] ? null : "resolved dependency tree changed"];
       } catch (error) {
@@ -322,7 +344,7 @@ export function publicPackages(state) {
   }
   return config.packages;
 }
-function workspacePackages(state) {
+export function workspacePackages(state) {
   const config = yaml(state.read("pnpm-workspace.yaml")?.toString() ?? "", "pnpm-workspace.yaml");
   if (!Array.isArray(config?.packages)) throw new Error("Expected workspace package patterns");
   return new Map(
@@ -338,7 +360,7 @@ function workspacePackages(state) {
       }),
   );
 }
-function sourceDirectories(item, state) {
+export function sourceDirectories(item, state) {
   const workspaces = workspacePackages(state);
   const dirs = new Set([item.directory]);
   if (!item.bundleWorkspaceDependencies) return dirs;
@@ -419,7 +441,9 @@ export function contributionCheck({ before, after, changed, body }) {
           importerAtBoth(path === "package.json" ? "." : path.slice(0, -"/package.json".length))),
     ),
   );
-  const treeChanges = byTree.size ? dependencyTreeChanges(parsedLockfiles(), items) : new Map();
+  const treeChanges = byTree.size
+    ? dependencyTreeChanges(parsedLockfiles(), items, [before, after])
+    : new Map();
   const notes = [...treeChanges].map(
     ([name, change]) => `${name}: ${change ?? "resolved dependency tree unchanged"}`,
   );

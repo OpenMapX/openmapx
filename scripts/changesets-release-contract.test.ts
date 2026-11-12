@@ -62,7 +62,7 @@ function lockModel(): LockModel {
             undici: dep("8.0.0"),
             "wrap-cjs": dep("wrap@7.0.0", "npm:wrap@7.0.0"),
           },
-          devDependencies: { vitest: dep("5.0.0") },
+          devDependencies: { peerlib: dep("1.0.0"), vitest: dep("5.0.0") },
         },
         "packages/app": { dependencies: { react: dep("19.0.0") } },
         "packages/fetch": { dependencies: { fetchdep: dep("1.0.0") } },
@@ -72,6 +72,7 @@ function lockModel(): LockModel {
         "client@1.0.0",
         "commander@15.0.0",
         "fetchdep@1.0.0",
+        "peerlib@1.0.0",
         "react@19.0.0",
         "rootonly@1.0.0",
         "tsup@9.0.0",
@@ -87,6 +88,7 @@ function lockModel(): LockModel {
         "client@1.0.0": { dependencies: { "@fixture/fetch": "link:packages/fetch" } },
         "commander@15.0.0": {},
         "fetchdep@1.0.0": {},
+        "peerlib@1.0.0": {},
         "react@19.0.0": {},
         "rootonly@1.0.0": {},
         "tsup@9.0.0(typescript@6.0.3)": { dependencies: { typescript: "6.0.3" } },
@@ -128,8 +130,14 @@ const baseManifests: Record<string, Record<string, unknown>> = {
     files: ["dist", "templates"],
     devDependencies: { "@fixture/helper": "workspace:*" },
   },
-  helper: { name: "@fixture/helper", version: "1.0.0", private: true },
+  helper: {
+    name: "@fixture/helper",
+    version: "1.0.0",
+    private: true,
+    peerDependencies: { peerlib: "^1.0.0" },
+  },
   app: { name: "@fixture/app", version: "1.0.0", private: true },
+  fetch: { name: "@fixture/fetch", version: "1.0.0", private: true },
 };
 
 function fixture() {
@@ -402,6 +410,28 @@ describe("dependency-only changes judged by resolved dependency trees", () => {
     });
     expect(result.status).toBe(1);
     expect(failing(result.output)).toEqual(["@fixture/tool"]);
+  });
+  it("follows a linked workspace package's devDependency that provides its peer", () => {
+    const result = fixture().run({
+      "pnpm-lock.yaml": lockfile((model) => {
+        bump(model, "peerlib@1.0.0", "peerlib@1.1.0");
+        model.project.importers["packages/helper"].devDependencies.peerlib = dep("1.1.0");
+      }),
+    });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/tool"]);
+  });
+  it("fails closed when a linked workspace manifest cannot be read", () => {
+    const result = fixture().run({
+      "packages/fetch/package.json": null,
+      "pnpm-lock.yaml": lockfile((model) => {
+        bump(model, "react@19.0.0", "react@19.1.0");
+        model.project.importers["packages/app"].dependencies.react = dep("19.1.0");
+      }),
+    });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/tool"]);
+    expect(result.output).toContain("packages/fetch/package.json");
   });
   it("ignores a linked workspace package's devDependency", () => {
     const result = fixture().run({
