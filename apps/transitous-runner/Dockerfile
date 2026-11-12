@@ -23,7 +23,7 @@ WORKDIR /tmp/gtfsclean-build
 COPY --chmod=0755 services/motis/tools/transitous/build-gtfsclean.sh /usr/local/bin/build-gtfsclean
 RUN build-gtfsclean
 
-FROM node:24.22.2-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c AS base
+FROM node:24.22.2-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS base
 COPY package.json /tmp/package.json
 RUN corepack enable && \
     corepack prepare "$(node -e "console.log(require('/tmp/package.json').packageManager)")" --activate && \
@@ -82,7 +82,7 @@ RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runt
 # The runner needs no package manager: starting from the plain Node image keeps
 # the pnpm that corepack prepared for the build stages, and its bundled
 # dependencies, out of the shipped image.
-FROM node:24.22.2-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c AS runner
+FROM node:24.22.2-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS runner
 WORKDIR /app
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 

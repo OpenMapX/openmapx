@@ -3,7 +3,7 @@ import { getTableColumns } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-const BETTER_AUTH_VERSION = "1.7.16";
+const BETTER_AUTH_VERSION = "1.7.18";
 const ORIGINAL_SECRET = process.env.BETTER_AUTH_SECRET;
 
 function policyIdentity(id: string, role: string) {
