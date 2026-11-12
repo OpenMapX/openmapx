@@ -116,19 +116,6 @@ revision. A changed service file belongs in an
 [override](./managing-services.md#service-file-overrides), which the refusal
 ignores. `pnpm openmapx check` reports the same.
 
-Releases before the operations agent kept the Transitous pin in its own state
-wrote an approved pin into the tracked `infra/docker/transitous.lock.json`. If
-`git status` shows that file modified, restore it before pulling:
-
-```bash
-git checkout -- infra/docker/transitous.lock.json
-```
-
-The new release's pin then applies, and the auto-bump, if enabled, proposes a
-newer one again through its canary. A leftover
-`infra/docker/transitous.lock.proposed.json` is no longer read and can be
-deleted.
-
 The checkout has changed, but running containers still use their existing
 images. Continue with release selection and replacement.
 
@@ -183,7 +170,7 @@ their user, and `app-api` keeps using the volumes it wrote. Elsewhere:
 
   ```bash
   pnpm openmapx services stop app-api
-  docker run --rm -v docker_openmapx-subject-exports:/v alpine chown -R 1001:1001 /v
+  docker run --rm -v openmapx_openmapx-subject-exports:/v alpine chown -R 1001:1001 /v
   pnpm openmapx services start app-api
   ```
 
