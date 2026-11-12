@@ -2,6 +2,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -336,6 +337,32 @@ describe("applyHardlinkPlan", () => {
     expect(existsSync(join(root, "tgt", "a.txt"))).toBe(false);
     expect(existsSync(join(root, "tgt", "container-made.cache"))).toBe(true);
     expect(second.pruned).toBe(1);
+  });
+
+  it("keeps the emptied target directory when the producer source disappears", () => {
+    mkdirSync(join(root, "src", "nested"), { recursive: true });
+    writeFileSync(join(root, "src", "nested", "a.txt"), "A");
+
+    const plan = [{ source: "src", target: "tgt", consumerService: "svc", dataType: "data" }];
+    applyHardlinkPlan(plan, { rootDir: root });
+    rmSync(join(root, "src"), { recursive: true, force: true });
+
+    const second = applyHardlinkPlan(plan, { rootDir: root });
+
+    expect(second.pruned).toBe(1);
+    // The consumer still mounts the target: it stays, empty, rather than
+    // being left for Docker to recreate as root.
+    expect(statSync(join(root, "tgt")).isDirectory()).toBe(true);
+    expect(readdirSync(join(root, "tgt"))).toEqual([]);
+  });
+
+  it("keeps an empty target directory that nothing was ever linked into", () => {
+    mkdirSync(join(root, "tgt"), { recursive: true });
+
+    const plan = [{ source: "src", target: "tgt", consumerService: "svc", dataType: "data" }];
+    applyHardlinkPlan(plan, { rootDir: root });
+
+    expect(statSync(join(root, "tgt")).isDirectory()).toBe(true);
   });
 
   it("does not prune when prune is false", () => {

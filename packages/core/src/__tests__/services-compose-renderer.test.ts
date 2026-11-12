@@ -1080,6 +1080,39 @@ describe("renderCompose", () => {
     expect(doc.services.valhalla.volumes).toContain("./data/valhalla/osm-data:/custom_files");
   });
 
+  it("records each consumer's hardlink target for render to create, built-in and community", () => {
+    const services = [
+      svc("valhalla", {
+        consumes: [{ type: "osm-data", mountAt: "/custom_files", required: true }],
+      }),
+      communitySvc("probe", {
+        consumes: [{ type: "osm-data", mountAt: "/custom_files" }],
+      }),
+      svc("data-manager", {
+        provides: ["osm-data"],
+        produces: [{ type: "osm-data", sourceDir: "data/osm" }],
+      }),
+      // Not mounted without a producer, so not created either.
+      svc("orphan", {
+        consumes: [{ type: "missing-data", mountAt: "/data", required: false }],
+      }),
+    ];
+    const result = renderCompose(services, {
+      domain: "example.com",
+      infraDir: "/repo/infra/docker",
+      composeOutDir: `/repo/infra/docker/${CURRENT_CONFIGURATION}`,
+    });
+    expect(result.writableBindDirs).toEqual(
+      expect.arrayContaining([
+        "/repo/infra/docker/data/valhalla/osm-data",
+        "/repo/infra/docker/data/probe/osm-data",
+      ]),
+    );
+    expect(result.writableBindDirs?.some((dir) => dir.includes("orphan"))).toBe(false);
+    // The producer's own source is not a consumer target.
+    expect(result.writableBindDirs).not.toContain("/repo/infra/docker/data/osm");
+  });
+
   it("passes consumes targetFilename through to the hardlink plan", () => {
     const services = [
       svc("data-manager", {
