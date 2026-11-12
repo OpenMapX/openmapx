@@ -397,42 +397,22 @@ dedicated hostname or port.
 
 ### Closing an expired application-update preparation
 
-Older Data Manager releases could adopt an application's maintenance grant and
-then refuse admission because their registered service inventory was incomplete.
-Activity can consequently remain at preparation with `recovery_required`, even
-though the previous application containers are still healthy.
+An application update can stay at preparation with `recovery_required` when
+Data Manager took its maintenance grant but then refused to admit it, or stopped
+in between. The previous application containers keep running.
 
-After installing the corrected API, ops-agent and Data Manager together, cancel
-the **original** job in Activity with a full administrator session. Once its
-original deadline has expired, cancellation can settle this specific case. The
-receiver checks its locked database and private admission records, while the
-agent checks the original candidate, frozen phases and complete ownership tree.
-An admitted receiver, changed source or unavailable evidence keeps it pending.
+Cancel the **original** job in Activity with a full administrator session. Once
+its original deadline has passed, cancellation settles it only after Data
+Manager and the operations agent confirm that nothing was admitted or changed;
+otherwise it stays pending. The job then finishes as **failed**, keeping its
+receipt and cancellation request, releases its ownership and discards its
+prepared configuration candidate. It does not resume the update, replace
+containers or make a backup.
 
-Verified recovery preserves the original failed receipt, releases its ownership
-and discards its verified inert configuration candidate before finishing the
-application job as **failed**, with the cancellation request retained. It does
-not resume the expired update, replace containers or make a
-backup. Start a fresh checked update afterward; use `--no-backup` for CLI updates
-and their resumes when that is your selected policy, or disable the panel's
-backup option.
-
-This recovery requires the upgraded running control services; updating the
-checkout alone is insufficient. An already blocked installation may need a
-separately supervised installation first. Older control images do not understand
-the new negative-admission evidence, so do not downgrade them after recovery.
-The standalone `services recover-update` command above does not recover an
-API-owned application job. Preserve the original records; do not delete locks
-or replay its preparation grant.
-
-An earlier API could finish this recovery as failed while leaving its candidate
-marked prepared, causing the next update to report `Configuration writer
-unavailable`. The corrected API automatically rejoins only the original verified
-negative recovery and completes its candidate cleanup. Its existing cancellation,
-canonical copy and recovery proof must still match; cleanup rechecks the original
-NoGuard closure and refuses a published or claimed candidate. Unavailable or
-changed evidence keeps the candidate fenced. Do not clear its database flag or
-start another copy of the old update.
+Start a fresh checked update afterward; use `--no-backup` for CLI updates and
+their resumes when that is your selected policy, or disable the panel's backup
+option. `services recover-update` does not recover an API-owned application
+job. Do not delete locks, clear database flags or replay the preparation grant.
 
 ## 5. Database migrations apply automatically
 

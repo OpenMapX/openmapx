@@ -4,22 +4,21 @@ impacts: [operator-action]
 
 ## What changes
 
-Authenticated cancellation can close an expired application update whose Data
-Manager adopted preparation but never admitted it. The original receiver proves
-no work occurred under its database and lease-journal locks. The agent verifies
-the unchanged candidate and original ownership closure before releasing it.
-The API keeps the original failed receipt and finishes the job as failed.
+Cancelling an application update can close a preparation that Data Manager took
+the maintenance grant for but never admitted. Once the original deadline has
+passed, cancellation settles it only after Data Manager and the operations agent
+confirm that nothing was admitted or changed. The job finishes as failed, keeps
+its receipt, releases its ownership and discards its prepared configuration
+candidate. It does not resume the update, replace containers or make a backup.
 
 ## Who is affected
 
-Installations with an update stuck at preparation after the older Data Manager
-refused built-in service targets. Admitted or uncertain work remains pending.
+Installations with an application update that stays at preparation with
+`recovery_required` while the previous containers keep running. Admitted or
+uncertain work stays pending.
 
 ## Required action
 
-Install the corrected API, ops-agent and Data Manager together before canceling
-the original job with a full administrator session. A blocked installation may
-need a separately supervised installation first. After verified recovery, start
-a fresh checked update. Recovery creates no backup and never resumes the expired
-attempt. Preserve original records and avoid downgrading control images that
-cannot read the new evidence; see the upgrading guide.
+Cancel the original job in Activity with a full administrator session, then
+start a fresh checked update. Do not delete locks, clear database flags or
+replay the preparation grant; see the upgrading guide.
