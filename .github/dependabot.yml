@@ -18,6 +18,14 @@ updates:
       prefix: chore
       include: scope
     groups:
+      # Every minor and patch update lands in one weekly pull request, so the
+      # full CI matrix runs once instead of once per package. Dependabot uses
+      # the first matching group, so the stack groups below only collect
+      # majors.
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+        patterns: ["*"]
       eslint-and-formatters:
         patterns:
           - "@biomejs/*"
@@ -106,6 +114,11 @@ updates:
     commit-message:
       prefix: chore
       include: scope
+    groups:
+      docs-minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+        patterns: ["*"]
     ignore:
       # TypeScript 7 is not supported by this workspace yet; upgrade it with
       # the compiler API migration rather than as a transitive update.
@@ -125,6 +138,10 @@ updates:
     labels: [dependencies, ci]
     commit-message:
       prefix: ci
+    groups:
+      github-actions:
+        applies-to: version-updates
+        patterns: ["*"]
     ignore:
       # Pinned fork that provides the Node 24 runtime; the upstream 2.6.1 tag
       # regresses the runtime, so update this action by hand, not via Dependabot.
@@ -155,6 +172,11 @@ updates:
     commit-message:
       prefix: chore
       include: scope
+    groups:
+      # One pull request for every Dockerfile's base image refresh.
+      docker-images:
+        applies-to: version-updates
+        patterns: ["*"]
     ignore:
       # Stay on the Node 24 LTS base images; bump the Node major deliberately
       # (Dockerfiles + .nvmrc + engines + @types/node together), not piecemeal.
