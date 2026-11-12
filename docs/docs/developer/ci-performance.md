@@ -227,7 +227,9 @@ data-manager's service from 1.38 MB to 1.17 MB, and its traffic worker from
 
 Changesets excludes package-root `Dockerfile` edits from release detection;
 these private deployment-image changes do not need empty package notes. Source,
-package manifests and nested Dockerfile fixtures still participate in the gate.
+package manifests and nested Dockerfile fixtures still participate in the gate;
+dependency-only manifest and lockfile changes count only where they change a
+public package's resolved dependency tree.
 The wider package/release baseline is handled separately.
 
 ## Linux deployment-user validation
