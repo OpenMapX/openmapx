@@ -492,7 +492,7 @@ it.skipIf(!enabled).each(["git", "proposal"] as const)(
                 version: 1,
                 requestId: new Headers(options.headers).get("x-ops-request-id"),
                 ok: true,
-                result: { versions: [1, 2] },
+                result: { versions: [2] },
               });
             const request = JSON.parse(String(options?.body));
             if (request.operation.kind !== "transitousLock.propose")

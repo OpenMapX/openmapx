@@ -2397,7 +2397,7 @@ describe("recoverInterruptedTrafficMaintenance", () => {
     submittedAt = "2026-10-30T15:44:08.048Z",
   ) => ({
     operation: { kind: "valhalla.traffic.maintain", plan: "rebuild-extract" } as OpsOperation,
-    fingerprint,
+    operationFingerprint: fingerprint,
     state,
     ...(errorClass ? { errorClass } : {}),
     submittedAt,
@@ -2479,22 +2479,18 @@ describe("recoverInterruptedTrafficMaintenance", () => {
     );
   });
 
-  it("matches a version2 journal's operation fingerprint without confusing its execution fingerprint", async () => {
+  it("keeps the fence when only another operation's job is interrupted", async () => {
     await withDataRoot({ ".traffic-maintenance.json": fence }, async (dataRoot) => {
       await expect(
         recoverInterruptedTrafficMaintenance({
           trafficDataRoot: dataRoot,
           journalRecords: [
-            {
-              ...job("failed", "recovery_required"),
-              operationFingerprint: fingerprint,
-              fingerprint: "c".repeat(64),
-            },
+            { ...job("failed", "recovery_required"), operationFingerprint: "c".repeat(64) },
           ],
           execFile: docker([]),
           descriptorAnchorRoot: null,
         }),
-      ).resolves.toMatchObject({ state: "released", operationId: fingerprint });
+      ).resolves.toEqual({ state: "kept", reason: "the journal holds no job for the fence" });
     });
   });
 

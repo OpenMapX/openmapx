@@ -692,7 +692,6 @@ function terminalIdentity(s: AuthorityState, status: OpsJobStatus) {
     !s.origin ||
     s.installation.installation.role !== "ops-agent" ||
     s.installation.fixedChildId ||
-    terminal.version !== 2 ||
     terminal.admittedAt !== admitted.admittedAt ||
     terminal.operationId !== execution.executionId ||
     terminal.operationKey !== execution.operationKey ||
@@ -851,8 +850,6 @@ export function repairControlJournalTerminal(
     !s.origin ||
     installation.role !== "ops-agent" ||
     s.installation.fixedChildId ||
-    terminal.version !== 2 ||
-    terminal.admittedAt === undefined ||
     terminal.operationId !== execution.executionId ||
     terminal.operationKey !== execution.operationKey ||
     terminal.fingerprint !== execution.fingerprint ||

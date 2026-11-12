@@ -1,6 +1,7 @@
 import { existsSync, rmSync } from "node:fs";
 import { closeControlInstallation, openControlInstallation } from "@openmapx/core/build-artifacts";
 import {
+  OPS_PUBLIC_ERROR_MESSAGES,
   type OpsOperation,
   type OpsResourcePolicy,
   parseControlRootOperationKey,
@@ -934,16 +935,10 @@ it.each([0, 1])(
   },
 );
 
-describe("fix1 baseline protocol compatibility", () => {
-  const legacyEnvelope = (...args: Parameters<typeof envelope>) => {
-    const { execution: _execution, ...body } = envelope(...args);
-    return { ...body, version: 1 };
-  };
-  it("projects the exact historical admission/status/lookup/cancel shapes for a v1 caller", async () => {
+describe("ops protocol version", () => {
+  it("refuses a status, lookup or cancellation peer that does not speak version 2", async () => {
     const { opsOperationFingerprint } = await import("@openmapx/core/ops");
     let finish!: (x: unknown) => void;
-    let signal: AbortSignal | undefined;
-    let dispatches = 0;
     const operation = {
       kind: "service.logs.follow" as const,
       serviceId: "osrm",
@@ -954,88 +949,91 @@ describe("fix1 baseline protocol compatibility", () => {
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourcePolicy: allowAll,
       now: () => new Date(nowIso),
-      dispatch: async (_o, _r, c) => {
-        dispatches += 1;
-        signal = c.signal;
-        return new Promise((resolve) => {
+      dispatch: async () =>
+        new Promise((resolve) => {
           finish = resolve;
-        });
-      },
+        }),
     });
     try {
-      const response = await app.inject({
-        method: "POST",
-        url: "/v1/operations",
-        headers: { authorization: `Bearer ${apiToken}` },
-        payload: legacyEnvelope(operation),
+      const protocol = await app.inject({
+        method: "GET",
+        url: "/v1/protocol",
+        headers: auth(apiToken),
       });
-      const admission = response.json().result;
-      expect(Object.keys(admission).sort()).toEqual(
-        ["execution", "operationId", "operationKey", "kind", "state"].sort(),
-      );
-      const duplicate = (
+      expect(protocol.json().result).toEqual({ versions: [2] });
+      const admission = (
         await app.inject({
           method: "POST",
           url: "/v1/operations",
-          headers: { authorization: `Bearer ${apiToken}` },
-          payload: legacyEnvelope(operation, "ops1_legacyretry00000"),
+          headers: auth(apiToken),
+          payload: envelope(operation),
         })
       ).json().result;
-      expect(duplicate).toEqual(admission);
-      expect(dispatches).toBe(1);
-      for (const url of [
-        `/v1/operations/${admission.operationId}`,
-        `/v1/operation-keys/${admission.operationKey}`,
-      ]) {
-        const status = (
-          await app.inject({
-            method: "GET",
-            url,
-            headers: {
-              ...{ authorization: `Bearer ${apiToken}` },
-              "x-ops-operation-fingerprint": opsOperationFingerprint(operation),
-            },
-          })
-        ).json().result;
-        expect(status.version).toBe(1);
-        expect(Object.keys(status).sort()).toEqual(
-          [
-            "version",
-            "operationId",
-            "operationKey",
-            "kind",
-            "resourceId",
-            "state",
-            "submittedAt",
-            "updatedAt",
-          ].sort(),
-        );
-      }
-      const cancel = app.inject({
-        method: "DELETE",
-        url: `/v1/operations/${admission.operationId}`,
-        headers: { authorization: `Bearer ${apiToken}` },
-      });
-      await vi.waitFor(() => expect(signal?.aborted).toBe(true));
-      finish({ lines: 0, truncated: false });
-      expect((await cancel).statusCode).toBe(200);
-      const modern = (
-        await app.inject({
-          method: "GET",
+      expect(admission).toMatchObject({ version: 2, fingerprint: expect.any(String) });
+      const requests = [
+        { method: "GET" as const, url: `/v1/operations/${admission.operationId}` },
+        {
+          method: "GET" as const,
+          url: `/v1/operation-keys/${admission.operationKey}`,
+          headers: { "x-ops-body-fingerprint": opsOperationFingerprint(operation) },
+        },
+        {
+          method: "DELETE" as const,
           url: `/v1/operations/${admission.operationId}`,
-          headers: { ...{ authorization: `Bearer ${apiToken}` }, "x-ops-protocol-version": "2" },
-        })
-      ).json().result;
-      expect(modern.version).toBe(2);
-      expect(modern.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+          headers: { "x-ops-operation-fingerprint": admission.fingerprint },
+        },
+      ];
+      for (const version of [undefined, "1", "3"])
+        for (const request of requests) {
+          const response = await app.inject({
+            method: request.method,
+            url: request.url,
+            headers: {
+              authorization: `Bearer ${apiToken}`,
+              ...request.headers,
+              ...(version === undefined ? {} : { "x-ops-protocol-version": version }),
+            },
+          });
+          expect(response.statusCode).toBe(400);
+          expect(response.json().error).toEqual({
+            class: "unsupported_peer",
+            message: OPS_PUBLIC_ERROR_MESSAGES.unsupported_peer,
+          });
+        }
+      for (const request of requests.slice(0, 2)) {
+        const response = await app.inject({
+          method: request.method,
+          url: request.url,
+          headers: { ...auth(apiToken), ...request.headers },
+        });
+        expect(response.statusCode).toBe(200);
+        expect(response.json().result).toMatchObject({ version: 2, state: "running" });
+      }
+      const sole = await app.inject({
+        method: "GET",
+        url: `/v1/operation-keys/${admission.operationKey}`,
+        headers: {
+          ...auth(apiToken),
+          "x-ops-operation-fingerprint": opsOperationFingerprint(operation),
+        },
+      });
+      expect(sole.statusCode).toBe(400);
+      const v1Body = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: auth(apiToken),
+        payload: { ...envelope(operation, "ops1_versionOneBody00"), version: 1 },
+      });
+      expect(v1Body.statusCode).toBe(400);
+      expect(v1Body.json().error.class).toBe("validation");
     } finally {
-      finish?.({ completed: true });
+      finish?.({ lines: 0, truncated: false });
       await app.close();
     }
   });
 });
 
-it("fix1 cannot downgrade modern-origin cancellation to the legacy fence", async () => {
+it("refuses cancellation without the execution fingerprint", async () => {
   let finish!: (x: unknown) => void;
   const app = await buildOpsAgentServer({
     tokens: { api: apiToken, "data-manager": dataManagerToken },
@@ -1058,7 +1056,7 @@ it("fix1 cannot downgrade modern-origin cancellation to the legacy fence", async
     const rejected = await app.inject({
       method: "DELETE",
       url: `/v1/operations/${admission.operationId}`,
-      headers: { authorization: `Bearer ${apiToken}` },
+      headers: auth(apiToken),
     });
     expect(rejected.statusCode).toBe(409);
     const cancellation = app.inject({

@@ -463,7 +463,7 @@ export interface TrafficMaintenanceRecoveryOptions {
   /** The job journal as opened, which has already failed every interrupted job. */
   journalRecords: readonly Pick<
     PersistedOpsJob,
-    "operation" | "operationFingerprint" | "fingerprint" | "state" | "errorClass" | "submittedAt"
+    "operation" | "operationFingerprint" | "state" | "errorClass" | "submittedAt"
   >[];
   execFile?: ExecFile;
   descriptorAnchorRoot?: string | null;
@@ -526,7 +526,7 @@ export async function recoverInterruptedTrafficMaintenance(
       .filter(
         (record) =>
           record.operation.kind === "valhalla.traffic.maintain" &&
-          (record.operationFingerprint ?? record.fingerprint) === operationId,
+          record.operationFingerprint === operationId,
       )
       .sort((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt))[0];
     if (!job) return { state: "kept", reason: "the journal holds no job for the fence" };

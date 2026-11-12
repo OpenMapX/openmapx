@@ -7,6 +7,7 @@ import { services } from "@openmapx/core/server";
 import { expect, it, vi } from "vitest";
 import { createDefaultReleaseEffects } from "./administrative-runtime";
 import { startOpsAgentServer } from "./bootstrap";
+import { persistedJob } from "./test-fixtures/persisted-job";
 
 it.each(["SIGTERM", "SIGINT"] as const)(
   "production bootstrap drains an accepted request on %s",
@@ -50,10 +51,10 @@ it.each(["SIGTERM", "SIGINT"] as const)(
         headers: {
           authorization: "Bearer shutdown-fixture-token",
           "content-type": "application/json",
-          "x-ops-protocol-version": "1",
+          "x-ops-protocol-version": "2",
         },
         body: JSON.stringify({
-          version: 1,
+          version: 2,
           requestId: "ops1_shutdown0000000000",
           operationKey: "opk1_shutdown0000000000",
           issuedAt: new Date(now).toISOString(),
@@ -101,27 +102,21 @@ it("production bootstrap retains health and observation when the release store i
   writeFileSync(overlay, "operator-state\n");
   const dispatch = vi.fn(async () => ({ reachable: true, version: "test" }));
   const token = Buffer.alloc(32, 1).toString("base64url");
-  const retained = {
-    role: "api" as const,
-    operation: {
-      kind: "service.pull" as const,
-      serviceId: "redis",
-      expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
-    },
-    operationId: "job1_0123456789abcdef",
-    operationKey: "opk1_0123456789abcdef",
-    fingerprint: (await import("@openmapx/core/ops")).opsOperationFingerprint({
+  const retained = persistedJob(
+    {
       kind: "service.pull",
       serviceId: "redis",
       expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
-    }),
-    resourceId: "redis",
-    state: "succeeded" as const,
-    submittedAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    terminalAt: new Date().toISOString(),
-    result: { completed: true },
-  };
+    },
+    {
+      operationId: "job1_0123456789abcdef",
+      operationKey: "opk1_0123456789abcdef",
+      state: "succeeded",
+      submittedAt: new Date().toISOString(),
+      terminalAt: new Date().toISOString(),
+      result: { completed: true },
+    },
+  );
   const ready = vi.fn();
   let app: Awaited<ReturnType<typeof startOpsAgentServer>> | undefined;
   try {
@@ -153,7 +148,11 @@ it("production bootstrap retains health and observation when the release store i
         await app.inject({
           method: "GET",
           url: "/v1/operation-keys/opk1_0123456789abcdef",
-          headers: { ...headers, "x-ops-operation-fingerprint": retained.fingerprint },
+          headers: {
+            ...headers,
+            "x-ops-body-fingerprint": retained.operationFingerprint,
+            "x-ops-operation-fingerprint": retained.fingerprint,
+          },
         })
       ).statusCode,
     ).toBe(200);

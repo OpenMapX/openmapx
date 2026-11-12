@@ -47,6 +47,13 @@ function context(): JobContext {
   };
   return ctx;
 }
+// The execution identity every admission and status carries.
+const identity = {
+  version: 2 as const,
+  admittedAt: 0,
+  deadlineAt: 3_600_000,
+  fingerprint: "a".repeat(64),
+};
 function seedProjection(ctx: JobContext, key: string, kind: OpsOperation["kind"], id?: string) {
   ctx.checkpointResult = {
     opsProjection: {
@@ -194,13 +201,14 @@ describe("administrative job operations broker", () => {
     const client = {
       execute: vi.fn().mockResolvedValue({
         execution: "async",
+        ...identity,
         kind: "release.images.pull",
         operationId,
         operationKey,
         state: "queued",
       }),
       status: vi.fn().mockResolvedValue({
-        version: 1,
+        ...identity,
         operationId,
         operationKey,
         kind: "release.images.pull",
@@ -255,6 +263,7 @@ describe("administrative job operations broker", () => {
     const client = {
       execute: vi.fn().mockResolvedValue({
         execution: "async",
+        ...identity,
         kind: operation.kind,
         operationId,
         operationKey,
@@ -262,7 +271,7 @@ describe("administrative job operations broker", () => {
       }),
       lookup: vi.fn(),
       status: vi.fn().mockResolvedValue({
-        version: 1,
+        ...identity,
         kind: operation.kind,
         operationId,
         operationKey,
@@ -355,7 +364,7 @@ describe("administrative job operations broker", () => {
     const client = {
       execute,
       lookup: vi.fn().mockResolvedValue({
-        version: 1,
+        ...identity,
         operationId,
         operationKey,
         kind: operation.kind,
@@ -365,7 +374,7 @@ describe("administrative job operations broker", () => {
         updatedAt: "2026-08-25T00:00:01.000Z",
       }),
       status: vi.fn().mockResolvedValue({
-        version: 1,
+        ...identity,
         operationId,
         operationKey,
         kind: operation.kind,
@@ -852,7 +861,10 @@ it.each([false, true])(
         const denied = await app.inject({
           method: "GET",
           url: path,
-          headers: { authorization: `Bearer ${Buffer.alloc(32, 8).toString("base64url")}` },
+          headers: {
+            authorization: `Bearer ${Buffer.alloc(32, 8).toString("base64url")}`,
+            "x-ops-protocol-version": "2",
+          },
         });
         expect(denied.statusCode).toBe(404);
       }
@@ -861,7 +873,10 @@ it.each([false, true])(
           await app.inject({
             method: "DELETE",
             url: `/v1/operations/${admitted.operationId}`,
-            headers: { authorization: `Bearer ${Buffer.alloc(32, 8).toString("base64url")}` },
+            headers: {
+              authorization: `Bearer ${Buffer.alloc(32, 8).toString("base64url")}`,
+              "x-ops-protocol-version": "2",
+            },
           })
         ).statusCode,
       ).toBe(404);
@@ -965,6 +980,7 @@ it.each(["log", "checkpoint", "output"])(
     const client = {
       execute: vi.fn().mockResolvedValue({
         execution: "async",
+        ...identity,
         kind: "backup.delete",
         operationKey: key,
         operationId: id,
@@ -973,6 +989,7 @@ it.each(["log", "checkpoint", "output"])(
       status: vi.fn(async () => {
         await resume.promise;
         return {
+          ...identity,
           kind: "backup.delete",
           operationId: id,
           operationKey: key,
@@ -990,7 +1007,7 @@ it.each(["log", "checkpoint", "output"])(
       }),
       cancel: vi.fn(),
       lookup: vi.fn().mockResolvedValue({
-        version: 1,
+        ...identity,
         kind: "backup.delete",
         operationId: id,
         operationKey: key,

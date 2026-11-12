@@ -20,6 +20,19 @@ function tokenFile(contents = Buffer.alloc(32, 7).toString("base64url")): string
 }
 
 // Existing operation tests use a negotiated v2 peer; negotiation itself is tested below.
+const identity = {
+  version: 2 as const,
+  admittedAt: 0,
+  deadlineAt: 1000,
+  fingerprint: "a".repeat(64),
+};
+const pullResult = {
+  changed: true,
+  revisionId: `cfg1_${"a".repeat(43)}`,
+  imageReference: "example/redis:1",
+  imageId: `sha256:${"b".repeat(64)}`,
+  releaseSelectionDigest: null,
+};
 class ProtocolTestClient extends OpsClient {
   constructor(options: ConstructorParameters<typeof OpsClient>[0]) {
     const transport = options.fetch ?? globalThis.fetch;
@@ -32,7 +45,7 @@ class ProtocolTestClient extends OpsClient {
               version: 1,
               requestId: new Headers(init?.headers).get("x-ops-request-id"),
               ok: true,
-              result: { versions: [1, 2] },
+              result: { versions: [2] },
             }),
           );
         return transport(url, init);
@@ -355,7 +368,7 @@ describe("ops client", () => {
           requestId,
           ok: true,
           result: {
-            version: 1,
+            ...identity,
             operationId,
             operationKey: "opk1_cancelOperation000",
             kind: "service.logs.follow",
@@ -394,6 +407,7 @@ describe("ops client", () => {
       expect(String(input)).toBe(`http://ops-agent:4300/v1/operation-keys/${operationKey}`);
       const fingerprint = new Headers(init?.headers).get("x-ops-body-fingerprint");
       expect(fingerprint).toMatch(/^[a-f0-9]{64}$/);
+      expect(new Headers(init?.headers).get("x-ops-protocol-version")).toBe("2");
       fingerprints.push(fingerprint as string);
       const requestId = new Headers(init?.headers).get("x-ops-request-id");
       return new Response(
@@ -402,7 +416,7 @@ describe("ops client", () => {
           requestId,
           ok: true,
           result: {
-            version: 1,
+            ...identity,
             operationId,
             operationKey,
             kind: "service.logs.follow",
@@ -564,7 +578,7 @@ describe("ops client", () => {
               events: [{ cursor: 1, type: "state", state: "running" }],
             }
           : {
-              version: 1,
+              ...identity,
               operationId: "job1_retainedOperation0",
               operationKey: "opk1_retainedOperation0",
               kind: "service.pull",
@@ -572,7 +586,7 @@ describe("ops client", () => {
               state: "succeeded",
               submittedAt: "2026-08-23T18:00:00.000Z",
               updatedAt: "2026-08-23T18:00:01.000Z",
-              result: { changed: true },
+              result: pullResult,
             };
         return new Response(JSON.stringify({ version: 1, requestId, ok: true, result }));
       },
@@ -581,7 +595,7 @@ describe("ops client", () => {
     await expect(client.status("service.pull", "job1_retainedOperation0")).resolves.toMatchObject({
       kind: "service.pull",
       state: "succeeded",
-      result: { changed: true },
+      result: pullResult,
     });
     await expect(
       client.events("job1_retainedOperation0", { after: 0, limit: 10 }),
@@ -613,7 +627,7 @@ describe("ops client", () => {
               events: [{ cursor: 3, type: "state", state: "running" }],
             }
           : {
-              version: 1,
+              ...identity,
               operationId: "job1_anotherOperation00",
               operationKey: "opk1_retainedOperation0",
               kind: "service.pull",

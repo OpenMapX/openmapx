@@ -193,12 +193,6 @@ journal.replace = async (records) => {
   terminal = records.find((job) => ["succeeded", "failed", "timed_out"].includes(job.state));
   if (!terminal) return;
   if (input.outcome === "not-started") {
-    if (
-      terminal.admittedAt === undefined ||
-      terminal.deadlineAt === undefined ||
-      !terminal.operationFingerprint
-    )
-      throw Error("Missing exact admission");
     const execution = {
       executor: "ops-agent" as const,
       principal: "api" as const,

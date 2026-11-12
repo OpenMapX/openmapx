@@ -152,7 +152,7 @@ describe("ops-agent async foundation", () => {
       url: `/v1/operation-keys/${operationKey}`,
       headers: {
         ...auth(),
-        "x-ops-operation-fingerprint": opsOperationFingerprint(operation),
+        "x-ops-body-fingerprint": opsOperationFingerprint(operation),
       },
     });
     expect(byKey.statusCode).toBe(200);
@@ -167,7 +167,7 @@ describe("ops-agent async foundation", () => {
       url: `/v1/operation-keys/${operationKey}`,
       headers: {
         ...auth(dataManagerToken),
-        "x-ops-operation-fingerprint": "0".repeat(64),
+        "x-ops-body-fingerprint": "0".repeat(64),
       },
     });
     expect(keyHiddenFromOtherRole.statusCode).toBe(404);
@@ -176,7 +176,7 @@ describe("ops-agent async foundation", () => {
       url: `/v1/operation-keys/${operationKey}`,
       headers: {
         ...auth(),
-        "x-ops-operation-fingerprint": opsOperationFingerprint({
+        "x-ops-body-fingerprint": opsOperationFingerprint({
           kind: "service.pull",
           serviceId: "motis",
           expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
@@ -203,7 +203,7 @@ describe("ops-agent async foundation", () => {
       url: `/v1/operation-keys/${operationKey}`,
       headers: {
         ...auth(),
-        "x-ops-operation-fingerprint": opsOperationFingerprint(operation),
+        "x-ops-body-fingerprint": opsOperationFingerprint(operation),
       },
     });
     expect(terminalLookup.statusCode).toBe(200);
@@ -262,7 +262,7 @@ describe("ops-agent async foundation", () => {
           url: `/v1/operation-keys/${operationKey}`,
           headers: {
             ...auth(),
-            "x-ops-operation-fingerprint": opsOperationFingerprint(mismatch),
+            "x-ops-body-fingerprint": opsOperationFingerprint(mismatch),
           },
         }),
       ),

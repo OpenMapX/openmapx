@@ -17,7 +17,10 @@ describe("second reviewed ops protocol", () => {
     ).toEqual({ completed: true, resourceId: "europe/germany" });
     expect(
       parseOpsJobStatusForKind("data.overtureSync", {
-        version: 1,
+        version: 2,
+        admittedAt: 100,
+        deadlineAt: 1000,
+        fingerprint: "a".repeat(64),
         operationId: "job1_regionOperation00",
         operationKey: "opk1_regionOperation00",
         kind: "data.overtureSync",

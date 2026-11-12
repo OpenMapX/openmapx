@@ -225,7 +225,6 @@ export async function observeRetainedHostOperation(
     // settlement allowance before trusting it.
     const deadlineAt =
       typeof retained.deadlineAt === "number" ? retained.deadlineAt : status.deadlineAt;
-    if (typeof deadlineAt !== "number") return "unknown";
     return Date.now() > deadlineAt + SETTLEMENT_BUDGET_MS ? "terminal" : "active";
   } catch (error) {
     if (

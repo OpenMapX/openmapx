@@ -116,19 +116,6 @@ revision. A changed service file belongs in an
 [override](./managing-services.md#service-file-overrides), which the refusal
 ignores. `pnpm openmapx check` reports the same.
 
-Releases before the operations agent kept the Transitous pin in its own state
-wrote an approved pin into the tracked `infra/docker/transitous.lock.json`. If
-`git status` shows that file modified, restore it before pulling:
-
-```bash
-git checkout -- infra/docker/transitous.lock.json
-```
-
-The new release's pin then applies, and the auto-bump, if enabled, proposes a
-newer one again through its canary. A leftover
-`infra/docker/transitous.lock.proposed.json` is no longer read and can be
-deleted.
-
 The checkout has changed, but running containers still use their existing
 images. Continue with release selection and replacement.
 
@@ -183,14 +170,14 @@ their user, and `app-api` keeps using the volumes it wrote. Elsewhere:
 
   ```bash
   pnpm openmapx services stop app-api
-  docker run --rm -v docker_openmapx-subject-exports:/v alpine chown -R 1001:1001 /v
+  docker run --rm -v openmapx_openmapx-subject-exports:/v alpine chown -R 1001:1001 /v
   pnpm openmapx services start app-api
   ```
 
 ## 4. Check and apply the complete release
 
-For an existing installation, use **Admin → System → Updates** (older panels:
-**Admin → System**). Check the configured release and apply that exact candidate.
+For an existing installation, use **Admin → System → Updates**. Check the
+configured release and apply that exact candidate.
 The coordinated producer preserves Data Manager ownership, drains active work,
 retains its configuration decision and observes the original job across API and
 agent replacement. Keep the backup option enabled.
@@ -556,47 +543,9 @@ relevant guides; [routing engines](../guides/routing-engines.md),
 [geocoders](../guides/geocoders.md), [transit engines](../guides/transit-engines.md),
 and [OSM data queries](../guides/osm-data-queries.md).
 
-## OpenStreetMap contributions and OAuth token encryption
+## Rolling back
 
-The release that adds
-[OpenStreetMap place contributions](../features/osm-contributions.md) also turns
-on **encryption at rest for stored OAuth provider tokens**, because a linked
-OpenStreetMap account can now hold write permissions.
-
-Nothing is required of you to upgrade, and both contribution flags stay off
-until you set them.
-
-Keep `BETTER_AUTH_SECRET` **stable and protected**. It is now the key material
-for stored provider tokens as well as sessions. Rotating it deliberately is
-supported, but every linked OAuth account will need to be re-linked afterwards;
-Better Auth does not re-encrypt existing tokens under a new secret.
-
-## Martin's own database login
-
-Martin used to log in as the `postgres` superuser and publish every table it
-could see, including the OpenConditions records and crowd reports kept in the
-same database. It now serves only the traffic-flow tiles and logs in as
-`openmapx_tiles`, which can read no table. If Martin is enabled, set its
-password before rendering, then restart PostGIS so it applies it:
-
-```bash
-echo "MARTIN_DB_PASSWORD=$(openssl rand -hex 32)" >> infra/docker/.env
-pnpm openmapx compose render
-pnpm openmapx services update postgis --no-deps
-pnpm openmapx services update martin
-```
-
-Without the password, rendering fails with `MARTIN_DB_PASSWORD must be set`.
-
-## The operations agent stops mounting the checkout
-
-The operations agent's container does not mount the checkout. Every render,
-on the host or by the agent, mounts `infra/docker` read-only (for `.env` and
-your overrides) and `infra/docker/state`, `data`, `secrets`, `backups` and
-`catalog-pins` read-write, all at their host paths. Everything else it uses
-comes from its image and its state.
-
-**Rollback needs a recovery decision.** Image selection does not reverse database
+Rollback needs a recovery decision. Image selection does not reverse database
 migrations or a committed configuration change. Preserve the previous coherent
 manifest and matching database/configuration backups. If a rollback is compatible,
 set `OPENMAPX_RELEASE` to its exact metadata digest, check it with `--check` and

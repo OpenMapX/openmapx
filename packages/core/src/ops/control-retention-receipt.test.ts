@@ -39,7 +39,9 @@ it("binds exact safe terminal evidence while excluding observation-only timestam
       result: { backupId: "daily", unexpected: "secret" },
     }),
   ).toThrow();
-  expect(() => controlTerminalReceiptDigest({ ...status, version: 1 })).toThrow();
+  expect(() =>
+    controlTerminalReceiptDigest({ ...status, version: 1 } as unknown as OpsJobStatus),
+  ).toThrow();
 });
 
 it("authenticates a bounded recovery observation independently of the unchanged failed canonical", () => {

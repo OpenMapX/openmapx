@@ -7,24 +7,24 @@ import {
 } from "./contract";
 
 const revisionId = `cfg1_${"a".repeat(43)}`;
-it("decodes unchanged historical pull status for observation while its old result grants no fresh pull evidence", () => {
-  for (const version of [1, 2]) {
-    const status = {
-      version,
-      operationId: "job1_legacyPullObservation0",
-      operationKey: "opk1_legacyPullObservation0",
-      kind: "service.pull",
-      resourceId: "redis",
-      state: "succeeded",
-      submittedAt: "2026-08-23T18:00:00.000Z",
-      updatedAt: "2026-08-23T18:00:01.000Z",
-      result: { changed: true },
-      ...(version === 2 ? { admittedAt: 100, deadlineAt: 1000, fingerprint: "a".repeat(64) } : {}),
-    };
-    expect(parseOpsJobStatus(status)).toEqual(status);
-    expect(parseOpsJobStatusForKind("service.pull", status)).toEqual(status);
-    expect(() => parseOpsResult("service.pull", status.result)).toThrow();
-  }
+it("refuses a pull status whose result carries no exact pull evidence", () => {
+  const status = {
+    version: 2,
+    admittedAt: 100,
+    deadlineAt: 1000,
+    fingerprint: "a".repeat(64),
+    operationId: "job1_pullObservation0000",
+    operationKey: "opk1_pullObservation0000",
+    kind: "service.pull",
+    resourceId: "redis",
+    state: "succeeded",
+    submittedAt: "2026-08-23T18:00:00.000Z",
+    updatedAt: "2026-08-23T18:00:01.000Z",
+    result: { changed: true },
+  };
+  expect(() => parseOpsJobStatus(status)).toThrow();
+  expect(() => parseOpsJobStatusForKind("service.pull", status)).toThrow();
+  expect(() => parseOpsResult("service.pull", status.result)).toThrow();
 });
 it("conditions every fresh pull on its exact current configuration and keeps candidate binding finite", () => {
   expect(

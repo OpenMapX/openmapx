@@ -70,12 +70,7 @@ import {
   coordinatorModeSchema,
 } from "./configuration-preparation-records";
 import { opsFailureResultSchema, processDiagnosticsSchema } from "./job-evidence";
-import {
-  type HistoricalServicePullResult,
-  historicalServicePullResultSchema,
-  servicePullOperationSchema,
-  servicePullResultSchema,
-} from "./service-operation-records";
+import { servicePullOperationSchema, servicePullResultSchema } from "./service-operation-records";
 import { hardlinkApplySummarySchema, serviceActionsSchema } from "./service-results";
 
 export const OPS_PROTOCOL_VERSION = 2 as const;
@@ -738,22 +733,17 @@ export function isTrustedConfigurationApplyOperation(
   ].includes(operation.kind);
 }
 
-const opsRequestSchema = z
-  .strictObject({
-    version: z.union([z.literal(1), z.literal(OPS_PROTOCOL_VERSION)]),
-    requestId: requestIdSchema,
-    operationKey: operationKeySchema,
-    issuedAt: timestampSchema,
-    expiresAt: timestampSchema,
-    operation: opsOperationSchema,
-    execution: z
-      .strictObject({ requestedDeadlineAt: z.number().int().nonnegative().safe() })
-      .optional(),
-  })
-  .refine(
-    (request) => request.version === 2 || request.execution === undefined,
-    "Version1 cannot carry execution authority",
-  );
+const opsRequestSchema = z.strictObject({
+  version: z.literal(OPS_PROTOCOL_VERSION),
+  requestId: requestIdSchema,
+  operationKey: operationKeySchema,
+  issuedAt: timestampSchema,
+  expiresAt: timestampSchema,
+  operation: opsOperationSchema,
+  execution: z
+    .strictObject({ requestedDeadlineAt: z.number().int().nonnegative().safe() })
+    .optional(),
+});
 export type OpsRequest = z.infer<typeof opsRequestSchema>;
 
 export function authorizeOpsOperation(role: OpsRole, kind: OpsOperationKind): boolean {
@@ -781,6 +771,7 @@ export type OpsErrorClass =
   | "recovery_required"
   | "host_update_required"
   | "configuration_prerequisite"
+  | "unsupported_peer"
   | "runtime";
 export const OPS_PUBLIC_ERROR_MESSAGES: Record<OpsErrorClass, string> = {
   authentication: "Request authentication failed",
@@ -801,6 +792,8 @@ export const OPS_PUBLIC_ERROR_MESSAGES: Record<OpsErrorClass, string> = {
   recovery_required: "Operation requires an explicit retry",
   host_update_required:
     "Host update required: the operations agent or its backup helper could not be verified or updated. Inspect Activity and host diagnostics, then follow the upgrading guide to resolve the prerequisite. Retrying the candidate through the CLI does not repair the host. Preserve the current release selection.",
+  unsupported_peer:
+    "The operations agent and its caller use different protocol versions. Run both from the same release.",
   runtime: "Operation failed",
 };
 export class OpsContractError extends Error {
@@ -1445,19 +1438,6 @@ export const OPS_RESULT_SCHEMAS = {
 } as const satisfies Record<OpsOperationKind, z.ZodType>;
 
 export type OpsResultFor<K extends OpsOperationKind> = z.infer<(typeof OPS_RESULT_SCHEMAS)[K]>;
-export type OpsObservedResultFor<K extends OpsOperationKind> = K extends "service.pull"
-  ? OpsResultFor<K> | HistoricalServicePullResult
-  : OpsResultFor<K>;
-/** Status observation only. Fresh execution/settlement continues to use the
- * strict parseOpsResult/parseBoundedOpsResult above the runtime boundary. */
-export function parseObservedOpsResult<K extends OpsOperationKind>(
-  kind: K,
-  value: unknown,
-): OpsObservedResultFor<K> {
-  if (kind === "service.pull" && historicalServicePullResultSchema.safeParse(value).success)
-    return historicalServicePullResultSchema.parse(value) as OpsObservedResultFor<K>;
-  return parseBoundedOpsResult(kind, value) as OpsObservedResultFor<K>;
-}
 export function parseOpsResult<K extends OpsOperationKind>(
   kind: K,
   value: unknown,
@@ -1495,13 +1475,10 @@ const errorClass = z.enum(
   Object.keys(OPS_PUBLIC_ERROR_MESSAGES) as [OpsErrorClass, ...OpsErrorClass[]],
 );
 const jobStatus = z.strictObject({
-  version: z.union([z.literal(1), z.literal(2)]),
-  admittedAt: z.number().int().nonnegative().safe().optional(),
-  deadlineAt: z.number().int().nonnegative().safe().optional(),
-  fingerprint: z
-    .string()
-    .regex(/^[a-f0-9]{64}$/)
-    .optional(),
+  version: z.literal(OPS_PROTOCOL_VERSION),
+  admittedAt: z.number().int().nonnegative().safe(),
+  deadlineAt: z.number().int().nonnegative().safe(),
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   diagnostics: processDiagnosticsSchema.optional(),
   failureResult: opsFailureResultSchema.optional(),
   operationId: operationIdSchema,
@@ -1522,23 +1499,7 @@ const jobStatus = z.strictObject({
 export type OpsJobStatus = z.infer<typeof jobStatus>;
 export function parseOpsJobStatus(input: unknown): OpsJobStatus {
   const status = jobStatus.parse(input);
-  if (
-    status.version === 1 &&
-    (status.admittedAt !== undefined ||
-      status.deadlineAt !== undefined ||
-      status.fingerprint !== undefined ||
-      status.diagnostics !== undefined ||
-      status.failureResult !== undefined)
-  )
-    throw new Error("Invalid compatibility identity");
-  if (
-    status.version === 2 &&
-    (status.admittedAt === undefined ||
-      status.deadlineAt === undefined ||
-      status.fingerprint === undefined ||
-      status.deadlineAt <= status.admittedAt)
-  )
-    throw new Error("Invalid execution identity");
+  if (status.deadlineAt <= status.admittedAt) throw new Error("Invalid execution identity");
   if (status.failureResult !== undefined && !["failed", "timed_out"].includes(status.state))
     throw new Error("Invalid failure evidence");
   if (
@@ -1550,7 +1511,7 @@ export function parseOpsJobStatus(input: unknown): OpsJobStatus {
   if (status.state === "succeeded") {
     if (status.result === undefined || status.errorClass !== undefined)
       throw new Error("Invalid operation status");
-    parseObservedOpsResult(status.kind, status.result);
+    parseBoundedOpsResult(status.kind, status.result);
   } else if (status.state === "failed" || status.state === "timed_out") {
     if (status.result !== undefined || status.errorClass === undefined)
       throw new Error("Invalid operation status");
@@ -1571,7 +1532,7 @@ export type OpsJobStatusFor<K extends OpsOperationKind> =
     })
   | (OpsJobStatusBase<K> & {
       state: "succeeded";
-      result: OpsObservedResultFor<K>;
+      result: OpsResultFor<K>;
       errorClass?: never;
     })
   | (OpsJobStatusBase<K> & {
@@ -1591,7 +1552,7 @@ export function parseOpsJobStatusForKind<K extends OpsOperationKind>(
   }
   return {
     ...status,
-    ...(status.result === undefined ? {} : { result: parseObservedOpsResult(kind, status.result) }),
+    ...(status.result === undefined ? {} : { result: parseBoundedOpsResult(kind, status.result) }),
   } as OpsJobStatusFor<K>;
 }
 const stateEvent = z.strictObject({
@@ -1638,34 +1599,31 @@ export function parseOpsEventBatch(
 }
 
 export interface OpsAdmission {
-  version?: 1 | 2;
-  admittedAt?: number;
-  deadlineAt?: number;
-  fingerprint?: string;
+  version: typeof OPS_PROTOCOL_VERSION;
+  admittedAt: number;
+  deadlineAt: number;
+  fingerprint: string;
   execution: "async";
   operationId: string;
   operationKey: string;
   kind: OpsOperationKind;
   state: OpsJobState;
 }
-const legacyAdmission = z.strictObject({
-  execution: z.literal("async"),
-  operationId: operationIdSchema,
-  operationKey: operationKeySchema,
-  kind: operationKindSchema,
-  state: jobState,
-});
-const executionAdmission = legacyAdmission
-  .extend({
-    version: z.literal(2),
+const admission = z
+  .strictObject({
+    version: z.literal(OPS_PROTOCOL_VERSION),
+    execution: z.literal("async"),
+    operationId: operationIdSchema,
+    operationKey: operationKeySchema,
+    kind: operationKindSchema,
+    state: jobState,
     admittedAt: z.number().int().nonnegative().safe(),
     deadlineAt: z.number().int().nonnegative().safe(),
     fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   })
   .refine((value) => value.deadlineAt > value.admittedAt);
-/** The historical admission had no inner version. Both forms remain exact, disjoint schemas. */
 export function parseOpsAdmission(input: unknown): OpsAdmission {
-  return z.union([legacyAdmission, executionAdmission]).parse(input);
+  return admission.parse(input);
 }
 export interface OpsSyncResult<K extends OpsOperationKind = OpsOperationKind> {
   execution: "sync";

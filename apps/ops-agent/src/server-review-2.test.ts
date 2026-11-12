@@ -14,6 +14,7 @@ import {
 } from "./__fixtures__/server";
 import { type OpsJobJournal, openOpsJobJournal, type PersistedOpsJob } from "./journal";
 import type { OpsResourceClaimer } from "./policy";
+import { persistedJob } from "./test-fixtures/persisted-job";
 
 const pullResult = {
   changed: true as const,
@@ -45,11 +46,6 @@ function request(operation: OpsOperation, requestId: string, operationKey: strin
   };
 }
 
-function legacyRequest(...args: Parameters<typeof request>) {
-  const { execution: _execution, ...body } = request(...args);
-  return { ...body, version: 1 };
-}
-
 function auth() {
   return { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "2" };
 }
@@ -67,18 +63,14 @@ function persisted(
   operation: OpsOperation,
   overrides: Partial<PersistedOpsJob> = {},
 ): PersistedOpsJob {
-  return {
-    role: "api",
-    operation,
+  return persistedJob(operation, {
     operationId: "job1_restoredOperation0",
     operationKey: key("opk1_restoredOperation0"),
-    fingerprint: opsOperationFingerprint(operation),
-    resourceId: "redis",
+    requestedDeadlineAt: deadlineAt,
     state: "running",
     submittedAt: new Date(baseTime).toISOString(),
-    updatedAt: new Date(baseTime).toISOString(),
     ...overrides,
-  };
+  });
 }
 
 describe("reviewed durable admission boundary", () => {
@@ -262,7 +254,7 @@ describe("reviewed durable admission boundary", () => {
       method: "POST",
       url: "/v1/operations",
       headers: auth(),
-      payload: legacyRequest(operation, "ops1_tombstoneRetry000", key("opk1_recoveryTombstone0")),
+      payload: request(operation, "ops1_tombstoneRetry000", key("opk1_recoveryTombstone0")),
     });
     expect(retry.statusCode).toBe(202);
     expect(retry.json().result).toMatchObject({
@@ -274,7 +266,7 @@ describe("reviewed durable admission boundary", () => {
       method: "POST",
       url: "/v1/operations",
       headers: auth(),
-      payload: legacyRequest(operation, "ops1_tombstoneCapacity0", key("opk1_tombstoneCapacity0")),
+      payload: request(operation, "ops1_tombstoneCapacity0", key("opk1_tombstoneCapacity0")),
     });
     expect(capacity.statusCode).toBe(429);
     expect(dispatch).not.toHaveBeenCalled();
@@ -670,7 +662,7 @@ describe("reviewed durable admission boundary", () => {
         method: "POST",
         url: "/v1/operations",
         headers: auth(),
-        payload: legacyRequest(
+        payload: request(
           operation,
           `ops1_retainedState${index}0000`,
           key(`opk1_retainedState${index}0000`),
@@ -708,7 +700,7 @@ describe("reviewed durable admission boundary", () => {
       method: "POST",
       url: "/v1/operations",
       headers: auth(),
-      payload: legacyRequest(operation, "ops1_restartRetry00000", key("opk1_restoredOperation0")),
+      payload: request(operation, "ops1_restartRetry00000", key("opk1_restoredOperation0")),
     });
     expect(retry.statusCode).toBe(202);
     expect(retry.json().result).toMatchObject({

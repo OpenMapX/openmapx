@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -12,10 +11,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { canonicalJson, opsOperationFingerprint } from "@openmapx/core/ops";
+import { opsOperationFingerprint } from "@openmapx/core/ops";
 import { afterEach, describe, expect, it } from "vitest";
 import { OPS_JOB_JOURNAL_MAX_ORPHANS, openOpsJobJournal, type PersistedOpsJob } from "./journal";
-import { buildOpsAgentServer } from "./server";
+import { persistedJob } from "./test-fixtures/persisted-job";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -34,87 +33,40 @@ function job(overrides: Partial<PersistedOpsJob> = {}): PersistedOpsJob {
     serviceId: "redis",
     expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
   };
-  return {
-    role: "api",
-    operation,
+  return persistedJob(operation, {
     operationId: "job1_journalOperation0",
     operationKey: "opk1_journalOperation0",
-    fingerprint: opsOperationFingerprint(operation),
-    resourceId: "redis",
-    state: "queued",
-    submittedAt: "2026-08-23T18:00:00.000Z",
-    updatedAt: "2026-08-23T18:00:00.000Z",
     ...overrides,
-  };
+  });
 }
 
 describe("durable ops job journal", () => {
-  it("keeps an original historical pull journal as byte-identical observation without dispatchable work", async () => {
-    const path = join(root(), "journal", "jobs-v1.json");
-    await openOpsJobJournal(path);
-    const operation = { kind: "service.pull", serviceId: "redis" },
-      record = {
-        role: "api",
-        operation,
-        operationId: "job1_legacyPullObservation0",
-        operationKey: "opk1_legacyPullObservation0",
-        fingerprint: createHash("sha256").update(canonicalJson(operation)).digest("hex"),
-        resourceId: "redis",
-        state: "succeeded",
-        submittedAt: "2026-08-23T18:00:00.000Z",
-        updatedAt: "2026-08-23T18:00:01.000Z",
-        terminalAt: "2026-08-23T18:00:01.000Z",
-        result: { changed: true },
-      },
-      encoded = JSON.stringify(record);
-    writeFileSync(path, JSON.stringify({ version: 2, jobs: [record] }), { mode: 0o600 });
-    const journal = await openOpsJobJournal(path);
-    expect(journal.records()).toHaveLength(0);
-    expect(JSON.stringify(journal.historicalPullRecords?.()[0])).toBe(encoded);
-    const token = Buffer.alloc(32, 3).toString("base64url"),
-      app = buildOpsAgentServer({
-        tokens: { api: token, "data-manager": Buffer.alloc(32, 4).toString("base64url") },
-        journal,
-      });
-    try {
-      const response = await app.inject({
-        method: "GET",
-        url: `/v1/operations/${record.operationId}`,
-        headers: { authorization: `Bearer ${token}` },
-      });
-      expect(response.statusCode).toBe(200);
-      expect(response.json().result).toEqual({
-        version: 1,
-        operationId: record.operationId,
-        operationKey: record.operationKey,
-        kind: "service.pull",
-        resourceId: "redis",
-        state: record.state,
-        submittedAt: record.submittedAt,
-        updatedAt: record.updatedAt,
-        result: record.result,
-      });
-      const now = Date.now(),
-        rejected = await app.inject({
-          method: "POST",
-          url: "/v1/operations",
-          headers: { authorization: `Bearer ${token}` },
-          payload: {
-            version: 1,
-            requestId: "ops1_legacyPullRejected00",
-            operationKey: record.operationKey,
-            issuedAt: new Date(now).toISOString(),
-            expiresAt: new Date(now + 20000).toISOString(),
-            operation,
-          },
-        });
-      expect(rejected.statusCode).toBe(400);
-      expect(journal.records()).toHaveLength(0);
-    } finally {
-      await app.close();
-    }
-    await journal.replace([]);
-    expect(JSON.stringify(JSON.parse(readFileSync(path, "utf8")).jobs[0])).toBe(encoded);
+  it("refuses a version 1 journal file and a job without its execution identity", async () => {
+    const directory = join(root(), "journal");
+    mkdirSync(directory, { mode: 0o700 });
+    const path = join(directory, "jobs-v1.json");
+    writeFileSync(path, JSON.stringify({ version: 1, jobs: [] }), { mode: 0o600 });
+    await expect(openOpsJobJournal(path)).rejects.toThrow("Ops job journal is unavailable");
+
+    const {
+      executionVersion: _executionVersion,
+      requestVersion: _requestVersion,
+      admittedAt: _admittedAt,
+      deadlineAt: _deadlineAt,
+      operationFingerprint: _operationFingerprint,
+      deploymentBudgetMs: _deploymentBudgetMs,
+      ...withoutIdentity
+    } = job({
+      state: "succeeded",
+      terminalAt: "2026-08-23T18:00:01.000Z",
+      result: { changed: true },
+    });
+    writeFileSync(path, JSON.stringify({ version: 2, jobs: [withoutIdentity] }), { mode: 0o600 });
+    await expect(openOpsJobJournal(path)).rejects.toThrow("Ops job journal is unavailable");
+    writeFileSync(path, JSON.stringify({ version: 2, jobs: [{ ...job(), requestVersion: 1 }] }), {
+      mode: 0o600,
+    });
+    await expect(openOpsJobJournal(path)).rejects.toThrow("Ops job journal is unavailable");
   });
   it("durably probes a missing journal before open succeeds", async () => {
     const path = join(root(), "journal", "jobs-v1.json");
@@ -126,7 +78,7 @@ describe("durable ops job journal", () => {
     const directory = join(root(), "journal");
     mkdirSync(directory, { mode: 0o700 });
     const path = join(directory, "jobs-v1.json");
-    writeFileSync(path, JSON.stringify({ version: 1, jobs: [] }));
+    writeFileSync(path, JSON.stringify({ version: 2, jobs: [] }));
     chmodSync(directory, 0o500);
     try {
       await expect(openOpsJobJournal(path)).rejects.toThrow("Ops job journal is unavailable");
@@ -139,7 +91,7 @@ describe("durable ops job journal", () => {
     const directory = join(root(), "journal");
     mkdirSync(directory, { mode: 0o700 });
     const path = join(directory, "jobs-v1.json");
-    writeFileSync(path, JSON.stringify({ version: 1, jobs: [] }));
+    writeFileSync(path, JSON.stringify({ version: 2, jobs: [] }));
     chmodSync(directory, 0o722);
     try {
       await expect(openOpsJobJournal(path)).rejects.toThrow("Ops job journal is unavailable");
@@ -233,7 +185,7 @@ describe("durable ops job journal", () => {
   it("fails closed for symlink, hardlink, corrupt, and oversized journal files", async () => {
     const base = root();
     const target = join(base, "target");
-    writeFileSync(target, JSON.stringify({ version: 1, jobs: [] }));
+    writeFileSync(target, JSON.stringify({ version: 2, jobs: [] }));
     const symlinkDirectory = join(base, "symlink");
     mkdirSync(symlinkDirectory, { mode: 0o700 });
     const symlink = join(symlinkDirectory, "jobs-v1.json");
@@ -242,7 +194,7 @@ describe("durable ops job journal", () => {
     mkdirSync(hardlinkDirectory, { mode: 0o700 });
     const hardlink = join(hardlinkDirectory, "jobs-v1.json");
     const hardlinkTarget = join(hardlinkDirectory, "target");
-    writeFileSync(hardlinkTarget, JSON.stringify({ version: 1, jobs: [] }));
+    writeFileSync(hardlinkTarget, JSON.stringify({ version: 2, jobs: [] }));
     linkSync(hardlinkTarget, hardlink);
     const corruptDirectory = join(base, "corrupt");
     mkdirSync(corruptDirectory, { mode: 0o700 });
@@ -311,7 +263,7 @@ describe("version2 execution journal", () => {
     });
     const record = {
       executionVersion: 2 as const,
-      requestVersion: 1 as const,
+      requestVersion: 2 as const,
       ...normalized,
       operationFingerprint,
       requestedDeadlineAt: admittedAt + 1000,
@@ -332,16 +284,16 @@ describe("version2 execution journal", () => {
       admittedAt,
       deadlineAt: admittedAt + 1000,
       fingerprint: normalized.fingerprint,
-      requestVersion: 1,
+      requestVersion: 2,
       state: "failed",
       errorClass: "recovery_required",
       terminationRequestedAt: new Date(admittedAt + 1000).toISOString(),
     });
     const retained = recovered.records()[0];
     if (!retained) throw new Error("Missing retained execution");
-    await expect(recovered.replace([{ ...retained, requestVersion: 2 }])).rejects.toThrow(
-      "Retained execution identity is immutable",
-    );
+    await expect(
+      recovered.replace([{ ...retained, deploymentBudgetMs: 6 * 3600_000 }]),
+    ).rejects.toThrow("Retained execution identity is immutable");
     const extended = normalizeExecutionAdmission({
       operationFingerprint,
       operationKey,

@@ -34,6 +34,7 @@ const ADMISSION_REFUSALS = new Set([
   "not_wired",
   "host_update_required",
   "control_upgrade_required",
+  "unsupported_peer",
   "recovery_required",
 ]);
 const OPERATION_KEY = /^opk1_[A-Za-z0-9_-]{16,64}$/;
