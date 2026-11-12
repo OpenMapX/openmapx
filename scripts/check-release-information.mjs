@@ -98,7 +98,7 @@ function dependencyOnlyChange(before, after, path) {
  * Splits a pnpm v9 lockfile into its package-manager document (when present)
  * and the workspace project document.
  */
-function lockfileDocuments(state) {
+export function lockfileDocuments(state) {
   const source = state.read("pnpm-lock.yaml");
   if (source === null) throw new Error("pnpm-lock.yaml is missing");
   const docs = parseAllDocuments(source.toString(), { uniqueKeys: true });
@@ -156,7 +156,7 @@ function declaredPeers(state, directory) {
  * production dependencies and the devDependencies that provide their declared
  * peers (their runtime imports); and all transitive snapshot dependencies.
  */
-function dependencyTree({ project }, directory, state) {
+export function resolveDependencyTree({ project }, directory, state) {
   const { importers, packages = {}, snapshots = {} } = project;
   const tree = { importers: {}, snapshots: {}, packages: {} };
   const pending = [];
@@ -208,6 +208,21 @@ function dependencyTree({ project }, directory, state) {
       for (const [name, version] of Object.entries(snapshot[field])) follow(".", name, version);
     }
   }
+  return tree;
+}
+/**
+ * A public package's serialized tree. A tree that links a workspace package
+ * outside the package's source directories counts as unknown, because the path
+ * rule would miss that package's source.
+ */
+function dependencyTree(lockfile, item, state) {
+  const tree = resolveDependencyTree(lockfile, item.directory, state);
+  const sources = sourceDirectories(item, state);
+  const outside = Object.keys(tree.importers).filter((path) => !sources.has(path));
+  if (outside.length)
+    throw new Error(
+      `links workspace packages outside its source directories: ${outside.join(", ")}`,
+    );
   return JSON.stringify(tree);
 }
 /** Parses the lockfile at both commits, keeping a parse failure as a value. */
@@ -236,7 +251,7 @@ function dependencyTreeChanges(states, items, refs) {
         if (failure) throw failure;
         if (!sides.before || !sides.after) throw new Error("not present at both commits");
         const trees = states.map((state, index) =>
-          dependencyTree(state.lockfile, [sides.before, sides.after][index].directory, refs[index]),
+          dependencyTree(state.lockfile, [sides.before, sides.after][index], refs[index]),
         );
         return [name, trees[0] === trees[1] ? null : "resolved dependency tree changed"];
       } catch (error) {

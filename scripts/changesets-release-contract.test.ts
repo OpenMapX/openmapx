@@ -62,7 +62,11 @@ function lockModel(): LockModel {
             undici: dep("8.0.0"),
             "wrap-cjs": dep("wrap@7.0.0", "npm:wrap@7.0.0"),
           },
-          devDependencies: { peerlib: dep("1.0.0"), vitest: dep("5.0.0") },
+          devDependencies: {
+            "@fixture/fetch": dep("link:../fetch", "workspace:*"),
+            peerlib: dep("1.0.0"),
+            vitest: dep("5.0.0"),
+          },
         },
         "packages/app": { dependencies: { react: dep("19.0.0") } },
         "packages/fetch": { dependencies: { fetchdep: dep("1.0.0") } },
@@ -135,6 +139,7 @@ const baseManifests: Record<string, Record<string, unknown>> = {
     version: "1.0.0",
     private: true,
     peerDependencies: { peerlib: "^1.0.0" },
+    devDependencies: { "@fixture/fetch": "workspace:*" },
   },
   app: { name: "@fixture/app", version: "1.0.0", private: true },
   fetch: { name: "@fixture/fetch", version: "1.0.0", private: true },
@@ -431,7 +436,9 @@ describe("dependency-only changes judged by resolved dependency trees", () => {
     });
     expect(result.status).toBe(1);
     expect(failing(result.output)).toEqual(["@fixture/tool"]);
-    expect(result.output).toContain("packages/fetch/package.json");
+    expect(result.output).toContain(
+      "@fixture/tool: resolved dependency tree unknown (packages/fetch/package.json",
+    );
   });
   it("ignores a linked workspace package's devDependency", () => {
     const result = fixture().run({
@@ -510,10 +517,14 @@ describe("dependency-only changes judged by resolved dependency trees", () => {
     const aliased = lockfile()
       .replace("\n  ansi@1.0.0: {}\n", "\n  ansi@1.0.0: &empty {}\n")
       .replace("\n  fetchdep@1.0.0: {}\n", "\n  fetchdep@1.0.0: *empty\n");
-    expect(aliased).toContain("*empty");
+    expect(aliased).toContain("ansi@1.0.0: &empty {}");
+    expect(aliased).toContain("fetchdep@1.0.0: *empty");
     const result = fixture().run({ "pnpm-lock.yaml": aliased });
     expect(result.status).toBe(1);
     expect(failing(result.output)).toEqual(["@fixture/lib", "@fixture/tool"]);
+    expect(result.output).toContain(
+      "resolved dependency tree unknown (Alias resolution is disabled",
+    );
   });
   it("fails closed on an added lockfile", () => {
     const f = fixture();
@@ -533,6 +544,18 @@ describe("dependency-only changes judged by resolved dependency trees", () => {
     });
     expect(result.status).toBe(1);
     expect(failing(result.output)).toEqual(["@fixture/tool"]);
+  });
+  it("fails closed when the tree links a workspace package outside the source directories", () => {
+    const result = fixture().run({
+      "pnpm-lock.yaml": lockfile((model) => {
+        model.project.snapshots["client@1.0.0"] = {
+          dependencies: { "@fixture/app": "link:packages/app" },
+        };
+      }),
+    });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/tool"]);
+    expect(result.output).toContain("outside its source directories: packages/app");
   });
   it("flags a resolution change at the same version", () => {
     const result = fixture().run({
@@ -589,7 +612,9 @@ describe("dependency-only changes judged by resolved dependency trees", () => {
   });
   it("defers a bundled workspace manifest dependency-only change to the closure", () => {
     const quiet = fixture().run({
-      "packages/helper/package.json": manifest("helper", { devDependencies: { vitest: "5.1.0" } }),
+      "packages/helper/package.json": manifest("helper", {
+        devDependencies: { "@fixture/fetch": "workspace:*", vitest: "5.1.0" },
+      }),
       "pnpm-lock.yaml": lockfile((model) => {
         bump(model, "vitest@5.0.0", "vitest@5.1.0");
         model.project.importers["packages/helper"].devDependencies.vitest = dep("5.1.0");
