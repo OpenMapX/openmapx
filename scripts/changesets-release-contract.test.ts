@@ -1,5 +1,13 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -49,14 +57,21 @@ function lockModel(): LockModel {
           devDependencies: { "@fixture/helper": dep("link:../helper", "workspace:*") },
         },
         "packages/helper": {
-          dependencies: { undici: dep("8.0.0"), "wrap-cjs": dep("wrap@7.0.0", "npm:wrap@7.0.0") },
+          dependencies: {
+            client: dep("1.0.0"),
+            undici: dep("8.0.0"),
+            "wrap-cjs": dep("wrap@7.0.0", "npm:wrap@7.0.0"),
+          },
           devDependencies: { vitest: dep("5.0.0") },
         },
         "packages/app": { dependencies: { react: dep("19.0.0") } },
+        "packages/fetch": { dependencies: { fetchdep: dep("1.0.0") } },
       },
       packages: resolved(
         "ansi@1.0.0",
+        "client@1.0.0",
         "commander@15.0.0",
+        "fetchdep@1.0.0",
         "react@19.0.0",
         "rootonly@1.0.0",
         "tsup@9.0.0",
@@ -68,7 +83,10 @@ function lockModel(): LockModel {
       ),
       snapshots: {
         "ansi@1.0.0": {},
+        // A pnpm override can link an installed package to a workspace package.
+        "client@1.0.0": { dependencies: { "@fixture/fetch": "link:packages/fetch" } },
         "commander@15.0.0": {},
+        "fetchdep@1.0.0": {},
         "react@19.0.0": {},
         "rootonly@1.0.0": {},
         "tsup@9.0.0(typescript@6.0.3)": { dependencies: { typescript: "6.0.3" } },
@@ -101,6 +119,18 @@ const note = (name = "@fixture/lib") =>
   `---\n"${name}": patch\n---\nFix the consumer-facing validation result.\n`;
 const fragment = (impacts = "migration") =>
   `---\nimpacts: [${impacts}]\n---\n## What changes\nThe database layout changes for stored observations.\n\n## Who is affected\nOperators upgrading an existing instance with stored data.\n\n## Required action\nRun the documented migration before restarting the API.\n`;
+
+const baseManifests: Record<string, Record<string, unknown>> = {
+  lib: { name: "@fixture/lib", version: "0.1.0" },
+  tool: {
+    name: "@fixture/tool",
+    version: "0.1.0",
+    files: ["dist", "templates"],
+    devDependencies: { "@fixture/helper": "workspace:*" },
+  },
+  helper: { name: "@fixture/helper", version: "1.0.0", private: true },
+  app: { name: "@fixture/app", version: "1.0.0", private: true },
+};
 
 function fixture() {
   const cwd = mkdtempSync(join(tmpdir(), "openmapx-release-info-"));
@@ -148,17 +178,7 @@ function fixture() {
       ignore: [],
     }),
   );
-  for (const [slug, manifest] of Object.entries({
-    lib: { name: "@fixture/lib", version: "0.1.0" },
-    tool: {
-      name: "@fixture/tool",
-      version: "0.1.0",
-      files: ["dist", "templates"],
-      devDependencies: { "@fixture/helper": "workspace:*" },
-    },
-    helper: { name: "@fixture/helper", version: "1.0.0", private: true },
-    app: { name: "@fixture/app", version: "1.0.0", private: true },
-  })) {
+  for (const [slug, manifest] of Object.entries(baseManifests)) {
     write(`packages/${slug}/package.json`, JSON.stringify(manifest));
     write(`packages/${slug}/src/index.ts`, "export const value = 0;\n");
     write(`packages/${slug}/src/value.test.ts`, "// test baseline\n");
@@ -316,23 +336,7 @@ describe("conditional contribution release information", () => {
 
 describe("dependency-only changes judged by resolved dependency trees", () => {
   const manifest = (slug: string, extra: Record<string, unknown>) =>
-    JSON.stringify({
-      ...JSON.parse(
-        JSON.stringify(
-          {
-            lib: { name: "@fixture/lib", version: "0.1.0" },
-            tool: {
-              name: "@fixture/tool",
-              version: "0.1.0",
-              files: ["dist", "templates"],
-              devDependencies: { "@fixture/helper": "workspace:*" },
-            },
-            helper: { name: "@fixture/helper", version: "1.0.0", private: true },
-          }[slug],
-        ),
-      ),
-      ...extra,
-    });
+    JSON.stringify({ ...baseManifests[slug], ...extra });
   const failing = (output: string) =>
     ["@fixture/lib", "@fixture/tool"].filter((name) =>
       output.includes(`${name}: delivered artifact may change`),
@@ -452,10 +456,87 @@ describe("dependency-only changes judged by resolved dependency trees", () => {
         model.project.importers["packages/tool"].dependencies.commander = dep("link:../../outside");
       }),
     ],
-  ])("fails closed on %s", (_name, contents) => {
+    [
+      "a snapshot without its package entry",
+      lockfile((model) => {
+        delete model.project.packages["undici@8.0.0"];
+        delete model.project.packages["zod@4.0.0"];
+      }),
+    ],
+    ["more than two documents", `${lockfile()}\n---\nlockfileVersion: '9.0'\n`],
+    [
+      "a malformed package-manager document",
+      lockfile((model) => {
+        model.environment.importers = { ".": {}, "packages/lib": {} };
+      }),
+    ],
+    ["a deleted lockfile", null],
+  ] as [string, string | null][])("fails closed on %s", (_name, contents) => {
     const result = fixture().run({ "pnpm-lock.yaml": contents });
     expect(result.status).toBe(1);
     expect(failing(result.output)).toEqual(["@fixture/lib", "@fixture/tool"]);
+  });
+  it("fails closed on YAML aliases", () => {
+    const aliased = lockfile()
+      .replace("\n  ansi@1.0.0: {}\n", "\n  ansi@1.0.0: &empty {}\n")
+      .replace("\n  fetchdep@1.0.0: {}\n", "\n  fetchdep@1.0.0: *empty\n");
+    expect(aliased).toContain("*empty");
+    const result = fixture().run({ "pnpm-lock.yaml": aliased });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/lib", "@fixture/tool"]);
+  });
+  it("fails closed on an added lockfile", () => {
+    const f = fixture();
+    f.git("rm", "-q", "pnpm-lock.yaml");
+    f.git("commit", "-m", "test: no lockfile");
+    f.advanceBase();
+    const result = f.run({ "pnpm-lock.yaml": lockfile() });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/lib", "@fixture/tool"]);
+  });
+  it("follows a snapshot-level link into the linked workspace package", () => {
+    const result = fixture().run({
+      "pnpm-lock.yaml": lockfile((model) => {
+        bump(model, "fetchdep@1.0.0", "fetchdep@1.1.0");
+        model.project.importers["packages/fetch"].dependencies.fetchdep = dep("1.1.0");
+      }),
+    });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/tool"]);
+  });
+  it("flags a resolution change at the same version", () => {
+    const result = fixture().run({
+      "pnpm-lock.yaml": lockfile((model) => {
+        model.project.packages["zod@4.0.0"] = { resolution: { integrity: "sha512-other" } };
+      }),
+    });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/lib"]);
+  });
+  it("keeps the path rule for a nested manifest without a lockfile importer", () => {
+    const f = fixture();
+    const nested = "packages/helper/strings/package.json";
+    f.write(nested, '{"type":"module"}');
+    f.git("add", ".");
+    f.git("commit", "-m", "test: nested manifest");
+    f.advanceBase();
+    const result = f.run({ [nested]: '{"type":"module","dependencies":{"zod":"4.1.0"}}' });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/tool"]);
+  });
+  it("keeps the path rule for a manifest that is not a regular file", () => {
+    const f = fixture();
+    const linked = "packages/helper/linked/package.json";
+    mkdirSync(join(f.cwd, dirname(linked)), { recursive: true });
+    symlinkSync("../package.json", join(f.cwd, linked));
+    f.git("add", ".");
+    f.git("commit", "-m", "test: symlinked manifest");
+    f.advanceBase();
+    unlinkSync(join(f.cwd, linked));
+    symlinkSync("../src/index.ts", join(f.cwd, linked));
+    const result = f.run({});
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/tool"]);
   });
   it("defers a root manifest dependency-only change to the lockfile", () => {
     const result = fixture().run({

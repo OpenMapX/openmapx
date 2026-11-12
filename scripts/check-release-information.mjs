@@ -76,12 +76,13 @@ const plainObject = (value) => value !== null && typeof value === "object" && !A
  * A manifest edit confined to its dependency objects is fully reflected in the
  * lockfile's importer for that directory, so the lockfile closure can judge it.
  * Key order is kept in the comparison because some fields, such as conditional
- * exports, are order-sensitive.
+ * exports, are order-sensitive. A manifest that is missing on one side, not a
+ * regular file or not a JSON object is not a dependency-only change.
  */
 function dependencyOnlyChange(before, after, path) {
-  const sides = [before.read(path), after.read(path)];
-  if (sides.includes(null)) return false;
   try {
+    const sides = [before.read(path), after.read(path)];
+    if (sides.includes(null)) return false;
     const [a, b] = sides.map((bytes) => {
       const manifest = JSON.parse(bytes.toString());
       if (!plainObject(manifest)) throw new Error(`${path}: expected a JSON object`);
@@ -187,18 +188,21 @@ function dependencyTree({ project }, directory) {
   }
   return JSON.stringify(tree);
 }
-/**
- * Decides, per public package, whether a dependency-only change can reach its
- * build. Anything that cannot be resolved counts as a change.
- */
-function dependencyTreeChanges(before, after, items) {
-  const states = [before, after].map((state) => {
+/** Parses the lockfile at both commits, keeping a parse failure as a value. */
+function parseLockfiles(before, after) {
+  return [before, after].map((state) => {
     try {
       return { lockfile: lockfileDocuments(state) };
     } catch (error) {
       return { error };
     }
   });
+}
+/**
+ * Decides, per public package, whether a dependency-only change can reach its
+ * build. Anything that cannot be resolved counts as a change.
+ */
+function dependencyTreeChanges(states, items) {
   const failure = states.find((state) => state.error)?.error;
   if (!failure && lockfileWideInputs(states[0].lockfile) !== lockfileWideInputs(states[1].lockfile))
     return new Map(
@@ -392,19 +396,30 @@ export function contributionCheck({ before, after, changed, body }) {
     }
   }
   if (!packages.size) throw new Error("No qualified public packages configured");
-  // A public package's own manifest is always packed (and the CLI bundles it),
-  // and shipped manifests such as scaffold templates reach consumers verbatim,
-  // so both stay under the path rule.
+  let lockfiles;
+  const parsedLockfiles = () => {
+    lockfiles ??= parseLockfiles(before, after);
+    return lockfiles;
+  };
+  // Only a manifest with a lockfile importer at both commits is fully reflected
+  // in the lockfile. A public package's own manifest is always packed (and the
+  // CLI bundles it), and shipped manifests such as scaffold templates reach
+  // consumers verbatim, so both stay under the path rule.
+  const importerAtBoth = (directory) =>
+    parsedLockfiles().every(
+      ({ lockfile }) => lockfile && Object.hasOwn(lockfile.project.importers, directory),
+    );
   const byTree = new Set(
     changed.filter(
       (path) =>
         path === "pnpm-lock.yaml" ||
         ((path === "package.json" ||
           (path.endsWith("/package.json") && !publicManifests.has(path) && !shipped.has(path))) &&
-          dependencyOnlyChange(before, after, path)),
+          dependencyOnlyChange(before, after, path) &&
+          importerAtBoth(path === "package.json" ? "." : path.slice(0, -"/package.json".length))),
     ),
   );
-  const treeChanges = byTree.size ? dependencyTreeChanges(before, after, items) : new Map();
+  const treeChanges = byTree.size ? dependencyTreeChanges(parsedLockfiles(), items) : new Map();
   const notes = [...treeChanges].map(
     ([name, change]) => `${name}: ${change ?? "resolved dependency tree unchanged"}`,
   );
