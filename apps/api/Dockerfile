@@ -271,8 +271,7 @@ COPY packages/core/tsconfig.json ./packages/core/
 # volumes, which Docker seeds with the owner and mode of these directories:
 # root-owned, world-writable and sticky, like /tmp, so the API's uid creates
 # its own 0700 directory inside (see private-volume-directory.ts). Only the
-# API mounts them. Volumes seeded by earlier images belong to uid 1000 and are
-# used as they are by an API running as that uid.
+# API mounts them.
 RUN mkdir -p /app/custom_integrations /var/lib/openmapx/trusted-config \
       /var/lib/openmapx/erasure /var/lib/openmapx/subject-exports \
       /app/infra/docker/.runtime-recovery && \

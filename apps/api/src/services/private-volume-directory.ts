@@ -17,12 +17,11 @@ export const API_VOLUMES = {
  *
  * Docker seeds a new volume with the owner and mode of the image's directory.
  * This image's are root-owned, world-writable and sticky, like /tmp, so the
- * API uses `<mount>/uid-<uid>`, which its store creates 0700. A volume an
- * earlier image seeded belongs to uid 1000 with mode 0700; an API running as
- * that uid keeps using its root, and the data in it. A root that belongs to
- * another uid was seeded for another user. It is refused with the fix, which
- * keeps its data: the subject-export ciphertexts the database references and
- * the runtime-recovery journal.
+ * API uses `<mount>/uid-<uid>`, which its store creates 0700. A directory the
+ * API's uid owns, as its store creates outside the container, is used as it
+ * is. Any other root is refused with the fix, which keeps its data: the
+ * subject-export ciphertexts the database references and the runtime-recovery
+ * journal.
  */
 export function privateVolumeDirectory(mount: string, volume: string): string {
   const uid = process.geteuid?.();
@@ -42,6 +41,6 @@ export function privateVolumeDirectory(mount: string, volume: string): string {
   if (stats.uid === 0 && (stats.mode & 0o1777) === 0o1777) return join(mount, `uid-${uid}`);
   const gid = process.getegid?.() ?? uid;
   throw new Error(
-    `${mount} (volume ${volume}) belongs to uid ${stats.uid} (mode ${(stats.mode & 0o7777).toString(8)}), not to uid ${uid}, which the API runs as: an earlier image created the volume for that uid. Keep its data and change its owner in place: stop app-api (pnpm openmapx services stop app-api), run \`docker run --rm -v ${volume}:/v alpine chown -R ${uid}:${gid} /v\`, and start app-api again`,
+    `${mount} (volume ${volume}) belongs to uid ${stats.uid} (mode ${(stats.mode & 0o7777).toString(8)}), not to uid ${uid}, which the API runs as. Keep its data and change its owner in place: stop app-api (pnpm openmapx services stop app-api), run \`docker run --rm -v ${volume}:/v alpine chown -R ${uid}:${gid} /v\`, and start app-api again`,
   );
 }

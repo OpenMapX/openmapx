@@ -41,7 +41,7 @@ function mount(): string {
 const uid = process.geteuid?.() ?? 0;
 
 describe("the API's directory in a named volume", () => {
-  it("is the root of a volume seeded for this uid, as earlier images did for 1000", () => {
+  it("is a directory this uid owns, as the store creates outside the container", () => {
     const path = mount();
     expect(privateVolumeDirectory(path, "openmapx_openmapx-subject-exports")).toBe(path);
   });
