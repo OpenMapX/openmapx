@@ -1,9 +1,9 @@
-import { services } from "@openmapx/core/server";
+import { validateExtensionManifest } from "@openmapx/extension-contracts/extension";
 import { describe, expect, it } from "vitest";
 import { buildExtensionManifest } from "../commands/bundle.js";
 
 describe("buildExtensionManifest", () => {
-  it("assembles a service + integration bundle that passes the core validator", () => {
+  it("assembles a service + integration bundle that passes the platform validator", () => {
     const doc = buildExtensionManifest({
       id: "openconditions",
       name: "OpenConditions",
@@ -17,7 +17,7 @@ describe("buildExtensionManifest", () => {
     ]);
     expect(doc.integrations?.[0]).toMatchObject({ id: "overlay-x" });
     // The emitted doc must satisfy the platform's extension.json schema.
-    expect(services.validateExtensionManifest(doc).valid).toBe(true);
+    expect(validateExtensionManifest(doc).valid).toBe(true);
   });
 
   it("omits an empty ref", () => {

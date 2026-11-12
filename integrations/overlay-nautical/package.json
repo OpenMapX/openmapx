@@ -9,5 +9,17 @@
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/noaa-coops-data": "workspace:^",
     "@openmapx/place-ids": "workspace:^"
+  },
+  "peerDependencies": {
+    "@mui/icons-material": "^9.5.0",
+    "@mui/material": "^9.5.0",
+    "maplibre-gl": "^6.16.0",
+    "next-intl": "^4.14.9"
+  },
+  "devDependencies": {
+    "@mui/icons-material": "^9.5.0",
+    "@mui/material": "^9.5.0",
+    "maplibre-gl": "^6.16.0",
+    "next-intl": "^4.14.9"
   }
 }

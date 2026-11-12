@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "include": ["files", "dependencies"],
+  "include": ["files", "dependencies", "unlisted", "unresolved"],
   "ignoreWorkspaces": [
     "integrations/__tests__",
     "integrations/_placeholder",
@@ -12,7 +12,14 @@
         // The CI privacy-backup fixture spawns this file by path.
         "services/ops-agent/privacy-backup/verify-output.ts"
       ],
-      "ignoreFiles": ["docs/**"]
+      "ignoreFiles": ["docs/**"],
+      // Cross-integration component tests in integrations/ sit outside every
+      // workspace and run in the web Vitest project, which provides React and
+      // the web app's `@/*` alias.
+      "ignoreDependencies": ["react"],
+      "paths": {
+        "@/*": ["apps/web/src/*"]
+      }
     },
     "scripts": {
       // Discover dynamically loaded GraphQL Code Generator plugins from their real config.
@@ -52,7 +59,16 @@
         "ev-vehicles/generate.ts"
       ],
       // TypeScript resolves the .mjs validator import to this typed companion.
-      "ignoreFiles": ["validate-privacy-release.d.mts"]
+      "ignoreFiles": ["validate-privacy-release.d.mts"],
+      "ignoreDependencies": [
+        // The Biome plugin test runs the root node_modules/.bin/biome binary by
+        // path, which Knip reads as a package named "biome".
+        "biome",
+        // Knip reads the replay's local register() fixture helper as Node's
+        // module.register() and its source IDs as loader specifiers.
+        "replay-regional",
+        "replay-national"
+      ]
     },
     "apps/api": {
       "entry": [
@@ -82,7 +98,17 @@
         "release/**/*.mts",
         "scripts/**/*.mts",
         "store/screenshots/**/*.mts"
-      ]
+      ],
+      "ignoreDependencies": [
+        // Knip's Expo plugin assumes expo-updates unless app config disables
+        // updates; the app does not ship over-the-air updates.
+        "expo-updates",
+        // A jest-expo preset moduleNameMapper target; the app never imports
+        // react-native-vector-icons.
+        "@expo/vector-icons"
+      ],
+      // Expo prebuild generates the Gradle wrapper in the untracked android/.
+      "ignoreUnresolved": ["./gradlew"]
     },
     "apps/ops-agent": {
       "entry": [

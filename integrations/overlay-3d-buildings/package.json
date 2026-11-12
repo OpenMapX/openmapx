@@ -8,10 +8,12 @@
     "@openmapx/core": "workspace:^"
   },
   "peerDependencies": {
+    "maplibre-gl": "^6.16.0",
     "react": ">=19"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",
+    "maplibre-gl": "^6.16.0",
     "react": "19.3.1"
   }
 }
