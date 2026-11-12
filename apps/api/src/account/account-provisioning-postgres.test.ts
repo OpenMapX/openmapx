@@ -688,14 +688,25 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
       for (let i = 0; i < 60 && mail.mock.calls.length < 2; i++)
         await new Promise((r) => setTimeout(r, 50));
       expect(mail).toHaveBeenCalledTimes(2);
-      const delivered = await sdk.getAdminAccountDelivery(created.data.userId, {
-        client,
-        headers: { cookie: grant.actor.headers.get("cookie") ?? "" },
-      });
-      expect(delivered.status).toBe(200);
-      expect(delivered.data).toMatchObject({
-        latest: { action: "create", verificationDelivery: "sent", passwordSetupDelivery: "sent" },
-      });
+      // The worker records "sent" only after the mail handoff returns, so the
+      // second delivery can still read "queued" right after the second call.
+      await vi.waitFor(
+        async () => {
+          const delivered = await sdk.getAdminAccountDelivery(created.data.userId, {
+            client,
+            headers: { cookie: grant.actor.headers.get("cookie") ?? "" },
+          });
+          expect(delivered.status).toBe(200);
+          expect(delivered.data).toMatchObject({
+            latest: {
+              action: "create",
+              verificationDelivery: "sent",
+              passwordSetupDelivery: "sent",
+            },
+          });
+        },
+        { timeout: 3000, interval: 50 },
+      );
       const anonymous = await sdk.getAdminAccountDelivery(created.data.userId, { client });
       expect(anonymous.status).toBe(401);
     } finally {
