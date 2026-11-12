@@ -94,7 +94,6 @@ describe("reviewed ops foundation contract", () => {
       "release.pull",
       "release.apply",
       "appApi.replace",
-      "agent.update",
       "system.update",
       "serviceRepository.inspect",
       "serviceRepository.publish",

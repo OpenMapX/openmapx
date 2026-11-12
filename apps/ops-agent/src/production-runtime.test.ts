@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
   existsSync,
@@ -9,7 +8,6 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -30,8 +28,7 @@ import { releaseProvenance } from "../../../packages/core/src/services/__fixture
 import { ownedComposePathRuntime } from "./__fixtures__/owned-compose-path-runtime";
 import { ownedServiceHost } from "./__fixtures__/owned-service-host";
 import { readProductionFixtureCompose } from "./__fixtures__/production-compose-config";
-import { createAgentHandoffBindings, createDefaultReleaseEffects } from "./administrative-runtime";
-import { readAgentHandoff, writeAgentHandoff } from "./agent-handoff";
+import { createDefaultReleaseEffects } from "./administrative-runtime";
 import { startOpsAgentServer } from "./bootstrap";
 import { runContainedProcess } from "./docker-runtime";
 import { openOpsJobJournal } from "./journal";
@@ -181,17 +178,6 @@ describe("assembled production service authority", () => {
       OpsNotWiredError,
     );
     await expect(
-      effects.updateAgent?.(
-        {
-          releaseId: "release-unavailable",
-          expectedDigest: "a".repeat(64),
-          handoffId: "handoff-unavailable",
-          otherActiveOperations: 0,
-        },
-        io,
-      ),
-    ).rejects.toBeInstanceOf(OpsNotWiredError);
-    await expect(
       dispatchOpsOperation(
         host.runtime,
         {
@@ -215,63 +201,13 @@ describe("assembled production service authority", () => {
     expect(
       existsSync(join(services.releaseStatePaths(host.infraDir).store, "transaction.json")),
     ).toBe(false);
-    expect(existsSync(services.agentStatePaths(join(host.root, "infra/docker")).handoff)).toBe(
-      false,
-    );
     expect(services.currentConfigurationGeneration(host.infraDir)).toBe(before);
     await expect(effects.inspect()).resolves.toBeDefined();
     await expect(effects.runtimeInspect?.()).resolves.toEqual({});
     await expect(effects.inspectSystem(io)).resolves.toMatchObject({ maintenanceReady: false });
   });
 
-  it("production helper entry and write bindings preserve original handoff evidence", async () => {
-    const host = await fixture();
-    const record = {
-      version: 1 as const,
-      handoffId: "handoff-unavailable",
-      releaseId: "release-unavailable",
-      digest: "a".repeat(64),
-      phase: "launched" as const,
-      previousOverlay: "previous\n",
-      createdAt: "2026-10-20T00:00:00.000Z",
-      updatedAt: "2026-10-20T00:00:00.000Z",
-    };
-    mkdirSync(dirname(services.agentStatePaths(join(host.root, "infra/docker")).handoff), {
-      recursive: true,
-      mode: 0o700,
-    });
-    writeAgentHandoff(host.root, record);
-    const path = services.agentStatePaths(join(host.root, "infra/docker")).handoff,
-      bytes = readFileSync(path);
-    const bindings = createAgentHandoffBindings(host.root);
-    expect(() => bindings.writeOverlay(record.releaseId, record.digest)).toThrow(OpsNotWiredError);
-    expect(() => bindings.restoreOverlay(record.previousOverlay)).toThrow(OpsNotWiredError);
-    expect(() => bindings.assertAvailable()).toThrow(OpsNotWiredError);
-    const entry = spawnSync(
-      process.execPath,
-      [
-        "--import",
-        createRequire(import.meta.url).resolve("tsx/esm"),
-        fileURLToPath(new URL("./agent-handoff-main.ts", import.meta.url)),
-      ],
-      {
-        env: {
-          ...process.env,
-          OPENMAPX_ROOT_DIR: host.root,
-          OPS_AGENT_HANDOFF_ID: record.handoffId,
-        },
-        encoding: "utf8",
-        timeout: 15000,
-      },
-    );
-    expect(entry.status, entry.stderr).toBe(1);
-    expect(entry.stderr).toContain("Typed adapter is not wired");
-    expect(readFileSync(path)).toEqual(bytes);
-    expect(readAgentHandoff(host.root)).toEqual(record);
-    expect(existsSync(host.stack.composeReleasePath)).toBe(false);
-  });
-
-  it("production startup preserves actual interrupted legacy transaction and handoff while reads remain available", async () => {
+  it("production startup preserves an actual interrupted legacy transaction while reads remain available", async () => {
     const host = await fixture();
     const directory = services.releaseStatePaths(host.infraDir).store;
     const manifest = services.parseReleaseManifest(
@@ -316,23 +252,8 @@ describe("assembled production service authority", () => {
         await host.context({ kind: "configuration.inspect" }),
       ),
     ).rejects.toThrow("actual legacy prepared interruption");
-    mkdirSync(dirname(services.agentStatePaths(join(host.root, "infra/docker")).handoff), {
-      recursive: true,
-      mode: 0o700,
-    });
-    writeAgentHandoff(host.root, {
-      version: 1,
-      handoffId: "handoff-legacy",
-      releaseId: manifest.release,
-      digest: "a".repeat(64),
-      phase: "overlay_written",
-      previousOverlay: null,
-      createdAt: "2026-10-20T00:00:00.000Z",
-      updatedAt: "2026-10-20T00:00:00.000Z",
-    });
-    const transaction = join(directory, "transaction.json"),
-      handoff = services.agentStatePaths(join(host.root, "infra/docker")).handoff;
-    const before = [readFileSync(transaction), readFileSync(handoff)];
+    const transaction = join(directory, "transaction.json");
+    const before = readFileSync(transaction);
     const restarted = await createProductionOpsRuntime({
       rootDir: host.root,
       stack: host.stack,
@@ -347,10 +268,7 @@ describe("assembled production service authority", () => {
       availableReleaseId: manifest.release,
     });
     await expect(effects.runtimeInspect?.()).resolves.toEqual({});
-    await expect(effects.inspectAgentHandoff?.("handoff-legacy")).resolves.toMatchObject({
-      phase: "overlay_written",
-    });
-    expect([readFileSync(transaction), readFileSync(handoff)]).toEqual(before);
+    expect(readFileSync(transaction)).toEqual(before);
     expect(host.calls).toEqual([]);
     const app = await startOpsAgentServer(
       {
@@ -369,7 +287,7 @@ describe("assembled production service authority", () => {
         ok: true,
         releaseRecovery: { ready: false, reason: "recovery_required" },
       });
-      expect([readFileSync(transaction), readFileSync(handoff)]).toEqual(before);
+      expect(readFileSync(transaction)).toEqual(before);
     } finally {
       await app.close();
     }

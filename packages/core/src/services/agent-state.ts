@@ -11,8 +11,8 @@ export function writeAgentStateFile(infraDir: string, name: string, contents: st
 
 /**
  * Where the operations agent keeps its own state: the job journal, the
- * self-update handoff record, the trusted-configuration snapshot queue it
- * shares with app-api, and its privacy-extraction scratch.
+ * trusted-configuration snapshot queue it shares with app-api, and its
+ * privacy-extraction scratch.
  *
  * It lives in `infra/docker/state/ops-agent`, beside `infra/docker/data`
  * rather than inside it: data-manager mounts the whole data directory
@@ -21,7 +21,6 @@ export function writeAgentStateFile(infraDir: string, name: string, contents: st
 export interface AgentStatePaths {
   directory: string;
   journal: string;
-  handoff: string;
   trustedConfig: string;
   privacyExtraction: string;
   /** The community service repositories the agent installed. */
@@ -37,7 +36,6 @@ export function agentStatePaths(infraDir: string): AgentStatePaths {
   return {
     directory,
     journal: join(directory, "jobs-v1.json"),
-    handoff: join(directory, "agent-handoff.json"),
     trustedConfig: join(directory, "trusted-config"),
     privacyExtraction: join(directory, "privacy-extraction"),
     community: join(directory, "community"),

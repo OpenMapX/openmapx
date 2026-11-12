@@ -13,7 +13,6 @@ import {
   loadConfiguredResourceAuthority,
   pruneBackupRetention,
 } from "./administrative-runtime";
-import { isTerminalHandoff, readAgentHandoff } from "./agent-handoff";
 import { installPreparedImportRuntime } from "./artifact-transfer/import-runtime";
 import { loadArtifactTransferPolicy } from "./artifact-transfer/policy";
 import { installArtifactTransferRuntime } from "./artifact-transfer/runtime";
@@ -189,8 +188,9 @@ async function main(): Promise<void> {
     } catch {
       process.stderr.write("Could not check the Valhalla traffic maintenance fence\n");
     }
-    // After a self-update this agent starts before anything has rendered with
-    // its code, so the state directories it opens may not exist yet.
+    // After the configuration helper replaces it, this agent starts before
+    // anything has rendered with its code, so the state directories it opens
+    // may not exist yet.
     await services.withConfigurationGenerationWriter(paths.infraDir, async () =>
       services.prepareAgentStateDirectories(paths.infraDir),
     );
@@ -263,15 +263,6 @@ async function main(): Promise<void> {
         ownerGid: gid,
       },
     });
-    const replacementInProgress = () => {
-      if (configurationHandoffPendingMaintenanceIds(runtime).size) return true;
-      try {
-        const handoff = readAgentHandoff(config.rootDir);
-        return handoff !== null && !isTerminalHandoff(handoff.phase);
-      } catch {
-        return true;
-      }
-    };
     const transferPolicy = loadArtifactTransferPolicy();
     const artifactTransfers =
       "policy" in transferPolicy && controlStartup.installation
@@ -283,7 +274,7 @@ async function main(): Promise<void> {
             ),
             token: apiToken,
             policy: transferPolicy.policy,
-            admissionsOpen: () => !replacementInProgress(),
+            admissionsOpen: () => configurationHandoffPendingMaintenanceIds(runtime).size === 0,
           })
         : undefined;
     if (artifactTransfers) {
@@ -383,17 +374,6 @@ async function main(): Promise<void> {
         terminalClaimCleanup,
         runtime,
         artifactTransfers,
-        replacementInProgress: () => {
-          if (configurationHandoffPendingMaintenanceIds(runtime).size) return true;
-          try {
-            const handoff = readAgentHandoff(config.rootDir);
-            return handoff !== null && !isTerminalHandoff(handoff.phase);
-          } catch {
-            // Unknown legacy replacement retains the existing mutation/drain
-            // boundary; inspection and health remain reachable.
-            return true;
-          }
-        },
         audit: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),
         ...(privacyBackupExtraction ? { privacyBackupExtraction } : {}),
         privacyBackupHealth: () =>

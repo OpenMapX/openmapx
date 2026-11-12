@@ -31,7 +31,7 @@ COPY --parents \
 COPY apps/ops-agent/package.json apps/ops-agent/
 RUN pnpm install --frozen-lockfile
 
-# Bundles the agent, its update helper and its fixed CLI, with the workspace
+# Bundles the agent, its configuration helper and its fixed CLI, with the workspace
 # code they reach, into dist/. The release planner fingerprints this bundle;
 # release builds pass its digest so a different bundle fails the build.
 FROM deps AS bundle

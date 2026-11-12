@@ -42,15 +42,6 @@ import {
 } from "@openmapx/core/ops";
 import { atomicWrite, durableUnlink } from "@openmapx/core/release-files";
 import { services as coreServices } from "@openmapx/core/server";
-import {
-  advanceAgentHandoff,
-  agentHandoffRunArgs,
-  inspectAgentContainer,
-  isTerminalHandoff,
-  readAgentHandoff,
-  reconcileAgentHandoff,
-  writeAgentHandoff,
-} from "./agent-handoff";
 import { inspectDataInventory } from "./data-inventory";
 import {
   hashDescriptorAnchoredFile,
@@ -62,7 +53,6 @@ import { strictReadFile } from "./durable-files";
 import { safeProcessDiagnostic } from "./process-output";
 import { createImageInspection } from "./release-images";
 import {
-  OpsAgentBusyError,
   type OpsExecutionContext,
   OpsExecutionFailure,
   OpsHostUpdateRequiredError,
@@ -156,16 +146,6 @@ export interface AdministrativeReleaseEffects {
     updateJobId?: string,
   ): Promise<void>;
   runtimeInspect?(): Promise<{ releaseId?: string; updateJobId?: string }>;
-  updateAgent?(
-    request: {
-      releaseId: string;
-      expectedDigest: string;
-      handoffId: string;
-      otherActiveOperations: number;
-    },
-    context: FixedCliOptions,
-  ): Promise<OpsResultFor<"agent.update">>;
-  inspectAgentHandoff?(handoffId: string): Promise<OpsResultFor<"agent.handoff.inspect">>;
 }
 
 export interface AdministrativeReleaseRuntimeOptions {
@@ -737,12 +717,7 @@ function inspectBackupManifestDigest(rootDir: string, backupId: string): string 
   }
 }
 
-function releaseStoreBindings(
-  rootDir: string,
-  hooks: ReleaseStoreLockHooks = {},
-  uid: number | undefined = stateOwner(),
-) {
-  const directory = releaseDirectory(rootDir);
+function releaseStoreBindings(rootDir: string, uid: number | undefined) {
   const infraDir = infraDirectory(rootDir);
   const repositoryPaths: coreServices.StackPaths = {
     infraDir,
@@ -763,64 +738,6 @@ function releaseStoreBindings(
         path === overlay ? readOverlay() !== null : isRegularComposeFile(path),
       ),
     readOverlay,
-    restoreOverlay: (previousOverlay: string | null) => {
-      if (previousOverlay === null) durableUnlink(overlay);
-      else atomicWrite(overlay, previousOverlay);
-    },
-    withStoreLock: async <T>(action: () => T): Promise<T> => {
-      const lock = await acquireReleaseStoreLock(directory, hooks);
-      try {
-        return action();
-      } finally {
-        lock.release();
-      }
-    },
-  };
-}
-
-/** Release-store access for the agent replacement helper, which runs outside the agent. */
-export function createAgentHandoffBindings(rootDir: string, options: { uid?: number } = {}) {
-  const uid = stateOwner(options.uid);
-  const bindings = releaseStoreBindings(rootDir, {}, uid);
-  const loadStored = (releaseId: string, digest: string) => {
-    const raw = strictReadFile(
-      releaseManifestPath(rootDir, releaseId),
-      MAX_RELEASE_MANIFEST_BYTES,
-      {
-        owner: uid,
-      },
-    );
-    const manifest = coreServices.parseReleaseManifest(raw);
-    if (
-      manifest.release !== releaseId ||
-      raw !== coreServices.canonicalReleaseManifest(manifest) ||
-      releaseDigest(raw) !== digest
-    ) {
-      throw new Error("Release authority rejected");
-    }
-    return manifest;
-  };
-  return {
-    stackArgs: bindings.stackArgs,
-    // Task08.3 installs the guarded helper. A parent observation cannot
-    // authorize this detached process or its rollback after the parent exits.
-    assertAvailable: (): never => {
-      throw new OpsNotWiredError();
-    },
-    restoreOverlay: (_previousOverlay: string | null): never => {
-      throw new OpsNotWiredError();
-    },
-    withStoreLock: bindings.withStoreLock,
-    releasePins: (releaseId: string, digest: string) => {
-      const manifest = loadStored(releaseId, digest);
-      return {
-        agentImage: manifest.images["ops-agent"],
-        helperImage: manifest.images["privacy-backup"],
-      };
-    },
-    writeOverlay: (_releaseId: string, _digest: string): never => {
-      throw new OpsNotWiredError();
-    },
   };
 }
 
@@ -845,8 +762,7 @@ export function createDefaultReleaseEffects(
     transaction: join(directory, "transaction.json"),
     selections: join(directory, "selections.json"),
   };
-  const { repositoryPaths, stackArgs, restoreOverlay, withStoreLock, readOverlay } =
-    releaseStoreBindings(rootDir, releaseStoreLockHooks, uid);
+  const { repositoryPaths, stackArgs, readOverlay } = releaseStoreBindings(rootDir, uid);
   const manifestNames = () => coreServices.listReleaseStoreManifests(directory, { uid });
   const loadManifest = (releaseId: string) => {
     manifestNames();
@@ -1199,26 +1115,6 @@ export function createDefaultReleaseEffects(
       await restorePrevious(transaction, context);
     }
   };
-  const reconcileHandoff = () => {
-    const silent = { signal: AbortSignal.timeout(60_000), emitLog: () => undefined };
-    return reconcileAgentHandoff({
-      rootDir,
-      runDocker,
-      runningRelease: async (record) => {
-        const containerId = await agentContainerId(silent);
-        return (
-          containerId !== undefined &&
-          (await agentMatchesRelease(
-            containerId,
-            agentPins(loadManifest(record.releaseId)),
-            silent,
-          ))
-        );
-      },
-      restoreOverlay,
-      withStoreLock,
-    });
-  };
   let initialization: Promise<void> | undefined;
   const initialize = (): Promise<void> => {
     initialization ??= (async () => {
@@ -1240,9 +1136,6 @@ export function createDefaultReleaseEffects(
       } finally {
         lock.release();
       }
-      // A handoff that cannot be reconciled now must not keep the agent from
-      // starting; release operations reconcile again before they proceed.
-      await reconcileHandoff().catch(() => undefined);
     })();
     return initialization;
   };
@@ -1443,9 +1336,7 @@ export function createDefaultReleaseEffects(
     apply: async (releaseId, serviceIds, context, updateJobId) => {
       await initialize();
       // The agent cannot replace the container executing this transaction. A
-      // complete admin apply requires its own image and helper to match already:
-      // `updateAgent` replaces the agent first, through a separate helper.
-      await reconcileHandoff();
+      // complete admin apply requires its own image and helper to match already.
       // Claiming the transaction is a read-then-write across processes. Without
       // the lock two agents can both observe no active transaction and both
       // write `transaction.json`, so the loser's rollback state is lost.
@@ -1454,20 +1345,9 @@ export function createDefaultReleaseEffects(
       let transaction: ReleaseTransaction;
       try {
         if (readTransaction()) throw new Error("Release transaction already active");
-        const handoff = readAgentHandoff(rootDir);
-        if (handoff && !isTerminalHandoff(handoff.phase)) {
-          throw new Error("Operations agent replacement is still in progress");
-        }
         manifest = loadManifest(releaseId);
         if (serviceIds.length > 1) await requireCurrentAgent(manifest, context);
-        // A handoff for this release already rewrote the overlay to replace the
-        // agent. The application services' rollback target is the overlay from
-        // before that handoff, or a failed update would "restore" the new images.
-        const afterHandoff =
-          handoff?.phase === "applied" && handoff.releaseId === releaseId && !handoff.consumed
-            ? handoff
-            : undefined;
-        const previousOverlay = afterHandoff ? afterHandoff.previousOverlay : readOverlay();
+        const previousOverlay = readOverlay();
         const previousState = existsSync(paths.state)
           ? strictReadFile(paths.state, MAX_RELEASE_STATE_BYTES, { owner: uid })
           : null;
@@ -1483,13 +1363,6 @@ export function createDefaultReleaseEffects(
           ...(context.execution ? { execution: context.execution } : {}),
         };
         await writeTransaction(transaction);
-        if (afterHandoff) {
-          writeAgentHandoff(rootDir, {
-            ...afterHandoff,
-            consumed: true,
-            updatedAt: new Date().toISOString(),
-          });
-        }
       } finally {
         claimLock.release();
       }
@@ -1511,65 +1384,6 @@ export function createDefaultReleaseEffects(
       transaction = { ...transaction, phase: "state_published" };
       await writeTransaction(transaction);
       durableUnlink(paths.transaction);
-    },
-    updateAgent: async (request, context) => {
-      await initialize();
-      await reconcileHandoff();
-      await validateCandidate(request.releaseId, request.expectedDigest);
-      const manifest = loadManifest(request.releaseId);
-      const silent = { ...context, emitLog: () => undefined };
-      const existing = readAgentHandoff(rootDir);
-      if (existing?.handoffId === request.handoffId) {
-        return { handoffId: request.handoffId, replaced: true };
-      }
-      const containerId = await agentContainerId(silent);
-      if (!containerId) throw new Error("Operations agent container is unavailable");
-      if (await agentMatchesRelease(containerId, agentPins(manifest), silent)) {
-        return { handoffId: request.handoffId, replaced: false };
-      }
-      // Recreating the agent ends every operation it is running.
-      if (request.otherActiveOperations > 0) throw new OpsAgentBusyError();
-      const timestamp = new Date().toISOString();
-      const record = await withStoreLock(() => {
-        if (readTransaction()) throw new Error("Release transaction already active");
-        const current = readAgentHandoff(rootDir);
-        if (current && !isTerminalHandoff(current.phase)) {
-          throw new Error("Operations agent replacement is already in progress");
-        }
-        const launched = {
-          version: 1 as const,
-          handoffId: request.handoffId,
-          releaseId: request.releaseId,
-          digest: request.expectedDigest,
-          phase: "launched" as const,
-          previousOverlay: readOverlay(),
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        };
-        writeAgentHandoff(rootDir, launched);
-        return launched;
-      });
-      try {
-        const facts = await inspectAgentContainer(runDocker, containerId, rootDir, context.signal);
-        await runDocker(agentHandoffRunArgs(facts, rootDir, request.handoffId), silent);
-      } catch (error) {
-        advanceAgentHandoff(rootDir, record, {
-          phase: "failed",
-          reason: "The replacement helper could not start; nothing was changed",
-        });
-        throw error;
-      }
-      context.emitLog("stdout", "Replacing the operations agent; it restarts shortly");
-      return { handoffId: request.handoffId, replaced: true };
-    },
-    inspectAgentHandoff: async (handoffId) => {
-      const record = readAgentHandoff(rootDir);
-      if (record?.handoffId !== handoffId) return { handoffId, phase: "none" };
-      return {
-        handoffId,
-        phase: record.phase,
-        ...(record.reason === undefined ? {} : { reason: record.reason }),
-      };
     },
     runtimeInspect: async () => {
       const state = readState();
@@ -1968,22 +1782,6 @@ export function createAdministrativeRuntime(
     return { updateJobId: operation.updateJobId, replaced: true };
   };
   runtime["appApi.runtime.inspect"] = async () => releaseEffects.runtimeInspect?.() ?? {};
-  runtime["agent.update"] = async (operation, context) => {
-    if (!releaseEffects.updateAgent) throw new Error("Agent replacement unavailable");
-    return releaseEffects.updateAgent(
-      {
-        releaseId: operation.releaseId,
-        expectedDigest: operation.expectedDigest,
-        handoffId: operation.handoffId,
-        otherActiveOperations: context.otherActiveOperations?.() ?? 0,
-      },
-      context,
-    );
-  };
-  runtime["agent.handoff.inspect"] = async (operation) => {
-    if (!releaseEffects.inspectAgentHandoff) throw new Error("Agent replacement unavailable");
-    return releaseEffects.inspectAgentHandoff(operation.handoffId);
-  };
   runtime["system.update"] = async (operation, context) => {
     if (!releaseEffects.validateCandidate)
       throw new Error("Checked release validation unavailable");

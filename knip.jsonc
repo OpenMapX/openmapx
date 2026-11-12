@@ -87,9 +87,8 @@
     "apps/ops-agent": {
       "entry": [
         // Runtime bundle entries from scripts/build-runtime-bundles.mjs: the
-        // agent itself and the helper that replaces the agent's container.
+        // agent itself and the configuration helper.
         "src/index.ts",
-        "src/agent-handoff-main.ts",
         "src/configuration-handoff-main.ts",
         // Concurrency tests spawn these writer processes by path.
         "src/__fixtures__/*.mjs",

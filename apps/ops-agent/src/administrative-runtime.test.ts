@@ -18,7 +18,6 @@ import { releaseProvenance } from "../../../packages/core/src/services/__fixture
 import { testExecution } from "./__fixtures__/execution";
 import {
   createAdministrativeRuntime,
-  createAgentHandoffBindings,
   createDefaultFixedCli,
   createDefaultReleaseEffects,
   inspectBackupAuthority,
@@ -1052,44 +1051,6 @@ describe("administrative release runtime", () => {
     ).rejects.toThrow(/group or others/);
     expect(cli).not.toHaveBeenCalled();
     expect(readFileSync(overlay, "utf8")).toBe("services: {}\n");
-  });
-
-  it("lets the legacy self-update helper read checked pins but refuses unguarded overlay mutation", async () => {
-    const rootDir = temporaryRoot();
-    const { store, overlay, evidence } = releaseState(rootDir);
-    mkdirSync(store, { recursive: true, mode: 0o700 });
-    const manifest = services.canonicalReleaseManifest(
-      services.parseReleaseManifest(
-        JSON.stringify({
-          schemaVersion: 1,
-          release: "release-helper",
-          images: Object.fromEntries(
-            services.RELEASE_IMAGE_NAMES.map((name) => [
-              name,
-              `ghcr.io/openmapx/${name}@sha256:${"8".repeat(64)}`,
-            ]),
-          ),
-          privacyReleaseValidation,
-          ...releaseProvenance(),
-        }),
-      ),
-    );
-    writeFileSync(join(store, "release-helper.json"), manifest, { mode: 0o600 });
-    const digest = createHash("sha256").update(manifest).digest("hex");
-    const bindings = createAgentHandoffBindings(rootDir);
-    expect(bindings.releasePins("release-helper", digest).agentImage).toContain("ops-agent@");
-    expect(() => bindings.releasePins("release-helper", "0".repeat(64))).toThrow(
-      "Release authority rejected",
-    );
-    await expect(
-      bindings.withStoreLock(() => bindings.writeOverlay("release-helper", digest)),
-    ).rejects.toThrow("Typed adapter is not wired");
-    await expect(bindings.withStoreLock(() => bindings.restoreOverlay(null))).rejects.toThrow(
-      "Typed adapter is not wired",
-    );
-    expect(existsSync(evidence)).toBe(false);
-    expect(existsSync(overlay)).toBe(false);
-    expect(bindings.stackArgs()).not.toContain(overlay);
   });
 
   it("refuses release state directories of another user", () => {

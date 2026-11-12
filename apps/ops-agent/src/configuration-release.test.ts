@@ -441,70 +441,35 @@ it.each([false, true])(
   },
 );
 
-it.each(["transaction", "active-handoff", "consumed-handoff"])(
-  "preserves legacy release recovery sources during guarded preflight: %s",
-  async (kind) => {
-    const { preflightConfigurationRelease } = await import("./configuration-release-preflight");
-    const { writeAgentHandoff } = await import("./agent-handoff");
-    const checkout = join(root, "legacy-checkout"),
-      infraDir = join(checkout, "infra/docker"),
-      store = services.releaseStatePaths(infraDir).store;
-    mkdirSync(store, { recursive: true, mode: 0o700 });
-    writeFileSync(join(store, `${releaseId}.json`), raw, { mode: 0o600 });
-    let legacy: string;
-    if (kind === "transaction") {
-      legacy = join(store, "transaction.json");
-      writeFileSync(legacy, JSON.stringify({ version: 1, phase: "prepared" }), { mode: 0o600 });
-    } else {
-      writeAgentHandoff(checkout, {
-        version: 1,
-        handoffId: "legacy-handoff-01",
-        releaseId,
-        digest: manifestDigest,
-        phase: kind === "consumed-handoff" ? "applied" : "launched",
-        consumed: kind === "consumed-handoff",
-        previousOverlay: null,
-        createdAt: "2026-10-30T00:00:00Z",
-        updatedAt: "2026-10-30T00:00:00Z",
-      });
-      legacy = services.agentStatePaths(join(checkout, "infra/docker")).handoff;
-    }
-    const before = readFileSync(legacy);
-    const cliRead = () =>
-      services.readCheckedConfigurationRelease(
-        infraDir,
-        { releaseId, manifestDigest },
-        services.readAppliedReleaseSelection(infraDir),
-      );
-    if (kind === "consumed-handoff") expect(cliRead()).toMatchObject({ releaseId, manifestDigest });
-    else expect(cliRead).toThrow(/legacy/i);
-    const execFile = vi.fn(async (_file: string, args: readonly string[]) => ({
-      stdout:
-        args[0] === "info"
-          ? "linux/amd64"
-          : JSON.stringify({
-              schemaVersion: 2,
-              config: { digest: `sha256:${"c".repeat(64)}`, size: 32 },
-              layers: [{ digest: `sha256:${"d".repeat(64)}`, size: 64 }],
-            }),
-      stderr: "",
-    }));
-    const run = () =>
-      preflightConfigurationRelease({
-        infraDir,
-        selection: { releaseId, manifestDigest },
-        execFile,
-        signal: new AbortController().signal,
-      });
-    if (kind === "consumed-handoff")
-      expect(await run()).toMatchObject({ releaseId, manifestDigest });
-    else {
-      await expect(run()).rejects.toThrow(/legacy/i);
-      expect(execFile).not.toHaveBeenCalled();
-    }
-    expect(readFileSync(legacy)).toEqual(before);
-  },
-);
+it("preserves an unfinished legacy release transaction during guarded preflight", async () => {
+  const { preflightConfigurationRelease } = await import("./configuration-release-preflight");
+  const checkout = join(root, "legacy-checkout"),
+    infraDir = join(checkout, "infra/docker"),
+    store = services.releaseStatePaths(infraDir).store;
+  mkdirSync(store, { recursive: true, mode: 0o700 });
+  writeFileSync(join(store, `${releaseId}.json`), raw, { mode: 0o600 });
+  const legacy = join(store, "transaction.json");
+  writeFileSync(legacy, JSON.stringify({ version: 1, phase: "prepared" }), { mode: 0o600 });
+  const before = readFileSync(legacy);
+  expect(() =>
+    services.readCheckedConfigurationRelease(
+      infraDir,
+      { releaseId, manifestDigest },
+      services.readAppliedReleaseSelection(infraDir),
+    ),
+  ).toThrow(/legacy/i);
+  const execFile = vi.fn(async () => ({ stdout: "", stderr: "" }));
+  await expect(
+    preflightConfigurationRelease({
+      infraDir,
+      selection: { releaseId, manifestDigest },
+      execFile,
+      signal: new AbortController().signal,
+    }),
+  ).rejects.toThrow(/legacy/i);
+  expect(execFile).not.toHaveBeenCalled();
+  expect(readFileSync(legacy)).toEqual(before);
+});
 
 function frozenIo(options: { missing?: boolean } = {}) {
   const calls: string[][] = [];

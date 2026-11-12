@@ -225,7 +225,6 @@ const RELEASE_RECOVERY_READ_KINDS = new Set<OpsOperationKind>([
   "dawarich.provisioning.inspect",
   "release.inspect",
   "appApi.runtime.inspect",
-  "agent.handoff.inspect",
   "backup.list",
   "system.inspect",
   "communityServices.inspect",
@@ -277,11 +276,6 @@ export interface BuildOpsAgentServerOptions {
   maxJobEntries?: number;
   jobRetentionMs?: number;
   claimTimeoutMs?: number;
-  /**
-   * True while the agent is being replaced. New asynchronous operations are
-   * refused as busy, because recreating the agent would end them.
-   */
-  replacementInProgress?: () => boolean;
   /** Dedicated streaming managed-Dawarich collector; absent in minimal/dev agents. */
   dawarichExport?: Omit<DawarichSubjectExportRouteOptions, "apiToken">;
   /** Dedicated case-scoped backup extraction; absent in minimal agents. */
@@ -492,9 +486,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     registerArtifactTransferRoutes(app, {
       store: options.artifactTransfers,
       apiToken: options.tokens.api,
-      admissionsOpen: () =>
-        !options.replacementInProgress?.() &&
-        configurationHandoffPendingMaintenanceIds(runtime).size === 0,
+      admissionsOpen: () => configurationHandoffPendingMaintenanceIds(runtime).size === 0,
     });
   }
   const runtime = options.runtime ?? createUnavailableRuntime();
@@ -2614,14 +2606,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           }
           if (jobsById.size + historicalPulls.length >= maxJobEntries) {
             throw new RequestGuardError("busy", 429);
-          }
-          // A resumed agent update re-attaches above; nothing new may start.
-          if (
-            operation.kind !== "agent.update" &&
-            options.replacementInProgress?.() &&
-            configurationHandoffPendingMaintenanceIds(runtime).size === 0
-          ) {
-            throw new RequestGuardError("busy", 409);
           }
         }
         const pendingHandoffs = configurationHandoffPendingMaintenanceIds(runtime);

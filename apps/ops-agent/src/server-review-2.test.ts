@@ -1060,7 +1060,7 @@ describe("asynchronous operation slots", () => {
   }, 120_000);
 });
 
-describe("operation context for agent replacement", () => {
+describe("operation context for configuration helper drain", () => {
   it("counts the other unfinished operations the agent is running", async () => {
     let releaseFirst: () => void = () => {};
     const firstRunning = new Promise<void>((resolve) => {
@@ -1079,7 +1079,7 @@ describe("operation context for agent replacement", () => {
           return { changed: true };
         }
         counts.push(context.otherActiveOperations?.() ?? -1);
-        return { handoffId: "handoff-1", replaced: false };
+        return { releaseId: "release-2" };
       },
     });
     try {
@@ -1094,86 +1094,23 @@ describe("operation context for agent replacement", () => {
         ),
       });
       expect(restart.statusCode).toBe(202);
-      const update = await app.inject({
+      const second = await app.inject({
         method: "POST",
         url: "/v1/operations",
         headers: auth(),
         payload: request(
-          {
-            kind: "agent.update",
-            releaseId: "release-2",
-            expectedDigest: "a".repeat(64),
-            handoffId: "handoff-1",
-          },
-          "ops1_activeUpdate00000",
-          key("opk1_activeUpdate00000"),
+          { kind: "release.resolve" },
+          "ops1_activeResolve0000",
+          key("opk1_activeResolve0000"),
         ),
       });
-      expect(update.statusCode).toBe(202);
+      expect(second.statusCode, second.body).toBe(202);
       for (let attempt = 0; attempt < 100 && counts.length === 0; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 1));
       }
       expect(counts).toEqual([1]);
     } finally {
       releaseFirst();
-      await app.close();
-    }
-  });
-});
-
-describe("admission during an agent replacement", () => {
-  it("refuses new asynchronous operations but lets the agent update re-attach", async () => {
-    const dispatch = vi.fn(async () => ({ handoffId: "handoff-1", replaced: true }));
-    const journal: OpsJobJournal = { records: () => [], replace: async () => {} };
-    let replacing = false;
-    const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
-      resourceClaimer: allow,
-      journal,
-      now: () => new Date(baseTime),
-      replacementInProgress: () => replacing,
-      dispatch,
-    });
-    const update = request(
-      {
-        kind: "agent.update",
-        releaseId: "release-2",
-        expectedDigest: "a".repeat(64),
-        handoffId: "handoff-1",
-      },
-      "ops1_gateUpdate000000",
-      key("opk1_gateUpdate000000"),
-    );
-    try {
-      const first = await app.inject({
-        method: "POST",
-        url: "/v1/operations",
-        headers: auth(),
-        payload: update,
-      });
-      expect(first.statusCode).toBe(202);
-      replacing = true;
-      const restart = await app.inject({
-        method: "POST",
-        url: "/v1/operations",
-        headers: auth(),
-        payload: request(
-          { kind: "service.restart", serviceId: "redis" },
-          "ops1_gateRestart00000",
-          key("opk1_gateRestart00000"),
-        ),
-      });
-      expect(restart.statusCode).toBe(409);
-      expect(restart.json()).toMatchObject({ error: { class: "busy" } });
-      const resumed = await app.inject({
-        method: "POST",
-        url: "/v1/operations",
-        headers: auth(),
-        payload: { ...update, requestId: "ops1_gateUpdate000001" },
-      });
-      expect(resumed.statusCode).toBe(202);
-      expect(resumed.json().result.operationId).toBe(first.json().result.operationId);
-    } finally {
       await app.close();
     }
   });

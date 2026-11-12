@@ -183,7 +183,7 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
           detail: `service "${serviceId}" mounts the host repository root`,
         });
       }
-      // The agent's own state (job journal, handoff record, trusted-config
+      // The agent's own state (job journal, trusted-config
       // queue, privacy scratch, stores). app-api publishes into the trusted-config
       // queue and reads the integration store, and nothing else; every other
       // service, data-manager above all,
