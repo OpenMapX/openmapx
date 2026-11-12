@@ -225,9 +225,7 @@ export type ListPrivacyAdminOperatorsParams = {
    * @maximum 100
    */
   limit?: number;
-  /**
-   * @maxLength 512
-   */
+  /** @maxLength 512 */
   cursor?: string;
 };
 
@@ -734,9 +732,7 @@ export type GetPrivacyAdminReadiness503 =
     };
 
 export type CreatePrivacyAdminCaseHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$ */
   "idempotency-key": string;
 };
 
@@ -1529,9 +1525,7 @@ export type DownloadPrivacyAdminArtifact503 =
     };
 
 export type CompletePrivacyAdminReauthenticationHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$ */
   "idempotency-key": string;
 };
 
@@ -1677,9 +1671,7 @@ export type CompletePrivacyAdminReauthentication503 =
     };
 
 export type StartPrivacyAdminReauthenticationHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$ */
   "idempotency-key": string;
 };
 
@@ -1848,9 +1840,7 @@ export type StartPrivacyAdminReauthentication503 =
     };
 
 export type UploadPrivacyAdminAttachmentHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$ */
   "idempotency-key": string;
 };
 
@@ -2171,9 +2161,7 @@ export type UploadPrivacyAdminAttachment503 =
     };
 
 export type DeletePrivacyAdminAttachmentHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$ */
   "idempotency-key": string;
 };
 
@@ -2450,9 +2438,7 @@ export type DownloadPrivacyAdminAttachment503 =
     };
 
 export type ReviewPrivacyAdminAttachmentHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$ */
   "idempotency-key": string;
 };
 
@@ -2913,9 +2899,7 @@ export type ListPrivacyAdminBackupOmissions503 =
     };
 
 export type AcceptPrivacyAdminBackupOmissionsHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$ */
   "idempotency-key": string;
 };
 
@@ -3247,9 +3231,7 @@ export type ListPrivacyAdminBackupReviews503 =
     };
 
 export type CreatePrivacyAdminBackupReviewHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$ */
   "idempotency-key": string;
 };
 
@@ -3424,9 +3406,7 @@ export type CreatePrivacyAdminBackupReview503 =
     };
 
 export type DecidePrivacyAdminCaseHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$ */
   "idempotency-key": string;
 };
 
@@ -3643,9 +3623,7 @@ export type DecidePrivacyAdminCase503 =
     };
 
 export type ExtendPrivacyAdminCaseHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$ */
   "idempotency-key": string;
 };
 
@@ -3856,9 +3834,7 @@ export type ExtendPrivacyAdminCase503 =
     };
 
 export type GeneratePrivacyAdminArtifactHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$ */
   "idempotency-key": string;
 };
 
@@ -4069,9 +4045,7 @@ export type GeneratePrivacyAdminArtifact503 =
     };
 
 export type ReviewPrivacyAdminIdentityHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$ */
   "idempotency-key": string;
 };
 
@@ -4322,9 +4296,7 @@ export type ReviewPrivacyAdminIdentity503 =
     };
 
 export type IssuePrivacyAdminEmailChallengeHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$ */
   "idempotency-key": string;
 };
 
@@ -4489,9 +4461,7 @@ export type IssuePrivacyAdminEmailChallenge503 =
     };
 
 export type CompletePrivacyAdminEmailChallengeHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$ */
   "idempotency-key": string;
 };
 
@@ -4647,9 +4617,7 @@ export type CompletePrivacyAdminEmailChallenge503 =
     };
 
 export type AssignPrivacyAdminTaskHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$ */
   "idempotency-key": string;
 };
 
@@ -4852,9 +4820,7 @@ export type AssignPrivacyAdminTask503 =
     };
 
 export type DecidePrivacyAdminTaskHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$ */
   "idempotency-key": string;
 };
 
