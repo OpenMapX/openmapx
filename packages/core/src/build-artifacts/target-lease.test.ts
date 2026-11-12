@@ -318,18 +318,6 @@ describe("certified target leases", () => {
     await expect(a.releaseArtifactTargetLease(lease)).rejects.toThrow(/inode|identity|changed/);
     expect(existsSync(path)).toBe(true);
   });
-  it("keeps the fence when the callback throws; elapsed time is never containment", async () => {
-    const a = await api();
-    await expect(
-      a.withArtifactTargetLease(
-        { dataRoot: join(root, "data"), serviceIds: ["osrm"], owner: owner() },
-        async () => {
-          throw Error("lost response");
-        },
-      ),
-    ).rejects.toThrow("lost response");
-    expect(existsSync(join(root, "data/.admin-target-control/locks/osrm"))).toBe(true);
-  });
 });
 it("never reacquires or expands a retained execution's root", async () => {
   const a = await api();
@@ -719,17 +707,14 @@ it("retains terminal and unresolved records past 72h and refuses at retained cap
     }
   }
   const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 96 * 60 * 60 * 1000);
-  let effects = 0;
   try {
     await expect(
-      a.withArtifactTargetLease(
-        { dataRoot: join(root, "data"), serviceIds: ["osrm"], owner: owner() },
-        async () => {
-          effects++;
-        },
-      ),
+      a.acquireArtifactTargetLease({
+        dataRoot: join(root, "data"),
+        serviceIds: ["osrm"],
+        owner: owner(),
+      }),
     ).rejects.toThrow(/capacity/);
-    expect(effects).toBe(0);
     expect(readFileSync(retainedFile)).toEqual(original);
     expect(
       fs.existsSync(join(root, `data/.admin-target-control/leases/${terminal.leaseId}/owner.json`)),

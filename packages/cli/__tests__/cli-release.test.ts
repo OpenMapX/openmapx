@@ -385,16 +385,6 @@ describe("clearReleaseSelection", () => {
     writeFileSync(path, Buffer.alloc(100000, 255));
     await expect(clearReleaseSelection({ infraDir })).resolves.toEqual({ path, cleared: true });
   });
-  it("refuses an active transaction even if the overlay is absent", async () => {
-    const { infraDir, path, store } = fixture();
-    writeFileSync(join(store, "transaction.json"), "pending transaction");
-    const before = readFileSync(path, "utf8");
-    await expect(clearReleaseSelection({ infraDir })).rejects.toThrow(/transaction/);
-    expect(readFileSync(path, "utf8")).toBe(before);
-    rmSync(path);
-    await expect(clearReleaseSelection({ infraDir })).rejects.toThrow(/transaction/);
-  });
-
   it("refuses a held or abandoned lock without changing it", async () => {
     const { infraDir, path, store } = fixture();
     const lock = join(store, ".release-store.lock");

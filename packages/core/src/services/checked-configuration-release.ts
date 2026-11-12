@@ -47,15 +47,6 @@ export function readCheckedConfigurationRelease(
       throw error;
     }
     try {
-      // An unfinished release transaction must be recovered first; never
-      // reinterpret startup cleanup as authority.
-      try {
-        directory.read("transaction.json", 128 * 1024);
-        throw Error("Legacy release transaction requires recovery");
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT")
-          throw Error("Legacy release transaction requires recovery");
-      }
       const raw = directory.read(`${selected.releaseId}.json`, 32 * 1024).toString("utf8"),
         manifest = parseReleaseManifest(raw, channel.imagePrefix),
         canonical = canonicalReleaseManifest(manifest),

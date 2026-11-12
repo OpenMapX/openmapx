@@ -100,7 +100,6 @@ export function createRegistryResourcePolicy(options: {
     | "allowCountry"
     | "allowDataType"
     | "allowCatalogRevision"
-    | "allowUpdateJobId"
   >;
 }): OpsResourcePolicy {
   const services = new Set(options.serviceIds);
@@ -147,7 +146,6 @@ export function createRegistryResourcePolicy(options: {
     allowCountry: options.resourceAuthority?.allowCountry ?? (() => false),
     allowDataType: options.resourceAuthority?.allowDataType ?? (() => false),
     allowCatalogRevision: options.resourceAuthority?.allowCatalogRevision ?? (() => false),
-    allowUpdateJobId: options.resourceAuthority?.allowUpdateJobId ?? (() => false),
     allowIntegration: (integrationId) => integrations.has(integrationId),
     allowTrustedRevision: () => false,
   };
@@ -174,30 +172,25 @@ function claimedResourcePolicy(
 ): OpsResourcePolicy {
   const revisions = new Set<string>();
   const operationFields = operation as OpsOperation &
-    Partial<Record<"updateJobId" | "catalogRevisionId" | "revisionId", string>>;
-  for (const key of ["updateJobId", "catalogRevisionId", "revisionId"] as const) {
+    Partial<Record<"catalogRevisionId" | "revisionId", string>>;
+  for (const key of ["catalogRevisionId", "revisionId"] as const) {
     const value = operationFields[key];
     if (typeof value === "string") revisions.add(value);
   }
   return {
     ...ordinary,
     allowBackup: (kind, id) =>
-      ((operation.kind === "backup.create" ||
+      (operation.kind === "backup.create" ||
         operation.kind === "backup.restore" ||
         operation.kind === "backup.delete") &&
-        kind === operation.kind &&
-        id === operation.backupId) ||
-      (operation.kind === "system.update" && kind === "backup.create" && id === operation.backupId),
+      kind === operation.kind &&
+      id === operation.backupId,
     allowPreparedRun: (id) =>
       operation.kind === "motis.primary.promote" && id === operation.preparedRunId,
     allowCandidate: (id) =>
       operation.kind === "feedProxy.validateAndReload" && id === operation.candidateId,
     allowRelease: (kind, id) =>
-      (operation.kind === "release.pull" ||
-        operation.kind === "release.images.pull" ||
-        operation.kind === "release.apply" ||
-        operation.kind === "appApi.replace" ||
-        operation.kind === "system.update") &&
+      operation.kind === "release.images.pull" &&
       kind === operation.kind &&
       id === operation.releaseId,
     allowRegion: (kind, id) =>
@@ -214,7 +207,6 @@ function claimedResourcePolicy(
       operation.kind === "data.generateApiKeys" &&
       kind === operation.kind &&
       id === operation.catalogRevisionId,
-    allowUpdateJobId: (id) => operation.kind === "appApi.replace" && id === operation.updateJobId,
     allowTrustedRevision: (kind, id) => kind === operation.kind && revisions.has(id),
   };
 }
@@ -229,7 +221,6 @@ function registryPreflightPolicy(ordinary: OpsResourcePolicy): OpsResourcePolicy
     allowRegion: () => true,
     allowDataType: () => true,
     allowCatalogRevision: () => true,
-    allowUpdateJobId: () => true,
     allowTrustedRevision: () => true,
   };
 }
@@ -290,7 +281,6 @@ export function createRegistryResourceClaimer(options: {
     | "allowCountry"
     | "allowDataType"
     | "allowCatalogRevision"
-    | "allowUpdateJobId"
   >;
 }): OpsResourceClaimer {
   const registeredServiceIds = new Set(options.serviceIds);
@@ -467,7 +457,6 @@ export function createProductionRegistryResourceClaimer<
     | "allowCountry"
     | "allowDataType"
     | "allowCatalogRevision"
-    | "allowUpdateJobId"
   >;
   enabledServiceIds?: (services: readonly Service[]) => ReadonlySet<string>;
   loadAuthority?: () => Promise<{

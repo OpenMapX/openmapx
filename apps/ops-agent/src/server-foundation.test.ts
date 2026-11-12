@@ -9,7 +9,7 @@ import {
   controlTestKey,
 } from "./__fixtures__/server";
 import type { OpsJobJournal, PersistedOpsJob } from "./journal";
-import type { OpsExecutionContext } from "./runtime";
+import { type OpsExecutionContext, OpsHostUpdateRequiredError } from "./runtime";
 import { OPS_AGENT_RETENTION_LIMITS, type OpsAuditEvent } from "./server";
 
 const apiToken = Buffer.alloc(32, 21).toString("base64url");
@@ -620,6 +620,42 @@ describe("ops-agent async foundation", () => {
       state: "succeeded",
       result: { lines: 1_101, truncated: true },
     });
+    await app.close();
+  });
+
+  it("reports a host update as its safe error code through the async protocol", async () => {
+    const app = await buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      resourcePolicy: allowAllResources,
+      now: () => new Date(baseTime),
+      dispatch: async () => {
+        throw new OpsHostUpdateRequiredError();
+      },
+    });
+    const admitted = await app.inject({
+      method: "POST",
+      url: "/v1/operations",
+      headers: auth(),
+      payload: request(
+        { kind: "release.images.pull", releaseId: "test-release", manifestDigest: "a".repeat(64) },
+        "ops1_hostUpdateRequest",
+        key("opk1_hostUpdateRequest"),
+      ),
+    });
+    expect(admitted.statusCode).toBe(202);
+    const operationId = admitted.json().result.operationId as string;
+    const status = await eventually(
+      async () =>
+        (
+          await app.inject({
+            method: "GET",
+            url: `/v1/operations/${operationId}`,
+            headers: auth(),
+          })
+        ).json().result,
+      (result) => result.state === "failed",
+    );
+    expect(status).toMatchObject({ state: "failed", errorClass: "host_update_required" });
     await app.close();
   });
 

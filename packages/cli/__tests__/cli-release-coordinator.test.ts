@@ -200,20 +200,6 @@ describe("coordinator-safe release selection", () => {
     });
     expect(readFileSync(f.paths.overlay, "utf8")).toBe(f.overlay);
   });
-
-  it("does not overwrite an active update even when the candidate matches the old container", async () => {
-    const f = fixture();
-    writeFileSync(join(f.paths.store, "transaction.json"), "{}", { mode: 0o600 });
-    await expect(
-      selectRelease({
-        infraDir: f.infraDir,
-        resolve: async () => f.before,
-        docker: dockerFixture(f.before),
-      }),
-    ).rejects.toThrow(/transaction|update/i);
-    expect(readFileSync(f.paths.overlay, "utf8")).toBe(f.overlay);
-    expect(f.evidence()).toEqual(f.originalEvidence);
-  });
 });
 
 describe("automatic selection and clearing", () => {

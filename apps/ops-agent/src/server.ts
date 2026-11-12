@@ -210,7 +210,7 @@ export const OPS_AGENT_RETENTION_LIMITS = {
   maxAggregateJournalBytes: 24 * 1024 * 1024,
   maxAggregateEventBytes: DEFAULT_JOB_ENTRIES * MAX_RETAINED_EVENT_BYTES_PER_JOB,
 } as const;
-// Conservative read-only surface while a retained release transaction needs reconciliation.
+// Conservative read-only surface while the release store cannot be read safely.
 const RELEASE_RECOVERY_READ_KINDS = new Set<OpsOperationKind>([
   "configurationHandoff.inspect",
   "configurationMaintenance.inspect",
@@ -224,7 +224,6 @@ const RELEASE_RECOVERY_READ_KINDS = new Set<OpsOperationKind>([
   "service.logs.follow",
   "dawarich.provisioning.inspect",
   "release.inspect",
-  "appApi.runtime.inspect",
   "backup.list",
   "system.inspect",
   "communityServices.inspect",

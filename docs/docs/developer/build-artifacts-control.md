@@ -82,11 +82,9 @@ Use `acquireArtifactTargetLease`, `delegateArtifactTargetLease`,
 `adoptArtifactTargetLease`, `settleArtifactTargetLeaseChild`,
 `releaseArtifactTargetLease` and `reconcileArtifactTargetLease`. All verified
 contexts are nominal. An inherited borrower cannot expand targets or acquire a
-second root. `withArtifactTargetLease` checks forward permission and retains fences
-on failure; its callback must produce durable own-effect evidence before release.
-Acquisition has one five-second budget. The limits are 256 registered targets,
-64 child intents, 128 KiB per lease ledger and 256 unsettled leases. Settled
-receipts remain retained under the capacity policy below.
+second root. Acquisition has one five-second budget. The limits are 256
+registered targets, 64 child intents, 128 KiB per lease ledger and 256 unsettled
+leases. Settled receipts remain retained under the capacity policy below.
 
 Host ordering is target lease, nonblocking transit reservation, configuration
 writer, then release store. A busy reservation must settle an unused owner without

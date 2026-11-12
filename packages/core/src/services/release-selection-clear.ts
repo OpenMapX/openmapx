@@ -11,7 +11,7 @@ import {
   type Stats,
   unlinkSync,
 } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { parseReleaseComposeSelection } from "./release-manifest";
 import {
   ensureReleaseStateDirectories,
@@ -38,14 +38,6 @@ export async function clearReleaseComposeSelection(opts: {
   const store = paths.store;
   const lock = await acquireReleaseStoreLock(store, {}, { failIfBusy: true });
   try {
-    try {
-      lstatSync(join(store, "transaction.json"));
-      throw Error(
-        "Release transaction is active; finish or recover the update before clearing selection",
-      );
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
     let selected: Stats;
     try {
       selected = lstatSync(path);

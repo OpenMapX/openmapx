@@ -31,8 +31,6 @@
   ],
   "typedEffectRoles": {
     "api": [
-      "appApi.replace",
-      "appApi.runtime.inspect",
       "artifactTransfer.capabilities",
       "artifactTransfer.claim",
       "artifactTransfer.create",
@@ -96,11 +94,9 @@
       "integration.remove",
       "integration.settle",
       "integrationConfig.apply",
-      "release.apply",
       "release.clear",
       "release.images.pull",
       "release.inspect",
-      "release.pull",
       "release.resolve",
       "service.build",
       "service.image.stage",
@@ -129,7 +125,6 @@
       "stack.stop",
       "system.diagnostics",
       "system.inspect",
-      "system.update",
       "transitCredentials.inspect",
       "transitousPin.inspect",
       "vault.apply"
@@ -157,11 +152,7 @@
     "serviceConfig.apply",
     "integrationConfig.apply",
     "vault.apply",
-    "release.pull",
     "release.images.pull",
-    "release.apply",
-    "appApi.replace",
-    "system.update",
     "backup.create",
     "backup.restore",
     "backup.delete",
@@ -294,20 +285,15 @@
       ]
     },
     {
-      "id": "api.release-system-self-replacement",
+      "id": "api.release-system-maintenance",
       "callSiteIds": [],
       "semanticSources": ["apps/api/src/services/system-maintenance.ts"],
       "typedKinds": [
         "stack.render",
         "release.resolve",
-        "release.pull",
         "release.images.pull",
         "release.inspect",
-        "release.apply",
-        "appApi.replace",
-        "appApi.runtime.inspect",
         "system.diagnostics",
-        "system.update",
         "system.inspect"
       ]
     },

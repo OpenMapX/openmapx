@@ -5027,8 +5027,6 @@ export function fixedCliArguments(operation: import("../ops/contract").OpsOperat
       return ["data", "link"];
     case "data.clean":
       return ["data", "clean", operation.dataTypeId];
-    case "system.update":
-      return ["services", "update"];
     case "data.update":
       return [
         "data",

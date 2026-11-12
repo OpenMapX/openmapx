@@ -28,12 +28,10 @@ import { releaseProvenance } from "../../../packages/core/src/services/__fixture
 import { ownedComposePathRuntime } from "./__fixtures__/owned-compose-path-runtime";
 import { ownedServiceHost } from "./__fixtures__/owned-service-host";
 import { readProductionFixtureCompose } from "./__fixtures__/production-compose-config";
-import { createDefaultReleaseEffects } from "./administrative-runtime";
-import { startOpsAgentServer } from "./bootstrap";
 import { runContainedProcess } from "./docker-runtime";
 import { openOpsJobJournal } from "./journal";
 import { createProductionOpsRuntime, productionReleaseEffects } from "./production-runtime";
-import { dispatchOpsOperation, OpsNotWiredError } from "./runtime";
+import { dispatchOpsOperation } from "./runtime";
 import { buildOpsAgentServer } from "./server";
 import { initializeTrustedConfigurationRuntime } from "./trusted-config-runtime";
 
@@ -105,11 +103,7 @@ describe("assembled production service authority", () => {
         host.setServiceState("data-manager", "exited");
         await expect(effects.inspectSystem(io)).resolves.toMatchObject({ maintenanceReady: false });
         host.setServiceState("data-manager", "running");
-        const path = join(services.releaseStatePaths(host.infraDir).store, "transaction.json");
-        mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-        writeFileSync(path, "{}", { mode: 0o600 });
-        await expect(effects.inspectSystem(io)).resolves.toMatchObject({ maintenanceReady: false });
-        expect(readFileSync(path, "utf8")).toBe("{}");
+        await expect(effects.inspectSystem(io)).resolves.toMatchObject({ maintenanceReady: true });
       }
     },
   );
@@ -167,130 +161,6 @@ describe("assembled production service authority", () => {
           args.includes("restart"),
       ),
     ).toBe(false);
-  });
-  it("refuses unsupported legacy release mutation without staging and keeps inspection available", async () => {
-    const host = await fixture();
-    const effects = productionReleaseEffects(host.runtime);
-    const io = { signal: new AbortController().signal, emitLog() {} };
-    const before = services.currentConfigurationGeneration(host.infraDir);
-    host.calls.length = 0;
-    await expect(effects.apply("release-unavailable", ["app-api"], io)).rejects.toBeInstanceOf(
-      OpsNotWiredError,
-    );
-    await expect(
-      dispatchOpsOperation(
-        host.runtime,
-        {
-          kind: "system.update",
-          releaseId: "release-unavailable",
-          expectedDigest: "a".repeat(64),
-          createBackup: true,
-          backupId: "unavailable-backup",
-        },
-        await host.context({ kind: "configuration.inspect" }),
-      ),
-    ).rejects.toBeInstanceOf(OpsNotWiredError);
-    expect(
-      host.calls.every(
-        (args) =>
-          (args[0] === "container" && ["ls", "inspect"].includes(args[1] ?? "")) ||
-          (args[0] === "image" && args[1] === "inspect") ||
-          (args[0] === "compose" && args.includes("config")),
-      ),
-    ).toBe(true);
-    expect(
-      existsSync(join(services.releaseStatePaths(host.infraDir).store, "transaction.json")),
-    ).toBe(false);
-    expect(services.currentConfigurationGeneration(host.infraDir)).toBe(before);
-    await expect(effects.inspect()).resolves.toBeDefined();
-    await expect(effects.runtimeInspect?.()).resolves.toEqual({});
-    await expect(effects.inspectSystem(io)).resolves.toMatchObject({ maintenanceReady: false });
-  });
-
-  it("production startup preserves an actual interrupted legacy transaction while reads remain available", async () => {
-    const host = await fixture();
-    const directory = services.releaseStatePaths(host.infraDir).store;
-    const manifest = services.parseReleaseManifest(
-      JSON.stringify({
-        schemaVersion: 1,
-        release: "release-legacy",
-        images: Object.fromEntries(
-          services.RELEASE_IMAGE_NAMES.map((name) => [
-            name,
-            `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`,
-          ]),
-        ),
-        privacyReleaseValidation: {
-          version: 1,
-          sourceBuildFingerprint: "a".repeat(64),
-          validatedAt: "2026-09-05T12:00:00.000Z",
-          checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
-        },
-        ...releaseProvenance(),
-      }),
-    );
-    writeFileSync(
-      join(directory, "release-legacy.json"),
-      services.canonicalReleaseManifest(manifest),
-      { mode: 0o600 },
-    );
-    const legacy = createDefaultReleaseEffects(
-      host.root,
-      async () => {
-        throw Error("No CLI expected before prepared");
-      },
-      {
-        afterReleasePhase(phase) {
-          if (phase === "prepared") throw Error("actual legacy prepared interruption");
-        },
-      },
-    );
-    await expect(
-      legacy.apply(
-        manifest.release,
-        ["app-api"],
-        await host.context({ kind: "configuration.inspect" }),
-      ),
-    ).rejects.toThrow("actual legacy prepared interruption");
-    const transaction = join(directory, "transaction.json");
-    const before = readFileSync(transaction);
-    const restarted = await createProductionOpsRuntime({
-      rootDir: host.root,
-      stack: host.stack,
-      loadAuthority: host.loadAuthority,
-      communityRepositories: host.repositories,
-      docker: { execFile: host.execFile, fileExists: existsSync },
-    });
-    const effects = productionReleaseEffects(restarted);
-    host.calls.length = 0;
-    await expect(effects.initialize?.()).rejects.toMatchObject({ errorClass: "recovery_required" });
-    await expect(effects.inspect()).resolves.toMatchObject({
-      availableReleaseId: manifest.release,
-    });
-    await expect(effects.runtimeInspect?.()).resolves.toEqual({});
-    expect(readFileSync(transaction)).toEqual(before);
-    expect(host.calls).toEqual([]);
-    const app = await startOpsAgentServer(
-      {
-        tokens: {
-          api: Buffer.alloc(32, 1).toString("base64url"),
-          "data-manager": Buffer.alloc(32, 2).toString("base64url"),
-        },
-        runtime: restarted,
-        resourcePolicy: { allowGlobal: () => true, allowService: () => true },
-      },
-      effects,
-      { host: "127.0.0.1", port: 0 },
-    );
-    try {
-      expect((await app.inject({ method: "GET", url: "/health" })).json()).toMatchObject({
-        ok: true,
-        releaseRecovery: { ready: false, reason: "recovery_required" },
-      });
-      expect(readFileSync(transaction)).toEqual(before);
-    } finally {
-      await app.close();
-    }
   });
   it("production service.update pulls then prepares and recreates", async () => {
     const host = await fixture({

@@ -10,12 +10,7 @@ export type DockerCommandRunner = (
   context: DockerCommandContext,
 ) => Promise<string>;
 
-export interface AgentReleasePins {
-  agentImage: string;
-  helperImage: string;
-}
-
-/** Image observations shared by the agent and its replacement helper. */
+/** Image observations for the agent's system inspection. */
 export function createImageInspection(runDocker: DockerCommandRunner) {
   const inspectImageId = async (
     args: readonly string[],
@@ -97,27 +92,10 @@ export function createImageInspection(runDocker: DockerCommandRunner) {
       return undefined;
     }
   };
-  /** False for any unreadable observation: an unknown agent is never current. */
-  const agentMatchesRelease = async (
-    containerId: string,
-    pins: AgentReleasePins,
-    context: DockerCommandContext,
-  ): Promise<boolean> => {
-    const running = await inspectImageId(
-      ["container", "inspect", "--format", "{{.Image}}", containerId],
-      context,
-    );
-    return (
-      running !== undefined &&
-      (await observePinnedImage(running, pins.agentImage, context)).matches === true &&
-      (await inspectAgentHelper(containerId, context)) === pins.helperImage
-    );
-  };
   return {
     inspectImageId,
     inspectRepoDigests,
     observePinnedImage,
     inspectAgentHelper,
-    agentMatchesRelease,
   };
 }

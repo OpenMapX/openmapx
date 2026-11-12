@@ -702,11 +702,11 @@ describe("independent observation deadlines", () => {
     expect(client.cancel).not.toHaveBeenCalled();
     expect(client.execute).not.toHaveBeenCalled();
   });
-  it("allows a separately selected observer beyond forty-eight hours and reports loss as pending", async () => {
+  it("allows a separately selected observer beyond the kind's budget and reports loss as pending", async () => {
     const controller = new AbortController();
     const admission = {
       execution: "async" as const,
-      kind: "system.update" as const,
+      kind: "services.buildAll" as const,
       operationId: "job1_abcdefghijklmnop",
       operationKey: "opk1_abcdefghijklmnop",
       state: "running" as const,

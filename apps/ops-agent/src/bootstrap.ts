@@ -52,7 +52,7 @@ export async function startOpsAgentServer(
     await releaseEffects.initialize?.();
     ready = true;
   } catch {
-    // Retain the transaction for explicit reconciliation; never retry unknown effects here.
+    // An unreadable release store keeps the agent to observation until an operator repairs it.
   }
   const app = buildOpsAgentServer({
     ...options,
