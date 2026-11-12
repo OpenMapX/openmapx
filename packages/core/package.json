@@ -254,7 +254,7 @@
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@types/tar-stream": "3.1.4",
+    "@types/tar-stream": "3.1.5",
     "esbuild": "^0.28.2",
     "postgres": "^3.4.9",
     "react-dom": "19.3.1",

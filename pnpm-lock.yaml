@@ -2594,8 +2594,8 @@ importers:
         specifier: ^19.3.0
         version: 19.3.0(@types/react@19.3.0)
       '@types/tar-stream':
-        specifier: 3.1.4
-        version: 3.1.4
+        specifier: 3.1.5
+        version: 3.1.5
       esbuild:
         specifier: '>=0.28.1'
         version: 0.28.2
@@ -7101,8 +7101,8 @@ packages:
   '@types/stack-utils@2.0.3':
     resolution: {integrity: sha512-9aEbYZ3TbYMznPdcdr3SmIrLXwC/AKZXQeCf9Pgao5CKb8CyHuEX5jzWPTkvregvhRJHcpRO6BFoGW9ycaOkYw==}
 
-  '@types/tar-stream@3.1.4':
-    resolution: {integrity: sha512-921gW0+g29mCJX0fRvqeHzBlE/XclDaAG0Ousy1LCghsOhvaKacDeRGEVzQP9IPfKn8Vysy7FEXAIxycpc/CMg==}
+  '@types/tar-stream@3.1.5':
+    resolution: {integrity: sha512-zCUA6CSDw0t2cpQiZixpyzfubpeuVZmBr5wztvuCG4bhy7reX/9wGXdZxEzz2CjMFLQ32UPR/01jzUUSRJeCeQ==}
 
   '@types/tough-cookie@4.0.5':
     resolution: {integrity: sha512-/Ad8+nIOV7Rl++6f1BdKxFSMgmoqEoYbHRpPcx3JEfv8VRsQe9Z4mCXeJBzxs7mbHY/XOZZuXlRNfhpVPbs6ZA==}
@@ -16810,7 +16810,7 @@ snapshots:
 
   '@types/stack-utils@2.0.3': {}
 
-  '@types/tar-stream@3.1.4':
+  '@types/tar-stream@3.1.5':
     dependencies:
       '@types/node': 26.6.6
 
