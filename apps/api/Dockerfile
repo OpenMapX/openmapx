@@ -150,7 +150,8 @@ WORKDIR /app
 # is the only component that holds the Docker socket. Shipping the CLI here
 # would hand a compromised API the tooling for host control the moment any
 # socket became reachable.
-# The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456, and git
+# The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456. git
+# 2.54.1-r0 fixes CVE-2026-105437, CVE-2026-111760 and CVE-2026-114466, and git
 # pulls in libexpat; 2.10.0-r0 fixes CVE-2026-117610 and CVE-2026-118370.
 # curl pulls in brotli-libs; 1.2.1-r0 fixes CVE-2026-111497. curl and libcurl
 # 8.23.0-r0 fix CVE-2026-92392. `apk add` alone is not enough: a release build
@@ -159,11 +160,13 @@ WORKDIR /app
 # instruction, which keeps such a layer from being reused; they also fail the
 # build on a mirror that doesn't have the fixes yet.
 RUN apk add --no-cache curl ca-certificates git && \
-    apk upgrade --no-cache libcrypto3 libssl3 libexpat brotli-libs curl libcurl && \
+    apk upgrade --no-cache libcrypto3 libssl3 libexpat brotli-libs curl libcurl git git-init-template && \
     libcurl="$(apk query --fields version libcurl)" && libcurl="${libcurl#Version: }" && \
     test -n "$libcurl" && test "$(apk version -t "$libcurl" 8.23.0-r0)" != "<" && \
     libexpat="$(apk query --fields version libexpat)" && libexpat="${libexpat#Version: }" && \
     test -n "$libexpat" && test "$(apk version -t "$libexpat" 2.10.0-r0)" != "<" && \
+    git="$(apk query --fields version git)" && git="${git#Version: }" && \
+    test -n "$git" && test "$(apk version -t "$git" 2.54.1-r0)" != "<" && \
     rm -rf /usr/local/lib/node_modules/npm && \
     rm -f /usr/local/bin/npm /usr/local/bin/npx
 
