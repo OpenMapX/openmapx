@@ -611,7 +611,7 @@ importers:
         version: 5.3.0
       '@iconify-json/meteocons':
         specifier: ^1.2.4
-        version: 1.2.4
+        version: 1.2.5
       '@iconify/react':
         specifier: ^6.0.3
         version: 6.0.3(react@19.3.1)
@@ -4954,8 +4954,8 @@ packages:
   '@hey-api/types@0.1.4':
     resolution: {integrity: sha512-thWfawrDIP7wSI9ioT13I5soaaqB5vAPIiZmgD8PbeEVKNrkonc0N/Sjj97ezl7oQgusZmaNphGdMKipPO6IBg==}
 
-  '@iconify-json/meteocons@1.2.4':
-    resolution: {integrity: sha512-E7YV02ql5WmJgAOpXU/hoF9Mdshq73KjwR6fBxZ5SrqMJghMa3CIcRG6NQGwP4I1uBOhIjOFlAikYoPAKuT56A==}
+  '@iconify-json/meteocons@1.2.5':
+    resolution: {integrity: sha512-JaSAL4y7n1eM1HKzhHfIWweTvWLYkvBYss1prn/SrdeJA3XPaCm0WYlG62Vsp9EG2/TdeLMNSgtL1WZz+Fo8bA==}
 
   '@iconify/react@6.0.3':
     resolution: {integrity: sha512-2x7gVs+tpUG75aXYo/0c5wPOqrFy75YSGKmuJZyuHyrHMydzXpI/+i9/USIzWXJL9WWc2BCgPVnGY2FhbeiiDQ==}
@@ -14749,7 +14749,7 @@ snapshots:
 
   '@hey-api/types@0.1.4': {}
 
-  '@iconify-json/meteocons@1.2.4':
+  '@iconify-json/meteocons@1.2.5':
     dependencies:
       '@iconify/types': 2.0.0
 
