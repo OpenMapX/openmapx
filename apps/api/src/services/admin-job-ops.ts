@@ -1165,6 +1165,16 @@ export async function cancelAdminJobOperations(
         if (error instanceof JobObservationPending) throw error;
         return "pending";
       }
+    } else {
+      // Read streams and diagnostics deliver no receipt. Checkpoint the
+      // observed terminal here, because the job settles only once its stored
+      // projection shows every operation terminal.
+      if (!options.context) return "pending";
+      try {
+        await persistProjection(options.context, projection);
+      } catch {
+        return "pending";
+      }
     }
     if (verifiedRecovery) recoveredFailure = true;
     outcomes.push(

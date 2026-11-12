@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   cancelAdminJobOperations,
   executeAdminJobOperation,
+  readProjection,
   resumeAdminJobObservation,
 } from "../admin-job-ops";
 import type { JobContext } from "../job-runner";
@@ -444,8 +445,11 @@ describe("administrative job operations broker", () => {
           errorClass: "runtime",
         }),
     };
+    const ctx = context();
+    ctx.checkpointResult = structuredClone(projection);
     await expect(
       cancelAdminJobOperations(projection, client as never, {
+        context: ctx,
         pollIntervalMs: 1,
         sleep: async () => undefined,
       }),
@@ -454,6 +458,60 @@ describe("administrative job operations broker", () => {
       signal: expect.any(AbortSignal),
     });
     expect(client.status).toHaveBeenCalledTimes(2);
+    expect(readProjection(ctx.checkpointResult).operations.opk1_abcdefghijklmnop).toMatchObject({
+      terminal: true,
+      phase: "terminal",
+      errorClass: "runtime",
+    });
+  });
+
+  it("keeps a read operation's cancellation pending when its terminal cannot be checkpointed", async () => {
+    const operationId = "job1_abcdefghijklmnop";
+    const projection = {
+      opsProjection: {
+        version: 3,
+        steps: {},
+        eventTotal: 0,
+        byteTotal: 0,
+        truncated: false,
+        operations: {
+          opk1_abcdefghijklmnop: {
+            kind: "system.diagnostics",
+            operationKey: "opk1_abcdefghijklmnop",
+            operationId,
+            phase: "observing",
+            cursor: 0,
+            events: 0,
+            bytes: 0,
+            truncated: false,
+            terminal: false,
+          },
+        },
+      },
+    };
+    const terminal = {
+      state: "failed",
+      kind: "system.diagnostics",
+      operationId,
+      operationKey: "opk1_abcdefghijklmnop",
+      errorClass: "runtime",
+      terminationRequestedAt: "2026-08-25T00:00:00.000Z",
+    };
+    const client = { cancel: vi.fn(), status: vi.fn().mockResolvedValue(terminal) };
+    const options = { pollIntervalMs: 1, sleep: async () => undefined };
+    // Without a context nothing can be checkpointed.
+    await expect(
+      cancelAdminJobOperations(structuredClone(projection), client as never, options),
+    ).resolves.toBe("pending");
+    const ctx = context();
+    ctx.checkpointResult = structuredClone(projection);
+    ctx.checkpoint = vi.fn().mockRejectedValue(new Error("CAS lost"));
+    await expect(
+      cancelAdminJobOperations(structuredClone(projection), client as never, {
+        ...options,
+        context: ctx,
+      }),
+    ).resolves.toBe("pending");
   });
 
   it("reports containment when one operation is canceled alongside a succeeded sibling", async () => {
@@ -518,8 +576,11 @@ describe("administrative job operations broker", () => {
 
     // A succeeded sibling must not mask the operation this request contained:
     // reporting "completed" would restore the job to running.
+    const ctx = context();
+    ctx.checkpointResult = structuredClone(projection);
     await expect(
       cancelAdminJobOperations(projection, client as never, {
+        context: ctx,
         pollIntervalMs: 1,
         sleep: async () => undefined,
       }),
@@ -564,8 +625,11 @@ describe("administrative job operations broker", () => {
     };
 
     client.status.mockImplementation(client.cancel);
+    const ctx = context();
+    ctx.checkpointResult = structuredClone(projection);
     await expect(
       cancelAdminJobOperations(projection, client as never, {
+        context: ctx,
         pollIntervalMs: 1,
         sleep: async () => undefined,
       }),

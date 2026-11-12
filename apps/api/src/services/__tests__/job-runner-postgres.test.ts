@@ -436,6 +436,117 @@ describe.skipIf(
     expect((await row(job.id)).status).toBe("running");
   });
 
+  describe.each([
+    "system.diagnostics",
+    "service.logs.follow",
+    "serviceRepository.inspect",
+    "catalogIntegration.inspect",
+  ] as const)("cancellation of a running %s operation", (kind) => {
+    const key = "opk1_readcancelsettle1234";
+    const operationId = "job1_readcancelsettle1234";
+    const diagnostics = { truncated: false, tail: [{ stream: "stderr", message: "retained" }] };
+    async function seedObserved(status: "running" | "cancel_pending") {
+      const job = await seed(
+        "system.diagnostics",
+        {
+          observation: {
+            state: "unknown",
+            reason: "transport",
+            nextCheckAt: new Date(0).toISOString(),
+          },
+          opsProjection: {
+            version: 3,
+            steps: {},
+            eventTotal: 0,
+            byteTotal: 0,
+            truncated: false,
+            operations: {
+              [key]: {
+                kind,
+                operationKey: key,
+                operationId,
+                phase: "observing",
+                cursor: 0,
+                events: 0,
+                bytes: 0,
+                truncated: false,
+                terminal: false,
+              },
+            },
+          },
+        },
+        status,
+      );
+      jobRunner.register(job.type, async () => {
+        throw Error("A canceled job must not run its handler");
+      });
+      return job;
+    }
+    const agentStatus = (state: string) => ({
+      version: 1,
+      kind,
+      operationKey: key,
+      operationId,
+      state,
+      ...(state === "failed"
+        ? {
+            errorClass: "runtime",
+            terminationRequestedAt: new Date().toISOString(),
+            diagnostics,
+          }
+        : {}),
+    });
+
+    it.each([false, true])(
+      "settles canceled once the agent reports it stopped (reconcile=%s)",
+      async (reconcile) => {
+        const job = await seedObserved(reconcile ? "cancel_pending" : "running");
+        state.client = {
+          status: vi.fn().mockResolvedValue(agentStatus("failed")),
+          cancel: vi.fn(),
+          lookup: vi.fn(),
+        } as unknown as ApiOpsClient;
+        const events: unknown[] = [];
+        const stop = jobEventBus.subscribe(job.id, ({ event }) => {
+          if (event.type === "status" && event.status === "canceled") events.push(event.result);
+        });
+        if (reconcile) await jobRunner.reconcile();
+        else expect(await jobRunner.cancel(job.id)).toBe(true);
+        stop();
+        const finished = await row(job.id);
+        expect(finished.status).toBe("canceled");
+        expect(finished.finishedAt).not.toBeNull();
+        expect(finished.result).not.toHaveProperty("observation");
+        expect(finished.result).toHaveProperty("diagnostics", diagnostics);
+        expect(checkedCheckpoint(finished.result).opsProjection.operations[key]).toMatchObject({
+          terminal: true,
+          phase: "terminal",
+          errorClass: "runtime",
+        });
+        expect(events).toEqual([expect.objectContaining({ diagnostics })]);
+        expect(state.client.cancel).not.toHaveBeenCalled();
+      },
+    );
+
+    it("stays cancel_pending while the agent may still run it", async () => {
+      const job = await seedObserved("running");
+      state.client = {
+        status: vi.fn().mockResolvedValue(agentStatus("termination_pending")),
+        cancel: vi.fn().mockResolvedValue(agentStatus("termination_pending")),
+        lookup: vi.fn(),
+      } as unknown as ApiOpsClient;
+      expect(await jobRunner.cancel(job.id)).toBe(false);
+      const pending = await row(job.id);
+      expect(pending.status).toBe("cancel_pending");
+      expect(pending.finishedAt).toBeNull();
+      expect(checkedCheckpoint(pending.result).opsProjection.operations[key]).toMatchObject({
+        terminal: false,
+        phase: "observing",
+      });
+      expect(state.client.cancel).toHaveBeenCalledTimes(1);
+    });
+  });
+
   async function checkpointContexts(job: typeof adminJob.$inferSelect, n = 2) {
     const found: JobContext[] = [],
       ready = Promise.withResolvers<void>(),
