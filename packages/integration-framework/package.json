@@ -55,7 +55,13 @@
     "zod": "^4.6.7"
   },
   "peerDependencies": {
-    "react": ">=19"
+    "react": ">=19",
+    "vitest": "^5.0.5"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",

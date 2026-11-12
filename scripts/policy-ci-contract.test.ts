@@ -29,6 +29,7 @@ describe("repository policy gate", () => {
       "pnpm check-docker-context-secrets",
       "pnpm check-migration-order",
       "pnpm check-ops-authority",
+      "pnpm check-declared-imports",
       "pnpm check-integration-cache-writes",
       "pnpm check-entur-graphql",
       "pnpm check-entur-geocoder",

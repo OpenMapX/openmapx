@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { matchesGlob, resolve } from "node:path";
+import { matchesGlob, posix, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { parseDocument } from "yaml";
+import { parseAllDocuments, parseDocument } from "yaml";
 import { canonicalPackageVersion } from "./canonical-package-version.mjs";
 
 export const importantImpacts = ["breaking", "migration", "security", "operator-action"];
@@ -21,7 +21,7 @@ const notePath = (path) =>
   /^\.changeset\/[a-z0-9][a-z0-9-]*\.md$/.test(path) && path !== ".changeset/README.md";
 const fragmentPath = (path) =>
   /^release-notes\/[a-z0-9][a-z0-9-]*\.md$/.test(path) && path !== "release-notes/README.md";
-const testsOnly = (path) =>
+export const testsOnly = (path) =>
   /(?:^|\/)(__tests__|__mocks__)\//.test(path) || /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path);
 
 export function git(cwd, ...args) {
@@ -68,6 +68,197 @@ function yaml(source, path) {
       `${path}: invalid YAML: ${[...doc.errors, ...doc.warnings].map((e) => e.message).join("; ")}`,
     );
   return doc.toJS({ maxAliasCount: 0 });
+}
+const dependencyFields = ["dependencies", "devDependencies", "optionalDependencies"];
+const productionFields = ["dependencies", "optionalDependencies"];
+const plainObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+/**
+ * A manifest edit confined to its dependency objects is fully reflected in the
+ * lockfile's importer for that directory, so the lockfile closure can judge it.
+ * Key order is kept in the comparison because some fields, such as conditional
+ * exports, are order-sensitive. A manifest that is missing on one side, not a
+ * regular file or not a JSON object is not a dependency-only change.
+ */
+function dependencyOnlyChange(before, after, path) {
+  try {
+    const sides = [before.read(path), after.read(path)];
+    if (sides.includes(null)) return false;
+    const [a, b] = sides.map((bytes) => {
+      const manifest = JSON.parse(bytes.toString());
+      if (!plainObject(manifest)) throw new Error(`${path}: expected a JSON object`);
+      for (const field of dependencyFields) delete manifest[field];
+      return JSON.stringify(manifest);
+    });
+    return a === b;
+  } catch {
+    return false;
+  }
+}
+/**
+ * Splits a pnpm v9 lockfile into its package-manager document (when present)
+ * and the workspace project document.
+ */
+export function lockfileDocuments(state) {
+  const source = state.read("pnpm-lock.yaml");
+  if (source === null) throw new Error("pnpm-lock.yaml is missing");
+  const docs = parseAllDocuments(source.toString(), { uniqueKeys: true });
+  if (!Array.isArray(docs) || !docs.length) throw new Error("pnpm-lock.yaml has no documents");
+  for (const doc of docs)
+    if (doc.errors.length || doc.warnings.length)
+      throw new Error(
+        `pnpm-lock.yaml: invalid YAML: ${[...doc.errors, ...doc.warnings].map((e) => e.message).join("; ")}`,
+      );
+  const values = docs.map((doc) => doc.toJS({ maxAliasCount: 0 }));
+  if (values.length > 2) throw new Error("pnpm-lock.yaml has unexpected documents");
+  const project = values.at(-1);
+  const environment = values.length === 2 ? values[0] : null;
+  if (
+    environment &&
+    (!plainObject(environment.importers) || Object.keys(environment.importers).join() !== ".")
+  )
+    throw new Error("pnpm-lock.yaml: unexpected package-manager document");
+  if (
+    !plainObject(project) ||
+    !plainObject(project.importers) ||
+    !["packages", "snapshots"].every(
+      (key) => project[key] === undefined || plainObject(project[key]),
+    )
+  )
+    throw new Error("pnpm-lock.yaml: expected workspace importers");
+  return { environment, project };
+}
+/** Everything in the lockfile that applies to the whole workspace rather than one package. */
+function lockfileWideInputs({ environment, project }) {
+  const { importers, packages, snapshots, ...settings } = project;
+  return JSON.stringify({ environment, settings });
+}
+const snapshotKey = (name, version) =>
+  version.split("(")[0].indexOf("@", 1) > 0 ? version : `${name}@${version}`;
+/** The peer dependency names a workspace package declares in its manifest at this commit. */
+function declaredPeers(state, directory) {
+  const path = directory === "." ? "package.json" : `${directory}/package.json`;
+  let manifest;
+  try {
+    manifest = state.json(path);
+  } catch (error) {
+    throw new Error(`${path}: unreadable manifest (${error.message})`);
+  }
+  if (
+    !plainObject(manifest) ||
+    (manifest.peerDependencies !== undefined && !plainObject(manifest.peerDependencies))
+  )
+    throw new Error(`${path}: missing or invalid manifest`);
+  return new Set(Object.keys(manifest.peerDependencies ?? {}));
+}
+/**
+ * Resolves every lockfile snapshot a package's build can use: its own importer's
+ * dependencies (including build tools); for linked workspace packages, their
+ * production dependencies and the devDependencies that provide their declared
+ * peers (their runtime imports); and all transitive snapshot dependencies.
+ */
+export function resolveDependencyTree({ project }, directory, state) {
+  const { importers, packages = {}, snapshots = {} } = project;
+  const tree = { importers: {}, snapshots: {}, packages: {} };
+  const pending = [];
+  const follow = (from, name, version) => {
+    if (typeof version !== "string" || !version)
+      throw new Error(`${name}: missing resolved version`);
+    if (!version.startsWith("link:")) return pending.push(snapshotKey(name, version));
+    const target = posix.normalize(posix.join(from, version.slice(5)));
+    if (target === ".." || target.startsWith("../") || posix.isAbsolute(target))
+      throw new Error(`${name}: link outside the workspace`);
+    visit(target, true);
+  };
+  const visit = (path, linked) => {
+    if (Object.hasOwn(tree.importers, path)) return;
+    const importer = importers[path];
+    if (!plainObject(importer)) throw new Error(`missing importer ${path}`);
+    const entry = {};
+    tree.importers[path] = entry;
+    for (const [key, value] of Object.entries(importer))
+      if (!dependencyFields.includes(key)) entry[key] = value;
+    const peers = linked ? declaredPeers(state, path) : null;
+    for (const field of dependencyFields) {
+      if (importer[field] === undefined) continue;
+      if (!plainObject(importer[field])) throw new Error(`${path}: invalid ${field}`);
+      const followed = Object.entries(importer[field]).filter(
+        ([name]) => !linked || field !== "devDependencies" || peers.has(name),
+      );
+      if (!followed.length) continue;
+      entry[field] = {};
+      for (const [name, value] of followed) {
+        entry[field][name] = value?.version;
+        follow(path, name, value?.version);
+      }
+    }
+  };
+  visit(directory, false);
+  while (pending.length) {
+    const key = pending.pop();
+    if (Object.hasOwn(tree.snapshots, key)) continue;
+    const snapshot = snapshots[key];
+    const id = key.includes("(") ? key.slice(0, key.indexOf("(")) : key;
+    if (!plainObject(snapshot) || !plainObject(packages[id]))
+      throw new Error(`missing lockfile entry ${key}`);
+    tree.snapshots[key] = snapshot;
+    tree.packages[id] = packages[id];
+    for (const field of productionFields) {
+      if (snapshot[field] === undefined) continue;
+      if (!plainObject(snapshot[field])) throw new Error(`${key}: invalid ${field}`);
+      for (const [name, version] of Object.entries(snapshot[field])) follow(".", name, version);
+    }
+  }
+  return tree;
+}
+/**
+ * A public package's serialized tree. A tree that links a workspace package
+ * outside the package's source directories counts as unknown, because the path
+ * rule would miss that package's source.
+ */
+function dependencyTree(lockfile, item, state) {
+  const tree = resolveDependencyTree(lockfile, item.directory, state);
+  const sources = sourceDirectories(item, state);
+  const outside = Object.keys(tree.importers).filter((path) => !sources.has(path));
+  if (outside.length)
+    throw new Error(
+      `links workspace packages outside its source directories: ${outside.join(", ")}`,
+    );
+  return JSON.stringify(tree);
+}
+/** Parses the lockfile at both commits, keeping a parse failure as a value. */
+function parseLockfiles(before, after) {
+  return [before, after].map((state) => {
+    try {
+      return { lockfile: lockfileDocuments(state) };
+    } catch (error) {
+      return { error };
+    }
+  });
+}
+/**
+ * Decides, per public package, whether a dependency-only change can reach its
+ * build. Anything that cannot be resolved counts as a change.
+ */
+function dependencyTreeChanges(states, items, refs) {
+  const failure = states.find((state) => state.error)?.error;
+  if (!failure && lockfileWideInputs(states[0].lockfile) !== lockfileWideInputs(states[1].lockfile))
+    return new Map(
+      [...items.keys()].map((name) => [name, "lockfile-wide settings changed; treated as changed"]),
+    );
+  return new Map(
+    [...items].map(([name, sides]) => {
+      try {
+        if (failure) throw failure;
+        if (!sides.before || !sides.after) throw new Error("not present at both commits");
+        const trees = states.map((state, index) =>
+          dependencyTree(state.lockfile, [sides.before, sides.after][index], refs[index]),
+        );
+        return [name, trees[0] === trees[1] ? null : "resolved dependency tree changed"];
+      } catch (error) {
+        return [name, `resolved dependency tree unknown (${error.message}); treated as changed`];
+      }
+    }),
+  );
 }
 function frontmatter(contents, path) {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/.exec(contents);
@@ -168,7 +359,7 @@ export function publicPackages(state) {
   }
   return config.packages;
 }
-function workspacePackages(state) {
+export function workspacePackages(state) {
   const config = yaml(state.read("pnpm-workspace.yaml")?.toString() ?? "", "pnpm-workspace.yaml");
   if (!Array.isArray(config?.packages)) throw new Error("Expected workspace package patterns");
   return new Map(
@@ -184,7 +375,7 @@ function workspacePackages(state) {
       }),
   );
 }
-function sourceDirectories(item, state) {
+export function sourceDirectories(item, state) {
   const workspaces = workspacePackages(state);
   const dirs = new Set([item.directory]);
   if (!item.bundleWorkspaceDependencies) return dirs;
@@ -224,23 +415,63 @@ export function contributionCheck({ before, after, changed, body }) {
   const errors = [];
   const disposition = readDisposition(body);
   const packages = new Map();
+  const items = new Map();
   const shipped = new Set();
-  for (const state of [before, after]) {
+  const publicManifests = new Set();
+  for (const [side, state] of [
+    ["before", before],
+    ["after", after],
+  ]) {
     if (!state.entries.has("scripts/public-packages.json")) continue;
     for (const item of publicPackages(state)) {
       for (const path of changed) if (explicitlyShipped(item, state, path)) shipped.add(path);
       if (!packages.has(item.name)) packages.set(item.name, new Set());
       for (const dir of sourceDirectories(item, state)) packages.get(item.name).add(dir);
+      if (!items.has(item.name)) items.set(item.name, { before: null, after: null });
+      items.get(item.name)[side] = item;
+      publicManifests.add(`${item.directory}/package.json`);
     }
   }
   if (!packages.size) throw new Error("No qualified public packages configured");
+  let lockfiles;
+  const parsedLockfiles = () => {
+    lockfiles ??= parseLockfiles(before, after);
+    return lockfiles;
+  };
+  // Only a manifest with a lockfile importer at both commits is fully reflected
+  // in the lockfile. A public package's own manifest is always packed (and the
+  // CLI bundles it), and shipped manifests such as scaffold templates reach
+  // consumers verbatim, so both stay under the path rule.
+  const importerAtBoth = (directory) =>
+    parsedLockfiles().every(
+      ({ lockfile }) => lockfile && Object.hasOwn(lockfile.project.importers, directory),
+    );
+  const byTree = new Set(
+    changed.filter(
+      (path) =>
+        path === "pnpm-lock.yaml" ||
+        ((path === "package.json" ||
+          (path.endsWith("/package.json") && !publicManifests.has(path) && !shipped.has(path))) &&
+          dependencyOnlyChange(before, after, path) &&
+          importerAtBoth(path === "package.json" ? "." : path.slice(0, -"/package.json".length))),
+    ),
+  );
+  const treeChanges = byTree.size
+    ? dependencyTreeChanges(parsedLockfiles(), items, [before, after])
+    : new Map();
+  const notes = [...treeChanges].map(
+    ([name, change]) => `${name}: ${change ?? "resolved dependency tree unchanged"}`,
+  );
   const affected = [...packages]
-    .filter(([, dirs]) =>
-      changed.some(
-        (path) =>
-          (!testsOnly(path) || shipped.has(path)) &&
-          (globalInputs.has(path) || [...dirs].some((dir) => path.startsWith(`${dir}/`))),
-      ),
+    .filter(
+      ([name, dirs]) =>
+        treeChanges.get(name) ||
+        changed.some(
+          (path) =>
+            !byTree.has(path) &&
+            (!testsOnly(path) || shipped.has(path)) &&
+            (globalInputs.has(path) || [...dirs].some((dir) => path.startsWith(`${dir}/`))),
+        ),
     )
     .map(([name]) => name);
   for (const path of changed) {
@@ -320,7 +551,7 @@ export function contributionCheck({ before, after, changed, body }) {
       errors.push(
         `Product ${impact} impact requires a committed release-notes fragment with change, audience and required action`,
       );
-  return { errors, affected, reason: disposition.reason, version: disposition.version };
+  return { errors, affected, notes, reason: disposition.reason, version: disposition.version };
 }
 
 function main() {
@@ -404,6 +635,7 @@ function main() {
         },
       })
     : contributionCheck({ before, after, changed, body });
+  for (const note of result.notes ?? []) console.log(note);
   if (result.errors.length) throw new Error(result.errors.join("\n"));
   console.log(
     `Release information valid. Affected public artifacts: ${result.affected.join(", ") || "none"}.`,

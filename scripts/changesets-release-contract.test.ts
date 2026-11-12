@@ -1,11 +1,123 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { stringify } from "yaml";
 
 const gate = resolve(import.meta.dirname, "check-release-information.mjs");
+
+type Entry = Record<string, unknown>;
+type LockModel = {
+  environment: Entry;
+  project: {
+    lockfileVersion: string;
+    settings: Entry;
+    overrides?: Record<string, string>;
+    importers: Record<
+      string,
+      Record<string, Record<string, { specifier: string; version: string }>>
+    >;
+    packages: Record<string, Entry>;
+    snapshots: Record<string, Entry>;
+  };
+};
+const dep = (version: string, specifier = version) => ({ specifier, version });
+const resolved = (...keys: string[]) =>
+  Object.fromEntries(keys.map((key) => [key, { resolution: { integrity: `sha512-${key}` } }]));
+/** A two-document pnpm v9 lockfile shaped like the repository's own. */
+function lockModel(): LockModel {
+  return {
+    environment: {
+      lockfileVersion: "9.0",
+      importers: { ".": { packageManagerDependencies: { pnpm: dep("12.11.2") } } },
+      packages: resolved("pnpm@12.11.2"),
+      snapshots: { "pnpm@12.11.2": {} },
+    },
+    project: {
+      lockfileVersion: "9.0",
+      settings: { autoInstallPeers: true, excludeLinksFromLockfile: false },
+      importers: {
+        ".": { devDependencies: { rootonly: dep("1.0.0") } },
+        "packages/lib": {
+          dependencies: { zod: dep("4.0.0") },
+          devDependencies: { tsup: dep("9.0.0(typescript@6.0.3)", "9.0.0") },
+        },
+        "packages/tool": {
+          dependencies: { commander: dep("15.0.0") },
+          devDependencies: { "@fixture/helper": dep("link:../helper", "workspace:*") },
+        },
+        "packages/helper": {
+          dependencies: {
+            client: dep("1.0.0"),
+            undici: dep("8.0.0"),
+            "wrap-cjs": dep("wrap@7.0.0", "npm:wrap@7.0.0"),
+          },
+          devDependencies: {
+            "@fixture/fetch": dep("link:../fetch", "workspace:*"),
+            peerlib: dep("1.0.0"),
+            vitest: dep("5.0.0"),
+          },
+        },
+        "packages/app": { dependencies: { react: dep("19.0.0") } },
+        "packages/fetch": { dependencies: { fetchdep: dep("1.0.0") } },
+      },
+      packages: resolved(
+        "ansi@1.0.0",
+        "client@1.0.0",
+        "commander@15.0.0",
+        "fetchdep@1.0.0",
+        "peerlib@1.0.0",
+        "react@19.0.0",
+        "rootonly@1.0.0",
+        "tsup@9.0.0",
+        "typescript@6.0.3",
+        "undici@8.0.0",
+        "vitest@5.0.0",
+        "wrap@7.0.0",
+        "zod@4.0.0",
+      ),
+      snapshots: {
+        "ansi@1.0.0": {},
+        // A pnpm override can link an installed package to a workspace package.
+        "client@1.0.0": { dependencies: { "@fixture/fetch": "link:packages/fetch" } },
+        "commander@15.0.0": {},
+        "fetchdep@1.0.0": {},
+        "peerlib@1.0.0": {},
+        "react@19.0.0": {},
+        "rootonly@1.0.0": {},
+        "tsup@9.0.0(typescript@6.0.3)": { dependencies: { typescript: "6.0.3" } },
+        "typescript@6.0.3": {},
+        "undici@8.0.0": { dependencies: { ansi: "1.0.0" } },
+        "vitest@5.0.0": {},
+        "wrap@7.0.0": {},
+        "zod@4.0.0": {},
+      },
+    },
+  };
+}
+function lockfile(change: (model: LockModel) => void = () => {}) {
+  const model = lockModel();
+  change(model);
+  return `---\n${stringify(model.environment)}\n---\n${stringify(model.project)}`;
+}
+/** Move one resolved package to a new version, keeping the lockfile internally consistent. */
+function bump(model: LockModel, from: string, to: string) {
+  const { packages, snapshots } = model.project;
+  packages[to] = { resolution: { integrity: `sha512-${to}` } };
+  delete packages[from];
+  snapshots[to] = snapshots[from];
+  delete snapshots[from];
+}
 const workspaces: string[] = [];
 const noRelease =
   "## Release and upgrade impact\n\nNo package release: Only the author verification tooling changes; installed artifacts are unchanged.\n";
@@ -13,6 +125,25 @@ const note = (name = "@fixture/lib") =>
   `---\n"${name}": patch\n---\nFix the consumer-facing validation result.\n`;
 const fragment = (impacts = "migration") =>
   `---\nimpacts: [${impacts}]\n---\n## What changes\nThe database layout changes for stored observations.\n\n## Who is affected\nOperators upgrading an existing instance with stored data.\n\n## Required action\nRun the documented migration before restarting the API.\n`;
+
+const baseManifests: Record<string, Record<string, unknown>> = {
+  lib: { name: "@fixture/lib", version: "0.1.0" },
+  tool: {
+    name: "@fixture/tool",
+    version: "0.1.0",
+    files: ["dist", "templates"],
+    devDependencies: { "@fixture/helper": "workspace:*" },
+  },
+  helper: {
+    name: "@fixture/helper",
+    version: "1.0.0",
+    private: true,
+    peerDependencies: { peerlib: "^1.0.0" },
+    devDependencies: { "@fixture/fetch": "workspace:*" },
+  },
+  app: { name: "@fixture/app", version: "1.0.0", private: true },
+  fetch: { name: "@fixture/fetch", version: "1.0.0", private: true },
+};
 
 function fixture() {
   const cwd = mkdtempSync(join(tmpdir(), "openmapx-release-info-"));
@@ -34,7 +165,7 @@ function fixture() {
     }).trim();
   write("package.json", '{"name":"fixture","private":true,"packageManager":"pnpm@12.11.2"}');
   write("pnpm-workspace.yaml", 'packages:\n  - "packages/*"\n');
-  write("pnpm-lock.yaml", "lockfileVersion: '9.0'\nimporters: {}\n");
+  write("pnpm-lock.yaml", lockfile());
   write(
     "scripts/public-packages.json",
     JSON.stringify({
@@ -60,17 +191,7 @@ function fixture() {
       ignore: [],
     }),
   );
-  for (const [slug, manifest] of Object.entries({
-    lib: { name: "@fixture/lib", version: "0.1.0" },
-    tool: {
-      name: "@fixture/tool",
-      version: "0.1.0",
-      files: ["dist", "templates"],
-      devDependencies: { "@fixture/helper": "workspace:*" },
-    },
-    helper: { name: "@fixture/helper", version: "1.0.0", private: true },
-    app: { name: "@fixture/app", version: "1.0.0", private: true },
-  })) {
+  for (const [slug, manifest] of Object.entries(baseManifests)) {
     write(`packages/${slug}/package.json`, JSON.stringify(manifest));
     write(`packages/${slug}/src/index.ts`, "export const value = 0;\n");
     write(`packages/${slug}/src/value.test.ts`, "// test baseline\n");
@@ -223,6 +344,317 @@ describe("conditional contribution release information", () => {
     f.git("commit", "-m", "test: existing note");
     f.advanceBase();
     expect(f.run({ "packages/lib/src/index.ts": "export const value=1;" }).status).toBe(1);
+  });
+});
+
+describe("dependency-only changes judged by resolved dependency trees", () => {
+  const manifest = (slug: string, extra: Record<string, unknown>) =>
+    JSON.stringify({ ...baseManifests[slug], ...extra });
+  const failing = (output: string) =>
+    ["@fixture/lib", "@fixture/tool"].filter((name) =>
+      output.includes(`${name}: delivered artifact may change`),
+    );
+
+  it("passes a lockfile bump outside every closure, resolving aliases and peer suffixes", () => {
+    const result = fixture().run({
+      "pnpm-lock.yaml": lockfile((model) => {
+        bump(model, "react@19.0.0", "react@19.1.0");
+        model.project.importers["packages/app"].dependencies.react = dep("19.1.0");
+        bump(model, "rootonly@1.0.0", "rootonly@2.0.0");
+        model.project.importers["."].devDependencies.rootonly = dep("2.0.0");
+      }),
+    });
+    expect(result.status, result.output).toBe(0);
+    expect(result.output).toContain("Affected public artifacts: none.");
+    expect(result.output).toContain("@fixture/lib: resolved dependency tree unchanged");
+    expect(result.output).toContain("@fixture/tool: resolved dependency tree unchanged");
+  });
+  it("flags a package whose own production dependency moves", () => {
+    const result = fixture().run({
+      "pnpm-lock.yaml": lockfile((model) => {
+        bump(model, "zod@4.0.0", "zod@4.1.0");
+        model.project.importers["packages/lib"].dependencies.zod = dep("4.1.0");
+      }),
+    });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/lib"]);
+    expect(result.output).toContain("@fixture/lib: resolved dependency tree changed");
+  });
+  it("flags a package whose build devDependency resolves a different peer", () => {
+    const result = fixture().run({
+      "pnpm-lock.yaml": lockfile((model) => {
+        const { importers, snapshots } = model.project;
+        bump(model, "typescript@6.0.3", "typescript@6.0.4");
+        delete snapshots["tsup@9.0.0(typescript@6.0.3)"];
+        snapshots["tsup@9.0.0(typescript@6.0.4)"] = { dependencies: { typescript: "6.0.4" } };
+        importers["packages/lib"].devDependencies.tsup = dep("9.0.0(typescript@6.0.4)", "9.0.0");
+      }),
+    });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/lib"]);
+  });
+  it("flags a bundling package when a linked workspace production dependency moves transitively", () => {
+    const result = fixture().run({
+      "pnpm-lock.yaml": lockfile((model) => {
+        bump(model, "ansi@1.0.0", "ansi@1.0.1");
+        model.project.snapshots["undici@8.0.0"] = { dependencies: { ansi: "1.0.1" } };
+      }),
+    });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/tool"]);
+  });
+  it("follows an aliased dependency to the snapshot it names", () => {
+    const result = fixture().run({
+      "pnpm-lock.yaml": lockfile((model) => {
+        bump(model, "wrap@7.0.0", "wrap@7.1.0");
+        model.project.importers["packages/helper"].dependencies["wrap-cjs"] = dep(
+          "wrap@7.1.0",
+          "npm:wrap@7.1.0",
+        );
+      }),
+    });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/tool"]);
+  });
+  it("follows a linked workspace package's devDependency that provides its peer", () => {
+    const result = fixture().run({
+      "pnpm-lock.yaml": lockfile((model) => {
+        bump(model, "peerlib@1.0.0", "peerlib@1.1.0");
+        model.project.importers["packages/helper"].devDependencies.peerlib = dep("1.1.0");
+      }),
+    });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/tool"]);
+  });
+  it("fails closed when a linked workspace manifest cannot be read", () => {
+    const result = fixture().run({
+      "packages/fetch/package.json": null,
+      "pnpm-lock.yaml": lockfile((model) => {
+        bump(model, "react@19.0.0", "react@19.1.0");
+        model.project.importers["packages/app"].dependencies.react = dep("19.1.0");
+      }),
+    });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/tool"]);
+    expect(result.output).toContain(
+      "@fixture/tool: resolved dependency tree unknown (packages/fetch/package.json",
+    );
+  });
+  it("ignores a linked workspace package's devDependency", () => {
+    const result = fixture().run({
+      "pnpm-lock.yaml": lockfile((model) => {
+        bump(model, "vitest@5.0.0", "vitest@5.1.0");
+        model.project.importers["packages/helper"].devDependencies.vitest = dep("5.1.0");
+      }),
+    });
+    expect(result.status, result.output).toBe(0);
+  });
+  it.each([
+    [
+      "settings",
+      (model: LockModel) => {
+        model.project.settings.autoInstallPeers = false;
+      },
+    ],
+    [
+      "overrides",
+      (model: LockModel) => {
+        model.project.overrides = { rootonly: "2.0.0" };
+      },
+    ],
+    [
+      "package-manager document",
+      (model: LockModel) => {
+        model.environment.lockfileVersion = "9.1";
+      },
+    ],
+  ] as [string, (model: LockModel) => void][])(
+    "flags every public package for a lockfile-wide %s change",
+    (_name, change) => {
+      const result = fixture().run({ "pnpm-lock.yaml": lockfile(change) });
+      expect(result.status).toBe(1);
+      expect(failing(result.output)).toEqual(["@fixture/lib", "@fixture/tool"]);
+    },
+  );
+  it.each([
+    ["unparsable YAML", "importers: [\n"],
+    ["a missing project document", "lockfileVersion: '9.0'\n"],
+    [
+      "a missing snapshot",
+      lockfile((model) => {
+        delete model.project.snapshots["undici@8.0.0"];
+        delete model.project.snapshots["zod@4.0.0"];
+      }),
+    ],
+    [
+      "a link outside the workspace",
+      lockfile((model) => {
+        model.project.importers["packages/lib"].dependencies.zod = dep("link:../../outside");
+        model.project.importers["packages/tool"].dependencies.commander = dep("link:../../outside");
+      }),
+    ],
+    [
+      "a snapshot without its package entry",
+      lockfile((model) => {
+        delete model.project.packages["undici@8.0.0"];
+        delete model.project.packages["zod@4.0.0"];
+      }),
+    ],
+    ["more than two documents", `${lockfile()}\n---\nlockfileVersion: '9.0'\n`],
+    [
+      "a malformed package-manager document",
+      lockfile((model) => {
+        model.environment.importers = { ".": {}, "packages/lib": {} };
+      }),
+    ],
+    ["a deleted lockfile", null],
+  ] as [string, string | null][])("fails closed on %s", (_name, contents) => {
+    const result = fixture().run({ "pnpm-lock.yaml": contents });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/lib", "@fixture/tool"]);
+  });
+  it("fails closed on YAML aliases", () => {
+    const aliased = lockfile()
+      .replace("\n  ansi@1.0.0: {}\n", "\n  ansi@1.0.0: &empty {}\n")
+      .replace("\n  fetchdep@1.0.0: {}\n", "\n  fetchdep@1.0.0: *empty\n");
+    expect(aliased).toContain("ansi@1.0.0: &empty {}");
+    expect(aliased).toContain("fetchdep@1.0.0: *empty");
+    const result = fixture().run({ "pnpm-lock.yaml": aliased });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/lib", "@fixture/tool"]);
+    expect(result.output).toContain(
+      "resolved dependency tree unknown (Alias resolution is disabled",
+    );
+  });
+  it("fails closed on an added lockfile", () => {
+    const f = fixture();
+    f.git("rm", "-q", "pnpm-lock.yaml");
+    f.git("commit", "-m", "test: no lockfile");
+    f.advanceBase();
+    const result = f.run({ "pnpm-lock.yaml": lockfile() });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/lib", "@fixture/tool"]);
+  });
+  it("follows a snapshot-level link into the linked workspace package", () => {
+    const result = fixture().run({
+      "pnpm-lock.yaml": lockfile((model) => {
+        bump(model, "fetchdep@1.0.0", "fetchdep@1.1.0");
+        model.project.importers["packages/fetch"].dependencies.fetchdep = dep("1.1.0");
+      }),
+    });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/tool"]);
+  });
+  it("fails closed when the tree links a workspace package outside the source directories", () => {
+    const result = fixture().run({
+      "pnpm-lock.yaml": lockfile((model) => {
+        model.project.snapshots["client@1.0.0"] = {
+          dependencies: { "@fixture/app": "link:packages/app" },
+        };
+      }),
+    });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/tool"]);
+    expect(result.output).toContain("outside its source directories: packages/app");
+  });
+  it("flags a resolution change at the same version", () => {
+    const result = fixture().run({
+      "pnpm-lock.yaml": lockfile((model) => {
+        model.project.packages["zod@4.0.0"] = { resolution: { integrity: "sha512-other" } };
+      }),
+    });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/lib"]);
+  });
+  it("keeps the path rule for a nested manifest without a lockfile importer", () => {
+    const f = fixture();
+    const nested = "packages/helper/strings/package.json";
+    f.write(nested, '{"type":"module"}');
+    f.git("add", ".");
+    f.git("commit", "-m", "test: nested manifest");
+    f.advanceBase();
+    const result = f.run({ [nested]: '{"type":"module","dependencies":{"zod":"4.1.0"}}' });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/tool"]);
+  });
+  it("keeps the path rule for a manifest that is not a regular file", () => {
+    const f = fixture();
+    const linked = "packages/helper/linked/package.json";
+    mkdirSync(join(f.cwd, dirname(linked)), { recursive: true });
+    symlinkSync("../package.json", join(f.cwd, linked));
+    f.git("add", ".");
+    f.git("commit", "-m", "test: symlinked manifest");
+    f.advanceBase();
+    unlinkSync(join(f.cwd, linked));
+    symlinkSync("../src/index.ts", join(f.cwd, linked));
+    const result = f.run({});
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/tool"]);
+  });
+  it("defers a root manifest dependency-only change to the lockfile", () => {
+    const result = fixture().run({
+      "package.json":
+        '{"name":"fixture","private":true,"packageManager":"pnpm@12.11.2","devDependencies":{"rootonly":"2.0.0"}}',
+      "pnpm-lock.yaml": lockfile((model) => {
+        bump(model, "rootonly@1.0.0", "rootonly@2.0.0");
+        model.project.importers["."].devDependencies.rootonly = dep("2.0.0");
+      }),
+    });
+    expect(result.status, result.output).toBe(0);
+  });
+  it.each([
+    '{"name":"fixture","private":true,"packageManager":"pnpm@12.11.2","scripts":{"build":"turbo build"}}',
+    '{"name":"fixture","private":true,"packageManager":"pnpm@12.12.0"}',
+  ])("keeps other root manifest changes global: %s", (contents) => {
+    const result = fixture().run({ "package.json": contents });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/lib", "@fixture/tool"]);
+  });
+  it("defers a bundled workspace manifest dependency-only change to the closure", () => {
+    const quiet = fixture().run({
+      "packages/helper/package.json": manifest("helper", {
+        devDependencies: { "@fixture/fetch": "workspace:*", vitest: "5.1.0" },
+      }),
+      "pnpm-lock.yaml": lockfile((model) => {
+        bump(model, "vitest@5.0.0", "vitest@5.1.0");
+        model.project.importers["packages/helper"].devDependencies.vitest = dep("5.1.0");
+      }),
+    });
+    expect(quiet.status, quiet.output).toBe(0);
+    const reached = fixture().run({
+      "packages/helper/package.json": manifest("helper", { dependencies: { undici: "8.1.0" } }),
+      "pnpm-lock.yaml": lockfile((model) => {
+        bump(model, "undici@8.0.0", "undici@8.1.0");
+        model.project.importers["packages/helper"].dependencies.undici = dep("8.1.0");
+      }),
+    });
+    expect(reached.status).toBe(1);
+    expect(failing(reached.output)).toEqual(["@fixture/tool"]);
+  });
+  it("keeps the path rule for other bundled workspace manifest changes", () => {
+    const result = fixture().run({
+      "packages/helper/package.json": manifest("helper", { scripts: { build: "tsup" } }),
+    });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/tool"]);
+  });
+  it("keeps the path rule for a shipped template manifest", () => {
+    const f = fixture();
+    const template = "packages/tool/templates/integration/package.json";
+    f.write(template, '{"name":"template","dependencies":{"zod":"4.0.0"}}');
+    f.git("add", ".");
+    f.git("commit", "-m", "test: template manifest");
+    f.advanceBase();
+    const result = f.run({ [template]: '{"name":"template","dependencies":{"zod":"4.1.0"}}' });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/tool"]);
+  });
+  it("keeps the path rule for a public package's own shipped manifest", () => {
+    const result = fixture().run({
+      "packages/lib/package.json": manifest("lib", { devDependencies: { tsup: "9.0.0" } }),
+    });
+    expect(result.status).toBe(1);
+    expect(failing(result.output)).toEqual(["@fixture/lib"]);
   });
 });
 
