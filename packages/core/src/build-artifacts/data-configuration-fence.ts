@@ -1803,6 +1803,11 @@ export function createDataConfigurationFenceStore(
       execution: grant.execution,
       serviceIds: grant.serviceIds,
     });
+    // The fence holds the whole application closure the agent signed into
+    // the lease. Startup registers only the release's built-in services;
+    // installed community-extension services are known to the agent alone,
+    // so they arrive here, as for a borrowed hardlink leaf.
+    local.registeredTargets = new Set([...local.registeredTargets, ...lease.serviceIds]);
     try {
       const admit = () => {
           let authority: ReturnType<typeof restoreAdmittedControlExecution> | undefined;

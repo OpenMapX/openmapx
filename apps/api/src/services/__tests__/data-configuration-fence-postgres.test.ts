@@ -92,7 +92,6 @@ describe.skipIf(
     async ({ producer, alreadyFailed }) => {
       const f = await ownedFenceFixture({
         productionRegistration: true,
-        legacyRegistration: true,
         immediateRecovery: producer === "immediate",
         guardedRecovery: producer === "guarded",
       });
@@ -101,9 +100,7 @@ describe.skipIf(
       try {
         const fence = createDataConfigurationMaintenance(f.sql, f.dm);
         await fence.startup();
-        await expect(
-          fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion]),
-        ).rejects.toThrow("Unregistered execution role/targets");
+        await f.adoptPreparationWithoutAdmission();
         await f.failPreparation();
         const { cancelAdminJobOperations } = await import("../admin-job-ops"),
           { jobRunner } = await import("../job-runner"),
@@ -323,7 +320,7 @@ describe.skipIf(
   }, 60000);
 
   it("keeps ownership when negative receiver evidence is live, changed, admitted, or unavailable", async () => {
-    const f = await ownedFenceFixture({ productionRegistration: true, legacyRegistration: true });
+    const f = await ownedFenceFixture({ productionRegistration: true });
     let clock: ReturnType<typeof vi.spyOn> | undefined;
     const request = (input = f.input, headers: Record<string, string> = {}) =>
       fetch(`${f.data.baseUrl}/executions/configuration-maintenance/recovery`, {
@@ -339,9 +336,7 @@ describe.skipIf(
     try {
       const fence = createDataConfigurationMaintenance(f.sql, f.dm);
       await fence.startup();
-      await expect(
-        fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion]),
-      ).rejects.toThrow("Unregistered execution role/targets");
+      await f.adoptPreparationWithoutAdmission();
       expect((await request()).status).not.toBe(200); // live original
       clock = vi.spyOn(Date, "now").mockReturnValue(f.owner.deadlineAt + 1);
       expect((await request()).status).not.toBe(200); // issuer not frozen
@@ -440,16 +435,13 @@ describe.skipIf(
   it("cancels the original failed preparation without changing its canonical or replaying PREPARE", async () => {
     const f = await ownedFenceFixture({
       productionRegistration: true,
-      legacyRegistration: true,
       loseRecoveryResponseOnce: true,
     });
     let clock: ReturnType<typeof vi.spyOn> | undefined;
     try {
       const fence = createDataConfigurationMaintenance(f.sql, f.dm);
       await fence.startup();
-      await expect(
-        fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion]),
-      ).rejects.toThrow("Unregistered execution role/targets");
+      await f.adoptPreparationWithoutAdmission();
       await f.failPreparation();
       const { createApiOpsClient } = await import("../ops-client"),
         client = createApiOpsClient(),
@@ -618,15 +610,13 @@ describe.skipIf(
   it.each(["child", "owner", "bundle", "link", "release"] as const)(
     "rejoins only original negative recovery after lost %s publication acknowledgement",
     async (boundary) => {
-      const f = await ownedFenceFixture({ productionRegistration: true, legacyRegistration: true });
+      const f = await ownedFenceFixture({ productionRegistration: true });
       let clock: ReturnType<typeof vi.spyOn> | undefined,
         fault: ReturnType<typeof vi.spyOn> | undefined;
       try {
         const fence = createDataConfigurationMaintenance(f.sql, f.dm);
         await fence.startup();
-        await expect(
-          fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion]),
-        ).rejects.toThrow("Unregistered execution role/targets");
+        await f.adoptPreparationWithoutAdmission();
         await f.failPreparation();
         const canonicalPath = join(
             f.root,
@@ -687,14 +677,12 @@ describe.skipIf(
   );
 
   it("settles only the expired adopted but unadmitted original preparation through receiver recovery", async () => {
-    const f = await ownedFenceFixture({ productionRegistration: true, legacyRegistration: true });
+    const f = await ownedFenceFixture({ productionRegistration: true });
     let clock: ReturnType<typeof vi.spyOn> | undefined;
     try {
       const fence = createDataConfigurationMaintenance(f.sql, f.dm);
       await fence.startup();
-      await expect(
-        fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion]),
-      ).rejects.toThrow("Unregistered execution role/targets");
+      await f.adoptPreparationWithoutAdmission();
       const assertion = JSON.parse(Buffer.from(f.assertion, "base64url").toString("utf8")),
         adoption = join(
           f.root,
@@ -775,6 +763,28 @@ describe.skipIf(
     try {
       expect(f.input.serviceIds).toContain("app-api");
       expect(f.input.serviceIds).toContain("ops-agent");
+      const fence = createDataConfigurationMaintenance(f.sql, f.dm);
+      await fence.startup();
+      const receipt = await fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion]);
+      expect(receipt.state).toBe("prepared");
+      expect(
+        control.preparedDataConfigurationFenceState(
+          control.verifyPublishedDataConfigurationFencePrepared(f.lease, f.child),
+        ).preparedReceipt,
+      ).toEqual(receipt);
+    } finally {
+      await f.close();
+    }
+  }, 60000);
+
+  it("holds an enabled community-extension service in the application closure with the production Data Manager target registration", async () => {
+    const f = await ownedFenceFixture({
+      productionRegistration: true,
+      enabledCommunityServiceIds: ["community-tiles"],
+    });
+    try {
+      expect(DATA_MANAGER_CONTROL_SERVICE_IDS).not.toContain("community-tiles");
+      expect(f.input.serviceIds).toContain("community-tiles");
       const fence = createDataConfigurationMaintenance(f.sql, f.dm);
       await fence.startup();
       const receipt = await fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion]);
@@ -1041,10 +1051,11 @@ import { drizzle } from "drizzle-orm/postgres-js";
 async function ownedFenceFixture(
   options: {
     productionRegistration?: boolean;
-    legacyRegistration?: boolean;
     loseRecoveryResponseOnce?: boolean;
     immediateRecovery?: boolean;
     guardedRecovery?: boolean;
+    /** Installed, enabled services outside the release's built-in set. */
+    enabledCommunityServiceIds?: string[];
   } = {},
 ) {
   const fixture = await createConfigurationPostgresFixture({
@@ -1052,14 +1063,15 @@ async function ownedFenceFixture(
     withConfigurationMigration: options.guardedRecovery,
   });
   apiState.fixture = fixture;
+  const community = options.enabledCommunityServiceIds ?? [];
   const host = await ownedServiceHost({
     withCoordinator: true,
     configurationReleaseMetadata: options.guardedRecovery,
     configurationHelperVersion: options.guardedRecovery ? "1" : undefined,
     selectedRoots: options.productionRegistration
-      ? ["app-api", "data-manager", "motis", "ops-agent"]
+      ? ["app-api", "data-manager", "motis", "ops-agent", ...community]
       : ["data-manager", "motis"],
-    extraServiceIds: options.productionRegistration ? [] : ["foreign-consumer"],
+    extraServiceIds: options.productionRegistration ? community : ["foreign-consumer"],
     schemas: {
       "data-manager": {
         type: "object",
@@ -1085,11 +1097,9 @@ async function ownedFenceFixture(
       : []),
   ]);
   const serviceIds = host.loaded.map((s) => s.manifest.id),
-    dmServiceIds = options.legacyRegistration
-      ? ["data-manager", "motis", "motis-feed-proxy", "motis-staging"]
-      : options.productionRegistration
-        ? [...DATA_MANAGER_CONTROL_SERVICE_IDS]
-        : serviceIds,
+    dmServiceIds = options.productionRegistration
+      ? [...DATA_MANAGER_CONTROL_SERVICE_IDS]
+      : serviceIds,
     root = host.infraDir,
     agent = control.openControlInstallation({ infraDir: root, role: "ops-agent", serviceIds }),
     data = await ownedDataManager({
@@ -1343,6 +1353,29 @@ async function ownedFenceFixture(
         }),
       );
       await preparation.catch(() => {});
+    },
+    /** The receiver's state after a PREPARE stopped between adopting the
+     * signed lease and admitting its execution, for example because the Data
+     * Manager was killed there: a ready adoption and no admitted execution. */
+    async adoptPreparationWithoutAdmission() {
+      const rawHeaders = ["x-openmapx-control-delegation", assertion],
+        dataRoot = join(root, "data"),
+        peer = control.verifyControlPeer(dm, {
+          rawHeaders,
+          transportPrincipal: "shared-data-manager-bearer",
+          execution: child,
+          kind: "configuration-maintenance.prepare",
+        }),
+        grant = control.inspectArtifactDelegation({ dataRoot, assertion, installation: dm });
+      control.closeArtifactTargetLeaseHandle(
+        await control.adoptArtifactTargetLease({
+          dataRoot,
+          assertion,
+          peer,
+          execution: child,
+          serviceIds: grant.serviceIds,
+        }),
+      );
     },
     async close() {
       response.reject(Error("Named fixture HTTP transport closed"));
