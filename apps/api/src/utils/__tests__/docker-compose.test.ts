@@ -19,6 +19,14 @@ function clientWithExecute(execute: ApiOpsClient["execute"]): ApiOpsClient {
   };
 }
 
+// The execution identity every admission and status carries.
+const identity = {
+  version: 2 as const,
+  admittedAt: 0,
+  deadlineAt: 3_600_000,
+  fingerprint: "a".repeat(64),
+};
+
 describe("inspectDawarichProvisioning", () => {
   it("returns the strict provisioning inspection result", async () => {
     const execute = vi.fn(async () => ({
@@ -93,7 +101,7 @@ describe("typed Compose facade", () => {
         throw options.signal?.reason ?? new DOMException("Aborted", "AbortError");
       });
     const lookup = vi.fn().mockResolvedValue({
-      version: 1,
+      ...identity,
       operationId: "job1_followAmbiguous000",
       operationKey,
       kind: "service.logs.follow",
@@ -103,7 +111,7 @@ describe("typed Compose facade", () => {
       updatedAt: "2026-08-23T10:00:01.000Z",
     });
     const cancel = vi.fn().mockResolvedValue({
-      version: 1,
+      ...identity,
       operationId: "job1_followAmbiguous000",
       operationKey,
       kind: "service.logs.follow",
@@ -143,6 +151,7 @@ describe("typed Compose facade", () => {
     const client = clientWithExecute(
       vi.fn().mockResolvedValue({
         execution: "async",
+        ...identity,
         operationId: "job1_followTerminalFail00",
         operationKey,
         kind: "service.logs.follow",
@@ -158,7 +167,7 @@ describe("typed Compose facade", () => {
       events: [{ cursor: 1, type: "log", stream: "stdout", message: "truncated" }],
     });
     vi.mocked(client.status).mockResolvedValue({
-      version: 1,
+      ...identity,
       operationId: "job1_followTerminalFail00",
       operationKey,
       kind: "service.logs.follow",
@@ -307,6 +316,7 @@ it("cancels only its admitted log reader when the active HTTP observer closes", 
   });
   const execute = vi.fn().mockResolvedValue({
     execution: "async",
+    ...identity,
     kind: "service.logs.follow",
     operationId: "job1_ownedLogReader0000",
     operationKey: "opk1_ownedLogReader0000",

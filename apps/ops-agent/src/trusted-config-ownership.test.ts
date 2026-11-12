@@ -498,7 +498,7 @@ describe("authenticated conditional configuration admission", () => {
                     await app.inject({
                       method: "GET",
                       url: `/v1/operations/${journalRecords[0].operationId}`,
-                      headers: { authorization: `Bearer ${token}` },
+                      headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" },
                     })
                   ).json().result;
                   interimResultHidden = interim.state === "running" && interim.result === undefined;
@@ -588,7 +588,7 @@ describe("authenticated conditional configuration admission", () => {
             await app.inject({
               method: "GET",
               url: `/v1/operations/${id}`,
-              headers: { authorization: `Bearer ${token}` },
+              headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" },
             })
           ).json().result;
           expect(status.state).toBe("running");
@@ -613,7 +613,7 @@ describe("authenticated conditional configuration admission", () => {
           const cancelled = app.inject({
             method: "DELETE",
             url: `/v1/operations/${id}`,
-            headers: { authorization: `Bearer ${token}` },
+            headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" },
           });
           const cancelDeadline = performance.now() + 3_000;
           while (
@@ -621,7 +621,7 @@ describe("authenticated conditional configuration admission", () => {
               await app.inject({
                 method: "GET",
                 url: `/v1/operations/${id}`,
-                headers: { authorization: `Bearer ${token}` },
+                headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" },
               })
             ).json().result.state !== "termination_pending" &&
             performance.now() < cancelDeadline
@@ -635,7 +635,7 @@ describe("authenticated conditional configuration admission", () => {
             await app.inject({
               method: "GET",
               url: `/v1/operations/${id}`,
-              headers: { authorization: `Bearer ${token}` },
+              headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" },
             })
           ).json().result;
         const deadline = performance.now() + 3_000;

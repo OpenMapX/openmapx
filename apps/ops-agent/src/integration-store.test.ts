@@ -333,7 +333,7 @@ describe("integration store", () => {
       let status = await app.inject({
         method: "GET",
         url: `/v1/operations/${operationId}`,
-        headers: { authorization: `Bearer ${apiToken}` },
+        headers: { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "2" },
       });
       for (
         let attempt = 0;
@@ -344,7 +344,7 @@ describe("integration store", () => {
         status = await app.inject({
           method: "GET",
           url: `/v1/operations/${operationId}`,
-          headers: { authorization: `Bearer ${apiToken}` },
+          headers: { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "2" },
         });
       }
 

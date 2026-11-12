@@ -48,6 +48,7 @@ const ERROR_CLASSES = new Set<OpsErrorClass>([
   "recovery_required",
   "host_update_required",
   "control_upgrade_required",
+  "unsupported_peer",
   "runtime",
 ]);
 
@@ -339,7 +340,7 @@ export class OpsClient {
         headers: {
           authorization: `Bearer ${token}`,
           "x-ops-request-id": requestId,
-          "x-ops-protocol-version": "2",
+          "x-ops-protocol-version": String(OPS_PROTOCOL_VERSION),
           ...(options.fingerprint ? { "x-ops-operation-fingerprint": options.fingerprint } : {}),
           ...(options.bodyFingerprint ? { "x-ops-body-fingerprint": options.bodyFingerprint } : {}),
           ...(options.requestedDeadlineAt === undefined
@@ -436,10 +437,7 @@ export class OpsClient {
         }),
       );
       if (status.operationId !== operationId) throw new Error("Operation status ID mismatch");
-      if (
-        status.version === 2 &&
-        status.fingerprint !== (options.fingerprint ?? retained?.fingerprint)
-      )
+      if (status.fingerprint !== (options.fingerprint ?? retained?.fingerprint))
         throw new Error("Operation cancellation identity mismatch");
       return status;
     } catch (error) {
@@ -500,7 +498,8 @@ export class OpsClient {
         typeof value !== "object" ||
         Array.isArray(value) ||
         !exactKeys(value as Record<string, unknown>, ["versions"]) ||
-        JSON.stringify((value as { versions?: unknown }).versions) !== "[1,2]"
+        JSON.stringify((value as { versions?: unknown }).versions) !==
+          JSON.stringify([OPS_PROTOCOL_VERSION])
       )
         throw new OpsProtocolUpgradeRequiredError();
     })();

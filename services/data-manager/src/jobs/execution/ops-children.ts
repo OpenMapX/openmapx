@@ -410,7 +410,6 @@ export async function lookupOwnedDataOpsChildren(
 function sameStatus(child: DataOpsChildAttempt, status: OpsJobStatus) {
   if (
     child.state === "reserved" ||
-    status.version !== 2 ||
     status.operationId !== child.proposedId ||
     status.operationKey !== child.operationKey ||
     status.kind !== child.operation.kind ||

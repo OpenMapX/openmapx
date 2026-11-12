@@ -77,6 +77,8 @@ import {
   OPS_MAX_REQUEST_TTL_MS,
   OPS_MAX_RESULT_BYTES,
   OPS_OPERATION_KINDS,
+  OPS_PROTOCOL_VERSION,
+  type OpsAdmission,
   OpsContractError,
   type OpsErrorClass,
   type OpsEventBatch,
@@ -161,7 +163,7 @@ import {
   registerDawarichSubjectExportRoute,
 } from "./dawarich-subject-export";
 import { registerOpsIngressRateLimit } from "./ingress-rate-limit";
-import type { HistoricalPullJob, OpsJobJournal, PersistedOpsJob } from "./journal";
+import type { OpsJobJournal, PersistedOpsJob } from "./journal";
 import {
   type CoordinatorPullOwnershipObservation,
   consumeCoordinatorPullOwnershipCapture,
@@ -326,6 +328,11 @@ function resolveRole(
 
 function validRequestId(value: unknown): string {
   return typeof value === "string" && REQUEST_ID_PATTERN.test(value) ? value : FALLBACK_REQUEST_ID;
+}
+
+/** Status reads speak only the current protocol; a missing or older header is refused. */
+function supportedPeer(request: { headers: Record<string, unknown> }): boolean {
+  return request.headers["x-ops-protocol-version"] === String(OPS_PROTOCOL_VERSION);
 }
 
 function requestIdFromBody(body: unknown): string {
@@ -519,29 +526,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   }
   if (literalProductionRuntime && options.controlInstallation && options.journal)
     installCoordinatorStagedOwnershipSource(runtime, options.controlInstallation, journal);
-  const historicalPulls = journal.historicalPullRecords?.() ?? [];
-  const historicalStatus = (job: HistoricalPullJob, version: 1 | 2): OpsJobStatus => ({
-    version: version === 2 && job.executionVersion === 2 ? 2 : 1,
-    ...(version === 2 && job.executionVersion === 2
-      ? {
-          admittedAt: job.admittedAt,
-          deadlineAt: job.deadlineAt,
-          fingerprint: job.fingerprint,
-          ...(job.diagnostics ? { diagnostics: job.diagnostics } : {}),
-          ...(job.failureResult ? { failureResult: job.failureResult } : {}),
-        }
-      : {}),
-    operationId: job.operationId,
-    operationKey: job.operationKey,
-    kind: "service.pull",
-    resourceId: job.resourceId,
-    state: job.state,
-    submittedAt: job.submittedAt,
-    updatedAt: job.updatedAt,
-    ...(job.result === undefined ? {} : { result: job.result }),
-    ...(job.errorClass ? { errorClass: job.errorClass } : {}),
-    ...(job.terminationRequestedAt ? { terminationRequestedAt: job.terminationRequestedAt } : {}),
-  });
   const resourceClaimer =
     options.resourceClaimer ?? createPolicyResourceClaimer(options.resourcePolicy ?? {});
   const jobsById = new Map<string, JobRecord>();
@@ -575,7 +559,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   };
 
   const restoredRecords = journal.records();
-  if (restoredRecords.length + historicalPulls.length > maxJobEntries) {
+  if (restoredRecords.length > maxJobEntries) {
     throw new Error("Ops job journal exceeds the configured server capacity");
   }
   for (const persisted of restoredRecords) {
@@ -627,18 +611,14 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   });
   const persisted = (job: JobRecord): PersistedOpsJob => ({
     ...(job.controlAdoption ? { controlAdoption: job.controlAdoption } : {}),
-    ...(job.executionVersion === 2
-      ? {
-          executionVersion: 2 as const,
-          requestVersion: job.requestVersion,
-          admittedAt: job.admittedAt,
-          deadlineAt: job.deadlineAt,
-          operationFingerprint: job.operationFingerprint,
-          requestedDeadlineAt: job.requestedDeadlineAt,
-          deploymentBudgetMs: job.deploymentBudgetMs,
-          parent: job.parent,
-        }
-      : {}),
+    executionVersion: 2,
+    requestVersion: job.requestVersion,
+    admittedAt: job.admittedAt,
+    deadlineAt: job.deadlineAt,
+    operationFingerprint: job.operationFingerprint,
+    requestedDeadlineAt: job.requestedDeadlineAt,
+    deploymentBudgetMs: job.deploymentBudgetMs,
+    parent: job.parent,
     ...(job.diagnostics ? { diagnostics: job.diagnostics } : {}),
     ...(job.failureResult ? { failureResult: job.failureResult } : {}),
     ...(job.progressResult ? { progressResult: job.progressResult } : {}),
@@ -1015,7 +995,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         if (candidate.terminalAt === undefined) throw Error("Missing terminal time");
         candidate.terminalAt = retainControlTerminalCommitment(
           authority,
-          statusFor(candidate, 2, true),
+          statusFor(candidate, true),
           candidate.terminalAt,
         );
         updates = { ...updates, terminalAt: candidate.terminalAt };
@@ -1045,7 +1025,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       if (containedValidation && authority && job.terminalAt !== undefined) {
         retainArtifactValidationObservation(
           authority,
-          statusFor(job, 2, true),
+          statusFor(job, true),
           job.terminalAt,
           containedValidation,
         );
@@ -1076,20 +1056,20 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     pushEvent(job, { cursor: job.cursor, type: "state", state: job.state });
   };
 
-  const identityFor = (job: JobRecord) =>
-    job.executionVersion === 2
-      ? { admittedAt: job.admittedAt, deadlineAt: job.deadlineAt, fingerprint: job.fingerprint }
-      : {};
+  const identityFor = (job: JobRecord) => ({
+    admittedAt: job.admittedAt,
+    deadlineAt: job.deadlineAt,
+    fingerprint: job.fingerprint,
+  });
   const executionFor = (job: JobRecord): ExecutionRef =>
     Object.freeze({
       executor: "ops-agent",
       principal: job.role,
       executionId: job.operationId,
       operationKey: job.operationKey,
-      operationFingerprint: job.operationFingerprint ?? job.fingerprint,
+      operationFingerprint: job.operationFingerprint,
       fingerprint: job.fingerprint,
-      // Compatibility records never resume a forward execution or gain a new budget.
-      deadlineAt: job.deadlineAt ?? Date.parse(job.submittedAt),
+      deadlineAt: job.deadlineAt,
     });
   /** The secondary UNKNOWN projection may be repaired only from the actual
    * original owner's completed canonical source, never a runtime retry. */
@@ -1245,25 +1225,20 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     },
   });
 
-  const projectionVersion = (request: { headers: Record<string, unknown> }): 1 | 2 =>
-    request.headers["x-ops-protocol-version"] === "2" ? 2 : 1;
-  const admissionFor = (job: JobRecord, version: 1 | 2) => ({
+  const admissionFor = (job: JobRecord): OpsAdmission => ({
+    version: OPS_PROTOCOL_VERSION,
     execution: "async",
     operationId: job.operationId,
     operationKey: job.operationKey,
     kind: job.operation.kind,
     state: outwardStateFor(job),
-    ...(version === 2 && job.executionVersion === 2 ? { version: 2, ...identityFor(job) } : {}),
+    ...identityFor(job),
   });
-  const statusFor = (job: JobRecord, version: 1 | 2, internalTerminal = false): OpsJobStatus => ({
-    version: version === 2 && job.executionVersion === 2 ? 2 : 1,
-    ...(version === 2 && job.executionVersion === 2 ? identityFor(job) : {}),
-    ...(version === 2 && job.executionVersion === 2 && job.diagnostics
-      ? { diagnostics: job.diagnostics }
-      : {}),
-    ...(version === 2 && job.executionVersion === 2 && job.failureResult
-      ? { failureResult: job.failureResult }
-      : {}),
+  const statusFor = (job: JobRecord, internalTerminal = false): OpsJobStatus => ({
+    version: OPS_PROTOCOL_VERSION,
+    ...identityFor(job),
+    ...(job.diagnostics ? { diagnostics: job.diagnostics } : {}),
+    ...(job.failureResult ? { failureResult: job.failureResult } : {}),
     operationId: job.operationId,
     operationKey: job.operationKey,
     kind: job.operation.kind,
@@ -1310,7 +1285,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             !activeControllers.has(job.operationId) &&
             ["succeeded", "failed", "timed_out"].includes(job.state) &&
             !!digest &&
-            controlTerminalReceiptDigest(statusFor(job, 2)) === digest
+            controlTerminalReceiptDigest(statusFor(job)) === digest
           );
         },
         retire: async (executions, _manifestDigest) =>
@@ -1323,7 +1298,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 activeControllers.has(job.operationId) ||
                 job.operationKey !== execution.operationKey ||
                 job.fingerprint !== execution.fingerprint ||
-                controlTerminalReceiptDigest(statusFor(job, 2)) !== digest
+                controlTerminalReceiptDigest(statusFor(job)) !== digest
               )
                 throw Error("Agent terminal journal changed during retirement");
               remove.add(job.operationId);
@@ -1351,7 +1326,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 job.state !== "succeeded" ||
                 job.terminalAt === undefined ||
                 job.role !== "api" ||
-                job.executionVersion !== 2 ||
                 parent?.issuer !== "api" ||
                 canonicalJson(receipt.prepare) !== canonicalJson(original.execution) ||
                 original.execution.operationFingerprint !== body.prepareFingerprint ||
@@ -1663,7 +1637,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 retainControlTerminalStatus(
                   options.controlInstallation,
                   authority.execution,
-                  statusFor(job, 2),
+                  statusFor(job),
                   job.terminalAt,
                 );
               if (terminalDurable && claimReleased && authority)
@@ -1687,7 +1661,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                     options.controlInstallation,
                     job.operation,
                     executionFor(job),
-                    statusFor(job, 2),
+                    statusFor(job),
                     job.terminalAt,
                   );
                 } catch {
@@ -1793,7 +1767,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 retainControlTerminalStatus(
                   options.controlInstallation,
                   authority.execution,
-                  statusFor(job, 2),
+                  statusFor(job),
                   job.terminalAt,
                 );
               if (terminalDurable && claimReleased && authority)
@@ -1830,7 +1804,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     const requestId = validRequestId(request.headers["x-ops-request-id"]);
     if (!resolveRole(request.headers.authorization, options.tokens))
       return reply.code(401).send(redactedOpsError(requestId, "authentication"));
-    return reply.send(opsSuccess(requestId, { versions: [1, 2] }));
+    return reply.send(opsSuccess(requestId, { versions: [OPS_PROTOCOL_VERSION] }));
   });
   app.get("/health", async () => {
     let privacyBackup = {
@@ -1905,7 +1879,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             retainControlTerminalStatus(
               installation,
               authority.execution,
-              statusFor(job, 2),
+              statusFor(job),
               job.terminalAt,
             );
             completeControlJournalExecution(authority);
@@ -1915,7 +1889,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             // can still expose proved committed files and physical release.
             if (result.outcome === "committed" && job.terminalAt !== undefined) {
               try {
-                inspectSettledArtifactImport(authority, statusFor(job, 2), job.terminalAt);
+                inspectSettledArtifactImport(authority, statusFor(job), job.terminalAt);
               } catch {
                 /* retain unknown source */
               }
@@ -1944,7 +1918,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         job.operation.ownerId !== operation.ownerId ||
         job.fingerprint !== operation.identity.fingerprint ||
         job.operationKey !== operation.identity.operationKey ||
-        new Date(job.deadlineAt!).toISOString() !== operation.identity.executionDeadlineAt ||
+        new Date(job.deadlineAt).toISOString() !== operation.identity.executionDeadlineAt ||
         job.terminalAt === undefined
       )
         return found;
@@ -1969,10 +1943,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             publication: "committed",
             receipt: { kind: "ops-result", result: validation },
           });
-          retainControlTerminalCommitment(authority, statusFor(job, 2), job.terminalAt);
+          retainControlTerminalCommitment(authority, statusFor(job), job.terminalAt);
           retainArtifactValidationObservation(
             authority,
-            statusFor(job, 2),
+            statusFor(job),
             job.terminalAt,
             validation,
           );
@@ -1982,11 +1956,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         }
         if (job.operation.kind !== "artifactTransfer.import" || found.claim.use !== "import-build")
           return found;
-        const publication = inspectSettledArtifactImport(
-          authority,
-          statusFor(job, 2),
-          job.terminalAt,
-        );
+        const publication = inspectSettledArtifactImport(authority, statusFor(job), job.terminalAt);
         return { ...found, publication };
       } catch {
         return found;
@@ -2150,7 +2120,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 // an unknown secondary journal never overrides that source.
                 restored.terminalAt = retainControlTerminalCommitment(
                   authority,
-                  statusFor(restored, 2, true),
+                  statusFor(restored, true),
                   published.terminalAt,
                 );
                 await journal.replace(
@@ -2177,7 +2147,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         }
       }
       if (
-        job.executionVersion === 2 &&
         job.operation.kind !== "configurationMaintenance.decide" &&
         job.operation.kind !== "configurationMaintenance.settle" &&
         opsKindRequiresControlAuthority(job.operation.kind) &&
@@ -2213,7 +2182,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             const recovered = restoreConfigurationPreEffectTerminal(
                 options.controlInstallation,
                 execution,
-                statusFor(job, 2),
+                statusFor(job),
               ),
               authority = repairControlJournalTerminal(
                 options.controlInstallation,
@@ -2250,7 +2219,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           const authority = repairControlJournalTerminal(
             options.controlInstallation,
             execution,
-            statusFor(job, 2),
+            statusFor(job),
             job.terminalAt,
           );
           controlAuthorities.set(job.operationId, authority);
@@ -2308,23 +2277,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         const timing = validateTiming(parsed.issuedAt, parsed.expiresAt, nowMs);
         replay.accept(parsed.requestId, timing.expiresAtMs, nowMs);
         const policy = OPS_KIND_POLICIES[operation.kind];
-        // Read-only historical records can neither reserve a fresh normal key
-        // nor turn an unresolved old effect into permission for another writer.
-        if (
-          historicalPulls.some(
-            (job) => job.role === role && job.operationKey === parsed.operationKey,
-          )
-        )
-          throw new RequestGuardError("conflict", 409);
-        if (
-          opsKindRequiresControlAuthority(operation.kind) &&
-          historicalPulls.some(
-            (job) =>
-              ["queued", "running", "termination_pending"].includes(job.state) ||
-              job.errorClass === "recovery_required",
-          )
-        )
-          throw new RequestGuardError("recovery_required", 409);
         const operationFingerprint = opsOperationFingerprint(operation);
         if (operation.kind === "controlRetention.acknowledge") {
           if (role !== "api" || !options.controlInstallation)
@@ -2333,7 +2285,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             const existing = jobsByKey.get(`api:${operation.operationKey}`);
             if (
               existing &&
-              controlTerminalReceiptDigest(statusFor(existing, 2)) !== operation.terminalDigest
+              controlTerminalReceiptDigest(statusFor(existing)) !== operation.terminalDigest
             )
               throw Error("Current terminal digest conflict");
             const phase =
@@ -2349,7 +2301,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 options.controlInstallation,
                 existing.operation,
                 executionFor(existing),
-                statusFor(existing, 2),
+                statusFor(existing),
                 existing.terminalAt,
               );
             const value = phase
@@ -2425,12 +2377,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           throw new RequestGuardError("authorization", 403);
         }
         if (delegationHeader !== undefined) {
-          if (
-            !options.controlInstallation ||
-            role !== "data-manager" ||
-            parsed.version !== 2 ||
-            parentHeader !== undefined
-          )
+          if (!options.controlInstallation || role !== "data-manager" || parentHeader !== undefined)
             throw new RequestGuardError("authorization", 403);
           try {
             controlAdmission = inspectControlAdmission(options.controlInstallation, {
@@ -2447,8 +2394,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             throw new RequestGuardError("authorization", 403);
           }
         }
-        if (parsed.version === 1 && (parentHeader !== undefined || delegationHeader !== undefined))
-          throw new RequestGuardError("authorization", 403);
         if (parentHeader !== undefined) {
           if (role !== "api" || typeof parentHeader !== "string")
             throw new RequestGuardError("authorization", 403);
@@ -2583,12 +2528,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         const fingerprint = operationFingerprint; // Existing sealed claims bind the body, never execution timing.
         const matchesRetained = (job: JobRecord): boolean => {
           try {
-            return job.executionVersion === 2
-              ? job.fingerprint ===
-                  normalize(job.admittedAt as number, job.deploymentBudgetMs).fingerprint
-              : job.fingerprint === operationFingerprint &&
-                  parsed.execution === undefined &&
-                  !parent;
+            return (
+              job.fingerprint === normalize(job.admittedAt, job.deploymentBudgetMs).fingerprint
+            );
           } catch {
             return false;
           }
@@ -2599,11 +2541,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           const existing = jobsByKey.get(ownerKey);
           if (existing) {
             if (!matchesRetained(existing)) throw new RequestGuardError("conflict", 409);
-            return reply
-              .code(202)
-              .send(opsSuccess(parsed.requestId, admissionFor(existing, parsed.version)));
+            return reply.code(202).send(opsSuccess(parsed.requestId, admissionFor(existing)));
           }
-          if (jobsById.size + historicalPulls.length >= maxJobEntries) {
+          if (jobsById.size >= maxJobEntries) {
             throw new RequestGuardError("busy", 429);
           }
         }
@@ -2739,8 +2679,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               }
               return { type: "retained", job: retained } as const;
             }
-            if (jobsById.size + historicalPulls.length >= maxJobEntries)
-              throw new RequestGuardError("busy", 429);
+            if (jobsById.size >= maxJobEntries) throw new RequestGuardError("busy", 429);
             if (normalized.deadlineAt <= now().getTime())
               throw new RequestGuardError("timeout", 504);
             const timestamp = new Date(normalized.admittedAt).toISOString();
@@ -2796,11 +2735,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               operation.kind === "configurationMaintenance.decide"
             ) {
               try {
-                if (
-                  job.admittedAt === undefined ||
-                  job.requestedDeadlineAt === undefined ||
-                  typeof parentHeader !== "string"
-                )
+                if (job.requestedDeadlineAt === undefined || typeof parentHeader !== "string")
                   throw new ConfigurationMaintenanceControlUnauthorized(
                     "Actual decision request source required",
                   );
@@ -2815,7 +2750,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                         ).authority,
                         AbortSignal.any([
                           claimController.signal,
-                          AbortSignal.timeout(Math.max(1, job.deadlineAt! - Date.now())),
+                          AbortSignal.timeout(Math.max(1, job.deadlineAt - Date.now())),
                         ]),
                       )
                     : undefined;
@@ -2827,8 +2762,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                     admittedAt: job.admittedAt,
                     requestedDeadlineAt: job.requestedDeadlineAt,
                     parentAssertion: parentHeader,
-                    requestVersion: job.requestVersion!,
-                    deploymentBudgetMs: job.deploymentBudgetMs!,
+                    requestVersion: job.requestVersion,
+                    deploymentBudgetMs: job.deploymentBudgetMs,
                   },
                   continueObservation,
                 );
@@ -2846,11 +2781,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               operation.kind === "configurationMaintenance.settle"
             ) {
               try {
-                if (
-                  job.admittedAt === undefined ||
-                  job.requestedDeadlineAt === undefined ||
-                  typeof parentHeader !== "string"
-                )
+                if (job.requestedDeadlineAt === undefined || typeof parentHeader !== "string")
                   throw new ConfigurationMaintenanceControlUnauthorized(
                     "Actual settlement request source required",
                   );
@@ -2862,8 +2793,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                     admittedAt: job.admittedAt,
                     requestedDeadlineAt: job.requestedDeadlineAt,
                     parentAssertion: parentHeader,
-                    requestVersion: job.requestVersion!,
-                    deploymentBudgetMs: job.deploymentBudgetMs!,
+                    requestVersion: job.requestVersion,
+                    deploymentBudgetMs: job.deploymentBudgetMs,
                   },
                 );
                 maintenanceControls.set(job.operationId, configurationMaintenanceControl);
@@ -2919,8 +2850,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               opsKindRequiresControlAuthority(operation.kind)
             ) {
               try {
-                if (!options.controlInstallation || job.admittedAt === undefined)
-                  throw Error("Control trust unavailable");
+                if (!options.controlInstallation) throw Error("Control trust unavailable");
                 const maintenanceAdmission =
                   job.operation.kind === "configurationMaintenance.prepare"
                     ? await prepareConfigurationMaintenanceAdmission(runtime, {
@@ -3081,7 +3011,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 delegationId: controlAdmission.delegationId,
               };
               try {
-                if (!options.controlInstallation || job.admittedAt === undefined)
+                if (!options.controlInstallation)
                   throw Error("Missing durable control admission context");
                 const lease = await controlAdmission.adopt(executionFor(job));
                 const authority = retainAdmittedControlExecution(options.controlInstallation, {
@@ -3142,9 +3072,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           if (admission.type === "retained") {
             await claimAdmission?.rollback().catch(() => undefined);
             active -= 1;
-            return reply
-              .code(202)
-              .send(opsSuccess(parsed.requestId, admissionFor(admission.job, parsed.version)));
+            return reply.code(202).send(opsSuccess(parsed.requestId, admissionFor(admission.job)));
           }
           const { job } = admission;
           try {
@@ -3163,9 +3091,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             throw new RequestGuardError("runtime", 500);
           }
           await runAsync(job, startedAt, claim, claimAdmission);
-          return reply
-            .code(202)
-            .send(opsSuccess(parsed.requestId, admissionFor(job, parsed.version)));
+          return reply.code(202).send(opsSuccess(parsed.requestId, admissionFor(job)));
         }
         const controller = new AbortController();
         try {
@@ -3252,163 +3178,114 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     const requestId = validRequestId(request.headers["x-ops-request-id"]);
     const role = resolveRole(request.headers.authorization, options.tokens);
     if (!role) return reply.code(401).send(redactedOpsError(requestId, "authentication"));
+    if (!supportedPeer(request))
+      return reply.code(400).send(redactedOpsError(requestId, "unsupported_peer"));
     const operationKey = (request.params as { operationKey?: unknown }).operationKey;
     if (typeof operationKey !== "string" || !/^opk1_[A-Za-z0-9_-]{16,64}$/.test(operationKey)) {
       return reply.code(400).send(redactedOpsError(requestId, "validation"));
     }
     await pruneJobs(now().getTime());
     const job = jobsByKey.get(`${role}:${operationKey}`);
-    if (!job) {
-      const legacy = historicalPulls.find(
-        (value) => value.role === role && value.operationKey === operationKey,
-      );
-      if (!legacy) return reply.code(404).send(redactedOpsError(requestId, "not_found"));
-      const fingerprint = request.headers["x-ops-operation-fingerprint"],
-        body = request.headers["x-ops-body-fingerprint"],
-        requested = request.headers["x-ops-requested-deadline"];
-      if (
-        (body !== undefined && body !== (legacy.operationFingerprint ?? legacy.fingerprint)) ||
-        ((body === undefined || fingerprint !== undefined) &&
-          fingerprint !== legacy.fingerprint &&
-          fingerprint !== legacy.operationFingerprint) ||
-        (requested !== undefined && requested !== String(legacy.requestedDeadlineAt))
-      )
-        return reply.code(409).send(redactedOpsError(requestId, "conflict"));
-      return reply
-        .code(200)
-        .send(opsSuccess(requestId, historicalStatus(legacy, projectionVersion(request))));
-    }
+    if (!job) return reply.code(404).send(redactedOpsError(requestId, "not_found"));
     const fingerprint = request.headers["x-ops-operation-fingerprint"];
+    // The lookup names the operation body it would submit; an optional
+    // execution fingerprint must match the retained identity as well.
     const bodyFingerprint = request.headers["x-ops-body-fingerprint"];
-    // Explicit compatibility: a v1 lookup used the body hash in the sole header.
-    if (bodyFingerprint !== undefined) {
-      if (bodyFingerprint !== (job.operationFingerprint ?? job.fingerprint))
-        return reply.code(409).send(redactedOpsError(requestId, "conflict"));
+    if (typeof bodyFingerprint !== "string" || !/^[a-f0-9]{64}$/.test(bodyFingerprint))
+      return reply.code(400).send(redactedOpsError(requestId, "validation"));
+    if (bodyFingerprint !== job.operationFingerprint)
+      return reply.code(409).send(redactedOpsError(requestId, "conflict"));
+    if (
+      fingerprint !== undefined &&
+      fingerprint !== job.fingerprint &&
+      fingerprint !== bodyFingerprint
+    )
+      return reply.code(409).send(redactedOpsError(requestId, "conflict"));
+    const requested = request.headers["x-ops-requested-deadline"];
+    if (requested !== undefined) {
+      const requestedDeadlineAt = Number(requested);
       if (
-        fingerprint !== undefined &&
-        fingerprint !== job.fingerprint &&
-        fingerprint !== bodyFingerprint
+        typeof requested !== "string" ||
+        !Number.isSafeInteger(requestedDeadlineAt) ||
+        requestedDeadlineAt < 0
       )
-        return reply.code(409).send(redactedOpsError(requestId, "conflict"));
-      const requested = request.headers["x-ops-requested-deadline"];
-      if (requested !== undefined) {
-        const requestedDeadlineAt = Number(requested);
-        if (
-          typeof requested !== "string" ||
-          !Number.isSafeInteger(requestedDeadlineAt) ||
-          requestedDeadlineAt < 0
-        )
-          return reply.code(400).send(redactedOpsError(requestId, "validation"));
-        let deadlineAt = Math.min(
-          requestedDeadlineAt,
-          job.parent?.deadlineAt ?? Infinity,
-          (job.admittedAt ?? 0) + (job.deploymentBudgetMs ?? 0),
-        );
-        const originalControl = maintenanceControls.get(job.operationId);
-        if (
-          originalControl &&
-          (job.operation.kind === "configurationMaintenance.settle" ||
-            (job.operation.kind === "configurationMaintenance.decide" &&
-              job.operation.decision === "abandon"))
-        ) {
-          // These accepted metadata controls retained their own bounded clock
-          // under the original expired/canceled root. Lookup must authenticate
-          // that SAME intent, without applying the forward-parent clamp again.
-          if (
-            requestedDeadlineAt !== job.requestedDeadlineAt ||
-            job.admittedAt === undefined ||
-            job.deploymentBudgetMs === undefined
-          )
-            return reply.code(409).send(redactedOpsError(requestId, "conflict"));
-          try {
-            deadlineAt = normalizeConfigurationMaintenanceRecoveryControl(
-              originalControl,
-              job.operation,
-              job.operationKey,
-              job.admittedAt,
-              job.deploymentBudgetMs,
-            ).deadlineAt;
-          } catch {
-            return reply.code(409).send(redactedOpsError(requestId, "recovery_required"));
-          }
-        }
-        if (
-          executionFingerprint({
-            kind: job.operation.kind,
-            operationFingerprint: bodyFingerprint as string,
-            deadlineAt,
-            ...(job.parent ? { parent: job.parent } : {}),
-          }) !== job.fingerprint
-        )
-          return reply.code(409).send(redactedOpsError(requestId, "conflict"));
-      }
-    } else {
-      if (typeof fingerprint !== "string" || !/^[a-f0-9]{64}$/.test(fingerprint))
         return reply.code(400).send(redactedOpsError(requestId, "validation"));
-      if (fingerprint !== job.fingerprint && fingerprint !== job.operationFingerprint)
+      let deadlineAt = Math.min(
+        requestedDeadlineAt,
+        job.parent?.deadlineAt ?? Infinity,
+        job.admittedAt + job.deploymentBudgetMs,
+      );
+      const originalControl = maintenanceControls.get(job.operationId);
+      if (
+        originalControl &&
+        (job.operation.kind === "configurationMaintenance.settle" ||
+          (job.operation.kind === "configurationMaintenance.decide" &&
+            job.operation.decision === "abandon"))
+      ) {
+        // These accepted metadata controls retained their own bounded clock
+        // under the original expired/canceled root. Lookup must authenticate
+        // that SAME intent, without applying the forward-parent clamp again.
+        if (requestedDeadlineAt !== job.requestedDeadlineAt)
+          return reply.code(409).send(redactedOpsError(requestId, "conflict"));
+        try {
+          deadlineAt = normalizeConfigurationMaintenanceRecoveryControl(
+            originalControl,
+            job.operation,
+            job.operationKey,
+            job.admittedAt,
+            job.deploymentBudgetMs,
+          ).deadlineAt;
+        } catch {
+          return reply.code(409).send(redactedOpsError(requestId, "recovery_required"));
+        }
+      }
+      if (
+        executionFingerprint({
+          kind: job.operation.kind,
+          operationFingerprint: bodyFingerprint,
+          deadlineAt,
+          ...(job.parent ? { parent: job.parent } : {}),
+        }) !== job.fingerprint
+      )
         return reply.code(409).send(redactedOpsError(requestId, "conflict"));
     }
     await refreshOriginalMaintenanceControl(job);
-    return reply.code(200).send(opsSuccess(requestId, statusFor(job, projectionVersion(request))));
+    return reply.code(200).send(opsSuccess(requestId, statusFor(job)));
   });
 
   app.get("/v1/operations/:operationId", async (request, reply) => {
     const requestId = validRequestId(request.headers["x-ops-request-id"]);
     const role = resolveRole(request.headers.authorization, options.tokens);
     if (!role) return reply.code(401).send(redactedOpsError(requestId, "authentication"));
+    if (!supportedPeer(request))
+      return reply.code(400).send(redactedOpsError(requestId, "unsupported_peer"));
     const operationId = (request.params as { operationId?: unknown }).operationId;
     if (typeof operationId !== "string" || !OPERATION_ID_PATTERN.test(operationId)) {
       return reply.code(400).send(redactedOpsError(requestId, "validation"));
     }
     await pruneJobs(now().getTime());
     const job = jobsById.get(operationId);
-    if (!job || job.role !== role) {
-      const legacy = historicalPulls.find(
-        (value) => value.operationId === operationId && value.role === role,
-      );
-      if (legacy)
-        return reply
-          .code(200)
-          .send(opsSuccess(requestId, historicalStatus(legacy, projectionVersion(request))));
+    if (!job || job.role !== role)
       return reply.code(404).send(redactedOpsError(requestId, "not_found"));
-    }
     await refreshOriginalMaintenanceControl(job);
-    return reply.code(200).send(opsSuccess(requestId, statusFor(job, projectionVersion(request))));
+    return reply.code(200).send(opsSuccess(requestId, statusFor(job)));
   });
 
   app.delete("/v1/operations/:operationId", async (request, reply) => {
     const requestId = validRequestId(request.headers["x-ops-request-id"]);
     const role = resolveRole(request.headers.authorization, options.tokens);
     if (!role) return reply.code(401).send(redactedOpsError(requestId, "authentication"));
+    if (!supportedPeer(request))
+      return reply.code(400).send(redactedOpsError(requestId, "unsupported_peer"));
     const operationId = (request.params as { operationId?: unknown }).operationId;
     if (typeof operationId !== "string" || !OPERATION_ID_PATTERN.test(operationId)) {
       return reply.code(400).send(redactedOpsError(requestId, "validation"));
     }
     await pruneJobs(now().getTime());
     const job = jobsById.get(operationId);
-    if (!job || job.role !== role) {
-      const legacy = historicalPulls.find(
-        (value) => value.operationId === operationId && value.role === role,
-      );
-      if (legacy) {
-        if (
-          legacy.executionVersion === 2 &&
-          request.headers["x-ops-operation-fingerprint"] !== legacy.fingerprint
-        )
-          return reply.code(409).send(redactedOpsError(requestId, "conflict"));
-        return legacy.terminalAt === undefined
-          ? reply.code(409).send(redactedOpsError(requestId, "recovery_required"))
-          : reply
-              .code(200)
-              .send(opsSuccess(requestId, historicalStatus(legacy, projectionVersion(request))));
-      }
+    if (!job || job.role !== role)
       return reply.code(404).send(redactedOpsError(requestId, "not_found"));
-    }
-    if (
-      job.executionVersion === 2 &&
-      request.headers["x-ops-operation-fingerprint"] !== job.fingerprint &&
-      !(projectionVersion(request) === 1 && job.requestVersion === 1)
-    )
+    if (request.headers["x-ops-operation-fingerprint"] !== job.fingerprint)
       return reply.code(409).send(redactedOpsError(requestId, "conflict"));
     if (job.terminalAt !== undefined) {
       if (
@@ -3422,11 +3299,11 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               runtime,
               restoreAdmittedControlExecution(options.controlInstallation, executionFor(job)),
             ),
-            status = statusFor(job, projectionVersion(request));
+            status = statusFor(job);
           retainControlTerminalStatus(
             options.controlInstallation,
             executionFor(job),
-            statusFor(job, 2, true),
+            statusFor(job, true),
             job.terminalAt,
           );
           const proof = signMaintenanceRecoveryProof(options.tokens.api, {
@@ -3435,23 +3312,19 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             operationId: job.operationId,
             operationKey: job.operationKey,
             fingerprint: job.fingerprint,
-            terminalDigest: controlTerminalReceiptDigest(statusFor(job, 2)),
+            terminalDigest: controlTerminalReceiptDigest(statusFor(job)),
             ...source,
           });
           return reply.code(200).send(
             opsSuccess(requestId, {
               ...status,
-              ...(status.version === 2
-                ? {
-                    diagnostics: {
-                      tail: [],
-                      truncated: Boolean(
-                        status.diagnostics?.truncated || status.diagnostics?.tail.length,
-                      ),
-                      maintenanceRecovery: proof,
-                    },
-                  }
-                : {}),
+              diagnostics: {
+                tail: [],
+                truncated: Boolean(
+                  status.diagnostics?.truncated || status.diagnostics?.tail.length,
+                ),
+                maintenanceRecovery: proof,
+              },
             }),
           );
         } catch (error) {
@@ -3478,9 +3351,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           if (lease) closeArtifactTargetLeaseHandle(lease);
         }
       }
-      return reply
-        .code(200)
-        .send(opsSuccess(requestId, statusFor(job, projectionVersion(request))));
+      return reply.code(200).send(opsSuccess(requestId, statusFor(job)));
     }
     const controller = activeControllers.get(operationId);
     if (!controller) {
@@ -3508,7 +3379,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         if (waitTimer !== undefined) clearTimeout(waitTimer);
       });
     }
-    return reply.code(200).send(opsSuccess(requestId, statusFor(job, projectionVersion(request))));
+    return reply.code(200).send(opsSuccess(requestId, statusFor(job)));
   });
 
   app.get("/v1/operations/:operationId/events", async (request, reply) => {

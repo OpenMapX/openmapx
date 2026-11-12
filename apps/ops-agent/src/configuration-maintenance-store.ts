@@ -1235,7 +1235,7 @@ export function retainConfigurationMaintenanceSettleControl(
     admittedAt: number;
     requestedDeadlineAt: number;
     parentAssertion: string;
-    requestVersion: 1 | 2;
+    requestVersion: 2;
     deploymentBudgetMs: number;
   },
 ): void {
@@ -1382,7 +1382,7 @@ export function retainConfigurationMaintenanceDecisionControl(
     admittedAt: number;
     requestedDeadlineAt: number;
     parentAssertion: string;
-    requestVersion: 1 | 2;
+    requestVersion: 2;
     deploymentBudgetMs: number;
   },
   continueObservation?: MaintenanceContinueObservation,
@@ -5489,10 +5489,8 @@ export async function prepareConfigurationMaintenanceAdmission(
           throw Error("Unique original coordinator pull source unavailable");
         const job = matches[0]!;
         if (
-          job.executionVersion !== 2 ||
           job.operation.kind !== "service.pull" ||
           job.state !== "succeeded" ||
-          job.requestVersion !== 2 ||
           canonicalJson(job.operation) !== canonicalJson(fixed.pull.operation)
         )
           throw Error("Actual successful current coordinator pull required");

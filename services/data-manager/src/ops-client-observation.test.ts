@@ -48,7 +48,10 @@ const status =
       requestId,
       ok: true,
       result: {
-        version: 1,
+        version: 2,
+        admittedAt: 1_000,
+        deadlineAt: 2_000,
+        fingerprint: "a".repeat(64),
         operationId: "job1_observeOperation0000",
         operationKey,
         kind: operation.kind,
@@ -103,11 +106,6 @@ describe("observeRetainedHostOperation", () => {
     await expect(at(now - 29_999)).resolves.toBe("active");
     await expect(at(now - 30_000)).resolves.toBe("active");
     await expect(at(now - 30_001)).resolves.toBe("terminal");
-  });
-
-  it("holds a recovery-required failure when no deadline is recorded anywhere", async () => {
-    agent(status("timed_out", { errorClass: "recovery_required" }));
-    await expect(observeRetainedHostOperation(operationKey, retained())).resolves.toBe("unknown");
   });
 
   it("only reads: every request is a lookup by operation key", async () => {

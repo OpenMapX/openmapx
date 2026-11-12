@@ -50,7 +50,8 @@ export class ApiOpsError extends Error {
     super(
       errorClass === "host_update_required" ||
         errorClass === "control_upgrade_required" ||
-        errorClass === "configuration_prerequisite"
+        errorClass === "configuration_prerequisite" ||
+        errorClass === "unsupported_peer"
         ? OPS_PUBLIC_ERROR_MESSAGES[errorClass]
         : "Operations request failed",
     );
@@ -392,8 +393,8 @@ export async function waitForOpsResult<K extends OpsOperationKind>(
         status.kind !== kind ||
         status.operationId !== admission.operationId ||
         status.operationKey !== admission.operationKey ||
-        (admission.fingerprint !== undefined && status.fingerprint !== admission.fingerprint) ||
-        (admission.deadlineAt !== undefined && status.deadlineAt !== admission.deadlineAt)
+        status.fingerprint !== admission.fingerprint ||
+        status.deadlineAt !== admission.deadlineAt
       )
         pending("invalid_identity");
       await options.onStatus?.(status);
@@ -622,13 +623,9 @@ export async function submitOpsOperationWithRecovery<K extends OpsOperationKind>
           operationKey: status.operationKey,
           kind: operation.kind,
           state: status.state,
-          ...(status.version === 2
-            ? {
-                admittedAt: status.admittedAt,
-                deadlineAt: status.deadlineAt,
-                fingerprint: status.fingerprint,
-              }
-            : {}),
+          admittedAt: status.admittedAt,
+          deadlineAt: status.deadlineAt,
+          fingerprint: status.fingerprint,
         } as OpsSubmitResult<K>;
       } catch (lookupError) {
         if (lookupError instanceof OpsObservationPending) throw lookupError;

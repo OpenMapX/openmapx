@@ -20,12 +20,3 @@ export const servicePullResultSchema = z.strictObject({
     .nullable(),
 });
 export type ServicePullResult = z.infer<typeof servicePullResultSchema>;
-/** Retained read-only data, deliberately absent from opsOperationSchema and
- * fresh result validation. Neither shape can be dispatched or copied as proof. */
-export const historicalServicePullOperationSchema = z.strictObject({
-  kind: z.literal("service.pull"),
-  serviceId: servicePullOperationSchema.shape.serviceId,
-});
-export const historicalServicePullResultSchema = z.strictObject({ changed: z.boolean() });
-export type HistoricalServicePullOperation = z.infer<typeof historicalServicePullOperationSchema>;
-export type HistoricalServicePullResult = z.infer<typeof historicalServicePullResultSchema>;

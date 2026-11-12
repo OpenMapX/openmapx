@@ -251,8 +251,6 @@ export async function readLiteralCoordinatorStagedRetention(
       job.operation.kind !== "service.pull" ||
       job.operation.serviceId !== "data-manager" ||
       !job.operation.candidateId ||
-      job.executionVersion !== 2 ||
-      job.requestVersion !== 2 ||
       job.state !== "succeeded"
     )
       continue;
@@ -296,8 +294,6 @@ function stagedProofs(resolver: OwnedServiceResolver): VerifiedStagedCoordinator
       job.operation.kind !== "service.pull" ||
       job.operation.serviceId !== "data-manager" ||
       !job.operation.candidateId ||
-      job.executionVersion !== 2 ||
-      job.requestVersion !== 2 ||
       job.state !== "succeeded"
     )
       continue;

@@ -26,6 +26,13 @@ const pullResult = {
   imageId: `sha256:${"b".repeat(64)}`,
   releaseSelectionDigest: null,
 };
+// The execution identity every admission and status carries.
+const identity = {
+  version: 2 as const,
+  admittedAt: 0,
+  deadlineAt: 3_600_000,
+  fingerprint: "a".repeat(64),
+};
 
 function fakeClient(overrides: Partial<Record<keyof ApiOpsClient, unknown>> = {}): ApiOpsClient {
   return {
@@ -78,6 +85,7 @@ describe("bounded async ops helpers", () => {
     let now = 0;
     const admission = {
       execution: "async" as const,
+      ...identity,
       operationId: "job1_abcdefghijklmnop",
       operationKey: "opk1_abcdefghijklmnop",
       kind,
@@ -85,7 +93,7 @@ describe("bounded async ops helpers", () => {
     };
     const client = fakeClient({
       status: async () => ({
-        version: 1,
+        ...identity,
         operationId: admission.operationId,
         operationKey: admission.operationKey,
         kind,
@@ -118,7 +126,7 @@ describe("bounded async ops helpers", () => {
     const operationKey = "opk1_lookupDisconnected000";
     const execute = vi.fn().mockRejectedValue(new DOMException("Aborted", "AbortError"));
     const lookup = vi.fn().mockResolvedValue({
-      version: 1,
+      ...identity,
       operationId: "job1_lookupDisconnected000",
       operationKey,
       kind: "service.logs.follow",
@@ -176,6 +184,7 @@ describe("bounded async ops helpers", () => {
     const operationKey = "opk1_ambiguousAdmission00";
     const admission = {
       execution: "async" as const,
+      ...identity,
       operationId: "job1_ambiguousAdmission00",
       operationKey,
       kind: "service.pull" as const,
@@ -183,7 +192,7 @@ describe("bounded async ops helpers", () => {
     };
     const execute = vi.fn().mockRejectedValueOnce(new ApiOpsError("runtime"));
     const status = vi.fn().mockResolvedValue({
-      version: 1,
+      ...identity,
       operationId: admission.operationId,
       operationKey,
       kind: admission.kind,
@@ -194,7 +203,7 @@ describe("bounded async ops helpers", () => {
       result: pullResult,
     });
     const lookup = vi.fn().mockResolvedValue({
-      version: 1,
+      ...identity,
       operationId: admission.operationId,
       operationKey,
       kind: admission.kind,
@@ -239,13 +248,14 @@ describe("bounded async ops helpers", () => {
   it("retries bounded transient status failures but not authorization failures", async () => {
     const admission = {
       execution: "async" as const,
+      ...identity,
       operationId: "job1_transientStatus000",
       operationKey: "opk1_transientStatus000",
       kind: "service.pull" as const,
       state: "running" as const,
     };
     const success = {
-      version: 1 as const,
+      ...identity,
       operationId: admission.operationId,
       operationKey: admission.operationKey,
       kind: admission.kind,
@@ -276,6 +286,7 @@ describe("bounded async ops helpers", () => {
   it("waits for and returns the exact typed terminal result", async () => {
     const admission: OpsSubmitResult<"service.start"> = {
       execution: "async",
+      ...identity,
       operationId: "job1_abcdefghijklmnop",
       operationKey: "opk1_abcdefghijklmnop",
       kind: "service.start",
@@ -283,7 +294,7 @@ describe("bounded async ops helpers", () => {
     };
     const statuses: OpsJobStatusFor<"service.start">[] = [
       {
-        version: 1,
+        ...identity,
         operationId: admission.operationId,
         operationKey: admission.operationKey,
         kind: "service.start",
@@ -293,7 +304,7 @@ describe("bounded async ops helpers", () => {
         updatedAt: "2026-08-23T10:00:01.000Z",
       },
       {
-        version: 1,
+        ...identity,
         operationId: admission.operationId,
         operationKey: admission.operationKey,
         kind: "service.start",
@@ -321,6 +332,7 @@ describe("bounded async ops helpers", () => {
   it("translates terminal failure and local timeout without leaking details", async () => {
     const admission = {
       execution: "async" as const,
+      ...identity,
       operationId: "job1_abcdefghijklmnop",
       operationKey: "opk1_abcdefghijklmnop",
       kind: "service.restart" as const,
@@ -328,7 +340,7 @@ describe("bounded async ops helpers", () => {
     };
     const failed = fakeClient({
       status: vi.fn(async () => ({
-        version: 1,
+        ...identity,
         operationId: admission.operationId,
         operationKey: admission.operationKey,
         kind: admission.kind,
@@ -348,7 +360,7 @@ describe("bounded async ops helpers", () => {
     let now = 0;
     const running = fakeClient({
       status: vi.fn(async () => ({
-        version: 1,
+        ...identity,
         operationId: admission.operationId,
         operationKey: admission.operationKey,
         kind: admission.kind,
@@ -375,6 +387,7 @@ describe("bounded async ops helpers", () => {
   it("rejects a status bound to a different operation key", async () => {
     const admission = {
       execution: "async" as const,
+      ...identity,
       operationId: "job1_abcdefghijklmnop",
       operationKey: "opk1_abcdefghijklmnop",
       kind: "service.start" as const,
@@ -382,7 +395,7 @@ describe("bounded async ops helpers", () => {
     };
     const client = fakeClient({
       status: vi.fn(async () => ({
-        version: 1,
+        ...identity,
         operationId: admission.operationId,
         operationKey: "opk1_ponmlkjihgfedcba",
         kind: admission.kind,
@@ -403,6 +416,7 @@ describe("bounded async ops helpers", () => {
     const controller = new AbortController();
     const admission = {
       execution: "async" as const,
+      ...identity,
       operationId: "job1_abcdefghijklmnop",
       operationKey: "opk1_abcdefghijklmnop",
       kind: "service.stop" as const,
@@ -415,7 +429,7 @@ describe("bounded async ops helpers", () => {
         effectiveSignal = options.signal;
         reads++;
         return {
-          version: 1,
+          ...identity,
           operationId: admission.operationId,
           operationKey: admission.operationKey,
           kind: admission.kind,
@@ -606,13 +620,14 @@ describe("configuration outcome evidence", () => {
       const client = fakeClient({
         execute: vi.fn().mockResolvedValue({
           execution: "async",
+          ...identity,
           kind: operation.kind,
           operationId: "job",
           operationKey: "opk1_configOutcome123",
           state: "queued",
         }),
         status: vi.fn().mockResolvedValue({
-          version: 1,
+          ...identity,
           operationId: "job",
           operationKey: "opk1_configOutcome123",
           kind: operation.kind,
@@ -671,18 +686,16 @@ describe("independent observation deadlines", () => {
     let now = 0;
     const admission = {
       execution: "async" as const,
+      ...identity,
       kind: "service.build" as const,
       operationId: "job1_abcdefghijklmnop",
       operationKey: "opk1_abcdefghijklmnop",
       state: "running" as const,
-      admittedAt: 0,
       deadlineAt: 12 * 3600_000,
-      fingerprint: "a".repeat(64),
     };
     let polls = 0;
     const client = fakeClient({
       status: async () => ({
-        version: 2,
         ...admission,
         resourceId: "valhalla",
         submittedAt: new Date(0).toISOString(),
@@ -706,6 +719,7 @@ describe("independent observation deadlines", () => {
     const controller = new AbortController();
     const admission = {
       execution: "async" as const,
+      ...identity,
       kind: "services.buildAll" as const,
       operationId: "job1_abcdefghijklmnop",
       operationKey: "opk1_abcdefghijklmnop",
@@ -730,6 +744,7 @@ describe("independent observation deadlines", () => {
 it("bounds an inflight status read by the observer deadline without canceling execution", async () => {
   const admission = {
     execution: "async" as const,
+    ...identity,
     kind: "service.build" as const,
     operationId: "job1_abcdefghijklmnop",
     operationKey: "opk1_abcdefghijklmnop",
@@ -741,7 +756,6 @@ it("bounds an inflight status read by the observer deadline without canceling ex
         const timer = setTimeout(
           () =>
             resolve({
-              version: 1,
               ...admission,
               resourceId: "valhalla",
               state: "succeeded",

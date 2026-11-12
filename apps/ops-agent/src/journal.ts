@@ -1,14 +1,11 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { constants, realpathSync } from "node:fs";
 import { mkdir, open, opendir, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { type ControlAdoption, controlAdoptionSchema } from "@openmapx/core/build-artifacts";
 import {
-  canonicalJson,
-  type HistoricalServicePullOperation,
-  historicalServicePullOperationSchema,
-  historicalServicePullResultSchema,
   OPS_KIND_POLICIES,
+  OPS_PROTOCOL_VERSION,
   OPS_PUBLIC_ERROR_MESSAGES,
   type OpsErrorClass,
   type OpsFailureResult,
@@ -28,6 +25,8 @@ import {
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 
+/** The file keeps its jobs-v1.json name; its contents are format version 2. */
+const JOURNAL_FILE_VERSION = 2;
 const OPS_JOB_JOURNAL_MAX_ENTRIES = 256;
 const OPS_JOB_JOURNAL_MAX_BYTES = 24 * 1024 * 1024;
 export const OPS_JOB_JOURNAL_MAX_ORPHANS = 8;
@@ -48,13 +47,13 @@ const ERROR_CLASSES = new Set<OpsErrorClass>(
 
 export interface PersistedOpsJob {
   controlAdoption?: ControlAdoption;
-  executionVersion?: 2;
-  requestVersion?: 1 | 2;
-  admittedAt?: number;
-  deadlineAt?: number;
-  operationFingerprint?: string;
+  executionVersion: 2;
+  requestVersion: typeof OPS_PROTOCOL_VERSION;
+  admittedAt: number;
+  deadlineAt: number;
+  operationFingerprint: string;
   requestedDeadlineAt?: number;
-  deploymentBudgetMs?: number;
+  deploymentBudgetMs: number;
   parent?: RetainedExecutionAdmission["parent"];
   diagnostics?: ProcessDiagnostics;
   failureResult?: OpsFailureResult;
@@ -79,8 +78,6 @@ export interface PersistedOpsJob {
 
 export interface OpsJobJournal {
   records(): readonly PersistedOpsJob[];
-  /** Historical pulls are an immutable observation view, never worker input. */
-  historicalPullRecords?(): readonly HistoricalPullJob[];
   replace(records: readonly PersistedOpsJob[]): Promise<void>;
 }
 const productionJournalIndexes = new WeakMap<
@@ -102,15 +99,6 @@ export function readProductionCoordinatorJournalIndex(journal: OpsJobJournal, da
   if (records.length > OPS_JOB_JOURNAL_MAX_ENTRIES) throw Error("Ops journal index limit");
   return records;
 }
-export interface HistoricalPullJob extends Omit<PersistedOpsJob, "operation"> {
-  operation: HistoricalServicePullOperation;
-}
-type RetainedOpsJob = PersistedOpsJob | HistoricalPullJob;
-function historical(job: RetainedOpsJob): job is HistoricalPullJob {
-  return (
-    job.operation.kind === "service.pull" && !("expectedConfigurationRevisionId" in job.operation)
-  );
-}
 
 export interface OpenOpsJobJournalOptions {
   now?: () => Date;
@@ -131,7 +119,7 @@ function iso(value: unknown): value is string {
   );
 }
 
-function parseJob(value: unknown): RetainedOpsJob {
+function parseJob(value: unknown): PersistedOpsJob {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid");
   const raw = value as Record<string, unknown>;
   if (
@@ -162,6 +150,8 @@ function parseJob(value: unknown): RetainedOpsJob {
       "terminalAt",
       "terminationRequestedAt",
     ]) ||
+    raw.executionVersion !== 2 ||
+    raw.requestVersion !== OPS_PROTOCOL_VERSION ||
     (raw.role !== "api" && raw.role !== "data-manager") ||
     typeof raw.operationId !== "string" ||
     !OPERATION_ID.test(raw.operationId) ||
@@ -181,53 +171,28 @@ function parseJob(value: unknown): RetainedOpsJob {
   ) {
     throw new Error("invalid");
   }
-  if (raw.controlAdoption !== undefined) {
-    controlAdoptionSchema.parse(raw.controlAdoption);
-    if (raw.executionVersion !== 2) throw Error("invalid control adoption");
-  }
-  const legacy = historicalServicePullOperationSchema.safeParse(raw.operation),
-    operation = legacy.success ? legacy.data : opsOperationSchema.parse(raw.operation),
-    bodyFingerprint = legacy.success
-      ? createHash("sha256").update(canonicalJson(operation)).digest("hex")
-      : opsOperationFingerprint(opsOperationSchema.parse(operation));
+  if (raw.controlAdoption !== undefined) controlAdoptionSchema.parse(raw.controlAdoption);
+  const operation = opsOperationSchema.parse(raw.operation);
   if (
-    bodyFingerprint !== (raw.executionVersion === 2 ? raw.operationFingerprint : raw.fingerprint) ||
-    (legacy.success
-      ? legacy.data.serviceId
-      : opsResourceId(opsOperationSchema.parse(operation))) !== raw.resourceId
+    opsOperationFingerprint(operation) !== raw.operationFingerprint ||
+    opsResourceId(operation) !== raw.resourceId
   ) {
     throw new Error("invalid");
   }
-  if (raw.executionVersion === 2) {
-    if (
-      operation.kind === "configurationMaintenance.settle" ||
-      (operation.kind === "configurationMaintenance.decide" && operation.decision === "abandon")
-    )
-      validateRetainedConfigurationMaintenanceRecoveryControl(
-        operation,
-        raw as unknown as RetainedExecutionAdmission,
-      );
-    else
-      validateRetainedExecutionAdmission(
-        operation.kind,
-        raw as unknown as RetainedExecutionAdmission,
-      );
-    if (raw.requestVersion !== undefined && raw.requestVersion !== 1 && raw.requestVersion !== 2)
-      throw new Error("invalid request version");
-    if (raw.admittedAt !== Date.parse(raw.submittedAt as string)) throw new Error("invalid");
-  } else if (
-    [
-      "executionVersion",
-      "requestVersion",
-      "admittedAt",
-      "deadlineAt",
-      "operationFingerprint",
-      "requestedDeadlineAt",
-      "deploymentBudgetMs",
-      "parent",
-    ].some((key) => raw[key] !== undefined)
+  if (
+    operation.kind === "configurationMaintenance.settle" ||
+    (operation.kind === "configurationMaintenance.decide" && operation.decision === "abandon")
   )
-    throw new Error("invalid");
+    validateRetainedConfigurationMaintenanceRecoveryControl(
+      operation,
+      raw as unknown as RetainedExecutionAdmission,
+    );
+  else
+    validateRetainedExecutionAdmission(
+      operation.kind,
+      raw as unknown as RetainedExecutionAdmission,
+    );
+  if (raw.admittedAt !== Date.parse(raw.submittedAt as string)) throw new Error("invalid");
   if (raw.diagnostics !== undefined) processDiagnosticsSchema.parse(raw.diagnostics);
   if (raw.progressResult !== undefined) {
     const progress = opsFailureResultSchema.parse(raw.progressResult);
@@ -238,7 +203,6 @@ function parseJob(value: unknown): RetainedOpsJob {
           ? "serviceBatch"
           : null;
     if (
-      raw.executionVersion !== 2 ||
       !allowed ||
       !["queued", "running", "termination_pending"].includes(raw.state as string) ||
       Object.keys(progress).some((key) => key !== allowed) ||
@@ -258,14 +222,12 @@ function parseJob(value: unknown): RetainedOpsJob {
   if (state === "succeeded") {
     if (raw.result === undefined || raw.errorClass !== undefined || raw.terminalAt === undefined)
       throw new Error("invalid");
-    if (legacy.success) historicalServicePullResultSchema.parse(raw.result);
-    else parseBoundedOpsResult(operation.kind, raw.result);
+    parseBoundedOpsResult(operation.kind, raw.result);
   } else if (state === "failed" || state === "timed_out") {
     // This finite metadata control can retain an accepted intent without any
     // conclusive completion. Startup rejoins it to the authenticated private
     // owner before lookup; parsing this projection grants no completion/ACK.
     const unresolvedSettle =
-      raw.executionVersion === 2 &&
       operation.kind === "configurationMaintenance.settle" &&
       state === "failed" &&
       raw.errorClass === "recovery_required" &&
@@ -284,25 +246,23 @@ function parseJob(value: unknown): RetainedOpsJob {
     throw new Error("invalid");
   }
   if (raw.progressResult === undefined) delete raw.progressResult;
-  return raw as unknown as RetainedOpsJob;
+  return raw as unknown as PersistedOpsJob;
 }
 
-function parseFile(bytes: Uint8Array, maxEntries: number): RetainedOpsJob[] {
+function parseFile(bytes: Uint8Array, maxEntries: number): PersistedOpsJob[] {
   const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   const decoded = JSON.parse(text) as unknown;
   if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) throw new Error("invalid");
   const raw = decoded as Record<string, unknown>;
   if (
     Object.keys(raw).sort().join(",") !== "jobs,version" ||
-    (raw.version !== 1 && raw.version !== 2) ||
+    raw.version !== JOURNAL_FILE_VERSION ||
     !Array.isArray(raw.jobs) ||
     raw.jobs.length > maxEntries
   ) {
     throw new Error("invalid");
   }
   const jobs = raw.jobs.map(parseJob);
-  if (raw.version === 1 && jobs.some((job) => job.executionVersion !== undefined))
-    throw new Error("invalid journal version");
   const ids = new Set(jobs.map((entry) => entry.operationId));
   const keys = new Set(jobs.map((entry) => `${entry.role}:${entry.operationKey}`));
   if (ids.size !== jobs.length || keys.size !== jobs.length) throw new Error("invalid");
@@ -398,7 +358,7 @@ export async function openOpsJobJournal(
     throw new Error("Invalid ops job journal limits");
   }
   const now = options.now ?? (() => new Date());
-  let current: RetainedOpsJob[] = [];
+  let current: PersistedOpsJob[] = [];
   try {
     await prepareJournalDirectory(path);
     const bytes = await safeRead(path, maxBytes);
@@ -409,10 +369,7 @@ export async function openOpsJobJournal(
   let chain = Promise.resolve();
 
   const writeSnapshot = async (records: readonly PersistedOpsJob[]): Promise<void> => {
-    const observed = current.filter(historical),
-      fresh = records.map(parseJob);
-    if (fresh.some(historical)) throw Error("Historical pull cannot enter the worker journal");
-    const validated = [...observed, ...fresh];
+    const validated = records.map(parseJob);
     if (validated.length > maxEntries) throw new Error("Ops job journal capacity exceeded");
     for (const record of validated) {
       const retained = current.find(
@@ -426,8 +383,6 @@ export async function openOpsJobJournal(
           retained.operationKey !== record.operationKey ||
           retained.role !== record.role ||
           retained.fingerprint !== record.fingerprint ||
-          retained.executionVersion !== record.executionVersion ||
-          retained.requestVersion !== record.requestVersion ||
           retained.admittedAt !== record.admittedAt ||
           retained.deadlineAt !== record.deadlineAt ||
           retained.operationFingerprint !== record.operationFingerprint ||
@@ -442,7 +397,10 @@ export async function openOpsJobJournal(
     if (ids.size !== validated.length || keys.size !== validated.length) {
       throw new Error("Ops job journal contains duplicate identity");
     }
-    const bytes = Buffer.from(JSON.stringify({ version: 2, jobs: validated }), "utf8");
+    const bytes = Buffer.from(
+      JSON.stringify({ version: JOURNAL_FILE_VERSION, jobs: validated }),
+      "utf8",
+    );
     if (bytes.byteLength > maxBytes) throw new Error("Ops job journal capacity exceeded");
     const directory = dirname(path);
     const temporary = join(directory, `.${basename(path)}.${randomBytes(12).toString("hex")}.tmp`);
@@ -469,11 +427,7 @@ export async function openOpsJobJournal(
   };
 
   const journal: OpsJobJournal = {
-    records: () =>
-      current
-        .filter((entry): entry is PersistedOpsJob => !historical(entry))
-        .map((entry) => structuredClone(entry)),
-    historicalPullRecords: () => current.filter(historical).map((entry) => structuredClone(entry)),
+    records: () => current.map((entry) => structuredClone(entry)),
     replace: (records) => {
       const snapshot = records.map((entry) => structuredClone(entry));
       const next = chain.then(() => writeSnapshot(snapshot));
@@ -517,10 +471,7 @@ export async function openOpsJobJournal(
   }
   productionJournalIndexes.set(journal, {
     path: join(realpathSync(dirname(path)), basename(resolve(path))),
-    read: () =>
-      current
-        .filter((entry): entry is PersistedOpsJob => !historical(entry))
-        .map((entry) => structuredClone(entry)),
+    read: () => current.map((entry) => structuredClone(entry)),
   });
   return journal;
 }

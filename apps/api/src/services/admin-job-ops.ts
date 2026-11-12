@@ -72,6 +72,7 @@ const ADMISSION_REFUSALS = new Set([
   "not_wired",
   "host_update_required",
   "control_upgrade_required",
+  "unsupported_peer",
   "recovery_required",
 ]);
 
@@ -517,13 +518,15 @@ async function observeOperation(
       )
         throw new OpsObservationPending(identity, "invalid_identity");
       admission = {
+        version: status.version,
         execution: "async" as const,
         kind: projected.kind,
         operationId: projected.operationId,
         operationKey: projected.operationKey,
         state: "queued" as const,
-        fingerprint: projected.fingerprint,
-        deadlineAt: projected.deadlineAt,
+        admittedAt: status.admittedAt,
+        fingerprint: status.fingerprint,
+        deadlineAt: status.deadlineAt,
       };
     } else {
       if (!projected.operation) throw new OpsObservationPending(identity, "invalid_identity");
@@ -829,7 +832,6 @@ async function verifiedOriginalMaintenanceRecovery(
       proof = status.diagnostics?.maintenanceRecovery;
     if (
       !proof ||
-      status.version !== 2 ||
       status.kind !== "configurationMaintenance.prepare" ||
       body?.kind !== "configurationMaintenance.prepare"
     )

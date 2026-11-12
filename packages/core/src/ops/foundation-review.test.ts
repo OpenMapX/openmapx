@@ -116,7 +116,10 @@ describe("reviewed ops foundation contract", () => {
   it("defines bounded typed async status and event batches", () => {
     expect(
       parseOpsJobStatus({
-        version: 1,
+        version: 2,
+        admittedAt: 100,
+        deadlineAt: 1000,
+        fingerprint: "a".repeat(64),
         operationId: "job1_0123456789abcdef",
         operationKey: "opk1_0123456789abcdef",
         kind: "service.pull",
@@ -168,9 +171,12 @@ describe("reviewed ops foundation contract", () => {
         events: [],
       }),
     ).toThrow();
-    expect(
+    expect(() =>
       parseOpsJobStatusForKind("service.pull", {
-        version: 1,
+        version: 2,
+        admittedAt: 100,
+        deadlineAt: 1000,
+        fingerprint: "a".repeat(64),
         operationId: "job1_0123456789abcdef",
         operationKey: "opk1_0123456789abcdef",
         kind: "service.pull",
@@ -179,11 +185,14 @@ describe("reviewed ops foundation contract", () => {
         submittedAt: "2026-08-23T18:00:00.000Z",
         updatedAt: "2026-08-23T18:00:01.000Z",
         result: { changed: true },
-      }).result,
-    ).toEqual({ changed: true });
+      }),
+    ).toThrow();
     expect(() =>
       parseOpsJobStatus({
-        version: 1,
+        version: 2,
+        admittedAt: 100,
+        deadlineAt: 1000,
+        fingerprint: "a".repeat(64),
         operationId: "job1_0123456789abcdef",
         operationKey: "opk1_0123456789abcdef",
         kind: "service.pull",
@@ -196,7 +205,10 @@ describe("reviewed ops foundation contract", () => {
     ).toThrow();
     expect(() =>
       parseOpsJobStatus({
-        version: 1,
+        version: 2,
+        admittedAt: 100,
+        deadlineAt: 1000,
+        fingerprint: "a".repeat(64),
         operationId: "job1_0123456789abcdef",
         operationKey: "opk1_0123456789abcdef",
         kind: "service.pull",

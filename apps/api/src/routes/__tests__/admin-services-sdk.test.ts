@@ -240,6 +240,13 @@ const backupInventory = {
   ],
   warningCount: 1,
 };
+// The execution identity every admission and status carries.
+const identity = {
+  version: 2 as const,
+  admittedAt: 0,
+  deadlineAt: 3_600_000,
+  fingerprint: "a".repeat(64),
+};
 const execute = vi.fn(
   async (
     operation: OpsOperation,
@@ -287,6 +294,7 @@ const execute = vi.fn(
       throw Error("Unexpected typed operation or missing identity");
     return {
       execution: "async",
+      ...identity,
       operationId: "job1_syntheticFollow00",
       kind: operation.kind,
       operationKey: options.operationKey,
@@ -309,7 +317,7 @@ const ops = {
   cancel: opsCancel,
   status: vi.fn(async (kind: OpsOperationKind, operationId: string) =>
     parseOpsJobStatusForKind(kind, {
-      version: 1,
+      ...identity,
       kind,
       operationId,
       resourceId: "motis",
@@ -1137,6 +1145,7 @@ it("cancels only the admitted log observation after disconnect during submission
     await admitted.promise;
     return {
       execution: "async",
+      ...identity,
       operationId: "job1_syntheticFollow00",
       kind: operation.kind,
       operationKey: options.operationKey ?? "opk1_synthetic",

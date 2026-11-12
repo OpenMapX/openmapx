@@ -45,7 +45,7 @@ it("refuses an unowned synchronous proposal before the actual client POST", asyn
             version: 1,
             requestId: new Headers(options.headers).get("x-ops-request-id"),
             ok: true,
-            result: { versions: [1, 2] },
+            result: { versions: [2] },
           });
         posts++;
         const request = JSON.parse(String(options?.body));

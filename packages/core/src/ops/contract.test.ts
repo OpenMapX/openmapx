@@ -39,7 +39,7 @@ const maintenanceIdentity = {
 
 function request(operation: unknown, extra: Record<string, unknown> = {}) {
   return {
-    version: 1,
+    version: 2,
     requestId: "ops1_0123456789abcdef",
     operationKey: "opk1_0123456789abcdef",
     issuedAt,
@@ -1074,25 +1074,33 @@ describe("ops contract", () => {
   });
 });
 
-it("fix1 reads only the actual historical or exact v2 admission projection", async () => {
+it("reads only an exact version 2 admission with its execution identity", async () => {
   const { parseOpsAdmission } = await import("./contract");
-  const historical = {
+  const admission = {
+    version: 2,
     execution: "async",
     operationId: "job1_0123456789abcdef",
     operationKey: "opk1_0123456789abcdef",
     kind: "service.build",
     state: "queued",
+    admittedAt: 1,
+    deadlineAt: 2,
+    fingerprint: "a".repeat(64),
   };
-  expect(parseOpsAdmission(historical)).toEqual(historical);
-  for (const extra of [{ version: 1 }, { deadlineAt: 10 }, { parent: {} }, { unexpected: true }])
-    expect(() => parseOpsAdmission({ ...historical, ...extra })).toThrow();
-  expect(
-    parseOpsAdmission({
-      ...historical,
-      version: 2,
-      admittedAt: 1,
-      deadlineAt: 2,
-      fingerprint: "a".repeat(64),
-    }),
-  ).toMatchObject({ version: 2 });
+  expect(parseOpsAdmission(admission)).toEqual(admission);
+  const { version: _version, admittedAt: _admittedAt, ...withoutIdentity } = admission;
+  for (const candidate of [
+    withoutIdentity,
+    { ...admission, version: 1 },
+    { ...admission, deadlineAt: 1 },
+    { ...admission, parent: {} },
+    { ...admission, unexpected: true },
+  ])
+    expect(() => parseOpsAdmission(candidate)).toThrow();
+});
+
+it("refuses a version 1 request body", () => {
+  expect(() =>
+    parseOpsRequest(request({ kind: "docker.status" }, { version: 1 }), { role: "api" }),
+  ).toThrow(OpsContractError);
 });
