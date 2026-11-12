@@ -43,10 +43,9 @@ import {
 
 /**
  * The deployment's user on a host whose operator is not uid 1000, from an
- * .env without UID or GID, through to a committed
- * trusted-configuration request: in the host update's order (the host's
- * render, then the agent) and in the panel self-update's (the new agent
- * first). Only the host's render writes UID and GID; the agent and its fixed
+ * .env without UID or GID, through to a committed trusted-configuration
+ * request: in the host update's order (the host's render, then the agent)
+ * and in the panel self-update's (the new agent first). Only the host's render writes UID and GID; the agent and its fixed
  * CLI read .env and never change it. The fixture publishes with the UID/GID
  * Compose gives app-api from .env and submits a truthful local bearer root.
  *

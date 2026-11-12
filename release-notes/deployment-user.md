@@ -14,8 +14,8 @@ into `.env` from the checkout's owner when they are missing; explicit values
 are kept. The operations agent only reads them (see the note on the agent
 reading `.env`). A render refuses to run as a uid other
 than `UID`, and to take the user from a checkout root owns. `pnpm openmapx
-check` and **Run diagnostics** report when `.env`, the checkout's owner or the
-running containers disagree.
+check` and **Run diagnostics** report when `.env`, the checkout's owner, the
+uid running the check or the running containers disagree.
 
 ## Who is affected
 

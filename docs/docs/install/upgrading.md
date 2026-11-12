@@ -142,11 +142,11 @@ preserves the same stack content. The update command also renders, but this
 separate step lets you inspect configuration before replacement.
 
 Run it as the checkout's owner. The stack's own containers run as the
-deployment's user, `UID:GID` in `.env`, with no fallback: where `.env` sets neither, the first
-render on the host writes them from the checkout's owner, and explicit values
-are kept. The operations agent only reads them and refuses renders and
-configuration changes until they are set; a render refuses to run as another
-uid or to take the user from a checkout root owns.
+deployment's user, `UID:GID` in `.env`, with no fallback: the first render on
+the host writes whichever of the two `.env` lacks from the checkout's owner,
+and keeps an explicit value. The operations agent only reads them and refuses
+renders and configuration changes until both are set; a render refuses to run
+as another uid or to take the user from a checkout root owns.
 
 ## 4. Check and apply the complete release
 

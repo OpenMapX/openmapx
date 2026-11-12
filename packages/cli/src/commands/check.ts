@@ -238,7 +238,7 @@ export function deploymentUserProblems(input: {
     );
     return problems;
   }
-  const { uid } = assigned as { uid: number; gid: number };
+  const { uid } = assigned as { uid: number };
   if (owner && uid !== owner.uid) {
     problems.push(
       `UID in infra/docker/.env is ${uid}, but the checkout belongs to uid ${owner.uid}: the stack's containers would not own the files they share with the checkout.`,
@@ -324,8 +324,8 @@ export function registerCheckCommand(program: Command): void {
         process.exit(1);
       }
 
-      // The deployment's user against the checkout, this process, the
-      // running containers and the paths they write.
+      // The deployment's user against the checkout, this process and the
+      // running containers.
       const config = await dockerCompose(["config", "--format", "json"]);
       let composeServices: Record<string, ComposeConfigService> | null = null;
       if (config.exitCode === 0) {
