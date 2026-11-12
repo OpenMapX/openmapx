@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -248,6 +248,17 @@ describe("declared imports in public package sources", () => {
       'packages/helper/tsup.config.ts:1: "yaml" is not declared in packages/helper/package.json',
       'packages/lib/scripts/other.mjs:1: "yaml" is not declared in packages/lib/package.json',
     ]);
+  });
+  it("refuses a symbolic link among checked sources", () => {
+    const cwd = fixture({ "packages/other/x.ts": 'import "./y";\n' });
+    symlinkSync("../../other/x.ts", join(cwd, "packages/tool/src/x.ts"));
+    expect(() =>
+      declaredImportViolations({
+        cwd,
+        allowlist: [],
+        tooling: [{ path: toolScript, reason: "fixture maintenance script" }],
+      }),
+    ).toThrow("packages/tool/src/x.ts: symbolic links are not allowed in checked sources");
   });
   it("rejects a listed exclusion that no longer exists", () => {
     expect(check({ [toolScript]: null })).toEqual([

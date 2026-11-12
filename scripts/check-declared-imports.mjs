@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { builtinModules } from "node:module";
 import { join, posix, resolve } from "node:path";
 import ts from "typescript";
@@ -57,7 +57,13 @@ export function worktreeState(cwd) {
   return {
     entries,
     read(path) {
-      return entries.has(path) ? readFileSync(join(cwd, path)) : null;
+      if (!entries.has(path)) return null;
+      // The build follows a symbolic link and resolves the target's imports
+      // from the target's directory, so a link would be checked in the wrong
+      // place.
+      if (lstatSync(join(cwd, path)).isSymbolicLink())
+        throw new Error(`${path}: symbolic links are not allowed in checked sources`);
+      return readFileSync(join(cwd, path));
     },
     json(path) {
       const value = this.read(path);
