@@ -49,8 +49,7 @@ Accepted changes are durable jobs. The owning System topic reconnects to retaine
 Activity shows the original job, outcome and logs. The application coordinates the
 configuration generation, Data Manager guard, protected service helper and image
 verification before reporting completion. The agent is replaced last during a
-checked release update. Images must provide the supported configuration helper;
-older installations receive a host-upgrade prerequisite before application.
+checked release update. Images must provide the supported configuration helper.
 
 A cancel request does not undo an already committed update. If work has committed,
 the original verified completion wins. A failed pull, interrupted helper, missing

@@ -270,9 +270,7 @@ anyone's linked-account state.
 Provider OAuth tokens are **encrypted at rest** using the deployment's
 `BETTER_AUTH_SECRET`. Keep that secret protected and stable: rotating it
 intentionally makes existing stored tokens undecryptable, and affected users
-must re-link their OpenStreetMap (or other OAuth) account. See
-[upgrading](./upgrading.md#openstreetmap-contributions-and-oauth-token-encryption)
-for what happens to tokens stored before encryption was enabled.
+must re-link their OpenStreetMap (or other OAuth) account.
 
 ### Redis
 
