@@ -108,7 +108,8 @@ overrides:
   "js-yaml": "^5.2.1"
   # Orval pins this maintained v4 release, including the merge/omap DoS fixes.
   # Keep this exception scoped to dev-only code generation, not runtime parsers.
-  "orval@8.45.0>js-yaml": "4.3.2"
+  # It names no Orval version, so an Orval update keeps the v4 it imports.
+  "orval>js-yaml": "4.3.2"
   # react-redux@9.2.0 and reselect@5.1.1 ship without provenance attestation
   # even though earlier and later versions have it; pin to the latest provenance-
   # signed releases so pnpm's `trustPolicy: no-downgrade` lets the install
