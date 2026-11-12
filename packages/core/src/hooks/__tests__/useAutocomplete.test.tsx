@@ -113,6 +113,24 @@ describe("useAutocomplete", () => {
     moved.unmount();
   });
 
+  it("keeps the last results while an intermediate prefix is still loading", async () => {
+    const results = [{ id: "cafe", label: "Café", type: "poi" }];
+    vi.spyOn(apiClient, "get").mockImplementation((_path, params) =>
+      params?.q === "cof" ? Promise.resolve(results as never) : (new Promise(() => {}) as never),
+    );
+
+    const { result, rerender } = renderHook(({ query }) => useAutocomplete(query, "de"), {
+      initialProps: { query: "cof" },
+      wrapper: createQueryWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.data).toEqual(results));
+    rerender({ query: "coff" });
+    rerender({ query: "coffe" });
+    expect(result.current.isPlaceholderData).toBe(true);
+    expect(result.current.data).toEqual(results);
+  });
+
   it("does not fire for a single-character query", () => {
     const spy = vi.spyOn(apiClient, "get").mockResolvedValue([] as never);
 
