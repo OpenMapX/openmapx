@@ -53,6 +53,9 @@ export async function startOpsAgentServer(
     ready = true;
   } catch {
     // An unreadable release store keeps the agent to observation until an operator repairs it.
+    process.stderr.write(
+      "ops-agent: the release store under state/ops-agent/releases could not be read. Only read operations are admitted; repair the release store, then restart the agent.\n",
+    );
   }
   const app = buildOpsAgentServer({
     ...options,

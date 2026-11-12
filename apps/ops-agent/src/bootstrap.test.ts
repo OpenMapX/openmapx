@@ -118,6 +118,7 @@ it("production bootstrap retains health and observation when the release store i
     },
   );
   const ready = vi.fn();
+  const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
   let app: Awaited<ReturnType<typeof startOpsAgentServer>> | undefined;
   try {
     app = await startOpsAgentServer(
@@ -190,7 +191,13 @@ it("production bootstrap retains health and observation when the release store i
     ).toBe(200);
     expect(ready).not.toHaveBeenCalled();
     expect(readFileSync(overlay, "utf8")).toBe("operator-state\n");
+    // The operator is told to repair and restart; a retry cannot succeed.
+    const written = stderr.mock.calls.map(([chunk]) => String(chunk)).join("");
+    expect(written).toContain("release store");
+    expect(written).toContain("restart the agent");
+    expect(written).not.toMatch(/retry/i);
   } finally {
+    stderr.mockRestore();
     await app?.close();
     rmSync(root, { recursive: true, force: true });
   }
