@@ -98,6 +98,7 @@ WORKDIR /app
 # The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456. curl and
 # libcurl 8.23.0-r0 fix CVE-2026-92392.
 # git fetches community service repositories into the agent's community store.
+# git 2.54.1-r0 fixes CVE-2026-105437, CVE-2026-111760 and CVE-2026-114466.
 # It pulls in libexpat; 2.10.0-r0 fixes CVE-2026-117610 and CVE-2026-118370.
 # Docker CLI 29.9.3-r0 fixes CVE-2026-116587 and CVE-2026-116591.
 # The upgrade runs after the install: `apk upgrade` of a package that isn't
@@ -107,13 +108,15 @@ WORKDIR /app
 # which keeps such a layer from being reused; they also fail the build on a
 # mirror that doesn't have the fixes yet.
 RUN apk add --no-cache ca-certificates curl docker-cli docker-cli-compose git tini && \
-    apk upgrade --no-cache libcrypto3 libssl3 libexpat curl libcurl docker-cli && \
+    apk upgrade --no-cache libcrypto3 libssl3 libexpat curl libcurl docker-cli git git-init-template && \
     docker_cli="$(apk query --fields version docker-cli)" && docker_cli="${docker_cli#Version: }" && \
     test -n "$docker_cli" && test "$(apk version -t "$docker_cli" 29.9.3-r0)" != "<" && \
     libcurl="$(apk query --fields version libcurl)" && libcurl="${libcurl#Version: }" && \
     test -n "$libcurl" && test "$(apk version -t "$libcurl" 8.23.0-r0)" != "<" && \
     libexpat="$(apk query --fields version libexpat)" && libexpat="${libexpat#Version: }" && \
     test -n "$libexpat" && test "$(apk version -t "$libexpat" 2.10.0-r0)" != "<" && \
+    git="$(apk query --fields version git)" && git="${git#Version: }" && \
+    test -n "$git" && test "$(apk version -t "$git" 2.54.1-r0)" != "<" && \
     rm -rf /usr/local/lib/node_modules/npm && \
     rm -f /usr/local/bin/npm /usr/local/bin/npx
 
