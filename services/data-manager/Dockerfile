@@ -21,7 +21,7 @@ WORKDIR /tmp/gtfsclean-build
 COPY --chmod=0755 services/motis/tools/transitous/build-gtfsclean.sh /usr/local/bin/build-gtfsclean
 RUN build-gtfsclean
 
-FROM node:24.22.2-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c AS base
+FROM node:24.22.2-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS base
 
 # Read the pnpm version directly from the repo root package.json to ensure
 # lockfile resolution stays reproducible across local and CI Docker builds.
@@ -87,7 +87,7 @@ COPY scripts/copy-runtime-packages.mjs scripts/
 COPY --from=bundle /app/services/data-manager/dist/runtime-packages.json /tmp/runtime-packages.json
 RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runtime
 
-FROM node:24.22.2-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c AS runner
+FROM node:24.22.2-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS runner
 WORKDIR /app
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
