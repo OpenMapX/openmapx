@@ -15,9 +15,7 @@ import {
   verifyAdminAccountRequest,
 } from "./operation-bindings.generated";
 export type CreateAdminAccountHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$ */
   "idempotency-key": string;
 };
 
@@ -885,13 +883,9 @@ export type GetAdminAccountDelivery503 =
     };
 
 export type InviteAdminAccountHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$ */
   "idempotency-key": string;
-  /**
-   * @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
-   */
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
   "x-openmapx-reauth-challenge": string;
 };
 
@@ -1100,13 +1094,9 @@ export type InviteAdminAccount503 =
     };
 
 export type SetAdminAccountPasswordHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$ */
   "idempotency-key": string;
-  /**
-   * @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
-   */
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
   "x-openmapx-reauth-challenge": string;
 };
 
@@ -1330,13 +1320,9 @@ export type SetAdminAccountPassword503 =
     };
 
 export type SendAdminAccountPasswordResetHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$ */
   "idempotency-key": string;
-  /**
-   * @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
-   */
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
   "x-openmapx-reauth-challenge": string;
 };
 
@@ -1545,9 +1531,7 @@ export type SendAdminAccountPasswordReset503 =
     };
 
 export type ChangeAdminAccountRoleHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$ */
   "idempotency-key": string;
 };
 
@@ -1761,13 +1745,9 @@ export type ChangeAdminAccountRole503 =
     };
 
 export type SendAdminAccountVerificationEmailHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$ */
   "idempotency-key": string;
-  /**
-   * @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
-   */
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
   "x-openmapx-reauth-challenge": string;
 };
 
@@ -1976,13 +1956,9 @@ export type SendAdminAccountVerificationEmail503 =
     };
 
 export type VerifyAdminAccountHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$ */
   "idempotency-key": string;
-  /**
-   * @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
-   */
+  /** @pattern ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$ */
   "x-openmapx-reauth-challenge": string;
 };
 
@@ -2206,9 +2182,7 @@ export type VerifyAdminAccount503 =
     };
 
 export type CompleteAdminReauthenticationHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$ */
   "idempotency-key": string;
 };
 
@@ -2375,9 +2349,7 @@ export type CompleteAdminReauthentication503 =
     };
 
 export type StartAdminReauthenticationHeaders = {
-  /**
-   * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$
-   */
+  /** @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$ */
   "idempotency-key": string;
 };
 
