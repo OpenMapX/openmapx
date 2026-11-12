@@ -11,7 +11,7 @@
     "@openmapx/transitous-core": "workspace:^",
     "@scalar/openapi-parser": "^0.29.18",
     "esbuild": "^0.28.2",
-    "graphql": "17.0.2",
+    "graphql": "17.1.0",
     "orval": "8.45.0",
     "p-map": "7.1.1",
     "prettier": "^3.9.10",
