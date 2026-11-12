@@ -66,6 +66,11 @@ updates:
       # move compiler majors as an explicit repository-wide migration.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # The OTP code generator stays on graphql 16: the upstream OTP schemas
+      # fail graphql 17's schema validation. Workspaces already on 17 still
+      # receive 17.x updates; move a major deliberately.
+      - dependency-name: "graphql"
+        update-types: ["version-update:semver-major"]
       # Expo owns the compatible React Native and test-preset versions. Upgrade
       # this pair with the Expo SDK instead of accepting standalone bumps.
       - dependency-name: "react-native"
