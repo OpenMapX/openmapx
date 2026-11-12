@@ -450,7 +450,7 @@ it("closes new admissions during the existing drain without dropping the active 
 it("keeps production transfer metadata out of the strict configuration startup queue", async () => {
   const { root } = await fixture();
   const infraDir = join(root, "infra");
-  const queue = join(infraDir, "data", "ops-agent", "trusted-config");
+  const queue = join(infraDir, "state", "ops-agent", "trusted-config");
   await mkdir(queue, { recursive: true, mode: 0o700 });
   const { artifactTransferPrivateRoot } = await import("./store");
   const { initializeTerminalClaimCleanup } = await import("../trusted-config-source");

@@ -518,7 +518,6 @@ describe("assembled production service authority", () => {
       "data-manager": { condition: "service_started", required: true },
     };
     writeFileSync(host.firstCompose, JSON.stringify(compose), { mode: 0o644 });
-    mkdirSync(join(host.infraDir, "data/ops-agent"), { recursive: true, mode: 0o700 });
     const installation = openControlInstallation({
         infraDir: host.infraDir,
         role: "ops-agent",

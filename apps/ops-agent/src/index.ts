@@ -13,7 +13,7 @@ import {
   loadConfiguredResourceAuthority,
   pruneBackupRetention,
 } from "./administrative-runtime";
-import { AGENT_HANDOFF_LABEL, isTerminalHandoff, readAgentHandoff } from "./agent-handoff";
+import { isTerminalHandoff, readAgentHandoff } from "./agent-handoff";
 import { installPreparedImportRuntime } from "./artifact-transfer/import-runtime";
 import { loadArtifactTransferPolicy } from "./artifact-transfer/policy";
 import { installArtifactTransferRuntime } from "./artifact-transfer/runtime";
@@ -28,10 +28,9 @@ import {
   createDockerDawarichRuntimeInspector,
 } from "./dawarich-subject-export";
 import { describeDeploymentUserAtStart } from "./deployment-user-at-start";
-import { recoverInterruptedTrafficMaintenance, runContainedProcess } from "./docker-runtime";
+import { recoverInterruptedTrafficMaintenance } from "./docker-runtime";
 import { IntegrationStore } from "./integration-store";
 import { openOpsJobJournal } from "./journal";
-import { importLegacyAgentState, retireLegacyAgentState } from "./legacy-state";
 import { createProductionRegistryResourceClaimer } from "./policy";
 import type { PrivacyBackupExtractionRouteOptions } from "./privacy-backup-extraction";
 import {
@@ -62,9 +61,6 @@ import { createTrustedConfigurationAuthorityLoader } from "./trusted-configurati
 
 async function main(): Promise<void> {
   const config = loadOpsAgentConfig();
-  // Privacy scratch, like the trusted-configuration queue, is reached through
-  // the checkout: the container's own mount may still be the old location,
-  // which data-manager can read.
   janitorPrivacyBackupScratch(config.rootDir);
   // The release's manifests and service files apply, with the operator's
   // overrides; the checkout's no longer do. Reported, never fatal at start.
@@ -173,48 +169,6 @@ async function main(): Promise<void> {
     for (const service of builtInServices) {
       service.enabled = bootstrapEnabledServiceIds.has(service.manifest.id);
     }
-    // Releases before this one kept the journal and handoff record where
-    // data-manager can write; import them once, before anything reads them.
-    const handoffHelperRunning = async (handoffId?: string) =>
-      (
-        await runContainedProcess(
-          "docker",
-          [
-            "ps",
-            "--quiet",
-            "--filter",
-            `label=${AGENT_HANDOFF_LABEL}${handoffId === undefined ? "" : `=${handoffId}`}`,
-          ],
-          { signal: AbortSignal.timeout(30_000), timeout: 30_000, maxBuffer: 64 * 1024 },
-        )
-      ).stdout.trim() !== "";
-    // Whether any container, running or stopped, bind-mounts an earlier
-    // directory: one restarted without its source would get it back as root.
-    const containerMounts = async (path: string) =>
-      (
-        await runContainedProcess(
-          "docker",
-          ["ps", "--all", "--quiet", "--filter", `volume=${path}`],
-          {
-            signal: AbortSignal.timeout(30_000),
-            timeout: 30_000,
-            maxBuffer: 64 * 1024,
-          },
-        )
-      ).stdout.trim() !== "";
-    const legacyState = {
-      rootDir: config.rootDir,
-      handoffHelperRunning,
-      containerMounts,
-      report: (message: string) => process.stderr.write(`${message}\n`),
-    };
-    const imported = await importLegacyAgentState(legacyState);
-    if (imported) {
-      process.stderr.write(
-        `Imported the agent state from infra/docker/data/ops-agent: journal ${imported.journal}, handoff record ${imported.handoff}\n`,
-      );
-    }
-    await retireLegacyAgentState(legacyState).catch(() => false);
     const journal = await openOpsJobJournal(config.journalFile);
     // A maintenance job this agent was stopped in left its fence behind, and
     // with it a quiesced data-manager worker that would never ask again.
@@ -301,11 +255,6 @@ async function main(): Promise<void> {
       loadAuthority: authorityLoader,
       communityRepositories,
       integrationStore,
-      releaseRuntimeOptions: {
-        afterHandoffSettled: async () => {
-          await retireLegacyAgentState(legacyState);
-        },
-      },
       runFixedCli: administrativeCli,
       candidateSource: {
         directory: config.trustedConfigDirectory,

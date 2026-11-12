@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -12,11 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  agentStatePaths,
-  legacyAgentStatePaths,
-  prepareAgentStateDirectories,
-} from "../agent-state";
+import { agentStatePaths, prepareAgentStateDirectories } from "../agent-state";
 import { serviceSelectionPath, writeServiceSelectionFile } from "../deployment";
 
 const roots: string[] = [];
@@ -42,58 +39,67 @@ describe("agent state directories", () => {
     }
   });
 
-  it("move an earlier release's mounted directories, keeping each one's identity", () => {
+  it("create missing directories owner-only", () => {
     const infraDir = infra();
-    const legacy = legacyAgentStatePaths(infraDir);
-    mkdirSync(legacy.trustedConfig, { recursive: true, mode: 0o700 });
-    mkdirSync(legacy.privacyExtraction, { recursive: true, mode: 0o700 });
-    writeFileSync(join(legacy.trustedConfig, "queued-snapshot"), "sealed");
-    const trustedConfig = statSync(legacy.trustedConfig).ino;
-    const privacyExtraction = statSync(legacy.privacyExtraction).ino;
 
     prepareAgentStateDirectories(infraDir);
 
     const current = agentStatePaths(infraDir);
-    // A container still mounting the old path sees the same directory.
-    expect(statSync(current.trustedConfig).ino).toBe(trustedConfig);
-    expect(statSync(current.privacyExtraction).ino).toBe(privacyExtraction);
-    expect(readFileSync(join(current.trustedConfig, "queued-snapshot"), "utf8")).toBe("sealed");
-    expect(() => lstatSync(legacy.trustedConfig)).toThrow();
-    expect(() => lstatSync(legacy.privacyExtraction)).toThrow();
-    expect(statSync(current.directory).mode & 0o777).toBe(0o700);
-
-    // Later generations find them in place and change nothing.
-    prepareAgentStateDirectories(infraDir);
-    expect(statSync(current.trustedConfig).ino).toBe(trustedConfig);
+    for (const directory of [
+      current.directory,
+      current.trustedConfig,
+      current.privacyExtraction,
+      current.traefikDynamic,
+    ]) {
+      expect(lstatSync(directory).isDirectory()).toBe(true);
+      expect(statSync(directory).mode & 0o777).toBe(0o700);
+    }
   });
 
-  it("create missing directories owner-only and never move a planted symlink", () => {
+  it("keep existing directories and what they hold, tightening their permissions", () => {
     const infraDir = infra();
-    const legacy = legacyAgentStatePaths(infraDir);
+    const current = agentStatePaths(infraDir);
+    mkdirSync(current.trustedConfig, { recursive: true, mode: 0o755 });
+    chmodSync(current.trustedConfig, 0o755);
+    writeFileSync(join(current.trustedConfig, "queued-snapshot"), "sealed");
+    const queue = statSync(current.trustedConfig).ino;
+
+    prepareAgentStateDirectories(infraDir);
+    prepareAgentStateDirectories(infraDir);
+
+    expect(statSync(current.trustedConfig).ino).toBe(queue);
+    expect(statSync(current.trustedConfig).mode & 0o777).toBe(0o700);
+    expect(readdirSync(current.trustedConfig)).toEqual(["queued-snapshot"]);
+    expect(readFileSync(join(current.trustedConfig, "queued-snapshot"), "utf8")).toBe("sealed");
+  });
+
+  it("move a planted symlink aside unfollowed and replace it with a fresh directory", () => {
+    const infraDir = infra();
+    const current = agentStatePaths(infraDir);
     const outside = join(infraDir, "..", "outside");
     mkdirSync(outside);
-    mkdirSync(legacy.directory, { recursive: true });
-    symlinkSync(outside, legacy.trustedConfig);
+    mkdirSync(current.directory, { recursive: true, mode: 0o700 });
+    symlinkSync(outside, current.trustedConfig);
 
     prepareAgentStateDirectories(infraDir);
 
-    const current = agentStatePaths(infraDir);
     expect(lstatSync(current.trustedConfig).isSymbolicLink()).toBe(false);
+    expect(lstatSync(current.trustedConfig).isDirectory()).toBe(true);
     expect(statSync(current.trustedConfig).mode & 0o777).toBe(0o700);
-    expect(statSync(current.privacyExtraction).mode & 0o777).toBe(0o700);
-    expect(lstatSync(legacy.trustedConfig).isSymbolicLink()).toBe(true);
+    expect(statSync(current.trustedConfig).ino).not.toBe(statSync(outside).ino);
+    const aside = readdirSync(current.directory).filter((name) =>
+      name.startsWith("trusted-config.rejected-"),
+    );
+    expect(aside).toHaveLength(1);
+    expect(lstatSync(join(current.directory, aside[0] as string)).isSymbolicLink()).toBe(true);
+    expect(readdirSync(outside)).toEqual([]);
   });
 
-  it("leave both alone when the new directory already exists", () => {
+  it("fail when a file is where the state directory must go", () => {
     const infraDir = infra();
-    const legacy = legacyAgentStatePaths(infraDir);
-    const current = agentStatePaths(infraDir);
-    mkdirSync(legacy.trustedConfig, { recursive: true });
-    mkdirSync(current.trustedConfig, { recursive: true });
-    writeFileSync(join(current.trustedConfig, "current"), "kept");
-    prepareAgentStateDirectories(infraDir);
-    expect(readdirSync(current.trustedConfig)).toEqual(["current"]);
-    expect(lstatSync(legacy.trustedConfig).isDirectory()).toBe(true);
+    mkdirSync(join(infraDir, "state"), { recursive: true });
+    writeFileSync(join(infraDir, "state", "ops-agent"), "");
+    expect(() => prepareAgentStateDirectories(infraDir)).toThrow();
   });
 });
 
