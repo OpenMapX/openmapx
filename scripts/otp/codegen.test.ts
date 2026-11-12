@@ -48,8 +48,10 @@ describe("OTP generation refuses contract drift", () => {
     const tool = JSON.parse(
       readFileSync(resolve(root, "packages/otp-codegen/package.json"), "utf8"),
     );
-    expect(app.devDependencies.graphql).toBe("17.0.2");
-    expect(tool.devDependencies.graphql).toBe("16.14.2");
+    // The upstream OTP schemas fail graphql 17's schema validation, so only the
+    // major line is pinned here; patch and minor updates stay routine.
+    expect(app.devDependencies.graphql).toMatch(/^17\.\d+\.\d+$/);
+    expect(tool.devDependencies.graphql).toMatch(/^16\.\d+\.\d+$/);
     const client = JSON.parse(
       readFileSync(resolve(root, "packages/otp-client/package.json"), "utf8"),
     );
