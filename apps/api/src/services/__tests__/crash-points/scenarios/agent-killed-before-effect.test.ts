@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CrashHost, crashPointsUnavailable } from "../driver";
 
-// C7: the agent accepted an operation and dies before its first effect.
-describe.skipIf(crashPointsUnavailable())(
+// The agent accepted an operation and dies before its first effect.
+describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1" || !!crashPointsUnavailable())(
   "an agent killed before an accepted operation's effect",
   () => {
     let host: CrashHost;

@@ -85,12 +85,17 @@ const READINESS: Record<Role, string> = {
 
 /** Why this machine cannot run the suite, or undefined when it can. */
 export function crashPointsUnavailable(): string | undefined {
-  if (process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")
-    return "set OPENMAPX_RUN_DATABASE_TESTS=1 with a disposable DATABASE_URL";
-  if (!process.env.DATABASE_URL) return "DATABASE_URL is not set";
-  return (
-    sandboxAvailable() ?? (realDocker() ? undefined : "the Docker CLI with Compose is required")
-  );
+  const reason =
+    process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1"
+      ? "set OPENMAPX_RUN_DATABASE_TESTS=1 with a disposable DATABASE_URL"
+      : !process.env.DATABASE_URL
+        ? "DATABASE_URL is not set"
+        : (sandboxAvailable() ??
+          (realDocker() ? undefined : "the Docker CLI with Compose is required"));
+  // CI asserts the suite runs: a missing prerequisite there is a failure.
+  if (reason && process.env.OPENMAPX_RUN_CRASH_POINT_TESTS === "1")
+    throw new Error(`The crash-point suite cannot run: ${reason}`);
+  return reason;
 }
 
 function realDocker(): string | undefined {
