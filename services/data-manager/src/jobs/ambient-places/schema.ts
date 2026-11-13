@@ -7,7 +7,6 @@ export class AmbientPublicationBusyError extends Error {
   }
 }
 export const ambientSchemaDDL = `
-CREATE EXTENSION IF NOT EXISTS btree_gist;
 CREATE SCHEMA IF NOT EXISTS ambient_places;
 CREATE TABLE IF NOT EXISTS ambient_places.generations (
   id UUID PRIMARY KEY, manifest JSONB NOT NULL, published_at TIMESTAMPTZ NOT NULL DEFAULT now(),

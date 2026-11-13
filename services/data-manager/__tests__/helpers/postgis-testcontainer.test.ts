@@ -71,7 +71,8 @@ describe("disposable PostGIS fixture ownership", () => {
     const fixture = await startPostgis();
     expect(mock.construct).toHaveBeenCalledWith("postgres://disposable", { max: 2 });
     expect(mock.drizzle).toHaveBeenCalledWith(fixture.sql);
-    expect(mock.unsafe).toHaveBeenCalledWith("CREATE EXTENSION IF NOT EXISTS postgis");
+    for (const extension of ["postgis", "pg_trgm", "fuzzystrmatch", "btree_gist"])
+      expect(mock.unsafe).toHaveBeenCalledWith(`CREATE EXTENSION IF NOT EXISTS ${extension}`);
     await fixture.stop();
     expect(mock.end).toHaveBeenCalledOnce();
     expect(mock.stop).toHaveBeenCalledOnce();

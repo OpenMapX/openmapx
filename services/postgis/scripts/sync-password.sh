@@ -252,51 +252,36 @@ ALTER SCHEMA public OWNER TO ${API_ROLE};
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 ALTER DEFAULT PRIVILEGES FOR ROLE ${DATA_MANAGER_ROLE} GRANT USAGE ON SCHEMAS TO ${API_ROLE};
 ALTER DEFAULT PRIVILEGES FOR ROLE ${DATA_MANAGER_ROLE} GRANT SELECT ON TABLES TO ${API_ROLE};
--- Trusted extensions belong to the superuser, so data-manager's own
--- "CREATE EXTENSION IF NOT EXISTS" always finds them and owns none.
+-- Trusted extensions belong to the superuser and are installed here, as
+-- neither role may install one.
 CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
 CREATE EXTENSION IF NOT EXISTS fuzzystrmatch WITH SCHEMA public;
 CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public;
--- Code a role writes must never run with another role's rights. The API reads
--- data-manager's schemas, and a function, rule, trigger, policy, domain check
--- or coercion runs as whoever's query fires it; a restore loads every table as
--- the superuser, which evaluates check constraints and generated columns.
--- These two event triggers refuse such code from every role but the superuser.
+-- Code data-manager writes must never run with another role's rights. The
+-- API reads its schemas, and a function, rule, trigger, policy, domain check,
+-- coercion or extension runs as whoever's query reaches it, so data-manager
+-- may create only tables, indexes, sequences, schemas and plain views. Check
+-- constraints, defaults and index expressions run as whoever writes the
+-- table: data-manager itself, or a restore session of the table's owner.
+-- The API writes the functions, triggers and types its migrations need, but
+-- no domain, whose check a restoring superuser runs while it reads a
+-- literal, and no extension, which would add functions to `public`.
 CREATE SCHEMA IF NOT EXISTS openmapx_guard;
 REVOKE ALL ON SCHEMA openmapx_guard FROM PUBLIC;
--- Whether a stored expression calls a function, directly or through an
--- operator, other than the superuser's immutable or stable ones. Those cannot
--- write anything; the few stable ones that run a query given as text are
--- refused as well.
-CREATE OR REPLACE FUNCTION openmapx_guard.calls_foreign_code(expression pg_node_tree)
-  RETURNS boolean
-  LANGUAGE sql STABLE
-  SET search_path = pg_catalog
-AS \$\$
-  SELECT EXISTS (
-    SELECT FROM (
-      SELECT m[1]::oid AS id FROM regexp_matches(expression::text, ':funcid ([0-9]+)', 'g') m
-      UNION ALL
-      SELECT o.oprcode::oid FROM regexp_matches(expression::text, ':opno ([0-9]+)', 'g') m
-        JOIN pg_operator o ON o.oid = m[1]::oid
-    ) called
-    LEFT JOIN pg_proc p ON p.oid = called.id
-    LEFT JOIN pg_roles r ON r.oid = p.proowner
-    WHERE called.id <> 0 AND (
-      p.oid IS NULL OR NOT r.rolsuper OR p.provolatile NOT IN ('i', 's') OR p.proname ~ '_to_xml'))
-\$\$;
-
 CREATE OR REPLACE FUNCTION openmapx_guard.refuse_code()
   RETURNS event_trigger
   LANGUAGE plpgsql
   SET search_path = pg_catalog
 AS \$\$
 BEGIN
-  -- Data-manager writes no code at all: its schemas hold tables, indexes and
-  -- plain views. The API writes only the trigger functions and enums its
-  -- migrations need; both are checked when the command ends.
-  IF current_user = '${DATA_MANAGER_ROLE}' OR (current_user = '${API_ROLE}' AND tg_tag NOT IN (
-    'CREATE FUNCTION', 'ALTER FUNCTION', 'CREATE TRIGGER', 'ALTER TRIGGER', 'CREATE TYPE', 'ALTER TYPE'))
+  IF (current_user = '${DATA_MANAGER_ROLE}' AND tg_tag NOT IN (
+      'CREATE SCHEMA', 'ALTER SCHEMA', 'DROP SCHEMA',
+      'CREATE TABLE', 'CREATE TABLE AS', 'ALTER TABLE', 'DROP TABLE',
+      'CREATE INDEX', 'ALTER INDEX', 'DROP INDEX',
+      'CREATE SEQUENCE', 'ALTER SEQUENCE', 'DROP SEQUENCE',
+      'CREATE VIEW', 'ALTER VIEW', 'DROP VIEW'))
+    OR (current_user = '${API_ROLE}' AND tg_tag IN (
+      'CREATE DOMAIN', 'ALTER DOMAIN', 'CREATE EXTENSION', 'ALTER EXTENSION'))
   THEN
     RAISE EXCEPTION '% may not run %', current_user, tg_tag USING ERRCODE = 'insufficient_privilege';
   END IF;
@@ -311,15 +296,11 @@ DECLARE
   data_manager_schemas constant text := '^((osm_search|notable_places)(__staging|__previous)?|ambient_places|overture_[a-z0-9_]{1,55})\$';
   api_schemas constant text := '^(data_manager|drizzle)\$';
   command record;
-  relation oid;
 BEGIN
-  IF (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
-    RETURN;
-  END IF;
-  FOR command IN SELECT classid, objid, object_type, object_identity FROM pg_event_trigger_ddl_commands() LOOP
+  FOR command IN SELECT objid, object_type, object_identity FROM pg_event_trigger_ddl_commands() LOOP
     -- Each role creates only the schemas it needs, so neither can take a name
-    -- another component trusts, such as a role's name or a schema a function
-    -- of the tile server calls into.
+    -- another component trusts, such as a role's name or the schemas the
+    -- tile server's functions read.
     IF command.object_type = 'schema' AND (
       (current_user = '${DATA_MANAGER_ROLE}' AND command.object_identity !~ data_manager_schemas)
       OR (current_user = '${API_ROLE}' AND command.object_identity !~ api_schemas))
@@ -327,77 +308,43 @@ BEGIN
       RAISE EXCEPTION '% may not create or rename a schema to %', current_user, command.object_identity
         USING ERRCODE = 'insufficient_privilege';
     END IF;
-    -- The API's functions carry its own prefix, so no call another role makes
-    -- to a built-in or PostGIS function can resolve to one of them.
-    IF current_user = '${API_ROLE}' AND command.object_type = 'function'
-      AND command.object_identity !~ '\.openmapx_[a-z0-9_]+\('
-    THEN
-      RAISE EXCEPTION '% may name its functions only openmapx_*: %', current_user, command.object_identity
-        USING ERRCODE = 'insufficient_privilege';
-    END IF;
-    -- Range types create constructor functions under their own name.
-    IF current_user = '${API_ROLE}' AND command.object_type = 'type'
-      AND EXISTS (SELECT FROM pg_type t WHERE t.oid = command.objid AND t.typtype NOT IN ('e', 'c'))
-    THEN
-      RAISE EXCEPTION '% may create only enum and composite types: %', current_user, command.object_identity
-        USING ERRCODE = 'insufficient_privilege';
-    END IF;
-    -- Check constraints of tables and domains, and generated columns, run in
-    -- the session that writes the row, a restoring superuser among them.
-    relation := CASE command.classid
-      WHEN 'pg_class'::regclass THEN command.objid
-      WHEN 'pg_constraint'::regclass THEN (SELECT conrelid FROM pg_constraint WHERE oid = command.objid)
-    END;
-    IF EXISTS (
-        SELECT FROM pg_constraint c
-        WHERE c.contype = 'c' AND openmapx_guard.calls_foreign_code(c.conbin) AND (
-          (relation IS NOT NULL AND c.conrelid = relation)
-          OR (command.classid = 'pg_type'::regclass AND c.contypid = command.objid)
-          OR (command.classid = 'pg_constraint'::regclass AND c.oid = command.objid)))
-      OR (relation IS NOT NULL AND EXISTS (
-        SELECT FROM pg_attrdef d
-        JOIN pg_attribute a ON a.attrelid = d.adrelid AND a.attnum = d.adnum
-        WHERE d.adrelid = relation AND a.attgenerated <> '' AND openmapx_guard.calls_foreign_code(d.adbin)))
-    THEN
-      RAISE EXCEPTION 'check constraints and generated columns of % may call only built-in immutable functions', command.object_identity
-        USING ERRCODE = 'insufficient_privilege';
-    END IF;
-    -- A view runs every function and coercion it contains, and with
-    -- security_invoker every table it reads, as the role reading it. The API
-    -- reads data-manager's views, so they may read only data-manager's own
-    -- relations and contain no call or coercion.
+    -- A view runs what it contains with the rights of the role reading it,
+    -- the API among them. Data-manager's views may therefore only select,
+    -- join and filter data-manager's own relations, comparing with built-in
+    -- operators: every node in the stored query must be one of these.
     IF current_user = '${DATA_MANAGER_ROLE}' AND command.object_type = 'view' AND (
-      EXISTS (SELECT FROM pg_class c WHERE c.oid = command.objid AND c.reloptions::text ~* 'security_invoker')
-      -- Built-in functions are not recorded as dependencies, so look for any
-      -- call or coercion in the stored query.
+      EXISTS (
+        SELECT FROM pg_rewrite r, regexp_matches(r.ev_action::text, '[{]([A-Z_]+)', 'g') node
+        WHERE r.ev_class = command.objid AND node[1] NOT IN (
+          'QUERY', 'RANGETBLENTRY', 'RTEPERMISSIONINFO', 'RANGETBLREF', 'ALIAS', 'FROMEXPR',
+          'JOINEXPR', 'SETOPERATIONSTMT', 'TARGETENTRY', 'VAR', 'CONST', 'RELABELTYPE',
+          'BOOLEXPR', 'OPEXPR'))
+      -- Operators created at initdb, none of which runs a query.
       OR EXISTS (
-        SELECT FROM pg_rewrite r
-        WHERE r.ev_class = command.objid
-          AND r.ev_action::text ~ '[{](FUNCEXPR|AGGREF|WINDOWFUNC|COERCETODOMAIN|COERCEVIAIO|ARRAYCOERCEEXPR) ')
+        SELECT FROM pg_rewrite r, regexp_matches(r.ev_action::text, ':opno ([0-9]+)', 'g') operator
+        WHERE r.ev_class = command.objid AND operator[1]::oid >= 16384)
       OR EXISTS (
         SELECT FROM pg_rewrite r
         JOIN pg_depend d ON d.classid = 'pg_rewrite'::regclass AND d.objid = r.oid
-        WHERE r.ev_class = command.objid AND (
-          d.refclassid = 'pg_proc'::regclass
-          OR (d.refclassid = 'pg_class'::regclass AND NOT EXISTS (
-            SELECT FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-            WHERE c.oid = d.refobjid AND n.nspname ~ data_manager_schemas))))
+        JOIN pg_class c ON d.refclassid = 'pg_class'::regclass AND c.oid = d.refobjid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE r.ev_class = command.objid AND n.nspname !~ data_manager_schemas)
     ) THEN
-      RAISE EXCEPTION 'data-manager may not define view % that calls functions, coerces types or reads other schemas', command.object_identity
+      RAISE EXCEPTION 'data-manager may not define view %, which calls code or reads other schemas', command.object_identity
         USING ERRCODE = 'insufficient_privilege';
     END IF;
   END LOOP;
 END;
 \$\$;
 -- The event triggers run as the role issuing the command, which therefore
--- reaches this read-only catalog check and nothing else in the schema.
+-- reaches these read-only catalog checks and nothing else in the schema.
 GRANT USAGE ON SCHEMA openmapx_guard TO PUBLIC;
 REVOKE ALL ON FUNCTION openmapx_guard.refuse_code() FROM PUBLIC;
 REVOKE ALL ON FUNCTION openmapx_guard.check_ddl() FROM PUBLIC;
 DROP EVENT TRIGGER IF EXISTS openmapx_guard_refuse_code;
-CREATE EVENT TRIGGER openmapx_guard_refuse_code ON ddl_command_start WHEN TAG IN ('CREATE FUNCTION', 'ALTER FUNCTION', 'CREATE PROCEDURE', 'ALTER PROCEDURE', 'ALTER ROUTINE', 'CREATE AGGREGATE', 'ALTER AGGREGATE', 'CREATE OPERATOR', 'ALTER OPERATOR', 'CREATE CAST', 'CREATE CONVERSION', 'CREATE RULE', 'ALTER RULE', 'CREATE TRIGGER', 'ALTER TRIGGER', 'CREATE POLICY', 'ALTER POLICY', 'CREATE DOMAIN', 'ALTER DOMAIN', 'CREATE TYPE', 'ALTER TYPE') EXECUTE FUNCTION openmapx_guard.refuse_code();
+CREATE EVENT TRIGGER openmapx_guard_refuse_code ON ddl_command_start EXECUTE FUNCTION openmapx_guard.refuse_code();
 DROP EVENT TRIGGER IF EXISTS openmapx_guard_check_ddl;
-CREATE EVENT TRIGGER openmapx_guard_check_ddl ON ddl_command_end WHEN TAG IN ('CREATE SCHEMA', 'ALTER SCHEMA', 'CREATE TABLE', 'ALTER TABLE', 'CREATE VIEW', 'ALTER VIEW', 'CREATE FUNCTION', 'ALTER FUNCTION', 'CREATE TYPE', 'ALTER TYPE', 'CREATE DOMAIN', 'ALTER DOMAIN') EXECUTE FUNCTION openmapx_guard.check_ddl();
+CREATE EVENT TRIGGER openmapx_guard_check_ddl ON ddl_command_end WHEN TAG IN ('CREATE SCHEMA', 'ALTER SCHEMA', 'CREATE VIEW', 'ALTER VIEW') EXECUTE FUNCTION openmapx_guard.check_ddl();
 SQL
 echo "[openmapx-postgis] database roles ${API_ROLE} and ${DATA_MANAGER_ROLE} ready"
 

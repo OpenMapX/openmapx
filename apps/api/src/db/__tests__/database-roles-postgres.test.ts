@@ -178,13 +178,21 @@ integration("database roles", () => {
       "CREATE TRIGGER probe BEFORE INSERT ON ambient_places.features FOR EACH ROW EXECUTE FUNCTION suppress_redundant_updates_trigger()",
       "CREATE AGGREGATE ambient_places.probe(int) (SFUNC = int4pl, STYPE = int)",
       "CREATE POLICY probe ON ambient_places.features USING (true)",
-      // Views that run SQL as their reader, call a function, read another
-      // schema, or read with the reader's rights.
+      "CREATE MATERIALIZED VIEW ambient_places.probe AS SELECT name FROM ambient_places.features",
+      "CREATE STATISTICS ambient_places.probe ON name, generation FROM ambient_places.features",
+      "GRANT INSERT ON ambient_places.features TO openmapx_api",
+      "COMMENT ON TABLE ambient_places.features IS 'probe'",
+      // Extensions, even those PostGIS already installed.
+      "CREATE EXTENSION IF NOT EXISTS pg_trgm",
+      "CREATE EXTENSION tablefunc SCHEMA ambient_places",
+      // Views that run SQL as their reader, call a function or an extension's
+      // operator, branch, or read another schema.
       `CREATE VIEW ambient_places.leak AS SELECT query_to_xml('SELECT email FROM public."user"', true, false, '')::text AS name`,
       "CREATE VIEW ambient_places.leak AS SELECT upper(name) AS name FROM ambient_places.features",
+      "CREATE VIEW ambient_places.leak AS SELECT name FROM ambient_places.features WHERE name % 'view'",
+      "CREATE VIEW ambient_places.leak AS SELECT CASE WHEN name = 'a' THEN name END AS name FROM ambient_places.features",
+      "CREATE VIEW ambient_places.leak AS SELECT name FROM ambient_places.features WHERE name IN (SELECT name FROM ambient_places.features)",
       'CREATE VIEW ambient_places.leak AS SELECT id AS name FROM public."user"',
-      "CREATE VIEW ambient_places.leak WITH (security_invoker = true) AS SELECT name FROM ambient_places.features",
-      "ALTER VIEW ambient_places.features_all SET (security_invoker = true)",
       `CREATE OR REPLACE VIEW ambient_places.features_all AS
         SELECT f.* FROM ambient_places.features f WHERE length(f.name) > 0
         UNION ALL SELECT f.* FROM ambient_places.planet_features f`,
@@ -212,10 +220,6 @@ integration("database roles", () => {
   it("keeps a schema data-manager builds readable by the API across a swap", async () => {
     const build = async (schema: string, label: string) => {
       await dataManager.unsafe(`
-        CREATE EXTENSION IF NOT EXISTS postgis;
-        CREATE EXTENSION IF NOT EXISTS pg_trgm;
-        CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;
-        CREATE EXTENSION IF NOT EXISTS btree_gist;
         DROP SCHEMA IF EXISTS "${schema}" CASCADE;
         CREATE SCHEMA "${schema}";
         CREATE TABLE "${schema}".places (name text NOT NULL, geom geometry(Point, 4326));
@@ -309,24 +313,29 @@ integration("code planted for another role", () => {
     await roles.dataManager.unsafe("DROP SCHEMA osm_search CASCADE");
   });
 
-  it("refuses the API's function whose name another role's call could resolve to", async () => {
-    await permissionDenied(
-      roles.api.unsafe(`
-        CREATE FUNCTION public.format(fmt text, db name) RETURNS text LANGUAGE plpgsql AS $$
-        BEGIN
-          IF (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
-            EXECUTE 'ALTER ROLE openmapx_api SUPERUSER';
-          END IF;
-          RETURN fmt;
-        END $$`),
-    );
+  it("keeps the API's functions in public out of the entrypoint's superuser SQL", async () => {
+    // The API owns public, so it can shadow a built-in there; the entrypoint
+    // searches only the catalogs.
+    await roles.api.unsafe(`
+      CREATE FUNCTION public.format(fmt text, db name) RETURNS text LANGUAGE plpgsql AS $$
+      BEGIN
+        IF (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
+          EXECUTE 'ALTER ROLE openmapx_api SUPERUSER';
+        END IF;
+        RETURN fmt;
+      END $$`);
+    await restart();
+    expect(
+      await roles.superuser`SELECT rolsuper FROM pg_roles WHERE rolname = 'openmapx_api'`,
+    ).toEqual([{ rolsuper: false }]);
+    await roles.api.unsafe("DROP FUNCTION public.format(text, name)");
+  }, 120_000);
+
+  it("refuses the API's domains, extensions and other schemas", async () => {
     for (const statement of [
-      "CREATE FUNCTION public.st_x(text) RETURNS float8 LANGUAGE sql AS 'SELECT 0::float8'",
-      "CREATE PROCEDURE public.openmapx_probe_procedure() LANGUAGE sql AS 'SELECT 1'",
-      "CREATE AGGREGATE public.openmapx_probe_sum(int) (SFUNC = int4pl, STYPE = int)",
-      "CREATE OPERATOR public.=== (LEFTARG = text, RIGHTARG = text, FUNCTION = texteq)",
+      // A restoring superuser runs a domain's check when it reads a literal.
       "CREATE DOMAIN public.openmapx_probe_domain AS text",
-      "CREATE TYPE public.openmapx_probe_span AS RANGE (subtype = text)",
+      "CREATE EXTENSION hstore",
       "CREATE SCHEMA conditions",
       "CREATE SCHEMA tiles_shadow",
     ])
@@ -341,19 +350,25 @@ integration("code planted for another role", () => {
     `);
   });
 
-  it("refuses check constraints and generated columns that would run code in a restore", async () => {
-    // A restore loads rows as the superuser, which evaluates check constraints.
-    for (const statement of [
-      "ALTER TABLE public.openmapx_probe_table ADD CONSTRAINT probe CHECK (public.openmapx_probe() = 1)",
-      "ALTER TABLE public.openmapx_probe_table ADD CONSTRAINT probe CHECK (set_config('search_path', 'public', false) IS NOT NULL)",
-      "ALTER TABLE public.openmapx_probe_table ADD COLUMN g int GENERATED ALWAYS AS (public.openmapx_probe()) STORED",
-      "CREATE TABLE public.openmapx_probe_copy (v int CHECK (lo_export(0, '/tmp/x') = 1))",
-    ])
-      await permissionDenied(roles.api.unsafe(statement));
+  it("lets check constraints and generated columns run only as the table's owner", async () => {
+    // Accepted, with a row each, for the restore below to load: each runs as
+    // its table's owner, whose session loads the row.
+    await roles.api.unsafe(`
+      CREATE FUNCTION public.openmapx_escalate() RETURNS int LANGUAGE plpgsql IMMUTABLE AS $$
+      BEGIN
+        IF (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
+          EXECUTE 'ALTER ROLE openmapx_api SUPERUSER';
+        END IF;
+        RETURN 1;
+      END $$;
+      CREATE TABLE public.openmapx_checked (
+        v int CHECK (public.openmapx_escalate() = 1),
+        p text CHECK (set_config('search_path', 'public', false) IS NOT NULL),
+        g int GENERATED ALWAYS AS (public.openmapx_escalate()) STORED);
+      INSERT INTO public.openmapx_checked (v, p) VALUES (1, 'a');
+    `);
     // Data-manager's own tables, with checks and a PostGIS generated column.
     await roles.dataManager.unsafe(`
-      CREATE EXTENSION IF NOT EXISTS pg_trgm;
-      CREATE EXTENSION IF NOT EXISTS btree_gist;
       CREATE SCHEMA ambient_places;
       CREATE TABLE ambient_places.state (singleton smallint PRIMARY KEY CHECK (singleton = 1));
       CREATE TABLE ambient_places.places (
@@ -365,6 +380,10 @@ integration("code planted for another role", () => {
         ) STORED,
         kind TEXT NOT NULL CHECK (kind IN ('place','settlement'))
       );
+      ALTER TABLE ambient_places.state ADD CONSTRAINT probe
+        CHECK (query_to_xml('SELECT 1', true, false, '') IS NOT NULL);
+      INSERT INTO ambient_places.state VALUES (1);
+      INSERT INTO ambient_places.places (qid, lat, lng, kind) VALUES ('Q1', 52.5, 13.4, 'place');
     `);
     expect(
       await roles.superuser`
@@ -375,33 +394,10 @@ integration("code planted for another role", () => {
       { extname: "fuzzystrmatch", owner: "postgres" },
       { extname: "pg_trgm", owner: "postgres" },
     ]);
-    await permissionDenied(
-      roles.dataManager.unsafe(
-        "ALTER TABLE ambient_places.state ADD CONSTRAINT probe CHECK (query_to_xml('SELECT 1', true, false, '') IS NOT NULL)",
-      ),
-    );
-    await roles.dataManager.unsafe("DROP SCHEMA ambient_places CASCADE");
-  });
-
-  it("keeps the API's objects in public out of the entrypoint's superuser SQL", async () => {
-    // Planted by the superuser, so the role guard does not stop it; only the
-    // entrypoint's own search path keeps it from running.
-    await roles.superuser.unsafe(`
-      CREATE FUNCTION public.format(fmt text, db name) RETURNS text LANGUAGE plpgsql AS $$
-      BEGIN
-        IF (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
-          EXECUTE 'ALTER ROLE openmapx_api SUPERUSER';
-        END IF;
-        RETURN fmt;
-      END $$;
-      ALTER FUNCTION public.format(text, name) OWNER TO openmapx_api;
-    `);
-    await restart();
     expect(
       await roles.superuser`SELECT rolsuper FROM pg_roles WHERE rolname = 'openmapx_api'`,
     ).toEqual([{ rolsuper: false }]);
-    await roles.superuser.unsafe("DROP FUNCTION public.format(text, name)");
-  }, 120_000);
+  });
 
   it("renders a traffic tile as a role without superuser rights or table access", async () => {
     // OpenConditions installed after PostGIS started, as its own role.

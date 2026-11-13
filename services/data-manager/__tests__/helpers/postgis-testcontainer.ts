@@ -43,7 +43,10 @@ export async function startPostgis(): Promise<PostgisFixture> {
     // Production shares its client with drizzle, which replaces the client's
     // date and JSON serializers and its date parsers.
     drizzle(sql);
-    await sql.unsafe(`CREATE EXTENSION IF NOT EXISTS postgis`);
+    // The extensions production's PostGIS entrypoint installs; data-manager
+    // may not install one itself.
+    for (const extension of ["postgis", "pg_trgm", "fuzzystrmatch", "btree_gist"])
+      await sql.unsafe(`CREATE EXTENSION IF NOT EXISTS ${extension}`);
     return { container, sql, connectionString, stop: close };
   } catch (error) {
     try {
