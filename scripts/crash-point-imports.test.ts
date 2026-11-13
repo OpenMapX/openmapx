@@ -91,3 +91,57 @@ describe("crash-point suite imports", () => {
     expect(refused("../driver")).toBe(false);
   });
 });
+
+describe("crash-point known failures", () => {
+  const scenarioFiles = files(`${suite}/scenarios`).filter((file) => file.endsWith(".test.ts"));
+  /** Every scenario name declared with the suite's wrapper, by file. */
+  const declared = scenarioFiles.flatMap((file) => {
+    const source = ts.createSourceFile(
+      file,
+      readFileSync(resolve(root, file), "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const names: { file: string; name: string }[] = [];
+    const visit = (node: ts.Node) => {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "scenario" &&
+        node.arguments[0] &&
+        ts.isStringLiteralLike(node.arguments[0])
+      )
+        names.push({ file, name: node.arguments[0].text });
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    return names;
+  });
+  const registry = JSON.parse(
+    readFileSync(resolve(root, suite, "known-failures.json"), "utf8"),
+  ) as Record<string, unknown>;
+
+  it("declares every scenario through the wrapper, once per name", () => {
+    expect(scenarioFiles.length).toBeGreaterThan(0);
+    for (const file of scenarioFiles) {
+      const source = readFileSync(resolve(root, file), "utf8");
+      expect(
+        declared.filter((entry) => entry.file === file),
+        file,
+      ).toHaveLength(1);
+      expect(source, `${file} declares tests only through scenario()`).not.toMatch(
+        /(?<![\w.])(?:it|test)(?:\.\w+)*\(/,
+      );
+    }
+    const names = declared.map((entry) => entry.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it("names only existing scenarios, each with a reason", () => {
+    const names = new Set(declared.map((entry) => entry.name));
+    for (const [name, reason] of Object.entries(registry)) {
+      expect(names.has(name), `known failure "${name}" names no scenario`).toBe(true);
+      expect(typeof reason === "string" && reason.trim().length > 0, name).toBe(true);
+    }
+  });
+});

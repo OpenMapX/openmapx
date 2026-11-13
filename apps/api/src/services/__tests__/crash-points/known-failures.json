@@ -1,0 +1,8 @@
+{
+  "reclaims the job, reuses its operations and finishes as an unkilled update": "After an API restart the reclaimed update job is held with observation recovery_required although the agent's image download succeeded.",
+  "returns the original operation and prepares one data fence": "After a lost prepare reply and an API restart the update fails with configuration reason conflict instead of resuming its operation.",
+  "continues with the same candidate and applies the generation once": "After an API restart between saving and applying, the reclaimed update job is held with observation transport.",
+  "never starts the service a second time and keeps the target held": "An agent killed during a service start leaves its configuration writer held, so the restarted agent refuses to start.",
+  "finishes the recreate in flight, starts no further effect and never succeeds": "A cancelled update's helper keeps recreating services, including the agent, and the update succeeds.",
+  "exit busy without a Compose effect and succeed after the update": "services restart is unleased: it runs compose restart while the helper recreates services."
+}

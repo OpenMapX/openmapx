@@ -1,5 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect } from "vitest";
 import { CrashHost, crashPointsUnavailable } from "../driver";
+import { scenario } from "../scenario";
 
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1" || !!crashPointsUnavailable())(
   "a fresh installation",
@@ -12,13 +13,17 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1" || !!crashPoints
       await host?.close();
     }, 120_000);
 
-    it("runs every role on release N and finds release N+1 to update to", async () => {
-      const images = host.runningImages();
-      expect(images["app-api"]).toBe(host.releaseImageId("current", "api"));
-      expect(images["ops-agent"]).toBe(host.releaseImageId("current", "ops-agent"));
-      expect(images["data-manager"]).toBe(host.releaseImageId("current", "data-manager"));
-      expect(host.release.nextDigest).toMatch(/^[a-f0-9]{64}$/);
-      expect((await host.submitDataJob()).status).toBe(200);
-    });
+    scenario(
+      "runs every role on release N and finds release N+1 to update to",
+      async () => {
+        const images = host.runningImages();
+        expect(images["app-api"]).toBe(host.releaseImageId("current", "api"));
+        expect(images["ops-agent"]).toBe(host.releaseImageId("current", "ops-agent"));
+        expect(images["data-manager"]).toBe(host.releaseImageId("current", "data-manager"));
+        expect(host.release.nextDigest).toMatch(/^[a-f0-9]{64}$/);
+        expect((await host.submitDataJob()).status).toBe(200);
+      },
+      120_000,
+    );
   },
 );
