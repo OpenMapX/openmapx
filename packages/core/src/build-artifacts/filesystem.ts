@@ -25,6 +25,29 @@ export const identity = (s: BigIntStats): FileIdentity => ({
   ino: String(s.ino),
 });
 export const sameInode = (a: FileIdentity, b: FileIdentity) => a.dev === b.dev && a.ino === b.ino;
+/** How long a writer guard waits for another live holder before refusing.
+ * Holders keep a guard only for a few small synchronous reads and writes
+ * (single milliseconds), but a role inspecting maintenance takes them well
+ * over a hundred times a second, so a contender waits for a gap rather than
+ * failing at the first collision. Two seconds is hundreds of hold times, yet
+ * a guard left behind by a crashed holder is still refused once it ends. */
+const GUARD_WAIT_MS = 2_000;
+const guardSleep = new Int32Array(new SharedArrayBuffer(4));
+/** Creates a writer guard directory, waiting with a doubling delay while
+ * another holder has it; refuses with the original error after the wait. */
+export function acquireGuardDirectory(path: string): void {
+  const deadline = Date.now() + GUARD_WAIT_MS;
+  for (let delay = 1; ; delay = Math.min(delay * 2, 50)) {
+    try {
+      mkdirSync(path, { mode: 0o700 });
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST" || Date.now() >= deadline) throw error;
+    }
+    // These guards protect synchronous critical sections; waiting blocks too.
+    Atomics.wait(guardSleep, 0, 0, Math.min(delay, Math.max(1, deadline - Date.now())));
+  }
+}
 function component(name: string) {
   if (
     !name ||

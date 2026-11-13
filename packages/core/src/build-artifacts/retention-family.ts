@@ -95,7 +95,13 @@ import {
   dataConfigurationFencePreparedWitnessDomain,
   dataConfigurationFencePreparedWitnessSchema,
 } from "./data-configuration-fence-witness-records";
-import { AnchoredDirectory, type FileIdentity, identity, sameInode } from "./filesystem";
+import {
+  AnchoredDirectory,
+  acquireGuardDirectory,
+  type FileIdentity,
+  identity,
+  sameInode,
+} from "./filesystem";
 import { advanceRetentionClock, readRetentionClock } from "./retention-clock";
 // biome-ignore-start lint/suspicious/noImportCycles: Index repair verifies actual physical release/full closure; physical closure verifies this same index. No constructor or verifier runs at module initialization.
 import {
@@ -740,29 +746,8 @@ function progress(f: Family, p: Progress, reserveAdmission = false) {
   cell(f.slot, "progress.json", p, 131072);
   cell(f.slot, "progress-highwater.json", { sequence: p.sequence, digest: controlDigest(p) }, 1024);
 }
-/** How long a guard waits for another live holder before refusing. Holders
- * keep a guard only for a few small synchronous reads and writes (single
- * milliseconds), but a role inspecting maintenance takes them well over a
- * hundred times a second, so a contender needs to wait for a gap rather than
- * fail at the first collision. Two seconds is hundreds of hold times, yet a
- * guard left behind by a crashed holder is still refused once the wait ends. */
-const GUARD_WAIT_MS = 2_000;
-const guardSleep = new Int32Array(new SharedArrayBuffer(4));
-function acquireGuard(path: string) {
-  const deadline = Date.now() + GUARD_WAIT_MS;
-  for (let delay = 1; ; delay = Math.min(delay * 2, 50)) {
-    try {
-      mkdirSync(path, { mode: 0o700 });
-      return;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST" || Date.now() >= deadline) throw error;
-    }
-    // These guards protect synchronous critical sections; waiting blocks too.
-    Atomics.wait(guardSleep, 0, 0, Math.min(delay, Math.max(1, deadline - Date.now())));
-  }
-}
 export function guard<T>(dir: AnchoredDirectory, name: string, run: () => T): T {
-  acquireGuard(dir.name(name));
+  acquireGuardDirectory(dir.name(name));
   fsyncSync(dir.fd);
   const held = dir.directory(name),
     expected = identity(held.stat);

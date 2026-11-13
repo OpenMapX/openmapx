@@ -1,9 +1,9 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { AnchoredDirectory } from "./filesystem";
+import { AnchoredDirectory, acquireGuardDirectory } from "./filesystem";
 import { guard } from "./retention-family";
 
 let root: string;
@@ -76,3 +76,16 @@ it("still refuses a guard nobody releases, once the wait is over", () => {
   expect(waited).toBeGreaterThanOrEqual(1_900);
   expect(waited).toBeLessThan(5_000);
 });
+
+// The lease journal guard takes its directory through the same wait.
+it("lets a direct guard taker wait out the same busy holder", async () => {
+  const path = join(root, ".journal-writer");
+  holder = busyHolder(path, 6_000);
+  const started = Date.now();
+  while (!existsSync(path) && Date.now() - started < 5_000)
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  for (let attempt = 0; attempt < 100; attempt++) {
+    acquireGuardDirectory(path);
+    rmdirSync(path);
+  }
+}, 30_000);
