@@ -53,7 +53,7 @@ elif name == "psql":
     mark(phase + "-sql", sql)
     if "-c" not in sys.argv:
         assert sql and "--single-transaction" in sys.argv
-        assert os.environ.get("PGOPTIONS") == "-c log_statement=none"
+        assert os.environ.get("PGOPTIONS") == "-c log_statement=none -c search_path=pg_catalog,pg_temp"
     counter = root / (phase + "-attempts")
     attempts = int(counter.read_text()) + 1 if counter.exists() else 1
     mark(phase + "-attempts", str(attempts))
@@ -278,8 +278,12 @@ describe("PostGIS entrypoint child ownership", () => {
       );
       expect(roles).toContain("ALTER ROLE openmapx_api SET search_path = public;");
       expect(roles).toContain("ALTER ROLE openmapx_data_manager SET search_path = public;");
-      expect(roles).toContain("CREATE EVENT TRIGGER openmapx_restrict_data_manager_schemas");
-      expect(roles).toContain("CREATE EVENT TRIGGER openmapx_refuse_data_manager_code");
+      expect(roles).toContain(
+        "CREATE EVENT TRIGGER openmapx_guard_refuse_code ON ddl_command_start",
+      );
+      expect(roles).toContain("CREATE EVENT TRIGGER openmapx_guard_check_ddl ON ddl_command_end");
+      expect(roles).toContain("CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;");
+      expect(roles).toContain("'CREATE DOMAIN', 'ALTER DOMAIN', 'CREATE TYPE', 'ALTER TYPE'");
       expect(roles).toContain("AS $$");
       expect(roles).toContain("overture_[a-z0-9_]{1,55})$'");
       expect(f.read("tile-sync-sql")).toContain(

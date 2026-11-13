@@ -17,7 +17,10 @@ updates both roles on every start. `POSTGRES_PASSWORD` remains the superuser's
 password, used only by PostGIS administration and the CLI's backups and
 restores.
 
-A migration grants data-manager's role its tables. Database backups now keep
+Event triggers keep each role's code out of the other's sessions and out of
+the superuser's: data-manager writes no code, the API names its functions
+`openmapx_*`, and check constraints may call only built-in immutable or stable
+functions. A migration grants data-manager's role its tables. Database backups now keep
 each object's owner and grants, and a restore keeps the live database's owner
 and database-level grants.
 

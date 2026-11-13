@@ -82,14 +82,32 @@ before it reports healthy.
 
 - `openmapx_api` owns the `public` schema and runs the migrations, so it owns
   every table they create, including data-manager's `data_manager` tables. The
-  database itself stays the superuser's, so neither role can change settings
-  that superuser sessions inherit.
+  database itself stays the superuser's, so the API cannot change database-wide
+  settings.
 - `openmapx_data_manager` may read and change only the `data_manager` tables and
   create schemas for the indexes it rebuilds (search, Overture, notable and
   ambient places). The API can read those schemas. Data-manager has no access to
-  accounts, administrative jobs or saved configuration, may not name a schema
-  otherwise, and may not create functions, triggers, rules, row-level policies
-  or views that call functions or read other schemas.
+  accounts, administrative jobs or saved configuration.
+
+Code one role writes must never run with another role's rights. PostGIS
+installs two event triggers that enforce this for every role except the
+superuser:
+
+- Data-manager may create no functions, procedures, aggregates, operators,
+  casts, domains, types, rules, triggers or row-level policies, may name schemas
+  only after its indexes, and its views may contain no function call or type
+  coercion and read only its own schemas.
+- The API may create only the schemas `data_manager` and `drizzle`, enum and
+  composite types, triggers, and functions whose names start with `openmapx_`,
+  so no call to a built-in or PostGIS function can resolve to its code. It may
+  create no procedures, aggregates, operators, casts, domains, rules or
+  row-level policies.
+- Check constraints and generated columns, which run in whichever session
+  writes a row, including the superuser's during a restore, may call only the
+  superuser's immutable or stable functions.
+
+PostGIS's own superuser SQL searches only the system catalogs, so no object in
+`public` can stand in for a built-in it calls.
 
 There are no environment variables for these passwords. To change one, delete
 its file, render again and restart PostGIS, `app-api` and `data-manager`.

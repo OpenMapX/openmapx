@@ -15,6 +15,8 @@ const { container: manifest } = JSON.parse(
 ) as { container: { image: string; tag: string; digest: string } };
 const IMAGE = `${manifest.image}:${manifest.tag}@${manifest.digest}`;
 const ENTRYPOINT = "/usr/local/bin/openmapx-postgis-entrypoint.sh";
+const SYNCED =
+  "pg_isready -h 127.0.0.1 -U postgres -d openmapx -q && test -f /var/run/postgresql/openmapx-password-synced";
 const passwords = {
   superuser: randomBytes(24).toString("base64url"),
   api: randomBytes(32).toString("base64url"),
@@ -26,8 +28,8 @@ let api: Sql;
 let dataManager: Sql;
 let superuser: Sql;
 
-function connect(role: string, password: string): Sql {
-  const url = new URL(container.getConnectionUri());
+function connect(role: string, password: string, on = container): Sql {
+  const url = new URL(on.getConnectionUri());
   url.username = role;
   url.password = password;
   return postgres(url.toString(), { max: 1, onnotice: () => {} });
@@ -37,43 +39,46 @@ async function permissionDenied(statement: Promise<unknown>): Promise<void> {
   await expect(statement).rejects.toMatchObject({ code: "42501" });
 }
 
+/** The pinned PostGIS image running the production entrypoint with both role password files. */
+async function startPostgis(environment: Record<string, string> = {}) {
+  return new PostgreSqlContainer(IMAGE)
+    .withDatabase("openmapx")
+    .withUsername("postgres")
+    .withPassword(passwords.superuser)
+    .withEnvironment({
+      OPENMAPX_API_DB_PASSWORD_FILE: "/run/secrets/postgres-api-password",
+      OPENMAPX_DATA_MANAGER_DB_PASSWORD_FILE: "/run/secrets/postgres-data-manager-password",
+      ...environment,
+    })
+    .withCopyContentToContainer([
+      {
+        content: readFileSync(join(repoRoot, "services/postgis/scripts/sync-password.sh")),
+        target: ENTRYPOINT,
+        mode: 0o755,
+      },
+      { content: passwords.api, target: "/run/secrets/postgres-api-password", mode: 0o600 },
+      {
+        content: passwords.dataManager,
+        target: "/run/secrets/postgres-data-manager-password",
+        mode: 0o600,
+      },
+    ])
+    .withEntrypoint([ENTRYPOINT])
+    .withCommand(["postgres"])
+    .withHealthCheck({
+      test: ["CMD-SHELL", SYNCED],
+      interval: 250,
+      timeout: 1000,
+      retries: 1000,
+    })
+    .withStartupTimeout(120_000)
+    .start();
+}
+
 /** The production PostGIS entrypoint creates the roles before the API migrates as its own role. */
 integration("database roles", () => {
   beforeAll(async () => {
-    container = await new PostgreSqlContainer(IMAGE)
-      .withDatabase("openmapx")
-      .withUsername("postgres")
-      .withPassword(passwords.superuser)
-      .withEnvironment({
-        OPENMAPX_API_DB_PASSWORD_FILE: "/run/secrets/postgres-api-password",
-        OPENMAPX_DATA_MANAGER_DB_PASSWORD_FILE: "/run/secrets/postgres-data-manager-password",
-      })
-      .withCopyContentToContainer([
-        {
-          content: readFileSync(join(repoRoot, "services/postgis/scripts/sync-password.sh")),
-          target: ENTRYPOINT,
-          mode: 0o755,
-        },
-        { content: passwords.api, target: "/run/secrets/postgres-api-password", mode: 0o600 },
-        {
-          content: passwords.dataManager,
-          target: "/run/secrets/postgres-data-manager-password",
-          mode: 0o600,
-        },
-      ])
-      .withEntrypoint([ENTRYPOINT])
-      .withCommand(["postgres"])
-      .withHealthCheck({
-        test: [
-          "CMD-SHELL",
-          "pg_isready -h 127.0.0.1 -U postgres -d openmapx -q && test -f /var/run/postgresql/openmapx-password-synced",
-        ],
-        interval: 250,
-        timeout: 1000,
-        retries: 1000,
-      })
-      .withStartupTimeout(120_000)
-      .start();
+    container = await startPostgis();
     superuser = connect("postgres", passwords.superuser);
     api = connect("openmapx_api", passwords.api);
     dataManager = connect("openmapx_data_manager", passwords.dataManager);
@@ -141,9 +146,8 @@ integration("database roles", () => {
       dataManager.unsafe("ALTER SCHEMA notable_places__staging RENAME TO conditions"),
     );
     await dataManager.unsafe("DROP SCHEMA notable_places__staging");
-    // The superuser and the API are not restricted to those names.
-    await api.unsafe("CREATE SCHEMA api_probe");
-    await api.unsafe("DROP SCHEMA api_probe");
+    // The API creates only the schemas its migrations need.
+    await permissionDenied(api.unsafe("CREATE SCHEMA api_probe"));
   });
 
   it("lets data-manager write plain views but no code that the API could run", async () => {
@@ -233,4 +237,166 @@ integration("database roles", () => {
     expect(await api.unsafe("SELECT name FROM osm_search.names")).toEqual([{ name: "second" }]);
     await permissionDenied(api.unsafe("INSERT INTO osm_search.places (name) VALUES ('api')"));
   });
+});
+
+/**
+ * Code one role writes must never run with another role's rights: neither
+ * data-manager's in the API's sessions, nor the API's in a superuser's. Each
+ * case below is a reproduction of such an attempt.
+ */
+integration("code planted for another role", () => {
+  let db: StartedPostgreSqlContainer;
+  let roles: { api: Sql; dataManager: Sql; superuser: Sql };
+  const open = () => {
+    roles = {
+      api: connect("openmapx_api", passwords.api, db),
+      dataManager: connect("openmapx_data_manager", passwords.dataManager, db),
+      superuser: connect("postgres", passwords.superuser, db),
+    };
+  };
+  const close = () =>
+    Promise.allSettled([roles.api.end(), roles.dataManager.end(), roles.superuser.end()]);
+  /** PostGIS restarts and runs its entrypoint's superuser SQL again. */
+  const restart = async () => {
+    await close();
+    await db.restart();
+    for (let attempt = 0; attempt < 240; attempt += 1) {
+      if ((await db.exec(["sh", "-c", SYNCED])).exitCode === 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    open();
+  };
+
+  beforeAll(async () => {
+    db = await startPostgis();
+    open();
+    await migrate(drizzle(roles.api), { migrationsFolder: MIGRATIONS });
+  }, 240_000);
+  afterAll(async () => {
+    await close();
+    await db?.stop();
+  });
+
+  it("refuses data-manager's domain whose check would change the API's search path", async () => {
+    await roles.dataManager.unsafe(`
+      CREATE SCHEMA osm_search;
+      CREATE TABLE osm_search.places (name text);
+      INSERT INTO osm_search.places VALUES ('a');
+      CREATE TABLE osm_search."user" (id text, email text);
+      INSERT INTO osm_search."user" VALUES ('1', 'forged@x');
+    `);
+    for (const statement of [
+      "CREATE DOMAIN osm_search.d AS text CHECK (set_config('search_path', 'osm_search, public', false) IS NOT NULL)",
+      "CREATE VIEW osm_search.v AS SELECT name::osm_search.d AS name FROM osm_search.places",
+    ])
+      await roles.dataManager.unsafe(statement).catch(() => undefined);
+    await roles.api.unsafe("SELECT * FROM osm_search.v").catch(() => undefined);
+    expect(await roles.api.unsafe("SHOW search_path")).toEqual([{ search_path: "public" }]);
+    expect(await roles.api.unsafe(`SELECT email FROM "user" WHERE email = 'forged@x'`)).toEqual([]);
+    for (const statement of [
+      "CREATE DOMAIN osm_search.d2 AS text",
+      "CREATE TYPE osm_search.kind AS ENUM ('a')",
+      "CREATE TYPE osm_search.pair AS (a text, b text)",
+      "CREATE TYPE osm_search.span AS RANGE (subtype = text)",
+      // Coercions run the target type's code as the reader of the view.
+      "CREATE VIEW osm_search.w AS SELECT 1::information_schema.cardinal_number AS n FROM osm_search.places",
+      "CREATE VIEW osm_search.w AS SELECT name::text::xml AS x FROM osm_search.places",
+    ])
+      await permissionDenied(roles.dataManager.unsafe(statement));
+    await roles.dataManager.unsafe("DROP SCHEMA osm_search CASCADE");
+  });
+
+  it("refuses the API's function whose name another role's call could resolve to", async () => {
+    await permissionDenied(
+      roles.api.unsafe(`
+        CREATE FUNCTION public.format(fmt text, db name) RETURNS text LANGUAGE plpgsql AS $$
+        BEGIN
+          IF (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
+            EXECUTE 'ALTER ROLE openmapx_api SUPERUSER';
+          END IF;
+          RETURN fmt;
+        END $$`),
+    );
+    for (const statement of [
+      "CREATE FUNCTION public.st_x(text) RETURNS float8 LANGUAGE sql AS 'SELECT 0::float8'",
+      "CREATE PROCEDURE public.openmapx_probe_procedure() LANGUAGE sql AS 'SELECT 1'",
+      "CREATE AGGREGATE public.openmapx_probe_sum(int) (SFUNC = int4pl, STYPE = int)",
+      "CREATE OPERATOR public.=== (LEFTARG = text, RIGHTARG = text, FUNCTION = texteq)",
+      "CREATE DOMAIN public.openmapx_probe_domain AS text",
+      "CREATE TYPE public.openmapx_probe_span AS RANGE (subtype = text)",
+      "CREATE SCHEMA conditions",
+      "CREATE SCHEMA tiles_shadow",
+    ])
+      await permissionDenied(roles.api.unsafe(statement));
+    // What the migrations themselves create stays possible.
+    await roles.api.unsafe(`
+      CREATE FUNCTION public.openmapx_probe() RETURNS int LANGUAGE sql IMMUTABLE AS 'SELECT 1';
+      CREATE TYPE public.openmapx_probe_kind AS ENUM ('a');
+      CREATE TABLE public.openmapx_probe_table (v int CHECK (v > 0), w text CHECK (w ~ '^[a-z]+$'));
+      CREATE TRIGGER openmapx_probe_trigger BEFORE UPDATE ON public.openmapx_probe_table
+        FOR EACH ROW EXECUTE FUNCTION suppress_redundant_updates_trigger();
+    `);
+  });
+
+  it("refuses check constraints and generated columns that would run code in a restore", async () => {
+    // A restore loads rows as the superuser, which evaluates check constraints.
+    for (const statement of [
+      "ALTER TABLE public.openmapx_probe_table ADD CONSTRAINT probe CHECK (public.openmapx_probe() = 1)",
+      "ALTER TABLE public.openmapx_probe_table ADD CONSTRAINT probe CHECK (set_config('search_path', 'public', false) IS NOT NULL)",
+      "ALTER TABLE public.openmapx_probe_table ADD COLUMN g int GENERATED ALWAYS AS (public.openmapx_probe()) STORED",
+      "CREATE TABLE public.openmapx_probe_copy (v int CHECK (lo_export(0, '/tmp/x') = 1))",
+    ])
+      await permissionDenied(roles.api.unsafe(statement));
+    // Data-manager's own tables, with checks and a PostGIS generated column.
+    await roles.dataManager.unsafe(`
+      CREATE EXTENSION IF NOT EXISTS pg_trgm;
+      CREATE EXTENSION IF NOT EXISTS btree_gist;
+      CREATE SCHEMA ambient_places;
+      CREATE TABLE ambient_places.state (singleton smallint PRIMARY KEY CHECK (singleton = 1));
+      CREATE TABLE ambient_places.places (
+        qid TEXT PRIMARY KEY CHECK (qid ~ '^Q[0-9]+$'),
+        lat DOUBLE PRECISION NOT NULL CHECK (lat BETWEEN -90 AND 90),
+        lng DOUBLE PRECISION NOT NULL CHECK (lng BETWEEN -180 AND 180),
+        geom GEOGRAPHY(POINT, 4326) GENERATED ALWAYS AS (
+          ST_SetSRID(ST_MakePoint(lng, lat), 4326)::geography
+        ) STORED,
+        kind TEXT NOT NULL CHECK (kind IN ('place','settlement'))
+      );
+    `);
+    expect(
+      await roles.superuser`
+        SELECT e.extname, pg_get_userbyid(e.extowner) AS owner FROM pg_extension e
+        WHERE e.extname IN ('pg_trgm', 'btree_gist', 'fuzzystrmatch') ORDER BY 1`,
+    ).toEqual([
+      { extname: "btree_gist", owner: "postgres" },
+      { extname: "fuzzystrmatch", owner: "postgres" },
+      { extname: "pg_trgm", owner: "postgres" },
+    ]);
+    await permissionDenied(
+      roles.dataManager.unsafe(
+        "ALTER TABLE ambient_places.state ADD CONSTRAINT probe CHECK (query_to_xml('SELECT 1', true, false, '') IS NOT NULL)",
+      ),
+    );
+    await roles.dataManager.unsafe("DROP SCHEMA ambient_places CASCADE");
+  });
+
+  it("keeps the API's objects in public out of the entrypoint's superuser SQL", async () => {
+    // Planted by the superuser, so the role guard does not stop it; only the
+    // entrypoint's own search path keeps it from running.
+    await roles.superuser.unsafe(`
+      CREATE FUNCTION public.format(fmt text, db name) RETURNS text LANGUAGE plpgsql AS $$
+      BEGIN
+        IF (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
+          EXECUTE 'ALTER ROLE openmapx_api SUPERUSER';
+        END IF;
+        RETURN fmt;
+      END $$;
+      ALTER FUNCTION public.format(text, name) OWNER TO openmapx_api;
+    `);
+    await restart();
+    expect(
+      await roles.superuser`SELECT rolsuper FROM pg_roles WHERE rolname = 'openmapx_api'`,
+    ).toEqual([{ rolsuper: false }]);
+    await roles.superuser.unsafe("DROP FUNCTION public.format(text, name)");
+  }, 120_000);
 });
