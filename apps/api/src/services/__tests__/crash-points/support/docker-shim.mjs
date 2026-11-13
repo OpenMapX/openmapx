@@ -42,7 +42,7 @@ const body = JSON.stringify({
   stdin: await readStdin(),
 });
 
-const url = new URL("/invoke", engine);
+const url = new URL("invoke", engine);
 const req = request(
   url,
   { method: "POST", headers: { "content-type": "application/json" }, timeout: 0 },

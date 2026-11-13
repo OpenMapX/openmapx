@@ -6,7 +6,7 @@
  * Fault rules can hold an invocation (a deterministic "effect started"
  * moment), fail it, or report a recreated service as unhealthy. */
 import { execFile } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -173,6 +173,7 @@ export class FakeDockerEngine {
   private sequence = 0;
   private composeQueue: Promise<unknown> = Promise.resolve();
   url = "";
+  private readonly secret = randomBytes(24).toString("hex");
   /** Where each answered invocation is appended, for diagnosing a failed run. */
   traceFile?: string;
 
@@ -186,7 +187,7 @@ export class FakeDockerEngine {
     this.server.headersTimeout = 0;
     this.server.keepAliveTimeout = 0;
     await new Promise<void>((resolve) => this.server?.listen(0, "127.0.0.1", resolve));
-    this.url = `http://127.0.0.1:${(this.server.address() as AddressInfo).port}`;
+    this.url = `http://127.0.0.1:${(this.server.address() as AddressInfo).port}/${this.secret}/`;
     return this.url;
   }
 
@@ -282,6 +283,14 @@ export class FakeDockerEngine {
   }
 
   private async handle(request: IncomingMessage, response: ServerResponse) {
+    // Only processes this host started know the engine's path; any other local
+    // process is refused before the engine starts anything on its behalf.
+    const expected = Buffer.from(`/${this.secret}/invoke`);
+    const presented = Buffer.from(request.url ?? "");
+    if (presented.length !== expected.length || !timingSafeEqual(presented, expected)) {
+      response.writeHead(404).end();
+      return;
+    }
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(chunk as Buffer);
     let parsed: Request;
