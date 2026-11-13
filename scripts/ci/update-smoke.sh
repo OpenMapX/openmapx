@@ -5,7 +5,10 @@
 #   scripts/ci/update-smoke.sh
 #
 # Release N is built from this checkout and pushed to a registry:2 container at
-# localhost:5000/openmapx. Each later release is the previous release's images
+# localhost:5000/openmapx. The operations agent inspects release manifests with
+# its own Docker CLI, inside its container, where localhost is the container:
+# during each update a forwarder in the agent's network namespace passes
+# localhost:5000 on to the registry, which listens on the host's network. Each later release is the previous release's images
 # with one more label (a new digest each), plus a release manifest. Every case
 # starts from a fresh installation of N, selected through the release channel
 # exactly as an operator's installation is:
@@ -36,6 +39,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$root/scripts/ci/install-smoke.sh"
 
 registry_name="openmapx-update-smoke-registry"
+forwarder_name="openmapx-update-smoke-registry-forwarder"
 registry_image="registry:2.8.3"
 registry="localhost:5000/openmapx"
 release_counter=0
@@ -65,7 +69,8 @@ built_image() {
 start_registry() {
   step "Start the local registry"
   docker rm --force "$registry_name" >/dev/null 2>&1 || true
-  docker run --detach --name "$registry_name" --publish 5000:5000 "$registry_image" >/dev/null
+  # Host networking, so the agent's network gateway reaches it on port 5000.
+  docker run --detach --name "$registry_name" --network host "$registry_image" >/dev/null
   local deadline=$((SECONDS + 60))
   until curl --fail --silent http://localhost:5000/v2/ >/dev/null; do
     ((SECONDS < deadline)) || fail "the local registry did not answer"
@@ -82,6 +87,46 @@ resume_registry() {
     sleep 1
   done
 }
+
+# Listens on localhost:5000 inside the operations agent's network namespace
+# and forwards to the registry on the host, reached through the agent
+# network's gateway. It runs on the agent's own image, which has Node.
+start_registry_forwarder() {
+  local agent image gateway deadline
+  stop_registry_forwarder
+  agent="$(docker ps --quiet --filter "label=com.docker.compose.project=$project" \
+    --filter "label=com.docker.compose.service=ops-agent" | head -1)"
+  [[ -n "$agent" ]] || fail "no operations agent runs to forward the registry to"
+  image="$(docker inspect --format '{{.Image}}' "$agent")"
+  gateway="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.Gateway}} {{end}}' "$agent")"
+  gateway="${gateway%% *}"
+  [[ -n "$gateway" ]] || fail "the operations agent has no network gateway"
+  docker run --detach --name "$forwarder_name" --network "container:$agent" --entrypoint node "$image" -e '
+    const net = require("node:net");
+    const [, host, port] = process.argv;
+    for (const address of ["127.0.0.1", "::1"])
+      net
+        .createServer((client) => {
+          const upstream = net.connect(Number(port), host);
+          client.pipe(upstream).pipe(client);
+          upstream.on("error", () => client.destroy());
+          client.on("error", () => upstream.destroy());
+        })
+        .on("error", (error) => {
+          if (address === "127.0.0.1") throw error;
+        })
+        .listen(Number(port), address);
+  ' "$gateway" 5000 >/dev/null
+  # While the registry is up (not in the outage case), the agent must reach it.
+  curl --fail --silent http://localhost:5000/v2/ >/dev/null || return 0
+  deadline=$((SECONDS + 30))
+  until docker exec "$agent" curl --fail --silent --max-time 5 http://127.0.0.1:5000/v2/ >/dev/null; do
+    ((SECONDS < deadline)) || fail "the operations agent cannot reach the registry through the forwarder"
+    sleep 1
+  done
+}
+
+stop_registry_forwarder() { docker rm --force "$forwarder_name" >/dev/null 2>&1 || true; }
 
 # Pushes an image under a tag and prints its repository digest reference.
 push_image() {
@@ -156,10 +201,15 @@ snapshot_images() {
 }
 
 install_release_one() {
+  stop_registry_forwarder
   reset_project
   configure_environment
   set_env OPENMAPX_RELEASE main
   set_env OPENMAPX_RELEASE_MANIFEST_REPOSITORY "$registry/release-manifest"
+  # The first notable-places build starts right after the installation, runs
+  # for minutes and holds the data-manager target: an update meanwhile is
+  # refused (reported as a generic runtime failure). Each case tests the update.
+  set_env NOTABLE_PLACES_REFRESH_CRON off
   release_counter=0
   publish_release
   step "Install release N"
@@ -211,6 +261,7 @@ check_release() {
 system_update() {
   local name="$1" release="$2" digest="$3" status=0 follower
   rm -f "$work/receipt-$name"
+  start_registry_forwarder
   follow_helpers "$name" &
   follower=$!
   NODE_TLS_REJECT_UNAUTHORIZED=0 logged "update-$name" openmapx system update \
@@ -218,6 +269,7 @@ system_update() {
     --receipt "$work/receipt-$name" --api-origin https://localhost --no-backup || status=$?
   kill "$follower" 2>/dev/null || true
   wait "$follower" 2>/dev/null || true
+  stop_registry_forwarder
   return "$status"
 }
 
@@ -395,11 +447,21 @@ dump_diagnostics() {
   fi
   local receipt
   for receipt in "$work"/receipt-*; do
-    [[ -f "$receipt" ]] && cp "$receipt" "$diagnostics_dir/" 2>/dev/null || true
+    if [[ -f "$receipt" ]]; then cp "$receipt" "$diagnostics_dir/" 2>/dev/null || true; fi
   done
   cp "$work"/*.log "$diagnostics_dir/" 2>/dev/null || true
   docker ps --all --format 'table {{.Names}}\t{{.Image}}\t{{.State}}\t{{.Status}}' \
     >"$diagnostics_dir/containers.txt" 2>&1 || true
+  local agent
+  agent="$(docker ps --quiet --filter "label=com.docker.compose.project=$project" \
+    --filter "label=com.docker.compose.service=ops-agent" | head -1)"
+  if [[ -n "$agent" ]]; then
+    # Whether the agent's own Docker CLI reaches the registry it inspects.
+    docker exec "$agent" curl --silent --output /dev/null --max-time 5 \
+      --write-out 'registry from the agent: HTTP %{http_code}\n' http://127.0.0.1:5000/v2/ \
+      >>"$diagnostics_dir/summary.txt" 2>&1 || echo "registry from the agent: unreachable" \
+      >>"$diagnostics_dir/summary.txt"
+  fi
   local container name
   while IFS= read -r container; do
     [[ -n "$container" ]] || continue
@@ -419,6 +481,7 @@ dump_diagnostics() {
 update_exit() {
   local status=$?
   if ((status != 0)); then dump_diagnostics || true; fi
+  stop_registry_forwarder
   docker rm --force "$registry_name" >/dev/null 2>&1 || true
   (exit "$status")
   on_exit
