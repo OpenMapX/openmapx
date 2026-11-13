@@ -279,11 +279,17 @@ Only the superuser can create or replace the functions in `tiles`, and only
 the superuser and the owner of `conditions` those in `conditions`. Until
 OpenConditions creates `conditions`, any role with `CREATE` on the database
 other than the API's and data-manager's could create it, so grant that right
-only to the services that need it. The tile functions call PostGIS without a
-schema, through `public`, which the API's role owns: a compromised API could
-add a PostGIS function there that a tile calls instead. It would run as
-`openmapx_tiles_owner`, never as the superuser, so it could read what that role
-reads or break the traffic tiles. See
+only to the services that need it. The tile roles may create no objects of
+their own.
+
+The tile functions call PostGIS without a schema, through `public`, which the
+API's role owns, and so do OpenConditions' own functions: a compromised API
+could add a PostGIS function there that a tile calls instead. It would run as
+the role calling it: `openmapx_tiles_owner` during a tile, so it could read
+every OpenConditions table or break the traffic tiles, or OpenConditions' own
+role when that runs the same function, so it could change OpenConditions'
+tables and functions. It cannot reach the superuser, and code that runs as the
+tile owner can leave nothing that a restore would recreate. See
 [Database roles](../install/configuration.md#database-roles).
 
 Martin is independent of TileServer GL. Most deployments that only need a

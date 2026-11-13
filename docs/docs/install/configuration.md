@@ -101,8 +101,10 @@ API's or the superuser's rights. Two structural rules keep it that way:
   so a view the API reads runs no data-manager code.
 - A check constraint, default, generated column or index expression runs in the
   session that writes the row or builds the index. Only data-manager writes its
-  tables, and a backup restore recreates every object, and loads every table,
-  in a session of the role that owns it (see
+  tables, and a backup restore recreates each role's objects, and loads its
+  tables, in a session of that role; the superuser restores only schemas,
+  extensions, casts, its own objects and the tile function, none of which runs
+  code when created (see
   [Backup & restore](../administration/backup-and-restore.md#restoring)).
 
 The API may create only the schemas `data_manager` and `drizzle`, so it cannot
@@ -115,26 +117,38 @@ the erasure replay and the closing of restored jobs after a restore) as
 `openmapx_api`. Make your own changes to API tables the same way:
 `docker exec -it postgis psql -U openmapx_api -d openmapx`.
 
+The tile server's roles may create nothing at all. PostGIS creates the tile
+function itself and hands it to `openmapx_tiles_owner`, and a restore refuses
+a backup holding any other object of a role that cannot log in, so code that
+runs as the tile owner can leave nothing behind for a restoring superuser.
+
 These guarantees have known limits:
 
-- The API owns the `data_manager` tables that data-manager writes, so a
-  compromised API can run code as data-manager through a trigger, rule, policy
-  or default on them. It already reads data-manager's schemas; it gains
-  data-manager's right to change them.
-- The tile function finds PostGIS through `public`, which the API owns. A
-  compromised API can add a PostGIS function there that a tile calls instead,
-  which runs as `openmapx_tiles_owner`: it can read the OpenConditions tables
-  that role reads, or break traffic tiles, but never act as the superuser.
-  Moving PostGIS into a schema the API cannot write would close this, but
-  PostGIS cannot be moved in place: it would have to be reinstalled, with every
-  spatial column and index that depends on it, and the new schema added to
-  every role's search path.
+- PostGIS lives in `public`, which the API owns, and the API may create
+  functions and operators there. Every role finds PostGIS, and any other
+  function or operator called without a schema, through `public`. A compromised
+  API can therefore make any role that calls such a name, with or without the
+  `public.` prefix, run the API's code instead, when the API's version matches
+  the call's types more closely: data-manager, OpenConditions' roles, including the owner of
+  `conditions`, and `openmapx_tiles_owner` through the tile function. It can
+  also run code as data-manager through a trigger, rule, policy or default on
+  the `data_manager` tables it owns. Each such move gives the API that role's
+  rights: data-manager's right to change its schemas, OpenConditions' right to
+  change its tables and functions, the tile owner's right to read every
+  OpenConditions table. None reaches the superuser. Moving PostGIS into a
+  schema the API cannot write would close this, but PostGIS cannot be moved in
+  place: it would have to be reinstalled, with every spatial column and index
+  that depends on it, and the new schema put ahead of `public` on every role's
+  search path.
 - As the owner of `public`, a compromised API can revoke other roles' use of
   it, so that data-manager, OpenConditions and the tile function no longer find
   PostGIS. That stops them working but gives the API none of their rights.
-- A superuser session of your own that reads or writes an object a role owns,
-  such as a view, or a table with a trigger, default or check constraint, runs
-  that role's code with superuser rights. Connect as the owning role instead.
+- A superuser session of your own runs a role's code with superuser rights
+  when it reads or writes an object that role owns, such as a view, or a table
+  with a trigger, default or check constraint, and when it calls a function or
+  operator in `public`, PostGIS's among them, whether by its `public.` name or
+  through its search path. Connect as the owning role, or run
+  `SET search_path = pg_catalog` first and call no PostGIS function.
 - PostGIS grants every role read access to its catalogue tables
   (`spatial_ref_sys`, `geometry_columns`, `geography_columns`,
   `topology.topology` and `topology.layer`).

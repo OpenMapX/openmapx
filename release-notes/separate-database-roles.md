@@ -28,17 +28,20 @@ data-manager's role its tables.
 
 Database backups are now `pg_dump` archives in PostgreSQL's custom format
 (`<service>__<volume>.dump`) that keep each object's owner and grants. A
-restore recreates every object, and loads every table, in a session of the
-role that owns it, so no role's check constraints, defaults or index
-expressions run as the superuser, and it keeps the live database's owner and
-database-level grants. The CLI refuses to restore an older plain-SQL backup
+restore recreates each role's objects, and loads its tables, in a session of
+that role, so no role's check constraints, defaults or index expressions run
+as the superuser; the superuser restores only schemas, extensions, casts, its
+own objects and the tile function. Before it drops anything, the restore
+refuses a backup with an object of a role the server lacks or that cannot log
+in. It keeps the live database's owner and database-level grants. The CLI refuses to restore an older plain-SQL backup
 (`.sql.gz`) of the OpenMapX database; other services' older backups still
 restore.
 
-A compromised API can still run code as data-manager, through a trigger,
-default or policy on the `data_manager` tables it owns, and can make the tile
-function run its code as `openmapx_tiles_owner` by adding a PostGIS function
-to `public`; neither gives it superuser rights.
+PostGIS stays in the `public` schema, which the API owns. A compromised API
+can add functions or operators there that run as any role calling such a
+name, data-manager, OpenConditions' roles and the tile owner among them, and can run code as data-manager through a trigger, default or
+policy on the `data_manager` tables it owns. These moves give it those roles'
+rights, never the superuser's. The tile roles may create no objects.
 [Database roles](../docs/docs/install/configuration.md#database-roles) lists
 these limits.
 

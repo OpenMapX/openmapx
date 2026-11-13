@@ -518,7 +518,20 @@ installation does not prove that their database and feed credentials are valid.
    [Martin overlays](../guides/map-tiles.md#martin-overlays). The roles live
    outside the database, so a backup restore keeps their grants only while the
    roles still exist. A restore recreates each service's objects in a session
-   of the role that owns them, so those roles must also be able to log in.
+   of the role that owns them, so those roles must also be able to log in: it
+   refuses a backup holding an object of a role that cannot, before it drops
+   anything.
+
+   PostGIS lives in the `public` schema, which the API's role owns, and every
+   role finds it there. A function or operator a compromised API adds to
+   `public` runs as any service role that calls the name with arguments it
+   matches more closely than PostGIS's own. That role's
+   rights then become the API's: for OpenConditions' ingest role, the right to
+   change every OpenConditions table and function. Calling PostGIS as
+   `public.ST_Transform(...)` does not prevent this, as the API's function sits
+   in `public` beside PostGIS's own; only moving PostGIS out of `public` would
+   (see [Database roles](../install/configuration.md#database-roles)). Weigh
+   this before giving a service's role rights the API should not have.
 
 3. Set non-secret options in **Configuration**, or use
    `SERVICE_OPENCONDITIONS_INGEST_<KEY>` and
