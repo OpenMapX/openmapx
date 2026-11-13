@@ -71,5 +71,12 @@
   "apps/api/src/services/__tests__/crash-points/scenarios/self-update.test.ts": 80,
   "apps/api/src/services/__tests__/crash-points/scenarios/state-filesystem-full.test.ts": 130,
   "apps/api/src/services/__tests__/crash-points/scenarios/unhealthy-api-image.test.ts": 220,
-  "apps/api/src/services/__tests__/crash-points/scenarios/update-cancelled-during-settle.test.ts": 215
+  "apps/api/src/services/__tests__/crash-points/scenarios/update-cancelled-during-settle.test.ts": 215,
+  "apps/api/src/services/__tests__/crash-points/scenarios/api-killed-during-download.test.ts": 340,
+  "apps/api/src/services/__tests__/crash-points/scenarios/lost-prepare-reply.test.ts": 80,
+  "apps/api/src/services/__tests__/crash-points/scenarios/api-killed-before-apply.test.ts": 340,
+  "apps/api/src/services/__tests__/crash-points/scenarios/agent-killed-during-start.test.ts": 190,
+  "apps/api/src/services/__tests__/crash-points/scenarios/update-cancelled-mid-recreate.test.ts": 90,
+  "apps/api/src/services/__tests__/crash-points/scenarios/cli-during-helper.test.ts": 90,
+  "apps/api/src/services/__tests__/crash-points/scenarios/traffic-without-valhalla.test.ts": 120
 }
