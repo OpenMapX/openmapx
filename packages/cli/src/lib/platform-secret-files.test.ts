@@ -1,5 +1,4 @@
 import {
-  chmodSync,
   linkSync,
   lstatSync,
   mkdirSync,
