@@ -283,9 +283,9 @@ SELECT format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC', p.oid::regprocedure)
 -- constraints, defaults and index expressions run as whoever writes the
 -- table: data-manager itself, or a restore session of the table's owner.
 -- The API may install no extension: a trusted extension's script runs as the
--- superuser and finds names through `public`, which the API owns. The tile
--- roles create nothing: the tile owner runs whatever a tile reaches, the
--- API's functions in `public` among them, and cannot log in to restore an
+-- superuser and finds names through the public schema, which the API owns.
+-- The tile roles create nothing: the tile owner runs whatever a tile reaches,
+-- the API's functions in the public schema among them, and cannot log in to restore an
 -- object of its own, which only this script gives it.
 CREATE SCHEMA IF NOT EXISTS openmapx_guard;
 REVOKE ALL ON SCHEMA openmapx_guard FROM PUBLIC;
