@@ -39,26 +39,39 @@ trap 'rm -f "$list"' EXIT
 while IFS= read -r entry && [ -n "$entry" ]; do printf '%s\n' "$entry" >>"$list"; done
 pg_restore --use-list="$list" "$@"`;
 
+/** The first `server_version_num` that knows `transaction_timeout`
+ * (PostgreSQL 17). An older server refuses the setting at login. */
+const TRANSACTION_TIMEOUT_SERVER_VERSION = 170000;
+
 /**
  * Session settings every restore pass needs, given at login so that they
  * override whatever defaults a role has set for its own sessions, such as
- * read-only transactions or short timeouts.
+ * read-only transactions or short timeouts. `serverVersion` is the server's
+ * `server_version_num`: a setting the server does not know is left out.
  */
-const RESTORE_PASS_PGOPTIONS = [
-  "default_transaction_read_only=off",
-  "statement_timeout=0",
-  "lock_timeout=0",
-  "idle_in_transaction_session_timeout=0",
-  "transaction_timeout=0",
-]
-  .map((setting) => `-c ${setting}`)
-  .join(" ");
+function restorePassOptions(serverVersion: number): string {
+  return [
+    "default_transaction_read_only=off",
+    "statement_timeout=0",
+    "lock_timeout=0",
+    "idle_in_transaction_session_timeout=0",
+    ...(serverVersion >= TRANSACTION_TIMEOUT_SERVER_VERSION ? ["transaction_timeout=0"] : []),
+  ]
+    .map((setting) => `-c ${setting}`)
+    .join(" ");
+}
 
-/** Arguments, inside the database container, for one restore pass. */
-export function restorePassCommand(pass: RestorePass, superuser: string, db: string): string[] {
+/** Arguments, inside the database container, for one restore pass on a
+ * server with the given `server_version_num`. */
+export function restorePassCommand(
+  pass: RestorePass,
+  superuser: string,
+  db: string,
+  serverVersion: number,
+): string[] {
   return [
     "env",
-    `PGOPTIONS=${RESTORE_PASS_PGOPTIONS}`,
+    `PGOPTIONS=${restorePassOptions(serverVersion)}`,
     "bash",
     "-c",
     RESTORE_PASS_SCRIPT,

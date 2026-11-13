@@ -57,6 +57,13 @@ vi.mock("../src/commands/backup-processes", async (original) => ({
 let tmp: string;
 const ERASURE_KEY = Buffer.from("0123456789abcdef0123456789abcdef");
 
+/** Every restore plan reads the server's version; these tests use PostgreSQL 18. */
+function serverVersionReply(command: string, args: readonly string[]) {
+  return command === "docker" && args.includes("SHOW server_version_num")
+    ? Promise.resolve({ exitCode: 0, stdout: "180001\n", stderr: "" })
+    : undefined;
+}
+
 function setupRepo(): void {
   // Workspace marker so findRepoRoot accepts this dir.
   writeFileSync(join(tmp, "pnpm-workspace.yaml"), "packages: []\n");
@@ -1076,6 +1083,8 @@ describe("backup volume modes", () => {
       writeFileSync(join(directory, name), "synthetic archive");
     });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+      const version = serverVersionReply(command, args);
+      if (version) return version;
       if (command === "gunzip") {
         return Object.assign(Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }), {
           stdout: Readable.from(["dump"]),
@@ -1254,6 +1263,8 @@ describe("backup volume modes", () => {
       "timeline__openmapx-files.tar.gz": "tar",
     });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+      const version = serverVersionReply(command, args);
+      if (version) return version;
       if (command === "gunzip") {
         return Object.assign(Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }), {
           stdout: Readable.from(["dump"]),
@@ -1323,6 +1334,8 @@ describe("backup volume modes", () => {
       args: string[],
       options?: { input?: unknown },
     ) => {
+      const version = serverVersionReply(command, args);
+      if (version) return version;
       if (command === "gunzip") {
         return Object.assign(Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }), {
           stdout: Readable.from(["dump"]),
@@ -1409,6 +1422,8 @@ describe("backup volume modes", () => {
       "--section=post-data": "5999; 3466 18301 EVENT TRIGGER - guard postgres\n",
     };
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+      const version = serverVersionReply(command, args);
+      if (version) return version;
       if (command === "docker" && args.includes("ps")) {
         return Promise.resolve({ exitCode: 0, stdout: '{"Service":"timeline"}\n', stderr: "" });
       }
@@ -1437,6 +1452,11 @@ describe("backup volume modes", () => {
       .filter((args) => !args.includes("--list"))
       .map((args) => /-U (\S+) -d timeline/.exec(args)?.[1]);
     expect(sessions).toEqual(["postgres", "timeline_app", "timeline_app", "postgres"]);
+    // The planned server version reaches every pass: PostgreSQL 18 knows
+    // transaction_timeout.
+    const passes = calls.filter((args) => args.includes("openmapx-restore"));
+    expect(passes.length).toBeGreaterThan(0);
+    for (const pass of passes) expect(pass).toContain("-c transaction_timeout=0");
   });
 
   it.each([
@@ -1467,6 +1487,8 @@ describe("backup volume modes", () => {
       });
       writeBackupFiles(dir, { "timeline__openmapx-db.dump": "archive" });
       vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+        const version = serverVersionReply(command, args);
+        if (version) return version;
         if (command === "docker" && args.includes("ps")) {
           return Promise.resolve({ exitCode: 0, stdout: '{"Service":"timeline"}\n', stderr: "" });
         }
@@ -1517,6 +1539,8 @@ describe("backup volume modes", () => {
     });
     writeBackupFiles(dir, { "postgis.dump": "archive" });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+      const version = serverVersionReply(command, args);
+      if (version) return version;
       if (command === "docker" && args.includes("ps")) {
         return Promise.resolve({
           exitCode: 0,
@@ -1587,6 +1611,8 @@ describe("backup volume modes", () => {
     });
     writeBackupFiles(dir, { "postgis.sql.gz": "dump" });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+      const version = serverVersionReply(command, args);
+      if (version) return version;
       if (command === "docker" && args.includes("ps")) {
         return Promise.resolve({
           exitCode: 0,
@@ -1637,6 +1663,8 @@ describe("backup volume modes", () => {
     });
     writeBackupFiles(dir, { "postgis.dump": "dump", "postgis-files.tar.gz": "tar" });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+      const version = serverVersionReply(command, args);
+      if (version) return version;
       if (command === "gunzip") {
         return Object.assign(Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }), {
           stdout: Readable.from(["dump"]),
@@ -1708,6 +1736,8 @@ describe("backup volume modes", () => {
       args: string[],
       options?: { input?: unknown },
     ) => {
+      const version = serverVersionReply(command, args);
+      if (version) return version;
       if (command === "gunzip") {
         return Object.assign(Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }), {
           stdout: Readable.from(["dump"]),
@@ -1803,6 +1833,8 @@ describe("backup volume modes", () => {
     });
     writeBackupFiles(dir, { "postgis.dump": "dump" });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+      const version = serverVersionReply(command, args);
+      if (version) return version;
       if (command === "docker" && args.includes("ps")) {
         const keyPath = join(tmp, "infra", "docker", "secrets", "erasure-journal-key");
         rmSync(keyPath);

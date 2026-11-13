@@ -114,9 +114,11 @@ describe("planOwnerRestore", () => {
   it("hands pg_restore the entry list before the archive and logs in as the owner", () => {
     const pass = { role: "openmapx_api", section: "data", entries: [5950, 5952] } as const;
     expect(restorePassPreamble(pass)).toBe("5950;\n5952;\n\n");
-    const command = restorePassCommand(pass, "postgres", "openmapx");
+    const command = restorePassCommand(pass, "postgres", "openmapx", 180001);
     // Pinned at login over whatever defaults the role set for its sessions.
-    expect(command[1]).toContain("-c default_transaction_read_only=off");
+    expect(command[1]).toBe(
+      "PGOPTIONS=-c default_transaction_read_only=off -c statement_timeout=0 -c lock_timeout=0 -c idle_in_transaction_session_timeout=0 -c transaction_timeout=0",
+    );
     expect(command.slice(6)).toEqual([
       "--single-transaction",
       "--exit-on-error",
@@ -125,9 +127,22 @@ describe("planOwnerRestore", () => {
       "-d",
       "openmapx",
     ]);
-    expect(restorePassCommand({ ...pass, role: null }, "postgres", "openmapx")).toContain(
+    expect(restorePassCommand({ ...pass, role: null }, "postgres", "openmapx", 180001)).toContain(
       "postgres",
     );
+  });
+
+  it("pins transaction_timeout only on a server that knows it", () => {
+    const pass = { role: "openmapx_api", section: "data", entries: [1] } as const;
+    const options = (version: number) =>
+      restorePassCommand(pass, "postgres", "openmapx", version)[1];
+    // PostgreSQL 16 refuses an unknown setting at login; 17 added this one.
+    expect(options(160004)).toBe(
+      "PGOPTIONS=-c default_transaction_read_only=off -c statement_timeout=0 -c lock_timeout=0 -c idle_in_transaction_session_timeout=0",
+    );
+    expect(options(169999)).not.toContain("transaction_timeout=0 ");
+    expect(options(169999).endsWith("idle_in_transaction_session_timeout=0")).toBe(true);
+    expect(options(170000)).toContain(" -c transaction_timeout=0");
   });
 });
 

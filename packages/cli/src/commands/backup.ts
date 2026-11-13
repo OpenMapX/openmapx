@@ -1333,7 +1333,7 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
   // Check every file and plan every database restore before anything is
   // stopped or changed, so a backup that cannot be restored leaves the
   // deployment as it was.
-  const plans = new Map<BackupVolumeEntry, coreServices.RestorePass[] | null>();
+  const plans = new Map<BackupVolumeEntry, DatabaseRestorePlan | null>();
   try {
     for (const svc of pre.targets) {
       for (const vol of svc.volumes) {
@@ -1499,9 +1499,16 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
   }
 }
 
+/** How a custom-format archive is restored: its passes, and the server's
+ * `server_version_num`, which decides the settings each pass pins. */
+interface DatabaseRestorePlan {
+  readonly passes: readonly coreServices.RestorePass[];
+  readonly serverVersion: number;
+}
+
 /**
  * Checks a database backup against the live server before anything changes:
- * the passes that restore a custom-format archive, or `null` for an older
+ * the plan that restores a custom-format archive, or `null` for an older
  * plain-SQL backup. Throws when the backup cannot be restored safely.
  */
 async function planDatabaseRestore(
@@ -1510,7 +1517,7 @@ async function planDatabaseRestore(
   file: string,
   user: string,
   db: string,
-): Promise<coreServices.RestorePass[] | null> {
+): Promise<DatabaseRestorePlan | null> {
   // Backups before the database roles hold plain SQL, which only a superuser
   // session can load. Such a backup of the platform database cannot serve
   // this release, whose roles must own their objects.
@@ -1564,7 +1571,7 @@ async function pgRestoreFromFile(
   file: string,
   user: string,
   db: string,
-  passes: readonly coreServices.RestorePass[] | null,
+  plan: DatabaseRestorePlan | null,
   swap: { before(): void; failed(): void },
 ): Promise<void> {
   const { scratch, previous } = coreServices.restoreDatabaseNames(db);
@@ -1617,8 +1624,8 @@ async function pgRestoreFromFile(
       if (apply.exitCode !== 0)
         throw new Error(`restoring the database owner failed: ${apply.stderr ?? ""}`);
     }
-    if (passes === null) await loadPlainDump(ctx, serviceId, file, user, scratch);
-    else await restoreAsOwners(ctx, serviceId, file, user, scratch, passes);
+    if (plan === null) await loadPlainDump(ctx, serviceId, file, user, scratch);
+    else await restoreAsOwners(ctx, serviceId, file, user, scratch, plan);
   } catch (error) {
     await dropScratch();
     throw error;
@@ -1692,32 +1699,38 @@ async function planOwnerRestore(
   serviceId: string,
   archive: string,
   user: string,
-): Promise<coreServices.RestorePass[]> {
-  const roles = await execa(
-    "docker",
-    [
-      ...ctx.composeArgs,
-      "exec",
-      "-T",
-      "-e",
-      `PGOPTIONS=${coreServices.SUPERUSER_PGOPTIONS}`,
-      serviceId,
-      "psql",
-      "-X",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-U",
-      user,
-      "-d",
-      "postgres",
-      "--no-align",
-      "--tuples-only",
-      "-c",
-      coreServices.RESTORE_ROLES_QUERY,
-    ],
-    { ...cliProcessOptions(), cwd: ctx.cwd, reject: false },
-  );
+): Promise<DatabaseRestorePlan> {
+  const query = (sql: string) =>
+    execa(
+      "docker",
+      [
+        ...ctx.composeArgs,
+        "exec",
+        "-T",
+        "-e",
+        `PGOPTIONS=${coreServices.SUPERUSER_PGOPTIONS}`,
+        serviceId,
+        "psql",
+        "-X",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-U",
+        user,
+        "-d",
+        "postgres",
+        "--no-align",
+        "--tuples-only",
+        "-c",
+        sql,
+      ],
+      { ...cliProcessOptions(), cwd: ctx.cwd, reject: false },
+    );
+  const roles = await query(coreServices.RESTORE_ROLES_QUERY);
   if (roles.exitCode !== 0) throw new Error(`reading the roles failed: ${roles.stderr ?? ""}`);
+  const version = await query("SHOW server_version_num");
+  const serverVersion = Number((version.stdout ?? "").trim());
+  if (version.exitCode !== 0 || !Number.isInteger(serverVersion) || serverVersion <= 0)
+    throw new Error(`reading the server version failed: ${version.stderr ?? version.stdout ?? ""}`);
   const list = async (section: string) => {
     const result = await execWithArchive(
       ctx,
@@ -1729,7 +1742,7 @@ async function planOwnerRestore(
     if (result.exitCode !== 0) throw new Error(`listing the backup failed: ${result.stderr ?? ""}`);
     return result.stdout ?? "";
   };
-  return coreServices.planOwnerRestore(
+  const passes = coreServices.planOwnerRestore(
     {
       preData: await list("pre-data"),
       data: await list("data"),
@@ -1737,6 +1750,7 @@ async function planOwnerRestore(
     },
     roles.stdout ?? "",
   );
+  return { passes, serverVersion };
 }
 
 /**
@@ -1750,13 +1764,13 @@ async function restoreAsOwners(
   archive: string,
   user: string,
   db: string,
-  passes: readonly coreServices.RestorePass[],
+  plan: DatabaseRestorePlan,
 ): Promise<void> {
-  for (const pass of passes) {
+  for (const pass of plan.passes) {
     const result = await execWithArchive(
       ctx,
       serviceId,
-      coreServices.restorePassCommand(pass, user, db),
+      coreServices.restorePassCommand(pass, user, db, plan.serverVersion),
       archive,
       coreServices.restorePassPreamble(pass),
     );
