@@ -756,7 +756,17 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     }
   };
 
+  // The extract exists for the traffic writers, which read OpenConditions.
+  // Without them nothing uses it, and on a host without Valhalla the agent's
+  // rebuild fails part way and keeps the Valhalla target held.
+  const trafficExtractUnused = (phase: string): boolean => {
+    if (openConditionsUrl) return false;
+    log.info(`traffic-extract: ${phase} skipped (OPENCONDITIONS_URL not configured)`);
+    return true;
+  };
+
   const runTrafficExtractStartup = async (): Promise<void> => {
+    if (trafficExtractUnused("startup check")) return;
     let graphRebuilt = false;
     try {
       const result = await withLegacyDataMutation("traffic-maintenance", () =>
@@ -782,6 +792,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   };
 
   const runTrafficExtractGuard = async (): Promise<void> => {
+    if (trafficExtractUnused("guard")) return;
     try {
       const stale = await checkExtractStale({ logger: log });
       if (stale) {

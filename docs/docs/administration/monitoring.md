@@ -413,7 +413,9 @@ maintenance. The operations agent stops Valhalla, writes
 Valhalla tools and starts Valhalla again. While that fence file exists, Data
 Manager keeps its service stopped (its health check fails) and logs
 `Traffic worker paused for Valhalla maintenance`. A rebuild takes a few
-minutes.
+minutes. Data Manager checks and rebuilds the traffic extract only when
+`OPENCONDITIONS_URL` is set, because only the traffic writers use it; without
+it, Data Manager logs `traffic-extract: startup check skipped`.
 
 If the agent itself is stopped during maintenance (an update recreating it, a
 crash or a reboot), its next start releases the fence and logs
