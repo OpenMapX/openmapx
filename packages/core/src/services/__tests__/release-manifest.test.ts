@@ -1,4 +1,12 @@
-import { lstatSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  closeSync,
+  fstatSync,
+  lstatSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { load } from "js-yaml";
@@ -93,8 +101,13 @@ describe("shared release manifest", () => {
       );
       expect(writeReleaseComposeArtifacts(manifest, root)).toEqual({ overlayPath });
       expect(lstatSync(releaseStatePaths(root).directory).mode & 0o777).toBe(0o700);
-      expect(lstatSync(overlayPath).mode & 0o777).toBe(0o600);
-      expect(readFileSync(overlayPath, "utf8")).toBe(renderReleaseCompose(manifest));
+      const overlay = openSync(overlayPath, "r");
+      try {
+        expect(fstatSync(overlay).mode & 0o777).toBe(0o600);
+        expect(readFileSync(overlay, "utf8")).toBe(renderReleaseCompose(manifest));
+      } finally {
+        closeSync(overlay);
+      }
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
