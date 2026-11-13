@@ -2283,7 +2283,8 @@
         "refused": "Abgelehnt"
       },
       "downloadExport": "Meine Daten herunterladen",
-      "exportFailed": "Das Archiv konnte nicht heruntergeladen werden. Bitte versuchen Sie es erneut."
+      "exportFailed": "Das Archiv konnte nicht heruntergeladen werden. Bitte versuchen Sie es erneut.",
+      "secondFactorRequired": "Bitte melden Sie sich erneut mit Ihrem Passwort und dem zweiten Faktor Ihres Kontos an (Authenticator-App oder Wiederherstellungscode). Ein Passkey oder eine externe Anmeldung reicht nicht aus, solange die Zwei-Faktor-Authentifizierung aktiviert ist."
     },
     "mangroveConnectTitle": "Mit Mangrove verbinden",
     "mangroveConnectIntro": "Verwenden Sie dieselbe Bewertungsidentität auf mehreren Geräten und in teilnehmenden Apps. Die Mangrove-Anmeldung ist von Ihrer OpenMapX-Anmeldung getrennt.",
@@ -4560,6 +4561,7 @@
       "refusalHelp": "Eine Ablehnung ist eine endgültige Entscheidung und benachrichtigt die anfragende Person. Bestätigen Sie sie erst nach der erforderlichen Prüfung.",
       "cancel": "Abbrechen",
       "versionConflict": "Eine andere Person hat diesen Fall geändert. Ihr Entwurf bleibt erhalten. Den aktualisierten Fall prüfen und mit einer neuen Vorgangskennung bestätigen.",
+      "identityRequired": "Vor der Bearbeitung dieses Falls die Identität der anfragenden Person prüfen.",
       "caseEvents": "Aufbewahrte Fallereignisse",
       "taskStates": {
         "open": "Offen",
@@ -4576,6 +4578,8 @@
       "resolveTask": "Als geprüft markieren",
       "exportHelp": "Laden Sie den Export der betroffenen Person nach einer erneuten Administrator-Anmeldung herunter. Das Archiv wird direkt an Sie übertragen und nicht auf dem Server gespeichert.",
       "downloadExport": "Export herunterladen",
+      "saveExport": "Export speichern",
+      "exportInBrowser": "Die Dateiauswahl ist nicht verfügbar. Der Browser speichert das Archiv deshalb, sobald es vollständig angekommen ist; bei großen Zeitachsen braucht das mehr Speicher.",
       "exportUnavailable": "Der Export ist noch nicht verfügbar",
       "exportDownloaded": "Der Export wurde heruntergeladen.",
       "exportFailed": "Der Export konnte nicht heruntergeladen werden. Melden Sie sich vor einem neuen Versuch erneut an."

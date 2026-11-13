@@ -87,12 +87,14 @@ it("sends the person through a fresh sign-in and keeps only the export intent", 
   await screen.findByText("privacyData.noRequests");
   fireEvent.click(screen.getByRole("button", { name: "privacyData.downloadExport" }));
   await waitFor(() => expect(assign).toHaveBeenCalledWith("/auth/privacy"));
-  expect(Number(sessionStorage.getItem(PENDING_EXPORT_KEY))).toBeGreaterThan(0);
+  expect(JSON.parse(sessionStorage.getItem(PENDING_EXPORT_KEY) ?? "null")).toMatchObject({
+    retried: false,
+  });
 });
 
 it("continues the export once after returning from the fresh sign-in", async () => {
   getPrivacyDataRequests.mockResolvedValue({ requests: [] });
-  sessionStorage.setItem(PENDING_EXPORT_KEY, String(Date.now()));
+  sessionStorage.setItem(PENDING_EXPORT_KEY, JSON.stringify({ at: Date.now(), retried: false }));
   requestPrivacyExport.mockResolvedValue(
     new Response(new Blob(["zip"]), {
       status: 200,
@@ -112,7 +114,34 @@ it("continues the export once after returning from the fresh sign-in", async () 
 
 it("ignores an expired export intent", async () => {
   getPrivacyDataRequests.mockResolvedValue({ requests: [] });
-  sessionStorage.setItem(PENDING_EXPORT_KEY, String(Date.now() - 11 * 60_000));
+  sessionStorage.setItem(
+    PENDING_EXPORT_KEY,
+    JSON.stringify({ at: Date.now() - 11 * 60_000, retried: false }),
+  );
+  render(<PrivacyDataSection />);
+  await screen.findByText("privacyData.noRequests");
+  expect(requestPrivacyExport).not.toHaveBeenCalled();
+  expect(sessionStorage.getItem(PENDING_EXPORT_KEY)).toBeNull();
+});
+
+it("retries once and then explains the second-factor requirement instead of redirecting again", async () => {
+  getPrivacyDataRequests.mockResolvedValue({ requests: [] });
+  sessionStorage.setItem(PENDING_EXPORT_KEY, JSON.stringify({ at: Date.now(), retried: false }));
+  requestPrivacyExport.mockResolvedValue(
+    Response.json({ code: "FRESH_SIGN_IN_REQUIRED" }, { status: 401 }),
+  );
+  const assign = vi.fn();
+  vi.stubGlobal("location", { ...window.location, assign });
+  render(<PrivacyDataSection />);
+  expect(await screen.findByText("privacyData.secondFactorRequired")).toBeVisible();
+  expect(requestPrivacyExport).toHaveBeenCalledTimes(1);
+  expect(assign).not.toHaveBeenCalled();
+  expect(sessionStorage.getItem(PENDING_EXPORT_KEY)).toBeNull();
+});
+
+it("does not retry an intent that was already retried", async () => {
+  getPrivacyDataRequests.mockResolvedValue({ requests: [] });
+  sessionStorage.setItem(PENDING_EXPORT_KEY, JSON.stringify({ at: Date.now(), retried: true }));
   render(<PrivacyDataSection />);
   await screen.findByText("privacyData.noRequests");
   expect(requestPrivacyExport).not.toHaveBeenCalled();

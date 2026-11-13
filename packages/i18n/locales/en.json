@@ -2283,7 +2283,8 @@
         "refused": "Declined"
       },
       "downloadExport": "Download my data",
-      "exportFailed": "The archive could not be downloaded. Please try again."
+      "exportFailed": "The archive could not be downloaded. Please try again.",
+      "secondFactorRequired": "Please sign in again with your password and your account's second factor (authenticator app or recovery code). A passkey or external sign-in is not enough to download your data while two-factor authentication is enabled."
     },
     "mangroveConnectTitle": "Connect to Mangrove",
     "mangroveConnectIntro": "Use the same review identity across devices and participating apps. Your Mangrove login is separate from your OpenMapX sign-in.",
@@ -4560,6 +4561,7 @@
       "refusalHelp": "Refusal is a final decision and notifies the requester. Confirm only after the required review.",
       "cancel": "Cancel",
       "versionConflict": "Another caseworker changed this case. Your draft is retained. Review the refreshed case and confirm again with a new operation key.",
+      "identityRequired": "Verify the requester's identity before moving this case into work.",
       "caseEvents": "Retained case events",
       "taskStates": {
         "open": "Open",
@@ -4576,6 +4578,8 @@
       "resolveTask": "Mark as checked",
       "exportHelp": "Download the subject's export after a fresh administrator sign-in. The archive streams straight to you and is not stored on the server.",
       "downloadExport": "Download export",
+      "saveExport": "Save export",
+      "exportInBrowser": "The file picker is unavailable, so the browser saves the archive once it has fully arrived. Large timelines take more memory this way.",
       "exportUnavailable": "Export is not available yet",
       "exportDownloaded": "The export was downloaded.",
       "exportFailed": "The export could not be downloaded. Sign in again before a new attempt."

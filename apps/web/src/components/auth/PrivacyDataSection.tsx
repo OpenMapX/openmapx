@@ -26,19 +26,37 @@ import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
 import { downloadPrivacyDeviceData } from "@/lib/privacyDeviceData";
 
 /** Set before the fresh sign-in so the download continues on return. It holds
- * only a timestamp and expires with the sign-in window. */
+ * only a timestamp and whether the one retry has happened, and expires with
+ * the sign-in window. */
 export const PENDING_EXPORT_KEY = "openmapx:privacy:pending-export";
 const PENDING_EXPORT_TTL_MS = 10 * 60_000;
+type PendingExport = { at: number; retried: boolean };
 
-function readPendingExport(): boolean {
+function writePendingExport(value: PendingExport | null): void {
   try {
-    const raw = window.sessionStorage.getItem(PENDING_EXPORT_KEY);
-    window.sessionStorage.removeItem(PENDING_EXPORT_KEY);
-    const at = raw ? Number(raw) : Number.NaN;
-    return Number.isFinite(at) && Date.now() - at >= 0 && Date.now() - at <= PENDING_EXPORT_TTL_MS;
+    if (value) window.sessionStorage.setItem(PENDING_EXPORT_KEY, JSON.stringify(value));
+    else window.sessionStorage.removeItem(PENDING_EXPORT_KEY);
   } catch {
+    /* storage unavailable: the person can start the download again */
+  }
+}
+
+/** The intent to retry once after returning from the sign-in. A retried or
+ * expired intent is discarded. */
+function claimPendingExport(): boolean {
+  let pending: PendingExport | null = null;
+  try {
+    pending = JSON.parse(window.sessionStorage.getItem(PENDING_EXPORT_KEY) ?? "null");
+  } catch {
+    pending = null;
+  }
+  const age = pending && Number.isFinite(pending.at) ? Date.now() - pending.at : Number.NaN;
+  if (!pending || pending.retried || !(age >= 0 && age <= PENDING_EXPORT_TTL_MS)) {
+    writePendingExport(null);
     return false;
   }
+  writePendingExport({ ...pending, retried: true });
+  return true;
 }
 
 function filenameFrom(response: Response): string {
@@ -90,7 +108,9 @@ export const PrivacyDataSection = forwardRef<HTMLHeadingElement>(
         const result = await getPrivacyDataRequests();
         if (!isCurrent()) return;
         setRequests(result.requests.slice(0, 20));
-        setError(null);
+        // Clear only a previous list failure; keep an export message visible.
+        const loadFailed = t("privacyData.loadFailed");
+        setError((current) => (current === loadFailed ? null : current));
       } catch {
         if (isCurrent()) setError(t("privacyData.loadFailed"));
       } finally {
@@ -107,35 +127,47 @@ export const PrivacyDataSection = forwardRef<HTMLHeadingElement>(
       };
     }, [load]);
 
-    const download = useCallback(async () => {
-      setBusy("export");
-      setError(null);
-      try {
-        const response = await requestPrivacyExport("access_and_portability");
-        if (response.status === 401) {
-          const body = (await response.json().catch(() => null)) as { code?: string } | null;
-          if (body?.code === FRESH_SIGN_IN_REQUIRED) {
-            // A new interactive sign-in proves the request; the export then
-            // continues when this page loads again.
-            window.sessionStorage.setItem(PENDING_EXPORT_KEY, String(Date.now()));
-            window.location.assign("/auth/privacy");
-            return;
+    const download = useCallback(
+      async (retry = false) => {
+        setBusy("export");
+        setError(null);
+        try {
+          const response = await requestPrivacyExport("access_and_portability");
+          if (response.status === 401) {
+            const body = (await response.json().catch(() => null)) as { code?: string } | null;
+            if (body?.code === FRESH_SIGN_IN_REQUIRED) {
+              if (retry) {
+                // The new sign-in was not enough, usually because it skipped
+                // the account's second factor. Explain instead of looping.
+                writePendingExport(null);
+                if (mounted.current) setError(t("privacyData.secondFactorRequired"));
+                return;
+              }
+              // A new interactive sign-in proves the request; the export then
+              // continues once when this page loads again.
+              writePendingExport({ at: Date.now(), retried: false });
+              window.location.assign("/auth/privacy");
+              return;
+            }
+          }
+          if (!response.ok) throw new Error("export failed");
+          await saveResponse(response);
+          if (retry) writePendingExport(null);
+        } catch {
+          if (retry) writePendingExport(null);
+          if (mounted.current) setError(t("privacyData.exportFailed"));
+        } finally {
+          if (mounted.current) {
+            setBusy(null);
+            void load();
           }
         }
-        if (!response.ok) throw new Error("export failed");
-        await saveResponse(response);
-      } catch {
-        if (mounted.current) setError(t("privacyData.exportFailed"));
-      } finally {
-        if (mounted.current) {
-          setBusy(null);
-          void load();
-        }
-      }
-    }, [load, t]);
+      },
+      [load, t],
+    );
 
     useEffect(() => {
-      if (readPendingExport()) void download();
+      if (claimPendingExport()) void download(true);
     }, [download]);
 
     const withdraw = async (request: PrivacyRequestView) => {
@@ -173,7 +205,7 @@ export const PrivacyDataSection = forwardRef<HTMLHeadingElement>(
             variant="contained"
             size="small"
             startIcon={<PrivacyTipIcon />}
-            onClick={() => void download()}
+            onClick={() => void download(false)}
             disabled={busy !== null}
           >
             {busy === "export" ? <CircularProgress size={16} /> : t("privacyData.downloadExport")}

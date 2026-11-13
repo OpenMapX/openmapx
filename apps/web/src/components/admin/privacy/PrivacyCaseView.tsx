@@ -154,7 +154,9 @@ export function PrivacyCaseView({
           <Alert severity="error">
             {client.errorCode === "REQUEST_VERSION_CONFLICT"
               ? w("versionConflict")
-              : t("actionFailed")}{" "}
+              : client.errorCode === "IDENTITY_REQUIRED"
+                ? w("identityRequired")
+                : t("actionFailed")}{" "}
             ({client.errorCode})
           </Alert>
         )}
