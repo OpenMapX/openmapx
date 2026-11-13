@@ -263,7 +263,7 @@ const ROLE_SERVICES: Readonly<Record<string, string>> = {
  */
 export function swapPreconditionsQuery(db: string): string {
   const { previous } = restoreDatabaseNames(db);
-  return `SELECT 'previous', (EXISTS (SELECT FROM pg_database WHERE datname = '${previous}'))::int
+  return `SELECT 'previous', (EXISTS (SELECT FROM pg_database WHERE datname = '${previous}'))::int::text
 UNION ALL
 SELECT 'session', coalesce(usename::text, '') FROM pg_stat_activity
   WHERE datname = '${db}' AND pid <> pg_backend_pid()`;
