@@ -59,4 +59,17 @@ jobs:
           cache: pnpm
 
       - name: Install, update and check the stack
+        env:
+          UPDATE_SMOKE_DIAGNOSTICS_DIR: ${{ runner.temp }}/update-smoke-diagnostics
         run: bash scripts/ci/update-smoke.sh
+
+      # Administrative jobs, CLI receipts and output, container states and the
+      # roles' and helpers' logs of a failed case. No secrets are written there.
+      - name: Preserve the diagnostics of a failed update
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: update-smoke-diagnostics
+          path: ${{ runner.temp }}/update-smoke-diagnostics
+          if-no-files-found: warn
+          retention-days: 7

@@ -181,15 +181,17 @@ create_admin_session() {
   local api="https://localhost"
   curl --silent --show-error --insecure --fail --max-time 30 \
     --header "content-type: application/json" --header "origin: $api" \
-    --data "{\"email\":\"$admin_email\",\"password\":\"$admin_password\",\"name\":\"Update smoke\"}" \
-    "$api/api/auth/sign-up/email" >/dev/null || fail "administrator sign-up failed"
+    --data @- "$api/api/auth/sign-up/email" >/dev/null \
+    <<<"{\"email\":\"$admin_email\",\"password\":\"$admin_password\",\"name\":\"Update smoke\"}" ||
+    fail "administrator sign-up failed"
   openmapx users verify "$admin_email" >/dev/null || fail "users verify failed"
   openmapx users promote "$admin_email" >/dev/null || fail "users promote failed"
   local jar="$work/cookies"
   curl --silent --show-error --insecure --fail --max-time 30 --cookie-jar "$jar" \
     --header "content-type: application/json" --header "origin: $api" \
-    --data "{\"email\":\"$admin_email\",\"password\":\"$admin_password\"}" \
-    "$api/api/auth/sign-in/email" >/dev/null || fail "administrator sign-in failed"
+    --data @- "$api/api/auth/sign-in/email" >/dev/null \
+    <<<"{\"email\":\"$admin_email\",\"password\":\"$admin_password\"}" ||
+    fail "administrator sign-in failed"
   cookie_file="$work/session-cookie"
   (umask 077 && awk '$6 ~ /better-auth\.session_token$/ { print $6 "=" $7 }' "$jar" >"$cookie_file")
   [[ -s "$cookie_file" ]] || fail "no session cookie was issued"
@@ -207,11 +209,30 @@ check_release() {
 
 # Runs the authenticated system update to the checked release. Returns its status.
 system_update() {
-  local name="$1" release="$2" digest="$3"
+  local name="$1" release="$2" digest="$3" status=0 follower
   rm -f "$work/receipt-$name"
+  follow_helpers "$name" &
+  follower=$!
   NODE_TLS_REJECT_UNAUTHORIZED=0 logged "update-$name" openmapx system update \
     --release-id "$release" --digest "$digest" --session-file "$cookie_file" \
-    --receipt "$work/receipt-$name" --api-origin https://localhost --no-backup
+    --receipt "$work/receipt-$name" --api-origin https://localhost --no-backup || status=$?
+  kill "$follower" 2>/dev/null || true
+  wait "$follower" 2>/dev/null || true
+  return "$status"
+}
+
+# The agent starts configuration helpers with --rm, so their output is kept by
+# following each one as it appears.
+follow_helpers() {
+  local name="$1" seen=" " helper
+  while true; do
+    for helper in $(docker ps --all --quiet --filter "name=openmapx-configuration-handoff-"); do
+      [[ "$seen" == *" $helper "* ]] && continue
+      seen+="$helper "
+      docker logs --follow "$helper" >"$work/helper-$name-$helper.log" 2>&1 &
+    done
+    sleep 1
+  done
 }
 
 # Order in which helper containers recreated services, from Compose's events.
@@ -346,8 +367,58 @@ case_cli() {
 
 # Removes the registry, then runs the install smoke's cleanup with the
 # original exit status.
+diagnostics_dir="${UPDATE_SMOKE_DIAGNOSTICS_DIR:-}"
+
+# Writes what explains a failed case into $diagnostics_dir, before the install
+# smoke's cleanup removes the containers: the latest administrative jobs as the
+# API reports them (status, error and result), the CLI receipts, every
+# container's state, and the logs of the roles and of every configuration
+# helper, including exited ones. Secrets and environment files are not copied;
+# the session cookie is only read by curl.
+dump_diagnostics() {
+  [[ -n "$diagnostics_dir" ]] || return 0
+  mkdir -p "$diagnostics_dir"
+  echo "--- writing update smoke diagnostics to $diagnostics_dir ---" >&2
+  {
+    echo "failed during: $current_step"
+    echo "release counter: $release_counter"
+  } >"$diagnostics_dir/summary.txt"
+  if [[ -s "$work/cookies" ]]; then
+    curl --silent --insecure --max-time 30 --cookie "$work/cookies" \
+      --header "origin: https://localhost" \
+      "https://localhost/api/admin/jobs?limit=10" >"$diagnostics_dir/admin-jobs.json" 2>&1 || true
+    node -e '
+      const jobs = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
+      for (const job of jobs.jobs ?? jobs.items ?? jobs ?? [])
+        console.log([job.id, job.type, job.status, job.error ?? "", JSON.stringify(job.result ?? null)].join("\t"));
+    ' "$diagnostics_dir/admin-jobs.json" >"$diagnostics_dir/admin-jobs.tsv" 2>/dev/null || true
+  fi
+  local receipt
+  for receipt in "$work"/receipt-*; do
+    [[ -f "$receipt" ]] && cp "$receipt" "$diagnostics_dir/" 2>/dev/null || true
+  done
+  cp "$work"/*.log "$diagnostics_dir/" 2>/dev/null || true
+  docker ps --all --format 'table {{.Names}}\t{{.Image}}\t{{.State}}\t{{.Status}}' \
+    >"$diagnostics_dir/containers.txt" 2>&1 || true
+  local container name
+  while IFS= read -r container; do
+    [[ -n "$container" ]] || continue
+    name="$(docker inspect --format '{{.Name}}' "$container" 2>/dev/null | tr -d /)"
+    docker logs --tail 400 "$container" >"$diagnostics_dir/logs-${name:-$container}.txt" 2>&1 || true
+  done < <(
+    docker ps --all --quiet --filter "label=com.docker.compose.project=$project" \
+      --filter "label=com.docker.compose.service=ops-agent"
+    docker ps --all --quiet --filter "label=com.docker.compose.project=$project" \
+      --filter "label=com.docker.compose.service=app-api"
+    docker ps --all --quiet --filter "label=com.docker.compose.project=$project" \
+      --filter "label=com.docker.compose.service=data-manager"
+    docker ps --all --quiet --filter "name=openmapx-configuration-handoff-"
+  )
+}
+
 update_exit() {
   local status=$?
+  if ((status != 0)); then dump_diagnostics || true; fi
   docker rm --force "$registry_name" >/dev/null 2>&1 || true
   (exit "$status")
   on_exit
