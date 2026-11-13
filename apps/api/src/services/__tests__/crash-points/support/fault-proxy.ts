@@ -12,6 +12,9 @@ export interface ProxiedRequest {
   kind?: string;
   operationKey?: string;
   status?: number;
+  /** From an agent answer: the operation it admitted or reported, and its state. */
+  operationId?: string;
+  state?: string;
   dropped: boolean;
 }
 
@@ -89,6 +92,18 @@ export class FaultProxy {
             response.on("data", (chunk: Buffer) => reply.push(chunk));
             response.on("end", () => {
               entry.status = response.statusCode;
+              try {
+                const answer = JSON.parse(Buffer.concat(reply).toString("utf8")) as {
+                  result?: { operationId?: string; state?: string; operationKey?: string };
+                };
+                if (typeof answer.result?.operationId === "string")
+                  entry.operationId = answer.result.operationId;
+                if (typeof answer.result?.state === "string") entry.state = answer.result.state;
+                if (!entry.operationKey && typeof answer.result?.operationKey === "string")
+                  entry.operationKey = answer.result.operationKey;
+              } catch {
+                // Not a JSON answer.
+              }
               if (drop) {
                 entry.dropped = true;
                 rule?.dropped.resolve(entry);

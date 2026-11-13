@@ -26,11 +26,13 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { request as httpRequest } from "node:http";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { OPS_PROTOCOL_VERSION } from "@openmapx/core/ops";
 import postgres from "postgres";
 import { type RuntimeBundles, runtimeBundles } from "./support/bundles";
 import {
@@ -331,6 +333,11 @@ export class CrashHost {
       intervalMs: 2000,
       what: "the data-manager to admit a data job",
     });
+    this.step("publish and check release N+1");
+    this.publishNextRelease();
+    const checked = await this.checkForUpdate();
+    if (checked.releaseId !== this.release.next)
+      throw new Error(`The update check found ${checked.releaseId}, not ${this.release.next}`);
     this.step("installed");
   }
 
@@ -863,12 +870,29 @@ export class CrashHost {
   }
 
   /** Invocations that change containers or images. */
-  dockerEffects(filter: Partial<DockerMatch> = {}): Invocation[] {
+  dockerEffects(filter: Partial<DockerMatch> & { since?: number } = {}): Invocation[] {
+    const { since = 0, ...match } = filter;
     return this.engine.trace.filter(
       (invocation) =>
+        invocation.seq > since &&
         isEffect(invocation.args) &&
-        matches({ command: filter.command ?? "any", ...filter } as DockerMatch, invocation),
+        matches({ command: match.command ?? "any", ...match } as DockerMatch, invocation),
     );
+  }
+
+  /** Every Docker invocation of a caller, read-only ones included. */
+  dockerCalls(filter: Partial<DockerMatch> & { since?: number } = {}): Invocation[] {
+    const { since = 0, ...match } = filter;
+    return this.engine.trace.filter(
+      (invocation) =>
+        invocation.seq > since &&
+        matches({ command: match.command ?? "any", ...match } as DockerMatch, invocation),
+    );
+  }
+
+  /** A point in the Docker trace; later filters count only what follows it. */
+  mark(): number {
+    return this.engine.trace.at(-1)?.seq ?? 0;
   }
 
   /** The image each Compose service's container runs. */
@@ -929,30 +953,62 @@ export class CrashHost {
     method: string,
     path: string,
     body?: unknown,
+    options: { fresh?: boolean } = {},
   ): Promise<{ status: number; body: unknown }> {
     const { cookie } = await this.adminSession();
-    const response = await fetch(`http://127.0.0.1:${this.ports.api}${path}`, {
-      method,
-      headers: {
-        cookie,
-        origin: "https://localhost",
-        ...(body === undefined ? {} : { "content-type": "application/json" }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    // Maintenance requests are rate limited per client network. A request that
+    // must reach admission comes from its own loopback address, as a request
+    // from another administrator's workstation would.
+    const localAddress = options.fresh
+      ? `127.0.0.${10 + (this.clientCounter++ % 240)}`
+      : "127.0.0.1";
+    const payload = body === undefined ? undefined : JSON.stringify(body);
+    return new Promise((resolve, reject) => {
+      const request = httpRequest(
+        {
+          host: "127.0.0.1",
+          port: this.ports.api,
+          path,
+          method,
+          localAddress,
+          headers: {
+            cookie,
+            origin: "https://localhost",
+            ...(payload === undefined
+              ? {}
+              : {
+                  "content-type": "application/json",
+                  "content-length": Buffer.byteLength(payload),
+                }),
+          },
+          timeout: 60_000,
+        },
+        (response) => {
+          const chunks: Buffer[] = [];
+          response.on("data", (chunk: Buffer) => chunks.push(chunk));
+          response.on("end", () => {
+            const text = Buffer.concat(chunks).toString("utf8");
+            let parsed: unknown = text;
+            try {
+              parsed = JSON.parse(text);
+            } catch {
+              // Not JSON.
+            }
+            resolve({ status: response.statusCode ?? 0, body: parsed });
+          });
+        },
+      );
+      request.on("error", reject);
+      request.on("timeout", () => request.destroy(new Error(`API ${method} ${path} timed out`)));
+      request.end(payload);
     });
-    const text = await response.text();
-    let parsed: unknown = text;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      // Not JSON.
-    }
-    return { status: response.status, body: parsed };
   }
+
+  private clientCounter = 0;
 
   /** Checks for an update through the API and waits for the check to finish. */
   async checkForUpdate(): Promise<{ releaseId?: string; digest?: string }> {
-    const check = await this.api("POST", "/api/admin/system/updates/check", {});
+    const check = await this.api("POST", "/api/admin/system/updates/check", {}, { fresh: true });
     if (check.status !== 200)
       throw new Error(`Update check refused: ${check.status} ${JSON.stringify(check.body)}`);
     const jobId = (check.body as { jobId: string }).jobId;
@@ -969,17 +1025,103 @@ export class CrashHost {
 
   /** Submits the system update to release N+1, as the admin panel does. */
   async submitUpdate(options: { backup?: boolean } = {}): Promise<Submission> {
-    const response = await this.api("POST", "/api/admin/system/updates/apply", {
-      confirmation: "UPDATE OPENMAPX",
-      createBackup: options.backup ?? false,
-      releaseId: this.release.next,
-      expectedDigest: this.release.nextDigest,
-    });
+    const response = await this.api(
+      "POST",
+      "/api/admin/system/updates/apply",
+      {
+        confirmation: "UPDATE OPENMAPX",
+        createBackup: options.backup ?? false,
+        releaseId: this.release.next,
+        expectedDigest: this.release.nextDigest,
+      },
+      { fresh: true },
+    );
     return {
       status: response.status,
       body: response.body,
       ...(typeof (response.body as { jobId?: unknown })?.jobId === "string"
         ? { jobId: (response.body as { jobId: string }).jobId }
+        : {}),
+    };
+  }
+
+  /** Starts, stops or restarts one service from the admin panel. */
+  async serviceAction(service: string, action: "start" | "stop" | "restart"): Promise<Submission> {
+    const response = await this.api(
+      "POST",
+      `/api/admin/services/${service}/action`,
+      { action },
+      { fresh: true },
+    );
+    const jobId = (response.body as { jobId?: unknown })?.jobId;
+    return {
+      status: response.status,
+      body: response.body,
+      ...(typeof jobId === "string" ? { jobId } : {}),
+    };
+  }
+
+  /** The agent operations the API submitted, as the agent admitted them. */
+  agentOperations(
+    kind?: string,
+  ): Array<{ kind: string; operationId: string; operationKey?: string }> {
+    const seen = new Map<string, { kind: string; operationId: string; operationKey?: string }>();
+    for (const entry of this.proxies["api->agent"].requests) {
+      if (entry.method !== "POST" || !entry.kind || !entry.operationId) continue;
+      if (kind && entry.kind !== kind) continue;
+      seen.set(entry.operationId, {
+        kind: entry.kind,
+        operationId: entry.operationId,
+        ...(entry.operationKey ? { operationKey: entry.operationKey } : {}),
+      });
+    }
+    return [...seen.values()];
+  }
+
+  /** A request to the agent's operations contract, as the API makes it. */
+  async agentRequest(
+    method: string,
+    path: string,
+    body?: unknown,
+  ): Promise<{ status: number; body: unknown }> {
+    const token = readFileSync(
+      join(this.infraDir, "secrets", "ops-agent-api-token"),
+      "utf8",
+    ).trim();
+    const response = await fetch(`${this.proxies["api->agent"].url}${path}`, {
+      method,
+      headers: {
+        authorization: `Bearer ${token}`,
+        "x-ops-protocol-version": String(OPS_PROTOCOL_VERSION),
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    const text = await response.text();
+    let parsed: unknown = text;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      // Not JSON.
+    }
+    return { status: response.status, body: parsed };
+  }
+
+  /** The agent's account of one operation: its state, or why it has none. */
+  async operation(
+    operationId: string,
+  ): Promise<{ status: number; state?: string; errorClass?: string }> {
+    const response = await this.agentRequest("GET", `/v1/operations/${operationId}`);
+    const body = response.body as {
+      result?: { state?: string; error?: { class?: string } };
+      error?: { class?: string };
+    };
+    return {
+      status: response.status,
+      ...(body.result?.state ? { state: body.result.state } : {}),
+      ...(body.result?.error?.class || body.error?.class
+        ? { errorClass: body.result?.error?.class ?? body.error?.class }
         : {}),
     };
   }
