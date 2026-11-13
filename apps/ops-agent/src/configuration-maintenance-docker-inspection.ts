@@ -16,6 +16,30 @@ import { verifyConfigurationRuntimeResources } from "./configuration-resource-in
 import type { DockerRuntimeOptions } from "./docker-runtime";
 import type { OwnedServiceSnapshot } from "./owned-services";
 
+/** How long the inspection waits for another live holder of the release
+ * store lock. The agent takes it for short reads while it observes the same
+ * maintenance, so a helper's inspection waits for a gap instead of failing at
+ * the first collision, then refuses as before. */
+const RELEASE_STORE_BUSY_WAIT_MS = 2_000;
+
+export async function acquireReleaseStoreLockBriefly(store: string) {
+  const deadline = Date.now() + RELEASE_STORE_BUSY_WAIT_MS;
+  for (let delay = 5; ; delay = Math.min(delay * 2, 100)) {
+    try {
+      return await services.acquireReleaseStoreLock(store, {}, { failIfBusy: true });
+    } catch (error) {
+      if (
+        !(error instanceof Error && error.message === "Release store is busy") ||
+        Date.now() >= deadline
+      )
+        throw error;
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(delay, Math.max(1, deadline - Date.now()))),
+    );
+  }
+}
+
 export async function inspectMaintenanceDockerRuntime(options: {
   stack: services.StackPaths;
   execFile: NonNullable<DockerRuntimeOptions["execFile"]>;
@@ -61,10 +85,8 @@ export async function inspectMaintenanceDockerRuntime(options: {
         .update("openmapx-private-maintenance-runtime-v1\0")
         .update(value)
         .digest("hex"),
-    lock = await services.acquireReleaseStoreLock(
+    lock = await acquireReleaseStoreLockBriefly(
       services.releaseStatePaths(options.stack.infraDir).store,
-      {},
-      { failIfBusy: true },
     );
   try {
     if (

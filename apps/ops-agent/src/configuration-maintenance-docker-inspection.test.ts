@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
 import { afterEach, expect, it } from "vitest";
-import { inspectMaintenanceDockerRuntime } from "./configuration-maintenance-docker-inspection";
+import {
+  acquireReleaseStoreLockBriefly,
+  inspectMaintenanceDockerRuntime,
+} from "./configuration-maintenance-docker-inspection";
 import type { ConfigurationMaintenanceOwnerRecord } from "./configuration-maintenance-store";
 
 const roots: string[] = [];
@@ -210,3 +213,30 @@ it.each(["source", "access", "duplicate", "contents"])(
     );
   },
 );
+
+it("waits briefly for another holder of the release store lock", async () => {
+  const store = mkdtempSync(join(tmpdir(), "openmapx-release-store-"));
+  try {
+    const held = await services.acquireReleaseStoreLock(store);
+    setTimeout(() => held.release(), 300);
+    const started = Date.now();
+    const lock = await acquireReleaseStoreLockBriefly(store);
+    lock.release();
+    expect(Date.now() - started).toBeGreaterThanOrEqual(250);
+  } finally {
+    rmSync(store, { recursive: true, force: true });
+  }
+});
+
+it("still refuses the release store lock while another holder keeps it", async () => {
+  const store = mkdtempSync(join(tmpdir(), "openmapx-release-store-"));
+  try {
+    const held = await services.acquireReleaseStoreLock(store);
+    const started = Date.now();
+    await expect(acquireReleaseStoreLockBriefly(store)).rejects.toThrow("Release store is busy");
+    expect(Date.now() - started).toBeGreaterThanOrEqual(1_900);
+    held.release();
+  } finally {
+    rmSync(store, { recursive: true, force: true });
+  }
+});
