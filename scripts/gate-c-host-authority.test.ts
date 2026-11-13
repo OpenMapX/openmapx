@@ -60,11 +60,11 @@ function renderedVolumes(composeYaml: string): Record<string, RenderedService> {
   return (parseYaml(composeYaml) as { services: Record<string, RenderedService> }).services;
 }
 
-/** Violations of the agent-state rule alone; the control rules have their own cases. */
+/** Violations of the agent-state rule alone; the control and secret rules have their own cases. */
 function stateDetails(violations: ReturnType<typeof findAuthorityViolations>): string[] {
   return violations
     .map((violation) => violation.detail)
-    .filter((detail) => !/ control /.test(detail));
+    .filter((detail) => !/ control | reaches \S+ through /.test(detail));
 }
 
 /** A checkout holding only the given manifests, for the gate's rule cases. */
@@ -427,49 +427,111 @@ describe("Gate C — host authority", () => {
     );
   });
 
-  it("keeps each data-manager caller token to data-manager and that caller", () => {
-    const token = (caller: string) => ({
-      source: `@infra:secrets/data-manager-${caller}-token`,
-      target: `/run/secrets/data-manager-${caller}-token`,
+  it("keeps data-manager tokens and database role passwords with their holders", () => {
+    const secret = (name: string) => ({
+      source: `@infra:secrets/${name}`,
+      target: `/run/secrets/${name}`,
     });
     withManifests(
       {
-        "data-manager": { bindMounts: [token("api"), token("ops-agent"), token("host-cli")] },
-        "app-api": { bindMounts: [token("api"), token("ops-agent")] },
-        "ops-agent": { bindMounts: [token("ops-agent")] },
-        "app-web": { bindMounts: [token("api"), token("host-cli"), token("unknown")] },
+        "data-manager": {
+          bindMounts: [
+            secret("data-manager-api-token"),
+            secret("data-manager-ops-agent-token"),
+            secret("data-manager-host-cli-token"),
+            secret("postgres-data-manager-password"),
+          ],
+        },
+        "app-api": {
+          bindMounts: [
+            secret("data-manager-api-token"),
+            secret("data-manager-ops-agent-token"),
+            secret("postgres-api-password"),
+          ],
+        },
+        "ops-agent": {
+          // The agent alone may mount the whole secrets directory.
+          bindMounts: [
+            secret("data-manager-ops-agent-token"),
+            { source: "@infra:secrets", target: "/s" },
+          ],
+        },
+        postgis: {
+          bindMounts: [secret("postgres-api-password"), secret("postgres-data-manager-password")],
+        },
+        "app-web": {
+          bindMounts: [
+            secret("data-manager-host-cli-token"),
+            secret("data-manager-unknown-token"),
+            secret("postgres-api-password"),
+          ],
+        },
+        martin: { bindMounts: [{ source: "@infra:secrets", target: "/s" }] },
       },
       (details) =>
-        expect(details).toEqual([
-          'service "app-api" mounts the data-manager token of "ops-agent" (@infra:secrets/data-manager-ops-agent-token)',
-          'service "app-web" mounts the data-manager token of "api" (@infra:secrets/data-manager-api-token)',
-          'service "app-web" mounts the data-manager token of "host-cli" (@infra:secrets/data-manager-host-cli-token)',
-          'service "app-web" mounts the data-manager token of "unknown" (@infra:secrets/data-manager-unknown-token)',
-        ]),
+        expect(details.filter((detail) => !/ control /.test(detail)).sort()).toEqual(
+          [
+            'service "app-api" mounts data-manager-ops-agent-token (@infra:secrets/data-manager-ops-agent-token)',
+            'service "app-web" mounts data-manager-host-cli-token (@infra:secrets/data-manager-host-cli-token)',
+            'service "app-web" mounts an unknown data-manager token (@infra:secrets/data-manager-unknown-token)',
+            'service "app-web" mounts postgres-api-password (@infra:secrets/postgres-api-password)',
+            ...[
+              "data-manager-api-token",
+              "data-manager-ops-agent-token",
+              "data-manager-host-cli-token",
+              "postgres-api-password",
+              "postgres-data-manager-password",
+            ].map((name) => `service "martin" reaches ${name} through @infra:secrets`),
+          ].sort(),
+        ),
     );
   });
 
   it("keeps the database superuser to PostGIS and the API and data-manager on their own roles", () => {
+    const own = (
+      role: string,
+      password: string,
+      url = `postgresql://${role}@postgis:5432/openmapx`,
+    ) => ({
+      container: {
+        environment: { DATABASE_URL: url, DATABASE_PASSWORD_FILE: `/run/secrets/${password}` },
+      },
+      bindMounts: [{ source: `@infra:secrets/${password}`, target: `/run/secrets/${password}` }],
+    });
     const url = (value: string) => ({ container: { environment: { DATABASE_URL: value } } });
     withManifests(
       {
         postgis: { container: { environment: { POSTGRES_USER: "postgres" } } },
-        "app-api": url("postgresql://openmapx_data_manager@postgis:5432/openmapx"),
+        "app-api": own(
+          "openmapx_api",
+          "postgres-api-password",
+          "postgresql://openmapx_data_manager@postgis:5432/openmapx",
+        ),
         "data-manager": url("postgresql://openmapx_data_manager:secret@postgis:5432/openmapx"),
         openconditions: url("postgresql://postgres:secret@postgis:5432/openmapx"),
         martin: url("postgresql://openmapx_tiles:${MARTIN_DB_PASSWORD}@postgis:5432/openmapx"),
       },
       (details) =>
-        expect(details).toEqual([
-          'service "app-api" must connect to PostgreSQL as openmapx_api, without a password in the URL',
-          'service "data-manager" must connect to PostgreSQL as openmapx_data_manager, without a password in the URL',
-          'service "openconditions" connects to PostgreSQL as the superuser',
-        ]),
+        expect([...details].sort()).toEqual(
+          [
+            'service "app-api" must connect to PostgreSQL as openmapx_api, without a password in the URL',
+            'service "data-manager" must connect to PostgreSQL as openmapx_data_manager, without a password in the URL',
+            'service "data-manager" must read its database password from its own mounted postgres-data-manager-password',
+            'service "openconditions" connects to PostgreSQL as the superuser',
+          ].sort(),
+        ),
+    );
+    // A container without DATABASE_URL would fall back to the superuser default.
+    withManifests({ "app-api": { container: { environment: {} } } }, (details) =>
+      expect(details).toEqual([
+        'service "app-api" must connect to PostgreSQL as openmapx_api, without a password in the URL',
+        'service "app-api" must read its database password from its own mounted postgres-api-password',
+      ]),
     );
     withManifests(
       {
-        "app-api": url("postgresql://openmapx_api@postgis:5432/openmapx"),
-        "data-manager": url("postgresql://openmapx_data_manager@postgis:5432/openmapx"),
+        "app-api": own("openmapx_api", "postgres-api-password"),
+        "data-manager": own("openmapx_data_manager", "postgres-data-manager-password"),
       },
       (details) => expect(details).toEqual([]),
     );

@@ -45,18 +45,29 @@ const CONTROL_PRIVATE = "infra/docker/control-private";
 const CONTROL_KEY_MASK = `${CONTROL_PRIVATE}/hidden-key`;
 const CONTROL_DIRECTORY_MASK = `${CONTROL_PRIVATE}/empty`;
 
-/** The one service, besides data-manager itself, that may mount each data-manager caller token. */
-const DATA_MANAGER_TOKEN_HOLDER: Readonly<Record<string, string | null>> = {
-  api: "app-api",
-  "ops-agent": "ops-agent",
-  "host-cli": null,
+/**
+ * Secret files with a fixed set of holders. No other service may mount one,
+ * alone or inside a wider mount; the operations agent alone mounts the whole
+ * secrets directory, because it renders the configuration, and it holds the
+ * Docker socket, which reaches every file anyway.
+ */
+const SECRET_HOLDERS: Readonly<Record<string, readonly string[]>> = {
+  "infra/docker/secrets/data-manager-api-token": ["data-manager", "app-api"],
+  "infra/docker/secrets/data-manager-ops-agent-token": ["data-manager", "ops-agent"],
+  "infra/docker/secrets/data-manager-host-cli-token": ["data-manager"],
+  "infra/docker/secrets/postgres-api-password": ["postgis", "app-api"],
+  "infra/docker/secrets/postgres-data-manager-password": ["postgis", "data-manager"],
 };
-const DATA_MANAGER_TOKEN = /^infra\/docker\/secrets\/data-manager-(.+)-token$/;
+/** Any data-manager caller token, including one of a caller that does not exist. */
+const DATA_MANAGER_TOKEN = /^infra\/docker\/secrets\/data-manager-.+-token$/;
 
-/** The role each service connects to the platform database as. */
-const DATABASE_ROLE_OF_SERVICE: Readonly<Record<string, string>> = {
-  "app-api": "openmapx_api",
-  "data-manager": "openmapx_data_manager",
+/** The role each service connects to the platform database as, and that role's password file. */
+const DATABASE_ROLE_OF_SERVICE: Readonly<Record<string, { role: string; password: string }>> = {
+  "app-api": { role: "openmapx_api", password: "infra/docker/secrets/postgres-api-password" },
+  "data-manager": {
+    role: "openmapx_data_manager",
+    password: "infra/docker/secrets/postgres-data-manager-password",
+  },
 };
 const SUPERUSER_DATABASE_URL = /postgres(?:ql)?:\/\/postgres[:@]/;
 
@@ -237,16 +248,28 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
     // Signed-control keys and private records: each role reaches only its own.
     for (const detail of controlViolations(serviceId, mounts)) violations.push({ file, detail });
 
-    // Each data-manager caller token belongs to data-manager and one caller.
+    // Data-manager tokens and database role passwords stay with their holders.
     for (const { source } of mounts) {
       const path = checkoutPath(serviceId, source);
-      const caller = path === null ? undefined : DATA_MANAGER_TOKEN.exec(path)?.[1];
-      if (caller === undefined || serviceId === "data-manager") continue;
-      if (!(caller in DATA_MANAGER_TOKEN_HOLDER) || DATA_MANAGER_TOKEN_HOLDER[caller] !== serviceId)
+      if (path === null) continue;
+      if (DATA_MANAGER_TOKEN.test(path) && !(path in SECRET_HOLDERS))
         violations.push({
           file,
-          detail: `service "${serviceId}" mounts the data-manager token of "${caller}" (${source})`,
+          detail: `service "${serviceId}" mounts an unknown data-manager token (${source})`,
         });
+      for (const [secret, holders] of Object.entries(SECRET_HOLDERS)) {
+        const name = posix.basename(secret);
+        if (path === secret && !holders.includes(serviceId))
+          violations.push({ file, detail: `service "${serviceId}" mounts ${name} (${source})` });
+        else if (
+          serviceId !== AUTHORITY_SERVICE &&
+          (secret.startsWith(`${path}/`) || path === "." || path.startsWith(".."))
+        )
+          violations.push({
+            file,
+            detail: `service "${serviceId}" reaches ${name} through ${source}`,
+          });
+      }
     }
 
     // Only PostGIS itself uses the database superuser; the API and
@@ -256,17 +279,25 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
         file,
         detail: `service "${serviceId}" connects to PostgreSQL as the superuser`,
       });
-    const databaseRole = DATABASE_ROLE_OF_SERVICE[serviceId];
-    const databaseUrl = manifest.container?.environment?.DATABASE_URL;
-    if (
-      databaseRole !== undefined &&
-      databaseUrl !== undefined &&
-      (typeof databaseUrl !== "string" || !databaseUrl.startsWith(`postgresql://${databaseRole}@`))
-    )
-      violations.push({
-        file,
-        detail: `service "${serviceId}" must connect to PostgreSQL as ${databaseRole}, without a password in the URL`,
-      });
+    // A missing URL would fall back to the code's superuser default.
+    const database = DATABASE_ROLE_OF_SERVICE[serviceId];
+    const environment = manifest.container?.environment;
+    if (database !== undefined && manifest.container !== undefined) {
+      const url = environment?.DATABASE_URL;
+      if (typeof url !== "string" || !url.startsWith(`postgresql://${database.role}@`))
+        violations.push({
+          file,
+          detail: `service "${serviceId}" must connect to PostgreSQL as ${database.role}, without a password in the URL`,
+        });
+      const own = mounts.find(
+        (mount) => checkoutPath(serviceId, mount.source) === database.password,
+      );
+      if (own === undefined || environment?.DATABASE_PASSWORD_FILE !== own.target)
+        violations.push({
+          file,
+          detail: `service "${serviceId}" must read its database password from its own mounted ${posix.basename(database.password)}`,
+        });
+    }
 
     for (const mount of manifest.bindMounts ?? []) {
       const source = typeof mount.source === "string" ? mount.source : "";
