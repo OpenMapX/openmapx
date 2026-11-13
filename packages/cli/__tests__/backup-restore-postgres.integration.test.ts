@@ -571,7 +571,7 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
     await psql(
       `CREATE TABLE osm_search.planted (id int, CHECK (pg_catalog.length(COALESCE(public.st_findextent('osm_search', 't',
         'g") AS extent FROM (SELECT NULL::public.geometry AS g) s WHERE CASE WHEN (SELECT rolsuper FROM pg_catalog.pg_roles
-         WHERE rolname = current_user) THEN pg_catalog.lo_from_bytea(4242, ''pwn'')::int ELSE 0 END >= 0 --')::text, '')) >= 0));
+         WHERE rolname = current_user) THEN pg_catalog.length(pg_catalog.query_to_xml(''SELECT pg_catalog.lo_from_bytea(4242, ''''pwn'''')'', true, false, '''')::text) ELSE 0 END >= 0 --')::text, '')) >= 0));
       INSERT INTO osm_search.planted VALUES (1);\n`,
       DATABASE,
       "openmapx_data_manager",

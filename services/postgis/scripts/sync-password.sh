@@ -259,6 +259,15 @@ ALTER DEFAULT PRIVILEGES FOR ROLE ${DATA_MANAGER_ROLE} GRANT SELECT ON TABLES TO
 CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
 CREATE EXTENSION IF NOT EXISTS fuzzystrmatch WITH SCHEMA public;
 CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public;
+-- Only the superuser creates large objects. Neither the platform nor
+-- OpenConditions uses them, they are no schema object the event triggers
+-- below could refuse, and a restore refuses one owned by a role that cannot
+-- log in, such as the tile owner whose code the API can reach.
+SELECT format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC', p.oid::regprocedure)
+  FROM pg_proc p
+  WHERE p.pronamespace = 'pg_catalog'::regnamespace
+    AND p.proname IN ('lo_create', 'lo_creat', 'lo_from_bytea', 'lo_import')
+\gexec
 -- Code data-manager writes must never run with another role's rights. The
 -- API reads its schemas, and a function, rule, trigger, policy, domain check,
 -- coercion or extension runs as whoever's query reaches it, so data-manager

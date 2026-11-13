@@ -121,6 +121,9 @@ The tile server's roles may create nothing at all. PostGIS creates the tile
 function itself and hands it to `openmapx_tiles_owner`, and a restore refuses
 a backup holding any other object of a role that cannot log in, so code that
 runs as the tile owner can leave nothing behind for a restoring superuser.
+PostGIS also revokes from every role but the superuser the right to create
+large objects, which no event trigger sees and nothing in OpenMapX or
+OpenConditions uses.
 
 These guarantees have known limits:
 
@@ -149,11 +152,6 @@ These guarantees have known limits:
   operator in `public`, PostGIS's among them, whether by its `public.` name or
   through its search path. Connect as the owning role, or run
   `SET search_path = pg_catalog` first and call no PostGIS function.
-- Through the tile function, a compromised API can make the tile owner create
-  a large object, which a restore refuses as it refuses any object of a role
-  that cannot log in. That blocks restoring later backups until the object is
-  removed (see [Backup & restore](../administration/backup-and-restore.md#restoring)),
-  but runs nothing as the superuser.
 - PostGIS grants every role read access to its catalogue tables
   (`spatial_ref_sys`, `geometry_columns`, `geography_columns`,
   `topology.topology` and `topology.layer`).

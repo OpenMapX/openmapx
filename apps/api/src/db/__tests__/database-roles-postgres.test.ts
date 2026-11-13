@@ -401,6 +401,30 @@ integration("code planted for another role", () => {
     ).toEqual([{ rolsuper: false }]);
   });
 
+  it("lets no role but the superuser create a large object", async () => {
+    // A large object is no schema object, so the role guard does not see it,
+    // and a restore refuses one owned by the tile owner, who cannot log in.
+    const creations = [
+      "SELECT pg_catalog.lo_create(0)",
+      "SELECT pg_catalog.lo_creat(-1)",
+      "SELECT pg_catalog.lo_from_bytea(0, 'x')",
+      "SELECT pg_catalog.lo_import('/etc/hostname')",
+    ];
+    for (const statement of creations) {
+      await permissionDenied(roles.api.unsafe(statement));
+      await permissionDenied(roles.dataManager.unsafe(statement));
+      await permissionDenied(
+        roles.superuser.begin(async (tx) => {
+          await tx.unsafe("SET LOCAL ROLE openmapx_tiles_owner");
+          await tx.unsafe(statement);
+        }),
+      );
+    }
+    expect(
+      await roles.superuser`SELECT count(*)::int AS large_objects FROM pg_largeobject_metadata`,
+    ).toEqual([{ large_objects: 0 }]);
+  });
+
   it("renders OpenConditions' traffic tile as a read-only role without superuser rights", async () => {
     // OpenConditions installed after PostGIS started, as its own role, with
     // its real tile function and the functions and tables it reads.
@@ -539,7 +563,7 @@ integration("code planted for another role", () => {
     await roles.dataManager.unsafe(`
       CREATE TABLE osm_search.planted (id int, CHECK (pg_catalog.length(COALESCE(public.st_findextent('osm_search', 't',
         'g") AS extent FROM (SELECT NULL::public.geometry AS g) s WHERE CASE WHEN (SELECT rolsuper FROM pg_catalog.pg_roles
-         WHERE rolname = current_user) THEN pg_catalog.lo_from_bytea(4242, ''pwn'')::int ELSE 0 END >= 0 --')::text, '')) >= 0));
+         WHERE rolname = current_user) THEN pg_catalog.length(pg_catalog.query_to_xml(''SELECT pg_catalog.lo_from_bytea(4242, ''''pwn'''')'', true, false, '''')::text) ELSE 0 END >= 0 --')::text, '')) >= 0));
       INSERT INTO osm_search.planted VALUES (1);
     `);
     await close();
