@@ -891,7 +891,15 @@ describe.skipIf(
           operationsPolicy,
         }),
         app = Fastify();
-      registerAuth(app, "guard-fixture-token", { executionReceiver: () => receiver });
+      registerAuth(
+        app,
+        {
+          api: "guard-fixture-token-api",
+          "ops-agent": "guard-fixture-token",
+          "host-cli": "guard-fixture-token-cli",
+        },
+        { executionReceiver: () => receiver },
+      );
       registerApi(app, {
         executionReceiver: receiver,
         dataDir: join(root, "data"),
@@ -913,19 +921,20 @@ describe.skipIf(
         beforeRows =
           await sql`SELECT id,metadata,status,finished_at FROM data_manager.jobs ORDER BY id`;
       try {
-        for (const [url, payload] of [
-          ["/ambient-places/enabled", { enabled: false }],
-          ["/ambient-places/rollback", {}],
-          ["/transit/sync", { countries: ["de"] }],
-          ["/transit/restart-motis", {}],
-          ["/traffic/predicted/bake", {}],
-          ["/datasets/reload", {}],
+        // Each mutation comes from a caller whose own token may use its route.
+        for (const [url, payload, token] of [
+          ["/ambient-places/enabled", { enabled: false }, "guard-fixture-token-api"],
+          ["/ambient-places/rollback", {}, "guard-fixture-token-api"],
+          ["/transit/sync", { countries: ["de"] }, "guard-fixture-token-api"],
+          ["/transit/restart-motis", {}, "guard-fixture-token-api"],
+          ["/traffic/predicted/bake", {}, "guard-fixture-token-cli"],
+          ["/datasets/reload", {}, "guard-fixture-token-cli"],
         ] as const) {
           const response = await app.inject({
             method: "POST",
             url,
             payload,
-            headers: { authorization: "Bearer guard-fixture-token" },
+            headers: { authorization: `Bearer ${token}` },
           });
           expect(response.statusCode, url + response.body).toBe(409);
         }
@@ -1047,6 +1056,7 @@ describe.skipIf(
 
 import { existsSync, readFileSync } from "node:fs";
 import { drizzle } from "drizzle-orm/postgres-js";
+import { dataManagerTokenFile } from "../../test/data-manager-token";
 
 async function ownedFenceFixture(
   options: {
@@ -1134,7 +1144,7 @@ async function ownedFenceFixture(
     BETTER_AUTH_SECRET: "owned-fence-synthetic-secret-at-least-32",
     DOMAIN: "example.test",
     DATA_MANAGER_URL: data.baseUrl,
-    DATA_MANAGER_AUTH_TOKEN: data.token,
+    DATA_MANAGER_TOKEN_FILE: dataManagerTokenFile(data.token),
   }))
     vi.stubEnv(key, value);
   const { initServiceRegistry } = await import(
@@ -1356,7 +1366,7 @@ async function ownedFenceFixture(
         dataRoot = join(root, "data"),
         peer = control.verifyControlPeer(dm, {
           rawHeaders,
-          transportPrincipal: "shared-data-manager-bearer",
+          transportPrincipal: "ops-agent",
           execution: child,
           kind: "configuration-maintenance.prepare",
         }),
@@ -1395,7 +1405,7 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
     try {
       const peer = control.verifyControlPeer(f.dm, {
         rawHeaders: ["x-openmapx-control-delegation", f.assertion],
-        transportPrincipal: "shared-data-manager-bearer",
+        transportPrincipal: "ops-agent",
         execution: f.child,
         kind: "configuration-maintenance.prepare",
       });

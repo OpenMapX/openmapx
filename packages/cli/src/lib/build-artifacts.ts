@@ -66,6 +66,8 @@ export {
   type ImageMismatch,
 } from "@openmapx/core/build-artifacts";
 
+import { cliDataManagerToken } from "./data-manager-token";
+
 function dataRootFor(rootDir?: string): string {
   return join(repoPaths(rootDir).infraDir, "data");
 }
@@ -339,7 +341,7 @@ export async function importBuildBundle(opts: ImportBuildBundleOptions): Promise
     );
     const transport = dm.createDataManagerTransport({
       baseUrl: dataManagerUrl(),
-      authToken: process.env.DATA_MANAGER_AUTH_TOKEN?.trim(),
+      authToken: cliDataManagerToken(),
       requestTimeoutMs: 15000,
       maxJsonBytes: 65536,
     });

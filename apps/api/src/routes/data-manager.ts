@@ -1,6 +1,7 @@
 import { DEFAULT_CATALOG_BRANCH } from "@openmapx/core/data-manager-contracts";
 import * as dm from "@openmapx/core/data-manager-sdk";
 import { envString } from "@openmapx/core/server-env";
+import { readDataManagerToken } from "@openmapx/core/service-secret-files";
 import { and, asc, count, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../db/index.js";
@@ -22,7 +23,8 @@ import { registerDataManagerAdminRoute } from "./data-manager-admin-contract.js"
  *
  * Auth model:
  *   - Reads (`GET /state`, `/feeds`, `/jobs[/:id]`) — admin session OR bearer
- *     token (the service token shared with the data-manager).
+ *     token (the API's own data-manager token, which the data-manager also
+ *     presents when it calls back).
  *   - `POST /sync`, `POST /restart-motis` — same dual auth.
  *   - `POST /bump-transitous-ref` — admin session only. Bumps are human
  *     decisions that must be attributable to a logged-in operator, never a
@@ -64,7 +66,7 @@ function extractBearerToken(req: FastifyRequest): string | null {
  */
 async function resolveDataManagerAuthentication(req: FastifyRequest): Promise<AuthResult> {
   const presented = extractBearerToken(req);
-  const expected = process.env.DATA_MANAGER_AUTH_TOKEN?.trim();
+  const expected = readDataManagerToken();
   if (presented && expected && safeEqual(presented, expected)) {
     return { kind: "token", userId: "service" };
   }
@@ -91,7 +93,7 @@ function dataManagerOptions() {
   return {
     transport: dm.createDataManagerTransport({
       baseUrl: envString("DATA_MANAGER_URL", DATA_MANAGER_URL_DEFAULT),
-      authToken: envString("DATA_MANAGER_AUTH_TOKEN", ""),
+      authToken: readDataManagerToken(),
       requestTimeoutMs: DATA_MANAGER_PROXY_TIMEOUT_MS,
       maxJsonBytes: DATA_MANAGER_PROXY_MAX_BYTES,
     }),

@@ -96,17 +96,32 @@ its file, render again and restart PostGIS, `app-api` and `data-manager`.
 
 ## Secrets
 
-Authentication and internal service secrets. `BETTER_AUTH_SECRET` and
-`DATA_MANAGER_AUTH_TOKEN` must each contain at least 32 characters in production;
-the CLI validates both before deployment and their services validate them again
-at startup. Generate each with the command shown.
+Authentication and internal service secrets. `BETTER_AUTH_SECRET` must contain
+at least 32 characters in production; the CLI validates it before deployment and
+the API validates it again at startup. Generate each with the command shown.
 
 | Variable                     | Description                                                                                                                                                                                                                                                                                                                                                                     | Required / Default                     |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
 | `BETTER_AUTH_SECRET`         | Better Auth session-signing key. The API refuses to start without it and rejects production values shorter than 32 characters. Generate with `npx @better-auth/cli@latest secret`.                                                                                                                                                                                              | **Required**                           |
 | `OPENMAPX_SECRETS_KEY`       | 32-byte key encoded as 64 hexadecimal characters for the secret vault, including personal timeline credentials. Preserve it across restarts and restores; losing or changing it makes existing encrypted values unreadable. Generate with `openssl rand -hex 32`.                                                                                                               | **Required** (to use the secret vault) |
-| `DATA_MANAGER_AUTH_TOKEN`    | Shared secret between `app-api` and the `data-manager` service; every data-manager mutation endpoint (downloads, hardlinks, dataset reload, conversions) requires it. Production rejects values shorter than 32 characters; development generates a random ephemeral token when unset. Generate with `openssl rand -hex 32`.                                                    | **Required** in production             |
 | `OPENMAPX_LOCAL_ADMIN_TOKEN` | Shared secret for the CLI ↔ API loopback admin short-circuit. When set, loopback requests only gain admin if they carry a matching `X-OpenMapX-Local-Admin` header (a CSRF guard); the CLI attaches it automatically. Without the token in production, the loopback bypass is denied; admin API calls need normal session authentication. Generate with `openssl rand -hex 32`. | Optional (recommended). Default unset  |
+
+### Data-manager caller tokens
+
+Three callers use the data-manager's protected routes, and each has its own
+bearer token: `app-api`, the operations agent (including the CLI commands it
+runs), and the CLI on the host. `openmapx compose render` generates the three
+once, in `infra/docker/secrets/data-manager-api-token`,
+`data-manager-ops-agent-token` and `data-manager-host-cli-token`, and refuses to
+render when two are equal. The data-manager reads all three and admits each
+caller only to the routes it uses: the configuration fence only for the
+operations agent, the admin panel's and map's routes only for the API, and the
+data commands for both CLIs. A token presented to another caller's route is
+refused with `403`.
+
+Each service receives only a token **file path**; there are no environment
+variables for these tokens. The host CLI reads its file from
+`infra/docker/secrets/` itself.
 
 ## Docker & host wiring
 

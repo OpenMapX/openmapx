@@ -320,9 +320,8 @@ its own timeout. Lifted spans are pruned when current feed evidence is available
 ### The applied set
 
 Read `GET /traffic/conditions/applied` on Data Manager from the trusted service
-network, using its configured `Authorization: Bearer` service token. The running Data Manager requires authentication for this route. Production
-requires `DATA_MANAGER_AUTH_TOKEN`; development generates an ephemeral token
-when none is configured. Do not publish it as an anonymous monitoring endpoint.
+network, using a caller's `Authorization: Bearer` token. The running Data Manager requires authentication for this route; from the host,
+use the CLI's token in `infra/docker/secrets/data-manager-host-cli-token`. Do not publish it as an anonymous monitoring endpoint.
 
 The response includes mode, write ID, engine boot, graph generation, policy
 revision, expiry, per-effect receipts, `writtenAt` and applied observation IDs.

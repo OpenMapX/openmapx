@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { LngLat, Route, RoutingOptions } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -5,6 +8,13 @@ import {
   createRoutingHandlerEnvironment,
   createRoutingTestReply,
 } from "./support/routing-handler-contract.js";
+
+/** A private file holding `token`, for `DATA_MANAGER_TOKEN_FILE`. */
+function dataManagerTokenFile(token: string): string {
+  const path = join(mkdtempSync(join(tmpdir(), "openmapx-dm-token-")), "token");
+  writeFileSync(path, token, { mode: 0o600 });
+  return path;
+}
 
 const route = (geometry: LngLat[]): Route => ({ geometry, mode: "driving" }) as unknown as Route;
 /** Straight north through the closed carriageway. */
@@ -79,7 +89,7 @@ const query = {
 };
 
 describe("/directions — a planned car trip and the closures in force then", () => {
-  beforeEach(() => vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "token"));
+  beforeEach(() => vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile("token")));
   afterEach(() => vi.unstubAllEnvs());
 
   it("plans again around a closure the first route travels", async () => {

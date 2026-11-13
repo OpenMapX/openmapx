@@ -3,6 +3,7 @@ import { routeJsonSchema } from "@openmapx/core/api-schema";
 import { dataManagerOperations } from "@openmapx/core/data-manager-contracts";
 import type { FastifyInstance, FastifyReply, FastifyRequest, RouteGenericInterface } from "fastify";
 import type { z } from "zod/v4";
+import { DATA_MANAGER_ROUTE_PRINCIPALS } from "./principals.js";
 
 type OperationId = keyof typeof dataManagerOperations;
 type ContractPart<
@@ -64,6 +65,8 @@ export function registerDataManagerRoute<K extends OperationId>(
     tags: ["data-manager"],
     "x-openmapx-contract-id": operationId,
     "x-openmapx-auth": operation.auth,
+    // The callers whose own token reaches this route; the auth hook enforces it.
+    "x-openmapx-principals": DATA_MANAGER_ROUTE_PRINCIPALS[operationId],
     security: operation.auth === "service" ? [{ serviceBearer: [] }, { serviceToken: [] }] : [],
     response: {},
   };

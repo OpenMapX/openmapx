@@ -122,7 +122,7 @@ describe.skipIf(process.platform !== "linux" || !EXPECTED_UID)(
     }
 
     function envWithoutUser(target: string): string {
-      return `# UID=1000\n# GID=1000\nPOSTGRES_PASSWORD=${secret()}\nBETTER_AUTH_SECRET=${secret()}\nDATA_MANAGER_AUTH_TOKEN=${secret()}\nOPENMAPX_HOST_DIR=${target}\n`;
+      return `# UID=1000\n# GID=1000\nPOSTGRES_PASSWORD=${secret()}\nBETTER_AUTH_SECRET=${secret()}\nOPENMAPX_HOST_DIR=${target}\n`;
     }
 
     /** UID and GID as Compose reads them from .env. */

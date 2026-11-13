@@ -143,7 +143,6 @@ describe.skipIf(process.platform !== "linux" || !IMAGE)(
           `DOCKER_GID=${socketGroup}`,
           `POSTGRES_PASSWORD=${secret()}`,
           `BETTER_AUTH_SECRET=${secret()}`,
-          `DATA_MANAGER_AUTH_TOKEN=${secret()}`,
           `OPENMAPX_HOST_DIR=${root}`,
           `OPENMAPX_DOCKER_CONFIG_DIR=${dockerConfig}`,
           "",

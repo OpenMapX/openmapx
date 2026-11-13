@@ -38,7 +38,6 @@ it("restores only the caller-named original signed update and leaves its failed 
   installations.push(...fixture.installations);
   vi.spyOn(Date, "now").mockReturnValue(fixture.execution.deadlineAt + 1);
   vi.stubGlobal("fetch", fixture.recoveryFetch);
-  vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "d".repeat(32));
   vi.stubEnv("DATA_MANAGER_URL", "http://127.0.0.1:4301");
   const result = await recoverServiceUpdate({
     rootDir: root,

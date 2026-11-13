@@ -5,6 +5,7 @@ import {
   getCoverageEvidence,
   unwrapDataManagerResponse,
 } from "@openmapx/core/data-manager-sdk";
+import { readDataManagerToken } from "@openmapx/core/service-secret-files";
 import { serviceUrl } from "../service-registry.js";
 
 const DATA_MANAGER_TIMEOUT_MS = 3_000;
@@ -150,7 +151,7 @@ export function createDataManagerEvidenceReader(
   if (providedClient) return { read: () => readDataManagerEvidence(providedClient) };
   const transport = createDataManagerTransport({
     baseUrl: options.baseUrl ?? baseUrl(),
-    authToken: options.authToken ?? process.env.DATA_MANAGER_AUTH_TOKEN?.trim(),
+    authToken: options.authToken ?? readDataManagerToken(),
     requestTimeoutMs: DATA_MANAGER_TIMEOUT_MS,
     maxJsonBytes: 4 * 1024 * 1024 + 128 * 1024,
   });

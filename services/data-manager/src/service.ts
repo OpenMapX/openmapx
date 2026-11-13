@@ -9,7 +9,7 @@ import { isDataExecutionTerminal } from "@openmapx/core/data-manager-contracts";
 import { createFatalProcessHandler } from "@openmapx/core/server";
 import Fastify from "fastify";
 import { registerApi } from "./api.js";
-import { registerAuth, resolveAuthToken } from "./auth.js";
+import { registerAuth, resolveCallerTokens } from "./auth.js";
 import { DATA_MANAGER_CONTROL_SERVICE_IDS } from "./control-targets.js";
 import { awaitInflightSync, type CronHandles, setupCron } from "./cron.js";
 import { rawSql, sql } from "./db/index.js";
@@ -58,7 +58,7 @@ let shuttingDown = false;
 app.addHook("onClose", async () => {
   await stopControlRetention?.();
 });
-registerAuth(app, resolveAuthToken(app), { executionReceiver: () => executionReceiver });
+registerAuth(app, resolveCallerTokens(app), { executionReceiver: () => executionReceiver });
 const readiness = new DataManagerReadiness();
 const controlStartup = loadControlStartup({
   infraDir: "/data",

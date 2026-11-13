@@ -4,6 +4,7 @@ import { Readable } from "node:stream";
 import { RollingStreamBudget } from "@openmapx/core/server";
 import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { dataManagerTokenFile } from "../../test/data-manager-token";
 
 const auth = vi.hoisted(() => ({ userId: "user-a" as string | null }));
 vi.mock("../../utils/require-auth.js", () => ({
@@ -97,7 +98,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 describe("offline package public API", () => {
   it("rejects an unsafe internal destination without sending service credentials", async () => {
     vi.stubEnv("DATA_MANAGER_URL", "http://untrusted.example.test:4000");
-    vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "private-token");
+    vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile("private-token"));
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({
         available: true,

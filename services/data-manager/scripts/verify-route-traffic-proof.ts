@@ -1,7 +1,9 @@
 /** Disposable pinned-engine probe. Uses real writer, provider, API auth and receipt consumer. */
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
   RoadConditionEffect,
@@ -142,10 +144,12 @@ let snapshot: TrafficApplicationSnapshot = {
 };
 assert.equal(snapshot.receipts.length, 1);
 const app = Fastify();
-const priorToken = process.env.DATA_MANAGER_AUTH_TOKEN;
+const priorTokenFile = process.env.DATA_MANAGER_TOKEN_FILE;
 const token = randomUUID();
-process.env.DATA_MANAGER_AUTH_TOKEN = token;
-registerAuth(app, token);
+const tokenDirectory = mkdtempSync(join(tmpdir(), "openmapx-route-proof-"));
+process.env.DATA_MANAGER_TOKEN_FILE = join(tokenDirectory, "data-manager-api-token");
+writeFileSync(process.env.DATA_MANAGER_TOKEN_FILE, token, { mode: 0o600 });
+registerAuth(app, { api: token, "ops-agent": `${token}-agent`, "host-cli": `${token}-cli` });
 registerApi(app, { getTrafficConditionsApplied: () => snapshot });
 const dmUrl = await app.listen({ host: "127.0.0.1", port: 0 });
 let events: RoadConditionEvent[] = [event];
@@ -310,7 +314,8 @@ try {
   );
 } finally {
   await app.close();
-  if (priorToken === undefined) delete process.env.DATA_MANAGER_AUTH_TOKEN;
-  else process.env.DATA_MANAGER_AUTH_TOKEN = priorToken;
+  if (priorTokenFile === undefined) delete process.env.DATA_MANAGER_TOKEN_FILE;
+  else process.env.DATA_MANAGER_TOKEN_FILE = priorTokenFile;
+  rmSync(tokenDirectory, { recursive: true, force: true });
   await expireLiveTraffic({ ...deps, now: Date.now() + 120_001 });
 }

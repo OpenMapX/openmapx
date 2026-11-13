@@ -177,7 +177,6 @@ describe("assembled production service authority", () => {
       DOMAIN: "example.test",
       POSTGRES_PASSWORD: "p".repeat(24),
       BETTER_AUTH_SECRET: "a".repeat(32),
-      DATA_MANAGER_AUTH_TOKEN: "d".repeat(32),
       OPENMAPX_ENABLED_SERVICES: "",
     }))
       vi.stubEnv(key, value);

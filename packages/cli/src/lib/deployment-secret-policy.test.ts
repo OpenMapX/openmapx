@@ -111,7 +111,7 @@ describe("deployment secret assertions", () => {
       ),
     ).not.toThrow();
     expect(() =>
-      assertApplicationDeploymentSecret("DATA_MANAGER_AUTH_TOKEN", "%20".repeat(11)),
+      assertApplicationDeploymentSecret("OPENMAPX_LOCAL_ADMIN_TOKEN", "%20".repeat(11)),
     ).not.toThrow();
   });
 
@@ -128,10 +128,10 @@ describe("deployment secret assertions", () => {
     expect.assertions(2);
     const rejected = "private-application-fixture";
     try {
-      assertApplicationDeploymentSecret("DATA_MANAGER_AUTH_TOKEN", rejected);
+      assertApplicationDeploymentSecret("OPENMAPX_LOCAL_ADMIN_TOKEN", rejected);
     } catch (error) {
       expect((error as Error).message).not.toContain(rejected);
-      expect((error as Error).message).toContain("DATA_MANAGER_AUTH_TOKEN");
+      expect((error as Error).message).toContain("OPENMAPX_LOCAL_ADMIN_TOKEN");
     }
   });
 });
@@ -140,7 +140,6 @@ describe("assertCliDeploymentSecrets", () => {
   const env = {
     POSTGRES_PASSWORD: "p".repeat(POSTGRES_DEPLOYMENT_SECRET_MIN_LENGTH),
     BETTER_AUTH_SECRET: "b".repeat(APPLICATION_DEPLOYMENT_SECRET_MIN_LENGTH),
-    DATA_MANAGER_AUTH_TOKEN: "d".repeat(APPLICATION_DEPLOYMENT_SECRET_MIN_LENGTH),
   };
 
   it("leaves the tile server's password to deployments that set it", () => {

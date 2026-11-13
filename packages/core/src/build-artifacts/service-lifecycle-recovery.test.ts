@@ -62,6 +62,7 @@ it("releases only the expired failed update's unadopted hardlink grant without r
     Promise.resolve().then(async () => {
       const receiver = inspectDataExecutionAdmission(dm, {
         rawHeaders: ["x-openmapx-control-delegation", f.assertion],
+        transportPrincipal: "host-cli",
         input: {
           kind: "generation-hardlinks",
           revisionId: f.revisionId,
@@ -131,6 +132,7 @@ it("a revoked unadopted grant cannot become an adoption before root release", as
     installations.push(dm);
     const receiver = inspectDataExecutionAdmission(dm, {
       rawHeaders: ["x-openmapx-control-delegation", f.assertion],
+      transportPrincipal: "host-cli",
       input: {
         kind: "generation-hardlinks",
         revisionId: f.revisionId,

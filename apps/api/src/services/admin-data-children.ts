@@ -14,6 +14,7 @@ import {
   unwrapDataManagerResponse,
 } from "@openmapx/core/data-manager-sdk";
 import { envString } from "@openmapx/core/server-env";
+import { readDataManagerToken } from "@openmapx/core/service-secret-files";
 import { eq } from "drizzle-orm";
 import z from "zod/v4";
 import { db } from "../db";
@@ -163,7 +164,7 @@ export async function cancelAdminDataChildren(
   await persist();
   const transport = createDataManagerTransport({
     baseUrl: envString("DATA_MANAGER_URL", "http://localhost:4000"),
-    authToken: envString("DATA_MANAGER_AUTH_TOKEN", ""),
+    authToken: readDataManagerToken(),
     requestTimeoutMs: 2000,
   });
   const outcomes: DataChildrenCancellation[] = [];

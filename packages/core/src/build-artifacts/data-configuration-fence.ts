@@ -1767,7 +1767,8 @@ export function createDataConfigurationFenceStore(
         throw Error("Configuration fence target subset conflict");
       const peer = verifyControlPeer(installation, {
         rawHeaders,
-        transportPrincipal: "shared-data-manager-bearer",
+        // Only the operations agent's own token reaches the fence routes.
+        transportPrincipal: "ops-agent",
         execution: grant.execution,
         kind,
       });

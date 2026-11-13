@@ -7,6 +7,7 @@ import {
 } from "@openmapx/core/data-manager-sdk";
 import { DIAGNOSTIC_CREDENTIAL_KEY_SOURCE } from "@openmapx/core/scrub-secrets";
 import { envString } from "@openmapx/core/server-env";
+import { readDataManagerToken } from "@openmapx/core/service-secret-files";
 import type { GtfsCatalogProvider } from "@openmapx/integration-framework";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { getIntegrationsByDomain } from "../../integration-host.js";
@@ -17,7 +18,7 @@ const DATA_MANAGER_URL_DEFAULT = "http://localhost:4000";
 async function installedCatalog(): Promise<TransitCatalogFeed[]> {
   const transport = createDataManagerTransport({
     baseUrl: envString("DATA_MANAGER_URL", DATA_MANAGER_URL_DEFAULT),
-    authToken: envString("DATA_MANAGER_AUTH_TOKEN", ""),
+    authToken: readDataManagerToken(),
   });
   const body = unwrapDataManagerResponse(await readPinnedTransitCatalog({ transport }));
   return body.sources.flatMap((source) => {

@@ -17,6 +17,7 @@ import {
   planDataCleanup,
   pruneDataManagerStateForCleanup,
 } from "../lib/data-local";
+import { cliDataManagerToken } from "../lib/data-manager-token";
 import { dataManagerUrl } from "../lib/data-manager-url";
 import { runCliDataUpdate } from "../lib/data-update-command";
 import { runningComposeServicesStrict } from "../lib/docker";
@@ -29,7 +30,6 @@ import {
 } from "../lib/env-defaults";
 import { cliAcquisitionOptions, constrainCliDataManagerTransport } from "../lib/execution-deadline";
 import { applyGeneratedHardlinks, logAppliedHardlinks } from "../lib/hardlinks";
-
 import { log, routeLogsToStderr, table } from "../lib/output";
 import { generateTransitousApiKeys } from "../lib/transitous-api-keys";
 import { renderComposeForRepo } from "./compose";
@@ -39,7 +39,7 @@ function createCliTransport() {
     dm.createDataManagerTransport({
       ...cliAcquisitionOptions(),
       baseUrl: dataManagerUrl(),
-      authToken: process.env.DATA_MANAGER_AUTH_TOKEN?.trim(),
+      authToken: cliDataManagerToken(),
     }),
   );
 }

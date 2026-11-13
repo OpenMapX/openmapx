@@ -61,7 +61,6 @@ function start(root: string, mode: string, letter = "a", expected = "", hold = "
         NODE_OPTIONS: process.env.NODE_OPTIONS,
         POSTGRES_PASSWORD: "x".repeat(24),
         BETTER_AUTH_SECRET: "a".repeat(32),
-        DATA_MANAGER_AUTH_TOKEN: "b".repeat(32),
       },
     },
   );

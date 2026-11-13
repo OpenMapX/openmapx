@@ -59,7 +59,7 @@ it.skipIf(
         "DATA_MANAGER_URL",
         "OPENMAPX_TEST_FIXED_DM_TARGET",
         "NODE_OPTIONS",
-        "DATA_MANAGER_AUTH_TOKEN",
+        "DATA_MANAGER_TOKEN_FILE",
         "OPENMAPTILES_FONTS_URL",
       ] as const,
       prior = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
@@ -147,7 +147,15 @@ it.skipIf(
       }
       return payload;
     });
-    registerAuth(app, "synthetic-dm-token", { executionReceiver: () => receiver });
+    registerAuth(
+      app,
+      {
+        api: "synthetic-dm-token-api",
+        "ops-agent": "synthetic-dm-token",
+        "host-cli": "synthetic-dm-token-cli",
+      },
+      { executionReceiver: () => receiver },
+    );
     registerApi(app, {
       dataDir: data,
       singleFlight,
@@ -161,7 +169,9 @@ it.skipIf(
     process.env.OPENMAPX_TEST_FIXED_DM_TARGET = process.env.DATA_MANAGER_URL;
     process.env.NODE_OPTIONS =
       `${process.env.NODE_OPTIONS ?? ""} --import=${new URL("../../../../../apps/ops-agent/src/test-fixtures/fixed-cli-data-manager-preload.mjs", import.meta.url).href}`.trim();
-    process.env.DATA_MANAGER_AUTH_TOKEN = "synthetic-dm-token";
+    // The fixed CLI the agent runs presents the agent's own token.
+    process.env.DATA_MANAGER_TOKEN_FILE = join(root, "data-manager-ops-agent-token");
+    writeFileSync(process.env.DATA_MANAGER_TOKEN_FILE, "synthetic-dm-token", { mode: 0o600 });
     const agentJournal = await openOpsJobJournal(join(data, "ops-agent/jobs-v1.json")),
       agentRuntime = createAdministrativeRuntime(createUnavailableRuntime(), {
         rootDir: root,

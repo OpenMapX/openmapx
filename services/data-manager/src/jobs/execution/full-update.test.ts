@@ -81,7 +81,7 @@ it.skipIf(
         "DATA_MANAGER_URL",
         "OPENMAPX_TEST_FIXED_DM_TARGET",
         "NODE_OPTIONS",
-        "DATA_MANAGER_AUTH_TOKEN",
+        "DATA_MANAGER_TOKEN_FILE",
         "POSTGRES_PASSWORD",
         "BETTER_AUTH_SECRET",
         "DOMAIN",
@@ -90,7 +90,10 @@ it.skipIf(
       prior = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
     process.env.DOMAIN = "example.test";
     process.env.OPENMAPX_ROOT_DIR = host.root;
-    process.env.DATA_MANAGER_AUTH_TOKEN = "synthetic-full-update-token-" + "d".repeat(32);
+    // The fixed CLI the agent runs presents the agent's own token.
+    const agentToken = "synthetic-full-update-token-" + "d".repeat(32);
+    process.env.DATA_MANAGER_TOKEN_FILE = join(bundle, "data-manager-ops-agent-token");
+    writeFileSync(process.env.DATA_MANAGER_TOKEN_FILE, agentToken, { mode: 0o600 });
     process.env.POSTGRES_PASSWORD = "synthetic-full-update-password-" + "p".repeat(32);
     process.env.BETTER_AUTH_SECRET = "synthetic-full-update-secret-" + "s".repeat(32);
     const service = host.loaded.find((s) => s.manifest.id === "osrm")!;
@@ -207,7 +210,15 @@ it.skipIf(
       }
       return payload;
     });
-    registerAuth(app, process.env.DATA_MANAGER_AUTH_TOKEN, { executionReceiver: () => receiver });
+    registerAuth(
+      app,
+      {
+        api: `${agentToken}-api`,
+        "ops-agent": agentToken,
+        "host-cli": `${agentToken}-cli`,
+      },
+      { executionReceiver: () => receiver },
+    );
     registerApi(app, {
       dataDir: data,
       singleFlight,

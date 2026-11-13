@@ -87,7 +87,6 @@ function generatedCompose(): string {
 }
 let originalPostgresPassword: string | undefined;
 let originalBetterAuthSecret: string | undefined;
-let originalDataManagerAuthToken: string | undefined;
 
 function writeManifest(slug: string, body: Record<string, unknown>) {
   const dir = join(tmp, "services", slug);
@@ -105,10 +104,8 @@ const baseManifest = {
 beforeEach(() => {
   originalPostgresPassword = process.env.POSTGRES_PASSWORD;
   originalBetterAuthSecret = process.env.BETTER_AUTH_SECRET;
-  originalDataManagerAuthToken = process.env.DATA_MANAGER_AUTH_TOKEN;
   process.env.POSTGRES_PASSWORD = "x".repeat(24);
   process.env.BETTER_AUTH_SECRET = "a".repeat(32);
-  process.env.DATA_MANAGER_AUTH_TOKEN = "b".repeat(32);
   delete process.env.OPENMAPX_ENABLED_SERVICES;
   tmp = mkdtempSync(join(tmpdir(), "openmapx-cli-render-"));
   writeFileSync(join(tmp, "pnpm-workspace.yaml"), "packages: []\n");
@@ -120,8 +117,6 @@ afterEach(() => {
   else process.env.POSTGRES_PASSWORD = originalPostgresPassword;
   if (originalBetterAuthSecret === undefined) delete process.env.BETTER_AUTH_SECRET;
   else process.env.BETTER_AUTH_SECRET = originalBetterAuthSecret;
-  if (originalDataManagerAuthToken === undefined) delete process.env.DATA_MANAGER_AUTH_TOKEN;
-  else process.env.DATA_MANAGER_AUTH_TOKEN = originalDataManagerAuthToken;
   rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -137,7 +132,7 @@ describe("renderComposeForRepo", () => {
     expect(existsSync(join(tmp, "infra", "docker", "secrets"))).toBe(false);
   });
 
-  it.each(["BETTER_AUTH_SECRET", "DATA_MANAGER_AUTH_TOKEN"] as const)(
+  it.each(["BETTER_AUTH_SECRET"] as const)(
     "rejects an unsafe %s before creating render output",
     async (name) => {
       writeManifest("alpha", { ...baseManifest, id: "alpha" });
@@ -766,6 +761,74 @@ describe("renderComposeForRepo", () => {
     expect(readFileSync(join(secretDir, "postgres-data-manager-password"), "utf8")).toBe(
       dataManager,
     );
+  });
+
+  it("bootstraps one data-manager token per caller and mounts each only where it belongs", async () => {
+    for (const id of ["app-api", "data-manager", "ops-agent", "motis", "postgis", "redis"]) {
+      const manifest = JSON.parse(
+        readFileSync(join(REPO_ROOT, "services", id, "service.json"), "utf8"),
+      ) as Record<string, unknown>;
+      writeManifest(id, manifest);
+    }
+
+    await renderComposeForRepo({
+      rootDir: tmp,
+      domain: "example.com",
+      services: ["postgis,app-api,data-manager,ops-agent"],
+    });
+    const secretDir = join(tmp, "infra", "docker", "secrets");
+    const callers = ["api", "ops-agent", "host-cli"] as const;
+    const tokens = callers.map((caller) =>
+      readFileSync(join(secretDir, `data-manager-${caller}-token`), "utf8"),
+    );
+    const yaml = readFileSync(generatedCompose(), "utf8");
+    const rendered = parseYaml(yaml) as {
+      services: Record<string, { environment?: Record<string, string>; volumes?: string[] }>;
+    };
+    const mounts = (id: string) => (rendered.services[id]?.volumes ?? []).join("\n");
+
+    for (const token of tokens) {
+      expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(yaml).not.toContain(token);
+    }
+    expect(new Set(tokens).size).toBe(3);
+    for (const caller of callers)
+      expect(mounts("data-manager")).toContain(`data-manager-${caller}-token`);
+    expect(mounts("app-api")).toContain("data-manager-api-token");
+    expect(mounts("app-api")).not.toMatch(/data-manager-(ops-agent|host-cli)-token/);
+    expect(mounts("ops-agent")).toContain("data-manager-ops-agent-token");
+    expect(mounts("ops-agent")).not.toMatch(/data-manager-(api|host-cli)-token/);
+    expect(rendered.services["app-api"]?.environment?.DATA_MANAGER_TOKEN_FILE).toBe(
+      "/run/secrets/data-manager-api-token",
+    );
+    expect(rendered.services["ops-agent"]?.environment?.DATA_MANAGER_TOKEN_FILE).toBe(
+      "/run/secrets/data-manager-ops-agent-token",
+    );
+    expect(yaml).not.toContain("DATA_MANAGER_AUTH_TOKEN");
+
+    await renderComposeForRepo({
+      rootDir: tmp,
+      domain: "example.com",
+      services: ["postgis,app-api,data-manager,ops-agent"],
+    });
+    expect(
+      callers.map((caller) =>
+        readFileSync(join(secretDir, `data-manager-${caller}-token`), "utf8"),
+      ),
+    ).toEqual(tokens);
+  });
+
+  it("rejects pre-existing data-manager caller tokens that two callers share", async () => {
+    writeManifest("alpha", { ...baseManifest, id: "alpha" });
+    const secretDir = join(tmp, "infra", "docker", "secrets");
+    mkdirSync(secretDir, { recursive: true, mode: 0o700 });
+    const token = Buffer.alloc(32, 23).toString("base64url");
+    writeFileSync(join(secretDir, "data-manager-api-token"), token, { mode: 0o444 });
+    writeFileSync(join(secretDir, "data-manager-host-cli-token"), token, { mode: 0o444 });
+
+    await expect(
+      renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] }),
+    ).rejects.toThrow("Data-manager caller tokens must be distinct");
   });
 
   it("rejects pre-existing identical database role passwords", async () => {

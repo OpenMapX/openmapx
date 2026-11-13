@@ -88,11 +88,12 @@ export function createDataExecutionReceiver(deps: {
           : {}),
       });
     },
-    async admitHardlinks(value, rawHeaders) {
+    async admitHardlinks(value, rawHeaders, transportPrincipal) {
       const request = startGenerationHardlinksExecutionSchema.parse(value),
         verified = inspectDataExecutionAdmission(installation, {
           ...request,
           rawHeaders,
+          transportPrincipal,
           operationFingerprint: dataExecutionInputFingerprint(request.input),
         });
       if (!verified || !controlHeaders(rawHeaders).delegation)

@@ -620,6 +620,11 @@
         ],
         "x-openmapx-contract-id": "startDataExecution",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api",
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "202": {
             "description": "Response",
@@ -2176,6 +2181,10 @@
         ],
         "x-openmapx-contract-id": "startGenerationHardlinksExecution",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "202": {
             "description": "Response",
@@ -3732,6 +3741,10 @@
         ],
         "x-openmapx-contract-id": "recoverUnadmittedGenerationHardlinks",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -4638,6 +4651,9 @@
         ],
         "x-openmapx-contract-id": "prepareDataConfigurationFence",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "ops-agent"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -5448,6 +5464,9 @@
         ],
         "x-openmapx-contract-id": "recoverUnadmittedConfigurationPreparation",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "ops-agent"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -6318,6 +6337,9 @@
         ],
         "x-openmapx-contract-id": "inspectDataConfigurationFence",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "ops-agent"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -7065,6 +7087,9 @@
         ],
         "x-openmapx-contract-id": "settleDataConfigurationFence",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "ops-agent"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -7827,6 +7852,11 @@
         ],
         "x-openmapx-contract-id": "lookupDataExecution",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api",
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -8757,6 +8787,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -9276,6 +9366,11 @@
         ],
         "x-openmapx-contract-id": "getDataExecution",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api",
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -10206,6 +10301,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -10750,6 +10905,11 @@
         ],
         "x-openmapx-contract-id": "cancelDataExecution",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api",
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -11739,6 +11899,66 @@
               }
             }
           },
+          "403": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
           "404": {
             "description": "Response",
             "content": {
@@ -12187,6 +12407,9 @@
         ],
         "x-openmapx-contract-id": "getAmbientPlacesStatus",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -12750,6 +12973,66 @@
               }
             }
           },
+          "403": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
           "413": {
             "description": "Response",
             "content": {
@@ -13067,6 +13350,9 @@
         ],
         "x-openmapx-contract-id": "buildAmbientPlaces",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "202": {
             "description": "Response",
@@ -13151,6 +13437,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -13618,6 +13964,9 @@
         ],
         "x-openmapx-contract-id": "resumeAmbientPlaces",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "202": {
             "description": "Response",
@@ -13702,6 +14051,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -14169,6 +14578,9 @@
         ],
         "x-openmapx-contract-id": "discardAmbientPlaces",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -14253,6 +14665,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -14719,6 +15191,9 @@
         ],
         "x-openmapx-contract-id": "setAmbientPlacesEnabled",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -14803,6 +15278,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -15250,6 +15785,9 @@
         ],
         "x-openmapx-contract-id": "rollbackAmbientPlaces",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -15334,6 +15872,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -15812,6 +16410,9 @@
         ],
         "x-openmapx-contract-id": "getCoverageEvidence",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -17376,6 +17977,66 @@
               }
             }
           },
+          "403": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
           "409": {
             "description": "Response",
             "headers": {
@@ -17796,6 +18457,9 @@
         ],
         "x-openmapx-contract-id": "getOfflinePackageCapability",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -17958,6 +18622,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -18349,6 +19073,9 @@
         ],
         "x-openmapx-contract-id": "prepareOfflinePackage",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -20090,6 +20817,66 @@
               }
             }
           },
+          "403": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
           "404": {
             "description": "Response",
             "content": {
@@ -21309,6 +22096,9 @@
         ],
         "x-openmapx-contract-id": "getOfflinePackageJob",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -23043,6 +23833,66 @@
               }
             }
           },
+          "403": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
           "404": {
             "description": "Response",
             "content": {
@@ -23502,6 +24352,9 @@
         ],
         "x-openmapx-contract-id": "getOfflinePackageManifest",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -23789,6 +24642,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -24307,6 +25220,9 @@
         ],
         "x-openmapx-contract-id": "getOfflineGlyphCatalog",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -24432,6 +25348,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -24968,6 +25944,9 @@
         ],
         "x-openmapx-contract-id": "headOfflineGlyph",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "200": {
             "description": "No response body",
@@ -24999,6 +25978,9 @@
             "description": "No response body"
           },
           "401": {
+            "description": "No response body"
+          },
+          "403": {
             "description": "No response body"
           },
           "404": {
@@ -25065,6 +26047,9 @@
         ],
         "x-openmapx-contract-id": "getOfflineGlyph",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -25199,6 +26184,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -25733,6 +26778,9 @@
         ],
         "x-openmapx-contract-id": "headOfflinePackageArchive",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "200": {
             "description": "No response body",
@@ -25827,6 +26875,9 @@
           "401": {
             "description": "No response body"
           },
+          "403": {
+            "description": "No response body"
+          },
           "404": {
             "description": "No response body"
           },
@@ -25915,6 +26966,9 @@
         ],
         "x-openmapx-contract-id": "getOfflinePackageArchive",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -26118,6 +27172,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -26653,6 +27767,7 @@
         "security": [],
         "x-openmapx-contract-id": "getLive",
         "x-openmapx-auth": "public",
+        "x-openmapx-principals": [],
         "responses": {
           "200": {
             "description": "Response",
@@ -26819,6 +27934,7 @@
         "security": [],
         "x-openmapx-contract-id": "getTransitOperatorFeed",
         "x-openmapx-auth": "capability",
+        "x-openmapx-principals": [],
         "responses": {
           "200": {
             "description": "Response",
@@ -26929,6 +28045,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -27415,6 +28591,7 @@
         "security": [],
         "x-openmapx-contract-id": "getStatus",
         "x-openmapx-auth": "public",
+        "x-openmapx-principals": [],
         "responses": {
           "200": {
             "description": "Response",
@@ -27652,6 +28829,11 @@
         ],
         "x-openmapx-contract-id": "getDatasets",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api",
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -27797,6 +28979,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -28124,6 +29366,9 @@
         ],
         "x-openmapx-contract-id": "getTransitProfile",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -28315,6 +29560,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -28705,6 +30010,11 @@
         ],
         "x-openmapx-contract-id": "getTransitSources",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api",
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -28961,6 +30271,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -29475,6 +30845,11 @@
         ],
         "x-openmapx-contract-id": "addTransitSource",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api",
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "202": {
             "description": "Response",
@@ -29567,6 +30942,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -30134,6 +31569,9 @@
         ],
         "x-openmapx-contract-id": "getTransitCatalog",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -30253,6 +31691,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -30739,6 +32237,11 @@
         ],
         "x-openmapx-contract-id": "removeTransitSource",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api",
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "202": {
             "description": "Response",
@@ -30831,6 +32334,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -31437,6 +33000,11 @@
         ],
         "x-openmapx-contract-id": "enableTransitSource",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api",
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "202": {
             "description": "Response",
@@ -31529,6 +33097,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -32135,6 +33763,11 @@
         ],
         "x-openmapx-contract-id": "disableTransitSource",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api",
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "202": {
             "description": "Response",
@@ -32227,6 +33860,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -32846,6 +34539,10 @@
         ],
         "x-openmapx-contract-id": "preflightTransit",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -33153,6 +34850,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -33845,6 +35602,10 @@
         ],
         "x-openmapx-contract-id": "reloadDatasets",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -33934,6 +35695,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -34381,6 +36202,10 @@
         ],
         "x-openmapx-contract-id": "bakePredictedTraffic",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "202": {
             "description": "Response",
@@ -34465,6 +36290,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -34972,6 +36857,11 @@
         ],
         "x-openmapx-contract-id": "getAppliedTrafficConditions",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api",
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -35255,6 +37145,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -35694,6 +37644,11 @@
         ],
         "x-openmapx-contract-id": "getPlannedTrafficClosures",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api",
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -35884,6 +37839,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -36331,6 +38346,11 @@
         ],
         "x-openmapx-contract-id": "getSearchIndexStatus",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api",
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -36513,6 +38533,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -36900,6 +38980,11 @@
         ],
         "x-openmapx-contract-id": "getNotablePlacesStatus",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api",
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -37072,6 +39157,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -37520,6 +39665,10 @@
         ],
         "x-openmapx-contract-id": "link",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -37619,6 +39768,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -38079,6 +40288,9 @@
         ],
         "x-openmapx-contract-id": "getOvertureRecovery",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -38291,6 +40503,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -38678,6 +40950,11 @@
         ],
         "x-openmapx-contract-id": "getOvertureStatus",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api",
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -39108,6 +41385,66 @@
               }
             }
           },
+          "403": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
           "404": {
             "description": "Response",
             "content": {
@@ -39461,6 +41798,9 @@
         ],
         "x-openmapx-contract-id": "inspectTransitSyncPreflight",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -39805,6 +42145,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -40316,6 +42716,11 @@
         ],
         "x-openmapx-contract-id": "syncTransit",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api",
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "202": {
             "description": "Response",
@@ -40411,6 +42816,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -40937,6 +43402,9 @@
         ],
         "x-openmapx-contract-id": "restartMotis",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -41028,6 +43496,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -41509,6 +44037,9 @@
         ],
         "x-openmapx-contract-id": "inspectCatalogReview",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -43387,6 +45918,66 @@
               }
             }
           },
+          "403": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
           "409": {
             "description": "Response",
             "content": {
@@ -43803,6 +46394,11 @@
         ],
         "x-openmapx-contract-id": "proposeTransitBump",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "api",
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -43974,6 +46570,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {
@@ -44500,6 +47156,10 @@
         ],
         "x-openmapx-contract-id": "approveTransitBump",
         "x-openmapx-auth": "service",
+        "x-openmapx-principals": [
+          "ops-agent",
+          "host-cli"
+        ],
         "responses": {
           "200": {
             "description": "Response",
@@ -44601,6 +47261,66 @@
             }
           },
           "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Response",
             "content": {
               "application/json": {

@@ -2,7 +2,18 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import rateLimit, { normalizeIP } from "@fastify/rate-limit";
 import { controlHeaders } from "@openmapx/core/build-artifacts";
 import { assertProductionApplicationSecret } from "@openmapx/core/deployment-secret-policy";
+import { readServiceSecretFile } from "@openmapx/core/service-secret-files";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { DATA_MANAGER_PRINCIPALS, type DataManagerPrincipal } from "./principals.js";
+
+export type DataManagerCallerTokens = Readonly<Record<DataManagerPrincipal, string>>;
+
+/** The environment variable naming each caller's token file. */
+const TOKEN_FILE_VARIABLES: Readonly<Record<DataManagerPrincipal, string>> = {
+  api: "DATA_MANAGER_API_TOKEN_FILE",
+  "ops-agent": "DATA_MANAGER_OPS_AGENT_TOKEN_FILE",
+  "host-cli": "DATA_MANAGER_HOST_CLI_TOKEN_FILE",
+};
 
 /**
  * Paths that bypass the bearer-token pre-handler:
@@ -37,51 +48,87 @@ function getAuthToken(req: FastifyRequest): string | null {
   return null;
 }
 
+/** Compares against every caller's token, so the time taken names none of them. */
+function principalFor(
+  presented: string | null,
+  tokens: DataManagerCallerTokens,
+): DataManagerPrincipal | null {
+  if (!presented) return null;
+  let found: DataManagerPrincipal | null = null;
+  for (const principal of DATA_MANAGER_PRINCIPALS)
+    if (safeEqual(presented, tokens[principal])) found = principal;
+  return found;
+}
+
+const principals = new WeakMap<FastifyRequest, DataManagerPrincipal>();
+
+/** The caller an authenticated request came from. */
+export function requestPrincipal(req: FastifyRequest): DataManagerPrincipal | undefined {
+  return principals.get(req);
+}
+
 /**
- * Resolves the expected shared-secret for the data-manager. Falls back to
- * generating an ephemeral secret when none is configured, and logs a warning.
+ * Reads each caller's token from the file its variable names. `openmapx
+ * compose render` writes the three files and the deployment mounts them.
  *
- * - `DATA_MANAGER_AUTH_TOKEN=<secret>` — required in production; all mutation
- *   endpoints demand a matching token.
- * - `DATA_MANAGER_AUTH_TOKEN=` (empty) or unset in development — a random
- *   token is generated at startup and printed to the log so the sibling
- *   `apps/api` process can pick it up via the same env var when running
- *   outside docker-compose.
+ * Production refuses a missing, weak or shared token. In development a caller
+ * without a configured file gets a random token for this run, which no other
+ * process knows, so that caller's requests are refused.
  */
-export function resolveAuthToken(app: FastifyInstance): string {
-  const configured = process.env.DATA_MANAGER_AUTH_TOKEN?.trim();
-  if (configured) {
-    assertProductionApplicationSecret("DATA_MANAGER_AUTH_TOKEN", configured, process.env.NODE_ENV);
-    return configured;
-  }
-
-  if (process.env.NODE_ENV === "production") {
-    app.log.error(
-      "DATA_MANAGER_AUTH_TOKEN is required in production. Refusing to start with an ephemeral token.",
+export function resolveCallerTokens(
+  app: FastifyInstance,
+  env: NodeJS.ProcessEnv = process.env,
+): DataManagerCallerTokens {
+  const production = env.NODE_ENV === "production";
+  const tokens = {} as Record<DataManagerPrincipal, string>;
+  for (const principal of DATA_MANAGER_PRINCIPALS) {
+    const variable = TOKEN_FILE_VARIABLES[principal];
+    const path = env[variable]?.trim();
+    if (path) {
+      const token = readServiceSecretFile(path, `Data-manager ${principal} token`);
+      assertProductionApplicationSecret(variable, token, env.NODE_ENV);
+      tokens[principal] = token;
+      continue;
+    }
+    if (production) {
+      app.log.error(`${variable} is required in production`);
+      throw new Error(`${variable} is required in production`);
+    }
+    app.log.warn(
+      `${variable} is not set; ${principal} requests are refused for this run (development only).`,
     );
-    throw new Error("DATA_MANAGER_AUTH_TOKEN is required in production");
+    tokens[principal] = randomBytes(32).toString("hex");
   }
+  assertDistinct(tokens);
+  return tokens;
+}
 
-  const ephemeral = randomBytes(32).toString("hex");
-  app.log.warn(
-    { token: ephemeral },
-    "DATA_MANAGER_AUTH_TOKEN not set — generated ephemeral token for this run (dev only).",
-  );
-  return ephemeral;
+function assertDistinct(tokens: DataManagerCallerTokens): void {
+  if (new Set(DATA_MANAGER_PRINCIPALS.map((principal) => tokens[principal])).size !== 3)
+    throw new Error("Each data-manager caller needs its own token");
+}
+
+/** The callers a route admits, from its contract; a route without that list admits none. */
+function routePrincipals(req: FastifyRequest): readonly string[] {
+  const schema = req.routeOptions.schema as { "x-openmapx-principals"?: unknown } | undefined;
+  const allowed = schema?.["x-openmapx-principals"];
+  return Array.isArray(allowed) ? allowed : [];
 }
 
 /**
  * Registers an on-request authentication guard with a failed-attempt budget,
  * before body parsing. Health endpoints remain open so container/k8s probes
- * and cross-service discovery keep working.
+ * and cross-service discovery keep working. Each caller presents its own
+ * token and reaches only the routes its contract lists for it.
  */
 export function registerAuth(
   app: FastifyInstance,
-  expectedToken: string,
+  tokens: DataManagerCallerTokens,
   options: {
     executionReceiver?: () => import("./jobs/execution/api.js").DataExecutionReceiver | undefined;
   } = {},
 ): void {
+  assertDistinct(tokens);
   // Register the maintained limiter in this root scope, while invoking it only
   // for failed credentials. Successful long-running jobs and probes have no
   // authentication-attempt budget. The root hook runs before body parsing.
@@ -95,8 +142,8 @@ export function registerAuth(
   let limitFailedAuthentication: ReturnType<FastifyInstance["createRateLimit"]> | undefined;
   app.addHook("onRequest", async (req: FastifyRequest, reply: FastifyReply) => {
     if (bypassesBearerAuth(req)) return;
-    const presented = getAuthToken(req);
-    if (!presented || !safeEqual(presented, expectedToken)) {
+    const principal = principalFor(getAuthToken(req), tokens);
+    if (!principal) {
       limitFailedAuthentication ??= app.createRateLimit();
       const limit = await limitFailedAuthentication(req);
       if (!limit.isAllowed && limit.isExceeded)
@@ -106,7 +153,11 @@ export function registerAuth(
           .send({ error: "Too many authentication attempts" });
       return reply.code(401).send({ error: "Unauthorized" });
     }
-    // Task02.3 owns durable receiver admission. Never silently ignore an internal authority header.
+    // An unknown path falls through to the not-found reply.
+    if (req.routeOptions.url !== undefined && !routePrincipals(req).includes(principal))
+      return reply.code(403).send({ error: "This caller may not use this route" });
+    principals.set(req, principal);
+    // Durable receiver admission only. Never silently ignore an internal authority header.
     try {
       const headers = controlHeaders(req.raw.rawHeaders);
       const path = req.url.split("?")[0] ?? "";

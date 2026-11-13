@@ -3,6 +3,7 @@ import { type OfflinePackageCapability, parseOfflinePackageRequest } from "@open
 import * as dm from "@openmapx/core/data-manager-sdk";
 import { RollingStreamBudget, type RollingStreamBudgetLease } from "@openmapx/core/server";
 import { envString } from "@openmapx/core/server-env";
+import { readDataManagerToken } from "@openmapx/core/service-secret-files";
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { redis } from "../redis.js";
 import {
@@ -100,7 +101,7 @@ function dataManagerOptions(signal?: AbortSignal) {
   return {
     transport: dm.createDataManagerTransport({
       baseUrl: envString("DATA_MANAGER_URL", DATA_MANAGER_URL_DEFAULT),
-      authToken: envString("DATA_MANAGER_AUTH_TOKEN", ""),
+      authToken: readDataManagerToken(),
       ...(signal ? { signal } : {}),
     }),
   };

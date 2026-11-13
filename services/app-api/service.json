@@ -55,7 +55,7 @@
       "OPS_TRUSTED_CONFIG_UID": "${UID:?UID must be set, run pnpm openmapx compose render}",
       "OPS_TRUSTED_CONFIG_GID": "${GID:?GID must be set, run pnpm openmapx compose render}",
       "DATA_MANAGER_URL": "${DATA_MANAGER_URL:-http://data-manager:4000}",
-      "DATA_MANAGER_AUTH_TOKEN": "${DATA_MANAGER_AUTH_TOKEN:?DATA_MANAGER_AUTH_TOKEN must be set — generate with: openssl rand -hex 32}",
+      "DATA_MANAGER_TOKEN_FILE": "/run/secrets/data-manager-api-token",
       "MOTIS_LICENSE_FILE": "/var/lib/openmapx/motis-live/license.json",
       "OSRM_URL": "${OSRM_URL:-https://router.project-osrm.org}",
       "VALHALLA_URL": "${VALHALLA_URL:-https://api.stadiamaps.com}",
@@ -189,6 +189,11 @@
     {
       "source": "@infra:secrets/ops-agent-api-token",
       "target": "/run/secrets/ops-agent-api-token",
+      "readOnly": true
+    },
+    {
+      "source": "@infra:secrets/data-manager-api-token",
+      "target": "/run/secrets/data-manager-api-token",
       "readOnly": true
     },
     {

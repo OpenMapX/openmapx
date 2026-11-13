@@ -70,6 +70,24 @@ resumes. Ordinary compose rendering does not perform that rotation. Until the
 coordinated rotation command lands, do not delete, edit, or move either token
 while any of those containers is running.
 
+### `data-manager-api-token`, `data-manager-ops-agent-token` and `data-manager-host-cli-token` (generated)
+
+Every CLI compose render creates one data-manager bearer token per caller when
+it is absent: the API, the operations agent (whose fixed CLI commands use the
+same token), and the CLI on the host. They follow the same format, reuse and
+file rules as the ops-agent tokens above, and a render fails closed if any two
+hold the same value.
+
+`data-manager` mounts all three and admits each caller only to the routes it
+uses. `app-api` mounts only the API token and `ops-agent` only the agent token,
+each receiving the path as `DATA_MANAGER_TOKEN_FILE`; data-manager also presents
+the API token when it calls back into the API. The host CLI reads its token
+from this directory. No raw token belongs in Compose environment values, URLs,
+labels, commands or logs.
+
+To rotate them, stop `app-api`, `ops-agent` and `data-manager`, delete the
+files, run `pnpm openmapx compose render`, then start the three services.
+
 ### `postgres-api-password` and `postgres-data-manager-password` (generated)
 
 Every CLI compose render creates the database passwords of the API's and

@@ -201,7 +201,15 @@ it
       }
       return payload;
     });
-    registerAuth(app, "synthetic-gen-token", { executionReceiver: () => receiver });
+    registerAuth(
+      app,
+      {
+        api: "synthetic-gen-token-api",
+        "ops-agent": "synthetic-gen-token",
+        "host-cli": "synthetic-gen-token-cli",
+      },
+      { executionReceiver: () => receiver },
+    );
     registerApi(app, {
       dataDir: data,
       singleFlight,

@@ -23,6 +23,7 @@ import {
   type HardlinkEntry,
   hardlinkPlanHasWork,
 } from "@openmapx/hardlinks";
+import { cliDataManagerToken } from "./data-manager-token";
 import { dataManagerUrl } from "./data-manager-url";
 import { log } from "./output";
 import { repoPaths } from "./paths";
@@ -177,7 +178,7 @@ export async function applyGeneratedHardlinks(
   const transport = createDataManagerTransport({
     ...cliAcquisitionOptions(),
     baseUrl,
-    authToken: process.env.DATA_MANAGER_AUTH_TOKEN?.trim(),
+    authToken: cliDataManagerToken(),
   });
   const result = unwrapDataManagerResponse(await link({ plan, prune: opts.prune }, { transport }));
   return {

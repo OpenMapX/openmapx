@@ -22,7 +22,11 @@ describe("data-manager producer contract metadata", () => {
     const instance = Fastify({ bodyLimit: 128, exposeHeadRoutes: false });
     const baseline = Fastify({ bodyLimit: 128, exposeHeadRoutes: false });
     apps.push(instance, baseline);
-    registerAuth(instance, "secret");
+    registerAuth(instance, {
+      api: "secret-api",
+      "ops-agent": "secret-agent",
+      "host-cli": "secret",
+    });
     let calls = 0;
     registerDataManagerRoute(instance, "link", () => {
       calls++;
@@ -157,6 +161,7 @@ describe("data-manager producer contract metadata", () => {
       "206",
       "400",
       "401",
+      "403",
       "404",
       "416",
       "429",
@@ -167,7 +172,11 @@ describe("data-manager producer contract metadata", () => {
   });
   it("keeps HEAD auth and request-validation failures bodyless", async () => {
     const instance = app();
-    registerAuth(instance, "secret");
+    registerAuth(instance, {
+      api: "secret",
+      "ops-agent": "secret-agent",
+      "host-cli": "secret-cli",
+    });
     registerDataManagerRoute(instance, "headOfflinePackageArchive", () => {
       throw new Error("handler must not run");
     });

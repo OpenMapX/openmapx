@@ -12,6 +12,7 @@ import {
 } from "@openmapx/core/data-manager-sdk";
 import type { ExecutionRef, OpsOperation } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
+import { readDataManagerToken } from "@openmapx/core/service-secret-files";
 import { OpsExecutionFailure, type OpsRuntime } from "./runtime";
 
 const sources = new WeakMap<OpsRuntime, { infraDir: string }>();
@@ -35,7 +36,7 @@ export function prepareConfigurationHardlinksAdmission(
 export function configurationDataManagerTransport() {
   return createDataManagerTransport({
     baseUrl: process.env.DATA_MANAGER_URL?.trim() || "http://data-manager:4000",
-    authToken: process.env.DATA_MANAGER_AUTH_TOKEN?.trim(),
+    authToken: readDataManagerToken(),
     requestTimeoutMs: 15000,
     maxJsonBytes: 65536,
   });

@@ -361,7 +361,15 @@ it.skipIf(
       }),
     );
     const app = Fastify();
-    registerAuth(app, "synthetic-dm-token", { executionReceiver: () => receiver });
+    registerAuth(
+      app,
+      {
+        api: "synthetic-dm-token-api",
+        "ops-agent": "synthetic-dm-token",
+        "host-cli": "synthetic-dm-token-cli",
+      },
+      { executionReceiver: () => receiver },
+    );
     registerApi(app, {
       dataDir: join(root, "data"),
       singleFlight,
@@ -692,7 +700,15 @@ it
       }),
     );
     const app = Fastify();
-    registerAuth(app, "late-fixture-token", { executionReceiver: () => receiver });
+    registerAuth(
+      app,
+      {
+        api: "late-fixture-token-api",
+        "ops-agent": "late-fixture-token",
+        "host-cli": "late-fixture-token-cli",
+      },
+      { executionReceiver: () => receiver },
+    );
     registerApi(app, {
       dataDir: data,
       singleFlight,

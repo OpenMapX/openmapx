@@ -670,7 +670,15 @@ async function legacyFixture(
     operationsPolicy: policy,
   });
   const app = Fastify();
-  registerAuth(app, "fix1-synthetic-token", { executionReceiver: () => receiver });
+  registerAuth(
+    app,
+    {
+      api: "fix1-synthetic-token-api",
+      "ops-agent": "fix1-synthetic-token",
+      "host-cli": "fix1-synthetic-token-cli",
+    },
+    { executionReceiver: () => receiver },
+  );
   registerApi(app, {
     dataDir: join(root, "data"),
     singleFlight,
@@ -704,6 +712,8 @@ async function legacyFixture(
   };
 }
 const headers = { authorization: "Bearer fix1-synthetic-token" };
+/** The admin panel reviews a transit sync through the API, with the API's own token. */
+const apiHeaders = { authorization: "Bearer fix1-synthetic-token-api" };
 
 it.skipIf(!enabled).each([
   ["manual", "profiles"],
@@ -1177,7 +1187,7 @@ it.skipIf(!enabled)(
       const preview = await f.app.inject({
         method: "POST",
         url: "/transit/sync/preflight",
-        headers,
+        headers: apiHeaders,
         payload: { countries: ["de"] },
       });
       expect(preview.statusCode, preview.body).toBe(200);
@@ -1186,7 +1196,7 @@ it.skipIf(!enabled)(
         response = await f.app.inject({
           method: "POST",
           url: "/transit/sync",
-          headers,
+          headers: apiHeaders,
           payload: {
             countries: ["de"],
             preflightId: reviewed.preflightId,

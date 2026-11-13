@@ -22,7 +22,6 @@ export {
 export function assertCliDeploymentSecrets(env: NodeJS.ProcessEnv = process.env): void {
   assertPostgresDeploymentSecret(env.POSTGRES_PASSWORD, env.POSTGRES_USER ?? "postgres");
   assertApplicationDeploymentSecret("BETTER_AUTH_SECRET", env.BETTER_AUTH_SECRET);
-  assertApplicationDeploymentSecret("DATA_MANAGER_AUTH_TOKEN", env.DATA_MANAGER_AUTH_TOKEN);
   // Only Martin needs it, and Martin's own manifest refuses to render without it.
   if (env.MARTIN_DB_PASSWORD) {
     const issue = deploymentSecretIssue(env.MARTIN_DB_PASSWORD, {

@@ -35,6 +35,8 @@ export const empty = { kind: "empty" } as const;
 export const serviceErrors = {
   400: json(httpErrorSchema),
   401: json(httpErrorSchema),
+  // A caller whose own token does not admit it to this route.
+  403: json(httpErrorSchema),
   413: json(httpErrorSchema),
   415: json(httpErrorSchema),
   429: json(httpErrorSchema, authenticationRetryAfterHeadersSchema),

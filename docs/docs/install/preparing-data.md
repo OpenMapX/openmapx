@@ -24,7 +24,8 @@ rows live in MOTIS artifacts.
 The host CLI reaches the published loopback port `http://localhost:4000`.
 `DATA_MANAGER_HOST_PORT` relocates it; `DATA_MANAGER_URL` can specify an explicit
 endpoint. API-to-data-manager traffic uses Docker DNS instead. Mutation endpoints
-require `DATA_MANAGER_AUTH_TOKEN`, which the CLI reads from `.env` and attaches
+require a bearer token; the CLI reads its own from
+`infra/docker/secrets/data-manager-host-cli-token` and attaches it
 automatically. Keep the loopback port private.
 
 ## How regions are named

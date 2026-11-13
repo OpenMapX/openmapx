@@ -33,7 +33,11 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const { OVERTURE_LOCK_NAMESPACE, OVERTURE_LOCK_KEY } = await import(
         "../../src/jobs/overture/operation-lock"
       );
-      registerAuth(app, "synthetic-recovery-token");
+      registerAuth(app, {
+        api: "synthetic-recovery-token",
+        "ops-agent": "synthetic-recovery-token-agent",
+        "host-cli": "synthetic-recovery-token-cli",
+      });
       registerApi(app, { dataDir: root });
       const request = () =>
         app.inject({

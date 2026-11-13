@@ -111,6 +111,7 @@ export async function failedServiceLifecycle(
     installations.push(dm);
     const receiver = inspectDataExecutionAdmission(dm, {
       rawHeaders: ["x-openmapx-control-delegation", assertion],
+      transportPrincipal: "host-cli",
       input: {
         kind: "generation-hardlinks",
         revisionId,

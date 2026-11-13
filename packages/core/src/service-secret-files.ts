@@ -57,3 +57,14 @@ export function resolveDatabaseUrl(
   url.password = encodeURIComponent(readServiceSecretFile(passwordFile, "Database password"));
   return url.toString();
 }
+
+/**
+ * The bearer token this process presents to the data-manager, read from the
+ * file `DATA_MANAGER_TOKEN_FILE` names. Each caller has its own token. Without
+ * the file the process has no token, which happens only in development, and
+ * the data-manager refuses its protected requests.
+ */
+export function readDataManagerToken(env: Record<string, string | undefined> = process.env) {
+  const path = env.DATA_MANAGER_TOKEN_FILE?.trim();
+  return path ? readServiceSecretFile(path, "Data-manager token") : "";
+}

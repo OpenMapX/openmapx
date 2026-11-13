@@ -114,7 +114,12 @@ export async function ownedDataManager(options: {
     return payload;
   });
   const token = "synthetic-task012-data-manager-token";
-  registerAuth(app, token, { executionReceiver: () => receiver });
+  // The operations agent's own token; the API's and host CLI's differ.
+  registerAuth(
+    app,
+    { api: `${token}-api`, "ops-agent": token, "host-cli": `${token}-cli` },
+    { executionReceiver: () => receiver },
+  );
   registerApi(app, { dataDir, singleFlight, operationsPolicy, executionReceiver: receiver });
   const baseUrl = await app.listen({ host: "127.0.0.1", port: 0 });
   const resumeHttp=async()=>{

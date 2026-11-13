@@ -294,6 +294,14 @@ export async function renderComposeWithWriter(
   if (apiDatabasePassword === dataManagerDatabasePassword) {
     throw new Error("API and data-manager database passwords must be distinct");
   }
+  // Each data-manager caller's own bearer token: the API, the operations agent
+  // (and the CLI it runs), and the CLI on the host.
+  const dataManagerTokens = ["api", "ops-agent", "host-cli"].map((caller) =>
+    ensurePlatformSecretFile(join(paths.infraDir, "secrets", `data-manager-${caller}-token`)),
+  );
+  if (new Set(dataManagerTokens).size !== dataManagerTokens.length) {
+    throw new Error("Data-manager caller tokens must be distinct");
+  }
   reconcileRedisAuthFiles(redisPasswordPath, redisAclPath, opts.redisAuthHooks);
   // Before a generation mounts their directory into data-manager.
   ensureTransitousApiKeysFile(paths.root);

@@ -29,7 +29,6 @@ beforeEach(() => {
   vi.stubEnv("POSTGRES_PASSWORD", "x".repeat(24));
   vi.stubEnv("POSTGRES_USER", "postgres");
   vi.stubEnv("BETTER_AUTH_SECRET", "a".repeat(32));
-  vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "b".repeat(32));
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(process, "exit").mockImplementation((code) => {
     throw new Error(`exit:${code}`);
