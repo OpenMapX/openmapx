@@ -20,7 +20,6 @@ export type PrivacyCryptoPurpose =
   | "request-locator"
   | "email-challenge-recipient"
   | "protected-note"
-  | "source-snapshot"
   | "attachment";
 
 export interface MasterKeyRing {

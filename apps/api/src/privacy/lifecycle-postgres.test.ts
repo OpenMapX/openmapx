@@ -150,6 +150,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           throw error;
         }
       });
+      // No release approval exists or can exist: the runner generates the
+      // self-service export as soon as the request's own tasks allow it.
+      const [approvalTable] = await db.execute<{ name: string | null }>(
+        sql`select to_regclass('public.data_subject_request_approval')::text as name`,
+      );
+      expect(approvalTable?.name).toBeNull();
       await runner.runOnce();
       expect(generationError).toBeUndefined();
       expect(generations.at(-1)?.request.state).toBe("ready");

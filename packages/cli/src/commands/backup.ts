@@ -1160,15 +1160,6 @@ WHERE attachment.request_id = request.id
   AND request.user_id = subject.user_id
   AND request.state IN (${terminalStates})
   AND (attachment.deleted_at IS NULL OR attachment.wrapped_dek IS NOT NULL);
-UPDATE data_subject_request_source_snapshot snapshot
-SET state = 'captured',
-    expires_at = LEAST(snapshot.expires_at, CURRENT_TIMESTAMP),
-    deleted_at = NULL
-FROM data_subject_request request, _openmapx_erasure_subject subject
-WHERE snapshot.request_id = request.id
-  AND request.user_id = subject.user_id
-  AND request.state IN (${terminalStates})
-  AND (snapshot.state <> 'deleted' OR snapshot.wrapped_dek IS NOT NULL);
 DELETE FROM verification verification
 USING _openmapx_erasure_subject subject
 WHERE verification.value = subject.user_id

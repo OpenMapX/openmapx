@@ -81,18 +81,13 @@ export { dataExportReauthentication, sessionAuthAssurance } from "./privacy-auth
 // GDPR subject-access request lifecycle and encrypted artifact metadata
 export {
   dataExportArtifact,
-  dataExportBackupReview,
-  dataPrivacyApproval,
   dataSubjectRequest,
-  dataSubjectRequestApproval,
   dataSubjectRequestAttachment,
-  dataSubjectRequestBackupReview,
   dataSubjectRequestEmailChallenge,
   dataSubjectRequestEvent,
   dataSubjectRequestIdentity,
   dataSubjectRequestNotification,
   dataSubjectRequestPreservation,
-  dataSubjectRequestSourceSnapshot,
   dataSubjectRequestTask,
 } from "./privacy-schema";
 // Saved places tables

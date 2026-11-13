@@ -12,7 +12,6 @@ import {
   dataExportArtifact,
   dataSubjectRequest,
   dataSubjectRequestAttachment,
-  dataSubjectRequestSourceSnapshot,
   user,
   verification,
 } from "../schema";
@@ -61,9 +60,7 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
       "data_export_reauthentication.user_id:n",
       "data_subject_request.actor_user_id:n",
       "data_subject_request.user_id:n",
-      "data_subject_request_approval.approver_user_id:n",
       "data_subject_request_attachment.owner_id:n",
-      "data_subject_request_backup_review.reviewed_by:n",
       "data_subject_request_identity.verified_by:n",
       "data_subject_request_notification.recipient_user_id:n",
       "data_subject_request_task.assigned_to:n",
@@ -250,45 +247,10 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
           expiresAt: new Date(Date.now() + 86_400_000),
         },
       ]);
-      await db.insert(dataSubjectRequestSourceSnapshot).values([
-        {
-          requestId: terminalRequestId,
-          registrationId: "terminal-source",
-          storageKey: `snapshots/${terminalRequestId}.bin`,
-          recordCount: 1,
-          plaintextBytes: 1,
-          encryptedBytes: 1,
-          plaintextSha256: "0".repeat(64),
-          ciphertextSha256: "1".repeat(64),
-          iv: "iv",
-          wrappedDek: "terminal-key",
-          capturedAt: new Date(),
-          expiresAt: new Date(Date.now() + 86_400_000),
-        },
-        {
-          requestId: activeRequestId,
-          registrationId: "active-source",
-          storageKey: `snapshots/${activeRequestId}.bin`,
-          recordCount: 1,
-          plaintextBytes: 1,
-          encryptedBytes: 1,
-          plaintextSha256: "0".repeat(64),
-          ciphertextSha256: "1".repeat(64),
-          iv: "iv",
-          wrappedDek: "active-key",
-          capturedAt: new Date(),
-          expiresAt: new Date(Date.now() + 86_400_000),
-        },
-      ]);
-
       await cleanupResidualUserData({ id: userId, email: `${userId}@example.test` });
 
       expect(deletedStorageKeys.sort()).toEqual(
-        [
-          `attachments/${terminalRequestId}.bin`,
-          `objects/${terminalRequestId}.bin`,
-          `snapshots/${terminalRequestId}.bin`,
-        ].sort(),
+        [`attachments/${terminalRequestId}.bin`, `objects/${terminalRequestId}.bin`].sort(),
       );
       const artifacts = await db
         .select()

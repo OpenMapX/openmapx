@@ -243,59 +243,6 @@ export const dataSubjectRequestPreservation = pgTable(
   ],
 );
 
-/** Receipt-side safe projections for short-lived sources. Ciphertext lives in
- * the private privacy blob store; this row is the durable integrity/key
- * boundary and contains no source records or usable credentials. */
-export const dataSubjectRequestSourceSnapshot = pgTable(
-  "data_subject_request_source_snapshot",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    requestId: uuid("request_id")
-      .notNull()
-      .references(() => dataSubjectRequest.id, { onDelete: "cascade" }),
-    registrationId: text("registration_id").notNull(),
-    state: text("state").notNull().default("captured"),
-    format: text("format").notNull().default("subject-record-jsonl-v1"),
-    storageKey: text("storage_key").notNull().unique(),
-    recordCount: integer("record_count").notNull(),
-    plaintextBytes: integer("plaintext_bytes").notNull(),
-    encryptedBytes: integer("encrypted_bytes").notNull(),
-    plaintextSha256: text("plaintext_sha256").notNull(),
-    ciphertextSha256: text("ciphertext_sha256").notNull(),
-    cipherVersion: integer("cipher_version").notNull().default(1),
-    aadVersion: integer("aad_version").notNull().default(1),
-    iv: text("iv").notNull(),
-    tag: text("tag"),
-    wrappedDek: text("wrapped_dek"),
-    masterKeyVersion: integer("master_key_version"),
-    capturedAt: timestamp("captured_at", { withTimezone: true }).notNull(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    deleteAttempts: integer("delete_attempts").notNull().default(0),
-    lastDeleteAttemptAt: timestamp("last_delete_attempt_at", { withTimezone: true }),
-    deletedAt: timestamp("deleted_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    uniqueIndex("data_subject_request_source_snapshot_request_registration_idx").on(
-      table.requestId,
-      table.registrationId,
-    ),
-    index("data_subject_request_source_snapshot_expiry_idx").on(table.state, table.expiresAt),
-    check(
-      "data_subject_request_source_snapshot_state_check",
-      sql`${table.state} in ('captured', 'delete_failed', 'deleted')`,
-    ),
-    check(
-      "data_subject_request_source_snapshot_format_check",
-      sql`${table.format} = 'subject-record-jsonl-v1'`,
-    ),
-    check(
-      "data_subject_request_source_snapshot_counts_check",
-      sql`${table.recordCount} >= 0 and ${table.plaintextBytes} >= 0 and ${table.encryptedBytes} >= 0 and ${table.deleteAttempts} >= 0 and ${table.deleteAttempts} <= 5`,
-    ),
-  ],
-);
-
 export const dataExportArtifact = pgTable(
   "data_export_artifact",
   {
@@ -509,78 +456,6 @@ export const dataSubjectRequestEmailChallenge = pgTable(
   ],
 );
 
-/** Immutable, case-scoped decision for one retained snapshot family.  The
- * backup path, image and command are deliberately not persisted here; the
- * trusted ops inventory is re-resolved at execution time. */
-export const dataSubjectRequestBackupReview = pgTable(
-  "data_subject_request_backup_review",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    requestId: uuid("request_id")
-      .notNull()
-      .references(() => dataSubjectRequest.id, { onDelete: "cascade" }),
-    backupId: text("backup_id").notNull(),
-    manifestDigest: text("manifest_digest").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
-    platformVersion: text("platform_version").notNull(),
-    decision: text("decision").notNull(),
-    reasonCode: text("reason_code").notNull(),
-    reviewedBy: text("reviewed_by").references(() => user.id, { onDelete: "set null" }),
-    reviewedAt: timestamp("reviewed_at", { withTimezone: true }).notNull(),
-  },
-  (table) => [
-    uniqueIndex("data_subject_request_backup_review_request_backup_idx").on(
-      table.requestId,
-      table.backupId,
-    ),
-    index("data_subject_request_backup_review_manifest_idx").on(table.manifestDigest),
-    check(
-      "data_subject_request_backup_review_decision_check",
-      sql`${table.decision} in ('not_applicable', 'no_material_difference', 'extract', 'unavailable')`,
-    ),
-  ],
-);
-
-/** Immutable human release approval.  Findings are represented by a digest,
- * never as free-form legal or security notes in the case database. */
-export const dataSubjectRequestApproval = pgTable(
-  "data_subject_request_approval",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    scope: text("scope").notNull(),
-    version: text("version").notNull(),
-    approverUserId: text("approver_user_id").references(() => user.id, { onDelete: "set null" }),
-    approverRole: text("approver_role").notNull(),
-    decision: text("decision").notNull(),
-    findingsDigest: text("findings_digest"),
-    /** Transport idempotency key; nullable for approvals written before this
-     * field was introduced, but mandatory at the route boundary for new
-     * records. */
-    idempotencyKey: text("idempotency_key"),
-    reviewedAt: timestamp("reviewed_at", { withTimezone: true }).notNull(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    index("data_subject_request_approval_scope_idx").on(
-      table.scope,
-      table.version,
-      table.expiresAt,
-    ),
-    uniqueIndex("data_subject_request_approval_idempotency_idx")
-      .on(table.idempotencyKey)
-      .where(sql`${table.idempotencyKey} is not null`),
-    check(
-      "data_subject_request_approval_scope_check",
-      sql`${table.scope} in ('legal-content', 'dsar-process', 'security-review')`,
-    ),
-    check(
-      "data_subject_request_approval_decision_check",
-      sql`${table.decision} in ('approved', 'rejected')`,
-    ),
-  ],
-);
-
 /** Durable, minimal notification outbox for statutory case updates.  The
  * recipient is resolved from the current subject row when dispatched; raw
  * email addresses, URLs and archive identifiers are never persisted here. */
@@ -627,7 +502,3 @@ export const dataSubjectRequestNotification = pgTable(
     check("data_subject_request_notification_attempts_check", sql`${table.attempts} >= 0`),
   ],
 );
-
-// Descriptive aliases used by integrations and evidence tooling.
-export const dataExportBackupReview = dataSubjectRequestBackupReview;
-export const dataPrivacyApproval = dataSubjectRequestApproval;

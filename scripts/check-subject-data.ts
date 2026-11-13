@@ -48,8 +48,6 @@ export const DIRECT_USER_FK_CLASSIFICATIONS: Record<string, string> = {
   "data_subject_request.actor_user_id": "privacy-case-records",
   "data_export_reauthentication.user_id": "privacy-case-records",
   "data_export_reauthentication.initiating_admin_user_id": "privacy-case-records",
-  "data_subject_request_approval.approver_user_id": "privacy-case-records",
-  "data_subject_request_backup_review.reviewed_by": "privacy-case-records",
   "data_subject_request_task.assigned_to": "privacy-case-records",
   "data_subject_request_attachment.owner_id": "privacy-case-records",
   "data_subject_request_identity.verified_by": "privacy-case-records",
@@ -204,7 +202,6 @@ export function validateSubjectDataInventory(
   }
   const reserved = [
     ["data_subject_request", "privacy-case-records"],
-    ["data_subject_request_source_snapshot", "privacy-case-records"],
     ["data_disclosure_event", "disclosure-events"],
   ] as const;
   const schemaText = readFileSync(join(ROOT, "apps/api/src/db/schema.ts"), "utf8");
@@ -214,7 +211,7 @@ export function validateSubjectDataInventory(
     }
   }
   if (SUBJECT_DATA_CATALOGUE.some((item) => item.strategy === "operator_task")) {
-    warnings.push("operator-task sources require caseworker review before readiness");
+    warnings.push("operator-task sources require caseworker review before an export is generated");
   }
   return {
     errors,
