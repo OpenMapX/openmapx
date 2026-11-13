@@ -801,6 +801,10 @@ export class PrivacyRequestService {
     if (!acceptsCaseDecision(request.state))
       throw new PrivacyRequestError("REQUEST_NOT_ACTIVE", 409);
     if (!request.identityMethod) throw new PrivacyRequestError("IDENTITY_REQUIRED", 409);
+    // A fresh sign-in by the account holder proves who they are, not who sent
+    // the case, so only a manual check lets the administrator hand data out.
+    if (request.identityMethod !== "manual")
+      throw new PrivacyRequestError("MANUAL_IDENTITY_REQUIRED", 409);
     return this.recordExportEvent(request, "export_started", { kind: "admin", id: actorId });
   }
 

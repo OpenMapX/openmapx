@@ -81,11 +81,14 @@ requires another explicit confirmation.
   extensions cannot exceed two calendar months after the original deadline.
   Completion requires every task to be resolved, and refusal requires
   confirmation. Completing or refusing notifies a requester who has an account.
-- **Export for an assisted request:** after the identity check, **Download
-  export** streams the same archive for the case's subject account. It needs a
-  fresh, purpose-bound administrator sign-in (`privacy.export`) for that case,
-  used once. An assisted request that names someone only by email or another
-  reference has no account to export; answer it manually.
+- **Export for an assisted request:** after a manual **Verify identity**,
+  **Download export** streams the same archive for the case's subject account.
+  It needs a fresh, purpose-bound administrator sign-in (`privacy.export`) for
+  that case, used once. A case verified by the account holder's own sign-in
+  cannot be exported by an administrator: that sign-in proves who holds the
+  account, not who sent the request, and the account holder already received
+  the archive themselves. An assisted request that names someone only by email
+  or another reference has no account to export; answer it manually.
 - **Backups:** retained backups are not searched automatically. Follow the
   [manual restore runbook](./backup-and-restore.md#manual-backup-export-for-a-privacy-request)
   and resolve the `backup-retained-copies` task with its outcome.

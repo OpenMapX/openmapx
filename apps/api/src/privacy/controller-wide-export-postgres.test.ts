@@ -545,6 +545,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             .from(dataSubjectRequest)
             .where(eq(dataSubjectRequest.userId, SUBJECT_ID)),
         ).toHaveLength(1);
+        // The account holder's own sign-in does not prove who sent the case, so
+        // it never lets an administrator export the data to that requester.
+        await expect(service.beginAdminExport(assisted.id, "admin-1")).rejects.toMatchObject({
+          code: "MANUAL_IDENTITY_REQUIRED",
+        });
       } finally {
         await app.close();
       }

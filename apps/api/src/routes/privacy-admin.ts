@@ -173,7 +173,9 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
               ? "case-not-active"
               : !row.identityMethod
                 ? "identity-required"
-                : subjectExportReason(service, row);
+                : row.identityMethod !== "manual"
+                  ? "manual-identity-required"
+                  : subjectExportReason(service, row);
         return reply.send({
           request: projection(row as unknown as Record<string, unknown>),
           tasks,
