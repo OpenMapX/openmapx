@@ -27,7 +27,7 @@ release manifest. A Git pull updates the checkout but leaves running containers
 unchanged; a release selection writes image pins but does not replace containers.
 Both operations are followed by an explicit service update.
 
-Application release metadata selects seven digest-pinned images, including the
+Application release metadata selects six digest-pinned images, including the
 running API, web, data-manager, ops-agent, and Transitous runner plus matching
 helper images. Some digests can be reused from an earlier release. Do not infer
 the selected release from one image's source revision or a mutable tag. See
@@ -258,8 +258,9 @@ lifecycle commands preserve an existing selection; a Data Manager update needs
 the coordinated producer above. Updating other services individually does not
 complete an application release and API migrations move forward only.
 
-For bootstrap, the CLI validates all six image pins before selecting. `main` is the development pointer; `preview` is the
-latest deliberately published named prerelease. Exact versions or metadata
+For bootstrap, the CLI validates all six image pins before selecting. `main` is
+the development pointer; `preview` is the latest deliberately published named
+prerelease. Exact versions or metadata
 image digests pin a particular selection. A missing preview or pin fails without
 choosing main. See [Product releases](../developer/product-releases.md).
 
@@ -351,7 +352,8 @@ pnpm openmapx compose release --clear
 This idempotent command removes only `infra/docker/state/ops-agent/releases/docker-compose.release.yml`.
 It inspects existing Data Manager containers and refuses to clear a valid overlay
 that a matching coordinator still uses. Clearing mismatched or malformed state is
-only a recovery action; Docker ambiguity or observation failure refuses. It preserves running containers and `state/ops-agent/releases/store` manifests and recorded
+only a recovery action; Docker ambiguity or observation failure refuses. It
+preserves running containers and `state/ops-agent/releases/store` manifests and recorded
 running state. It refuses to clear while the release store is locked or an update
 transaction awaits completion or recovery. `--clear` cannot be combined with
 `--status` or `--check`.

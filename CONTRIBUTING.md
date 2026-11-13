@@ -223,7 +223,7 @@ pnpm test --project web              # scope to one environment (web | node)
 pnpm exec vitest run packages/core   # scope by path or test-name substring
 pnpm test:database api-privacy       # migrated disposable PostGIS + Docker required
 pnpm test:database ingestion         # isolated ingestion fixtures + Docker required
-pnpm test:database export-restore    # also requires retained-backup fixture below
+pnpm test:database export-restore    # migrated disposable PostGIS + Docker required
 pnpm test:database configuration-recovery # native configuration recovery
 pnpm test:database coordinator-recovery   # native coordinator recovery
 pnpm test:database                   # full union, serially
@@ -385,7 +385,7 @@ The historical mixed queue has been cleared without consuming its bumps. Private
 3. Push your branch and open a PR. Fill out the PR template.
 4. PR CI checks code, tests, production builds, and affected Docker targets
    without publishing them. After merge, application release automation requires
-   successful CI and publishes a coherent set of seven application images plus
+   successful CI and publishes a coherent set of six application images plus
    its release manifest. Use a run-qualified tag or digest for rollback; SHA
    aliases can move after a security rebuild. See
    [Product releases](docs/docs/developer/product-releases.md) for publication,

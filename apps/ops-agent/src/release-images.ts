@@ -1,5 +1,3 @@
-import { services as coreServices } from "@openmapx/core/server";
-
 export interface DockerCommandContext {
   signal: AbortSignal;
   emitLog(stream: "stdout" | "stderr", message: string): void;

@@ -53,26 +53,25 @@ function entryKind(path: string): "missing" | "directory" | "other" {
 
 /**
  * Prepares the agent's state directories: the trusted-configuration queue
- * app-api mounts and Traefik's dynamic configuration. Run under the writer lock by every configuration generation
- * commit, and by the agent at startup.
+ * app-api mounts and Traefik's dynamic configuration. Run under the writer
+ * lock by every configuration generation commit, and by the agent at startup.
  *
- * Each must be a real directory of this user, owner-only. Compose would mount
- * whatever a symlink here names, so anything else at the path is moved aside,
- * never followed, and replaced by a fresh directory.
+ * The queue must be a real directory of this user, owner-only. Compose would
+ * mount whatever a symlink here names, so anything else at the path is moved
+ * aside, never followed, and replaced by a fresh directory.
  */
 export function prepareAgentStateDirectories(infraDir: string): void {
   const current = agentStatePaths(infraDir);
   mkdirSync(current.directory, { recursive: true, mode: 0o700 });
-  for (const directory of [current.trustedConfig]) {
-    const kind = entryKind(directory);
-    if (kind !== "directory" || lstatSync(directory).uid !== process.geteuid?.()) {
-      if (kind !== "missing") {
-        renameSync(directory, `${directory}.rejected-${process.pid}-${Date.now()}`);
-      }
-      mkdirSync(directory, { mode: 0o700 });
+  const queue = current.trustedConfig;
+  const kind = entryKind(queue);
+  if (kind !== "directory" || lstatSync(queue).uid !== process.geteuid?.()) {
+    if (kind !== "missing") {
+      renameSync(queue, `${queue}.rejected-${process.pid}-${Date.now()}`);
     }
-    chmodSync(directory, 0o700);
+    mkdirSync(queue, { mode: 0o700 });
   }
+  chmodSync(queue, 0o700);
   ensureTraefikDynamicDirectory(infraDir);
 }
 

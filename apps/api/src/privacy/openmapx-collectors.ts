@@ -72,8 +72,6 @@ export interface OpenMapxCollectorContext {
   offlinePrincipalKey?: Buffer;
   snapshotAt?: Date;
   excludedRegistrationIds?: ReadonlySet<string>;
-  /** Durable receipt-side safe projections replace live rows that may have
-   * expired before generation. Each iterable is consumed at most once. */
   streamingLimits?: {
     parentDirectory?: string;
     maxMemberBytes?: number;
