@@ -123,9 +123,14 @@ export {
   DataManagerHttpError,
   validateDataManagerBaseUrl,
 } from "./data-manager/transport";
+export type { RestorePass, RestoreSection } from "./database-roles";
 export {
   API_DATABASE_ROLE,
   databaseSettingsQuery,
+  planOwnerRestore,
+  RESTORE_ROLES_QUERY,
+  restorePassCommand,
+  restorePassPreamble,
   SUPERUSER_PGOPTIONS,
 } from "./database-roles";
 export {

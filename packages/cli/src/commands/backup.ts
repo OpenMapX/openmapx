@@ -19,6 +19,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { erasureVerificationIdentifiers } from "@openmapx/core/erasure-cleanup";
 import {
   assertErasureJournalKey,
@@ -737,8 +739,9 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
         assertForward();
         // Postgres: pg_dump while running. One dump file per declared volume
         // keeps the manifest schema simple even though the volume is just a
-        // marker for "this service has data to back up".
-        const file = `${svc.id}__${v.volumeName}.sql.gz`;
+        // marker for "this service has data to back up". The custom format
+        // lets a restore load each table as its owner.
+        const file = `${svc.id}__${v.volumeName}.dump`;
         const out = join(backupDir, file);
         const user = svc.postgresUser ?? "postgres";
         const db = svc.postgresDb ?? "openmapx";
@@ -1459,18 +1462,25 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
 async function pgRestoreFromFile(
   ctx: ComposeContext,
   serviceId: string,
-  gzFile: string,
+  file: string,
   user: string,
   db: string,
 ): Promise<void> {
-  // The `pg_dump` we wrote at backup time uses defaults (no `--clean
-  // --if-exists --create`), so the dump itself doesn't drop or recreate the
-  // database — it's just `CREATE TABLE …` etc., with their owners and grants.
-  // We therefore drop + create the target DB up-front to give the dump a
-  // clean slate. The dump creates the extensions it uses.
+  // Backups before the database roles hold plain SQL, which only a superuser
+  // session can load. Such a backup of the platform database cannot serve
+  // this release, whose roles must own their objects.
+  const plain = file.endsWith(".sql.gz");
+  if (plain && db === "openmapx") {
+    throw new Error(
+      `${file} predates the platform database's roles; restore it with the release that wrote it`,
+    );
+  }
+  // The backup holds the database's contents with their owners and grants,
+  // but not the database itself, so drop and create it first for a clean
+  // slate. The backup creates the extensions it uses.
   //
-  // The database's own owner and grants are not in such a dump. Read them
-  // from the live database first and give them to the new one, so the roles
+  // Nor does it hold the database's own owner and grants. Read them from
+  // the live database first and give them to the new one, so the roles
   // the deployment created (which live outside any database) keep their
   // access: the platform database stays the superuser's, and the API and
   // data-manager keep the right to create schemas in it.
@@ -1573,7 +1583,21 @@ async function pgRestoreFromFile(
     }
   }
 
-  // gunzip <file> | docker compose exec -T <svc> psql -U <user> <db>
+  if (plain) {
+    await loadPlainDump(ctx, serviceId, file, user, db);
+    return;
+  }
+  await restoreAsOwners(ctx, serviceId, file, user, db);
+}
+
+/** Older backups: `gunzip <file> | docker compose exec -T <svc> psql -U <user> <db>`. */
+async function loadPlainDump(
+  ctx: ComposeContext,
+  serviceId: string,
+  gzFile: string,
+  user: string,
+  db: string,
+): Promise<void> {
   // The dump sets an empty search path itself. PostGIS's extension scripts
   // reset it to the session default, so this load keeps that default.
   const gunzip = execa("gunzip", ["-c", gzFile], {
@@ -1595,6 +1619,118 @@ async function pgRestoreFromFile(
   if (psqlRes.exitCode !== 0) {
     throw new Error(`psql restore failed: ${psqlRes.stderr ?? ""}`);
   }
+}
+
+/**
+ * Restores a custom-format archive so that each entry is restored by a
+ * session logged in as its owner, over the database container's local
+ * socket; see `planOwnerRestore`. A role's generated columns, check
+ * constraints, defaults and index expressions then never run as the
+ * superuser, which a session that only switched roles could switch back to.
+ */
+async function restoreAsOwners(
+  ctx: ComposeContext,
+  serviceId: string,
+  archive: string,
+  user: string,
+  db: string,
+): Promise<void> {
+  const roles = await execa(
+    "docker",
+    [
+      ...ctx.composeArgs,
+      "exec",
+      "-T",
+      "-e",
+      `PGOPTIONS=${coreServices.SUPERUSER_PGOPTIONS}`,
+      serviceId,
+      "psql",
+      "-X",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-U",
+      user,
+      "-d",
+      "postgres",
+      "--no-align",
+      "--tuples-only",
+      "-c",
+      coreServices.RESTORE_ROLES_QUERY,
+    ],
+    { ...cliProcessOptions(), cwd: ctx.cwd, reject: false },
+  );
+  if (roles.exitCode !== 0) throw new Error(`reading the roles failed: ${roles.stderr ?? ""}`);
+  const list = async (section: string) => {
+    const result = await execWithArchive(
+      ctx,
+      serviceId,
+      ["pg_restore", "--list", `--section=${section}`],
+      archive,
+      "",
+    );
+    if (result.exitCode !== 0) throw new Error(`listing the backup failed: ${result.stderr ?? ""}`);
+    return result.stdout ?? "";
+  };
+  const passes = coreServices.planOwnerRestore(
+    {
+      preData: await list("pre-data"),
+      data: await list("data"),
+      postData: await list("post-data"),
+    },
+    roles.stdout ?? "",
+  );
+  for (const pass of passes) {
+    const result = await execWithArchive(
+      ctx,
+      serviceId,
+      coreServices.restorePassCommand(pass, user, db),
+      archive,
+      coreServices.restorePassPreamble(pass),
+    );
+    if (result.exitCode !== 0) {
+      throw new Error(
+        `pg_restore of the ${pass.section} as ${pass.role ?? user} failed: ${result.stderr ?? ""}`,
+      );
+    }
+  }
+}
+
+/** Runs a command in the service container with `preamble` and the archive on stdin. */
+async function execWithArchive(
+  ctx: ComposeContext,
+  serviceId: string,
+  command: string[],
+  archive: string,
+  preamble: string,
+): Promise<{ exitCode?: number; stdout?: string; stderr?: string }> {
+  const sub = execa("docker", [...ctx.composeArgs, "exec", "-T", serviceId, ...command], {
+    ...cliProcessOptions(),
+    cwd: ctx.cwd,
+    reject: false,
+    stdin: "pipe",
+  });
+  // The command may stop reading once it has what it needs, so a stdin that
+  // closes early is no failure; its exit status decides.
+  const feed = sub.stdin
+    ? pipeline(
+        Readable.from(
+          (async function* () {
+            yield Buffer.from(preamble);
+            yield* createReadStream(archive);
+          })(),
+        ),
+        sub.stdin,
+      ).catch((error: NodeJS.ErrnoException) => {
+        if (
+          !["EPIPE", "ERR_STREAM_PREMATURE_CLOSE", "ERR_STREAM_DESTROYED"].includes(
+            error.code ?? "",
+          )
+        )
+          throw error;
+      })
+    : Promise.resolve();
+  const [result] = await Promise.all([sub, feed]);
+  return result;
 }
 
 async function tarRestoreFromFile(

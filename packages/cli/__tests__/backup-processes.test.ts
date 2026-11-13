@@ -10,7 +10,6 @@ import {
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
-import { gunzipSync } from "node:zlib";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createBackup } from "../src/commands/backup";
 import {
@@ -269,7 +268,7 @@ it("refuses a clean Docker exit without a dump completion record", async () => {
   );
 });
 
-it("keeps the existing SQL gzip and manifest format after confirmed completion", async () => {
+it("writes pg_dump's custom-format archive unchanged after confirmed completion", async () => {
   const result = await createBackup({ rootDir: root, name: "complete" });
   const volume = result.manifest.services[0]?.volumes[0];
   if (!volume) throw Error("Missing fixture backup volume");
@@ -279,10 +278,13 @@ it("keeps the existing SQL gzip and manifest format after confirmed completion",
     postgresUser: "postgres",
     postgresDb: "synthetic",
   });
-  expect(volume?.file).toBe("postgis__openmapx-pgdata.sql.gz");
-  expect(gunzipSync(readFileSync(join(result.directory, volume.file))).toString()).toBe(
-    "SELECT 1;\n",
-  );
+  expect(volume?.file).toBe("postgis__openmapx-pgdata.dump");
+  expect(readFileSync(join(result.directory, volume.file)).toString()).toBe("SELECT 1;\n");
+  const commands = readFileSync(join(root, "commands"), "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as string[]);
+  expect(commands.find((args) => args.includes("pg_dump"))).toContain("--format=custom");
 });
 
 it("gives the tar writer an init process and a non-recreating backup bind", async () => {

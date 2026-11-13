@@ -1227,7 +1227,7 @@ describe("backup volume modes", () => {
             {
               name: "openmapx-pgdata",
               mode: "pg_dump",
-              file: "postgis__openmapx-pgdata.sql.gz",
+              file: "postgis__openmapx-pgdata.dump",
               sizeBytes: 0,
               postgresUser: "postgres",
               postgresDb: "openmapx",
@@ -1250,7 +1250,7 @@ describe("backup volume modes", () => {
       ],
     });
     writeBackupFiles(dir, {
-      "postgis__openmapx-pgdata.sql.gz": "dump",
+      "postgis__openmapx-pgdata.dump": "dump",
       "timeline__openmapx-files.tar.gz": "tar",
     });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
@@ -1360,6 +1360,102 @@ describe("backup volume modes", () => {
       expect(inputs[step]?.args).toContain("-e PGOPTIONS=-c search_path=pg_catalog,pg_temp");
   });
 
+  it("restores each entry of an archive in a session of its owner", async () => {
+    const dir = writeBackup("owner-sessions", {
+      name: "owner-sessions",
+      createdAt: new Date().toISOString(),
+      services: [
+        {
+          id: "timeline",
+          version: "1.0.0",
+          volumes: [
+            {
+              name: "openmapx-db",
+              mode: "pg_dump",
+              file: "timeline__openmapx-db.dump",
+              sizeBytes: 0,
+              postgresUser: "postgres",
+              postgresDb: "timeline",
+            },
+          ],
+        },
+      ],
+    });
+    writeBackupFiles(dir, { "timeline__openmapx-db.dump": "archive" });
+    const listings: Record<string, string> = {
+      "--section=pre-data":
+        "16; 2615 21089 SCHEMA - app timeline_app\n321; 1259 21090 TABLE app t timeline_app\n",
+      "--section=data": "5950; 0 21090 TABLE DATA app t timeline_app\n",
+      "--section=post-data": "5999; 3466 18301 EVENT TRIGGER - guard postgres\n",
+    };
+    vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+      if (command === "docker" && args.includes("ps")) {
+        return Promise.resolve({ exitCode: 0, stdout: '{"Service":"timeline"}\n', stderr: "" });
+      }
+      if (command === "docker" && args.some((arg) => arg.includes("rolcanlogin"))) {
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: "1 1 postgres\n0 1 timeline_app\n",
+          stderr: "",
+        });
+      }
+      const section = args.find((arg) => arg.startsWith("--section="));
+      if (command === "docker" && args.includes("--list") && section) {
+        return Promise.resolve({ exitCode: 0, stdout: listings[section], stderr: "" });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+    }) as never);
+
+    await restoreBackup({ rootDir: tmp, name: "owner-sessions", stopRunning: true });
+
+    const calls = mockedCommandCalls().map(([, args]) => args);
+    expect(calls.find((args) => args.includes("rolcanlogin"))).toContain(
+      "-e PGOPTIONS=-c search_path=pg_catalog,pg_temp",
+    );
+    const sessions = calls
+      .filter((args) => args.includes(" pg_restore ") || args.includes("openmapx-restore"))
+      .filter((args) => !args.includes("--list"))
+      .map((args) => /-U (\S+) -d timeline/.exec(args)?.[1]);
+    expect(sessions).toEqual(["postgres", "timeline_app", "timeline_app", "postgres"]);
+  });
+
+  it("refuses a plain backup of the platform database written before its roles", async () => {
+    const dir = writeBackup("plain-platform", {
+      name: "plain-platform",
+      createdAt: new Date().toISOString(),
+      services: [
+        {
+          id: "postgis",
+          version: "1.0.0",
+          volumes: [
+            {
+              name: "openmapx-pgdata",
+              mode: "pg_dump",
+              file: "postgis.sql.gz",
+              sizeBytes: 0,
+              postgresUser: "postgres",
+              postgresDb: "openmapx",
+            },
+          ],
+        },
+      ],
+    });
+    writeBackupFiles(dir, { "postgis.sql.gz": "dump" });
+    vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+      if (command === "docker" && args.includes("ps")) {
+        return Promise.resolve({ exitCode: 0, stdout: '{"Service":"postgis"}\n', stderr: "" });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+    }) as never);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(
+      restoreBackup({ rootDir: tmp, name: "plain-platform", stopRunning: true }),
+    ).rejects.toThrow("predates the platform database's roles");
+    errorSpy.mockRestore();
+    expect(mockedCommandCalls().some(([, args]) => args.includes(" dropdb "))).toBe(false);
+  });
+
   it("restarts and probes a mixed-mode database service before delayed erasure replay", async () => {
     const dir = writeBackup("mixed-protected-restore", {
       name: "mixed-protected-restore",
@@ -1372,7 +1468,7 @@ describe("backup volume modes", () => {
             {
               name: "openmapx-pgdata",
               mode: "pg_dump",
-              file: "postgis.sql.gz",
+              file: "postgis.dump",
               sizeBytes: 0,
               postgresUser: "postgres",
               postgresDb: "openmapx",
@@ -1388,7 +1484,7 @@ describe("backup volume modes", () => {
         },
       ],
     });
-    writeBackupFiles(dir, { "postgis.sql.gz": "dump", "postgis-files.tar.gz": "tar" });
+    writeBackupFiles(dir, { "postgis.dump": "dump", "postgis-files.tar.gz": "tar" });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
       if (command === "gunzip") {
         return Object.assign(Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }), {
@@ -1441,7 +1537,7 @@ describe("backup volume modes", () => {
             {
               name: "openmapx-pgdata",
               mode: "pg_dump",
-              file: "postgis.sql.gz",
+              file: "postgis.dump",
               sizeBytes: 0,
               postgresUser: "postgres",
               postgresDb: "openmapx",
@@ -1450,7 +1546,7 @@ describe("backup volume modes", () => {
         },
       ],
     });
-    writeBackupFiles(dir, { "postgis.sql.gz": "dump" });
+    writeBackupFiles(dir, { "postgis.dump": "dump" });
     await appendErasureRequest(
       join(tmp, "infra", "docker", "data", "erasure", "journal.jsonl"),
       ERASURE_KEY,
@@ -1544,7 +1640,7 @@ describe("backup volume modes", () => {
             {
               name: "openmapx-pgdata",
               mode: "pg_dump",
-              file: "postgis.sql.gz",
+              file: "postgis.dump",
               sizeBytes: 0,
               postgresUser: "postgres",
               postgresDb: "openmapx",
@@ -1553,7 +1649,7 @@ describe("backup volume modes", () => {
         },
       ],
     });
-    writeBackupFiles(dir, { "postgis.sql.gz": "dump" });
+    writeBackupFiles(dir, { "postgis.dump": "dump" });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
       if (command === "docker" && args.includes("ps")) {
         const keyPath = join(tmp, "infra", "docker", "secrets", "erasure-journal-key");

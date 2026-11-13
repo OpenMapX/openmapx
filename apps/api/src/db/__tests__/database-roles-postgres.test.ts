@@ -484,6 +484,28 @@ integration("code planted for another role", () => {
       `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
        VALUES ('restored', 'Restored', 'restored@example.test', true, now(), now())`,
     );
+    // Each role's check constraint calls a superuser's PostGIS function that
+    // runs the SQL it is given; loading the row runs it as whoever loads it.
+    await roles.api.unsafe(`
+      CREATE FUNCTION public.openmapx_pwn() RETURNS int LANGUAGE plpgsql AS $$
+      BEGIN
+        IF (SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname = current_user) THEN
+          EXECUTE 'ALTER ROLE openmapx_api SUPERUSER';
+        END IF;
+        RETURN 1;
+      END $$;
+      CREATE VIEW data_manager.pwnv AS
+        SELECT 'POINT(0 0)'::public.geometry AS g, public.openmapx_pwn() AS x;
+      CREATE TABLE public.harmless (id int, CHECK (pg_catalog.length(COALESCE(
+        public.st_findextent('data_manager', 'pwnv', 'g')::text, '')) >= 0));
+      INSERT INTO public.harmless VALUES (1);
+    `);
+    await roles.dataManager.unsafe(`
+      CREATE TABLE osm_search.planted (id int, CHECK (pg_catalog.length(COALESCE(public.st_findextent('osm_search', 't',
+        'g") AS extent FROM (SELECT NULL::public.geometry AS g) s WHERE CASE WHEN (SELECT rolsuper FROM pg_catalog.pg_roles
+         WHERE rolname = current_user) THEN pg_catalog.lo_from_bytea(4242, ''pwn'')::int ELSE 0 END >= 0 --')::text, '')) >= 0));
+      INSERT INTO osm_search.planted VALUES (1);
+    `);
     await close();
     const run = async (command: string[], label: string) => {
       const result = await db.exec(command);
@@ -491,25 +513,31 @@ integration("code planted for another role", () => {
       return result.output;
     };
     const superuserPsql = ["env", `PGOPTIONS=${services.SUPERUSER_PGOPTIONS}`, "psql", "-X"];
-    // The CLI's restore: dump, read the live database's owner and grants,
-    // recreate the database, give them back, then load the dump.
-    await run(["sh", "-c", "pg_dump -U postgres openmapx > /tmp/openmapx.sql"], "dump");
-    const settings = await run(
-      [
-        ...superuserPsql,
-        "-v",
-        "ON_ERROR_STOP=1",
-        "-U",
-        "postgres",
-        "-d",
-        "postgres",
-        "--no-align",
-        "--tuples-only",
-        "-c",
-        services.databaseSettingsQuery("openmapx"),
-      ],
-      "settings",
+    const query = (sql: string) =>
+      run(
+        [
+          ...superuserPsql,
+          "-v",
+          "ON_ERROR_STOP=1",
+          "-U",
+          "postgres",
+          "-d",
+          "postgres",
+          "--no-align",
+          "--tuples-only",
+          "-c",
+          sql,
+        ],
+        sql,
+      );
+    // The CLI's restore: dump through a pipe, read the live database's owner
+    // and grants, recreate the database, give them back, then restore each
+    // entry in a session of its owner.
+    await run(
+      ["sh", "-c", "pg_dump --format=custom -U postgres openmapx | cat > /tmp/openmapx.dump"],
+      "dump",
     );
+    const settings = await query(services.databaseSettingsQuery("openmapx"));
     expect(settings).toContain("GRANT CREATE ON DATABASE openmapx TO openmapx_data_manager;");
     await run(["dropdb", "-U", "postgres", "--force", "openmapx"], "dropdb");
     await run(["createdb", "-U", "postgres", "openmapx"], "createdb");
@@ -529,25 +557,61 @@ integration("code planted for another role", () => {
       ],
       "settings apply",
     );
-    await run(
-      // The dump sets an empty search path itself. PostGIS's extension scripts
-      // reset it to the session default, so the load must keep that default.
-      [
-        "psql",
-        "-X",
-        "-v",
-        "ON_ERROR_STOP=1",
-        "-q",
-        "-U",
-        "postgres",
-        "-d",
-        "openmapx",
-        "-f",
-        "/tmp/openmapx.sql",
-      ],
-      "load",
+    const list = (section: string) =>
+      run(["sh", "-c", `pg_restore --list --section=${section} < /tmp/openmapx.dump`], section);
+    const passes = services.planOwnerRestore(
+      {
+        preData: await list("pre-data"),
+        data: await list("data"),
+        postData: await list("post-data"),
+      },
+      await query(services.RESTORE_ROLES_QUERY),
     );
+    // Each role restores its own entries; the superuser's event triggers
+    // come last.
+    const sessions = new Set(
+      passes.map(({ role, section }) => `${section} ${role ?? "superuser"}`),
+    );
+    expect([...sessions].sort()).toEqual([
+      "data openconditions_fixture",
+      "data openmapx_api",
+      "data openmapx_data_manager",
+      "data superuser",
+      "post-data openmapx_api",
+      "post-data openmapx_data_manager",
+      "post-data superuser",
+      "pre-data openconditions_fixture",
+      "pre-data openmapx_api",
+      "pre-data openmapx_data_manager",
+      "pre-data superuser",
+    ]);
+    expect(passes.at(-1)).toMatchObject({ role: null, section: "post-data" });
+    for (const [index, pass] of passes.entries()) {
+      const preamble = `/tmp/preamble-${index}`;
+      await db.copyContentToContainer([
+        { content: services.restorePassPreamble(pass), target: preamble },
+      ]);
+      await run(
+        [
+          "sh",
+          "-c",
+          'cat "$0" /tmp/openmapx.dump | "$@"',
+          preamble,
+          ...services.restorePassCommand(pass, "postgres", "openmapx"),
+        ],
+        `${pass.section} as ${pass.role ?? "superuser"}`,
+      );
+    }
     open();
+    // Every row came back, and loading them ran no role's code as the superuser.
+    expect(
+      await roles.superuser`
+        SELECT (SELECT count(*)::int FROM public.harmless) AS api_rows,
+          (SELECT count(*)::int FROM osm_search.planted) AS data_manager_rows,
+          (SELECT array_agg(rolname ORDER BY rolname) FROM pg_roles
+            WHERE rolsuper AND rolname <> 'postgres') AS superusers,
+          (SELECT count(*)::int FROM pg_largeobject_metadata) AS large_objects`,
+    ).toEqual([{ api_rows: 1, data_manager_rows: 1, superusers: null, large_objects: 0 }]);
     expect(
       await roles.superuser`
         SELECT pg_get_userbyid(d.datdba) AS database,

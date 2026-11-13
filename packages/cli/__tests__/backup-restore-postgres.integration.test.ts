@@ -15,7 +15,6 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, relative, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
-import { createGzip } from "node:zlib";
 import { isDataExecutionTerminal } from "@openmapx/core/data-manager-contracts";
 import {
   appendErasureCompleted,
@@ -300,7 +299,7 @@ async function sha256(path: string): Promise<string> {
 async function createDatabaseBackup(name: string, includeScratch = false): Promise<void> {
   const backupDir = join(fixture.infra, "backups", name);
   mkdirSync(backupDir, { recursive: true });
-  const file = "postgis__openmapx-pgdata.sql.gz";
+  const file = "postgis__openmapx-pgdata.dump";
   const path = join(backupDir, file);
   const dump = execa(
     "docker",
@@ -312,6 +311,7 @@ async function createDatabaseBackup(name: string, includeScratch = false): Promi
       "-T",
       "postgis",
       "pg_dump",
+      "--format=custom",
       "-U",
       POSTGRES_USER,
       DATABASE,
@@ -320,7 +320,7 @@ async function createDatabaseBackup(name: string, includeScratch = false): Promi
   );
   if (!dump.stdout) throw new Error("fixture pg_dump has no stdout");
   const output = createWriteStream(path, { mode: 0o600 });
-  const [dumpResult] = await Promise.all([dump, pipeline(dump.stdout, createGzip(), output)]);
+  const [dumpResult] = await Promise.all([dump, pipeline(dump.stdout, output)]);
   if (dumpResult.exitCode !== 0) throw new Error(`fixture pg_dump failed: ${dumpResult.stderr}`);
   const volumes: Array<Record<string, unknown>> = [
     {
@@ -550,10 +550,44 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
       DATABASE,
       "openmapx_data_manager",
     );
+    // Each role's check constraint calls a superuser's PostGIS function that
+    // runs the SQL it is given, and the restore loads a row of each.
+    await psql(
+      `CREATE FUNCTION public.openmapx_pwn() RETURNS int LANGUAGE plpgsql AS $$
+      BEGIN
+        IF (SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname = current_user) THEN
+          EXECUTE 'ALTER ROLE openmapx_api SUPERUSER';
+        END IF;
+        RETURN 1;
+      END $$;
+      CREATE VIEW data_manager.pwnv AS
+        SELECT 'POINT(0 0)'::public.geometry AS g, public.openmapx_pwn() AS x;
+      CREATE TABLE public.harmless (id int, CHECK (pg_catalog.length(COALESCE(
+        public.st_findextent('data_manager', 'pwnv', 'g')::text, '')) >= 0));
+      INSERT INTO public.harmless VALUES (1);\n`,
+      DATABASE,
+      "openmapx_api",
+    );
+    await psql(
+      `CREATE TABLE osm_search.planted (id int, CHECK (pg_catalog.length(COALESCE(public.st_findextent('osm_search', 't',
+        'g") AS extent FROM (SELECT NULL::public.geometry AS g) s WHERE CASE WHEN (SELECT rolsuper FROM pg_catalog.pg_roles
+         WHERE rolname = current_user) THEN pg_catalog.lo_from_bytea(4242, ''pwn'')::int ELSE 0 END >= 0 --')::text, '')) >= 0));
+      INSERT INTO osm_search.planted VALUES (1);\n`,
+      DATABASE,
+      "openmapx_data_manager",
+    );
     await createDatabaseBackup("roles");
     await resetJournal(GOOD_KEY);
 
     await restoreBackup({ rootDir: fixture.root, name: "roles", stopRunning: true });
+
+    expect(
+      await psql(`SELECT concat_ws(' ',
+        (SELECT count(*) FROM public.harmless),
+        (SELECT count(*) FROM osm_search.planted),
+        (SELECT count(*) FROM pg_roles WHERE rolsuper AND rolname <> '${POSTGRES_USER}'),
+        (SELECT count(*) FROM pg_largeobject_metadata));`),
+    ).toBe("1 1 0 0");
 
     expect(
       await psql(`SELECT concat_ws(' ',
