@@ -112,6 +112,7 @@
     "apps/api/src/services/__tests__/crash-points/scenarios/lost-fence-settle-reply.test.ts",
     "apps/api/src/services/__tests__/crash-points/scenarios/lost-prepare-reply.test.ts",
     "apps/api/src/services/__tests__/crash-points/scenarios/maintenance-holds-admission.test.ts",
+    "apps/api/src/services/__tests__/crash-points/scenarios/per-caller-tokens.test.ts",
     "apps/api/src/services/__tests__/crash-points/scenarios/registry-outage.test.ts",
     "apps/api/src/services/__tests__/crash-points/scenarios/same-key-conflict.test.ts",
     "apps/api/src/services/__tests__/crash-points/scenarios/self-update.test.ts",

@@ -78,5 +78,6 @@
   "apps/api/src/services/__tests__/crash-points/scenarios/agent-killed-during-start.test.ts": 210,
   "apps/api/src/services/__tests__/crash-points/scenarios/update-cancelled-mid-recreate.test.ts": 75,
   "apps/api/src/services/__tests__/crash-points/scenarios/cli-during-helper.test.ts": 60,
-  "apps/api/src/services/__tests__/crash-points/scenarios/traffic-without-valhalla.test.ts": 70
+  "apps/api/src/services/__tests__/crash-points/scenarios/traffic-without-valhalla.test.ts": 70,
+  "apps/api/src/services/__tests__/crash-points/scenarios/per-caller-tokens.test.ts": 75
 }
