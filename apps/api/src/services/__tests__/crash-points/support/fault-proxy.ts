@@ -1,0 +1,136 @@
+/** An HTTP forwarder between two roles. It records every request and can let a
+ * matching request reach the upstream and then drop its reply, which is a lost
+ * response as the caller experiences it: the effect happened, the answer never
+ * arrived. */
+import { createServer, request as forward, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+
+export interface ProxiedRequest {
+  method: string;
+  path: string;
+  /** `operation.kind` for agent operations, when the body names one. */
+  kind?: string;
+  operationKey?: string;
+  status?: number;
+  dropped: boolean;
+}
+
+export interface ReplyMatch {
+  method?: string;
+  path: RegExp;
+  kind?: string;
+  skip?: number;
+  times?: number;
+}
+
+interface DropRule extends Required<Pick<ReplyMatch, "path">> {
+  method?: string;
+  kind?: string;
+  skip: number;
+  times: number;
+  dropped: PromiseWithResolvers<ProxiedRequest>;
+}
+
+export class FaultProxy {
+  readonly requests: ProxiedRequest[] = [];
+  private readonly rules: DropRule[] = [];
+  private server?: Server;
+  url = "";
+
+  constructor(private upstream: string) {}
+
+  setUpstream(url: string) {
+    this.upstream = url;
+  }
+
+  async listen(): Promise<string> {
+    this.server = createServer((incoming, outgoing) => {
+      const chunks: Buffer[] = [];
+      incoming.on("data", (chunk: Buffer) => chunks.push(chunk));
+      incoming.on("end", () => {
+        const body = Buffer.concat(chunks);
+        const entry: ProxiedRequest = {
+          method: incoming.method ?? "GET",
+          path: incoming.url ?? "/",
+          dropped: false,
+        };
+        try {
+          const parsed = JSON.parse(body.toString("utf8")) as {
+            operation?: { kind?: string };
+            operationKey?: string;
+          };
+          if (typeof parsed.operation?.kind === "string") entry.kind = parsed.operation.kind;
+          if (typeof parsed.operationKey === "string") entry.operationKey = parsed.operationKey;
+        } catch {
+          // Not JSON; only the method and path are recorded.
+        }
+        this.requests.push(entry);
+        const rule = this.rules.find(
+          (candidate) =>
+            candidate.times > 0 &&
+            (!candidate.method || candidate.method === entry.method) &&
+            candidate.path.test(entry.path) &&
+            (!candidate.kind || candidate.kind === entry.kind),
+        );
+        let drop = false;
+        if (rule) {
+          if (rule.skip > 0) rule.skip--;
+          else {
+            rule.times--;
+            drop = true;
+          }
+        }
+        const target = new URL(entry.path, this.upstream);
+        const upstream = forward(
+          target,
+          { method: entry.method, headers: { ...incoming.headers, host: target.host } },
+          (response) => {
+            const reply: Buffer[] = [];
+            response.on("data", (chunk: Buffer) => reply.push(chunk));
+            response.on("end", () => {
+              entry.status = response.statusCode;
+              if (drop) {
+                entry.dropped = true;
+                rule?.dropped.resolve(entry);
+                outgoing.socket?.destroy();
+                return;
+              }
+              outgoing.writeHead(response.statusCode ?? 502, response.headers);
+              outgoing.end(Buffer.concat(reply));
+            });
+          },
+        );
+        upstream.on("error", () => {
+          entry.status = 502;
+          outgoing.socket?.destroy();
+        });
+        upstream.end(body);
+      });
+    });
+    this.server.requestTimeout = 0;
+    this.server.headersTimeout = 0;
+    await new Promise<void>((resolve) => this.server?.listen(0, "127.0.0.1", resolve));
+    this.url = `http://127.0.0.1:${(this.server.address() as AddressInfo).port}`;
+    return this.url;
+  }
+
+  dropReply(match: ReplyMatch): Promise<ProxiedRequest> {
+    const rule: DropRule = {
+      method: match.method,
+      path: match.path,
+      kind: match.kind,
+      skip: match.skip ?? 0,
+      times: match.times ?? 1,
+      dropped: Promise.withResolvers(),
+    };
+    this.rules.push(rule);
+    return rule.dropped.promise;
+  }
+
+  async close(): Promise<void> {
+    const server = this.server;
+    if (!server) return;
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
