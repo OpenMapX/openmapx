@@ -76,7 +76,7 @@ function quote(value: string): string {
 }
 
 /** The shell program run as root inside the new namespaces before the process. */
-function mountProgram(binds: readonly BindMount[]): string {
+function mountProgram(binds: readonly BindMount[], workDir: string): string {
   const lines = ["set -e"];
   const anchors = new Set<string>();
   for (const bind of binds) {
@@ -90,6 +90,16 @@ function mountProgram(binds: readonly BindMount[]): string {
   lines.push(
     "[ -e /var/run/docker.sock ] || touch /var/run/docker.sock",
     "mount --bind /dev/null /var/run/docker.sock",
+  );
+  // Offline: names other than localhost never resolve (the only nameserver is
+  // a closed loopback port), so no role reaches a host outside the test.
+  const resolver = join(workDir, "offline-resolv.conf");
+  const hosts = join(workDir, "offline-hosts");
+  writeFileSync(resolver, "nameserver 127.0.0.1\noptions timeout:1 attempts:1\n", { mode: 0o644 });
+  writeFileSync(hosts, "127.0.0.1 localhost\n::1 localhost\n", { mode: 0o644 });
+  lines.push(
+    `mount --bind ${quote(resolver)} /etc/resolv.conf`,
+    `mount --bind ${quote(hosts)} /etc/hosts`,
   );
   // Outermost first so a nested mount lands on top of its parent.
   const ordered = [...binds].sort((a, b) => a.target.length - b.target.length);
@@ -134,7 +144,7 @@ export function launchContained(options: {
   const [executable, ...rest] = options.argv as [string, ...string[]];
   const groups = [...new Set([options.gid, ...options.groups])].join(",");
   const inner = [
-    mountProgram(options.binds),
+    mountProgram(options.binds, options.workDir),
     `cd ${quote(options.cwd)}`,
     `exec setpriv --reuid=${options.uid} --regid=${options.gid} --groups=${groups} -- env -i ${quote(executable)} --env-file=${quote(envFile)} ${rest.map(quote).join(" ")}`,
   ].join("\n");

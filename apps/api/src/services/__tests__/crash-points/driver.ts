@@ -16,6 +16,7 @@
  * messages, the Docker trace, and the API's configuration inspect route. */
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { lookup } from "node:dns/promises";
 import {
   appendFileSync,
   chmodSync,
@@ -262,6 +263,14 @@ function matches(match: DockerMatch, invocation: Invocation): boolean {
   return true;
 }
 
+export interface HostOptions {
+  /** Mount the agent's state directory on a small tmpfs the test can fill. */
+  smallStateFilesystem?: boolean;
+  /** Configure an OpenConditions source (a local stand-in that answers
+   * nothing useful), which turns on the data-manager's traffic jobs. */
+  openConditions?: boolean;
+}
+
 export class CrashHost {
   readonly root: string;
   readonly hostDir: string;
@@ -310,7 +319,7 @@ export class CrashHost {
   }
 
   /** A fresh installation on release N, with release N+1 published. */
-  static async open(options: { smallStateFilesystem?: boolean } = {}): Promise<CrashHost> {
+  static async open(options: HostOptions = {}): Promise<CrashHost> {
     const root = mkdtempSync(join(tmpdir(), "openmapx-crash-"));
     chmodSync(root, 0o755);
     const host = new CrashHost(root, {
@@ -327,7 +336,7 @@ export class CrashHost {
     }
   }
 
-  private async provision(options: { smallStateFilesystem?: boolean }) {
+  private async provision(options: HostOptions) {
     mkdirSync(this.binDir, { recursive: true, mode: 0o755 });
     mkdirSync(this.workDir, { recursive: true, mode: 0o700 });
     writeFileSync(
@@ -345,6 +354,7 @@ export class CrashHost {
     for (const proxy of Object.values(this.proxies)) await proxy.listen();
     await this.createDatabase();
     this.publishReleases();
+    if (options.openConditions) await this.startOpenConditions();
     this.writeEnvironment();
     this.step("select release N");
     await this.cliOk(["compose", "release"]);
@@ -476,6 +486,8 @@ export class CrashHost {
       await admin.end({ timeout: 2 });
     }
     const url = new URL(process.env.DATABASE_URL as string);
+    // The roles resolve no names but localhost: they get the server's address.
+    url.hostname = (await lookup(url.hostname, { family: 4 })).address;
     url.pathname = `/${this.databaseName}`;
     url.username = this.databaseName;
     url.password = password;
@@ -597,6 +609,7 @@ export class CrashHost {
       OPENMAPX_DOCKER_CONFIG_DIR: join(this.root, "docker-config"),
     };
     mkdirSync(values.OPENMAPX_DOCKER_CONFIG_DIR, { recursive: true, mode: 0o700 });
+    Object.assign(values, this.environment);
     Object.assign(this.environment, values);
     writeFileSync(
       join(this.infraDir, ".env"),
@@ -1007,6 +1020,16 @@ export class CrashHost {
   }
 
   private stateFilesystem?: string;
+  private openConditionsSource?: Server;
+
+  private async startOpenConditions() {
+    const server = createHttpServer((_request, response) => {
+      response.writeHead(503, { "content-type": "application/json" }).end("{}");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    this.openConditionsSource = server;
+    this.environment.OPENCONDITIONS_URL = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  }
 
   /** Fills the agent's state filesystem, so its next write fails with ENOSPC. */
   fillStateFilesystem(): void {
@@ -1396,6 +1419,10 @@ export class CrashHost {
     }
     if (this.stateFilesystem)
       spawnSync("sudo", ["-n", "umount", "--lazy", this.stateFilesystem], { stdio: "ignore" });
+    if (this.openConditionsSource) {
+      this.openConditionsSource.closeAllConnections();
+      await new Promise<void>((resolve) => this.openConditionsSource?.close(() => resolve()));
+    }
     if (this.databaseName && process.env.OPENMAPX_CRASH_KEEP !== "1") {
       const admin = postgres(process.env.DATABASE_URL as string, { max: 1, onnotice: () => {} });
       try {
