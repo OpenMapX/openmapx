@@ -168,10 +168,15 @@ export interface DockerMatch {
     | "container inspect"
     | "container ls"
     | "manifest inspect"
+    | "info"
+    /** Any Compose command that changes containers. */
+    | "compose"
     | "any";
   /** A Compose service named by the invocation, or the helper for `run`. */
   service?: string;
   caller?: Caller;
+  /** A text one of the arguments contains. */
+  contains?: string;
 }
 
 export interface HeldEffect {
@@ -222,9 +227,17 @@ function matches(match: DockerMatch, invocation: Invocation): boolean {
     case "manifest inspect":
       if (!(words[0] === "manifest" && words[1] === "inspect")) return false;
       break;
+    case "compose":
+      if (words[0] !== "compose" || !isEffect(words)) return false;
+      break;
+    case "info":
+      if (words[0] !== "info") return false;
+      break;
     case "any":
       break;
   }
+  if (match.contains && !words.some((word) => word.includes(match.contains as string)))
+    return false;
   if (match.service) {
     if (match.command === "run")
       return words.some((word) => word.includes(match.service as string));
@@ -831,8 +844,32 @@ export class CrashHost {
   /** Holds the first matching Docker invocation until released. */
   blockDocker(match: DockerMatch, options: { skip?: number } = {}): HeldEffect {
     const rule: FaultRule = this.engine.hold((invocation) => matches(match, invocation), options);
+    // A run that never reaches the effect fails with what the engine saw last,
+    // instead of hanging until the suite's own timeout.
+    const entered = Promise.race([
+      rule.entered,
+      new Promise<never>((_, reject) => {
+        const timer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `No Docker invocation matched ${JSON.stringify(match)} within 180 s; last calls:\n${this.engine.trace
+                  .slice(-12)
+                  .map(
+                    (call) =>
+                      `${call.caller} ${call.code ?? "…"} ${call.args.join(" ").slice(0, 200)}`,
+                  )
+                  .join("\n")}`,
+              ),
+            ),
+          180_000,
+        );
+        void rule.entered.then(() => clearTimeout(timer));
+      }),
+    ]);
+    entered.catch(() => undefined);
     return {
-      entered: rule.entered,
+      entered,
       release: () => rule.release(),
       fail: (message = "Error response from daemon: injected failure") =>
         rule.release({ fail: message }),
@@ -953,7 +990,7 @@ export class CrashHost {
     method: string,
     path: string,
     body?: unknown,
-    options: { fresh?: boolean } = {},
+    options: { fresh?: boolean; headers?: Record<string, string> } = {},
   ): Promise<{ status: number; body: unknown }> {
     const { cookie } = await this.adminSession();
     // Maintenance requests are rate limited per client network. A request that
@@ -974,6 +1011,7 @@ export class CrashHost {
           headers: {
             cookie,
             origin: "https://localhost",
+            ...options.headers,
             ...(payload === undefined
               ? {}
               : {
@@ -1051,7 +1089,8 @@ export class CrashHost {
       "POST",
       `/api/admin/services/${service}/action`,
       { action },
-      { fresh: true },
+      // The admin panel names each intent with a key it keeps for retries.
+      { fresh: true, headers: { "idempotency-key": `crash-point-${randomUUID()}` } },
     );
     const jobId = (response.body as { jobId?: unknown })?.jobId;
     return {
@@ -1148,6 +1187,16 @@ export class CrashHost {
   }
 
   private readonly lastJobs = new Map<string, unknown>();
+
+  /** The job once terminal, or as it stands when the wait ends: an update the
+   * system holds for the operator stays unfinished on purpose. */
+  async settledJob(id: string, timeoutMs: number): Promise<JobView> {
+    try {
+      return await this.waitForJob(id, { timeoutMs });
+    } catch {
+      return this.job(id);
+    }
+  }
 
   async waitForJob(
     id: string,

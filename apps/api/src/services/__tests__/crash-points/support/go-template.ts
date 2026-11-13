@@ -15,7 +15,21 @@ type Expr =
   | { type: "number"; value: number }
   | { type: "call"; name: string; args: Expr[] };
 
-const FUNCTIONS = new Set(["json", "index", "split", "join", "println", "len", "lower", "upper"]);
+const FUNCTIONS = new Set([
+  "json",
+  "index",
+  "split",
+  "join",
+  "println",
+  "len",
+  "lower",
+  "upper",
+  "eq",
+  "ne",
+  "not",
+  "and",
+  "or",
+]);
 
 function tokenize(source: string): string[] {
   const tokens: string[] = [];
@@ -159,6 +173,16 @@ function evaluate(expr: Expr, dot: Value): Value {
       return String(args[0]).toLowerCase();
     case "upper":
       return String(args[0]).toUpperCase();
+    case "eq":
+      return args.slice(1).some((value) => value === args[0]);
+    case "ne":
+      return args[0] !== args[1];
+    case "not":
+      return !truthy(args[0]);
+    case "and":
+      return args.find((value) => !truthy(value)) ?? args.at(-1);
+    case "or":
+      return args.find((value) => truthy(value)) ?? args.at(-1);
     default:
       throw new Error(`Unsupported template function ${expr.name}`);
   }

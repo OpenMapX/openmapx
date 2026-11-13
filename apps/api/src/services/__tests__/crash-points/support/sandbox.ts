@@ -5,7 +5,7 @@
  * lets an entrypoint that reads `/data` or `/run/secrets/...` run unmodified
  * outside Docker. */
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 export interface BindMount {
@@ -151,9 +151,12 @@ export function launchContained(options: {
   let stderr = "";
   let parent = 0;
   const startedSignal = Promise.withResolvers<void>();
+  // The live log survives a run the test runner kills before cleanup.
+  const liveLog = join(options.workDir, `${options.name}.log`);
   const append = (chunk: string) => {
     output += chunk;
     if (output.length > 512 * 1024) output = output.slice(-256 * 1024);
+    appendFileSync(liveLog, chunk);
   };
   child.stdout?.on("data", (chunk: Buffer) => {
     append(chunk.toString("utf8"));
