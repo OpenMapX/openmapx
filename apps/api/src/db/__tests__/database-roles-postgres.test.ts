@@ -342,6 +342,8 @@ integration("code planted for another role", () => {
       ],
       "settings apply",
     );
+    const version = await db.exec(["psql", "-U", "postgres", "-tAc", "SHOW server_version_num"]);
+    const serverVersion = Number(version.output.trim());
     for (const [index, pass] of passes.entries()) {
       const preamble = `/tmp/preamble-${index}`;
       await db.copyContentToContainer([
@@ -352,7 +354,7 @@ integration("code planted for another role", () => {
         "-c",
         'cat "$0" /tmp/openmapx.dump | "$@"',
         preamble,
-        ...services.restorePassCommand(pass, "postgres", scratch),
+        ...services.restorePassCommand(pass, "postgres", scratch, serverVersion),
       ]);
       if (result.exitCode !== 0) {
         await run(["dropdb", "-U", "postgres", "--if-exists", scratch], "drop the scratch");
