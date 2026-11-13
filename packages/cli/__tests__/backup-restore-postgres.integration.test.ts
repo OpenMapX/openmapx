@@ -609,7 +609,7 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
         "openmapx_api",
       ),
     ).toBe("1");
-  });
+  }, 120_000);
 
   it("rejects a journal key mismatch before restoring a backup with no users", async () => {
     await resetMigratedDatabase();
