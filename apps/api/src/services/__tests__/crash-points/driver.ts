@@ -17,6 +17,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
+  appendFileSync,
   chmodSync,
   cpSync,
   existsSync,
@@ -26,7 +27,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { request as httpRequest } from "node:http";
+import { createServer as createHttpServer, request as httpRequest, type Server } from "node:http";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -42,7 +43,12 @@ import {
   type Invocation,
   isEffect,
 } from "./support/engine";
-import { FaultProxy, type ProxiedRequest, type ReplyMatch } from "./support/fault-proxy";
+import {
+  FaultProxy,
+  type HeldRequest,
+  type ProxiedRequest,
+  type ReplyMatch,
+} from "./support/fault-proxy";
 import {
   type BindMount,
   type ContainedProcess,
@@ -176,6 +182,8 @@ export interface DockerMatch {
     | "info"
     /** Any Compose command that changes containers. */
     | "compose"
+    /** Any command that changes containers or images. */
+    | "effect"
     | "any";
   /** A Compose service named by the invocation, or the helper for `run`. */
   service?: string;
@@ -238,6 +246,9 @@ function matches(match: DockerMatch, invocation: Invocation): boolean {
     case "info":
       if (words[0] !== "info") return false;
       break;
+    case "effect":
+      if (!isEffect(words)) return false;
+      break;
     case "any":
       break;
   }
@@ -299,7 +310,7 @@ export class CrashHost {
   }
 
   /** A fresh installation on release N, with release N+1 published. */
-  static async open(): Promise<CrashHost> {
+  static async open(options: { smallStateFilesystem?: boolean } = {}): Promise<CrashHost> {
     const root = mkdtempSync(join(tmpdir(), "openmapx-crash-"));
     chmodSync(root, 0o755);
     const host = new CrashHost(root, {
@@ -308,7 +319,7 @@ export class CrashHost {
       dm: await freePort(),
     });
     try {
-      await host.provision();
+      await host.provision(options);
       return host;
     } catch (error) {
       await host.close();
@@ -316,7 +327,7 @@ export class CrashHost {
     }
   }
 
-  private async provision() {
+  private async provision(options: { smallStateFilesystem?: boolean }) {
     mkdirSync(this.binDir, { recursive: true, mode: 0o755 });
     mkdirSync(this.workDir, { recursive: true, mode: 0o700 });
     writeFileSync(
@@ -327,6 +338,7 @@ export class CrashHost {
     this.step("build the runtime bundles");
     this.bundles = await runtimeBundles(REPO);
     this.copyCheckout();
+    if (options.smallStateFilesystem) this.mountStateFilesystem();
     this.engine.traceFile = join(this.workDir, "docker-trace.jsonl");
     this.engine.volumeRoot = join(this.root, "volumes");
     await this.engine.listen();
@@ -376,6 +388,30 @@ export class CrashHost {
       // Not JSON.
     }
     return { status: response.status, body };
+  }
+
+  /** The agent's state directory on its own small tmpfs, so a test can fill it. */
+  private mountStateFilesystem() {
+    const state = join(this.infraDir, "state");
+    mkdirSync(state, { recursive: true, mode: 0o755 });
+    const uid = process.geteuid?.() ?? 0;
+    const gid = process.getegid?.() ?? 0;
+    const result = spawnSync(
+      "sudo",
+      [
+        "-n",
+        "mount",
+        "-t",
+        "tmpfs",
+        "-o",
+        `size=64m,mode=0755,uid=${uid},gid=${gid}`,
+        "tmpfs",
+        state,
+      ],
+      { encoding: "utf8" },
+    );
+    if (result.status !== 0) throw new Error(`Cannot mount the state filesystem: ${result.stderr}`);
+    this.stateFilesystem = state;
   }
 
   private step(message: string) {
@@ -594,6 +630,7 @@ export class CrashHost {
     delete env.REDIS_URL;
     delete env.REDIS_PASSWORD_FILE;
     delete env.NODE_OPTIONS;
+    Object.assign(env, this.roleOverrides[role] ?? {});
     Object.assign(env, {
       PATH: this.path(),
       NODE_ENV: "production",
@@ -909,6 +946,91 @@ export class CrashHost {
     return this.proxies[link].dropReply(match);
   }
 
+  /** Keeps the next matching request on a link from its receiver until released. */
+  holdRequest(link: Link, match: ReplyMatch): HeldRequest {
+    return this.proxies[link].holdRequest(match);
+  }
+
+  /** Kills every running configuration helper, as `docker kill` would. */
+  async killHelpers(): Promise<number> {
+    const running = [...this.helpers];
+    for (const helper of running) helper.kill("SIGKILL");
+    await Promise.all(running.map((helper) => helper.exited));
+    return running.length;
+  }
+
+  /** Cancels a job from the admin panel. */
+  async cancelJob(id: string): Promise<{ status: number; body: unknown }> {
+    return this.api("POST", `/api/admin/jobs/${id}/cancel`, {}, { fresh: true });
+  }
+
+  private readonly roleOverrides: Partial<Record<Role, Record<string, string>>> = {};
+  private notablePlacesSource?: { server: Server; requests: number; release: () => void };
+
+  /** Starts a long data job: the data-manager's first notable-places build,
+   * whose source answers only when {@link finishLongDataJob} is called. The
+   * data-manager restarts with that build enabled, as after an operator
+   * turned it on, and the call returns once the job reached its source. */
+  async startLongDataJob(): Promise<void> {
+    const held: Array<() => void> = [];
+    const source = {
+      requests: 0,
+      release: () => {
+        for (const answer of held.splice(0)) answer();
+      },
+    } as {
+      server: Server;
+      requests: number;
+      release: () => void;
+    };
+    source.server = createHttpServer((_request, response) => {
+      source.requests++;
+      held.push(() => response.writeHead(503).end("closed"));
+    });
+    await new Promise<void>((resolve) => source.server.listen(0, "127.0.0.1", resolve));
+    this.notablePlacesSource = source;
+    const port = (source.server.address() as { port: number }).port;
+    this.roleOverrides.dm = {
+      NOTABLE_PLACES_REFRESH_CRON: "0 2 1 * *",
+      NOTABLE_PLACES_SPARQL_URL: `http://127.0.0.1:${port}/sparql`,
+    };
+    await this.restart("dm");
+    await waitFor(() => (source.requests > 0 ? true : undefined), {
+      timeoutMs: 120_000,
+      what: "the long data job to reach its source",
+    });
+  }
+
+  /** Lets the long data job's source answer (with an error), ending the job. */
+  finishLongDataJob(): void {
+    this.notablePlacesSource?.release();
+  }
+
+  private stateFilesystem?: string;
+
+  /** Fills the agent's state filesystem, so its next write fails with ENOSPC. */
+  fillStateFilesystem(): void {
+    if (!this.stateFilesystem) throw new Error("Open the host with a small state filesystem");
+    const filler = join(this.stateFilesystem, ".crash-point-filler");
+    const block = Buffer.alloc(1024 * 1024);
+    try {
+      for (;;) appendFileSync(filler, block);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOSPC") throw error;
+    }
+    try {
+      for (;;) appendFileSync(filler, Buffer.alloc(1));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOSPC") throw error;
+    }
+  }
+
+  /** Frees what {@link fillStateFilesystem} took. */
+  freeStateFilesystem(): void {
+    if (this.stateFilesystem)
+      rmSync(join(this.stateFilesystem, ".crash-point-filler"), { force: true });
+  }
+
   requests(link: Link): readonly ProxiedRequest[] {
     return this.proxies[link].requests;
   }
@@ -944,6 +1066,15 @@ export class CrashHost {
   }
 
   /** The image each Compose service's container runs. */
+  /** The id of the container a Compose service runs in, as `docker ps` shows it. */
+  containerId(service: string): string {
+    const container = [...this.engine.containers.values()].find(
+      (value) => value.service === service,
+    );
+    if (!container) throw new Error(`No container runs ${service}`);
+    return container.Id;
+  }
+
   runningImages(): Record<string, string> {
     const out: Record<string, string> = {};
     for (const container of this.engine.containers.values())
@@ -1201,6 +1332,15 @@ export class CrashHost {
 
   /** The job once terminal, or as it stands when the wait ends: an update the
    * system holds for the operator stays unfinished on purpose. */
+  /** Waits until an outward condition holds. */
+  async waitUntil(probe: () => Promise<boolean>, timeoutMs: number, what: string): Promise<void> {
+    await waitFor(async () => ((await probe()) ? true : undefined), {
+      timeoutMs,
+      intervalMs: 2000,
+      what,
+    });
+  }
+
   async settledJob(id: string, timeoutMs: number): Promise<JobView> {
     try {
       return await this.waitForJob(id, { timeoutMs });
@@ -1249,6 +1389,13 @@ export class CrashHost {
     }
     await this.engine.close();
     for (const proxy of Object.values(this.proxies)) await proxy.close().catch(() => undefined);
+    if (this.notablePlacesSource) {
+      this.notablePlacesSource.release();
+      this.notablePlacesSource.server.closeAllConnections();
+      await new Promise<void>((resolve) => this.notablePlacesSource?.server.close(() => resolve()));
+    }
+    if (this.stateFilesystem)
+      spawnSync("sudo", ["-n", "umount", "--lazy", this.stateFilesystem], { stdio: "ignore" });
     if (this.databaseName && process.env.OPENMAPX_CRASH_KEEP !== "1") {
       const admin = postgres(process.env.DATABASE_URL as string, { max: 1, onnotice: () => {} });
       try {
