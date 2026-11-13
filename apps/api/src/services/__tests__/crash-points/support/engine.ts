@@ -191,7 +191,10 @@ export class FakeDockerEngine {
     return this.url;
   }
 
+  private closed = false;
+
   async close(): Promise<void> {
+    this.closed = true;
     for (const rule of this.rules) rule.released.resolve({ fail: "engine closed" });
     const server = this.server;
     if (!server) return;
@@ -317,11 +320,16 @@ export class FakeDockerEngine {
     }
     invocation.code = answer.code;
     invocation.done = true;
-    if (this.traceFile)
-      appendFileSync(
-        this.traceFile,
-        `${JSON.stringify({ seq: invocation.seq, caller: invocation.caller, args: invocation.args, code: answer.code, stderr: answer.code ? answer.stderr?.slice(0, 2000) : undefined, stdout: (answer.stdout ?? "").slice(0, 300) })}\n`,
-      );
+    // A call answered while the host is being removed has nowhere to be logged.
+    if (this.traceFile && !this.closed)
+      try {
+        appendFileSync(
+          this.traceFile,
+          `${JSON.stringify({ seq: invocation.seq, caller: invocation.caller, args: invocation.args, code: answer.code, stderr: answer.code ? answer.stderr?.slice(0, 2000) : undefined, stdout: (answer.stdout ?? "").slice(0, 300) })}\n`,
+        );
+      } catch {
+        // The trace file is diagnostics only.
+      }
     const body = JSON.stringify(answer);
     if (!response.destroyed)
       response.writeHead(200, { "content-type": "application/json" }).end(body);

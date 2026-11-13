@@ -156,7 +156,11 @@ export function launchContained(options: {
   const append = (chunk: string) => {
     output += chunk;
     if (output.length > 512 * 1024) output = output.slice(-256 * 1024);
-    appendFileSync(liveLog, chunk);
+    try {
+      appendFileSync(liveLog, chunk);
+    } catch {
+      // Output that arrives after the host directory is gone is not kept.
+    }
   };
   child.stdout?.on("data", (chunk: Buffer) => {
     append(chunk.toString("utf8"));
