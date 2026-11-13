@@ -142,7 +142,8 @@ export function createDataExecutionReceiver(deps: {
     inspect: runtime.inspect,
     lookup: runtime.lookup,
     requestCancel: runtime.requestCancel,
-    prepareFence: (input, headers) => configurationFence.prepare(input, headers),
+    prepareFence: (input, headers, transportPrincipal) =>
+      configurationFence.prepare(input, headers, transportPrincipal),
     inspectFence: (id, headers) => configurationFence.inspect(id, headers),
     settleFence: (input, headers) => configurationFence.settle(input, headers),
     subscribe: deps.dispatcher.subscribe,

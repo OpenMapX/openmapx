@@ -309,7 +309,7 @@ describe.skipIf(
       const fence = createDataConfigurationMaintenance(f.sql, f.dm);
       await fence.startup();
       await expect(
-        fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion]),
+        fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion], "ops-agent"),
       ).resolves.toMatchObject({ state: "prepared" });
       expect(cancellation).toBeDefined();
       await expect(cancellation!).rejects.toThrow("Lease journal writer is busy");
@@ -765,7 +765,11 @@ describe.skipIf(
       expect(f.input.serviceIds).toContain("ops-agent");
       const fence = createDataConfigurationMaintenance(f.sql, f.dm);
       await fence.startup();
-      const receipt = await fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion]);
+      const receipt = await fence.prepare(
+        f.input,
+        ["x-openmapx-control-delegation", f.assertion],
+        "ops-agent",
+      );
       expect(receipt.state).toBe("prepared");
       expect(
         control.preparedDataConfigurationFenceState(
@@ -787,7 +791,11 @@ describe.skipIf(
       expect(f.input.serviceIds).toContain("community-tiles");
       const fence = createDataConfigurationMaintenance(f.sql, f.dm);
       await fence.startup();
-      const receipt = await fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion]);
+      const receipt = await fence.prepare(
+        f.input,
+        ["x-openmapx-control-delegation", f.assertion],
+        "ops-agent",
+      );
       expect(receipt.state).toBe("prepared");
       expect(
         control.preparedDataConfigurationFenceState(
@@ -805,7 +813,11 @@ describe.skipIf(
     try {
       const fence = createDataConfigurationMaintenance(sql, dm);
       await fence.startup();
-      const receipt = await fence.prepare(input, ["x-openmapx-control-delegation", assertion]);
+      const receipt = await fence.prepare(
+        input,
+        ["x-openmapx-control-delegation", assertion],
+        "ops-agent",
+      );
       expect(receipt).toMatchObject({ fenceId: child.executionId, state: "prepared", sequence: 0 });
       expect(
         existsSync(
@@ -1036,14 +1048,15 @@ describe.skipIf(
         "configuration_maintenance_busy",
       );
       await expect(
-        fence.prepare({ ...input, candidateId: randomUUID() }, [
-          "x-openmapx-control-delegation",
-          assertion,
-        ]),
+        fence.prepare(
+          { ...input, candidateId: randomUUID() },
+          ["x-openmapx-control-delegation", assertion],
+          "ops-agent",
+        ),
       ).rejects.toThrow();
-      expect(await fence.prepare(input, ["x-openmapx-control-delegation", assertion])).toEqual(
-        receipt,
-      );
+      expect(
+        await fence.prepare(input, ["x-openmapx-control-delegation", assertion], "ops-agent"),
+      ).toEqual(receipt);
       expect(control.inspectArtifactTargetLeaseChildSettlement(lease, child)?.publication).toBe(
         "committed",
       );
@@ -1477,7 +1490,11 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
       },
     });
     await fence.startup();
-    const attempt = fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion]);
+    const attempt = fence.prepare(
+      f.input,
+      ["x-openmapx-control-delegation", f.assertion],
+      "ops-agent",
+    );
     const rejected = expect(attempt).rejects.toThrow("Synthetic process crash");
     try {
       await ready;
@@ -1533,7 +1550,7 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
     let foreignLease: control.ArtifactTargetLease | undefined;
     try {
       await fence.startup();
-      await fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion]);
+      await fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion], "ops-agent");
       const mirror = join(
           f.root,
           "control-private/data-manager/configuration-maintenance",

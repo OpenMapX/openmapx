@@ -63,6 +63,7 @@ export interface DataExecutionReceiver {
   prepareFence(
     input: DataConfigurationFencePrepare,
     rawHeaders: readonly string[],
+    transportPrincipal: DataManagerPrincipal,
   ): Promise<DataConfigurationFenceReceipt>;
   inspectFence(
     maintenanceId: string,
@@ -111,7 +112,7 @@ export function registerDataExecutionApi(
   });
   registerDataManagerRoute(app, "prepareDataConfigurationFence", async (request, reply) => {
     if (!receiver) return unavailable(reply);
-    return receiver.prepareFence(request.body, request.raw.rawHeaders);
+    return receiver.prepareFence(request.body, request.raw.rawHeaders, principal(request));
   });
   registerDataManagerRoute(
     app,
