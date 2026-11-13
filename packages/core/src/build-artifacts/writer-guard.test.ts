@@ -22,7 +22,9 @@ afterEach(async () => {
 });
 
 /** Another process takes the guard over and over, holding it a few
- * milliseconds each time, as a role inspecting maintenance does. */
+ * milliseconds each time, as a role inspecting maintenance does. It leaves
+ * the guard free as long as it holds it: a shorter gap lets a loaded machine
+ * starve the waiter for the whole wait, which no real holder does. */
 function busyHolder(path: string, durationMs: number): ChildProcess {
   return spawn(
     process.execPath,
@@ -35,7 +37,7 @@ function busyHolder(path: string, durationMs: number): ChildProcess {
          try { fs.mkdirSync(${JSON.stringify(path)}); } catch { continue; }
          Atomics.wait(sleep, 0, 0, 4);
          fs.rmdirSync(${JSON.stringify(path)});
-         Atomics.wait(sleep, 0, 0, 1);
+         Atomics.wait(sleep, 0, 0, 4);
        }`,
     ],
     { stdio: "ignore" },
