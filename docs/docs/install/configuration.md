@@ -149,6 +149,11 @@ These guarantees have known limits:
   operator in `public`, PostGIS's among them, whether by its `public.` name or
   through its search path. Connect as the owning role, or run
   `SET search_path = pg_catalog` first and call no PostGIS function.
+- Through the tile function, a compromised API can make the tile owner create
+  a large object, which a restore refuses as it refuses any object of a role
+  that cannot log in. That blocks restoring later backups until the object is
+  removed (see [Backup & restore](../administration/backup-and-restore.md#restoring)),
+  but runs nothing as the superuser.
 - PostGIS grants every role read access to its catalogue tables
   (`spatial_ref_sys`, `geometry_columns`, `geography_columns`,
   `topology.topology` and `topology.layer`).

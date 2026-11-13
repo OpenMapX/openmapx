@@ -364,6 +364,16 @@ server's roles. It refuses the backup, and leaves the live database as it
 is, when an entry belongs to a role the server lacks, or to a role that
 cannot log in, other than that tile function. Nobody but the superuser could
 restore such an entry, and its code would then run with superuser rights.
+The tile roles can create no table, function or other schema object, but code
+running as the tile owner can still create a large object, which would make
+such a refusal block every later restore. If a restore names
+`openmapx_tiles_owner`, find and remove those large objects in the live
+database, then take a new backup:
+
+```sql
+SELECT oid FROM pg_largeobject_metadata WHERE lomowner = 'openmapx_tiles_owner'::regrole;
+SELECT lo_unlink(oid) FROM pg_largeobject_metadata WHERE lomowner = 'openmapx_tiles_owner'::regrole;
+```
 
 The roles themselves belong to the PostgreSQL server, not to any database,
 and are not in the dump. PostGIS creates them each time it starts, so to
