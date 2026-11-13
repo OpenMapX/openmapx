@@ -35,7 +35,7 @@ function CreateUserForm({ open, onClose }: Props) {
     [name, setName] = useState(""),
     [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
-    [role, setRole] = useState<"user" | "admin" | "privacy_admin">("user"),
+    [role, setRole] = useState<"user" | "admin">("user"),
     [sendInvitation, setSendInvitation] = useState(true),
     [created, setCreated] = useState<AccountProvisioningResult | null>(null),
     key = useRef<string | null>(null),
@@ -115,7 +115,6 @@ function CreateUserForm({ open, onClose }: Props) {
               >
                 <MenuItem value="user">User</MenuItem>
                 <MenuItem value="admin">Admin</MenuItem>
-                <MenuItem value="privacy_admin">Privacy admin</MenuItem>
               </Select>
             </FormControl>
             <FormControlLabel

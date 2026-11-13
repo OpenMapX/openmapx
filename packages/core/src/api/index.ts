@@ -45,7 +45,6 @@ export {
   createPrivacyDataRequest,
   getPrivacyDataRequest,
   getPrivacyDataRequests,
-  type PrivacyAdminRole,
   type PrivacyArtifactView,
   type PrivacyRequestDetail,
   type PrivacyRequestKind,
@@ -55,7 +54,6 @@ export {
   privacyArtifactDownloadUrl,
   regeneratePrivacyDataRequest,
   revokePrivacyArtifact,
-  setPrivacyAdminRole,
   startPrivacyReauthentication,
   withdrawPrivacyDataRequest,
 } from "./privacy";

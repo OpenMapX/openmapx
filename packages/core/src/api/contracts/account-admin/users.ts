@@ -1,5 +1,5 @@
 import z from "zod/v4";
-export const accountRoleSchema = z.enum(["user", "admin", "privacy_admin"]);
+export const accountRoleSchema = z.enum(["user", "admin"]);
 export const accountMailOutcomeSchema = z.enum([
   "not_requested",
   "queued",

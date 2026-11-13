@@ -9,7 +9,7 @@ vi.mock("../auth.js", () => ({
   auth: {
     api: {
       getSession: vi.fn(async () => ({
-        user: { id: "subject", role: "privacy_admin", twoFactorEnabled: false },
+        user: { id: "subject", role: "admin", twoFactorEnabled: false },
         session: { id: "new-session" },
       })),
     },

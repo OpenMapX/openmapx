@@ -15,7 +15,7 @@ import {
   isTransactionalAuthDatabase,
   withAuthDatabase,
 } from "./auth-database";
-export const accountRoleSchema = z.enum(["user", "admin", "privacy_admin"]);
+export const accountRoleSchema = z.enum(["user", "admin"]);
 export type AccountRole = z.infer<typeof accountRoleSchema>;
 export interface AccountMutationIntent {
   actorId: string | null;

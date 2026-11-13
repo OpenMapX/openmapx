@@ -68,9 +68,12 @@ dbDescribe("last-admin migration of historical roles", () => {
       expect((await fixture.db.select().from(user).orderBy(user.id)).map((r) => r.role)).toEqual([
         "admin",
         "admin",
-        "privacy_admin",
+        "user",
         "user",
       ]);
+      await expect(
+        fixture.db.update(user).set({ role: "privacy_admin" }).where(eq(user.id, "legacy-c")),
+      ).rejects.toThrow();
       expect((await fixture.db.select().from(accountAdminGuard))[0]?.activeCount).toBe(2);
       await fixture.db.update(user).set({ role: "user" }).where(eq(user.id, "legacy-a"));
       await expect(

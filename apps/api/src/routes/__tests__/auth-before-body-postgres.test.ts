@@ -14,7 +14,7 @@ const PASSWORD = "synthetic-password-1234";
 const MIB = 1024 * 1024;
 const BODY_LIMIT_PROBE = "/api/body-limit-probe";
 const BODY_METHODS = ["post", "put", "patch", "delete"];
-const AUTHENTICATED_LEVELS = new Set(["session", "admin", "privacy_admin", "service"]);
+const AUTHENTICATED_LEVELS = new Set(["session", "admin", "service"]);
 
 interface Operation {
   method: string;

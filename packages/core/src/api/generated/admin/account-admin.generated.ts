@@ -25,7 +25,6 @@ export type CreateAdminAccountBodyRole =
 export const CreateAdminAccountBodyRole = {
   user: "user",
   admin: "admin",
-  privacy_admin: "privacy_admin",
 } as const;
 
 export type CreateAdminAccountBody = {
@@ -1541,7 +1540,6 @@ export type ChangeAdminAccountRoleBodyRole =
 export const ChangeAdminAccountRoleBodyRole = {
   user: "user",
   admin: "admin",
-  privacy_admin: "privacy_admin",
 } as const;
 
 export type ChangeAdminAccountRoleBodyExpectedRole =
@@ -1550,7 +1548,6 @@ export type ChangeAdminAccountRoleBodyExpectedRole =
 export const ChangeAdminAccountRoleBodyExpectedRole = {
   user: "user",
   admin: "admin",
-  privacy_admin: "privacy_admin",
 } as const;
 
 export type ChangeAdminAccountRoleBody = {
@@ -1564,7 +1561,6 @@ export type ChangeAdminAccountRole200Role =
 export const ChangeAdminAccountRole200Role = {
   user: "user",
   admin: "admin",
-  privacy_admin: "privacy_admin",
 } as const;
 
 export type ChangeAdminAccountRole200 = {

@@ -30,7 +30,7 @@ vi.mock("../auth.js", () => ({
   auth: {
     api: {
       getSession: async () => ({
-        user: { id: "synthetic-worker", role: "privacy_admin" },
+        user: { id: "synthetic-worker", role: "admin" },
         session: { id: authFixture.sessionId },
       }),
     },
@@ -54,7 +54,7 @@ suite("owned privacy case transaction boundaries", () => {
       id: actorId,
       name: "Synthetic caseworker",
       email: `${actorId}@example.test`,
-      role: "privacy_admin",
+      role: "admin",
       updatedAt: now,
     });
     await fixture.db.insert(session).values({

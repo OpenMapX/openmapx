@@ -31,7 +31,7 @@ export const accountActionReceipt = pgTable(
     intentDigest: text("intent_digest").notNull(),
     result: jsonb("result").$type<{
       created: boolean;
-      role?: "user" | "admin" | "privacy_admin";
+      role?: "user" | "admin";
       changed?: boolean;
       verificationDelivery?: AccountMailOutcome;
       passwordSetupDelivery?: AccountMailOutcome;

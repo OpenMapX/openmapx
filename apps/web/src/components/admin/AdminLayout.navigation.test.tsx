@@ -51,7 +51,7 @@ it("retires the admin view and navigation after a confirmed authority change", a
         type="button"
         onClick={() =>
           store?.observeSession({
-            data: { user: { id: "admin", role: "privacy_admin" }, session: { id: "session" } },
+            data: { user: { id: "admin", role: "user" }, session: { id: "session" } },
             isPending: false,
           })
         }

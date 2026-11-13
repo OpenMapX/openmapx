@@ -407,6 +407,13 @@
       "when": 1794524187368,
       "tag": "0057_drop_privacy_gate_snapshots_backup_reviews",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1794531513099,
+      "tag": "0058_remove_privacy_admin_role",
+      "breakpoints": true
     }
   ]
 }

@@ -30,40 +30,16 @@ it.each([true, null])(
     );
   },
 );
-it.each(["admin", "privacy_admin"])(
-  "does not expose host navigation for explicitly hosted %s",
-  (role) => {
-    render(
-      <NextIntlClientProvider locale="en" messages={en}>
-        <AdminSidebar open={true} onClose={() => {}} selfHosted={false} role={role} />
-      </NextIntlClientProvider>,
-    );
-    expect(document.querySelector('a[href="/admin/system/services"]')).toBeNull();
-    if (role === "admin") {
-      expect(screen.getAllByRole("link", { name: "System" })[0]).toHaveAttribute(
-        "href",
-        "/admin/system/cache",
-      );
-    } else {
-      expect(screen.queryByRole("link", { name: "System" })).toBeNull();
-    }
-  },
-);
-it("keeps privacy-admin access restricted during unknown deployment", () => {
+it("does not expose host navigation for an explicitly hosted administrator", () => {
   render(
     <NextIntlClientProvider locale="en" messages={en}>
-      <AdminSidebar
-        open={true}
-        onClose={() => {}}
-        selfHosted={null}
-        {...{ role: "privacy_admin" }}
-      />
+      <AdminSidebar open={true} onClose={() => {}} selfHosted={false} {...{ role: "admin" }} />
     </NextIntlClientProvider>,
   );
-  expect(screen.queryByRole("link", { name: "System" })).toBeNull();
-  expect(screen.getAllByRole("link", { name: "Privacy" })[0]).toHaveAttribute(
+  expect(document.querySelector('a[href="/admin/system/services"]')).toBeNull();
+  expect(screen.getAllByRole("link", { name: "System" })[0]).toHaveAttribute(
     "href",
-    "/admin/privacy",
+    "/admin/system/cache",
   );
 });
 

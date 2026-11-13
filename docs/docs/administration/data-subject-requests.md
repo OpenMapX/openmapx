@@ -8,15 +8,14 @@ title: Data-subject requests
 
 People start Article 15 access and Article 20 portability requests from Account
 settings or the published privacy contact. Operators handle cases at
-`/admin/privacy`, which requires an `admin` or `privacy_admin` account; deployment configuration requires a full administrator. The deployment
+`/admin/privacy`, which requires an `admin` account. The deployment
 owner remains responsible for controller facts, processor instructions,
 deadlines and independent review. A working export is not a compliance
 certificate.
 
 ## Working a case in Privacy requests
 
-Open **Privacy requests** at `/admin/privacy` with a real full-administrator or
-privacy-administrator session. Selecting a different case clears its evidence,
+Open **Privacy requests** at `/admin/privacy` with a real administrator session. Selecting a different case clears its evidence,
 verification-code and delivery drafts. A version conflict retains your current
 draft, reloads the case, and requires another explicit confirmation.
 

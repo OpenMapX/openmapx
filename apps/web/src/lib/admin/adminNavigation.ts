@@ -16,7 +16,6 @@ export interface AdminDestination {
   description: string;
   href: string;
   workspace: AdminWorkspace;
-  access: "admin" | "privacy";
   hostOnly?: boolean;
   keywords?: readonly string[];
 }
@@ -31,7 +30,7 @@ const destination = (
   href: string,
   workspace: AdminWorkspace,
   hostOnly = false,
-): AdminDestination => ({ id, label, description, href, workspace, hostOnly, access: "admin" });
+): AdminDestination => ({ id, label, description, href, workspace, hostOnly });
 /** Literal destinations are also the allowlist for privileged return navigation. */
 export const ADMIN_DESTINATIONS: readonly AdminDestination[] = [
   destination("overview", "Overview", "Attention, health and current work", "/admin", "overview"),
@@ -105,16 +104,13 @@ export const ADMIN_DESTINATIONS: readonly AdminDestination[] = [
     true,
   ),
   destination("users", "Users", "Accounts, sessions and recovery", "/admin/users", "users"),
-  {
-    ...destination(
-      "privacy",
-      "Privacy requests",
-      "Review and fulfil privacy cases",
-      "/admin/privacy",
-      "privacy",
-    ),
-    access: "privacy",
-  },
+  destination(
+    "privacy",
+    "Privacy requests",
+    "Review and fulfil privacy cases",
+    "/admin/privacy",
+    "privacy",
+  ),
   destination(
     "privacy-setup",
     "Privacy setup",
@@ -221,9 +217,7 @@ export const ADMIN_DESTINATIONS: readonly AdminDestination[] = [
 ];
 export function adminDestinations({ role = "admin", selfHosted = null }: AdminNavigationAccess) {
   return ADMIN_DESTINATIONS.filter(
-    (entry) =>
-      (role === "admin" || (role === "privacy_admin" && entry.access === "privacy")) &&
-      (!entry.hostOnly || selfHosted !== false),
+    (entry) => role === "admin" && (!entry.hostOnly || selfHosted !== false),
   );
 }
 export function adminPrimaryNavigation(access: AdminNavigationAccess) {

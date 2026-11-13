@@ -16,7 +16,7 @@ export type ApiResponseContract =
 export interface ApiOperation {
   method: "GET" | "POST" | "DELETE" | "PUT" | "PATCH";
   path: `/api/${string}`;
-  auth: "public" | "session" | "service" | "admin" | "privacy_admin";
+  auth: "public" | "session" | "service" | "admin";
   request?: { body?: z.ZodType; query?: z.ZodType; params?: z.ZodType; headers?: z.ZodType };
   requestBody?: { kind: "bytes"; mediaType: "application/octet-stream" };
   responses: Record<number, ApiResponseContract>;

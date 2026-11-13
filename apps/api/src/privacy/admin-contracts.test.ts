@@ -7,7 +7,7 @@ vi.mock("../auth.js", () => ({
   auth: {
     api: {
       getSession: async () => ({
-        user: { id: "worker", role: "privacy_admin" },
+        user: { id: "worker", role: "admin" },
         session: { id: "session" },
       }),
     },

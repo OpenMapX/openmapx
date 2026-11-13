@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { privacyCaseDecisionSchema, privacyCaseExtensionSchema } from "@openmapx/core/privacy";
 import { envString } from "@openmapx/core/server-env";
+import { httpError } from "@openmapx/integration-framework";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { db } from "../db/index.js";
 import {
   dataExportArtifact,
@@ -60,7 +61,7 @@ import {
 import { PrivacyRequestError, PrivacyRequestService } from "../privacy/request-service.js";
 import { getSessionAuthAssurance } from "../privacy/session-assurance.js";
 import { sendMail } from "../utils/email.js";
-import { getPrivacyAdminSession, requirePrivacyAdmin } from "../utils/require-privacy-admin.js";
+import { getAdminSession, requireAdmin } from "../utils/require-admin.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 import { sendAdminByteResponse } from "./admin-byte-response";
 import { registerPrivacyAdminRoute } from "./privacy-admin-contract";
@@ -121,6 +122,14 @@ function eventPayloadValue(event: { payload: unknown } | undefined, key: string)
   return typeof value === "string" ? value : null;
 }
 
+/** Privacy decisions need an attributable account, so the loopback CLI
+ * session that `requireAdmin` admits is refused here. */
+async function requirePrivacyCaseAdmin(request: FastifyRequest) {
+  const session = await requireAdmin(request);
+  if (session.user.id === "loopback") throw httpError(403, "Administrator account required");
+  return session;
+}
+
 export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = async (
   fastify,
   options,
@@ -129,9 +138,9 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
     if (route.url.endsWith("/attachments") && route.method === "POST")
       route.bodyLimit = ATTACHMENT_BODY_LIMIT;
   });
-  declareRouteAuth(fastify, "privacy_admin");
+  declareRouteAuth(fastify, "admin");
   fastify.addHook("onRequest", async (request) => {
-    request.privacyAdminSession = await requirePrivacyAdmin(request);
+    request.adminSession = await requirePrivacyCaseAdmin(request);
   });
   fastify.addHook("onSend", async (_request, reply, payload) => {
     reply.header("Cache-Control", "private, no-store");
@@ -377,7 +386,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
     "createPrivacyAdminCase",
     async (request, reply) => {
       try {
-        const actor = getPrivacyAdminSession(request);
+        const actor = getAdminSession(request);
         const idempotencyKey = requireMutationKey(request);
         const body = createSubjectRequestSchema.parse({
           ...((request.body as Record<string, unknown>) ?? {}),
@@ -412,7 +421,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
         const row = await serviceForRequest().recordIdentityReview({
           requestId: request.params.requestId,
           ...parsed.data,
-          actorId: getPrivacyAdminSession(request).user.id,
+          actorId: getAdminSession(request).user.id,
           idempotencyKey,
         });
         return reply.send({ request: projection(row as unknown as Record<string, unknown>) });
@@ -433,7 +442,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
         const challenge = await challengeService.issue({
           requestId: request.params.requestId,
           party: parsed.party,
-          actorId: getPrivacyAdminSession(request).user.id,
+          actorId: getAdminSession(request).user.id,
           idempotencyKey,
         });
         const delivery = await challengeService.dispatchPending({
@@ -475,7 +484,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
           challengeId: request.params.challengeId,
           party: parsed.party,
           code: parsed.code,
-          actorId: getPrivacyAdminSession(request).user.id,
+          actorId: getAdminSession(request).user.id,
           idempotencyKey,
         });
         return reply.send(result);
@@ -520,7 +529,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
           requestId: request.params.requestId,
           taskId: request.params.taskId,
           ...parsed.data,
-          actorId: getPrivacyAdminSession(request).user.id,
+          actorId: getAdminSession(request).user.id,
           idempotencyKey,
         });
         return reply.send({ request: projection(row as unknown as Record<string, unknown>) });
@@ -551,7 +560,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
           redactionCode: parsed.data.redactionCode,
           recordCount: parsed.data.recordCount,
           requestVersion: parsed.data.version,
-          actorId: getPrivacyAdminSession(request).user.id,
+          actorId: getAdminSession(request).user.id,
           idempotencyKey,
         });
         return reply.send({ ok: true });
@@ -582,7 +591,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
           extendedUntil: new Date(body.extendedUntil),
           extensionNotifiedAt: new Date(body.extensionNotifiedAt),
           reasonCode: body.reasonCode,
-          actorId: getPrivacyAdminSession(request).user.id,
+          actorId: getAdminSession(request).user.id,
           idempotencyKey,
         });
         return reply.send({ request: projection(row as unknown as Record<string, unknown>) });
@@ -612,7 +621,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
           version,
           decision: body.decision as "refused" | "clarification_needed" | "operator_review",
           reasonCode: body.reasonCode,
-          actorId: getPrivacyAdminSession(request).user.id,
+          actorId: getAdminSession(request).user.id,
           idempotencyKey,
         });
         return reply.send({ request: projection(row as unknown as Record<string, unknown>) });
@@ -675,7 +684,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
           idempotencyKey,
           eventType: "generation_completed",
           actorKind: "privacy_admin",
-          actorId: getPrivacyAdminSession(request).user.id,
+          actorId: getAdminSession(request).user.id,
           payload: { artifactId: result.artifact.id },
           operationDigest,
         });
@@ -705,7 +714,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
           kind: "upload",
           requestId: request.params.requestId,
           body: request.body,
-          actorId: getPrivacyAdminSession(request).user.id,
+          actorId: getAdminSession(request).user.id,
           idempotencyKey: requireMutationKey(request),
           database,
           store: options.artifactStore,
@@ -727,7 +736,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
             requestId: request.params.requestId,
             attachmentId: request.params.attachmentId,
             body: request.body,
-            actorId: getPrivacyAdminSession(request).user.id,
+            actorId: getAdminSession(request).user.id,
             idempotencyKey: requireMutationKey(request),
             database,
           }),
@@ -749,7 +758,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
     "downloadPrivacyAdminAttachment",
     async (request, reply) => {
       if (request.headers.range) return reply.status(416).send({ code: "RANGE_NOT_SUPPORTED" });
-      const actor = getPrivacyAdminSession(request);
+      const actor = getAdminSession(request);
       const assurance = await getSessionAuthAssurance(actor.session.id, database);
       if (
         !assurance ||
@@ -815,7 +824,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
         );
         prepared = startArtifactStream(options.artifactStore, attachment);
         await prepared.verified;
-        const currentActor = await requirePrivacyAdmin(request);
+        const currentActor = await requirePrivacyCaseAdmin(request);
         const currentAssurance = await getSessionAuthAssurance(currentActor.session.id, database);
         if (
           currentActor.user.id !== actor.user.id ||
@@ -915,7 +924,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
           requestId: request.params.requestId,
           attachmentId: request.params.attachmentId,
           body: request.body,
-          actorId: getPrivacyAdminSession(request).user.id,
+          actorId: getAdminSession(request).user.id,
           idempotencyKey: requireMutationKey(request),
           database,
           store: options.artifactStore,
@@ -948,7 +957,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
       const channel = startBody.success ? startBody.data.channel : "assisted";
       const reasonCode = startBody.success ? startBody.data.reasonCode : "";
       if (!parsed.success || !startBody.success) return genericReauthFailure(reply);
-      const actor = getPrivacyAdminSession(request);
+      const actor = getAdminSession(request);
       try {
         if (!(await assistedDeliveryAuthorized(parsed.data.requestId, channel)))
           return reply.status(409).send({ code: "DELIVERY_IDENTITY_NOT_AUTHORIZED" });
@@ -1007,7 +1016,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
         clearReauthCookie(reply);
         return genericReauthFailure(reply);
       }
-      const actor = getPrivacyAdminSession(request);
+      const actor = getAdminSession(request);
       const assurance = await getSessionAuthAssurance(actor.session.id, database);
       if (!assurance) {
         clearReauthCookie(reply);
@@ -1076,7 +1085,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
           ? reply.status(416).send({ code: "RANGE_NOT_SUPPORTED" })
           : reply.status(404).send({ code: "NOT_FOUND" });
       const cookie = parseReauthCookie(request.headers.cookie);
-      const actor = getPrivacyAdminSession(request);
+      const actor = getAdminSession(request);
       if (!cookie || !options.artifactStore) return genericReauthFailure(reply);
       const rows = await database
         .select({ artifact: dataExportArtifact, requestState: dataSubjectRequest.state })
@@ -1108,7 +1117,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
         });
         prepared = startArtifactStream(options.artifactStore, artifact);
         await prepared.verified;
-        const currentActor = await requirePrivacyAdmin(request);
+        const currentActor = await requirePrivacyCaseAdmin(request);
         const currentAssurance = await getSessionAuthAssurance(currentActor.session.id, database);
         if (
           currentActor.user.id !== actor.user.id ||

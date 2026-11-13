@@ -354,39 +354,6 @@ dbDescribe("atomic last administrator protection", () => {
     expect(
       await fixture.db.select().from(session).where(eq(session.userId, target.id)),
     ).toHaveLength(0);
-    const next = await actor("privacy-target", "user"),
-      privacy = Fastify();
-    await privacy.register((await import("../routes/privacy-roles")).privacyRolesRoute, {
-      prefix: "/api",
-      database: fixture.db,
-    });
-    await privacy.ready();
-    try {
-      const changed = await privacy.inject({
-        method: "POST",
-        url: `/api/privacy/admin/roles/${next.id}/grant`,
-        headers: headers(admin.cookie),
-        payload: {},
-      });
-      expect(changed.statusCode, changed.body).toBe(200);
-      expect(
-        await fixture.db
-          .select()
-          .from(adminAuditLog)
-          .where(
-            and(eq(adminAuditLog.targetId, next.id), eq(adminAuditLog.action, "user.role.change")),
-          ),
-      ).toHaveLength(1);
-      const denied = await privacy.inject({
-        method: "POST",
-        url: `/api/privacy/admin/roles/${target.id}/grant`,
-        headers: headers(admin.cookie),
-        payload: {},
-      });
-      expect(denied.statusCode).toBe(409);
-    } finally {
-      await privacy.close();
-    }
   });
   it("preserves ordinary self-service deletion and commits its completion only after deletion", async () => {
     const target = await actor("self-service", "user"),

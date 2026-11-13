@@ -49,7 +49,6 @@ import { privacyAdminRoute } from "./privacy-admin";
 import type { PrivacyAdminRouteOptions } from "./privacy-admin.js";
 import { privacyRequestsRoute } from "./privacy-requests";
 import type { PrivacyRequestsRouteOptions } from "./privacy-requests.js";
-import { privacyRolesRoute } from "./privacy-roles";
 import { reviewsKeypairRoute } from "./reviews-keypair";
 import { savedRoute } from "./saved";
 import { sharesRoute } from "./shares";
@@ -99,7 +98,6 @@ export async function registerCoreRoutes(
     ...(options.privacyRequests ?? {}),
   });
   await server.register(privacyAdminRoute, { prefix: "/api", ...(options.privacyAdmin ?? {}) });
-  await server.register(privacyRolesRoute, { prefix: "/api" });
   await server.register(mobileAuthRoute, { prefix: "/api" });
 
   await server.register(placesRoute, { prefix: "/api" });

@@ -5722,8 +5722,7 @@
                     "type": "string",
                     "enum": [
                       "user",
-                      "admin",
-                      "privacy_admin"
+                      "admin"
                     ]
                   },
                   "password": {
@@ -10378,16 +10377,14 @@
                     "type": "string",
                     "enum": [
                       "user",
-                      "admin",
-                      "privacy_admin"
+                      "admin"
                     ]
                   },
                   "expectedRole": {
                     "type": "string",
                     "enum": [
                       "user",
-                      "admin",
-                      "privacy_admin"
+                      "admin"
                     ]
                   }
                 },
@@ -10415,8 +10412,7 @@
                       "type": "string",
                       "enum": [
                         "user",
-                        "admin",
-                        "privacy_admin"
+                        "admin"
                       ]
                     },
                     "changed": {
@@ -122005,7 +122001,7 @@
         "tags": [
           "privacy-admin"
         ],
-        "x-openmapx-auth": "privacy_admin"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/privacy/admin/queue": {
@@ -122672,7 +122668,7 @@
         "tags": [
           "privacy-admin"
         ],
-        "x-openmapx-auth": "privacy_admin"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/privacy/admin/requests": {
@@ -123451,7 +123447,7 @@
         "tags": [
           "privacy-admin"
         ],
-        "x-openmapx-auth": "privacy_admin"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/privacy/admin/requests/{requestId}": {
@@ -124609,7 +124605,7 @@
         "tags": [
           "privacy-admin"
         ],
-        "x-openmapx-auth": "privacy_admin"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/privacy/admin/requests/{requestId}/artifacts/{artifactId}/download": {
@@ -125181,7 +125177,7 @@
         "tags": [
           "privacy-admin"
         ],
-        "x-openmapx-auth": "privacy_admin",
+        "x-openmapx-auth": "admin",
         "x-openmapx-native-download": true
       }
     },
@@ -125762,7 +125758,7 @@
         "tags": [
           "privacy-admin"
         ],
-        "x-openmapx-auth": "privacy_admin"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/privacy/admin/requests/{requestId}/artifacts/{artifactId}/reauth/start": {
@@ -126362,7 +126358,7 @@
         "tags": [
           "privacy-admin"
         ],
-        "x-openmapx-auth": "privacy_admin"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/privacy/admin/requests/{requestId}/attachments": {
@@ -127133,7 +127129,7 @@
         "tags": [
           "privacy-admin"
         ],
-        "x-openmapx-auth": "privacy_admin"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/privacy/admin/requests/{requestId}/attachments/{attachmentId}": {
@@ -127701,7 +127697,7 @@
         "tags": [
           "privacy-admin"
         ],
-        "x-openmapx-auth": "privacy_admin"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/privacy/admin/requests/{requestId}/attachments/{attachmentId}/download": {
@@ -128273,7 +128269,7 @@
         "tags": [
           "privacy-admin"
         ],
-        "x-openmapx-auth": "privacy_admin",
+        "x-openmapx-auth": "admin",
         "x-openmapx-native-download": true
       }
     },
@@ -129129,7 +129125,7 @@
         "tags": [
           "privacy-admin"
         ],
-        "x-openmapx-auth": "privacy_admin"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/privacy/admin/requests/{requestId}/decision": {
@@ -129850,7 +129846,7 @@
         "tags": [
           "privacy-admin"
         ],
-        "x-openmapx-auth": "privacy_admin"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/privacy/admin/requests/{requestId}/extension": {
@@ -130574,7 +130570,7 @@
         "tags": [
           "privacy-admin"
         ],
-        "x-openmapx-auth": "privacy_admin"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/privacy/admin/requests/{requestId}/generate": {
@@ -131353,7 +131349,7 @@
         "tags": [
           "privacy-admin"
         ],
-        "x-openmapx-auth": "privacy_admin"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/privacy/admin/requests/{requestId}/identity": {
@@ -132110,7 +132106,7 @@
         "tags": [
           "privacy-admin"
         ],
-        "x-openmapx-auth": "privacy_admin"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/privacy/admin/requests/{requestId}/identity/email-challenges": {
@@ -132695,7 +132691,7 @@
         "tags": [
           "privacy-admin"
         ],
-        "x-openmapx-auth": "privacy_admin"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/privacy/admin/requests/{requestId}/identity/email-challenges/{challengeId}/complete": {
@@ -133281,7 +133277,7 @@
         "tags": [
           "privacy-admin"
         ],
-        "x-openmapx-auth": "privacy_admin"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/privacy/admin/requests/{requestId}/tasks/{taskId}/assignment": {
@@ -134010,7 +134006,7 @@
         "tags": [
           "privacy-admin"
         ],
-        "x-openmapx-auth": "privacy_admin"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/privacy/admin/requests/{requestId}/tasks/{taskId}/decision": {
@@ -134616,7 +134612,7 @@
         "tags": [
           "privacy-admin"
         ],
-        "x-openmapx-auth": "privacy_admin"
+        "x-openmapx-auth": "admin"
       }
     },
     "/api/privacy/admin/requests/{requestId}/verify": {
@@ -134629,54 +134625,6 @@
             },
             "in": "path",
             "name": "requestId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        },
-        "tags": [
-          "privacy"
-        ],
-        "x-openmapx-auth": "privacy_admin"
-      }
-    },
-    "/api/privacy/admin/roles/{userId}/grant": {
-      "post": {
-        "operationId": "postApiPrivacyAdminRolesUserIdGrant",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "userId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        },
-        "tags": [
-          "privacy"
-        ],
-        "x-openmapx-auth": "admin"
-      }
-    },
-    "/api/privacy/admin/roles/{userId}/revoke": {
-      "post": {
-        "operationId": "postApiPrivacyAdminRolesUserIdRevoke",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "userId",
             "required": true
           }
         ],

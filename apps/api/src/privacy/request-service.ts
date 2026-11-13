@@ -1103,7 +1103,7 @@ export class PrivacyRequestService {
           .limit(1);
         if (
           !assignee ||
-          !["admin", "privacy_admin"].includes(assignee.role ?? "") ||
+          assignee.role !== "admin" ||
           (assignee.banned && (!assignee.banExpires || assignee.banExpires > now))
         )
           throw new PrivacyRequestError("ASSIGNEE_NOT_AUTHORIZED", 409);

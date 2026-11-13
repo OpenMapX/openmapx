@@ -113,7 +113,7 @@ async function fixture(mode = "success") {
           email: "admin@example.test",
           emailVerified: true,
           image: null,
-          role: mode === "nonadmin" ? "privacy_admin" : "admin",
+          role: mode === "nonadmin" ? "user" : "admin",
         },
         session: { expiresAt: new Date(Date.now() + 3600000).toISOString() },
       });

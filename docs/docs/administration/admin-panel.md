@@ -18,15 +18,13 @@ review the instance settings.
 The browser checks the session before rendering administration pages. The API
 enforces permissions separately:
 
-| Role            | Access                                                                             |
-| --------------- | ---------------------------------------------------------------------------------- |
-| `user`          | Personal account features; no administration pages                                 |
-| `privacy_admin` | Privacy casework at `/admin/privacy`; no general operations or deployment settings |
-| `admin`         | Full administration, including privacy setup and role management                   |
+| Role    | Access                                                                      |
+| ------- | --------------------------------------------------------------------------- |
+| `user`  | Personal account features; no administration pages                          |
+| `admin` | Full administration, including privacy casework, privacy setup and accounts |
 
-A privacy administrator opening a general administration page is redirected to
-privacy casework. See [Users and access](./users-and-access.md) for assigning
-roles and [Data-subject requests](./data-subject-requests.md) for privacy work.
+See [Users and access](./users-and-access.md) for assigning roles and
+[Data-subject requests](./data-subject-requests.md) for privacy work.
 
 ### The local admin escape hatch
 
@@ -39,8 +37,8 @@ environment. Without a token, production rejects this shortcut. Development
 accepts a present, empty header when no token is configured. Set
 `OPENMAPX_DISABLE_LOCALHOST_AUTH=1` to disable it on a host where other tenants
 can reach loopback. A remote API URL and token alone do not satisfy the peer
-check. Privacy-role changes require an attributable signed-in administrator and
-reject the synthetic loopback identity.
+check. Privacy casework requires an attributable signed-in administrator and
+rejects the synthetic loopback identity.
 
 The `openmapx users` recovery commands use Docker and PostgreSQL directly;
 they do not use this HTTP shortcut.
@@ -159,8 +157,8 @@ read-only. See [Authentication methods](./users-and-access.md#authentication-met
 ### Privacy setup
 
 Full administrators use `/admin/privacy-setup` for controller details, email
-delivery, retention and source declarations. Privacy administrators handle cases
-through privacy casework. See [Data-subject requests](./data-subject-requests.md).
+delivery, retention and source declarations. Cases are handled in privacy
+casework. See [Data-subject requests](./data-subject-requests.md).
 
 ## CLI coverage and deliberate exclusions
 
@@ -203,7 +201,6 @@ System groups Services, Deployment, Updates, Backups, Diagnostics, Cache and
 Configuration transfer. Explicitly hosted deployments show Cache and
 Configuration transfer; host operations and the unsupported Platform editor are
 hidden. When deployment status is unknown, troubleshooting topics remain visible.
-Privacy administrators see privacy casework only.
 
 Existing Services, Transit, Coverage and Cache URLs redirect to their canonical
 workspace, retaining supported public navigation state. Ordinary unsaved drafts

@@ -15,7 +15,7 @@ import { createQueryWrapper, createTestQueryClient } from "@/test/query";
 const binding = vi.hoisted(() => ({ client: undefined as unknown }));
 vi.mock("@openmapx/core", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@openmapx/core")>()),
-  useSession: () => ({ data: { user: { id: "synthetic-worker", role: "privacy_admin" } } }),
+  useSession: () => ({ data: { user: { id: "synthetic-worker", role: "admin" } } }),
 }));
 vi.mock("@/components/admin/activity/activityQueries", () => ({
   useActivityClient: () => ({ client: binding.client, apiUrl: "http://privacy.test" }),

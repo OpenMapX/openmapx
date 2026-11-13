@@ -100,7 +100,6 @@ function UserRoleSelect({
       >
         <MenuItem value="user">User</MenuItem>
         <MenuItem value="admin">Admin</MenuItem>
-        <MenuItem value="privacy_admin">Privacy admin</MenuItem>
       </Select>
     </FormControl>
   );

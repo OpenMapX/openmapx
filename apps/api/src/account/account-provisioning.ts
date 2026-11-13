@@ -269,7 +269,7 @@ export async function provisionAccount(
   input: {
     name: string;
     email: string;
-    role: "user" | "admin" | "privacy_admin";
+    role: "user" | "admin";
     password?: string;
     sendInvitation: boolean;
     idempotencyKey: string;

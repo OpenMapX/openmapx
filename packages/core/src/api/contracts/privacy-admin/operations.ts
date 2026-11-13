@@ -47,7 +47,7 @@ const base = "/api/privacy/admin" as const;
 const read = <S extends z.ZodType>(path: `/api/${string}`, schema: S, p?: z.ZodType) => ({
   method: "GET" as const,
   path,
-  auth: "privacy_admin" as const,
+  auth: "admin" as const,
   ...(p ? { request: { params: p } } : {}),
   responses: { ...errors, 200: adminJson(schema) },
 });
@@ -60,7 +60,7 @@ const write = <S extends z.ZodType>(
 ) => ({
   method: "POST" as const,
   path,
-  auth: "privacy_admin" as const,
+  auth: "admin" as const,
   request: { params: p, body, headers },
   responses: { ...errors, [success]: adminJson(schema) },
 });
@@ -220,7 +220,7 @@ export const privacyAdminOperations = {
   downloadPrivacyAdminArtifact: {
     method: "GET",
     path: `${base}/requests/:requestId/artifacts/:artifactId/download`,
-    auth: "privacy_admin",
+    auth: "admin",
     request: { params: artifact },
     responses: {
       ...errors,
@@ -230,7 +230,7 @@ export const privacyAdminOperations = {
   downloadPrivacyAdminAttachment: {
     method: "GET",
     path: `${base}/requests/:requestId/attachments/:attachmentId/download`,
-    auth: "privacy_admin",
+    auth: "admin",
     request: { params: attachment },
     responses: {
       ...errors,

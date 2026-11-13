@@ -127,15 +127,14 @@ A single route can override the plugin-wide level:
 fastify.post("/mobile-auth/issue", { config: { auth: "session" } }, handler);
 ```
 
-| Level           | Meaning                                                                                             |
-| --------------- | --------------------------------------------------------------------------------------------------- |
-| `public`        | No credentials required.                                                                            |
-| `session`       | A signed-in user session.                                                                           |
-| `admin`         | An administrator session.                                                                           |
-| `privacy_admin` | A least-privilege privacy caseworker or full administrator session.                                 |
-| `service`       | An administrator session **or** a service-to-service token (`/api/data-manager`).                   |
-| `internal`      | No application check: reachability is expected to be restricted by the network (`/api/internal/*`). |
-| `unspecified`   | Nobody has classified it. Fails the freshness test.                                                 |
+| Level         | Meaning                                                                                             |
+| ------------- | --------------------------------------------------------------------------------------------------- |
+| `public`      | No credentials required.                                                                            |
+| `session`     | A signed-in user session.                                                                           |
+| `admin`       | An administrator session.                                                                           |
+| `service`     | An administrator session **or** a service-to-service token (`/api/data-manager`).                   |
+| `internal`    | No application check: reachability is expected to be restricted by the network (`/api/internal/*`). |
+| `unspecified` | Nobody has classified it. Fails the freshness test.                                                 |
 
 `unspecified` is deliberately distinct from `public`: an unclassified route must
 never be documented as open.

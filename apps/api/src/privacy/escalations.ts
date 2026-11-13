@@ -78,12 +78,7 @@ export async function schedulePrivacyEscalations(
         await database
           .select({ id: user.id })
           .from(user)
-          .where(
-            and(
-              or(eq(user.role, "admin"), eq(user.role, "privacy_admin")),
-              or(isNull(user.banned), eq(user.banned, false)),
-            ),
-          )
+          .where(and(eq(user.role, "admin"), or(isNull(user.banned), eq(user.banned, false))))
       ).map((row) => row.id);
   const requests = await database
     .select({
