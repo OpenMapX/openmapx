@@ -1285,6 +1285,11 @@ describe("backup volume modes", () => {
     expect(tar).toBeGreaterThan(restore);
     expect(replay).toBeGreaterThan(tar);
     expect(startApi).toBeGreaterThan(replay);
+    // Erasure replay and job closing, after the volumes, change API tables as
+    // the API's role.
+    const apiSessions = calls.filter(([, args], index) => index > tar && args.includes(" psql "));
+    expect(apiSessions.length).toBeGreaterThanOrEqual(2);
+    for (const [, args] of apiSessions) expect(args).toContain("-U openmapx_api");
   });
 
   it("gives the recreated database the live database's owner and grants before the dump", async () => {
@@ -1348,6 +1353,11 @@ describe("backup volume modes", () => {
     expect(apply).toBeGreaterThan(create);
     expect(inputs[apply]?.args).toContain("--single-transaction");
     expect(dump).toBeGreaterThan(apply);
+    // Every superuser step but the load, whose dump sets its own search path,
+    // searches only the catalogs.
+    expect(inputs[dump]?.args).not.toContain("PGOPTIONS");
+    for (const step of [read, drop, create, apply])
+      expect(inputs[step]?.args).toContain("-e PGOPTIONS=-c search_path=pg_catalog,pg_temp");
   });
 
   it("restarts and probes a mixed-mode database service before delayed erasure replay", async () => {

@@ -342,8 +342,10 @@ Database dumps keep each object's owner and grants. A restore drops and
 recreates the database, gives it the owner and database-level grants the live
 database had, then loads the dump. The API therefore keeps its schemas and
 the right to create them, data-manager keeps its own tables and schemas, and
-the API can still read them. The roles themselves belong to the PostgreSQL server, not
-to any database, and are not in the dump. PostGIS creates them each time it
+the API can still read them. The restore's superuser steps search only the system catalogs,
+except the load, where the dump sets its own empty search path; the erasure replay and the closing of restored jobs connect as
+`openmapx_api`, which owns those tables. The roles themselves belong to the
+PostgreSQL server, not to any database, and are not in the dump. PostGIS creates them each time it
 starts, so to restore onto a new host or an empty volume, render and start
 `postgis` from this checkout first, then restore. A community service's own
 role (see [Community extensions](./community-extensions.md)) must likewise

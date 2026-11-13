@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { services } from "@openmapx/core/server";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
@@ -471,5 +472,124 @@ integration("code planted for another role", () => {
       await roles.superuser`SELECT rolsuper FROM pg_roles WHERE rolname = 'openmapx_api'`,
     ).toEqual([{ rolsuper: false }]);
     await roles.superuser.unsafe("DROP FUNCTION public.st_tileenvelope(integer, integer, integer)");
+  }, 180_000);
+
+  it("restores a backup with every owner, grant and guard intact", async () => {
+    await roles.dataManager.unsafe(`
+      CREATE SCHEMA osm_search;
+      CREATE TABLE osm_search.places (name text);
+      INSERT INTO osm_search.places VALUES ('kept');
+    `);
+    await roles.api.unsafe(
+      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
+       VALUES ('restored', 'Restored', 'restored@example.test', true, now(), now())`,
+    );
+    await close();
+    const run = async (command: string[], label: string) => {
+      const result = await db.exec(command);
+      expect(result.exitCode, `${label}: ${result.stderr}`).toBe(0);
+      return result.output;
+    };
+    const superuserPsql = ["env", `PGOPTIONS=${services.SUPERUSER_PGOPTIONS}`, "psql", "-X"];
+    // The CLI's restore: dump, read the live database's owner and grants,
+    // recreate the database, give them back, then load the dump.
+    await run(["sh", "-c", "pg_dump -U postgres openmapx > /tmp/openmapx.sql"], "dump");
+    const settings = await run(
+      [
+        ...superuserPsql,
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-U",
+        "postgres",
+        "-d",
+        "postgres",
+        "--no-align",
+        "--tuples-only",
+        "-c",
+        services.databaseSettingsQuery("openmapx"),
+      ],
+      "settings",
+    );
+    expect(settings).toContain("GRANT CREATE ON DATABASE openmapx TO openmapx_data_manager;");
+    await run(["dropdb", "-U", "postgres", "--force", "openmapx"], "dropdb");
+    await run(["createdb", "-U", "postgres", "openmapx"], "createdb");
+    await db.copyContentToContainer([{ content: settings, target: "/tmp/settings.sql" }]);
+    await run(
+      [
+        ...superuserPsql,
+        "-v",
+        "ON_ERROR_STOP=1",
+        "--single-transaction",
+        "-U",
+        "postgres",
+        "-d",
+        "postgres",
+        "-f",
+        "/tmp/settings.sql",
+      ],
+      "settings apply",
+    );
+    await run(
+      // The dump sets an empty search path itself. PostGIS's extension scripts
+      // reset it to the session default, so the load must keep that default.
+      [
+        "psql",
+        "-X",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-q",
+        "-U",
+        "postgres",
+        "-d",
+        "openmapx",
+        "-f",
+        "/tmp/openmapx.sql",
+      ],
+      "load",
+    );
+    open();
+    expect(
+      await roles.superuser`
+        SELECT pg_get_userbyid(d.datdba) AS database,
+          (SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = 'public') AS public,
+          (SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = 'osm_search') AS index,
+          (SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = 'public."user"'::regclass) AS users,
+          (SELECT pg_get_userbyid(proowner) FROM pg_proc
+            WHERE oid = 'tiles.segment_flow(integer, integer, integer, json)'::regprocedure) AS tiles,
+          (SELECT array_agg(evtname ORDER BY evtname) FROM pg_event_trigger) AS guards,
+          has_database_privilege('openmapx_data_manager', d.datname, 'CREATE') AS data_manager_create,
+          has_table_privilege('openmapx_tiles_owner', 'conditions.road_segment', 'SELECT') AS tile_read
+        FROM pg_database d WHERE d.datname = 'openmapx'`,
+    ).toEqual([
+      {
+        database: "postgres",
+        public: "openmapx_api",
+        index: "openmapx_data_manager",
+        users: "openmapx_api",
+        tiles: "openmapx_tiles_owner",
+        guards: ["openmapx_guard_check_ddl", "openmapx_guard_refuse_code"],
+        data_manager_create: true,
+        tile_read: true,
+      },
+    ]);
+    expect(await roles.api.unsafe("SELECT name FROM osm_search.places")).toEqual([
+      { name: "kept" },
+    ]);
+    await permissionDenied(roles.dataManager.unsafe(`SELECT 1 FROM "user"`));
+    await permissionDenied(roles.dataManager.unsafe("CREATE SCHEMA conditions_shadow"));
+    // The CLI changes API tables as the API's role, over PostGIS's local socket.
+    await run(
+      [
+        "psql",
+        "-X",
+        "-U",
+        "openmapx_api",
+        "-d",
+        "openmapx",
+        "-c",
+        `DELETE FROM "user" WHERE id = 'restored'`,
+      ],
+      "API role over the socket",
+    );
   }, 180_000);
 });

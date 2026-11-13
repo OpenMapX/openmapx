@@ -26,9 +26,11 @@ async function resolvePostgresTarget(rootDir?: string): Promise<PostgresTarget> 
     );
   }
   const env = svc.manifest.container.environment ?? {};
+  // The API's role owns the account tables, so their triggers run with its
+  // own rights here, never a superuser's. PostGIS trusts its local socket.
   return {
     serviceId: POSTGIS_ID,
-    user: env.POSTGRES_USER ?? "postgres",
+    user: coreServices.API_DATABASE_ROLE,
     db: env.POSTGRES_DB ?? "openmapx",
   };
 }

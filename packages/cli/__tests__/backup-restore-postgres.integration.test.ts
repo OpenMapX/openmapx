@@ -44,6 +44,7 @@ const GOOD_KEY = Buffer.alloc(32, 17);
 const WRONG_KEY = Buffer.alloc(32, 29);
 const repoRoot = resolve(import.meta.dirname, "../../..");
 const migrations = join(repoRoot, "apps", "api", "src", "db", "migrations");
+const entrypoint = join(repoRoot, "services", "postgis", "scripts", "sync-password.sh");
 
 interface FixtureState {
   root: string;
@@ -77,22 +78,37 @@ while :; do sleep 3600; done
   );
   writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
   mkdirSync(join(root, "services"));
+  // PostGIS runs the production entrypoint, which creates the API's and
+  // data-manager's roles from these password files.
+  const secrets = join(root, "postgis-secrets");
+  mkdirSync(secrets, { recursive: true, mode: 0o700 });
+  writeFileSync(join(secrets, "api"), "restore-fixture-api-password", { mode: 0o600 });
+  writeFileSync(join(secrets, "data-manager"), "restore-fixture-data-manager-password", {
+    mode: 0o600,
+  });
   const composeYaml = `name: ${project}
 services:
   postgis:
     image: ${POSTGIS_IMAGE}
+    entrypoint: ["/usr/local/bin/openmapx-postgis-entrypoint.sh"]
+    command: ["postgres"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: restore-fixture-password
       POSTGRES_DB: ${DATABASE}
+      OPENMAPX_API_DB_PASSWORD_FILE: /run/secrets/postgres-api-password
+      OPENMAPX_DATA_MANAGER_DB_PASSWORD_FILE: /run/secrets/postgres-data-manager-password
     ports:
       - "127.0.0.1::5432"
     volumes:
       - pgdata:/var/lib/postgresql
       - scratch:/fixture-scratch
       - ${JSON.stringify(`${migrations}:/migrations:ro`)}
+      - ${JSON.stringify(`${entrypoint}:/usr/local/bin/openmapx-postgis-entrypoint.sh:ro`)}
+      - ${JSON.stringify(`${join(secrets, "api")}:/run/secrets/postgres-api-password:ro`)}
+      - ${JSON.stringify(`${join(secrets, "data-manager")}:/run/secrets/postgres-data-manager-password:ro`)}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${DATABASE}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${DATABASE} && test -f /var/run/postgresql/openmapx-password-synced"]
       interval: 1s
       timeout: 3s
       retries: 60
@@ -161,7 +177,25 @@ async function waitForPostgresInitialization(): Promise<void> {
   // explicit init-complete marker and a query on the final server.
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const logs = await compose(["logs", "--no-color", "postgis"], false);
-    if (logs.includes("PostgreSQL init process complete; ready for start up.")) {
+    const synced = await execa(
+      "docker",
+      [
+        "compose",
+        "-f",
+        fixture.composeFile,
+        "exec",
+        "-T",
+        "postgis",
+        "test",
+        "-f",
+        "/var/run/postgresql/openmapx-password-synced",
+      ],
+      { cwd: fixture.infra, reject: false },
+    );
+    if (
+      logs.includes("PostgreSQL init process complete; ready for start up.") &&
+      synced.exitCode === 0
+    ) {
       const query = await execa(
         "docker",
         [
@@ -189,7 +223,7 @@ async function waitForPostgresInitialization(): Promise<void> {
   throw new Error("fixture PostgreSQL initialization did not complete");
 }
 
-async function psql(input: string, database = DATABASE): Promise<string> {
+async function psql(input: string, database = DATABASE, user = POSTGRES_USER): Promise<string> {
   const result = await execa(
     "docker",
     [
@@ -204,7 +238,7 @@ async function psql(input: string, database = DATABASE): Promise<string> {
       "-v",
       "ON_ERROR_STOP=1",
       "-U",
-      POSTGRES_USER,
+      user,
       "-d",
       database,
       "-At",
@@ -230,8 +264,12 @@ async function livePostgresUrl(): Promise<string> {
 
 async function resetMigratedDatabase(): Promise<void> {
   await psql(
-    `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${DATABASE}' AND pid <> pg_backend_pid();\nDROP DATABASE IF EXISTS ${DATABASE};\nCREATE DATABASE ${DATABASE};\n`,
+    `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${DATABASE}' AND pid <> pg_backend_pid();\nDROP DATABASE IF EXISTS ${DATABASE};\nCREATE DATABASE ${DATABASE};\nGRANT CREATE ON DATABASE ${DATABASE} TO openmapx_api, openmapx_data_manager;\n`,
     "postgres",
+  );
+  // What PostGIS's entrypoint gives the platform database on start.
+  await psql(
+    `CREATE EXTENSION IF NOT EXISTS postgis;\nALTER SCHEMA public OWNER TO openmapx_api;\nREVOKE CREATE ON SCHEMA public FROM PUBLIC;\nALTER DEFAULT PRIVILEGES FOR ROLE openmapx_data_manager GRANT USAGE ON SCHEMAS TO openmapx_api;\nALTER DEFAULT PRIVILEGES FOR ROLE openmapx_data_manager GRANT SELECT ON TABLES TO openmapx_api;\n`,
   );
   const result = await execa(
     "docker",
@@ -244,7 +282,8 @@ async function resetMigratedDatabase(): Promise<void> {
       "postgis",
       "sh",
       "-ec",
-      `for file in /migrations/[0-9][0-9][0-9][0-9]_*.sql; do psql -X --single-transaction -v ON_ERROR_STOP=1 -U ${POSTGRES_USER} -d ${DATABASE} -f "$file"; done`,
+      // The API's role migrates and owns the tables, as in production.
+      `for file in /migrations/[0-9][0-9][0-9][0-9]_*.sql; do psql -X --single-transaction -v ON_ERROR_STOP=1 -U openmapx_api -d ${DATABASE} -f "$file"; done`,
     ],
     { cwd: fixture.infra, reject: false },
   );
@@ -502,6 +541,41 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
     ).toBe("true:true:true:true:true");
     expect(await psql("SELECT count(*) FROM app_logs WHERE source = 'fixture';")).toBe("0");
   }, 120_000);
+
+  it("keeps the API's and data-manager's owners and grants across the restore", async () => {
+    await resetMigratedDatabase();
+    await seedRestoreScenario();
+    await psql(
+      "CREATE SCHEMA osm_search;\nCREATE TABLE osm_search.places (name text);\nINSERT INTO osm_search.places VALUES ('kept');\n",
+      DATABASE,
+      "openmapx_data_manager",
+    );
+    await createDatabaseBackup("roles");
+    await resetJournal(GOOD_KEY);
+
+    await restoreBackup({ rootDir: fixture.root, name: "roles", stopRunning: true });
+
+    expect(
+      await psql(`SELECT concat_ws(' ',
+        pg_get_userbyid(d.datdba),
+        (SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = 'public'),
+        (SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = 'osm_search'),
+        (SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = 'public."user"'::regclass),
+        has_database_privilege('openmapx_data_manager', d.datname, 'CREATE'),
+        has_database_privilege('openmapx_api', d.datname, 'CREATE'))
+      FROM pg_database d WHERE d.datname = '${DATABASE}';`),
+    ).toBe("postgres openmapx_api openmapx_data_manager openmapx_api t t");
+    expect(await psql("SELECT name FROM osm_search.places;", DATABASE, "openmapx_api")).toBe(
+      "kept",
+    );
+    expect(
+      await psql(
+        `SELECT count(*) FROM "user" WHERE id = '${UNRELATED_USER_ID}';`,
+        DATABASE,
+        "openmapx_api",
+      ),
+    ).toBe("1");
+  });
 
   it("rejects a journal key mismatch before restoring a backup with no users", async () => {
     await resetMigratedDatabase();

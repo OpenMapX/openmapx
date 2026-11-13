@@ -124,6 +124,11 @@ export {
   validateDataManagerBaseUrl,
 } from "./data-manager/transport";
 export {
+  API_DATABASE_ROLE,
+  databaseSettingsQuery,
+  SUPERUSER_PGOPTIONS,
+} from "./database-roles";
+export {
   assertDeploymentEnvironmentFile,
   CONFIGURATION_DIRECTORY,
   CONFIGURATION_GENERATIONS,

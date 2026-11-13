@@ -106,8 +106,13 @@ superuser:
   writes a row, including the superuser's during a restore, may call only the
   superuser's immutable or stable functions.
 
-PostGIS's own superuser SQL searches only the system catalogs, so no object in
-`public` can stand in for a built-in it calls.
+PostGIS's own superuser SQL and the CLI's restore steps search only the system
+catalogs (the restore's load uses the dump's own empty search path), so no
+object in `public` can stand in for a built-in they call. The
+CLI changes API tables (`openmapx users`, the erasure replay and the closing of
+restored jobs after a restore) as `openmapx_api`, so the API's triggers never run
+with superuser rights. Make your own changes to API tables the same way:
+`docker exec -it postgis psql -U openmapx_api -d openmapx`.
 
 There are no environment variables for these passwords. To change one, delete
 its file, render again and restart PostGIS, `app-api` and `data-manager`.

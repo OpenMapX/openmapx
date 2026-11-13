@@ -453,11 +453,20 @@ standard practice. The change that removes role keys and witnesses removes this
 use; until then, treat any exposure of an HMAC digest's inputs and key handling as
 exposure of the signing key.
 
-**The CLI's superuser sessions touch API tables.** `openmapx users` and the
-erasure replay after a restore update API-owned tables as the superuser, so an
-API-owned trigger on those tables runs with superuser rights. The API's own
-functions carry the `openmapx_` prefix and the entrypoint searches only the
-catalogs, but these sessions still fire the API's triggers.
+**Superuser sessions in the platform database.** The API's role owns `public`,
+so a superuser session that searched it, or wrote to an API table, could run
+the API's code with superuser rights. PostGIS's entrypoint and the CLI's
+restore steps search only the catalogs; `openmapx users`, the erasure replay
+and the closing of restored jobs connect as `openmapx_api`, so the API's
+triggers run with its own rights. The restore's load runs the dump as the
+superuser with the dump's own empty search path; PostGIS's extension scripts in
+it fall back to the default path, which includes `public`, but the role guard
+keeps the API from creating any function, operator or cast there that a call
+could resolve to, and check constraints and generated columns may call only
+the superuser's immutable or stable functions. What remains: an operator's own
+superuser session that changes API tables fires the API's triggers with
+superuser rights, so make such changes as `openmapx_api` (`psql -U
+openmapx_api` in the PostGIS container).
 
 ## Target design (not yet implemented)
 

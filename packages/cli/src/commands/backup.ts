@@ -45,7 +45,7 @@ import {
   tarVolumeToFile,
 } from "./backup-processes";
 
-const { ServiceRegistry, isSafePostgresIdentifier } = coreServices;
+const { API_DATABASE_ROLE, ServiceRegistry, isSafePostgresIdentifier } = coreServices;
 
 // ─── Public types ───────────────────────────────────────────────────────────
 
@@ -1217,20 +1217,23 @@ function postgresCopyTextField(value: string): string {
     .join("\\v");
 }
 
+/**
+ * Replays erasures as the API's role, which owns the tables involved. Its
+ * triggers on those tables then run with its own rights, never a superuser's.
+ */
 async function replayOpenMapXErasures(
   ctx: ComposeContext,
   rootDir: string | undefined,
   serviceId: string,
-  postgresUser: string,
   database: string,
 ): Promise<number> {
   const { journalPath } = erasureJournalPaths(rootDir);
   return replayErasureRequests({
     journalPath,
     key: readErasureJournalKey(rootDir),
-    listUsers: () => listRestoredUsers(ctx, serviceId, postgresUser, database),
+    listUsers: () => listRestoredUsers(ctx, serviceId, API_DATABASE_ROLE, database),
     eraseUser: (restoredUser) =>
-      eraseRestoredUser(ctx, serviceId, postgresUser, database, restoredUser),
+      eraseRestoredUser(ctx, serviceId, API_DATABASE_ROLE, database, restoredUser),
   });
 }
 
@@ -1407,11 +1410,11 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
         ctx,
         opts.rootDir,
         target.serviceId,
-        target.postgresUser,
         target.database,
       );
       log.dim(`  replayed ${erased} retained user-erasure request(s)`);
-      await failRestoredJobs(ctx, target.serviceId, target.postgresUser, target.database);
+      // As the API's role, which owns the job tables, for the same reason.
+      await failRestoredJobs(ctx, target.serviceId, API_DATABASE_ROLE, target.database);
       log.dim("  closed jobs that were in progress when the backup was taken");
       if (startedForRestore.has(target.serviceId)) {
         log.dim(`  stopping ${target.serviceId} after erasure replay…`);
@@ -1453,25 +1456,6 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
   }
 }
 
-/**
- * Statements that give a recreated database the live one's owner and
- * database-level grants. `db` is a validated identifier. Prints nothing when
- * the database does not exist.
- */
-function databaseSettingsQuery(db: string): string {
-  return `SELECT statement FROM (
-  SELECT 0 AS step, format('ALTER DATABASE %I OWNER TO %I;', d.datname, pg_get_userbyid(d.datdba)) AS statement
-    FROM pg_database d WHERE d.datname = '${db}'
-  UNION ALL
-  SELECT 1, format('REVOKE ALL ON DATABASE %I FROM PUBLIC;', d.datname)
-    FROM pg_database d WHERE d.datname = '${db}' AND d.datacl IS NOT NULL
-  UNION ALL
-  SELECT 2, format('GRANT %s ON DATABASE %I TO %s;', a.privilege_type, d.datname,
-      CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE quote_ident(pg_get_userbyid(a.grantee)) END)
-    FROM pg_database d CROSS JOIN LATERAL aclexplode(d.datacl) a WHERE d.datname = '${db}'
-) settings ORDER BY step`;
-}
-
 async function pgRestoreFromFile(
   ctx: ComposeContext,
   serviceId: string,
@@ -1488,14 +1472,19 @@ async function pgRestoreFromFile(
   // The database's own owner and grants are not in such a dump. Read them
   // from the live database first and give them to the new one, so the roles
   // the deployment created (which live outside any database) keep their
-  // access: the platform database belongs to the API's role, and
-  // data-manager may create schemas in it.
+  // access: the platform database stays the superuser's, and the API and
+  // data-manager keep the right to create schemas in it.
+  //
+  // These superuser sessions search only the catalogs, so nothing the API's
+  // role created in `public` can stand in for a built-in they call.
   const settingsQuery = await execa(
     "docker",
     [
       ...ctx.composeArgs,
       "exec",
       "-T",
+      "-e",
+      `PGOPTIONS=${coreServices.SUPERUSER_PGOPTIONS}`,
       serviceId,
       "psql",
       "-X",
@@ -1508,7 +1497,7 @@ async function pgRestoreFromFile(
       "--no-align",
       "--tuples-only",
       "-c",
-      databaseSettingsQuery(db),
+      coreServices.databaseSettingsQuery(db),
     ],
     { ...cliProcessOptions(), cwd: ctx.cwd, reject: false },
   );
@@ -1519,7 +1508,19 @@ async function pgRestoreFromFile(
 
   const drop = await execa(
     "docker",
-    [...ctx.composeArgs, "exec", "-T", serviceId, "dropdb", "-U", user, "--if-exists", db],
+    [
+      ...ctx.composeArgs,
+      "exec",
+      "-T",
+      "-e",
+      `PGOPTIONS=${coreServices.SUPERUSER_PGOPTIONS}`,
+      serviceId,
+      "dropdb",
+      "-U",
+      user,
+      "--if-exists",
+      db,
+    ],
     { ...cliProcessOptions(), cwd: ctx.cwd, reject: false },
   );
   if (drop.exitCode !== 0) {
@@ -1528,7 +1529,18 @@ async function pgRestoreFromFile(
 
   const create = await execa(
     "docker",
-    [...ctx.composeArgs, "exec", "-T", serviceId, "createdb", "-U", user, db],
+    [
+      ...ctx.composeArgs,
+      "exec",
+      "-T",
+      "-e",
+      `PGOPTIONS=${coreServices.SUPERUSER_PGOPTIONS}`,
+      serviceId,
+      "createdb",
+      "-U",
+      user,
+      db,
+    ],
     { ...cliProcessOptions(), cwd: ctx.cwd, reject: false },
   );
   if (create.exitCode !== 0) {
@@ -1541,6 +1553,8 @@ async function pgRestoreFromFile(
         ...ctx.composeArgs,
         "exec",
         "-T",
+        "-e",
+        `PGOPTIONS=${coreServices.SUPERUSER_PGOPTIONS}`,
         serviceId,
         "psql",
         "-X",
@@ -1560,6 +1574,8 @@ async function pgRestoreFromFile(
   }
 
   // gunzip <file> | docker compose exec -T <svc> psql -U <user> <db>
+  // The dump sets an empty search path itself. PostGIS's extension scripts
+  // reset it to the session default, so this load keeps that default.
   const gunzip = execa("gunzip", ["-c", gzFile], {
     ...cliProcessOptions(),
     cwd: ctx.cwd,
