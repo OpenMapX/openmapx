@@ -13,7 +13,7 @@
     "bench:overture-h3": "tsx scripts/bench-overture-h3.ts"
   },
   "dependencies": {
-    "@fastify/rate-limit": "11.2.1",
+    "@fastify/rate-limit": "11.2.2",
     "@mapbox/glyph-pbf-composite": "0.0.3",
     "@motis-project/motis-client": "2.11.4",
     "@openmapx/cli": "workspace:*",
@@ -34,7 +34,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@fastify/swagger": "9.9.2",
+    "@fastify/swagger": "9.9.3",
     "@mapbox/vector-tile": "3.0.0",
     "@openmapx/integration-framework": "workspace:^",
     "@testcontainers/postgresql": "^12.2.1",
