@@ -34,7 +34,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { OPS_PROTOCOL_VERSION } from "@openmapx/core/ops";
+import { createControlRootOperationKey, OPS_PROTOCOL_VERSION } from "@openmapx/core/ops";
 import postgres from "postgres";
 import { type RuntimeBundles, runtimeBundles } from "./support/bundles";
 import {
@@ -289,6 +289,7 @@ export class CrashHost {
   private databaseUrl = "";
   private databaseName = "";
   private databaseServer = { hostname: "", port: "" };
+  private readonly operationDeadlines = new Map<string, number>();
   private admin?: { cookie: string; userId: string };
   private closed = false;
   private bundles?: RuntimeBundles;
@@ -1400,6 +1401,37 @@ export class CrashHost {
     return { status: response.status, body: parsed };
   }
 
+  /** A fresh operation key, as the API mints one for a mutation. */
+  newOperationKey(): string {
+    // A mutation names its deadline in its key and again in each request.
+    const deadline = Date.now() + 30 * 60_000;
+    const key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) });
+    this.operationDeadlines.set(key, deadline);
+    return key;
+  }
+
+  /** Submits one operation to the agent under a key from `newOperationKey`,
+   * as the API does, and returns the agent's answer. */
+  async submitAgentOperation(
+    operationKey: string,
+    operation: Record<string, unknown>,
+  ): Promise<{ status: number; operationId?: string; body: unknown }> {
+    const deadline = this.operationDeadlines.get(operationKey);
+    if (deadline === undefined) throw new Error("Unknown operation key; use newOperationKey");
+    const now = Date.now();
+    const reply = await this.agentRequest("POST", "/v1/operations", {
+      version: 2,
+      requestId: `ops1_${randomBytes(12).toString("base64url")}`,
+      operationKey,
+      issuedAt: new Date(now).toISOString(),
+      expiresAt: new Date(now + 20_000).toISOString(),
+      operation,
+      execution: { requestedDeadlineAt: deadline },
+    });
+    const operationId = (reply.body as { result?: { operationId?: string } }).result?.operationId;
+    return { ...reply, ...(operationId ? { operationId } : {}) };
+  }
+
   /** The agent's account of one operation: its state, or why it has none. */
   async operation(
     operationId: string,
@@ -1441,8 +1473,6 @@ export class CrashHost {
 
   private readonly lastJobs = new Map<string, unknown>();
 
-  /** The job once terminal, or as it stands when the wait ends: an update the
-   * system holds for the operator stays unfinished on purpose. */
   /** Waits until an outward condition holds. */
   async waitUntil(probe: () => Promise<boolean>, timeoutMs: number, what: string): Promise<void> {
     await waitFor(async () => ((await probe()) ? true : undefined), {
@@ -1452,6 +1482,8 @@ export class CrashHost {
     });
   }
 
+  /** The job once terminal, or as it stands when the wait ends: an update the
+   * system holds for the operator stays unfinished on purpose. */
   async settledJob(id: string, timeoutMs: number): Promise<JobView> {
     try {
       return await this.waitForJob(id, { timeoutMs });

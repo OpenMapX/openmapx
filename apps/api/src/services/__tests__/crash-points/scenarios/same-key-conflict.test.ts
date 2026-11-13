@@ -1,24 +1,6 @@
-import { randomBytes } from "node:crypto";
-import { createControlRootOperationKey } from "@openmapx/core/ops";
 import { afterAll, beforeAll, describe, expect } from "vitest";
 import { CrashHost, crashPointsUnavailable } from "../driver";
 import { scenario } from "../scenario";
-
-// A mutation names its deadline in its operation key and in its request.
-const deadline = Date.now() + 30 * 60_000;
-
-function request(operationKey: string, operation: Record<string, unknown>) {
-  const now = Date.now();
-  return {
-    version: 2,
-    requestId: `ops1_${randomBytes(12).toString("base64url")}`,
-    operationKey,
-    issuedAt: new Date(now).toISOString(),
-    expiresAt: new Date(now + 20_000).toISOString(),
-    operation,
-    execution: { requestedDeadlineAt: deadline },
-  };
-}
 
 // An operation key names one body; a different body under it is a conflict.
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1" || !!crashPointsUnavailable())(
@@ -35,19 +17,18 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1" || !!crashPoints
     scenario(
       "is refused as a conflict and starts no effect for the second body",
       async () => {
-        const key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) });
-        const first = await host.agentRequest(
-          "POST",
-          "/v1/operations",
-          request(key, { kind: "service.stop", serviceId: "well-known" }),
-        );
+        const key = host.newOperationKey();
+        const first = await host.submitAgentOperation(key, {
+          kind: "service.stop",
+          serviceId: "well-known",
+        });
         expect(first.status, JSON.stringify(first.body)).toBeLessThan(300);
+        expect(first.operationId).toBeDefined();
         const before = host.mark();
-        const second = await host.agentRequest(
-          "POST",
-          "/v1/operations",
-          request(key, { kind: "service.stop", serviceId: "traefik" }),
-        );
+        const second = await host.submitAgentOperation(key, {
+          kind: "service.stop",
+          serviceId: "traefik",
+        });
         expect(second.status).toBe(409);
         expect(
           host
@@ -55,15 +36,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1" || !!crashPoints
             .filter((call) => call.args.some((value) => value.includes("traefik"))),
         ).toEqual([]);
         // The same body under the same key is the original operation, not a new one.
-        const again = await host.agentRequest(
-          "POST",
-          "/v1/operations",
-          request(key, { kind: "service.stop", serviceId: "well-known" }),
-        );
+        const again = await host.submitAgentOperation(key, {
+          kind: "service.stop",
+          serviceId: "well-known",
+        });
         expect(again.status).toBeLessThan(300);
-        expect((again.body as { result?: { operationId?: string } }).result?.operationId).toBe(
-          (first.body as { result?: { operationId?: string } }).result?.operationId,
-        );
+        expect(again.operationId).toBe(first.operationId);
       },
       600_000,
     );

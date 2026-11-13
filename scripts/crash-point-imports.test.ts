@@ -65,7 +65,10 @@ function specifiers(file: string): string[] {
       const callee = node.expression;
       const isImport = callee.kind === ts.SyntaxKind.ImportKeyword;
       const isRequire =
-        (ts.isIdentifier(callee) && callee.text === "require") || ts.isCallExpression(callee);
+        (ts.isIdentifier(callee) && callee.text === "require") ||
+        (ts.isCallExpression(callee) &&
+          ts.isIdentifier(callee.expression) &&
+          callee.expression.text === "createRequire");
       const [first] = node.arguments;
       if ((isImport || isRequire) && first && ts.isStringLiteralLike(first)) found.push(first.text);
     }
@@ -87,6 +90,16 @@ describe("crash-point suite imports", () => {
       ),
     );
     expect(violations).toEqual([]);
+  });
+
+  it("lets scenario files talk only to the driver", () => {
+    const scenarios = files(`${suite}/scenarios`);
+    expect(scenarios.length).toBeGreaterThan(0);
+    for (const file of scenarios)
+      for (const specifier of specifiers(file))
+        expect(["vitest", "../driver", "../scenario"], `${file} imports ${specifier}`).toContain(
+          specifier,
+        );
   });
 
   it("recognises the forbidden forms it is meant to refuse", () => {
