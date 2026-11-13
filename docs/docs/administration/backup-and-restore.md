@@ -336,37 +336,58 @@ the OpenMapX database being restored, the restore refuses unless you opt in:
 pnpm openmapx backup restore weekly --stop-running
 ```
 
-With `--stop-running`, the CLI stops the required tar targets and dependent API and restarts them after a successful restore. The database server stays running because restoring the
-dump needs it. For an OpenMapX database restore, the CLI also
-stops `app-api` before the database is replaced and restarts it only after the
-erasure journal has been replayed. If restore or replay fails, the API remains
-stopped so it cannot expose resurrected account data.
+With `--stop-running`, the CLI stops the required tar targets and dependent API
+and restarts them after a successful restore. The database server stays running
+because restoring the dump needs it. For an OpenMapX database restore, the CLI
+also stops `app-api` before the database is replaced and restarts it only after
+the erasure journal has been replayed. If replay fails after the database was
+replaced, the API remains stopped so it cannot expose resurrected account data.
 
-Database dumps keep each object's owner and grants. A restore drops and
-recreates the database, gives it the owner and database-level grants the live
-database had, then restores the dump. The API therefore keeps its schemas and
-the right to create them, data-manager keeps its own tables and schemas, and
-the API can still read them.
+Before it stops or changes anything, the CLI checks every file in the backup and
+plans every database restore against the live server (see below). A backup it
+refuses leaves every service and volume as it was.
 
-Each table, view, function and other object a role owns is restored by a
-session that logs in as that role, over the database container's local
-socket. A table's check constraints, defaults, generated columns and index
-expressions, which the restore evaluates, therefore run with their owner's
-rights and never as the superuser. The superuser restores only what runs
-nothing when created: schemas, extensions, entries without an owner such as
-casts, its own objects, and the tile function PostGIS creates and hands to
-`openmapx_tiles_owner`. The restore's other superuser steps search only the
-system catalogs; the erasure replay and the closing of restored jobs connect
-as `openmapx_api`, which owns those tables.
+Database dumps keep each object's owner and grants. The API therefore keeps its
+schemas and the right to create them, data-manager keeps its own tables and
+schemas, and the API can still read them.
 
-Before it drops anything, the CLI reads the backup's list of entries and the
-server's roles. It refuses the backup, and leaves the live database as it
-is, when an entry belongs to a role the server lacks, or to a role that
-cannot log in, other than that tile function. Nobody but the superuser could
-restore such an entry, and its code would then run with superuser rights.
-The tile roles can create no table, function or other object, and PostGIS
-lets only the superuser create large objects, so code that runs as the tile
-owner cannot make a backup unrestorable this way.
+A restore creates a scratch database beside the live one
+(`<database>__restore`), gives it the owner and database-level grants the live
+database has, and restores the dump into it. Only when every step succeeded does
+one transaction rename the live database to `<database>__previous` and the
+scratch one into its place; the replaced database is dropped last. When a step
+fails, the CLI drops the scratch database and the live one stays as it was, so
+the API is started again. The swap fails, and changes nothing, while any session
+is still connected to the live database. A restore needs free disk space for a
+second copy of the database while it runs. A `<database>__restore` left by an
+interrupted restore is dropped when the next one starts; a
+`<database>__previous` that could not be dropped is reported, and must be
+dropped before the next restore can swap.
+
+Each table, view, function and other object a role owns is restored by a session
+that logs in as that role, over the database container's local socket. A table's
+check constraints, defaults, generated columns and index expressions, which the
+restore evaluates, therefore run with their owner's rights and never as the
+superuser. Each pass logs in with the session settings a restore needs, such as
+read-write transactions and no timeouts, over any defaults the role set for
+itself; PostGIS also clears such defaults each time it starts. The superuser
+restores schemas, entries without an owner such as casts, its own objects, and
+the tile function PostGIS creates and hands to `openmapx_tiles_owner`; none of
+these runs code when created. It also creates the extensions, whose scripts run
+as the superuser and find names through the `public` schema the API owns. That
+is safe because `pg_dump` places every extension before any role's functions,
+operators, types and tables, so no role's code exists yet when the scripts run;
+the CLI refuses a backup where that order does not hold. The restore's other
+superuser steps search only the system catalogs; the erasure replay and the
+closing of restored jobs connect as `openmapx_api`, which owns those tables.
+
+When it plans, the CLI reads the backup's list of entries and the server's
+roles. It refuses the backup when an entry belongs to a role the server lacks,
+or to a role that cannot log in, other than that tile function. Nobody but the
+superuser could restore such an entry, and its code would then run with
+superuser rights. The tile roles can create no table, function or other object,
+and PostGIS lets only the superuser create large objects, so code that runs as
+the tile owner cannot make a backup unrestorable this way.
 
 The roles themselves belong to the PostgreSQL server, not to any database,
 and are not in the dump. PostGIS creates them each time it starts, so to

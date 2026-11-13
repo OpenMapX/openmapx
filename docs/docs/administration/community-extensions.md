@@ -483,13 +483,18 @@ installation does not prove that their database and feed credentials are valid.
 1. Open **System → Services → openconditions-ingest** and
    **openconditions-contributions-api**. Read each installed manifest's fields
    and setup guides.
-2. Set secrets on **Credentials**. `OPENMAPX_SECRETS_KEY` is required for the API
-   vault; generated containers receive private secret files through `<KEY>_FILE`.
-   The ingest and contributions services need `DATABASE_URL`. Never give a
-   community service the PostgreSQL superuser or the `openmapx_api` and
+2. Set secrets on **Credentials**. `OPENMAPX_SECRETS_KEY` is required for the
+   API vault; generated containers receive private secret files through
+   `<KEY>_FILE`. The ingest and contributions services need `DATABASE_URL`.
+   Never give a community service the PostgreSQL superuser's URL, even when its
+   own documentation suggests one, nor the `openmapx_api` and
    `openmapx_data_manager` roles: any of them would let it read and change
-   accounts and the platform's configuration. Create a dedicated role for each
-   service with only what it needs, as shown below, and use
+   accounts and the platform's configuration. The superuser is worse still. A
+   service that calls PostGIS runs whatever functions the API's role has put in
+   `public` (see below), so with the superuser's URL a compromised API would
+   gain superuser rights over the whole server, including running commands in
+   the database container. Create a dedicated role for each service with only
+   what it needs, as shown below, and use
    `postgresql://<role>:<password>@postgis:5432/openmapx` with a correctly
    URL-encoded password. The contributions service also declares
    `OPENCONDITIONS_GRANT_SECRET` and `OPENCONDITIONS_REVIEWER_TOKEN`; generate

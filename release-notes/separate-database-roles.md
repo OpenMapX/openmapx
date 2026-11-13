@@ -30,12 +30,17 @@ Database backups are now `pg_dump` archives in PostgreSQL's custom format
 (`<service>__<volume>.dump`) that keep each object's owner and grants. A
 restore recreates each role's objects, and loads its tables, in a session of
 that role, so no role's check constraints, defaults or index expressions run
-as the superuser; the superuser restores only schemas, extensions, casts, its
-own objects and the tile function. Before it drops anything, the restore
-refuses a backup with an object of a role the server lacks or that cannot log
-in. It keeps the live database's owner and database-level grants. The CLI refuses to restore an older plain-SQL backup
-(`.sql.gz`) of the OpenMapX database; other services' older backups still
-restore.
+as the superuser; the superuser restores only schemas, casts, its own objects
+and the tile function, and creates the extensions before any role's code
+exists. The restore checks every file and plans every database before it stops
+anything, and refuses a backup with an object of a role the server lacks or
+that cannot log in. It restores into a scratch database and swaps it in only
+when every step succeeded, so a failed restore leaves the live database in
+place; it needs disk space for a second copy meanwhile. It keeps the live
+database's owner and database-level grants. PostGIS clears the defaults each
+role may set for its own sessions when it starts. The CLI refuses to restore
+an older plain-SQL backup (`.sql.gz`) of the OpenMapX database; other
+services' older backups still restore.
 
 PostGIS stays in the `public` schema, which the API owns. A compromised API
 can add functions or operators there that run as any role calling such a

@@ -102,9 +102,10 @@ API's or the superuser's rights. Two structural rules keep it that way:
 - A check constraint, default, generated column or index expression runs in the
   session that writes the row or builds the index. Only data-manager writes its
   tables, and a backup restore recreates each role's objects, and loads its
-  tables, in a session of that role; the superuser restores only schemas,
-  extensions, casts, its own objects and the tile function, none of which runs
-  code when created (see
+  tables, in a session of that role. The superuser restores only schemas,
+  casts, its own objects and the tile function, none of which runs code when
+  created, and the extensions, whose scripts it runs before any role's code
+  exists in the restored database (see
   [Backup & restore](../administration/backup-and-restore.md#restoring)).
 
 The API may create only the schemas `data_manager` and `drizzle`, so it cannot
@@ -132,17 +133,17 @@ These guarantees have known limits:
   function or operator called without a schema, through `public`. A compromised
   API can therefore make any role that calls such a name, with or without the
   `public.` prefix, run the API's code instead, when the API's version matches
-  the call's types more closely: data-manager, OpenConditions' roles, including the owner of
-  `conditions`, and `openmapx_tiles_owner` through the tile function. It can
-  also run code as data-manager through a trigger, rule, policy or default on
-  the `data_manager` tables it owns. Each such move gives the API that role's
-  rights: data-manager's right to change its schemas, OpenConditions' right to
-  change its tables and functions, the tile owner's right to read every
-  OpenConditions table. None reaches the superuser. Moving PostGIS into a
-  schema the API cannot write would close this, but PostGIS cannot be moved in
-  place: it would have to be reinstalled, with every spatial column and index
-  that depends on it, and the new schema put ahead of `public` on every role's
-  search path.
+  the call's types more closely: data-manager, OpenConditions' roles, including
+  the owner of `conditions`, and `openmapx_tiles_owner` through the tile
+  function. It can also run code as data-manager through a trigger, rule, policy
+  or default on the `data_manager` tables it owns. Each such move gives the API
+  that role's rights: data-manager's right to change its schemas,
+  OpenConditions' right to change its tables and functions, the tile owner's
+  right to read every OpenConditions table. None reaches the superuser, as long
+  as no service connects as the superuser. Moving PostGIS into a schema the API
+  cannot write would close this, but PostGIS cannot be moved in place: it would
+  have to be reinstalled, with every spatial column and index that depends on
+  it, and the new schema put ahead of `public` on every role's search path.
 - As the owner of `public`, a compromised API can revoke other roles' use of
   it, so that data-manager, OpenConditions and the tile function no longer find
   PostGIS. That stops them working but gives the API none of their rights.
