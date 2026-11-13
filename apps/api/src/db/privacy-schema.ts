@@ -198,7 +198,10 @@ export const dataSubjectRequestPreservation = pgTable(
       table.requestId,
       table.registrationId,
     ),
-    index("data_subject_request_preservation_locator_idx").on(table.registrationId, table.status),
+    index("data_subject_request_preservation_registration_status_idx").on(
+      table.registrationId,
+      table.status,
+    ),
   ],
 );
 

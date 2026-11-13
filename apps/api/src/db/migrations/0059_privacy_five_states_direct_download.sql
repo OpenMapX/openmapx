@@ -29,7 +29,7 @@ ALTER TABLE "data_subject_request_task" ADD COLUMN "resolved_at" timestamp with 
 CREATE UNIQUE INDEX "data_subject_request_task_request_registration_idx" ON "data_subject_request_task" USING btree ("request_id","registration_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "data_subject_request_active_user_kind_idx" ON "data_subject_request" USING btree ("user_id","kind") WHERE "data_subject_request"."user_id" is not null and "data_subject_request"."state" in ('open', 'in_progress', 'waiting_on_requester');--> statement-breakpoint
 CREATE UNIQUE INDEX "data_subject_request_notification_event_idx" ON "data_subject_request_notification" USING btree ("request_id","template","channel","recipient_user_id");--> statement-breakpoint
-CREATE INDEX "data_subject_request_preservation_locator_idx" ON "data_subject_request_preservation" USING btree ("registration_id","status");--> statement-breakpoint
+CREATE INDEX "data_subject_request_preservation_registration_status_idx" ON "data_subject_request_preservation" USING btree ("registration_id","status");--> statement-breakpoint
 CREATE INDEX "data_subject_request_task_status_idx" ON "data_subject_request_task" USING btree ("status");--> statement-breakpoint
 ALTER TABLE "data_subject_request_preservation" DROP COLUMN "locator_digest";--> statement-breakpoint
 ALTER TABLE "data_subject_request" ADD CONSTRAINT "data_subject_request_identity_check" CHECK (("data_subject_request"."identity_method" is null and "data_subject_request"."identity_verified_at" is null) or ("data_subject_request"."identity_method" in ('account_session', 'manual') and "data_subject_request"."identity_verified_at" is not null));--> statement-breakpoint

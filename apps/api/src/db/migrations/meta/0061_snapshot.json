@@ -3051,8 +3051,8 @@
           "method": "btree",
           "with": {}
         },
-        "data_subject_request_preservation_locator_idx": {
-          "name": "data_subject_request_preservation_locator_idx",
+        "data_subject_request_preservation_registration_status_idx": {
+          "name": "data_subject_request_preservation_registration_status_idx",
           "columns": [
             {
               "expression": "registration_id",
