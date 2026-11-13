@@ -60,6 +60,8 @@ import {
 export type Role = "api" | "agent" | "dm";
 export type Link = "api->agent" | "agent->dm" | "dm->agent" | "api->dm";
 export type Caller = Role | "helper" | "host-cli";
+/** The callers that hold a data-manager token, each its own. */
+export type DataManagerCaller = "api" | "ops-agent" | "host-cli";
 
 const REPO = fileURLToPath(new URL("../../../../../../", import.meta.url));
 const SHIM = fileURLToPath(new URL("./support/docker-shim.mjs", import.meta.url));
@@ -283,8 +285,10 @@ export class CrashHost {
   private readonly roles = new Map<Role, RoleProcess>();
   private readonly helpers = new Set<ContainedProcess>();
   private readonly environment: Record<string, string>;
+  /** The host's superuser session, as the operator's CLI has it. */
   private databaseUrl = "";
   private databaseName = "";
+  private databaseServer = { hostname: "", port: "" };
   private admin?: { cookie: string; userId: string };
   private closed = false;
   private bundles?: RuntimeBundles;
@@ -360,6 +364,7 @@ export class CrashHost {
     await this.cliOk(["compose", "release"]);
     this.step("render");
     await this.cliOk(["compose", "render"]);
+    await this.provisionDatabaseRoles();
     this.publishThirdPartyImages();
     this.step("compose up");
     await this.cliOk(["compose", "up"]);
@@ -383,21 +388,40 @@ export class CrashHost {
   }
 
   /** Asks the data-manager to start a short data job (a dataset reload), as
-   * the API does on an operator's behalf. 200 is admitted; 409 is busy. */
+   * an operator does with the host CLI. 200 is admitted; 409 is busy. */
   async submitDataJob(): Promise<Submission> {
-    const response = await fetch(`${this.proxies["api->dm"].url}/datasets/reload`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${this.environment.DATA_MANAGER_AUTH_TOKEN}` },
+    return this.callDataManager("host-cli", "POST", "/datasets/reload");
+  }
+
+  /** Calls a data-manager route directly, with the token rendered for one
+   * caller, and returns the reply. */
+  async callDataManager(
+    caller: DataManagerCaller,
+    method: string,
+    path: string,
+    body?: unknown,
+  ): Promise<Submission> {
+    const token = readFileSync(
+      join(this.infraDir, "secrets", `data-manager-${caller}-token`),
+      "utf8",
+    ).trim();
+    const response = await fetch(`http://127.0.0.1:${this.ports.dm}${path}`, {
+      method,
+      headers: {
+        authorization: `Bearer ${token}`,
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal: AbortSignal.timeout(30_000),
     });
     const text = await response.text();
-    let body: unknown = text;
+    let parsed: unknown = text;
     try {
-      body = JSON.parse(text);
+      parsed = JSON.parse(text);
     } catch {
       // Not JSON.
     }
-    return { status: response.status, body };
+    return { status: response.status, body: parsed };
   }
 
   /** The agent's state directory on its own small tmpfs, so a test can fill it. */
@@ -492,9 +516,67 @@ export class CrashHost {
     url.username = this.databaseName;
     url.password = password;
     this.databaseUrl = url.toString();
+    this.databaseServer = { hostname: url.hostname, port: url.port || "5432" };
     const database = postgres(this.databaseUrl, { max: 1, onnotice: () => {} });
     try {
       await database`CREATE EXTENSION IF NOT EXISTS postgis`;
+    } finally {
+      await database.end({ timeout: 2 });
+    }
+  }
+
+  /** Creates the API's and data-manager's roles in this host's database as
+   * the PostGIS entrypoint does when PostGIS starts: its own SQL, with the
+   * passwords `compose render` wrote. psql's `\gexec` runs each row of the
+   * preceding query as a statement. The roles are server-wide, so each host
+   * sets their passwords again. */
+  private async provisionDatabaseRoles() {
+    const script = readFileSync(join(REPO, "services/postgis/scripts/sync-password.sh"), "utf8");
+    const start = script.indexOf('run_sql "$APP_DB" <<SQL\n');
+    const end = script.indexOf("\nSQL\n", start);
+    if (start < 0 || end < 0) throw new Error("The PostGIS entrypoint's role SQL was not found");
+    const password = (name: string) =>
+      readFileSync(join(this.infraDir, "secrets", name), "utf8")
+        .replace(/\n+$/, "")
+        .replaceAll("'", "''");
+    const values: Record<string, string> = {
+      API_ROLE: "openmapx_api",
+      DATA_MANAGER_ROLE: "openmapx_data_manager",
+      TILES_ROLE: "openmapx_tiles",
+      TILES_OWNER: "openmapx_tiles_owner",
+      ESCAPED_API_PASSWORD: password("postgres-api-password"),
+      ESCAPED_DATA_MANAGER_PASSWORD: password("postgres-data-manager-password"),
+    };
+    const sql = script
+      .slice(script.indexOf("\n", start) + 1, end)
+      .replace(/\$\{([A-Z_]+)\}/g, (match, name: string) => {
+        const value = values[name];
+        if (value === undefined) throw new Error(`The role SQL expands ${match}`);
+        return value;
+      })
+      .replaceAll("\\$", "$");
+    const database = postgres(this.databaseUrl, {
+      max: 1,
+      onnotice: () => {},
+      connection: { search_path: "pg_catalog,pg_temp" },
+    });
+    try {
+      const chunks = sql.split(/^\\gexec$/m);
+      await database.begin(async (transaction) => {
+        for (const [index, chunk] of chunks.entries()) {
+          const results: unknown[] = await transaction.unsafe(chunk).simple();
+          if (index === chunks.length - 1) continue;
+          // Several statements answer one result each; `\gexec` takes the last.
+          const rows = (Array.isArray(results[0]) ? results.at(-1) : results) as Record<
+            string,
+            string
+          >[];
+          for (const row of rows) {
+            const statement = Object.values(row)[0];
+            if (statement) await transaction.unsafe(statement).simple();
+          }
+        }
+      });
     } finally {
       await database.end({ timeout: 2 });
     }
@@ -595,7 +677,6 @@ export class CrashHost {
       POSTGRES_PASSWORD: secret(),
       BETTER_AUTH_SECRET: secret(),
       OPENMAPX_SECRETS_KEY: secret(),
-      DATA_MANAGER_AUTH_TOKEN: secret(),
       OPENMAPX_LOCAL_ADMIN_TOKEN: secret(),
       OPENMAPX_HOST_DIR: this.hostDir,
       DOCKER_GID: String(process.getegid?.() ?? 0),
@@ -652,12 +733,19 @@ export class CrashHost {
       OPENMAPX_CRASH_DOCKER_ENGINE: this.engine.url,
       OPENMAPX_CRASH_ROLE: role,
     });
+    // Each role keeps its own database role and password file from the
+    // rendered service; only the server and database are this host's.
+    if (env.DATABASE_URL) {
+      const url = new URL(env.DATABASE_URL);
+      url.hostname = this.databaseServer.hostname;
+      url.port = this.databaseServer.port;
+      url.pathname = `/${this.databaseName}`;
+      env.DATABASE_URL = url.toString();
+    }
     if (role === "api") {
-      env.DATABASE_URL = this.databaseUrl;
       env.OPS_AGENT_URL = this.proxies["api->agent"].url;
       env.DATA_MANAGER_URL = this.proxies["api->dm"].url;
     } else if (role === "dm") {
-      env.DATABASE_URL = this.databaseUrl;
       env.OPS_AGENT_URL = this.proxies["dm->agent"].url;
       env.APP_API_BASE_URL = `http://127.0.0.1:${this.ports.api}`;
     } else {
