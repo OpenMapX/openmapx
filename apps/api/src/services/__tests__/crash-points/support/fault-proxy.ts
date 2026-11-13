@@ -83,10 +83,23 @@ export class FaultProxy {
             drop = true;
           }
         }
-        const target = new URL(entry.path, this.upstream);
+        // Only origin-form targets reach the one configured upstream; an
+        // absolute-form or protocol-relative target could name another host.
+        if (!entry.path.startsWith("/") || entry.path.startsWith("//")) {
+          entry.status = 400;
+          outgoing.writeHead(400).end();
+          return;
+        }
+        const origin = new URL(this.upstream);
         const upstream = forward(
-          target,
-          { method: entry.method, headers: { ...incoming.headers, host: target.host } },
+          {
+            protocol: origin.protocol,
+            hostname: origin.hostname,
+            port: origin.port,
+            path: entry.path,
+            method: entry.method,
+            headers: { ...incoming.headers, host: origin.host },
+          },
           (response) => {
             const reply: Buffer[] = [];
             response.on("data", (chunk: Buffer) => reply.push(chunk));
