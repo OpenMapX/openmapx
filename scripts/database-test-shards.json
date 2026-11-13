@@ -63,5 +63,15 @@
     "group": "export-restore",
     "part": 1,
     "total": 1
+  },
+  {
+    "group": "crash-points",
+    "part": 1,
+    "total": 2
+  },
+  {
+    "group": "crash-points",
+    "part": 2,
+    "total": 2
   }
 ]

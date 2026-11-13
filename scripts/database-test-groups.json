@@ -94,5 +94,13 @@
     "apps/api/src/privacy/controller-wide-export-postgres.test.ts",
     "packages/cli/__tests__/backup-restore-postgres.integration.test.ts",
     "packages/cli/__tests__/backup-cancellation-postgres.integration.test.ts"
+  ],
+  "crash-points": [
+    "apps/api/src/services/__tests__/crash-points/scenarios/agent-killed-before-effect.test.ts",
+    "apps/api/src/services/__tests__/crash-points/scenarios/concurrent-admission.test.ts",
+    "apps/api/src/services/__tests__/crash-points/scenarios/install.test.ts",
+    "apps/api/src/services/__tests__/crash-points/scenarios/maintenance-holds-admission.test.ts",
+    "apps/api/src/services/__tests__/crash-points/scenarios/registry-outage.test.ts",
+    "apps/api/src/services/__tests__/crash-points/scenarios/same-key-conflict.test.ts"
   ]
 }

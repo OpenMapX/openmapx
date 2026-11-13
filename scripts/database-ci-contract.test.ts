@@ -31,6 +31,7 @@ const groupNames = [
   "configuration-recovery",
   "coordinator-recovery",
   "export-restore",
+  "crash-points",
 ];
 const groupsFile = resolve(root, "scripts/database-test-groups.json");
 const groups: Record<string, string[]> = JSON.parse(readFileSync(groupsFile, "utf8"));
@@ -64,7 +65,7 @@ describe("required database test gate", () => {
       "DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/openmapx_test",
     );
     expect(databaseJob).toContain(
-      `contains(fromJSON('["api-privacy", "ingestion", "configuration-recovery", "coordinator-recovery"]'), matrix.group) && 90 || 30`,
+      `contains(fromJSON('["api-privacy", "ingestion", "configuration-recovery", "coordinator-recovery", "crash-points"]'), matrix.group) && 90 || 30`,
     );
     const production = JSON.parse(read("services/postgis/service.json")).container;
     expect(parsed.jobs.database.services.postgis.image).toBe(

@@ -451,7 +451,7 @@ jobs:
     # API/privacy includes the full native platform-helper recovery matrix.
     # Give native recovery groups headroom for setup and all serial suites;
     # individual test and execution deadlines remain independently enforced.
-    timeout-minutes: ${{ contains(fromJSON('["api-privacy", "ingestion", "configuration-recovery", "coordinator-recovery"]'), matrix.group) && 90 || 30 }}
+    timeout-minutes: ${{ contains(fromJSON('["api-privacy", "ingestion", "configuration-recovery", "coordinator-recovery", "crash-points"]'), matrix.group) && 90 || 30 }}
     strategy:
       # Each group has a separate runner and service; keep the other groups
       # running after a failure so all applicable evidence is collected.
@@ -603,12 +603,26 @@ jobs:
         timeout-minutes: 10
         run: OPENMAPX_RUN_DAWARICH_EXPORT_TESTS=1 pnpm exec vitest run --project node apps/ops-agent/src/dawarich-subject-export.integration.test.ts
 
+      # The crash-point suite runs each role in mount and PID namespaces, which
+      # needs passwordless sudo, and reads Compose files with the Docker CLI.
+      # The log shows that the prerequisites were present.
+      - name: Check the crash-point sandbox prerequisites
+        if: matrix.group == 'crash-points'
+        run: |
+          sudo -n true
+          unshare --version
+          setpriv --version
+          docker compose version
+
       - name: Run the required database integration suites
         env:
           TEST_DB_GROUP: ${{ matrix.group }}
           TEST_DB_PART: ${{ matrix.part }}
           TEST_DB_TOTAL: ${{ matrix.total }}
           OPENMAPX_TEST_SHARD_RECEIPT: ${{ runner.temp }}/database-${{ matrix.group }}-${{ matrix.part }}.json
+          # Set for the crash-point group: a missing sandbox fails the suite
+          # instead of skipping it.
+          OPENMAPX_RUN_CRASH_POINT_TESTS: ${{ matrix.group == 'crash-points' && '1' || '0' }}
         run: pnpm test:database "${TEST_DB_GROUP}" "${TEST_DB_PART}/${TEST_DB_TOTAL}"
 
       - name: Preserve the exact database shard inventory

@@ -55,5 +55,11 @@
   "services/data-manager/__tests__/ambient-places/publish-postgres.test.ts": 42.83,
   "services/data-manager/src/jobs/execution/runner-cancellation.test.ts": 45.62,
   "services/data-manager/__tests__/ambient-places/germany-postgres.test.ts": 67.26,
-  "services/data-manager/__tests__/ambient-places/planet-postgres.test.ts": 38.18
+  "services/data-manager/__tests__/ambient-places/planet-postgres.test.ts": 38.18,
+  "apps/api/src/services/__tests__/crash-points/scenarios/agent-killed-before-effect.test.ts": 155,
+  "apps/api/src/services/__tests__/crash-points/scenarios/concurrent-admission.test.ts": 95,
+  "apps/api/src/services/__tests__/crash-points/scenarios/install.test.ts": 90,
+  "apps/api/src/services/__tests__/crash-points/scenarios/maintenance-holds-admission.test.ts": 210,
+  "apps/api/src/services/__tests__/crash-points/scenarios/registry-outage.test.ts": 95,
+  "apps/api/src/services/__tests__/crash-points/scenarios/same-key-conflict.test.ts": 90
 }
