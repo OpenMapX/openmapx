@@ -1342,6 +1342,9 @@ describe("backup volume modes", () => {
         });
       }
       inputs.push({ args: args.join(" "), input: options?.input });
+      if (command === "docker" && args.some((arg) => arg.includes("pg_stat_activity"))) {
+        return Promise.resolve({ exitCode: 0, stdout: "previous|0\n", stderr: "" });
+      }
       if (command === "docker" && args.includes("--tuples-only")) {
         expect(args.join(" ")).toContain("datname = 'timeline'");
         expect(args.join(" ")).toContain("'timeline__restore'");
@@ -1355,10 +1358,16 @@ describe("backup volume modes", () => {
 
     await restoreBackup({ rootDir: tmp, name: "owner-restore", stopRunning: true });
 
-    const read = inputs.findIndex(({ args }) => args.includes("--tuples-only"));
+    const preconditions = inputs.findIndex(({ args }) => args.includes("pg_stat_activity"));
+    const read = inputs.findIndex(
+      ({ args }) => args.includes("--tuples-only") && !args.includes("pg_stat_activity"),
+    );
     const drop = inputs.findIndex(({ args }) =>
       args.endsWith(" dropdb -U postgres --if-exists timeline__restore"),
     );
+    // What could block the swap is read while planning, before any change.
+    expect(preconditions).toBeGreaterThanOrEqual(0);
+    expect(preconditions).toBeLessThan(read);
     const create = inputs.findIndex(({ args }) =>
       args.endsWith(" createdb -U postgres timeline__restore"),
     );
@@ -1389,9 +1398,67 @@ describe("backup volume modes", () => {
     // Every superuser step but the load, whose dump sets its own search path,
     // searches only the catalogs.
     expect(inputs[dump]?.args).not.toContain("PGOPTIONS");
-    for (const step of [read, drop, create, apply, swap, dropPrevious])
+    for (const step of [preconditions, read, drop, create, apply, swap, dropPrevious])
       expect(inputs[step]?.args).toContain("-e PGOPTIONS=-c search_path=pg_catalog,pg_temp");
   });
+
+  it.each([
+    [
+      "a session of a service it does not stop",
+      "previous|0\nsession|openmapx_data_manager\nsession|openmapx_tiles\n",
+      "database timeline is in use by data-manager, martin",
+    ],
+    [
+      "a database left by an earlier restore",
+      "previous|1\n",
+      "database timeline__previous, left by an earlier restore, still exists",
+    ],
+  ])(
+    "refuses a restore that %s would block before changing anything",
+    async (_case, state, message) => {
+      const dir = writeBackup("blocked-swap", {
+        name: "blocked-swap",
+        createdAt: new Date().toISOString(),
+        services: [
+          {
+            id: "timeline",
+            version: "1.0.0",
+            volumes: [
+              {
+                name: "openmapx-db",
+                mode: "pg_dump",
+                file: "timeline__openmapx-db.sql.gz",
+                sizeBytes: 0,
+                postgresUser: "postgres",
+                postgresDb: "timeline",
+              },
+            ],
+          },
+        ],
+      });
+      writeBackupFiles(dir, { "timeline__openmapx-db.sql.gz": "dump" });
+      vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+        if (command === "docker" && args.includes("ps")) {
+          return Promise.resolve({ exitCode: 0, stdout: '{"Service":"timeline"}\n', stderr: "" });
+        }
+        if (command === "docker" && args.some((arg) => arg.includes("pg_stat_activity"))) {
+          return Promise.resolve({ exitCode: 0, stdout: state, stderr: "" });
+        }
+        return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+      }) as never);
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        await expect(
+          restoreBackup({ rootDir: tmp, name: "blocked-swap", stopRunning: true }),
+        ).rejects.toThrow(message);
+      } finally {
+        errorSpy.mockRestore();
+      }
+      const calls = mockedCommandCalls().map(([, args]) => args);
+      for (const step of [" stop ", " dropdb ", " createdb ", "gunzip"])
+        expect(calls.filter((args) => args.includes(step))).toEqual([]);
+    },
+  );
 
   it("restores each entry of an archive in a session of its owner", async () => {
     const dir = writeBackup("owner-sessions", {

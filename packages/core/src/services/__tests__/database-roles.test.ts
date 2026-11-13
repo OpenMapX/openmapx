@@ -6,6 +6,8 @@ import {
   restoreDatabaseNames,
   restorePassCommand,
   restorePassPreamble,
+  swapPreconditionRefusal,
+  swapPreconditionsQuery,
 } from "../database-roles";
 
 const roles = [
@@ -147,6 +149,27 @@ describe("planOwnerRestore", () => {
 });
 
 describe("restoring into a scratch database", () => {
+  it("counts only sessions of services the restore leaves running", () => {
+    const stopping = new Set(["app-api"]);
+    expect(
+      swapPreconditionRefusal("openmapx", "previous|0\nsession|openmapx_api\n", stopping),
+    ).toBe(undefined);
+    expect(
+      swapPreconditionRefusal(
+        "openmapx",
+        "previous|0\nsession|openmapx_api\nsession|openmapx_data_manager\nsession|postgres\n",
+        stopping,
+      ),
+    ).toBe(
+      "database openmapx is in use by data-manager, role postgres, which would keep the restored database from replacing it; stop them, then restore again",
+    );
+    expect(swapPreconditionRefusal("openmapx", "previous|1\n", stopping)).toContain(
+      "database openmapx__previous, left by an earlier restore, still exists",
+    );
+    expect(swapPreconditionsQuery("openmapx")).toContain("datname = 'openmapx__previous'");
+    expect(() => swapPreconditionsQuery("bad'name")).toThrow("Unsafe database name");
+  });
+
   it("names the scratch and replaced databases beside the live one", () => {
     expect(restoreDatabaseNames("openmapx")).toEqual({
       scratch: "openmapx__restore",

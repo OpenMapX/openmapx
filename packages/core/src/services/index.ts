@@ -134,6 +134,8 @@ export {
   restorePassCommand,
   restorePassPreamble,
   SUPERUSER_PGOPTIONS,
+  swapPreconditionRefusal,
+  swapPreconditionsQuery,
 } from "./database-roles";
 export {
   assertDeploymentEnvironmentFile,

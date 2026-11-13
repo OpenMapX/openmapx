@@ -358,11 +358,14 @@ one transaction rename the live database to `<database>__previous` and the
 scratch one into its place; the replaced database is dropped last. When a step
 fails, the CLI drops the scratch database and the live one stays as it was, so
 the API is started again. The swap fails, and changes nothing, while any session
-is still connected to the live database. A restore needs free disk space for a
-second copy of the database while it runs. A `<database>__restore` left by an
-interrupted restore is dropped when the next one starts; a
-`<database>__previous` that could not be dropped is reported, and must be
-dropped before the next restore can swap.
+is still connected to the live database. The CLI therefore refuses, while
+planning and before it stops anything, a restore whose database is in use by a
+service it does not stop itself, naming the service: stop `data-manager`,
+`martin` or any other service it names first, then restore again. A restore needs
+free disk space for a second copy of the database while it runs. A
+`<database>__restore` left by an interrupted restore is dropped when the next one
+starts; a `<database>__previous` that could not be dropped is reported, and the
+next restore refuses, while planning, until it has been dropped.
 
 Each table, view, function and other object a role owns is restored by a session
 that logs in as that role, over the database container's local socket. A table's

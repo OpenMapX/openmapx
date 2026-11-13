@@ -1360,7 +1360,14 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
         }
         plans.set(
           vol,
-          await planDatabaseRestore(ctx, svc.id, file, vol.postgresUser, vol.postgresDb),
+          await planDatabaseRestore(
+            ctx,
+            svc.id,
+            file,
+            vol.postgresUser,
+            vol.postgresDb,
+            new Set(dependentStops),
+          ),
         );
       }
     }
@@ -1509,7 +1516,10 @@ interface DatabaseRestorePlan {
 /**
  * Checks a database backup against the live server before anything changes:
  * the plan that restores a custom-format archive, or `null` for an older
- * plain-SQL backup. Throws when the backup cannot be restored safely.
+ * plain-SQL backup. Throws when the backup cannot be restored safely, or when
+ * the restored database could not replace the live one: a session of a
+ * service the restore does not stop (`stopping`), or a database left by an
+ * earlier restore under the name the live one moves to.
  */
 async function planDatabaseRestore(
   ctx: ComposeContext,
@@ -1517,18 +1527,35 @@ async function planDatabaseRestore(
   file: string,
   user: string,
   db: string,
+  stopping: ReadonlySet<string>,
 ): Promise<DatabaseRestorePlan | null> {
   // Backups before the database roles hold plain SQL, which only a superuser
   // session can load. Such a backup of the platform database cannot serve
   // this release, whose roles must own their objects.
-  if (file.endsWith(".sql.gz")) {
-    if (db === "openmapx")
-      throw new Error(
-        `${file} predates the platform database's roles; restore it with the release that wrote it`,
-      );
-    return null;
-  }
-  coreServices.restoreDatabaseNames(db);
+  const plain = file.endsWith(".sql.gz");
+  if (plain && db === "openmapx")
+    throw new Error(
+      `${file} predates the platform database's roles; restore it with the release that wrote it`,
+    );
+  const preconditions = await superuserCommand(ctx, serviceId, [
+    "psql",
+    "-X",
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-U",
+    user,
+    "-d",
+    "postgres",
+    "--no-align",
+    "--tuples-only",
+    "-c",
+    coreServices.swapPreconditionsQuery(db),
+  ]);
+  if (preconditions.exitCode !== 0)
+    throw new Error(`reading the database's sessions failed: ${preconditions.stderr ?? ""}`);
+  const refusal = coreServices.swapPreconditionRefusal(db, preconditions.stdout ?? "", stopping);
+  if (refusal) throw new Error(refusal);
+  if (plain) return null;
   return planOwnerRestore(ctx, serviceId, file, user);
 }
 

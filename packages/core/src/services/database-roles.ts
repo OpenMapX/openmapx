@@ -247,3 +247,49 @@ SELECT format('ALTER DATABASE %I RENAME TO %I', '${scratch}', '${db}')
 \\gexec
 `;
 }
+
+/** The service that connects as each platform role. */
+const ROLE_SERVICES: Readonly<Record<string, string>> = {
+  openmapx_api: "app-api",
+  openmapx_data_manager: "data-manager",
+  openmapx_tiles: "martin",
+};
+
+/**
+ * What would make the swap of `db` fail, read before anything changes: a
+ * `previous|1` line when the name the live database moves to is taken, and a
+ * `session|<role>` line for each session connected to `db`. Run it from
+ * another database, so its own session is not counted.
+ */
+export function swapPreconditionsQuery(db: string): string {
+  const { previous } = restoreDatabaseNames(db);
+  return `SELECT 'previous', (EXISTS (SELECT FROM pg_database WHERE datname = '${previous}'))::int
+UNION ALL
+SELECT 'session', coalesce(usename::text, '') FROM pg_stat_activity
+  WHERE datname = '${db}' AND pid <> pg_backend_pid()`;
+}
+
+/**
+ * Why the restored database could not replace `db`, from the output of
+ * `swapPreconditionsQuery`, or `undefined` when nothing stands in the way.
+ * Sessions of the services the restore stops first do not count.
+ */
+export function swapPreconditionRefusal(
+  db: string,
+  output: string,
+  stopping: ReadonlySet<string>,
+): string | undefined {
+  const { previous } = restoreDatabaseNames(db);
+  const holders = new Set<string>();
+  for (const line of output.split("\n").filter(Boolean)) {
+    const [kind, value = ""] = line.split("|");
+    if (kind === "previous" && value === "1")
+      return `database ${previous}, left by an earlier restore, still exists; drop it or rename it, then restore again`;
+    if (kind !== "session") continue;
+    const service = ROLE_SERVICES[value];
+    if (service && stopping.has(service)) continue;
+    holders.add(service ?? `role ${value || "(unknown)"}`);
+  }
+  if (holders.size === 0) return undefined;
+  return `database ${db} is in use by ${[...holders].sort().join(", ")}, which would keep the restored database from replacing it; stop ${holders.size === 1 ? "it" : "them"}, then restore again`;
+}
