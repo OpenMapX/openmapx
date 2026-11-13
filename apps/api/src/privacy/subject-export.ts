@@ -16,7 +16,10 @@ import {
   collectOpenMapxDataSnapshot,
   type OpenMapxCollectorContext,
 } from "./openmapx-collectors.js";
-import { resolvePrivacyReportLegalFacts } from "./report-settings.js";
+import {
+  PrivacyLegalConfigurationError,
+  resolvePrivacyReportLegalFacts,
+} from "./report-settings.js";
 
 const RECIPIENT_SUMMARY_ENTRY_LIMIT = 100;
 const DISCLOSURE_ARCHIVE_PATH = "openmapx-data-export/article-15/disclosures.jsonl";
@@ -65,8 +68,12 @@ async function configuredOfflinePrincipalKey(): Promise<Buffer | undefined> {
 async function legalFacts(database: typeof defaultDb) {
   try {
     return await resolvePrivacyReportLegalFacts(database);
-  } catch {
-    throw new PrivacyRequestError("PRIVACY_CONFIGURATION_INCOMPLETE", 503);
+  } catch (error) {
+    // Only missing or invalid legal facts are a configuration problem; a
+    // database failure must surface as itself.
+    if (error instanceof PrivacyLegalConfigurationError)
+      throw new PrivacyRequestError("PRIVACY_CONFIGURATION_INCOMPLETE", 503);
+    throw error;
   }
 }
 

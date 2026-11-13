@@ -59,7 +59,8 @@ import { encodeGeoJson, encodeJsonArray, encodeJsonLines } from "./primary-sourc
 
 export interface OpenMapxCollectorContext {
   userId: string;
-  /** Trusted current case ID, supplied only by generation after identity review. */
+  /** Trusted current case ID, supplied by the self-service export, the
+   * administrator export or the manual backup export script. */
   requestId?: string;
   cutoffAt: Date;
   database?: typeof defaultDb;

@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { existsSync, readdirSync } from "node:fs";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -28,6 +29,8 @@ import {
 } from "../db/schema.js";
 import { tar } from "./__tests__/fixtures/source-tar.js";
 import { SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
+import { EncryptedSourceSpool } from "./encrypted-source-spool.js";
+import { PrivacyRequestService } from "./request-service.js";
 
 const SUBJECT_ID = "controller-acceptance-subject";
 const FOREIGN_ID = "controller-acceptance-foreign";
@@ -273,6 +276,29 @@ async function eventTypes(requestId: string) {
   ).map((row) => row.eventType);
 }
 
+/**
+ * Watch every source spool the export creates: where it lives, and that real
+ * source data was written into it while the export ran.
+ */
+function watchSpools() {
+  const spools: Array<{ directory: string; filesDuringExport: number }> = [];
+  const original = EncryptedSourceSpool.create.bind(EncryptedSourceSpool);
+  const spy = vi.spyOn(EncryptedSourceSpool, "create").mockImplementation(async (options) => {
+    const spool = await original(options);
+    const directory = (spool as unknown as { directory: string }).directory;
+    const seen = { directory, filesDuringExport: 0 };
+    spools.push(seen);
+    const write = spool.write.bind(spool);
+    spool.write = async (input) => {
+      const entry = await write(input);
+      seen.filesDuringExport = Math.max(seen.filesDuringExport, readdirSync(directory).length);
+      return entry;
+    };
+    return spool;
+  });
+  return { spools, restore: () => spy.mockRestore() };
+}
+
 /** Every file below the test's temporary directory: the export may only use
  * the short-lived encrypted source spool, and must leave nothing behind. */
 async function filesUnder(directory: string): Promise<string[]> {
@@ -337,6 +363,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
 
     it("streams the full scope with the Article 15(1) information and stores nothing", async () => {
       const app = await exportApp();
+      const watched = watchSpools();
       try {
         await signInFreshly();
         const response = await app.inject({
@@ -429,7 +456,18 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ]),
           ),
         );
-        // No archive was written anywhere: only the spool was used, and it is gone.
+        // The sources really were spooled, encrypted, under the temporary
+        // directory while the export ran (marker plus at least one member)...
+        expect(watched.spools.length).toBeGreaterThan(0);
+        for (const spool of watched.spools) {
+          expect(spool.directory.startsWith(join(temporary, "openmapx-privacy-source-spool"))).toBe(
+            true,
+          );
+          expect(spool.filesDuringExport).toBeGreaterThan(1);
+          // ...and every spool is gone afterwards.
+          expect(existsSync(spool.directory)).toBe(false);
+        }
+        // No archive was written anywhere: the temporary directory holds no file.
         expect(await filesUnder(temporary)).toEqual([]);
 
         // A second download reuses the same active request.
@@ -441,6 +479,113 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             .from(dataSubjectRequest)
             .where(eq(dataSubjectRequest.userId, SUBJECT_ID)),
         ).toHaveLength(1);
+      } finally {
+        watched.restore();
+        await app.close();
+      }
+    }, 60_000);
+
+    it("lets a freshly signed-in owner verify and download an admin-created case linked to the account", async () => {
+      vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 5).toString("hex"));
+      const service = new PrivacyRequestService({ database: db });
+      // An administrator recorded a postal request and linked it to the account.
+      const assisted = await service.create({
+        channel: "post",
+        kind: "access_and_portability",
+        userId: SUBJECT_ID,
+        subject: { locatorType: "user_id", locator: SUBJECT_ID, accountState: "current" },
+        locale: "en",
+        timeZone: "UTC",
+      });
+      expect(assisted).toMatchObject({ state: "open", identityMethod: null });
+      const app = await exportApp();
+      try {
+        await signInFreshly();
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/privacy/export",
+          payload: {},
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.headers["content-type"]).toBe("application/zip");
+        expect(zipMembers(response.rawPayload).has("openmapx-data-export/manifest.json")).toBe(
+          true,
+        );
+        // The same case was used, verified by the session and moved into work.
+        const row = await service.getById(assisted.id);
+        expect(row).toMatchObject({
+          channel: "post",
+          state: "in_progress",
+          identityMethod: "account_session",
+        });
+        expect(row.identityVerifiedAt).not.toBeNull();
+        const events = await db
+          .select({
+            eventType: dataSubjectRequestEvent.eventType,
+            payload: dataSubjectRequestEvent.payload,
+          })
+          .from(dataSubjectRequestEvent)
+          .where(eq(dataSubjectRequestEvent.requestId, assisted.id));
+        expect(events).toEqual(
+          expect.arrayContaining([
+            { eventType: "identity_verified", payload: { reasonCode: "account_session" } },
+            {
+              eventType: "state_in_progress",
+              payload: { from: "open", reasonCode: "account_session" },
+            },
+            { eventType: "export_started", payload: {} },
+          ]),
+        );
+        await vi.waitFor(async () =>
+          expect(await eventTypes(assisted.id)).toContain("export_delivered"),
+        );
+        expect(
+          await db
+            .select({ id: dataSubjectRequest.id })
+            .from(dataSubjectRequest)
+            .where(eq(dataSubjectRequest.userId, SUBJECT_ID)),
+        ).toHaveLength(1);
+      } finally {
+        await app.close();
+      }
+    }, 60_000);
+
+    it("returns a linked case that waits on the requester to work with the same verification", async () => {
+      vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 5).toString("hex"));
+      const service = new PrivacyRequestService({ database: db });
+      const assisted = await service.create({
+        channel: "email",
+        kind: "access_and_portability",
+        userId: SUBJECT_ID,
+        subject: { locatorType: "user_id", locator: SUBJECT_ID, accountState: "current" },
+        locale: "en",
+        timeZone: "UTC",
+      });
+      const waiting = await service.recordDecision({
+        requestId: assisted.id,
+        version: assisted.version,
+        decision: "waiting_on_requester",
+        reasonCode: "asked-for-identity",
+        actorId: "controller-acceptance-admin",
+        idempotencyKey: `wait-${assisted.id}`,
+      });
+      expect(waiting.state).toBe("waiting_on_requester");
+      const app = await exportApp();
+      try {
+        await signInFreshly();
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/privacy/export",
+          payload: {},
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(await service.getById(assisted.id)).toMatchObject({
+          state: "in_progress",
+          identityMethod: "account_session",
+        });
+        expect(await eventTypes(assisted.id)).toEqual(
+          expect.arrayContaining(["identity_verified", "state_in_progress"]),
+        );
       } finally {
         await app.close();
       }

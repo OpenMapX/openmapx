@@ -21,6 +21,22 @@ export interface PrivacyReportLegalFacts {
   };
 }
 
+/** The operator has not configured the legal facts, or configured them wrongly.
+ * Any other error, such as a database failure, is not this. */
+export class PrivacyLegalConfigurationError extends Error {
+  override name = "PrivacyLegalConfigurationError";
+}
+
+function backupRetentionDays(): number {
+  try {
+    return parseRequiredRetentionDays("BACKUP_RETENTION_DAYS", 30);
+  } catch (error) {
+    throw new PrivacyLegalConfigurationError(
+      error instanceof Error ? error.message : "Invalid BACKUP_RETENTION_DAYS",
+    );
+  }
+}
+
 function clean(raw: unknown): string {
   return typeof raw === "string" ? raw.trim() : "";
 }
@@ -58,7 +74,8 @@ function numberSetting(
 }
 
 function required(name: string, value: string): string {
-  if (!value) throw new Error(`Missing privacy report legal configuration: ${name}`);
+  if (!value)
+    throw new PrivacyLegalConfigurationError(`Missing privacy report legal configuration: ${name}`);
   return value;
 }
 
@@ -72,14 +89,16 @@ function hasControlCharacter(value: string): boolean {
 function requiredSingleLine(name: string, value: string, maxLength: number): string {
   const result = required(name, value);
   if (result.length > maxLength || hasControlCharacter(result))
-    throw new Error(`Invalid privacy report legal configuration: ${name}`);
+    throw new PrivacyLegalConfigurationError(`Invalid privacy report legal configuration: ${name}`);
   return result;
 }
 
 function optionalPhone(value: string): string | null {
   if (!value) return null;
   if (value.length > 64 || !/^[+()0-9 .\-/]+$/.test(value))
-    throw new Error("Invalid privacy report legal configuration: controllerPhone");
+    throw new PrivacyLegalConfigurationError(
+      "Invalid privacy report legal configuration: controllerPhone",
+    );
   return value;
 }
 
@@ -116,17 +135,23 @@ export async function resolvePrivacyReportLegalFacts(
   );
   const controllerEmail = stringSetting("LEGAL_EMAIL", "legalControllerEmail", values);
   if (controllerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(controllerEmail))
-    throw new Error("Invalid privacy report legal configuration: controllerEmail");
+    throw new PrivacyLegalConfigurationError(
+      "Invalid privacy report legal configuration: controllerEmail",
+    );
   const contact =
     stringSetting("LEGAL_DATA_REQUEST_EMAIL", "legalDataRequestEmail", values) || controllerEmail;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact))
-    throw new Error("Missing privacy report legal configuration: dataRequestEmail");
+    throw new PrivacyLegalConfigurationError(
+      "Missing privacy report legal configuration: dataRequestEmail",
+    );
   const jurisdiction = required(
     "deploymentJurisdiction",
     stringSetting("LEGAL_DEPLOYMENT_JURISDICTION", "legalDeploymentJurisdiction", values),
   );
   if (!/^[A-Z]{2}(?:-[A-Z0-9]{1,8})?$/.test(jurisdiction))
-    throw new Error("Invalid privacy report legal configuration: deploymentJurisdiction");
+    throw new PrivacyLegalConfigurationError(
+      "Invalid privacy report legal configuration: deploymentJurisdiction",
+    );
   const supervisoryAuthority = requiredSingleLine(
     "supervisoryAuthority",
     stringSetting("LEGAL_SUPERVISORY_AUTHORITY", "legalSupervisoryAuthority", values),
@@ -142,14 +167,18 @@ export async function resolvePrivacyReportLegalFacts(
     try {
       parsedAuthorityUrl = new URL(authorityUrl);
     } catch {
-      throw new Error("Invalid privacy report legal configuration: supervisoryAuthorityUrl");
+      throw new PrivacyLegalConfigurationError(
+        "Invalid privacy report legal configuration: supervisoryAuthorityUrl",
+      );
     }
     if (
       !["http:", "https:"].includes(parsedAuthorityUrl.protocol) ||
       parsedAuthorityUrl.username !== "" ||
       parsedAuthorityUrl.password !== ""
     )
-      throw new Error("Invalid privacy report legal configuration: supervisoryAuthorityUrl");
+      throw new PrivacyLegalConfigurationError(
+        "Invalid privacy report legal configuration: supervisoryAuthorityUrl",
+      );
   }
   const sourceRaw = setting("LEGAL_PRIVACY_SOURCES", "legalPrivacySources", values, []);
   let sourceValue: unknown = sourceRaw;
@@ -157,12 +186,16 @@ export async function resolvePrivacyReportLegalFacts(
     try {
       sourceValue = JSON.parse(sourceRaw);
     } catch {
-      throw new Error("Invalid privacy report legal configuration: privacySources");
+      throw new PrivacyLegalConfigurationError(
+        "Invalid privacy report legal configuration: privacySources",
+      );
     }
   }
   const sourceResult = privacySourceSchema.array().safeParse(sourceValue);
   if (!sourceResult.success)
-    throw new Error("Invalid privacy report legal configuration: privacySources");
+    throw new PrivacyLegalConfigurationError(
+      "Invalid privacy report legal configuration: privacySources",
+    );
   return {
     controller: {
       name,
@@ -183,7 +216,7 @@ export async function resolvePrivacyReportLegalFacts(
         30,
         3650,
       ),
-      backupRetentionDays: parseRequiredRetentionDays("BACKUP_RETENTION_DAYS", 30),
+      backupRetentionDays: backupRetentionDays(),
     },
   };
 }

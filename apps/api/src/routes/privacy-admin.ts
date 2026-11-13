@@ -74,6 +74,21 @@ async function requirePrivacyCaseAdmin(request: FastifyRequest) {
   return session;
 }
 
+/** Why an assisted case's subject cannot be exported, if anything. An
+ * unreadable locator keeps the case readable but names the failure. */
+function subjectExportReason(
+  service: PrivacyRequestService,
+  row: Parameters<PrivacyRequestService["subjectUserId"]>[0],
+): string | undefined {
+  try {
+    return service.subjectUserId(row) === null ? "subject-account-unknown" : undefined;
+  } catch (error) {
+    if (error instanceof PrivacyRequestError && error.code === "SUBJECT_LOCATOR_UNREADABLE")
+      return "subject-locator-unreadable";
+    throw error;
+  }
+}
+
 function requireMutationKey(request: {
   headers: { [key: string]: string | string[] | undefined };
 }): string {
@@ -151,13 +166,14 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
             .orderBy(asc(dataSubjectRequestEvent.createdAt))
         ).map(eventProjection);
         const active = acceptsCaseDecision(row.state);
-        const exportReason = !active
-          ? "case-not-active"
-          : !row.identityMethod
-            ? "identity-required"
-            : service.subjectUserId(row) === null
-              ? "subject-account-unknown"
-              : undefined;
+        const exportReason =
+          row.channel === "self_service"
+            ? "self-service-request"
+            : !active
+              ? "case-not-active"
+              : !row.identityMethod
+                ? "identity-required"
+                : subjectExportReason(service, row);
         return reply.send({
           request: projection(row as unknown as Record<string, unknown>),
           tasks,
@@ -309,11 +325,13 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
         nonce: nonce ?? "",
       };
       let prepared: PreparedSubjectExport | undefined;
+      let started = false;
       try {
         if (!nonce || !proof.challengeId)
           throw new PrivacyRequestError("REAUTHENTICATION_REQUIRED", 409);
         await database.transaction((tx) => new AdminActionReauthentication(tx).check(proof, tx));
         const row = await service.beginAdminExport(request.params.requestId, actor.user.id);
+        started = true;
         prepared = await prepareSubjectExport({
           request: row,
           subjectUserId: service.subjectUserId(row),
@@ -323,6 +341,10 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
         await database.transaction((tx) => new AdminActionReauthentication(tx).consume(proof, tx));
       } catch (error) {
         await prepared?.dispose();
+        if (started)
+          await service
+            .recordExportFailure(request.params.requestId, "export-preparation-failed")
+            .catch(() => undefined);
         return privacyErrorReply(reply, error);
       }
       const ready = prepared;

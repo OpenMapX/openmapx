@@ -39,7 +39,8 @@ including a configured second factor). Otherwise it answers
 and continues the download when they return. That fresh sign-in is the
 identity proof, so a self-service request starts `in_progress`.
 
-The export creates the request, or reuses the person's active one, collects
+The export creates the request, or reuses the person's active one of the same
+kind, including an assisted case an administrator linked to the account, collects
 every source and then streams the ZIP archive straight to the browser with
 `Cache-Control: private, no-store`. Nothing is stored on the server. While the
 archive is assembled, large sources pass through a short-lived encrypted spool
@@ -61,12 +62,16 @@ Open **Privacy requests** at `/admin/privacy` with a real administrator
 session. A version conflict retains your current draft, reloads the case and
 requires another explicit confirmation.
 
-- **Identity:** a self-service request is proven by the fresh sign-in. For an
-  assisted request, check the requester's identity outside OpenMapX (for
-  example by letter or by asking them to sign in and use self-service), then
-  record **Verify identity** with a reason code. This moves the case from
-  `open` to `in_progress`. A representative's authority is checked the same
-  way and recorded in the reason code.
+- **Identity:** a self-service request is proven by the fresh sign-in. An
+  assisted request linked to the person's account can be verified the same
+  way: ask them to sign in and select **Download my data**. The fresh sign-in
+  verifies the open case of the same kind (recorded as an `identity_verified`
+  event with reason `account_session`), moves it to `in_progress` and
+  downloads the export for that case. Otherwise, check the requester's
+  identity outside OpenMapX (for example by letter), then record **Verify
+  identity** with a reason code. This moves the case from `open` or
+  `waiting_on_requester` to `in_progress`. A representative's authority is
+  checked the same way and recorded in the reason code.
 - **Operator-held sources:** each request has one task per source that only an
   operator can check. Check it outside OpenMapX and resolve it with one action
   and a reason code. A self-service request stays `in_progress` after the

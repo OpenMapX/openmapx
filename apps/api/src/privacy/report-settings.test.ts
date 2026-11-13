@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { resolvePrivacyReportLegalFacts } from "./report-settings.js";
+import {
+  PrivacyLegalConfigurationError,
+  resolvePrivacyReportLegalFacts,
+} from "./report-settings.js";
 
 beforeEach(() => {
   for (const name of [
@@ -40,6 +43,26 @@ const persistedFacts = () =>
   }) as never;
 
 describe("privacy report legal facts", () => {
+  it("tells a configuration gap apart from a database failure", async () => {
+    const missing = { select: () => ({ from: async () => [] }) } as never;
+    await expect(resolvePrivacyReportLegalFacts(missing)).rejects.toBeInstanceOf(
+      PrivacyLegalConfigurationError,
+    );
+    vi.stubEnv("BACKUP_RETENTION_DAYS", "0");
+    await expect(resolvePrivacyReportLegalFacts(persistedFacts())).rejects.toBeInstanceOf(
+      PrivacyLegalConfigurationError,
+    );
+    const outage = new Error("connect ECONNREFUSED");
+    const unreachable = {
+      select: () => ({
+        from: async () => {
+          throw outage;
+        },
+      }),
+    } as never;
+    await expect(resolvePrivacyReportLegalFacts(unreachable)).rejects.toBe(outage);
+  });
+
   it("reports the configured backup retention, defaulting to 30 days", async () => {
     await expect(resolvePrivacyReportLegalFacts(persistedFacts())).resolves.toMatchObject({
       deployment: { backupRetentionDays: 30 },

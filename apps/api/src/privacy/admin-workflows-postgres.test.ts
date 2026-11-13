@@ -438,4 +438,157 @@ suite("privacy case administration on PostgreSQL", () => {
       await server.close();
     }
   }, 60_000);
+
+  /** A completed privacy.export proof for one case, signed in by a new session. */
+  async function exportProof(requestId: string) {
+    const ceremony = await new AdminActionReauthentication(fixture.db).start({
+      actorId: ACTOR,
+      startingSessionId: "admin-session",
+      purpose: "privacy.export",
+      targetId: requestId,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const signedInAt = new Date();
+    const sessionId = `admin-proof-${randomUUID()}`;
+    await adminSession(sessionId, signedInAt);
+    await new AdminActionReauthentication(fixture.db).complete({
+      challengeId: ceremony.challengeId,
+      nonce: ceremony.nonce,
+      session: {
+        id: sessionId,
+        userId: ACTOR,
+        method: "password",
+        authenticatedAt: signedInAt,
+        mfaConfigured: false,
+      },
+    });
+    authFixture.sessionId = sessionId;
+    return {
+      "x-admin-reauth-proof": ceremony.challengeId,
+      cookie: `__Host-openmapx-admin-reauth=${ceremony.nonce.toString("base64url")}`,
+    };
+  }
+
+  it("offers the administrator export only for assisted requests", async () => {
+    const subjectId = `self-service-subject-${randomUUID()}`;
+    await fixture.db
+      .insert(user)
+      .values({ id: subjectId, name: "Self-service subject", email: `${subjectId}@example.test` });
+    const selfService = await service().create({
+      channel: "self_service",
+      kind: "access",
+      userId: subjectId,
+      locale: "en",
+      timeZone: "UTC",
+    });
+    const server = await app();
+    try {
+      const detail = await server.inject({
+        method: "GET",
+        url: `/api/privacy/admin/requests/${selfService.id}`,
+      });
+      expect(detail.json().capabilities).toMatchObject({
+        export: false,
+        reasons: { export: "self-service-request" },
+      });
+    } finally {
+      await server.close();
+    }
+    await expect(service().beginAdminExport(selfService.id, ACTOR)).rejects.toMatchObject({
+      code: "ASSISTED_REQUEST_REQUIRED",
+      statusCode: 409,
+    });
+  });
+
+  it("records an export failure when an administrator export cannot be prepared", async () => {
+    const created = await service().create({
+      channel: "email",
+      kind: "access",
+      subject: { locatorType: "email", locator: "unknown@example.test", accountState: "unknown" },
+      actorUserId: ACTOR,
+      locale: "en",
+      timeZone: "UTC",
+    });
+    const request = await service().verifyIdentity({
+      requestId: created.id,
+      version: created.version,
+      reasonCode: "reply-checked",
+      actorId: ACTOR,
+      idempotencyKey: `verify-${created.id}`,
+    });
+    const headers = await exportProof(request.id);
+    const server = await app();
+    try {
+      const response = await server.inject({
+        method: "POST",
+        url: `/api/privacy/admin/requests/${request.id}/export`,
+        headers,
+        payload: {},
+      });
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ code: "EXACT_SUBJECT_LOCATOR_REQUIRED" });
+      const events = await fixture.db
+        .select({
+          eventType: dataSubjectRequestEvent.eventType,
+          payload: dataSubjectRequestEvent.payload,
+        })
+        .from(dataSubjectRequestEvent)
+        .where(eq(dataSubjectRequestEvent.requestId, request.id));
+      expect(events).toEqual(
+        expect.arrayContaining([
+          { eventType: "export_started", payload: {} },
+          { eventType: "export_failed", payload: { reasonCode: "export-preparation-failed" } },
+        ]),
+      );
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("reports an unreadable locator as a failure, not as an unknown subject", async () => {
+    const subjectId = `locator-subject-${randomUUID()}`;
+    const created = await service().create({
+      channel: "post",
+      kind: "access",
+      subject: { locatorType: "user_id", locator: subjectId, accountState: "inaccessible" },
+      actorUserId: ACTOR,
+      locale: "en",
+      timeZone: "UTC",
+    });
+    await service().verifyIdentity({
+      requestId: created.id,
+      version: created.version,
+      reasonCode: "letter-checked",
+      actorId: ACTOR,
+      idempotencyKey: `verify-${created.id}`,
+    });
+    // The secrets key changed since the locator was stored.
+    vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 10).toString("hex"));
+    const row = await service().getById(created.id);
+    expect(() => service().subjectUserId(row)).toThrow(
+      expect.objectContaining({ code: "SUBJECT_LOCATOR_UNREADABLE", statusCode: 503 }),
+    );
+    const server = await app();
+    try {
+      const detail = await server.inject({
+        method: "GET",
+        url: `/api/privacy/admin/requests/${created.id}`,
+      });
+      expect(detail.statusCode).toBe(200);
+      expect(detail.json().capabilities).toMatchObject({
+        export: false,
+        reasons: { export: "subject-locator-unreadable" },
+      });
+      const exported = await server.inject({
+        method: "POST",
+        url: `/api/privacy/admin/requests/${created.id}/export`,
+        headers: await exportProof(created.id),
+        payload: {},
+      });
+      expect(exported.statusCode).toBe(503);
+      expect(exported.json()).toEqual({ code: "SUBJECT_LOCATOR_UNREADABLE" });
+    } finally {
+      await server.close();
+    }
+  });
 });

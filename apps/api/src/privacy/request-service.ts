@@ -108,16 +108,20 @@ function encodeLocator(value: string): string {
   return JSON.stringify(encrypt(JSON.stringify({ value })));
 }
 
-function decodeLocator(envelope: string): string | null {
+/** A stored locator that cannot be decrypted (for example after a changed
+ * OPENMAPX_SECRETS_KEY) is an operational failure, never "no subject". */
+function decodeLocator(envelope: string): string {
+  let value: unknown;
   try {
     const parsed = JSON.parse(envelope) as { ciphertext: string; iv: string; tag: string };
-    const payload = JSON.parse(decrypt(parsed.ciphertext, parsed.iv, parsed.tag)) as {
-      value?: unknown;
-    };
-    return typeof payload.value === "string" && payload.value ? payload.value : null;
+    value = (JSON.parse(decrypt(parsed.ciphertext, parsed.iv, parsed.tag)) as { value?: unknown })
+      .value;
   } catch {
-    return null;
+    throw new PrivacyRequestError("SUBJECT_LOCATOR_UNREADABLE", 503);
   }
+  if (typeof value !== "string" || !value)
+    throw new PrivacyRequestError("SUBJECT_LOCATOR_UNREADABLE", 503);
+  return value;
 }
 
 /** Active administrator accounts that receive operator alerts. */
@@ -732,8 +736,10 @@ export class PrivacyRequestService {
   }
 
   /**
-   * Create or reuse the subject's active self-service request and mark the
-   * start of one export. A request waiting on the requester returns to work,
+   * Create or reuse the subject's active request and mark the start of one
+   * export. The freshly signed-in session is the identity proof: an assisted
+   * case linked to this account that is still unverified is verified by it.
+   * A request that is open or waiting on the requester returns to work,
    * because downloading is the requester acting.
    */
   async beginSelfServiceExport(input: {
@@ -755,15 +761,30 @@ export class PrivacyRequestService {
     if (!acceptsSelfServiceExport(request.state))
       throw new PrivacyRequestError("REQUEST_NOT_ACTIVE", 409);
     if (request.state !== "in_progress") {
-      if (!request.identityMethod) throw new PrivacyRequestError("IDENTITY_REQUIRED", 409);
       const current = request;
-      request = await this.database.transaction((tx) =>
-        this.applyTransition(tx, current, {
+      const verifying = !current.identityMethod;
+      const now = this.now();
+      request = await this.database.transaction(async (tx) => {
+        if (verifying)
+          await tx.insert(dataSubjectRequestEvent).values({
+            id: randomUUID(),
+            requestId: current.id,
+            eventType: "identity_verified",
+            actorKind: "subject",
+            actorId: input.userId,
+            payload: boundedEventPayload({ reasonCode: "account_session" }),
+            payloadVersion: 1,
+            createdAt: now,
+          });
+        return this.applyTransition(tx, current, {
           to: "in_progress",
           actor: { kind: "subject", id: input.userId },
-          reasonCode: "export-requested",
-        }),
-      );
+          reasonCode: verifying ? "account_session" : "export-requested",
+          ...(verifying
+            ? { set: { identityMethod: "account_session", identityVerifiedAt: now } }
+            : {}),
+        });
+      });
     }
     return this.recordExportEvent(request, "export_started", {
       kind: "subject",
@@ -771,9 +792,12 @@ export class PrivacyRequestService {
     });
   }
 
-  /** Mark the start of an administrator export for an assisted request. */
+  /** Mark the start of an administrator export for an assisted request. A
+   * self-service request is downloaded by its subject, not by an administrator. */
   async beginAdminExport(requestId: string, actorId: string): Promise<RequestRow> {
     const request = await this.getById(requestId);
+    if (request.channel === "self_service")
+      throw new PrivacyRequestError("ASSISTED_REQUEST_REQUIRED", 409);
     if (!acceptsCaseDecision(request.state))
       throw new PrivacyRequestError("REQUEST_NOT_ACTIVE", 409);
     if (!request.identityMethod) throw new PrivacyRequestError("IDENTITY_REQUIRED", 409);
