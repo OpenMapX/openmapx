@@ -124,8 +124,7 @@ digest. Hosts then neither download nor restart that service.
 
 In the recorded 200-main-commit planner replay, the same planner rules would have
 rebuilt ops-agent 106 times instead of 139, transitous-runner 97 instead of 121,
-data-manager 118 instead of 130, transitous-tools 10 instead of 18, and
-privacy-backup 8 instead of 17. API and web include every integration and change
+data-manager 118 instead of 130, and transitous-tools 10 instead of 18. API and web include every integration and change
 in most commits anyway. Most remaining rebuilds come from `packages/core`: every
 image uses it, and ops-agent's CLI imports its barrel, which reaches about 1,000
 of its files. File-level inputs would mostly help transitous-runner, which reaches
@@ -251,7 +250,7 @@ launcher partitions explicit files and verifies each resulting collection. More 
 | `ingestion`              | 2          | Explicit file partitions; owned PostGIS, pinned Transitous Python dependencies, accounting/search/catalog/native import recovery         |
 | `configuration-recovery` | 4          | Expanded native scenario partitions; owned migrated schemas and independent host/process fixtures                                        |
 | `coordinator-recovery`   | 4          | Expanded native lifecycle scenarios, including unchanged real SQL/wall-clock expiry waits                                                |
-| `export-restore`         | 1          | Exact-image Dawarich, real retained archive, controller export and restore replay together                                               |
+| `export-restore`         | 1          | Exact-image Dawarich, controller export and restore replay together                                                                      |
 
 `scripts/database-test-shards.json` is the runner inventory. Group membership stays
 in `database-test-groups.json`, validated against discovered opt-in suites. Every

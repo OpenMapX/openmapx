@@ -5,7 +5,6 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { commitConfigurationGeneration } from "../services/configuration-generation";
 import { writeServiceSelectionFile } from "../services/deployment";
 import {
-  PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV,
   parseReleaseComposeSelection,
   TRANSITOUS_TOOLS_IMAGE_ENV,
 } from "../services/release-manifest";
@@ -37,31 +36,19 @@ it("retains the original private release selection instead of accepting a change
   });
   try {
     const pins = Object.fromEntries(
-      [
-        "api",
-        "web",
-        "data-manager",
-        "ops-agent",
-        "transitous-runner",
-        "privacy-backup",
-        "transitous-tools",
-      ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"b".repeat(64)}`]),
+      ["api", "web", "data-manager", "ops-agent", "transitous-runner", "transitous-tools"].map(
+        (name) => [name, `ghcr.io/openmapx/${name}@sha256:${"b".repeat(64)}`],
+      ),
     );
     const document = {
       services: {
-        "app-api": {
-          image: pins.api,
-          environment: { [PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV]: pins["privacy-backup"] },
-        },
+        "app-api": { image: pins.api },
         "app-web": { image: pins.web },
         "data-manager": {
           image: pins["data-manager"],
           environment: { [TRANSITOUS_TOOLS_IMAGE_ENV]: pins["transitous-tools"] },
         },
-        "ops-agent": {
-          image: pins["ops-agent"],
-          environment: { [PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV]: pins["privacy-backup"] },
-        },
+        "ops-agent": { image: pins["ops-agent"] },
         "transitous-runner": { image: pins["transitous-runner"] },
       },
       "x-openmapx-release": { release: "public-release-fixture", images: pins },

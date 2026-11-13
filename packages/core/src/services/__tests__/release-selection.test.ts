@@ -58,16 +58,6 @@ const manifest = {
   images: Object.fromEntries(
     releases.RELEASE_IMAGE_NAMES.map((name) => [name, `ghcr.io/openmapx/${name}@${digest}`]),
   ) as releases.ReleaseManifest["images"],
-  privacyReleaseValidation: {
-    version: 1 as const,
-    sourceBuildFingerprint: "b".repeat(64),
-    validatedAt: "2026-10-18T10:00:00Z",
-    checks: {
-      translationsConsistent: true as const,
-      openApiConsistent: true as const,
-      policyConsistent: true as const,
-    },
-  },
   ...releaseProvenance(),
 };
 it("retains producer and actual reused image metadata in canonical authority", () => {

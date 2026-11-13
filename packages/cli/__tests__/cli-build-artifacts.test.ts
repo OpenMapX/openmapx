@@ -113,15 +113,8 @@ describe("build provenance", () => {
       web: `ghcr.io/openmapx/web@${digest("b")}`,
       "data-manager": `ghcr.io/openmapx/data-manager@${digest("c")}`,
       "ops-agent": `ghcr.io/openmapx/ops-agent@${digest("d")}`,
-      "privacy-backup": `ghcr.io/openmapx/privacy-backup@${digest("9")}`,
       "transitous-runner": `ghcr.io/openmapx/transitous-runner@${digest("e")}`,
       "transitous-tools": `ghcr.io/openmapx/transitous-tools@${digest("f")}`,
-    },
-    privacyReleaseValidation: {
-      version: 1,
-      sourceBuildFingerprint: "2".repeat(64),
-      validatedAt: "2026-09-05T12:00:00.000Z",
-      checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
     },
     ...releaseProvenance(),
   };

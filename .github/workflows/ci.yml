@@ -603,17 +603,11 @@ jobs:
         timeout-minutes: 10
         run: OPENMAPX_RUN_DAWARICH_EXPORT_TESTS=1 pnpm exec vitest run --project node apps/ops-agent/src/dawarich-subject-export.integration.test.ts
 
-      - name: Verify the isolated retained-backup export
-        if: matrix.group == 'export-restore'
-        timeout-minutes: 10
-        run: node services/ops-agent/privacy-backup/test-fixture.mjs --output "$RUNNER_TEMP/openmapx-real-backup-result.tar"
-
       - name: Run the required database integration suites
         env:
           TEST_DB_GROUP: ${{ matrix.group }}
           TEST_DB_PART: ${{ matrix.part }}
           TEST_DB_TOTAL: ${{ matrix.total }}
-          OPENMAPX_REAL_BACKUP_FIXTURE: ${{ runner.temp }}/openmapx-real-backup-result.tar
           OPENMAPX_TEST_SHARD_RECEIPT: ${{ runner.temp }}/database-${{ matrix.group }}-${{ matrix.part }}.json
         run: pnpm test:database "${TEST_DB_GROUP}" "${TEST_DB_PART}/${TEST_DB_TOTAL}"
 
@@ -729,7 +723,6 @@ jobs:
             web) echo "context=." >> "$GITHUB_OUTPUT"; echo "dockerfile=apps/web/Dockerfile" >> "$GITHUB_OUTPUT" ;;
             data-manager) echo "context=." >> "$GITHUB_OUTPUT"; echo "dockerfile=services/data-manager/Dockerfile" >> "$GITHUB_OUTPUT" ;;
             ops-agent) echo "context=." >> "$GITHUB_OUTPUT"; echo "dockerfile=apps/ops-agent/Dockerfile" >> "$GITHUB_OUTPUT" ;;
-            privacy-backup) echo "context=." >> "$GITHUB_OUTPUT"; echo "dockerfile=services/ops-agent/privacy-backup/Dockerfile" >> "$GITHUB_OUTPUT" ;;
             transitous-runner) echo "context=." >> "$GITHUB_OUTPUT"; echo "dockerfile=apps/transitous-runner/Dockerfile" >> "$GITHUB_OUTPUT" ;;
             transitous-tools) echo "context=services/motis/tools/transitous" >> "$GITHUB_OUTPUT"; echo "dockerfile=services/motis/tools/transitous/Dockerfile" >> "$GITHUB_OUTPUT" ;;
             docs) echo "context=docs" >> "$GITHUB_OUTPUT"; echo "dockerfile=docs/Dockerfile" >> "$GITHUB_OUTPUT" ;;

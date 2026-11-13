@@ -262,7 +262,7 @@ it.each([
   if (problem === "settings-disabled") readiness.immutableReleases.enabled = false;
   if (problem === "wrong-upgrade-origin") readiness.upgradeOrigin = "invented-stable";
   if (problem === "bad-date") readiness.testedAt = "2026";
-  if (problem === "missing-check") delete readiness.checks.privacyEvidence;
+  if (problem === "missing-check") delete readiness.checks.serviceHealth;
   if (problem === "missing-artifact")
     t.ports.extractManifest = async () => {
       throw new Error("synthetic missing artifact");
@@ -322,7 +322,6 @@ it("requires every published version alias without repairing missing or changed 
     "web",
     "data-manager",
     "ops-agent",
-    "privacy-backup",
     "transitous-runner",
     "transitous-tools",
     "release-manifest",

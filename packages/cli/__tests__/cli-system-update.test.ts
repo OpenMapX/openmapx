@@ -29,12 +29,6 @@ async function fixture(mode = "success") {
         `ghcr.io/openmapx/${id}@sha256:${"a".repeat(64)}`,
       ]),
     ) as services.ReleaseManifest["images"],
-    privacyReleaseValidation: {
-      version: 1,
-      sourceBuildFingerprint: "b".repeat(64),
-      validatedAt: "2026-11-06T00:00:00.000Z",
-      checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
-    },
     ...releaseProvenance(),
   };
   const lock = await services.acquireReleaseStoreLock(paths.store, {}, { failIfBusy: true });

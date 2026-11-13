@@ -238,10 +238,6 @@ export {
   canonicalReleaseManifest,
   DEFAULT_RELEASE_MANIFEST_REPOSITORY,
   normalizeReleaseSelection,
-  PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV,
-  PRIVACY_RELEASE_VALIDATION_EVIDENCE_ENV,
-  PRIVACY_RELEASE_VALIDATION_EVIDENCE_PATH,
-  type PrivacyReleaseValidationEvidence,
   type ProductReleaseMetadata,
   parseReleaseComposeSelection,
   parseReleaseManifest,
@@ -298,7 +294,6 @@ export {
   readReleaseOverlayFile,
   readReleaseStateBytes,
   readReleaseStateFile,
-  releaseEvidenceReference,
   releaseStateFileProblem,
   releaseStatePaths,
 } from "./release-state";

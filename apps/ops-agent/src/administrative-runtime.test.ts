@@ -31,16 +31,6 @@ import { createUnavailableRuntime, dispatchOpsOperation, OpsExecutionFailure } f
 const temporaryRoots: string[] = [];
 const releaseState = (rootDir: string) =>
   services.releaseStatePaths(join(rootDir, "infra", "docker"));
-const privacyReleaseValidation = {
-  version: 1 as const,
-  sourceBuildFingerprint: "a".repeat(64),
-  validatedAt: "2026-09-05T12:00:00.000Z",
-  checks: {
-    translationsConsistent: true as const,
-    openApiConsistent: true as const,
-    policyConsistent: true as const,
-  },
-};
 
 function temporaryRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "openmapx-admin-runtime-"));
@@ -866,17 +856,10 @@ describe("administrative release runtime", () => {
       schemaVersion: 1 as const,
       release,
       images: Object.fromEntries(
-        [
-          "api",
-          "web",
-          "data-manager",
-          "ops-agent",
-          "privacy-backup",
-          "transitous-runner",
-          "transitous-tools",
-        ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${digit.repeat(64)}`]),
+        ["api", "web", "data-manager", "ops-agent", "transitous-runner", "transitous-tools"].map(
+          (name) => [name, `ghcr.io/openmapx/${name}@sha256:${digit.repeat(64)}`],
+        ),
       ),
-      privacyReleaseValidation,
       ...releaseProvenance(),
     });
     let manifestText = JSON.stringify(makeManifest("4"));
@@ -910,8 +893,7 @@ describe("administrative release runtime", () => {
     expect(
       JSON.parse(readFileSync(join(releaseState(rootDir).store, `${release}.json`), "utf8")),
     ).toMatchObject({
-      images: { "privacy-backup": `ghcr.io/openmapx/privacy-backup@sha256:${"4".repeat(64)}` },
-      privacyReleaseValidation,
+      images: { "ops-agent": `ghcr.io/openmapx/ops-agent@sha256:${"4".repeat(64)}` },
     });
 
     manifestText = services.canonicalReleaseManifest(
@@ -941,17 +923,10 @@ describe("administrative release runtime", () => {
       schemaVersion: 1,
       release: `${sourceRevision}-123-${attempt}`,
       images: Object.fromEntries(
-        [
-          "api",
-          "web",
-          "data-manager",
-          "ops-agent",
-          "privacy-backup",
-          "transitous-runner",
-          "transitous-tools",
-        ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${String(attempt).repeat(64)}`]),
+        ["api", "web", "data-manager", "ops-agent", "transitous-runner", "transitous-tools"].map(
+          (name) => [name, `ghcr.io/openmapx/${name}@sha256:${String(attempt).repeat(64)}`],
+        ),
       ),
-      privacyReleaseValidation,
       ...releaseProvenance(),
       producer: {
         repository: "OpenMapX/openmapx",
@@ -1004,7 +979,6 @@ describe("administrative release runtime", () => {
           `ghcr.io/openmapx/${name}@sha256:${"7".repeat(64)}`,
         ]),
       ),
-      privacyReleaseValidation,
       ...releaseProvenance(),
     });
     writeFileSync(join(store, "release-1.json"), manifest, { mode: 0o600 });
@@ -1043,17 +1017,10 @@ describe("administrative release runtime", () => {
       schemaVersion: 1 as const,
       release,
       images: Object.fromEntries(
-        [
-          "api",
-          "web",
-          "data-manager",
-          "ops-agent",
-          "privacy-backup",
-          "transitous-runner",
-          "transitous-tools",
-        ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${digit.repeat(64)}`]),
+        ["api", "web", "data-manager", "ops-agent", "transitous-runner", "transitous-tools"].map(
+          (name) => [name, `ghcr.io/openmapx/${name}@sha256:${digit.repeat(64)}`],
+        ),
       ),
-      privacyReleaseValidation,
       ...releaseProvenance(),
     });
     const latest = makeManifest("a-new", "1");
@@ -1097,17 +1064,10 @@ describe("administrative release runtime", () => {
         schemaVersion: 1,
         release,
         images: Object.fromEntries(
-          [
-            "api",
-            "web",
-            "data-manager",
-            "ops-agent",
-            "privacy-backup",
-            "transitous-runner",
-            "transitous-tools",
-          ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"3".repeat(64)}`]),
+          ["api", "web", "data-manager", "ops-agent", "transitous-runner", "transitous-tools"].map(
+            (name) => [name, `ghcr.io/openmapx/${name}@sha256:${"3".repeat(64)}`],
+          ),
         ),
-        privacyReleaseValidation,
         ...releaseProvenance(),
       });
     for (let index = 0; index < 63; index += 1) {
@@ -1187,20 +1147,13 @@ describe("administrative release runtime", () => {
       schemaVersion: 1,
       release: releaseId,
       images: Object.fromEntries(
-        [
-          "api",
-          "web",
-          "data-manager",
-          "ops-agent",
-          "privacy-backup",
-          "transitous-runner",
-          "transitous-tools",
-        ].map((name, index) => [
-          name,
-          `ghcr.io/openmapx/${name}@sha256:${String(index + 1).repeat(64)}`,
-        ]),
+        ["api", "web", "data-manager", "ops-agent", "transitous-runner", "transitous-tools"].map(
+          (name, index) => [
+            name,
+            `ghcr.io/openmapx/${name}@sha256:${String(index + 1).repeat(64)}`,
+          ],
+        ),
       ),
-      privacyReleaseValidation,
       ...releaseProvenance(),
     };
     writeFileSync(join(releaseDirectory, `${releaseId}.json`), JSON.stringify(manifest), {
@@ -1281,7 +1234,6 @@ describe("administrative release runtime", () => {
               "web",
               "data-manager",
               "ops-agent",
-              "privacy-backup",
               "transitous-runner",
               "transitous-tools",
             ].map((name, index) => [
@@ -1289,7 +1241,6 @@ describe("administrative release runtime", () => {
               `ghcr.io/openmapx/${name}@sha256:${String(index + 1).repeat(64)}`,
             ]),
           ),
-          privacyReleaseValidation,
           ...releaseProvenance(),
         }),
         { mode: 0o600 },
@@ -1351,8 +1302,6 @@ describe("administrative release runtime", () => {
         if (ps) return containers[ps[1]].repeat(64);
         if (args.includes("{{.Image}}"))
           return `sha256:${String(args.at(-1)).slice(0, 1).repeat(64)}`;
-        if (args.some((arg) => arg.includes(".Config.Env")))
-          return `OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE=${pin("privacy-backup", 5)}\n`;
         if (args.includes("{{json .RepoDigests}}")) {
           const digests = running[String(args.at(-1))];
           if (digests !== undefined) return digests;
@@ -1370,6 +1319,9 @@ describe("administrative release runtime", () => {
       ]);
       for (const service of result.services) expect(service.localImageId).toBeUndefined();
       expect(calls.some((args) => args[0] === "pull")).toBe(false);
+      // The agent is current from its own image pin alone; no helper image is
+      // read from its container environment.
+      expect(calls.some((args) => args.some((arg) => arg.includes(".Config.Env")))).toBe(false);
     });
 
     it("rejects a non-file Compose path instead of reporting it ready", async () => {

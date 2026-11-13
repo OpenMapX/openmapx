@@ -66,36 +66,9 @@ export function createImageInspection(runDocker: DockerCommandRunner) {
     if (repoDigests === undefined && localImageId === undefined) return {};
     return { matches: false, ...(localImageId ? { localImageId } : {}) };
   };
-  // Inspect only the non-secret helper reference, never the complete environment.
-  const inspectAgentHelper = async (
-    containerId: string,
-    context: DockerCommandContext,
-  ): Promise<string | undefined> => {
-    const key = coreServices.PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV;
-    try {
-      const value = (
-        await runDocker(
-          [
-            "container",
-            "inspect",
-            "--format",
-            `{{range .Config.Env}}{{if eq (index (split . "=") 0) "${key}"}}{{println .}}{{end}}{{end}}`,
-            containerId,
-          ],
-          context,
-        )
-      ).trim();
-      return value.startsWith(`${key}=`) && !value.includes("\n")
-        ? value.slice(key.length + 1)
-        : undefined;
-    } catch {
-      return undefined;
-    }
-  };
   return {
     inspectImageId,
     inspectRepoDigests,
     observePinnedImage,
-    inspectAgentHelper,
   };
 }

@@ -36,16 +36,6 @@ function manifest(release: string, dmDigest = "c"): ReleaseManifest {
         `ghcr.io/openmapx/${name}@${digest(name === "data-manager" ? dmDigest : "d")}`,
       ]),
     ) as ReleaseManifest["images"],
-    privacyReleaseValidation: {
-      version: 1,
-      sourceBuildFingerprint: "e".repeat(64),
-      validatedAt: "2026-11-06T00:00:00.000Z",
-      checks: {
-        translationsConsistent: true,
-        openApiConsistent: true,
-        policyConsistent: true,
-      },
-    },
     ...releaseProvenance(),
   };
 }
@@ -58,12 +48,7 @@ function fixture() {
   const paths = services.releaseStatePaths(infraDir);
   services.ensureReleaseStateDirectory(paths.store);
   const overlay = readFileSync(paths.overlay, "utf8");
-  const evidence = () =>
-    readdirSync(paths.evidence)
-      .sort()
-      .map((name) => [name, readFileSync(join(paths.evidence, name), "utf8")]);
-  const originalEvidence = evidence();
-  return { infraDir, before, paths, overlay, evidence, originalEvidence };
+  return { infraDir, before, paths, overlay };
 }
 
 function dockerFixture(
@@ -129,7 +114,6 @@ function dockerFixture(
       writeFileSync(destination, JSON.stringify(candidate), { mode: 0o600 });
       return ok();
     }
-    if (args.join(" ") === `pull ${candidate.images["privacy-backup"]}`) return ok();
     if (args.join(" ") === `rm -f ${"f".repeat(64)}`) return ok();
     throw Error(`Unexpected Docker command: ${JSON.stringify(args)}`);
   });
@@ -142,7 +126,7 @@ afterEach(() => {
 });
 
 describe("coordinator-safe release selection", () => {
-  it("preserves the live pin and privacy evidence when the candidate changes Data Manager", async () => {
+  it("preserves the live pin when the candidate changes Data Manager", async () => {
     const f = fixture();
     const next = manifest("after", "0");
     await expect(
@@ -153,7 +137,6 @@ describe("coordinator-safe release selection", () => {
       }),
     ).rejects.toThrow(/coordinator|Data Manager/i);
     expect(readFileSync(f.paths.overlay, "utf8")).toBe(f.overlay);
-    expect(f.evidence()).toEqual(f.originalEvidence);
   });
 
   it.each([
@@ -214,7 +197,6 @@ describe("automatic selection and clearing", () => {
       });
       expect(result.status).toBe("held");
       expect(existsSync(f.paths.overlay)).toBe(false);
-      expect(f.evidence()).toEqual(f.originalEvidence);
     },
   );
 

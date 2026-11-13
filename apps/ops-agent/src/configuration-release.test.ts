@@ -28,12 +28,6 @@ beforeEach(() => {
             `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`,
           ]),
         ),
-        privacyReleaseValidation: {
-          version: 1,
-          sourceBuildFingerprint: "b".repeat(64),
-          validatedAt: "2026-10-30T00:00:00.000Z",
-          checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
-        },
         ...releaseProvenance(),
       }),
     ),
@@ -84,31 +78,27 @@ it.each(["symlink", "hardlink"])("rejects a %s cached manifest", (kind) => {
   else linkSync(original, path);
   expect(() => readCheckedConfigurationRelease(root, { releaseId, manifestDigest })).toThrow();
 });
-it.each(["foreign", "tag", "oversized", "privacy", "local"])(
-  "rejects ineligible checked data: %s",
-  (kind) => {
-    const manifest = JSON.parse(raw);
-    if (kind === "foreign") manifest.images.api = `ghcr.io/foreign/api@sha256:${"a".repeat(64)}`;
-    if (kind === "tag") manifest.images.api = "ghcr.io/openmapx/api:latest";
-    if (kind === "privacy") manifest.privacyReleaseValidation.checks.policyConsistent = false;
-    if (kind === "local") vi.stubEnv("OPENMAPX_RELEASE", "local");
-    if (kind === "oversized")
-      manifest.producer = {
-        repository: `${"x".repeat(32768)}/repository`,
-        workflowPath: ".github/workflows/ci.yml",
-        sourceRevision: "c".repeat(40),
-        runId: 1,
-        runAttempt: 1,
-        event: "push",
-      };
-    const modified = services.canonicalReleaseManifest(manifest);
-    writeFileSync(join(directory, `${releaseId}.json`), modified);
-    const digest = createHash("sha256").update(modified).digest("hex");
-    expect(() =>
-      readCheckedConfigurationRelease(root, { releaseId, manifestDigest: digest }),
-    ).toThrow();
-  },
-);
+it.each(["foreign", "tag", "oversized", "local"])("rejects ineligible checked data: %s", (kind) => {
+  const manifest = JSON.parse(raw);
+  if (kind === "foreign") manifest.images.api = `ghcr.io/foreign/api@sha256:${"a".repeat(64)}`;
+  if (kind === "tag") manifest.images.api = "ghcr.io/openmapx/api:latest";
+  if (kind === "local") vi.stubEnv("OPENMAPX_RELEASE", "local");
+  if (kind === "oversized")
+    manifest.producer = {
+      repository: `${"x".repeat(32768)}/repository`,
+      workflowPath: ".github/workflows/ci.yml",
+      sourceRevision: "c".repeat(40),
+      runId: 1,
+      runAttempt: 1,
+      event: "push",
+    };
+  const modified = services.canonicalReleaseManifest(manifest);
+  writeFileSync(join(directory, `${releaseId}.json`), modified);
+  const digest = createHash("sha256").update(modified).digest("hex");
+  expect(() =>
+    readCheckedConfigurationRelease(root, { releaseId, manifestDigest: digest }),
+  ).toThrow();
+});
 it.each(["single", "indexed"])(
   "preflights declared OCI bytes and platform without pulling images: %s",
   async (kind) => {
@@ -145,8 +135,8 @@ it.each(["single", "indexed"])(
       execFile,
       signal: new AbortController().signal,
     });
-    expect(result).toMatchObject({ version: 1, platform: "linux/amd64", declaredBytes: 7 * 1280 });
-    expect(result.images).toHaveLength(7);
+    expect(result).toMatchObject({ version: 1, platform: "linux/amd64", declaredBytes: 6 * 1280 });
+    expect(result.images).toHaveLength(6);
     expect(result.images[0]).toMatchObject({
       image: "api",
       reference: release.manifest.images.api,
@@ -220,7 +210,7 @@ function heldMetadata() {
   };
 }
 
-it("inspects all seven images concurrently and retains release order under reversed completion", async () => {
+it("inspects all six images concurrently and retains release order under reversed completion", async () => {
   const release = readCheckedConfigurationRelease(root, { releaseId, manifestDigest });
   const held = heldMetadata();
   const controller = new AbortController();
@@ -232,30 +222,29 @@ it("inspects all seven images concurrently and retains release order under rever
   // Install the rejection handler before an assertion can fail and start cleanup.
   const settled = result.catch(() => undefined);
   try {
-    await vi.waitFor(() => expect(held.calls).toHaveLength(7), { timeout: 2000, interval: 5 });
+    await vi.waitFor(() => expect(held.calls).toHaveLength(6), { timeout: 2000, interval: 5 });
     expect(held.calls.map((call) => call.reference)).toEqual(
       Object.values(release.manifest.images),
     );
     for (const call of [...held.calls].reverse()) call.resolve(platformIndex());
-    await vi.waitFor(() => expect(held.calls).toHaveLength(14), { timeout: 2000, interval: 5 });
-    for (const call of held.calls.slice(7).reverse()) call.resolve(platformManifest);
+    await vi.waitFor(() => expect(held.calls).toHaveLength(12), { timeout: 2000, interval: 5 });
+    for (const call of held.calls.slice(6).reverse()) call.resolve(platformManifest);
     expect(await result).toMatchObject({
       platform: "linux/amd64",
-      declaredBytes: 8960,
+      declaredBytes: 7680,
       images: [
         { image: "api" },
         { image: "web" },
         { image: "data-manager" },
         { image: "ops-agent" },
-        { image: "privacy-backup" },
         { image: "transitous-runner" },
         { image: "transitous-tools" },
       ],
     });
-    expect(held.peak()).toBe(7);
+    expect(held.peak()).toBe(6);
     expect(
       held.calls
-        .slice(7)
+        .slice(6)
         .map((call) => call.reference)
         .sort(),
     ).toEqual(
@@ -295,11 +284,11 @@ it.each(["sibling failure", "caller abort"])(
       },
     );
     try {
-      await vi.waitFor(() => expect(held.calls).toHaveLength(7), { timeout: 2000, interval: 5 });
+      await vi.waitFor(() => expect(held.calls).toHaveLength(6), { timeout: 2000, interval: 5 });
       if (failure === "sibling failure") held.calls[0]!.resolve(platformIndex("arm64"));
       else {
         for (const call of [...held.calls]) call.resolve(platformIndex());
-        await vi.waitFor(() => expect(held.calls).toHaveLength(14), { timeout: 2000, interval: 5 });
+        await vi.waitFor(() => expect(held.calls).toHaveLength(12), { timeout: 2000, interval: 5 });
         controller.abort(Error("Caller canceled metadata"));
       }
       await vi.waitFor(() => expect(held.calls.every((call) => call.signal.aborted)).toBe(true), {
@@ -320,7 +309,7 @@ it.each(["sibling failure", "caller abort"])(
             : "Caller canceled metadata",
         ),
       );
-      expect(held.calls).toHaveLength(failure === "sibling failure" ? 7 : 14);
+      expect(held.calls).toHaveLength(failure === "sibling failure" ? 6 : 12);
       const lock = await services.acquireReleaseStoreLock(directory, {}, { failIfBusy: true });
       lock.release();
     } finally {
@@ -357,7 +346,7 @@ it.each([
             kind === "oversized-image"
               ? 8 * 1024 ** 3 + 1
               : kind === "oversized-total"
-                ? 5 * 1024 ** 3
+                ? 6 * 1024 ** 3
                 : 1024,
           digest: `sha256:${"d".repeat(64)}`,
         },
@@ -422,7 +411,7 @@ it.each([false, true])(
         manifestDigest,
         canonicalManifest: raw,
         imagePrefix: "ghcr.io/openmapx",
-        downloads: { declaredBytes: 7 * 96 },
+        downloads: { declaredBytes: 6 * 96 },
       });
     expect(
       execFile.mock.calls.every(([, args]) => args[0] === "info" || args[0] === "manifest"),

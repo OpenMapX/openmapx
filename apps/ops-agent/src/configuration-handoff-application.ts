@@ -296,7 +296,7 @@ export async function runConfigurationHandoffApplication(input: {
             if (
               !published ||
               Buffer.from(published.bytes, "base64").toString("utf8") !==
-                services.renderReleaseCompose(checked.manifest, stack.infraDir)
+                services.renderReleaseCompose(checked.manifest)
             )
               throw Error("Original release overlay publication incomplete");
             save({

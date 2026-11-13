@@ -74,8 +74,8 @@ docker compose -f docs/deploy/docker-compose.yml -p openmapx-docs up -d
 
 For rollback, resolve a previously published docs image to its immutable digest
 and set `OPENMAPX_DOCS_IMAGE` to that digest. SHA aliases can move on a refresh of the same source commit.
-Application release lockfiles contain only the seven application images: API, web,
-data-manager, ops-agent, privacy-backup, transitous-runner, and transitous-tools.
+Application release lockfiles contain only the six application images: API, web,
+data-manager, ops-agent, transitous-runner, and transitous-tools.
 Deploy the documentation website through its independent image channel above.
 
 Point the docs hostname's DNS at the proxy and configure its ACME challenge before

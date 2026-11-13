@@ -1,6 +1,5 @@
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
-import { CURRENT_CONFIGURATION } from "./deployment";
+import { dirname, join } from "node:path";
 
 /**
  * The operations agent's releases, in its own state directory:
@@ -9,9 +8,7 @@ import { CURRENT_CONFIGURATION } from "./deployment";
  * - `store/`, the release manifests the agent resolved and its pointers to
  *   them (`current.json`, `latest.json`, `selections.json`), with the store
  *   lock;
- * - `docker-compose.release.yml`, the overlay pinning the selected release;
- * - `evidence/`, the immutable privacy release-validation files the overlay
- *   mounts.
+ * - `docker-compose.release.yml`, the overlay pinning the selected release.
  *
  * Only the agent's user can reach it, and the host CLI runs as that user. So
  * every directory and file here must be that user's own and unwritable by
@@ -39,7 +36,6 @@ export const RELEASE_STORE_LIMITS = {
 export interface ReleaseStatePaths {
   directory: string;
   store: string;
-  evidence: string;
   overlay: string;
 }
 
@@ -48,21 +44,8 @@ export function releaseStatePaths(infraDir: string): ReleaseStatePaths {
   return {
     directory,
     store: join(directory, "store"),
-    evidence: join(directory, "evidence"),
     overlay: join(directory, RELEASE_OVERLAY_FILE),
   };
-}
-
-/**
- * The overlay's `file:` reference to an evidence file. Compose resolves an
- * overlay's paths against the project directory, the directory of the first
- * `-f` file: the `current` configuration pointer, taken as named.
- */
-export function releaseEvidenceReference(infraDir: string, file: string): string {
-  return relative(
-    join(infraDir, CURRENT_CONFIGURATION),
-    join(releaseStatePaths(infraDir).evidence, file),
-  );
 }
 
 export interface ReleaseStateOptions {
@@ -137,7 +120,7 @@ export function ensureReleaseStateDirectory(path: string, options: ReleaseStateO
   assertReleaseStateDirectory(path, options);
 }
 
-/** `releases/`, `store/` and `evidence/`, created owner-only when missing. */
+/** `releases/` and `store/`, created owner-only when missing. */
 export function ensureReleaseStateDirectories(
   infraDir: string,
   options: ReleaseStateOptions = {},
@@ -145,7 +128,6 @@ export function ensureReleaseStateDirectories(
   const paths = releaseStatePaths(infraDir);
   ensureReleaseStateDirectory(paths.directory, options);
   ensureReleaseStateDirectory(paths.store, options);
-  ensureReleaseStateDirectory(paths.evidence, options);
   return paths;
 }
 

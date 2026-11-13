@@ -596,16 +596,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   `ghcr.io/openmapx/${image}@sha256:${"9".repeat(64)}`,
                 ]),
               ),
-              privacyReleaseValidation: {
-                version: 1,
-                sourceBuildFingerprint: "f".repeat(64),
-                validatedAt: "2026-10-30T00:00:00.000Z",
-                checks: {
-                  translationsConsistent: true,
-                  openApiConsistent: true,
-                  policyConsistent: true,
-                },
-              },
               ...releaseProvenance(),
             }),
           );

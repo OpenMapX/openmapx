@@ -219,12 +219,6 @@ it("freezes the checked release helper graph and budgets a complete 13-service s
           `ghcr.io/openmapx/${name}@sha256:${"3".repeat(64)}`,
         ]),
       ),
-      privacyReleaseValidation: {
-        version: 1,
-        sourceBuildFingerprint: "a".repeat(64),
-        validatedAt: "2026-10-30T00:00:00Z",
-        checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
-      },
       ...releaseProvenance(),
     }),
   );
@@ -246,7 +240,7 @@ it("freezes the checked release helper graph and budgets a complete 13-service s
       downloads: {
         version: 1 as const,
         platform: "linux/amd64" as const,
-        declaredBytes: 7 * 512,
+        declaredBytes: 6 * 512,
         images: RELEASE_IMAGE_NAMES.map((image) => ({
           image,
           reference: manifest.images[image],

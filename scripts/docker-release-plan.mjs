@@ -12,7 +12,6 @@ import {
 import { tmpdir } from "node:os";
 import { join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { computePrivacySourceFingerprint } from "../apps/api/privacy-source-fingerprint.mjs";
 import { createDockerIgnoreMatcher } from "./check-docker-context-secrets.ts";
 import { coversPath, dockerInputs, stageInputs } from "./docker-inputs.mjs";
 
@@ -23,11 +22,6 @@ export const targets = [
   { app: "web", context: ".", dockerfile: "apps/web/Dockerfile" },
   { app: "data-manager", context: ".", dockerfile: "services/data-manager/Dockerfile" },
   { app: "ops-agent", context: ".", dockerfile: "apps/ops-agent/Dockerfile" },
-  {
-    app: "privacy-backup",
-    context: ".",
-    dockerfile: "services/ops-agent/privacy-backup/Dockerfile",
-  },
   { app: "transitous-runner", context: ".", dockerfile: "apps/transitous-runner/Dockerfile" },
   {
     app: "transitous-tools",
@@ -220,7 +214,6 @@ export function imageFingerprint({
   target,
   tree,
   readDockerfile,
-  privacyFingerprint,
   lockfile,
   onLockfileFallback = () => {},
   bundleDigest,
@@ -276,7 +269,6 @@ export function imageFingerprint({
     }
     hash.update(JSON.stringify([entry.path, entry.mode, entry.oid]));
   }
-  if (target.app === "api") hash.update(privacyFingerprint);
   return hash.digest("hex");
 }
 
@@ -296,7 +288,6 @@ function validatePrevious(previous, imagePrefix) {
   if (
     previous.schemaVersion !== 1 ||
     !previousReleasePattern.test(previous.release ?? "") ||
-    !hashPattern.test(previous.privacyReleaseValidation?.sourceBuildFingerprint ?? "") ||
     previous.buildMetadata?.version !== 1
   )
     throw new Error("Invalid previous release manifest");
@@ -328,7 +319,6 @@ export function createReleasePlan({
   releaseId = revision,
   tree,
   readDockerfile,
-  privacyFingerprint,
   previous = null,
   now = new Date().toISOString(),
   force = false,
@@ -341,10 +331,9 @@ export function createReleasePlan({
   if (
     !shaPattern.test(revision) ||
     !releasePattern.test(releaseId) ||
-    releaseId.slice(0, 40) !== revision ||
-    !hashPattern.test(privacyFingerprint)
+    releaseId.slice(0, 40) !== revision
   )
-    throw new Error("Invalid release revision or privacy fingerprint");
+    throw new Error("Invalid release revision");
   const currentTime = timestamp(now);
   validatePrevious(previous, imagePrefix);
   const buildMetadata = { version: 1, images: {} };
@@ -353,7 +342,6 @@ export function createReleasePlan({
       target,
       tree,
       readDockerfile,
-      privacyFingerprint,
       lockfile,
       onLockfileFallback,
       bundleDigest: bundleDigests[target.app],
@@ -366,10 +354,7 @@ export function createReleasePlan({
       currentTime - timestamp(old.coldRefreshedAt) >= maxColdRefreshAge ||
       timestamp(old.coldRefreshedAt) > currentTime ||
       timestamp(old.builtAt) > currentTime;
-    const privacyChanged =
-      target.app === "api" &&
-      previous?.privacyReleaseValidation.sourceBuildFingerprint !== privacyFingerprint;
-    const rebuild = !old || old.inputHash !== inputHash || refresh || privacyChanged;
+    const rebuild = !old || old.inputHash !== inputHash || refresh;
     const reason = !old
       ? "bootstrap"
       : refresh
@@ -401,7 +386,6 @@ export function createReleasePlan({
     version: 1,
     release: releaseId,
     sourceRevision: revision,
-    privacyFingerprint,
     images,
     buildMetadata,
   };
@@ -493,7 +477,6 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       releaseId: process.env.RELEASE_ID,
       tree: trackedTree(root),
       readDockerfile: (path) => readFileSync(join(root, path), "utf8"),
-      privacyFingerprint: await computePrivacySourceFingerprint(root),
       previous,
       force: process.env.FORCE_REBUILD === "true",
       imagePrefix,

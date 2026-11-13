@@ -419,12 +419,6 @@ describe("actual CLI service lifecycle preparation", () => {
             `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`,
           ]),
         ),
-        privacyReleaseValidation: {
-          version: 1,
-          sourceBuildFingerprint: "2".repeat(64),
-          validatedAt: "2026-09-05T12:00:00.000Z",
-          checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
-        },
         ...releaseProvenance(),
       }),
       "ghcr.io/openmapx",

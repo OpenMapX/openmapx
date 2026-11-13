@@ -6,7 +6,6 @@ export const CONFIGURATION_RELEASE_IMAGE_NAMES = [
   "web",
   "data-manager",
   "ops-agent",
-  "privacy-backup",
   "transitous-runner",
   "transitous-tools",
 ] as const;

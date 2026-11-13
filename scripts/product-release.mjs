@@ -18,7 +18,6 @@ const fixedAssets = [
   "candidate.json",
   "release-manifest.json",
   "docker-compose.release.yml",
-  "privacy-release-validation.json",
   "INSTALL.md",
   "notes.md",
 ];
@@ -27,7 +26,7 @@ function main(ports) {
 }
 function overlay(manifest) {
   const images = manifest.images;
-  return `# Exact rehearsal selection; use the matching source checkout.\nx-openmapx-release: ${canonicalCandidate({ release: manifest.release, images, product: manifest.product })}\nservices:\n  app-api:\n    image: ${images.api}\n    environment:\n      OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE: ${images["privacy-backup"]}\n      PRIVACY_EXPORT_VALIDATION_EVIDENCE_FILE: /run/openmapx/privacy-release-validation.json\n    configs:\n      - source: privacy-release-validation\n        target: /run/openmapx/privacy-release-validation.json\n  app-web:\n    image: ${images.web}\n  data-manager:\n    image: ${images["data-manager"]}\n    environment:\n      OPENMAPX_TRANSITOUS_TOOLS_IMAGE: ${images["transitous-tools"]}\n  ops-agent:\n    image: ${images["ops-agent"]}\n    environment:\n      OPS_PRIVACY_BACKUP_COLLECTOR_ENABLED: "true"\n      OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE: ${images["privacy-backup"]}\n  transitous-runner:\n    image: ${images["transitous-runner"]}\nconfigs:\n  privacy-release-validation:\n    content: ${JSON.stringify(`${canonicalCandidate(manifest.privacyReleaseValidation)}\n`)}\n`;
+  return `# Exact rehearsal selection; use the matching source checkout.\nx-openmapx-release: ${canonicalCandidate({ release: manifest.release, images, product: manifest.product })}\nservices:\n  app-api:\n    image: ${images.api}\n  app-web:\n    image: ${images.web}\n  data-manager:\n    image: ${images["data-manager"]}\n    environment:\n      OPENMAPX_TRANSITOUS_TOOLS_IMAGE: ${images["transitous-tools"]}\n  ops-agent:\n    image: ${images["ops-agent"]}\n  transitous-runner:\n    image: ${images["transitous-runner"]}\n`;
 }
 function assetsFor(candidate, digest, notes) {
   const envelope = {
@@ -39,9 +38,8 @@ function assetsFor(candidate, digest, notes) {
     "candidate.json": `${canonicalCandidate(envelope)}\n`,
     "release-manifest.json": `${canonicalCandidate(candidate.manifest)}\n`,
     "docker-compose.release.yml": overlay(candidate.manifest),
-    "privacy-release-validation.json": `${canonicalCandidate(candidate.manifest.privacyReleaseValidation)}\n`,
     "notes.md": notes,
-    "INSTALL.md": `# Candidate ${candidate.version}\n\nNot published until the owner approves the protected publishing job.\n\nCheck out ${candidate.repository} at exact source ${candidate.sourceRevision}. Use the installation instructions at that source. Set OPENMAPX_RELEASE=${digest} and OPENMAPX_RELEASE_MANIFEST_REPOSITORY=ghcr.io/${candidate.repository.toLowerCase().split("/")[0]}/release-manifest, then run pnpm openmapx compose release for a clean installation. For an existing installation, use compose release --check and the authenticated system update workflow in the upgrading guide; do not replace its running Data Manager pin with bare compose release. Both resolve the exact staged candidate; no preview fallback is permitted. The accompanying overlay is an auditable seven-image summary; use the CLI-generated selection and privacy evidence paths for normal host operations.\n\nRehearse clean installation and ${candidate.manifest.product.upgradeOrigins.join(", ")} upgrade, selected service health and critical flows. Image rollback does not reverse database migrations. Record actual recovery limits and evidence in readiness.json; no backups are created automatically by these instructions.\n`,
+    "INSTALL.md": `# Candidate ${candidate.version}\n\nNot published until the owner approves the protected publishing job.\n\nCheck out ${candidate.repository} at exact source ${candidate.sourceRevision}. Use the installation instructions at that source. Set OPENMAPX_RELEASE=${digest} and OPENMAPX_RELEASE_MANIFEST_REPOSITORY=ghcr.io/${candidate.repository.toLowerCase().split("/")[0]}/release-manifest, then run pnpm openmapx compose release for a clean installation. For an existing installation, use compose release --check and the authenticated system update workflow in the upgrading guide; do not replace its running Data Manager pin with bare compose release. Both resolve the exact staged candidate; no preview fallback is permitted. The accompanying overlay is an auditable six-image summary; use the CLI-generated selection for normal host operations.\n\nRehearse clean installation and ${candidate.manifest.product.upgradeOrigins.join(", ")} upgrade, selected service health and critical flows. Image rollback does not reverse database migrations. Record actual recovery limits and evidence in readiness.json; no backups are created automatically by these instructions.\n`,
   };
   assets.SHA256SUMS = fixedAssets.map((name) => `${sha256(assets[name])}  ${name}\n`).join("");
   return assets;

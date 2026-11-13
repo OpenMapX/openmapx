@@ -4,7 +4,7 @@ impacts: [breaking, operator-action]
 
 ## What changes
 
-Product release selection uses main, preview, an exact prerelease version or metadata digest, or explicit local mode. Existing overlays must contain a coherent seven-image selection; incomplete hand-written overlays are rejected. Admin apply uses the exact checked release and fails if its selection configuration changed.
+Product release selection uses main, preview, an exact prerelease version or metadata digest, or explicit local mode. Existing overlays must contain a coherent six-image selection; incomplete hand-written overlays are rejected. Admin apply uses the exact checked release and fails if its selection configuration changed.
 
 ## Who is affected
 

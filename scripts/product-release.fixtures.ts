@@ -6,7 +6,6 @@ export function fixture() {
     "web",
     "data-manager",
     "ops-agent",
-    "privacy-backup",
     "transitous-runner",
     "transitous-tools",
   ];
@@ -31,12 +30,6 @@ export function fixture() {
     release: `${revision}-123-2`,
     producer,
     images: Object.fromEntries(names.map((name) => [name, `ghcr.io/openmapx/${name}@${digest}`])),
-    privacyReleaseValidation: {
-      version: 1,
-      sourceBuildFingerprint: "c".repeat(64),
-      validatedAt: "2026-10-18T10:00:00.000Z",
-      checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
-    },
     buildMetadata: {
       version: 1,
       images: Object.fromEntries(
@@ -55,7 +48,6 @@ export function fixture() {
   const jobs = [
     "lint / types / test",
     "Publish coherent release",
-    "Validate privacy release evidence",
     ...names.map((name) => `Build or reuse and scan ${name}`),
   ].map((name) => ({ name, status: "completed", conclusion: "success" }));
   const run = {

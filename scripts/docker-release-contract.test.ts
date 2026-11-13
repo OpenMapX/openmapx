@@ -118,7 +118,7 @@ describe("Docker release trust gate", () => {
   it("requires explicit eligibility for every downstream release job", () => {
     // biome-ignore lint/suspicious/noTemplateCurlyInString: Literal GitHub Actions output expression.
     expect(release).toContain("eligible: ${{ steps.verify.outputs.eligible }}");
-    for (const job of ["plan", "build", "validate-privacy-release", "promote"]) {
+    for (const job of ["plan", "build", "promote"]) {
       const block = release.split(`  ${job}:\n`)[1].split(/^ {2}[\w-]+:\n/m)[0];
       expect(block).toContain("    if: needs.gate.outputs.eligible == 'true'");
     }
@@ -248,7 +248,7 @@ describe("Docker release trust gate", () => {
 
   it("publishes immutable image tags before advancing the complete release pointer", () => {
     expect(release).toMatch(/^ {2}promote:\n/m);
-    expect(release).toContain("needs: [gate, plan, build, validate-privacy-release]");
+    expect(release).toContain("needs: [gate, plan, build]");
     expect(release).toContain("RELEASE_MANIFEST_IMAGE");
     expect(release).toContain("release-manifest.json");
     expect(release).toContain("docker buildx imagetools create");
@@ -293,7 +293,6 @@ describe("Docker release trust gate", () => {
         "web",
         "data-manager",
         "ops-agent",
-        "privacy-backup",
         "transitous-runner",
         "transitous-tools",
       ]) {
@@ -306,7 +305,6 @@ describe("Docker release trust gate", () => {
         "web",
         "data-manager",
         "ops-agent",
-        "privacy-backup",
         "transitous-runner",
         "transitous-tools",
       ];
@@ -330,25 +328,9 @@ describe("Docker release trust gate", () => {
           version: 1,
           release: `${"a".repeat(40)}-1-1`,
           sourceRevision: "a".repeat(40),
-          privacyFingerprint: "b".repeat(64),
           images: apps.map((app) => ({ app, rebuild: true })),
           buildMetadata,
         }),
-      );
-      const privacyEvidence = {
-        version: 1,
-        sourceBuildFingerprint: "b".repeat(64),
-        validatedAt: "2026-09-05T12:00:00.000Z",
-        checks: {
-          translationsConsistent: true,
-          openApiConsistent: true,
-          policyConsistent: true,
-        },
-      };
-      mkdirSync(join(temp, "privacy-release-validation"));
-      writeFileSync(
-        join(temp, "privacy-release-validation", "privacy-release-validation.json"),
-        `${JSON.stringify(privacyEvidence, null, 2)}\n`,
       );
       const docker = join(bin, "docker");
       writeFileSync(
@@ -396,11 +378,9 @@ describe("Docker release trust gate", () => {
           web: `example.invalid/openmapx/web@sha256:${"a".repeat(64)}`,
           "data-manager": `example.invalid/openmapx/data-manager@sha256:${"a".repeat(64)}`,
           "ops-agent": `example.invalid/openmapx/ops-agent@sha256:${"a".repeat(64)}`,
-          "privacy-backup": `example.invalid/openmapx/privacy-backup@sha256:${"a".repeat(64)}`,
           "transitous-runner": `example.invalid/openmapx/transitous-runner@sha256:${"a".repeat(64)}`,
           "transitous-tools": `example.invalid/openmapx/transitous-tools@sha256:${"a".repeat(64)}`,
         },
-        privacyReleaseValidation: privacyEvidence,
       });
     } finally {
       rmSync(temp, { recursive: true, force: true });
@@ -445,6 +425,17 @@ describe("Docker release trust gate", () => {
       expect(read(dockerfile)).toContain("rm -rf /usr/local/lib/node_modules/npm");
     }
     expect(read("apps/api/Dockerfile")).toContain("image-size@*");
+    // The API build reuses the frozen dependency install offline, and the
+    // runtime ships the shared translator with its production dependencies.
+    const apiDockerfile = read("apps/api/Dockerfile");
+    expect(apiDockerfile).toContain(
+      "RUN --network=none pnpm --config.verify-deps-before-run=false build",
+    );
+    const apiRunner = apiDockerfile.split("# Production image")[1];
+    expect(apiRunner).toContain("COPY packages/i18n/ packages/i18n/");
+    expect(apiRunner).toContain(
+      "COPY --from=prod-deps /app/packages/i18n/node_modules ./packages/i18n/node_modules",
+    );
     // Bundled images install only the packages their bundles load, which
     // leaves out the mobile toolchain's image-size with everything else.
     for (const dockerfile of [
@@ -466,34 +457,23 @@ describe("Docker release trust gate", () => {
     );
   });
 
-  it("builds and promotes the isolated privacy backup collector", () => {
-    expect(release).toContain("app: privacy-backup");
-    expect(release).toContain("dockerfile: services/ops-agent/privacy-backup/Dockerfile");
+  it("builds and promotes only the six application images without privacy evidence", () => {
+    const matrixApps = [...release.matchAll(/^ {10}- app: (\S+)$/gm)].map((match) => match[1]);
+    expect(matrixApps).toEqual([
+      "api",
+      "web",
+      "data-manager",
+      "ops-agent",
+      "transitous-runner",
+      "transitous-tools",
+    ]);
+    expect(release).not.toMatch(/validate-privacy|privacyReleaseValidation/);
     expect(release).toContain(
-      "for app in api web data-manager ops-agent privacy-backup transitous-runner",
-    );
-    expect(ci).toContain(
-      'privacy-backup) echo "context=." >> "$GITHUB_OUTPUT"; echo "dockerfile=services/ops-agent/privacy-backup/Dockerfile"',
-    );
-  });
-
-  it("gates promotion on exact-checkout privacy validation evidence from the same run", () => {
-    expect(release).toMatch(/^ {2}validate-privacy-release:\n/m);
-    expect(release).toContain("ref: $" + "{{ needs.gate.outputs.sha }}");
-    expect(release).toContain(
-      'pnpm validate:privacy-release "$RUNNER_TEMP/privacy-release-validation.json"',
-    );
-    expect(release).toContain(
-      "privacy-release-validation-$" + "{{ needs.gate.outputs.sha }}-$" + "{{ github.run_id }}",
+      "for app in api web data-manager ops-agent transitous-runner transitous-tools; do",
     );
     expect(release).toContain(
       "RELEASE_ID: $" + "{{ github.sha }}-$" + "{{ github.run_id }}-$" + "{{ github.run_attempt }}",
     );
     expect(release).toContain("runAttempt = Number(process.env.GITHUB_RUN_ATTEMPT)");
-    const validation = release.indexOf("pnpm validate:privacy-release");
-    const releasePointer = release.indexOf('"$' + '{RELEASE_MANIFEST_IMAGE}:main"');
-    expect(validation).toBeGreaterThan(-1);
-    expect(validation).toBeLessThan(releasePointer);
-    expect(release).toContain("cat privacy-release-validation/privacy-release-validation.json");
   });
 });

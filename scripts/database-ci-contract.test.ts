@@ -83,7 +83,6 @@ describe("required database test gate", () => {
     for (const command of [
       "DAWARICH_SUPPORTED_IMAGE_DIGEST",
       "OPENMAPX_RUN_DAWARICH_EXPORT_TESTS=1",
-      "node services/ops-agent/privacy-backup/test-fixture.mjs",
     ]) {
       const step = parsed.jobs.database.steps.find((step: { run?: string }) =>
         step.run?.includes(command),
@@ -94,12 +93,9 @@ describe("required database test gate", () => {
     expect(exportSteps).toContain(
       "OPENMAPX_RUN_DAWARICH_EXPORT_TESTS=1 pnpm exec vitest run --project node apps/ops-agent/src/dawarich-subject-export.integration.test.ts",
     );
-    expect(exportSteps).toContain(
-      'node services/ops-agent/privacy-backup/test-fixture.mjs --output "$RUNNER_TEMP/openmapx-real-backup-result.tar"',
-    );
-    expect(exportSteps).toContain(
-      "OPENMAPX_REAL_BACKUP_FIXTURE: $" + "{{ runner.temp }}/openmapx-real-backup-result.tar",
-    );
+    // Retained backups are handled manually by the operator; no CI step
+    // builds a per-subject backup extraction fixture.
+    expect(workflow).not.toContain("OPENMAPX_REAL_BACKUP_FIXTURE");
     expect(workflow).toMatch(/needs:\s*\[[^\]]*\bdatabase\b[^\]]*\]/);
     expect(workflow).toContain("run: node scripts/ci-impact-plan.mjs verify");
     expect(workflow).toContain("node scripts/database-test-shards.mjs verify");
@@ -266,17 +262,8 @@ describe("required database test gate", () => {
   it.each([undefined, "", "   "])(
     "requires an explicit database URL for shared-database groups: %j",
     (databaseUrl) => {
-      const temp = mkdtempSync(join(tmpdir(), "openmapx-db-contract-"));
-      try {
-        const fixture = join(temp, "backup.tar");
-        writeFileSync(fixture, "fixture");
-        for (const group of ["api-privacy", "export-restore", "all"]) {
-          expect(() =>
-            command(group, { DATABASE_URL: databaseUrl, OPENMAPX_REAL_BACKUP_FIXTURE: fixture }),
-          ).toThrow(/DATABASE_URL/);
-        }
-      } finally {
-        rmSync(temp, { recursive: true, force: true });
+      for (const group of ["api-privacy", "export-restore", "all"]) {
+        expect(() => command(group, { DATABASE_URL: databaseUrl })).toThrow(/DATABASE_URL/);
       }
     },
   );
@@ -387,56 +374,29 @@ describe("required database test gate", () => {
     }
   });
 
-  it.each([undefined, "/does-not-exist"])(
-    "requires the retained backup for export/all: %s",
-    (fixture) => {
-      for (const group of ["all", "export-restore"]) {
-        expect(() => command(group, { OPENMAPX_REAL_BACKUP_FIXTURE: fixture })).toThrow(
-          /retained-backup fixture/,
-        );
-      }
-    },
-  );
-
-  it("rejects an empty file or directory as a retained backup", () => {
-    const temp = mkdtempSync(join(tmpdir(), "openmapx-db-contract-"));
-    try {
-      const empty = join(temp, "empty.tar");
-      writeFileSync(empty, "");
-      for (const fixture of [empty, temp]) {
-        expect(() => command("export-restore", { OPENMAPX_REAL_BACKUP_FIXTURE: fixture })).toThrow(
-          /retained-backup fixture/,
-        );
-      }
-    } finally {
-      rmSync(temp, { recursive: true, force: true });
-    }
+  it("runs export and restore suites without a retained-backup fixture", () => {
+    const selected = command("export-restore", {
+      DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:1/openmapx_test",
+    });
+    expect(selected.args).toEqual(expect.arrayContaining(groups["export-restore"]));
+    expect(selected.env.OPENMAPX_REAL_BACKUP_FIXTURE).toBeUndefined();
   });
 
   it("runs the complete union serially with both opt-ins despite inherited disabling flags", () => {
-    const temp = mkdtempSync(join(tmpdir(), "openmapx-db-contract-"));
-    try {
-      const fixture = join(temp, "backup.tar");
-      writeFileSync(fixture, "fixture validation happens in the real export suite");
-      const selected = command("all", {
-        DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:1/openmapx_test",
-        OPENMAPX_REAL_BACKUP_FIXTURE: fixture,
-        OPENMAPX_RUN_DATABASE_TESTS: "0",
-        OPENMAPX_RUN_RESTORE_DATABASE_TESTS: "0",
-      });
-      expect(selected.args.slice(0, 5)).toEqual([
-        "run",
-        "--project",
-        "node",
-        "--maxWorkers=1",
-        "--bail=1",
-      ]);
-      expect(selected.args.slice(5).sort()).toEqual(Object.values(groups).flat().sort());
-      expect(selected.env.OPENMAPX_RUN_DATABASE_TESTS).toBe("1");
-      expect(selected.env.OPENMAPX_RUN_RESTORE_DATABASE_TESTS).toBe("1");
-      expect(selected.env.OPENMAPX_REAL_BACKUP_FIXTURE).toBe(fixture);
-    } finally {
-      rmSync(temp, { recursive: true, force: true });
-    }
+    const selected = command("all", {
+      DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:1/openmapx_test",
+      OPENMAPX_RUN_DATABASE_TESTS: "0",
+      OPENMAPX_RUN_RESTORE_DATABASE_TESTS: "0",
+    });
+    expect(selected.args.slice(0, 5)).toEqual([
+      "run",
+      "--project",
+      "node",
+      "--maxWorkers=1",
+      "--bail=1",
+    ]);
+    expect(selected.args.slice(5).sort()).toEqual(Object.values(groups).flat().sort());
+    expect(selected.env.OPENMAPX_RUN_DATABASE_TESTS).toBe("1");
+    expect(selected.env.OPENMAPX_RUN_RESTORE_DATABASE_TESTS).toBe("1");
   });
 });

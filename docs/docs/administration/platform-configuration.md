@@ -70,6 +70,6 @@ mount paths, executable options or Docker socket access.
 In **System → Updates**, **Selected pin** is separate from the running release.
 **Clear selected release pin** requires the exact `CLEAR RELEASE PIN` confirmation
 and queues an Activity job bound to that pin. A changed pin is refused. Clearing
-leaves images, running containers, release evidence and the configured channel
+leaves images, running containers and the configured channel
 unchanged. It does not select local images: a later configuration action may
 resolve the configured channel again. Finish any pending data-manager update first.

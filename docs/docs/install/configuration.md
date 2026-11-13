@@ -125,7 +125,7 @@ published named prerelease and fails if none exists. Changing configuration does
 
 `compose render` creates platform files under `infra/docker/secrets/`, including
 Redis authentication, distinct ops-agent tokens, offline-package signing,
-erasure-journal, subject-export, privacy-backup, and runner capability keys.
+erasure-journal, subject-export, and runner capability keys.
 They belong to the deployment's user (`UID`), which the containers run as. Do not replace them as a
 routine configuration refresh. Managed Dawarich credentials are provisioned
 through its dedicated admin setup, not this renderer.

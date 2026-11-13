@@ -1,10 +1,8 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { build } from "esbuild";
-import { computePrivacySourceFingerprint } from "./privacy-source-fingerprint.mjs";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-const privacySourceFingerprint = await computePrivacySourceFingerprint(path.resolve("../.."));
 
 // Externalize every dependency, including `@openmapx/*` workspace packages.
 // Bundling workspace packages would inline a private copy of any module-level
@@ -67,9 +65,6 @@ await build({
   target: "node24",
   format: "esm",
   external,
-  define: {
-    __OPENMAPX_PRIVACY_SOURCE_FINGERPRINT__: JSON.stringify(privacySourceFingerprint),
-  },
   outdir: "dist",
   plugins: [noRelativeIntegrationsImports],
 });

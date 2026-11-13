@@ -33,7 +33,7 @@ Upload a real `readiness.json` asset to the draft. Its strict schema contains:
 
 - `schemaVersion: 1`, the exact `candidateHash` and `candidateManifestDigest` from `candidate.json`.
 - Actual `environment`, `platform: "linux/amd64"`, ISO `testedAt`, declared `upgradeOrigin`, and `limitations` array.
-- `checks` entries `cleanInstall`, `authentication`, `navigation`, `savedPlaces`, `providerFailure`, `credits`, `serviceHealth`, `privacyEvidence`, `upgrade`. Each has `passed: true` and an HTTPS `evidence` link to actual results.
+- `checks` entries `cleanInstall`, `authentication`, `navigation`, `savedPlaces`, `providerFailure`, `credits`, `serviceHealth`, `upgrade`. Each has `passed: true` and an HTTPS `evidence` link to actual results.
 - `immutableReleases`: `enabled: true`, `repository`, the same `candidateHash`, maintainer `checkedBy`, ISO `checkedAt` and an HTTPS `evidence` link to the settings readback.
 
 Before approving, the maintainer checks `gh api repos/OpenMapX/openmapx/immutable-releases` with their existing administration authority and records the actual enabled readback. Ordinary GITHUB_TOKEN cannot read this Administration endpoint; no new publishing token or invented YAML permission is used. Readiness JSON is a record, not independent proof: review the referenced evidence. No passing readiness file is generated automatically.

@@ -35,7 +35,6 @@ export interface PrivacyRequestRunnerOptions {
   deferDelayMs?: number;
   now?: () => Date;
   onError?: () => void;
-  releaseReady?: () => boolean | Promise<boolean>;
 }
 
 export class PrivacyRequestRunner {
@@ -54,7 +53,6 @@ export class PrivacyRequestRunner {
       deferDelayMs: options.deferDelayMs ?? 60_000,
       now: options.now ?? (() => new Date()),
       onError: options.onError ?? (() => undefined),
-      releaseReady: options.releaseReady ?? (() => true),
     };
   }
 
@@ -64,7 +62,6 @@ export class PrivacyRequestRunner {
 
   async runOnce(): Promise<boolean> {
     if (this.active > 0) return false;
-    if (!(await this.options.releaseReady())) return false;
     this.active += 1;
     try {
       const task = await this.store.claimDueTask(this.options.now());
