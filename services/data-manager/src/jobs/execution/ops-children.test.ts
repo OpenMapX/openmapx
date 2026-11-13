@@ -385,9 +385,10 @@ it.skipIf(
 
     try {
       const observer = new AbortController();
+      // Only the API may restart MOTIS.
       const observation = fetch(`${baseUrl}/transit/restart-motis`, {
         method: "POST",
-        headers: { authorization: "Bearer synthetic-dm-token" },
+        headers: { authorization: "Bearer synthetic-dm-token-api" },
         signal: observer.signal,
       }).catch((error) => error);
       expect(
