@@ -41,7 +41,6 @@ const TERMINAL_REQUEST_ID = "22222222-2222-4222-8222-222222222222";
 const ACTIVE_ARTIFACT_ID = "33333333-3333-4333-8333-333333333333";
 const TERMINAL_ARTIFACT_ID = "44444444-4444-4444-8444-444444444444";
 const TERMINAL_ATTACHMENT_ID = "55555555-5555-4555-8555-555555555555";
-const TERMINAL_SNAPSHOT_ID = "66666666-6666-4666-8666-666666666666";
 const COPY_TERMINATOR_USER_ID = "\\.";
 const ADVERSARIAL_EMAIL = "quote'\\slash\ttab\nline@example.test";
 const GOOD_KEY = Buffer.alloc(32, 17);
@@ -65,7 +64,7 @@ interface FixtureState {
     write(input: {
       requestId: string;
       blobId: string;
-      purpose: "export-artifact" | "attachment" | "source-snapshot";
+      purpose: "export-artifact" | "attachment";
       storageKey: string;
       source: Buffer;
     }): Promise<WrittenBlob>;
@@ -441,13 +440,6 @@ async function seedRestoreScenario(): Promise<{
     storageKey: "objects/terminal-attachment.bin",
     source: Buffer.from("terminal-attachment-fixture"),
   });
-  const terminalSnapshot = await fixture.store.write({
-    requestId: TERMINAL_REQUEST_ID,
-    blobId: TERMINAL_SNAPSHOT_ID,
-    purpose: "source-snapshot",
-    storageKey: "objects/terminal-snapshot.bin",
-    source: Buffer.from("terminal-snapshot-fixture"),
-  });
 
   await psql(`
 BEGIN;
@@ -482,17 +474,13 @@ INSERT INTO data_subject_request_attachment
   (id, request_id, purpose, storage_key, filename, media_type, encrypted_bytes, plaintext_bytes, plaintext_sha256, ciphertext_sha256, iv, tag, wrapped_dek, master_key_version, owner_id, expires_at, rights_review_state, metadata)
 VALUES
   ('${TERMINAL_ATTACHMENT_ID}', '${TERMINAL_REQUEST_ID}', 'operator_supplement', '${terminalAttachment.storageKey}', 'terminal.txt', 'text/plain', 1, 1, 'attachment-plain', 'attachment-cipher', 'attachment-iv', 'attachment-tag', 'attachment-wrapped-key', 1, '${DELETED_USER_ID}', now() + interval '30 days', 'approved', '{}');
-INSERT INTO data_subject_request_source_snapshot
-  (id, request_id, registration_id, state, storage_key, record_count, plaintext_bytes, encrypted_bytes, plaintext_sha256, ciphertext_sha256, iv, tag, wrapped_dek, master_key_version, captured_at, expires_at)
-VALUES
-  ('${TERMINAL_SNAPSHOT_ID}', '${TERMINAL_REQUEST_ID}', 'fixture-source', 'captured', '${terminalSnapshot.storageKey}', 1, 1, 1, 'snapshot-plain', 'snapshot-cipher', 'snapshot-iv', 'snapshot-tag', 'snapshot-wrapped-key', 1, now(), now() + interval '30 days');
 INSERT INTO admin_audit_log (id, actor_id, target_id, target_type, action, details, ip_address, user_agent)
 VALUES ('deleted-audit', '${DELETED_USER_ID}', '${DELETED_USER_ID}', 'user', 'fixture', jsonb_build_object('subject', '${DELETED_USER_ID}', 'email', '${DELETED_EMAIL}'), '192.0.2.10', 'fixture-agent');
 INSERT INTO app_logs (level, source, msg, metadata)
 VALUES ('warn', 'fixture', 'event for ${DELETED_EMAIL}', jsonb_build_object('subject', '${DELETED_USER_ID}'));
 COMMIT;
 `);
-  return { active, terminal: [terminalArtifact, terminalAttachment, terminalSnapshot] };
+  return { active, terminal: [terminalArtifact, terminalAttachment] };
 }
 
 describe.skipIf(!runIntegration)("backup restore erasure replay with real PostgreSQL", () => {
@@ -604,11 +592,6 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
         `SELECT (expires_at <= now())::text || ':' || (deleted_at IS NULL)::text || ':' || (wrapped_dek IS NOT NULL)::text FROM data_subject_request_attachment WHERE id = '${TERMINAL_ATTACHMENT_ID}';`,
       ),
     ).toBe("true:true:true");
-    expect(
-      await psql(
-        `SELECT state || ':' || (expires_at <= now())::text || ':' || (deleted_at IS NULL)::text || ':' || (wrapped_dek IS NOT NULL)::text FROM data_subject_request_source_snapshot WHERE id = '${TERMINAL_SNAPSHOT_ID}';`,
-      ),
-    ).toBe("captured:true:true:true");
     expect(blobs.active.path && existsSync(blobs.active.path)).toBe(true);
     for (const blob of blobs.terminal) expect(existsSync(blob.path)).toBe(true);
 
@@ -616,7 +599,7 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
       database: apiDatabase,
       now: new Date(Date.now() + 1_000),
     });
-    expect(unavailable.failed).toBeGreaterThanOrEqual(3);
+    expect(unavailable.failed).toBeGreaterThanOrEqual(2);
     for (const blob of blobs.terminal) expect(existsSync(blob.path)).toBe(true);
     expect(
       await psql(
@@ -631,7 +614,7 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
       store: fixture.store as never,
       now: new Date(Date.now() + 2_000),
     });
-    expect(unsafe.failed).toBeGreaterThanOrEqual(3);
+    expect(unsafe.failed).toBeGreaterThanOrEqual(2);
     for (const blob of blobs.terminal) expect(existsSync(blob.path)).toBe(true);
     chmodSync(objectsDir, 0o700);
 
@@ -640,7 +623,7 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
       store: fixture.store as never,
       now: new Date(Date.now() + 3_000),
     });
-    expect(cleaned).toMatchObject({ artifacts: 1, attachments: 1, sourceSnapshots: 1 });
+    expect(cleaned).toMatchObject({ artifacts: 1, attachments: 1 });
     expect(existsSync(blobs.active.path)).toBe(true);
     for (const blob of blobs.terminal) expect(existsSync(blob.path)).toBe(false);
     expect(
@@ -651,11 +634,6 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
     expect(
       await psql(
         `SELECT count(*) FROM data_subject_request_attachment WHERE id = '${TERMINAL_ATTACHMENT_ID}' AND wrapped_dek IS NULL AND master_key_version IS NULL AND tag IS NULL AND deleted_at IS NOT NULL;`,
-      ),
-    ).toBe("1");
-    expect(
-      await psql(
-        `SELECT count(*) FROM data_subject_request_source_snapshot WHERE id = '${TERMINAL_SNAPSHOT_ID}' AND state = 'deleted' AND wrapped_dek IS NULL AND master_key_version IS NULL AND tag IS NULL AND deleted_at IS NOT NULL;`,
       ),
     ).toBe("1");
   }, 120_000);
@@ -926,8 +904,7 @@ VALUES
   it("rejects a restored schema missing required privacy tables and keeps the API stopped", async () => {
     await resetMigratedDatabase();
     await psql(`
-DROP TABLE data_subject_request_source_snapshot,
-  data_export_artifact,
+DROP TABLE data_export_artifact,
   data_subject_request_attachment,
   data_subject_request CASCADE;
 INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)

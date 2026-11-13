@@ -48,7 +48,6 @@
       "OPENMAPX_EXPORTS_KEY_FILE": "/run/secrets/subject-exports-master-key",
       "OPENMAPX_EXPORTS_KEY_UID": "${UID:?UID must be set, run pnpm openmapx compose render}",
       "OPENMAPX_EXPORT_STORAGE_DIR": "/var/lib/openmapx/subject-exports",
-      "OPS_PRIVACY_BACKUP_CAPABILITY_KEY_FILE": "/run/secrets/privacy-backup-capability-key",
       "BACKUP_RETENTION_DAYS": "${BACKUP_RETENTION_DAYS:-30}",
       "LEGAL_SERVER_LOG_RETENTION_DAYS": "${LEGAL_SERVER_LOG_RETENTION_DAYS:-30}",
       "OPS_AGENT_URL": "${OPS_AGENT_URL:-http://ops-agent:4300}",
@@ -211,11 +210,6 @@
     {
       "source": "@infra:secrets/subject-exports-master-key",
       "target": "/run/secrets/subject-exports-master-key",
-      "readOnly": true
-    },
-    {
-      "source": "@infra:secrets/privacy-backup-capability-key",
-      "target": "/run/secrets/privacy-backup-capability-key",
       "readOnly": true
     },
     {

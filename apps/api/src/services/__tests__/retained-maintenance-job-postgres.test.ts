@@ -855,12 +855,6 @@ dbDescribe("retained finite maintenance requests", () => {
             `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`,
           ]),
         ),
-        privacyReleaseValidation: {
-          version: 1,
-          sourceBuildFingerprint: "a".repeat(64),
-          validatedAt: "2026-10-30T00:00:00.000Z",
-          checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
-        },
         ...releaseProvenance(),
       }),
     );
@@ -1007,16 +1001,6 @@ dbDescribe("retained finite maintenance requests", () => {
                   `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`,
                 ]),
               ),
-              privacyReleaseValidation: {
-                version: 1,
-                sourceBuildFingerprint: "a".repeat(64),
-                validatedAt: "2026-10-30T00:00:00.000Z",
-                checks: {
-                  translationsConsistent: true,
-                  openApiConsistent: true,
-                  policyConsistent: true,
-                },
-              },
               ...releaseProvenance(),
             }),
           ),

@@ -169,10 +169,6 @@ import {
   consumeCoordinatorPullOwnershipCapture,
 } from "./owned-services";
 import { createPolicyResourceClaimer, type OpsResourceClaimer } from "./policy";
-import {
-  type PrivacyBackupExtractionRouteOptions,
-  registerPrivacyBackupExtractionRoute,
-} from "./privacy-backup-extraction";
 import { safeProcessDiagnostic } from "./process-output";
 import { productionOwnedServices, productionRegisteredServiceIds } from "./production-runtime";
 import {
@@ -279,13 +275,6 @@ export interface BuildOpsAgentServerOptions {
   claimTimeoutMs?: number;
   /** Dedicated streaming managed-Dawarich collector; absent in minimal/dev agents. */
   dawarichExport?: Omit<DawarichSubjectExportRouteOptions, "apiToken">;
-  /** Dedicated case-scoped backup extraction; absent in minimal agents. */
-  privacyBackupExtraction?: Omit<PrivacyBackupExtractionRouteOptions, "apiToken">;
-  privacyBackupHealth?: () => Promise<{
-    ready: boolean;
-    inventoryReadable: boolean;
-    collectorImage: string | null;
-  }>;
 }
 
 interface JobRecord extends Omit<PersistedOpsJob, "terminalAt"> {
@@ -479,12 +468,6 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   if (options.dawarichExport) {
     registerDawarichSubjectExportRoute(app, {
       ...options.dawarichExport,
-      apiToken: options.tokens.api,
-    });
-  }
-  if (options.privacyBackupExtraction) {
-    registerPrivacyBackupExtractionRoute(app, {
-      ...options.privacyBackupExtraction,
       apiToken: options.tokens.api,
     });
   }
@@ -1807,19 +1790,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     return reply.send(opsSuccess(requestId, { versions: [OPS_PROTOCOL_VERSION] }));
   });
   app.get("/health", async () => {
-    let privacyBackup = {
-      ready: false,
-      inventoryReadable: false,
-      collectorImage: null as string | null,
-    };
-    try {
-      privacyBackup = (await options.privacyBackupHealth?.()) ?? privacyBackup;
-    } catch {
-      // Health evidence is fail-closed and never includes Docker/inventory errors.
-    }
     return {
       ok: true,
-      privacyBackup,
       ...(options.releaseRecovery ? { releaseRecovery: options.releaseRecovery } : {}),
     };
   });

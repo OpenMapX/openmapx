@@ -3,7 +3,6 @@ import { Readable, Transform } from "node:stream";
 import { ZipArchive } from "@archiver/archiver";
 import { type DawarichSourceEntryId, dawarichSourcePathForEntryId } from "@openmapx/core/privacy";
 import type { EncryptedBlobResult, EncryptedBlobStore } from "./artifact-storage.js";
-import { isBackupOpenmapxEntryId } from "./backup-source-part.js";
 
 export const ARCHIVE_PATHS = Object.freeze({
   "readme-html": "openmapx-data-export/README.html",
@@ -33,8 +32,6 @@ export const ARCHIVE_PATHS = Object.freeze({
   "portable-places-schema": "openmapx-data-export/schemas/portable-places.schema.json",
   "processing-information-schema":
     "openmapx-data-export/schemas/processing-information.schema.json",
-  "backup-record-schema": "openmapx-data-export/schemas/backup-history-record.schema.json",
-  "backup-source-schema": "openmapx-data-export/schemas/backup-source.schema.json",
   "dawarich-source-manifest":
     "openmapx-data-export/article-15/timeline/dawarich/source-manifest.json",
   "dawarich-account": "openmapx-data-export/article-15/timeline/dawarich/account.json",
@@ -71,50 +68,6 @@ export const ARCHIVE_PATHS = Object.freeze({
     "openmapx-data-export/portable/timeline/dawarich/raw-archives.jsonl",
   "dawarich-portable-flights": "openmapx-data-export/portable/timeline/dawarich/flights.jsonl",
   "dawarich-portable-notes": "openmapx-data-export/portable/timeline/dawarich/notes.jsonl",
-  "backup-dawarich-source-manifest":
-    "openmapx-data-export/article-15/history/dawarich/source-manifest.json",
-  "backup-dawarich-account": "openmapx-data-export/article-15/history/dawarich/account.json",
-  "backup-dawarich-settings": "openmapx-data-export/article-15/history/dawarich/settings.json",
-  "backup-dawarich-areas": "openmapx-data-export/article-15/history/dawarich/areas.jsonl",
-  "backup-dawarich-places": "openmapx-data-export/article-15/history/dawarich/places.jsonl",
-  "backup-dawarich-tags": "openmapx-data-export/article-15/history/dawarich/tags.jsonl",
-  "backup-dawarich-taggings": "openmapx-data-export/article-15/history/dawarich/taggings.jsonl",
-  "backup-dawarich-imports": "openmapx-data-export/article-15/history/dawarich/imports.jsonl",
-  "backup-dawarich-export-records":
-    "openmapx-data-export/article-15/history/dawarich/export-records.jsonl",
-  "backup-dawarich-trips": "openmapx-data-export/article-15/history/dawarich/trips.jsonl",
-  "backup-dawarich-notifications":
-    "openmapx-data-export/article-15/history/dawarich/notifications.jsonl",
-  "backup-dawarich-points": "openmapx-data-export/article-15/history/dawarich/points.jsonl",
-  "backup-dawarich-visits": "openmapx-data-export/article-15/history/dawarich/visits.jsonl",
-  "backup-dawarich-stats": "openmapx-data-export/article-15/history/dawarich/stats.jsonl",
-  "backup-dawarich-tracks": "openmapx-data-export/article-15/history/dawarich/tracks.jsonl",
-  "backup-dawarich-track-segments":
-    "openmapx-data-export/article-15/history/dawarich/track-segments.jsonl",
-  "backup-dawarich-digests": "openmapx-data-export/article-15/history/dawarich/digests.jsonl",
-  "backup-dawarich-raw-archives":
-    "openmapx-data-export/article-15/history/dawarich/raw-archives.jsonl",
-  "backup-dawarich-flights": "openmapx-data-export/article-15/history/dawarich/flights.jsonl",
-  "backup-dawarich-notes": "openmapx-data-export/article-15/history/dawarich/notes.jsonl",
-  "backup-dawarich-posters": "openmapx-data-export/article-15/history/dawarich/posters.jsonl",
-  "backup-dawarich-shared-links":
-    "openmapx-data-export/article-15/history/dawarich/shared-links.jsonl",
-  "backup-dawarich-attachments":
-    "openmapx-data-export/article-15/history/dawarich/attachments.jsonl",
-  "backup-dawarich-rich-text": "openmapx-data-export/article-15/history/dawarich/rich-text.jsonl",
-  "backup-dawarich-family": "openmapx-data-export/article-15/history/dawarich/family.jsonl",
-  "backup-dawarich-portable-areas": "openmapx-data-export/portable/history/dawarich/areas.jsonl",
-  "backup-dawarich-portable-places": "openmapx-data-export/portable/history/dawarich/places.jsonl",
-  "backup-dawarich-portable-imports":
-    "openmapx-data-export/portable/history/dawarich/imports.jsonl",
-  "backup-dawarich-portable-points": "openmapx-data-export/portable/history/dawarich/points.jsonl",
-  "backup-dawarich-portable-raw-archives":
-    "openmapx-data-export/portable/history/dawarich/raw-archives.jsonl",
-  "backup-dawarich-portable-flights":
-    "openmapx-data-export/portable/history/dawarich/flights.jsonl",
-  "backup-dawarich-portable-notes": "openmapx-data-export/portable/history/dawarich/notes.jsonl",
-  "backup-source-metadata": "openmapx-data-export/article-15/history/backup-source.json",
-  "backup-source-manifest": "openmapx-data-export/article-15/history/source-manifest.json",
   "supplements-manifest": "openmapx-data-export/article-15/supplements/manifest.json",
   "supplement-1": "openmapx-data-export/article-15/supplements/1.bin",
   "supplement-2": "openmapx-data-export/article-15/supplements/2.bin",
@@ -154,12 +107,7 @@ export type ArchiveLogicalId = keyof typeof ARCHIVE_PATHS | string;
 
 const DYNAMIC_DAWARICH_PREFIXES = [
   { logicalPrefix: "dawarich-", archivePrefix: "openmapx-data-export/article-15/timeline/" },
-  { logicalPrefix: "backup-dawarich-", archivePrefix: "openmapx-data-export/article-15/history/" },
   { logicalPrefix: "dawarich-portable-", archivePrefix: "openmapx-data-export/portable/timeline/" },
-  {
-    logicalPrefix: "backup-dawarich-portable-",
-    archivePrefix: "openmapx-data-export/portable/history/",
-  },
 ] as const;
 
 /** Return the only archive path permitted for a logical member. Dynamic
@@ -168,50 +116,11 @@ const DYNAMIC_DAWARICH_PREFIXES = [
 export function archivePathForLogicalId(logicalId: string): string | null {
   const fixed = ARCHIVE_PATHS[logicalId as keyof typeof ARCHIVE_PATHS];
   if (fixed) return fixed;
-  const retained = /^backup-([a-f0-9]{64})-(.+)$/.exec(logicalId);
-  if (retained) {
-    const [, reference, member] = retained;
-    const articleRoot = `openmapx-data-export/article-15/history/${reference}`;
-    const portableRoot = `openmapx-data-export/portable/history/${reference}`;
-    if (member === "source-metadata") return `${articleRoot}/backup-source.json`;
-    if (member === "source-manifest") return `${articleRoot}/source-manifest.json`;
-    if (member.startsWith("openmapx-portable-")) {
-      const id = member.slice("openmapx-portable-".length);
-      if (isBackupOpenmapxEntryId(id)) return `${portableRoot}/openmapx/${id}.jsonl`;
-    }
-    if (member.startsWith("openmapx-")) {
-      const id = member.slice("openmapx-".length);
-      if (isBackupOpenmapxEntryId(id)) return `${articleRoot}/openmapx/${id}.jsonl`;
-    }
-    for (const [prefix, root] of [
-      ["dawarich-portable-", portableRoot],
-      ["dawarich-", articleRoot],
-    ] as const) {
-      if (!member.startsWith(prefix)) continue;
-      const sourcePath = dawarichSourcePathForEntryId(
-        member.slice(prefix.length) as DawarichSourceEntryId,
-      );
-      if (sourcePath) return `${root}/${sourcePath}`;
-    }
-    return null;
-  }
   for (const { logicalPrefix, archivePrefix } of DYNAMIC_DAWARICH_PREFIXES) {
     if (!logicalId.startsWith(logicalPrefix)) continue;
     const sourceId = logicalId.slice(logicalPrefix.length) as DawarichSourceEntryId;
     const sourcePath = dawarichSourcePathForEntryId(sourceId);
     if (sourcePath) return `${archivePrefix}${sourcePath}`;
-  }
-  const primaryPortablePrefix = "backup-openmapx-portable-";
-  const primaryPrefix = "backup-openmapx-";
-  if (logicalId.startsWith(primaryPortablePrefix)) {
-    const id = logicalId.slice(primaryPortablePrefix.length);
-    if (isBackupOpenmapxEntryId(id))
-      return `openmapx-data-export/portable/history/openmapx/${id}.jsonl`;
-  }
-  if (logicalId.startsWith(primaryPrefix)) {
-    const id = logicalId.slice(primaryPrefix.length);
-    if (isBackupOpenmapxEntryId(id))
-      return `openmapx-data-export/article-15/history/openmapx/${id}.jsonl`;
   }
   return null;
 }

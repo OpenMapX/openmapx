@@ -8,10 +8,6 @@
   ],
   "workspaces": {
     ".": {
-      "entry": [
-        // The CI privacy-backup fixture spawns this file by path.
-        "services/ops-agent/privacy-backup/verify-output.ts"
-      ],
       "ignoreFiles": ["docs/**"],
       // Cross-integration component tests in integrations/ sit outside every
       // workspace and run in the web Vitest project, which provides React and
@@ -58,8 +54,6 @@
         "benchmark-motis-reachability.ts",
         "ev-vehicles/generate.ts"
       ],
-      // TypeScript resolves the .mjs validator import to this typed companion.
-      "ignoreFiles": ["validate-privacy-release.d.mts"],
       "ignoreDependencies": [
         // The Biome plugin test runs the root node_modules/.bin/biome binary by
         // path, which Knip reads as a package named "biome".
@@ -76,11 +70,7 @@
         // Memory tests spawn these children by path in heap-constrained processes.
         "src/privacy/__tests__/fixtures/*-memory-child.ts"
       ],
-      "ignoreFiles": [
-        "src/__tests__/fixtures/**",
-        // TypeScript resolves the .mjs fingerprint import to this typed companion.
-        "privacy-source-fingerprint.d.mts"
-      ],
+      "ignoreFiles": ["src/__tests__/fixtures/**"],
       // Integration adapters are copied into the API image and discovered from
       // their manifests at runtime, so their API-only packages have no static
       // import path from this workspace.

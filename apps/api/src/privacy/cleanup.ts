@@ -1,19 +1,13 @@
-import { TERMINAL_PRIVACY_REQUEST_STATES } from "@openmapx/core/erasure-cleanup";
-import { and, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import { db as defaultDb } from "../db/index.js";
 import {
   dataExportArtifact,
   dataSubjectRequest,
   dataSubjectRequestAttachment,
-  dataSubjectRequestSourceSnapshot,
 } from "../db/schema.js";
 import type { EncryptedBlobStore } from "./artifact-storage.js";
 import { PrivacyReauthenticationService } from "./reauthentication.js";
 import { privacyRetention } from "./settings.js";
-
-const SOURCE_SNAPSHOT_CLEANUP_BATCH_SIZE = 100;
-const SOURCE_SNAPSHOT_MAX_DELETE_ATTEMPTS = 5;
-const SOURCE_SNAPSHOT_EXHAUSTED_RETRY_MS = 24 * 60 * 60 * 1_000;
 
 export interface CleanupArtifact {
   id: string;
@@ -75,7 +69,6 @@ export async function runPrivacyDatabaseCleanup(input: {
 }): Promise<{
   artifacts: number;
   attachments: number;
-  sourceSnapshots: number;
   challenges: number;
   failed: number;
 }> {
@@ -83,8 +76,6 @@ export async function runPrivacyDatabaseCleanup(input: {
   const now = input.now ?? new Date();
   let artifactsDeleted = 0;
   let attachmentsDeleted = 0;
-  let sourceSnapshotsDeleted = 0;
-  let sourceSnapshotAttemptFailed = false;
   let failed = 0;
   await database
     .update(dataExportArtifact)
@@ -162,111 +153,6 @@ export async function runPrivacyDatabaseCleanup(input: {
       await input.incident?.(attachment.id, "attachment-delete-failed");
     }
   }
-  const sourceSnapshots = await database
-    .select()
-    .from(dataSubjectRequestSourceSnapshot)
-    .where(
-      and(
-        inArray(dataSubjectRequestSourceSnapshot.state, ["captured", "delete_failed"]),
-        or(
-          sql`${dataSubjectRequestSourceSnapshot.deleteAttempts} < ${SOURCE_SNAPSHOT_MAX_DELETE_ATTEMPTS}`,
-          and(
-            eq(
-              dataSubjectRequestSourceSnapshot.deleteAttempts,
-              SOURCE_SNAPSHOT_MAX_DELETE_ATTEMPTS,
-            ),
-            or(
-              isNull(dataSubjectRequestSourceSnapshot.lastDeleteAttemptAt),
-              lte(
-                dataSubjectRequestSourceSnapshot.lastDeleteAttemptAt,
-                new Date(now.getTime() - SOURCE_SNAPSHOT_EXHAUSTED_RETRY_MS),
-              ),
-            ),
-          ),
-        ),
-        or(
-          lte(dataSubjectRequestSourceSnapshot.expiresAt, now),
-          sql`exists (
-            select 1 from data_subject_request source_request
-            where source_request.id = ${dataSubjectRequestSourceSnapshot.requestId}
-              and source_request.state in (${sql.join(
-                TERMINAL_PRIVACY_REQUEST_STATES.map((state) => sql`${state}`),
-                sql`, `,
-              )})
-          )`,
-        ),
-      ),
-    )
-    .limit(SOURCE_SNAPSHOT_CLEANUP_BATCH_SIZE);
-  for (const snapshot of sourceSnapshots) {
-    const nextAttempts = Math.min(SOURCE_SNAPSHOT_MAX_DELETE_ATTEMPTS, snapshot.deleteAttempts + 1);
-    if (!input.store) {
-      failed += 1;
-      sourceSnapshotAttemptFailed = true;
-      await database
-        .update(dataSubjectRequestSourceSnapshot)
-        .set({
-          state: "delete_failed",
-          deleteAttempts: nextAttempts,
-          lastDeleteAttemptAt: now,
-        })
-        .where(eq(dataSubjectRequestSourceSnapshot.id, snapshot.id));
-      await input.incident?.(snapshot.id, "source-snapshot-storage-unavailable");
-      continue;
-    }
-    try {
-      await input.store.delete(snapshot.storageKey);
-      await database
-        .update(dataSubjectRequestSourceSnapshot)
-        .set({
-          state: "deleted",
-          deletedAt: now,
-          deleteAttempts: nextAttempts,
-          lastDeleteAttemptAt: now,
-          wrappedDek: null,
-          masterKeyVersion: null,
-          tag: null,
-        })
-        .where(eq(dataSubjectRequestSourceSnapshot.id, snapshot.id));
-      sourceSnapshotsDeleted += 1;
-    } catch {
-      failed += 1;
-      sourceSnapshotAttemptFailed = true;
-      await database
-        .update(dataSubjectRequestSourceSnapshot)
-        .set({
-          state: "delete_failed",
-          deleteAttempts: nextAttempts,
-          lastDeleteAttemptAt: now,
-        })
-        .where(eq(dataSubjectRequestSourceSnapshot.id, snapshot.id));
-      await input.incident?.(snapshot.id, "source-snapshot-delete-failed");
-    }
-  }
-  const [unresolvedSourceSnapshot] = await database
-    .select({ id: dataSubjectRequestSourceSnapshot.id })
-    .from(dataSubjectRequestSourceSnapshot)
-    .where(
-      and(
-        inArray(dataSubjectRequestSourceSnapshot.state, ["captured", "delete_failed"]),
-        or(
-          lte(dataSubjectRequestSourceSnapshot.expiresAt, now),
-          sql`exists (
-            select 1 from data_subject_request source_request
-            where source_request.id = ${dataSubjectRequestSourceSnapshot.requestId}
-              and source_request.state in (${sql.join(
-                TERMINAL_PRIVACY_REQUEST_STATES.map((state) => sql`${state}`),
-                sql`, `,
-              )})
-          )`,
-        ),
-      ),
-    )
-    .limit(1);
-  // A saturated row waits for its low-frequency retry, but it remains an
-  // unresolved cleanup failure until physical deletion and key clearing have
-  // both been durably recorded.
-  if (unresolvedSourceSnapshot && !sourceSnapshotAttemptFailed) failed += 1;
   // Case metadata has its own retention period. Never cascade away a row
   // while ciphertext still needs physical cleanup or another access request
   // for this subject remains open.
@@ -281,7 +167,6 @@ export async function runPrivacyDatabaseCleanup(input: {
         sql`coalesce(${dataSubjectRequest.closedAt}, ${dataSubjectRequest.withdrawalAt}, ${dataSubjectRequest.updatedAt}) < ${caseCutoff.toISOString()}`,
         sql`not exists (select 1 from data_export_artifact a where a.request_id = ${dataSubjectRequest.id} and a.state <> 'deleted')`,
         sql`not exists (select 1 from data_subject_request_attachment a where a.request_id = ${dataSubjectRequest.id} and a.deleted_at is null)`,
-        sql`not exists (select 1 from data_subject_request_source_snapshot s where s.request_id = ${dataSubjectRequest.id} and s.state <> 'deleted')`,
         sql`not exists (select 1 from data_subject_request active where active.id <> ${dataSubjectRequest.id} and active.state not in ('closed', 'withdrawn', 'refused') and (active.user_id = ${dataSubjectRequest.userId} or active.locator_digest = ${dataSubjectRequest.locatorDigest}))`,
       ),
     );
@@ -289,7 +174,6 @@ export async function runPrivacyDatabaseCleanup(input: {
   return {
     artifacts: artifactsDeleted,
     attachments: attachmentsDeleted,
-    sourceSnapshots: sourceSnapshotsDeleted,
     challenges,
     failed,
   };

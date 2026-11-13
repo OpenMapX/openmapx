@@ -327,7 +327,6 @@ export function assertProspectiveConfigurationMaintenanceBudget(input: {
         overlay: Buffer.from(
           renderReleaseCompose(
             parseReleaseManifest(plan.release.canonicalManifest, plan.release.imagePrefix),
-            rendered.context.infraDir!,
           ),
         ).toString("base64"),
         state: Buffer.from(

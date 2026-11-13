@@ -39,8 +39,8 @@ environment. Without a token, production rejects this shortcut. Development
 accepts a present, empty header when no token is configured. Set
 `OPENMAPX_DISABLE_LOCALHOST_AUTH=1` to disable it on a host where other tenants
 can reach loopback. A remote API URL and token alone do not satisfy the peer
-check. Privacy approvals and privacy-role changes require an attributable
-signed-in administrator and reject the synthetic loopback identity.
+check. Privacy-role changes require an attributable signed-in administrator and
+reject the synthetic loopback identity.
 
 The `openmapx users` recovery commands use Docker and PostgreSQL directly;
 they do not use this HTTP shortcut.
@@ -158,11 +158,9 @@ read-only. See [Authentication methods](./users-and-access.md#authentication-met
 
 ### Privacy setup
 
-Full administrators use `/admin/privacy-setup` for controller details, email readiness,
-retention, source declarations and independent reviews. Privacy administrators
-handle cases and inspect readiness through privacy casework. A release install
-does not approve generation for the deployment. See
-[Data-subject requests](./data-subject-requests.md).
+Full administrators use `/admin/privacy-setup` for controller details, email
+delivery, retention and source declarations. Privacy administrators handle cases
+through privacy casework. See [Data-subject requests](./data-subject-requests.md).
 
 ## CLI coverage and deliberate exclusions
 
@@ -215,6 +213,6 @@ Draft values remain in this browser document's memory only.
 
 ## Privacy case navigation
 
-Casework uses `?case=<id>&section=<section>` for direct, authorized detail access independently of queue membership. Identity, Tasks, Decisions, Attachments, Backup review, Generation & delivery and Events are addressable disclosures. Ordinary case form inputs survive section toggles; private delivery controls dispose when closed. Available work and denial reasons come from the server capabilities, and version conflicts require refresh.
+Casework uses `?case=<id>&section=<section>` for direct, authorized detail access independently of queue membership. Identity, Tasks, Decisions, Attachments, Generation & delivery and Events are addressable disclosures. Ordinary case form inputs survive section toggles; private delivery controls dispose when closed. Available work and denial reasons come from the server capabilities, and version conflicts require refresh.
 
-Changing cases, including browser Back, clears the previous pending delivery. A reauthentication return without a case restores its matching pending case. Casework shows a concise readiness status; the complete checklist and configuration stay in Privacy setup. Privacy administrators receive contact guidance without settings links. On narrow screens a case selector replaces the long side queue.
+Changing cases, including browser Back, clears the previous pending delivery. A reauthentication return without a case restores its matching pending case. Configuration stays in Privacy setup. On narrow screens a case selector replaces the long side queue.

@@ -1,28 +1,23 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { PrivacyRequestRunner } from "./request-runner.js";
 
 describe("PrivacyRequestRunner", () => {
-  it("does not claim work while the exact release gate is closed", async () => {
-    let claims = 0;
-    let handled = 0;
-    const runner = new PrivacyRequestRunner(
-      {
-        claimDueTask: async () => {
-          claims += 1;
-          return null;
-        },
-        completeTask: async () => {},
-        retryTask: async () => {},
-        operatorReview: async () => {},
-      },
-      async () => {
-        handled += 1;
-      },
-      { releaseReady: async () => false },
-    );
-    expect(await runner.runOnce()).toBe(false);
-    expect(claims).toBe(0);
-    expect(handled).toBe(0);
+  it("claims and handles due export work without a release approval or build fingerprint", async () => {
+    const task = { id: "t", requestId: "r", status: "pending" as const, attempts: 0 };
+    const store = {
+      claimDueTask: vi.fn(async () => task),
+      completeTask: vi.fn(async () => {}),
+      retryTask: vi.fn(async () => {}),
+      operatorReview: vi.fn(async () => {}),
+    };
+    const handler = vi.fn(async () => {});
+    const runner = new PrivacyRequestRunner(store, handler);
+
+    expect(await runner.runOnce()).toBe(true);
+    expect(handler).toHaveBeenCalledExactlyOnceWith(task);
+    expect(store.completeTask).toHaveBeenCalledExactlyOnceWith("t");
   });
 
   it("does not handle or settle work when the store has no due task", async () => {
@@ -76,5 +71,26 @@ describe("PrivacyRequestRunner", () => {
     expect(store.operatorReview).toHaveBeenCalledExactlyOnceWith("t", "collector-exhausted");
     expect(store.retryTask).toHaveBeenCalledTimes(1);
     expect(store.completeTask).not.toHaveBeenCalled();
+  });
+});
+
+describe("privacy export availability inputs", () => {
+  // A dependency bump changes pnpm-lock.yaml. Export availability must never
+  // depend on that file or on a build fingerprint derived from source files.
+  it("never reads the lockfile or a build fingerprint", () => {
+    const apiRoot = resolve(import.meta.dirname, "../..");
+    const runtimeFiles = [
+      join(apiRoot, "esbuild.config.mjs"),
+      join(apiRoot, "src/app.ts"),
+      join(apiRoot, "src/routes/privacy-admin.ts"),
+      join(apiRoot, "src/routes/privacy-requests.ts"),
+      ...readdirSync(join(apiRoot, "src/privacy"), { recursive: true, encoding: "utf8" })
+        .filter((path) => /\.ts$/.test(path) && !/\.test\.ts$/.test(path))
+        .map((path) => join(apiRoot, "src/privacy", path)),
+    ];
+    for (const file of runtimeFiles) {
+      const source = readFileSync(file, "utf8");
+      expect(source, file).not.toMatch(/pnpm-lock|SOURCE_FINGERPRINT|sourceBuildFingerprint/);
+    }
   });
 });

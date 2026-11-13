@@ -5,8 +5,8 @@ impacts: [security]
 ## What changes
 
 The operations agent keeps its own state in `infra/docker/state/ops-agent/`,
-outside `infra/docker/data/`: its job journal, the trusted-configuration queue
-it shares with app-api, and its privacy-extraction scratch. data-manager mounts
+outside `infra/docker/data/`: its job journal and the trusted-configuration
+queue it shares with app-api. data-manager mounts
 the data directory read-write as the same user, so state there could be
 rewritten by it: the journal and queued configuration snapshots, including
 secrets. Only app-api (the queue, and the

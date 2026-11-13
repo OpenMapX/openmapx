@@ -48,12 +48,10 @@ assisted delivery. This does not retain usable account credentials or restore
 login access. Terminal case outcomes and source/artifact expiry trigger
 separate physical cleanup; key metadata is cleared only after deletion is
 confirmed. Case accounting retention does not extend full source-data retention.
-After a receipt snapshot expires, regeneration requires explicit review of the
-missing source rather than silently collecting a later state.
 
 Restore applies the same distinction between active and terminal cases. It
-revokes restored terminal export artifacts and expires their attachments and
-source snapshots before the API resumes. Physical cleanup then uses the
+revokes restored terminal export artifacts and expires their attachments before
+the API resumes. Physical cleanup then uses the
 normal monitored retry path; restored keys and deletion records are retained
 until that cleanup confirms removal. A restore must not mark still-present
 ciphertext as deleted. The private export volume is excluded from backups and

@@ -4,15 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const apps = [
-  "api",
-  "web",
-  "data-manager",
-  "ops-agent",
-  "privacy-backup",
-  "transitous-runner",
-  "transitous-tools",
-];
+const apps = ["api", "web", "data-manager", "ops-agent", "transitous-runner", "transitous-tools"];
 const prefix = "example.invalid/openmapx";
 const sha = "f".repeat(40);
 const releaseId = `${sha}-1-2`;
@@ -50,7 +42,6 @@ function promote(
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, digests[app].slice(7)), "");
     }
-    mkdirSync(join(temp, "privacy-release-validation"));
     mkdirSync(join(temp, "release-plan"));
     writeFileSync(
       join(temp, "release-plan/release-plan.json"),
@@ -58,7 +49,6 @@ function promote(
         version: 1,
         release: releaseId,
         sourceRevision: sha,
-        privacyFingerprint: "a".repeat(64),
         images: apps.map((app) => ({
           app,
           rebuild: !reusedApps.includes(app),
@@ -81,15 +71,6 @@ function promote(
           ),
         },
         ...planOverrides,
-      }),
-    );
-    writeFileSync(
-      join(temp, "privacy-release-validation/privacy-release-validation.json"),
-      JSON.stringify({
-        version: 1,
-        sourceBuildFingerprint: "a".repeat(64),
-        validatedAt: "2026-09-12T12:00:00.000Z",
-        checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
       }),
     );
     const docker = join(bin, "docker");
@@ -175,9 +156,9 @@ describe("aggregate Docker promotion", () => {
     });
   });
   it.each([
-    { privacyFingerprint: "0".repeat(64) },
+    { sourceRevision: "0".repeat(40) },
     { images: [{ app: "api", rebuild: false, digest: `sha256:${"0".repeat(64)}` }] },
-  ])("refuses publication when evidence or reused digest disagrees with the plan", (override) => {
+  ])("refuses publication when the plan or a reused digest disagrees", (override) => {
     const { status, calls } = promote("", false, ["api"], override);
     expect(status).toBe(1);
     expect(calls.flatMap(destinations).some((tag) => tag.endsWith(":main"))).toBe(false);

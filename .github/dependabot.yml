@@ -159,7 +159,6 @@ updates:
       - "/docs"
       - "/services/data-manager"
       - "/services/motis/tools/transitous"
-      - "/services/ops-agent/privacy-backup"
     schedule:
       interval: weekly
       day: monday

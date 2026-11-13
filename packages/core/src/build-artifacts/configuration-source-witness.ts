@@ -209,7 +209,6 @@ export function assertConfigurationHandoffHostSources(authority: VerifiedExecuti
     Buffer.from(files.release.bytes, "base64").toString("utf8") !==
       renderReleaseCompose(
         parseReleaseManifest(intent.release.canonicalManifest, intent.release.imagePrefix),
-        infraDir,
       ) ||
     !matches(keyed({ ...files, release: intent.previousReleaseOverlay }))
   )

@@ -23,7 +23,7 @@ describe("trusted configuration deployment handoff", () => {
     const user = `\${UID:?UID must be set, run pnpm openmapx compose render}:\${GID:?GID must be set, run pnpm openmapx compose render}`;
     expect(api.manifest.container.user).toBe(user);
     expect(agent.manifest.container.user).toBe(user);
-    // The agent opens the queue and its privacy scratch through the checkout,
+    // The agent opens the queue through the checkout,
     // so only app-api mounts the queue and is told where it is.
     expect(api.manifest.container.environment?.OPS_TRUSTED_CONFIG_DIR).toBe(
       "/var/lib/openmapx/trusted-config",
@@ -36,7 +36,6 @@ describe("trusted configuration deployment handoff", () => {
     });
     const agentSources = (agent.manifest.bindMounts ?? []).map((mount) => mount.source);
     expect(agentSources).not.toContain("@infra:state/ops-agent/trusted-config");
-    expect(agentSources).not.toContain("@infra:state/ops-agent/privacy-extraction");
     expect(api.manifest.container.environment?.OPS_TRUSTED_CONFIG_UID).toBe(
       `\${UID:?UID must be set, run pnpm openmapx compose render}`,
     );

@@ -1,18 +1,17 @@
 import {
-  chmodSync,
+  closeSync,
+  fstatSync,
   lstatSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   rmSync,
-  symlinkSync,
-  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { load } from "js-yaml";
 import { describe, expect, it } from "vitest";
 import { releaseProvenance } from "../__fixtures__/release-provenance";
-import { CURRENT_CONFIGURATION } from "../deployment";
 import {
   canonicalReleaseManifest,
   parseReleaseComposeSelection,
@@ -25,8 +24,6 @@ import {
 } from "../release-manifest";
 import { releaseStatePaths } from "../release-state";
 
-const INFRA = "/srv/openmapx/infra/docker";
-
 const digest = (c: string) => `sha256:${c.repeat(64)}`;
 const manifest: ReleaseManifest = {
   schemaVersion: 1,
@@ -36,19 +33,8 @@ const manifest: ReleaseManifest = {
     web: `ghcr.io/openmapx/web@${digest("b")}`,
     "data-manager": `ghcr.io/openmapx/data-manager@${digest("c")}`,
     "ops-agent": `ghcr.io/openmapx/ops-agent@${digest("d")}`,
-    "privacy-backup": `ghcr.io/openmapx/privacy-backup@${digest("9")}`,
     "transitous-runner": `ghcr.io/openmapx/transitous-runner@${digest("e")}`,
     "transitous-tools": `ghcr.io/openmapx/transitous-tools@${digest("f")}`,
-  },
-  privacyReleaseValidation: {
-    version: 1,
-    sourceBuildFingerprint: "2".repeat(64),
-    validatedAt: "2026-09-05T12:00:00.000Z",
-    checks: {
-      translationsConsistent: true,
-      openApiConsistent: true,
-      policyConsistent: true,
-    },
   },
   ...releaseProvenance(),
 };
@@ -72,7 +58,7 @@ describe("shared release manifest", () => {
     };
     const parsed = parseReleaseManifest(JSON.stringify(mixed));
     expect(parsed).toEqual(mixed);
-    const overlay = renderReleaseCompose(parsed, INFRA);
+    const overlay = renderReleaseCompose(parsed);
     expect(overlay).toContain(`image: ${manifest.images.api}`);
     expect(overlay).toContain(`image: ${manifest.images["ops-agent"]}`);
   });
@@ -87,85 +73,23 @@ describe("shared release manifest", () => {
         }),
       ),
     ).toThrow(/images\.api/);
-    expect(() =>
-      parseReleaseManifest(
-        JSON.stringify({
-          ...manifest,
-          images: {
-            ...manifest.images,
-            "privacy-backup": "ghcr.io/openmapx/privacy-backup:latest",
-          },
-        }),
-      ),
-    ).toThrow(/images\.privacy-backup/);
   });
 
-  it("rejects missing or unvalidated privacy release evidence", () => {
-    const { privacyReleaseValidation: _missing, ...withoutEvidence } = manifest;
-    expect(() => parseReleaseManifest(JSON.stringify(withoutEvidence))).toThrow(
-      /privacyReleaseValidation/,
-    );
-    expect(() =>
-      parseReleaseManifest(
-        JSON.stringify({
-          ...manifest,
-          privacyReleaseValidation: {
-            ...manifest.privacyReleaseValidation,
-            checks: {
-              ...manifest.privacyReleaseValidation.checks,
-              policyConsistent: false,
-            },
-          },
-        }),
-      ),
-    ).toThrow(/privacyReleaseValidation\.checks\.policyConsistent/);
-  });
-
-  it("rejects evidence the API would reject instead of mounting unusable JSON", () => {
-    for (const privacyReleaseValidation of [
-      { ...manifest.privacyReleaseValidation, unexpected: true },
-      {
-        ...manifest.privacyReleaseValidation,
-        checks: { ...manifest.privacyReleaseValidation.checks, unexpected: true },
-      },
-      { ...manifest.privacyReleaseValidation, validatedAt: "2026-02-31T12:00:00Z" },
-    ]) {
-      expect(() =>
-        parseReleaseManifest(JSON.stringify({ ...manifest, privacyReleaseValidation })),
-      ).toThrow(/privacyReleaseValidation/);
-    }
-  });
-
-  it("renders the exact collector pin and validation evidence for the API and ops agent", () => {
-    const overlay = load(renderReleaseCompose(manifest, INFRA)) as {
+  it("pins only the six release images and no privacy collector or validation evidence", () => {
+    expect(Object.keys(manifest.images)).toHaveLength(6);
+    const rendered = renderReleaseCompose(manifest);
+    const overlay = load(rendered) as {
       services: Record<string, { environment?: Record<string, string>; configs?: unknown[] }>;
-      configs: Record<string, { file: string }>;
+      configs?: unknown;
     };
-    const collector = manifest.images["privacy-backup"];
-    expect(overlay.services["app-api"]?.environment).toMatchObject({
-      OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE: collector,
-      PRIVACY_EXPORT_VALIDATION_EVIDENCE_FILE:
-        "$" +
-        "{PRIVACY_EXPORT_VALIDATION_EVIDENCE_FILE:-/run/openmapx/privacy-release-validation.json}",
-    });
-    expect(overlay.services["ops-agent"]?.environment).toMatchObject({
-      OPS_PRIVACY_BACKUP_COLLECTOR_ENABLED: "$" + "{OPS_PRIVACY_BACKUP_COLLECTOR_ENABLED:-true}",
-      OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE: collector,
-    });
-    expect(overlay.services["app-api"]?.configs).toEqual([
-      {
-        source: "privacy-release-validation",
-        target: "/run/openmapx/privacy-release-validation.json",
-      },
-    ]);
-    expect(overlay.configs["privacy-release-validation"]).toEqual({
-      // Compose resolves an overlay's paths against the first file's directory,
-      // the configuration pointer; the evidence sits beside the overlay.
-      file: "../../releases/evidence/privacy-release-validation-59ce9957109148ecc7d47d1179863822a181e27293e188aa365b7fa787010cb2.json",
-    });
+    expect(overlay.configs).toBeUndefined();
+    expect(overlay.services["app-api"]).toEqual({ image: manifest.images.api });
+    expect(overlay.services["ops-agent"]).toEqual({ image: manifest.images["ops-agent"] });
+    expect(rendered).not.toMatch(/privacy/i);
+    expect(canonicalReleaseManifest(manifest)).not.toMatch(/privacy/i);
   });
 
-  it("writes content-addressed validation evidence and a private release overlay", () => {
+  it("writes a private release overlay", () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-release-artifacts-"));
     try {
       const overlayPath = join(
@@ -175,121 +99,27 @@ describe("shared release manifest", () => {
         "releases",
         "docker-compose.release.yml",
       );
-      const result = writeReleaseComposeArtifacts(manifest, root);
-      expect(result).toEqual({
-        overlayPath,
-        evidencePath: join(
-          root,
-          "state",
-          "ops-agent",
-          "releases",
-          "evidence",
-          "privacy-release-validation-59ce9957109148ecc7d47d1179863822a181e27293e188aa365b7fa787010cb2.json",
-        ),
-      });
-      expect(JSON.parse(readFileSync(result.evidencePath, "utf8"))).toEqual(
-        manifest.privacyReleaseValidation,
-      );
-      expect(lstatSync(result.evidencePath).mode & 0o777).toBe(0o444);
-      expect(lstatSync(releaseStatePaths(root).evidence).mode & 0o777).toBe(0o700);
+      expect(writeReleaseComposeArtifacts(manifest, root)).toEqual({ overlayPath });
       expect(lstatSync(releaseStatePaths(root).directory).mode & 0o777).toBe(0o700);
-      expect(readFileSync(overlayPath, "utf8")).toBe(renderReleaseCompose(manifest, root));
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-
-  it("keeps release evidence readable by the fixed API UID under a restrictive umask", () => {
-    const root = mkdtempSync(join(tmpdir(), "openmapx-release-artifacts-"));
-    const previousUmask = process.umask(0o077);
-    try {
-      const result = writeReleaseComposeArtifacts(manifest, root);
-      expect(lstatSync(result.evidencePath).mode & 0o777).toBe(0o444);
-    } finally {
-      process.umask(previousUmask);
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-
-  it.each(["corrupt", "symlink"] as const)(
-    "refuses %s existing evidence without replacing the active release artifacts",
-    (kind) => {
-      const root = mkdtempSync(join(tmpdir(), "openmapx-release-artifacts-"));
+      const overlay = openSync(overlayPath, "r");
       try {
-        const overlayPath = releaseStatePaths(root).overlay;
-        const active = writeReleaseComposeArtifacts(manifest, root);
-        const activeOverlay = readFileSync(overlayPath, "utf8");
-        const activeEvidence = readFileSync(active.evidencePath, "utf8");
-        const next = {
-          ...manifest,
-          release: "def456",
-          privacyReleaseValidation: {
-            ...manifest.privacyReleaseValidation,
-            validatedAt: "2026-09-06T12:00:00.000Z",
-          },
-        };
-        const nextCompose = load(renderReleaseCompose(next, root)) as {
-          configs: { "privacy-release-validation": { file: string } };
-        };
-        const nextEvidencePath = join(
-          root,
-          CURRENT_CONFIGURATION,
-          nextCompose.configs["privacy-release-validation"].file,
-        );
-        if (kind === "corrupt") {
-          writeFileSync(nextEvidencePath, "{}\n", { mode: 0o444 });
-          chmodSync(nextEvidencePath, 0o444);
-        } else {
-          symlinkSync(active.evidencePath, nextEvidencePath);
-        }
-
-        expect(() => writeReleaseComposeArtifacts(next, root)).toThrow(
-          /validation evidence is unsafe/,
-        );
-        expect(readFileSync(overlayPath, "utf8")).toBe(activeOverlay);
-        expect(readFileSync(active.evidencePath, "utf8")).toBe(activeEvidence);
+        expect(fstatSync(overlay).mode & 0o777).toBe(0o600);
+        expect(readFileSync(overlay, "utf8")).toBe(renderReleaseCompose(manifest));
       } finally {
-        rmSync(root, { recursive: true, force: true });
+        closeSync(overlay);
       }
-    },
-  );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 
-  it("retains prior evidence so the exact previous overlay still resolves after a switch", () => {
+  it("replaces the overlay atomically when another release is selected", () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-release-artifacts-"));
     try {
-      const overlayPath = releaseStatePaths(root).overlay;
-      const first = writeReleaseComposeArtifacts(manifest, root);
-      const firstOverlay = readFileSync(overlayPath, "utf8");
-      const next = {
-        ...manifest,
-        release: "def456",
-        privacyReleaseValidation: {
-          ...manifest.privacyReleaseValidation,
-          validatedAt: "2026-09-06T12:00:00.000Z",
-        },
-      };
-      const second = writeReleaseComposeArtifacts(next, root);
-      expect(second.evidencePath).not.toBe(first.evidencePath);
-      expect(JSON.parse(readFileSync(first.evidencePath, "utf8"))).toEqual(
-        manifest.privacyReleaseValidation,
-      );
-      expect(JSON.parse(readFileSync(second.evidencePath, "utf8"))).toEqual(
-        next.privacyReleaseValidation,
-      );
-
-      const oldCompose = load(firstOverlay) as {
-        configs: { "privacy-release-validation": { file: string } };
-      };
-      const oldEvidencePath = join(
-        root,
-        CURRENT_CONFIGURATION,
-        oldCompose.configs["privacy-release-validation"].file,
-      );
-      expect(oldEvidencePath).toBe(first.evidencePath);
-      expect(JSON.parse(readFileSync(oldEvidencePath, "utf8"))).toEqual(
-        manifest.privacyReleaseValidation,
-      );
-      expect(firstOverlay).toBe(renderReleaseCompose(manifest, root));
+      const { overlayPath } = writeReleaseComposeArtifacts(manifest, root);
+      const next = { ...manifest, release: "def456" };
+      writeReleaseComposeArtifacts(next, root);
+      expect(readFileSync(overlayPath, "utf8")).toBe(renderReleaseCompose(next));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -344,10 +174,10 @@ describe("release lockfile image contract and selection", () => {
     },
   );
 
-  it("round trips selected identity and seven images, including quoted release IDs", () => {
+  it("round trips selected identity and six images, including quoted release IDs", () => {
     const selected = { ...manifest, release: "release-test" };
     const images = manifest.images;
-    const rendered = renderReleaseCompose(selected, INFRA);
+    const rendered = renderReleaseCompose(selected);
     expect(parseReleaseComposeSelection(rendered)).toEqual({ release: selected.release, images });
     expect(transitousToolsImageFromReleaseCompose(rendered)).toBe(images["transitous-tools"]);
     expect(transitousToolsImageFromReleaseCompose("services: {}\n")).toBeNull();
@@ -370,37 +200,11 @@ describe("release lockfile image contract and selection", () => {
 });
 
 it("does not attribute a modified service pin to stale release metadata", () => {
-  const rendered = renderReleaseCompose(manifest, INFRA).replace(
+  const rendered = renderReleaseCompose(manifest).replace(
     `image: ${manifest.images.api}`,
     `image: ghcr.io/openmapx/api@${digest("0")}`,
   );
   const selected = parseReleaseComposeSelection(rendered);
   expect(selected.release).toBeNull();
   expect(selected.images.api).toBe(`ghcr.io/openmapx/api@${digest("0")}`);
-});
-
-it.each(["app-api", "ops-agent"])(
-  "reports unknown helper selection when %s disagrees with its mirrored pin",
-  (serviceId) => {
-    const rendered = load(renderReleaseCompose(manifest, INFRA)) as {
-      services: Record<string, { environment: Record<string, string> }>;
-    };
-    rendered.services[serviceId].environment.OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE =
-      `ghcr.io/openmapx/privacy-backup@${digest("0")}`;
-    const selected = parseReleaseComposeSelection(JSON.stringify(rendered));
-    expect(selected.release).toBeNull();
-    expect(selected.images["privacy-backup"]).toBeUndefined();
-    expect(selected.images.api).toBe(manifest.images.api);
-    expect(selected.images["transitous-tools"]).toBe(manifest.images["transitous-tools"]);
-  },
-);
-
-it("does not claim a complete release when a mirrored helper pin is absent", () => {
-  const rendered = load(renderReleaseCompose(manifest, INFRA)) as {
-    services: Record<string, { environment: Record<string, string> }>;
-  };
-  delete rendered.services["app-api"].environment.OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE;
-  const selected = parseReleaseComposeSelection(JSON.stringify(rendered));
-  expect(selected.release).toBeNull();
-  expect(selected.images["privacy-backup"]).toBeUndefined();
 });

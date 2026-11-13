@@ -1,6 +1,7 @@
 import { type PrivacySource, privacySourceSchema } from "@openmapx/core/privacy";
 import { db as defaultDb } from "../db/index.js";
 import { systemSettings } from "../db/schema.js";
+import { parseRequiredRetentionDays } from "../services/activity-retention.js";
 
 export interface PrivacyReportLegalFacts {
   controller: {
@@ -17,6 +18,8 @@ export interface PrivacyReportLegalFacts {
     dsarCaseRetentionDays: number;
     identityEvidenceRetentionDays: number;
     exportArtifactRetentionHours: number;
+    /** Configured backup retention; backups are kept at most this long. */
+    backupRetentionDays: number;
   };
 }
 
@@ -82,7 +85,7 @@ function optionalPhone(value: string): string | null {
   return value;
 }
 
-/** Canonical, secret-free legal facts used by response generation and release-evidence hashing. */
+/** Canonical, secret-free legal facts used by response generation. */
 export async function resolvePrivacyReportLegalFacts(
   database: typeof defaultDb = defaultDb,
 ): Promise<PrivacyReportLegalFacts> {
@@ -198,6 +201,7 @@ export async function resolvePrivacyReportLegalFacts(
         24,
         720,
       ),
+      backupRetentionDays: parseRequiredRetentionDays("BACKUP_RETENTION_DAYS", 30),
     },
   };
 }

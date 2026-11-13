@@ -4,10 +4,7 @@ vi.mock(
 );
 
 import { createApiClient } from "@openmapx/core";
-import {
-  privacyDetail,
-  privacyReadiness,
-} from "@/components/admin/privacy/privacyFixtures.test-support";
+import { privacyDetail } from "@/components/admin/privacy/privacyFixtures.test-support";
 import {
   PRIVACY_ADMIN_RESUME_KEY,
   savePendingPrivacyAdminDelivery,
@@ -81,9 +78,6 @@ function installFetch() {
           ],
         }),
       );
-    if (url.endsWith("/privacy/admin/readiness")) return Promise.resolve(json(privacyReadiness()));
-    if (url.endsWith("/privacy/admin/backups"))
-      return Promise.resolve(json({ backups: [], warningCount: 0 }));
     if (url.includes("/operators?"))
       return Promise.resolve(
         json({
@@ -91,8 +85,6 @@ function installFetch() {
           nextCursor: null,
         }),
       );
-    if (url.endsWith("/backup-reviews")) return Promise.resolve(json({ reviews: [] }));
-    if (url.endsWith("/backup-omissions")) return Promise.resolve(json({ reviews: [] }));
     if (url.endsWith(`/privacy/admin/requests/${CASE_A}`))
       return Promise.resolve(json(detail(CASE_A, "registration-for-case-a")));
     if (url.endsWith(`/privacy/admin/requests/${CASE_B}`)) {
@@ -193,17 +185,15 @@ describe("privacy admin case selection", () => {
     ).toBeInTheDocument();
   });
 
-  it("gives privacy operators translated readiness guidance without a settings redirect", async () => {
-    installFetch();
+  it("opens the case queue without a release readiness or backup inventory request", async () => {
+    const fixture = installFetch();
     render(<PrivacyAdminPage />, { wrapper: createQueryWrapper(createTestQueryClient()) });
+    await screen.findByText(/registration-for-case-a/);
 
-    expect(await screen.findByText("adminNavigation.privacyReadinessBlocked")).toBeInTheDocument();
-    expect(screen.getByText("privacySetup.readiness.contactFullAdmin")).toBeInTheDocument();
-    expect(
-      screen.getByText(/privacySetup.readiness.checks.controller-contact.title/),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /controller-contact/ })).not.toBeInTheDocument();
-    expect(screen.queryByText("controller-contact")).not.toBeInTheDocument();
+    expect(screen.queryByText("adminNavigation.privacyReadinessBlocked")).not.toBeInTheDocument();
+    expect(fixture.calls.some(({ url }) => /\/readiness$|\/backups$|\/backup-/.test(url))).toBe(
+      false,
+    );
   });
 });
 
@@ -286,25 +276,3 @@ it.each([403, 404])(
     expect(screen.queryByText(/registration-for-case-b/)).not.toBeInTheDocument();
   },
 );
-
-it("names a blocked encryption readiness check for privacy operators without a setup link", async () => {
-  binding.client = createApiClient({ baseUrl: "http://privacy.test", credentials: "include" });
-  sessionStorage.clear();
-  adminTestHistory.reset("/admin/privacy");
-  installFetch();
-  const fetchFixture = globalThis.fetch;
-  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
-    String(input).endsWith("/privacy/admin/readiness")
-      ? Promise.resolve(
-          json({
-            ...privacyReadiness(),
-            checks: [{ id: "encryption-key", status: "fail", detailCode: "unavailable" }],
-          }),
-        )
-      : fetchFixture(input, init),
-  );
-  render(<PrivacyAdminPage />, { wrapper: createQueryWrapper(createTestQueryClient()) });
-  await screen.findByText(/privacySetup.readiness.checks.encryption-key.title/);
-  expect(screen.getByText("privacySetup.readiness.contactFullAdmin")).toBeInTheDocument();
-  expect(document.querySelector('a[href="/admin/privacy-setup"]')).toBeNull();
-});

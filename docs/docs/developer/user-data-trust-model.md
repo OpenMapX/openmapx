@@ -73,10 +73,9 @@ password hashes, private keys or artifact keys.
 - **Managed Dawarich:** a pinned, versioned source contract and an authenticated
   streaming tar response. The API validates each source manifest and never
   treats an unavailable processor as an empty result.
-- **Retained backups:** reviewed per snapshot. Only verified v2 manifests and
-  compatible collectors may be extracted in a new, egress-free scratch
-  environment; production volumes, secrets and the Docker socket are not
-  mounted into that environment.
+- **Retained backups:** not searched or extracted per person. The operator
+  handles a request for backup data manually, as described in
+  [Personal data in backups](../administration/backup-and-restore.md#personal-data-in-backups).
 - **External/off-host sources:** operator tasks and encrypted case
   attachments. Their provenance, cutoff and redactions must be recorded.
 - **Browser-only data:** a local allowlist export, kept separate from
@@ -97,10 +96,10 @@ accept paths, SQL, image names or Docker flags from the browser.
 
 ## Completeness
 
-`GdprExportReadiness` is fail-closed. It reports registry coverage, encryption,
-retention cleanup, backup review, monitoring, notification, OpenAPI/policy and
-current human approvals. A failed check permits intake and an honest partial
-response. It does not establish deployment readiness or authorize an automatic
-GDPR-compliance claim. See
-[Data-subject requests](../administration/data-subject-requests.md#release-and-operational-gate)
-for deployment prerequisites and readiness checks.
+Every catalogue source is reported in the response: collected, reviewed by an
+operator, or unavailable with a reason. Short-lived categories that may have
+expired before collection are named in the response report, and retained
+backups are handled manually by the operator. An export does not authorize an
+automatic GDPR-compliance claim. See
+[Data-subject requests](../administration/data-subject-requests.md#operational-checks)
+for deployment prerequisites.

@@ -27,7 +27,6 @@ describe("privacy operational health freshness", () => {
       database: database.db as never,
       keyReady: async () => true,
       storageHealthy: async () => true,
-      backupCapability: true,
       cleanupHealthy: { healthy: true, checkedAt: "2020-01-01T00:00:00Z" },
       notificationHealthy: { healthy: true, checkedAt },
       intervalMs: 60_000,
@@ -38,29 +37,25 @@ describe("privacy operational health freshness", () => {
       monitorHealthy: true,
       keyReady: true,
       storageHealthy: true,
-      backupCapability: true,
       cleanupHealthy: false,
       notificationHealthy: true,
       keyRing: { activeVersion: 5, availableVersions: [2, 5] },
     });
   });
 
-  it("reports attachment and source-snapshot cleanup backlogs", async () => {
+  it("reports attachment cleanup backlogs", async () => {
     const database = createDbMock();
     database.queueSelect([]); // open requests
     database.queueSelect([]); // source tasks
     database.queueSelect([]); // generation failures
     database.queueSelect([{ createdAt: now, revokedAt: now }]); // artifacts
-    database.queueSelect([{ id: "source-snapshot-1" }, { id: "source-snapshot-2" }]);
     database.queueSelect([{ id: "attachment-1" }]);
-    database.queueSelect([]); // backup review
     database.queueSelect([]); // notification failures
     const monitor = createPrivacyOperationsMonitor({
       database: database.db as never,
       now: () => now,
       keyReady: true,
       storageHealthy: true,
-      backupCapability: true,
       cleanupHealthy: true,
       notificationHealthy: true,
       intervalMs: 60_000,
@@ -69,7 +64,6 @@ describe("privacy operational health freshness", () => {
     await expect(monitor.runOnce()).resolves.toMatchObject({
       artifactCleanupBacklog: 1,
       attachmentCleanupBacklog: 1,
-      sourceSnapshotCleanupBacklog: 2,
     });
     expect(monitor.health().cleanupHealthy).toBe(false);
   });

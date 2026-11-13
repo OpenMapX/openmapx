@@ -223,7 +223,7 @@ pnpm test --project web              # scope to one environment (web | node)
 pnpm exec vitest run packages/core   # scope by path or test-name substring
 pnpm test:database api-privacy       # migrated disposable PostGIS + Docker required
 pnpm test:database ingestion         # isolated ingestion fixtures + Docker required
-pnpm test:database export-restore    # also requires retained-backup fixture below
+pnpm test:database export-restore    # migrated disposable PostGIS + Docker required
 pnpm test:database configuration-recovery # native configuration recovery
 pnpm test:database coordinator-recovery   # native coordinator recovery
 pnpm test:database                   # full union, serially
@@ -238,7 +238,7 @@ including restore replay for `export-restore` and the all-groups command. Each C
 group owns a separate runner and PostGIS service with the full production Drizzle
 migrations. Suites stay serial within a group because some fixtures mutate shared
 state. The launcher stops at the first failing test so native recovery failures
-report promptly; successful groups run every selected test. Missing databases, schemas, Docker or required backup input fail the run.
+report promptly; successful groups run every selected test. Missing databases, schemas or Docker fail the run.
 
 For a local run, use an owned disposable PostgreSQL 18 / PostGIS 3.6 database,
 export its `DATABASE_URL`, and apply production migrations first. API/privacy,
@@ -255,20 +255,18 @@ environment, install its production dependencies first:
 python3 -m pip install --require-hashes -r services/motis/tools/transitous/requirements.txt
 ```
 
-The export group and all-groups command also require the real retained-backup
-fixture. Pull the reviewed Dawarich image and generate the archive before running:
+Run the export group with:
+
+```bash
+pnpm test:database export-restore
+```
+
+CI also runs the separate exact-image Dawarich export test in that group. Pull
+the reviewed Dawarich image before running it:
 
 ```bash
 image="freikin/dawarich@$(node --input-type=module -e 'const { DAWARICH_SUPPORTED_IMAGE_DIGEST } = await import("./packages/core/src/privacy/dawarich-contract.ts"); console.log(DAWARICH_SUPPORTED_IMAGE_DIGEST)')"
 docker pull "$image"
-export OPENMAPX_REAL_BACKUP_FIXTURE="$(mktemp -d)/openmapx-real-backup-result.tar"
-node services/ops-agent/privacy-backup/test-fixture.mjs --output "$OPENMAPX_REAL_BACKUP_FIXTURE"
-pnpm test:database export-restore
-```
-
-CI also runs the separate exact-image Dawarich export test in that group:
-
-```bash
 OPENMAPX_RUN_DAWARICH_EXPORT_TESTS=1 pnpm exec vitest run --project node apps/ops-agent/src/dawarich-subject-export.integration.test.ts
 ```
 
@@ -387,7 +385,7 @@ The historical mixed queue has been cleared without consuming its bumps. Private
 3. Push your branch and open a PR. Fill out the PR template.
 4. PR CI checks code, tests, production builds, and affected Docker targets
    without publishing them. After merge, application release automation requires
-   successful CI and publishes a coherent set of seven application images plus
+   successful CI and publishes a coherent set of six application images plus
    its release manifest. Use a run-qualified tag or digest for rollback; SHA
    aliases can move after a security rebuild. See
    [Product releases](docs/docs/developer/product-releases.md) for publication,

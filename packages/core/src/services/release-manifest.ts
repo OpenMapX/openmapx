@@ -29,24 +29,17 @@ import { createHash, randomBytes } from "node:crypto";
 import {
   closeSync,
   constants,
-  existsSync,
-  fchmodSync,
-  fstatSync,
   fsyncSync,
-  lstatSync,
   openSync,
-  readFileSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
 import { JSON_SCHEMA, load } from "js-yaml";
 import z from "zod/v4";
 import {
   ensureReleaseStateDirectory,
   type ReleaseStateOptions,
-  releaseEvidenceReference,
   releaseStatePaths,
 } from "./release-state";
 
@@ -60,18 +53,13 @@ export const RELEASE_PINNED_SERVICE_IDS = [
   "transitous-runner",
 ] as const;
 export const TRANSITOUS_TOOLS_IMAGE_ENV = "OPENMAPX_TRANSITOUS_TOOLS_IMAGE";
-export const PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV = "OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE";
-export const PRIVACY_RELEASE_VALIDATION_EVIDENCE_ENV = "PRIVACY_EXPORT_VALIDATION_EVIDENCE_FILE";
-export const PRIVACY_RELEASE_VALIDATION_EVIDENCE_PATH =
-  "/run/openmapx/privacy-release-validation.json";
 
-/** The seven application images; documentation publishes independently. */
+/** The six application images; documentation publishes independently. */
 export const RELEASE_IMAGE_NAMES = [
   "api",
   "web",
   "data-manager",
   "ops-agent",
-  "privacy-backup",
   "transitous-runner",
   "transitous-tools",
 ] as const;
@@ -177,37 +165,10 @@ export interface ReleaseManifest {
   schemaVersion: 1;
   release: string;
   images: Record<(typeof RELEASE_IMAGE_NAMES)[number], string>;
-  privacyReleaseValidation: PrivacyReleaseValidationEvidence;
   producer: ReleaseProducer;
   buildMetadata: ReleaseBuildMetadata;
   product?: ProductReleaseMetadata;
 }
-
-export interface PrivacyReleaseValidationEvidence {
-  version: 1;
-  sourceBuildFingerprint: string;
-  validatedAt: string;
-  checks: {
-    translationsConsistent: true;
-    openApiConsistent: true;
-    policyConsistent: true;
-  };
-}
-
-const privacyReleaseValidationSchema = z
-  .object({
-    version: z.literal(1),
-    sourceBuildFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-    validatedAt: z.iso.datetime({ offset: true }),
-    checks: z
-      .object({
-        translationsConsistent: z.literal(true),
-        openApiConsistent: z.literal(true),
-        policyConsistent: z.literal(true),
-      })
-      .strict(),
-  })
-  .strict();
 
 const producerSchema = z.strictObject({
   repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
@@ -279,7 +240,6 @@ export function parseReleaseManifest(
     schemaVersion?: unknown;
     release?: unknown;
     images?: unknown;
-    privacyReleaseValidation?: unknown;
     producer?: unknown;
     buildMetadata?: unknown;
     product?: unknown;
@@ -300,13 +260,6 @@ export function parseReleaseManifest(
         `Release lockfile images.${name} is not an approved immutable reference under ${imagePrefix}`,
       );
     }
-  }
-  const validation = privacyReleaseValidationSchema.safeParse(candidate.privacyReleaseValidation);
-  if (!validation.success) {
-    const field = validation.error.issues[0]?.path.join(".");
-    throw new Error(
-      `Release lockfile privacyReleaseValidation${field ? `.${field}` : ""} is invalid`,
-    );
   }
   for (const [field, schema] of [
     ["producer", producerSchema],
@@ -342,19 +295,8 @@ export function canonicalReleaseManifest(manifest: ReleaseManifest): string {
       web: manifest.images.web,
       "data-manager": manifest.images["data-manager"],
       "ops-agent": manifest.images["ops-agent"],
-      "privacy-backup": manifest.images["privacy-backup"],
       "transitous-runner": manifest.images["transitous-runner"],
       "transitous-tools": manifest.images["transitous-tools"],
-    },
-    privacyReleaseValidation: {
-      version: manifest.privacyReleaseValidation.version,
-      sourceBuildFingerprint: manifest.privacyReleaseValidation.sourceBuildFingerprint,
-      validatedAt: manifest.privacyReleaseValidation.validatedAt,
-      checks: {
-        translationsConsistent: manifest.privacyReleaseValidation.checks.translationsConsistent,
-        openApiConsistent: manifest.privacyReleaseValidation.checks.openApiConsistent,
-        policyConsistent: manifest.privacyReleaseValidation.checks.policyConsistent,
-      },
     },
     producer: stableObject(manifest.producer),
     buildMetadata: stableObject(manifest.buildMetadata),
@@ -362,15 +304,11 @@ export function canonicalReleaseManifest(manifest: ReleaseManifest): string {
   });
 }
 
-/**
- * What an overlay is rendered from: its release's identity and pins, and the
- * privacy validation evidence it mounts.
- */
+/** What an overlay is rendered from: its release's identity and pins. */
 interface ReleaseOverlaySource {
   /** The `x-openmapx-release` metadata, as the overlay's first line carries it. */
   metadata: string;
   images: ReleaseManifest["images"];
-  evidence: string;
 }
 
 function overlaySource(manifest: ReleaseManifest): ReleaseOverlaySource {
@@ -382,27 +320,16 @@ function overlaySource(manifest: ReleaseManifest): ReleaseOverlaySource {
       digest: createHash("sha256").update(canonicalReleaseManifest(manifest)).digest("hex"),
     }),
     images: manifest.images,
-    evidence: `${JSON.stringify(manifest.privacyReleaseValidation)}\n`,
   };
 }
 
-function evidenceFilename(evidence: string): string {
-  return `privacy-release-validation-${createHash("sha256").update(evidence).digest("hex")}.json`;
-}
-
-function renderOverlay(source: ReleaseOverlaySource, evidenceReference: string): string {
+function renderOverlay(source: ReleaseOverlaySource): string {
   const { images } = source;
   return [
     `x-openmapx-release: ${source.metadata}`,
     "services:",
     "  app-api:",
     `    image: ${images.api}`,
-    "    environment:",
-    `      ${PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV}: ${images["privacy-backup"]}`,
-    `      ${PRIVACY_RELEASE_VALIDATION_EVIDENCE_ENV}: \${${PRIVACY_RELEASE_VALIDATION_EVIDENCE_ENV}:-${PRIVACY_RELEASE_VALIDATION_EVIDENCE_PATH}}`,
-    "    configs:",
-    "      - source: privacy-release-validation",
-    `        target: ${PRIVACY_RELEASE_VALIDATION_EVIDENCE_PATH}`,
     "  app-web:",
     `    image: ${images.web}`,
     "  data-manager:",
@@ -411,28 +338,15 @@ function renderOverlay(source: ReleaseOverlaySource, evidenceReference: string):
     `      ${TRANSITOUS_TOOLS_IMAGE_ENV}: ${images["transitous-tools"]}`,
     "  ops-agent:",
     `    image: ${images["ops-agent"]}`,
-    "    environment:",
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: literal Docker Compose default expression
-    "      OPS_PRIVACY_BACKUP_COLLECTOR_ENABLED: ${OPS_PRIVACY_BACKUP_COLLECTOR_ENABLED:-true}",
-    `      ${PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV}: ${images["privacy-backup"]}`,
     "  transitous-runner:",
     `    image: ${images["transitous-runner"]}`,
-    "configs:",
-    "  privacy-release-validation:",
-    // Compose resolves this overlay's paths against the first compose file's
-    // directory, the configuration pointer; the evidence sits beside the overlay.
-    `    file: ${evidenceReference}`,
     "",
   ].join("\n");
 }
 
-/** The overlay of `manifest` as it is written in the release state of `infraDir`. */
-export function renderReleaseCompose(manifest: ReleaseManifest, infraDir: string): string {
-  const source = overlaySource(manifest);
-  return renderOverlay(
-    source,
-    releaseEvidenceReference(infraDir, evidenceFilename(source.evidence)),
-  );
+/** The overlay of `manifest` as it is written in the release state. */
+export function renderReleaseCompose(manifest: ReleaseManifest): string {
+  return renderOverlay(overlaySource(manifest));
 }
 
 function fsyncDirectory(path: string): void {
@@ -444,79 +358,15 @@ function fsyncDirectory(path: string): void {
   }
 }
 
-function readImmutableEvidence(path: string, options: ReleaseStateOptions): string {
-  const before = lstatSync(path);
-  const currentUid = options.uid ?? process.geteuid?.();
-  if (
-    !before.isFile() ||
-    before.isSymbolicLink() ||
-    before.nlink !== 1 ||
-    (before.mode & 0o777) !== 0o444 ||
-    (currentUid !== undefined && before.uid !== currentUid)
-  ) {
-    throw new Error("Release validation evidence is unsafe");
-  }
-  const descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-  try {
-    const opened = fstatSync(descriptor);
-    if (opened.dev !== before.dev || opened.ino !== before.ino || opened.size !== before.size) {
-      throw new Error("Release validation evidence is unsafe");
-    }
-    return readFileSync(descriptor, "utf8");
-  } finally {
-    closeSync(descriptor);
-  }
-}
-
-/**
- * Publish immutable evidence first, then atomically switch the Compose overlay,
- * both in the release state of `infraDir`.
- */
+/** Atomically switch the Compose overlay in the release state of `infraDir`. */
 export function writeReleaseComposeArtifacts(
   manifest: ReleaseManifest,
   infraDir: string,
   options: ReleaseStateOptions = {},
-): { evidencePath: string; overlayPath: string } {
-  const source = overlaySource(manifest);
-  const {
-    directory,
-    evidence: evidenceDirectory,
-    overlay: overlayPath,
-  } = releaseStatePaths(infraDir);
+): { overlayPath: string } {
+  const { directory, overlay: overlayPath } = releaseStatePaths(infraDir);
   ensureReleaseStateDirectory(directory, options);
-  ensureReleaseStateDirectory(evidenceDirectory, options);
   fsyncDirectory(directory);
-  const { evidence } = source;
-  const evidenceFile = evidenceFilename(evidence);
-  const evidencePath = join(evidenceDirectory, evidenceFile);
-  if (existsSync(evidencePath)) {
-    if (readImmutableEvidence(evidencePath, options) !== evidence) {
-      throw new Error("Release validation evidence is unsafe");
-    }
-  } else {
-    const temporaryEvidence = join(
-      evidenceDirectory,
-      `.${evidenceFile}.${randomBytes(12).toString("hex")}.partial`,
-    );
-    let descriptor: number | undefined;
-    try {
-      descriptor = openSync(
-        temporaryEvidence,
-        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
-        0o444,
-      );
-      writeFileSync(descriptor, evidence, { encoding: "utf8" });
-      fchmodSync(descriptor, 0o444);
-      fsyncSync(descriptor);
-      closeSync(descriptor);
-      descriptor = undefined;
-      renameSync(temporaryEvidence, evidencePath);
-      fsyncDirectory(evidenceDirectory);
-    } finally {
-      if (descriptor !== undefined) closeSync(descriptor);
-      rmSync(temporaryEvidence, { force: true });
-    }
-  }
   const temporaryOverlay = `${overlayPath}.${randomBytes(12).toString("hex")}.partial`;
   let overlayDescriptor: number | undefined;
   try {
@@ -525,13 +375,7 @@ export function writeReleaseComposeArtifacts(
       constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
       0o600,
     );
-    writeFileSync(
-      overlayDescriptor,
-      renderOverlay(source, releaseEvidenceReference(infraDir, evidenceFile)),
-      {
-        encoding: "utf8",
-      },
-    );
+    writeFileSync(overlayDescriptor, renderReleaseCompose(manifest), { encoding: "utf8" });
     fsyncSync(overlayDescriptor);
     closeSync(overlayDescriptor);
     overlayDescriptor = undefined;
@@ -541,7 +385,7 @@ export function writeReleaseComposeArtifacts(
     if (overlayDescriptor !== undefined) closeSync(overlayDescriptor);
     rmSync(temporaryOverlay, { force: true });
   }
-  return { evidencePath, overlayPath };
+  return { overlayPath };
 }
 
 /**
@@ -586,18 +430,10 @@ export function parseReleaseComposeSelection(raw: string): ReleaseComposeSelecti
     "data-manager": object(services["data-manager"]).image,
     "ops-agent": object(services["ops-agent"]).image,
     "transitous-runner": object(services["transitous-runner"]).image,
-    "privacy-backup": object(object(services["ops-agent"]).environment)[
-      PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV
-    ],
     "transitous-tools": object(object(services["data-manager"]).environment)[
       TRANSITOUS_TOOLS_IMAGE_ENV
     ],
   };
-  // Both consumers must agree; otherwise no single helper pin describes this overlay.
-  const apiCollector = object(object(services["app-api"]).environment)[
-    PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV
-  ];
-  if (apiCollector !== pins["privacy-backup"]) delete pins["privacy-backup"];
   for (const name of RELEASE_IMAGE_NAMES) {
     const pin = pins[name];
     if (typeof pin === "string" && new RegExp(`^\\S+@${DIGEST}$`).test(pin)) images[name] = pin;

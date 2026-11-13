@@ -1,9 +1,14 @@
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { describe, expect, it } from "vitest";
 import { accountAdminGuard, user } from "../db/schema";
 import { createMigratedPostgresFixture } from "../test/postgres-fixture";
+
+const migrationJournal = JSON.parse(
+  readFileSync(new URL("../db/migrations/meta/_journal.json", import.meta.url), "utf8"),
+) as { entries: unknown[] };
 
 const dbDescribe = process.env.OPENMAPX_RUN_DATABASE_TESTS === "1" ? describe : describe.skip;
 dbDescribe("last-admin migration of historical roles", () => {
@@ -21,7 +26,7 @@ dbDescribe("last-admin migration of historical roles", () => {
       expect(columns).toHaveLength(3);
       expect((await fixture.db.select().from(accountAdminGuard))[0]?.activeCount).toBe(1);
       const count = await fixture.sql`SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations`;
-      expect(count[0]?.n).toBe(57);
+      expect(count[0]?.n).toBe(migrationJournal.entries.length);
     } finally {
       await fixture.stop();
     }

@@ -28,6 +28,7 @@ describe("fetchLegalConfig", () => {
             exportArtifactRetentionHours: 168,
             deploymentJurisdiction: "DE-BE",
             privacySources: [],
+            backupRetentionDays: 14,
           }),
           { status: 200, headers: { "content-type": "application/json" } },
         ),
@@ -44,6 +45,7 @@ describe("fetchLegalConfig", () => {
       phone: "+49 30 123456",
       dataRequestEmail: "privacy@example.test",
       deploymentJurisdiction: "DE-BE",
+      backupRetentionDays: 14,
     });
   });
 

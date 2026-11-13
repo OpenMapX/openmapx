@@ -28,12 +28,6 @@ function manifest(id: string): services.ReleaseManifest {
         `ghcr.io/openmapx/${name}@sha256:${(id === "running" ? "a" : "b").repeat(64)}`,
       ]),
     ) as services.ReleaseManifest["images"],
-    privacyReleaseValidation: {
-      version: 1,
-      sourceBuildFingerprint: "c".repeat(64),
-      validatedAt: "2026-11-06T00:00:00.000Z",
-      checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
-    },
     ...releaseProvenance(),
   };
 }

@@ -4,17 +4,16 @@ impacts: [breaking]
 
 ## What changes
 
-Live Dawarich and retained-backup privacy source archives now require canonical
-USTAR regular-file headers. GNU/PAX extensions, unsupported format markers and
-malformed numeric fields are rejected. Member sizes, manifest sizes and total
-budgets include the final manifests before the backup collector starts output.
+Live Dawarich privacy source archives now require canonical USTAR regular-file
+headers. GNU/PAX extensions, unsupported format markers and malformed numeric
+fields are rejected. Member sizes, manifest sizes and total budgets include the
+final manifest.
 
 ## Who is affected
 
 This affects the internal archives supplied to privacy export collectors. It does
-not change the subject's delivered export format. The managed Ruby and Python
-producers are verified against the shared reader, including the pinned Dawarich
-image and the networkless retained-backup fixture.
+not change the subject's delivered export format. The managed Ruby producer is
+verified against the shared reader with the pinned Dawarich image.
 
 ## Required action
 

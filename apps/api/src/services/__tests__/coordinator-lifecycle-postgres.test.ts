@@ -288,19 +288,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           JSON.stringify({
             "x-openmapx-release": { release: "task012-baseline-budget", images },
             services: {
-              "app-api": {
-                image: images.api,
-                environment: {
-                  [services.PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV]: images["privacy-backup"],
-                },
-              },
+              "app-api": { image: images.api },
               "app-web": { image: images.web },
-              "ops-agent": {
-                image: images["ops-agent"],
-                environment: {
-                  [services.PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV]: images["privacy-backup"],
-                },
-              },
+              "ops-agent": { image: images["ops-agent"] },
               "data-manager": {
                 image: images["data-manager"],
                 environment: { [services.TRANSITOUS_TOOLS_IMAGE_ENV]: images["transitous-tools"] },
@@ -1264,16 +1254,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 `ghcr.io/openmapx/${name}@sha256:${"f".repeat(64)}`,
               ]),
             ),
-            privacyReleaseValidation: {
-              version: 1,
-              sourceBuildFingerprint: "f".repeat(64),
-              validatedAt: "2026-09-12T12:00:00.000Z",
-              checks: {
-                translationsConsistent: true,
-                openApiConsistent: true,
-                policyConsistent: true,
-              },
-            },
             ...releaseProvenance(),
           }),
         );

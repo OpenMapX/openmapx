@@ -10,7 +10,6 @@ export const productImageNames = [
   "web",
   "data-manager",
   "ops-agent",
-  "privacy-backup",
   "transitous-runner",
   "transitous-tools",
 ];
@@ -80,7 +79,7 @@ export function validateProducerManifest(manifest, repository, run) {
     Object.keys(manifest.images ?? {})
       .sort()
       .join() === [...productImageNames].sort().join(),
-    "Incomplete seven-image manifest",
+    "Incomplete six-image manifest",
   );
   for (const name of productImageNames) {
     const prefix = `${namespace}/${name}@`;
@@ -92,16 +91,6 @@ export function validateProducerManifest(manifest, repository, run) {
       `Unapproved ${name} image`,
     );
   }
-  const evidence = manifest.privacyReleaseValidation;
-  assert(
-    evidence?.version === 1 &&
-      /^[a-f0-9]{64}$/.test(evidence.sourceBuildFingerprint) &&
-      Number.isFinite(Date.parse(evidence.validatedAt)) &&
-      ["translationsConsistent", "openApiConsistent", "policyConsistent"].every(
-        (key) => evidence.checks?.[key] === true,
-      ),
-    "Missing privacy evidence",
-  );
   assert(manifest.buildMetadata?.version === 1, "Missing build metadata");
   // The timestamp form the core release parser accepts: seconds, an optional
   // fraction, Z or a +HH:MM offset, and a date that exists in the calendar.
@@ -160,7 +149,6 @@ export function planProductRelease({
   const names = [
     "lint / types / test",
     "Publish coherent release",
-    "Validate privacy release evidence",
     ...productImageNames.map((name) => `Build or reuse and scan ${name}`),
   ];
   for (const name of names)
@@ -211,7 +199,6 @@ export const readinessChecks = [
   "providerFailure",
   "credits",
   "serviceHealth",
-  "privacyEvidence",
   "upgrade",
 ];
 export function validateReadiness(readiness, candidate, digest) {

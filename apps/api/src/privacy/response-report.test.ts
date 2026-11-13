@@ -1,5 +1,7 @@
 import { messages } from "@openmapx/i18n";
 import { describe, expect, it } from "vitest";
+import { SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
+import { getCatalogueCopyWithFallbacks } from "./catalogue-copy.js";
 import { buildPrivacyResponseReport, type PrivacyResponseContext } from "./response-report.js";
 
 const context: PrivacyResponseContext = {
@@ -31,12 +33,13 @@ const context: PrivacyResponseContext = {
         location: "Encrypted EU object storage",
         retention: "Thirty rolling days",
         accessStrategy: "operator_task",
-        instructionsCode: "backup-review",
+        instructionsCode: "backup-manual-restore",
       },
     ],
     dsarCaseRetentionDays: 1095,
     identityEvidenceRetentionDays: 30,
     exportArtifactRetentionHours: 168,
+    backupRetentionDays: 14,
   },
   reviewContact: "privacy@example.test (case request-123)",
   recipientSummary: {
@@ -152,5 +155,51 @@ describe("localized privacy response report", () => {
     } finally {
       entry.category = category;
     }
+  });
+
+  it("names the short-lived catalogue categories that may have expired before collection", () => {
+    const report = buildPrivacyResponseReport({ locale: "en", context, sources: [] });
+    const shortLived = report.text.slice(
+      report.text.indexOf("Short-lived data"),
+      report.text.indexOf("Backups"),
+    );
+    const expected = [
+      "auth-sessions",
+      "auth-verifications",
+      "mobile-auth-handoffs",
+      "offline-package-ownership",
+      "application-logs",
+      "redis-subject-controls",
+    ];
+    for (const id of expected) {
+      const registration = SUBJECT_DATA_CATALOGUE.find((entry) => entry.id === id);
+      expect(registration, id).toBeDefined();
+      expect(shortLived).toContain(getCatalogueCopyWithFallbacks("en", id).copy.category);
+    }
+    // Long-lived categories and retained backups are not listed as short-lived.
+    expect(shortLived).not.toContain(
+      getCatalogueCopyWithFallbacks("en", "account-profile").copy.category,
+    );
+    expect(shortLived).not.toContain(
+      getCatalogueCopyWithFallbacks("en", "backup-retained-copies").copy.category,
+    );
+    expect(report.processingInformation.shortLivedCategories).toEqual(
+      expect.arrayContaining(expected),
+    );
+    expect(report.processingInformation.shortLivedCategories).toHaveLength(expected.length);
+  });
+
+  it("states the backup policy with the configured retention and the request contact", () => {
+    for (const locale of ["en", "de"] as const) {
+      const report = buildPrivacyResponseReport({ locale, context, sources: [] });
+      const t = messages[locale].privacyExport.report;
+      expect(report.text).toContain(t.backupHeading);
+      const statement = report.text.slice(report.text.indexOf(t.backupHeading));
+      expect(statement).toContain("14");
+      expect(statement).toContain("privacy@example.test");
+    }
+    const english = buildPrivacyResponseReport({ locale: "en", context, sources: [] }).text;
+    expect(english).toContain("only to recover from failure");
+    expect(english).toContain("erasure journal");
   });
 });

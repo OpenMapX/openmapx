@@ -45,19 +45,8 @@ const manifestJson = JSON.stringify({
     web: `ghcr.io/openmapx/web@${digest("b")}`,
     "data-manager": `ghcr.io/openmapx/data-manager@${digest("c")}`,
     "ops-agent": `ghcr.io/openmapx/ops-agent@${digest("d")}`,
-    "privacy-backup": `ghcr.io/openmapx/privacy-backup@${digest("9")}`,
     "transitous-runner": `ghcr.io/openmapx/transitous-runner@${digest("e")}`,
     "transitous-tools": `ghcr.io/openmapx/transitous-tools@${digest("f")}`,
-  },
-  privacyReleaseValidation: {
-    version: 1,
-    sourceBuildFingerprint: "2".repeat(64),
-    validatedAt: "2026-09-05T12:00:00.000Z",
-    checks: {
-      translationsConsistent: true,
-      openApiConsistent: true,
-      policyConsistent: true,
-    },
   },
   ...releaseProvenance(),
 });
@@ -130,10 +119,7 @@ describe("ensureReleaseOverlay", () => {
     expect(readFileSync(path, "utf-8")).toContain(
       `image: ghcr.io/openmapx/transitous-runner@${digest("e")}`,
     );
-    expect(readFileSync(path, "utf-8")).toContain(
-      `OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE: ghcr.io/openmapx/privacy-backup@${digest("9")}`,
-    );
-    expect(docker).toHaveBeenCalledWith(["pull", `ghcr.io/openmapx/privacy-backup@${digest("9")}`]);
+    expect(readFileSync(path, "utf-8")).not.toMatch(/privacy/i);
   });
 
   it("never overwrites an existing overlay", async () => {
@@ -154,32 +140,6 @@ describe("ensureReleaseOverlay", () => {
     });
     const result = await ensureReleaseOverlay({ docker, infraDir });
     expect(result.status).toBe("unpinned");
-    expect(existsSync(path)).toBe(false);
-  });
-
-  it("does not write an overlay when release validation evidence is missing", async () => {
-    const { infraDir, path } = releaseInfra();
-    const invalid = JSON.stringify({
-      ...JSON.parse(manifestJson),
-      privacyReleaseValidation: undefined,
-    });
-    const result = await ensureReleaseOverlay({ docker: fakeDocker(invalid), infraDir });
-    expect(result).toMatchObject({ status: "unpinned", reason: expect.stringMatching(/privacy/) });
-    expect(existsSync(path)).toBe(false);
-  });
-
-  it("does not activate the release when the pinned collector cannot be pulled", async () => {
-    const { infraDir, path } = releaseInfra();
-    const base = fakeDocker();
-    const docker: ReleaseDockerRunner = async (args) =>
-      args[0] === "pull" && args[1]?.includes("privacy-backup@")
-        ? { stdout: "", stderr: "collector unavailable", exitCode: 1 }
-        : base(args);
-    const result = await ensureReleaseOverlay({ docker, infraDir });
-    expect(result).toMatchObject({
-      status: "unpinned",
-      reason: expect.stringMatching(/privacy-backup/),
-    });
     expect(existsSync(path)).toBe(false);
   });
 });
@@ -320,12 +280,21 @@ it("does not report a candidate as selected when atomic overlay publication fail
   const previous = JSON.parse(manifestJson);
   writeReleaseOverlay(previous, { infraDir });
   const before = readFileSync(path, "utf8");
-  chmodSync(services.releaseStatePaths(infraDir).evidence, 0o755);
   const next = { ...previous, release: "next" };
   const lines: string[] = [];
-  await expect(
-    selectRelease({ infraDir, resolve: async () => next, report: (line) => lines.push(line) }),
-  ).rejects.toThrow(/unsafe/i);
+  // Once the store lock is held, an owner-only release directory without write
+  // permission refuses the temporary overlay.
+  const resolve = async () => {
+    chmodSync(dirname(path), 0o500);
+    return next;
+  };
+  try {
+    await expect(
+      selectRelease({ infraDir, resolve, report: (line) => lines.push(line) }),
+    ).rejects.toThrow();
+  } finally {
+    chmodSync(dirname(path), 0o700);
+  }
   expect(lines.join("\n")).toContain("Candidate release: next");
   expect(lines.join("\n")).not.toContain("Selected release: next");
   expect(readFileSync(path, "utf8")).toBe(before);
@@ -357,13 +326,8 @@ describe("clearReleaseSelection", () => {
       clearReleaseSelection({ infraDir, expectedReleaseId: "deadbeef" }),
     ).rejects.toThrow(/changed/);
   });
-  it("clears only the local overlay idempotently and retains running release evidence", async () => {
+  it("clears only the local overlay idempotently and retains the running release state", async () => {
     const { infraDir, path, store } = fixture();
-    const evidence = services.releaseStatePaths(infraDir).evidence;
-    const files = readdirSync(evidence).map((name) => [
-      name,
-      readFileSync(join(evidence, name), "utf8"),
-    ]);
     vi.stubEnv("OPENMAPX_RELEASE", "local");
     try {
       expect(await clearReleaseSelection({ infraDir })).toEqual({ path, cleared: true });
@@ -374,9 +338,6 @@ describe("clearReleaseSelection", () => {
     }
     expect(existsSync(path)).toBe(false);
     expect(readFileSync(join(store, "current.json"), "utf8")).toBe("running-state");
-    expect(
-      readdirSync(evidence).map((name) => [name, readFileSync(join(evidence, name), "utf8")]),
-    ).toEqual(files);
     expect(readdirSync(store)).toEqual(["current.json"]);
   });
 
@@ -516,16 +477,6 @@ it.each(["group-writable", "foreign"] as const)(
     expect(readFileSync(path, "utf8")).toBe(before);
   },
 );
-
-it("writes evidence the overlay references from the configuration pointer", () => {
-  const { infraDir, path } = releaseInfra();
-  writeReleaseOverlay(JSON.parse(manifestJson), { infraDir });
-  const reference = /file: (\S+)/.exec(readFileSync(path, "utf8"))?.[1] ?? "";
-  expect(reference).toMatch(
-    /^\.\.\/\.\.\/releases\/evidence\/privacy-release-validation-[a-f0-9]{64}\.json$/,
-  );
-  expect(existsSync(join(infraDir, services.CURRENT_CONFIGURATION, reference))).toBe(true);
-});
 
 it("rejects a malformed existing overlay without replacing it or reaching the registry", async () => {
   const { infraDir, path } = releaseInfra("omx-invalid-overlay-");

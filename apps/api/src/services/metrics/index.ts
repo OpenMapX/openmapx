@@ -99,7 +99,6 @@ export interface MetricsHandle {
   privacyArtifactCleanupLag: ObservableGauge;
   privacyCleanupBacklog: ObservableGauge;
   privacyKeyReady: ObservableGauge;
-  privacyBackupReviewBacklog: ObservableGauge;
   privacyNotificationFailures: ObservableGauge;
   recordPrivacyOperationalSnapshot(snapshot: PrivacyOperationalMetricSnapshot): void;
   /** Render the current metric state as Prometheus text format. */
@@ -118,9 +117,7 @@ export interface PrivacyOperationalMetricSnapshot {
   artifactCleanupLagSeconds: number;
   artifactCleanupBacklog: number;
   attachmentCleanupBacklog: number;
-  sourceSnapshotCleanupBacklog: number;
   keyReady: boolean;
-  backupReviewBacklog: number;
   notificationFailures: number;
 }
 
@@ -236,9 +233,7 @@ export function initMetrics(): MetricsHandle {
     artifactCleanupLagSeconds: 0,
     artifactCleanupBacklog: 0,
     attachmentCleanupBacklog: 0,
-    sourceSnapshotCleanupBacklog: 0,
     keyReady: false,
-    backupReviewBacklog: 0,
     notificationFailures: 0,
   };
   const privacyOpenRequests = meter.createObservableGauge("privacy_open_requests", {
@@ -283,21 +278,12 @@ export function initMetrics(): MetricsHandle {
     observation.observe(privacySnapshot.attachmentCleanupBacklog, {
       resource_kind: "attachment",
     });
-    observation.observe(privacySnapshot.sourceSnapshotCleanupBacklog, {
-      resource_kind: "source_snapshot",
-    });
   });
   const privacyKeyReady = meter.createObservableGauge("privacy_key_ready", {
     description: "Whether the dedicated privacy encryption key is ready",
   });
   privacyKeyReady.addCallback((observation) =>
     observation.observe(privacySnapshot.keyReady ? 1 : 0),
-  );
-  const privacyBackupReviewBacklog = meter.createObservableGauge("privacy_backup_review_backlog", {
-    description: "Open backup review tasks",
-  });
-  privacyBackupReviewBacklog.addCallback((observation) =>
-    observation.observe(privacySnapshot.backupReviewBacklog),
   );
   const privacyNotificationFailures = meter.createObservableGauge("privacy_notification_failures", {
     description: "Failed privacy notification outbox items",
@@ -367,7 +353,6 @@ export function initMetrics(): MetricsHandle {
     privacyArtifactCleanupLag,
     privacyCleanupBacklog,
     privacyKeyReady,
-    privacyBackupReviewBacklog,
     privacyNotificationFailures,
     recordPrivacyOperationalSnapshot(snapshot) {
       privacySnapshot = {
@@ -383,11 +368,6 @@ export function initMetrics(): MetricsHandle {
         ),
         artifactCleanupBacklog: Math.max(0, Math.floor(snapshot.artifactCleanupBacklog)),
         attachmentCleanupBacklog: Math.max(0, Math.floor(snapshot.attachmentCleanupBacklog)),
-        sourceSnapshotCleanupBacklog: Math.max(
-          0,
-          Math.floor(snapshot.sourceSnapshotCleanupBacklog),
-        ),
-        backupReviewBacklog: Math.max(0, Math.floor(snapshot.backupReviewBacklog)),
         notificationFailures: Math.max(0, Math.floor(snapshot.notificationFailures)),
       };
     },

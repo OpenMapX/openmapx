@@ -12,7 +12,7 @@
     "storesPersonalData": true,
     "strategy": "operator_task",
     "registrationIds": ["managed-dawarich"],
-    "operatorInstructions": "Use the pinned managed Dawarich collector or an approved isolated backup review."
+    "operatorInstructions": "Use the pinned managed Dawarich collector. Requests for data held in backups are handled manually by the operator."
   },
   "container": {
     "image": "ghcr.io/baosystems/postgis",

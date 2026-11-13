@@ -9,7 +9,6 @@ export interface OpsAgentConfig {
   trustedConfigDirectory: string;
   host: string;
   port: number;
-  privacyBackupCapabilityKeyFile?: string;
 }
 
 function absolutePath(env: NodeJS.ProcessEnv, name: string, label: string): string {
@@ -38,14 +37,5 @@ export function loadOpsAgentConfig(env: NodeJS.ProcessEnv = process.env): OpsAge
       .trustedConfig,
     host: env.HOST?.trim() || "0.0.0.0",
     port,
-    ...(env.OPS_PRIVACY_BACKUP_CAPABILITY_KEY_FILE?.trim()
-      ? {
-          privacyBackupCapabilityKeyFile: absolutePath(
-            env,
-            "OPS_PRIVACY_BACKUP_CAPABILITY_KEY_FILE",
-            "privacy backup capability key file path",
-          ),
-        }
-      : {}),
   };
 }

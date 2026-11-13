@@ -29,14 +29,11 @@ describe("named product candidate", () => {
     (input.run as Record<string, unknown>)[field] = field === "run_attempt" ? 3 : "untrusted";
     expect(() => release.planProductRelease(input)).toThrow();
   });
-  it.each(["producer", "buildMetadata", "privacyReleaseValidation"])(
-    "requires durable %s evidence",
-    (field) => {
-      const input = fixture();
-      delete (input.producerManifest as Record<string, unknown>)[field];
-      expect(() => release.planProductRelease(input)).toThrow();
-    },
-  );
+  it.each(["producer", "buildMetadata"])("requires durable %s evidence", (field) => {
+    const input = fixture();
+    delete (input.producerManifest as Record<string, unknown>)[field];
+    expect(() => release.planProductRelease(input)).toThrow();
+  });
   it.each([
     undefined,
     null,

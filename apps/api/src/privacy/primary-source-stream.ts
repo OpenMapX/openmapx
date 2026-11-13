@@ -1,14 +1,5 @@
 import { createHash } from "node:crypto";
 
-/** Reviewed implementation contract consumed by the release gate and bound
- * into the source fingerprint. */
-export const PRIVACY_BOUNDED_SOURCE_STREAMING_CAPABILITY = Object.freeze({
-  version: 1,
-  databaseCursor: true,
-  encryptedReplaySpool: true,
-  perRecordAndMemberBounds: true,
-});
-
 export interface StreamFacts {
   bytes: number;
   records: number;

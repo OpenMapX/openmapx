@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse, parseAllDocuments } from "yaml";
-import { computePrivacySourceFingerprint } from "../apps/api/privacy-source-fingerprint.mjs";
 import { dockerStages, stageInputs } from "./docker-inputs.mjs";
 import {
   coversPath,
@@ -18,7 +17,6 @@ import {
 
 const revision = "b".repeat(40);
 const now = "2026-09-12T12:00:00.000Z";
-const privacy = "f".repeat(64);
 const tree = [
   ["apps/api/src/server.ts", "api"],
   ["apps/web/src/page.tsx", "web"],
@@ -36,18 +34,15 @@ const dockerfiles: Record<string, string> = Object.fromEntries(
     target.dockerfile,
     target.app === "docs"
       ? "FROM scratch\nCOPY . /docs\n"
-      : target.app === "privacy-backup"
-        ? "FROM scratch\nCOPY services/ops-agent/privacy-backup/ /app\n"
-        : target.app === "transitous-tools"
-          ? "FROM scratch\nCOPY requirements.txt /app\n"
-          : `FROM scratch\nCOPY apps/${target.app}/ /app\nCOPY packages/ /packages\nCOPY pnpm-lock.yaml /app/\n`,
+      : target.app === "transitous-tools"
+        ? "FROM scratch\nCOPY requirements.txt /app\n"
+        : `FROM scratch\nCOPY apps/${target.app}/ /app\nCOPY packages/ /packages\nCOPY pnpm-lock.yaml /app/\n`,
   ]),
 );
 const options = {
   revision,
   now,
   tree,
-  privacyFingerprint: privacy,
   readDockerfile: (path: string) => dockerfiles[path],
 };
 
@@ -62,7 +57,6 @@ function baseline() {
         `ghcr.io/openmapx/${target.app}@sha256:${String(i + 1).repeat(64)}`,
       ]),
     ),
-    privacyReleaseValidation: { sourceBuildFingerprint: privacy },
     buildMetadata: plan.buildMetadata,
   };
 }
@@ -133,13 +127,6 @@ describe("Dockerfile build input coverage", () => {
     });
 
     expect(selected).toEqual(["api", "web", "data-manager", "ops-agent", "transitous-runner"]);
-    expect(
-      selectChangedTargets({
-        changedPaths: ["services/ops-agent/privacy-backup/openmapx-backup-subject-export.py"],
-        readDockerfile: (path: string) =>
-          readFileSync(resolve(import.meta.dirname, "..", path), "utf8"),
-      }),
-    ).toContain("privacy-backup");
   });
   it.each([
     ["packages/brands/src/index.ts", ["api", "web"]],
@@ -265,18 +252,6 @@ describe("selective release planning", () => {
     });
     expect(next.images.find((image: { app: string }) => image.app === "api").rebuild).toBe(true);
     expect(next.buildMetadata.images.api.inputHash).toBe(failed.buildMetadata.images.api.inputHash);
-  });
-  it("rebuilds API when privacy evidence changes, even with identical Docker inputs", () => {
-    const plan = createReleasePlan({
-      ...options,
-      privacyFingerprint: "e".repeat(64),
-      previous: baseline(),
-    });
-    expect(
-      plan.images
-        .filter((image: { rebuild: boolean }) => image.rebuild)
-        .map((image: { app: string }) => image.app),
-    ).toEqual(["api"]);
   });
   it("preserves original build age on reuse and refreshes without cache after seven days", () => {
     const previous = baseline();
@@ -406,13 +381,12 @@ describe("selective release planning", () => {
       .filter((entry) => entry.dockerfile);
     expect(targets).toEqual(matrix);
   });
-  it("covers the actual repository's copied inputs and privacy coupling", async () => {
+  it("covers the actual repository's copied inputs", async () => {
     const root = resolve(import.meta.dirname, "..");
     const actual = {
       ...options,
       tree: trackedTree(root),
       readDockerfile: (path: string) => readFileSync(resolve(root, path), "utf8"),
-      privacyFingerprint: await computePrivacySourceFingerprint(root),
     };
     const plan = createReleasePlan(actual);
     expect(plan.images.map((image: { app: string }) => image.app)).toEqual(
@@ -425,7 +399,6 @@ describe("selective release planning", () => {
     const previous = {
       ...baseline(),
       buildMetadata: plan.buildMetadata,
-      privacyReleaseValidation: { sourceBuildFingerprint: actual.privacyFingerprint },
     };
     const docsOnly = createReleasePlan({ ...actual, tree: changedTree, previous });
     expect(
@@ -597,7 +570,6 @@ snapshots:
         target,
         tree: tree.map((entry) => (entry.path === "pnpm-lock.yaml" ? { ...entry, oid } : entry)),
         readDockerfile,
-        privacyFingerprint: privacy,
         lockfile: { documents: documents(text) },
         onLockfileFallback: (app: string) => fallbacks.push(app),
       });
@@ -663,7 +635,6 @@ describe("bundled image fingerprints", () => {
         oid: createHash("sha1").update(text).digest("hex"),
       })),
       readDockerfile: () => dockerfile,
-      privacyFingerprint: privacy,
       bundleDigest,
       readFile: (path: string) => contents[path],
     });
@@ -749,7 +720,6 @@ describe("bundled image fingerprints", () => {
         target,
         tree: [],
         readDockerfile: () => "FROM node AS runner\nCOPY a ./\n",
-        privacyFingerprint: privacy,
         bundleDigest: "a".repeat(64),
         readFile: () => "",
       }),

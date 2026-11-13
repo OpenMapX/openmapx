@@ -45,12 +45,7 @@ describe("agent state directories", () => {
     prepareAgentStateDirectories(infraDir);
 
     const current = agentStatePaths(infraDir);
-    for (const directory of [
-      current.directory,
-      current.trustedConfig,
-      current.privacyExtraction,
-      current.traefikDynamic,
-    ]) {
+    for (const directory of [current.directory, current.trustedConfig, current.traefikDynamic]) {
       expect(lstatSync(directory).isDirectory()).toBe(true);
       expect(statSync(directory).mode & 0o777).toBe(0o700);
     }

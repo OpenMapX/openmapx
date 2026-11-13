@@ -120,12 +120,6 @@ describe("assembled production service authority", () => {
           `ghcr.io/openmapx/${name}@sha256:${"a".repeat(64)}`,
         ]),
       ) as services.ReleaseManifest["images"],
-      privacyReleaseValidation: {
-        version: 1,
-        sourceBuildFingerprint: "a".repeat(64),
-        validatedAt: "2026-09-05T12:00:00.000Z",
-        checks: { translationsConsistent: true, openApiConsistent: true, policyConsistent: true },
-      },
       ...releaseProvenance(),
     };
     services.writeReleaseComposeArtifacts(manifest, host.infraDir);

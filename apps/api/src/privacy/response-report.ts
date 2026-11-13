@@ -27,6 +27,7 @@ export interface PrivacyResponseContext {
     dsarCaseRetentionDays: number;
     identityEvidenceRetentionDays: number;
     exportArtifactRetentionHours: number;
+    backupRetentionDays: number;
   };
   reviewContact: string;
   recipientSummary: {
@@ -81,6 +82,27 @@ function reportRights(kind: PrivacyRequestKind): { access: boolean; portability:
     access: kind === "access" || kind === "access_and_portability",
     portability: kind === "portability" || kind === "access_and_portability",
   };
+}
+
+/** Categories kept for at most the regular one-month response period may have
+ * expired between receipt and collection. */
+const SHORT_LIVED_RETENTION_DAYS = 30;
+
+function retentionDays(rule: (typeof SUBJECT_DATA_CATALOGUE)[number]["retention"]): number | null {
+  if (rule.kind === "fixed-days") return rule.days;
+  if (rule.kind === "ephemeral") return rule.hours / 24;
+  return null;
+}
+
+function isShortLived(registration: (typeof SUBJECT_DATA_CATALOGUE)[number]): boolean {
+  const days = retentionDays(registration.retention);
+  return (
+    registration.strategy !== "not_personal" &&
+    // Retained backups have their own statement in the report.
+    registration.category !== "backup-copies" &&
+    days !== null &&
+    days <= SHORT_LIVED_RETENTION_DAYS
+  );
 }
 
 function codeLabel(t: ReportTranslator, group: string, code: string): string {
@@ -168,13 +190,35 @@ export function buildPrivacyResponseReport(input: {
       artifactHours: context.deployment.exportArtifactRetentionHours,
     }),
     t("snapshotLimitations"),
-    "",
-    t("sourcesHeading"),
   ];
   const catalogueFallbacks: ReturnType<typeof t.fallbacks> = [];
-  const processingSources = SUBJECT_DATA_CATALOGUE.filter(
+  const scopedRegistrations = SUBJECT_DATA_CATALOGUE.filter(
     (registration) => rights.access || registration.portability.decision === "include",
-  ).map((registration) => {
+  );
+  const shortLived = scopedRegistrations.filter(isShortLived);
+  lines.push("", t("shortLivedHeading"), t("shortLivedIntro"));
+  for (const registration of shortLived) {
+    const copy = getCatalogueCopyWithFallbacks(locale, registration.id);
+    catalogueFallbacks.push(...copy.translationFallbacks);
+    lines.push(
+      t("shortLivedRow", {
+        id: registration.id,
+        category: copy.copy.category,
+        retention: retentionText(t, registration.retention),
+      }),
+    );
+  }
+  lines.push(
+    "",
+    t("backupHeading"),
+    t("backupStatement", {
+      days: context.deployment.backupRetentionDays,
+      contact: context.controller.email,
+    }),
+    "",
+    t("sourcesHeading"),
+  );
+  const processingSources = scopedRegistrations.map((registration) => {
     const observed = input.sources.find((source) => source.registrationId === registration.id);
     const explanation = getCatalogueCopyWithFallbacks(locale, registration.id);
     catalogueFallbacks.push(...explanation.translationFallbacks);
@@ -354,6 +398,7 @@ export function buildPrivacyResponseReport(input: {
       reviewContact: context.reviewContact,
       recipientSummary: reportedRecipientSummary,
       translationFallbacks,
+      shortLivedCategories: shortLived.map((registration) => registration.id),
       sources: processingSources,
     },
   };

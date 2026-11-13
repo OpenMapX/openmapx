@@ -68,7 +68,7 @@ Named-volume backups do not capture arbitrary bind-mounted data.
 :::caution[Save configuration and recovery material separately]
 
 Snapshots do not contain `infra/docker/.env`, host secret files, the external
-erasure journal, service-selection/configuration generations or release evidence.
+erasure journal or service-selection/configuration generations.
 Protect recovery copies of the configuration actually used by your deployment,
 including generated credentials and any external secret manager records.
 `BETTER_AUTH_SECRET` protects authentication material; `OPENMAPX_SECRETS_KEY`
@@ -116,24 +116,17 @@ copies. The local scheduler cannot delete objects in storage it does not control
 boundaries in detail.
 :::
 
-## Privacy access review
+## Personal data in backups
 
-Backups are not automatically searched for every Article 15 request. The
-privacy queue exposes a trusted, path-free inventory and records a review for
-each snapshot family. A reviewer compares its creation time with the request
-cutoff and live snapshot, then records `no_material_difference`, `extract`, or
-an honest unavailable reason. Unsupported manifests and changed files
-are never extracted.
+Backups are kept for up to `BACKUP_RETENTION_DAYS` and are used only to recover
+from failure. They are not searched automatically for an access request, and no
+per-person extraction runs from them. The privacy page and the export's
+response report state this to the people whose data you hold.
 
-An approved extraction uses fixed, version-compatible collectors in an isolated
-scratch environment without external network access. It never restores into production or
-mounts production volumes, secrets, the erasure-journal key, artifact keys or
-the Docker socket. The source part is streamed directly into the encrypted
-case artifact and the scratch database, containers, network and volumes are
-cleaned through monitored success, failure, timeout and restart paths. Cleanup
-can fail; investigate it instead of assuming physical removal. Readiness requires
-healthy cleanup, backup-review capability and current independent approvals.
-Individual case review tasks must also be resolved before assembly.
+The operator handles a person's request for data held in backups manually.
+Requests arrive through the published data-request contact, and the case keeps
+a retained-backup source task that the operator resolves and records. Never
+restore a backup into production to answer such a request.
 
 ## Creating a backup
 

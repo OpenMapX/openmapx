@@ -99,35 +99,13 @@ COPY --from=deps /app ./
 COPY --exclude=*/package.json packages/ packages/
 COPY integrations/ integrations/
 COPY apps/api/ apps/api/
-# The privacy source fingerprint is computed inside this build stage. Copy
-# every reviewed external source boundary with its repository-relative path so
-# the strict fingerprint is identical to a local build and fails if a required
-# input is removed.
-COPY apps/ops-agent/src/ apps/ops-agent/src/
-COPY apps/ops-agent/Dockerfile apps/ops-agent/package.json apps/ops-agent/tsconfig.json apps/ops-agent/
-COPY scripts/build-runtime-bundles.mjs scripts/module-specifiers.mjs scripts/
-COPY .github/workflows/docker.yml .github/workflows/product-release.yml .github/workflows/
-COPY apps/web/src/app/(legal)/ apps/web/src/app/(legal)/
-COPY apps/web/src/app/admin/(full-admin)/privacy-setup/ apps/web/src/app/admin/(full-admin)/privacy-setup/
-COPY apps/web/src/components/admin/settings/ apps/web/src/components/admin/settings/
-COPY apps/web/src/components/admin/privacy/ apps/web/src/components/admin/privacy/
-COPY apps/web/src/components/admin/AdminSidebar.tsx apps/web/src/components/admin/AdminSidebar.tsx
-COPY apps/web/src/app/admin/privacy/ apps/web/src/app/admin/privacy/
-COPY apps/web/src/app/auth/privacy/ apps/web/src/app/auth/privacy/
-COPY apps/web/src/app/settings/privacy/ apps/web/src/app/settings/privacy/
-COPY apps/web/src/components/auth/AuthDialog.tsx apps/web/src/components/auth/AuthDialog.tsx
-COPY apps/web/src/components/auth/PrivacyDataSection.tsx apps/web/src/components/auth/PrivacyDataSection.tsx
-COPY scripts/check-subject-data.ts scripts/check-subject-data.ts
-COPY scripts/validate-privacy-release.mjs scripts/validate-privacy-release.mjs
-COPY scripts/product-release-config.mjs scripts/product-release-plan.mjs scripts/product-release.mjs scripts/product-release-io.mjs scripts/
-COPY services/ services/
 COPY tsconfig.base.json ./
 COPY turbo.json ./
 
 WORKDIR /app/apps/api
 # The dependency stage already installed the reviewed lockfile with --frozen-lockfile.
 # pnpm otherwise performs an implicit, unfrozen install after workspace COPYs,
-# mutating the lockfile that the release fingerprint must identify exactly.
+# mutating the lockfile the image was built from.
 RUN --network=none pnpm --config.verify-deps-before-run=false build
 
 # Production image

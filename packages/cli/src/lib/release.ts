@@ -217,16 +217,12 @@ export async function resolveReleaseCandidate(
   }
 }
 
-/** Bootstrap selection also acquires its pinned privacy helper as before. */
+/** The release manifest the configured selection resolves to. */
 export async function resolveReleaseManifest(
   docker: ReleaseDockerRunner = defaultDocker,
   infraDir = repoPaths().infraDir,
 ): Promise<ReleaseManifest> {
   const { manifest } = await resolveReleaseCandidate(docker, infraDir);
-  expectOk(
-    await docker(["pull", manifest.images["privacy-backup"]]),
-    `docker pull ${manifest.images["privacy-backup"]}`,
-  );
   return manifest;
 }
 
@@ -268,7 +264,7 @@ export async function checkRelease(
   }
 }
 
-/** Write the overlay and its evidence atomically into the agent's release state. */
+/** Write the overlay atomically into the agent's release state. */
 export function writeReleaseOverlay(manifest: ReleaseManifest, opts: ReleaseStateLocation = {}) {
   return writeReleaseComposeArtifacts(manifest, opts.infraDir ?? repoPaths().infraDir, {
     uid: opts.uid,

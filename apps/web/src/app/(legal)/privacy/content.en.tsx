@@ -53,6 +53,8 @@ export default function PrivacyContent({
     ? legal.supervisoryAuthorityUrl
     : supervisoryAuthorityUrlEnv;
   const serverLogRetentionDays = legal ? legal.serverLogRetentionDays : serverLogRetentionDaysEnv;
+  // Backup retention is a platform setting only app-api reports.
+  const backupRetentionDays = legal ? legal.backupRetentionDays : null;
   const T = privacyTitles("en");
 
   return (
@@ -67,7 +69,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: November 4, 2026
+        Last updated: November 13, 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -1185,11 +1187,14 @@ export default function PrivacyContent({
           </li>
           <li>
             <Typography>
-              <strong>Backups</strong> — account and synchronized content that existed when a
-              database backup was created may remain until the configured backup retention period
-              expires (30 days by default). Deleting live data does not rewrite an archive; a
-              pseudonymous erasure journal is replayed during restore so a deleted account is not
-              brought back.
+              <strong>Backups</strong> —{" "}
+              {backupRetentionDays !== null
+                ? `backups are kept for up to ${backupRetentionDays} days under the configured backup retention`
+                : "backups are kept for the backup retention period the operator configures (30 days by default)"}{" "}
+              and are used only to recover from failure, not for any other processing. Data deleted
+              or changed recently may remain in backups until they expire: deleting live data does
+              not rewrite a backup. A restore replays a pseudonymous erasure journal, so a deleted
+              account stays deleted. To ask about your data in backups, write to {email}.
             </Typography>
           </li>
           <li>

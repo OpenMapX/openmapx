@@ -596,16 +596,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   `ghcr.io/openmapx/${image}@sha256:${"9".repeat(64)}`,
                 ]),
               ),
-              privacyReleaseValidation: {
-                version: 1,
-                sourceBuildFingerprint: "f".repeat(64),
-                validatedAt: "2026-10-30T00:00:00.000Z",
-                checks: {
-                  translationsConsistent: true,
-                  openApiConsistent: true,
-                  policyConsistent: true,
-                },
-              },
               ...releaseProvenance(),
             }),
           );
@@ -728,23 +718,29 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               Config: {
                 Image: row.ConfigImage,
                 Labels: row.Labels,
-                Env: Object.entries(spec.environment ?? {}).map(
-                  ([key, value]) => `${key}=${value}`,
+                // The wrong-configuration case runs an API container whose
+                // environment no longer matches the checked release's Compose
+                // definition; the Data Manager before it still matches.
+                Env: Object.entries(spec.environment ?? {}).map(([key, value]) =>
+                  checkedRelease &&
+                  version === "launch-native-release-wrong-config" &&
+                  id === "app-api"
+                    ? `${key}=${value}-changed`
+                    : `${key}=${value}`,
                 ),
               },
               HostConfig: {
                 Memory: Number(limits?.memory ?? 0),
                 NanoCpus: Math.round(Number(limits?.cpus ?? 0) * 1e9),
               },
-              Mounts:
-                checkedRelease && version !== "launch-native-release-wrong-config"
-                  ? (spec.configs ?? []).map((mount: { source: string; target?: string }) => ({
-                      Type: "bind",
-                      Source: config.configs[mount.source].file,
-                      Destination: mount.target ?? `/${mount.source}`,
-                      RW: false,
-                    }))
-                  : [],
+              Mounts: checkedRelease
+                ? (spec.configs ?? []).map((mount: { source: string; target?: string }) => ({
+                    Type: "bind",
+                    Source: config.configs[mount.source].file,
+                    Destination: mount.target ?? `/${mount.source}`,
+                    RW: false,
+                  }))
+                : [],
             };
             host.setRuntimeInspections(inspections);
           });

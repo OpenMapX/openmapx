@@ -135,7 +135,7 @@ export interface AdministrativeReleaseRuntimeOptions {
   uid?: number;
 }
 
-export interface ParsedBackupManifest {
+interface ParsedBackupManifest {
   name: string;
   createdAt: string;
   expiresAt?: string;
@@ -162,15 +162,6 @@ export interface ParsedBackupManifest {
       schemaContract: string;
     };
   };
-}
-
-export interface VerifiedPrivacyBackupInput {
-  serviceId: string;
-  volumeId: string;
-  file: string;
-  mode: "tar" | "pg_dump";
-  sizeBytes: number;
-  sha256: string;
 }
 
 interface DataAuthorityService {
@@ -394,7 +385,7 @@ function corruptEntry(
   };
 }
 
-export function inspectBackupInventory(rootDir: string): OpsResultFor<"backup.list"> {
+function inspectBackupInventory(rootDir: string): OpsResultFor<"backup.list"> {
   const root = backupRoot(rootDir);
   if (!strictDirectory(root)) return { backups: [], warningCount: 0 };
   const entries = listDescriptorAnchoredDirectory(backupRoot(rootDir), [], {
@@ -479,79 +470,6 @@ export function inspectBackupInventory(rootDir: string): OpsResultFor<"backup.li
       right.createdAt.localeCompare(left.createdAt) || left.backupId.localeCompare(right.backupId),
   );
   return { backups, warningCount };
-}
-
-/**
- * Re-open one format-2 backup and verify every declared member while the
- * caller's backup-store lease is held. This helper is intentionally scoped to
- * the ops process: its returned filenames are never serialized through the
- * public inventory or privacy API.
- */
-export function readVerifiedPrivacyBackupInputs(
-  rootDir: string,
-  backupId: string,
-  expectedManifestDigest: string,
-): { manifest: ParsedBackupManifest; inputs: VerifiedPrivacyBackupInput[] } {
-  assertBackupId(backupId);
-  if (!/^[a-f0-9]{64}$/.test(expectedManifestDigest)) throw new Error("Backup authority rejected");
-  const manifest = parseManifest(rootDir, backupId);
-  if (manifest.manifestDigest !== expectedManifestDigest) {
-    throw new Error("Backup authority rejected");
-  }
-  const inputs: VerifiedPrivacyBackupInput[] = [];
-  for (const service of manifest.services) {
-    for (const volume of service.volumes) {
-      const measured = hashDescriptorAnchoredFile(backupRoot(rootDir), [backupId, volume.file], {
-        maximumBytes: Number.MAX_SAFE_INTEGER,
-        expectedBytes: volume.sizeBytes,
-        expectedSha256: volume.sha256,
-      });
-      if (measured.sizeBytes !== volume.sizeBytes || measured.sha256 !== volume.sha256) {
-        throw new Error("Backup authority rejected");
-      }
-      inputs.push({
-        serviceId: service.id,
-        volumeId: volume.name,
-        file: volume.file,
-        mode: volume.mode,
-        sizeBytes: volume.sizeBytes,
-        sha256: volume.sha256,
-      });
-    }
-  }
-  return { manifest, inputs };
-}
-
-export async function inspectPrivacyBackupLease(
-  rootDir: string,
-  backupId: string,
-  expectedManifestDigest: string,
-  signal: AbortSignal,
-): Promise<{
-  backupId: string;
-  manifestDigest: string;
-  platformVersion: string;
-  formatVersion: 2;
-  verified: true;
-  release: () => void;
-}> {
-  if (signal.aborted) throw new Error("backup inspection aborted");
-  const lock = await acquireBackupStoreLock(rootDir);
-  try {
-    if (signal.aborted) throw new Error("backup inspection aborted");
-    const verified = readVerifiedPrivacyBackupInputs(rootDir, backupId, expectedManifestDigest);
-    return {
-      backupId,
-      manifestDigest: verified.manifest.manifestDigest,
-      platformVersion: verified.manifest.openmapxVersion,
-      formatVersion: 2,
-      verified: true,
-      release: lock.release,
-    };
-  } catch (error) {
-    lock.release();
-    throw error;
-  }
 }
 
 export async function inspectBackupAuthority(
@@ -817,8 +735,7 @@ export function createDefaultReleaseEffects(
         : {}),
     };
   };
-  const { inspectImageId, observePinnedImage, inspectAgentHelper } =
-    createImageInspection(runDocker);
+  const { inspectImageId, observePinnedImage } = createImageInspection(runDocker);
   return {
     initialize: async () => {
       await inspectRelease();
@@ -958,19 +875,14 @@ export function createDefaultReleaseEffects(
                 context,
               )
             : undefined);
-        const helper =
-          serviceId === "ops-agent" && containerId
-            ? await inspectAgentHelper(containerId, context)
-            : undefined;
         const state =
           !dockerReachable || !composeReady || !pinnedImage || !observed
             ? "unknown"
             : !containerId
               ? "not_running"
-              : pin.matches === undefined || (serviceId === "ops-agent" && !helper)
+              : pin.matches === undefined
                 ? "unknown"
-                : pin.matches &&
-                    (serviceId !== "ops-agent" || helper === manifest?.images["privacy-backup"])
+                : pin.matches
                   ? "current"
                   : "update_available";
         services.push({

@@ -1,23 +1,14 @@
 "use client";
 
-import RefreshIcon from "@mui/icons-material/Refresh";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
-import Divider from "@mui/material/Divider";
 import Paper from "@mui/material/Paper";
-import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo } from "react";
-import { PrivacyApprovalForm } from "@/components/admin/privacy/PrivacyApprovalForm";
-import {
-  PrivacyReadinessChecklist,
-  type PrivacyReadinessReport,
-} from "@/components/admin/privacy/PrivacyReadinessChecklist";
 import {
   type ResolvedSetting,
   type SettingsEditorSection,
@@ -25,13 +16,11 @@ import {
   SystemSettings,
 } from "@/components/admin/settings/SystemSettings";
 import { AdminPageHeader } from "@/components/admin/shared/AdminPageHeader";
-import { useEnv } from "@/integration-api/runtime/EnvProvider";
 
-const STEP_IDS = ["operator", "notifications", "retention", "reviews"] as const;
+const STEP_IDS = ["operator", "notifications", "retention"] as const;
 
 export function PrivacySetupPage() {
   const t = useTranslations("privacySetup");
-  const env = useEnv();
   const field = useSearchParams()?.get("field");
   const sections = useMemo<SettingsEditorSection[]>(
     () => [
@@ -107,18 +96,6 @@ export function PrivacySetupPage() {
     [t],
   );
 
-  const readiness = useQuery<PrivacyReadinessReport>({
-    queryKey: ["privacy", "admin", "readiness", env.apiUrl],
-    queryFn: async () => {
-      const response = await fetch(`${env.apiUrl}/api/privacy/admin/readiness`, {
-        credentials: "include",
-        cache: "no-store",
-      });
-      if (!response.ok) throw new Error("readiness unavailable");
-      return response.json();
-    },
-  });
-
   return (
     <Stack sx={{ gap: 2 }}>
       <AdminPageHeader title={t("title")} subtitle={t("subtitle")} />
@@ -154,77 +131,7 @@ export function PrivacySetupPage() {
         settingText={settingText}
         subgroupMeta={subgroupMeta}
         text={editorText}
-        onSettingsSaved={async () => {
-          await readiness.refetch();
-        }}
       />
-
-      <Paper id="reviews" variant="outlined" sx={{ p: { xs: 1.5, sm: 2 } }}>
-        <Stack sx={{ gap: 1.5 }}>
-          <Stack
-            direction={{ xs: "column", sm: "row" }}
-            useFlexGap
-            sx={{ gap: 1, alignItems: { sm: "flex-start" } }}
-          >
-            <Stack sx={{ flex: 1, gap: 0.25 }}>
-              <Typography component="h2" variant="h6">
-                {t("steps.reviews.title")}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {t("steps.reviews.description")}
-              </Typography>
-            </Stack>
-            <Button
-              size="small"
-              startIcon={<RefreshIcon />}
-              disabled={readiness.isFetching}
-              onClick={() => void readiness.refetch()}
-            >
-              {t("readiness.refresh")}
-            </Button>
-          </Stack>
-
-          {readiness.isLoading ? (
-            <Stack sx={{ gap: 1 }}>
-              {[1, 2, 3].map((item) => (
-                <Skeleton key={item} variant="rounded" height={72} />
-              ))}
-            </Stack>
-          ) : readiness.data ? (
-            <PrivacyReadinessChecklist readiness={readiness.data} canConfigure />
-          ) : (
-            <Alert
-              severity="error"
-              action={
-                <Button color="inherit" size="small" onClick={() => void readiness.refetch()}>
-                  {t("readiness.retry")}
-                </Button>
-              }
-            >
-              {t("readiness.loadFailed")}
-            </Alert>
-          )}
-          {readiness.data && (
-            <>
-              <Divider />
-              <Stack sx={{ gap: 0.25 }}>
-                <Typography component="h3" variant="subtitle1" sx={{ fontWeight: 700 }}>
-                  {t("approval.title")}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {t("approval.description")}
-                </Typography>
-              </Stack>
-              <PrivacyApprovalForm
-                evidenceVersion={readiness.data.evidenceVersion}
-                onRecorded={async () => {
-                  await readiness.refetch();
-                }}
-              />
-            </>
-          )}
-        </Stack>
-      </Paper>
     </Stack>
   );
 }

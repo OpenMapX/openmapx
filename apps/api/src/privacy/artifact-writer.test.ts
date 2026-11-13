@@ -22,22 +22,12 @@ afterEach(async () => {
 });
 
 describe("PrivacyArchiveWriter", () => {
-  it("maps only registered historical OpenMapX backup members", () => {
-    expect(archivePathForLogicalId("backup-openmapx-auth-accounts")).toBe(
-      "openmapx-data-export/article-15/history/openmapx/auth-accounts.jsonl",
+  it("maps no retained-backup history members", () => {
+    expect(archivePathForLogicalId("backup-openmapx-auth-accounts")).toBeNull();
+    expect(archivePathForLogicalId(`backup-${"a".repeat(64)}-openmapx-auth-accounts`)).toBeNull();
+    expect(archivePathForLogicalId("dawarich-account")).toBe(
+      "openmapx-data-export/article-15/timeline/dawarich/account.json",
     );
-    expect(archivePathForLogicalId("backup-openmapx-portable-saved-places")).toBe(
-      "openmapx-data-export/portable/history/openmapx/saved-places.jsonl",
-    );
-    expect(archivePathForLogicalId("backup-openmapx-secrets")).toBeNull();
-    const reference = "a".repeat(64);
-    expect(archivePathForLogicalId(`backup-${reference}-openmapx-auth-accounts`)).toBe(
-      `openmapx-data-export/article-15/history/${reference}/openmapx/auth-accounts.jsonl`,
-    );
-    expect(archivePathForLogicalId(`backup-${reference}-dawarich-portable-areas`)).toBe(
-      `openmapx-data-export/portable/history/${reference}/dawarich/areas.jsonl`,
-    );
-    expect(archivePathForLogicalId(`backup-${reference}-openmapx-secrets`)).toBeNull();
   });
 
   it("uses the pinned ZipArchive and streams a bounded ZIP64 archive", async () => {
