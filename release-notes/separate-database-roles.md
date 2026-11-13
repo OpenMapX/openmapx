@@ -17,15 +17,30 @@ updates both roles on every start. `POSTGRES_PASSWORD` remains the superuser's
 password, used only by PostGIS administration and the CLI's backups and
 restores.
 
-Event triggers keep each role's code out of the other's sessions and out of
-the superuser's: data-manager writes no code, the API names its functions
-`openmapx_*`, and check constraints may call only built-in immutable or stable
-functions. Martin's tile functions now run as `openmapx_tiles_owner`, which is no
-superuser and may read only the OpenConditions tables a traffic tile needs;
-PostGIS grants that access on each start. A migration grants data-manager's
-role its tables. Database backups now keep
-each object's owner and grants, and a restore keeps the live database's owner
-and database-level grants.
+Data-manager's code never runs with the API's or the superuser's rights. An
+event trigger lets data-manager create only tables, indexes, sequences, its own
+schemas and views that run no code, and refuses extensions, functions, types,
+domains, rules, triggers, policies and grants. The API may create only its two
+schemas and no extension or domain. Martin's tile functions now run as
+`openmapx_tiles_owner`, which is no superuser and only reads OpenConditions'
+tables; PostGIS grants that access on each start. A migration grants
+data-manager's role its tables.
+
+Database backups are now `pg_dump` archives in PostgreSQL's custom format
+(`<service>__<volume>.dump`) that keep each object's owner and grants. A
+restore recreates every object, and loads every table, in a session of the
+role that owns it, so no role's check constraints, defaults or index
+expressions run as the superuser, and it keeps the live database's owner and
+database-level grants. The CLI refuses to restore an older plain-SQL backup
+(`.sql.gz`) of the OpenMapX database; other services' older backups still
+restore.
+
+A compromised API can still run code as data-manager, through a trigger,
+default or policy on the `data_manager` tables it owns, and can make the tile
+function run its code as `openmapx_tiles_owner` by adding a PostGIS function
+to `public`; neither gives it superuser rights.
+[Database roles](../docs/docs/install/configuration.md#database-roles) lists
+these limits.
 
 The shared `DATA_MANAGER_AUTH_TOKEN` is gone. The API, the operations agent
 (with the CLI commands it runs) and the CLI on the host each present their own
@@ -47,6 +62,9 @@ must use the host CLI's token file.
 
 Community services that were configured with the superuser's connection URL
 keep working, but should not: they can read and change the whole platform.
+
+Scripts that read the backup's `.sql.gz` file must read the `.dump` archive
+with `pg_restore` instead.
 
 ## Required action
 

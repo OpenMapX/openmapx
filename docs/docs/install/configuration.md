@@ -89,30 +89,55 @@ before it reports healthy.
   ambient places). The API can read those schemas. Data-manager has no access to
   accounts, administrative jobs or saved configuration.
 
-Code one role writes must never run with another role's rights. PostGIS
-installs two event triggers that enforce this for every role except the
-superuser:
+Data-manager is the least trusted of the two: its code must never run with the
+API's or the superuser's rights. Two structural rules keep it that way:
 
-- Data-manager may create no functions, procedures, aggregates, operators,
-  casts, domains, types, rules, triggers or row-level policies, may name schemas
-  only after its indexes, and its views may contain no function call or type
-  coercion and read only its own schemas.
-- The API may create only the schemas `data_manager` and `drizzle`, enum and
-  composite types, triggers, and functions whose names start with `openmapx_`,
-  so no call to a built-in or PostGIS function can resolve to its code. It may
-  create no procedures, aggregates, operators, casts, domains, rules or
-  row-level policies.
-- Check constraints and generated columns, which run in whichever session
-  writes a row, including the superuser's during a restore, may call only the
-  superuser's immutable or stable functions.
+- An event trigger installed by PostGIS lets data-manager create, change and
+  drop only tables, indexes, sequences, schemas named after its indexes, and
+  views. It refuses everything else, including extensions, functions,
+  procedures, operators, casts, domains, types, rules, triggers, row-level
+  policies, grants and comments. Its views may only select, join and filter
+  data-manager's own relations, comparing with PostgreSQL's built-in operators,
+  so a view the API reads runs no data-manager code.
+- A check constraint, default, generated column or index expression runs in the
+  session that writes the row or builds the index. Only data-manager writes its
+  tables, and a backup restore recreates every object, and loads every table,
+  in a session of the role that owns it (see
+  [Backup & restore](../administration/backup-and-restore.md#restoring)).
 
-PostGIS's own superuser SQL and the CLI's restore steps search only the system
-catalogs (the restore's load uses the dump's own empty search path), so no
-object in `public` can stand in for a built-in they call. The
-CLI changes API tables (`openmapx users`, the erasure replay and the closing of
-restored jobs after a restore) as `openmapx_api`, so the API's triggers never run
-with superuser rights. Make your own changes to API tables the same way:
+The API may create only the schemas `data_manager` and `drizzle`, so it cannot
+take a name that data-manager, the tile server or the superuser trusts. It may
+install no extension, and no domain, whose check a restoring superuser would run
+while it reads a value. PostGIS's own superuser SQL and the CLI's restore steps
+search only the system catalogs, so no object the API creates in `public` can
+stand in for a built-in they call. The CLI changes API tables (`openmapx users`,
+the erasure replay and the closing of restored jobs after a restore) as
+`openmapx_api`. Make your own changes to API tables the same way:
 `docker exec -it postgis psql -U openmapx_api -d openmapx`.
+
+These guarantees have known limits:
+
+- The API owns the `data_manager` tables that data-manager writes, so a
+  compromised API can run code as data-manager through a trigger, rule, policy
+  or default on them. It already reads data-manager's schemas; it gains
+  data-manager's right to change them.
+- The tile function finds PostGIS through `public`, which the API owns. A
+  compromised API can add a PostGIS function there that a tile calls instead,
+  which runs as `openmapx_tiles_owner`: it can read the OpenConditions tables
+  that role reads, or break traffic tiles, but never act as the superuser.
+  Moving PostGIS into a schema the API cannot write would close this, but
+  PostGIS cannot be moved in place: it would have to be reinstalled, with every
+  spatial column and index that depends on it, and the new schema added to
+  every role's search path.
+- A superuser session of your own that reads or writes an object a role owns,
+  such as a view, or a table with a trigger, default or check constraint, runs
+  that role's code with superuser rights. Connect as the owning role instead.
+- PostGIS grants every role read access to its catalogue tables
+  (`spatial_ref_sys`, `geometry_columns`, `geography_columns`,
+  `topology.topology` and `topology.layer`).
+- OpenConditions installed after PostGIS started needs a PostGIS restart before
+  traffic tiles work. Until then tiles fail with a permission error, and nothing
+  runs as the superuser.
 
 There are no environment variables for these passwords. To change one, delete
 its file, render again and restart PostGIS, `app-api` and `data-manager`.
