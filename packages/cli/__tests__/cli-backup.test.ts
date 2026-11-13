@@ -1272,15 +1272,16 @@ describe("backup volume modes", () => {
     await restoreBackup({ rootDir: tmp, name: "protected-restore", stopRunning: true });
 
     const calls = mockedCommandCalls();
+    const planned = calls.findIndex(([, args]) => args.includes("rolcanlogin"));
     const stopApi = calls.findIndex(([, args]) => args.includes(" stop app-api"));
-    const restore = calls.findIndex(
-      ([, args]) => args.includes(" psql ") && !args.includes(" -At "),
-    );
+    const restore = calls.findIndex(([, args]) => args.includes(" createdb "));
     const replay = calls.findIndex(([, args]) => args.includes(" psql ") && args.includes(" -At "));
     const tar = calls.findIndex(([, args]) => args.includes("openmapx_openmapx-files:/target"));
     const startApi = calls.findIndex(([, args]) => args.includes(" start app-api"));
 
-    expect(stopApi).toBeGreaterThanOrEqual(0);
+    // Every database restore is planned before anything is stopped.
+    expect(planned).toBeGreaterThanOrEqual(0);
+    expect(stopApi).toBeGreaterThan(planned);
     expect(restore).toBeGreaterThan(stopApi);
     expect(tar).toBeGreaterThan(restore);
     expect(replay).toBeGreaterThan(tar);
@@ -1292,7 +1293,7 @@ describe("backup volume modes", () => {
     for (const [, args] of apiSessions) expect(args).toContain("-U openmapx_api");
   });
 
-  it("gives the recreated database the live database's owner and grants before the dump", async () => {
+  it("restores into a scratch database with the live owner and grants, then swaps it in", async () => {
     const dir = writeBackup("owner-restore", {
       name: "owner-restore",
       createdAt: new Date().toISOString(),
@@ -1330,6 +1331,7 @@ describe("backup volume modes", () => {
       inputs.push({ args: args.join(" "), input: options?.input });
       if (command === "docker" && args.includes("--tuples-only")) {
         expect(args.join(" ")).toContain("datname = 'timeline'");
+        expect(args.join(" ")).toContain("'timeline__restore'");
         return Promise.resolve({ exitCode: 0, stdout: `${settings}\n`, stderr: "" });
       }
       if (command === "docker" && args.includes("ps")) {
@@ -1341,11 +1343,22 @@ describe("backup volume modes", () => {
     await restoreBackup({ rootDir: tmp, name: "owner-restore", stopRunning: true });
 
     const read = inputs.findIndex(({ args }) => args.includes("--tuples-only"));
-    const drop = inputs.findIndex(({ args }) => args.includes(" dropdb "));
-    const create = inputs.findIndex(({ args }) => args.includes(" createdb "));
+    const drop = inputs.findIndex(({ args }) =>
+      args.endsWith(" dropdb -U postgres --if-exists timeline__restore"),
+    );
+    const create = inputs.findIndex(({ args }) =>
+      args.endsWith(" createdb -U postgres timeline__restore"),
+    );
     const apply = inputs.findIndex(({ input }) => input === `${settings}\n`);
     const dump = inputs.findIndex(
-      ({ args, input }) => args.endsWith(" timeline") && args.includes(" psql ") && !!input,
+      ({ args, input }) =>
+        args.endsWith(" timeline__restore") && args.includes(" psql ") && !!input,
+    );
+    const swap = inputs.findIndex(
+      ({ input }) => typeof input === "string" && input.includes("ALTER DATABASE %I RENAME"),
+    );
+    const dropPrevious = inputs.findIndex(({ args }) =>
+      args.endsWith(" --if-exists timeline__previous"),
     );
     expect(read).toBeGreaterThanOrEqual(0);
     expect(drop).toBeGreaterThan(read);
@@ -1353,10 +1366,17 @@ describe("backup volume modes", () => {
     expect(apply).toBeGreaterThan(create);
     expect(inputs[apply]?.args).toContain("--single-transaction");
     expect(dump).toBeGreaterThan(apply);
+    expect(swap).toBeGreaterThan(dump);
+    expect(inputs[swap]?.args).toContain("--single-transaction");
+    expect(dropPrevious).toBeGreaterThan(swap);
+    // The live database is never dropped, only renamed aside by the swap.
+    expect(inputs.some(({ args }) => args.endsWith(" timeline") && args.includes(" dropdb "))).toBe(
+      false,
+    );
     // Every superuser step but the load, whose dump sets its own search path,
     // searches only the catalogs.
     expect(inputs[dump]?.args).not.toContain("PGOPTIONS");
-    for (const step of [read, drop, create, apply])
+    for (const step of [read, drop, create, apply, swap, dropPrevious])
       expect(inputs[step]?.args).toContain("-e PGOPTIONS=-c search_path=pg_catalog,pg_temp");
   });
 
@@ -1474,6 +1494,76 @@ describe("backup volume modes", () => {
     },
   );
 
+  it("keeps the live database and restarts the API when a restore pass fails", async () => {
+    const dir = writeBackup("failed-pass", {
+      name: "failed-pass",
+      createdAt: new Date().toISOString(),
+      services: [
+        {
+          id: "postgis",
+          version: "1.0.0",
+          volumes: [
+            {
+              name: "openmapx-pgdata",
+              mode: "pg_dump",
+              file: "postgis.dump",
+              sizeBytes: 0,
+              postgresUser: "postgres",
+              postgresDb: "openmapx",
+            },
+          ],
+        },
+      ],
+    });
+    writeBackupFiles(dir, { "postgis.dump": "archive" });
+    vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+      if (command === "docker" && args.includes("ps")) {
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: '{"Service":"app-api"}\n{"Service":"postgis"}\n',
+          stderr: "",
+        });
+      }
+      if (command === "docker" && args.some((arg) => arg.includes("rolcanlogin"))) {
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: "1 1 postgres\n0 1 openmapx_api\n",
+          stderr: "",
+        });
+      }
+      if (command === "docker" && args.includes("--section=data")) {
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: "5950; 0 21090 TABLE DATA public t openmapx_api\n",
+          stderr: "",
+        });
+      }
+      if (command === "docker" && args.includes("openmapx-restore")) {
+        return Promise.resolve({ exitCode: 1, stdout: "", stderr: "permission denied" });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+    }) as never);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(
+      restoreBackup({ rootDir: tmp, name: "failed-pass", stopRunning: true }),
+    ).rejects.toThrow("permission denied");
+    errorSpy.mockRestore();
+    const calls = mockedCommandCalls().map(([, args]) => args);
+    const failed = calls.findIndex((args) => args.includes("openmapx-restore"));
+    expect(
+      calls.slice(failed + 1).some((args) => args.endsWith(" --if-exists openmapx__restore")),
+    ).toBe(true);
+    // No swap transaction follows the failed pass.
+    expect(calls.slice(failed + 1).some((args) => args.includes("--single-transaction"))).toBe(
+      false,
+    );
+    expect(calls.some((args) => args.endsWith(" openmapx") && args.includes(" dropdb "))).toBe(
+      false,
+    );
+    expect(calls.findIndex((args) => args.includes(" start app-api"))).toBeGreaterThan(failed);
+  });
+
   it("refuses a plain backup of the platform database written before its roles", async () => {
     const dir = writeBackup("plain-platform", {
       name: "plain-platform",
@@ -1498,7 +1588,11 @@ describe("backup volume modes", () => {
     writeBackupFiles(dir, { "postgis.sql.gz": "dump" });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
       if (command === "docker" && args.includes("ps")) {
-        return Promise.resolve({ exitCode: 0, stdout: '{"Service":"postgis"}\n', stderr: "" });
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: '{"Service":"app-api"}\n{"Service":"postgis"}\n',
+          stderr: "",
+        });
       }
       return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
     }) as never);
@@ -1508,7 +1602,9 @@ describe("backup volume modes", () => {
       restoreBackup({ rootDir: tmp, name: "plain-platform", stopRunning: true }),
     ).rejects.toThrow("predates the platform database's roles");
     errorSpy.mockRestore();
+    // Refused before anything was stopped: the API keeps serving.
     expect(mockedCommandCalls().some(([, args]) => args.includes(" dropdb "))).toBe(false);
+    expect(mockedCommandCalls().some(([, args]) => args.includes(" stop "))).toBe(false);
   });
 
   it("restarts and probes a mixed-mode database service before delayed erasure replay", async () => {
@@ -1664,7 +1760,8 @@ describe("backup volume modes", () => {
         Array.isArray(call[1]) &&
         call[1].includes("psql") &&
         !call[1].includes("-At") &&
-        typeof call[2]?.input === "string",
+        typeof call[2]?.input === "string" &&
+        !call[2].input.includes("ALTER DATABASE"),
     );
     expect(replayCall).toBeDefined();
     expect(replayCall?.[1]).not.toContain("deleted-user");

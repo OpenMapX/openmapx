@@ -297,6 +297,17 @@ export async function sha256File(filePath: string): Promise<string> {
 }
 
 /** Verify a file's size and digest immediately before any restore or privacy extraction reads it. */
+/** A volume's backup file, which must exist inside the backup directory. */
+function backupFilePath(backupDir: string, vol: BackupVolumeEntry): string {
+  // Defense-in-depth backstop for the filename validation in readBackupManifest.
+  const file = resolve(backupDir, vol.file);
+  if (!file.startsWith(`${resolve(backupDir)}/`)) {
+    throw new Error(`Refusing to read a backup file outside ${backupDir}: ${file}`);
+  }
+  if (!existsSync(file)) throw new Error(`Backup file missing: ${file}`);
+  return file;
+}
+
 export async function verifyBackupVolumeFile(
   volume: BackupVolumeEntry,
   backupDir: string,
@@ -1317,9 +1328,55 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
     );
   }
 
-  const stopped: string[] = [];
   const active = new Set(running);
   const startedForRestore = new Set<string>();
+  // Check every file and plan every database restore before anything is
+  // stopped or changed, so a backup that cannot be restored leaves the
+  // deployment as it was.
+  const plans = new Map<BackupVolumeEntry, coreServices.RestorePass[] | null>();
+  try {
+    for (const svc of pre.targets) {
+      for (const vol of svc.volumes) {
+        const file = backupFilePath(pre.backupDir, vol);
+        await verifyBackupVolumeFile(vol, pre.backupDir);
+        if (vol.mode === "tar" && !vol.resolvedName) {
+          throw new Error(
+            `Backup entry ${vol.name} is missing its resolved docker volume name — re-create the backup.`,
+          );
+        }
+        if (vol.mode !== "pg_dump") continue;
+        if (!vol.postgresUser || !vol.postgresDb) {
+          throw new Error(
+            `Backup entry ${vol.name} is missing postgres credentials — re-create the backup.`,
+          );
+        }
+        // pg_dump restores require a live server. A service can use this mode
+        // regardless of its id, so never infer the behavior from `postgis`.
+        if (!active.has(svc.id)) {
+          log.dim(`  starting ${svc.id} for restore…`);
+          await dockerCompose(ctx, ["start", svc.id]);
+          active.add(svc.id);
+          startedForRestore.add(svc.id);
+        }
+        plans.set(
+          vol,
+          await planDatabaseRestore(ctx, svc.id, file, vol.postgresUser, vol.postgresDb),
+        );
+      }
+    }
+  } catch (err) {
+    log.err(`Restore refused, nothing was changed: ${(err as Error).message}`);
+    for (const id of startedForRestore) {
+      try {
+        await dockerCompose(ctx, ["stop", id]);
+      } catch (e) {
+        log.warn(`Failed to stop ${id}: ${(e as Error).message}`);
+      }
+    }
+    throw err;
+  }
+
+  const stopped: string[] = [];
   const protectedDatabases: Array<{
     serviceId: string;
     postgresUser: string;
@@ -1345,32 +1402,25 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
       const tarVolumes = svc.volumes.filter((volume) => volume.mode === "tar");
 
       for (const vol of pgVolumes) {
-        // Defense-in-depth backstop for the filename validation in readBackupManifest.
-        const file = resolve(pre.backupDir, vol.file);
-        if (!file.startsWith(`${resolve(pre.backupDir)}/`)) {
-          throw new Error(`Refusing to read a backup file outside ${pre.backupDir}: ${file}`);
-        }
-        if (!existsSync(file)) throw new Error(`Backup file missing: ${file}`);
-        await verifyBackupVolumeFile(vol, pre.backupDir);
-
-        // pg_dump restores require a live server. A service can use this mode
-        // regardless of its id, so never infer the behavior from `postgis`.
+        const file = backupFilePath(pre.backupDir, vol);
         if (!active.has(svc.id)) {
           log.dim(`  starting ${svc.id} for restore…`);
           await dockerCompose(ctx, ["start", svc.id]);
           active.add(svc.id);
           if (!running.has(svc.id)) startedForRestore.add(svc.id);
         }
-        if (!vol.postgresUser || !vol.postgresDb) {
-          throw new Error(
-            `Backup entry ${vol.name} is missing postgres credentials — re-create the backup.`,
-          );
-        }
-        const user = vol.postgresUser;
-        const db = vol.postgresDb;
+        const user = vol.postgresUser ?? "";
+        const db = vol.postgresDb ?? "";
         log.dim(`  restoring database ${db} (user=${user}) from ${vol.file}…`);
-        if (db === "openmapx") protectedDatabaseSafe = false;
-        await pgRestoreFromFile(ctx, svc.id, file, user, db);
+        // The live database stays in place until the restored one replaces it.
+        await pgRestoreFromFile(ctx, svc.id, file, user, db, plans.get(vol) ?? null, {
+          before: () => {
+            if (db === "openmapx") protectedDatabaseSafe = false;
+          },
+          failed: () => {
+            if (db === "openmapx") protectedDatabaseSafe = true;
+          },
+        });
         if (db === "openmapx") {
           protectedDatabases.push({ serviceId: svc.id, postgresUser: user, database: db });
         }
@@ -1384,19 +1434,9 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
       }
 
       for (const vol of tarVolumes) {
-        const file = resolve(pre.backupDir, vol.file);
-        if (!file.startsWith(`${resolve(pre.backupDir)}/`)) {
-          throw new Error(`Refusing to read a backup file outside ${pre.backupDir}: ${file}`);
-        }
-        if (!existsSync(file)) throw new Error(`Backup file missing: ${file}`);
-        await verifyBackupVolumeFile(vol, pre.backupDir);
-        if (!vol.resolvedName) {
-          throw new Error(
-            `Backup entry ${vol.name} is missing its resolved docker volume name — re-create the backup.`,
-          );
-        }
+        backupFilePath(pre.backupDir, vol);
         log.dim(`  restoring volume ${vol.resolvedName} from ${vol.file}…`);
-        await tarRestoreFromFile(vol.resolvedName, pre.backupDir, vol.file);
+        await tarRestoreFromFile(vol.resolvedName ?? "", pre.backupDir, vol.file);
       }
     }
 
@@ -1459,138 +1499,153 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
   }
 }
 
+/**
+ * Checks a database backup against the live server before anything changes:
+ * the passes that restore a custom-format archive, or `null` for an older
+ * plain-SQL backup. Throws when the backup cannot be restored safely.
+ */
+async function planDatabaseRestore(
+  ctx: ComposeContext,
+  serviceId: string,
+  file: string,
+  user: string,
+  db: string,
+): Promise<coreServices.RestorePass[] | null> {
+  // Backups before the database roles hold plain SQL, which only a superuser
+  // session can load. Such a backup of the platform database cannot serve
+  // this release, whose roles must own their objects.
+  if (file.endsWith(".sql.gz")) {
+    if (db === "openmapx")
+      throw new Error(
+        `${file} predates the platform database's roles; restore it with the release that wrote it`,
+      );
+    return null;
+  }
+  coreServices.restoreDatabaseNames(db);
+  return planOwnerRestore(ctx, serviceId, file, user);
+}
+
+/** A superuser command in the database container that searches only the catalogs. */
+async function superuserCommand(
+  ctx: ComposeContext,
+  serviceId: string,
+  command: string[],
+  input?: string,
+): Promise<{ exitCode?: number; stdout?: string; stderr?: string }> {
+  return execa(
+    "docker",
+    [
+      ...ctx.composeArgs,
+      "exec",
+      "-T",
+      "-e",
+      `PGOPTIONS=${coreServices.SUPERUSER_PGOPTIONS}`,
+      serviceId,
+      ...command,
+    ],
+    {
+      ...cliProcessOptions(),
+      cwd: ctx.cwd,
+      reject: false,
+      ...(input === undefined ? {} : { input }),
+    },
+  );
+}
+
+/**
+ * Restores a database backup into a scratch database, then swaps it in for
+ * the live one. A pass that fails leaves the live database as it was and
+ * drops the scratch one. `swap.before` runs just before the live database is
+ * replaced, and `swap.failed` when the swap left it in place.
+ */
 async function pgRestoreFromFile(
   ctx: ComposeContext,
   serviceId: string,
   file: string,
   user: string,
   db: string,
+  passes: readonly coreServices.RestorePass[] | null,
+  swap: { before(): void; failed(): void },
 ): Promise<void> {
-  // Backups before the database roles hold plain SQL, which only a superuser
-  // session can load. Such a backup of the platform database cannot serve
-  // this release, whose roles must own their objects.
-  const plain = file.endsWith(".sql.gz");
-  if (plain && db === "openmapx") {
-    throw new Error(
-      `${file} predates the platform database's roles; restore it with the release that wrote it`,
-    );
-  }
-  // Every reason to refuse an archive is found before the live database is
-  // dropped.
-  const passes = plain ? [] : await planOwnerRestore(ctx, serviceId, file, user);
+  const { scratch, previous } = coreServices.restoreDatabaseNames(db);
+  const psql = (database: string, ...args: string[]) => [
+    "psql",
+    "-X",
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-U",
+    user,
+    "-d",
+    database,
+    ...args,
+  ];
+  const dropScratch = () =>
+    superuserCommand(ctx, serviceId, ["dropdb", "-U", user, "--if-exists", scratch]);
   // The backup holds the database's contents with their owners and grants,
-  // but not the database itself, so drop and create it first for a clean
-  // slate. The backup creates the extensions it uses.
-  //
-  // Nor does it hold the database's own owner and grants. Read them from
-  // the live database first and give them to the new one, so the roles
+  // but not the database itself, nor its own owner and grants. Read those
+  // from the live database and give them to the scratch one, so the roles
   // the deployment created (which live outside any database) keep their
   // access: the platform database stays the superuser's, and the API and
-  // data-manager keep the right to create schemas in it.
-  //
-  // These superuser sessions search only the catalogs, so nothing the API's
-  // role created in `public` can stand in for a built-in they call.
-  const settingsQuery = await execa(
-    "docker",
-    [
-      ...ctx.composeArgs,
-      "exec",
-      "-T",
-      "-e",
-      `PGOPTIONS=${coreServices.SUPERUSER_PGOPTIONS}`,
-      serviceId,
-      "psql",
-      "-X",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-U",
-      user,
-      "-d",
+  // data-manager keep the right to create schemas in it. A scratch database
+  // left by an interrupted restore is dropped first.
+  const settings = await superuserCommand(
+    ctx,
+    serviceId,
+    psql(
       "postgres",
       "--no-align",
       "--tuples-only",
       "-c",
-      coreServices.databaseSettingsQuery(db),
-    ],
-    { ...cliProcessOptions(), cwd: ctx.cwd, reject: false },
+      coreServices.databaseSettingsQuery(db, scratch),
+    ),
   );
-  if (settingsQuery.exitCode !== 0) {
-    throw new Error(`reading the database owner failed: ${settingsQuery.stderr ?? ""}`);
-  }
-  const settings = (settingsQuery.stdout ?? "").trim();
-
-  const drop = await execa(
-    "docker",
-    [
-      ...ctx.composeArgs,
-      "exec",
-      "-T",
-      "-e",
-      `PGOPTIONS=${coreServices.SUPERUSER_PGOPTIONS}`,
-      serviceId,
-      "dropdb",
-      "-U",
-      user,
-      "--if-exists",
-      db,
-    ],
-    { ...cliProcessOptions(), cwd: ctx.cwd, reject: false },
-  );
-  if (drop.exitCode !== 0) {
-    throw new Error(`dropdb failed: ${drop.stderr ?? ""}`);
-  }
-
-  const create = await execa(
-    "docker",
-    [
-      ...ctx.composeArgs,
-      "exec",
-      "-T",
-      "-e",
-      `PGOPTIONS=${coreServices.SUPERUSER_PGOPTIONS}`,
-      serviceId,
-      "createdb",
-      "-U",
-      user,
-      db,
-    ],
-    { ...cliProcessOptions(), cwd: ctx.cwd, reject: false },
-  );
-  if (create.exitCode !== 0) {
-    throw new Error(`createdb failed: ${create.stderr ?? ""}`);
-  }
-  if (settings) {
-    const apply = await execa(
-      "docker",
-      [
-        ...ctx.composeArgs,
-        "exec",
-        "-T",
-        "-e",
-        `PGOPTIONS=${coreServices.SUPERUSER_PGOPTIONS}`,
+  if (settings.exitCode !== 0)
+    throw new Error(`reading the database owner failed: ${settings.stderr ?? ""}`);
+  const leftover = await dropScratch();
+  if (leftover.exitCode !== 0) throw new Error(`dropdb failed: ${leftover.stderr ?? ""}`);
+  const create = await superuserCommand(ctx, serviceId, ["createdb", "-U", user, scratch]);
+  if (create.exitCode !== 0) throw new Error(`createdb failed: ${create.stderr ?? ""}`);
+  try {
+    const statements = (settings.stdout ?? "").trim();
+    if (statements) {
+      const apply = await superuserCommand(
+        ctx,
         serviceId,
-        "psql",
-        "-X",
-        "-v",
-        "ON_ERROR_STOP=1",
-        "--single-transaction",
-        "-U",
-        user,
-        "-d",
-        "postgres",
-      ],
-      { ...cliProcessOptions(), cwd: ctx.cwd, reject: false, input: `${settings}\n` },
-    );
-    if (apply.exitCode !== 0) {
-      throw new Error(`restoring the database owner failed: ${apply.stderr ?? ""}`);
+        psql("postgres", "--single-transaction"),
+        `${statements}\n`,
+      );
+      if (apply.exitCode !== 0)
+        throw new Error(`restoring the database owner failed: ${apply.stderr ?? ""}`);
     }
+    if (passes === null) await loadPlainDump(ctx, serviceId, file, user, scratch);
+    else await restoreAsOwners(ctx, serviceId, file, user, scratch, passes);
+  } catch (error) {
+    await dropScratch();
+    throw error;
   }
-
-  if (plain) {
-    await loadPlainDump(ctx, serviceId, file, user, db);
-    return;
+  swap.before();
+  const swapped = await superuserCommand(
+    ctx,
+    serviceId,
+    psql("postgres", "--single-transaction"),
+    coreServices.databaseSwapSql(db),
+  );
+  if (swapped.exitCode !== 0) {
+    swap.failed();
+    await dropScratch();
+    throw new Error(
+      `replacing database ${db} failed, and it was left as it was: ${swapped.stderr ?? ""}`,
+    );
   }
-  await restoreAsOwners(ctx, serviceId, file, user, db, passes);
+  const old = await superuserCommand(ctx, serviceId, [
+    "dropdb",
+    "-U",
+    user,
+    "--if-exists",
+    previous,
+  ]);
+  if (old.exitCode !== 0)
+    log.warn(`The replaced database is kept as ${previous}; drop it once you no longer need it.`);
 }
 
 /** Older backups: `gunzip <file> | docker compose exec -T <svc> psql -U <user> <db>`. */

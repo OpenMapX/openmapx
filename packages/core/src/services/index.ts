@@ -127,8 +127,10 @@ export type { RestorePass, RestoreSection } from "./database-roles";
 export {
   API_DATABASE_ROLE,
   databaseSettingsQuery,
+  databaseSwapSql,
   planOwnerRestore,
   RESTORE_ROLES_QUERY,
+  restoreDatabaseNames,
   restorePassCommand,
   restorePassPreamble,
   SUPERUSER_PGOPTIONS,

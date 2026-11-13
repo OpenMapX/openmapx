@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { planOwnerRestore, restorePassCommand, restorePassPreamble } from "../database-roles";
+import {
+  databaseSettingsQuery,
+  databaseSwapSql,
+  planOwnerRestore,
+  restoreDatabaseNames,
+  restorePassCommand,
+  restorePassPreamble,
+} from "../database-roles";
 
 const roles = [
   "1 1 postgres",
@@ -66,6 +73,32 @@ describe("planOwnerRestore", () => {
       ).toThrow("a role that cannot log in to restore it");
   });
 
+  it("refuses a role's code that would exist before an extension's script runs", () => {
+    const aheadOfPostgis = (entry: string) =>
+      listings.preData.replace(
+        "5; 3079 18937 EXTENSION - postgis ",
+        `${entry}\n5; 3079 18937 EXTENSION - postgis `,
+      );
+    expect(() =>
+      planOwnerRestore(
+        {
+          ...listings,
+          preData: aheadOfPostgis("400; 1255 40000 FUNCTION public st_x(text) openmapx_api"),
+        },
+        roles,
+      ),
+    ).toThrow("before an extension");
+    expect(
+      planOwnerRestore(
+        {
+          ...listings,
+          preData: aheadOfPostgis("401; 3456 40001 COLLATION public probe openmapx_api"),
+        },
+        roles,
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+
   it("refuses entries of a role the server lacks and lines it cannot read", () => {
     expect(() =>
       planOwnerRestore(
@@ -81,7 +114,10 @@ describe("planOwnerRestore", () => {
   it("hands pg_restore the entry list before the archive and logs in as the owner", () => {
     const pass = { role: "openmapx_api", section: "data", entries: [5950, 5952] } as const;
     expect(restorePassPreamble(pass)).toBe("5950;\n5952;\n\n");
-    expect(restorePassCommand(pass, "postgres", "openmapx").slice(4)).toEqual([
+    const command = restorePassCommand(pass, "postgres", "openmapx");
+    // Pinned at login over whatever defaults the role set for its sessions.
+    expect(command[1]).toContain("-c default_transaction_read_only=off");
+    expect(command.slice(6)).toEqual([
       "--single-transaction",
       "--exit-on-error",
       "-U",
@@ -92,5 +128,30 @@ describe("planOwnerRestore", () => {
     expect(restorePassCommand({ ...pass, role: null }, "postgres", "openmapx")).toContain(
       "postgres",
     );
+  });
+});
+
+describe("restoring into a scratch database", () => {
+  it("names the scratch and replaced databases beside the live one", () => {
+    expect(restoreDatabaseNames("openmapx")).toEqual({
+      scratch: "openmapx__restore",
+      previous: "openmapx__previous",
+    });
+    expect(() => restoreDatabaseNames("a".repeat(60))).toThrow("Unsafe database name");
+    expect(() => restoreDatabaseNames("bad name")).toThrow("Unsafe database name");
+  });
+
+  it("copies the live database's settings to the scratch one and swaps both in one go", () => {
+    const settings = databaseSettingsQuery("openmapx", "openmapx__restore");
+    expect(settings).toContain("WHERE d.datname = 'openmapx'");
+    expect(settings).toContain("'openmapx__restore'");
+    expect(
+      databaseSwapSql("openmapx"),
+    ).toBe(`SELECT format('ALTER DATABASE %I RENAME TO %I', 'openmapx', 'openmapx__previous')
+  WHERE EXISTS (SELECT FROM pg_database WHERE datname = 'openmapx')
+\\gexec
+SELECT format('ALTER DATABASE %I RENAME TO %I', 'openmapx__restore', 'openmapx')
+\\gexec
+`);
   });
 });

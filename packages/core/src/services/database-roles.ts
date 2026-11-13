@@ -39,9 +39,26 @@ trap 'rm -f "$list"' EXIT
 while IFS= read -r entry && [ -n "$entry" ]; do printf '%s\n' "$entry" >>"$list"; done
 pg_restore --use-list="$list" "$@"`;
 
+/**
+ * Session settings every restore pass needs, given at login so that they
+ * override whatever defaults a role has set for its own sessions, such as
+ * read-only transactions or short timeouts.
+ */
+const RESTORE_PASS_PGOPTIONS = [
+  "default_transaction_read_only=off",
+  "statement_timeout=0",
+  "lock_timeout=0",
+  "idle_in_transaction_session_timeout=0",
+  "transaction_timeout=0",
+]
+  .map((setting) => `-c ${setting}`)
+  .join(" ");
+
 /** Arguments, inside the database container, for one restore pass. */
 export function restorePassCommand(pass: RestorePass, superuser: string, db: string): string[] {
   return [
+    "env",
+    `PGOPTIONS=${RESTORE_PASS_PGOPTIONS}`,
     "bash",
     "-c",
     RESTORE_PASS_SCRIPT,
@@ -80,10 +97,12 @@ const ENTRYPOINT_ENTRIES = new Set([
  * So every entry is restored by a session that logs in as its owner, whose
  * code then runs with its owner's rights only.
  *
- * The superuser restores what only it can and what runs nothing: schemas,
- * as giving `public` to the API's role needs it, extensions, entries without
- * an owner such as casts, superusers' entries, and the tile function PostGIS
- * creates for its owner, which cannot log in. Any other entry of a role that
+ * The superuser restores what only it can: schemas, as giving `public` to
+ * the API's role needs it, entries without an owner such as casts,
+ * superusers' entries, and the tile function PostGIS creates for its owner,
+ * which cannot log in; none of these runs code when created. It also
+ * creates the extensions, whose scripts it runs before any role's code
+ * exists (see below). Any other entry of a role that
  * cannot log in, or of a role this server lacks, refuses the whole archive:
  * nothing but the superuser could restore it, and its code would then run
  * with superuser rights. Definitions keep their archive order, so each
@@ -127,7 +146,12 @@ export function planOwnerRestore(
           );
         const bySuperuser =
           !role || role.superuser || !role.login || match[2].startsWith("SCHEMA ");
-        return { id: Number(match[1]), role: bySuperuser ? null : owner };
+        return {
+          id: Number(match[1]),
+          description: match[2],
+          owner,
+          role: bySuperuser ? null : owner,
+        };
       });
   const passes: RestorePass[] = [];
   const inOrder = (section: RestoreSection, listing: string) => {
@@ -137,6 +161,20 @@ export function planOwnerRestore(
       else passes.push({ role, section, entries: [id] });
     }
   };
+  // An extension's script runs as the superuser and finds names through
+  // `public`, which the API owns. `pg_dump` sorts every extension before any
+  // role's function, operator, type or table, so no role's code exists yet
+  // when the scripts run; refuse an archive where that is not so. Grants,
+  // comments and collations run nothing.
+  const definitions = entries(listings.preData);
+  const lastExtension = definitions.findLastIndex(({ description }) =>
+    description.startsWith("EXTENSION "),
+  );
+  for (const { description, owner, role } of definitions.slice(0, Math.max(lastExtension, 0)))
+    if (role !== null && !/^(ACL|COMMENT|COLLATION|SECURITY LABEL) /.test(description))
+      throw new Error(
+        `The backup creates ${description}, owned by ${owner}, before an extension; it cannot be restored safely`,
+      );
   inOrder("pre-data", listings.preData);
   const rows = new Map<string | null, number[]>();
   for (const { id, role } of entries(listings.data))
@@ -147,21 +185,50 @@ export function planOwnerRestore(
 }
 
 /**
- * Statements that give a recreated database the live one's owner and
+ * Statements that give `target` the live database `db`'s owner and
  * database-level grants, which a `pg_dump` of its contents leaves out. Prints
- * nothing when the database does not exist.
+ * nothing when `db` does not exist.
  */
-export function databaseSettingsQuery(db: string): string {
-  if (!isSafePostgresIdentifier(db)) throw new Error("Unsafe database name");
+export function databaseSettingsQuery(db: string, target = db): string {
+  if (!isSafePostgresIdentifier(db) || !isSafePostgresIdentifier(target))
+    throw new Error("Unsafe database name");
   return `SELECT statement FROM (
-  SELECT 0 AS step, format('ALTER DATABASE %I OWNER TO %I;', d.datname, pg_get_userbyid(d.datdba)) AS statement
+  SELECT 0 AS step, format('ALTER DATABASE %I OWNER TO %I;', '${target}', pg_get_userbyid(d.datdba)) AS statement
     FROM pg_database d WHERE d.datname = '${db}'
   UNION ALL
-  SELECT 1, format('REVOKE ALL ON DATABASE %I FROM PUBLIC;', d.datname)
+  SELECT 1, format('REVOKE ALL ON DATABASE %I FROM PUBLIC;', '${target}')
     FROM pg_database d WHERE d.datname = '${db}' AND d.datacl IS NOT NULL
   UNION ALL
-  SELECT 2, format('GRANT %s ON DATABASE %I TO %s;', a.privilege_type, d.datname,
+  SELECT 2, format('GRANT %s ON DATABASE %I TO %s;', a.privilege_type, '${target}',
       CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE quote_ident(pg_get_userbyid(a.grantee)) END)
     FROM pg_database d CROSS JOIN LATERAL aclexplode(d.datacl) a WHERE d.datname = '${db}'
 ) settings ORDER BY step`;
+}
+
+/**
+ * The databases a restore of `db` uses beside it: the scratch database it
+ * restores into, and the name the live database takes while the restored one
+ * replaces it.
+ */
+export function restoreDatabaseNames(db: string): { scratch: string; previous: string } {
+  const names = { scratch: `${db}__restore`, previous: `${db}__previous` };
+  if (!isSafePostgresIdentifier(db) || names.previous.length > 63)
+    throw new Error("Unsafe database name");
+  return names;
+}
+
+/**
+ * One transaction, in another database, that moves the live database `db`
+ * aside, when it exists, and the restored scratch database into its place.
+ * Either both renames happen or neither does; it fails while a session is
+ * connected to either database.
+ */
+export function databaseSwapSql(db: string): string {
+  const { scratch, previous } = restoreDatabaseNames(db);
+  return `SELECT format('ALTER DATABASE %I RENAME TO %I', '${db}', '${previous}')
+  WHERE EXISTS (SELECT FROM pg_database WHERE datname = '${db}')
+\\gexec
+SELECT format('ALTER DATABASE %I RENAME TO %I', '${scratch}', '${db}')
+\\gexec
+`;
 }

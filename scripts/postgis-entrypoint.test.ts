@@ -276,6 +276,9 @@ describe("PostGIS entrypoint child ownership", () => {
       expect(roles).toContain(
         "ALTER DEFAULT PRIVILEGES FOR ROLE openmapx_data_manager GRANT SELECT ON TABLES TO openmapx_api;",
       );
+      expect(roles).toContain("ALTER ROLE openmapx_api RESET ALL;");
+      expect(roles).toContain("ALTER ROLE openmapx_data_manager RESET ALL;");
+      expect(f.read("tile-sync-sql")).toContain("ALTER ROLE openmapx_tiles_owner RESET ALL;");
       expect(roles).toContain("ALTER ROLE openmapx_api SET search_path = public;");
       expect(roles).toContain("ALTER ROLE openmapx_data_manager SET search_path = public;");
       expect(roles).toContain(
