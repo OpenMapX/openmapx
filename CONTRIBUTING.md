@@ -226,6 +226,7 @@ pnpm test:database ingestion         # isolated ingestion fixtures + Docker requ
 pnpm test:database export-restore    # migrated disposable PostGIS + Docker required
 pnpm test:database configuration-recovery # native configuration recovery
 pnpm test:database coordinator-recovery   # native coordinator recovery
+pnpm test:database crash-points      # process-level crash points (Linux, sudo)
 pnpm test:database                   # full union, serially
 pnpm test:database coordinator-recovery 1/4 # one complete scenario partition
 pnpm build                           # production app/service/package outputs
@@ -269,6 +270,64 @@ image="freikin/dawarich@$(node --input-type=module -e 'const { DAWARICH_SUPPORTE
 docker pull "$image"
 OPENMAPX_RUN_DAWARICH_EXPORT_TESTS=1 pnpm exec vitest run --project node apps/ops-agent/src/dawarich-subject-export.integration.test.ts
 ```
+
+### Crash-point suite
+
+`apps/api/src/services/__tests__/crash-points/` pins the update and control
+plane at boundaries that survive a rewrite of its internals. Each scenario
+installs a fresh host in a temporary directory with the real CLI
+(`compose release`, `compose render`, `compose up`), runs the API from source
+and the operations agent, configuration helper and data-manager as their
+runtime bundles, and injects faults only from outside: a fake Docker engine
+behind a `docker` shim on `PATH`, HTTP proxies between the roles, and role
+processes that are killed and restarted. Scenarios observe only HTTP answers,
+job and agent operation states, CLI exit codes, the Docker trace and data
+admission. They talk to the system only through `driver.ts`; a policy test
+(`scripts/crash-point-imports.test.ts`) refuses imports of the signed control
+layer, the agent's sources and the data-manager's sources. When the update
+system changes, only the driver may change; scenario files stay as they are.
+
+Each role runs in its own mount and PID namespace that reproduces its Compose
+bind mounts and user, so the suite needs Linux, passwordless `sudo`, `unshare`
+and `setpriv` (util-linux) and the Docker CLI with the Compose plugin (only
+`docker compose config` is run for real). It needs no Docker daemon. Each
+scenario creates and drops its own database and role on the server
+`DATABASE_URL` names, whose user must be allowed to create roles and databases.
+`OPENMAPX_RUN_CRASH_POINT_TESTS=1` turns a missing prerequisite into a failure;
+CI sets it. `OPENMAPX_CRASH_DEBUG=1` prints the provisioning steps and
+`OPENMAPX_CRASH_KEEP=1` keeps the host directory (role logs and the Docker
+trace are in its `work/`) and the database after a run.
+
+On macOS, or any machine without those prerequisites, run it in a disposable
+privileged Linux container with its own dependency install, never sharing the
+host's `node_modules`:
+
+```bash
+docker network create crash-net
+docker run -d --rm --name crash-pg --network crash-net \
+  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=openmapx_test \
+  ghcr.io/baosystems/postgis:18-3.6@sha256:dd7515b7d8b8b8bac3516a9c3e12584df5890b0864c29295c1b934ecd1db81a7
+docker run -d --init --privileged --name crash-dev --network crash-net node:24.22.2-bookworm sleep infinity
+docker exec crash-dev sh -c 'apt-get update -qq && apt-get install -y -qq sudo curl \
+  && arch=$(uname -m) \
+  && curl -fsSL "https://download.docker.com/linux/static/stable/$arch/docker-29.0.0.tgz" | tar -xz -C /tmp \
+  && cp /tmp/docker/docker /usr/local/bin/ \
+  && mkdir -p /usr/local/lib/docker/cli-plugins \
+  && curl -fsSL -o /usr/local/lib/docker/cli-plugins/docker-compose \
+       "https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-$arch" \
+  && chmod +x /usr/local/lib/docker/cli-plugins/docker-compose'
+docker exec crash-dev sh -c 'useradd -m runner && echo "runner ALL=(ALL) NOPASSWD:ALL" >/etc/sudoers.d/runner && mkdir /work && chown runner /work && corepack enable'
+git ls-files -co --exclude-standard | grep -v '^node_modules/' | COPYFILE_DISABLE=1 tar -cf - -T - \
+  | docker exec -i -u runner crash-dev tar -xf - -C /work
+docker exec -u runner -w /work crash-dev pnpm install --frozen-lockfile
+docker exec -u runner -w /work \
+  -e DATABASE_URL=postgresql://postgres:postgres@crash-pg:5432/openmapx_test \
+  crash-dev pnpm test:database crash-points
+docker rm -f crash-dev crash-pg && docker network rm crash-net
+```
+
+A tmpfs for `TMPDIR` inside the container (`mount -t tmpfs tmpfs /fast` as root,
+then `-e TMPDIR=/fast`) makes runs on Docker Desktop considerably faster.
 
 The group inventory lives in `scripts/database-test-groups.json`. The database CI
 contract discovers opt-in suites and checks that every suite has exactly one owner
