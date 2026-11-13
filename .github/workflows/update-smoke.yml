@@ -1,0 +1,62 @@
+name: Update smoke
+
+# Installs a release built from the checkout through a local registry and
+# updates it to later releases with an authenticated `system update`, also
+# through the failures the update system must contain
+# (scripts/ci/update-smoke.sh). It is expensive and not a required check, so
+# pull requests run it only when they touch what an update executes; main and
+# a nightly run cover everything else.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 4 * * *"
+  pull_request:
+    paths:
+      - packages/cli/**
+      - packages/core/src/services/**
+      - packages/core/src/build-artifacts/**
+      - packages/core/src/ops/**
+      - apps/ops-agent/**
+      - apps/api/src/services/**
+      - services/**
+      - infra/docker/**
+      - apps/*/Dockerfile
+      - scripts/ci/install-smoke.sh
+      - scripts/ci/update-smoke.sh
+      - .github/workflows/update-smoke.yml
+
+# A newer push replaces a running pull-request check; main and the nightly run
+# always finish.
+concurrency:
+  group: update-smoke-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+
+jobs:
+  update-smoke:
+    name: self-update and failed updates
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install, update and check the stack
+        run: bash scripts/ci/update-smoke.sh
