@@ -125,10 +125,13 @@ restore a backup into production to answer such a request.
 
 ### Manual backup export for a privacy request
 
-Run these steps on the deployment host. They restore one snapshot into a
-throwaway database that has no network, export the person from it, and remove
-everything again. Never restore into production, and never mount production
-secrets, the erasure journal or its key into the scratch container.
+Run these steps from the OpenMapX checkout on the deployment host. They
+restore one snapshot into a throwaway database that has no network, export the
+person from it, and remove everything again. Never restore into production,
+and never mount production secrets, the erasure journal or its key into the
+scratch container. The export reaches the scratch database through a bind-mounted
+Unix socket, which needs a Linux host running Docker Engine; Docker Desktop on
+macOS or Windows cannot connect through such a socket.
 
 1. **List the backups.** `pnpm openmapx backup list` prints each snapshot
    under `infra/docker/backups/` with its creation time.
@@ -142,27 +145,43 @@ secrets, the erasure journal or its key into the scratch container.
    sha256sum "$SNAPSHOT"/postgis__*.sql.gz   # must equal the manifest sha256
    ```
 
-3. **Start the scratch database.** Use the pinned production PostGIS image,
-   no network, the snapshot mounted read-only, and a private socket directory:
+3. **Start the scratch database.** Use the PostGIS image that production
+   runs. Its name, tag and digest are pinned in `services/postgis/service.json`
+   under `container.image`, `container.tag` and `container.digest`; read them
+   from there rather than copying a digest from this page:
 
    ```bash
-   SCRATCH=$(mktemp -d /srv/privacy-scratch.XXXXXX)
-   mkdir -m 0700 "$SCRATCH/socket"
+   POSTGIS_IMAGE=$(node -p 'const c = require("./services/postgis/service.json").container; `${c.image}:${c.tag}@${c.digest}`')
+   SCRATCH=$(mktemp -d /srv/privacy-scratch.XXXXXX)   # mode 0700, yours only
+   mkdir "$SCRATCH/socket"
    docker run -d --name openmapx-privacy-scratch --network none \
-     -e POSTGRES_PASSWORD="$(openssl rand -hex 16)" -e POSTGRES_DB=openmapx \
+     -e POSTGRES_PASSWORD="$(openssl rand -hex 16)" \
      -v openmapx-privacy-scratch-data:/var/lib/postgresql \
      -v "$PWD/$SNAPSHOT":/snapshot:ro \
      -v "$SCRATCH/socket":/var/run/postgresql \
-     ghcr.io/baosystems/postgis:18-3.6@sha256:dd7515b7d8b8b8bac3516a9c3e12584df5890b0864c29295c1b934ecd1db81a7
+     "$POSTGIS_IMAGE"
    ```
 
-4. **Restore the dumps into it.** Wait until `pg_isready` succeeds, then load
-   the OpenMapX dump:
+   The image's entrypoint makes the socket directory world-writable, and local
+   socket connections need no password. The scratch directory created by
+   `mktemp -d` is what keeps the socket private, so do not loosen its mode.
+   The password is only there because the entrypoint refuses to start without
+   one; nothing uses it.
+
+4. **Restore the dump into a fresh database.** The entrypoint first runs a
+   temporary server that listens only on the socket, then restarts. Wait for
+   the final server on the container's loopback address, which still exists
+   with `--network none`. Then load the OpenMapX dump into an empty database,
+   as `pnpm openmapx backup restore` does. A database created by the image
+   already holds the PostGIS extension schemas that the dump creates again,
+   and the load would stop on them.
 
    ```bash
-   docker exec openmapx-privacy-scratch pg_isready -U postgres -d openmapx
+   until docker exec openmapx-privacy-scratch pg_isready -q -h 127.0.0.1 -U postgres; do sleep 2; done
+   docker exec openmapx-privacy-scratch dropdb -U postgres --if-exists openmapx
+   docker exec openmapx-privacy-scratch createdb -U postgres openmapx
    docker exec openmapx-privacy-scratch sh -c \
-     'gunzip -c /snapshot/postgis__*.sql.gz | psql -v ON_ERROR_STOP=1 -U postgres -d openmapx'
+     'gunzip -c /snapshot/postgis__*.sql.gz | psql -q -v ON_ERROR_STOP=1 -U postgres -d openmapx'
    ```
 
    A managed Dawarich timeline lives in the separate `dawarich-postgis__*`
@@ -171,16 +190,33 @@ secrets, the erasure journal or its key into the scratch container.
 
 5. **Export the person from the scratch database.** The script runs the same
    streaming export as the self-service download, against the scratch socket
-   only, and writes the ZIP to a file:
+   only, and writes the ZIP to a file. It needs no secrets: it never reads
+   `DATABASE_URL` or the secrets key, and it does not contact the ops agent.
+
+   The response report names the controller. The script reads each legal fact
+   from its `LEGAL_*` environment variable when that is set, and otherwise
+   from the `system_settings` table of the restored snapshot, which holds the
+   facts as they were when the backup was taken. To report the current facts,
+   pass them as plain values on the command line, copied from the legal
+   settings in the administration area. Do not source the production
+   environment or secrets files to get them. `BACKUP_RETENTION_DAYS` should
+   match production; it defaults to 30.
 
    ```bash
+   LEGAL_NAME="Example Maps GmbH" LEGAL_STREET="Example Street 1" \
+   LEGAL_POSTAL_CODE="10115" LEGAL_CITY="Berlin" LEGAL_COUNTRY="Germany" \
+   LEGAL_DATA_REQUEST_EMAIL="privacy@example.org" \
+   LEGAL_DEPLOYMENT_JURISDICTION="DE-BE" LEGAL_SUPERVISORY_AUTHORITY="<authority>" \
+   BACKUP_RETENTION_DAYS=30 \
    pnpm --filter @openmapx/api exec tsx scripts/privacy/export-from-database.ts \
      --socket-dir "$SCRATCH/socket" --database openmapx \
      --subject <account id> --case <privacy case id> --out "$SCRATCH/backup-export.zip"
    ```
 
-   The report inside lists sources the scratch database could not answer,
-   such as the managed timeline, for you to review.
+   Leave out the `LEGAL_*` variables to use the snapshot's facts instead. The
+   script stops with `PRIVACY_CONFIGURATION_INCOMPLETE` when a required fact is
+   missing from both. The report inside the archive lists sources the scratch
+   database could not answer, such as the managed timeline, for you to review.
 
 6. **Remove the container, its volume and the scratch files** once the
    archive is delivered through the agreed channel:
