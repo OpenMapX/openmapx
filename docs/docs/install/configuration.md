@@ -129,6 +129,9 @@ These guarantees have known limits:
   PostGIS cannot be moved in place: it would have to be reinstalled, with every
   spatial column and index that depends on it, and the new schema added to
   every role's search path.
+- As the owner of `public`, a compromised API can revoke other roles' use of
+  it, so that data-manager, OpenConditions and the tile function no longer find
+  PostGIS. That stops them working but gives the API none of their rights.
 - A superuser session of your own that reads or writes an object a role owns,
   such as a view, or a table with a trigger, default or check constraint, runs
   that role's code with superuser rights. Connect as the owning role instead.
