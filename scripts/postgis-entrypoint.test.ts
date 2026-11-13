@@ -286,9 +286,7 @@ describe("PostGIS entrypoint child ownership", () => {
       expect(roles).toContain(
         "CREATE EVENT TRIGGER openmapx_guard_refuse_code ON ddl_command_start EXECUTE FUNCTION",
       );
-      expect(roles).toContain(
-        "'CREATE DOMAIN', 'ALTER DOMAIN', 'CREATE EXTENSION', 'ALTER EXTENSION'",
-      );
+      expect(roles).toContain("tg_tag IN ('CREATE EXTENSION', 'ALTER EXTENSION')");
       expect(roles).toContain("AS $$");
       expect(roles).toContain("overture_[a-z0-9_]{1,55})$'");
       expect(f.read("tile-sync-sql")).toContain(

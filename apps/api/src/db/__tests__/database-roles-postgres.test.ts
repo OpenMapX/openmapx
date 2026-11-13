@@ -332,10 +332,9 @@ integration("code planted for another role", () => {
     await roles.api.unsafe("DROP FUNCTION public.format(text, name)");
   }, 120_000);
 
-  it("refuses the API's domains, extensions and other schemas", async () => {
+  it("refuses the API's extensions and other schemas", async () => {
     for (const statement of [
-      // A restoring superuser runs a domain's check when it reads a literal.
-      "CREATE DOMAIN public.openmapx_probe_domain AS text",
+      // A trusted extension's script runs as the superuser in public.
       "CREATE EXTENSION hstore",
       "CREATE SCHEMA conditions",
       "CREATE SCHEMA tiles_shadow",
@@ -351,9 +350,10 @@ integration("code planted for another role", () => {
     `);
   });
 
-  it("lets check constraints and generated columns run only as the table's owner", async () => {
+  it("lets check constraints, domains and generated columns run only as the table's owner", async () => {
     // Accepted, with a row each, for the restore below to load: each runs as
-    // its table's owner, whose session loads the row.
+    // its table's owner, whose session loads the row. Run as the superuser,
+    // the function would fail the restore: it may not change a role.
     await roles.api.unsafe(`
       CREATE FUNCTION public.openmapx_escalate() RETURNS int LANGUAGE plpgsql IMMUTABLE AS $$
       BEGIN
@@ -362,8 +362,9 @@ integration("code planted for another role", () => {
         END IF;
         RETURN 1;
       END $$;
+      CREATE DOMAIN public.openmapx_checked_value AS int CHECK (public.openmapx_escalate() = VALUE);
       CREATE TABLE public.openmapx_checked (
-        v int CHECK (public.openmapx_escalate() = 1),
+        v public.openmapx_checked_value CHECK (public.openmapx_escalate() = 1),
         p text CHECK (set_config('search_path', 'public', false) IS NOT NULL),
         g int GENERATED ALWAYS AS (public.openmapx_escalate()) STORED);
       INSERT INTO public.openmapx_checked (v, p) VALUES (1, 'a');

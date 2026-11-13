@@ -107,8 +107,8 @@ API's or the superuser's rights. Two structural rules keep it that way:
 
 The API may create only the schemas `data_manager` and `drizzle`, so it cannot
 take a name that data-manager, the tile server or the superuser trusts. It may
-install no extension, and no domain, whose check a restoring superuser would run
-while it reads a value. PostGIS's own superuser SQL and the CLI's restore steps
+install no extension, whose script would run as the superuser and find names
+through the `public` schema the API owns. PostGIS's own superuser SQL and the CLI's restore steps
 search only the system catalogs, so no object the API creates in `public` can
 stand in for a built-in they call. The CLI changes API tables (`openmapx users`,
 the erasure replay and the closing of restored jobs after a restore) as

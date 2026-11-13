@@ -263,9 +263,8 @@ CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public;
 -- may create only tables, indexes, sequences, schemas and plain views. Check
 -- constraints, defaults and index expressions run as whoever writes the
 -- table: data-manager itself, or a restore session of the table's owner.
--- The API writes the functions, triggers and types its migrations need, but
--- no domain, whose check a restoring superuser runs while it reads a
--- literal, and no extension, which would add functions to `public`.
+-- The API may install no extension: a trusted extension's script runs as the
+-- superuser and finds names through `public`, which the API owns.
 CREATE SCHEMA IF NOT EXISTS openmapx_guard;
 REVOKE ALL ON SCHEMA openmapx_guard FROM PUBLIC;
 CREATE OR REPLACE FUNCTION openmapx_guard.refuse_code()
@@ -280,8 +279,7 @@ BEGIN
       'CREATE INDEX', 'ALTER INDEX', 'DROP INDEX',
       'CREATE SEQUENCE', 'ALTER SEQUENCE', 'DROP SEQUENCE',
       'CREATE VIEW', 'ALTER VIEW', 'DROP VIEW'))
-    OR (current_user = '${API_ROLE}' AND tg_tag IN (
-      'CREATE DOMAIN', 'ALTER DOMAIN', 'CREATE EXTENSION', 'ALTER EXTENSION'))
+    OR (current_user = '${API_ROLE}' AND tg_tag IN ('CREATE EXTENSION', 'ALTER EXTENSION'))
   THEN
     RAISE EXCEPTION '% may not run %', current_user, tg_tag USING ERRCODE = 'insufficient_privilege';
   END IF;

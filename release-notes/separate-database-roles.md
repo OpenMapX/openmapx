@@ -21,7 +21,7 @@ Data-manager's code never runs with the API's or the superuser's rights. An
 event trigger lets data-manager create only tables, indexes, sequences, its own
 schemas and views that run no code, and refuses extensions, functions, types,
 domains, rules, triggers, policies and grants. The API may create only its two
-schemas and no extension or domain. Martin's tile functions now run as
+schemas and no extension. Martin's tile functions now run as
 `openmapx_tiles_owner`, which is no superuser and only reads OpenConditions'
 tables; PostGIS grants that access on each start. A migration grants
 data-manager's role its tables.
