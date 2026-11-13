@@ -15,16 +15,22 @@ held and visible.
 
 Some scenarios fail on today's code because of defects the update-system
 replacement removes. They are committed with their full expectations and
-listed in `known-failures.json`, each with a one-line reason. Every scenario
-declares its test through `scenario()` (`scenario.ts`), which runs a listed
-scenario as an expected failure: CI stays green while the defect exists and
-turns red when the scenario starts passing. The rules:
+listed in `known-failures.json`. Each entry gives a one-line `reason` and a
+`fails` signature: a regular expression matched against the failure's message
+and, for an assertion, the values it compared. Every scenario declares its test
+through `scenario()` (`scenario.ts`). A listed scenario passes only when it
+fails with its signature within its normal timeout. CI turns red when it
+passes, when it fails any other way (the original error is reported) and when
+it hangs. The rules:
 
 - Entries may only be removed, when their scenario passes.
 - Scenario files never change to make a scenario pass.
+- A signature names the defect, not just "something failed": the observation
+  a held job shows, the assertion that fails, or the role's own error.
 - `scripts/crash-point-imports.test.ts` checks that every entry names an
-  existing scenario and gives a reason, and that scenarios declare their tests
-  only through `scenario()`.
+  existing scenario with a reason and a valid signature, that scenarios declare
+  their tests only through `scenario()`, and how `scenario()` treats a pass, a
+  matching failure and any other failure.
 
 ## Environment
 

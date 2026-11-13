@@ -2,6 +2,10 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import {
+  expectKnownFailure,
+  failureText,
+} from "../apps/api/src/services/__tests__/crash-points/scenario";
 
 const root = resolve(import.meta.dirname, "..");
 const suite = "apps/api/src/services/__tests__/crash-points";
@@ -15,6 +19,11 @@ const forbidden: { label: string; matches: (specifier: string, file: string) => 
       specifier === "@openmapx/core/build-artifacts" ||
       specifier.startsWith("@openmapx/core/build-artifacts/"),
   },
+  // Neither package declares exports, so any deep import would resolve.
+  ...["@openmapx/ops-agent", "@openmapx/data-manager"].map((name) => ({
+    label: name,
+    matches: (specifier: string) => specifier === name || specifier.startsWith(`${name}/`),
+  })),
   ...["packages/core/src/build-artifacts", "apps/ops-agent/src", "services/data-manager/src"].map(
     (directory) => ({
       label: directory,
@@ -87,6 +96,10 @@ describe("crash-point suite imports", () => {
     expect(refused("../../../../../../ops-agent/src/server")).toBe(true);
     expect(refused("../../../../../../../services/data-manager/src/service")).toBe(true);
     expect(refused("../../../../../../../packages/core/src/build-artifacts/filesystem")).toBe(true);
+    expect(refused("@openmapx/ops-agent")).toBe(true);
+    expect(refused("@openmapx/ops-agent/src/server")).toBe(true);
+    expect(refused("@openmapx/data-manager/src/principals")).toBe(true);
+    expect(refused("@openmapx/ops-agent-client")).toBe(false);
     expect(refused("@openmapx/core/ops")).toBe(false);
     expect(refused("../driver")).toBe(false);
   });
@@ -137,11 +150,51 @@ describe("crash-point known failures", () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it("names only existing scenarios, each with a reason", () => {
+  it("names only existing scenarios, each with a reason and a failure signature", () => {
     const names = new Set(declared.map((entry) => entry.name));
-    for (const [name, reason] of Object.entries(registry)) {
+    for (const [name, entry] of Object.entries(registry)) {
       expect(names.has(name), `known failure "${name}" names no scenario`).toBe(true);
-      expect(typeof reason === "string" && reason.trim().length > 0, name).toBe(true);
+      expect(entry, name).toEqual({ reason: expect.any(String), fails: expect.any(String) });
+      const { reason, fails } = entry as { reason: string; fails: string };
+      expect(reason.trim().length, `${name}: reason`).toBeGreaterThan(0);
+      expect(fails.trim().length, `${name}: failure signature`).toBeGreaterThan(0);
+      expect(() => new RegExp(fails), `${name}: failure signature`).not.toThrow();
     }
+  });
+
+  it("passes a listed scenario only when it fails with its signature", async () => {
+    const entry = {
+      reason: "held",
+      fails: "^Timed out waiting for job [\\s\\S]*recovery_required",
+    };
+    const held = new Error(
+      'Timed out waiting for job 1\nlast seen: {"reason":"recovery_required"}',
+    );
+    await expect(
+      expectKnownFailure(entry, async () => {
+        throw held;
+      }),
+    ).resolves.toBeUndefined();
+    // Another failure is the scenario's own, unchanged.
+    const other = new Error("Data-manager answered 403");
+    await expect(
+      expectKnownFailure(entry, async () => {
+        throw other;
+      }),
+    ).rejects.toBe(other);
+    await expect(expectKnownFailure(entry, async () => {})).rejects.toThrow(
+      "This known failure now passes: remove its entry from known-failures.json",
+    );
+  });
+
+  it("matches a signature against an assertion's compared values too", () => {
+    const assertion = Object.assign(new Error("expected 'failed' to be 'success'"), {
+      actual: "failed",
+      expected: "success",
+    });
+    expect(failureText(assertion)).toBe(
+      "expected 'failed' to be 'success'\nactual: failed\nexpected: success",
+    );
+    expect(failureText({ code: 1 })).toBe('{"code":1}');
   });
 });
