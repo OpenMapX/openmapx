@@ -463,21 +463,51 @@ integration("code planted for another role", () => {
       await martin.end();
     }
     // The API can put a PostGIS overload in the public schema it owns, which
-    // the tile function resolves: it runs as the tile owner, never as the
-    // superuser.
+    // the tile function resolves before PostGIS's own: it runs as the tile
+    // owner, never with more rights.
     await roles.api.unsafe(`
-      CREATE FUNCTION public.st_tileenvelope(z integer, x integer, y integer) RETURNS geometry
+      CREATE TABLE public.openmapx_overload_runs (who text, superuser boolean);
+      GRANT INSERT ON public.openmapx_overload_runs TO PUBLIC;
+      CREATE FUNCTION public.st_asmvt(r record, name text, extent integer, geom text) RETURNS bytea
         LANGUAGE plpgsql AS $$
         BEGIN
-          EXECUTE 'ALTER ROLE openmapx_api SUPERUSER';
-          RETURN ST_MakeEnvelope(-180, -90, 180, 90, 4326);
+          INSERT INTO public.openmapx_overload_runs
+            SELECT current_user, rolsuper FROM pg_catalog.pg_roles WHERE rolname = current_user;
+          RETURN ''::bytea;
         END $$;
     `);
-    await tile().catch(() => undefined);
+    expect(await tile()).toEqual(Buffer.alloc(0));
+    expect(await roles.api`SELECT who, superuser FROM public.openmapx_overload_runs`).toEqual([
+      { who: "openmapx_tiles_owner", superuser: false },
+    ]);
+    // Acting as the tile owner through such an overload, the API may create
+    // nothing: a restore would recreate the object, and the tile owner cannot
+    // log in to do it.
+    await roles.api.unsafe(`
+      DROP FUNCTION public.st_asmvt(record, text, integer, text);
+      CREATE FUNCTION public.openmapx_pwn_as_tiles() RETURNS int LANGUAGE plpgsql AS $$
+      BEGIN IF (SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname = current_user)
+        THEN EXECUTE 'ALTER ROLE openmapx_api SUPERUSER'; END IF; RETURN 1; END $$;
+      GRANT USAGE, CREATE ON SCHEMA public TO openmapx_tiles_owner;
+      CREATE FUNCTION public.plant_as_tiles_owner() RETURNS void LANGUAGE plpgsql AS $$
+      BEGIN IF pg_catalog.to_regclass('public.tiles_owner_t') IS NULL THEN
+        EXECUTE 'CREATE TABLE public.tiles_owner_t (id int CHECK (public.openmapx_pwn_as_tiles() = 1))';
+        EXECUTE 'INSERT INTO public.tiles_owner_t VALUES (1)'; END IF; END $$;
+      CREATE FUNCTION public.st_asmvt(r record, name text, extent integer, geom text) RETURNS bytea
+        LANGUAGE plpgsql AS $$ BEGIN
+        IF current_user = 'openmapx_tiles_owner' THEN PERFORM public.plant_as_tiles_owner(); END IF;
+        RETURN ''::bytea; END $$;
+    `);
+    await permissionDenied(tile());
     expect(
-      await roles.superuser`SELECT rolsuper FROM pg_roles WHERE rolname = 'openmapx_api'`,
-    ).toEqual([{ rolsuper: false }]);
-    await roles.api.unsafe("DROP FUNCTION public.st_tileenvelope(integer, integer, integer)");
+      await roles.superuser`SELECT pg_catalog.to_regclass('public.tiles_owner_t') AS planted`,
+    ).toEqual([{ planted: null }]);
+    await roles.api.unsafe(`
+      DROP FUNCTION public.st_asmvt(record, text, integer, text);
+      DROP FUNCTION public.plant_as_tiles_owner();
+      DROP FUNCTION public.openmapx_pwn_as_tiles();
+      REVOKE CREATE ON SCHEMA public FROM openmapx_tiles_owner;
+    `);
   }, 180_000);
 
   it("restores a backup with every owner, grant and guard intact", async () => {
@@ -536,13 +566,62 @@ integration("code planted for another role", () => {
         ],
         sql,
       );
-    // The CLI's restore: dump through a pipe, read the live database's owner
-    // and grants, recreate the database, give them back, then restore each
-    // entry in a session of its owner.
-    await run(
-      ["sh", "-c", "pg_dump --format=custom -U postgres openmapx | cat > /tmp/openmapx.dump"],
-      "dump",
+    const dumpAndPlan = async () => {
+      await run(
+        ["sh", "-c", "pg_dump --format=custom -U postgres openmapx | cat > /tmp/openmapx.dump"],
+        "dump",
+      );
+      const list = (section: string) =>
+        run(["sh", "-c", `pg_restore --list --section=${section} < /tmp/openmapx.dump`], section);
+      const roleList = await query(services.RESTORE_ROLES_QUERY);
+      const listings = {
+        preData: await list("pre-data"),
+        data: await list("data"),
+        postData: await list("post-data"),
+      };
+      return () => services.planOwnerRestore(listings, roleList);
+    };
+    // A role that cannot log in has nobody but the superuser to restore its
+    // objects, so an archive holding one is refused before anything is
+    // dropped.
+    await query(
+      "CREATE ROLE openmapx_nologin_owner NOLOGIN; GRANT CREATE ON DATABASE openmapx TO openmapx_nologin_owner",
     );
+    await run(
+      [
+        ...superuserPsql,
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-U",
+        "postgres",
+        "-d",
+        "openmapx",
+        "-c",
+        "CREATE SCHEMA nologin_owned AUTHORIZATION openmapx_nologin_owner; CREATE TABLE nologin_owned.t (id int); ALTER TABLE nologin_owned.t OWNER TO openmapx_nologin_owner",
+      ],
+      "plant an object of a role that cannot log in",
+    );
+    expect(await dumpAndPlan()).toThrow("openmapx_nologin_owner, a role that cannot log in");
+    await run(
+      [
+        ...superuserPsql,
+        "-U",
+        "postgres",
+        "-d",
+        "openmapx",
+        "-c",
+        "DROP SCHEMA nologin_owned CASCADE",
+      ],
+      "drop it",
+    );
+    await query(
+      "REVOKE CREATE ON DATABASE openmapx FROM openmapx_nologin_owner; DROP ROLE openmapx_nologin_owner",
+    );
+    // The CLI's restore: dump through a pipe and plan it against the server's
+    // roles, read the live database's owner and grants, recreate the
+    // database, give them back, then restore each entry in a session of its
+    // owner.
+    const passes = (await dumpAndPlan())();
     const settings = await query(services.databaseSettingsQuery("openmapx"));
     expect(settings).toContain("GRANT CREATE ON DATABASE openmapx TO openmapx_data_manager;");
     await run(["dropdb", "-U", "postgres", "--force", "openmapx"], "dropdb");
@@ -562,16 +641,6 @@ integration("code planted for another role", () => {
         "/tmp/settings.sql",
       ],
       "settings apply",
-    );
-    const list = (section: string) =>
-      run(["sh", "-c", `pg_restore --list --section=${section} < /tmp/openmapx.dump`], section);
-    const passes = services.planOwnerRestore(
-      {
-        preData: await list("pre-data"),
-        data: await list("data"),
-        postData: await list("post-data"),
-      },
-      await query(services.RESTORE_ROLES_QUERY),
     );
     // Each role restores its own entries; the superuser's event triggers
     // come last.

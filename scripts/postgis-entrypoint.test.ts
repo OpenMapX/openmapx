@@ -49,7 +49,7 @@ elif name == "sleep":
     time.sleep(0.05)
 elif name == "psql":
     sql = sys.argv[sys.argv.index("-c") + 1] if "-c" in sys.argv else sys.stdin.read()
-    phase = "tile-sync" if "openmapx_tiles" in sql else "role-sync" if "openmapx_api" in sql else "sync"
+    phase = "tile-sync" if "tiles.segment_flow" in sql else "role-sync" if "openmapx_api" in sql else "sync"
     mark(phase + "-sql", sql)
     if "-c" not in sys.argv:
         assert sql and "--single-transaction" in sys.argv
@@ -286,6 +286,7 @@ describe("PostGIS entrypoint child ownership", () => {
       expect(roles).toContain(
         "CREATE EVENT TRIGGER openmapx_guard_refuse_code ON ddl_command_start EXECUTE FUNCTION",
       );
+      expect(roles).toContain("OR current_user IN ('openmapx_tiles', 'openmapx_tiles_owner')");
       expect(roles).toContain("tg_tag IN ('CREATE EXTENSION', 'ALTER EXTENSION')");
       expect(roles).toContain("AS $$");
       expect(roles).toContain("overture_[a-z0-9_]{1,55})$'");

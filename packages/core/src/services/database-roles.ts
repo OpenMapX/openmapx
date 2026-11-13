@@ -61,6 +61,17 @@ export function restorePassPreamble(pass: RestorePass): string {
 }
 
 /**
+ * The entries of a role that cannot log in that PostGIS's entrypoint itself
+ * creates, as description, schema, tag and owner: the tile function, which it
+ * hands to the tile owner, and the grant to call it. Creating a function
+ * runs nothing.
+ */
+const ENTRYPOINT_ENTRIES = new Set([
+  "FUNCTION tiles segment_flow(integer, integer, integer, json) openmapx_tiles_owner",
+  "ACL tiles FUNCTION segment_flow(z integer, x integer, y integer, query_params json) openmapx_tiles_owner",
+]);
+
+/**
  * The sessions that restore a custom-format archive so that no superuser
  * session runs a role's code. Creating a table plans its generated columns
  * and partition keys, which runs the immutable functions they call; loading
@@ -69,17 +80,20 @@ export function restorePassPreamble(pass: RestorePass): string {
  * So every entry is restored by a session that logs in as its owner, whose
  * code then runs with its owner's rights only.
  *
- * The superuser restores what only it can: schemas, as giving `public` to
- * the API's role needs it and creating a schema runs nothing, extensions,
- * and the entries of superusers and of roles that cannot log in, which only
- * a superuser or a member of the role can create. Definitions keep their
- * archive order, so each object follows what it depends on, and the
- * superuser's event triggers come last, after every statement a role
- * restores. Rows depend on nothing, so each owner loads all of its own in
- * one pass.
+ * The superuser restores what only it can and what runs nothing: schemas,
+ * as giving `public` to the API's role needs it, extensions, entries without
+ * an owner such as casts, superusers' entries, and the tile function PostGIS
+ * creates for its owner, which cannot log in. Any other entry of a role that
+ * cannot log in, or of a role this server lacks, refuses the whole archive:
+ * nothing but the superuser could restore it, and its code would then run
+ * with superuser rights. Definitions keep their archive order, so each
+ * object follows what it depends on, and the superuser's event triggers come
+ * last, after every statement a role restores. Rows depend on nothing, so
+ * each owner loads all of its own in one pass.
  *
  * `listings` are `pg_restore --list` outputs of the three sections; `roles`
- * is the output of {@link RESTORE_ROLES_QUERY}.
+ * is the output of {@link RESTORE_ROLES_QUERY}. Neither needs the target
+ * database, so plan before dropping it.
  */
 export function planOwnerRestore(
   listings: { readonly preData: string; readonly data: string; readonly postData: string },
@@ -102,6 +116,15 @@ export function planOwnerRestore(
         const role = known.get(owner);
         if (owner !== "" && !role)
           throw new Error(`The backup has an entry owned by ${owner}, a role this server lacks`);
+        if (
+          role &&
+          !role.superuser &&
+          !role.login &&
+          !ENTRYPOINT_ENTRIES.has(`${match[2]} ${owner}`)
+        )
+          throw new Error(
+            `The backup has ${match[2]} owned by ${owner}, a role that cannot log in to restore it`,
+          );
         const bySuperuser =
           !role || role.superuser || !role.login || match[2].startsWith("SCHEMA ");
         return { id: Number(match[1]), role: bySuperuser ? null : owner };

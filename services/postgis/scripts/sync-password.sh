@@ -164,6 +164,8 @@ fi
 # database. `openmapx compose render` writes the two password files.
 API_ROLE="openmapx_api"
 DATA_MANAGER_ROLE="openmapx_data_manager"
+TILES_ROLE="openmapx_tiles"
+TILES_OWNER="openmapx_tiles_owner"
 read_password_file() {
   local value escaped
   if [ -z "${1:-}" ] || [ ! -f "$1" ] || ! value=$(<"$1") || [ -z "$value" ]; then
@@ -264,7 +266,10 @@ CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public;
 -- constraints, defaults and index expressions run as whoever writes the
 -- table: data-manager itself, or a restore session of the table's owner.
 -- The API may install no extension: a trusted extension's script runs as the
--- superuser and finds names through `public`, which the API owns.
+-- superuser and finds names through `public`, which the API owns. The tile
+-- roles create nothing: the tile owner runs whatever a tile reaches, the
+-- API's functions in `public` among them, and cannot log in to restore an
+-- object of its own, which only this script gives it.
 CREATE SCHEMA IF NOT EXISTS openmapx_guard;
 REVOKE ALL ON SCHEMA openmapx_guard FROM PUBLIC;
 CREATE OR REPLACE FUNCTION openmapx_guard.refuse_code()
@@ -280,6 +285,7 @@ BEGIN
       'CREATE SEQUENCE', 'ALTER SEQUENCE', 'DROP SEQUENCE',
       'CREATE VIEW', 'ALTER VIEW', 'DROP VIEW'))
     OR (current_user = '${API_ROLE}' AND tg_tag IN ('CREATE EXTENSION', 'ALTER EXTENSION'))
+    OR current_user IN ('${TILES_ROLE}', '${TILES_OWNER}')
   THEN
     RAISE EXCEPTION '% may not run %', current_user, tg_tag USING ERRCODE = 'insufficient_privilege';
   END IF;
@@ -359,8 +365,6 @@ echo "[openmapx-postgis] database roles ${API_ROLE} and ${DATA_MANAGER_ROLE} rea
 # the grants. OpenConditions installed after PostGIS started needs a PostGIS
 # restart, and until then tiles fail with a permission error.
 # Without MARTIN_DB_PASSWORD the tile server cannot log in.
-TILES_ROLE="openmapx_tiles"
-TILES_OWNER="openmapx_tiles_owner"
 if [ -n "${MARTIN_DB_PASSWORD:-}" ]; then
   ESCAPED_TILES_PASSWORD=${MARTIN_DB_PASSWORD//\'/\'\'}
   TILES_LOGIN="LOGIN PASSWORD '${ESCAPED_TILES_PASSWORD}'"

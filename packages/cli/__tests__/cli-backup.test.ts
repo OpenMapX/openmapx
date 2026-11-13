@@ -1419,6 +1419,61 @@ describe("backup volume modes", () => {
     expect(sessions).toEqual(["postgres", "timeline_app", "timeline_app", "postgres"]);
   });
 
+  it.each([
+    ["a role that cannot log in", "1 1 postgres\n0 0 timeline_owner\n", "cannot log in"],
+    ["a role the server lacks", "1 1 postgres\n", "a role this server lacks"],
+  ])(
+    "refuses an archive with an entry of %s before dropping anything",
+    async (_case, roles, error) => {
+      const dir = writeBackup("refused-owner", {
+        name: "refused-owner",
+        createdAt: new Date().toISOString(),
+        services: [
+          {
+            id: "timeline",
+            version: "1.0.0",
+            volumes: [
+              {
+                name: "openmapx-db",
+                mode: "pg_dump",
+                file: "timeline__openmapx-db.dump",
+                sizeBytes: 0,
+                postgresUser: "postgres",
+                postgresDb: "timeline",
+              },
+            ],
+          },
+        ],
+      });
+      writeBackupFiles(dir, { "timeline__openmapx-db.dump": "archive" });
+      vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+        if (command === "docker" && args.includes("ps")) {
+          return Promise.resolve({ exitCode: 0, stdout: '{"Service":"timeline"}\n', stderr: "" });
+        }
+        if (command === "docker" && args.some((arg) => arg.includes("rolcanlogin"))) {
+          return Promise.resolve({ exitCode: 0, stdout: roles, stderr: "" });
+        }
+        if (command === "docker" && args.includes("--section=pre-data")) {
+          return Promise.resolve({
+            exitCode: 0,
+            stdout: "321; 1259 21090 TABLE app t timeline_owner\n",
+            stderr: "",
+          });
+        }
+        return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+      }) as never);
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await expect(
+        restoreBackup({ rootDir: tmp, name: "refused-owner", stopRunning: true }),
+      ).rejects.toThrow(error);
+      errorSpy.mockRestore();
+      const calls = mockedCommandCalls().map(([, args]) => args);
+      expect(calls.some((args) => args.includes(" dropdb "))).toBe(false);
+      expect(calls.some((args) => args.includes("openmapx-restore"))).toBe(false);
+    },
+  );
+
   it("refuses a plain backup of the platform database written before its roles", async () => {
     const dir = writeBackup("plain-platform", {
       name: "plain-platform",

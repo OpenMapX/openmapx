@@ -1475,6 +1475,9 @@ async function pgRestoreFromFile(
       `${file} predates the platform database's roles; restore it with the release that wrote it`,
     );
   }
+  // Every reason to refuse an archive is found before the live database is
+  // dropped.
+  const passes = plain ? [] : await planOwnerRestore(ctx, serviceId, file, user);
   // The backup holds the database's contents with their owners and grants,
   // but not the database itself, so drop and create it first for a clean
   // slate. The backup creates the extensions it uses.
@@ -1587,7 +1590,7 @@ async function pgRestoreFromFile(
     await loadPlainDump(ctx, serviceId, file, user, db);
     return;
   }
-  await restoreAsOwners(ctx, serviceId, file, user, db);
+  await restoreAsOwners(ctx, serviceId, file, user, db, passes);
 }
 
 /** Older backups: `gunzip <file> | docker compose exec -T <svc> psql -U <user> <db>`. */
@@ -1622,19 +1625,19 @@ async function loadPlainDump(
 }
 
 /**
- * Restores a custom-format archive so that each entry is restored by a
- * session logged in as its owner, over the database container's local
- * socket; see `planOwnerRestore`. A role's generated columns, check
- * constraints, defaults and index expressions then never run as the
- * superuser, which a session that only switched roles could switch back to.
+ * Plans the restore of a custom-format archive against the server's roles,
+ * so that each entry is restored by a session logged in as its owner, over
+ * the database container's local socket; see `planOwnerRestore`. A role's
+ * generated columns, check constraints, defaults and index expressions then
+ * never run as the superuser, which a session that only switched roles could
+ * switch back to. Reads neither database nor archive into the container.
  */
-async function restoreAsOwners(
+async function planOwnerRestore(
   ctx: ComposeContext,
   serviceId: string,
   archive: string,
   user: string,
-  db: string,
-): Promise<void> {
+): Promise<coreServices.RestorePass[]> {
   const roles = await execa(
     "docker",
     [
@@ -1671,7 +1674,7 @@ async function restoreAsOwners(
     if (result.exitCode !== 0) throw new Error(`listing the backup failed: ${result.stderr ?? ""}`);
     return result.stdout ?? "";
   };
-  const passes = coreServices.planOwnerRestore(
+  return coreServices.planOwnerRestore(
     {
       preData: await list("pre-data"),
       data: await list("data"),
@@ -1679,6 +1682,21 @@ async function restoreAsOwners(
     },
     roles.stdout ?? "",
   );
+}
+
+/**
+ * Runs the planned passes. Each reads the archive from its start up to the
+ * last entry it restores, so a large backup is read once per pass that loads
+ * rows, one per owning role.
+ */
+async function restoreAsOwners(
+  ctx: ComposeContext,
+  serviceId: string,
+  archive: string,
+  user: string,
+  db: string,
+  passes: readonly coreServices.RestorePass[],
+): Promise<void> {
   for (const pass of passes) {
     const result = await execWithArchive(
       ctx,

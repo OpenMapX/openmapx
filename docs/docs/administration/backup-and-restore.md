@@ -348,15 +348,22 @@ database had, then restores the dump. The API therefore keeps its schemas and
 the right to create them, data-manager keeps its own tables and schemas, and
 the API can still read them.
 
-Each object is restored by a session that logs in as the role owning it,
-over the database container's local socket. A table's check constraints,
-defaults, generated columns and index expressions, which the restore
-evaluates, therefore run with their owner's rights and never as the
-superuser. The superuser restores only schemas, extensions and its own
-objects, and objects of roles that cannot log in, such as the tile
-function's owner. The restore's other superuser steps search only the
+Each table, view, function and other object a role owns is restored by a
+session that logs in as that role, over the database container's local
+socket. A table's check constraints, defaults, generated columns and index
+expressions, which the restore evaluates, therefore run with their owner's
+rights and never as the superuser. The superuser restores only what runs
+nothing when created: schemas, extensions, entries without an owner such as
+casts, its own objects, and the tile function PostGIS creates and hands to
+`openmapx_tiles_owner`. The restore's other superuser steps search only the
 system catalogs; the erasure replay and the closing of restored jobs connect
 as `openmapx_api`, which owns those tables.
+
+Before it drops anything, the CLI reads the backup's list of entries and the
+server's roles. It refuses the backup, and leaves the live database as it
+is, when an entry belongs to a role the server lacks, or to a role that
+cannot log in, other than that tile function. Nobody but the superuser could
+restore such an entry, and its code would then run with superuser rights.
 
 The roles themselves belong to the PostgreSQL server, not to any database,
 and are not in the dump. PostGIS creates them each time it starts, so to
@@ -364,6 +371,10 @@ restore onto a new host or an empty volume, render and start `postgis` from
 this checkout first, then restore. A community service's own role (see
 [Community extensions](./community-extensions.md)) must likewise exist, and
 be able to log in over that socket, before its database is restored.
+
+Each restore pass streams the backup from its start, and every role that
+owns rows loads them in a pass of its own, so a large backup is read about
+once per such role.
 
 Backups taken before this release are plain SQL files (`.sql.gz`), which
 only a superuser session can load. The CLI still restores them into other

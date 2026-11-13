@@ -55,6 +55,17 @@ describe("planOwnerRestore", () => {
     ]);
   });
 
+  it("refuses entries of a role that cannot log in, except PostGIS's tile function", () => {
+    for (const entry of [
+      "500; 1259 30000 TABLE public tiles_owner_t openmapx_tiles_owner",
+      "501; 1255 30001 FUNCTION tiles segment_flow(integer, integer, integer) openmapx_tiles_owner",
+      "502; 2613 30002 BLOB METADATA - 4242 openmapx_tiles_owner",
+    ])
+      expect(() =>
+        planOwnerRestore({ ...listings, preData: `${listings.preData}${entry}\n` }, roles),
+      ).toThrow("a role that cannot log in to restore it");
+  });
+
   it("refuses entries of a role the server lacks and lines it cannot read", () => {
     expect(() =>
       planOwnerRestore(
