@@ -2265,44 +2265,25 @@
     "failedDeleteAccount": "Failed to delete account",
     "privacyData": {
       "title": "Your data and access request",
-      "description": "Request a copy of the personal data OpenMapX processes about you. The archive includes live OpenMapX data and connected Dawarich data when available. A fresh sign-in is required before download.",
-      "requestCopy": "Request data copy",
+      "description": "Download a copy of the personal data OpenMapX processes about you. The archive includes live OpenMapX data and connected Dawarich data when available. A fresh sign-in is required, and the archive is sent straight to you; nothing is stored on the server.",
       "downloadDevice": "Download browser data",
       "noRequests": "You have no data-access requests.",
       "loadFailed": "Data requests are temporarily unavailable.",
-      "requestFailed": "The data request could not be created.",
       "actionFailed": "The requested action could not be completed.",
-      "reauthenticationFailed": "Please sign in again before downloading your archive.",
-      "assistedProofTitle": "Link an assisted request",
-      "assistedProofDescription": "If the privacy team gave you a case reference, sign in again to prove that this account belongs to the subject. The reference is kept in this browser during sign-in and is not added to the URL.",
-      "assistedRequestReference": "Case reference",
-      "assistedProofAction": "Sign in and prove account",
-      "assistedProofComplete": "Your account login was verified for the assisted request.",
-      "assistedProofFailed": "The account login could not be matched to that assisted request.",
       "access": "Access",
       "portability": "Portable data",
       "accessAndPortability": "Access + portable copy",
       "due": "Response deadline: {date}",
-      "download": "Download archive",
-      "revoke": "Delete archive",
       "withdraw": "Withdraw request",
-      "regenerate": "Create fresh copy",
       "states": {
-        "received": "Received",
-        "identity_pending": "Identity check pending",
-        "preserving": "Preparing data",
-        "collecting": "Collecting data",
-        "pending_processor": "Waiting for a connected processor",
-        "operator_review": "Manual review",
-        "assembling": "Building archive",
-        "ready": "Ready to download",
-        "delivered": "Delivered",
-        "artifact_expired": "Archive expired",
-        "clarification_needed": "Clarification needed",
-        "withdrawn": "Withdrawn",
-        "refused": "Declined",
-        "closed": "Closed"
-      }
+        "open": "Received",
+        "in_progress": "In progress",
+        "waiting_on_requester": "Waiting for your reply",
+        "completed": "Completed",
+        "refused": "Declined"
+      },
+      "downloadExport": "Download my data",
+      "exportFailed": "The archive could not be downloaded. Please try again."
     },
     "mangroveConnectTitle": "Connect to Mangrove",
     "mangroveConnectIntro": "Use the same review identity across devices and participating apps. Your Mangrove login is separate from your OpenMapX sign-in.",
@@ -3774,8 +3755,7 @@
       "preservationAtLabel": "Preservation started",
       "snapshotAtLabel": "Source snapshot cutoff",
       "generatedAtLabel": "Generated",
-      "expiresAtLabel": "Download expires",
-      "caseRetention": "Case records are retained for {caseDays, plural, one {# day} other {# days}}, identity evidence for {identityDays, plural, one {# day} other {# days}}, and the download artifact for {artifactHours, plural, one {# hour} other {# hours}} according to the configured policy.",
+      "caseRetention": "Case records are retained for {caseDays, plural, one {# day} other {# days}} according to the configured policy.",
       "notRecorded": "not recorded",
       "notApplicable": "not applicable",
       "recordedCode": "{code} (recorded policy code)",
@@ -3789,7 +3769,8 @@
         "not_applicable": "Not applicable",
         "unavailable": "Unavailable",
         "reviewed_no_match": "Reviewed; no matching data",
-        "omitted_with_reason": "Omitted after review"
+        "omitted_with_reason": "Omitted after review",
+        "operator_check": "Checked separately by the operator"
       },
       "purposes": {
         "account-management": "Account management",
@@ -3874,11 +3855,7 @@
       "warnings": {
         "source-not-collected": "This source was not collected or no completed source result was available for this snapshot.",
         "operator-review-required": "This source requires an authorized manual review before disclosure.",
-        "operator-review-completed": "An authorized manual source review found no releasable matching records.",
         "external-source-review-required": "An external or operator-held source requires caseworker review.",
-        "approved-encrypted-supplement": "A reviewed operator supplement is included in the Article 15 section.",
-        "supplement-key-unavailable": "The approved supplement could not be decrypted for this response.",
-        "supplement-limit-exceeded": "The supplement exceeded the permitted response size or count.",
         "schema-missing": "The retained source lacked the required reviewed schema.",
         "storage-missing": "The retained source material was no longer available."
       },
@@ -3993,67 +3970,41 @@
         "rightsOfOthers": "Rights-of-others review where needed"
       }
     },
-    "identityChallenge": {
-      "subject": "Verify your identity for a privacy request",
-      "continue": "Continue",
-      "description": "Enter this code in the OpenMapX privacy request screen within {minutes, plural, one {# minute} other {# minutes}}.",
-      "unexpected": "If you did not request this code, do not share it and contact the controller through the published privacy channel.",
-      "footer": "You received this email because an identity check was requested for an OpenMapX privacy request."
-    },
     "email": {
       "templates": {
         "acknowledgement": {
           "subject": "We received your privacy request",
           "description": "Your request has been received and is being reviewed. Sign in and open your account settings to see its status."
         },
-        "clarification": {
+        "waiting_on_requester": {
           "subject": "Action needed for your privacy request",
-          "description": "We need clarification to process your privacy request. Sign in to see the next steps."
+          "description": "We need more information from you to continue your privacy request. Sign in to see the next steps."
         },
         "extension": {
           "subject": "Update about your privacy request",
           "description": "Your privacy request needs more time to process. Sign in to see the updated deadline and reason."
         },
-        "ready": {
-          "subject": "Your data access export is ready",
-          "description": "Your data access export is now available in your account settings. Sign in there to start the download."
-        },
-        "delivered": {
-          "subject": "Your data access export was downloaded",
-          "description": "A download of your data access export was recorded. If this was not you, sign in and contact us."
-        },
-        "closed": {
-          "subject": "Your privacy request is closed",
-          "description": "Your privacy request has been closed. Case information remains available according to our retention policy."
+        "completed": {
+          "subject": "Your privacy request is completed",
+          "description": "Your privacy request has been completed. Case information remains available according to our retention policy."
         },
         "refused": {
           "subject": "Update about your privacy request",
           "description": "We could not fulfil your privacy request as submitted. Sign in to see the reason and available next steps."
         },
-        "escalation_due_soon": {
+        "admin_new_request": {
+          "subject": "New privacy request",
+          "description": "A new privacy request was received. Please review it in the privacy queue."
+        },
+        "admin_deadline": {
           "subject": "Privacy deadline approaching",
-          "description": "A privacy request is approaching its statutory deadline. Please review the privacy queue."
-        },
-        "escalation_overdue": {
-          "subject": "Privacy deadline reached",
-          "description": "A privacy request has reached or passed its statutory deadline. Please review the privacy queue."
-        },
-        "escalation_identity": {
-          "subject": "Privacy request awaiting identity review",
-          "description": "A privacy request is waiting for identity verification or clarification. Please review the privacy queue."
-        },
-        "escalation_extension": {
-          "subject": "Extended privacy deadline approaching",
-          "description": "An extended privacy deadline is approaching. Please review the privacy queue."
-        },
-        "escalation_stuck": {
-          "subject": "Privacy export needs attention",
-          "description": "A privacy export has been in progress unusually long. Please review the privacy queue."
+          "description": "A privacy request is close to or past its statutory deadline. Please review it in the privacy queue."
         }
       },
       "continue": "Open your OpenMapX account settings to continue.",
       "unexpected": "If you did not request this, sign in and contact us.",
-      "footer": "You received this email because of activity on an OpenMapX privacy request."
+      "footer": "You received this email because of activity on an OpenMapX privacy request.",
+      "adminContinue": "Open Privacy requests in the OpenMapX administration to continue."
     }
   },
   "adminCoverage": {
@@ -4500,14 +4451,6 @@
         "label": "Request case retention (days)",
         "description": "How long completed data-subject request case records are kept."
       },
-      "legalIdentityEvidenceRetentionDays": {
-        "label": "Identity evidence retention (days)",
-        "description": "How long identity-verification evidence is kept."
-      },
-      "legalExportArtifactRetentionHours": {
-        "label": "Export artifact retention (hours)",
-        "description": "How long generated export archives remain available."
-      },
       "legalPrivacySources": {
         "label": "Privacy sources",
         "description": "JSON array of strict source declarations used by access reports."
@@ -4559,7 +4502,7 @@
   "privacyAdmin": {
     "newAssistedRequest": "Record assisted request",
     "assistedIntake": "Assisted request intake",
-    "assistedIntakeHelp": "Record the actual receipt channel and a protected exact subject locator. Deleted or inaccessible accounts are not recreated.",
+    "assistedIntakeHelp": "Record the actual receipt channel and the subject locator as given. The locator is encrypted. Deleted or inaccessible accounts are not recreated.",
     "channel": "Receipt channel",
     "receivedAt": "Actually received at",
     "channels": {
@@ -4585,21 +4528,7 @@
     },
     "subjectLocator": "Exact subject locator",
     "subjectLocatorHelp": "This value is encrypted and is not shown in the case queue.",
-    "representativeContact": "Representative verified-contact address",
-    "representativeContactHelp": "Authority and permission to receive the response are reviewed separately.",
     "recordRequest": "Record request",
-    "identityParties": "Identity and authority",
-    "identityProofRequired": "Complete a proven account login, verified email challenge, or exceptional-evidence review before collection.",
-    "sendIdentityChallenge": "Send verification code",
-    "identityCode": "Six-digit code",
-    "verifyIdentityCode": "Verify code",
-    "challengeIssueFailed": "The verification code could not be sent. Check that this party has an authoritative email address and try again later.",
-    "challengeCompleteFailed": "The code could not be verified. It may be incorrect, expired, or already used.",
-    "accountLoginProofHelp": "For account-login proof, the subject must sign in again and complete the assisted proof from their own authenticated session.",
-    "parties": {
-      "subject": "Subject",
-      "representative": "Representative"
-    },
     "loadFailed": "The privacy queue could not be loaded.",
     "caseFailed": "The case could not be loaded.",
     "actionFailed": "The privacy action could not be completed.",
@@ -4608,38 +4537,15 @@
     "empty": "No open requests.",
     "selectRequest": "Select a request to inspect its bounded metadata.",
     "verifyIdentity": "Verify identity",
-    "generate": "Generate archive",
-    "generateAfterReview": "Generate after review",
     "tasks": "Source tasks",
-    "review": "Review",
-    "archives": "Archives",
     "queue": "Queue ({count})",
     "queueItem": "{state} · due {date}",
     "case": "Case {id}",
     "caseMetadata": "Response deadline: {date} · identity: {identity}",
     "unknown": "Unknown",
-    "expires": "Expires {date}",
-    "verified": "Verified",
     "unverified": "Unverified",
     "workflows": {
-      "party": "Review party",
-      "reasonableDoubtCode": "Reasonable doubt code",
-      "identityOutcome": "Identity review outcome",
-      "identityEvidence": "Identity evidence",
-      "chooseEvidence": "Select live case evidence",
-      "authorityEvidence": "Representative authority evidence",
-      "deliveryAuthorized": "Representative may receive the response",
-      "approveAuthority": "Approve representative authority",
-      "recordIdentityReview": "Record exceptional-evidence review",
-      "assignee": "Assigned operator",
-      "unassigned": "Unassigned",
-      "moreOperators": "More authorized operators",
-      "assignTask": "Save assignment",
-      "taskDecision": "Task outcome",
       "reasonCode": "Reason code",
-      "redactionCode": "Redaction code",
-      "recordCount": "Reviewed record count",
-      "recordTaskDecision": "Record task decision",
       "caseDecisions": "Deadlines and case decisions",
       "originalDueAt": "Original deadline",
       "currentDueAt": "Current deadline",
@@ -4651,66 +4557,33 @@
       "decisionReason": "Decision reason code",
       "recordCaseDecision": "Record case decision",
       "confirmRefusal": "Confirm refusal",
-      "refusalHelp": "Refusal records a terminal decision and revokes access to case artifacts. Confirm only after the required review.",
+      "refusalHelp": "Refusal is a final decision and notifies the requester. Confirm only after the required review.",
       "cancel": "Cancel",
-      "attachments": "Encrypted case evidence and supplements",
-      "attachmentFailed": "The attachment action failed. Refresh the case and check your current session before a new deliberate attempt.",
-      "attachmentHelp": "Up to 25 MiB: PDF, text, CSV, JSON, PNG or JPEG. New uploads await rights review. Identity and authority documents never enter exports. Upload a separately redacted replacement when needed.",
-      "attachmentFile": "Choose attachment",
-      "attachmentPurpose": "Attachment purpose",
-      "provenanceSource": "Provenance source code",
-      "uploadAttachment": "Upload encrypted attachment",
-      "rightsReviewReason": "Rights-review reason code",
-      "download": "Download",
-      "approved": "Approve for export",
-      "rejected": "Reject for export",
-      "deleteAttachment": "Delete attachment",
-      "downloadUnavailable": "Download is unavailable in this browser/client configuration. Connect using a supported same-origin cookie session or a browser with a file-saving sink.",
-      "resumeUnavailable": "The tab could not retain the delivery ceremony. Start a new deliberate ceremony when tab storage is available.",
-      "browserOwnsDownload": "The browser owns this transfer. Refresh delivery status; a click does not establish delivery.",
-      "checkDeliveryStatus": "Check the server delivery status. Any new attempt requires a new explicit verification ceremony.",
-      "downloadCanceled": "No transfer was started. Choose a file destination to download.",
-      "artifactNotAuthorized": "Delivery is unavailable: the artifact, case, or subject/representative authority is not currently eligible.",
-      "expiresAt": "Expires",
-      "deliveryChannel": "Delivery channel",
-      "assisted": "Assisted subject delivery",
-      "representative": "Authorized representative delivery",
-      "deliveryReason": "Delivery reason code",
-      "completeReauthentication": "Complete fresh-login verification",
-      "startAssistedDelivery": "Confirm artifact and sign in again",
       "versionConflict": "Another caseworker changed this case. Your draft is retained. Review the refreshed case and confirm again with a new operation key.",
-      "generationBlocked": "Generation requires verified identity and resolved source tasks.",
       "caseEvents": "Retained case events",
-      "outcomes": {
-        "verified": "Verified by exceptional evidence",
-        "failed": "Failed",
-        "clarification": "Clarification required"
-      },
       "taskStates": {
-        "complete": "Complete",
-        "not_applicable": "Not applicable",
-        "operator_review": "Operator review",
-        "retryable": "Retryable source task",
-        "canceled": "Canceled"
+        "open": "Open",
+        "resolved": "Checked"
       },
       "caseStates": {
-        "clarification_needed": "Clarification needed",
-        "operator_review": "Operator review",
+        "in_progress": "In progress",
+        "waiting_on_requester": "Waiting on requester",
+        "completed": "Completed",
         "refused": "Refused"
       },
-      "purposes": {
-        "identity_evidence": "Identity evidence",
-        "representative_authority": "Representative authority",
-        "processor_response": "Processor response",
-        "operator_supplement": "Operator supplement"
-      },
-      "authorityOutcome": "Representative authority decision",
-      "recordAuthorityReview": "Record authority decision",
-      "authorityOutcomes": {
-        "pending": "Pending",
-        "approved": "Approved",
-        "rejected": "Rejected"
-      }
+      "verifyIdentityHelp": "Check the requester's identity outside OpenMapX, then record how you checked it as a reason code. This starts work on the case.",
+      "tasksHelp": "These sources are checked by the operator outside OpenMapX. Resolve each one with a reason code once it is checked; the case can be completed when all are resolved.",
+      "resolveTask": "Mark as checked",
+      "exportHelp": "Download the subject's export after a fresh administrator sign-in. The archive streams straight to you and is not stored on the server.",
+      "downloadExport": "Download export",
+      "exportUnavailable": "Export is not available yet",
+      "exportDownloaded": "The export was downloaded.",
+      "exportFailed": "The export could not be downloaded. Sign in again before a new attempt."
+    },
+    "identityVerified": "Identity verified: {method}",
+    "identityMethods": {
+      "account_session": "fresh account sign-in",
+      "manual": "checked by an administrator"
     }
   },
   "adminSearchIndex": {
@@ -4933,8 +4806,7 @@
       "identity": "Identity",
       "tasks": "Tasks",
       "decisions": "Decisions",
-      "attachments": "Attachments",
-      "delivery": "Generation & delivery",
+      "export": "Export",
       "events": "Events"
     },
     "transitSourceOwner": "Manage transit sources",

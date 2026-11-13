@@ -1,43 +1,22 @@
 import z from "zod/v4";
 import {
-  assistedReauthStartSchema,
-  emailIdentityChallengeCompleteSchema,
-  emailIdentityChallengeIssueSchema,
-  identityReviewSchema,
-  privacyAttachmentReviewSchema,
-  privacyAttachmentUploadSchema,
   privacyCaseDecisionSchema,
   privacyCaseExtensionSchema,
-  privacyCaseVersionSchema,
-  taskAssignmentSchema,
-  taskDecisionSchema,
+  privacyIdentityVerificationSchema,
+  privacyTaskResolutionSchema,
 } from "../../../privacy/admin-contracts";
-import {
-  type AdminOperation,
-  adminBytes,
-  adminEmpty,
-  adminJson,
-  adminJsonValueSchema,
-  adminTimestampSchema as date,
-} from "../admin";
+import { type AdminOperation, adminBytes, adminJson, adminTimestampSchema as date } from "../admin";
 import {
   privacyAdminDetailSchema,
-  privacyArtifactViewSchema,
-  privacyAttachmentViewSchema,
   privacyCaseViewSchema,
-  privacyDownloadHeaders,
   privacyErrorSchema,
+  privacyExportHeaders,
 } from "./common";
 
 const params = z.strictObject({ requestId: z.uuid() });
 const task = params.extend({ taskId: z.uuid() });
-const attachment = params.extend({ attachmentId: z.uuid() });
-const artifact = params.extend({ artifactId: z.uuid() });
 const errors = Object.fromEntries(
-  [400, 401, 403, 404, 409, 410, 413, 416, 429, 500, 503].map((s) => [
-    s,
-    adminJson(privacyErrorSchema),
-  ]),
+  [400, 401, 403, 404, 409, 500, 503].map((s) => [s, adminJson(privacyErrorSchema)]),
 );
 const headers = z.object({
   "idempotency-key": z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$/),
@@ -70,26 +49,6 @@ export const privacyAdminOperations = {
     z.strictObject({ requests: z.array(privacyCaseViewSchema) }),
   ),
   getPrivacyAdminCase: read(`${base}/requests/:requestId`, privacyAdminDetailSchema, params),
-  listPrivacyAdminOperators: {
-    ...read(
-      `${base}/operators`,
-      z.strictObject({
-        operators: z.array(z.strictObject({ id: z.string(), name: z.string() })),
-        nextCursor: z.string().nullable(),
-      }),
-    ),
-    request: {
-      query: z.strictObject({
-        limit: z
-          .preprocess(
-            (v) => (typeof v === "string" && /^\d+$/.test(v) ? Number(v) : v),
-            z.number().int().min(1).max(100),
-          )
-          .default(50),
-        cursor: z.string().max(512).optional(),
-      }),
-    },
-  },
   createPrivacyAdminCase: write(
     `${base}/requests`,
     z.strictObject({
@@ -109,12 +68,6 @@ export const privacyAdminOperations = {
           accountState: z.enum(["current", "inaccessible", "deleted", "unknown"]),
         })
         .optional(),
-      representative: z
-        .strictObject({
-          contactType: z.enum(["email", "other_reference"]),
-          contact: z.string().min(1).max(512),
-        })
-        .optional(),
       receivedAt: date.optional(),
       locale: z.string().optional(),
       timeZone: z.string().optional(),
@@ -123,38 +76,15 @@ export const privacyAdminOperations = {
     z.strictObject({}),
     202,
   ),
-  reviewPrivacyAdminIdentity: write(
+  verifyPrivacyAdminIdentity: write(
     `${base}/requests/:requestId/identity`,
-    identityReviewSchema,
+    privacyIdentityVerificationSchema,
     requestResult,
   ),
-  issuePrivacyAdminEmailChallenge: write(
-    `${base}/requests/:requestId/identity/email-challenges`,
-    emailIdentityChallengeIssueSchema,
-    z.strictObject({
-      challengeId: z.uuid(),
-      expiresAt: date,
-      deliveryState: z.enum(["sent", "queued"]),
-    }),
-    params,
-    202,
-  ),
-  completePrivacyAdminEmailChallenge: write(
-    `${base}/requests/:requestId/identity/email-challenges/:challengeId/complete`,
-    emailIdentityChallengeCompleteSchema,
-    z.strictObject({ proofId: z.uuid() }),
-    params.extend({ challengeId: z.uuid() }),
-  ),
-  assignPrivacyAdminTask: write(
-    `${base}/requests/:requestId/tasks/:taskId/assignment`,
-    taskAssignmentSchema,
+  resolvePrivacyAdminTask: write(
+    `${base}/requests/:requestId/tasks/:taskId/resolution`,
+    privacyTaskResolutionSchema,
     requestResult,
-    task,
-  ),
-  decidePrivacyAdminTask: write(
-    `${base}/requests/:requestId/tasks/:taskId/decision`,
-    taskDecisionSchema,
-    z.strictObject({ ok: z.literal(true) }),
     task,
   ),
   extendPrivacyAdminCase: write(
@@ -167,74 +97,17 @@ export const privacyAdminOperations = {
     privacyCaseDecisionSchema,
     requestResult,
   ),
-  generatePrivacyAdminArtifact: write(
-    `${base}/requests/:requestId/generate`,
-    z.strictObject({}),
-    z.strictObject({
-      request: privacyCaseViewSchema,
-      artifact: privacyArtifactViewSchema,
-      outcomes: z.array(adminJsonValueSchema),
-    }),
-    params,
-    201,
-  ),
-  uploadPrivacyAdminAttachment: write(
-    `${base}/requests/:requestId/attachments`,
-    privacyAttachmentUploadSchema,
-    z.strictObject({ attachment: privacyAttachmentViewSchema }),
-    params,
-    201,
-  ),
-  reviewPrivacyAdminAttachment: write(
-    `${base}/requests/:requestId/attachments/:attachmentId/review`,
-    privacyAttachmentReviewSchema,
-    z.strictObject({ request: privacyCaseViewSchema, attachment: privacyAttachmentViewSchema }),
-    attachment,
-  ),
-  deletePrivacyAdminAttachment: {
-    ...write(
-      `${base}/requests/:requestId/attachments/:attachmentId`,
-      privacyCaseVersionSchema,
-      z.never(),
-      attachment,
-    ),
-    method: "DELETE",
-    responses: { ...errors, 204: adminEmpty() },
-  },
-  startPrivacyAdminReauthentication: write(
-    `${base}/requests/:requestId/artifacts/:artifactId/reauth/start`,
-    assistedReauthStartSchema,
-    z.strictObject({
-      challengeId: z.uuid(),
-      expiresAt: date,
-      loginPath: z.literal("/auth/privacy/admin"),
-    }),
-    artifact,
-  ),
-  completePrivacyAdminReauthentication: write(
-    `${base}/requests/:requestId/artifacts/:artifactId/reauth/complete`,
-    z.strictObject({ challengeId: z.uuid() }),
-    z.strictObject({ completed: z.literal(true) }),
-    artifact,
-  ),
-  downloadPrivacyAdminArtifact: {
-    method: "GET",
-    path: `${base}/requests/:requestId/artifacts/:artifactId/download`,
+  /** Streams the subject's export for an assisted case. It needs a completed
+   * `privacy.export` reauthentication proof in `x-admin-reauth-proof`. */
+  exportPrivacyAdminCase: {
+    method: "POST",
+    path: `${base}/requests/:requestId/export`,
     auth: "admin",
-    request: { params: artifact },
-    responses: {
-      ...errors,
-      200: adminBytes("application/octet-stream", privacyDownloadHeaders, true),
+    request: {
+      params,
+      body: z.strictObject({}),
+      headers: z.object({ "x-admin-reauth-proof": z.uuid() }),
     },
-  },
-  downloadPrivacyAdminAttachment: {
-    method: "GET",
-    path: `${base}/requests/:requestId/attachments/:attachmentId/download`,
-    auth: "admin",
-    request: { params: attachment },
-    responses: {
-      ...errors,
-      200: adminBytes("application/octet-stream", privacyDownloadHeaders, true),
-    },
+    responses: { ...errors, 200: adminBytes("application/zip", privacyExportHeaders) },
   },
 } as const satisfies Record<string, AdminOperation>;

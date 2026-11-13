@@ -1,112 +1,68 @@
-import { createHmac, randomUUID } from "node:crypto";
-import { envString } from "@openmapx/core/server-env";
-import { resolveLocale } from "@openmapx/i18n";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import { db as defaultDb } from "../db/index.js";
-import type { RequestState, TaskState } from "../db/privacy-schema.js";
+import { randomUUID } from "node:crypto";
 import {
-  dataExportArtifact,
+  ACTIVE_REQUEST_STATES,
+  acceptsCaseDecision,
+  acceptsManualIdentityVerification,
+  acceptsSelfServiceExport,
+  acceptsTaskResolution,
+  canExtendDeadline,
+  INITIAL_REQUEST_STATE,
+  isTerminalRequestState,
+} from "@openmapx/core/privacy";
+import { defaultLocale, resolveLocale } from "@openmapx/i18n";
+import { and, desc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { db as defaultDb } from "../db/index.js";
+import type { PrivacyNotificationTemplate, RequestState } from "../db/privacy-schema.js";
+import {
   dataSubjectRequest,
-  dataSubjectRequestAttachment,
   dataSubjectRequestEvent,
-  dataSubjectRequestIdentity,
   dataSubjectRequestNotification,
   dataSubjectRequestPreservation,
   dataSubjectRequestTask,
-  sessionAuthAssurance,
   user,
 } from "../db/schema.js";
+import { decrypt, encrypt } from "../services/secrets.js";
 import { SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
-import {
-  type CryptoEnvelope,
-  decryptEnvelope,
-  encryptEnvelope,
-  loadMasterKeyRingAsync,
-  type MasterKeyRing,
-  makeAad,
-} from "./crypto.js";
 import { addCalendarMonths, calculateSubjectRequestDueAt } from "./deadline.js";
+import { PrivacyRequestError } from "./errors.js";
 import { findIdempotentEvent, idempotencyFingerprint } from "./idempotency.js";
-import { deriveOperatorTaskActions } from "./operator-task-actions";
 import { withPreservationRetentionLock } from "./preservation.js";
 import {
-  assertAssemblyReady,
   assertValidRequestTransition,
   type CreateSubjectRequestInput,
   createSubjectRequestSchema,
   eventPayloadSchema,
-  identityReviewSchema,
-  isValidRequestTransition,
 } from "./request-contracts.js";
-
-export class PrivacyRequestError extends Error {
-  constructor(
-    readonly code: string,
-    readonly statusCode = 409,
-  ) {
-    super(code);
-    this.name = "PrivacyRequestError";
-  }
-}
 
 export interface PrivacyRequestServiceOptions {
   database?: typeof defaultDb;
   catalogue?: typeof SUBJECT_DATA_CATALOGUE;
   now?: () => Date;
-  keyRing?: MasterKeyRing;
-  keyRingPromise?: Promise<MasterKeyRing>;
-  deploymentId?: string;
-  enqueue?: (requestId: string) => void | Promise<void>;
-  /** Physical ciphertext deletion is injected so DB mutations stay testable. */
-  deleteArtifactStorage?: (storageKey: string) => Promise<void>;
 }
 
-type DbLike = typeof defaultDb;
-function actorPayload(actor: { kind: string; id?: string | null }): {
-  actorKind: string;
-  actorId: string | null;
-} {
-  return {
-    actorKind: actor.kind.slice(0, 32),
-    actorId: actor.id ? actor.id.slice(0, 256) : null,
-  };
-}
+type RequestRow = typeof dataSubjectRequest.$inferSelect;
+type Transaction = Parameters<Parameters<typeof defaultDb.transaction>[0]>[0];
+type Actor = { kind: "subject" | "admin" | "system"; id?: string | null };
+
+const IDEMPOTENCY_KEY = /^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$/;
+const REASON_CODE = /^[a-z0-9][a-z0-9._-]{0,127}$/;
+/** Subject templates sent when a request enters a state. */
+const STATE_TEMPLATES: Partial<Record<RequestState, PrivacyNotificationTemplate>> = {
+  waiting_on_requester: "waiting_on_requester",
+  completed: "completed",
+  refused: "refused",
+};
+const NOTIFICATION_TARGET = [
+  dataSubjectRequestNotification.requestId,
+  dataSubjectRequestNotification.template,
+  dataSubjectRequestNotification.channel,
+  dataSubjectRequestNotification.recipientUserId,
+];
 
 function toDate(value: Date | string | number): Date {
   const result = value instanceof Date ? new Date(value.getTime()) : new Date(value);
   if (Number.isNaN(result.getTime())) throw new PrivacyRequestError("INVALID_DATE", 400);
   return result;
-}
-
-function digestLocatorWithKey(value: string, key: Buffer): string {
-  return createHmac("sha256", key)
-    .update("openmapx/privacy/locator-digest/v1\0")
-    .update(value)
-    .digest("hex");
-}
-
-function digestLocator(value: string, ring: MasterKeyRing): string {
-  return digestLocatorWithKey(value, ring.activeKey);
-}
-
-function encodeLocator(
-  requestId: string,
-  kind: string,
-  locator: string,
-  accountState: string,
-  ring: MasterKeyRing,
-  deploymentId: string,
-  blobId = requestId,
-): string {
-  const aad = makeAad({ deploymentId, requestId, blobId, purpose: "request-locator" });
-  return JSON.stringify(
-    encryptEnvelope(
-      Buffer.from(JSON.stringify({ kind, value: locator, accountState })),
-      ring,
-      "request-locator",
-      aad,
-    ),
-  );
 }
 
 function boundedEventPayload(payload: Record<string, unknown> = {}): Record<string, unknown> {
@@ -115,36 +71,21 @@ function boundedEventPayload(payload: Record<string, unknown> = {}): Record<stri
   return parsed.data;
 }
 
-function notificationTemplateForState(
-  state: RequestState,
-): "clarification" | "ready" | "delivered" | "closed" | "refused" | null {
-  switch (state) {
-    case "clarification_needed":
-      return "clarification";
-    case "ready":
-      return "ready";
-    case "delivered":
-      return "delivered";
-    case "closed":
-      return "closed";
-    case "refused":
-      return "refused";
-    default:
-      return null;
-  }
+function requireIdempotencyKey(value: string | undefined): string {
+  if (!value || !IDEMPOTENCY_KEY.test(value))
+    throw new PrivacyRequestError("IDEMPOTENCY_KEY_REQUIRED", 400);
+  return value;
+}
+
+function requireReasonCode(value: string): string {
+  if (!REASON_CODE.test(value)) throw new PrivacyRequestError("INVALID_REASON", 400);
+  return value;
 }
 
 function notificationValues(input: {
   requestId: string;
-  recipientUserId: string | null;
-  template:
-    | "acknowledgement"
-    | "clarification"
-    | "extension"
-    | "ready"
-    | "delivered"
-    | "closed"
-    | "refused";
+  recipientUserId: string;
+  template: PrivacyNotificationTemplate;
   locale: string;
   at: Date;
 }) {
@@ -163,206 +104,140 @@ function notificationValues(input: {
   };
 }
 
+function encodeLocator(value: string): string {
+  return JSON.stringify(encrypt(JSON.stringify({ value })));
+}
+
+function decodeLocator(envelope: string): string | null {
+  try {
+    const parsed = JSON.parse(envelope) as { ciphertext: string; iv: string; tag: string };
+    const payload = JSON.parse(decrypt(parsed.ciphertext, parsed.iv, parsed.tag)) as {
+      value?: unknown;
+    };
+    return typeof payload.value === "string" && payload.value ? payload.value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Active administrator accounts that receive operator alerts. */
+export async function privacyAlertRecipients(
+  database: Pick<typeof defaultDb, "select">,
+  now: Date,
+): Promise<string[]> {
+  const rows = await database
+    .select({ id: user.id })
+    .from(user)
+    .where(
+      and(
+        eq(user.role, "admin"),
+        or(isNull(user.banned), eq(user.banned, false), lte(user.banExpires, now)),
+        sql`${user.id} <> 'loopback'`,
+      ),
+    );
+  return rows.map((row) => row.id);
+}
+
 export class PrivacyRequestService {
-  private readonly database: DbLike;
+  private readonly database: typeof defaultDb;
   private readonly catalogue: typeof SUBJECT_DATA_CATALOGUE;
   private readonly now: () => Date;
-  private readonly getKeyRing: () => Promise<MasterKeyRing>;
-  private readonly deploymentId: string;
-  private readonly enqueue?: PrivacyRequestServiceOptions["enqueue"];
-  private readonly deleteArtifactStorage?: PrivacyRequestServiceOptions["deleteArtifactStorage"];
 
   constructor(options: PrivacyRequestServiceOptions = {}) {
     this.database = options.database ?? defaultDb;
     this.catalogue = options.catalogue ?? SUBJECT_DATA_CATALOGUE;
     this.now = options.now ?? (() => new Date());
-    this.getKeyRing = () =>
-      options.keyRingPromise ??
-      (options.keyRing ? Promise.resolve(options.keyRing) : loadMasterKeyRingAsync());
-    this.deploymentId = options.deploymentId ?? envString("OPENMAPX_DEPLOYMENT_ID", "openmapx");
-    this.enqueue = options.enqueue;
-    this.deleteArtifactStorage = options.deleteArtifactStorage;
   }
 
-  async resolveVerifiedSubjectId(
-    request: Pick<
-      typeof dataSubjectRequest.$inferSelect,
-      "id" | "userId" | "identityState" | "locatorType" | "encryptedLocator"
-    >,
-  ): Promise<string> {
-    if (request.identityState !== "verified")
-      throw new PrivacyRequestError("IDENTITY_REQUIRED", 409);
+  /** The exact account whose data an export contains, or null when an
+   * assisted case names someone only by email or another reference. */
+  subjectUserId(request: Pick<RequestRow, "userId" | "locatorType" | "encryptedLocator">) {
     if (request.userId) return request.userId;
-    if (request.locatorType !== "user_id")
-      throw new PrivacyRequestError("EXACT_SUBJECT_LOCATOR_REQUIRED", 409);
-    try {
-      const ring = await this.getKeyRing();
-      const aad = makeAad({
-        deploymentId: this.deploymentId,
-        requestId: request.id,
-        blobId: request.id,
-        purpose: "request-locator",
-      });
-      const payload = JSON.parse(
-        decryptEnvelope(
-          JSON.parse(request.encryptedLocator) as CryptoEnvelope,
-          ring,
-          "request-locator",
-          aad,
-        ).toString("utf8"),
-      ) as { kind?: unknown; value?: unknown };
-      if (payload.kind !== "user_id" || typeof payload.value !== "string" || !payload.value)
-        throw new Error("invalid locator");
-      return payload.value;
-    } catch {
-      throw new PrivacyRequestError("EXACT_SUBJECT_LOCATOR_REQUIRED", 409);
-    }
+    if (request.locatorType !== "user_id" || !request.encryptedLocator) return null;
+    return decodeLocator(request.encryptedLocator);
   }
 
-  /** Exact historical case lookup across configured locator-key versions.
-   * This exposes only keyed digests and never scans or returns raw locators. */
-  async exactUserLocatorDigests(userId: string): Promise<readonly string[]> {
-    if (!userId) throw new PrivacyRequestError("EXACT_SUBJECT_LOCATOR_REQUIRED", 409);
-    const ring = await this.getKeyRing();
-    return [
-      ...new Set(
-        [...ring.keys.values()].map((key) => digestLocatorWithKey(`user_id\0${userId}`, key)),
-      ),
-    ];
+  private async activeRequestFor(userId: string, kind: RequestRow["kind"]) {
+    const rows = await this.database
+      .select()
+      .from(dataSubjectRequest)
+      .where(
+        and(
+          eq(dataSubjectRequest.userId, userId),
+          eq(dataSubjectRequest.kind, kind),
+          inArray(dataSubjectRequest.state, [...ACTIVE_REQUEST_STATES]),
+        ),
+      )
+      .orderBy(desc(dataSubjectRequest.createdAt))
+      .limit(1);
+    return rows[0];
   }
 
-  async create(input: CreateSubjectRequestInput): Promise<typeof dataSubjectRequest.$inferSelect> {
+  async create(input: CreateSubjectRequestInput): Promise<RequestRow> {
     const parsed = createSubjectRequestSchema.parse(input);
     const now = this.now();
     const requestedReceivedAt = parsed.receivedAt ? toDate(parsed.receivedAt) : now;
-    const receivedAt = parsed.channel === "self_service" ? now : requestedReceivedAt;
-    if (
-      parsed.channel === "self_service" &&
-      Math.abs(now.getTime() - requestedReceivedAt.getTime()) > 5 * 60_000
-    ) {
+    const selfService = parsed.channel === "self_service";
+    if (selfService && Math.abs(now.getTime() - requestedReceivedAt.getTime()) > 5 * 60_000)
       throw new PrivacyRequestError("RECEIPT_TIME_MUST_BE_CURRENT", 400);
+    const receivedAt = selfService ? now : requestedReceivedAt;
+    if (parsed.userId) {
+      const existing = await this.activeRequestFor(parsed.userId, parsed.kind);
+      if (existing) return existing;
     }
-    const dueAt = calculateSubjectRequestDueAt(receivedAt, parsed.timeZone);
     const id = randomUUID();
-    const subjectLocator = parsed.subject?.locator ?? parsed.userId;
-    if (!subjectLocator) throw new PrivacyRequestError("SUBJECT_LOCATOR_REQUIRED", 400);
     const locatorType = parsed.subject?.locatorType ?? "user_id";
-    const accountState = parsed.subject?.accountState ?? "current";
-    const existing = parsed.userId
-      ? await this.database
-          .select()
-          .from(dataSubjectRequest)
-          .where(
-            and(
-              eq(dataSubjectRequest.userId, parsed.userId),
-              eq(dataSubjectRequest.kind, parsed.kind),
-              sql`${dataSubjectRequest.state} not in ('withdrawn', 'refused', 'closed', 'delivered', 'artifact_expired')`,
-            ),
-          )
-          .orderBy(desc(dataSubjectRequest.createdAt))
-          .limit(1)
-      : [];
-    if (existing[0]) return existing[0];
-    const state: RequestState =
-      parsed.channel === "self_service" ? "preserving" : "identity_pending";
-    const ring = await this.getKeyRing();
-    const locator = encodeLocator(
-      id,
-      locatorType,
-      subjectLocator,
-      accountState,
-      ring,
-      this.deploymentId,
-    );
-    const locatorDigest = digestLocator(`${locatorType}\0${subjectLocator}`, ring);
+    const locatorValue = parsed.subject?.locator ?? parsed.userId;
+    if (!locatorValue) throw new PrivacyRequestError("SUBJECT_LOCATOR_REQUIRED", 400);
+    // An assisted request keeps how the person was named; a self-service
+    // request is tied to the signed-in account and needs no locator copy.
+    const encryptedLocator = selfService ? null : encodeLocator(locatorValue);
     const applicable = this.catalogue.filter(
       (registration) => registration.strategy !== "not_personal",
     );
-    let racedRequest: typeof dataSubjectRequest.$inferSelect | undefined;
     try {
       await withPreservationRetentionLock(this.database, async (tx) => {
-        await tx.insert(dataSubjectRequest).values({
-          id,
-          kind: parsed.kind,
-          channel: parsed.channel,
-          userId: parsed.userId,
-          actorUserId: parsed.actorUserId ?? null,
-          actorSessionId: parsed.actorSessionId ?? null,
-          encryptedLocator: locator,
-          locatorDigest,
-          locatorType,
-          accountState,
-          locale: parsed.locale,
-          timeZone: parsed.timeZone,
-          state,
-          version: 1,
-          receivedAt,
-          registeredAt: now,
-          preservationAt: state === "preserving" ? now : null,
-          // The preservation/collection cutoff is the controller's receipt-side
-          // snapshot, not the caller's (possibly backdated) assisted receipt.
-          // Collectors may replace this with their actual repeatable-read time.
-          snapshotAt: now,
-          dueAt,
-          extension: null,
-          identityState: state === "preserving" ? "verified" : "pending",
-          deliveryState: "not_delivered",
-          createdAt: now,
-          updatedAt: now,
-        });
-        await tx.insert(dataSubjectRequestIdentity).values({
-          id: randomUUID(),
-          requestId: id,
-          party: "subject",
-          state: state === "preserving" ? "verified" : "pending",
-          method: state === "preserving" ? "account_login" : null,
-          authorityState: "not_applicable",
-          deliveryAuthorized: 0,
-          verifiedAt: state === "preserving" ? now : null,
-          verifiedBy: state === "preserving" ? parsed.userId : null,
-          createdAt: now,
-          updatedAt: now,
-        });
-        if (parsed.representative) {
-          const representativeBlobId = `${id}:representative`;
-          await tx.insert(dataSubjectRequestIdentity).values({
-            id: randomUUID(),
-            requestId: id,
-            party: "representative",
-            contactEnvelope: encodeLocator(
-              id,
-              parsed.representative.contactType,
-              parsed.representative.contact,
-              "unknown",
-              ring,
-              this.deploymentId,
-              representativeBlobId,
-            ),
-            contactDigest: digestLocator(
-              `${parsed.representative.contactType}\0${parsed.representative.contact}`,
-              ring,
-            ),
-            state: "pending",
-            authorityState: "pending",
-            deliveryAuthorized: 0,
+        const [created] = await tx
+          .insert(dataSubjectRequest)
+          .values({
+            id,
+            kind: parsed.kind,
+            channel: parsed.channel,
+            userId: parsed.userId,
+            actorUserId: parsed.actorUserId ?? null,
+            actorSessionId: parsed.actorSessionId ?? null,
+            encryptedLocator,
+            locatorType,
+            accountState: parsed.subject?.accountState ?? "current",
+            locale: parsed.locale,
+            timeZone: parsed.timeZone,
+            state: INITIAL_REQUEST_STATE,
+            version: 1,
+            receivedAt,
+            registeredAt: now,
+            preservationAt: now,
+            snapshotAt: now,
+            dueAt: calculateSubjectRequestDueAt(receivedAt, parsed.timeZone),
+            extension: null,
+            identityMethod: selfService ? "account_session" : null,
+            identityVerifiedAt: selfService ? now : null,
             createdAt: now,
             updatedAt: now,
-          });
-        }
+          })
+          .returning();
+        if (!created) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 500);
         await tx.insert(dataSubjectRequestEvent).values({
           id: randomUUID(),
           requestId: id,
           eventType: "received",
-          ...actorPayload({
-            kind: parsed.channel === "self_service" ? "subject" : "operator",
-            id: parsed.actorUserId,
-          }),
+          actorKind: selfService ? "subject" : "admin",
+          actorId: parsed.actorUserId ?? null,
           payload: boundedEventPayload({ kind: parsed.kind, channel: parsed.channel }),
           payloadVersion: 1,
           ...(parsed.idempotencyKey ? { idempotencyKey: parsed.idempotencyKey } : {}),
           createdAt: now,
         });
-        if (parsed.userId) {
+        if (parsed.userId)
           await tx
             .insert(dataSubjectRequestNotification)
             .values(
@@ -374,125 +249,89 @@ export class PrivacyRequestService {
                 at: now,
               }),
             )
-            .onConflictDoNothing({
-              target: [
-                dataSubjectRequestNotification.requestId,
-                dataSubjectRequestNotification.template,
-                dataSubjectRequestNotification.channel,
-              ],
-            });
-        }
+            .onConflictDoNothing({ target: NOTIFICATION_TARGET });
+        // Every new request alerts each administrator, so an assisted request
+        // without a subject account and a self-service download that still
+        // waits on operator-held sources are both seen.
+        const admins = await privacyAlertRecipients(tx, now);
+        if (admins.length)
+          await tx
+            .insert(dataSubjectRequestNotification)
+            .values(
+              admins.map((recipientUserId) =>
+                notificationValues({
+                  requestId: id,
+                  recipientUserId,
+                  template: "admin_new_request",
+                  locale: defaultLocale,
+                  at: now,
+                }),
+              ),
+            )
+            .onConflictDoNothing({ target: NOTIFICATION_TARGET });
         for (const registration of applicable) {
-          const required = 1;
-          const unresolvedLocator = !parsed.userId && locatorType !== "user_id";
-          await tx.insert(dataSubjectRequestTask).values({
-            id: randomUUID(),
-            requestId: id,
-            taskKey: registration.id,
-            registrationId: registration.id,
-            collectorId: registration.collectorId ?? null,
-            collectorVersion: registration.collectorVersion ?? null,
-            source: registration.source,
-            required,
-            status: unresolvedLocator ? "operator_review" : "pending",
-            attempts: 0,
-            nextAttemptAt: now,
-            cutoffAt: now,
-            createdAt: now,
-            updatedAt: now,
-          });
+          const operatorTask = registration.strategy === "operator_task";
+          const publicCode = `${registration.source}-preservation-action-required`;
+          if (operatorTask)
+            await tx.insert(dataSubjectRequestTask).values({
+              id: randomUUID(),
+              requestId: id,
+              registrationId: registration.id,
+              source: registration.source,
+              status: "open",
+              publicCode,
+              createdAt: now,
+              updatedAt: now,
+            });
           await tx.insert(dataSubjectRequestPreservation).values({
             id: randomUUID(),
             requestId: id,
             registrationId: registration.id,
-            locatorDigest,
             sourceCutoffAt: now,
             startedAt: now,
-            status: "held",
+            ...(operatorTask
+              ? { status: "action_required", outcomeCode: publicCode }
+              : registration.source === "managed-service"
+                ? {
+                    status: "source_capture_pending",
+                    outcomeCode: "managed-source-capture-required",
+                  }
+                : { status: "held" }),
           });
-          if (!unresolvedLocator && registration.strategy === "operator_task") {
-            const outcomeCode = `${registration.source}-preservation-action-required`;
-            await tx
-              .update(dataSubjectRequestTask)
-              .set({
-                status: "operator_review",
-                publicCode: outcomeCode,
-                exceptionCode: outcomeCode,
-              })
-              .where(
-                and(
-                  eq(dataSubjectRequestTask.requestId, id),
-                  eq(dataSubjectRequestTask.registrationId, registration.id),
-                ),
-              );
-            await tx
-              .update(dataSubjectRequestPreservation)
-              .set({ status: "action_required", outcomeCode })
-              .where(
-                and(
-                  eq(dataSubjectRequestPreservation.requestId, id),
-                  eq(dataSubjectRequestPreservation.registrationId, registration.id),
-                ),
-              );
-          } else if (!unresolvedLocator && registration.source === "managed-service") {
-            await tx
-              .update(dataSubjectRequestPreservation)
-              .set({
-                status: "source_capture_pending",
-                outcomeCode: "managed-source-capture-required",
-              })
-              .where(
-                and(
-                  eq(dataSubjectRequestPreservation.requestId, id),
-                  eq(dataSubjectRequestPreservation.registrationId, registration.id),
-                ),
-              );
-          }
         }
+        // The signed-in session already proves who asks, so self-service work
+        // starts at once.
+        if (selfService)
+          await this.applyTransition(tx, created, {
+            to: "in_progress",
+            actor: { kind: "subject", id: parsed.userId },
+            reasonCode: "account-session",
+          });
       });
     } catch (error: unknown) {
-      if (
-        String(error).includes("data_subject_request_active_user_kind_idx") ||
-        String(error).includes("duplicate key")
-      ) {
-        // The partial unique index is the race authority.  A concurrent
-        // request may win between the initial read and our insert; return its
-        // active case just like the non-racing path instead of exposing a
-        // spurious conflict to the subject.  Do not enqueue the losing random
-        // request ID.
-        if (!parsed.userId) throw error;
-        const raced = await this.database
-          .select()
-          .from(dataSubjectRequest)
-          .where(
-            and(
-              eq(dataSubjectRequest.userId, parsed.userId),
-              eq(dataSubjectRequest.kind, parsed.kind),
-              sql`${dataSubjectRequest.state} not in ('withdrawn', 'refused', 'closed', 'delivered', 'artifact_expired')`,
-            ),
-          )
-          .orderBy(desc(dataSubjectRequest.createdAt))
-          .limit(1);
-        if (raced[0]) racedRequest = raced[0];
-        else throw new PrivacyRequestError("REQUEST_ALREADY_ACTIVE", 409);
-      } else {
-        throw error;
+      // The partial unique index decides a race between two first requests:
+      // the loser returns the winner's active case.
+      if (parsed.userId && String(error).includes("data_subject_request_active_user_kind_idx")) {
+        const raced = await this.activeRequestFor(parsed.userId, parsed.kind);
+        if (raced) return raced;
+        throw new PrivacyRequestError("REQUEST_ALREADY_ACTIVE", 409);
       }
+      throw error;
     }
-    if (racedRequest) return racedRequest;
-    if (parsed.channel === "self_service") await this.enqueue?.(id);
+    return this.getById(id);
+  }
+
+  async getById(requestId: string): Promise<RequestRow> {
     const rows = await this.database
       .select()
       .from(dataSubjectRequest)
-      .where(eq(dataSubjectRequest.id, id))
+      .where(eq(dataSubjectRequest.id, requestId))
       .limit(1);
-    if (!rows[0]) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 500);
+    if (!rows[0]) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
     return rows[0];
   }
 
-  async listForUser(
-    userId: string,
-  ): Promise<ReadonlyArray<typeof dataSubjectRequest.$inferSelect>> {
+  async listForUser(userId: string): Promise<ReadonlyArray<RequestRow>> {
     return this.database
       .select()
       .from(dataSubjectRequest)
@@ -500,10 +339,7 @@ export class PrivacyRequestService {
       .orderBy(desc(dataSubjectRequest.createdAt));
   }
 
-  async getForUser(
-    requestId: string,
-    userId: string,
-  ): Promise<typeof dataSubjectRequest.$inferSelect> {
+  async getForUser(requestId: string, userId: string): Promise<RequestRow> {
     const rows = await this.database
       .select()
       .from(dataSubjectRequest)
@@ -513,223 +349,306 @@ export class PrivacyRequestService {
     return rows[0];
   }
 
-  async transition(input: {
-    requestId: string;
-    from: RequestState;
-    to: RequestState;
-    version: number;
-    actor: { kind: string; id?: string | null };
-    reasonCode?: string;
-    idempotencyKey?: string;
-    capturedRegistrationIds?: readonly string[];
-    operationDigest?: string;
-    allowSameState?: boolean;
-  }): Promise<typeof dataSubjectRequest.$inferSelect> {
-    // Replay detection must precede transition validation.  A retry arriving
-    // after the first caller reached a terminal state is still the same
-    // idempotent mutation and must not be rejected as a new invalid edge.
-    if (input.idempotencyKey) {
-      const previous = await this.database
-        .select()
-        .from(dataSubjectRequestEvent)
+  async openTaskCount(requestId: string): Promise<number> {
+    const rows = await this.database
+      .select({ id: dataSubjectRequestTask.id })
+      .from(dataSubjectRequestTask)
+      .where(
+        and(
+          eq(dataSubjectRequestTask.requestId, requestId),
+          eq(dataSubjectRequestTask.status, "open"),
+        ),
+      );
+    return rows.length;
+  }
+
+  /**
+   * The single writer of request state. It checks the transition table, bumps
+   * the version only when the caller's version still matches, records the
+   * event, queues the subject notification and releases retention holds when
+   * the request closes.
+   */
+  private async applyTransition(
+    tx: Transaction,
+    current: RequestRow,
+    input: {
+      to: RequestState;
+      actor: Actor;
+      reasonCode?: string;
+      idempotencyKey?: string;
+      operationDigest?: string;
+      set?: Partial<typeof dataSubjectRequest.$inferInsert>;
+    },
+  ): Promise<RequestRow> {
+    assertValidRequestTransition(current.state, input.to);
+    const now = this.now();
+    const closing = isTerminalRequestState(input.to);
+    const [updated] = await tx
+      .update(dataSubjectRequest)
+      .set({
+        ...input.set,
+        state: input.to,
+        version: sql`${dataSubjectRequest.version} + 1`,
+        updatedAt: now,
+        ...(input.to === "refused" ? { refusalCode: input.reasonCode ?? null } : {}),
+        ...(input.to === "completed" ? { completedAt: now } : {}),
+        ...(closing ? { closedAt: now } : {}),
+      })
+      .where(
+        and(
+          eq(dataSubjectRequest.id, current.id),
+          eq(dataSubjectRequest.state, current.state),
+          eq(dataSubjectRequest.version, current.version),
+        ),
+      )
+      .returning();
+    if (!updated) throw new PrivacyRequestError("REQUEST_VERSION_CONFLICT", 409);
+    await tx.insert(dataSubjectRequestEvent).values({
+      id: randomUUID(),
+      requestId: current.id,
+      eventType: `state_${input.to}`,
+      actorKind: input.actor.kind,
+      actorId: input.actor.id ? input.actor.id.slice(0, 256) : null,
+      payload: boundedEventPayload({
+        from: current.state,
+        ...(input.reasonCode ? { reasonCode: input.reasonCode } : {}),
+        ...(input.operationDigest ? { operationDigest: input.operationDigest } : {}),
+      }),
+      payloadVersion: 1,
+      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+      createdAt: now,
+    });
+    const template = STATE_TEMPLATES[input.to];
+    // A withdrawal is the subject's own act; it needs no completion email.
+    if (template && updated.userId && input.reasonCode !== "withdrawn")
+      await tx
+        .insert(dataSubjectRequestNotification)
+        .values(
+          notificationValues({
+            requestId: current.id,
+            recipientUserId: updated.userId,
+            template,
+            locale: updated.locale,
+            at: now,
+          }),
+        )
+        .onConflictDoNothing({ target: NOTIFICATION_TARGET });
+    if (closing)
+      await tx
+        .update(dataSubjectRequestPreservation)
+        .set({ releasedAt: now, status: "released" })
         .where(
           and(
-            eq(dataSubjectRequestEvent.requestId, input.requestId),
-            eq(dataSubjectRequestEvent.idempotencyKey, input.idempotencyKey),
+            eq(dataSubjectRequestPreservation.requestId, current.id),
+            isNull(dataSubjectRequestPreservation.releasedAt),
           ),
-        )
-        .limit(1);
-      if (previous[0]) {
-        if (
-          input.operationDigest &&
-          (previous[0].eventType !== `state_${input.to}` ||
-            (previous[0].payload as Record<string, unknown>)?.operationDigest !==
-              input.operationDigest)
-        )
-          throw new PrivacyRequestError("IDEMPOTENCY_KEY_REUSED", 409);
-        const current = await this.database
-          .select()
-          .from(dataSubjectRequest)
-          .where(eq(dataSubjectRequest.id, input.requestId))
-          .limit(1);
-        if (current[0]) return current[0];
-      }
-    }
-    if (!(input.allowSameState && input.from === input.to))
-      assertValidRequestTransition(input.from, input.to);
-    const now = this.now();
-    let rows: Array<typeof dataSubjectRequest.$inferSelect>;
+        );
+    return updated;
+  }
+
+  /**
+   * Run one versioned, idempotent mutation on a locked request row. A replay
+   * with the same key and the same operation returns the current row; a key
+   * reused for a different operation is refused.
+   */
+  private async mutate(
+    input: {
+      requestId: string;
+      version: number;
+      idempotencyKey: string;
+      eventType: string;
+      operationDigest: string;
+    },
+    work: (tx: Transaction, current: RequestRow) => Promise<RequestRow>,
+  ): Promise<RequestRow> {
+    requireIdempotencyKey(input.idempotencyKey);
     try {
-      rows = await this.database.transaction(async (tx) => {
-        const locked = await tx
+      return await this.database.transaction(async (tx) => {
+        const [current] = await tx
           .select()
           .from(dataSubjectRequest)
           .where(eq(dataSubjectRequest.id, input.requestId))
           .for("update")
           .limit(1);
-        if (input.idempotencyKey) {
-          const previous = await findIdempotentEvent(tx as unknown as typeof defaultDb, {
-            requestId: input.requestId,
-            idempotencyKey: input.idempotencyKey,
-            eventType: `state_${input.to}`,
-            ...(input.operationDigest ? { operationDigest: input.operationDigest } : {}),
-          });
-          if (previous) return locked;
-        }
-        const updated = await tx
-          .update(dataSubjectRequest)
-          .set({
-            state: input.to,
-            version: sql`${dataSubjectRequest.version} + 1`,
-            updatedAt: now,
-            ...(input.to === "collecting"
-              ? {
-                  snapshotAt: sql`coalesce(${dataSubjectRequest.snapshotAt}, ${now.toISOString()})`,
-                }
-              : {}),
-            ...(input.to === "withdrawn" ? { withdrawalAt: now } : {}),
-            ...(input.to === "refused"
-              ? { refusalCode: input.reasonCode ?? null, refusalReason: input.reasonCode ?? null }
-              : {}),
-            ...(input.to === "closed" ? { closedAt: now } : {}),
-            ...(input.to === "delivered" ? { completedAt: now, deliveryState: "delivered" } : {}),
-          })
-          .where(
-            and(
-              eq(dataSubjectRequest.id, input.requestId),
-              eq(dataSubjectRequest.state, input.from),
-              eq(dataSubjectRequest.version, input.version),
-            ),
-          )
-          .returning();
-        if (!updated[0]) throw new PrivacyRequestError("REQUEST_VERSION_CONFLICT", 409);
-        await tx.insert(dataSubjectRequestEvent).values({
-          id: randomUUID(),
+        if (!current) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
+        const previous = await findIdempotentEvent(tx as unknown as typeof defaultDb, {
           requestId: input.requestId,
-          eventType: `state_${input.to}`,
-          ...actorPayload(input.actor),
-          payload: boundedEventPayload({
-            ...(input.reasonCode ? { reasonCode: input.reasonCode } : {}),
-            ...(input.operationDigest ? { operationDigest: input.operationDigest } : {}),
-          }),
-          payloadVersion: 1,
-          ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
-          createdAt: now,
+          idempotencyKey: input.idempotencyKey,
+          eventType: input.eventType,
+          operationDigest: input.operationDigest,
         });
-        const notificationTemplate = notificationTemplateForState(input.to);
-        if (notificationTemplate && updated[0]?.userId) {
-          await tx
-            .insert(dataSubjectRequestNotification)
-            .values(
-              notificationValues({
-                requestId: input.requestId,
-                recipientUserId: updated[0].userId,
-                template: notificationTemplate,
-                locale: updated[0].locale,
-                at: now,
-              }),
-            )
-            .onConflictDoNothing({
-              target: [
-                dataSubjectRequestNotification.requestId,
-                dataSubjectRequestNotification.template,
-                dataSubjectRequestNotification.channel,
-              ],
-            });
-        }
-        if (input.to === "withdrawn" || input.to === "refused" || input.to === "closed") {
-          await tx
-            .update(dataSubjectRequestPreservation)
-            .set({ releasedAt: now, status: "released" })
-            .where(
-              and(
-                eq(dataSubjectRequestPreservation.requestId, input.requestId),
-                sql`${dataSubjectRequestPreservation.releasedAt} is null`,
-              ),
-            );
-        }
-        if (input.to === "ready" && input.capturedRegistrationIds?.length) {
-          await tx
-            .update(dataSubjectRequestPreservation)
-            .set({ capturedAt: now, status: "captured", outcomeCode: "artifact-source-captured" })
-            .where(
-              and(
-                eq(dataSubjectRequestPreservation.requestId, input.requestId),
-                inArray(dataSubjectRequestPreservation.registrationId, [
-                  ...new Set(input.capturedRegistrationIds),
-                ]),
-                sql`${dataSubjectRequestPreservation.releasedAt} is null`,
-              ),
-            );
-        }
-        return updated;
+        if (previous) return current;
+        if (current.version !== input.version)
+          throw new PrivacyRequestError("REQUEST_VERSION_CONFLICT", 409);
+        return work(tx, current);
       });
     } catch (error) {
-      if (
-        input.idempotencyKey &&
-        String(error).includes("data_subject_request_event_idempotency_idx")
-      ) {
-        const current = await this.database
-          .select()
-          .from(dataSubjectRequest)
-          .where(eq(dataSubjectRequest.id, input.requestId))
-          .limit(1);
-        if (current[0]) return current[0];
-      }
+      if (String(error).includes("data_subject_request_event_idempotency_idx"))
+        return this.getById(input.requestId);
       throw error;
     }
-    if (!rows[0]) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
-    return rows[0];
   }
 
+  /** The subject withdraws: the request completes with reason `withdrawn`. */
   async withdraw(
     requestId: string,
     userId: string,
     version: number,
-    idempotencyKey?: string,
-  ): Promise<typeof dataSubjectRequest.$inferSelect> {
-    const current = await this.getForUser(requestId, userId);
-    const result = await this.transition({
+    idempotencyKey: string,
+  ): Promise<RequestRow> {
+    await this.getForUser(requestId, userId);
+    const operationDigest = idempotencyFingerprint({
       requestId,
-      from: current.state,
-      to: "withdrawn",
+      userId,
       version,
-      actor: { kind: "subject", id: userId },
-      ...(idempotencyKey ? { idempotencyKey } : {}),
+      action: "withdraw",
     });
-    // Withdrawal invalidates every unpublished artifact immediately.  The
-    // retention job remains a repair path for a crash between the database
-    // state change and physical ciphertext deletion.
-    const artifacts = await this.database
-      .select({ id: dataExportArtifact.id, storageKey: dataExportArtifact.storageKey })
-      .from(dataExportArtifact)
-      .where(
-        and(
-          eq(dataExportArtifact.requestId, requestId),
-          sql`${dataExportArtifact.state} not in ('deleted', 'revoked')`,
-        ),
-      );
-    if (artifacts.length) {
-      await this.database
-        .update(dataExportArtifact)
-        .set({ state: "revoked", revokedAt: this.now() })
-        .where(
-          and(
-            eq(dataExportArtifact.requestId, requestId),
-            sql`${dataExportArtifact.state} not in ('deleted', 'revoked')`,
-          ),
-        );
-      if (this.deleteArtifactStorage) {
-        for (const artifact of artifacts) {
-          try {
-            await this.deleteArtifactStorage(artifact.storageKey);
-          } catch {
-            /* cleanup retries later */
-          }
+    return this.mutate(
+      { requestId, version, idempotencyKey, eventType: "state_completed", operationDigest },
+      (tx, current) =>
+        this.applyTransition(tx, current, {
+          to: "completed",
+          actor: { kind: "subject", id: userId },
+          reasonCode: "withdrawn",
+          idempotencyKey,
+          operationDigest,
+        }),
+    );
+  }
+
+  /** Record an operator's manual identity check and start the work. */
+  async verifyIdentity(input: {
+    requestId: string;
+    version: number;
+    reasonCode: string;
+    actorId: string;
+    idempotencyKey: string;
+  }): Promise<RequestRow> {
+    const reasonCode = requireReasonCode(input.reasonCode);
+    const operationDigest = idempotencyFingerprint({
+      version: input.version,
+      reasonCode,
+      actorId: input.actorId,
+      action: "verify-identity",
+    });
+    return this.mutate(
+      { ...input, eventType: "state_in_progress", operationDigest },
+      async (tx, current) => {
+        if (current.identityMethod || !acceptsManualIdentityVerification(current.state))
+          throw new PrivacyRequestError("IDENTITY_VERIFICATION_NOT_ALLOWED", 409);
+        return this.applyTransition(tx, current, {
+          to: "in_progress",
+          actor: { kind: "admin", id: input.actorId },
+          reasonCode,
+          idempotencyKey: input.idempotencyKey,
+          operationDigest,
+          set: { identityMethod: "manual", identityVerifiedAt: this.now() },
+        });
+      },
+    );
+  }
+
+  async recordDecision(input: {
+    requestId: string;
+    version: number;
+    decision: "in_progress" | "waiting_on_requester" | "completed" | "refused";
+    reasonCode: string;
+    actorId: string;
+    idempotencyKey: string;
+  }): Promise<RequestRow> {
+    const reasonCode = requireReasonCode(input.reasonCode);
+    const operationDigest = idempotencyFingerprint({
+      version: input.version,
+      decision: input.decision,
+      reasonCode,
+      actorId: input.actorId,
+    });
+    return this.mutate(
+      { ...input, eventType: `state_${input.decision}`, operationDigest },
+      async (tx, current) => {
+        if (!acceptsCaseDecision(current.state))
+          throw new PrivacyRequestError("CASE_DECISION_NOT_ALLOWED", 409);
+        // Work on a case starts only once the requester's identity is known.
+        if (input.decision === "in_progress" && !current.identityMethod)
+          throw new PrivacyRequestError("IDENTITY_REQUIRED", 409);
+        if (input.decision === "completed") {
+          const [openTask] = await tx
+            .select({ id: dataSubjectRequestTask.id })
+            .from(dataSubjectRequestTask)
+            .where(
+              and(
+                eq(dataSubjectRequestTask.requestId, current.id),
+                eq(dataSubjectRequestTask.status, "open"),
+              ),
+            )
+            .limit(1);
+          if (openTask) throw new PrivacyRequestError("TASKS_UNRESOLVED", 409);
         }
-      }
-    }
-    return result;
+        return this.applyTransition(tx, current, {
+          to: input.decision,
+          actor: { kind: "admin", id: input.actorId },
+          reasonCode,
+          idempotencyKey: input.idempotencyKey,
+          operationDigest,
+        });
+      },
+    );
+  }
+
+  /** Resolve one operator-held source with a reason code. */
+  async resolveTask(input: {
+    requestId: string;
+    taskId: string;
+    version: number;
+    reasonCode: string;
+    actorId: string;
+    idempotencyKey: string;
+  }): Promise<RequestRow> {
+    const reasonCode = requireReasonCode(input.reasonCode);
+    const operationDigest = idempotencyFingerprint({
+      taskId: input.taskId,
+      version: input.version,
+      reasonCode,
+      actorId: input.actorId,
+    });
+    return this.mutate(
+      { ...input, eventType: "task_resolved", operationDigest },
+      async (tx, current) => {
+        if (!acceptsTaskResolution(current.state))
+          throw new PrivacyRequestError("TASK_RESOLUTION_NOT_ALLOWED", 409);
+        const now = this.now();
+        const [task] = await tx
+          .update(dataSubjectRequestTask)
+          .set({ status: "resolved", resolutionCode: reasonCode, resolvedAt: now, updatedAt: now })
+          .where(
+            and(
+              eq(dataSubjectRequestTask.id, input.taskId),
+              eq(dataSubjectRequestTask.requestId, current.id),
+              eq(dataSubjectRequestTask.status, "open"),
+            ),
+          )
+          .returning({ id: dataSubjectRequestTask.id });
+        if (!task) throw new PrivacyRequestError("TASK_NOT_FOUND", 404);
+        const [updated] = await tx
+          .update(dataSubjectRequest)
+          .set({ version: sql`${dataSubjectRequest.version} + 1`, updatedAt: now })
+          .where(eq(dataSubjectRequest.id, current.id))
+          .returning();
+        if (!updated) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
+        await tx.insert(dataSubjectRequestEvent).values({
+          id: randomUUID(),
+          requestId: current.id,
+          eventType: "task_resolved",
+          actorKind: "admin",
+          actorId: input.actorId,
+          payload: boundedEventPayload({ taskId: input.taskId, reasonCode, operationDigest }),
+          payloadVersion: 1,
+          idempotencyKey: input.idempotencyKey,
+          createdAt: now,
+        });
+        return updated;
+      },
+    );
   }
 
   async recordExtension(input: {
@@ -739,13 +658,12 @@ export class PrivacyRequestService {
     extensionNotifiedAt: Date;
     reasonCode: string;
     actorId: string;
-    idempotencyKey?: string;
-  }): Promise<typeof dataSubjectRequest.$inferSelect> {
-    if (!/^[a-z0-9][a-z0-9._-]{0,127}$/.test(input.reasonCode))
+    idempotencyKey: string;
+  }): Promise<RequestRow> {
+    if (!REASON_CODE.test(input.reasonCode))
       throw new PrivacyRequestError("INVALID_EXTENSION_REASON", 400);
     const extendedUntil = toDate(input.extendedUntil),
-      notifiedAt = toDate(input.extensionNotifiedAt),
-      now = this.now();
+      notifiedAt = toDate(input.extensionNotifiedAt);
     const operationDigest = idempotencyFingerprint({
       version: input.version,
       extendedUntil: extendedUntil.toISOString(),
@@ -753,1167 +671,186 @@ export class PrivacyRequestService {
       reasonCode: input.reasonCode,
       actorId: input.actorId,
     });
-    return this.database.transaction(async (tx) => {
-      const [current] = await tx
-        .select()
-        .from(dataSubjectRequest)
-        .where(eq(dataSubjectRequest.id, input.requestId))
-        .for("update")
-        .limit(1);
-      if (!current) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
-      if (input.idempotencyKey) {
-        const [previous] = await tx
-          .select()
-          .from(dataSubjectRequestEvent)
-          .where(
-            and(
-              eq(dataSubjectRequestEvent.requestId, input.requestId),
-              eq(dataSubjectRequestEvent.idempotencyKey, input.idempotencyKey),
-            ),
-          )
-          .limit(1);
-        if (previous) {
-          if (
-            previous.eventType !== "extended" ||
-            (previous.payload as Record<string, unknown>)?.operationDigest !== operationDigest
-          )
-            throw new PrivacyRequestError("IDEMPOTENCY_KEY_REUSED", 409);
-          return current;
-        }
-      }
-      if (current.version !== input.version)
-        throw new PrivacyRequestError("REQUEST_VERSION_CONFLICT", 409);
-      if (
-        ["ready", "delivered", "artifact_expired", "closed", "refused", "withdrawn"].includes(
-          current.state,
-        )
-      )
-        throw new PrivacyRequestError("EXTENSION_NOT_ALLOWED", 409);
-      const originalDueAt = calculateSubjectRequestDueAt(current.receivedAt, current.timeZone);
-      const max = addCalendarMonths(originalDueAt, 2, current.timeZone);
-      if (
-        extendedUntil <= current.dueAt ||
-        extendedUntil > max ||
-        notifiedAt > originalDueAt ||
-        notifiedAt > now ||
-        notifiedAt < current.receivedAt
-      )
-        throw new PrivacyRequestError("INVALID_EXTENSION", 400);
-      const [updated] = await tx
-        .update(dataSubjectRequest)
-        .set({
-          extension: {
-            extendedUntil: extendedUntil.toISOString(),
-            extensionNotifiedAt: notifiedAt.toISOString(),
-            reasonCode: input.reasonCode,
-          },
-          dueAt: extendedUntil,
-          version: sql`${dataSubjectRequest.version}+1`,
-          updatedAt: now,
-        })
-        .where(eq(dataSubjectRequest.id, input.requestId))
-        .returning();
-      await tx.insert(dataSubjectRequestEvent).values({
-        id: randomUUID(),
-        requestId: input.requestId,
-        eventType: "extended",
-        ...actorPayload({ kind: "privacy_admin", id: input.actorId }),
-        payload: boundedEventPayload({ reasonCode: input.reasonCode, operationDigest }),
-        payloadVersion: 1,
-        ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
-        createdAt: now,
-      });
-      if (updated!.userId)
-        await tx
-          .insert(dataSubjectRequestNotification)
-          .values(
-            notificationValues({
-              requestId: input.requestId,
-              recipientUserId: updated!.userId,
-              template: "extension",
-              locale: updated!.locale,
-              at: now,
-            }),
-          )
-          .onConflictDoNothing({
-            target: [
-              dataSubjectRequestNotification.requestId,
-              dataSubjectRequestNotification.template,
-              dataSubjectRequestNotification.channel,
-            ],
-          });
-      return updated!;
-    });
-  }
-
-  async markTask(input: {
-    taskId: string;
-    requestId: string;
-    status: TaskState;
-    actorId?: string;
-    reasonCode?: string;
-    redactionCode?: string;
-    recordCount?: number;
-    requestVersion?: number;
-    idempotencyKey?: string;
-  }): Promise<void> {
-    if (
-      ["not_applicable", "operator_review", "canceled"].includes(input.status) &&
-      !input.reasonCode
-    )
-      throw new PrivacyRequestError("TASK_REASON_REQUIRED", 400);
-    const now = this.now();
-    const operationDigest = idempotencyFingerprint({
-      taskId: input.taskId,
-      actorId: input.actorId ?? null,
-      requestVersion: input.requestVersion ?? null,
-      status: input.status,
-      reasonCode: input.reasonCode ?? null,
-      redactionCode: input.redactionCode ?? null,
-      recordCount: input.recordCount ?? null,
-    });
-    if (input.idempotencyKey) {
-      const previous = await this.database
-        .select({
-          eventType: dataSubjectRequestEvent.eventType,
-          payload: dataSubjectRequestEvent.payload,
-        })
-        .from(dataSubjectRequestEvent)
-        .where(
-          and(
-            eq(dataSubjectRequestEvent.requestId, input.requestId),
-            eq(dataSubjectRequestEvent.idempotencyKey, input.idempotencyKey),
-          ),
-        )
-        .limit(1);
-      if (previous[0]) {
-        const previousDigest =
-          previous[0].payload && typeof previous[0].payload === "object"
-            ? (previous[0].payload as Record<string, unknown>).operationDigest
-            : undefined;
-        if (previous[0].eventType !== `task_${input.status}` || previousDigest !== operationDigest)
-          throw new PrivacyRequestError("IDEMPOTENCY_KEY_REUSED", 409);
-        return;
-      }
-    }
-    let updated: Array<{ id: string }>;
-    try {
-      updated = await this.database.transaction(async (tx) => {
-        // Human task decisions are request mutations as well as task
-        // mutations.  Keep the optimistic request version in the same
-        // transaction so a stale caseworker screen cannot overwrite a newer
-        // decision.  System collectors may omit this field because their
-        // durable task claim is the concurrency boundary.
-        if (input.requestVersion !== undefined) {
-          const [current] = await tx
-            .select()
-            .from(dataSubjectRequest)
-            .where(eq(dataSubjectRequest.id, input.requestId))
-            .for("update")
-            .limit(1);
-          const [task] = await tx
-            .select()
-            .from(dataSubjectRequestTask)
-            .where(
-              and(
-                eq(dataSubjectRequestTask.id, input.taskId),
-                eq(dataSubjectRequestTask.requestId, input.requestId),
-              ),
-            )
-            .for("update")
-            .limit(1);
-          if (!task) throw new PrivacyRequestError("TASK_NOT_FOUND", 404);
-          if (input.idempotencyKey) {
-            const previous = await findIdempotentEvent(tx as unknown as typeof defaultDb, {
-              requestId: input.requestId,
-              idempotencyKey: input.idempotencyKey,
-              eventType: `task_${input.status}`,
-              operationDigest,
-            });
-            if (previous) return [{ id: task.id }];
-          }
-          const allowed = deriveOperatorTaskActions(
-            current ?? { state: "missing" },
-            task,
-            this.catalogue,
-          );
-          if (
-            !allowed.actions.includes(
-              input.status as import("./operator-task-actions").TaskDecisionStatus,
-            )
-          )
-            throw new PrivacyRequestError("TASK_DECISION_NOT_ALLOWED", 409);
-          if (input.status === "complete" && input.recordCount === undefined)
-            throw new PrivacyRequestError("TASK_RECORD_COUNT_REQUIRED", 400);
-          const requestChanged = await tx
-            .update(dataSubjectRequest)
-            .set({ version: sql`${dataSubjectRequest.version} + 1`, updatedAt: now })
-            .where(
-              and(
-                eq(dataSubjectRequest.id, input.requestId),
-                eq(dataSubjectRequest.version, input.requestVersion),
-                sql`${dataSubjectRequest.state} in ('preserving', 'collecting', 'pending_processor', 'operator_review', 'clarification_needed')`,
-              ),
-            )
-            .returning({ id: dataSubjectRequest.id });
-          if (!requestChanged[0]) {
-            const [current] = await tx
-              .select({ version: dataSubjectRequest.version, state: dataSubjectRequest.state })
-              .from(dataSubjectRequest)
-              .where(eq(dataSubjectRequest.id, input.requestId))
-              .limit(1);
-            if (current?.version === input.requestVersion)
-              throw new PrivacyRequestError("TASK_DECISION_NOT_ALLOWED", 409);
-            throw new PrivacyRequestError("REQUEST_VERSION_CONFLICT", 409);
-          }
-        }
-        const changed = await tx
-          .update(dataSubjectRequestTask)
-          .set({
-            status: input.status,
-            exceptionCode: input.reasonCode ?? null,
-            redactionCode: input.redactionCode ?? null,
-            recordCount: input.recordCount ?? null,
-            collectedAt: ["complete", "not_applicable"].includes(input.status) ? now : null,
-            updatedAt: now,
-          })
-          .where(
-            and(
-              eq(dataSubjectRequestTask.id, input.taskId),
-              eq(dataSubjectRequestTask.requestId, input.requestId),
-            ),
-          )
-          .returning({ id: dataSubjectRequestTask.id });
-        if (!changed[0]) throw new PrivacyRequestError("TASK_NOT_FOUND", 404);
-        if (input.idempotencyKey)
-          await tx.insert(dataSubjectRequestEvent).values({
-            id: randomUUID(),
-            requestId: input.requestId,
-            eventType: `task_${input.status}`,
-            ...actorPayload({
-              kind: input.actorId ? "privacy_admin" : "system",
-              id: input.actorId,
-            }),
-            payload: boundedEventPayload({
-              taskId: input.taskId,
-              ...(input.reasonCode ? { reasonCode: input.reasonCode } : {}),
-              ...(input.redactionCode ? { redactionCode: input.redactionCode } : {}),
-              operationDigest,
-            }),
-            payloadVersion: 1,
-            idempotencyKey: input.idempotencyKey,
-            createdAt: now,
-          });
-        return changed;
-      });
-    } catch (error) {
-      if (input.idempotencyKey && String(error).toLowerCase().includes("idempotency")) {
-        const previous = await this.database
-          .select({
-            eventType: dataSubjectRequestEvent.eventType,
-            payload: dataSubjectRequestEvent.payload,
-          })
-          .from(dataSubjectRequestEvent)
-          .where(
-            and(
-              eq(dataSubjectRequestEvent.requestId, input.requestId),
-              eq(dataSubjectRequestEvent.idempotencyKey, input.idempotencyKey),
-            ),
-          )
-          .limit(1);
-        const previousDigest =
-          previous[0]?.payload && typeof previous[0].payload === "object"
-            ? (previous[0].payload as Record<string, unknown>).operationDigest
-            : undefined;
-        if (previous[0]?.eventType === `task_${input.status}` && previousDigest === operationDigest)
-          return;
-        throw new PrivacyRequestError("IDEMPOTENCY_KEY_REUSED", 409);
-      }
-      throw error;
-    }
-    if (!updated[0]) throw new PrivacyRequestError("TASK_NOT_FOUND", 404);
-  }
-
-  /** Assign a human/operator task with the same request-level CAS used by all
-   * other caseworker mutations.  Assignment is intentionally separate from a
-   * task decision so taking ownership never implies that the source result is
-   * complete or reviewed.
-   */
-  async assignTask(input: {
-    requestId: string;
-    taskId: string;
-    version: number;
-    assignedTo: string | null;
-    actorId: string;
-    idempotencyKey: string;
-  }): Promise<typeof dataSubjectRequest.$inferSelect> {
-    if (!/^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$/.test(input.idempotencyKey))
-      throw new PrivacyRequestError("IDEMPOTENCY_KEY_REQUIRED", 400);
-    const operationDigest = idempotencyFingerprint({
-        taskId: input.taskId,
-        version: input.version,
-        assignedTo: input.assignedTo,
-        actorId: input.actorId,
-      }),
-      now = this.now();
-    return this.database.transaction(async (tx) => {
-      const [current] = await tx
-        .select()
-        .from(dataSubjectRequest)
-        .where(eq(dataSubjectRequest.id, input.requestId))
-        .for("update")
-        .limit(1);
-      if (!current) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
-      const [previous] = await tx
-        .select()
-        .from(dataSubjectRequestEvent)
-        .where(
-          and(
-            eq(dataSubjectRequestEvent.requestId, input.requestId),
-            eq(dataSubjectRequestEvent.idempotencyKey, input.idempotencyKey),
-          ),
-        )
-        .limit(1);
-      if (previous) {
+    return this.mutate(
+      { ...input, eventType: "extended", operationDigest },
+      async (tx, current) => {
+        const now = this.now();
+        if (!canExtendDeadline(current.state))
+          throw new PrivacyRequestError("EXTENSION_NOT_ALLOWED", 409);
+        const originalDueAt = calculateSubjectRequestDueAt(current.receivedAt, current.timeZone);
+        const max = addCalendarMonths(originalDueAt, 2, current.timeZone);
         if (
-          previous.eventType !== "task_assigned" ||
-          (previous.payload as Record<string, unknown>)?.operationDigest !== operationDigest
+          extendedUntil <= current.dueAt ||
+          extendedUntil > max ||
+          notifiedAt > originalDueAt ||
+          notifiedAt > now ||
+          notifiedAt < current.receivedAt
         )
-          throw new PrivacyRequestError("IDEMPOTENCY_KEY_REUSED", 409);
-        return current;
-      }
-      if (current.version !== input.version)
-        throw new PrivacyRequestError("REQUEST_VERSION_CONFLICT", 409);
-      if (
-        ![
-          "preserving",
-          "collecting",
-          "pending_processor",
-          "operator_review",
-          "clarification_needed",
-        ].includes(current.state)
-      )
-        throw new PrivacyRequestError("TASK_ASSIGNMENT_NOT_ALLOWED", 409);
-      if (input.assignedTo) {
-        const [assignee] = await tx
-          .select({ role: user.role, banned: user.banned, banExpires: user.banExpires })
-          .from(user)
-          .where(eq(user.id, input.assignedTo))
-          .for("share")
-          .limit(1);
-        if (
-          !assignee ||
-          assignee.role !== "admin" ||
-          (assignee.banned && (!assignee.banExpires || assignee.banExpires > now))
-        )
-          throw new PrivacyRequestError("ASSIGNEE_NOT_AUTHORIZED", 409);
-      }
-      const [task] = await tx
-        .update(dataSubjectRequestTask)
-        .set({ assignedTo: input.assignedTo, updatedAt: now })
-        .where(
-          and(
-            eq(dataSubjectRequestTask.id, input.taskId),
-            eq(dataSubjectRequestTask.requestId, input.requestId),
-          ),
-        )
-        .returning({ id: dataSubjectRequestTask.id });
-      if (!task) throw new PrivacyRequestError("TASK_NOT_FOUND", 404);
-      const [updated] = await tx
-        .update(dataSubjectRequest)
-        .set({ version: sql`${dataSubjectRequest.version}+1`, updatedAt: now })
-        .where(eq(dataSubjectRequest.id, input.requestId))
-        .returning();
-      await tx.insert(dataSubjectRequestEvent).values({
-        id: randomUUID(),
-        requestId: input.requestId,
-        eventType: "task_assigned",
-        ...actorPayload({ kind: "privacy_admin", id: input.actorId }),
-        payload: boundedEventPayload({
-          taskId: input.taskId,
-          assigned: input.assignedTo !== null,
-          operationDigest,
-        }),
-        payloadVersion: 1,
-        idempotencyKey: input.idempotencyKey,
-        createdAt: now,
-      });
-      return updated!;
-    });
-  }
-
-  /** Prove an assisted subject through a real, newly created authenticated
-   * account session. The protected locator is compared inside the service;
-   * no caseworker-supplied identity assertion is accepted. */
-  async recordAccountLoginProof(input: {
-    requestId: string;
-    userId: string;
-    sessionId: string;
-    idempotencyKey: string;
-  }): Promise<typeof dataSubjectRequest.$inferSelect> {
-    if (!/^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$/.test(input.idempotencyKey))
-      throw new PrivacyRequestError("IDEMPOTENCY_KEY_REQUIRED", 400);
-    const operationDigest = idempotencyFingerprint({
-      requestId: input.requestId,
-      userId: input.userId,
-      method: "account_login",
-    });
-    const now = this.now();
-    let shouldEnqueue = false;
-    const result = await this.database.transaction(async (tx) => {
-      const [duplicate] = await tx
-        .select({
-          eventType: dataSubjectRequestEvent.eventType,
-          payload: dataSubjectRequestEvent.payload,
-        })
-        .from(dataSubjectRequestEvent)
-        .where(
-          and(
-            eq(dataSubjectRequestEvent.requestId, input.requestId),
-            eq(dataSubjectRequestEvent.idempotencyKey, input.idempotencyKey),
-          ),
-        )
-        .limit(1);
-      if (duplicate) {
-        const previousDigest =
-          duplicate.payload && typeof duplicate.payload === "object"
-            ? (duplicate.payload as Record<string, unknown>).operationDigest
-            : undefined;
-        if (
-          duplicate.eventType !== "account_login_identity_proved" ||
-          previousDigest !== operationDigest
-        )
-          throw new PrivacyRequestError("IDEMPOTENCY_KEY_REUSED", 409);
-        const [current] = await tx
-          .select()
-          .from(dataSubjectRequest)
-          .where(eq(dataSubjectRequest.id, input.requestId))
-          .limit(1);
-        if (!current) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
-        return current;
-      }
-      const [request] = await tx
-        .select()
-        .from(dataSubjectRequest)
-        .where(eq(dataSubjectRequest.id, input.requestId))
-        .for("update")
-        .limit(1);
-      if (
-        !request ||
-        request.channel === "self_service" ||
-        request.accountState === "deleted" ||
-        !["identity_pending", "clarification_needed"].includes(request.state)
-      )
-        throw new PrivacyRequestError("ACCOUNT_LOGIN_PROOF_FAILED", 404);
-      const [[assurance], [account], identities] = await Promise.all([
-        tx
-          .select({
-            userId: sessionAuthAssurance.userId,
-            authenticatedAt: sessionAuthAssurance.authenticatedAt,
-          })
-          .from(sessionAuthAssurance)
-          .where(eq(sessionAuthAssurance.sessionId, input.sessionId))
-          .limit(1),
-        tx.select({ email: user.email }).from(user).where(eq(user.id, input.userId)).limit(1),
-        tx
-          .select()
-          .from(dataSubjectRequestIdentity)
-          .where(eq(dataSubjectRequestIdentity.requestId, input.requestId)),
-      ]);
-      if (
-        !assurance ||
-        assurance.userId !== input.userId ||
-        assurance.authenticatedAt <= request.registeredAt ||
-        !account
-      )
-        throw new PrivacyRequestError("ACCOUNT_LOGIN_PROOF_FAILED", 404);
-      let locator: { kind?: unknown; value?: unknown };
-      try {
-        const ring = await this.getKeyRing();
-        locator = JSON.parse(
-          decryptEnvelope(
-            JSON.parse(request.encryptedLocator) as CryptoEnvelope,
-            ring,
-            "request-locator",
-            makeAad({
-              deploymentId: this.deploymentId,
-              requestId: request.id,
-              blobId: request.id,
-              purpose: "request-locator",
-            }),
-          ).toString("utf8"),
-        ) as { kind?: unknown; value?: unknown };
-      } catch {
-        throw new PrivacyRequestError("ACCOUNT_LOGIN_PROOF_FAILED", 404);
-      }
-      const matches =
-        request.userId === input.userId ||
-        (request.userId === null &&
-          ((locator.kind === "user_id" && locator.value === input.userId) ||
-            (locator.kind === "email" &&
-              typeof locator.value === "string" &&
-              locator.value.trim().toLowerCase() === account.email.trim().toLowerCase())));
-      const subject = identities.find((identity) => identity.party === "subject");
-      if (!matches || !subject || subject.state === "verified")
-        throw new PrivacyRequestError("ACCOUNT_LOGIN_PROOF_FAILED", 404);
-      await tx
-        .update(dataSubjectRequestIdentity)
-        .set({
-          state: "verified",
-          method: "account_login",
-          verifiedAt: now,
-          verifiedBy: input.userId,
-          updatedAt: now,
-        })
-        .where(eq(dataSubjectRequestIdentity.id, subject.id));
-      const representative = identities.find((identity) => identity.party === "representative");
-      const identityComplete =
-        !representative ||
-        (representative.state === "verified" && representative.authorityState === "approved");
-      const [updated] = await tx
-        .update(dataSubjectRequest)
-        .set({
-          userId: input.userId,
-          identityState: "verified",
-          state: identityComplete ? "preserving" : "identity_pending",
-          version: sql`${dataSubjectRequest.version} + 1`,
-          ...(identityComplete
-            ? {
-                preservationAt: sql`coalesce(${dataSubjectRequest.preservationAt}, ${now.toISOString()})`,
-                snapshotAt: sql`coalesce(${dataSubjectRequest.snapshotAt}, ${now.toISOString()})`,
-              }
-            : {}),
-          updatedAt: now,
-        })
-        .where(eq(dataSubjectRequest.id, request.id))
-        .returning();
-      if (!updated) throw new PrivacyRequestError("ACCOUNT_LOGIN_PROOF_FAILED", 409);
-      await tx.insert(dataSubjectRequestEvent).values({
-        id: randomUUID(),
-        requestId: request.id,
-        eventType: "account_login_identity_proved",
-        actorKind: "subject",
-        actorId: input.userId,
-        payloadVersion: 1,
-        payload: boundedEventPayload({ method: "account_login", operationDigest }),
-        idempotencyKey: input.idempotencyKey,
-        createdAt: now,
-      });
-      shouldEnqueue = identityComplete;
-      return updated;
-    });
-    if (shouldEnqueue) await this.enqueue?.(input.requestId);
-    return result;
-  }
-
-  async recordIdentityReview(input: {
-    requestId: string;
-    version: number;
-    party: "subject" | "representative";
-    outcome: "verified" | "failed" | "clarification";
-    method?: "account_login" | "verified_email_challenge" | "exceptional_evidence";
-    reasonableDoubtCode?: string;
-    evidenceAttachmentId?: string;
-    authorityOutcome?: "pending" | "approved" | "rejected";
-    authorityAttachmentId?: string;
-    deliveryAuthorized?: boolean;
-    actorId: string;
-    idempotencyKey: string;
-  }): Promise<typeof dataSubjectRequest.$inferSelect> {
-    const parsed = identityReviewSchema.safeParse({
-      version: input.version,
-      party: input.party,
-      outcome: input.outcome,
-      method: input.method,
-      reasonableDoubtCode: input.reasonableDoubtCode,
-      evidenceAttachmentId: input.evidenceAttachmentId,
-      authorityOutcome: input.authorityOutcome,
-      authorityAttachmentId: input.authorityAttachmentId,
-      deliveryAuthorized: input.deliveryAuthorized,
-    });
-    if (!parsed.success) throw new PrivacyRequestError("INVALID_IDENTITY_REVIEW", 400);
-    if (!/^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$/.test(input.idempotencyKey))
-      throw new PrivacyRequestError("IDEMPOTENCY_KEY_REQUIRED", 400);
-    const now = this.now();
-    const eventType =
-      input.party === "subject" ? "subject_identity_reviewed" : "representative_reviewed";
-    const operationDigest = idempotencyFingerprint({
-      party: input.party,
-      actorId: input.actorId,
-      version: input.version,
-      outcome: input.outcome,
-      method: input.method ?? null,
-      reasonableDoubtCode: input.reasonableDoubtCode ?? null,
-      evidenceAttachmentId: input.evidenceAttachmentId ?? null,
-      authorityOutcome: input.authorityOutcome ?? null,
-      authorityAttachmentId: input.authorityAttachmentId ?? null,
-      deliveryAuthorized: input.deliveryAuthorized ?? null,
-    });
-    let shouldEnqueue = false;
-    const row = await this.database.transaction(async (tx) => {
-      await tx
-        .select({ id: dataSubjectRequest.id })
-        .from(dataSubjectRequest)
-        .where(eq(dataSubjectRequest.id, input.requestId))
-        .for("update");
-      const duplicate = await tx
-        .select({
-          eventType: dataSubjectRequestEvent.eventType,
-          payload: dataSubjectRequestEvent.payload,
-        })
-        .from(dataSubjectRequestEvent)
-        .where(
-          and(
-            eq(dataSubjectRequestEvent.requestId, input.requestId),
-            eq(dataSubjectRequestEvent.idempotencyKey, input.idempotencyKey),
-          ),
-        )
-        .limit(1);
-      if (duplicate[0]) {
-        const previousDigest =
-          duplicate[0].payload && typeof duplicate[0].payload === "object"
-            ? (duplicate[0].payload as Record<string, unknown>).operationDigest
-            : undefined;
-        if (duplicate[0].eventType !== eventType || previousDigest !== operationDigest)
-          throw new PrivacyRequestError("IDEMPOTENCY_KEY_REUSED", 409);
-        const current = await tx
-          .select()
-          .from(dataSubjectRequest)
-          .where(eq(dataSubjectRequest.id, input.requestId))
-          .limit(1);
-        if (!current[0]) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
-        return current[0];
-      }
-      const currentRows = await tx
-        .select()
-        .from(dataSubjectRequest)
-        .where(eq(dataSubjectRequest.id, input.requestId))
-        .limit(1);
-      const current = currentRows[0];
-      if (!current) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
-      if (current.version !== input.version)
-        throw new PrivacyRequestError("REQUEST_VERSION_CONFLICT", 409);
-      if (input.method === "verified_email_challenge")
-        throw new PrivacyRequestError("EMAIL_CHALLENGE_PROOF_REQUIRED", 409);
-      if (input.method === "account_login")
-        throw new PrivacyRequestError("ACCOUNT_LOGIN_PROOF_REQUIRED", 409);
-      if (!["identity_pending", "clarification_needed", "preserving"].includes(current.state))
-        throw new PrivacyRequestError("IDENTITY_OUTCOME_NOT_ALLOWED", 409);
-      const identityRows = await tx
-        .select()
-        .from(dataSubjectRequestIdentity)
-        .where(
-          and(
-            eq(dataSubjectRequestIdentity.requestId, input.requestId),
-            eq(dataSubjectRequestIdentity.party, input.party),
-          ),
-        )
-        .limit(1);
-      if (!identityRows[0]) throw new PrivacyRequestError("IDENTITY_PARTY_NOT_FOUND", 404);
-      const existingIdentity = identityRows[0];
-      if (input.outcome === "verified" && !input.method && existingIdentity.state !== "verified")
-        throw new PrivacyRequestError("IDENTITY_PROOF_REQUIRED", 409);
-      for (const attachmentId of [input.evidenceAttachmentId, input.authorityAttachmentId]) {
-        if (!attachmentId) continue;
-        const attachment = await tx
-          .select({
-            id: dataSubjectRequestAttachment.id,
-            purpose: dataSubjectRequestAttachment.purpose,
-          })
-          .from(dataSubjectRequestAttachment)
-          .where(
-            and(
-              eq(dataSubjectRequestAttachment.id, attachmentId),
-              eq(dataSubjectRequestAttachment.requestId, input.requestId),
-              sql`${dataSubjectRequestAttachment.deletedAt} is null`,
-              sql`${dataSubjectRequestAttachment.expiresAt} > ${now.toISOString()}`,
-            ),
-          )
-          .limit(1);
-        if (!attachment[0]) throw new PrivacyRequestError("IDENTITY_ATTACHMENT_NOT_FOUND", 400);
-        if (
-          attachmentId === input.authorityAttachmentId &&
-          attachment[0].purpose !== "representative_authority"
-        )
-          throw new PrivacyRequestError("INVALID_AUTHORITY_ATTACHMENT", 400);
-        if (
-          attachmentId === input.evidenceAttachmentId &&
-          attachment[0].purpose !== "identity_evidence"
-        )
-          throw new PrivacyRequestError("INVALID_IDENTITY_ATTACHMENT", 400);
-      }
-      await tx
-        .update(dataSubjectRequestIdentity)
-        .set({
-          state: input.outcome,
-          method: input.method ?? existingIdentity.method,
-          reasonableDoubtCode: input.reasonableDoubtCode ?? existingIdentity.reasonableDoubtCode,
-          evidenceAttachmentId: input.evidenceAttachmentId ?? existingIdentity.evidenceAttachmentId,
-          ...(input.party === "representative"
-            ? {
-                authorityState: input.authorityOutcome ?? existingIdentity.authorityState,
-                authorityAttachmentId:
-                  input.authorityAttachmentId ?? existingIdentity.authorityAttachmentId,
-                deliveryAuthorized:
-                  input.outcome !== "verified" || input.authorityOutcome === "rejected"
-                    ? 0
-                    : input.deliveryAuthorized === undefined
-                      ? existingIdentity.deliveryAuthorized
-                      : input.deliveryAuthorized
-                        ? 1
-                        : 0,
-              }
-            : {}),
-          verifiedAt: input.outcome === "verified" ? (existingIdentity.verifiedAt ?? now) : null,
-          verifiedBy:
-            input.outcome === "verified" ? (existingIdentity.verifiedBy ?? input.actorId) : null,
-          updatedAt: now,
-        })
-        .where(eq(dataSubjectRequestIdentity.id, existingIdentity.id));
-      const allIdentities = await tx
-        .select()
-        .from(dataSubjectRequestIdentity)
-        .where(eq(dataSubjectRequestIdentity.requestId, input.requestId));
-      const subject = allIdentities.find((identity) => identity.party === "subject");
-      const representative = allIdentities.find((identity) => identity.party === "representative");
-      const identityComplete =
-        subject?.state === "verified" &&
-        (!representative ||
-          (representative.state === "verified" && representative.authorityState === "approved"));
-      const clarificationRequired =
-        input.outcome === "clarification" ||
-        (representative !== undefined && representative.authorityState === "rejected");
-      const nextState = identityComplete
-        ? "preserving"
-        : clarificationRequired
-          ? "clarification_needed"
-          : "identity_pending";
-      const updated = await tx
-        .update(dataSubjectRequest)
-        .set({
-          identityState: subject?.state ?? current.identityState,
-          state: nextState,
-          version: sql`${dataSubjectRequest.version} + 1`,
-          updatedAt: now,
-          ...(nextState === "preserving"
-            ? {
-                preservationAt: sql`coalesce(${dataSubjectRequest.preservationAt}, ${now.toISOString()})`,
-                snapshotAt: sql`coalesce(${dataSubjectRequest.snapshotAt}, ${now.toISOString()})`,
-              }
-            : {}),
-        })
-        .where(
-          and(
-            eq(dataSubjectRequest.id, input.requestId),
-            eq(dataSubjectRequest.version, input.version),
-          ),
-        )
-        .returning();
-      if (!updated[0]) throw new PrivacyRequestError("REQUEST_VERSION_CONFLICT", 409);
-      await tx.insert(dataSubjectRequestEvent).values({
-        id: randomUUID(),
-        requestId: input.requestId,
-        eventType,
-        actorKind: "privacy_admin",
-        actorId: input.actorId,
-        payloadVersion: 1,
-        payload: boundedEventPayload({
-          party: input.party,
-          outcome: input.outcome,
-          method: input.method ?? null,
-          authorityOutcome: input.authorityOutcome ?? null,
-          deliveryAuthorized: input.deliveryAuthorized ?? null,
-          operationDigest,
-        }),
-        idempotencyKey: input.idempotencyKey,
-        createdAt: now,
-      });
-      shouldEnqueue = current.state !== "preserving" && nextState === "preserving";
-      return updated[0];
-    });
-    if (shouldEnqueue) await this.enqueue?.(input.requestId);
-    return row;
-  }
-
-  async recordDecision(input: {
-    requestId: string;
-    version: number;
-    decision: "refused" | "clarification_needed" | "operator_review";
-    reasonCode: string;
-    actorId: string;
-    idempotencyKey: string;
-  }): Promise<typeof dataSubjectRequest.$inferSelect> {
-    if (!/^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$/.test(input.idempotencyKey))
-      throw new PrivacyRequestError("IDEMPOTENCY_KEY_REQUIRED", 400);
-    if (!/^[a-z0-9][a-z0-9._-]{0,127}$/.test(input.reasonCode))
-      throw new PrivacyRequestError("INVALID_REASON", 400);
-    const [current] = await this.database
-      .select()
-      .from(dataSubjectRequest)
-      .where(eq(dataSubjectRequest.id, input.requestId))
-      .limit(1);
-    if (!current) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
-    const operationDigest = idempotencyFingerprint({
-      version: input.version,
-      decision: input.decision,
-      reasonCode: input.reasonCode,
-      actorId: input.actorId,
-    });
-    const [previous] = await this.database
-      .select()
-      .from(dataSubjectRequestEvent)
-      .where(
-        and(
-          eq(dataSubjectRequestEvent.requestId, input.requestId),
-          eq(dataSubjectRequestEvent.idempotencyKey, input.idempotencyKey),
-        ),
-      )
-      .limit(1);
-    if (previous) {
-      if (
-        previous.eventType !== `state_${input.decision}` ||
-        (previous.payload as Record<string, unknown>)?.operationDigest !== operationDigest
-      )
-        throw new PrivacyRequestError("IDEMPOTENCY_KEY_REUSED", 409);
-      return current;
-    }
-    if (["refused", "withdrawn", "closed", "delivered", "artifact_expired"].includes(current.state))
-      throw new PrivacyRequestError("CASE_DECISION_NOT_ALLOWED", 409);
-    if (
-      current.state !== input.decision &&
-      !isValidRequestTransition(current.state, input.decision)
-    )
-      throw new PrivacyRequestError("CASE_DECISION_NOT_ALLOWED", 409);
-    return this.transition({
-      requestId: input.requestId,
-      from: current.state,
-      to: input.decision,
-      version: input.version,
-      actor: { kind: "privacy_admin", id: input.actorId },
-      reasonCode: input.reasonCode,
-      idempotencyKey: input.idempotencyKey,
-      operationDigest,
-      allowSameState: true,
-    });
-  }
-
-  async assertReadyForAssembly(requestId: string, completedClaim?: string): Promise<void> {
-    const tasks = await this.database
-      .select({
-        id: dataSubjectRequestTask.id,
-        status: dataSubjectRequestTask.status,
-        required: dataSubjectRequestTask.required,
-      })
-      .from(dataSubjectRequestTask)
-      .where(eq(dataSubjectRequestTask.requestId, requestId));
-    try {
-      assertAssemblyReady(
-        tasks.map((task) => ({
-          status: task.id === completedClaim ? "complete" : task.status,
-          required: task.required === 1,
-        })),
-      );
-    } catch {
-      throw new PrivacyRequestError("REQUEST_NOT_READY", 409);
-    }
-  }
-
-  /** Recover a request left in `assembling` after a process crash or a failed
-   * writer.  The transition is deliberately explicit and auditable: it is a
-   * technical retry, never a legal refusal/closure.  Any assembly metadata is
-   * revoked in the same transaction and its ciphertext is handed to the
-   * physical cleanup callback afterwards. */
-  async recoverInterruptedAssembly(input: {
-    requestId: string;
-    version: number;
-  }): Promise<boolean> {
-    const now = this.now();
-    const recovered = await this.database.transaction(async (tx) => {
-      const updated = await tx
-        .update(dataSubjectRequest)
-        .set({
-          state: "collecting",
-          version: sql`${dataSubjectRequest.version} + 1`,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(dataSubjectRequest.id, input.requestId),
-            eq(dataSubjectRequest.state, "assembling"),
-            eq(dataSubjectRequest.version, input.version),
-          ),
-        )
-        .returning({ id: dataSubjectRequest.id });
-      if (!updated[0]) return null;
-      const artifacts = await tx
-        .update(dataExportArtifact)
-        .set({ state: "revoked", revokedAt: now })
-        .where(
-          and(
-            eq(dataExportArtifact.requestId, input.requestId),
-            sql`${dataExportArtifact.state} in ('assembling', 'ready')`,
-          ),
-        )
-        .returning({ storageKey: dataExportArtifact.storageKey });
-      await tx
-        .update(dataSubjectRequestTask)
-        .set({
-          status: "pending",
-          nextAttemptAt: now,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(dataSubjectRequestTask.requestId, input.requestId),
-            eq(dataSubjectRequestTask.status, "complete"),
-            sql`${dataSubjectRequestTask.collectorId} is not null`,
-          ),
-        );
-      await tx.insert(dataSubjectRequestEvent).values({
-        id: randomUUID(),
-        requestId: input.requestId,
-        eventType: "assembly_recovered",
-        actorKind: "system",
-        actorId: "privacy-recovery",
-        payloadVersion: 1,
-        payload: boundedEventPayload({ reasonCode: "assembly-interrupted" }),
-        createdAt: now,
-      });
-      return artifacts;
-    });
-    if (!recovered) return false;
-    for (const artifact of recovered) {
-      try {
-        await this.deleteArtifactStorage?.(artifact.storageKey);
-      } catch {
-        /* cleanup retries later */
-      }
-    }
-    return true;
-  }
-
-  /** Startup recovery for assemblies that have been untouched longer than the
-   * writer watchdog window.  The compare-and-set in
-   * `recoverInterruptedAssembly` makes this safe when multiple API instances
-   * restart together. */
-  async recoverStaleAssemblies(staleAfterMs = 15 * 60_000): Promise<number> {
-    if (!Number.isSafeInteger(staleAfterMs) || staleAfterMs < 1_000)
-      throw new PrivacyRequestError("INVALID_RECOVERY_WINDOW", 500);
-    const cutoff = new Date(this.now().getTime() - staleAfterMs);
-    const candidates = await this.database
-      .select({ id: dataSubjectRequest.id, version: dataSubjectRequest.version })
-      .from(dataSubjectRequest)
-      .where(
-        and(
-          eq(dataSubjectRequest.state, "assembling"),
-          sql`${dataSubjectRequest.updatedAt} < ${cutoff.toISOString()}`,
-        ),
-      );
-    let recovered = 0;
-    for (const candidate of candidates) {
-      if (
-        await this.recoverInterruptedAssembly({
-          requestId: candidate.id,
-          version: candidate.version,
-        })
-      )
-        recovered += 1;
-    }
-    return recovered;
-  }
-
-  async revokeArtifact(
-    requestId: string,
-    artifactId: string,
-    userId: string,
-    idempotencyKey?: string,
-  ): Promise<void> {
-    if (idempotencyKey && !/^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$/.test(idempotencyKey))
-      throw new PrivacyRequestError("IDEMPOTENCY_KEY_REQUIRED", 400);
-    if (idempotencyKey) {
-      const previous = await this.database
-        .select({ id: dataSubjectRequestEvent.id })
-        .from(dataSubjectRequestEvent)
-        .where(
-          and(
-            eq(dataSubjectRequestEvent.requestId, requestId),
-            eq(dataSubjectRequestEvent.idempotencyKey, idempotencyKey),
-            eq(dataSubjectRequestEvent.eventType, "artifact_revoked"),
-          ),
-        )
-        .limit(1);
-      if (previous[0]) return;
-    }
-    const now = this.now();
-    // Ownership is part of the mutation predicate.  Never revoke an artifact
-    // first and discover afterwards that its request belonged to somebody
-    // else: that would be a cross-account destructive side effect.
-    const rows = await this.database
-      .select({ artifactId: dataExportArtifact.id, storageKey: dataExportArtifact.storageKey })
-      .from(dataExportArtifact)
-      .innerJoin(dataSubjectRequest, eq(dataExportArtifact.requestId, dataSubjectRequest.id))
-      .where(
-        and(
-          eq(dataExportArtifact.id, artifactId),
-          eq(dataExportArtifact.requestId, requestId),
-          eq(dataSubjectRequest.userId, userId),
-        ),
-      )
-      .limit(1);
-    if (!rows[0]) throw new PrivacyRequestError("ARTIFACT_NOT_FOUND", 404);
-    await this.database.transaction(async (tx) => {
-      const updated = await tx
-        .update(dataExportArtifact)
-        .set({ state: "revoked", revokedAt: now })
-        .where(
-          and(
-            eq(dataExportArtifact.id, artifactId),
-            eq(dataExportArtifact.requestId, requestId),
-            eq(dataExportArtifact.state, "ready"),
-          ),
-        )
-        .returning({ id: dataExportArtifact.id });
-      if (!updated[0]) throw new PrivacyRequestError("ARTIFACT_NOT_FOUND", 404);
-      await tx
-        .update(dataSubjectRequest)
-        .set({ deliveryState: "revoked", updatedAt: now })
-        .where(and(eq(dataSubjectRequest.id, requestId), eq(dataSubjectRequest.userId, userId)));
-      await tx.insert(dataSubjectRequestEvent).values({
-        id: randomUUID(),
-        requestId,
-        eventType: "artifact_revoked",
-        actorKind: "subject",
-        actorId: userId,
-        payloadVersion: 1,
-        payload: boundedEventPayload({}),
-        ...(idempotencyKey ? { idempotencyKey } : {}),
-        createdAt: now,
-      });
-    });
-    await this.deleteArtifactStorage?.(rows[0].storageKey);
-  }
-
-  /** Start a fresh generation while retaining the immutable case history. The
-   * previous ciphertext is revoked before a new collector run can be queued. */
-  async regenerate(
-    requestId: string,
-    userId: string,
-    version: number,
-    idempotencyKey: string,
-  ): Promise<typeof dataSubjectRequest.$inferSelect> {
-    const now = this.now();
-    const owned = await this.database
-      .select()
-      .from(dataSubjectRequest)
-      .where(and(eq(dataSubjectRequest.id, requestId), eq(dataSubjectRequest.userId, userId)))
-      .limit(1);
-    if (!owned[0]) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
-    const previous = await this.database
-      .select({ id: dataSubjectRequestEvent.id })
-      .from(dataSubjectRequestEvent)
-      .where(
-        and(
-          eq(dataSubjectRequestEvent.requestId, requestId),
-          eq(dataSubjectRequestEvent.idempotencyKey, idempotencyKey),
-        ),
-      )
-      .limit(1);
-    if (previous[0]) return owned[0];
-    try {
-      const result = await this.database.transaction(async (tx) => {
-        const updated = await tx
+          throw new PrivacyRequestError("INVALID_EXTENSION", 400);
+        const [updated] = await tx
           .update(dataSubjectRequest)
           .set({
-            state: "collecting",
+            extension: {
+              extendedUntil: extendedUntil.toISOString(),
+              extensionNotifiedAt: notifiedAt.toISOString(),
+              reasonCode: input.reasonCode,
+            },
+            dueAt: extendedUntil,
             version: sql`${dataSubjectRequest.version} + 1`,
-            deliveryState: "not_delivered",
             updatedAt: now,
           })
-          .where(
-            and(
-              eq(dataSubjectRequest.id, requestId),
-              eq(dataSubjectRequest.userId, userId),
-              eq(dataSubjectRequest.version, version),
-              sql`${dataSubjectRequest.state} in ('ready', 'artifact_expired', 'delivered')`,
-            ),
-          )
+          .where(eq(dataSubjectRequest.id, current.id))
           .returning();
-        if (!updated[0]) throw new PrivacyRequestError("REQUEST_VERSION_CONFLICT", 409);
-        await tx
-          .update(dataExportArtifact)
-          .set({ state: "revoked", revokedAt: now })
-          .where(
-            and(
-              eq(dataExportArtifact.requestId, requestId),
-              sql`${dataExportArtifact.state} not in ('deleted', 'revoked')`,
-            ),
-          );
-        // A new generation needs runnable collector tasks. Previous completion
-        // and retry counts belong to the old generation; retain human decisions.
-        await tx
-          .update(dataSubjectRequestTask)
-          .set({
-            status: "pending",
-            attempts: 0,
-            nextAttemptAt: now,
-            collectedAt: null,
-            recordCount: null,
-            exceptionCode: null,
-            redactionCode: null,
-            updatedAt: now,
-          })
-          .where(
-            and(
-              eq(dataSubjectRequestTask.requestId, requestId),
-              sql`${dataSubjectRequestTask.collectorId} is not null`,
-            ),
-          );
+        if (!updated) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
         await tx.insert(dataSubjectRequestEvent).values({
           id: randomUUID(),
-          requestId,
-          eventType: "generation_requested",
-          actorKind: "subject",
-          actorId: userId,
+          requestId: current.id,
+          eventType: "extended",
+          actorKind: "admin",
+          actorId: input.actorId,
+          payload: boundedEventPayload({ reasonCode: input.reasonCode, operationDigest }),
           payloadVersion: 1,
-          payload: boundedEventPayload({}),
-          idempotencyKey,
+          idempotencyKey: input.idempotencyKey,
           createdAt: now,
         });
+        if (updated.userId)
+          await tx
+            .insert(dataSubjectRequestNotification)
+            .values(
+              notificationValues({
+                requestId: current.id,
+                recipientUserId: updated.userId,
+                template: "extension",
+                locale: updated.locale,
+                at: now,
+              }),
+            )
+            .onConflictDoNothing({ target: NOTIFICATION_TARGET });
         return updated;
-      });
-      const revoked = await this.database
-        .select({ storageKey: dataExportArtifact.storageKey })
-        .from(dataExportArtifact)
-        .where(
-          and(eq(dataExportArtifact.requestId, requestId), eq(dataExportArtifact.state, "revoked")),
-        );
-      if (this.deleteArtifactStorage) {
-        for (const artifact of revoked) {
-          try {
-            await this.deleteArtifactStorage(artifact.storageKey);
-          } catch {
-            /* cleanup retries later */
-          }
-        }
-      }
-      await this.enqueue?.(requestId);
-      return result[0];
-    } catch (error) {
-      if (String(error).toLowerCase().includes("idempotency")) {
-        const current = await this.database
-          .select()
-          .from(dataSubjectRequest)
-          .where(eq(dataSubjectRequest.id, requestId))
-          .limit(1);
-        if (current[0]) return current[0];
-      }
-      throw error;
-    }
+      },
+    );
   }
-}
 
-export function createPrivacyRequestService(
-  options: PrivacyRequestServiceOptions = {},
-): PrivacyRequestService {
-  return new PrivacyRequestService(options);
+  /**
+   * Create or reuse the subject's active self-service request and mark the
+   * start of one export. A request waiting on the requester returns to work,
+   * because downloading is the requester acting.
+   */
+  async beginSelfServiceExport(input: {
+    userId: string;
+    sessionId: string;
+    kind: RequestRow["kind"];
+    locale: string;
+    timeZone: string;
+  }): Promise<RequestRow> {
+    let request = await this.create({
+      kind: input.kind,
+      channel: "self_service",
+      userId: input.userId,
+      actorUserId: input.userId,
+      actorSessionId: input.sessionId,
+      locale: input.locale,
+      timeZone: input.timeZone,
+    });
+    if (!acceptsSelfServiceExport(request.state))
+      throw new PrivacyRequestError("REQUEST_NOT_ACTIVE", 409);
+    if (request.state !== "in_progress") {
+      if (!request.identityMethod) throw new PrivacyRequestError("IDENTITY_REQUIRED", 409);
+      const current = request;
+      request = await this.database.transaction((tx) =>
+        this.applyTransition(tx, current, {
+          to: "in_progress",
+          actor: { kind: "subject", id: input.userId },
+          reasonCode: "export-requested",
+        }),
+      );
+    }
+    return this.recordExportEvent(request, "export_started", {
+      kind: "subject",
+      id: input.userId,
+    });
+  }
+
+  /** Mark the start of an administrator export for an assisted request. */
+  async beginAdminExport(requestId: string, actorId: string): Promise<RequestRow> {
+    const request = await this.getById(requestId);
+    if (!acceptsCaseDecision(request.state))
+      throw new PrivacyRequestError("REQUEST_NOT_ACTIVE", 409);
+    if (!request.identityMethod) throw new PrivacyRequestError("IDENTITY_REQUIRED", 409);
+    return this.recordExportEvent(request, "export_started", { kind: "admin", id: actorId });
+  }
+
+  /**
+   * Record that every byte of an export reached the client. A self-service
+   * request completes when no operator-held source is still open; otherwise
+   * it stays in progress for the administrator, who was alerted when the
+   * request arrived.
+   */
+  async finishExport(requestId: string, actor: Actor): Promise<RequestRow> {
+    const request = await this.recordExportEvent(
+      await this.getById(requestId),
+      "export_delivered",
+      actor,
+    );
+    if (
+      actor.kind !== "subject" ||
+      request.state !== "in_progress" ||
+      (await this.openTaskCount(requestId)) > 0
+    )
+      return request;
+    return this.database.transaction(async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(dataSubjectRequest)
+        .where(eq(dataSubjectRequest.id, requestId))
+        .for("update")
+        .limit(1);
+      if (!current || current.state !== "in_progress") return current ?? request;
+      return this.applyTransition(tx, current, {
+        to: "completed",
+        actor,
+        reasonCode: "export-delivered",
+      });
+    });
+  }
+
+  private async recordExportEvent(
+    request: RequestRow,
+    eventType: "export_started" | "export_delivered",
+    actor: Actor,
+  ): Promise<RequestRow> {
+    const now = this.now();
+    await this.database.insert(dataSubjectRequestEvent).values({
+      id: randomUUID(),
+      requestId: request.id,
+      eventType,
+      actorKind: actor.kind,
+      actorId: actor.id ?? null,
+      payload: {},
+      payloadVersion: 1,
+      createdAt: now,
+    });
+    if (eventType !== "export_started") return request;
+    // The export is collected now, so the request records this snapshot time.
+    const [updated] = await this.database
+      .update(dataSubjectRequest)
+      .set({ snapshotAt: now, updatedAt: now })
+      .where(eq(dataSubjectRequest.id, request.id))
+      .returning();
+    return updated ?? request;
+  }
+
+  /** Record an export failure without identifiers in the payload. */
+  async recordExportFailure(requestId: string, reasonCode: string): Promise<void> {
+    await this.database.insert(dataSubjectRequestEvent).values({
+      id: randomUUID(),
+      requestId,
+      eventType: "export_failed",
+      actorKind: "system",
+      actorId: "privacy-export",
+      payloadVersion: 1,
+      payload: { reasonCode: REASON_CODE.test(reasonCode) ? reasonCode : "export-failed" },
+      createdAt: this.now(),
+    });
+  }
 }

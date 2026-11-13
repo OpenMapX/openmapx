@@ -206,11 +206,11 @@ export default function PrivacyContentDe({
         <Typography sx={{ mt: 1 }}>
           Sie können einen Auskunftsantrag in Ihren Kontoeinstellungen starten. Wir stellen eine
           verständliche Erläuterung und, soweit Art.&nbsp;20 DSGVO greift, zusätzlich eine getrennte
-          maschinenlesbare Kopie bereit. Das Archiv ist verschlüsselt, erst nach einer erneuten
-          Anmeldung verfügbar und läuft automatisch ab. Verbundene Dawarich-Daten werden, sofern
-          verfügbar, bei diesem verwalteten Dienst angefordert; Daten unabhängiger Verantwortlicher,
-          externe Sicherungskopien und reine Browserdaten werden gesondert erklärt und nicht
-          stillschweigend als vollständig dargestellt.
+          maschinenlesbare Kopie bereit. Das Archiv wird nach einer erneuten Anmeldung beim
+          Herunterladen erstellt und direkt an Sie gesendet; wir speichern keine Kopie. Verbundene
+          Dawarich-Daten werden, sofern verfügbar, bei diesem verwalteten Dienst angefordert; Daten
+          unabhängiger Verantwortlicher, externe Sicherungskopien und reine Browserdaten werden
+          gesondert erklärt und nicht stillschweigend als vollständig dargestellt.
         </Typography>
         <Typography sx={{ mt: 1 }}>
           Rechtsgrundlage ist Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;a DSGVO (Ihre ausdr&uuml;ckliche

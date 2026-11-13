@@ -7,21 +7,19 @@ import { services } from "@openmapx/core/server";
  * Compose names them in the stack's project.
  */
 export const API_VOLUMES = {
-  subjectExports: `${services.STACK_PROJECT}_openmapx-subject-exports`,
   runtimeRecovery: `${services.STACK_PROJECT}_openmapx-api-runtime-recovery`,
 } as const;
 
 /**
- * The private directory the API keeps in one of its named volumes (subject
- * exports, the runtime-recovery journal), for whichever uid Compose runs it as.
+ * The private directory the API keeps in its named volume (the
+ * runtime-recovery journal), for whichever uid Compose runs it as.
  *
  * Docker seeds a new volume with the owner and mode of the image's directory.
  * This image's are root-owned, world-writable and sticky, like /tmp, so the
  * API uses `<mount>/uid-<uid>`, which its store creates 0700. A directory the
  * API's uid owns, as its store creates outside the container, is used as it
  * is. Any other root is refused with the fix, which keeps its data: the
- * subject-export ciphertexts the database references and the runtime-recovery
- * journal.
+ * runtime-recovery journal.
  */
 export function privateVolumeDirectory(mount: string, volume: string): string {
   const uid = process.geteuid?.();

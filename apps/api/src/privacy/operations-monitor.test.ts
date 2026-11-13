@@ -20,51 +20,26 @@ describe("privacy operational health freshness", () => {
     ).toBe(false);
   });
 
-  it("samples async storage/key probes and rejects stale cleanup evidence", async () => {
-    const database = createDbMock();
-    const checkedAt = new Date().toISOString();
-    const monitor = createPrivacyOperationsMonitor({
-      database: database.db as never,
-      keyReady: async () => true,
-      storageHealthy: async () => true,
-      cleanupHealthy: { healthy: true, checkedAt: "2020-01-01T00:00:00Z" },
-      notificationHealthy: { healthy: true, checkedAt },
-      intervalMs: 60_000,
-      keyRing: { activeVersion: 5, availableVersions: [2, 5] },
-    });
-    await monitor.runOnce();
-    expect(monitor.health()).toMatchObject({
-      monitorHealthy: true,
-      keyReady: true,
-      storageHealthy: true,
-      cleanupHealthy: false,
-      notificationHealthy: true,
-      keyRing: { activeVersion: 5, availableVersions: [2, 5] },
-    });
-  });
-
-  it("reports attachment cleanup backlogs", async () => {
+  it("rejects stale cleanup evidence and counts export failures", async () => {
     const database = createDbMock();
     database.queueSelect([]); // open requests
-    database.queueSelect([]); // source tasks
-    database.queueSelect([]); // generation failures
-    database.queueSelect([{ createdAt: now, revokedAt: now }]); // artifacts
-    database.queueSelect([{ id: "attachment-1" }]);
+    database.queueSelect([{ status: "open" }, { status: "resolved" }]); // operator tasks
+    database.queueSelect([{ id: "failure-1" }]); // export failures
     database.queueSelect([]); // notification failures
     const monitor = createPrivacyOperationsMonitor({
       database: database.db as never,
       now: () => now,
-      keyReady: true,
-      storageHealthy: true,
-      cleanupHealthy: true,
-      notificationHealthy: true,
+      cleanupHealthy: { healthy: true, checkedAt: "2020-01-01T00:00:00Z" },
+      notificationHealthy: { healthy: true, checkedAt: now.toISOString() },
       intervalMs: 60_000,
     });
-
     await expect(monitor.runOnce()).resolves.toMatchObject({
-      artifactCleanupBacklog: 1,
-      attachmentCleanupBacklog: 1,
+      exportFailures: 1,
+      sourceTasksByStatus: { open: 1, resolved: 1 },
     });
-    expect(monitor.health().cleanupHealthy).toBe(false);
+    expect(monitor.health()).toMatchObject({
+      cleanupHealthy: false,
+      notificationHealthy: true,
+    });
   });
 });

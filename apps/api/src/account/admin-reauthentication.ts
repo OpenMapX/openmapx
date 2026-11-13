@@ -15,7 +15,7 @@ import {
   nonceMatchesDigest,
   REAUTH_TTL_MS,
   type ReauthenticationSession,
-} from "../privacy/reauthentication";
+} from "../privacy/session-assurance";
 import { type AuthDatabase, currentAuthDatabase } from "./auth-database";
 import { loadAuthPolicy } from "./auth-policy";
 import { isDomainRecoveryAssuranceSufficient } from "./domain-recovery-assurance";

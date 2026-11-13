@@ -15,13 +15,11 @@ import helmet from "@fastify/helmet";
 import { compactErasureJournal } from "@openmapx/core/erasure-journal";
 import { envInt, envString } from "@openmapx/core/server-env";
 import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
-import { eq } from "drizzle-orm";
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from "fastify";
 import { startAccountMailWorker } from "./account/account-mail-outbox";
 import { auth } from "./auth";
 import { db, openMigrationSession, sql } from "./db/index";
 import { type MigrationRun, startMigrations } from "./db/migration-runner";
-import { dataSubjectRequest, dataSubjectRequestTask } from "./db/schema";
 import {
   getAllIntegrations,
   initIntegrations,
@@ -37,26 +35,11 @@ import {
   stopIntegrationHealthRefresh,
 } from "./integration-host";
 import { setIntegrationRouteRateLimits } from "./integration-routes";
-import { EncryptedBlobStore } from "./privacy/artifact-storage.js";
 import { runPrivacyDatabaseCleanup } from "./privacy/cleanup.js";
-import {
-  loadMasterKeyRingAsync,
-  type MasterKeyRing,
-  masterKeyRingConfigurationMatches,
-  masterKeyRingMetadata,
-} from "./privacy/crypto.js";
-import {
-  createPrivacyEmailChallengeWorker,
-  PrivacyEmailChallengeService,
-} from "./privacy/email-challenge.js";
+import { schedulePrivacyDeadlineReminders } from "./privacy/deadline-reminders.js";
 import { janitorEncryptedSourceSpools } from "./privacy/encrypted-source-spool.js";
-import { schedulePrivacyEscalations } from "./privacy/escalations.js";
-import { generatePrivacyExport } from "./privacy/generation.js";
 import { createPrivacyNotificationWorker } from "./privacy/notifications.js";
 import { createPrivacyOperationsMonitor } from "./privacy/operations-monitor.js";
-import { PrivacyRequestDeferredError, PrivacyRequestRunner } from "./privacy/request-runner.js";
-import { PrivacyRequestError, PrivacyRequestService } from "./privacy/request-service.js";
-import { createPrivacyRequestTaskStore } from "./privacy/request-task-store.js";
 import {
   cameraMediaSourcesOf,
   setCameraMediaSources,
@@ -123,13 +106,11 @@ import {
   stopAdminJobReconciliation,
 } from "./services/job-reconciliation";
 import { jobRunner } from "./services/job-runner";
-import { API_VOLUMES, privateVolumeDirectory } from "./services/private-volume-directory";
 import { initServiceRegistry } from "./services/service-registry";
 import { handleSystemDiagnosticsJob, handleSystemUpdateJob } from "./services/system-maintenance";
-import { configurePrivacyArtifactDeleter, readJournalKey } from "./services/user-erasure.js";
+import { readJournalKey } from "./services/user-erasure.js";
 import { applyRequiredMigrations } from "./startup-migrations";
 import { configuredTrustedWebOrigins, makeCsrfGuardHook } from "./utils/csrf";
-import { sendMail } from "./utils/email.js";
 import {
   authLimit,
   expensivePublicApiLimit,
@@ -343,182 +324,15 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
   // `routes/index.ts`. The OpenAPI generator mounts this same function on a bare
   // Fastify instance, so a core route registered anywhere else would be missing
   // from the committed `openapi.json`.
-  let privacyArtifactStore: EncryptedBlobStore | undefined;
-  let privacyKeyRing: MasterKeyRing | undefined;
-  try {
-    const exportRoot = privateVolumeDirectory(
-      envString("OPENMAPX_EXPORT_STORAGE_DIR", "/var/lib/openmapx/subject-exports").trim(),
-      API_VOLUMES.subjectExports,
-    );
-    const exportRing = await loadMasterKeyRingAsync();
-    privacyKeyRing = exportRing;
-    const artifactStore = new EncryptedBlobStore({
-      root: exportRoot,
-      ring: exportRing,
-      deploymentId: envString("OPENMAPX_DEPLOYMENT_ID", "openmapx"),
-    });
-    await artifactStore.initialize();
-    await artifactStore.reconcilePartials();
-    privacyArtifactStore = artifactStore;
-    configurePrivacyArtifactDeleter((storageKey) => artifactStore.delete(storageKey));
-  } catch {
-    // Intake/status remain available for assisted handling. Generation/download
-    // fail closed until an operator supplies the dedicated key and volume.
-    server.log.warn("Privacy export storage is unavailable; automated delivery is disabled");
-  }
-  // The statutory collection worker is intentionally separate from the general
-  // admin-job queue.  A task claim is only a wake-up hint: the request-level
-  // state, identity decision and operator gates are re-read before any source is
-  // touched.  In particular, operator tasks are never claimed here and cannot
-  // be converted into an automatic legal decision by retry exhaustion.
-  let privacyRequestRunner: PrivacyRequestRunner | undefined;
-  let privacyRequestService: PrivacyRequestService | undefined;
-  let recoverAndStartPrivacyRequests: (() => Promise<void>) | undefined;
-  if (privacyArtifactStore) {
-    const artifactStore = privacyArtifactStore;
-    const taskStore = createPrivacyRequestTaskStore(db);
-    const workerService = new PrivacyRequestService({
-      database: db,
-      keyRing: privacyKeyRing,
-      deleteArtifactStorage: (storageKey) => artifactStore.delete(storageKey),
-    });
-    const requestRunner = new PrivacyRequestRunner(
-      taskStore,
-      async (task) => {
-        const requestRows = await db
-          .select()
-          .from(dataSubjectRequest)
-          .where(eq(dataSubjectRequest.id, task.requestId))
-          .limit(1);
-        const current = requestRows[0];
-        if (
-          !current ||
-          ["withdrawn", "refused", "closed", "ready", "delivered", "artifact_expired"].includes(
-            current.state,
-          )
-        )
-          return;
-        if (
-          current.identityState !== "verified" ||
-          !["preserving", "collecting"].includes(current.state)
-        ) {
-          throw new PrivacyRequestDeferredError("identity-or-state-pending");
-        }
-        const tasks = await db
-          .select({
-            id: dataSubjectRequestTask.id,
-            status: dataSubjectRequestTask.status,
-            required: dataSubjectRequestTask.required,
-            collectorId: dataSubjectRequestTask.collectorId,
-          })
-          .from(dataSubjectRequestTask)
-          .where(eq(dataSubjectRequestTask.requestId, task.requestId));
-        const manualPending = tasks.some(
-          (candidate) =>
-            candidate.required === 1 &&
-            !candidate.collectorId &&
-            ["pending", "running", "retryable", "operator_review"].includes(candidate.status),
-        );
-        if (manualPending) throw new PrivacyRequestDeferredError("operator-task-pending");
-        const currentTask = tasks.find((candidate) => candidate.id === task.id);
-        if (!currentTask?.collectorId) return;
-        try {
-          await generatePrivacyExport({
-            requestId: task.requestId,
-            claimedTaskId: task.id,
-            database: db,
-            store: artifactStore,
-            service: workerService,
-          });
-        } catch (error) {
-          if (
-            error instanceof PrivacyRequestError &&
-            ["REQUEST_NOT_READY", "IDENTITY_REQUIRED", "REQUEST_VERSION_CONFLICT"].includes(
-              error.code,
-            )
-          ) {
-            throw new PrivacyRequestDeferredError(error.code.toLowerCase());
-          }
-          throw error;
-        }
-      },
-      {
-        onError: () => server.log.warn("Privacy request runner unavailable"),
-        intervalMs: envInt("PRIVACY_RUNNER_INTERVAL_MS", 1_000),
-        maxAttempts: envInt("PRIVACY_RUNNER_MAX_ATTEMPTS", 5),
-        retryDelayMs: envInt("PRIVACY_RUNNER_RETRY_DELAY_MS", 30_000),
-        deferDelayMs: envInt("PRIVACY_RUNNER_DEFER_DELAY_MS", 60_000),
-      },
-    );
-    privacyRequestRunner = requestRunner;
-    const requestService = new PrivacyRequestService({
-      database: db,
-      keyRing: privacyKeyRing,
-      deleteArtifactStorage: (storageKey) => artifactStore.delete(storageKey),
-      enqueue: async () => {
-        await privacyRequestRunner?.runOnce();
-      },
-    });
-    privacyRequestService = requestService;
-    recoverAndStartPrivacyRequests = async () => {
-      try {
-        const recoveredAssemblies = await requestService.recoverStaleAssemblies();
-        if (recoveredAssemblies > 0)
-          server.log.warn(
-            { recoveredAssemblies },
-            "Recovered interrupted privacy export assemblies",
-          );
-        await taskStore.recoverInterrupted?.();
-        requestRunner.start();
-      } catch (error) {
-        // Keep intake available for an operator even if startup recovery cannot
-        // reach the database.  The next health check/restart will retry; no
-        // request is marked complete by this failure path.
-        server.log.warn(error, "Privacy request runner recovery failed");
-        requestRunner.start();
-      }
-    };
-  }
-
   let privacyCleanupProbe = { healthy: false, checkedAt: new Date(0).toISOString() };
   const privacyNotificationWorker = createPrivacyNotificationWorker({ database: db });
-  const privacyEmailChallengeService = privacyKeyRing
-    ? new PrivacyEmailChallengeService(
-        db,
-        privacyKeyRing,
-        envString("OPENMAPX_DEPLOYMENT_ID", "openmapx"),
-        () => new Date(),
-        async () => {
-          await privacyRequestRunner?.runOnce();
-        },
-      )
-    : undefined;
-  const privacyEmailChallengeWorker = privacyEmailChallengeService
-    ? createPrivacyEmailChallengeWorker({
-        service: privacyEmailChallengeService,
-        sender: async (message) => {
-          await sendMail(message);
-        },
-      })
-    : undefined;
   const privacyOperationsMonitor = createPrivacyOperationsMonitor({
     database: db,
-    keyReady: () =>
-      privacyKeyRing ? masterKeyRingConfigurationMatches(privacyKeyRing) : Promise.resolve(false),
-    keyRing: privacyKeyRing ? masterKeyRingMetadata(privacyKeyRing) : null,
-    storageHealthy: () => privacyArtifactStore?.probeHealth() ?? false,
     cleanupHealthy: () => privacyCleanupProbe,
     notificationHealthy: () => {
       const notification = privacyNotificationWorker.health();
-      const challenge = privacyEmailChallengeWorker?.health();
-      if (!notification.lastRunAt || !challenge?.lastRunAt)
-        return { healthy: false, checkedAt: new Date(0).toISOString() };
-      return {
-        healthy: notification.healthy && challenge.healthy,
-        checkedAt: new Date(
-          Math.min(Date.parse(notification.lastRunAt), Date.parse(challenge.lastRunAt)),
-        ).toISOString(),
-      };
+      if (!notification.lastRunAt) return { healthy: false, checkedAt: new Date(0).toISOString() };
+      return { healthy: notification.healthy, checkedAt: notification.lastRunAt };
     },
     intervalMs: envInt("PRIVACY_MONITOR_INTERVAL_MS", 60_000),
   });
@@ -526,33 +340,14 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
   await registerCoreRoutes(server, {
     authHandler: auth.handler,
     authUiOrigin: trustedWebOrigins[0],
-    privacyRequests: {
-      artifactStore: privacyArtifactStore,
-      ...(privacyRequestService ? { service: privacyRequestService } : {}),
-    },
-    privacyAdmin: {
-      artifactStore: privacyArtifactStore,
-      ...(privacyRequestService ? { service: privacyRequestService } : {}),
-      ...(privacyEmailChallengeService ? { emailChallenge: privacyEmailChallengeService } : {}),
-    },
   });
 
-  // Privacy case ciphertext and reauthentication challenges have a separate
-  // retention loop.  It is intentionally independent from the broad activity
-  // cleanup below so a failure never deletes metadata before physical ciphertext
-  // deletion has been attempted.
+  // Case retention and the export source spool janitor run on their own loop,
+  // independent of the broad activity cleanup below.
   const runPrivacyRetention = () => {
-    void Promise.all([
-      runPrivacyDatabaseCleanup({ database: db, store: privacyArtifactStore }),
-      janitorEncryptedSourceSpools(),
-    ])
-      .then(([result]) => {
-        privacyCleanupProbe = {
-          healthy: result.failed === 0,
-          checkedAt: new Date().toISOString(),
-        };
-        if (result.failed > 0)
-          server.log.warn({ failed: result.failed }, "Privacy retention cleanup incomplete");
+    void Promise.all([runPrivacyDatabaseCleanup({ database: db }), janitorEncryptedSourceSpools()])
+      .then(() => {
+        privacyCleanupProbe = { healthy: true, checkedAt: new Date().toISOString() };
       })
       .catch(() => {
         privacyCleanupProbe = { healthy: false, checkedAt: new Date().toISOString() };
@@ -560,21 +355,13 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
       });
   };
 
-  const privacyEscalationIntervalMs = envInt("PRIVACY_ESCALATION_INTERVAL_MS", 5 * 60_000);
-  if (privacyEscalationIntervalMs < 60_000 || privacyEscalationIntervalMs > 3_600_000)
-    throw new Error("invalid privacy escalation interval");
-  const configuredEscalationRecipients = process.env.PRIVACY_ESCALATION_RECIPIENT_USER_IDS?.split(
-    ",",
-  )
-    .map((value) => value.trim())
-    .filter(Boolean);
-  const runPrivacyEscalations = () => {
-    void schedulePrivacyEscalations({
-      database: db,
-      ...(configuredEscalationRecipients?.length
-        ? { recipientUserIds: configuredEscalationRecipients }
-        : {}),
-    }).catch((err) => server.log.warn(err, "Privacy escalation scheduling failed"));
+  const privacyReminderIntervalMs = envInt("PRIVACY_DEADLINE_REMINDER_INTERVAL_MS", 5 * 60_000);
+  if (privacyReminderIntervalMs < 60_000 || privacyReminderIntervalMs > 3_600_000)
+    throw new Error("invalid privacy deadline reminder interval");
+  const runPrivacyDeadlineReminders = () => {
+    void schedulePrivacyDeadlineReminders({ database: db }).catch((err) =>
+      server.log.warn(err, "Privacy deadline reminder scheduling failed"),
+    );
   };
 
   // Service registry — load service manifests from services/ directory
@@ -747,8 +534,6 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
   const intervals: ReturnType<typeof setInterval>[] = [];
 
   async function start(): Promise<void> {
-    await recoverAndStartPrivacyRequests?.();
-
     // A crashed collector loses its ephemeral key; remove its owned ciphertext
     // spools as well. Active or ambiguous directories are never removed.
     await janitorEncryptedSourceSpools();
@@ -756,13 +541,15 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
     startMigrationStagePruning();
     runPrivacyRetention();
     privacyNotificationWorker.start();
-    privacyEmailChallengeWorker?.start();
     privacyOperationsMonitor.start();
 
-    runPrivacyEscalations();
-    const privacyEscalationTimer = setInterval(runPrivacyEscalations, privacyEscalationIntervalMs);
-    privacyEscalationTimer.unref?.();
-    intervals.push(privacyEscalationTimer);
+    runPrivacyDeadlineReminders();
+    const privacyReminderTimer = setInterval(
+      runPrivacyDeadlineReminders,
+      privacyReminderIntervalMs,
+    );
+    privacyReminderTimer.unref?.();
+    intervals.push(privacyReminderTimer);
 
     startAttributionLicenseWatch();
     startIntegrationHealthRefresh();
@@ -810,10 +597,8 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
 
   function stop(): Promise<void> {
     stopping ??= (async () => {
-      privacyRequestRunner?.stop();
       privacyOperationsMonitor.stop();
       privacyNotificationWorker.stop();
-      privacyEmailChallengeWorker?.stop();
       for (const interval of intervals) clearInterval(interval);
       stopMigrationStagePruning();
       stopIntegrationHealthRefresh();

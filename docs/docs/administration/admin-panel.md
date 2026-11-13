@@ -210,6 +210,6 @@ Draft values remain in this browser document's memory only.
 
 ## Privacy case navigation
 
-Casework uses `?case=<id>&section=<section>` for direct, authorized detail access independently of queue membership. Identity, Tasks, Decisions, Attachments, Generation & delivery and Events are addressable disclosures. Ordinary case form inputs survive section toggles; private delivery controls dispose when closed. Available work and denial reasons come from the server capabilities, and version conflicts require refresh.
+Casework uses `?case=<id>&section=<section>` for direct, authorized detail access independently of queue membership. Identity, Tasks, Decisions, Export and Events are addressable disclosures. Ordinary case form inputs survive section toggles; the export controls dispose when closed. Available work and denial reasons come from the server capabilities, and version conflicts require refresh.
 
-Changing cases, including browser Back, clears the previous pending delivery. A reauthentication return without a case restores its matching pending case. Configuration stays in Privacy setup. On narrow screens a case selector replaces the long side queue.
+An export started from a case returns to that case after the administrator sign-in. Configuration stays in Privacy setup. On narrow screens a case selector replaces the long side queue.

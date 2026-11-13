@@ -248,15 +248,14 @@ COPY packages/core/tsconfig.json ./packages/core/
 # and read-only to the process. A root API process was the difference between
 # "compromised service" and "compromised container" for every remaining mount.
 #
-# The API writes bind mounts the host creates for that user, and two named
-# volumes, which Docker seeds with the owner and mode of these directories:
+# The API writes bind mounts the host creates for that user, and one named
+# volume, which Docker seeds with the owner and mode of this directory:
 # root-owned, world-writable and sticky, like /tmp, so the API's uid creates
 # its own 0700 directory inside (see private-volume-directory.ts). Only the
-# API mounts them.
+# API mounts it.
 RUN mkdir -p /app/custom_integrations /var/lib/openmapx/trusted-config \
-      /var/lib/openmapx/erasure /var/lib/openmapx/subject-exports \
-      /app/infra/docker/.runtime-recovery && \
-    chmod 1777 /var/lib/openmapx/subject-exports /app/infra/docker/.runtime-recovery
+      /var/lib/openmapx/erasure /app/infra/docker/.runtime-recovery && \
+    chmod 1777 /app/infra/docker/.runtime-recovery
 USER node
 
 WORKDIR /app/apps/api

@@ -65,7 +65,7 @@ bind-mounted file or generated secret is captured.
 Preserve deployment configuration, generated secret files, and required recovery
 state separately under a protected operator backup policy. A copy of `.env` alone
 is not sufficient for recovery; keep encryption keys and the erasure journal
-needed by restore. Do not include private subject-export artifacts. For a local
+needed by restore. For a local
 configuration safety copy:
 
 ```bash

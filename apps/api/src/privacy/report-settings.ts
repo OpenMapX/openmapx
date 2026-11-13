@@ -16,8 +16,6 @@ export interface PrivacyReportLegalFacts {
     supervisoryAuthorityUrl: string | null;
     privacySources: PrivacySource[];
     dsarCaseRetentionDays: number;
-    identityEvidenceRetentionDays: number;
-    exportArtifactRetentionHours: number;
     /** Configured backup retention; backups are kept at most this long. */
     backupRetentionDays: number;
   };
@@ -184,22 +182,6 @@ export async function resolvePrivacyReportLegalFacts(
         1095,
         30,
         3650,
-      ),
-      identityEvidenceRetentionDays: numberSetting(
-        "LEGAL_IDENTITY_EVIDENCE_RETENTION_DAYS",
-        "legalIdentityEvidenceRetentionDays",
-        values,
-        30,
-        1,
-        365,
-      ),
-      exportArtifactRetentionHours: numberSetting(
-        "LEGAL_EXPORT_ARTIFACT_RETENTION_HOURS",
-        "legalExportArtifactRetentionHours",
-        values,
-        168,
-        24,
-        720,
       ),
       backupRetentionDays: parseRequiredRetentionDays("BACKUP_RETENTION_DAYS", 30),
     },

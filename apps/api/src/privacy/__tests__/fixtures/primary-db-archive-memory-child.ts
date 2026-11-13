@@ -1,23 +1,18 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { Writable } from "node:stream";
 import { inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "../../../db/schema.js";
 import { savedList, user } from "../../../db/schema.js";
-import { assembleSubjectArchive } from "../../archive-assembler.js";
-import { EncryptedBlobStore } from "../../artifact-storage.js";
-import { PrivacyArchiveWriter } from "../../artifact-writer.js";
-import { loadMasterKeyRing } from "../../crypto.js";
+import { buildSubjectArchiveEntries } from "../../archive-assembler.js";
+import { PrivacyArchiveWriter } from "../../archive-writer.js";
 import { collectOpenMapxDataSnapshot } from "../../openmapx-collectors.js";
 
 const connection = postgres(process.env.DATABASE_URL as string, { max: 2 });
 const database = drizzle(connection, { schema });
 const suffix = randomUUID();
 const userId = `primary-memory-${suffix}`;
-const root = await mkdtemp(join(tmpdir(), "openmapx-primary-memory-"));
 const cutoffAt = new Date("2026-01-01T00:00:00.000Z");
 const createdAt = new Date("2025-01-01T00:00:00.000Z");
 const recordCount = 60_000;
@@ -62,22 +57,12 @@ try {
     offlinePrincipalKey: Buffer.alloc(32, 9),
   });
   if (snapshot.disposeSources) sourceDisposers.push(snapshot.disposeSources);
-  const ring = loadMasterKeyRing({
-    env: {
-      NODE_ENV: "development",
-      OPENMAPX_EXPORTS_KEY: Buffer.alloc(32, 5).toString("base64url"),
-    },
-  });
-  const store = new EncryptedBlobStore({ root, ring, deploymentId: "primary-memory-test" });
   const requestId = randomUUID();
-  const archive = await assembleSubjectArchive({
+  const entries = buildSubjectArchiveEntries({
     requestId,
-    artifactId: randomUUID(),
     locale: "en",
     parts: snapshot.parts,
     sourceEntries: snapshot.entries,
-    disposeSources: snapshot.disposeSources,
-    writer: new PrivacyArchiveWriter(store),
     generatedAt: "2026-01-01T00:00:00.000Z",
     responseContext: {
       request: {
@@ -89,7 +74,6 @@ try {
         snapshotAt: "2026-01-01T00:00:00.000Z",
       },
       generatedAt: "2026-01-01T00:00:00.000Z",
-      expiresAt: "2026-01-08T00:00:00.000Z",
       controller: {
         name: "Memory Test Controller",
         address: "Test Street 1\n10115 Berlin\nGermany",
@@ -102,8 +86,6 @@ try {
         supervisoryAuthorityUrl: null,
         privacySources: [],
         dsarCaseRetentionDays: 1095,
-        identityEvidenceRetentionDays: 30,
-        exportArtifactRetentionHours: 168,
         backupRetentionDays: 30,
       },
       reviewContact: `privacy@example.test (case ${requestId})`,
@@ -119,6 +101,17 @@ try {
       },
     },
   });
+  // The ZIP goes to a counting sink, so only the streaming path holds memory.
+  let streamedBytes = 0;
+  const archive = await new PrivacyArchiveWriter().writeArchive({
+    entries,
+    sink: new Writable({
+      write(chunk: Buffer, _encoding, callback) {
+        streamedBytes += chunk.byteLength;
+        callback();
+      },
+    }),
+  });
   const saved = archive.entries.find((entry) => entry.logicalId === "saved-content");
   const portable = archive.entries.find((entry) => entry.logicalId === "portable-lists");
   process.stdout.write(
@@ -128,6 +121,7 @@ try {
       sha256: saved?.sha256 ?? "",
       schemaId: saved?.schemaId ?? "",
       portableRecords: portable?.recordCount ?? 0,
+      streamedBytes,
       peakRss,
       peakExternal,
     }),
@@ -140,5 +134,4 @@ try {
     .where(inArray(user.id, [userId]))
     .catch(() => undefined);
   await connection.end();
-  await rm(root, { recursive: true, force: true });
 }

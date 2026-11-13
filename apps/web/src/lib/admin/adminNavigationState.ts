@@ -43,8 +43,7 @@ export const PRIVACY_CASE_SECTIONS = [
   "identity",
   "tasks",
   "decisions",
-  "attachments",
-  "delivery",
+  "export",
   "events",
 ] as const;
 export type PrivacyCaseSection = (typeof PRIVACY_CASE_SECTIONS)[number];

@@ -61,10 +61,11 @@ suite("privacy notifications and the per-recipient auth mail limit", () => {
         kind: "access",
         channel: "email",
         encryptedLocator: "synthetic",
-        locatorDigest: randomUUID(),
         receivedAt: new Date(),
         dueAt: new Date(Date.now() + 30 * 86_400_000),
-        state: "operator_review",
+        state: "in_progress",
+        identityMethod: "manual",
+        identityVerifiedAt: new Date(),
       })
       .returning();
     if (!subject || !request) throw new Error("Fixture rows were not created");

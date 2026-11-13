@@ -1,20 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  cleanupResidualUserData,
-  configurePrivacyArtifactDeleter,
-} from "../../services/user-erasure";
+import { cleanupResidualUserData } from "../../services/user-erasure";
 import { db } from "../index";
-import {
-  adminAuditLog,
-  appLog,
-  dataExportArtifact,
-  dataSubjectRequest,
-  dataSubjectRequestAttachment,
-  user,
-  verification,
-} from "../schema";
+import { adminAuditLog, appLog, dataSubjectRequest, user, verification } from "../schema";
 
 const skipDatabase = process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1";
 
@@ -56,14 +45,9 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
       "auth_policy_state.activated_by:n",
       "configuration_migration_preview.actor_id:c",
       "data_disclosure_event.user_id:n",
-      "data_export_reauthentication.initiating_admin_user_id:n",
-      "data_export_reauthentication.user_id:n",
       "data_subject_request.actor_user_id:n",
       "data_subject_request.user_id:n",
-      "data_subject_request_attachment.owner_id:n",
-      "data_subject_request_identity.verified_by:n",
       "data_subject_request_notification.recipient_user_id:n",
-      "data_subject_request_task.assigned_to:n",
       "installed_extension.installed_by:n",
       "installed_integration.installed_by:n",
       "integration_application_receipt.actor_id:n",
@@ -167,14 +151,10 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
     }
   });
 
-  it("physically deletes terminal-case ciphertext while retaining active case objects", async () => {
+  it("keeps the case history and marks every request of the erased account as deleted", async () => {
     const userId = `erasure-privacy-${randomUUID()}`;
     const terminalRequestId = randomUUID();
     const activeRequestId = randomUUID();
-    const deletedStorageKeys: string[] = [];
-    configurePrivacyArtifactDeleter(async (storageKey) => {
-      deletedStorageKeys.push(storageKey);
-    });
     try {
       await db.insert(user).values({
         id: userId,
@@ -183,99 +163,34 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
       });
       const requestBase = {
         kind: "access" as const,
-        channel: "internal" as const,
+        channel: "self_service" as const,
         userId,
-        encryptedLocator: "encrypted",
-        locatorDigest: randomUUID().replaceAll("-", ""),
         receivedAt: new Date(),
         dueAt: new Date(Date.now() + 86_400_000),
+        identityMethod: "account_session" as const,
+        identityVerifiedAt: new Date(),
       };
       await db.insert(dataSubjectRequest).values([
-        { ...requestBase, id: terminalRequestId, state: "closed" },
-        {
-          ...requestBase,
-          id: activeRequestId,
-          state: "ready",
-          locatorDigest: randomUUID().replaceAll("-", ""),
-        },
-      ]);
-      await db.insert(dataExportArtifact).values([
-        {
-          requestId: terminalRequestId,
-          state: "ready",
-          storageKey: `objects/${terminalRequestId}.bin`,
-          filename: "terminal.zip",
-          iv: "iv",
-          wrappedDek: "terminal-key",
-        },
-        {
-          requestId: activeRequestId,
-          state: "ready",
-          storageKey: `objects/${activeRequestId}.bin`,
-          filename: "active.zip",
-          iv: "iv",
-          wrappedDek: "active-key",
-        },
-      ]);
-      await db.insert(dataSubjectRequestAttachment).values([
-        {
-          requestId: terminalRequestId,
-          purpose: "identity_evidence",
-          storageKey: `attachments/${terminalRequestId}.bin`,
-          filename: "terminal.txt",
-          mediaType: "text/plain",
-          encryptedBytes: 1,
-          plaintextBytes: 1,
-          plaintextSha256: "0".repeat(64),
-          ciphertextSha256: "1".repeat(64),
-          iv: "iv",
-          wrappedDek: "terminal-key",
-          expiresAt: new Date(Date.now() + 86_400_000),
-        },
-        {
-          requestId: activeRequestId,
-          purpose: "identity_evidence",
-          storageKey: `attachments/${activeRequestId}.bin`,
-          filename: "active.txt",
-          mediaType: "text/plain",
-          encryptedBytes: 1,
-          plaintextBytes: 1,
-          plaintextSha256: "0".repeat(64),
-          ciphertextSha256: "1".repeat(64),
-          iv: "iv",
-          wrappedDek: "active-key",
-          expiresAt: new Date(Date.now() + 86_400_000),
-        },
+        { ...requestBase, id: terminalRequestId, state: "completed" },
+        { ...requestBase, id: activeRequestId, kind: "portability", state: "in_progress" },
       ]);
       await cleanupResidualUserData({ id: userId, email: `${userId}@example.test` });
 
-      expect(deletedStorageKeys.sort()).toEqual(
-        [`attachments/${terminalRequestId}.bin`, `objects/${terminalRequestId}.bin`].sort(),
-      );
-      const artifacts = await db
-        .select()
-        .from(dataExportArtifact)
-        .where(sql`${dataExportArtifact.requestId} in (${terminalRequestId}, ${activeRequestId})`);
-      expect(artifacts.find((row) => row.requestId === terminalRequestId)).toMatchObject({
-        state: "deleted",
-        wrappedDek: null,
-      });
-      expect(artifacts.find((row) => row.requestId === activeRequestId)).toMatchObject({
-        state: "ready",
-        wrappedDek: "active-key",
-      });
       const requests = await db
-        .select({ id: dataSubjectRequest.id, accountState: dataSubjectRequest.accountState })
+        .select({
+          id: dataSubjectRequest.id,
+          state: dataSubjectRequest.state,
+          accountState: dataSubjectRequest.accountState,
+        })
         .from(dataSubjectRequest)
         .where(sql`${dataSubjectRequest.id} in (${terminalRequestId}, ${activeRequestId})`);
       expect(requests).toEqual(
         expect.arrayContaining([
-          { id: terminalRequestId, accountState: "deleted" },
-          { id: activeRequestId, accountState: "deleted" },
+          { id: terminalRequestId, state: "completed", accountState: "deleted" },
+          { id: activeRequestId, state: "in_progress", accountState: "deleted" },
         ]),
       );
     } finally {
-      configurePrivacyArtifactDeleter(undefined);
       await db
         .delete(dataSubjectRequest)
         .where(sql`${dataSubjectRequest.id} in (${terminalRequestId}, ${activeRequestId})`);

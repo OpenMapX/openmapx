@@ -1,743 +1,441 @@
 import { randomUUID } from "node:crypto";
-import { access, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { createApiClient } from "@openmapx/core";
-import * as sdk from "@openmapx/core/api-admin-sdk";
+import {
+  isValidRequestTransition,
+  REQUEST_STATES,
+  type RequestState,
+} from "@openmapx/core/privacy";
 import { eq } from "drizzle-orm";
 import Fastify from "fastify";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { AdminActionReauthentication } from "../account/admin-reauthentication";
 import {
-  dataExportArtifact,
   dataSubjectRequest,
-  dataSubjectRequestAttachment,
   dataSubjectRequestEvent,
-  dataSubjectRequestIdentity,
   dataSubjectRequestTask,
   session,
   sessionAuthAssurance,
   user,
 } from "../db/schema";
-import { privacyAdminRoute } from "../routes/privacy-admin";
 import { createMigratedPostgresFixture } from "../test/postgres-fixture";
-import { EncryptedBlobStore } from "./artifact-storage";
-import { mutateCaseAttachment } from "./attachment-review";
-import { createEncryptedAttachment } from "./attachments";
-import { collectApprovedAttachments } from "./collectors/attachments";
 
-const authFixture = vi.hoisted(() => ({ sessionId: "synthetic-session" }));
+const authFixture = vi.hoisted(() => ({ sessionId: "admin-session" }));
 vi.mock("../auth.js", () => ({
   auth: {
     api: {
       getSession: async () => ({
-        user: { id: "synthetic-worker", role: "admin" },
+        user: { id: "synthetic-admin", role: "admin", twoFactorEnabled: false },
         session: { id: authFixture.sessionId },
       }),
     },
   },
 }));
 
-import { PrivacyEmailChallengeService } from "./email-challenge";
-import { PrivacyRequestService } from "./request-service";
+const { privacyAdminRoute } = await import("../routes/privacy-admin");
+const { PrivacyRequestService } = await import("./request-service");
+
+const ACTOR = "synthetic-admin";
+const DECISIONS = ["in_progress", "waiting_on_requester", "completed", "refused"] as const;
 
 const suite = process.env.OPENMAPX_RUN_DATABASE_TESTS === "1" ? describe : describe.skip;
-suite("owned privacy case transaction boundaries", () => {
+suite("privacy case administration on PostgreSQL", () => {
   let fixture: Awaited<ReturnType<typeof createMigratedPostgresFixture>>;
-  let storageRoot: string;
-  let store: EncryptedBlobStore;
   const now = new Date("2026-02-15T12:00:00Z");
-  let actorId: string;
-  beforeAll(async () => {
-    fixture = await createMigratedPostgresFixture();
-    actorId = "synthetic-worker";
-    await fixture.db.insert(user).values({
-      id: actorId,
-      name: "Synthetic caseworker",
-      email: `${actorId}@example.test`,
-      role: "admin",
-      updatedAt: now,
-    });
+  const service = () => new PrivacyRequestService({ database: fixture.db, now: () => now });
+
+  async function adminSession(id: string, authenticatedAt: Date) {
     await fixture.db.insert(session).values({
-      id: "synthetic-session",
-      userId: actorId,
+      id,
+      userId: ACTOR,
       token: randomUUID(),
-      expiresAt: new Date(Date.now() + 3600000),
+      expiresAt: new Date(Date.now() + 3_600_000),
       createdAt: new Date(),
       updatedAt: new Date(),
     });
     await fixture.db.insert(sessionAuthAssurance).values({
-      sessionId: "synthetic-session",
-      userId: actorId,
+      sessionId: id,
+      userId: ACTOR,
       method: "password",
-      authenticatedAt: new Date(),
-      createdAt: new Date(),
+      authenticatedAt,
+      createdAt: authenticatedAt,
     });
-    storageRoot = await mkdtemp(join(tmpdir(), "openmapx-privacy-admin-test-"));
-    const ring = {
-      activeVersion: 1,
-      activeKey: Buffer.alloc(32, 87),
-      keys: new Map([[1, Buffer.alloc(32, 87)]]),
-    };
-    store = new EncryptedBlobStore({ root: storageRoot, ring, deploymentId: "openmapx" });
-  }, 120000);
+  }
+
+  beforeAll(async () => {
+    fixture = await createMigratedPostgresFixture();
+    await fixture.db.insert(user).values({
+      id: ACTOR,
+      name: "Synthetic administrator",
+      email: `${ACTOR}@example.test`,
+      role: "admin",
+      updatedAt: now,
+    });
+    await adminSession("admin-session", new Date(Date.now() - 60_000));
+  }, 120_000);
   afterAll(async () => {
     await fixture?.stop();
-    if (storageRoot) await rm(storageRoot, { recursive: true, force: true });
   });
-  async function request(state: "identity_pending" | "operator_review" = "operator_review") {
+  beforeEach(() => {
+    authFixture.sessionId = "admin-session";
+    vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 9).toString("hex"));
+  });
+
+  /** A case in an exact state, verified, without operator-held tasks. */
+  async function caseIn(state: RequestState, verified = true) {
     const [row] = await fixture.db
       .insert(dataSubjectRequest)
       .values({
         kind: "access",
         channel: "email",
-        encryptedLocator: "synthetic",
-        locatorDigest: randomUUID(),
-        receivedAt: new Date("2026-01-01T12:00:00Z"),
-        dueAt: new Date("2026-02-01T12:00:00Z"),
+        receivedAt: new Date("2026-01-20T12:00:00Z"),
+        dueAt: new Date("2026-02-20T12:00:00Z"),
         state,
+        ...(verified ? { identityMethod: "manual" as const, identityVerifiedAt: now } : {}),
       })
       .returning();
     return row!;
   }
-  const service = () => new PrivacyRequestService({ database: fixture.db, now: () => now });
-  it("keeps extensions inside the original maximum after an earlier extension", async () => {
-    const r = await request();
-    const first = await service().recordExtension({
-      requestId: r.id,
-      version: 1,
-      extendedUntil: new Date("2026-03-01T12:00:00Z"),
-      extensionNotifiedAt: new Date("2026-01-30T12:00:00Z"),
+
+  async function app(options: Record<string, unknown> = {}) {
+    const instance = Fastify();
+    await instance.register(privacyAdminRoute, {
+      prefix: "/api",
+      database: fixture.db,
+      ...options,
+    });
+    return instance;
+  }
+
+  describe("every decision pair through the transition table", () => {
+    const pairs = REQUEST_STATES.flatMap((from) => DECISIONS.map((to) => [from, to] as const));
+    it.each(pairs)("%s -> %s", async (from, to) => {
+      const request = await caseIn(from);
+      const decide = service().recordDecision({
+        requestId: request.id,
+        version: request.version,
+        decision: to,
+        reasonCode: "table-check",
+        actorId: ACTOR,
+        idempotencyKey: `decision-${randomUUID()}`,
+      });
+      if (from === "completed" || from === "refused") {
+        await expect(decide).rejects.toMatchObject({
+          code: "CASE_DECISION_NOT_ALLOWED",
+          statusCode: 409,
+        });
+      } else if (isValidRequestTransition(from, to)) {
+        await expect(decide).resolves.toMatchObject({ state: to, version: request.version + 1 });
+        const [event] = await fixture.db
+          .select({ eventType: dataSubjectRequestEvent.eventType })
+          .from(dataSubjectRequestEvent)
+          .where(eq(dataSubjectRequestEvent.requestId, request.id));
+        expect(event?.eventType).toBe(`state_${to}`);
+      } else {
+        await expect(decide).rejects.toMatchObject({
+          code: "INVALID_TRANSITION",
+          statusCode: 409,
+        });
+        expect((await service().getById(request.id)).state).toBe(from);
+      }
+    });
+  });
+
+  it("starts work only after the requester's identity is verified", async () => {
+    const request = await caseIn("open", false);
+    await expect(
+      service().recordDecision({
+        requestId: request.id,
+        version: request.version,
+        decision: "in_progress",
+        reasonCode: "start",
+        actorId: ACTOR,
+        idempotencyKey: `start-${request.id}`,
+      }),
+    ).rejects.toMatchObject({ code: "IDENTITY_REQUIRED", statusCode: 409 });
+    const server = await app();
+    try {
+      const verify = () =>
+        server.inject({
+          method: "POST",
+          url: `/api/privacy/admin/requests/${request.id}/identity`,
+          headers: { "idempotency-key": `verify-${request.id}` },
+          payload: { version: request.version, reasonCode: "letter-signature-checked" },
+        });
+      const first = await verify();
+      expect(first.statusCode, first.body).toBe(200);
+      expect(first.json().request).toMatchObject({
+        state: "in_progress",
+        identityMethod: "manual",
+      });
+      // The same key and operation replays; a second verification is refused.
+      expect((await verify()).statusCode).toBe(200);
+      const second = await server.inject({
+        method: "POST",
+        url: `/api/privacy/admin/requests/${request.id}/identity`,
+        headers: { "idempotency-key": `verify-again-${request.id}` },
+        payload: { version: request.version + 1, reasonCode: "again" },
+      });
+      expect(second.statusCode).toBe(409);
+      expect(second.json()).toEqual({ code: "IDENTITY_VERIFICATION_NOT_ALLOWED" });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("maps errors from every layer through one privacy reply", async () => {
+    const request = await caseIn("in_progress");
+    const failing = { recordDecision: async () => Promise.reject(new Error("database is down")) };
+    const server = await app();
+    const broken = await app({ service: failing });
+    try {
+      const decide = (payload: unknown, key = randomUUID()) =>
+        server.inject({
+          method: "POST",
+          url: `/api/privacy/admin/requests/${request.id}/decision`,
+          headers: { "idempotency-key": key },
+          payload: payload as Record<string, unknown>,
+        });
+      const invalid = await decide({ version: 1, decision: "open", reasonCode: "x" });
+      expect(invalid.statusCode).toBe(400);
+      const stale = await decide({ version: 99, decision: "refused", reasonCode: "scope" });
+      expect(stale.statusCode).toBe(409);
+      expect(stale.json()).toEqual({ code: "REQUEST_VERSION_CONFLICT" });
+      const missing = await server.inject({
+        method: "GET",
+        url: `/api/privacy/admin/requests/${randomUUID()}`,
+      });
+      expect(missing.statusCode).toBe(404);
+      expect(missing.json()).toEqual({ code: "REQUEST_NOT_FOUND" });
+      const outage = await broken.inject({
+        method: "POST",
+        url: `/api/privacy/admin/requests/${request.id}/decision`,
+        headers: { "idempotency-key": randomUUID() },
+        payload: { version: 1, decision: "refused", reasonCode: "scope" },
+      });
+      expect(outage.statusCode).toBe(503);
+      expect(outage.json()).toEqual({ code: "PRIVACY_SERVICE_UNAVAILABLE" });
+      const completed = await caseIn("completed");
+      const terminal = await server.inject({
+        method: "POST",
+        url: `/api/privacy/admin/requests/${completed.id}/decision`,
+        headers: { "idempotency-key": randomUUID() },
+        payload: { version: completed.version, decision: "refused", reasonCode: "late" },
+      });
+      expect(terminal.statusCode).toBe(409);
+      expect(terminal.json()).toEqual({ code: "CASE_DECISION_NOT_ALLOWED" });
+    } finally {
+      await server.close();
+      await broken.close();
+    }
+  });
+
+  it("rejects a changed replay of the same idempotency key", async () => {
+    const request = await caseIn("in_progress");
+    const key = `same-${request.id}`;
+    await service().recordDecision({
+      requestId: request.id,
+      version: request.version,
+      decision: "waiting_on_requester",
+      reasonCode: "need-id",
+      actorId: ACTOR,
+      idempotencyKey: key,
+    });
+    await expect(
+      service().recordDecision({
+        requestId: request.id,
+        version: request.version,
+        decision: "waiting_on_requester",
+        reasonCode: "different",
+        actorId: ACTOR,
+        idempotencyKey: key,
+      }),
+    ).rejects.toMatchObject({ code: "IDEMPOTENCY_KEY_REUSED", statusCode: 409 });
+  });
+
+  it("keeps extensions inside the original maximum", async () => {
+    const request = await caseIn("in_progress");
+    const extended = await service().recordExtension({
+      requestId: request.id,
+      version: request.version,
+      extendedUntil: new Date("2026-03-20T12:00:00Z"),
+      extensionNotifiedAt: new Date("2026-02-01T12:00:00Z"),
       reasonCode: "complexity",
-      actorId,
-      idempotencyKey: randomUUID(),
+      actorId: ACTOR,
+      idempotencyKey: `extend-${request.id}`,
     });
     await expect(
       service().recordExtension({
-        requestId: r.id,
-        version: first.version,
-        extendedUntil: new Date("2026-04-15T12:00:00Z"),
-        extensionNotifiedAt: new Date("2026-01-30T12:00:00Z"),
+        requestId: request.id,
+        version: extended.version,
+        extendedUntil: new Date("2026-05-01T12:00:00Z"),
+        extensionNotifiedAt: new Date("2026-02-01T12:00:00Z"),
         reasonCode: "complexity",
-        actorId,
-        idempotencyKey: randomUUID(),
+        actorId: ACTOR,
+        idempotencyKey: `extend-again-${request.id}`,
       }),
     ).rejects.toMatchObject({ code: "INVALID_EXTENSION" });
-  });
-  it("rejects a stale same-state decision and changed replay payload", async () => {
-    const r = await request();
+    const closed = await caseIn("refused");
     await expect(
-      service().recordDecision({
-        requestId: r.id,
-        version: 9,
-        decision: "operator_review",
-        reasonCode: "source-review",
-        actorId,
-        idempotencyKey: randomUUID(),
+      service().recordExtension({
+        requestId: closed.id,
+        version: closed.version,
+        extendedUntil: new Date("2026-03-20T12:00:00Z"),
+        extensionNotifiedAt: new Date("2026-02-01T12:00:00Z"),
+        reasonCode: "complexity",
+        actorId: ACTOR,
+        idempotencyKey: `extend-closed-${closed.id}`,
       }),
-    ).rejects.toMatchObject({ code: "REQUEST_VERSION_CONFLICT" });
-    const key = randomUUID();
-    await service().recordDecision({
-      requestId: r.id,
-      version: 1,
-      decision: "operator_review",
-      reasonCode: "source-review",
-      actorId,
-      idempotencyKey: key,
-    });
-    await expect(
-      service().recordDecision({
-        requestId: r.id,
-        version: 1,
-        decision: "refused",
-        reasonCode: "scope",
-        actorId,
-        idempotencyKey: key,
-      }),
-    ).rejects.toMatchObject({ code: "IDEMPOTENCY_KEY_REUSED" });
-  });
-  it("rejects expired identity evidence before verification", async () => {
-    const r = await request("identity_pending");
-    await fixture.db
-      .insert(dataSubjectRequestIdentity)
-      .values({ requestId: r.id, party: "subject", state: "pending" });
-    const [a] = await fixture.db
-      .insert(dataSubjectRequestAttachment)
-      .values({
-        requestId: r.id,
-        purpose: "identity_evidence",
-        storageKey: randomUUID(),
-        filename: "evidence.txt",
-        mediaType: "text/plain",
-        encryptedBytes: 8,
-        plaintextBytes: 1,
-        plaintextSha256: "1".repeat(64),
-        ciphertextSha256: "2".repeat(64),
-        iv: "synthetic",
-        expiresAt: new Date("2026-02-14T00:00:00Z"),
-      })
-      .returning();
-    await expect(
-      service().recordIdentityReview({
-        requestId: r.id,
-        version: 1,
-        party: "subject",
-        outcome: "verified",
-        method: "exceptional_evidence",
-        reasonableDoubtCode: "account-unavailable",
-        evidenceAttachmentId: a!.id,
-        actorId,
-        idempotencyKey: randomUUID(),
-      }),
-    ).rejects.toMatchObject({ code: "IDENTITY_ATTACHMENT_NOT_FOUND" });
-  });
-  it("rejects manual completion of an automated source", async () => {
-    const r = await request();
-    const [task] = await fixture.db
-      .insert(dataSubjectRequestTask)
-      .values({
-        requestId: r.id,
-        taskKey: "account-profile",
-        registrationId: "account-profile",
-        source: "application",
-        status: "running",
-        required: 1,
-      })
-      .returning();
-    await expect(
-      service().markTask({
-        requestId: r.id,
-        taskId: task!.id,
-        requestVersion: 1,
-        status: "complete",
-        recordCount: 0,
-        actorId,
-        idempotencyKey: randomUUID(),
-      }),
-    ).rejects.toMatchObject({ code: "TASK_DECISION_NOT_ALLOWED" });
-  });
-  it("rejects stale attachment uploads before writing encrypted storage", async () => {
-    const r = await request();
-    const write = vi.fn();
-    const app = Fastify();
-    await app.register(privacyAdminRoute, {
-      database: fixture.db,
-      artifactStore: { write } as never,
-    });
-    try {
-      const response = await app.inject({
-        method: "POST",
-        url: `/privacy/admin/requests/${r.id}/attachments`,
-        headers: { "idempotency-key": randomUUID() },
-        payload: {
-          version: 9,
-          purpose: "identity_evidence",
-          filename: "evidence.txt",
-          mediaType: "text/plain",
-          contentBase64: "aGVsbG8=",
-        },
-      });
-      expect(response.statusCode).toBe(409);
-      expect(response.json()).toMatchObject({ code: "REQUEST_VERSION_CONFLICT" });
-      expect(write).not.toHaveBeenCalled();
-    } finally {
-      await app.close();
-    }
-  });
-  it("rejects attachment rights review for an unknown case", async () => {
-    const app = Fastify();
-    await app.register(privacyAdminRoute, { database: fixture.db });
-    try {
-      const response = await app.inject({
-        method: "POST",
-        url: `/privacy/admin/requests/${randomUUID()}/attachments/${randomUUID()}/review`,
-        headers: { "idempotency-key": randomUUID() },
-        payload: { version: 1, decision: "approved", reasonCode: "rights-reviewed" },
-      });
-      expect(response.statusCode).toBe(404);
-      expect(response.json()).toMatchObject({ code: "REQUEST_NOT_FOUND" });
-    } finally {
-      await app.close();
-    }
-  });
-  it("revalidates assignment authority and rejects a changed assignment replay", async () => {
-    const r = await request();
-    const [t] = await fixture.db
-      .insert(dataSubjectRequestTask)
-      .values({
-        requestId: r.id,
-        taskKey: "manual",
-        registrationId: "data-manager-trigger-attribution",
-        source: "application",
-        status: "operator_review",
-        required: 1,
-      })
-      .returning();
-    await expect(
-      service().assignTask({
-        requestId: r.id,
-        taskId: t!.id,
-        version: 1,
-        assignedTo: "revoked-worker",
-        actorId,
-        idempotencyKey: randomUUID(),
-      }),
-    ).rejects.toMatchObject({ code: "ASSIGNEE_NOT_AUTHORIZED" });
-    const key = randomUUID();
-    await service().assignTask({
-      requestId: r.id,
-      taskId: t!.id,
-      version: 1,
-      assignedTo: actorId,
-      actorId,
-      idempotencyKey: key,
-    });
-    await expect(
-      service().assignTask({
-        requestId: r.id,
-        taskId: t!.id,
-        version: 1,
-        assignedTo: null,
-        actorId,
-        idempotencyKey: key,
-      }),
-    ).rejects.toMatchObject({ code: "IDEMPOTENCY_KEY_REUSED" });
+    ).rejects.toMatchObject({ code: "EXTENSION_NOT_ALLOWED" });
   });
 
-  it("retains an email issue challenge on exact actor/case/key replay", async () => {
-    const ring = {
-      activeVersion: 1,
-      activeKey: Buffer.alloc(32, 73),
-      keys: new Map([[1, Buffer.alloc(32, 73)]]),
-    };
-    const r = await new PrivacyRequestService({
-      database: fixture.db,
-      keyRing: ring,
-      deploymentId: "test",
-    }).create({
+  it("resolves operator-held tasks with one action each, then completes the case", async () => {
+    const request = await service().create({
       channel: "email",
-      subject: {
-        locatorType: "email",
-        locator: "synthetic@example.test",
-        accountState: "inaccessible",
-      },
+      kind: "access",
+      subject: { locatorType: "email", locator: "case@example.test", accountState: "unknown" },
+      actorUserId: ACTOR,
+      locale: "en",
+      timeZone: "UTC",
     });
-    const svc = new PrivacyEmailChallengeService(fixture.db, ring, "test");
-    const body = {
-      requestId: r.id,
-      party: "subject" as const,
-      actorId,
-      idempotencyKey: randomUUID(),
-    };
-    const first = await svc.issue(body);
-    await expect(svc.issue(body)).resolves.toEqual(first);
-    await expect(svc.issue({ ...body, party: "representative" })).rejects.toMatchObject({
-      code: "IDEMPOTENCY_KEY_REUSED",
-    });
-  });
-  it("returns admin-specific login and refuses start replay without the matching nonce cookie", async () => {
-    const r = await request();
-    await fixture.db
-      .update(dataSubjectRequest)
-      .set({ state: "ready", identityState: "verified" })
-      .where(eq(dataSubjectRequest.id, r.id));
-    await fixture.db
-      .insert(dataSubjectRequestIdentity)
-      .values({ requestId: r.id, party: "subject", state: "verified" });
-    const [artifact] = await fixture.db
-      .insert(dataExportArtifact)
-      .values({
-        requestId: r.id,
-        state: "ready",
-        storageKey: randomUUID(),
-        filename: "openmapx-data-export.zip",
-        iv: "synthetic",
-        expiresAt: new Date(Date.now() + 600000),
-      })
-      .returning();
-    const app = Fastify();
-    await app.register(privacyAdminRoute, { database: fixture.db });
+    const server = await app();
     try {
-      const options = {
-        method: "POST" as const,
-        url: `/privacy/admin/requests/${r.id}/artifacts/${artifact!.id}/reauth/start`,
-        headers: { "idempotency-key": randomUUID() },
-        payload: { channel: "assisted", reasonCode: "subject-request" },
-      };
-      const first = await app.inject(options);
-      expect(first.statusCode).toBe(200);
-      expect(first.json().loginPath).toBe("/auth/privacy/admin");
-      const replay = await app.inject(options);
-      expect(replay.statusCode).toBe(409);
-      expect(replay.json()).toMatchObject({ code: "REAUTH_RESTART_REQUIRED" });
-      const withCookie = await app.inject({
-        ...options,
-        headers: {
-          ...options.headers,
-          cookie: first.headers["set-cookie"]!.toString().split(";")[0]!,
-        },
+      let version = (
+        await service().verifyIdentity({
+          requestId: request.id,
+          version: request.version,
+          reasonCode: "email-reply-checked",
+          actorId: ACTOR,
+          idempotencyKey: `verify-${request.id}`,
+        })
+      ).version;
+      const detail = await server.inject({
+        method: "GET",
+        url: `/api/privacy/admin/requests/${request.id}`,
       });
-      expect(withCookie.statusCode).toBe(200);
-      expect(withCookie.json().challengeId).toBe(first.json().challengeId);
+      expect(detail.statusCode, detail.body).toBe(200);
+      expect(detail.json().capabilities).toMatchObject({
+        verifyIdentity: false,
+        resolveTasks: true,
+        export: false,
+        reasons: { export: "subject-account-unknown" },
+      });
+      for (const task of detail.json().tasks as Array<{ id: string }>) {
+        const resolved = await server.inject({
+          method: "POST",
+          url: `/api/privacy/admin/requests/${request.id}/tasks/${task.id}/resolution`,
+          headers: { "idempotency-key": `resolve-${task.id}` },
+          payload: { version, reasonCode: "checked" },
+        });
+        expect(resolved.statusCode, resolved.body).toBe(200);
+        version = resolved.json().request.version;
+      }
+      const tasks = await fixture.db
+        .select({ status: dataSubjectRequestTask.status })
+        .from(dataSubjectRequestTask)
+        .where(eq(dataSubjectRequestTask.requestId, request.id));
+      expect(tasks.every((task) => task.status === "resolved")).toBe(true);
+      const completed = await server.inject({
+        method: "POST",
+        url: `/api/privacy/admin/requests/${request.id}/decision`,
+        headers: { "idempotency-key": `complete-${request.id}` },
+        payload: { version, decision: "completed", reasonCode: "answered-by-post" },
+      });
+      expect(completed.statusCode, completed.body).toBe(200);
+      expect(completed.json().request.state).toBe("completed");
     } finally {
-      await app.close();
+      await server.close();
     }
   });
 
-  it("roundtrips non-UTF8 attachment bytes through actual HTTP and generated binary transport", async () => {
-    const r = await request();
-    const app = Fastify();
-    await app.register(privacyAdminRoute, {
-      prefix: "/api",
-      database: fixture.db,
-      artifactStore: store,
+  it("exports an assisted subject only with a fresh purpose-bound administrator proof", async () => {
+    for (const [key, value] of Object.entries({
+      LEGAL_NAME: "Admin Export Controller",
+      LEGAL_STREET: "Test Street 1",
+      LEGAL_POSTAL_CODE: "10115",
+      LEGAL_CITY: "Berlin",
+      LEGAL_COUNTRY: "Germany",
+      LEGAL_EMAIL: "privacy@example.test",
+      LEGAL_DATA_REQUEST_EMAIL: "privacy@example.test",
+      LEGAL_DEPLOYMENT_JURISDICTION: "DE-BE",
+      LEGAL_SUPERVISORY_AUTHORITY: "Test Supervisory Authority",
+      LEGAL_PRIVACY_SOURCES: "[]",
+    }))
+      vi.stubEnv(key, value);
+    const subjectId = `assisted-subject-${randomUUID()}`;
+    await fixture.db
+      .insert(user)
+      .values({ id: subjectId, name: "Assisted subject", email: `${subjectId}@example.test` });
+    const created = await service().create({
+      channel: "post",
+      kind: "access_and_portability",
+      subject: { locatorType: "user_id", locator: subjectId, accountState: "current" },
+      actorUserId: ACTOR,
+      locale: "en",
+      timeZone: "UTC",
     });
-    await app.listen({ host: "127.0.0.1", port: 0 });
+    const request = await service().verifyIdentity({
+      requestId: created.id,
+      version: created.version,
+      reasonCode: "postal-identity-checked",
+      actorId: ACTOR,
+      idempotencyKey: `verify-${created.id}`,
+    });
+    const server = await app({
+      exportSources: { openmapx: { offlinePrincipalKey: Buffer.alloc(32, 3) } },
+    });
     try {
-      const address = app.server.address();
-      if (!address || typeof address === "string") throw Error("No owned listener");
-      const client = createApiClient({
-        baseUrl: `http://127.0.0.1:${address.port}`,
-        credentials: "include",
-      });
-      const bytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 255, 128, 231]);
-      const upload = sdk.unwrapAdminResponse(
-        await sdk.uploadPrivacyAdminAttachment(
-          r.id,
-          {
-            version: 1,
-            purpose: "operator_supplement",
-            filename: "reviewed.png",
-            mediaType: "image/png",
-            contentBase64: bytes.toString("base64"),
-            metadata: { source: "synthetic-reviewed-source" },
-          },
-          { "idempotency-key": randomUUID() },
-          { client },
-        ),
-      );
-      expect(upload.attachment.rightsReviewState).toBe("pending");
-      const chunks: Buffer[] = [];
-      const result = await sdk.downloadPrivacyAdminAttachment(r.id, upload.attachment.id, {
-        client,
-        onByteChunk: async (chunk) => {
-          chunks.push(Buffer.from(chunk));
-        },
-      });
-      expect(result.status).toBe(200);
-      expect(Buffer.concat(chunks)).toEqual(bytes);
-      expect(result.headers.get("content-type")).toBe("application/octet-stream");
-      const review = sdk.unwrapAdminResponse(
-        await sdk.reviewPrivacyAdminAttachment(
-          r.id,
-          upload.attachment.id,
-          { version: 2, decision: "approved", reasonCode: "rights-reviewed" },
-          { "idempotency-key": randomUUID() },
-          { client },
-        ),
-      );
-      expect(review.request.version).toBe(3);
-      const source = await collectApprovedAttachments({
-        requestId: r.id,
-        database: fixture.db,
-        store,
-      });
-      expect(source.entries).toHaveLength(2);
-      const collected: Buffer[] = [];
-      for await (const chunk of source.entries![0]!.source as AsyncIterable<Uint8Array>)
-        collected.push(Buffer.from(chunk));
-      expect(Buffer.concat(collected)).toEqual(bytes);
-      const original = store.decryptToTwoPass.bind(store);
-      const expiry = vi.spyOn(store, "decryptToTwoPass").mockImplementation((blob, sink, options) =>
-        original(blob, sink, {
-          ...options,
-          beforeSecondPass: async () => {
-            await fixture.db
-              .update(dataSubjectRequestAttachment)
-              // PostgreSQL now() is fixed at transaction start; avoid a race with that clock.
-              .set({ expiresAt: new Date(0) })
-              .where(eq(dataSubjectRequestAttachment.id, upload.attachment.id));
-            await options?.beforeSecondPass?.();
-          },
-        }),
-      );
-      const denied: Buffer[] = [];
-      const expired = await sdk.downloadPrivacyAdminAttachment(r.id, upload.attachment.id, {
-        client,
-        onByteChunk: async (chunk) => {
-          denied.push(Buffer.from(chunk));
-        },
-      });
-      expiry.mockRestore();
-      expect(expired.status).toBe(404);
-      expect(denied).toHaveLength(0);
-    } finally {
-      await app.close();
-    }
-  });
+      const exportCase = (headers: Record<string, string>) =>
+        server.inject({
+          method: "POST",
+          url: `/api/privacy/admin/requests/${request.id}/export`,
+          headers,
+          payload: {},
+        });
+      // No proof at all.
+      const without = await exportCase({ "x-admin-reauth-proof": randomUUID() });
+      expect(without.statusCode).toBe(409);
+      expect(without.json()).toEqual({ code: "REAUTHENTICATION_REQUIRED" });
 
-  it.each([false, true])(
-    "delivers once or denies all bytes if representative authority changes after integrity verification (revoked=%s)",
-    async (revoke) => {
-      authFixture.sessionId = "synthetic-session";
-      const r = await request();
-      await fixture.db
-        .update(dataSubjectRequest)
-        .set({ state: "ready", identityState: "verified" })
-        .where(eq(dataSubjectRequest.id, r.id));
-      await fixture.db.insert(dataSubjectRequestIdentity).values([
-        { requestId: r.id, party: "subject", state: "verified" },
-        {
-          requestId: r.id,
-          party: "representative",
-          state: "verified",
-          authorityState: "approved",
-          deliveryAuthorized: 1,
-        },
-      ]);
-      const bytes = Buffer.from([80, 75, 3, 4, 255, 0, 128, 31]);
-      const id = randomUUID();
-      const stored = await store.write({
-        requestId: r.id,
-        blobId: id,
-        purpose: "export-artifact",
-        storageKey: `exports/${id}.bin`,
-        source: bytes,
+      // A completed ceremony: started in one session, finished by a new sign-in.
+      const ceremony = await new AdminActionReauthentication(fixture.db).start({
+        actorId: ACTOR,
+        startingSessionId: "admin-session",
+        purpose: "privacy.export",
+        targetId: request.id,
       });
-      await fixture.db.insert(dataExportArtifact).values({
-        id,
-        requestId: r.id,
-        state: "ready",
-        storageKey: stored.storageKey,
-        filename: "openmapx-data-export.zip",
-        plaintextBytes: stored.plaintextBytes,
-        encryptedBytes: stored.ciphertextBytes,
-        plaintextSha256: stored.plaintextSha256,
-        ciphertextSha256: stored.ciphertextSha256,
-        iv: stored.iv,
-        tag: stored.tag,
-        wrappedDek: JSON.stringify(stored.wrappedDek),
-        masterKeyVersion: stored.masterKeyVersion,
-        expiresAt: new Date(Date.now() + 600000),
-      });
-      const app = Fastify();
-      await app.register(privacyAdminRoute, {
-        prefix: "/api",
-        database: fixture.db,
-        artifactStore: store,
-      });
-      await app.listen({ host: "127.0.0.1", port: 0 });
-      let cookie = "";
-      try {
-        const address = app.server.address();
-        if (!address || typeof address === "string") throw Error("No owned listener");
-        const client = createApiClient({
-          baseUrl: `http://127.0.0.1:${address.port}`,
-          credentials: "include",
-          headerInterceptor: (): Record<string, string> => (cookie ? { cookie } : {}),
-        });
-        const started = await sdk.startPrivacyAdminReauthentication(
-          r.id,
-          id,
-          { channel: "representative", reasonCode: "representative-request" },
-          { "idempotency-key": randomUUID() },
-          { client },
-        );
-        const ceremony = sdk.unwrapAdminResponse(started);
-        cookie = started.headers.get("set-cookie")!.split(";")[0]!;
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        const login = randomUUID();
-        await fixture.db.insert(session).values({
-          id: login,
-          userId: actorId,
-          token: randomUUID(),
-          expiresAt: new Date(Date.now() + 3600000),
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        });
-        await fixture.db.insert(sessionAuthAssurance).values({
-          sessionId: login,
-          userId: actorId,
+      // The new sign-in happens after the ceremony started, never in the future.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const signedInAt = new Date();
+      await adminSession("admin-fresh-session", signedInAt);
+      await new AdminActionReauthentication(fixture.db).complete({
+        challengeId: ceremony.challengeId,
+        nonce: ceremony.nonce,
+        session: {
+          id: "admin-fresh-session",
+          userId: ACTOR,
           method: "password",
-          authenticatedAt: new Date(),
-          createdAt: new Date(),
-        });
-        authFixture.sessionId = login;
-        const completed = await sdk.completePrivacyAdminReauthentication(
-          r.id,
-          id,
-          { challengeId: ceremony.challengeId },
-          { "idempotency-key": randomUUID() },
-          { client },
-        );
-        expect(completed.status).toBe(200);
-        let restore: (() => void) | undefined;
-        if (revoke) {
-          const original = store.decryptToTwoPass.bind(store);
-          const spy = vi
-            .spyOn(store, "decryptToTwoPass")
-            .mockImplementation((blob, sink, options) =>
-              original(blob, sink, {
-                ...options,
-                beforeSecondPass: async () => {
-                  await fixture.db
-                    .update(dataSubjectRequestIdentity)
-                    .set({ authorityState: "rejected", deliveryAuthorized: 0 })
-                    .where(eq(dataSubjectRequestIdentity.requestId, r.id));
-                  await options?.beforeSecondPass?.();
-                },
-              }),
-            );
-          restore = () => spy.mockRestore();
-        }
-        const chunks: Buffer[] = [];
-        const downloaded = await sdk.downloadPrivacyAdminArtifact(r.id, id, {
-          client,
-          onByteChunk: async (chunk) => {
-            chunks.push(Buffer.from(chunk));
-          },
-        });
-        restore?.();
-        expect(downloaded.status).toBe(revoke ? 401 : 200);
-        expect(Buffer.concat(chunks)).toEqual(revoke ? Buffer.alloc(0) : bytes);
-        const again: Buffer[] = [];
-        const repeated = await sdk.downloadPrivacyAdminArtifact(r.id, id, {
-          client,
-          onByteChunk: async (chunk) => {
-            again.push(Buffer.from(chunk));
-          },
-        });
-        expect(repeated.status).toBe(401);
-        expect(again).toHaveLength(0);
-        await vi.waitFor(async () => {
-          const events = await fixture.db
-            .select()
-            .from(dataSubjectRequestEvent)
-            .where(eq(dataSubjectRequestEvent.requestId, r.id));
-          expect(events.filter((e) => e.eventType === "assisted_delivery_completed")).toHaveLength(
-            revoke ? 0 : 1,
-          );
-        });
-      } finally {
-        authFixture.sessionId = "synthetic-session";
-        await app.close();
-      }
-    },
-  );
-  it.each(["committed", "rolled_back", "unavailable"] as const)(
-    "retains attachment bytes unless a rejected transaction is proven rolled back (%s)",
-    async (outcome) => {
-      const r = await request(),
-        body = {
-          version: r.version,
-          purpose: "identity_evidence",
-          filename: "proof.txt",
-          mediaType: "text/plain",
-          contentBase64: Buffer.from("synthetic evidence").toString("base64"),
+          authenticatedAt: signedInAt,
+          mfaConfigured: false,
         },
-        input = {
-          kind: "upload" as const,
-          requestId: r.id,
-          body,
-          actorId,
-          idempotencyKey: randomUUID(),
-          database: fixture.db,
-          store,
-        },
-        original = fixture.db.transaction.bind(fixture.db),
-        write = vi.spyOn(store, "write"),
-        failure = Error("database outcome acknowledgement unavailable");
-      const transaction = vi
-        .spyOn(fixture.db, "transaction")
-        .mockImplementationOnce(async (callback, options) => {
-          if (outcome === "committed") {
-            await original(callback, options);
-            throw failure;
-          }
-          return original(async (tx) => {
-            await callback(tx);
-            throw failure;
-          }, options);
-        });
-      if (outcome === "unavailable")
-        transaction.mockRejectedValueOnce(Error("reconciliation connection unavailable"));
-      try {
-        await expect(mutateCaseAttachment(input)).rejects.toThrow(failure.message);
-        const stored = await write.mock.results[0]!.value,
-          [attachment] = await fixture.db
-            .select()
-            .from(dataSubjectRequestAttachment)
-            .where(eq(dataSubjectRequestAttachment.requestId, r.id));
-        expect(!!attachment).toBe(outcome === "committed");
-        if (outcome === "rolled_back")
-          await expect(access(stored.path)).rejects.toMatchObject({ code: "ENOENT" });
-        else {
-          const chunks: Buffer[] = [];
-          await store.decryptTo(stored, (chunk) => {
-            chunks.push(Buffer.from(chunk));
-          });
-          expect(Buffer.concat(chunks).toString()).toBe("synthetic evidence");
-        }
-        transaction.mockRestore();
-        if (outcome === "committed") {
-          const replay = await mutateCaseAttachment(input);
-          expect(replay?.attachment.id).toBe(attachment!.id);
-          expect(write).toHaveBeenCalledOnce();
-          expect(
-            (
-              await fixture.db
-                .select()
-                .from(dataSubjectRequestEvent)
-                .where(eq(dataSubjectRequestEvent.requestId, r.id))
-            ).filter((event) => event.eventType === "attachment_created"),
-          ).toHaveLength(1);
-        }
-      } finally {
-        transaction.mockRestore();
-        write.mockRestore();
-      }
-    },
-  );
-
-  it.each(["committed", "rejected_insert"] as const)(
-    "owns standalone attachment persistence before cleanup (%s)",
-    async (outcome) => {
-      const r = await request(),
-        original = fixture.db.transaction.bind(fixture.db),
-        write = vi.spyOn(store, "write");
-      const transaction = vi.spyOn(fixture.db, "transaction");
-      if (outcome === "committed")
-        transaction.mockImplementationOnce(async (callback, options) => {
-          await original(callback, options);
-          throw Error("standalone COMMIT acknowledgement lost");
-        });
-      try {
-        await expect(
-          createEncryptedAttachment(
-            {
-              requestId: outcome === "committed" ? r.id : randomUUID(),
-              ownerId: actorId,
-              purpose: "identity_evidence",
-              filename: "evidence.txt",
-              mediaType: "text/plain",
-              source: Buffer.from("standalone evidence"),
-              expiresAt: new Date(Date.now() + 60000),
-            },
-            { store, database: fixture.db },
-          ),
-        ).rejects.toThrow();
-        const stored = await write.mock.results[0]!.value;
-        if (outcome === "committed") {
-          const [row] = await fixture.db
-            .select()
-            .from(dataSubjectRequestAttachment)
-            .where(eq(dataSubjectRequestAttachment.requestId, r.id));
-          expect(row?.storageKey).toBe(stored.storageKey);
-          await store.verify(stored);
-        } else await expect(access(stored.path)).rejects.toMatchObject({ code: "ENOENT" });
-      } finally {
-        transaction.mockRestore();
-        write.mockRestore();
-      }
-    },
-  );
+      });
+      authFixture.sessionId = "admin-fresh-session";
+      const headers = {
+        "x-admin-reauth-proof": ceremony.challengeId,
+        cookie: `__Host-openmapx-admin-reauth=${ceremony.nonce.toString("base64url")}`,
+      };
+      const exported = await exportCase(headers);
+      expect(exported.statusCode, exported.body).toBe(200);
+      expect(exported.headers["content-type"]).toBe("application/zip");
+      expect(exported.headers["cache-control"]).toBe("private, no-store");
+      const zip = exported.rawPayload;
+      expect(zip.includes(Buffer.from("openmapx-data-export/manifest.json"))).toBe(true);
+      expect(zip.readUInt32LE(zip.length - 22)).toBe(0x06054b50);
+      // The proof is spent: a replay needs a new sign-in.
+      const replay = await exportCase(headers);
+      expect(replay.statusCode).toBe(409);
+      // An administrator export never completes the case on its own.
+      expect((await service().getById(request.id)).state).toBe("in_progress");
+    } finally {
+      await server.close();
+    }
+  }, 60_000);
 });

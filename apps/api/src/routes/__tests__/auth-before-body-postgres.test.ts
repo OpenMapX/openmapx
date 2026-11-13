@@ -166,7 +166,7 @@ describeDatabase("authentication before the request body, through createApp()", 
   }, 60_000);
 
   it("probes the whole authenticated surface", () => {
-    expect(operations.length).toBeGreaterThan(150);
+    expect(operations.length).toBeGreaterThan(130);
     expect(new Set(operations.map((operation) => operation.level))).toEqual(
       new Set(AUTHENTICATED_LEVELS),
     );

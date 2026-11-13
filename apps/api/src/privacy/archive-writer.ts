@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import { Readable, Transform } from "node:stream";
+import { Readable, Transform, type Writable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { ZipArchive } from "@archiver/archiver";
 import { type DawarichSourceEntryId, dawarichSourcePathForEntryId } from "@openmapx/core/privacy";
-import type { EncryptedBlobResult, EncryptedBlobStore } from "./artifact-storage.js";
 
 export const ARCHIVE_PATHS = Object.freeze({
   "readme-html": "openmapx-data-export/README.html",
@@ -68,39 +68,6 @@ export const ARCHIVE_PATHS = Object.freeze({
     "openmapx-data-export/portable/timeline/dawarich/raw-archives.jsonl",
   "dawarich-portable-flights": "openmapx-data-export/portable/timeline/dawarich/flights.jsonl",
   "dawarich-portable-notes": "openmapx-data-export/portable/timeline/dawarich/notes.jsonl",
-  "supplements-manifest": "openmapx-data-export/article-15/supplements/manifest.json",
-  "supplement-1": "openmapx-data-export/article-15/supplements/1.bin",
-  "supplement-2": "openmapx-data-export/article-15/supplements/2.bin",
-  "supplement-3": "openmapx-data-export/article-15/supplements/3.bin",
-  "supplement-4": "openmapx-data-export/article-15/supplements/4.bin",
-  "supplement-5": "openmapx-data-export/article-15/supplements/5.bin",
-  "supplement-6": "openmapx-data-export/article-15/supplements/6.bin",
-  "supplement-7": "openmapx-data-export/article-15/supplements/7.bin",
-  "supplement-8": "openmapx-data-export/article-15/supplements/8.bin",
-  "supplement-9": "openmapx-data-export/article-15/supplements/9.bin",
-  "supplement-10": "openmapx-data-export/article-15/supplements/10.bin",
-  "supplement-11": "openmapx-data-export/article-15/supplements/11.bin",
-  "supplement-12": "openmapx-data-export/article-15/supplements/12.bin",
-  "supplement-13": "openmapx-data-export/article-15/supplements/13.bin",
-  "supplement-14": "openmapx-data-export/article-15/supplements/14.bin",
-  "supplement-15": "openmapx-data-export/article-15/supplements/15.bin",
-  "supplement-16": "openmapx-data-export/article-15/supplements/16.bin",
-  "supplement-17": "openmapx-data-export/article-15/supplements/17.bin",
-  "supplement-18": "openmapx-data-export/article-15/supplements/18.bin",
-  "supplement-19": "openmapx-data-export/article-15/supplements/19.bin",
-  "supplement-20": "openmapx-data-export/article-15/supplements/20.bin",
-  "supplement-21": "openmapx-data-export/article-15/supplements/21.bin",
-  "supplement-22": "openmapx-data-export/article-15/supplements/22.bin",
-  "supplement-23": "openmapx-data-export/article-15/supplements/23.bin",
-  "supplement-24": "openmapx-data-export/article-15/supplements/24.bin",
-  "supplement-25": "openmapx-data-export/article-15/supplements/25.bin",
-  "supplement-26": "openmapx-data-export/article-15/supplements/26.bin",
-  "supplement-27": "openmapx-data-export/article-15/supplements/27.bin",
-  "supplement-28": "openmapx-data-export/article-15/supplements/28.bin",
-  "supplement-29": "openmapx-data-export/article-15/supplements/29.bin",
-  "supplement-30": "openmapx-data-export/article-15/supplements/30.bin",
-  "supplement-31": "openmapx-data-export/article-15/supplements/31.bin",
-  "supplement-32": "openmapx-data-export/article-15/supplements/32.bin",
 } as const);
 
 export type ArchiveLogicalId = keyof typeof ARCHIVE_PATHS | string;
@@ -145,7 +112,7 @@ export interface ArchiveEntryResult {
   schemaId: string | null;
 }
 
-export interface ArchiveWriteResult extends EncryptedBlobResult {
+export interface ArchiveWriteResult {
   entries: ArchiveEntryResult[];
 }
 
@@ -237,14 +204,13 @@ function trackedSource(
   return { source: transform, facts };
 }
 
-/** Fixed-name ZIP64 archive facade; caller-supplied paths are never accepted. */
+/** Fixed-name ZIP64 archive facade; caller-supplied paths are never accepted.
+ * The archive streams straight into the sink (the HTTP response for a
+ * download), so no archive copy is written to disk. */
 export class PrivacyArchiveWriter {
-  constructor(private readonly store: EncryptedBlobStore) {}
-
   async writeArchive(input: {
-    requestId: string;
-    artifactId: string;
     entries: ArchiveEntryInput[];
+    sink: Writable;
     maxBytes?: number;
   }): Promise<ArchiveWriteResult> {
     if (input.entries.length < 1 || input.entries.length > MAX_ENTRIES)
@@ -293,17 +259,9 @@ export class PrivacyArchiveWriter {
         mode: 0o600,
       });
     }
-    // Start the ZIP queue and encrypted sink together.  Per-entry facts are
-    // resolved as each source is consumed, so a large stream is never copied
-    // into an intermediate plaintext buffer.
-    const writePromise = this.store.write({
-      requestId: input.requestId,
-      blobId: input.artifactId,
-      purpose: "export-artifact",
-      storageKey: `objects/${input.artifactId}.bin`,
-      source: archive,
-      maxBytes: input.maxBytes ?? MAX_ARCHIVE_BYTES,
-    });
+    // Start the ZIP queue and the sink together. Per-entry facts resolve as
+    // each source is consumed, so a large stream is never buffered whole.
+    const writePromise = pipeline(archive, input.sink);
     const finalizePromise = archive.finalize();
     try {
       const factsPromise = Promise.all(
@@ -320,18 +278,15 @@ export class PrivacyArchiveWriter {
           };
         }),
       );
-      // Observe sink/finalizer failures while sources are still streaming.
+      // Observe sink and finalizer failures while sources are still streaming.
       // Waiting for source facts first deadlocks when a failed sink stops reading.
-      const [result, , facts] = await Promise.all([writePromise, finalizePromise, factsPromise]);
-      if (!result) throw new Error("Privacy archive write failed");
-      return { ...result, entries: facts };
+      const [, , facts] = await Promise.all([writePromise, finalizePromise, factsPromise]);
+      return { entries: facts };
     } catch (error) {
       archive.destroy(error as Error);
       for (const { tracked: source } of tracked) {
         if (source.source instanceof Readable) source.source.destroy();
       }
-      // Archiver may leave finalize pending after destroy; only the encrypted
-      // writer owns physical cleanup that must finish before returning.
       await Promise.allSettled([writePromise]);
       throw error;
     }

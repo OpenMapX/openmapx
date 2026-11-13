@@ -95,5 +95,6 @@ export const sourceOutcomeCodeSchema = z.enum([
   "unavailable",
   "reviewed_no_match",
   "omitted_with_reason",
+  "operator_check",
 ]);
 export type SourceOutcomeCode = z.infer<typeof sourceOutcomeCodeSchema>;

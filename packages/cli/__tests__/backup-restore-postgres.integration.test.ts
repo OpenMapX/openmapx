@@ -38,9 +38,6 @@ const UNRELATED_USER_ID = "restore-unrelated-user";
 const UNRELATED_EMAIL = `prefix-${DELETED_EMAIL}`;
 const ACTIVE_REQUEST_ID = "11111111-1111-4111-8111-111111111111";
 const TERMINAL_REQUEST_ID = "22222222-2222-4222-8222-222222222222";
-const ACTIVE_ARTIFACT_ID = "33333333-3333-4333-8333-333333333333";
-const TERMINAL_ARTIFACT_ID = "44444444-4444-4444-8444-444444444444";
-const TERMINAL_ATTACHMENT_ID = "55555555-5555-4555-8555-555555555555";
 const COPY_TERMINATOR_USER_ID = "\\.";
 const ADVERSARIAL_EMAIL = "quote'\\slash\ttab\nline@example.test";
 const GOOD_KEY = Buffer.alloc(32, 17);
@@ -48,42 +45,22 @@ const WRONG_KEY = Buffer.alloc(32, 29);
 const repoRoot = resolve(import.meta.dirname, "../../..");
 const migrations = join(repoRoot, "apps", "api", "src", "db", "migrations");
 
-interface WrittenBlob {
-  path: string;
-  storageKey: string;
-}
-
 interface FixtureState {
   root: string;
   infra: string;
   composeFile: string;
   project: string;
-  exportRoot: string;
   sentinelRoot: string;
-  store: {
-    write(input: {
-      requestId: string;
-      blobId: string;
-      purpose: "export-artifact" | "attachment";
-      storageKey: string;
-      source: Buffer;
-    }): Promise<WrittenBlob>;
-    delete(storageKey: string): Promise<void>;
-  };
   databaseUrl: string;
 }
 
 let fixture: FixtureState;
 const originalPath = process.env.PATH;
-let apiDatabase: typeof import("../../../apps/api/src/db/index").db;
 let apiSql: typeof import("../../../apps/api/src/db/index").sql;
-let runPrivacyDatabaseCleanup: typeof import("../../../apps/api/src/privacy/cleanup").runPrivacyDatabaseCleanup;
 
-function writeFixtureCompose(root: string, project: string, exportRoot: string): string {
+function writeFixtureCompose(root: string, project: string): string {
   const infra = join(root, "infra", "docker");
   mkdirSync(join(infra, "backups"), { recursive: true, mode: 0o700 });
-  mkdirSync(exportRoot, { recursive: true, mode: 0o700 });
-  chmodSync(exportRoot, 0o700);
   const sentinelRoot = join(root, "api-sentinel");
   mkdirSync(sentinelRoot, { recursive: true });
   const sentinelScript = join(root, "api-sentinel.sh");
@@ -123,7 +100,6 @@ services:
     image: ${POSTGIS_IMAGE}
     entrypoint: ["sh", "/fixture-api-sentinel.sh"]
     volumes:
-      - ${JSON.stringify(`${exportRoot}:/var/lib/openmapx/subject-exports`)}
       - ${JSON.stringify(`${sentinelRoot}:/fixture-sentinel`)}
       - ${JSON.stringify(`${sentinelScript}:/fixture-api-sentinel.sh:ro`)}
 volumes:
@@ -415,32 +391,7 @@ async function waitForSentinelEvent(): Promise<string[]> {
   throw new Error("app-api sentinel did not observe its restored database state");
 }
 
-async function seedRestoreScenario(): Promise<{
-  active: WrittenBlob;
-  terminal: WrittenBlob[];
-}> {
-  const active = await fixture.store.write({
-    requestId: ACTIVE_REQUEST_ID,
-    blobId: ACTIVE_ARTIFACT_ID,
-    purpose: "export-artifact",
-    storageKey: "objects/active.bin",
-    source: Buffer.from("active-case-ciphertext-fixture"),
-  });
-  const terminalArtifact = await fixture.store.write({
-    requestId: TERMINAL_REQUEST_ID,
-    blobId: TERMINAL_ARTIFACT_ID,
-    purpose: "export-artifact",
-    storageKey: "objects/terminal-artifact.bin",
-    source: Buffer.from("terminal-artifact-fixture"),
-  });
-  const terminalAttachment = await fixture.store.write({
-    requestId: TERMINAL_REQUEST_ID,
-    blobId: TERMINAL_ATTACHMENT_ID,
-    purpose: "attachment",
-    storageKey: "objects/terminal-attachment.bin",
-    source: Buffer.from("terminal-attachment-fixture"),
-  });
-
+async function seedRestoreScenario(): Promise<void> {
   await psql(`
 BEGIN;
 INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
@@ -461,42 +412,29 @@ VALUES
   ('deleted-change-verification', 'change-email:${DELETED_USER_ID}:${DELETED_EMAIL}', 'fixture-code', now() + interval '1 day', now(), now()),
   ('unrelated-suffix-verification', '${UNRELATED_EMAIL}', 'unrelated-code', now() + interval '1 day', now(), now());
 INSERT INTO data_subject_request
-  (id, kind, channel, user_id, actor_user_id, encrypted_locator, locator_digest, locator_type, account_state, locale, time_zone, state, received_at, due_at, identity_state, delivery_state)
+  (id, kind, channel, user_id, actor_user_id, locator_type, account_state, locale, time_zone, state, received_at, due_at, identity_method, identity_verified_at)
 VALUES
-  ('${ACTIVE_REQUEST_ID}', 'access', 'self_service', '${DELETED_USER_ID}', '${DELETED_USER_ID}', 'active-locator', 'active-locator-digest', 'user_id', 'current', 'en', 'UTC', 'collecting', now(), now() + interval '30 days', 'verified', 'not_delivered'),
-  ('${TERMINAL_REQUEST_ID}', 'access', 'self_service', '${DELETED_USER_ID}', '${DELETED_USER_ID}', 'terminal-locator', 'terminal-locator-digest', 'user_id', 'current', 'en', 'UTC', 'delivered', now(), now() + interval '30 days', 'verified', 'delivered');
-INSERT INTO data_export_artifact
-  (id, request_id, state, storage_key, filename, plaintext_bytes, encrypted_bytes, plaintext_sha256, ciphertext_sha256, iv, tag, wrapped_dek, master_key_version, ready_at, expires_at)
-VALUES
-  ('${ACTIVE_ARTIFACT_ID}', '${ACTIVE_REQUEST_ID}', 'ready', '${active.storageKey}', 'active.zip', 1, 1, 'active-plain', 'active-cipher', 'active-iv', 'active-tag', 'active-wrapped-key', 1, now(), now() + interval '30 days'),
-  ('${TERMINAL_ARTIFACT_ID}', '${TERMINAL_REQUEST_ID}', 'ready', '${terminalArtifact.storageKey}', 'terminal.zip', 1, 1, 'terminal-plain', 'terminal-cipher', 'terminal-iv', 'terminal-tag', 'terminal-wrapped-key', 1, now(), now() + interval '30 days');
-INSERT INTO data_subject_request_attachment
-  (id, request_id, purpose, storage_key, filename, media_type, encrypted_bytes, plaintext_bytes, plaintext_sha256, ciphertext_sha256, iv, tag, wrapped_dek, master_key_version, owner_id, expires_at, rights_review_state, metadata)
-VALUES
-  ('${TERMINAL_ATTACHMENT_ID}', '${TERMINAL_REQUEST_ID}', 'operator_supplement', '${terminalAttachment.storageKey}', 'terminal.txt', 'text/plain', 1, 1, 'attachment-plain', 'attachment-cipher', 'attachment-iv', 'attachment-tag', 'attachment-wrapped-key', 1, '${DELETED_USER_ID}', now() + interval '30 days', 'approved', '{}');
+  ('${ACTIVE_REQUEST_ID}', 'access', 'self_service', '${DELETED_USER_ID}', '${DELETED_USER_ID}', 'user_id', 'current', 'en', 'UTC', 'in_progress', now(), now() + interval '30 days', 'account_session', now()),
+  ('${TERMINAL_REQUEST_ID}', 'access_and_portability', 'self_service', '${DELETED_USER_ID}', '${DELETED_USER_ID}', 'user_id', 'current', 'en', 'UTC', 'completed', now(), now() + interval '30 days', 'account_session', now());
 INSERT INTO admin_audit_log (id, actor_id, target_id, target_type, action, details, ip_address, user_agent)
 VALUES ('deleted-audit', '${DELETED_USER_ID}', '${DELETED_USER_ID}', 'user', 'fixture', jsonb_build_object('subject', '${DELETED_USER_ID}', 'email', '${DELETED_EMAIL}'), '192.0.2.10', 'fixture-agent');
 INSERT INTO app_logs (level, source, msg, metadata)
 VALUES ('warn', 'fixture', 'event for ${DELETED_EMAIL}', jsonb_build_object('subject', '${DELETED_USER_ID}'));
 COMMIT;
 `);
-  return { active, terminal: [terminalArtifact, terminalAttachment] };
 }
 
 describe.skipIf(!runIntegration)("backup restore erasure replay with real PostgreSQL", () => {
   beforeAll(async () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-restore-postgres-"));
     const project = `openmapxrestore${process.pid}${Date.now()}`.toLowerCase();
-    const exportRoot = join(root, "subject-exports");
-    const composeFile = writeFixtureCompose(root, project, exportRoot);
+    const composeFile = writeFixtureCompose(root, project);
     fixture = {
       root,
       infra: join(root, "infra", "docker"),
       composeFile,
       project,
-      exportRoot,
       sentinelRoot: join(root, "api-sentinel"),
-      store: undefined as never,
       databaseUrl: "",
     };
     await installPrivateDockerProjectTransport(root, project);
@@ -505,28 +443,8 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
     fixture.databaseUrl = await livePostgresUrl();
     process.env.DATABASE_URL = fixture.databaseUrl;
     process.env.NODE_ENV = "test";
-    const [{ EncryptedBlobStore }, { loadMasterKeyRing }, databaseModule, cleanupModule] =
-      await Promise.all([
-        import("../../../apps/api/src/privacy/artifact-storage"),
-        import("../../../apps/api/src/privacy/crypto"),
-        import("../../../apps/api/src/db/index"),
-        import("../../../apps/api/src/privacy/cleanup"),
-      ]);
-    const ring = loadMasterKeyRing({
-      env: {
-        NODE_ENV: "development",
-        OPENMAPX_EXPORTS_KEY: Buffer.alloc(32, 41).toString("base64url"),
-      },
-    });
-    fixture.store = new EncryptedBlobStore({
-      root: fixture.exportRoot,
-      ring,
-      deploymentId: "restore-integration",
-    });
-    await (fixture.store as InstanceType<typeof EncryptedBlobStore>).initialize();
-    apiDatabase = databaseModule.db;
+    const databaseModule = await import("../../../apps/api/src/db/index");
     apiSql = databaseModule.sql;
-    runPrivacyDatabaseCleanup = cleanupModule.runPrivacyDatabaseCleanup;
   }, 120_000);
 
   afterAll(async () => {
@@ -537,11 +455,9 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
     else process.env.PATH = originalPath;
   }, 30_000);
 
-  it("erases the restored account without touching a suffix-email account and defers key destruction until physical cleanup", async () => {
+  it("erases the restored account without touching a suffix-email account", async () => {
     await resetMigratedDatabase();
-    rmSync(fixture.exportRoot, { recursive: true, force: true });
-    mkdirSync(fixture.exportRoot, { recursive: true, mode: 0o700 });
-    const blobs = await seedRestoreScenario();
+    await seedRestoreScenario();
     await createDatabaseBackup("erasure-replay");
     await resetJournal(GOOD_KEY, DELETED_USER_ID);
 
@@ -575,67 +491,18 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
       await psql(
         `SELECT state || ':' || account_state || ':' || coalesce(user_id, 'null') || ':' || coalesce(actor_user_id, 'null') FROM data_subject_request WHERE id = '${ACTIVE_REQUEST_ID}';`,
       ),
-    ).toBe("collecting:deleted:null:null");
+    ).toBe("in_progress:deleted:null:null");
+    expect(
+      await psql(
+        `SELECT state || ':' || account_state FROM data_subject_request WHERE id = '${TERMINAL_REQUEST_ID}';`,
+      ),
+    ).toBe("completed:deleted");
     expect(
       await psql(
         "SELECT (actor_id IS NULL)::text || ':' || (target_id IS NULL)::text || ':' || (details IS NULL)::text || ':' || (ip_address IS NULL)::text || ':' || (user_agent IS NULL)::text FROM admin_audit_log WHERE id = 'deleted-audit';",
       ),
     ).toBe("true:true:true:true:true");
     expect(await psql("SELECT count(*) FROM app_logs WHERE source = 'fixture';")).toBe("0");
-    expect(
-      await psql(
-        `SELECT state || ':' || (revoked_at IS NOT NULL)::text || ':' || (deleted_at IS NULL)::text || ':' || (wrapped_dek IS NOT NULL)::text FROM data_export_artifact WHERE id = '${TERMINAL_ARTIFACT_ID}';`,
-      ),
-    ).toBe("revoked:true:true:true");
-    expect(
-      await psql(
-        `SELECT (expires_at <= now())::text || ':' || (deleted_at IS NULL)::text || ':' || (wrapped_dek IS NOT NULL)::text FROM data_subject_request_attachment WHERE id = '${TERMINAL_ATTACHMENT_ID}';`,
-      ),
-    ).toBe("true:true:true");
-    expect(blobs.active.path && existsSync(blobs.active.path)).toBe(true);
-    for (const blob of blobs.terminal) expect(existsSync(blob.path)).toBe(true);
-
-    const unavailable = await runPrivacyDatabaseCleanup({
-      database: apiDatabase,
-      now: new Date(Date.now() + 1_000),
-    });
-    expect(unavailable.failed).toBeGreaterThanOrEqual(2);
-    for (const blob of blobs.terminal) expect(existsSync(blob.path)).toBe(true);
-    expect(
-      await psql(
-        `SELECT count(*) FROM data_export_artifact WHERE id = '${TERMINAL_ARTIFACT_ID}' AND wrapped_dek IS NOT NULL AND deleted_at IS NULL;`,
-      ),
-    ).toBe("1");
-
-    const objectsDir = join(fixture.exportRoot, "objects");
-    chmodSync(objectsDir, 0o755);
-    const unsafe = await runPrivacyDatabaseCleanup({
-      database: apiDatabase,
-      store: fixture.store as never,
-      now: new Date(Date.now() + 2_000),
-    });
-    expect(unsafe.failed).toBeGreaterThanOrEqual(2);
-    for (const blob of blobs.terminal) expect(existsSync(blob.path)).toBe(true);
-    chmodSync(objectsDir, 0o700);
-
-    const cleaned = await runPrivacyDatabaseCleanup({
-      database: apiDatabase,
-      store: fixture.store as never,
-      now: new Date(Date.now() + 3_000),
-    });
-    expect(cleaned).toMatchObject({ artifacts: 1, attachments: 1 });
-    expect(existsSync(blobs.active.path)).toBe(true);
-    for (const blob of blobs.terminal) expect(existsSync(blob.path)).toBe(false);
-    expect(
-      await psql(
-        `SELECT count(*) FROM data_export_artifact WHERE id = '${TERMINAL_ARTIFACT_ID}' AND state = 'deleted' AND wrapped_dek IS NULL AND master_key_version IS NULL AND tag IS NULL AND deleted_at IS NOT NULL;`,
-      ),
-    ).toBe("1");
-    expect(
-      await psql(
-        `SELECT count(*) FROM data_subject_request_attachment WHERE id = '${TERMINAL_ATTACHMENT_ID}' AND wrapped_dek IS NULL AND master_key_version IS NULL AND tag IS NULL AND deleted_at IS NOT NULL;`,
-      ),
-    ).toBe("1");
   }, 120_000);
 
   it("rejects a journal key mismatch before restoring a backup with no users", async () => {
@@ -904,9 +771,7 @@ VALUES
   it("rejects a restored schema missing required privacy tables and keeps the API stopped", async () => {
     await resetMigratedDatabase();
     await psql(`
-DROP TABLE data_export_artifact,
-  data_subject_request_attachment,
-  data_subject_request CASCADE;
+DROP TABLE data_subject_request CASCADE;
 INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
 VALUES ('${DELETED_USER_ID}', 'Unsupported Schema User', '${DELETED_EMAIL}', true, now(), now());
 INSERT INTO verification (id, identifier, value, expires_at, created_at, updated_at)

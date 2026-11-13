@@ -30,19 +30,29 @@ describe("privacy translations", () => {
   it("resolves regional locales consistently for exports and notifications", () => {
     expect(renderReadmeHtml("de-AT")).toContain('<html lang="de">');
     expect(renderReadmeHtml("de-AT")).toContain("OpenMapX-Datenauskunft");
-    expect(privacyRequestEmail("ready", "de-AT").subject).toContain("Ihre Datenauskunft");
+    expect(privacyRequestEmail("completed", "de-AT").subject).toContain("abgeschlossen");
   });
   it("localizes the whole German email including its layout and footers", () => {
-    const mail = privacyRequestEmail("ready", "de");
+    const mail = privacyRequestEmail("completed", "de");
     expect(mail.text).not.toContain("Open your");
     expect(mail.text).not.toContain("If you did not");
     expect(mail.html).toContain('<html lang="de">');
     expect(mail.html).not.toContain("You received this email");
     expect(mail.html).not.toContain("If you didn't request");
   });
+  it("points administrator alerts to the privacy queue without the subject's closing line", () => {
+    const mail = privacyRequestEmail("admin_new_request", "en");
+    expect(mail.text).toContain(messages.en.privacyExport.email.adminContinue);
+    expect(mail.text).not.toContain(messages.en.privacyExport.email.unexpected);
+    expect(privacyRequestEmail("acknowledgement", "en").text).toContain(
+      messages.en.privacyExport.email.unexpected,
+    );
+  });
   it("uses a safe default for unsupported or malformed locales", () => {
     expect(renderReadmeHtml('"><script>')).toContain('<html lang="en">');
     expect(renderReadmeHtml('"><script>')).not.toContain("<script>");
-    expect(privacyRequestEmail("ready", "unknown")).toEqual(privacyRequestEmail("ready", "en"));
+    expect(privacyRequestEmail("completed", "unknown")).toEqual(
+      privacyRequestEmail("completed", "en"),
+    );
   });
 });

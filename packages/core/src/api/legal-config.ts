@@ -22,8 +22,6 @@ export interface PublicLegalConfig {
   serverLogRetentionDays: number;
   dataRequestEmail: string;
   dsarCaseRetentionDays: number;
-  identityEvidenceRetentionDays: number;
-  exportArtifactRetentionHours: number;
   deploymentJurisdiction: string;
   privacySources: Array<Omit<PrivacySource, "contactCode" | "instructionsCode">>;
   /** Days backups are kept under the configured platform retention (defaults to 30). */
@@ -65,8 +63,6 @@ export async function fetchLegalConfig(): Promise<PublicLegalConfig | null> {
       serverLogRetentionDays: boundedNumber(data.serverLogRetentionDays, 30, 1, 3650),
       dataRequestEmail: asString(data.dataRequestEmail),
       dsarCaseRetentionDays: boundedNumber(data.dsarCaseRetentionDays, 1095, 30, 3650),
-      identityEvidenceRetentionDays: boundedNumber(data.identityEvidenceRetentionDays, 30, 1, 365),
-      exportArtifactRetentionHours: boundedNumber(data.exportArtifactRetentionHours, 168, 24, 720),
       deploymentJurisdiction: asString(data.deploymentJurisdiction),
       privacySources: Array.isArray(data.privacySources) ? data.privacySources : [],
       backupRetentionDays: boundedNumber(data.backupRetentionDays, 30, 1, 36_500),

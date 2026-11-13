@@ -4,13 +4,6 @@ import { db as defaultDb } from "../db/index.js";
 import { systemSettings } from "../db/schema.js";
 
 const retentionSettings = {
-  artifact: {
-    key: "legalExportArtifactRetentionHours",
-    env: "LEGAL_EXPORT_ARTIFACT_RETENTION_HOURS",
-    fallback: 168,
-    min: 24,
-    max: 720,
-  },
   case: {
     key: "legalDsarCaseRetentionDays",
     env: "LEGAL_DSAR_CASE_RETENTION_DAYS",

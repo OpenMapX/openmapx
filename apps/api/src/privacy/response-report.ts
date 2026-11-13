@@ -17,7 +17,6 @@ export interface PrivacyResponseContext {
     snapshotAt: string;
   };
   generatedAt: string;
-  expiresAt: string;
   controller: { name: string; address: string; email: string; phone: string | null };
   deployment: {
     jurisdiction: string;
@@ -25,8 +24,6 @@ export interface PrivacyResponseContext {
     supervisoryAuthorityUrl: string | null;
     privacySources: PrivacySource[];
     dsarCaseRetentionDays: number;
-    identityEvidenceRetentionDays: number;
-    exportArtifactRetentionHours: number;
     backupRetentionDays: number;
   };
   reviewContact: string;
@@ -148,7 +145,6 @@ export function buildPrivacyResponseReport(input: {
     preservationAt: context.request.preservationAt,
     snapshotAt: context.request.snapshotAt,
     generatedAt: context.generatedAt,
-    expiresAt: context.expiresAt,
     summarizedAt: context.recipientSummary.summarizedAt,
   }))
     iso(value, field);
@@ -183,12 +179,7 @@ export function buildPrivacyResponseReport(input: {
     `${t("preservationAtLabel")}: ${context.request.preservationAt ?? t("notRecorded")}`,
     `${t("snapshotAtLabel")}: ${context.request.snapshotAt}`,
     `${t("generatedAtLabel")}: ${context.generatedAt}`,
-    `${t("expiresAtLabel")}: ${context.expiresAt}`,
-    t("caseRetention", {
-      caseDays: context.deployment.dsarCaseRetentionDays,
-      identityDays: context.deployment.identityEvidenceRetentionDays,
-      artifactHours: context.deployment.exportArtifactRetentionHours,
-    }),
+    t("caseRetention", { caseDays: context.deployment.dsarCaseRetentionDays }),
     t("snapshotLimitations"),
   ];
   const catalogueFallbacks: ReturnType<typeof t.fallbacks> = [];
@@ -238,14 +229,20 @@ export function buildPrivacyResponseReport(input: {
       portability: registration.portability,
       secretPolicy: registration.secretPolicy,
       rightsOfOthers: registration.rightsOfOthers,
+      // Operator-held sources are never collected automatically: the report
+      // names them as checked separately by the operator.
       outcome:
         observed?.outcome ??
-        (registration.strategy === "not_personal" ? "not_applicable" : "unavailable"),
+        (registration.strategy === "not_personal"
+          ? "not_applicable"
+          : registration.strategy === "operator_task"
+            ? "operator_check"
+            : "unavailable"),
       capturedAt: observed?.capturedAt ?? null,
       recordCount: observed?.recordCount ?? 0,
       warningCodes:
         observed?.warningCodes ??
-        (registration.strategy === "not_personal" ? [] : ["source-not-collected"]),
+        (registration.strategy === "collector" ? ["source-not-collected"] : []),
     };
   });
   for (const source of processingSources) {
@@ -394,7 +391,6 @@ export function buildPrivacyResponseReport(input: {
       controller: context.controller,
       deployment: context.deployment,
       generatedAt: context.generatedAt,
-      expiresAt: context.expiresAt,
       reviewContact: context.reviewContact,
       recipientSummary: reportedRecipientSummary,
       translationFallbacks,

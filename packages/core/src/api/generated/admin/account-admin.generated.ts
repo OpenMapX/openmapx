@@ -2361,6 +2361,7 @@ export const StartAdminReauthenticationBodyPurpose = {
   credentialsimport: "credentials.import",
   transitcredentials: "transit.credentials",
   platformdomainapply: "platform.domain.apply",
+  privacyexport: "privacy.export",
 } as const;
 
 export type StartAdminReauthenticationBody = {

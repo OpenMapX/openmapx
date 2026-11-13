@@ -5,10 +5,6 @@ vi.mock(
 
 import { createApiClient } from "@openmapx/core";
 import { privacyDetail } from "@/components/admin/privacy/privacyFixtures.test-support";
-import {
-  PRIVACY_ADMIN_RESUME_KEY,
-  savePendingPrivacyAdminDelivery,
-} from "@/lib/admin/privacyReauthentication";
 import { adminTestHistory } from "@/test/adminNavigation";
 import { createQueryWrapper, createTestQueryClient } from "@/test/query";
 
@@ -78,13 +74,6 @@ function installFetch() {
           ],
         }),
       );
-    if (url.includes("/operators?"))
-      return Promise.resolve(
-        json({
-          operators: [{ id: "synthetic-worker", name: "Synthetic worker" }],
-          nextCursor: null,
-        }),
-      );
     if (url.endsWith(`/privacy/admin/requests/${CASE_A}`))
       return Promise.resolve(json(detail(CASE_A, "registration-for-case-a")));
     if (url.endsWith(`/privacy/admin/requests/${CASE_B}`)) {
@@ -94,17 +83,6 @@ function installFetch() {
       }
       return Promise.resolve(json(detail(CASE_B, "registration-for-case-b")));
     }
-    if (url.endsWith(`/privacy/admin/requests/${CASE_A}/identity/email-challenges`))
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            challengeId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-            expiresAt: "2030-01-01T00:10:00.000Z",
-            deliveryState: "sent",
-          }),
-          { status: 202, headers: { "Content-Type": "application/json" } },
-        ),
-      );
     throw new Error(`Unexpected request: ${url}`);
   });
   return {
@@ -157,20 +135,16 @@ describe("privacy admin case selection", () => {
     expect(screen.getByText(/registration-for-case-a/)).toBeInTheDocument();
   });
 
-  it("drops an issued challenge and typed code when the selected case changes", async () => {
+  it("drops a typed identity reason when the selected case changes", async () => {
     installFetch();
     render(<PrivacyAdminPage />, { wrapper: createQueryWrapper(createTestQueryClient()) });
     await screen.findByText(/registration-for-case-a/);
 
-    fireEvent.click(screen.getByRole("button", { name: "privacyAdmin.sendIdentityChallenge" }));
-    const code = await screen.findByLabelText("privacyAdmin.identityCode");
-    fireEvent.change(code, { target: { value: "123456" } });
+    const [reason] = screen.getAllByLabelText("privacyAdmin.workflows.reasonCode");
+    fireEvent.change(reason as HTMLElement, { target: { value: "checked-by-letter" } });
     expect(
-      (
-        screen.getByRole("button", {
-          name: "privacyAdmin.verifyIdentityCode",
-        }) as HTMLButtonElement
-      ).disabled,
+      (screen.getByRole("button", { name: "privacyAdmin.verifyIdentity" }) as HTMLButtonElement)
+        .disabled,
     ).toBe(false);
 
     const caseButtons = screen.getAllByRole("button", {
@@ -179,10 +153,8 @@ describe("privacy admin case selection", () => {
     fireEvent.click(caseButtons[1]);
     await screen.findByText(/registration-for-case-b/);
 
-    expect(screen.queryByLabelText("privacyAdmin.identityCode")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "privacyAdmin.sendIdentityChallenge" }),
-    ).toBeInTheDocument();
+    const [fresh] = screen.getAllByLabelText("privacyAdmin.workflows.reasonCode");
+    expect((fresh as HTMLInputElement).value).toBe("");
   });
 
   it("opens the case queue without a release readiness or backup inventory request", async () => {
@@ -195,52 +167,6 @@ describe("privacy admin case selection", () => {
       false,
     );
   });
-});
-
-function pendingDelivery(requestId = CASE_B) {
-  savePendingPrivacyAdminDelivery({
-    apiOrigin: "http://privacy.test",
-    actorId: "synthetic-worker",
-    requestId,
-    artifactId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-    challengeId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-    channel: "assisted",
-    expiresAt: new Date(Date.now() + 300000).toISOString(),
-  });
-}
-it("restores a pending delivery on return without a case query", async () => {
-  binding.client = createApiClient({ baseUrl: "http://privacy.test", credentials: "include" });
-  sessionStorage.clear();
-  adminTestHistory.reset("/admin/privacy");
-  pendingDelivery();
-  installFetch();
-  render(<PrivacyAdminPage />, { wrapper: createQueryWrapper(createTestQueryClient()) });
-  await screen.findByText(/registration-for-case-b/);
-  expect(sessionStorage.getItem(PRIVACY_ADMIN_RESUME_KEY)).not.toBeNull();
-});
-it("loads an explicitly addressed case independently and clears another case's pending delivery", async () => {
-  binding.client = createApiClient({ baseUrl: "http://privacy.test", credentials: "include" });
-  sessionStorage.clear();
-  pendingDelivery();
-  adminTestHistory.reset(`/admin/privacy?case=${CASE_A}`);
-  installFetch();
-  render(<PrivacyAdminPage />, { wrapper: createQueryWrapper(createTestQueryClient()) });
-  await screen.findByText(/registration-for-case-a/);
-  expect(sessionStorage.getItem(PRIVACY_ADMIN_RESUME_KEY)).toBeNull();
-});
-it("clears pending delivery on a history-driven case switch", async () => {
-  binding.client = createApiClient({ baseUrl: "http://privacy.test", credentials: "include" });
-  sessionStorage.clear();
-  adminTestHistory.reset(`/admin/privacy?case=${CASE_A}`);
-  installFetch();
-  render(<PrivacyAdminPage />, { wrapper: createQueryWrapper(createTestQueryClient()) });
-  await screen.findByText(/registration-for-case-a/);
-  act(() => adminTestHistory.push(`/admin/privacy?case=${CASE_B}`));
-  await screen.findByText(/registration-for-case-b/);
-  pendingDelivery();
-  act(() => adminTestHistory.back());
-  await screen.findByText(/registration-for-case-a/);
-  expect(sessionStorage.getItem(PRIVACY_ADMIN_RESUME_KEY)).toBeNull();
 });
 
 it("loads an addressed case that is outside the visible queue", async () => {

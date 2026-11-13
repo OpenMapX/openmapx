@@ -19,8 +19,6 @@ import {
 import { basename, dirname, join } from "node:path";
 
 const MAX_PLATFORM_SECRET_BYTES = 4_096;
-const MAX_EXPORTS_KEY_RING_BYTES = 2_048;
-const MAX_EXPORTS_KEY_RING_KEYS = 8;
 let temporarySequence = 0;
 
 export interface EnsurePlatformSecretOptions {
@@ -191,78 +189,16 @@ function isCanonicalPlatformSecret(value: string): boolean {
   return decoded.length === 32 && decoded.toString("base64url") === value;
 }
 
-function exactObjectKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
-  const actual = Object.keys(value).sort();
-  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
-}
-
-function isCanonicalExportsKeyRing(value: string): boolean {
-  if (Buffer.byteLength(value, "utf8") > MAX_EXPORTS_KEY_RING_BYTES) return false;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch {
-    return false;
-  }
-  if (
-    !parsed ||
-    typeof parsed !== "object" ||
-    Array.isArray(parsed) ||
-    JSON.stringify(parsed) !== value
-  )
-    return false;
-  const ring = parsed as Record<string, unknown>;
-  if (
-    !exactObjectKeys(ring, ["activeVersion", "formatVersion", "keys"]) ||
-    ring.formatVersion !== 1 ||
-    !Number.isSafeInteger(ring.activeVersion) ||
-    (ring.activeVersion as number) < 1 ||
-    !Array.isArray(ring.keys) ||
-    ring.keys.length < 1 ||
-    ring.keys.length > MAX_EXPORTS_KEY_RING_KEYS
-  )
-    return false;
-  const versions = new Set<number>();
-  for (const entry of ring.keys) {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
-    const key = entry as Record<string, unknown>;
-    if (
-      !exactObjectKeys(key, ["key", "version"]) ||
-      !Number.isSafeInteger(key.version) ||
-      (key.version as number) < 1 ||
-      typeof key.key !== "string" ||
-      versions.has(key.version as number) ||
-      !isCanonicalPlatformSecret(key.key)
-    )
-      return false;
-    versions.add(key.version as number);
-  }
-  return versions.has(ring.activeVersion as number);
-}
-
 interface PlatformSecretFormat {
   finalMode: number;
   invalidMessage: string;
   validate: (value: string) => boolean;
-  encodeGenerated?: (key: string) => string;
 }
 
 const ordinarySecretFormat: PlatformSecretFormat = {
   finalMode: 0o444,
   invalidMessage: "Platform secret file is not canonical base64url-encoded 32-byte data",
   validate: isCanonicalPlatformSecret,
-};
-
-const exportsKeyRingFormat: PlatformSecretFormat = {
-  finalMode: 0o400,
-  invalidMessage: "Platform exports key ring is invalid",
-  validate: isCanonicalExportsKeyRing,
-  encodeGenerated: (key) =>
-    JSON.stringify({
-      formatVersion: 1,
-      activeVersion: 1,
-      keys: [{ version: 1, key }],
-    }),
 };
 
 function readExistingSecret(
@@ -531,8 +467,12 @@ function ensurePlatformSecretFileWithFormat(
   if (existing !== null) return existing;
 
   const generated = generatePlatformSecret(options);
-  const value = format.encodeGenerated?.(generated) ?? generated;
-  const temporary = createTemporaryFile(path, value, options.temporaryFileOps, format.finalMode);
+  const temporary = createTemporaryFile(
+    path,
+    generated,
+    options.temporaryFileOps,
+    format.finalMode,
+  );
   try {
     // A hard link is an atomic create-without-replace operation. If another
     // renderer won the race, EEXIST preserves its value and we reuse it.
@@ -552,14 +492,6 @@ function ensurePlatformSecretFileWithFormat(
     cleanupTemporaryFile(temporary, options.temporaryFileOps);
     throw error;
   }
-}
-
-/** Provision or preserve the dedicated exports key file as a strict bounded key ring. */
-export function ensurePlatformExportsKeyRingFile(
-  path: string,
-  options: EnsurePlatformSecretOptions = {},
-): string {
-  return ensurePlatformSecretFileWithFormat(path, options, exportsKeyRingFormat);
 }
 
 export function preparePlatformFileReplacement(

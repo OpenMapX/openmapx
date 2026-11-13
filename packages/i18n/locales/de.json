@@ -2265,44 +2265,25 @@
     "failedDeleteAccount": "Konto konnte nicht gelöscht werden",
     "privacyData": {
       "title": "Ihre Daten und Ihr Auskunftsantrag",
-      "description": "Fordern Sie eine Kopie der personenbezogenen Daten an, die OpenMapX über Sie verarbeitet. Das Archiv enthält Live-Daten von OpenMapX und, sofern verfügbar, verbundene Dawarich-Daten. Vor dem Download ist eine erneute Anmeldung erforderlich.",
-      "requestCopy": "Datenkopie anfordern",
+      "description": "Laden Sie eine Kopie der personenbezogenen Daten herunter, die OpenMapX über Sie verarbeitet. Das Archiv enthält Live-Daten von OpenMapX und, sofern verfügbar, verbundene Dawarich-Daten. Dafür ist eine erneute Anmeldung erforderlich; das Archiv wird direkt an Sie gesendet und nicht auf dem Server gespeichert.",
       "downloadDevice": "Browserdaten herunterladen",
       "noRequests": "Sie haben keine Auskunftsanträge.",
       "loadFailed": "Datenauskünfte sind vorübergehend nicht verfügbar.",
-      "requestFailed": "Der Auskunftsantrag konnte nicht erstellt werden.",
       "actionFailed": "Die angeforderte Aktion konnte nicht abgeschlossen werden.",
-      "reauthenticationFailed": "Bitte melden Sie sich vor dem Download erneut an.",
-      "assistedProofTitle": "Unterstützte Anfrage verknüpfen",
-      "assistedProofDescription": "Wenn Ihnen das Datenschutzteam eine Fallreferenz gegeben hat, melden Sie sich erneut an, um dieses Konto als Konto der betroffenen Person nachzuweisen. Die Referenz bleibt während der Anmeldung in diesem Browser und wird nicht in die URL aufgenommen.",
-      "assistedRequestReference": "Fallreferenz",
-      "assistedProofAction": "Anmelden und Konto nachweisen",
-      "assistedProofComplete": "Ihre Kontoanmeldung wurde für die unterstützte Anfrage bestätigt.",
-      "assistedProofFailed": "Die Kontoanmeldung konnte dieser unterstützten Anfrage nicht zugeordnet werden.",
       "access": "Auskunft",
       "portability": "Portierbare Daten",
       "accessAndPortability": "Auskunft + portierbare Kopie",
       "due": "Antwortfrist: {date}",
-      "download": "Archiv herunterladen",
-      "revoke": "Archiv löschen",
       "withdraw": "Antrag zurückziehen",
-      "regenerate": "Neue Kopie erstellen",
       "states": {
-        "received": "Eingegangen",
-        "identity_pending": "Identitätsprüfung ausstehend",
-        "preserving": "Daten werden gesichert",
-        "collecting": "Daten werden gesammelt",
-        "pending_processor": "Warten auf verbundenen Auftragsverarbeiter",
-        "operator_review": "Manuelle Prüfung",
-        "assembling": "Archiv wird erstellt",
-        "ready": "Download bereit",
-        "delivered": "Zugestellt",
-        "artifact_expired": "Archiv abgelaufen",
-        "clarification_needed": "Rückfrage erforderlich",
-        "withdrawn": "Zurückgezogen",
-        "refused": "Abgelehnt",
-        "closed": "Geschlossen"
-      }
+        "open": "Eingegangen",
+        "in_progress": "In Bearbeitung",
+        "waiting_on_requester": "Wartet auf Ihre Antwort",
+        "completed": "Abgeschlossen",
+        "refused": "Abgelehnt"
+      },
+      "downloadExport": "Meine Daten herunterladen",
+      "exportFailed": "Das Archiv konnte nicht heruntergeladen werden. Bitte versuchen Sie es erneut."
     },
     "mangroveConnectTitle": "Mit Mangrove verbinden",
     "mangroveConnectIntro": "Verwenden Sie dieselbe Bewertungsidentität auf mehreren Geräten und in teilnehmenden Apps. Die Mangrove-Anmeldung ist von Ihrer OpenMapX-Anmeldung getrennt.",
@@ -3774,8 +3755,7 @@
       "preservationAtLabel": "Sicherung begonnen",
       "snapshotAtLabel": "Stichtag der Quelldaten",
       "generatedAtLabel": "Erstellt",
-      "expiresAtLabel": "Download läuft ab",
-      "caseRetention": "Fallaufzeichnungen werden nach der konfigurierten Richtlinie {caseDays, plural, one {# Tag} other {# Tage}}, Identitätsnachweise {identityDays, plural, one {# Tag} other {# Tage}} und das Download-Artefakt {artifactHours, plural, one {# Stunde} other {# Stunden}} aufbewahrt.",
+      "caseRetention": "Fallaufzeichnungen werden nach der konfigurierten Richtlinie {caseDays, plural, one {# Tag} other {# Tage}} aufbewahrt.",
       "notRecorded": "nicht erfasst",
       "notApplicable": "nicht anwendbar",
       "recordedCode": "{code} (erfasster Richtliniencode)",
@@ -3789,7 +3769,8 @@
         "not_applicable": "Nicht anwendbar",
         "unavailable": "Nicht verfügbar",
         "reviewed_no_match": "Geprüft; keine passenden Daten",
-        "omitted_with_reason": "Nach Prüfung ausgelassen"
+        "omitted_with_reason": "Nach Prüfung ausgelassen",
+        "operator_check": "Wird vom Betreiber gesondert geprüft"
       },
       "purposes": {
         "account-management": "Kontoverwaltung",
@@ -3874,11 +3855,7 @@
       "warnings": {
         "source-not-collected": "Diese Quelle wurde nicht erhoben oder für diesen Stichtag lag kein abgeschlossenes Quellenergebnis vor.",
         "operator-review-required": "Diese Quelle erfordert vor der Offenlegung eine berechtigte manuelle Prüfung.",
-        "operator-review-completed": "Eine berechtigte manuelle Quellenprüfung ergab keine freigabefähigen passenden Datensätze.",
         "external-source-review-required": "Eine externe oder vom Betreiber gehaltene Quelle erfordert eine Fallprüfung.",
-        "approved-encrypted-supplement": "Eine geprüfte Betreiberergänzung ist im Abschnitt nach Artikel 15 enthalten.",
-        "supplement-key-unavailable": "Die freigegebene Ergänzung konnte für diese Antwort nicht entschlüsselt werden.",
-        "supplement-limit-exceeded": "Die Ergänzung überschritt die zulässige Antwortgröße oder Anzahl.",
         "schema-missing": "Der aufbewahrten Quelle fehlte das erforderliche geprüfte Schema.",
         "storage-missing": "Das aufbewahrte Quellmaterial war nicht mehr verfügbar."
       },
@@ -3993,67 +3970,41 @@
         "rightsOfOthers": "Prüfung der Rechte anderer bei Bedarf"
       }
     },
-    "identityChallenge": {
-      "subject": "Bestätigen Sie Ihre Identität für eine Datenschutzanfrage",
-      "continue": "Weiter",
-      "description": "Geben Sie diesen Code innerhalb von {minutes, plural, one {# Minute} other {# Minuten}} in der OpenMapX-Ansicht für Datenschutzanfragen ein.",
-      "unexpected": "Wenn Sie diesen Code nicht angefordert haben, geben Sie ihn nicht weiter und kontaktieren Sie den Verantwortlichen über den veröffentlichten Datenschutzkanal.",
-      "footer": "Sie erhalten diese E-Mail, weil eine Identitätsprüfung für eine OpenMapX-Datenschutzanfrage angefordert wurde."
-    },
     "email": {
       "templates": {
         "acknowledgement": {
           "subject": "Ihre Datenschutzanfrage ist eingegangen",
           "description": "Wir haben Ihre Anfrage erhalten und prüfen sie. Den aktuellen Status finden Sie nach der Anmeldung in Ihren Kontoeinstellungen."
         },
-        "clarification": {
-          "subject": "Rückfrage zu Ihrer Datenschutzanfrage",
-          "description": "Für die Bearbeitung Ihrer Anfrage benötigen wir noch eine Klärung. Melden Sie sich an, um die nächsten Schritte zu sehen."
+        "waiting_on_requester": {
+          "subject": "Handlungsbedarf bei Ihrer Datenschutzanfrage",
+          "description": "Wir benötigen weitere Angaben von Ihnen, um Ihre Datenschutzanfrage fortzusetzen. Melden Sie sich an, um die nächsten Schritte zu sehen."
         },
         "extension": {
           "subject": "Aktualisierung Ihrer Datenschutzanfrage",
           "description": "Die Bearbeitung Ihrer Datenschutzanfrage benötigt mehr Zeit. Die aktualisierte Frist und Begründung finden Sie nach der Anmeldung."
         },
-        "ready": {
-          "subject": "Ihre Datenauskunft ist bereit",
-          "description": "Ihre Datenauskunft kann jetzt in Ihren Kontoeinstellungen abgerufen werden. Melden Sie sich dort an, um den Download zu starten."
-        },
-        "delivered": {
-          "subject": "Ihre Datenauskunft wurde abgerufen",
-          "description": "Der Abruf Ihrer Datenauskunft wurde registriert. Wenn Sie das nicht waren, melden Sie sich an und kontaktieren Sie uns."
-        },
-        "closed": {
+        "completed": {
           "subject": "Ihre Datenschutzanfrage ist abgeschlossen",
-          "description": "Ihre Datenschutzanfrage wurde abgeschlossen. Die Fallinformationen bleiben entsprechend unserer Aufbewahrungsfristen verfügbar."
+          "description": "Ihre Datenschutzanfrage wurde abgeschlossen. Fallinformationen bleiben gemäß unserer Aufbewahrungsrichtlinie verfügbar."
         },
         "refused": {
           "subject": "Aktualisierung Ihrer Datenschutzanfrage",
           "description": "Wir konnten Ihre Datenschutzanfrage nicht wie gestellt erfüllen. Die Begründung und mögliche nächsten Schritte finden Sie nach der Anmeldung."
         },
-        "escalation_due_soon": {
-          "subject": "Datenschutzfrist nähert sich",
-          "description": "Eine Datenschutzanfrage nähert sich ihrer gesetzlichen Frist. Bitte prüfen Sie die Datenschutzwarteschlange."
+        "admin_new_request": {
+          "subject": "Neue Datenschutzanfrage",
+          "description": "Eine neue Datenschutzanfrage ist eingegangen. Bitte prüfen Sie sie in der Datenschutz-Warteschlange."
         },
-        "escalation_overdue": {
-          "subject": "Datenschutzfrist überschritten",
-          "description": "Eine Datenschutzanfrage hat ihre gesetzliche Frist erreicht oder überschritten. Bitte prüfen Sie die Datenschutzwarteschlange."
-        },
-        "escalation_identity": {
-          "subject": "Datenschutzanfrage wartet auf Identitätsprüfung",
-          "description": "Eine Datenschutzanfrage wartet auf Identitätsprüfung oder eine Rückfrage. Bitte prüfen Sie die Datenschutzwarteschlange."
-        },
-        "escalation_extension": {
-          "subject": "Datenschutzfristverlängerung läuft ab",
-          "description": "Eine verlängerte Datenschutzfrist nähert sich ihrem Ende. Bitte prüfen Sie die Datenschutzwarteschlange."
-        },
-        "escalation_stuck": {
-          "subject": "Datenschutzexport benötigt Aufmerksamkeit",
-          "description": "Ein Datenschutzexport ist ungewöhnlich lange in Bearbeitung. Bitte prüfen Sie die Datenschutzwarteschlange."
+        "admin_deadline": {
+          "subject": "Datenschutzfrist läuft ab",
+          "description": "Eine Datenschutzanfrage steht kurz vor ihrer gesetzlichen Frist oder hat sie überschritten. Bitte prüfen Sie sie in der Datenschutz-Warteschlange."
         }
       },
       "continue": "Öffnen Sie Ihre OpenMapX-Kontoeinstellungen, um fortzufahren.",
       "unexpected": "Wenn Sie dies nicht angefragt haben, melden Sie sich an und kontaktieren Sie uns.",
-      "footer": "Sie erhalten diese E-Mail aufgrund einer Aktivität zu einer OpenMapX-Datenschutzanfrage."
+      "footer": "Sie erhalten diese E-Mail aufgrund einer Aktivität zu einer OpenMapX-Datenschutzanfrage.",
+      "adminContinue": "Öffnen Sie Datenschutzanfragen in der OpenMapX-Administration, um fortzufahren."
     }
   },
   "adminCoverage": {
@@ -4500,14 +4451,6 @@
         "label": "Aufbewahrung von Anfragefällen (Tage)",
         "description": "Dauer der Speicherung abgeschlossener Betroffenenanfragen."
       },
-      "legalIdentityEvidenceRetentionDays": {
-        "label": "Aufbewahrung von Identitätsnachweisen (Tage)",
-        "description": "Dauer der Speicherung von Nachweisen zur Identitätsprüfung."
-      },
-      "legalExportArtifactRetentionHours": {
-        "label": "Aufbewahrung von Exportdateien (Stunden)",
-        "description": "Dauer der Verfügbarkeit erzeugter Exportarchive."
-      },
       "legalPrivacySources": {
         "label": "Datenschutz-Datenquellen",
         "description": "JSON-Liste strikter Datenquellendeklarationen für Auskunftsberichte."
@@ -4559,7 +4502,7 @@
   "privacyAdmin": {
     "newAssistedRequest": "Unterstützte Anfrage erfassen",
     "assistedIntake": "Eingang einer unterstützten Anfrage",
-    "assistedIntakeHelp": "Erfassen Sie den tatsächlichen Eingangskanal und eine geschützte, eindeutige Zuordnung zur betroffenen Person. Gelöschte oder unzugängliche Konten werden nicht neu angelegt.",
+    "assistedIntakeHelp": "Erfassen Sie den tatsächlichen Eingangskanal und die Kennung der betroffenen Person wie angegeben. Die Kennung wird verschlüsselt. Gelöschte oder unzugängliche Konten werden nicht wiederhergestellt.",
     "channel": "Eingangskanal",
     "receivedAt": "Tatsächlich eingegangen am",
     "channels": {
@@ -4585,21 +4528,7 @@
     },
     "subjectLocator": "Eindeutige Personenzuordnung",
     "subjectLocatorHelp": "Dieser Wert wird verschlüsselt und nicht in der Fallliste angezeigt.",
-    "representativeContact": "Verifizierte Kontaktadresse der Vertretung",
-    "representativeContactHelp": "Vertretungsbefugnis und Empfangsberechtigung werden getrennt geprüft.",
     "recordRequest": "Anfrage erfassen",
-    "identityParties": "Identität und Vertretungsbefugnis",
-    "identityProofRequired": "Schließen Sie eine nachgewiesene Kontoanmeldung, eine verifizierte E-Mail-Challenge oder eine Ausnahmeprüfung mit Nachweis ab.",
-    "sendIdentityChallenge": "Bestätigungscode senden",
-    "identityCode": "Sechsstelliger Code",
-    "verifyIdentityCode": "Code bestätigen",
-    "challengeIssueFailed": "Der Bestätigungscode konnte nicht gesendet werden. Prüfen Sie, ob für diese Partei eine maßgebliche E-Mail-Adresse hinterlegt ist, und versuchen Sie es später erneut.",
-    "challengeCompleteFailed": "Der Code konnte nicht bestätigt werden. Er ist möglicherweise falsch, abgelaufen oder bereits verwendet.",
-    "accountLoginProofHelp": "Für den Nachweis per Kontoanmeldung muss sich die betroffene Person erneut anmelden und den unterstützten Nachweis in ihrer eigenen authentifizierten Sitzung abschließen.",
-    "parties": {
-      "subject": "Betroffene Person",
-      "representative": "Vertretung"
-    },
     "loadFailed": "Die Datenschutzwarteschlange konnte nicht geladen werden.",
     "caseFailed": "Der Fall konnte nicht geladen werden.",
     "actionFailed": "Die Datenschutzaktion konnte nicht abgeschlossen werden.",
@@ -4608,38 +4537,15 @@
     "empty": "Keine offenen Anfragen.",
     "selectRequest": "Wählen Sie eine Anfrage aus, um ihre Metadaten einzusehen.",
     "verifyIdentity": "Identität prüfen",
-    "generate": "Archiv erstellen",
-    "generateAfterReview": "Nach Prüfung erstellen",
     "tasks": "Aufgaben zu Datenquellen",
-    "review": "Prüfen",
-    "archives": "Archive",
     "queue": "Warteschlange ({count})",
     "queueItem": "{state} · Frist {date}",
     "case": "Fall {id}",
     "caseMetadata": "Antwortfrist: {date} · Identität: {identity}",
     "unknown": "Unbekannt",
-    "expires": "Läuft am {date} ab",
-    "verified": "Verifiziert",
     "unverified": "Nicht verifiziert",
     "workflows": {
-      "party": "Geprüfte Person",
-      "reasonableDoubtCode": "Code für begründete Zweifel",
-      "identityOutcome": "Ergebnis der Identitätsprüfung",
-      "identityEvidence": "Identitätsnachweis",
-      "chooseEvidence": "Gültigen Nachweis dieses Falls auswählen",
-      "authorityEvidence": "Vertretungsnachweis",
-      "deliveryAuthorized": "Vertretung darf die Antwort erhalten",
-      "approveAuthority": "Vertretungsbefugnis bestätigen",
-      "recordIdentityReview": "Prüfung des besonderen Nachweises speichern",
-      "assignee": "Zuständige Person",
-      "unassigned": "Nicht zugewiesen",
-      "moreOperators": "Weitere berechtigte Personen",
-      "assignTask": "Zuweisung speichern",
-      "taskDecision": "Aufgabenergebnis",
       "reasonCode": "Begründungscode",
-      "redactionCode": "Schwärzungscode",
-      "recordCount": "Anzahl geprüfter Datensätze",
-      "recordTaskDecision": "Aufgabenentscheidung speichern",
       "caseDecisions": "Fristen und Fallentscheidungen",
       "originalDueAt": "Ursprüngliche Frist",
       "currentDueAt": "Aktuelle Frist",
@@ -4651,66 +4557,33 @@
       "decisionReason": "Begründungscode der Entscheidung",
       "recordCaseDecision": "Fallentscheidung speichern",
       "confirmRefusal": "Ablehnung bestätigen",
-      "refusalHelp": "Die Ablehnung wird als abschließende Entscheidung gespeichert und sperrt den Zugriff auf Fallarchive. Erst nach der erforderlichen Prüfung bestätigen.",
+      "refusalHelp": "Eine Ablehnung ist eine endgültige Entscheidung und benachrichtigt die anfragende Person. Bestätigen Sie sie erst nach der erforderlichen Prüfung.",
       "cancel": "Abbrechen",
-      "attachments": "Verschlüsselte Nachweise und Ergänzungen",
-      "attachmentFailed": "Die Aktion für den Anhang ist fehlgeschlagen. Fall aktualisieren und aktuelle Sitzung vor einem neuen bewussten Versuch prüfen.",
-      "attachmentHelp": "Bis zu 25 MiB: PDF, Text, CSV, JSON, PNG oder JPEG. Neue Dateien benötigen eine Rechteprüfung. Identitäts- und Vertretungsnachweise werden nicht exportiert. Bei Bedarf eine separat geschwärzte Ersatzdatei hochladen.",
-      "attachmentFile": "Anhang auswählen",
-      "attachmentPurpose": "Zweck des Anhangs",
-      "provenanceSource": "Code der Herkunftsquelle",
-      "uploadAttachment": "Anhang verschlüsselt hochladen",
-      "rightsReviewReason": "Begründungscode der Rechteprüfung",
-      "download": "Herunterladen",
-      "approved": "Für Export freigeben",
-      "rejected": "Für Export ablehnen",
-      "deleteAttachment": "Anhang löschen",
-      "downloadUnavailable": "Download ist mit dieser Browser- oder Clientkonfiguration nicht verfügbar. Eine unterstützte Sitzung mit Cookies am selben Ursprung oder einen Browser mit Dateispeicherung verwenden.",
-      "resumeUnavailable": "Der Tab konnte den Auslieferungsvorgang nicht speichern. Sobald Tabspeicher verfügbar ist, einen neuen bewussten Vorgang starten.",
-      "browserOwnsDownload": "Der Browser steuert diese Übertragung. Auslieferungsstatus aktualisieren; ein Klick bestätigt keine Auslieferung.",
-      "checkDeliveryStatus": "Auslieferungsstatus am Server prüfen. Jeder neue Versuch erfordert eine neue ausdrückliche Verifizierung.",
-      "downloadCanceled": "Es wurde keine Übertragung gestartet. Zum Herunterladen einen Dateispeicherort auswählen.",
-      "artifactNotAuthorized": "Auslieferung nicht verfügbar: Archiv, Fall oder Identitäts- bzw. Vertretungsbefugnis ist derzeit nicht geeignet.",
-      "expiresAt": "Gültig bis",
-      "deliveryChannel": "Auslieferungskanal",
-      "assisted": "Unterstützte Auslieferung an betroffene Person",
-      "representative": "Auslieferung an berechtigte Vertretung",
-      "deliveryReason": "Begründungscode der Auslieferung",
-      "completeReauthentication": "Verifizierung der neuen Anmeldung abschließen",
-      "startAssistedDelivery": "Archiv bestätigen und erneut anmelden",
       "versionConflict": "Eine andere Person hat diesen Fall geändert. Ihr Entwurf bleibt erhalten. Den aktualisierten Fall prüfen und mit einer neuen Vorgangskennung bestätigen.",
-      "generationBlocked": "Die Erstellung erfordert bestätigte Identität und abgeschlossene Quellaufgaben.",
       "caseEvents": "Aufbewahrte Fallereignisse",
-      "outcomes": {
-        "verified": "Durch besonderen Nachweis bestätigt",
-        "failed": "Fehlgeschlagen",
-        "clarification": "Klärung erforderlich"
-      },
       "taskStates": {
-        "complete": "Abgeschlossen",
-        "not_applicable": "Nicht anwendbar",
-        "operator_review": "Manuelle Prüfung",
-        "retryable": "Quellaufgabe erneut ausführbar",
-        "canceled": "Abgebrochen"
+        "open": "Offen",
+        "resolved": "Geprüft"
       },
       "caseStates": {
-        "clarification_needed": "Klärung erforderlich",
-        "operator_review": "Manuelle Prüfung",
+        "in_progress": "In Bearbeitung",
+        "waiting_on_requester": "Wartet auf anfragende Person",
+        "completed": "Abgeschlossen",
         "refused": "Abgelehnt"
       },
-      "purposes": {
-        "identity_evidence": "Identitätsnachweis",
-        "representative_authority": "Vertretungsnachweis",
-        "processor_response": "Antwort eines Auftragsverarbeiters",
-        "operator_supplement": "Manuelle Ergänzung"
-      },
-      "authorityOutcome": "Entscheidung zur Vertretungsbefugnis",
-      "recordAuthorityReview": "Entscheidung zur Vertretungsbefugnis speichern",
-      "authorityOutcomes": {
-        "pending": "Ausstehend",
-        "approved": "Bestätigt",
-        "rejected": "Abgelehnt"
-      }
+      "verifyIdentityHelp": "Prüfen Sie die Identität der anfragenden Person außerhalb von OpenMapX und erfassen Sie die Art der Prüfung als Begründungscode. Damit beginnt die Bearbeitung des Falls.",
+      "tasksHelp": "Diese Quellen prüft der Betreiber außerhalb von OpenMapX. Schließen Sie jede nach der Prüfung mit einem Begründungscode ab; der Fall kann abgeschlossen werden, wenn alle erledigt sind.",
+      "resolveTask": "Als geprüft markieren",
+      "exportHelp": "Laden Sie den Export der betroffenen Person nach einer erneuten Administrator-Anmeldung herunter. Das Archiv wird direkt an Sie übertragen und nicht auf dem Server gespeichert.",
+      "downloadExport": "Export herunterladen",
+      "exportUnavailable": "Der Export ist noch nicht verfügbar",
+      "exportDownloaded": "Der Export wurde heruntergeladen.",
+      "exportFailed": "Der Export konnte nicht heruntergeladen werden. Melden Sie sich vor einem neuen Versuch erneut an."
+    },
+    "identityVerified": "Identität bestätigt: {method}",
+    "identityMethods": {
+      "account_session": "erneute Kontoanmeldung",
+      "manual": "durch eine Administratorin oder einen Administrator geprüft"
     }
   },
   "adminSearchIndex": {
@@ -4933,8 +4806,7 @@
       "identity": "Identität",
       "tasks": "Aufgaben",
       "decisions": "Entscheidungen",
-      "attachments": "Anhänge",
-      "delivery": "Erstellung & Zustellung",
+      "export": "Export",
       "events": "Ereignisse"
     },
     "transitSourceOwner": "Transit-Quellen verwalten",

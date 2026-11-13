@@ -11,10 +11,15 @@ import {
 } from "@mui/material";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import type { PrivacyAdminDetail } from "@openmapx/core/api-contracts";
+import { REQUEST_TRANSITIONS } from "@openmapx/core/privacy";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import { type PrivacyCaseClient, privacyResult } from "@/lib/admin/privacyAdmin";
+
+const DECISIONS = ["in_progress", "waiting_on_requester", "completed", "refused"] as const;
+type Decision = (typeof DECISIONS)[number];
+
 export function PrivacyCaseDecisionForms({
   detail,
   client,
@@ -27,23 +32,14 @@ export function PrivacyCaseDecisionForms({
     [notified, setNotified] = useState(""),
     [extensionReason, setExtensionReason] = useState(""),
     [reason, setReason] = useState(""),
-    [decision, setDecision] = useState<"refused" | "clarification_needed" | "operator_review">(
-      "clarification_needed",
-    ),
+    [decision, setDecision] = useState<Decision>("waiting_on_requester"),
     [confirm, setConfirm] = useState(false);
-  const allowed = (value: string) =>
-    value === "refused" ||
-    value === detail.request.state ||
-    (value === "clarification_needed" &&
-      [
-        "identity_pending",
-        "preserving",
-        "collecting",
-        "pending_processor",
-        "operator_review",
-      ].includes(detail.request.state)) ||
-    (value === "operator_review" &&
-      ["collecting", "clarification_needed"].includes(detail.request.state));
+  // The transition table decides what is offered; work only starts once the
+  // requester's identity is known, and completion waits for every task.
+  const allowed = (value: Decision) =>
+    REQUEST_TRANSITIONS[detail.request.state].includes(value) &&
+    (value !== "in_progress" || detail.request.identityMethod !== null) &&
+    (value !== "completed" || detail.tasks.every((task) => task.status === "resolved"));
   const decide = async () => {
     setConfirm(false);
     await client.execute("case-decision", (c, h) =>
@@ -124,7 +120,7 @@ export function PrivacyCaseDecisionForms({
         onChange={(e) => setDecision(e.target.value as typeof decision)}
         disabled={client.pending || !detail.capabilities.caseDecision}
       >
-        {(["clarification_needed", "operator_review", "refused"] as const).map((x) => (
+        {DECISIONS.map((x) => (
           <MenuItem key={x} value={x} disabled={!allowed(x)}>
             {w(`caseStates.${x}`)}
           </MenuItem>

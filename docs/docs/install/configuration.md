@@ -132,8 +132,7 @@ through its dedicated admin setup, not this renderer.
 
 Ordinary volume backups do not include `.env`, this secret directory, the
 configuration generations, or the erasure journal. Preserve required deployment
-keys and recovery state through a protected operator recovery procedure. Keep
-subject-export artifacts excluded from backups. See
+keys and recovery state through a protected operator recovery procedure. See
 [Backup and restore](../administration/backup-and-restore.md) before testing a
 restore or rotating encryption keys.
 

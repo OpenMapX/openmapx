@@ -41,24 +41,20 @@ describe("metrics service", () => {
     expect(text).not.toContain("place_id");
   });
 
-  it("exports bounded cleanup backlog counts by resource kind", async () => {
+  it("exports the privacy export failure count", async () => {
     const handle = getMetrics();
     handle.recordPrivacyOperationalSnapshot({
       openRequestsByDueState: { on_track: 0, due_soon: 0, overdue: 0 },
       oldestRequestAgeSeconds: 0,
       sourceTasksByStatus: {},
-      generationFailures: 0,
-      artifactCleanupLagSeconds: 0,
-      artifactCleanupBacklog: 3,
-      attachmentCleanupBacklog: 2,
-      keyReady: true,
+      exportFailures: 2,
       notificationFailures: 0,
     });
 
     const text = await handle.renderPrometheus();
-    expect(text).toMatch(/privacy_cleanup_backlog\{[^}]*resource_kind="artifact"[^}]*\} 3/);
-    expect(text).toMatch(/privacy_cleanup_backlog\{[^}]*resource_kind="attachment"[^}]*\} 2/);
-    expect(text).not.toContain('resource_kind="source_snapshot"');
+    expect(text).toMatch(/privacy_export_failures[^\n]* 2/);
+    expect(text).not.toContain("privacy_cleanup_backlog");
+    expect(text).not.toContain("privacy_key_ready");
   });
 
   it("renders Prometheus text containing the registered metric names after one call", async () => {

@@ -53,4 +53,19 @@ describe("case decisions", () => {
     expect(fetch).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
+  it("offers only the decisions the transition table allows for the current state", async () => {
+    const detail = privacyDetail();
+    renderPrivacyComponent(detail, (client) => (
+      <PrivacyCaseDecisionForms detail={detail} client={client} />
+    ));
+    fireEvent.mouseDown(screen.getByLabelText("privacyAdmin.workflows.caseDecision"));
+    const option = async (state: string) =>
+      screen.findByRole("option", { name: `privacyAdmin.workflows.caseStates.${state}` });
+    // An open, unverified case may wait on the requester or be refused; work
+    // starts only after the identity check and completion is not an edge.
+    expect(await option("waiting_on_requester")).not.toHaveAttribute("aria-disabled", "true");
+    expect(await option("refused")).not.toHaveAttribute("aria-disabled", "true");
+    expect(await option("in_progress")).toHaveAttribute("aria-disabled", "true");
+    expect(await option("completed")).toHaveAttribute("aria-disabled", "true");
+  });
 });

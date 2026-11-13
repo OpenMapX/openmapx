@@ -1,3 +1,4 @@
+import { REQUEST_STATES, type RequestState } from "@openmapx/core/privacy";
 import { sql } from "drizzle-orm";
 import {
   check,
@@ -12,23 +13,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { session, user } from "./auth-schema";
 
-export const REQUEST_STATES = [
-  "received",
-  "identity_pending",
-  "preserving",
-  "collecting",
-  "pending_processor",
-  "operator_review",
-  "assembling",
-  "ready",
-  "delivered",
-  "artifact_expired",
-  "clarification_needed",
-  "withdrawn",
-  "refused",
-  "closed",
-] as const;
-export type RequestState = (typeof REQUEST_STATES)[number];
+export { REQUEST_STATES, type RequestState };
 export const REQUEST_KINDS = ["access", "portability", "access_and_portability"] as const;
 export type RequestKind = (typeof REQUEST_KINDS)[number];
 export const REQUEST_CHANNELS = [
@@ -39,38 +24,26 @@ export const REQUEST_CHANNELS = [
   "internal",
 ] as const;
 export type RequestChannel = (typeof REQUEST_CHANNELS)[number];
-export const TASK_STATES = [
-  "pending",
-  "running",
-  "complete",
-  "not_applicable",
-  "retryable",
-  "operator_review",
-  "canceled",
-] as const;
+/** How the requester's identity was established: a freshly signed-in account
+ * session for self-service, or an operator's manual check for assisted cases. */
+export const IDENTITY_METHODS = ["account_session", "manual"] as const;
+export type IdentityMethod = (typeof IDENTITY_METHODS)[number];
+export const TASK_STATES = ["open", "resolved"] as const;
 export type TaskState = (typeof TASK_STATES)[number];
-export const ARTIFACT_STATES = [
-  "assembling",
-  "ready",
-  "revoked",
-  "expired",
-  "deleted",
-  "failed",
-] as const;
-export type ArtifactState = (typeof ARTIFACT_STATES)[number];
-export const PRIVACY_NOTIFICATION_TEMPLATES = [
+export const PRIVACY_SUBJECT_NOTIFICATION_TEMPLATES = [
   "acknowledgement",
-  "clarification",
+  "waiting_on_requester",
   "extension",
-  "ready",
-  "delivered",
-  "closed",
+  "completed",
   "refused",
-  "escalation_due_soon",
-  "escalation_overdue",
-  "escalation_identity",
-  "escalation_extension",
-  "escalation_stuck",
+] as const;
+export const PRIVACY_ADMIN_NOTIFICATION_TEMPLATES = [
+  "admin_new_request",
+  "admin_deadline",
+] as const;
+export const PRIVACY_NOTIFICATION_TEMPLATES = [
+  ...PRIVACY_SUBJECT_NOTIFICATION_TEMPLATES,
+  ...PRIVACY_ADMIN_NOTIFICATION_TEMPLATES,
 ] as const;
 export type PrivacyNotificationTemplate = (typeof PRIVACY_NOTIFICATION_TEMPLATES)[number];
 export const PRIVACY_NOTIFICATION_CHANNELS = ["email"] as const;
@@ -94,13 +67,13 @@ export const dataSubjectRequest = pgTable(
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     actorUserId: text("actor_user_id").references(() => user.id, { onDelete: "set null" }),
     actorSessionId: text("actor_session_id").references(() => session.id, { onDelete: "set null" }),
-    encryptedLocator: text("encrypted_locator").notNull(),
-    locatorDigest: text("locator_digest").notNull(),
+    /** Assisted requests only: the locator value, encrypted with OPENMAPX_SECRETS_KEY. */
+    encryptedLocator: text("encrypted_locator"),
     locatorType: text("locator_type").notNull().default("user_id"),
     accountState: text("account_state").notNull().default("current"),
     locale: text("locale").notNull().default("en"),
     timeZone: text("time_zone").notNull().default("UTC"),
-    state: text("state").$type<RequestState>().notNull().default("received"),
+    state: text("state").$type<RequestState>().notNull().default("open"),
     version: integer("version").notNull().default(1),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
     registeredAt: timestamp("registered_at", { withTimezone: true }).defaultNow().notNull(),
@@ -108,15 +81,11 @@ export const dataSubjectRequest = pgTable(
     snapshotAt: timestamp("snapshot_at", { withTimezone: true }),
     dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
     extension: jsonb("extension").$type<Record<string, unknown> | null>(),
-    identityState: text("identity_state").notNull().default("pending"),
+    identityMethod: text("identity_method").$type<IdentityMethod>(),
+    identityVerifiedAt: timestamp("identity_verified_at", { withTimezone: true }),
     refusalCode: text("refusal_code"),
-    refusalReason: text("refusal_reason"),
-    deliveryState: text("delivery_state").notNull().default("not_delivered"),
-    withdrawalAt: timestamp("withdrawal_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     closedAt: timestamp("closed_at", { withTimezone: true }),
-    /** Authenticated encrypted envelope; plaintext operator notes are never persisted. */
-    protectedNotesEnvelope: text("protected_notes_envelope"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -131,7 +100,7 @@ export const dataSubjectRequest = pgTable(
     ),
     check(
       "data_subject_request_state_check",
-      sql`${table.state} in ('received', 'identity_pending', 'preserving', 'collecting', 'pending_processor', 'operator_review', 'assembling', 'ready', 'delivered', 'artifact_expired', 'clarification_needed', 'withdrawn', 'refused', 'closed')`,
+      sql`${table.state} in ('open', 'in_progress', 'waiting_on_requester', 'completed', 'refused')`,
     ),
     check("data_subject_request_version_check", sql`${table.version} > 0`),
     check(
@@ -142,13 +111,16 @@ export const dataSubjectRequest = pgTable(
       "data_subject_request_account_state_check",
       sql`${table.accountState} in ('current', 'inaccessible', 'deleted', 'unknown')`,
     ),
+    check(
+      "data_subject_request_identity_check",
+      sql`(${table.identityMethod} is null and ${table.identityVerifiedAt} is null) or (${table.identityMethod} in ('account_session', 'manual') and ${table.identityVerifiedAt} is not null)`,
+    ),
     index("data_subject_request_user_state_idx").on(table.userId, table.state),
     index("data_subject_request_due_idx").on(table.state, table.dueAt),
-    index("data_subject_request_locator_digest_idx").on(table.locatorDigest),
     uniqueIndex("data_subject_request_active_user_kind_idx")
       .on(table.userId, table.kind)
       .where(
-        sql`${table.userId} is not null and ${table.state} not in ('withdrawn', 'refused', 'closed', 'delivered', 'artifact_expired')`,
+        sql`${table.userId} is not null and ${table.state} in ('open', 'in_progress', 'waiting_on_requester')`,
       ),
   ],
 );
@@ -178,6 +150,8 @@ export const dataSubjectRequestEvent = pgTable(
   ],
 );
 
+/** One operator-held source per request. The operator checks it outside the
+ * system and resolves the task with a reason code. */
 export const dataSubjectRequestTask = pgTable(
   "data_subject_request_task",
   {
@@ -185,32 +159,22 @@ export const dataSubjectRequestTask = pgTable(
     requestId: uuid("request_id")
       .notNull()
       .references(() => dataSubjectRequest.id, { onDelete: "cascade" }),
-    taskKey: text("task_key").notNull(),
     registrationId: text("registration_id").notNull(),
-    collectorId: text("collector_id"),
-    collectorVersion: integer("collector_version"),
     source: text("source").notNull(),
-    required: integer("required").notNull().default(1),
-    status: text("status").$type<TaskState>().notNull().default("pending"),
-    attempts: integer("attempts").notNull().default(0),
-    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
-    assignedTo: text("assigned_to").references(() => user.id, { onDelete: "set null" }),
-    cutoffAt: timestamp("cutoff_at", { withTimezone: true }),
-    collectedAt: timestamp("collected_at", { withTimezone: true }),
-    recordCount: integer("record_count"),
+    status: text("status").$type<TaskState>().notNull().default("open"),
     publicCode: text("public_code"),
-    encryptedDetail: text("encrypted_detail"),
-    exceptionCode: text("exception_code"),
-    redactionCode: text("redaction_code"),
+    resolutionCode: text("resolution_code"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex("data_subject_request_task_request_key_idx").on(table.requestId, table.taskKey),
-    index("data_subject_request_task_status_idx").on(table.status, table.nextAttemptAt),
-    index("data_subject_request_task_registration_idx").on(table.registrationId),
-    check("data_subject_request_task_attempts_check", sql`${table.attempts} >= 0`),
-    check("data_subject_request_task_required_check", sql`${table.required} in (0, 1)`),
+    uniqueIndex("data_subject_request_task_request_registration_idx").on(
+      table.requestId,
+      table.registrationId,
+    ),
+    index("data_subject_request_task_status_idx").on(table.status),
+    check("data_subject_request_task_status_check", sql`${table.status} in ('open', 'resolved')`),
   ],
 );
 
@@ -222,7 +186,6 @@ export const dataSubjectRequestPreservation = pgTable(
       .notNull()
       .references(() => dataSubjectRequest.id, { onDelete: "cascade" }),
     registrationId: text("registration_id").notNull(),
-    locatorDigest: text("locator_digest").notNull(),
     sourceCutoffAt: timestamp("source_cutoff_at", { withTimezone: true }).notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
     capturedAt: timestamp("captured_at", { withTimezone: true }),
@@ -235,224 +198,7 @@ export const dataSubjectRequestPreservation = pgTable(
       table.requestId,
       table.registrationId,
     ),
-    index("data_subject_request_preservation_locator_idx").on(
-      table.registrationId,
-      table.locatorDigest,
-      table.status,
-    ),
-  ],
-);
-
-export const dataExportArtifact = pgTable(
-  "data_export_artifact",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    requestId: uuid("request_id")
-      .notNull()
-      .references(() => dataSubjectRequest.id, { onDelete: "cascade" }),
-    generationId: uuid("generation_id").defaultRandom().notNull(),
-    state: text("state").$type<ArtifactState>().notNull().default("assembling"),
-    storageKey: text("storage_key").notNull().unique(),
-    filename: text("filename").notNull(),
-    mediaType: text("media_type").notNull().default("application/zip"),
-    plaintextBytes: integer("plaintext_bytes"),
-    encryptedBytes: integer("encrypted_bytes"),
-    plaintextSha256: text("plaintext_sha256"),
-    ciphertextSha256: text("ciphertext_sha256"),
-    cipherVersion: integer("cipher_version").notNull().default(1),
-    aadVersion: integer("aad_version").notNull().default(1),
-    iv: text("iv").notNull(),
-    tag: text("tag"),
-    wrappedDek: text("wrapped_dek"),
-    masterKeyVersion: integer("master_key_version"),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-    readyAt: timestamp("ready_at", { withTimezone: true }),
-    expiresAt: timestamp("expires_at", { withTimezone: true }),
-    revokedAt: timestamp("revoked_at", { withTimezone: true }),
-    deletedAt: timestamp("deleted_at", { withTimezone: true }),
-    downloadCount: integer("download_count").notNull().default(0),
-  },
-  (table) => [
-    index("data_export_artifact_request_state_idx").on(table.requestId, table.state),
-    index("data_export_artifact_expiry_idx").on(table.state, table.expiresAt),
-    check("data_export_artifact_download_count_check", sql`${table.downloadCount} >= 0`),
-  ],
-);
-
-export const dataSubjectRequestAttachment = pgTable(
-  "data_subject_request_attachment",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    requestId: uuid("request_id")
-      .notNull()
-      .references(() => dataSubjectRequest.id, { onDelete: "cascade" }),
-    purpose: text("purpose").notNull(),
-    storageKey: text("storage_key").notNull().unique(),
-    filename: text("filename").notNull(),
-    mediaType: text("media_type").notNull(),
-    encryptedBytes: integer("encrypted_bytes").notNull(),
-    plaintextBytes: integer("plaintext_bytes").notNull(),
-    plaintextSha256: text("plaintext_sha256").notNull(),
-    ciphertextSha256: text("ciphertext_sha256").notNull(),
-    iv: text("iv").notNull(),
-    tag: text("tag"),
-    wrappedDek: text("wrapped_dek"),
-    masterKeyVersion: integer("master_key_version"),
-    ownerId: text("owner_id").references(() => user.id, { onDelete: "set null" }),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    deletedAt: timestamp("deleted_at", { withTimezone: true }),
-    rightsReviewState: text("rights_review_state").notNull().default("pending"),
-    /** Bounded provenance/redaction metadata; never store supplement contents. */
-    metadata: jsonb("metadata")
-      .$type<Record<string, string | number | boolean | null>>()
-      .notNull()
-      .default({}),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    index("data_subject_request_attachment_request_idx").on(table.requestId, table.purpose),
-    index("data_subject_request_attachment_expiry_idx").on(table.expiresAt),
-    check(
-      "data_subject_request_attachment_purpose_check",
-      sql`${table.purpose} in ('identity_evidence', 'representative_authority', 'processor_response', 'operator_supplement')`,
-    ),
-  ],
-);
-
-/** Identity is recorded per party so subject verification never implies that a
- * representative is verified or authorized to receive the response. Contact
- * values remain encrypted; list/detail APIs expose only bounded state. */
-export const dataSubjectRequestIdentity = pgTable(
-  "data_subject_request_identity",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    requestId: uuid("request_id")
-      .notNull()
-      .references(() => dataSubjectRequest.id, { onDelete: "cascade" }),
-    party: text("party").notNull(),
-    contactEnvelope: text("contact_envelope"),
-    contactDigest: text("contact_digest"),
-    state: text("state").notNull().default("pending"),
-    method: text("method"),
-    reasonableDoubtCode: text("reasonable_doubt_code"),
-    evidenceAttachmentId: uuid("evidence_attachment_id").references(
-      () => dataSubjectRequestAttachment.id,
-      { onDelete: "set null" },
-    ),
-    authorityState: text("authority_state").notNull().default("not_applicable"),
-    authorityAttachmentId: uuid("authority_attachment_id").references(
-      () => dataSubjectRequestAttachment.id,
-      { onDelete: "set null" },
-    ),
-    deliveryAuthorized: integer("delivery_authorized").notNull().default(0),
-    verifiedAt: timestamp("verified_at", { withTimezone: true }),
-    verifiedBy: text("verified_by").references(() => user.id, { onDelete: "set null" }),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    uniqueIndex("data_subject_request_identity_party_idx").on(table.requestId, table.party),
-    index("data_subject_request_identity_state_idx").on(table.state, table.authorityState),
-    check(
-      "data_subject_request_identity_party_check",
-      sql`${table.party} in ('subject', 'representative')`,
-    ),
-    check(
-      "data_subject_request_identity_state_check",
-      sql`${table.state} in ('pending', 'verified', 'failed', 'clarification')`,
-    ),
-    check(
-      "data_subject_request_identity_method_check",
-      sql`${table.method} is null or ${table.method} in ('account_login', 'verified_email_challenge', 'exceptional_evidence')`,
-    ),
-    check(
-      "data_subject_request_identity_authority_check",
-      sql`${table.authorityState} in ('not_applicable', 'pending', 'approved', 'rejected')`,
-    ),
-    check(
-      "data_subject_request_identity_delivery_check",
-      sql`${table.deliveryAuthorized} in (0, 1) and (${table.deliveryAuthorized} = 0 or (${table.party} = 'representative' and ${table.authorityState} = 'approved' and ${table.state} = 'verified'))`,
-    ),
-  ],
-);
-
-/** One short-lived email proof attempt.  The recipient and code are never
- * persisted in plaintext; the row is also the atomic consume boundary. */
-export const dataSubjectRequestEmailChallenge = pgTable(
-  "data_subject_request_email_challenge",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    requestId: uuid("request_id")
-      .notNull()
-      .references(() => dataSubjectRequest.id, { onDelete: "cascade" }),
-    identityId: uuid("identity_id")
-      .notNull()
-      .references(() => dataSubjectRequestIdentity.id, { onDelete: "cascade" }),
-    purpose: text("purpose").notNull().default("identity_verification"),
-    party: text("party").notNull(),
-    recipientSource: text("recipient_source").notNull(),
-    locale: text("locale").notNull().default("en"),
-    recipientEnvelope: text("recipient_envelope").notNull(),
-    recipientDigest: text("recipient_digest").notNull(),
-    codeDigest: text("code_digest"),
-    codeKeyVersion: integer("code_key_version"),
-    state: text("state").notNull().default("queued"),
-    attempts: integer("attempts").notNull().default(0),
-    maxAttempts: integer("max_attempts").notNull().default(5),
-    deliveryAttempts: integer("delivery_attempts").notNull().default(0),
-    maxDeliveryAttempts: integer("max_delivery_attempts").notNull().default(5),
-    deliveryLeaseId: uuid("delivery_lease_id"),
-    nextDeliveryAttemptAt: timestamp("next_delivery_attempt_at", { withTimezone: true }),
-    lastDeliveryErrorCode: text("last_delivery_error_code"),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    issuedAt: timestamp("issued_at", { withTimezone: true }),
-    consumedAt: timestamp("consumed_at", { withTimezone: true }),
-    revokedAt: timestamp("revoked_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    index("data_subject_request_email_challenge_request_idx").on(table.requestId, table.createdAt),
-    index("data_subject_request_email_challenge_identity_idx").on(
-      table.identityId,
-      table.createdAt,
-    ),
-    index("data_subject_request_email_challenge_delivery_idx").on(
-      table.state,
-      table.nextDeliveryAttemptAt,
-    ),
-    index("data_subject_request_email_challenge_expiry_idx").on(table.expiresAt),
-    uniqueIndex("data_subject_request_email_challenge_active_identity_idx")
-      .on(table.identityId)
-      .where(sql`${table.state} in ('queued', 'sending', 'issued', 'retryable')`),
-    check(
-      "data_subject_request_email_challenge_purpose_check",
-      sql`${table.purpose} = 'identity_verification'`,
-    ),
-    check(
-      "data_subject_request_email_challenge_party_check",
-      sql`${table.party} in ('subject', 'representative')`,
-    ),
-    check(
-      "data_subject_request_email_challenge_recipient_source_check",
-      sql`${table.recipientSource} in ('live_account', 'request_locator', 'representative_contact')`,
-    ),
-    check(
-      "data_subject_request_email_challenge_state_check",
-      sql`${table.state} in ('queued', 'sending', 'issued', 'retryable', 'failed', 'revoked', 'consumed', 'expired')`,
-    ),
-    check(
-      "data_subject_request_email_challenge_attempts_check",
-      sql`${table.attempts} >= 0 and ${table.maxAttempts} > 0 and ${table.attempts} <= ${table.maxAttempts}`,
-    ),
-    check(
-      "data_subject_request_email_challenge_delivery_attempts_check",
-      sql`${table.deliveryAttempts} >= 0 and ${table.maxDeliveryAttempts} > 0 and ${table.deliveryAttempts} <= ${table.maxDeliveryAttempts}`,
-    ),
-    check(
-      "data_subject_request_email_challenge_code_check",
-      sql`(${table.codeDigest} is null and ${table.codeKeyVersion} is null) or (${table.codeDigest} is not null and ${table.codeKeyVersion} > 0)`,
-    ),
+    index("data_subject_request_preservation_locator_idx").on(table.registrationId, table.status),
   ],
 );
 
@@ -484,6 +230,7 @@ export const dataSubjectRequestNotification = pgTable(
       table.requestId,
       table.template,
       table.channel,
+      table.recipientUserId,
     ),
     index("data_subject_request_notification_state_idx").on(table.state, table.nextAttemptAt),
     index("data_subject_request_notification_recipient_idx").on(
@@ -492,7 +239,7 @@ export const dataSubjectRequestNotification = pgTable(
     ),
     check(
       "data_subject_request_notification_template_check",
-      sql`${table.template} in ('acknowledgement', 'clarification', 'extension', 'ready', 'delivered', 'closed', 'refused', 'escalation_due_soon', 'escalation_overdue', 'escalation_identity', 'escalation_extension', 'escalation_stuck')`,
+      sql`${table.template} in ('acknowledgement', 'waiting_on_requester', 'extension', 'completed', 'refused', 'admin_new_request', 'admin_deadline')`,
     ),
     check("data_subject_request_notification_channel_check", sql`${table.channel} in ('email')`),
     check(

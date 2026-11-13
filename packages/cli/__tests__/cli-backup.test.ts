@@ -1356,7 +1356,7 @@ describe("backup volume modes", () => {
     expect(readyCall?.[2]?.timeout).toBe(5_000);
   });
 
-  it("sends erased identities through psql stdin and quarantines terminal privacy rows", async () => {
+  it("sends erased identities through psql stdin and marks their privacy requests as deleted", async () => {
     const dir = writeBackup("stdin-erasure-replay", {
       name: "stdin-erasure-replay",
       createdAt: new Date().toISOString(),
@@ -1453,10 +1453,8 @@ describe("backup volume modes", () => {
     expect(stdin).toContain("change-email:");
     expect(stdin).not.toContain("right(lower(identifier)");
     expect(stdin).toContain("account_state = 'deleted'");
-    expect(stdin).toContain("state = 'revoked'");
-    expect(stdin).toContain("expires_at");
-    expect(stdin).not.toContain("wrapped_dek = NULL");
-    expect(stdin).toContain("deleted_at = NULL");
+    expect(stdin).not.toContain("data_export_artifact");
+    expect(stdin).not.toContain("data_subject_request_attachment");
     expect(loggedErrors.join("\n")).not.toContain("deleted-user");
     expect(loggedErrors.join("\n")).not.toContain("Person@example.test");
   });
@@ -1780,33 +1778,6 @@ describe("restore data-protection preflight", () => {
         new Set(["app-api"]),
       ),
     ).toEqual([]);
-  });
-
-  it("rejects backups that contain the private subject-export ciphertext volume", () => {
-    const dir = writeBackup("private-export-volume", {
-      name: "private-export-volume",
-      createdAt: new Date().toISOString(),
-      services: [
-        {
-          id: "app-api",
-          version: "1.0.0",
-          volumes: [
-            {
-              name: "openmapx-subject-exports",
-              resolvedName: "openmapx_openmapx-subject-exports",
-              mode: "tar",
-              file: "private.tar.gz",
-              sizeBytes: 0,
-            },
-          ],
-        },
-      ],
-    });
-    writeBackupFiles(dir, { "private.tar.gz": "tar" });
-
-    expect(() => preflightRestore({ rootDir: tmp, name: "private-export-volume" })).toThrow(
-      /subject-export.*must not be restored/i,
-    );
   });
 });
 

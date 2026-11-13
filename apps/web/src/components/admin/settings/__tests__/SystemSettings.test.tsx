@@ -139,11 +139,11 @@ describe("SystemSettings focused sections", () => {
       },
       {
         group: "legal",
-        key: "legalExportArtifactRetentionHours",
-        label: "Artifact retention",
+        key: "legalDsarCaseRetentionDays",
+        label: "Case retention",
         type: "number",
         secret: false,
-        value: 168,
+        value: 1095,
         source: "default",
         envOverride: false,
       },
@@ -169,7 +169,7 @@ describe("SystemSettings focused sections", () => {
 
     await screen.findByRole("heading", { name: /Operator details/ });
     expect(screen.getByLabelText("Controller name")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Artifact retention")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Case retention")).not.toBeInTheDocument();
   });
 
   it("blocks saving malformed JSON source declarations", async () => {

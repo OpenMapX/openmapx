@@ -144,17 +144,12 @@ export function emailOtpEmail(
 
 export type PrivacyNotificationTemplate =
   | "acknowledgement"
-  | "clarification"
+  | "waiting_on_requester"
   | "extension"
-  | "ready"
-  | "delivered"
-  | "closed"
+  | "completed"
   | "refused"
-  | "escalation_due_soon"
-  | "escalation_overdue"
-  | "escalation_identity"
-  | "escalation_extension"
-  | "escalation_stuck";
+  | "admin_new_request"
+  | "admin_deadline";
 
 /**
  * Static, purpose-limited case notifications.  These messages deliberately
@@ -177,46 +172,20 @@ export function privacyRequestEmail(
   const t = createTranslator(locale, "privacyExport.email");
   const subject = t(`templates.${template}.subject`);
   const description = t(`templates.${template}.description`);
-  const continuation = t("continue");
-  const unexpected = t("unexpected");
+  // Administrator alerts point to the privacy queue; subject messages point
+  // to the account settings and explain what to do if the request is unknown.
+  const admin = template === "admin_new_request" || template === "admin_deadline";
+  const continuation = t(admin ? "adminContinue" : "continue");
+  const closing = admin ? [] : [t("unexpected")];
   return {
     subject: `${subject} — OpenMapX`,
-    text: `${subject}\n\n${description}\n\n${continuation}\n\n${unexpected}`,
+    text: [subject, description, continuation, ...closing].join("\n\n"),
     html: layout(
       heading(escapeHtml(subject)) +
         paragraph(escapeHtml(description)) +
         paragraph(escapeHtml(continuation)) +
-        paragraph(escapeHtml(unexpected)),
+        closing.map((line) => paragraph(escapeHtml(line))).join(""),
       locale,
-      escapeHtml(t("footer")),
-    ),
-  };
-}
-
-/** A short-lived identity code rendered from the same ICU catalogues as the
- * web application. The message contains no case identifier or URL. */
-export function privacyIdentityChallengeEmail(
-  code: string,
-  locale: string = defaultLocale,
-  expiresInMinutes = 10,
-): { subject: string; text: string; html: string } {
-  if (!/^\d{6}$/.test(code)) throw new Error("invalid privacy identity code");
-  if (!Number.isSafeInteger(expiresInMinutes) || expiresInMinutes < 1 || expiresInMinutes > 60)
-    throw new Error("invalid privacy identity expiry");
-  const resolvedLocale = resolveLocale(locale);
-  const t = createTranslator(resolvedLocale, "privacyExport.identityChallenge");
-  const subject = t("subject");
-  const description = t("description", { minutes: expiresInMinutes });
-  const unexpected = t("unexpected");
-  return {
-    subject: `${subject} — OpenMapX`,
-    text: `${subject}\n\n${description}\n\n${code}\n\n${unexpected}`,
-    html: layout(
-      heading(escapeHtml(subject)) +
-        paragraph(escapeHtml(description)) +
-        otpBlock(code) +
-        paragraph(escapeHtml(unexpected)),
-      resolvedLocale,
       escapeHtml(t("footer")),
     ),
   };

@@ -46,11 +46,6 @@ export const DIRECT_USER_FK_CLASSIFICATIONS: Record<string, string> = {
   "two_factor.user_id": "auth-two-factor",
   "data_subject_request.user_id": "privacy-case-records",
   "data_subject_request.actor_user_id": "privacy-case-records",
-  "data_export_reauthentication.user_id": "privacy-case-records",
-  "data_export_reauthentication.initiating_admin_user_id": "privacy-case-records",
-  "data_subject_request_task.assigned_to": "privacy-case-records",
-  "data_subject_request_attachment.owner_id": "privacy-case-records",
-  "data_subject_request_identity.verified_by": "privacy-case-records",
   "data_subject_request_notification.recipient_user_id": "privacy-case-records",
   "session_auth_assurance.user_id": "auth-sessions",
 };

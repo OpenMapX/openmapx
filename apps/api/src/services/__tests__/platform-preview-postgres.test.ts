@@ -260,18 +260,9 @@ dbDescribe("durable exact platform preview", () => {
       fixture.db,
     );
     const { PrivacyRequestService } = await import("../../privacy/request-service"),
-      { loadMasterKeyRing } = await import("../../privacy/crypto"),
       { dataSubjectRequestPreservation } = await import("../../db/schema"),
       { releasePreservation } = await import("../../privacy/preservation");
-    const service = new PrivacyRequestService({
-        database: fixture.db,
-        keyRing: loadMasterKeyRing({
-          env: {
-            NODE_ENV: "development",
-            OPENMAPX_EXPORTS_KEY: Buffer.alloc(32, 9).toString("base64url"),
-          },
-        }),
-      }),
+    const service = new PrivacyRequestService({ database: fixture.db }),
       request = await service.create({
         userId: actorId,
         kind: "access",
@@ -347,19 +338,10 @@ dbDescribe("durable exact platform preview", () => {
       })
       .where(eq(platformConfigurationPreview.id, value.previewId));
     const { PrivacyRequestService } = await import("../../privacy/request-service"),
-      { loadMasterKeyRing } = await import("../../privacy/crypto"),
       { dataSubjectRequestPreservation } = await import("../../db/schema"),
       { releasePreservation } = await import("../../privacy/preservation"),
       { pruneCompletedJobs } = await import("../activity-retention");
-    const service = new PrivacyRequestService({
-        database: fixture.db,
-        keyRing: loadMasterKeyRing({
-          env: {
-            NODE_ENV: "development",
-            OPENMAPX_EXPORTS_KEY: Buffer.alloc(32, 9).toString("base64url"),
-          },
-        }),
-      }),
+    const service = new PrivacyRequestService({ database: fixture.db }),
       request = await service.create({
         userId: actorId,
         kind: "access",

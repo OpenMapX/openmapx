@@ -105,3 +105,33 @@ export async function createFileSink(filename: string): Promise<DownloadSink> {
     abort,
   };
 }
+
+/** Collect the bytes in memory and hand them to the browser as one download
+ * when they are complete. Used where no file picker is available. */
+export function createBlobSink(filename: string, mediaType: string): DownloadSink {
+  let chunks: Uint8Array[] = [];
+  return {
+    async write(chunk, signal) {
+      signal.throwIfAborted();
+      chunks.push(chunk.slice());
+    },
+    async close() {
+      const url = URL.createObjectURL(new Blob(chunks as BlobPart[], { type: mediaType }));
+      chunks = [];
+      try {
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = filename;
+        anchor.rel = "noopener";
+        document.body.append(anchor);
+        anchor.click();
+        anchor.remove();
+      } finally {
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      }
+    },
+    async abort() {
+      chunks = [];
+    },
+  };
+}

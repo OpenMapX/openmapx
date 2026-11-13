@@ -41,20 +41,15 @@ export {
   type PlaceDetailsRequestInput,
 } from "./placeDetails";
 export {
-  completePrivacyReauthentication,
-  createPrivacyDataRequest,
+  FRESH_SIGN_IN_REQUIRED,
   getPrivacyDataRequest,
   getPrivacyDataRequests,
-  type PrivacyArtifactView,
   type PrivacyRequestDetail,
   type PrivacyRequestKind,
   type PrivacyRequestState,
   type PrivacyRequestView,
   type PrivacyTaskView,
-  privacyArtifactDownloadUrl,
-  regeneratePrivacyDataRequest,
-  revokePrivacyArtifact,
-  startPrivacyReauthentication,
+  requestPrivacyExport,
   withdrawPrivacyDataRequest,
 } from "./privacy";
 export {

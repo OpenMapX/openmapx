@@ -7,57 +7,39 @@ import { privacyJson, renderPrivacyComponent } from "./privacyTestClient.test-su
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 afterEach(() => vi.unstubAllGlobals());
 describe("operator task actions", () => {
-  it("submits an explicit zero record count as complete without treating assignment as completion", async () => {
+  it("resolves an open operator task with one action and a reason code", async () => {
     const detail = privacyDetail();
-    const writes: unknown[] = [];
+    const writes: Array<{ url: string; body: unknown }> = [];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: unknown, rawInit: unknown) => {
         const init = rawInit as RequestInit | undefined;
-        if (String(url).includes("/operators?"))
-          return privacyJson({
-            operators: [{ id: "synthetic-worker", name: "Caseworker" }],
-            nextCursor: null,
-          });
-        writes.push(JSON.parse(String(init?.body)));
-        return privacyJson({ ok: true });
+        writes.push({ url: String(url), body: JSON.parse(String(init?.body)) });
+        return privacyJson({ request: detail.request });
       }),
     );
     renderPrivacyComponent(detail, (client) => (
       <PrivacyTaskActions detail={detail} client={client} />
     ));
-    fireEvent.mouseDown(screen.getByLabelText("privacyAdmin.workflows.taskDecision"));
-    fireEvent.click(
-      await screen.findByRole("option", { name: "privacyAdmin.workflows.taskStates.complete" }),
-    );
-    const button = screen.getByRole("button", {
-      name: "privacyAdmin.workflows.recordTaskDecision",
-    });
+    const button = screen.getByRole("button", { name: "privacyAdmin.workflows.resolveTask" });
     expect(button).toBeDisabled();
-    fireEvent.change(screen.getByLabelText("privacyAdmin.workflows.recordCount"), {
-      target: { value: "0" },
+    fireEvent.change(screen.getByLabelText("privacyAdmin.workflows.reasonCode"), {
+      target: { value: "logs-checked" },
     });
     fireEvent.click(button);
-    await waitFor(() =>
-      expect(writes).toEqual([{ version: 3, status: "complete", recordCount: 0 }]),
-    );
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]?.url).toMatch(/\/tasks\/[0-9a-f-]+\/resolution$/);
+    expect(writes[0]?.body).toEqual({ version: 3, reasonCode: "logs-checked" });
   });
-  it("fails closed when server actions deny collector completion", () => {
+
+  it("offers no action for a resolved task", () => {
     const detail = privacyDetail();
-    detail.tasks[0]!.actions = [];
-    detail.tasks[0]!.status = "running";
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => privacyJson({ operators: [], nextCursor: null })),
-    );
+    detail.tasks[0]!.status = "resolved";
+    detail.tasks[0]!.resolutionCode = "logs-checked";
     renderPrivacyComponent(detail, (client) => (
       <PrivacyTaskActions detail={detail} client={client} />
     ));
-    fireEvent.change(screen.getByLabelText("privacyAdmin.workflows.reasonCode"), {
-      target: { value: "scope-reviewed" },
-    });
-    expect(
-      screen.getByRole("button", { name: "privacyAdmin.workflows.recordTaskDecision" }),
-    ).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "privacyAdmin.workflows.resolveTask" })).toBeNull();
+    expect(screen.getByText(/logs-checked/)).toBeInTheDocument();
   });
 });

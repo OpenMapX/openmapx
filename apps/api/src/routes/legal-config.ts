@@ -63,18 +63,6 @@ export const legalConfigRoute: FastifyPluginAsync = async (fastify) => {
       dataRequestEmail:
         asString(values.legalDataRequestEmail) || asString(values.legalControllerEmail),
       dsarCaseRetentionDays: boundedNumber(values.legalDsarCaseRetentionDays, 1095, 30, 3650),
-      identityEvidenceRetentionDays: boundedNumber(
-        values.legalIdentityEvidenceRetentionDays,
-        30,
-        1,
-        365,
-      ),
-      exportArtifactRetentionHours: boundedNumber(
-        values.legalExportArtifactRetentionHours,
-        168,
-        24,
-        720,
-      ),
       deploymentJurisdiction: asString(values.legalDeploymentJurisdiction),
       privacySources: safePrivacySources(values.legalPrivacySources),
       // Platform backup retention, validated when the API starts.
