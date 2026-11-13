@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 const integration = describe.runIf(process.env.OPENMAPX_RUN_DATABASE_TESTS === "1");
 const repoRoot = join(import.meta.dirname, "..", "..", "..", "..", "..");
 const MIGRATIONS = join(import.meta.dirname, "..", "migrations");
+const TRAFFIC_FLOW = join(import.meta.dirname, "fixtures", "openconditions-traffic-flow.sql");
 const { container: manifest } = JSON.parse(
   readFileSync(join(repoRoot, "services", "postgis", "service.json"), "utf8"),
 ) as { container: { image: string; tag: string; digest: string } };
@@ -399,31 +400,31 @@ integration("code planted for another role", () => {
     ).toEqual([{ rolsuper: false }]);
   });
 
-  it("renders a traffic tile as a role without superuser rights or table access", async () => {
-    // OpenConditions installed after PostGIS started, as its own role.
+  it("renders OpenConditions' traffic tile as a read-only role without superuser rights", async () => {
+    // OpenConditions installed after PostGIS started, as its own role, with
+    // its real tile function and the functions and tables it reads.
     await roles.superuser.unsafe(`
       CREATE ROLE openconditions_fixture LOGIN PASSWORD '${passwords.openConditions}';
       GRANT CREATE ON DATABASE openmapx TO openconditions_fixture;
     `);
     const openConditions = connect("openconditions_fixture", passwords.openConditions, db);
     try {
+      await openConditions.unsafe("CREATE SCHEMA conditions");
+      await openConditions.unsafe(readFileSync(TRAFFIC_FLOW, "utf8"));
       await openConditions.unsafe(`
-        CREATE SCHEMA conditions;
-        CREATE TABLE conditions.road_segment (segment_id text, geom geometry(LineString, 4326));
-        CREATE TABLE conditions.segment_speed (segment_id text);
-        CREATE TABLE conditions.source (id text);
-        INSERT INTO conditions.road_segment VALUES
-          ('s1', ST_SetSRID(ST_MakeLine(ST_MakePoint(-1, -1), ST_MakePoint(1, 1)), 4326));
-        -- Like OpenConditions' own: invoker's rights, PostGIS called unqualified.
-        CREATE FUNCTION conditions.segment_flow(z integer, x integer, y integer, query_params json)
-          RETURNS bytea LANGUAGE plpgsql STABLE AS $$
-          DECLARE bounds geometry := ST_TileEnvelope(z, x, y); n integer;
-          BEGIN
-            SELECT count(*) INTO n FROM conditions.road_segment s
-              WHERE s.geom && ST_Transform(bounds, 4326);
-            RETURN convert_to(concat_ws(' ', current_user,
-              (SELECT rolsuper FROM pg_roles WHERE rolname = current_user), n), 'UTF8');
-          END $$;
+        INSERT INTO conditions.road_segment
+          (segment_id, way_id, dir, geom, highway, length_m, min_zoom, computed_at)
+        VALUES ('s1', 1, 'f', ST_SetSRID(ST_MakeLine(ST_MakePoint(-1, -1), ST_MakePoint(1, 1)), 4326),
+          'primary', 300, 0, now());
+        INSERT INTO conditions.source
+          (id, domain, format, product, access_mode, tier, operator, license, attribution,
+           cadence_sec, freshness_window_sec)
+        VALUES ('open', 'traffic', 'json', 'flow', 'open', 'a', 'Fixture', 'ODbL-1.0', 'Fixture', 60, 600);
+        INSERT INTO conditions.segment_speed
+          (segment_id, current_kph, free_flow_kph, speed_ratio, los, confidence, contributing,
+           permission_licenses, updated_at)
+        VALUES ('s1', 30, 50, 0.6, 'moderate', 'high', ARRAY['open'], ARRAY['ODbL-1.0'], now());
+        INSERT INTO conditions.public_license_policy VALUES ('ODbL-1.0');
       `);
     } finally {
       await openConditions.end();
@@ -431,8 +432,8 @@ integration("code planted for another role", () => {
     const tile = async () => {
       const martin = connect("openmapx_tiles", passwords.tiles, db);
       try {
-        const [row] = await martin<{ tile: string }[]>`
-          SELECT convert_from(tiles.segment_flow(0, 0, 0, '{}'), 'UTF8') AS tile`;
+        const [row] = await martin<{ tile: Buffer }[]>`
+          SELECT tiles.segment_flow(0, 0, 0, '{}') AS tile`;
         return row?.tile;
       } finally {
         await martin.end();
@@ -442,32 +443,40 @@ integration("code planted for another role", () => {
     // visibly and nothing runs with more rights.
     await permissionDenied(tile());
     await restart();
-    expect(await tile()).toBe("openmapx_tiles_owner f 1");
+    const [direct] = await roles.superuser<{ tile: Buffer }[]>`
+      SELECT conditions.segment_flow(0, 0, 0, '{}') AS tile`;
+    expect(direct?.tile.includes("speed_ratio")).toBe(true);
+    expect(await tile()).toEqual(direct?.tile);
+    expect(
+      await roles.superuser`
+        SELECT pg_get_userbyid(p.proowner) AS owner, p.prosecdef AS definer, r.rolsuper AS superuser,
+          has_table_privilege('openmapx_tiles_owner', 'conditions.segment_speed', 'INSERT') AS writes
+        FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner
+        WHERE p.oid = 'tiles.segment_flow(integer, integer, integer, json)'::regprocedure`,
+    ).toEqual([{ owner: "openmapx_tiles_owner", definer: true, superuser: false, writes: false }]);
     const martin = connect("openmapx_tiles", passwords.tiles, db);
     try {
-      // PostGIS's coordinate-system catalogue, spatial_ref_sys, stays readable by
-      // every role: PostGIS reads it for each transformation.
       for (const table of ["conditions.road_segment", "conditions.source", 'public."user"'])
         await permissionDenied(martin.unsafe(`SELECT 1 FROM ${table} LIMIT 1`));
     } finally {
       await martin.end();
     }
-    // An overload in public, planted past the role guard, runs with the tile
-    // role's rights at most.
-    await roles.superuser.unsafe(`
+    // The API can put a PostGIS overload in the public schema it owns, which
+    // the tile function resolves: it runs as the tile owner, never as the
+    // superuser.
+    await roles.api.unsafe(`
       CREATE FUNCTION public.st_tileenvelope(z integer, x integer, y integer) RETURNS geometry
         LANGUAGE plpgsql AS $$
         BEGIN
           EXECUTE 'ALTER ROLE openmapx_api SUPERUSER';
           RETURN ST_MakeEnvelope(-180, -90, 180, 90, 4326);
         END $$;
-      ALTER FUNCTION public.st_tileenvelope(integer, integer, integer) OWNER TO openmapx_api;
     `);
     await tile().catch(() => undefined);
     expect(
       await roles.superuser`SELECT rolsuper FROM pg_roles WHERE rolname = 'openmapx_api'`,
     ).toEqual([{ rolsuper: false }]);
-    await roles.superuser.unsafe("DROP FUNCTION public.st_tileenvelope(integer, integer, integer)");
+    await roles.api.unsafe("DROP FUNCTION public.st_tileenvelope(integer, integer, integer)");
   }, 180_000);
 
   it("restores a backup with every owner, grant and guard intact", async () => {
@@ -573,6 +582,7 @@ integration("code planted for another role", () => {
       "data openmapx_api",
       "data openmapx_data_manager",
       "data superuser",
+      "post-data openconditions_fixture",
       "post-data openmapx_api",
       "post-data openmapx_data_manager",
       "post-data superuser",

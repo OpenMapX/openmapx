@@ -351,15 +351,15 @@ echo "[openmapx-postgis] database roles ${API_ROLE} and ${DATA_MANAGER_ROLE} rea
 # The tile server's login, and the role its functions run as. Martin may only
 # call the functions in the `tiles` schema, so its role reads no table. Each
 # function runs as `openmapx_tiles_owner`, which cannot log in, is no
-# superuser and holds only what rendering a tile needs, so the code a tile
-# reaches, OpenConditions' among it, never runs with more rights than that.
-# The traffic-flow function calls OpenConditions' `conditions.segment_flow`,
-# which reads three of its tables and calls PostGIS unqualified, hence
-# `public` on the search path. Neither the API nor data-manager can put a
-# function there that such a call resolves to, nor create `tiles` or
-# `conditions` (see the event triggers above). The function can be created
-# before OpenConditions is installed; PostGIS grants the owner role read
-# access to those tables on every start, and a restore keeps the grants.
+# superuser and only reads, so the code a tile reaches, OpenConditions' among
+# it, never runs with more rights than that. The traffic-flow function calls
+# OpenConditions' `conditions.segment_flow`, which reads OpenConditions'
+# tables through its own helper functions and calls PostGIS unqualified,
+# hence `public` on the search path. PostGIS grants the owner role read
+# access to every table in `conditions` on each start, so a tile keeps working
+# when OpenConditions' functions read another of its tables; a restore keeps
+# the grants. OpenConditions installed after PostGIS started needs a PostGIS
+# restart, and until then tiles fail with a permission error.
 # Without MARTIN_DB_PASSWORD the tile server cannot log in.
 TILES_ROLE="openmapx_tiles"
 TILES_OWNER="openmapx_tiles_owner"
@@ -395,9 +395,8 @@ GRANT EXECUTE ON FUNCTION tiles.segment_flow(integer, integer, integer, json) TO
 SELECT 'GRANT USAGE ON SCHEMA conditions TO ${TILES_OWNER}'
   WHERE EXISTS (SELECT FROM pg_namespace WHERE nspname = 'conditions')
 \gexec
-SELECT format('GRANT SELECT ON TABLE %s TO ${TILES_OWNER}', c.oid::regclass)
-  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-  WHERE n.nspname = 'conditions' AND c.relname IN ('road_segment', 'segment_speed', 'source')
+SELECT 'GRANT SELECT ON ALL TABLES IN SCHEMA conditions TO ${TILES_OWNER}'
+  WHERE EXISTS (SELECT FROM pg_namespace WHERE nspname = 'conditions')
 \gexec
 SELECT 'GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA conditions TO ${TILES_OWNER}'
   WHERE EXISTS (SELECT FROM pg_namespace WHERE nspname = 'conditions')

@@ -301,6 +301,9 @@ describe("PostGIS entrypoint child ownership", () => {
         "ALTER FUNCTION tiles.segment_flow(integer, integer, integer, json) OWNER TO openmapx_tiles_owner;",
       );
       expect(f.read("tile-sync-sql")).toContain("SET search_path = pg_catalog, public, pg_temp");
+      expect(f.read("tile-sync-sql")).toContain(
+        "GRANT SELECT ON ALL TABLES IN SCHEMA conditions TO openmapx_tiles_owner",
+      );
       f.mark("exit-now");
       expect(await f.finished).toEqual({ code: 0, childExited: true, synced: true });
     });

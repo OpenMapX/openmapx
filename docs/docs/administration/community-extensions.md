@@ -512,12 +512,13 @@ installation does not prove that their database and feed credentials are valid.
 
    Read each service's setup guide for the schemas and tables it uses, and
    grant no more. Martin's traffic tiles call `conditions.segment_flow` as
-   `openmapx_tiles_owner`, which PostGIS grants read access to the tables that
-   function uses when it starts; after installing or upgrading OpenConditions,
+   `openmapx_tiles_owner`, which PostGIS grants read access to every table in
+   `conditions` when it starts; after installing or upgrading OpenConditions,
    restart PostGIS or run the grants in
    [Martin overlays](../guides/map-tiles.md#martin-overlays). The roles live
    outside the database, so a backup restore keeps their grants only while the
-   roles still exist.
+   roles still exist. A restore recreates each service's objects in a session
+   of the role that owns them, so those roles must also be able to log in.
 
 3. Set non-secret options in **Configuration**, or use
    `SERVICE_OPENCONDITIONS_INGEST_<KEY>` and

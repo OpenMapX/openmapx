@@ -252,26 +252,38 @@ curl -sf http://localhost:3002/health
 ```
 
 The functions in `tiles` run as `openmapx_tiles_owner`, a role that cannot log
-in, is no superuser and may read only what a tile needs. The traffic-flow
-function calls OpenConditions' `conditions.segment_flow`, which reads
-`conditions.road_segment`, `conditions.segment_speed` and `conditions.source`.
-PostGIS grants `openmapx_tiles_owner` read access to those tables and the use of
-the `conditions` functions each time it starts, and a backup restore keeps the
-grants. After installing or upgrading OpenConditions, restart PostGIS, or run
-as the superuser:
+in, is no superuser and only reads. The traffic-flow function calls
+OpenConditions' `conditions.segment_flow`, which reads OpenConditions' tables
+through OpenConditions' own helper functions. PostGIS grants
+`openmapx_tiles_owner` read access to every table in `conditions`, and the use
+of its functions, each time it starts, and a backup restore keeps the grants.
+The whole schema is granted so that tiles keep working when an OpenConditions
+release reads another of its tables; the role never writes. After installing or
+upgrading OpenConditions, restart PostGIS, or run as the superuser:
 
 ```sql
 GRANT USAGE ON SCHEMA conditions TO openmapx_tiles_owner;
-GRANT SELECT ON conditions.road_segment, conditions.segment_speed, conditions.source
-  TO openmapx_tiles_owner;
+GRANT SELECT ON ALL TABLES IN SCHEMA conditions TO openmapx_tiles_owner;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA conditions TO openmapx_tiles_owner;
 ```
 
 Until then a traffic tile request fails with `permission denied for schema
 conditions` (or for one of its tables) in Martin's log, and no code runs with
-more rights. No role but the superuser can create the `tiles` or `conditions`
-schemas' functions that a tile calls, or a function in `public` that the
-tile's PostGIS calls could resolve to: see
+more rights.
+
+PostGIS grants every role read access to its own catalogue tables:
+`spatial_ref_sys`, `geometry_columns`, `geography_columns`, `topology.topology`
+and `topology.layer`. The tile roles can read them as well.
+
+Only the superuser can create or replace the functions in `tiles`, and only
+the superuser and the owner of `conditions` those in `conditions`. Until
+OpenConditions creates `conditions`, any role with `CREATE` on the database
+other than the API's and data-manager's could create it, so grant that right
+only to the services that need it. The tile functions call PostGIS without a
+schema, through `public`, which the API's role owns: a compromised API could
+add a PostGIS function there that a tile calls instead. It would run as
+`openmapx_tiles_owner`, never as the superuser, so it could read what that role
+reads or break the traffic tiles. See
 [Database roles](../install/configuration.md#database-roles).
 
 Martin is independent of TileServer GL. Most deployments that only need a
