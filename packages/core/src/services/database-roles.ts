@@ -167,9 +167,11 @@ export function planOwnerRestore(
   // when the scripts run; refuse an archive where that is not so. Grants,
   // comments and collations run nothing.
   const definitions = entries(listings.preData);
-  const lastExtension = definitions.findLastIndex(({ description }) =>
-    description.startsWith("EXTENSION "),
-  );
+  // The extension CLI compiles this file for ES2022, without findLastIndex.
+  let lastExtension = -1;
+  definitions.forEach(({ description }, index) => {
+    if (description.startsWith("EXTENSION ")) lastExtension = index;
+  });
   for (const { description, owner, role } of definitions.slice(0, Math.max(lastExtension, 0)))
     if (role !== null && !/^(ACL|COMMENT|COLLATION|SECURITY LABEL) /.test(description))
       throw new Error(
