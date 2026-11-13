@@ -64,9 +64,20 @@ function extractBearerToken(req: FastifyRequest): string | null {
  * frequently re-resolves session cookies for every probe and that's wasted
  * latency for service-to-service calls.
  */
+/** The API's own data-manager token, or none when its file cannot be read. */
+function serviceToken(): string {
+  try {
+    return readDataManagerToken();
+  } catch {
+    return "";
+  }
+}
+
 async function resolveDataManagerAuthentication(req: FastifyRequest): Promise<AuthResult> {
   const presented = extractBearerToken(req);
-  const expected = readDataManagerToken();
+  // A missing or unreadable token file only rules out the service caller;
+  // an administrator's session still authenticates.
+  const expected = presented ? serviceToken() : "";
   if (presented && expected && safeEqual(presented, expected)) {
     return { kind: "token", userId: "service" };
   }
