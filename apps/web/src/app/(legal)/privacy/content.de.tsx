@@ -53,6 +53,8 @@ export default function PrivacyContentDe({
     ? legal.supervisoryAuthorityUrl
     : supervisoryAuthorityUrlEnv;
   const serverLogRetentionDays = legal ? legal.serverLogRetentionDays : serverLogRetentionDaysEnv;
+  // Backup retention is a platform setting only app-api reports.
+  const backupRetentionDays = legal ? legal.backupRetentionDays : null;
   const T = privacyTitles("de");
 
   return (
@@ -67,7 +69,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 4. November 2026
+        Zuletzt aktualisiert: 13. November 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -1300,12 +1302,16 @@ export default function PrivacyContentDe({
           </li>
           <li>
             <Typography>
-              <strong>Sicherungskopien</strong> &mdash; Konto- und synchronisierte Inhalte, die bei
-              Erstellung einer Datenbanksicherung vorhanden waren, k&ouml;nnen bis zum Ablauf der
-              konfigurierten Aufbewahrungsfrist (standardm&auml;&szlig;ig 30 Tage) darin verbleiben.
-              Das L&ouml;schen von Live-Daten schreibt Archive nicht um; bei einer Wiederherstellung
-              wird ein pseudonymes L&ouml;schjournal abgespielt, damit gel&ouml;schte Konten nicht
-              zur&uuml;ckkehren.
+              <strong>Sicherungskopien</strong> &mdash;{" "}
+              {backupRetentionDays !== null
+                ? `Sicherungen werden gemäß der eingestellten Aufbewahrung bis zu ${backupRetentionDays} Tage aufbewahrt`
+                : "Sicherungen werden für die vom Betreiber eingestellte Aufbewahrungsfrist (standardmäßig 30 Tage) aufbewahrt"}{" "}
+              und ausschlie&szlig;lich zur Wiederherstellung nach einem Ausfall verwendet, nicht
+              f&uuml;r andere Verarbeitungen. K&uuml;rzlich gel&ouml;schte oder ge&auml;nderte Daten
+              k&ouml;nnen bis zum Ablauf der Sicherungen darin verbleiben: Das L&ouml;schen von
+              Live-Daten schreibt eine Sicherung nicht um. Bei einer Wiederherstellung wird ein
+              pseudonymes L&ouml;schjournal abgespielt, sodass gel&ouml;schte Konten gel&ouml;scht
+              bleiben. Fragen zu Ihren Daten in Sicherungen richten Sie an {email}.
             </Typography>
           </li>
           <li>

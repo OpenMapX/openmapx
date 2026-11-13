@@ -26,6 +26,8 @@ export interface PublicLegalConfig {
   exportArtifactRetentionHours: number;
   deploymentJurisdiction: string;
   privacySources: Array<Omit<PrivacySource, "contactCode" | "instructionsCode">>;
+  /** Days backups are kept under the configured platform retention (defaults to 30). */
+  backupRetentionDays: number;
 }
 
 const asString = (v: unknown): string => (typeof v === "string" ? v : "");
@@ -67,6 +69,7 @@ export async function fetchLegalConfig(): Promise<PublicLegalConfig | null> {
       exportArtifactRetentionHours: boundedNumber(data.exportArtifactRetentionHours, 168, 24, 720),
       deploymentJurisdiction: asString(data.deploymentJurisdiction),
       privacySources: Array.isArray(data.privacySources) ? data.privacySources : [],
+      backupRetentionDays: boundedNumber(data.backupRetentionDays, 30, 1, 36_500),
     };
   } catch {
     return null;

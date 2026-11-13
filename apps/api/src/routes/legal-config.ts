@@ -1,4 +1,5 @@
 import { type PrivacySource, privacySourceSchema } from "@openmapx/core/privacy";
+import { envString } from "@openmapx/core/server-env";
 import type { FastifyPluginAsync } from "fastify";
 import { resolveSettings } from "../services/settings";
 import { declareRouteAuth } from "../utils/route-auth";
@@ -76,6 +77,8 @@ export const legalConfigRoute: FastifyPluginAsync = async (fastify) => {
       ),
       deploymentJurisdiction: asString(values.legalDeploymentJurisdiction),
       privacySources: safePrivacySources(values.legalPrivacySources),
+      // Platform backup retention, validated when the API starts.
+      backupRetentionDays: boundedNumber(envString("BACKUP_RETENTION_DAYS", "30"), 30, 1, 36_500),
     });
   });
 };

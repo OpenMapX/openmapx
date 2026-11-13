@@ -47,6 +47,7 @@ const responseContext: PrivacyResponseContext = {
     dsarCaseRetentionDays: 1095,
     identityEvidenceRetentionDays: 30,
     exportArtifactRetentionHours: 168,
+    backupRetentionDays: 30,
   },
   reviewContact: "privacy@example.test (case r)",
   recipientSummary: {

@@ -234,6 +234,7 @@ const ARCHIVE_SCHEMAS: ReadonlyArray<{
         "reviewContact",
         "recipientSummary",
         "translationFallbacks",
+        "shortLivedCategories",
         "sources",
       ],
       properties: {
@@ -246,6 +247,7 @@ const ARCHIVE_SCHEMAS: ReadonlyArray<{
         reviewContact: { type: "string" },
         recipientSummary: { type: ["object", "null"] },
         translationFallbacks: { type: "array", items: { type: "object" } },
+        shortLivedCategories: { type: "array", items: { type: "string" } },
         sources: {
           type: "array",
           items: {

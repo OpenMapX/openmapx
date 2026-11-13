@@ -18,12 +18,44 @@ beforeEach(() => {
     "LEGAL_DSAR_CASE_RETENTION_DAYS",
     "LEGAL_IDENTITY_EVIDENCE_RETENTION_DAYS",
     "LEGAL_EXPORT_ARTIFACT_RETENTION_HOURS",
+    "BACKUP_RETENTION_DAYS",
   ])
     vi.stubEnv(name, undefined);
 });
 afterEach(() => vi.unstubAllEnvs());
 
+const persistedFacts = () =>
+  ({
+    select: () => ({
+      from: async () => [
+        { key: "legalControllerName", value: "Controller" },
+        { key: "legalControllerStreet", value: "Street 1" },
+        { key: "legalControllerPostalCode", value: "10115" },
+        { key: "legalControllerCity", value: "Berlin" },
+        { key: "legalControllerCountry", value: "Germany" },
+        { key: "legalControllerEmail", value: "legal@example.test" },
+        { key: "legalDeploymentJurisdiction", value: "DE-BE" },
+        { key: "legalSupervisoryAuthority", value: "Berlin DPA" },
+        { key: "legalPrivacySources", value: [] },
+      ],
+    }),
+  }) as never;
+
 describe("privacy report legal facts", () => {
+  it("reports the configured backup retention, defaulting to 30 days", async () => {
+    await expect(resolvePrivacyReportLegalFacts(persistedFacts())).resolves.toMatchObject({
+      deployment: { backupRetentionDays: 30 },
+    });
+    vi.stubEnv("BACKUP_RETENTION_DAYS", "14");
+    await expect(resolvePrivacyReportLegalFacts(persistedFacts())).resolves.toMatchObject({
+      deployment: { backupRetentionDays: 14 },
+    });
+    vi.stubEnv("BACKUP_RETENTION_DAYS", "0");
+    await expect(resolvePrivacyReportLegalFacts(persistedFacts())).rejects.toThrow(
+      "BACKUP_RETENTION_DAYS",
+    );
+  });
+
   it("uses persisted controller facts when deployment env is unset", async () => {
     const database = {
       select: () => ({

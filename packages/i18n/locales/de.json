@@ -3858,6 +3858,11 @@
         "security-retention": "Sicherheitsaufbewahrungsfrist"
       },
       "snapshotLimitations": "Die Antwort gibt die zum genannten Stichtag verfügbaren Quellen des Verantwortlichen und seiner Auftragsverarbeiter wieder. Spätere Änderungen sowie nicht verfügbare oder abgelaufene Quellen werden unten ausgewiesen.",
+      "shortLivedHeading": "Kurzlebige Daten",
+      "shortLivedIntro": "Die folgenden Kategorien werden nur kurz aufbewahrt. Einträge, die vor der Erhebung nach ihrer Aufbewahrungsfrist abgelaufen sind, konnten in diese Auskunft nicht aufgenommen werden:",
+      "shortLivedRow": "- {category} ({id}): {retention}",
+      "backupHeading": "Sicherungen",
+      "backupStatement": "Sicherungen werden gemäß der eingestellten Aufbewahrung bis zu {days, plural, one {# Tag} other {# Tage}} aufbewahrt und ausschließlich zur Wiederherstellung nach einem Ausfall verwendet, nicht für andere Verarbeitungen. Kürzlich gelöschte oder geänderte Daten können bis zum Ablauf der Sicherungen darin verbleiben. Bei einer Wiederherstellung wird das Löschjournal erneut angewendet, sodass gelöschte Konten gelöscht bleiben. Fragen zu Ihren Daten in Sicherungen richten Sie an {contact}.",
       "sourcesHeading": "Verarbeitungskategorien, Quellen und Einschränkungen",
       "sourceRow": "{id} — {category}; Ergebnis: {outcome}; Datensätze: {count}; erfasst: {capturedAt}; Zwecke: {purposes}; Rechtsgrundlagen: {legalBases}; Herkunft: {origin}; Aufbewahrungsregel und Auslöser: {retention}.",
       "sourcePolicy": "Verarbeitungszweck: {purpose}. Quelle: {source}. Sichere Darstellung: {safeRepresentation}. Übertragbarkeit: {portability}. Rechte anderer: {rightsOfOthers}.",

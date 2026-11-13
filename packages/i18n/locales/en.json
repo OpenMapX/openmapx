@@ -3858,6 +3858,11 @@
         "security-retention": "security retention period"
       },
       "snapshotLimitations": "The response reflects controller and instructed-processor sources available at the stated snapshot cutoff. Later changes and unavailable or expired sources are identified below.",
+      "shortLivedHeading": "Short-lived data",
+      "shortLivedIntro": "The following categories are kept only briefly. Records that expired under their retention period before collection could not be included in this response:",
+      "shortLivedRow": "- {category} ({id}): {retention}",
+      "backupHeading": "Backups",
+      "backupStatement": "Backups are kept for up to {days, plural, one {# day} other {# days}} under the configured retention and are used only to recover from failure, not for any other processing. Data deleted or changed recently may remain in backups until they expire. A restore replays the erasure journal, so deleted accounts stay deleted. To ask about your data in backups, contact {contact}.",
       "sourcesHeading": "Processing categories, sources and limitations",
       "sourceRow": "{id} — {category}; outcome: {outcome}; records: {count}; captured: {capturedAt}; purposes: {purposes}; legal bases: {legalBases}; origin: {origin}; retention rule and trigger: {retention}.",
       "sourcePolicy": "Processing purpose: {purpose}. Source: {source}. Safe representation: {safeRepresentation}. Portability: {portability}. Rights of others: {rightsOfOthers}.",

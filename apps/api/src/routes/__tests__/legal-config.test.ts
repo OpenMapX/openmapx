@@ -58,6 +58,7 @@ beforeEach(() => {
     "LEGAL_EXPORT_ARTIFACT_RETENTION_HOURS",
     "LEGAL_DEPLOYMENT_JURISDICTION",
     "LEGAL_PRIVACY_SOURCES",
+    "BACKUP_RETENTION_DAYS",
   ])
     vi.stubEnv(key, undefined);
 });
@@ -89,6 +90,7 @@ describe("GET /legal-config", () => {
       exportArtifactRetentionHours: 168,
       deploymentJurisdiction: "",
       privacySources: [],
+      backupRetentionDays: 30,
     });
   });
 
@@ -127,6 +129,7 @@ describe("GET /legal-config", () => {
       exportArtifactRetentionHours: 168,
       deploymentJurisdiction: "",
       privacySources: [],
+      backupRetentionDays: 30,
     });
   });
 
@@ -201,5 +204,11 @@ describe("GET /legal-config", () => {
     vi.stubEnv("LEGAL_SERVER_LOG_RETENTION_DAYS", "7");
     const res = await app.inject({ method: "GET", url: "/legal-config" });
     expect(res.json().serverLogRetentionDays).toBe(7);
+  });
+
+  it("publishes the configured backup retention for the privacy page", async () => {
+    vi.stubEnv("BACKUP_RETENTION_DAYS", "14");
+    const res = await app.inject({ method: "GET", url: "/legal-config" });
+    expect(res.json().backupRetentionDays).toBe(14);
   });
 });
