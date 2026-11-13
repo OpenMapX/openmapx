@@ -77,15 +77,11 @@ export { mangroveKeypair, mangroveKeypairWrap } from "./mangrove-keypair-schema"
 export { mobileAuthHandoff } from "./mobile-auth-handoff-schema";
 export { platformConfigurationPreview } from "./platform-configuration-preview-schema";
 // Export-download authentication assurance and purpose-bound challenges
-export { dataExportReauthentication, sessionAuthAssurance } from "./privacy-auth-schema";
+export { sessionAuthAssurance } from "./privacy-auth-schema";
 // GDPR subject-access request lifecycle and encrypted artifact metadata
 export {
-  dataExportArtifact,
   dataSubjectRequest,
-  dataSubjectRequestAttachment,
-  dataSubjectRequestEmailChallenge,
   dataSubjectRequestEvent,
-  dataSubjectRequestIdentity,
   dataSubjectRequestNotification,
   dataSubjectRequestPreservation,
   dataSubjectRequestTask,

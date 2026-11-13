@@ -1,127 +1,130 @@
-import { describe, expect, it } from "vitest";
 import {
-  assertAssemblyReady,
-  assertValidRequestTransition,
-  createSubjectRequestSchema,
-  identityReviewSchema,
-  isAssistedDeliveryAuthorized,
+  ACTIVE_REQUEST_STATES,
+  acceptsCaseDecision,
+  acceptsManualIdentityVerification,
+  acceptsSelfServiceExport,
+  acceptsTaskResolution,
+  acceptsWithdrawal,
+  canExtendDeadline,
+  isActiveRequestState,
+  isTerminalRequestState,
   isValidRequestTransition,
-} from "./request-contracts.js";
+  REQUEST_STATES,
+  type RequestState,
+  TERMINAL_REQUEST_STATES,
+} from "@openmapx/core/privacy";
+import { describe, expect, it } from "vitest";
+import { PrivacyRequestError } from "./errors.js";
+import { assertValidRequestTransition, createSubjectRequestSchema } from "./request-contracts.js";
 
-describe("privacy request contracts", () => {
-  it("allows only the documented lifecycle transitions", () => {
-    expect(isValidRequestTransition("received", "preserving")).toBe(true);
-    expect(isValidRequestTransition("received", "ready")).toBe(false);
-    expect(isValidRequestTransition("ready", "withdrawn")).toBe(true);
-    expect(isValidRequestTransition("delivered", "withdrawn")).toBe(false);
-    expect(() => assertValidRequestTransition("ready", "ready")).toThrow();
-    expect(() => assertValidRequestTransition("received", "closed")).toThrow(
-      "Invalid privacy request transition: received -> closed",
+/** The owner-approved table, written out independently of the implementation. */
+const ALLOWED = new Set([
+  "open->in_progress",
+  "open->waiting_on_requester",
+  "open->refused",
+  "in_progress->waiting_on_requester",
+  "in_progress->completed",
+  "in_progress->refused",
+  "waiting_on_requester->in_progress",
+  "waiting_on_requester->refused",
+  "waiting_on_requester->completed",
+]);
+
+const pairs = REQUEST_STATES.flatMap((from) => REQUEST_STATES.map((to) => [from, to] as const));
+
+describe("privacy request transition table", () => {
+  it("has exactly the five request states", () => {
+    expect(REQUEST_STATES).toEqual([
+      "open",
+      "in_progress",
+      "waiting_on_requester",
+      "completed",
+      "refused",
+    ]);
+  });
+
+  it.each(pairs.filter(([from, to]) => ALLOWED.has(`${from}->${to}`)))(
+    "allows %s -> %s",
+    (from, to) => {
+      expect(isValidRequestTransition(from, to)).toBe(true);
+      expect(() => assertValidRequestTransition(from, to)).not.toThrow();
+    },
+  );
+
+  it.each(pairs.filter(([from, to]) => !ALLOWED.has(`${from}->${to}`)))(
+    "refuses %s -> %s with INVALID_TRANSITION (409)",
+    (from, to) => {
+      expect(isValidRequestTransition(from, to)).toBe(false);
+      let error: unknown;
+      try {
+        assertValidRequestTransition(from, to);
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toBeInstanceOf(PrivacyRequestError);
+      expect(error).toMatchObject({ code: "INVALID_TRANSITION", statusCode: 409 });
+    },
+  );
+
+  it("covers every one of the 25 ordered pairs", () => {
+    expect(pairs).toHaveLength(25);
+    expect(pairs.filter(([from, to]) => isValidRequestTransition(from, to))).toHaveLength(
+      ALLOWED.size,
     );
-    expect(() => assertValidRequestTransition("ready", "withdrawn")).not.toThrow();
+  });
+});
+
+describe("named state predicates", () => {
+  const states = (predicate: (state: RequestState) => boolean) =>
+    REQUEST_STATES.filter((state) => predicate(state));
+
+  it("splits the states into active and terminal sets", () => {
+    expect(ACTIVE_REQUEST_STATES).toEqual(["open", "in_progress", "waiting_on_requester"]);
+    expect(TERMINAL_REQUEST_STATES).toEqual(["completed", "refused"]);
+    expect(states(isActiveRequestState)).toEqual([...ACTIVE_REQUEST_STATES]);
+    expect(states(isTerminalRequestState)).toEqual([...TERMINAL_REQUEST_STATES]);
+    for (const state of TERMINAL_REQUEST_STATES)
+      expect(REQUEST_STATES.some((to) => isValidRequestTransition(state, to))).toBe(false);
   });
 
-  it("defaults self-service requests to the combined package", () => {
-    expect(createSubjectRequestSchema.parse({ userId: "u" })).toMatchObject({
-      kind: "access_and_portability",
-      channel: "self_service",
-      locale: "en",
-      timeZone: "UTC",
-    });
+  it("allows case work only on active requests", () => {
+    for (const predicate of [
+      acceptsCaseDecision,
+      canExtendDeadline,
+      acceptsTaskResolution,
+      acceptsSelfServiceExport,
+    ])
+      expect(states(predicate)).toEqual([...ACTIVE_REQUEST_STATES]);
   });
 
-  it("rejects caller-controlled subject locators on self-service requests", () => {
+  it("allows a manual identity check before work starts", () => {
+    expect(states(acceptsManualIdentityVerification)).toEqual(["open", "waiting_on_requester"]);
+  });
+
+  it("allows withdrawal exactly where the table reaches completed", () => {
+    expect(states(acceptsWithdrawal)).toEqual(["in_progress", "waiting_on_requester"]);
+  });
+});
+
+describe("subject request intake", () => {
+  it("requires the account for self-service and a locator for assisted requests", () => {
+    expect(createSubjectRequestSchema.safeParse({ channel: "self_service" }).success).toBe(false);
+    expect(createSubjectRequestSchema.safeParse({ channel: "email" }).success).toBe(false);
     expect(
       createSubjectRequestSchema.safeParse({
-        userId: "authoritative-user",
-        channel: "self_service",
-        subject: {
-          locatorType: "user_id",
-          locator: "different-user",
-          accountState: "current",
-        },
-      }).success,
-    ).toBe(false);
-  });
-
-  it("accepts protected assisted locators without requiring an account", () => {
-    expect(
-      createSubjectRequestSchema.parse({
-        channel: "email",
-        subject: {
-          locatorType: "email",
-          locator: "former-user@example.test",
-          accountState: "deleted",
-        },
-      }),
-    ).toMatchObject({ userId: null, subject: { accountState: "deleted" } });
-  });
-
-  it("requires proportional identity evidence and separate representative authority review", () => {
-    expect(
-      identityReviewSchema.safeParse({ version: 1, party: "subject", outcome: "verified" }).success,
-    ).toBe(false);
-    expect(
-      identityReviewSchema.safeParse({
-        version: 1,
-        party: "subject",
-        outcome: "verified",
-        method: "exceptional_evidence",
-        reasonableDoubtCode: "account-records-conflict",
-        evidenceAttachmentId: "c88e434c-1c1f-40e0-a975-17f4c8f062de",
-      }).success,
-    ).toBe(true);
-    expect(
-      identityReviewSchema.safeParse({
-        version: 1,
-        party: "representative",
-        outcome: "verified",
-        method: "verified_email_challenge",
-        authorityOutcome: "approved",
-        deliveryAuthorized: true,
-      }).success,
-    ).toBe(false);
-    expect(
-      identityReviewSchema.safeParse({
-        version: 2,
-        party: "representative",
-        outcome: "verified",
-        authorityOutcome: "approved",
-        authorityAttachmentId: "c88e434c-1c1f-40e0-a975-17f4c8f062de",
-        deliveryAuthorized: false,
+        channel: "representative",
+        subject: { locatorType: "email", locator: "a@example.test", accountState: "unknown" },
       }).success,
     ).toBe(true);
   });
 
-  it("fails closed for unresolved required tasks", () => {
-    expect(() => assertAssemblyReady([{ required: true, status: "pending" }])).toThrow(
-      "unresolved",
-    );
-    expect(() => assertAssemblyReady([{ required: true, status: "operator_review" }])).toThrow();
-    expect(() => assertAssemblyReady([{ required: false, status: "pending" }])).not.toThrow();
-  });
-
-  it("keeps representative identity, authority, and delivery permission separate", () => {
-    const subject = {
-      party: "subject",
-      state: "verified",
-      authorityState: "not_applicable",
-      deliveryAuthorized: 0,
-    };
-    expect(isAssistedDeliveryAuthorized([subject], "assisted")).toBe(true);
+  it("no longer accepts a representative contact", () => {
     expect(
-      isAssistedDeliveryAuthorized(
-        [
-          subject,
-          {
-            party: "representative",
-            state: "verified",
-            authorityState: "approved",
-            deliveryAuthorized: 0,
-          },
-        ],
-        "representative",
-      ),
+      createSubjectRequestSchema.safeParse({
+        channel: "representative",
+        subject: { locatorType: "email", locator: "a@example.test", accountState: "unknown" },
+        representative: { contactType: "email", contact: "b@example.test" },
+      }).success,
     ).toBe(false);
   });
 });

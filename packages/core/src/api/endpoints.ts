@@ -116,5 +116,5 @@ export const API_ENDPOINTS = {
   osmContributionPublish: "/api/osm/contributions/publish",
   osmContributionNotes: "/api/osm/contributions/notes",
   privacyDataRequests: "/api/privacy/data-requests",
-  privacyAdminRoles: "/api/privacy/admin/roles",
+  privacyExport: "/api/privacy/export",
 } as const;

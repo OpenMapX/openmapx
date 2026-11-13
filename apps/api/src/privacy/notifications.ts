@@ -53,8 +53,8 @@ export interface PrivacyNotificationRow {
 }
 
 /** Insert an outbox item idempotently.  The unique (request, template,
- * channel) key means retries after a transaction commit cannot produce a
- * second statutory email. */
+ * channel, recipient) key means retries after a transaction commit cannot
+ * produce a second statutory email to the same person. */
 export async function enqueuePrivacyNotification(
   input: EnqueuePrivacyNotification,
   database: typeof defaultDb = defaultDb,
@@ -80,6 +80,7 @@ export async function enqueuePrivacyNotification(
         dataSubjectRequestNotification.requestId,
         dataSubjectRequestNotification.template,
         dataSubjectRequestNotification.channel,
+        dataSubjectRequestNotification.recipientUserId,
       ],
     })
     .returning();
@@ -113,6 +114,7 @@ export async function enqueuePrivacyNotificationInTransaction(
         dataSubjectRequestNotification.requestId,
         dataSubjectRequestNotification.template,
         dataSubjectRequestNotification.channel,
+        dataSubjectRequestNotification.recipientUserId,
       ],
     });
 }

@@ -43,9 +43,8 @@ it("indexes only public metadata, never effective or secret values", () => {
   );
   expect(JSON.stringify(entries)).not.toMatch(/private-host|private-password|value|secret/);
 });
-it("retains narrower access and bounds query and results", () => {
-  const entries = buildAdminSearchEntries({ role: "privacy_admin", selfHosted: true });
-  expect(entries.map((entry) => entry.href)).toEqual(["/admin/privacy"]);
+it("offers nothing to a non-administrator and bounds query and results", () => {
+  expect(buildAdminSearchEntries({ role: "user", selfHosted: true })).toEqual([]);
   expect(searchAdminEntries(buildAdminSearchEntries(access), "").length).toBeLessThanOrEqual(30);
   expect(searchAdminEntries(buildAdminSearchEntries(access), "x".repeat(201))).toEqual([]);
 });

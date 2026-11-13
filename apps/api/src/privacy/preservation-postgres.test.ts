@@ -9,7 +9,6 @@ import {
   user,
 } from "../db/schema.js";
 import { pruneAuditLog } from "../services/activity-retention.js";
-import { loadMasterKeyRing } from "./crypto.js";
 import { releasePreservation, withPreservationRetentionLock } from "./preservation.js";
 import { PrivacyRequestService } from "./request-service.js";
 
@@ -37,13 +36,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         email: `${userId}@example.test`,
         updatedAt: new Date(),
       });
-      const ring = loadMasterKeyRing({
-        env: {
-          NODE_ENV: "development",
-          OPENMAPX_EXPORTS_KEY: Buffer.alloc(32, 9).toString("base64url"),
-        },
-      });
-      const service = new PrivacyRequestService({ database: db, keyRing: ring });
+      const service = new PrivacyRequestService({ database: db });
       const request = await service.create({
         userId,
         kind: "access",

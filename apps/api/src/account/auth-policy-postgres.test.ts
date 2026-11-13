@@ -131,10 +131,7 @@ dbDescribe("account policy through installed Better Auth", () => {
           role: "admin",
         },
       });
-      await fixture.db
-        .update(user)
-        .set({ role: "privacy_admin" })
-        .where(eq(user.id, actor.user.id));
+      await fixture.db.update(user).set({ role: "user" }).where(eq(user.id, actor.user.id));
       expect(
         (
           await app.inject({

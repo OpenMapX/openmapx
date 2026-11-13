@@ -24,11 +24,11 @@ export default async function AdminRootLayout({ children }: { children: ReactNod
 
   const session = await getAdminSession();
 
-  if (session?.user.role !== "admin" && session?.user.role !== "privacy_admin") {
+  if (session?.user.role !== "admin") {
     redirect("/");
   }
 
-  const selfHosted = session.user.role === "admin" ? await getSelfHosted(cookieHeader) : false;
+  const selfHosted = await getSelfHosted(cookieHeader);
 
   return (
     <AdminLayout user={session.user} selfHosted={selfHosted}>

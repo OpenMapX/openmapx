@@ -10,6 +10,7 @@ export const adminReauthPurposeSchema = z.enum([
   "credentials.import",
   "transit.credentials",
   "platform.domain.apply",
+  "privacy.export",
 ]);
 export type AdminReauthPurpose = z.infer<typeof adminReauthPurposeSchema>;
 const intentFields = {

@@ -2,7 +2,9 @@ import type { AdminReauthPurpose } from "@openmapx/core/api-contracts";
 import { sql } from "drizzle-orm";
 import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
-import type { ReauthenticationState, SessionAuthMethod } from "./privacy-auth-schema";
+import type { SessionAuthMethod } from "./privacy-auth-schema";
+
+type ReauthenticationState = "pending" | "completed" | "consumed" | "superseded" | "expired";
 export const adminActionReauthentication = pgTable(
   "admin_action_reauthentication",
   {
@@ -33,7 +35,7 @@ export const adminActionReauthentication = pgTable(
     ),
     check(
       "admin_reauth_purpose_check",
-      sql`${t.purpose} in ('account.verify','account.password.set','account.reset.send','account.invite','credentials.export','credentials.import','transit.credentials','platform.domain.apply')`,
+      sql`${t.purpose} in ('account.verify','account.password.set','account.reset.send','account.invite','credentials.export','credentials.import','transit.credentials','platform.domain.apply','privacy.export')`,
     ),
     index("admin_reauth_actor_expiry_idx").on(t.actorId, t.expiresAt),
     uniqueIndex("admin_reauth_request_uq").on(t.actorId, t.requestKey),

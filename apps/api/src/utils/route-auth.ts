@@ -13,8 +13,6 @@ export type AuthLevel =
   | "session"
   /** An administrator session. */
   | "admin"
-  /** A least-privilege privacy caseworker or full administrator session. */
-  | "privacy_admin"
   /** An administrator session or a service-to-service token. */
   | "service"
   /** No application-level check — reachability is expected to be restricted by the network. */
@@ -25,7 +23,6 @@ export const AUTH_LEVELS: readonly AuthLevel[] = [
   "public",
   "session",
   "admin",
-  "privacy_admin",
   "service",
   "internal",
   "unspecified",

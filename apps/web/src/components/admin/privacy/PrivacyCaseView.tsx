@@ -8,6 +8,7 @@ import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import type { PrivacyAdminDetail } from "@openmapx/core/api-contracts";
@@ -16,14 +17,66 @@ import { useEffect, useState } from "react";
 import { PRIVACY_CASE_SECTIONS, type PrivacyCaseSection } from "@/lib/admin/adminNavigationState";
 import {
   type PrivacyAdminBinding,
+  type PrivacyCaseClient,
   privacyResult,
   usePrivacyCaseClient,
 } from "@/lib/admin/privacyAdmin";
-import { PrivacyArtifactDelivery } from "./PrivacyArtifactDelivery";
-import { PrivacyAttachments } from "./PrivacyAttachments";
 import { PrivacyCaseDecisionForms } from "./PrivacyCaseDecisionForms";
-import { PrivacyIdentityReview } from "./PrivacyIdentityReview";
+import { PrivacyExportDownload } from "./PrivacyExportDownload";
 import { PrivacyTaskActions } from "./PrivacyTaskActions";
+
+/** Identity: a self-service request is proven by the fresh sign-in; an
+ * assisted one needs the operator to record a manual check. */
+function PrivacyIdentityVerification({
+  detail,
+  client,
+}: {
+  detail: PrivacyAdminDetail;
+  client: PrivacyCaseClient;
+}) {
+  const t = useTranslations("privacyAdmin"),
+    w = useTranslations("privacyAdmin.workflows");
+  const [reason, setReason] = useState("");
+  const method = detail.request.identityMethod;
+  return (
+    <Stack spacing={2}>
+      <Typography>
+        {method
+          ? t("identityVerified", { method: t(`identityMethods.${method}`) })
+          : t("unverified")}
+      </Typography>
+      {detail.capabilities.verifyIdentity && (
+        <>
+          <Typography variant="body2">{w("verifyIdentityHelp")}</Typography>
+          <TextField
+            label={w("reasonCode")}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            disabled={client.pending}
+          />
+          <Button
+            variant="contained"
+            disabled={client.pending || !reason}
+            onClick={() =>
+              void client.execute("identity-verification", (c, h) =>
+                privacyResult(
+                  sdk.verifyPrivacyAdminIdentity(
+                    detail.request.id,
+                    { version: detail.request.version, reasonCode: reason },
+                    h,
+                    { client: c },
+                  ),
+                ),
+              )
+            }
+          >
+            {t("verifyIdentity")}
+          </Button>
+        </>
+      )}
+    </Stack>
+  );
+}
 
 export function PrivacyCaseView({
   detail,
@@ -46,15 +99,11 @@ export function PrivacyCaseView({
     [eventCount, setEventCount] = useState(100);
   useEffect(() => setExpanded(section), [section]);
   const capabilitySections = {
-    identityReview: "identity",
-    taskDecision: "tasks",
-    taskAssignment: "tasks",
+    verifyIdentity: "identity",
+    resolveTasks: "tasks",
     extendDeadline: "decisions",
     caseDecision: "decisions",
-    attachmentWrite: "attachments",
-    generate: "delivery",
-    assistedDelivery: "delivery",
-    representativeDelivery: "delivery",
+    export: "export",
   } as const;
   const allowed = [
     ...new Set(
@@ -105,17 +154,14 @@ export function PrivacyCaseView({
           <Alert severity="error">
             {client.errorCode === "REQUEST_VERSION_CONFLICT"
               ? w("versionConflict")
-              : t("actionFailed")}{" "}
+              : client.errorCode === "IDENTITY_REQUIRED"
+                ? w("identityRequired")
+                : t("actionFailed")}{" "}
             ({client.errorCode})
           </Alert>
         )}
-        {!detail.capabilities.generate && (
-          <Alert severity="info">
-            {w("generationBlocked")} ({detail.capabilities.reasons.generate})
-          </Alert>
-        )}
         {Object.entries(detail.capabilities.reasons)
-          .filter(([key]) => key !== "generate")
+          .filter(([key]) => key !== "export")
           .map(([key, reason]) => (
             <Alert key={key} severity="info">
               {key}: {reason}
@@ -142,32 +188,15 @@ export function PrivacyCaseView({
                 </Typography>
               </AccordionSummary>
               <AccordionDetails id={`case-content-${value}`}>
-                {value === "identity" && <PrivacyIdentityReview detail={detail} client={client} />}
+                {value === "identity" && (
+                  <PrivacyIdentityVerification detail={detail} client={client} />
+                )}
                 {value === "tasks" && <PrivacyTaskActions detail={detail} client={client} />}
                 {value === "decisions" && (
                   <PrivacyCaseDecisionForms detail={detail} client={client} />
                 )}
-                {value === "attachments" && <PrivacyAttachments detail={detail} client={client} />}
-                {value === "delivery" && expanded === value && (
-                  <Stack sx={{ gap: 2 }}>
-                    <Button
-                      variant="contained"
-                      disabled={client.pending || !detail.capabilities.generate}
-                      onClick={() =>
-                        void client.execute("generate", (c, h) =>
-                          privacyResult(
-                            sdk.generatePrivacyAdminArtifact(detail.request.id, {}, h, {
-                              client: c,
-                              timeoutMs: 180000,
-                            }),
-                          ),
-                        )
-                      }
-                    >
-                      {t("generateAfterReview")}
-                    </Button>
-                    <PrivacyArtifactDelivery detail={detail} client={client} />
-                  </Stack>
+                {value === "export" && expanded === value && (
+                  <PrivacyExportDownload detail={detail} client={client} />
                 )}
                 {value === "events" && (
                   <Stack sx={{ gap: 1 }}>

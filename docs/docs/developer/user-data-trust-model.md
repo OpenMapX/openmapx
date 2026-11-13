@@ -76,18 +76,20 @@ password hashes, private keys or artifact keys.
 - **Retained backups:** not searched or extracted per person. The operator
   handles a request for backup data manually, as described in
   [Personal data in backups](../administration/backup-and-restore.md#personal-data-in-backups).
-- **External/off-host sources:** operator tasks and encrypted case
-  attachments. Their provenance, cutoff and redactions must be recorded.
+- **External/off-host sources:** operator tasks the administrator checks
+  outside OpenMapX and resolves with a reason code.
 - **Browser-only data:** a local allowlist export, kept separate from
   controller-held data.
 
 ## Integrity and authorization
 
-Export artifacts are written atomically as encrypted ciphertext. Plaintext and
-ciphertext digests are recorded in metadata and checked in a first pass before
-the second-pass response. Downloads require the subject-owned artifact,
-current request state, a fresh session assurance and a one-time challenge.
-Range requests and reusable URLs are not supported.
+Exports are never stored. Every source is collected and every archive member
+built before the response starts; the ZIP then streams straight to the client.
+Large sources wait in a short-lived spool encrypted with a per-process key and
+are removed when the download ends. A self-service download requires a recent
+interactive sign-in; an administrator export for an assisted case requires a
+one-time, purpose-bound administrator reauthentication. Reusable URLs are not
+supported.
 
 The API is the policy boundary. The ops agent accepts only fixed operation
 contracts and, for historical extraction, a short-lived HMAC capability bound

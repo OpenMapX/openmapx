@@ -21,8 +21,6 @@ const legal: PublicLegalConfig = {
   serverLogRetentionDays: 30,
   dataRequestEmail: "requests@example.test",
   dsarCaseRetentionDays: 1095,
-  identityEvidenceRetentionDays: 30,
-  exportArtifactRetentionHours: 168,
   deploymentJurisdiction: "DE-BE",
   privacySources: [],
   backupRetentionDays: 14,

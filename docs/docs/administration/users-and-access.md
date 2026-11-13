@@ -14,20 +14,18 @@ access to operations or privacy casework according to their role.
 
 Every account has a small, fixed set of fields: a name, an email, a verified
 flag, an optional avatar, a **role**, and moderation state (banned, ban reason,
-ban expiry). The three roles are:
+ban expiry). The two roles are:
 
 - **`user`** — the default. Can use the app and manage their own account, but
   never sees `/admin`.
 - **`admin`** — everything a user can do, plus the full operations surface.
-  This role manages instance configuration and accounts.
-- **`privacy_admin`** — access to the dedicated privacy case workflow; it does
-  not grant general instance or account administration.
+  This role manages instance configuration, accounts and privacy casework.
 
 Authentication uses Better Auth, configured in `apps/api/src/auth.ts`.
 
 The API enforces roles independently of the browser layout. Privacy casework
-has additional identity, authentication-assurance and review requirements;
-see [Data-subject requests](./data-subject-requests.md).
+requires a signed-in administrator account; see
+[Data-subject requests](./data-subject-requests.md).
 
 ## Becoming an admin
 
@@ -110,12 +108,6 @@ Open **Users**, then change the role in the list or the user's **Profile** tab.
 The list disables self-role changes. The database also serializes changes to
 active administrator capacity, so competing requests cannot remove the last
 active administrator.
-
-Select **Privacy admin** to grant casework access without general deployment
-permissions. Granting or revoking this role uses a dedicated full-admin endpoint
-and revokes the target's existing sessions. The person must sign in again.
-That endpoint cannot downgrade a full administrator; change a full-admin role
-through the ordinary account administration flow.
 
 ## Managing users
 

@@ -1,9 +1,7 @@
 "use client";
 
-import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
 import PrivacyTipIcon from "@mui/icons-material/PrivacyTip";
-import RefreshIcon from "@mui/icons-material/Refresh";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -14,34 +12,73 @@ import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import {
-  completePrivacyReauthentication,
-  createPrivacyDataRequest,
+  FRESH_SIGN_IN_REQUIRED,
   getPrivacyDataRequests,
-  type PrivacyArtifactView,
   type PrivacyRequestView,
-  privacyArtifactDownloadUrl,
-  regeneratePrivacyDataRequest,
-  revokePrivacyArtifact,
-  startPrivacyReauthentication,
+  requestPrivacyExport,
   withdrawPrivacyDataRequest,
 } from "@openmapx/core";
+import { acceptsWithdrawal } from "@openmapx/core/privacy";
 import { useFormatter, useTranslations } from "next-intl";
 import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
-import { navigateAdminDocument } from "@/lib/admin/adminDocumentExit";
 import { downloadPrivacyDeviceData } from "@/lib/privacyDeviceData";
 
-const PENDING_REAUTH_KEY = "openmapx:privacy:pending-reauth";
-const PENDING_ASSISTED_PROOF_KEY = "openmapx:privacy:pending-assisted-proof";
-type PendingReauth = { requestId: string; artifactId: string; challengeId: string };
-type PendingAssistedProof = { requestId: string; idempotencyKey: string };
+/** Set before the fresh sign-in so the download continues on return. It holds
+ * only a timestamp and whether the one retry has happened, and expires with
+ * the sign-in window. */
+export const PENDING_EXPORT_KEY = "openmapx:privacy:pending-export";
+const PENDING_EXPORT_TTL_MS = 10 * 60_000;
+type PendingExport = { at: number; retried: boolean };
 
-function readyArtifact(
-  request: PrivacyRequestView & { artifacts?: PrivacyArtifactView[] },
-): PrivacyArtifactView | undefined {
-  return request.artifacts?.find((artifact) => artifact.state === "ready");
+function writePendingExport(value: PendingExport | null): void {
+  try {
+    if (value) window.sessionStorage.setItem(PENDING_EXPORT_KEY, JSON.stringify(value));
+    else window.sessionStorage.removeItem(PENDING_EXPORT_KEY);
+  } catch {
+    /* storage unavailable: the person can start the download again */
+  }
+}
+
+/** The intent to retry once after returning from the sign-in. A retried or
+ * expired intent is discarded. */
+function claimPendingExport(): boolean {
+  let pending: PendingExport | null = null;
+  try {
+    pending = JSON.parse(window.sessionStorage.getItem(PENDING_EXPORT_KEY) ?? "null");
+  } catch {
+    pending = null;
+  }
+  const age = pending && Number.isFinite(pending.at) ? Date.now() - pending.at : Number.NaN;
+  if (!pending || pending.retried || !(age >= 0 && age <= PENDING_EXPORT_TTL_MS)) {
+    writePendingExport(null);
+    return false;
+  }
+  writePendingExport({ ...pending, retried: true });
+  return true;
+}
+
+function filenameFrom(response: Response): string {
+  const match = /filename="([A-Za-z0-9][A-Za-z0-9._ -]*)"/.exec(
+    response.headers.get("content-disposition") ?? "",
+  );
+  return match?.[1] ?? "openmapx-data-export.zip";
+}
+
+async function saveResponse(response: Response): Promise<void> {
+  const url = URL.createObjectURL(await response.blob());
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filenameFrom(response);
+    anchor.rel = "noopener";
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
 }
 
 export const PrivacyDataSection = forwardRef<HTMLHeadingElement>(
@@ -55,14 +92,10 @@ export const PrivacyDataSection = forwardRef<HTMLHeadingElement>(
         ? ""
         : format.dateTime(parsed, { dateStyle: "medium", timeStyle: "short" });
     };
-    const [requests, setRequests] = useState<
-      (PrivacyRequestView & { artifacts?: PrivacyArtifactView[] })[]
-    >([]);
+    const [requests, setRequests] = useState<PrivacyRequestView[]>([]);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [assistedRequestId, setAssistedRequestId] = useState("");
-    const [assistedProofComplete, setAssistedProofComplete] = useState(false);
 
     const mounted = useRef(false);
     const loadVersion = useRef(0);
@@ -74,25 +107,10 @@ export const PrivacyDataSection = forwardRef<HTMLHeadingElement>(
       try {
         const result = await getPrivacyDataRequests();
         if (!isCurrent()) return;
-        const detailed = await Promise.all(
-          result.requests.slice(0, 20).map(async (request) => {
-            try {
-              const response = await fetch(
-                `/api/privacy/data-requests/${encodeURIComponent(request.id)}`,
-                { credentials: "include", cache: "no-store" },
-              );
-              if (!response.ok) return request;
-              return (await response.json()) as PrivacyRequestView & {
-                artifacts?: PrivacyArtifactView[];
-              };
-            } catch {
-              return request;
-            }
-          }),
-        );
-        if (!isCurrent()) return;
-        setRequests(detailed);
-        setError(null);
+        setRequests(result.requests.slice(0, 20));
+        // Clear only a previous list failure; keep an export message visible.
+        const loadFailed = t("privacyData.loadFailed");
+        setError((current) => (current === loadFailed ? null : current));
       } catch {
         if (isCurrent()) setError(t("privacyData.loadFailed"));
       } finally {
@@ -109,165 +127,50 @@ export const PrivacyDataSection = forwardRef<HTMLHeadingElement>(
       };
     }, [load]);
 
-    useEffect(() => {
-      let pending: PendingReauth | null = null;
-      try {
-        const raw = window.sessionStorage.getItem(PENDING_REAUTH_KEY);
-        if (raw) pending = JSON.parse(raw) as PendingReauth;
-      } catch {
-        pending = null;
-      }
-      if (!pending?.requestId || !pending.artifactId || !pending.challengeId) return;
-      const challenge = pending;
-      let cancelled = false;
-      void completePrivacyReauthentication(
-        challenge.requestId,
-        challenge.artifactId,
-        challenge.challengeId,
-      )
-        .then(() => {
-          if (cancelled) return;
-          window.sessionStorage.removeItem(PENDING_REAUTH_KEY);
-          navigateAdminDocument(
-            privacyArtifactDownloadUrl(challenge.requestId, challenge.artifactId),
-            "download",
-          );
-        })
-        .catch(() => {
-          if (!cancelled) setError(t("privacyData.reauthenticationFailed"));
-          try {
-            window.sessionStorage.removeItem(PENDING_REAUTH_KEY);
-          } catch {
-            /* ignore */
+    const download = useCallback(
+      async (retry = false) => {
+        setBusy("export");
+        setError(null);
+        try {
+          const response = await requestPrivacyExport("access_and_portability");
+          if (response.status === 401) {
+            const body = (await response.json().catch(() => null)) as { code?: string } | null;
+            if (body?.code === FRESH_SIGN_IN_REQUIRED) {
+              if (retry) {
+                // The new sign-in was not enough, usually because it skipped
+                // the account's second factor. Explain instead of looping.
+                writePendingExport(null);
+                if (mounted.current) setError(t("privacyData.secondFactorRequired"));
+                return;
+              }
+              // A new interactive sign-in proves the request; the export then
+              // continues once when this page loads again.
+              writePendingExport({ at: Date.now(), retried: false });
+              window.location.assign("/auth/privacy");
+              return;
+            }
           }
-        });
-      return () => {
-        cancelled = true;
-      };
-    }, [t]);
+          if (!response.ok) throw new Error("export failed");
+          await saveResponse(response);
+          if (retry) writePendingExport(null);
+        } catch {
+          if (retry) writePendingExport(null);
+          if (mounted.current) setError(t("privacyData.exportFailed"));
+        } finally {
+          if (mounted.current) {
+            setBusy(null);
+            void load();
+          }
+        }
+      },
+      [load, t],
+    );
 
     useEffect(() => {
-      let pending: PendingAssistedProof | null = null;
-      try {
-        const raw = window.sessionStorage.getItem(PENDING_ASSISTED_PROOF_KEY);
-        if (raw) pending = JSON.parse(raw) as PendingAssistedProof;
-      } catch {
-        pending = null;
-      }
-      if (!pending?.requestId || !pending.idempotencyKey) return;
-      const proof = pending;
-      let cancelled = false;
-      void fetch(
-        `/api/privacy/assisted-requests/${encodeURIComponent(proof.requestId)}/identity/account-login`,
-        {
-          method: "POST",
-          credentials: "include",
-          cache: "no-store",
-          headers: { "Idempotency-Key": proof.idempotencyKey },
-        },
-      )
-        .then((response) => {
-          if (!response.ok) throw new Error("account login proof failed");
-          if (!cancelled) setAssistedProofComplete(true);
-        })
-        .catch(() => {
-          if (!cancelled) setError(t("privacyData.assistedProofFailed"));
-        })
-        .finally(() => {
-          try {
-            window.sessionStorage.removeItem(PENDING_ASSISTED_PROOF_KEY);
-          } catch {
-            /* ignore */
-          }
-        });
-      return () => {
-        cancelled = true;
-      };
-    }, [t]);
+      if (claimPendingExport()) void download(true);
+    }, [download]);
 
-    const create = async () => {
-      setBusy("create");
-      try {
-        await createPrivacyDataRequest("access_and_portability");
-        await load();
-      } catch {
-        setError(t("privacyData.requestFailed"));
-      } finally {
-        setBusy(null);
-      }
-    };
-
-    const startAssistedAccountProof = () => {
-      const requestId = assistedRequestId.trim();
-      if (!/^[0-9a-f-]{36}$/i.test(requestId)) {
-        setError(t("privacyData.assistedProofFailed"));
-        return;
-      }
-      window.sessionStorage.setItem(
-        PENDING_ASSISTED_PROOF_KEY,
-        JSON.stringify({
-          requestId,
-          idempotencyKey: `privacy-assisted-${crypto.randomUUID()}`,
-        } satisfies PendingAssistedProof),
-      );
-      window.location.assign("/auth/privacy");
-    };
-
-    const startDownload = async (
-      request: PrivacyRequestView & { artifacts?: PrivacyArtifactView[] },
-      artifact: PrivacyArtifactView,
-    ) => {
-      setBusy(artifact.id);
-      try {
-        const challenge = await startPrivacyReauthentication(request.id, artifact.id);
-        window.sessionStorage.setItem(
-          PENDING_REAUTH_KEY,
-          JSON.stringify({
-            requestId: request.id,
-            artifactId: artifact.id,
-            challengeId: challenge.challengeId,
-          }),
-        );
-        window.location.assign(challenge.loginPath);
-      } catch {
-        setError(t("privacyData.reauthenticationFailed"));
-      } finally {
-        setBusy(null);
-      }
-    };
-
-    const revoke = async (
-      request: PrivacyRequestView & { artifacts?: PrivacyArtifactView[] },
-      artifact: PrivacyArtifactView,
-    ) => {
-      setBusy(artifact.id);
-      try {
-        await revokePrivacyArtifact(request.id, artifact.id);
-        await load();
-      } catch {
-        setError(t("privacyData.actionFailed"));
-      } finally {
-        setBusy(null);
-      }
-    };
-
-    const regenerate = async (
-      request: PrivacyRequestView & { artifacts?: PrivacyArtifactView[] },
-    ) => {
-      setBusy(request.id);
-      try {
-        await regeneratePrivacyDataRequest(request.id, request.version);
-        await load();
-      } catch {
-        setError(t("privacyData.actionFailed"));
-      } finally {
-        setBusy(null);
-      }
-    };
-
-    const withdraw = async (
-      request: PrivacyRequestView & { artifacts?: PrivacyArtifactView[] },
-    ) => {
+    const withdraw = async (request: PrivacyRequestView) => {
       setBusy(request.id);
       try {
         await withdrawPrivacyDataRequest(request.id, request.version);
@@ -302,10 +205,10 @@ export const PrivacyDataSection = forwardRef<HTMLHeadingElement>(
             variant="contained"
             size="small"
             startIcon={<PrivacyTipIcon />}
-            onClick={() => void create()}
+            onClick={() => void download(false)}
             disabled={busy !== null}
           >
-            {busy === "create" ? <CircularProgress size={16} /> : t("privacyData.requestCopy")}
+            {busy === "export" ? <CircularProgress size={16} /> : t("privacyData.downloadExport")}
           </Button>
           <Button
             variant="outlined"
@@ -317,32 +220,6 @@ export const PrivacyDataSection = forwardRef<HTMLHeadingElement>(
           </Button>
         </Box>
         <Divider sx={{ my: 1.5 }} />
-        <Typography variant="subtitle2">{t("privacyData.assistedProofTitle")}</Typography>
-        <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
-          {t("privacyData.assistedProofDescription")}
-        </Typography>
-        {assistedProofComplete && (
-          <Alert severity="success" sx={{ mb: 1 }}>
-            {t("privacyData.assistedProofComplete")}
-          </Alert>
-        )}
-        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mb: 1.5 }}>
-          <TextField
-            size="small"
-            label={t("privacyData.assistedRequestReference")}
-            value={assistedRequestId}
-            onChange={(event) => setAssistedRequestId(event.target.value)}
-          />
-          <Button
-            variant="outlined"
-            size="small"
-            disabled={busy !== null || !/^[0-9a-f-]{36}$/i.test(assistedRequestId.trim())}
-            onClick={startAssistedAccountProof}
-          >
-            {t("privacyData.assistedProofAction")}
-          </Button>
-        </Box>
-        <Divider sx={{ my: 1.5 }} />
         {loading ? (
           <CircularProgress size={20} />
         ) : requests.length === 0 ? (
@@ -351,81 +228,46 @@ export const PrivacyDataSection = forwardRef<HTMLHeadingElement>(
           </Typography>
         ) : (
           <List dense disablePadding>
-            {requests.map((request) => {
-              const artifact = readyArtifact(request);
-              const terminal = ["withdrawn", "refused", "closed"].includes(request.state);
-              return (
-                <ListItem
-                  key={request.id}
-                  disableGutters
-                  alignItems="flex-start"
-                  sx={{ display: "block", py: 1 }}
-                >
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                    <ListItemIcon sx={{ minWidth: 32 }}>
-                      <PrivacyTipIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={t(`privacyData.states.${request.state}`)}
-                      secondary={t("privacyData.due", { date: dateLabel(request.dueAt) })}
-                    />
-                    <Chip
-                      size="small"
-                      label={
-                        request.kind === "access_and_portability"
-                          ? t("privacyData.accessAndPortability")
-                          : request.kind === "portability"
-                            ? t("privacyData.portability")
-                            : t("privacyData.access")
-                      }
-                    />
-                  </Box>
+            {requests.map((request) => (
+              <ListItem
+                key={request.id}
+                disableGutters
+                alignItems="flex-start"
+                sx={{ display: "block", py: 1 }}
+              >
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <ListItemIcon sx={{ minWidth: 32 }}>
+                    <PrivacyTipIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={t(`privacyData.states.${request.state}`)}
+                    secondary={t("privacyData.due", { date: dateLabel(request.dueAt) })}
+                  />
+                  <Chip
+                    size="small"
+                    label={
+                      request.kind === "access_and_portability"
+                        ? t("privacyData.accessAndPortability")
+                        : request.kind === "portability"
+                          ? t("privacyData.portability")
+                          : t("privacyData.access")
+                    }
+                  />
+                </Box>
+                {acceptsWithdrawal(request.state) && (
                   <Box sx={{ pl: 4, display: "flex", gap: 1, flexWrap: "wrap", mt: 0.75 }}>
-                    {artifact && (
-                      <Button
-                        size="small"
-                        startIcon={<DownloadIcon />}
-                        disabled={busy !== null}
-                        onClick={() => void startDownload(request, artifact)}
-                      >
-                        {t("privacyData.download")}
-                      </Button>
-                    )}
-                    {artifact && (
-                      <Button
-                        size="small"
-                        color="error"
-                        startIcon={<DeleteIcon />}
-                        disabled={busy !== null}
-                        onClick={() => void revoke(request, artifact)}
-                      >
-                        {t("privacyData.revoke")}
-                      </Button>
-                    )}
-                    {!terminal && request.state !== "ready" && (
-                      <Button
-                        size="small"
-                        color="warning"
-                        onClick={() => void withdraw(request)}
-                        disabled={busy !== null}
-                      >
-                        {t("privacyData.withdraw")}
-                      </Button>
-                    )}
-                    {(request.state === "artifact_expired" || request.state === "delivered") && (
-                      <Button
-                        size="small"
-                        startIcon={<RefreshIcon />}
-                        onClick={() => void regenerate(request)}
-                        disabled={busy !== null}
-                      >
-                        {t("privacyData.regenerate")}
-                      </Button>
-                    )}
+                    <Button
+                      size="small"
+                      color="warning"
+                      onClick={() => void withdraw(request)}
+                      disabled={busy !== null}
+                    >
+                      {t("privacyData.withdraw")}
+                    </Button>
                   </Box>
-                </ListItem>
-              );
-            })}
+                )}
+              </ListItem>
+            ))}
           </List>
         )}
       </Box>

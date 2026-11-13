@@ -65,10 +65,10 @@ it("loads metadata only on open and navigates by keyboard without executing an o
   ).toBe(true);
   expect(screen.queryByText("private-host")).toBeNull();
 });
-it("offers no search or metadata requests for a privacy administrator", () => {
+it("offers no search or metadata requests for a non-administrator", () => {
   const fetch = vi.fn();
   vi.stubGlobal("fetch", fetch);
-  mount("privacy_admin");
+  mount("user");
   fireEvent.keyDown(window, { key: "k", ctrlKey: true });
   expect(screen.queryByRole("combobox")).toBeNull();
   expect(screen.queryByRole("button", { name: "Search administration" })).toBeNull();
@@ -87,7 +87,7 @@ it("removes search before requesting metadata after a confirmed role change", as
           onClick={() =>
             store?.observeSession({
               data: {
-                user: { id: "actor-a", role: "privacy_admin" },
+                user: { id: "actor-a", role: "user" },
                 session: { id: "session-a" },
               },
               isPending: false,

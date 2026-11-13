@@ -12,6 +12,6 @@ export default async function FullAdminLayout({ children }: { children: ReactNod
   });
   if (!response.ok) redirect("/");
   const session = (await response.json()) as { user?: { role?: string } };
-  if (session.user?.role !== "admin") redirect("/admin/privacy");
+  if (session.user?.role !== "admin") redirect("/");
   return children;
 }

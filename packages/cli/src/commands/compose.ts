@@ -16,7 +16,6 @@ import { log } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import {
   assertPlatformFileTarget,
-  ensurePlatformExportsKeyRingFile,
   ensurePlatformPrivateDirectory,
   ensurePlatformSecretFile,
   PlatformFileTargetChangedError,
@@ -264,7 +263,6 @@ export async function renderComposeWithWriter(
     "offline-package-principal-key",
   );
   const erasureJournalKeyPath = join(paths.infraDir, "secrets", "erasure-journal-key");
-  const subjectExportsMasterKeyPath = join(paths.infraDir, "secrets", "subject-exports-master-key");
   // Shared only between data-manager and the private Transitous runner: it
   // signs the single-use capability tokens that authorize one upstream run.
   const transitousRunnerCapabilityPath = join(
@@ -279,7 +277,6 @@ export async function renderComposeWithWriter(
     "base64url",
   );
   initializeErasureJournal(join(erasureDirectory, "journal.jsonl"), erasureJournalKey);
-  ensurePlatformExportsKeyRingFile(subjectExportsMasterKeyPath);
   ensurePlatformSecretFile(transitousRunnerCapabilityPath);
   const opsAgentApiToken = ensurePlatformSecretFile(opsAgentApiTokenPath);
   const opsAgentDataManagerToken = ensurePlatformSecretFile(opsAgentDataManagerTokenPath);

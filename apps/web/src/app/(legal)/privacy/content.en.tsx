@@ -199,10 +199,11 @@ export default function PrivacyContent({
         <Typography sx={{ mt: 1 }}>
           You can start an access request in your account settings. We provide a human-readable
           explanation together with a separate machine-readable portable copy where Article 20
-          applies. The archive is encrypted, available only after a fresh sign-in, and expires
-          automatically. Connected Dawarich data is requested from that managed service when it is
-          available; data held by independent controllers, off-host backups and browser-only data
-          are explained separately rather than silently presented as complete.
+          applies. The archive is created when you download it, after a fresh sign-in, and sent
+          straight to you; we do not store a copy. Connected Dawarich data is requested from that
+          managed service when it is available; data held by independent controllers, off-host
+          backups and browser-only data are explained separately rather than silently presented as
+          complete.
         </Typography>
         <Typography sx={{ mt: 1 }}>
           The legal basis is Art. 6(1)(a) GDPR (your explicit consent via the browser permission

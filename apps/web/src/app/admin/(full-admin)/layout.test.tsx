@@ -38,10 +38,8 @@ describe("full administrator routes", () => {
     expect(await FullAdminLayout({ children })).toBe(children);
   });
 
-  it("returns a privacy administrator to the queue instead of exposing setup", async () => {
-    session.role = "privacy_admin";
-    await expect(FullAdminLayout({ children: "privacy setup" })).rejects.toThrow(
-      "redirect:/admin/privacy",
-    );
+  it("sends any other account away from the administration surface", async () => {
+    session.role = "user";
+    await expect(FullAdminLayout({ children: "privacy setup" })).rejects.toThrow("redirect:/");
   });
 });

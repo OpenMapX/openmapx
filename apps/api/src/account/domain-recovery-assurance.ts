@@ -1,4 +1,4 @@
-import { isAssuranceSufficient, type ReauthenticationSession } from "../privacy/reauthentication";
+import { isAssuranceSufficient, type ReauthenticationSession } from "../privacy/session-assurance";
 export function isDomainRecoveryAssuranceSufficient(
   session: ReauthenticationSession,
   originIndependentPasswordLogin: boolean,

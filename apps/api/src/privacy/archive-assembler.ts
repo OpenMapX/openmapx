@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { createTranslator, type Locale, locales, resolveLocale } from "@openmapx/i18n";
-import type { ArchiveEntryInput, ArchiveWriteResult } from "./artifact-writer.js";
-import { archivePathForLogicalId, type PrivacyArchiveWriter } from "./artifact-writer.js";
+import { type ArchiveEntryInput, archivePathForLogicalId } from "./archive-writer.js";
 import { SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
 import type {
   CollectorSourcePart,
@@ -76,7 +75,6 @@ const ARCHIVE_SCHEMAS: ReadonlyArray<{
       required: [
         "version",
         "generatedAt",
-        "expiresAt",
         "root",
         "locale",
         "request",
@@ -91,7 +89,6 @@ const ARCHIVE_SCHEMAS: ReadonlyArray<{
       properties: {
         version: { const: 2 },
         generatedAt: { type: "string", format: "date-time" },
-        expiresAt: { type: "string", format: "date-time" },
         root: { const: "openmapx-data-export/" },
         locale: { enum: locales },
         request: {
@@ -230,7 +227,6 @@ const ARCHIVE_SCHEMAS: ReadonlyArray<{
         "controller",
         "deployment",
         "generatedAt",
-        "expiresAt",
         "reviewContact",
         "recipientSummary",
         "translationFallbacks",
@@ -243,7 +239,6 @@ const ARCHIVE_SCHEMAS: ReadonlyArray<{
         controller: { type: "object" },
         deployment: { type: "object" },
         generatedAt: { type: "string", format: "date-time" },
-        expiresAt: { type: "string", format: "date-time" },
         reviewContact: { type: "string" },
         recipientSummary: { type: ["object", "null"] },
         translationFallbacks: { type: "array", items: { type: "object" } },
@@ -345,12 +340,9 @@ function geoJson(records: readonly SubjectExportRecord[]): Record<string, unknow
 
 export interface SubjectArchiveAssemblyInput {
   requestId: string;
-  artifactId: string;
   locale: Locale;
   parts: readonly CollectorSourcePart[];
   sourceEntries?: readonly CollectorSourcePartEntry[];
-  disposeSources?: () => void | Promise<void>;
-  writer: PrivacyArchiveWriter;
   generatedAt?: string;
   responseContext: PrivacyResponseContext;
 }
@@ -387,9 +379,11 @@ function requestedSourceEntry(
   return true;
 }
 
-async function assembleSubjectArchiveInternal(
+/** Build every archive member, including the report and the manifest, before
+ * any byte is sent. All checks that can fail run here. */
+export function buildSubjectArchiveEntries(
   input: SubjectArchiveAssemblyInput,
-): Promise<ArchiveWriteResult & { entryPaths: string[] }> {
+): ArchiveEntryInput[] {
   const byRegistration = new Map(input.parts.map((part) => [part.registrationId, part]));
   const entries: {
     logicalId: string;
@@ -570,7 +564,6 @@ async function assembleSubjectArchiveInternal(
   const manifest = {
     version: 2,
     generatedAt,
-    expiresAt: input.responseContext.expiresAt,
     root: "openmapx-data-export/",
     locale: input.locale,
     request: {
@@ -589,7 +582,6 @@ async function assembleSubjectArchiveInternal(
       preservationAt: input.responseContext.request.preservationAt,
       snapshotAt: input.responseContext.request.snapshotAt,
       generatedAt,
-      expiresAt: input.responseContext.expiresAt,
     },
     collectorOutcomes: report.processingInformation.sources.map((source) => ({
       registrationId: source.id,
@@ -611,23 +603,5 @@ async function assembleSubjectArchiveInternal(
     sha256: digest(manifestBuffer),
     schemaId: "export-manifest-v2",
   });
-  const archive = await input.writer.writeArchive({
-    requestId: input.requestId,
-    artifactId: input.artifactId,
-    entries,
-  });
-  return { ...archive, entryPaths: archive.entries.map((entry) => entry.path) };
-}
-
-export async function assembleSubjectArchive(
-  input: SubjectArchiveAssemblyInput,
-): Promise<ArchiveWriteResult & { entryPaths: string[] }> {
-  try {
-    return await assembleSubjectArchiveInternal(input);
-  } finally {
-    await Promise.allSettled([
-      ...input.parts.map((part) => part.disposeSources?.()),
-      input.disposeSources?.(),
-    ]);
-  }
+  return entries;
 }

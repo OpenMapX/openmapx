@@ -1,26 +1,9 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { assembleSubjectArchive, renderReadmeHtml } from "./archive-assembler.js";
-import { EncryptedBlobStore } from "./artifact-storage.js";
-import { archivePathForLogicalId, PrivacyArchiveWriter } from "./artifact-writer.js";
-import { loadMasterKeyRing } from "./crypto.js";
+import { readFile } from "node:fs/promises";
+import { Writable } from "node:stream";
+import { describe, expect, it } from "vitest";
+import { buildSubjectArchiveEntries, renderReadmeHtml } from "./archive-assembler.js";
+import { archivePathForLogicalId, PrivacyArchiveWriter } from "./archive-writer.js";
 import type { PrivacyResponseContext } from "./response-report.js";
-
-const temporaryDirectories: string[] = [];
-async function temporaryDirectory(prefix: string): Promise<string> {
-  const directory = await mkdtemp(join(tmpdir(), prefix));
-  temporaryDirectories.push(directory);
-  return directory;
-}
-afterEach(async () => {
-  await Promise.all(
-    temporaryDirectories
-      .splice(0)
-      .map((directory) => rm(directory, { recursive: true, force: true })),
-  );
-});
 
 const responseContext: PrivacyResponseContext = {
   request: {
@@ -32,7 +15,6 @@ const responseContext: PrivacyResponseContext = {
     snapshotAt: "2026-01-01T00:03:00.000Z",
   },
   generatedAt: "2026-01-02T00:00:00.000Z",
-  expiresAt: "2026-01-09T00:00:00.000Z",
   controller: {
     name: "Example Controller",
     address: "Street 1\n10115 Berlin\nGermany",
@@ -45,8 +27,6 @@ const responseContext: PrivacyResponseContext = {
     supervisoryAuthorityUrl: null,
     privacySources: [],
     dsarCaseRetentionDays: 1095,
-    identityEvidenceRetentionDays: 30,
-    exportArtifactRetentionHours: 168,
     backupRetentionDays: 30,
   },
   reviewContact: "privacy@example.test (case r)",
@@ -64,10 +44,9 @@ const responseContext: PrivacyResponseContext = {
 
 describe("subject archive assembler", () => {
   it("rejects duplicate source logical IDs instead of dropping a member", async () => {
-    await expect(
-      assembleSubjectArchive({
+    expect(() =>
+      buildSubjectArchiveEntries({
         requestId: "r",
-        artifactId: "a",
         locale: "en",
         generatedAt: "2026-01-01T00:00:00.000Z",
         responseContext,
@@ -88,49 +67,25 @@ describe("subject archive assembler", () => {
             },
           ],
         })),
-        writer: { writeArchive: vi.fn(async () => ({ entries: [] })) } as never,
       }),
-    ).rejects.toThrow("duplicate source logical ID");
+    ).toThrow("duplicate source logical ID");
   });
 
-  it("disposes transient source storage when validation fails before writing", async () => {
-    const disposeSources = vi.fn(async () => undefined);
-    await expect(
-      assembleSubjectArchive({
+  it("rejects an invalid generation timestamp before any byte is written", () => {
+    expect(() =>
+      buildSubjectArchiveEntries({
         requestId: "r",
-        artifactId: "a",
         locale: "en",
         generatedAt: "invalid",
         responseContext,
-        parts: [
-          {
-            registrationId: "managed-dawarich",
-            category: "timeline",
-            outcome: "included",
-            warningCodes: [],
-            capturedAt: "2026-01-01T00:00:00.000Z",
-            records: [],
-            disposeSources,
-          },
-        ],
-        writer: { writeArchive: vi.fn() } as never,
+        parts: [],
       }),
-    ).rejects.toThrow("generation timestamp");
-    expect(disposeSources).toHaveBeenCalledOnce();
+    ).toThrow("generation timestamp");
   });
 
   it("keeps Article 15 and portable projections separate and emits a static README", async () => {
-    const root = await temporaryDirectory("openmapx-assemble-test-");
-    const ring = loadMasterKeyRing({
-      env: {
-        NODE_ENV: "development",
-        OPENMAPX_EXPORTS_KEY: Buffer.alloc(32, 5).toString("base64url"),
-      },
-    });
-    const store = new EncryptedBlobStore({ root, ring, deploymentId: "test" });
-    const archive = await assembleSubjectArchive({
+    const entries = buildSubjectArchiveEntries({
       requestId: "r",
-      artifactId: "a",
       locale: "en",
       responseContext,
       parts: [
@@ -143,14 +98,20 @@ describe("subject archive assembler", () => {
           records: [{ id: "1", portable: true, data: { name: "Home", coordinates: [13, 52] } }],
         },
       ],
-      writer: new PrivacyArchiveWriter(store),
     });
-    expect(archive.entryPaths).toContain("openmapx-data-export/README.html");
-    expect(archive.entryPaths).toContain("openmapx-data-export/portable/saved-places.geojson");
     const chunks: Buffer[] = [];
-    await store.decryptTo(archive, (chunk) => {
-      chunks.push(Buffer.from(chunk));
+    const archive = await new PrivacyArchiveWriter().writeArchive({
+      entries,
+      sink: new Writable({
+        write(chunk, _encoding, callback) {
+          chunks.push(Buffer.from(chunk));
+          callback();
+        },
+      }),
     });
+    const paths = archive.entries.map((entry) => entry.path);
+    expect(paths).toContain("openmapx-data-export/README.html");
+    expect(paths).toContain("openmapx-data-export/portable/saved-places.geojson");
     const zip = Buffer.concat(chunks);
     expect(zip.includes(Buffer.from("openmapx-data-export/README.html"))).toBe(true);
     expect(zip.includes(Buffer.from("openmapx-data-export/portable/saved-places.geojson"))).toBe(
@@ -158,19 +119,18 @@ describe("subject archive assembler", () => {
     );
     expect(renderReadmeHtml("en")).toContain("default-src 'none'");
     expect(renderReadmeHtml("en")).not.toContain("<script");
-    expect((await readFile(archive.path)).toString()).not.toContain("Home");
   });
 
   it.each([
     [
       "access",
-      ["authentication", "dawarich-account", "supplement-1"],
+      ["authentication", "dawarich-account", "dawarich-settings"],
       ["portable-places", "dawarich-portable-areas"],
     ],
     [
       "portability",
       ["portable-places", "dawarich-portable-areas"],
-      ["authentication", "dawarich-account", "supplement-1", "processing-information"],
+      ["authentication", "dawarich-account", "dawarich-settings", "processing-information"],
     ],
     [
       "access_and_portability",
@@ -179,38 +139,15 @@ describe("subject archive assembler", () => {
         "portable-places",
         "dawarich-account",
         "dawarich-portable-areas",
-        "supplement-1",
+        "dawarich-settings",
       ],
       [],
     ],
   ] as const)(
     "gates %s archive members to the requested rights",
     async (kind, included, excluded) => {
-      let written: Array<{ logicalId: string; source: unknown }> = [];
-      const writer = {
-        writeArchive: vi.fn(async ({ entries }: { entries: typeof written }) => {
-          written = entries;
-          return {
-            storageKey: "test",
-            path: "/tmp/test",
-            plaintextBytes: 1,
-            ciphertextBytes: 1,
-            plaintextSha256: "a".repeat(64),
-            ciphertextSha256: "b".repeat(64),
-            iv: "iv",
-            tag: "tag",
-            wrappedDek: {},
-            masterKeyVersion: 1,
-            entries: entries.map((entry) => ({
-              logicalId: entry.logicalId,
-              path: archivePathForLogicalId(entry.logicalId) ?? "",
-            })),
-          };
-        }),
-      };
-      await assembleSubjectArchive({
+      const written = buildSubjectArchiveEntries({
         requestId: "r",
-        artifactId: "a",
         locale: "en",
         responseContext: { ...responseContext, request: { ...responseContext.request, kind } },
         parts: [
@@ -243,13 +180,13 @@ describe("subject archive assembler", () => {
             mediaType: "application/jsonl",
           },
           {
-            logicalId: "supplement-1",
-            source: Buffer.from("x"),
-            mediaType: "application/octet-stream",
+            logicalId: "dawarich-settings",
+            source: Buffer.from("{}"),
+            mediaType: "application/json",
           },
         ],
-        writer: writer as never,
       });
+      expect(written.every((entry) => archivePathForLogicalId(entry.logicalId))).toBe(true);
       const logicalIds = written.map((entry) => entry.logicalId);
       for (const logicalId of included) expect(logicalIds).toContain(logicalId);
       for (const logicalId of excluded) expect(logicalIds).not.toContain(logicalId);
@@ -260,8 +197,8 @@ describe("subject archive assembler", () => {
         version: 2,
         request: { id: "r", kind },
         generatedAt: responseContext.generatedAt,
-        expiresAt: responseContext.expiresAt,
       });
+      expect(manifest).not.toHaveProperty("expiresAt");
       expect(manifest.members.map((member: { logicalId: string }) => member.logicalId)).toEqual(
         logicalIds.filter((logicalId) => logicalId !== "manifest"),
       );

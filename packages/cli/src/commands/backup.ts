@@ -19,10 +19,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import {
-  erasureVerificationIdentifiers,
-  TERMINAL_PRIVACY_REQUEST_STATES,
-} from "@openmapx/core/erasure-cleanup";
+import { erasureVerificationIdentifiers } from "@openmapx/core/erasure-cleanup";
 import {
   assertErasureJournalKey,
   isErasedSubject,
@@ -973,25 +970,6 @@ function containsOpenMapXDatabase(manifest: BackupManifest): boolean {
   );
 }
 
-const PRIVATE_SUBJECT_EXPORT_VOLUME = "openmapx-subject-exports";
-
-function assertNoPrivateSubjectExportRestore(manifest: BackupManifest): void {
-  const privateVolume = manifest.services
-    .flatMap((service) => service.volumes)
-    .find(
-      (volume) =>
-        volume.mode === "tar" &&
-        (volume.name === PRIVATE_SUBJECT_EXPORT_VOLUME ||
-          volume.resolvedName === PRIVATE_SUBJECT_EXPORT_VOLUME ||
-          volume.resolvedName?.endsWith(`_${PRIVATE_SUBJECT_EXPORT_VOLUME}`)),
-    );
-  if (privateVolume) {
-    throw new Error(
-      "The private subject-export ciphertext volume must not be restored from a backup",
-    );
-  }
-}
-
 /**
  * Services outside the restore manifest that must be isolated while the
  * account database is restored. Keeping the API stopped prevents a deleted
@@ -1123,7 +1101,6 @@ async function eraseRestoredUser(
   const copyRow = [restoredUser.id, restoredUser.email, emailIdentifier, changeEmailIdentifier]
     .map(postgresCopyTextField)
     .join("\t");
-  const terminalStates = TERMINAL_PRIVACY_REQUEST_STATES.map(postgresSqlLiteral).join(", ");
   const statement = `BEGIN;
 CREATE TEMP TABLE _openmapx_erasure_subject (
   user_id text NOT NULL,
@@ -1143,23 +1120,6 @@ SET account_state = 'deleted',
 FROM _openmapx_erasure_subject subject
 WHERE request.user_id = subject.user_id
   AND request.account_state <> 'deleted';
-UPDATE data_export_artifact artifact
-SET state = 'revoked',
-    revoked_at = COALESCE(artifact.revoked_at, CURRENT_TIMESTAMP),
-    deleted_at = NULL
-FROM data_subject_request request, _openmapx_erasure_subject subject
-WHERE artifact.request_id = request.id
-  AND request.user_id = subject.user_id
-  AND request.state IN (${terminalStates})
-  AND (artifact.state <> 'deleted' OR artifact.wrapped_dek IS NOT NULL);
-UPDATE data_subject_request_attachment attachment
-SET expires_at = LEAST(attachment.expires_at, CURRENT_TIMESTAMP),
-    deleted_at = NULL
-FROM data_subject_request request, _openmapx_erasure_subject subject
-WHERE attachment.request_id = request.id
-  AND request.user_id = subject.user_id
-  AND request.state IN (${terminalStates})
-  AND (attachment.deleted_at IS NULL OR attachment.wrapped_dek IS NOT NULL);
 DELETE FROM verification verification
 USING _openmapx_erasure_subject subject
 WHERE verification.value = subject.user_id
@@ -1257,10 +1217,6 @@ function postgresCopyTextField(value: string): string {
     .join("\\v");
 }
 
-function postgresSqlLiteral(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`;
-}
-
 async function replayOpenMapXErasures(
   ctx: ComposeContext,
   rootDir: string | undefined,
@@ -1310,7 +1266,6 @@ export function preflightRestore(opts: RestoreOptions): RestorePreflight {
   if (opts.serviceIds && opts.serviceIds.length > 0) {
     manifest = filterManifestServices(manifest, opts.serviceIds);
   }
-  assertNoPrivateSubjectExportRestore(manifest);
 
   let versionError: string | undefined;
   let versionWarning: string | undefined;

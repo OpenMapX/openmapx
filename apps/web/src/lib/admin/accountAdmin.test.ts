@@ -27,7 +27,6 @@ const state = vi.hoisted(() => ({
       "revokeUserSession",
       "revokeUserSessions",
       "reset",
-      "privacy",
     ].map((key) => [key, vi.fn()]),
   ),
 }));
@@ -38,7 +37,6 @@ vi.mock("@openmapx/core", async () => ({
     admin: state.methods,
     requestPasswordReset: state.methods.reset,
   },
-  setPrivacyAdminRole: state.methods.privacy,
 }));
 vi.mock("@openmapx/core/api-admin-sdk", async () => ({
   ...(await vi.importActual<typeof import("@openmapx/core/api-admin-sdk")>(

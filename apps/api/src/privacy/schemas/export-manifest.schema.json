@@ -5,7 +5,6 @@
   "required": [
     "version",
     "generatedAt",
-    "expiresAt",
     "root",
     "locale",
     "request",
@@ -20,7 +19,6 @@
   "properties": {
     "version": { "const": 2 },
     "generatedAt": { "type": "string", "format": "date-time" },
-    "expiresAt": { "type": "string", "format": "date-time" },
     "root": { "const": "openmapx-data-export/" },
     "locale": { "enum": ["en", "de"] },
     "request": {

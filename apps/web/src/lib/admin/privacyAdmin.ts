@@ -41,19 +41,6 @@ export function privacyAdminQueries(client: ApiClient, apiOrigin: string, actorI
         enabled: !!actorId && !!requestId,
         retry: false,
       }),
-    operators: (cursor?: string) =>
-      queryOptions({
-        queryKey: [...root, "operators", cursor ?? ""],
-        queryFn: ({ signal }) =>
-          privacyResult(
-            sdk.listPrivacyAdminOperators(
-              { limit: 50, ...(cursor ? { cursor } : {}) },
-              options(signal),
-            ),
-          ),
-        enabled: !!actorId,
-        retry: false,
-      }),
   };
 }
 export function usePrivacyAdmin() {

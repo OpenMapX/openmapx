@@ -1,25 +1,15 @@
-import { and, eq, gte, isNull, lte, sql } from "drizzle-orm";
+import { ACTIVE_REQUEST_STATES } from "@openmapx/core/privacy";
+import { and, eq, gte, inArray } from "drizzle-orm";
 import { db as defaultDb } from "../db/index.js";
+import { TASK_STATES } from "../db/privacy-schema.js";
 import {
-  dataExportArtifact,
   dataSubjectRequest,
-  dataSubjectRequestAttachment,
   dataSubjectRequestEvent,
   dataSubjectRequestNotification,
   dataSubjectRequestTask,
 } from "../db/schema.js";
 import { getMetrics, type PrivacyOperationalMetricSnapshot } from "../services/metrics/index.js";
-import type { MasterKeyRingMetadata } from "./crypto.js";
 
-const TASK_STATUSES = [
-  "pending",
-  "running",
-  "complete",
-  "not_applicable",
-  "retryable",
-  "operator_review",
-  "canceled",
-] as const;
 const DUE_SOON_MS = 72 * 60 * 60 * 1_000;
 const MAX_ROWS = 50_000;
 
@@ -27,9 +17,6 @@ export interface PrivacyOperationsHealth {
   monitorHealthy: boolean;
   cleanupHealthy: boolean;
   notificationHealthy: boolean;
-  keyReady: boolean;
-  keyRing?: MasterKeyRingMetadata | null;
-  storageHealthy: boolean;
   lastRunAt: string | null;
   lastErrorCode: string | null;
 }
@@ -50,10 +37,6 @@ type PrivacyOperationalProbe =
 export interface PrivacyOperationsMonitorOptions {
   database?: typeof defaultDb;
   now?: () => Date;
-  keyReady: PrivacyOperationalProbe;
-  /** Metadata for the exact ring loaded by the running process. */
-  keyRing?: MasterKeyRingMetadata | null;
-  storageHealthy?: PrivacyOperationalProbe;
   cleanupHealthy?: PrivacyOperationalProbe;
   notificationHealthy?: PrivacyOperationalProbe;
   intervalMs?: number;
@@ -94,32 +77,8 @@ function safeCode(error: unknown): string {
   return normalized || "monitor_failed";
 }
 
-/** Record one generation failure without putting request/user identifiers in
- * the event payload or in telemetry labels. */
-export async function recordPrivacyGenerationFailure(input: {
-  requestId: string;
-  reasonCode: string;
-  database?: typeof defaultDb;
-  now?: Date;
-}): Promise<void> {
-  const database = input.database ?? defaultDb;
-  const reasonCode = /^[a-z0-9][a-z0-9._-]{0,127}$/.test(input.reasonCode)
-    ? input.reasonCode
-    : "generation-failed";
-  await database.insert(dataSubjectRequestEvent).values({
-    requestId: input.requestId,
-    eventType: "generation_failed",
-    actorKind: "system",
-    actorId: "privacy-generator",
-    payloadVersion: 1,
-    payload: { reasonCode },
-    createdAt: input.now ?? new Date(),
-  });
-}
-
 async function collectSnapshot(
   options: PrivacyOperationsMonitorOptions,
-  keyReady: boolean,
 ): Promise<PrivacyOperationsSnapshot> {
   const database = options.database ?? defaultDb;
   const now = (options.now ?? (() => new Date()))();
@@ -130,9 +89,7 @@ async function collectSnapshot(
       receivedAt: dataSubjectRequest.receivedAt,
     })
     .from(dataSubjectRequest)
-    .where(
-      sql`${dataSubjectRequest.state} not in ('withdrawn', 'refused', 'closed', 'delivered', 'artifact_expired')`,
-    )
+    .where(inArray(dataSubjectRequest.state, [...ACTIVE_REQUEST_STATES]))
     .limit(MAX_ROWS);
   const openRequestsByDueState = { on_track: 0, due_soon: 0, overdue: 0 };
   let oldestRequestAgeSeconds = 0;
@@ -152,7 +109,7 @@ async function collectSnapshot(
     .from(dataSubjectRequestTask)
     .limit(MAX_ROWS);
   const sourceTasksByStatus: Record<string, number> = Object.fromEntries(
-    TASK_STATUSES.map((status) => [status, 0]),
+    TASK_STATES.map((status) => [status, 0]),
   );
   for (const row of taskRows)
     sourceTasksByStatus[row.status] = (sourceTasksByStatus[row.status] ?? 0) + 1;
@@ -162,38 +119,11 @@ async function collectSnapshot(
     .from(dataSubjectRequestEvent)
     .where(
       and(
-        eq(dataSubjectRequestEvent.eventType, "generation_failed"),
+        eq(dataSubjectRequestEvent.eventType, "export_failed"),
         gte(dataSubjectRequestEvent.createdAt, new Date(now.getTime() - 24 * 60 * 60 * 1_000)),
       ),
     )
     .limit(MAX_ROWS);
-  const artifactRows = await database
-    .select({ createdAt: dataExportArtifact.createdAt, revokedAt: dataExportArtifact.revokedAt })
-    .from(dataExportArtifact)
-    .where(
-      and(
-        sql`${dataExportArtifact.state} in ('expired', 'failed', 'revoked')`,
-        isNull(dataExportArtifact.deletedAt),
-      ),
-    )
-    .limit(MAX_ROWS);
-  let artifactCleanupLagSeconds = 0;
-  for (const row of artifactRows)
-    artifactCleanupLagSeconds = Math.max(
-      artifactCleanupLagSeconds,
-      Math.max(0, (now.getTime() - (row.revokedAt?.getTime() ?? row.createdAt.getTime())) / 1_000),
-    );
-  const attachmentRows = await database
-    .select({ id: dataSubjectRequestAttachment.id })
-    .from(dataSubjectRequestAttachment)
-    .where(
-      and(
-        isNull(dataSubjectRequestAttachment.deletedAt),
-        lte(dataSubjectRequestAttachment.expiresAt, now),
-      ),
-    )
-    .limit(MAX_ROWS);
-
   const notificationRows = await database
     .select({ id: dataSubjectRequestNotification.id })
     .from(dataSubjectRequestNotification)
@@ -204,11 +134,7 @@ async function collectSnapshot(
     openRequestsByDueState,
     oldestRequestAgeSeconds,
     sourceTasksByStatus,
-    generationFailures: failureRows.length,
-    artifactCleanupLagSeconds,
-    artifactCleanupBacklog: artifactRows.length,
-    attachmentCleanupBacklog: attachmentRows.length,
-    keyReady,
+    exportFailures: failureRows.length,
     notificationFailures: notificationRows.length,
   };
   getMetrics().recordPrivacyOperationalSnapshot(snapshot);
@@ -230,8 +156,6 @@ export function createPrivacyOperationsMonitor(options: PrivacyOperationsMonitor
   let lastRunAt: string | null = null;
   let lastErrorCode: string | null = null;
   let dependencyHealth = {
-    keyReady: false,
-    storageHealthy: false,
     cleanupHealthy: false,
     notificationHealthy: false,
   };
@@ -241,14 +165,10 @@ export function createPrivacyOperationsMonitor(options: PrivacyOperationsMonitor
     try {
       const now = (options.now ?? (() => new Date()))();
       dependencyHealth = {
-        keyReady: await probe(options.keyReady, now, probeFreshnessMs),
-        storageHealthy: await probe(options.storageHealthy, now, probeFreshnessMs),
         cleanupHealthy: await probe(options.cleanupHealthy, now, probeFreshnessMs),
         notificationHealthy: await probe(options.notificationHealthy, now, probeFreshnessMs),
       };
-      const snapshot = await collectSnapshot(options, dependencyHealth.keyReady);
-      if (snapshot.artifactCleanupBacklog > 0 || snapshot.attachmentCleanupBacklog > 0)
-        dependencyHealth.cleanupHealthy = false;
+      const snapshot = await collectSnapshot(options);
       lastRunAt = snapshot.capturedAt;
       lastErrorCode = null;
       return snapshot;
@@ -280,14 +200,6 @@ export function createPrivacyOperationsMonitor(options: PrivacyOperationsMonitor
         monitorHealthy: monitorFresh && !lastErrorCode,
         cleanupHealthy: dependencyHealth.cleanupHealthy,
         notificationHealthy: dependencyHealth.notificationHealthy,
-        keyReady: dependencyHealth.keyReady,
-        keyRing: options.keyRing
-          ? {
-              activeVersion: options.keyRing.activeVersion,
-              availableVersions: [...options.keyRing.availableVersions],
-            }
-          : null,
-        storageHealthy: dependencyHealth.storageHealthy,
         lastRunAt,
         lastErrorCode,
       };

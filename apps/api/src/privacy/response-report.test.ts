@@ -14,7 +14,6 @@ const context: PrivacyResponseContext = {
     snapshotAt: "2026-01-01T10:03:00.000Z",
   },
   generatedAt: "2026-01-02T10:00:00.000Z",
-  expiresAt: "2026-01-09T10:00:00.000Z",
   controller: {
     name: "Example & Maps GmbH",
     address: "Example <Street> 1\n10115 Berlin\nGermany",
@@ -37,8 +36,6 @@ const context: PrivacyResponseContext = {
       },
     ],
     dsarCaseRetentionDays: 1095,
-    identityEvidenceRetentionDays: 30,
-    exportArtifactRetentionHours: 168,
     backupRetentionDays: 14,
   },
   reviewContact: "privacy@example.test (case request-123)",
@@ -87,7 +84,6 @@ describe("localized privacy response report", () => {
       "Example & Maps GmbH",
       "privacy@example.test",
       "2026-01-01T10:00:00.000Z",
-      "2026-01-09T10:00:00.000Z",
       "access_and_portability",
       "session-third-party-review",
       "privacy@example.test (case request-123)",
@@ -109,9 +105,11 @@ describe("localized privacy response report", () => {
       "Performance of the service contract",
       "An authorized caseworker recorded a source-specific limitation",
       "Case records are retained for 1,095 days",
+      "Checked separately by the operator",
     ]) {
       expect(report.text.toLowerCase()).toContain(value.toLowerCase());
     }
+    expect(report.text).not.toMatch(/download expires|identity evidence|download artifact/i);
     expect(report.html).toContain("default-src 'none'");
     expect(report.html).toContain("Example &amp; Maps GmbH");
     expect(report.html).toContain("Example &lt;Street&gt; 1");
@@ -130,6 +128,11 @@ describe("localized privacy response report", () => {
       outcome: "omitted_with_reason",
       recordCount: 2,
     });
+    // Operator-held sources are reported as checked separately, never as missing.
+    expect(
+      report.processingInformation.sources.find((source) => source.id === "application-logs"),
+    ).toMatchObject({ outcome: "operator_check", warningCodes: [] });
+    expect(report.processingInformation).not.toHaveProperty("expiresAt");
   });
 
   it("renders German canonical copy without losing exact case facts", () => {
@@ -137,7 +140,7 @@ describe("localized privacy response report", () => {
     expect(report.text).toContain("Datenschutz");
     expect(report.text).toContain("Example & Maps GmbH");
     expect(report.text).toContain("request-123");
-    expect(report.text).toContain("2026-01-09T10:00:00.000Z");
+    expect(report.text).toContain("Wird vom Betreiber gesondert geprüft");
   });
 
   it("records a per-key English fallback used by catalogue report copy", () => {

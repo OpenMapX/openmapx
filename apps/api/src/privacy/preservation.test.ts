@@ -13,26 +13,24 @@ const dialect = new PgDialect();
 describe("privacy preservation", () => {
   const base = {
     registrationId: "saved-places",
-    locatorDigest: "d",
     sourceCutoffAt: new Date("2024-01-10T00:00:00Z"),
     status: "held",
     releasedAt: null,
   } as const;
-  it("holds only the matching subject, source and cutoff", () => {
-    expect(
-      preservationHoldsCandidate(base, "saved-places", "d", new Date("2024-01-09T00:00:00Z")),
-    ).toBe(true);
-    expect(
-      preservationHoldsCandidate(base, "saved-places", "other", new Date("2024-01-09T00:00:00Z")),
-    ).toBe(false);
-    expect(
-      preservationHoldsCandidate(base, "saved-places", "d", new Date("2024-01-11T00:00:00Z")),
-    ).toBe(false);
+  it("holds only the matching source and cutoff", () => {
+    expect(preservationHoldsCandidate(base, "saved-places", new Date("2024-01-09T00:00:00Z"))).toBe(
+      true,
+    );
+    expect(preservationHoldsCandidate(base, "vehicles", new Date("2024-01-09T00:00:00Z"))).toBe(
+      false,
+    );
+    expect(preservationHoldsCandidate(base, "saved-places", new Date("2024-01-11T00:00:00Z"))).toBe(
+      false,
+    );
     expect(
       preservationHoldsCandidate(
         { ...base, status: "captured" },
         "saved-places",
-        "d",
         new Date("2024-01-09T00:00:00Z"),
       ),
     ).toBe(false);

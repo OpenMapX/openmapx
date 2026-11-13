@@ -779,15 +779,15 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
         actor: admin,
         userId: target.userId,
         idempotencyKey: randomUUID(),
-        body: { role: "privacy_admin", expectedRole: "user" },
+        body: { role: "admin", expectedRole: "user" },
       };
     const first = await changeProvisionedAccountRole(input);
-    expect(first).toEqual({ userId: target.userId, role: "privacy_admin", changed: true });
+    expect(first).toEqual({ userId: target.userId, role: "admin", changed: true });
     expect(await changeProvisionedAccountRole(input)).toEqual(first);
     await expect(
       changeProvisionedAccountRole({
         ...input,
-        body: { role: "admin", expectedRole: "privacy_admin" },
+        body: { role: "user", expectedRole: "admin" },
       }),
     ).rejects.toMatchObject({ code: "ACCOUNT_ACTION_CONFLICT" });
     const { adminAuditLog } = await import("../db/schema");

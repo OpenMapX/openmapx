@@ -45,9 +45,6 @@
       "ERASURE_JOURNAL_PATH": "/var/lib/openmapx/erasure/journal.jsonl",
       "ERASURE_JOURNAL_KEY_FILE": "/run/secrets/erasure-journal-key",
       "ERASURE_JOURNAL_KEY_UID": "${UID:?UID must be set, run pnpm openmapx compose render}",
-      "OPENMAPX_EXPORTS_KEY_FILE": "/run/secrets/subject-exports-master-key",
-      "OPENMAPX_EXPORTS_KEY_UID": "${UID:?UID must be set, run pnpm openmapx compose render}",
-      "OPENMAPX_EXPORT_STORAGE_DIR": "/var/lib/openmapx/subject-exports",
       "BACKUP_RETENTION_DAYS": "${BACKUP_RETENTION_DAYS:-30}",
       "LEGAL_SERVER_LOG_RETENTION_DAYS": "${LEGAL_SERVER_LOG_RETENTION_DAYS:-30}",
       "OPS_AGENT_URL": "${OPS_AGENT_URL:-http://ops-agent:4300}",
@@ -208,11 +205,6 @@
       "readOnly": true
     },
     {
-      "source": "@infra:secrets/subject-exports-master-key",
-      "target": "/run/secrets/subject-exports-master-key",
-      "readOnly": true
-    },
-    {
       "source": "@infra:state/ops-agent/custom-integrations",
       "target": "${OPENMAPX_CUSTOM_INTEGRATIONS_DIR:-/app/custom_integrations}",
       "readOnly": true,
@@ -220,12 +212,6 @@
     }
   ],
   "volumes": [
-    {
-      "name": "openmapx-subject-exports",
-      "mountAt": "/var/lib/openmapx/subject-exports",
-      "backup": false,
-      "readOnly": false
-    },
     {
       "name": "openmapx-api-runtime-recovery",
       "mountAt": "/app/infra/docker/.runtime-recovery",

@@ -2,17 +2,15 @@ import { createHash, randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import type { db as defaultDb } from "../db/index.js";
 import { dataSubjectRequestEvent } from "../db/schema.js";
+import { PrivacyRequestError } from "./errors.js";
 import { eventPayloadSchema } from "./request-contracts.js";
 
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$/;
 const EVENT_TYPE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 
-export class PrivacyIdempotencyError extends Error {
-  readonly code = "IDEMPOTENCY_KEY_REUSED";
-  readonly statusCode = 409;
-
+export class PrivacyIdempotencyError extends PrivacyRequestError {
   constructor() {
-    super("idempotency key was already used for another operation");
+    super("IDEMPOTENCY_KEY_REUSED", 409);
     this.name = "PrivacyIdempotencyError";
   }
 }

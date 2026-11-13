@@ -1,0 +1,2 @@
+ALTER TABLE "admin_action_reauthentication" DROP CONSTRAINT "admin_reauth_purpose_check";--> statement-breakpoint
+ALTER TABLE "admin_action_reauthentication" ADD CONSTRAINT "admin_reauth_purpose_check" CHECK ("admin_action_reauthentication"."purpose" in ('account.verify','account.password.set','account.reset.send','account.invite','credentials.export','credentials.import','transit.credentials','platform.domain.apply','privacy.export'));

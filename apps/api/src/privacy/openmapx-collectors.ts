@@ -11,14 +11,11 @@ import {
   authPolicyState,
   configurationMigrationPreview,
   dataDisclosureEvent,
-  dataExportReauthentication,
   dataManagerOfflinePackageArtifactReferences,
   dataManagerOfflinePackageJobOwners,
   dataManagerOfflinePackageJobs,
   dataSubjectRequest,
-  dataSubjectRequestEmailChallenge,
   dataSubjectRequestEvent,
-  dataSubjectRequestIdentity,
   dataSubjectRequestNotification,
   dataSubjectRequestTask,
   installedExtension,
@@ -62,11 +59,9 @@ import { encodeGeoJson, encodeJsonArray, encodeJsonLines } from "./primary-sourc
 
 export interface OpenMapxCollectorContext {
   userId: string;
-  /** Trusted current case ID, supplied only by generation after identity review. */
+  /** Trusted current case ID, supplied by the self-service export, the
+   * administrator export or the manual backup export script. */
   requestId?: string;
-  /** Purpose-bound keyed digests for exact historical user-ID cases whose
-   * nullable user FK was cleared by account erasure. */
-  subjectLocatorDigests?: readonly string[];
   cutoffAt: Date;
   database?: typeof defaultDb;
   offlinePrincipalKey?: Buffer;
@@ -1087,23 +1082,12 @@ export async function* streamOpenMapxRegistrationRecords(
       );
       return;
     case "privacy-case-records": {
-      const historicalOwnership = context.subjectLocatorDigests?.length
-        ? inArray(dataSubjectRequest.locatorDigest, [...new Set(context.subjectLocatorDigests)])
-        : undefined;
       const requestOwnership = context.requestId
-        ? historicalOwnership
-          ? or(
-              eq(dataSubjectRequest.userId, context.userId),
-              eq(dataSubjectRequest.id, context.requestId),
-              historicalOwnership,
-            )
-          : or(
-              eq(dataSubjectRequest.userId, context.userId),
-              eq(dataSubjectRequest.id, context.requestId),
-            )
-        : historicalOwnership
-          ? or(eq(dataSubjectRequest.userId, context.userId), historicalOwnership)
-          : eq(dataSubjectRequest.userId, context.userId);
+        ? or(
+            eq(dataSubjectRequest.userId, context.userId),
+            eq(dataSubjectRequest.id, context.requestId),
+          )
+        : eq(dataSubjectRequest.userId, context.userId);
       yield* emit(
         database
           .select({
@@ -1114,8 +1098,7 @@ export async function* streamOpenMapxRegistrationRecords(
             receivedAt: dataSubjectRequest.receivedAt,
             registeredAt: dataSubjectRequest.registeredAt,
             dueAt: dataSubjectRequest.dueAt,
-            identityState: dataSubjectRequest.identityState,
-            deliveryState: dataSubjectRequest.deliveryState,
+            identityMethod: dataSubjectRequest.identityMethod,
             completedAt: dataSubjectRequest.completedAt,
             closedAt: dataSubjectRequest.closedAt,
           })
@@ -1182,11 +1165,8 @@ export async function* streamOpenMapxRegistrationRecords(
             requestId: dataSubjectRequestTask.requestId,
             registrationId: dataSubjectRequestTask.registrationId,
             status: dataSubjectRequestTask.status,
-            required: dataSubjectRequestTask.required,
-            recordCount: dataSubjectRequestTask.recordCount,
-            exceptionCode: dataSubjectRequestTask.exceptionCode,
-            redactionCode: dataSubjectRequestTask.redactionCode,
-            collectedAt: dataSubjectRequestTask.collectedAt,
+            resolutionCode: dataSubjectRequestTask.resolutionCode,
+            resolvedAt: dataSubjectRequestTask.resolvedAt,
             createdAt: dataSubjectRequestTask.createdAt,
           })
           .from(dataSubjectRequestTask)
@@ -1203,111 +1183,6 @@ export async function* streamOpenMapxRegistrationRecords(
           )
           .orderBy(asc(dataSubjectRequestTask.id)),
         { policyCodes: ["protected-case-detail"] },
-      );
-      yield* emit(
-        database
-          .select({
-            id: dataSubjectRequestIdentity.id,
-            requestId: dataSubjectRequestIdentity.requestId,
-            party: dataSubjectRequestIdentity.party,
-            state: dataSubjectRequestIdentity.state,
-            method: dataSubjectRequestIdentity.method,
-            reasonableDoubtCode: dataSubjectRequestIdentity.reasonableDoubtCode,
-            authorityState: dataSubjectRequestIdentity.authorityState,
-            deliveryAuthorized: dataSubjectRequestIdentity.deliveryAuthorized,
-            verifiedAt: dataSubjectRequestIdentity.verifiedAt,
-            createdAt: dataSubjectRequestIdentity.createdAt,
-            updatedAt: dataSubjectRequestIdentity.updatedAt,
-          })
-          .from(dataSubjectRequestIdentity)
-          .innerJoin(
-            dataSubjectRequest,
-            eq(dataSubjectRequestIdentity.requestId, dataSubjectRequest.id),
-          )
-          .where(
-            and(
-              requestOwnership,
-              lte(dataSubjectRequestIdentity.createdAt, cutoff),
-              lte(dataSubjectRequest.receivedAt, cutoff),
-            ),
-          )
-          .orderBy(asc(dataSubjectRequestIdentity.id)),
-        {
-          policyCodes: [
-            "identity-evidence-redacted",
-            "representative-contact-redacted",
-            "operator-identifiers-redacted",
-          ],
-        },
-      );
-      yield* emit(
-        database
-          .select({
-            id: dataSubjectRequestEmailChallenge.id,
-            requestId: dataSubjectRequestEmailChallenge.requestId,
-            identityId: dataSubjectRequestEmailChallenge.identityId,
-            purpose: dataSubjectRequestEmailChallenge.purpose,
-            party: dataSubjectRequestEmailChallenge.party,
-            recipientSource: dataSubjectRequestEmailChallenge.recipientSource,
-            state: dataSubjectRequestEmailChallenge.state,
-            attempts: dataSubjectRequestEmailChallenge.attempts,
-            maxAttempts: dataSubjectRequestEmailChallenge.maxAttempts,
-            deliveryAttempts: dataSubjectRequestEmailChallenge.deliveryAttempts,
-            maxDeliveryAttempts: dataSubjectRequestEmailChallenge.maxDeliveryAttempts,
-            nextDeliveryAttemptAt: dataSubjectRequestEmailChallenge.nextDeliveryAttemptAt,
-            lastDeliveryErrorCode: dataSubjectRequestEmailChallenge.lastDeliveryErrorCode,
-            expiresAt: dataSubjectRequestEmailChallenge.expiresAt,
-            issuedAt: dataSubjectRequestEmailChallenge.issuedAt,
-            consumedAt: dataSubjectRequestEmailChallenge.consumedAt,
-            revokedAt: dataSubjectRequestEmailChallenge.revokedAt,
-            createdAt: dataSubjectRequestEmailChallenge.createdAt,
-            updatedAt: dataSubjectRequestEmailChallenge.updatedAt,
-          })
-          .from(dataSubjectRequestEmailChallenge)
-          .innerJoin(
-            dataSubjectRequest,
-            eq(dataSubjectRequestEmailChallenge.requestId, dataSubjectRequest.id),
-          )
-          .where(
-            and(
-              requestOwnership,
-              lte(dataSubjectRequestEmailChallenge.createdAt, cutoff),
-              lte(dataSubjectRequest.receivedAt, cutoff),
-            ),
-          )
-          .orderBy(asc(dataSubjectRequestEmailChallenge.id)),
-        { policyCodes: ["email-challenge-secrets-redacted"] },
-      );
-      yield* emit(
-        database
-          .select({
-            id: dataExportReauthentication.id,
-            requestId: dataExportReauthentication.requestId,
-            channel: dataExportReauthentication.deliveryChannel,
-            state: dataExportReauthentication.state,
-            completedMethod: dataExportReauthentication.completedMethod,
-            completedAt: dataExportReauthentication.completedAt,
-            consumedAt: dataExportReauthentication.consumedAt,
-            expiresAt: dataExportReauthentication.expiresAt,
-            createdAt: dataExportReauthentication.createdAt,
-          })
-          .from(dataExportReauthentication)
-          .innerJoin(
-            dataSubjectRequest,
-            eq(dataExportReauthentication.requestId, dataSubjectRequest.id),
-          )
-          .where(
-            and(
-              requestOwnership,
-              lte(dataExportReauthentication.createdAt, cutoff),
-              lte(dataSubjectRequest.receivedAt, cutoff),
-            ),
-          )
-          .orderBy(asc(dataExportReauthentication.id)),
-        {
-          policyCodes: ["reauthentication-metadata", "session-identifiers-redacted"],
-          map: ({ id, ...row }) => ({ ...row, challengeDigest: pseudonymousIdentifier(id) }),
-        },
       );
       return;
     }

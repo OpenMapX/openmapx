@@ -1,20 +1,14 @@
-import { lstat, rm } from "node:fs/promises";
-import { isAbsolute, relative, resolve } from "node:path";
-import {
-  erasureVerificationIdentifiers,
-  isTerminalPrivacyRequestState,
-} from "@openmapx/core/erasure-cleanup";
+import { erasureVerificationIdentifiers } from "@openmapx/core/erasure-cleanup";
 import {
   appendErasureCompleted,
   appendErasureRequest,
   readErasureJournalKeyFile,
 } from "@openmapx/core/erasure-journal";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { currentAccountMutation } from "../account/account-context";
 import { assertAccountDeletionAllowed } from "../account/admin-invariant";
 import { currentAuthDatabase } from "../account/auth-database";
-import { dataExportArtifact, dataSubjectRequest, dataSubjectRequestAttachment } from "../db/schema";
-import { API_VOLUMES, privateVolumeDirectory } from "./private-volume-directory";
+import { dataSubjectRequest } from "../db/schema";
 
 interface ErasureUser {
   id: string;
@@ -25,18 +19,6 @@ export interface UserErasureDependencies {
   request(userId: string): Promise<string>;
   cleanup(user: ErasureUser): Promise<void>;
   complete(receiptId: string): Promise<void>;
-}
-
-// The auth hook is constructed before the optional artifact store during API
-// startup.  Once the store is ready, the server installs its lock-aware
-// deleter here; the descriptor-only fallback below keeps deletion safe and
-// idempotent in minimal/test environments without a configured volume.
-let configuredPrivacyArtifactDeleter: ((storageKey: string) => Promise<void>) | undefined;
-
-export function configurePrivacyArtifactDeleter(
-  deleter: ((storageKey: string) => Promise<void>) | undefined,
-): void {
-  configuredPrivacyArtifactDeleter = deleter;
 }
 
 export function createUserErasureHooks(dependencies: UserErasureDependencies): {
@@ -91,81 +73,8 @@ function journalPath(): string {
 }
 
 export async function cleanupResidualUserData(user: ErasureUser): Promise<void> {
-  // Better Auth invokes this hook before deleting the user row.  Export
-  // ciphertext is deliberately outside the database and therefore is not
-  // covered by FK cascades; remove it while the exact subject/request mapping
-  // is still available.  A missing store/object is idempotent, but an unsafe
-  // path or failed delete aborts account deletion so we never report an
-  // erasure while a deliverable archive remains readable.
-  const requests = await currentAuthDatabase()
-    .select({ id: dataSubjectRequest.id, state: dataSubjectRequest.state })
-    .from(dataSubjectRequest)
-    .where(eq(dataSubjectRequest.userId, user.id));
-  const requestIds = requests.map((row) => row.id);
-  const retainedActiveRequestIds = new Set(
-    requests
-      .filter((request) => !isTerminalPrivacyRequestState(request.state))
-      .map((request) => request.id),
-  );
-  const deletionRequestIds = requestIds.filter((id) => !retainedActiveRequestIds.has(id));
-  if (deletionRequestIds.length) {
-    const [artifacts, attachments] = await Promise.all([
-      currentAuthDatabase()
-        .select({ id: dataExportArtifact.id, storageKey: dataExportArtifact.storageKey })
-        .from(dataExportArtifact)
-        .where(inArray(dataExportArtifact.requestId, deletionRequestIds)),
-      currentAuthDatabase()
-        .select({
-          id: dataSubjectRequestAttachment.id,
-          storageKey: dataSubjectRequestAttachment.storageKey,
-        })
-        .from(dataSubjectRequestAttachment)
-        .where(inArray(dataSubjectRequestAttachment.requestId, deletionRequestIds)),
-    ]);
-    for (const object of [...artifacts, ...attachments]) {
-      if (configuredPrivacyArtifactDeleter)
-        await configuredPrivacyArtifactDeleter(object.storageKey);
-      else await deletePrivacyCiphertext(object.storageKey);
-    }
-    const erasedAt = new Date();
-    await currentAuthDatabase().transaction(async (tx) => {
-      if (artifacts.length) {
-        await tx
-          .update(dataExportArtifact)
-          .set({
-            state: "deleted",
-            deletedAt: erasedAt,
-            revokedAt: erasedAt,
-            wrappedDek: null,
-            masterKeyVersion: null,
-            tag: null,
-          })
-          .where(
-            and(
-              inArray(
-                dataExportArtifact.id,
-                artifacts.map((row) => row.id),
-              ),
-              sql`${dataExportArtifact.state} <> 'deleted'`,
-            ),
-          );
-      }
-      if (attachments.length) {
-        await tx
-          .update(dataSubjectRequestAttachment)
-          .set({ deletedAt: erasedAt, wrappedDek: null, masterKeyVersion: null, tag: null })
-          .where(
-            and(
-              inArray(
-                dataSubjectRequestAttachment.id,
-                attachments.map((row) => row.id),
-              ),
-              sql`${dataSubjectRequestAttachment.deletedAt} is null`,
-            ),
-          );
-      }
-    });
-  }
+  // Better Auth invokes this hook before deleting the user row. Privacy
+  // requests keep their case history but record that the account is gone.
   const [emailIdentifier, changeEmailIdentifier] = erasureVerificationIdentifiers(user);
   const accountErasedAt = new Date();
   await currentAuthDatabase().transaction(async (tx) => {
@@ -215,66 +124,6 @@ export async function cleanupResidualUserData(user: ErasureUser): Promise<void> 
          OR position(lower(${user.email}) in lower(metadata::text)) > 0
     `);
   });
-}
-
-/**
- * Delete one ciphertext object using the same descriptor/path invariants as
- * the runtime artifact store, without loading the master key during the
- * Better-Auth deletion hook.  This is intentionally private to erasure: the
- * normal request cleanup path uses EncryptedBlobStore's lock and metadata
- * checks.  The storage root is fixed by deployment configuration and a
- * missing object is treated as an already-completed deletion.
- */
-async function deletePrivacyCiphertext(storageKey: string): Promise<void> {
-  const configuredRoot =
-    process.env.OPENMAPX_EXPORT_STORAGE_DIR?.trim() || "/var/lib/openmapx/subject-exports";
-  if (!isAbsolute(configuredRoot)) throw new Error("Privacy export storage root is unavailable");
-  // The same directory the export store uses (see app.ts).
-  const rootValue = privateVolumeDirectory(configuredRoot, API_VOLUMES.subjectExports);
-  if (
-    !storageKey ||
-    storageKey.length > 512 ||
-    isAbsolute(storageKey) ||
-    storageKey.split("/").some((part) => !part || part === "." || part === "..") ||
-    /[\\\0\p{Cc}]/u.test(storageKey)
-  ) {
-    throw new Error("Privacy artifact storage key is unsafe");
-  }
-  const root = resolve(rootValue);
-  const rootInfo = await lstat(root).catch((error: unknown) => {
-    if (
-      error &&
-      typeof error === "object" &&
-      "code" in error &&
-      (error as { code?: unknown }).code === "ENOENT"
-    )
-      return null;
-    throw error;
-  });
-  // A deployment without the optional export volume cannot have a readable
-  // ciphertext object.  Keep deletion idempotent without creating a new
-  // directory merely as a side effect of account removal.
-  if (!rootInfo) return;
-  if (!rootInfo.isDirectory() || (rootInfo.mode & 0o777) !== 0o700)
-    throw new Error("Privacy export storage root is unsafe");
-  const path = resolve(root, storageKey);
-  const rel = relative(root, path);
-  if (!rel || rel.startsWith("..") || isAbsolute(rel))
-    throw new Error("Privacy artifact storage key is unsafe");
-  const info = await lstat(path).catch((error: unknown) => {
-    if (
-      error &&
-      typeof error === "object" &&
-      "code" in error &&
-      (error as { code?: unknown }).code === "ENOENT"
-    )
-      return null;
-    throw error;
-  });
-  if (!info) return;
-  if (!info.isFile() || info.nlink !== 1 || (info.mode & 0o777) !== 0o400)
-    throw new Error("Privacy artifact path is unsafe");
-  await rm(path, { force: false });
 }
 
 export const userErasureHooks = createUserErasureHooks({

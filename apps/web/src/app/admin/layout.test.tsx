@@ -32,22 +32,6 @@ describe("admin layout deployment boundary", () => {
     );
     expect(rendered.props.selfHosted).toBeNull();
   });
-  it("keeps me authentication and privacy_admin deployment skip", async () => {
-    const paths: string[] = [];
-    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
-      paths.push(new URL(url).pathname);
-      expect(new Headers(init.headers).get("cookie")).toBe("session=privacy");
-      expect(init.cache).toBe("no-store");
-      return Response.json({
-        user: { name: "Synthetic", email: "privacy@example.test", role: "privacy_admin" },
-      });
-    });
-    const rendered = await request.run("session=privacy", () =>
-      AdminRootLayout({ children: "child" }),
-    );
-    expect(rendered.props.selfHosted).toBe(false);
-    expect(paths).toEqual(["/api/me"]);
-  });
   it.each(["user", "anonymous"])("retains redirect for %s before deployment", async (role) => {
     const paths: string[] = [];
     vi.stubGlobal("fetch", async (url: string) => {

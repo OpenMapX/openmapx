@@ -1,5 +1,8 @@
-import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { existsSync, readdirSync } from "node:fs";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { request as httpRequest } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -9,41 +12,54 @@ import {
   DAWARICH_SUPPORTED_COMMIT,
   DAWARICH_SUPPORTED_IMAGE_DIGEST,
 } from "@openmapx/core/privacy";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../db/index.js";
 import {
   account,
   dataDisclosureEvent,
   dataSubjectRequest,
-  dataSubjectRequestTask,
+  dataSubjectRequestEvent,
   personalTimelineConnection,
   savedList,
+  session,
+  sessionAuthAssurance,
   user,
 } from "../db/schema.js";
 import { tar } from "./__tests__/fixtures/source-tar.js";
-import { artifactResultFromRow, parseWrappedDek } from "./artifact-download.js";
-import { EncryptedBlobStore } from "./artifact-storage.js";
-import { createEncryptedAttachment } from "./attachments.js";
 import { SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
-import { loadMasterKeyRing } from "./crypto.js";
-import { generatePrivacyExport } from "./generation.js";
+import { EncryptedSourceSpool } from "./encrypted-source-spool.js";
 import { PrivacyRequestService } from "./request-service.js";
 
 const SUBJECT_ID = "controller-acceptance-subject";
 const FOREIGN_ID = "controller-acceptance-foreign";
-const FIXTURE_NOW = new Date("2026-09-05T00:00:00.000Z");
-const roots: string[] = [];
+const SESSION_ID = "controller-acceptance-session";
+const OPERATOR_SOURCES = SUBJECT_DATA_CATALOGUE.filter((r) => r.strategy === "operator_task").map(
+  (r) => r.id,
+);
+
+const auth = vi.hoisted(() => ({ current: null as unknown }));
+vi.mock("../auth.js", () => ({ auth: { api: { getSession: async () => auth.current } } }));
+
+const { privacyRequestsRoute } = await import("../routes/privacy-requests.js");
 
 function sha256(value: Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function dawarichTar(subjectId: string, cutoff: string): Buffer {
+/** A managed Dawarich export; `pointBytes` makes the archive large enough to
+ * interrupt mid-stream. */
+function dawarichTar(subjectId: string, cutoff: string, pointBytes = 0): Buffer {
   const accountRow = Buffer.from('{"id":41,"email":"subject@example.test","role":"user"}\n');
-  const points = Buffer.from(
-    '{"id":501,"timestamp":"2026-09-01T10:00:00.000Z","latitude":52.5,"longitude":13.4}\n',
-  );
+  const pointLines = [
+    '{"id":501,"timestamp":"2026-09-01T10:00:00.000Z","latitude":52.5,"longitude":13.4}',
+  ];
+  for (let id = 502; pointLines.join("\n").length < pointBytes; id += 1)
+    pointLines.push(
+      JSON.stringify({ id, note: randomBytes(512).toString("hex"), latitude: 52, longitude: 13 }),
+    );
+  const points = Buffer.from(`${pointLines.join("\n")}\n`);
   const declarations = [
     {
       id: "account",
@@ -56,7 +72,7 @@ function dawarichTar(subjectId: string, cutoff: string): Buffer {
       id: "points-2026-09",
       path: "dawarich/points/2026/09.jsonl",
       content: points,
-      records: 1,
+      records: pointLines.length,
       portability: true,
     },
   ];
@@ -105,10 +121,7 @@ function zipMembers(zip: Buffer): Map<string, Buffer> {
   return members;
 }
 
-async function runFixture() {
-  await db.delete(dataSubjectRequest).where(eq(dataSubjectRequest.userId, SUBJECT_ID));
-  await db.delete(user).where(eq(user.id, SUBJECT_ID));
-  await db.delete(user).where(eq(user.id, FOREIGN_ID));
+async function seedSubject() {
   const createdAt = new Date("2026-09-01T00:00:00.000Z");
   await db.insert(user).values([
     {
@@ -206,139 +219,98 @@ async function runFixture() {
       legalBasisCode: "contract",
     },
   ]);
-
-  const ring = loadMasterKeyRing({
-    env: {
-      NODE_ENV: "development",
-      OPENMAPX_EXPORTS_KEY: Buffer.alloc(32, 29).toString("base64url"),
-    },
-  });
-  const root = await mkdtemp(join(tmpdir(), "openmapx-controller-acceptance-"));
-  roots.push(root);
-  const store = new EncryptedBlobStore({ root, ring, deploymentId: "controller-acceptance" });
-  const service = new PrivacyRequestService({
-    database: db,
-    keyRing: ring,
-    deploymentId: "controller-acceptance",
-    now: () => FIXTURE_NOW,
-  });
-  const request = await service.create({
+  await db.insert(session).values({
+    id: SESSION_ID,
+    token: `token-${SESSION_ID}`,
     userId: SUBJECT_ID,
-    kind: "access_and_portability",
-    channel: "self_service",
-    locale: "en",
-    timeZone: "UTC",
+    expiresAt: new Date(Date.now() + 3_600_000),
+    createdAt: new Date(),
+    updatedAt: new Date(),
   });
-  const supplement = Buffer.from(
-    JSON.stringify({
-      version: 1,
-      event: "structured-log-match",
-      note: "rights of another person removed",
-    }),
-  );
-  await createEncryptedAttachment(
-    {
-      requestId: request.id,
-      ownerId: SUBJECT_ID,
-      purpose: "operator_supplement",
-      filename: "reviewed-log-supplement.json",
-      mediaType: "application/json",
-      source: supplement,
-      expiresAt: new Date(FIXTURE_NOW.getTime() + 86_400_000),
-      rightsReviewState: "redacted",
-      metadata: {
-        source: "local-structured-log",
-        cutoff: request.receivedAt.toISOString(),
-        reasonCode: "exact-subject-field-match",
-        redactionCode: "rights-of-others-removed",
-        schemaVersion: "structured-log-v1",
-      },
-    },
-    { store, database: db },
-  );
-  const tasks = await db
-    .select()
-    .from(dataSubjectRequestTask)
-    .where(eq(dataSubjectRequestTask.requestId, request.id));
-  for (const task of tasks) {
-    if (task.registrationId === "off-host-processor-sources")
-      await service.markTask({ taskId: task.id, requestId: request.id, status: "retryable" });
-    else if (task.registrationId === "backup-retained-copies")
-      // Retained backups are reviewed manually by the operator; the export
-      // records that review instead of extracting backup contents.
-      await service.markTask({
-        taskId: task.id,
-        requestId: request.id,
-        status: "complete",
-        reasonCode: "retained-backups-reviewed",
-        recordCount: 0,
-      });
-    else if (task.registrationId === "application-logs")
-      await service.markTask({
-        taskId: task.id,
-        requestId: request.id,
-        status: "complete",
-        reasonCode: "exact-structured-log-reviewed",
-        redactionCode: "rights-of-others-removed",
-        recordCount: 1,
-      });
-    else if (task.registrationId === "redis-subject-controls")
-      await service.markTask({
-        taskId: task.id,
-        requestId: request.id,
-        status: "complete",
-        reasonCode: "exact-locator-reviewed-no-match",
-        recordCount: 0,
-      });
-    else if (task.registrationId === "data-manager-trigger-attribution")
-      await service.markTask({
-        taskId: task.id,
-        requestId: request.id,
-        status: "not_applicable",
-        reasonCode: "source-not-configured",
-      });
-  }
-  const generate = () =>
-    generatePrivacyExport({
-      requestId: request.id,
-      database: db,
-      store,
-      service,
-      now: () => FIXTURE_NOW,
-      openmapx: { offlinePrincipalKey: Buffer.alloc(32, 11) },
-      dawarich: {
-        fetchExport: async ({ request: sourceRequest }) =>
-          Readable.from([dawarichTar(SUBJECT_ID, sourceRequest.cutoff)]),
-      },
-    });
-  const result = await generate();
-  if (!result.artifact.wrappedDek) throw new Error("acceptance artifact has no wrapped key");
-  const plaintext: Buffer[] = [];
-  await store.decryptTo(
-    artifactResultFromRow(result.artifact, {
-      deploymentId: "controller-acceptance",
-      wrappedDek: parseWrappedDek(result.artifact.wrappedDek),
-    }),
-    (chunk) => {
-      plaintext.push(Buffer.from(chunk));
-    },
-  );
-  const members = zipMembers(Buffer.concat(plaintext));
-  const manifest = JSON.parse(
-    members.get("openmapx-data-export/manifest.json")?.toString("utf8") ?? "null",
-  ) as {
-    request: { rights: { access: boolean; portability: boolean } };
-    timing: { snapshotAt: string };
-    collectorOutcomes: Array<{ registrationId: string; outcome: string; warningCodes: string[] }>;
-    members: Array<{ path: string; sha256: string; schema: string | null; records: number | null }>;
+  auth.current = {
+    user: { id: SUBJECT_ID, role: "user", twoFactorEnabled: false },
+    session: { id: SESSION_ID, userId: SUBJECT_ID },
   };
-  return { request, result, members, manifest };
 }
 
-beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(FIXTURE_NOW);
+async function signInFreshly(authenticatedAt = new Date()) {
+  await db
+    .insert(sessionAuthAssurance)
+    .values({ sessionId: SESSION_ID, userId: SUBJECT_ID, method: "password", authenticatedAt })
+    .onConflictDoUpdate({
+      target: sessionAuthAssurance.sessionId,
+      set: { authenticatedAt, method: "password" },
+    });
+}
+
+async function exportApp(pointBytes = 0) {
+  const app = Fastify();
+  await app.register(privacyRequestsRoute, {
+    prefix: "/api",
+    database: db,
+    exportSources: {
+      openmapx: { offlinePrincipalKey: Buffer.alloc(32, 11) },
+      dawarich: {
+        fetchExport: async ({ request: source }) =>
+          Readable.from([dawarichTar(SUBJECT_ID, source.cutoff, pointBytes)]),
+      },
+    },
+  });
+  return app;
+}
+
+async function subjectRequest() {
+  const [row] = await db
+    .select()
+    .from(dataSubjectRequest)
+    .where(eq(dataSubjectRequest.userId, SUBJECT_ID));
+  return row;
+}
+
+async function eventTypes(requestId: string) {
+  return (
+    await db
+      .select({ eventType: dataSubjectRequestEvent.eventType })
+      .from(dataSubjectRequestEvent)
+      .where(eq(dataSubjectRequestEvent.requestId, requestId))
+  ).map((row) => row.eventType);
+}
+
+/**
+ * Watch every source spool the export creates: where it lives, and that real
+ * source data was written into it while the export ran.
+ */
+function watchSpools() {
+  const spools: Array<{ directory: string; filesDuringExport: number }> = [];
+  const original = EncryptedSourceSpool.create.bind(EncryptedSourceSpool);
+  const spy = vi.spyOn(EncryptedSourceSpool, "create").mockImplementation(async (options) => {
+    const spool = await original(options);
+    const directory = (spool as unknown as { directory: string }).directory;
+    const seen = { directory, filesDuringExport: 0 };
+    spools.push(seen);
+    const write = spool.write.bind(spool);
+    spool.write = async (input) => {
+      const entry = await write(input);
+      seen.filesDuringExport = Math.max(seen.filesDuringExport, readdirSync(directory).length);
+      return entry;
+    };
+    return spool;
+  });
+  return { spools, restore: () => spy.mockRestore() };
+}
+
+/** Every file below the test's temporary directory: the export may only use
+ * the short-lived encrypted source spool, and must leave nothing behind. */
+async function filesUnder(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { recursive: true, withFileTypes: true });
+  return entries.filter((entry) => !entry.isDirectory()).map((entry) => entry.name);
+}
+
+let temporary: string;
+beforeEach(async () => {
+  temporary = await mkdtemp(join(tmpdir(), "openmapx-export-e2e-"));
   for (const [key, value] of Object.entries({
+    TMPDIR: temporary,
     OPENMAPX_DEPLOYMENT_ID: "controller-acceptance",
     LEGAL_NAME: "Controller Acceptance Test",
     LEGAL_STREET: "Test Street 1",
@@ -353,49 +325,107 @@ beforeEach(() => {
     LEGAL_PRIVACY_SOURCES: "[]",
   }))
     vi.stubEnv(key, value);
-});
-
-afterEach(async () => {
   await db.delete(dataSubjectRequest).where(eq(dataSubjectRequest.userId, SUBJECT_ID));
   await db.delete(user).where(eq(user.id, SUBJECT_ID));
   await db.delete(user).where(eq(user.id, FOREIGN_ID));
-  for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
+  await seedSubject();
+});
+
+afterEach(async () => {
+  auth.current = null;
+  await db.delete(dataSubjectRequest).where(eq(dataSubjectRequest.userId, SUBJECT_ID));
+  await db.delete(user).where(eq(user.id, SUBJECT_ID));
+  await db.delete(user).where(eq(user.id, FOREIGN_ID));
   vi.unstubAllEnvs();
-  vi.useRealTimers();
+  await rm(temporary, { recursive: true, force: true });
 });
 
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
-  "controller-wide privacy export on PostgreSQL",
+  "self-service privacy export streamed on PostgreSQL",
   () => {
-    it("produces the same safe controller-wide semantics in two clean scoped runs", async () => {
-      const runs = [];
-      for (let run = 0; run < 2; run += 1) {
-        const fixture = await runFixture();
-        const archiveText = [...fixture.members.values()]
-          .map((value) => value.toString("utf8"))
-          .join("\n");
-        const catalogue = SUBJECT_DATA_CATALOGUE.map((item) => item.id).sort();
-        const registrations = fixture.manifest.collectorOutcomes
-          .map((outcome) => outcome.registrationId)
-          .sort();
-        const outcomes = new Map(
-          fixture.manifest.collectorOutcomes.map((outcome) => [
-            outcome.registrationId,
-            outcome.outcome,
-          ]),
+    it("refuses a session without a fresh sign-in and creates no request", async () => {
+      const app = await exportApp();
+      try {
+        // An old sign-in is not fresh.
+        await signInFreshly(new Date(Date.now() - 11 * 60_000));
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/privacy/export",
+          payload: {},
+        });
+        expect(response.statusCode).toBe(401);
+        expect(response.json()).toEqual({ code: "FRESH_SIGN_IN_REQUIRED" });
+        expect(await subjectRequest()).toBeUndefined();
+      } finally {
+        await app.close();
+      }
+    });
+
+    it("streams the full scope with the Article 15(1) information and stores nothing", async () => {
+      const app = await exportApp();
+      const watched = watchSpools();
+      try {
+        await signInFreshly();
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/privacy/export",
+          payload: { kind: "access_and_portability", locale: "en", timeZone: "UTC" },
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.headers["content-type"]).toBe("application/zip");
+        expect(response.headers["cache-control"]).toBe("private, no-store");
+        expect(response.headers["content-disposition"]).toMatch(
+          /^attachment; filename="openmapx-data-export-[0-9a-f]{8}\.zip"$/,
         );
-        expect(registrations).toEqual(catalogue);
-        expect(new Set(registrations).size).toBe(registrations.length);
+        const members = zipMembers(response.rawPayload);
+        const manifest = JSON.parse(
+          members.get("openmapx-data-export/manifest.json")?.toString("utf8") ?? "null",
+        ) as {
+          request: { rights: { access: boolean; portability: boolean } };
+          collectorOutcomes: Array<{ registrationId: string; outcome: string }>;
+          members: Array<{ path: string; sha256: string }>;
+        };
+        // Full scope: every catalogue registration is accounted for, and the
+        // operator-held sources are named as checked separately.
+        const outcomes = new Map(
+          manifest.collectorOutcomes.map((source) => [source.registrationId, source.outcome]),
+        );
+        expect([...outcomes.keys()].sort()).toEqual(
+          SUBJECT_DATA_CATALOGUE.map((item) => item.id).sort(),
+        );
         expect(outcomes.get("managed-dawarich")).toBe("included");
-        expect(outcomes.get("backup-retained-copies")).toBe("reviewed_no_match");
-        expect(outcomes.get("off-host-processor-sources")).toBe("included");
-        expect(fixture.manifest.request.rights).toEqual({ access: true, portability: true });
-        expect(fixture.manifest.timing.snapshotAt).toBe(fixture.request.receivedAt.toISOString());
+        for (const id of OPERATOR_SOURCES) expect(outcomes.get(id), id).toBe("operator_check");
+        expect(manifest.request.rights).toEqual({ access: true, portability: true });
+        for (const member of manifest.members)
+          expect(sha256(members.get(member.path) as Buffer), member.path).toBe(member.sha256);
+        // Article 15(1): purposes, categories, recipients, retention, source,
+        // rights and the complaint authority are in the processing information.
+        const information = JSON.parse(
+          members
+            .get("openmapx-data-export/article-15/processing-information.json")
+            ?.toString("utf8") ?? "null",
+        );
+        expect(information).toMatchObject({
+          version: 2,
+          controller: { email: "privacy@example.test" },
+          deployment: { supervisoryAuthority: "Test Supervisory Authority" },
+          recipientSummary: { totalGroupCount: 1 },
+        });
+        const auth = information.sources.find(
+          (source: { id: string }) => source.id === "auth-sessions",
+        );
+        expect(auth).toMatchObject({
+          purposes: expect.any(Array),
+          legalBases: expect.any(Array),
+          retention: expect.any(Object),
+          origin: expect.any(Object),
+        });
+        const readme = members.get("openmapx-data-export/README.txt")?.toString("utf8") ?? "";
+        expect(readme).toContain("Checked separately by the operator");
+        const archiveText = [...members.values()].map((value) => value.toString("utf8")).join("\n");
         expect(archiveText).toContain("Controller acceptance subject");
         expect(archiveText).toContain("Subject hiking list");
         expect(archiveText).toContain("Acceptance Route Processor");
-        expect(archiveText).toContain("structured-log-match");
-        expect(archiveText).toContain("rights-of-others-removed");
         for (const forbidden of [
           "FOREIGN-ADJACENT-RECORD",
           "FOREIGN-SAVED-LIST",
@@ -407,44 +437,217 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           "FORBIDDEN-MANAGED-API-KEY",
         ])
           expect(archiveText).not.toContain(forbidden);
-        const readme =
-          fixture.members.get("openmapx-data-export/README.html")?.toString("utf8") ?? "";
-        expect(readme).toMatch(/^<!doctype html>/i);
-        expect(readme).not.toMatch(/<(?:script|iframe)|\ssrc\s*=/i);
-        let countedMembers = 0;
-        for (const member of fixture.manifest.members) {
-          const content = fixture.members.get(member.path);
-          expect(content, member.path).toBeDefined();
-          expect(sha256(content as Buffer), member.path).toBe(member.sha256);
-          expect(member.schema, member.path).not.toBeUndefined();
-          if (member.path.endsWith(".jsonl") && member.records !== null) {
-            const records = (content as Buffer)
-              .toString("utf8")
-              .split("\n")
-              .filter((line) => line.length > 0).length;
-            expect(records, member.path).toBe(member.records);
-            expect(member.schema, member.path).not.toBeNull();
-            countedMembers += 1;
-          }
-        }
-        expect(countedMembers).toBeGreaterThan(0);
-        runs.push({
-          outcomes: fixture.manifest.collectorOutcomes
-            .map(({ registrationId, outcome, warningCodes }) => ({
-              registrationId,
-              outcome,
-              warningCodes: [...warningCodes].sort(),
-            }))
-            .sort((a, b) => a.registrationId.localeCompare(b.registrationId)),
-          members: fixture.manifest.members
-            .map(({ path, schema, records }) => ({ path, schema, records }))
-            .sort((a, b) => a.path.localeCompare(b.path)),
+
+        // The request is self-service, proven by the session, and stays in
+        // progress while the operator-held sources are still open.
+        const row = await subjectRequest();
+        expect(row).toMatchObject({
+          channel: "self_service",
+          state: "in_progress",
+          identityMethod: "account_session",
         });
-        await db.delete(dataSubjectRequest).where(eq(dataSubjectRequest.id, fixture.request.id));
-        await db.delete(user).where(eq(user.id, SUBJECT_ID));
-        await db.delete(user).where(eq(user.id, FOREIGN_ID));
+        await vi.waitFor(async () =>
+          expect(await eventTypes(row!.id)).toEqual(
+            expect.arrayContaining([
+              "received",
+              "state_in_progress",
+              "export_started",
+              "export_delivered",
+            ]),
+          ),
+        );
+        // The sources really were spooled, encrypted, under the temporary
+        // directory while the export ran (marker plus at least one member)...
+        expect(watched.spools.length).toBeGreaterThan(0);
+        for (const spool of watched.spools) {
+          expect(spool.directory.startsWith(join(temporary, "openmapx-privacy-source-spool"))).toBe(
+            true,
+          );
+          expect(spool.filesDuringExport).toBeGreaterThan(1);
+          // ...and every spool is gone afterwards.
+          expect(existsSync(spool.directory)).toBe(false);
+        }
+        // No archive was written anywhere: the temporary directory holds no file.
+        expect(await filesUnder(temporary)).toEqual([]);
+
+        // A second download reuses the same active request.
+        const again = await app.inject({ method: "POST", url: "/api/privacy/export", payload: {} });
+        expect(again.statusCode).toBe(200);
+        expect(
+          await db
+            .select({ id: dataSubjectRequest.id })
+            .from(dataSubjectRequest)
+            .where(eq(dataSubjectRequest.userId, SUBJECT_ID)),
+        ).toHaveLength(1);
+      } finally {
+        watched.restore();
+        await app.close();
       }
-      expect(runs[1]).toEqual(runs[0]);
-    }, 30_000);
+    }, 60_000);
+
+    it("lets a freshly signed-in owner verify and download an admin-created case linked to the account", async () => {
+      vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 5).toString("hex"));
+      const service = new PrivacyRequestService({ database: db });
+      // An administrator recorded a postal request and linked it to the account.
+      const assisted = await service.create({
+        channel: "post",
+        kind: "access_and_portability",
+        userId: SUBJECT_ID,
+        subject: { locatorType: "user_id", locator: SUBJECT_ID, accountState: "current" },
+        locale: "en",
+        timeZone: "UTC",
+      });
+      expect(assisted).toMatchObject({ state: "open", identityMethod: null });
+      const app = await exportApp();
+      try {
+        await signInFreshly();
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/privacy/export",
+          payload: {},
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.headers["content-type"]).toBe("application/zip");
+        expect(zipMembers(response.rawPayload).has("openmapx-data-export/manifest.json")).toBe(
+          true,
+        );
+        // The same case was used, verified by the session and moved into work.
+        const row = await service.getById(assisted.id);
+        expect(row).toMatchObject({
+          channel: "post",
+          state: "in_progress",
+          identityMethod: "account_session",
+        });
+        expect(row.identityVerifiedAt).not.toBeNull();
+        const events = await db
+          .select({
+            eventType: dataSubjectRequestEvent.eventType,
+            payload: dataSubjectRequestEvent.payload,
+          })
+          .from(dataSubjectRequestEvent)
+          .where(eq(dataSubjectRequestEvent.requestId, assisted.id));
+        expect(events).toEqual(
+          expect.arrayContaining([
+            { eventType: "identity_verified", payload: { reasonCode: "account_session" } },
+            {
+              eventType: "state_in_progress",
+              payload: { from: "open", reasonCode: "account_session" },
+            },
+            { eventType: "export_started", payload: {} },
+          ]),
+        );
+        await vi.waitFor(async () =>
+          expect(await eventTypes(assisted.id)).toContain("export_delivered"),
+        );
+        expect(
+          await db
+            .select({ id: dataSubjectRequest.id })
+            .from(dataSubjectRequest)
+            .where(eq(dataSubjectRequest.userId, SUBJECT_ID)),
+        ).toHaveLength(1);
+        // The account holder's own sign-in does not prove who sent the case, so
+        // it never lets an administrator export the data to that requester.
+        await expect(service.beginAdminExport(assisted.id, "admin-1")).rejects.toMatchObject({
+          code: "MANUAL_IDENTITY_REQUIRED",
+        });
+      } finally {
+        await app.close();
+      }
+    }, 60_000);
+
+    it("returns a linked case that waits on the requester to work with the same verification", async () => {
+      vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 5).toString("hex"));
+      const service = new PrivacyRequestService({ database: db });
+      const assisted = await service.create({
+        channel: "email",
+        kind: "access_and_portability",
+        userId: SUBJECT_ID,
+        subject: { locatorType: "user_id", locator: SUBJECT_ID, accountState: "current" },
+        locale: "en",
+        timeZone: "UTC",
+      });
+      const waiting = await service.recordDecision({
+        requestId: assisted.id,
+        version: assisted.version,
+        decision: "waiting_on_requester",
+        reasonCode: "asked-for-identity",
+        actorId: "controller-acceptance-admin",
+        idempotencyKey: `wait-${assisted.id}`,
+      });
+      expect(waiting.state).toBe("waiting_on_requester");
+      const app = await exportApp();
+      try {
+        await signInFreshly();
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/privacy/export",
+          payload: {},
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(await service.getById(assisted.id)).toMatchObject({
+          state: "in_progress",
+          identityMethod: "account_session",
+        });
+        expect(await eventTypes(assisted.id)).toEqual(
+          expect.arrayContaining(["identity_verified", "state_in_progress"]),
+        );
+      } finally {
+        await app.close();
+      }
+    }, 60_000);
+
+    it("leaves the request in progress when the client aborts after the headers", async () => {
+      const app = await exportApp(8 * 1024 * 1024);
+      try {
+        await signInFreshly();
+        await app.listen({ port: 0, host: "127.0.0.1" });
+        const { port } = app.server.address() as AddressInfo;
+        const status = await new Promise<number>((resolve, reject) => {
+          const outgoing = httpRequest(
+            {
+              host: "127.0.0.1",
+              port,
+              method: "POST",
+              path: "/api/privacy/export",
+              headers: { "content-type": "application/json" },
+            },
+            (incoming) => {
+              incoming.once("data", () => {
+                // Headers and the first bytes arrived; the client goes away.
+                incoming.destroy();
+                outgoing.destroy();
+                resolve(incoming.statusCode ?? 0);
+              });
+            },
+          );
+          outgoing.on("error", () => undefined);
+          outgoing.once("error", reject);
+          outgoing.end(JSON.stringify({}));
+        });
+        expect(status).toBe(200);
+        const row = await subjectRequest();
+        await vi.waitFor(async () => expect(await eventTypes(row!.id)).toContain("export_failed"), {
+          timeout: 20_000,
+        });
+        const events = await eventTypes(row!.id);
+        expect(events).not.toContain("export_delivered");
+        expect(events).not.toContain("state_completed");
+        expect((await subjectRequest())?.state).toBe("in_progress");
+        expect(
+          await db
+            .select({ id: dataSubjectRequestEvent.id })
+            .from(dataSubjectRequestEvent)
+            .where(
+              and(
+                eq(dataSubjectRequestEvent.requestId, row!.id),
+                eq(dataSubjectRequestEvent.eventType, "export_failed"),
+              ),
+            ),
+        ).toHaveLength(1);
+        await vi.waitFor(async () => expect(await filesUnder(temporary)).toEqual([]));
+      } finally {
+        await app.close();
+      }
+    }, 60_000);
   },
 );

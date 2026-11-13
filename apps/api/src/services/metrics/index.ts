@@ -95,10 +95,7 @@ export interface MetricsHandle {
   privacyOpenRequests: ObservableGauge;
   privacyOldestRequestAge: ObservableGauge;
   privacySourceTasks: ObservableGauge;
-  privacyGenerationFailures: ObservableGauge;
-  privacyArtifactCleanupLag: ObservableGauge;
-  privacyCleanupBacklog: ObservableGauge;
-  privacyKeyReady: ObservableGauge;
+  privacyExportFailures: ObservableGauge;
   privacyNotificationFailures: ObservableGauge;
   recordPrivacyOperationalSnapshot(snapshot: PrivacyOperationalMetricSnapshot): void;
   /** Render the current metric state as Prometheus text format. */
@@ -113,11 +110,7 @@ export interface PrivacyOperationalMetricSnapshot {
   openRequestsByDueState: Readonly<Record<"on_track" | "due_soon" | "overdue", number>>;
   oldestRequestAgeSeconds: number;
   sourceTasksByStatus: Readonly<Record<string, number>>;
-  generationFailures: number;
-  artifactCleanupLagSeconds: number;
-  artifactCleanupBacklog: number;
-  attachmentCleanupBacklog: number;
-  keyReady: boolean;
+  exportFailures: number;
   notificationFailures: number;
 }
 
@@ -229,11 +222,7 @@ export function initMetrics(): MetricsHandle {
     openRequestsByDueState: { on_track: 0, due_soon: 0, overdue: 0 },
     oldestRequestAgeSeconds: 0,
     sourceTasksByStatus: {},
-    generationFailures: 0,
-    artifactCleanupLagSeconds: 0,
-    artifactCleanupBacklog: 0,
-    attachmentCleanupBacklog: 0,
-    keyReady: false,
+    exportFailures: 0,
     notificationFailures: 0,
   };
   const privacyOpenRequests = meter.createObservableGauge("privacy_open_requests", {
@@ -257,33 +246,11 @@ export function initMetrics(): MetricsHandle {
     for (const [status, value] of Object.entries(privacySnapshot.sourceTasksByStatus))
       observation.observe(value, { status });
   });
-  const privacyGenerationFailures = meter.createObservableGauge("privacy_generation_failures", {
-    description: "Unresolved privacy export generation failures",
+  const privacyExportFailures = meter.createObservableGauge("privacy_export_failures", {
+    description: "Privacy export failures in the last 24 hours",
   });
-  privacyGenerationFailures.addCallback((observation) =>
-    observation.observe(privacySnapshot.generationFailures),
-  );
-  const privacyArtifactCleanupLag = meter.createObservableGauge(
-    "privacy_artifact_cleanup_lag_seconds",
-    { description: "Age of the oldest pending artifact deletion", unit: "s" },
-  );
-  privacyArtifactCleanupLag.addCallback((observation) =>
-    observation.observe(privacySnapshot.artifactCleanupLagSeconds),
-  );
-  const privacyCleanupBacklog = meter.createObservableGauge("privacy_cleanup_backlog", {
-    description: "Pending privacy ciphertext deletions by bounded resource kind",
-  });
-  privacyCleanupBacklog.addCallback((observation) => {
-    observation.observe(privacySnapshot.artifactCleanupBacklog, { resource_kind: "artifact" });
-    observation.observe(privacySnapshot.attachmentCleanupBacklog, {
-      resource_kind: "attachment",
-    });
-  });
-  const privacyKeyReady = meter.createObservableGauge("privacy_key_ready", {
-    description: "Whether the dedicated privacy encryption key is ready",
-  });
-  privacyKeyReady.addCallback((observation) =>
-    observation.observe(privacySnapshot.keyReady ? 1 : 0),
+  privacyExportFailures.addCallback((observation) =>
+    observation.observe(privacySnapshot.exportFailures),
   );
   const privacyNotificationFailures = meter.createObservableGauge("privacy_notification_failures", {
     description: "Failed privacy notification outbox items",
@@ -349,10 +316,7 @@ export function initMetrics(): MetricsHandle {
     privacyOpenRequests,
     privacyOldestRequestAge,
     privacySourceTasks,
-    privacyGenerationFailures,
-    privacyArtifactCleanupLag,
-    privacyCleanupBacklog,
-    privacyKeyReady,
+    privacyExportFailures,
     privacyNotificationFailures,
     recordPrivacyOperationalSnapshot(snapshot) {
       privacySnapshot = {
@@ -361,13 +325,7 @@ export function initMetrics(): MetricsHandle {
           0,
           Math.min(snapshot.oldestRequestAgeSeconds, 31_536_000_000),
         ),
-        generationFailures: Math.max(0, Math.floor(snapshot.generationFailures)),
-        artifactCleanupLagSeconds: Math.max(
-          0,
-          Math.min(snapshot.artifactCleanupLagSeconds, 31_536_000_000),
-        ),
-        artifactCleanupBacklog: Math.max(0, Math.floor(snapshot.artifactCleanupBacklog)),
-        attachmentCleanupBacklog: Math.max(0, Math.floor(snapshot.attachmentCleanupBacklog)),
+        exportFailures: Math.max(0, Math.floor(snapshot.exportFailures)),
         notificationFailures: Math.max(0, Math.floor(snapshot.notificationFailures)),
       };
     },

@@ -16,31 +16,15 @@ export function privacyCaseProjection(row: Record<string, unknown>) {
     registeredAt: row.registeredAt,
     dueAt: row.dueAt,
     extension: row.extension,
-    identityState: row.identityState,
+    identityMethod: row.identityMethod ?? null,
+    identityVerifiedAt: row.identityVerifiedAt ?? null,
     locatorType: row.locatorType,
     accountState: row.accountState,
     refusalCode: row.refusalCode,
-    deliveryState: row.deliveryState,
+    completedAt: row.completedAt ?? null,
+    closedAt: row.closedAt ?? null,
     version: row.version,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
-}
-
-export function privacyAttachmentProjection(row: Record<string, unknown>) {
-  return Object.fromEntries(
-    [
-      "id",
-      "purpose",
-      "filename",
-      "mediaType",
-      "plaintextBytes",
-      "expiresAt",
-      "rightsReviewState",
-      "metadata",
-      "createdAt",
-    ]
-      .filter((k) => row[k] !== undefined)
-      .map((k) => [k, row[k]]),
-  );
 }

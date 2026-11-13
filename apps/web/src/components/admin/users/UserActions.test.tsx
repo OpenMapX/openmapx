@@ -277,7 +277,7 @@ it("a closed and reopened create dialog keeps new inputs when the old request co
   expect(mocks.toast).not.toHaveBeenCalled();
 });
 
-it("offers the privacy role for an existing administrator through the same canonical writer", async () => {
+it("demotes an existing administrator through the same canonical writer", async () => {
   mocks.list.mockResolvedValue({
     data: { users: [{ ...subject, role: "admin" }], total: 2 },
     error: null,
@@ -285,12 +285,12 @@ it("offers the privacy role for an existing administrator through the same canon
   mount(<UserDetail userId={subject.id} />);
   await screen.findByText(subject.email);
   fireEvent.mouseDown(screen.getByRole("combobox", { name: "Role" }));
-  fireEvent.click(screen.getByRole("option", { name: "Privacy admin" }));
+  fireEvent.click(screen.getByRole("option", { name: "User" }));
   fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
   await waitFor(() => expect(mocks.role).toHaveBeenCalledTimes(1));
   expect(mocks.role).toHaveBeenCalledWith(
     subject.id,
-    { role: "privacy_admin", expectedRole: "admin" },
+    { role: "user", expectedRole: "admin" },
     { "idempotency-key": expect.any(String) },
     expect.objectContaining({ client: expect.any(Object) }),
   );

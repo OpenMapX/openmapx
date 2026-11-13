@@ -36,12 +36,14 @@ See [Reviews](./reviews.md) for key export and recovery limits.
 ## Request a copy of your data
 
 1. In **Account settings**, find **Your data and access request**.
-2. Choose **Request data copy**. The request appears with its current status
-   and response deadline.
-3. Return to the section to check progress. A request can require an identity
-   check, a connected processor, clarification, or manual operator review.
-4. When an archive is ready, choose **Download archive** and complete the fresh
-   sign-in requested before download.
+2. Choose **Download my data**. If you have not signed in within the last few
+   minutes, OpenMapX asks you to sign in again, including any second factor,
+   and then continues the download.
+3. The archive is created on demand and downloaded straight to your device.
+   Nothing is kept on the server, so you can download again at any time.
+4. The request stays listed with its status and response deadline. Some
+   sources can only be checked by the operator; the archive's report names
+   them, and the request is completed once the operator has checked them.
 
 The request covers controller-held data and connected sources according to the
 instance's collection and review process. Check the archive's completeness and
@@ -49,10 +51,8 @@ source information; an unavailable connected source is not proof that it holds
 no data. Secret material, such as passwords and private signing keys, is excluded.
 Use a feature's dedicated credential-backup process when needed.
 
-The available actions depend on request state. **Withdraw request** stops an
-active request, **Delete archive** revokes an existing artifact, and
-**Create fresh copy** requests a new collection where offered. Archives expire;
-use the displayed state to decide whether to request another copy.
+**Withdraw request** ends an active request; it is recorded as completed at
+your request.
 
 **Download browser data** is a separate local export. It covers the supported
 data held by this browser, not every device, the server database, or arbitrary

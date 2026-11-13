@@ -1,4 +1,4 @@
-import { and, eq, gte, isNull, type SQL, type SQLWrapper, sql } from "drizzle-orm";
+import { and, eq, isNull, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import { db as defaultDb } from "../db/index.js";
 import { dataSubjectRequestPreservation } from "../db/schema.js";
 
@@ -6,7 +6,6 @@ type PreservationTransaction = Parameters<Parameters<typeof defaultDb.transactio
 
 export interface PreservationCandidate {
   registrationId: string;
-  locatorDigest: string;
   sourceCutoffAt: Date;
   status: string;
   releasedAt: Date | null;
@@ -15,12 +14,10 @@ export interface PreservationCandidate {
 export function preservationHoldsCandidate(
   row: PreservationCandidate,
   registrationId: string,
-  locatorDigest: string,
   candidateTimestamp: Date,
 ): boolean {
   return (
     row.registrationId === registrationId &&
-    row.locatorDigest === locatorDigest &&
     row.status === "held" &&
     row.releasedAt === null &&
     candidateTimestamp.getTime() <= row.sourceCutoffAt.getTime()
@@ -112,29 +109,6 @@ export async function withPreservationRetentionLock<T>(
     await transaction.execute(sql`select pg_advisory_xact_lock(1330464848, 1380275027)`);
     return callback(transaction);
   });
-}
-
-export async function isSubjectRetentionHeld(input: {
-  registrationId: string;
-  locatorDigest: string;
-  candidateTimestamp: Date;
-  database?: typeof defaultDb;
-}): Promise<boolean> {
-  const database = input.database ?? defaultDb;
-  const rows = await database
-    .select({ id: dataSubjectRequestPreservation.id })
-    .from(dataSubjectRequestPreservation)
-    .where(
-      and(
-        eq(dataSubjectRequestPreservation.registrationId, input.registrationId),
-        eq(dataSubjectRequestPreservation.locatorDigest, input.locatorDigest),
-        gte(dataSubjectRequestPreservation.sourceCutoffAt, input.candidateTimestamp),
-        eq(dataSubjectRequestPreservation.status, "held"),
-        isNull(dataSubjectRequestPreservation.releasedAt),
-      ),
-    )
-    .limit(1);
-  return rows.length > 0;
 }
 
 export async function capturePreservation(input: {

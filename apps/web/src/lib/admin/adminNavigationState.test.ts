@@ -29,7 +29,8 @@ it.each(["", " ", "\n", "x".repeat(257)])(
   },
 );
 it("keeps a valid case and section for direct navigation", () => {
-  expect(parseAdminCaseSelection(new URLSearchParams("case=case-123&section=attachments"))).toEqual(
-    { caseId: "case-123", section: "attachments" },
-  );
+  expect(parseAdminCaseSelection(new URLSearchParams("case=case-123&section=export"))).toEqual({
+    caseId: "case-123",
+    section: "export",
+  });
 });

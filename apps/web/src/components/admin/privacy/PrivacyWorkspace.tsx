@@ -27,10 +27,6 @@ import {
   usePrivacyAdmin,
   usePrivacyMutationClient,
 } from "@/lib/admin/privacyAdmin";
-import {
-  clearPendingPrivacyAdminDelivery,
-  readPendingPrivacyAdminDelivery,
-} from "@/lib/admin/privacyReauthentication";
 import { useAdminQueryState } from "@/lib/admin/useAdminQueryState";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { PrivacyCaseView } from "./PrivacyCaseView";
@@ -50,25 +46,18 @@ function Workspace({ binding }: { binding: PrivacyAdminBinding }) {
     [intake, setIntake] = useState(false);
   useEffect(() => {
     if (initialized.current || !binding.actorId) return;
-    const pending = readPendingPrivacyAdminDelivery(binding.apiOrigin, binding.actorId);
-    if (caseId) {
-      if (pending && pending.requestId !== caseId) clearPendingPrivacyAdminDelivery();
-    } else if (pending) update({ case: pending.requestId, section: "delivery" }, "replace");
-    else if (!queue.data) return;
-    else if (queue.data.requests[0]) update({ case: queue.data.requests[0].id }, "replace");
+    if (!caseId) {
+      if (!queue.data) return;
+      if (queue.data.requests[0]) update({ case: queue.data.requests[0].id }, "replace");
+    }
     initialized.current = true;
     setReady(true);
-  }, [caseId, queue.data, binding.apiOrigin, binding.actorId, update]);
+  }, [caseId, queue.data, binding.actorId, update]);
   useEffect(() => {
-    if (!ready || !caseId) return;
-    if (previous.current && previous.current !== caseId) clearPendingPrivacyAdminDelivery();
-    previous.current = caseId;
+    if (ready && caseId) previous.current = caseId;
   }, [ready, caseId]);
   const selected = caseId ?? previous.current;
-  const choose = (id: string) => {
-    if (id !== selected) clearPendingPrivacyAdminDelivery();
-    update({ case: id, section: "identity" });
-  };
+  const choose = (id: string) => update({ case: id, section: "identity" });
   return (
     <Stack spacing={3} sx={{ maxWidth: 1500, mx: "auto", width: "100%" }}>
       <AdminPageHeader
@@ -213,7 +202,6 @@ function Intake({
     [accountState, setAccountState] = useState<"current" | "inaccessible" | "deleted" | "unknown">(
       "inaccessible",
     ),
-    [contact, setContact] = useState(""),
     [received, setReceived] = useState("");
   return (
     <Stack spacing={2} sx={{ pt: 1 }}>
@@ -263,13 +251,6 @@ function Intake({
           </MenuItem>
         ))}
       </TextField>
-      {channel === "representative" && (
-        <TextField
-          label={t("representativeContact")}
-          value={contact}
-          onChange={(e) => setContact(e.target.value)}
-        />
-      )}
       <TextField
         label={t("receivedAt")}
         type="datetime-local"
@@ -279,7 +260,7 @@ function Intake({
       />
       <Button
         variant="contained"
-        disabled={mutation.pending || !locator || (channel === "representative" && !contact)}
+        disabled={mutation.pending || !locator}
         onClick={async () => {
           const result = await mutation.execute("intake", (c, h) =>
             privacyResult(
@@ -287,9 +268,6 @@ function Intake({
                 {
                   channel,
                   subject: { locatorType, locator, accountState },
-                  ...(channel === "representative"
-                    ? { representative: { contactType: "email", contact } }
-                    : {}),
                   ...(received ? { receivedAt: new Date(received).toISOString() } : {}),
                   locale: document.documentElement.lang || "en",
                   timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
