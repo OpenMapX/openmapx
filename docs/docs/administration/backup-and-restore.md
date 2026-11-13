@@ -81,11 +81,6 @@ For erasure-safe restore, retain both
 accounts are erased. Follow [User erasure operations](./user-erasure.md) for
 permissions and journal handling.
 
-Export-storage keys require separately protected recovery handling. Keep the
-private export volume excluded from ordinary backups; including it would defeat
-the workflow's retention boundary. See
-[Export-key provisioning and rotation](./data-subject-requests.md#export-key-provisioning-and-rotation).
-
 :::
 
 Copy snapshot directories and the required recovery material off the deployment
@@ -127,6 +122,78 @@ The operator handles a person's request for data held in backups manually.
 Requests arrive through the published data-request contact, and the case keeps
 a retained-backup source task that the operator resolves and records. Never
 restore a backup into production to answer such a request.
+
+### Manual backup export for a privacy request
+
+Run these steps on the deployment host. They restore one snapshot into a
+throwaway database that has no network, export the person from it, and remove
+everything again. Never restore into production, and never mount production
+secrets, the erasure journal or its key into the scratch container.
+
+1. **List the backups.** `pnpm openmapx backup list` prints each snapshot
+   under `infra/docker/backups/` with its creation time.
+2. **Pick a snapshot within retention and check it.** Choose a snapshot whose
+   manifest `expiresAt` has not passed. Its `manifest.json` names each dump
+   file (`postgis__<volume>.sql.gz` for the OpenMapX database) with its size
+   and `sha256`. Compare the digest before using the file:
+
+   ```bash
+   SNAPSHOT=infra/docker/backups/<name>
+   sha256sum "$SNAPSHOT"/postgis__*.sql.gz   # must equal the manifest sha256
+   ```
+
+3. **Start the scratch database.** Use the pinned production PostGIS image,
+   no network, the snapshot mounted read-only, and a private socket directory:
+
+   ```bash
+   SCRATCH=$(mktemp -d /srv/privacy-scratch.XXXXXX)
+   mkdir -m 0700 "$SCRATCH/socket"
+   docker run -d --name openmapx-privacy-scratch --network none \
+     -e POSTGRES_PASSWORD="$(openssl rand -hex 16)" -e POSTGRES_DB=openmapx \
+     -v openmapx-privacy-scratch-data:/var/lib/postgresql \
+     -v "$PWD/$SNAPSHOT":/snapshot:ro \
+     -v "$SCRATCH/socket":/var/run/postgresql \
+     ghcr.io/baosystems/postgis:18-3.6@sha256:dd7515b7d8b8b8bac3516a9c3e12584df5890b0864c29295c1b934ecd1db81a7
+   ```
+
+4. **Restore the dumps into it.** Wait until `pg_isready` succeeds, then load
+   the OpenMapX dump:
+
+   ```bash
+   docker exec openmapx-privacy-scratch pg_isready -U postgres -d openmapx
+   docker exec openmapx-privacy-scratch sh -c \
+     'gunzip -c /snapshot/postgis__*.sql.gz | psql -v ON_ERROR_STOP=1 -U postgres -d openmapx'
+   ```
+
+   A managed Dawarich timeline lives in the separate `dawarich-postgis__*`
+   dump; check it the same way in its own scratch container if the person had
+   a connected timeline.
+
+5. **Export the person from the scratch database.** The script runs the same
+   streaming export as the self-service download, against the scratch socket
+   only, and writes the ZIP to a file:
+
+   ```bash
+   pnpm --filter @openmapx/api exec tsx scripts/privacy/export-from-database.ts \
+     --socket-dir "$SCRATCH/socket" --database openmapx \
+     --subject <account id> --case <privacy case id> --out "$SCRATCH/backup-export.zip"
+   ```
+
+   The report inside lists sources the scratch database could not answer,
+   such as the managed timeline, for you to review.
+
+6. **Remove the container, its volume and the scratch files** once the
+   archive is delivered through the agreed channel:
+
+   ```bash
+   docker rm -f openmapx-privacy-scratch
+   docker volume rm openmapx-privacy-scratch-data
+   rm -rf "$SCRATCH"
+   ```
+
+7. **Record the outcome on the case.** Resolve the `backup-retained-copies`
+   task in **Privacy requests** with a reason code that names the snapshot
+   checked, and complete the request when every task is resolved.
 
 ## Creating a backup
 

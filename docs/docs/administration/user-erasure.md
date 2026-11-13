@@ -28,12 +28,12 @@ local cleanup.
 
 ## Access and portability requests
 
-The account settings **Your data and access request** section starts an
-Article 15 request and, by default, asks for a separate Article 20 portable
-copy. The response deadline is recorded when the request is received. A fresh
-sign-in (including configured MFA) is required for each archive download; the
-one-time authorization is consumed before streaming and the encrypted archive
-expires automatically. A download link is never sent by email.
+The account settings **Your data and access request** section downloads an
+Article 15 copy together with the Article 20 portable data. The response
+deadline is recorded when the request is received. A fresh sign-in (including
+configured MFA) is required for each download. The archive streams straight to
+the browser and is never stored on the server, and no download link is sent by
+email.
 
 The archive covers explicit OpenMapX projections and connected managed Dawarich
 data when that processor responds. Other controllers, off-host backups,
@@ -42,20 +42,14 @@ The **Download browser data** action is a separate local JSON supplement: it
 contains only an allowlisted preference snapshot and offline-map metadata, not
 cookies, sessions, credentials, caches or raw map archives.
 
-An active access case can retain its already captured, minimized encrypted
-source material and prepared response after account deletion for verified
-assisted delivery. This does not retain usable account credentials or restore
-login access. Terminal case outcomes and source/artifact expiry trigger
-separate physical cleanup; key metadata is cleared only after deletion is
-confirmed. Case accounting retention does not extend full source-data retention.
+Account deletion keeps the privacy case records, which are needed to account
+for the response, and marks every request of the deleted account as such.
+Nothing else about the case survives: there is no stored archive or evidence
+file to delete. A restore replays the same change for an account deleted after
+the snapshot.
 
-Restore applies the same distinction between active and terminal cases. It
-revokes restored terminal export artifacts and expires their attachments before
-the API resumes. Physical cleanup then uses the
-normal monitored retry path; restored keys and deletion records are retained
-until that cleanup confirms removal. A restore must not mark still-present
-ciphertext as deleted. The private export volume is excluded from backups and
-cannot be restored from an archive through this workflow.
+A request for data held in backups is answered manually with the
+[manual backup export](./backup-and-restore.md#manual-backup-export-for-a-privacy-request).
 
 ## Backups
 
