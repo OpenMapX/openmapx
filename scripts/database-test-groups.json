@@ -97,10 +97,20 @@
   ],
   "crash-points": [
     "apps/api/src/services/__tests__/crash-points/scenarios/agent-killed-before-effect.test.ts",
+    "apps/api/src/services/__tests__/crash-points/scenarios/agent-restart-during-helper.test.ts",
     "apps/api/src/services/__tests__/crash-points/scenarios/concurrent-admission.test.ts",
+    "apps/api/src/services/__tests__/crash-points/scenarios/data-job-blocks-update.test.ts",
+    "apps/api/src/services/__tests__/crash-points/scenarios/fence-released-after-update.test.ts",
+    "apps/api/src/services/__tests__/crash-points/scenarios/helper-killed.test.ts",
     "apps/api/src/services/__tests__/crash-points/scenarios/install.test.ts",
+    "apps/api/src/services/__tests__/crash-points/scenarios/lost-fence-prepare-reply.test.ts",
+    "apps/api/src/services/__tests__/crash-points/scenarios/lost-fence-settle-reply.test.ts",
     "apps/api/src/services/__tests__/crash-points/scenarios/maintenance-holds-admission.test.ts",
     "apps/api/src/services/__tests__/crash-points/scenarios/registry-outage.test.ts",
-    "apps/api/src/services/__tests__/crash-points/scenarios/same-key-conflict.test.ts"
+    "apps/api/src/services/__tests__/crash-points/scenarios/same-key-conflict.test.ts",
+    "apps/api/src/services/__tests__/crash-points/scenarios/self-update.test.ts",
+    "apps/api/src/services/__tests__/crash-points/scenarios/state-filesystem-full.test.ts",
+    "apps/api/src/services/__tests__/crash-points/scenarios/unhealthy-api-image.test.ts",
+    "apps/api/src/services/__tests__/crash-points/scenarios/update-cancelled-during-settle.test.ts"
   ]
 }

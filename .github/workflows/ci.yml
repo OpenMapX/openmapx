@@ -613,6 +613,7 @@ jobs:
           unshare --version
           setpriv --version
           docker compose version
+          echo "The full-state-filesystem scenario runs in this group (OPENMAPX_RUN_CRASH_DISK_TESTS=1)."
 
       - name: Run the required database integration suites
         env:
@@ -623,6 +624,8 @@ jobs:
           # Set for the crash-point group: a missing sandbox fails the suite
           # instead of skipping it.
           OPENMAPX_RUN_CRASH_POINT_TESTS: ${{ matrix.group == 'crash-points' && '1' || '0' }}
+          # The full-state-filesystem scenario mounts a tmpfs with sudo.
+          OPENMAPX_RUN_CRASH_DISK_TESTS: ${{ matrix.group == 'crash-points' && '1' || '0' }}
         run: pnpm test:database "${TEST_DB_GROUP}" "${TEST_DB_PART}/${TEST_DB_TOTAL}"
 
       - name: Preserve the exact database shard inventory

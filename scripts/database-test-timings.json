@@ -57,9 +57,19 @@
   "services/data-manager/__tests__/ambient-places/germany-postgres.test.ts": 67.26,
   "services/data-manager/__tests__/ambient-places/planet-postgres.test.ts": 38.18,
   "apps/api/src/services/__tests__/crash-points/scenarios/agent-killed-before-effect.test.ts": 155,
+  "apps/api/src/services/__tests__/crash-points/scenarios/agent-restart-during-helper.test.ts": 80,
   "apps/api/src/services/__tests__/crash-points/scenarios/concurrent-admission.test.ts": 95,
+  "apps/api/src/services/__tests__/crash-points/scenarios/data-job-blocks-update.test.ts": 600,
+  "apps/api/src/services/__tests__/crash-points/scenarios/fence-released-after-update.test.ts": 85,
+  "apps/api/src/services/__tests__/crash-points/scenarios/helper-killed.test.ts": 190,
   "apps/api/src/services/__tests__/crash-points/scenarios/install.test.ts": 90,
+  "apps/api/src/services/__tests__/crash-points/scenarios/lost-fence-prepare-reply.test.ts": 80,
+  "apps/api/src/services/__tests__/crash-points/scenarios/lost-fence-settle-reply.test.ts": 85,
   "apps/api/src/services/__tests__/crash-points/scenarios/maintenance-holds-admission.test.ts": 210,
   "apps/api/src/services/__tests__/crash-points/scenarios/registry-outage.test.ts": 95,
-  "apps/api/src/services/__tests__/crash-points/scenarios/same-key-conflict.test.ts": 90
+  "apps/api/src/services/__tests__/crash-points/scenarios/same-key-conflict.test.ts": 90,
+  "apps/api/src/services/__tests__/crash-points/scenarios/self-update.test.ts": 80,
+  "apps/api/src/services/__tests__/crash-points/scenarios/state-filesystem-full.test.ts": 130,
+  "apps/api/src/services/__tests__/crash-points/scenarios/unhealthy-api-image.test.ts": 220,
+  "apps/api/src/services/__tests__/crash-points/scenarios/update-cancelled-during-settle.test.ts": 215
 }
