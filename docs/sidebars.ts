@@ -162,6 +162,7 @@ const sidebars: SidebarsConfig = {
             'developer/integration-system',
             'developer/api-surface',
             'developer/service-manifest',
+            'developer/build-artifacts-control',
             'developer/user-data-trust-model',
             'developer/user-data-confidentiality-architecture',
           ],

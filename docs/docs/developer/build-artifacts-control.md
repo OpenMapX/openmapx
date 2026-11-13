@@ -1,8 +1,172 @@
+---
+title: Build bundles and target authority
+description: "What the update control plane guarantees, the terms it uses, its current state machines and the target design that replaces the signed layer."
+---
+
 # Build bundles and target authority
 
 `@openmapx/core/build-artifacts` is a server-only surface. It is intentionally absent
 from the browser barrel. CLI bundle commands use the same bounded validator and
 writer; uploaded archives never invoke shell extraction.
+
+This page has two halves. The first describes what the update control plane
+guarantees, the words it uses and the states it moves through today. The second
+records the bundle contract and the signed authority layer as implemented. The
+section [Target design (not yet implemented)](#target-design-not-yet-implemented)
+describes the simpler design that replaces the signed layer; each change that
+implements part of it moves the affected rows into the current sections.
+
+## Guarantee matrix
+
+The matrix assumes one Docker host and one maintainer. Host and Docker
+administrators are trusted. The threat is a compromised application service (API,
+data-manager or a community service) or a crash of any process at any point.
+
+The verdict says what happens to each mechanism group in the replacement. "Keep"
+means the mechanism stays as it is. "Simplify" keeps the guarantee and replaces
+the form. "Cut" removes the mechanism because the guarantee it protects comes from
+elsewhere. The last column names the crash-point scenario that shows the guarantee
+survives the replacement.
+
+| Mechanism group                                                                                                 | Failure prevented                                                                                                           | How credible                                                          | Verdict                                                          | Crash-point scenario                                                                                                                                    |
+| --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Typed agent operations, per-role agent tokens, resource policy, owned-service resolver                          | A compromised API or data-manager runs arbitrary Docker commands or widens the targets it may touch                         | The real boundary against a compromised service                       | Keep                                                             | Same key with a different body is a conflict                                                                                                            |
+| Agent job journal and idempotent operation keys                                                                 | A retry after a lost reply applies an operation twice                                                                       | Observed need: an earlier missing journal caused an eight-hour outage | Keep                                                             | Lost reply on configuration prepare; lost reply on data fence prepare and settle                                                                        |
+| Drain before self-replacement, ordered recreate, agent last                                                     | A self-update leaves services half-replaced, or the agent replaces itself while work is in flight                           | Observed need                                                         | Keep, simplify the helper                                        | Helper killed mid-recreate; agent killed while the helper runs; CLI command while the helper runs                                                       |
+| Configuration generations, one atomic pointer, retention against live containers                                | A crash leaves a half-written configuration, or pruning removes files a running container still uses                        | Observed need                                                         | Keep                                                             | API killed between saving desired rows and applying the generation                                                                                      |
+| Pre-pull, release manifest digests, post-recreate verification                                                  | An unavailable registry or an unhealthy image is discovered after the old containers are gone                               | Real failures, about the right size                                   | Keep                                                             | Registry outage before maintenance; new image unhealthy after recreate                                                                                  |
+| Confined hardlinks, archive validation, descriptor-anchored paths on shared data                                | A peer plants a symlink on `/data` and redirects an agent write                                                             | Real: data-manager can write `/data`                                  | Keep, narrowed                                                   | Unit tests only                                                                                                                                         |
+| Backup workflow and administrative job runner with one job owner                                                | Two API processes run the same job, or a double-submitted update creates two jobs                                           | Real, about the right size                                            | Keep                                                             | Concurrent admissions; API killed after the job is claimed                                                                                              |
+| "Unknown never releases", effect-started record, cancellation fence                                             | A crash after an effect began is mistaken for "nothing happened" and the targets are released or the effect is repeated     | The most valuable rule in the layer                                   | Keep the rule, simplify the form to one journal row              | Agent killed while a Compose effect is in flight; agent killed after accepting, before the effect; cancel and deadline variants                         |
+| Target leases and the child inventory                                                                           | Two writers (agent, host CLI, data job, helper) change one service at once, or a surviving delegated writer loses its claim | Real guarantee; a kernel lock cannot cover a surviving helper         | Simplify to durable rows in one agent-private store              | Concurrent admissions; a surviving data-manager child after an agent restart                                                                            |
+| Data-job fence                                                                                                  | Configuration maintenance runs while a data job writes the same data                                                        | Postgres is the right tool                                            | Simplify to one SQL row under the existing advisory lock         | Data-manager killed while the fence is prepared; fence prepare racing data-job admission; data-manager killed during a data job while the agent is down |
+| Maintenance state machine and candidate lifecycle                                                               | A crash between saving and applying configuration leaves rows and files disagreeing                                         | Real guarantee, very large form                                       | Simplify to one record and three phases                          | API killed between saving desired rows and applying the generation                                                                                      |
+| Configuration writer lock and artifact-store lock                                                               | Two writers render or publish at once                                                                                       | Real; today a crash inside the lock needs a manual `rmdir`            | Simplify to a recoverable lock never held across a Docker effect | Concurrent admissions; CLI command while the helper runs                                                                                                |
+| Release overlay and selection receipts                                                                          | Images and configuration drift apart                                                                                        | Two pointers where one suffices                                       | Simplify to image pins inside the generation                     | Registry outage before maintenance                                                                                                                      |
+| Two data-manager admission models                                                                               | A crashed legacy data job blocks all data work                                                                              | The second model caused that failure                                  | Merge                                                            | Data-manager killed during a data job while the agent is down                                                                                           |
+| Role keys, certificates, per-lease and child keys, signed assertions, witnesses                                 | A role forges another role's lease records on the shared ledger                                                             | Exists only because lease state sits on shared `/data`                | Cut once lease state moves to the agent store                    | Covered by the authority gate (agent state mounted nowhere else) and every scenario above                                                               |
+| Sequence numbers, retention clock, quotas, retention families, retirement commits, byte budgets, `mkdir` guards | Unbounded growth of signed records, replay after deletion                                                                   | Self-inflicted by the signed records; a time-based prune replaces it  | Cut                                                              | Agent state filesystem full right after an effect                                                                                                       |
+| Settlement cells and slots, the no-guard closure, recovery proofs                                               | A lost settle reply leaves the fence held forever                                                                           | Third-order machinery                                                 | Cut, replaced by an idempotent settle and an operator exit       | Lost reply on data fence settle                                                                                                                         |
+| Sealed configuration snapshot queue and its lock                                                                | The agent applies a configuration the API did not approve                                                                   | File transport created the need                                       | Cut, the payload travels in the authenticated operation          | API killed between saving desired rows and applying the generation                                                                                      |
+
+## Glossary
+
+- **Target.** A service ID, such as `motis` or `app-api`, whose containers a writer
+  may change. Writers claim targets before any Docker effect.
+- **Lease.** A durable claim on a set of targets by one execution. While it is
+  held, no other writer may begin an effect on those targets. Today a lease is a
+  signed owner certificate plus target lock files in the shared ledger under
+  `infra/docker/data/.admin-target-control/`.
+- **Child.** A delegated unit of work recorded under a lease before it starts: a
+  fixed CLI child, a data-manager job or the configuration helper. A lease cannot be
+  released until every attempted child is settled.
+- **Adoption.** The step in which a child process or peer verifies the child intent
+  recorded for it and takes it over. A child may begin effects only after adoption.
+- **Settlement.** Recording the final outcome of a child or effect from structured
+  evidence, so that its lease or fence can be released. Errors alone, expired
+  deadlines and dead processes do not settle anything.
+- **Fence.** The data-job fence: a `data_manager.jobs` row with
+  `kind = 'configuration-maintenance'` that blocks data-job admission while
+  configuration maintenance holds it. Its `guardState` is the fence's state.
+- **Guard.** Either the fence's `guardState`, or a `mkdir` writer guard: a
+  directory whose existence excludes a second writer from a record family. A crash
+  inside a `mkdir` guard leaves the directory behind until an operator removes it.
+- **Generation.** An immutable rendered configuration directory under
+  `infra/docker/state/ops-agent/configuration/generations/`, named `cfg1_…`.
+- **Pointer.** The symbolic link `infra/docker/state/ops-agent/configuration/current`
+  that names the live generation. Switching generations is one atomic rename of the
+  pointer.
+- **Journal.** The agent's job journal, `infra/docker/state/ops-agent/jobs-v1.json`,
+  written by atomic rename. It holds every operation the agent admitted and its
+  state.
+- **Operation key.** The caller-chosen idempotency key of an agent operation,
+  `opk1_…`. New root operations use timed keys, `opk1_t1_<expiry>_<nonce>`. The same
+  key with the same body returns the original operation; with a different body it
+  is a conflict.
+- **Origin.** The `{rootKey, issuer, notAfter}` identity of the root operation that
+  started a tree of executions. Descendants inherit it.
+- **Family.** All retained signed records that share one origin. Retention
+  collects records family by family.
+- **Receipt.** A signed record of an execution's terminal outcome, retained so that
+  another role can verify it.
+- **Witness.** A signed observation of host configuration sources, used to show
+  that the sources a plan was approved against have not changed.
+- **Role** and **principal.** A role is one of the processes that hold authority:
+  API, data-manager, ops-agent, host CLI and the helper. A principal is the role a
+  caller has authenticated as at a receiver, for example the role behind a
+  data-manager bearer token.
+- **Attempted.** An operation or child that was recorded as about to begin. From
+  this point a crash cannot prove that nothing happened.
+- **Effect started.** The record written immediately before the first host effect,
+  such as a Docker call.
+- **Unknown.** The outcome of an attempted operation that has no structured terminal
+  evidence. Unknown never releases a target or a fence.
+- **`recovery_required`.** The state of an operation whose outcome is unknown after
+  a restart or lost evidence. It is never re-dispatched automatically; it holds its
+  targets until an operator or a forward recovery path resolves it.
+
+## Current transition tables
+
+### Agent job states
+
+`OpsJobState` in `@openmapx/core/ops/contract`, journaled by `apps/ops-agent`.
+Terminal states carry `errorClass` when they are not `succeeded`.
+
+| From                                       | Event                                                       | To                                                              |
+| ------------------------------------------ | ----------------------------------------------------------- | --------------------------------------------------------------- |
+| (none)                                     | Operation admitted and journaled                            | `queued`                                                        |
+| `queued`                                   | Worker starts                                               | `running`                                                       |
+| `running`                                  | Typed result                                                | `succeeded`                                                     |
+| `running`                                  | Classified failure                                          | `failed` with its `errorClass`                                  |
+| `queued`, `running`                        | Cancellation request or deadline while the worker is active | `termination_pending`                                           |
+| `termination_pending`                      | Deadline passed and the worker stopped                      | `timed_out` (`errorClass: timeout`)                             |
+| `termination_pending`                      | Cancellation completed                                      | `failed` (`errorClass: runtime`)                                |
+| `termination_pending`                      | A fixed leaf handler had already committed its host call    | `succeeded`                                                     |
+| `queued`, `running`, `termination_pending` | Agent restart finds the entry unfinished                    | `failed` (`errorClass: recovery_required`); never re-dispatched |
+| Any non-terminal                           | Recovery forced while the worker is active                  | `termination_pending`, then `failed` (`recovery_required`)      |
+
+### Data-manager fence states
+
+`guardState` in the fence row's `metadata.configurationMaintenance`, mirrored in a
+signed record under `control-private/data-manager/configuration-maintenance/`.
+
+| From                        | Event                                               | To                             |
+| --------------------------- | --------------------------------------------------- | ------------------------------ |
+| (none)                      | Agent prepares maintenance; row inserted            | `preparing`                    |
+| `preparing`                 | Signed mirror and row both written                  | `prepared`                     |
+| `prepared`                  | Agent settles; mirror written before the row update | `settling` (mirror only)       |
+| `settling`                  | Row updated with the settlement control             | `settled`                      |
+| Missing or unreadable state | Read by admission or inspection                     | treated as `recovery_required` |
+
+Data-job admission refuses while any fence row is not `settled`.
+
+### API administrative job status
+
+`admin_job.status` in `apps/api`.
+
+| From                        | Event                                                        | To                                    |
+| --------------------------- | ------------------------------------------------------------ | ------------------------------------- |
+| (none)                      | Job created                                                  | `queued`                              |
+| `queued`                    | Cancel with no pending receipt delivery or managed operation | `canceled`                            |
+| `queued`                    | Claimed by a job owner                                       | `running`                             |
+| `running`                   | Job completed                                                | `success`                             |
+| `running`                   | Job failed                                                   | `failed`                              |
+| `running`, `cancel_pending` | Cancel requested                                             | `cancel_pending`                      |
+| `cancel_pending`            | Agent operations contained                                   | `canceled`                            |
+| `cancel_pending`            | Recovered failure that still needs candidate cleanup         | `running`, with observation `unknown` |
+
+### API observation state
+
+`admin_job.result.observation` records why a running job is waiting instead of
+finishing. A job with an observation, or with status `cancel_pending`, is picked up
+again when `nextCheckAt` passes.
+
+| Observation state  | Reason                                                                                     | Set when                                                                           | Cleared when                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `unknown`          | `transport`, `observer_deadline`, `recovery_required`, `unavailable` or `invalid_identity` | The API cannot yet read a terminal agent outcome                                   | A later observation reads the terminal outcome and the job settles |
+| `receipt_delivery` | `receipt_delivery`                                                                         | A terminal outcome is copied but its acknowledgement to the agent is not confirmed | The acknowledgement is confirmed                                   |
+
+Retries back off from 5 seconds to at most 60 seconds.
 
 ## Bundle contract
 
@@ -35,8 +199,8 @@ MOTIS export requires `motis/live/portable-sources.json`, a strict object contai
 credential values. Export retains source archives and the data subtree, omits
 generated configuration/proxy files, and writes a version 2 manifest with
 `runtimeMaterialization: "motis-target-credentials"`. Credential-bearing legacy
-bundles fail with rebuild guidance. Import cannot declare readiness until the
-future target credential materializer is installed; it must retain the original
+bundles fail with rebuild guidance. Import materializes the target's credentials
+into a private candidate before it can declare readiness, and retains the original
 bundle digest separately from the materialized fingerprint.
 
 ## Installation and process boundaries
@@ -46,9 +210,11 @@ public verifier bundle in `infra/docker/secrets`. Existing keys are validated an
 reused; partial trust, changed roles, unsafe owners/modes, links and foreign
 installation records are rejected. Keys and recovery records are never rotated
 implicitly. `infra/docker/control-private/<role>` stays outside shared data mounts.
-The agent's checkout mount masks sibling keys and recovery directories. The
-external helper masks all role keys and uses the agent recovery directory plus a
-fresh certified child key. Docker/host administrators remain trusted.
+The agent mounts `infra/docker` and several of its subtrees; bind mounts over the
+data-manager and host CLI keys and private directories hide those inside the agent
+container. The external helper masks all role keys and uses the agent recovery
+directory plus a fresh certified child key. Docker/host administrators remain
+trusted.
 
 Services read their fixed role key and verifier mounts on startup. Missing or
 conflicting trust disables signed-control admission with a fixed host recovery
@@ -102,8 +268,8 @@ Its separate signed lifecycle binds the original execution, monotonic sequence,
 phase and at most 64 child-intent digests. Each transition persists its private
 fence before shared publication under the execution writer guard. Terminal effect
 receipts fence new grants; `cancelControlExecution` persists cancellation and
-returns the original attempted identities for the future runtime's authenticated
-cancellation/lookup adapter. `assertControlExecutionForward` and
+returns the original attempted identities for the authenticated cancellation and
+lookup adapter. `assertControlExecutionForward` and
 `beginControlEffect` validate the complete deadline-only ancestry. New adoption
 and effect-start intent share the lifecycle guard with cancellation. Exact
 already-adopted duplicates remain usable for observation/settlement after cancel,
@@ -150,7 +316,7 @@ observation and settlement stay available.
   direct digest index, not a scan through historical keys.
 - Each role-family has at most 4,096 indexed records in 64 pages of 64 entries,
   each page at most 16 KiB. Its ordinary index, proof, acknowledgement and progress
-  metadata together are capped at 2 MiB. The 19 fixed private receipt namespaces
+  metadata together are capped at 2 MiB. The 22 fixed private receipt namespaces
   each permit at most 65,536 records of at most 128 KiB. Namespace creation
   counters and high-water records reserve capacity before publication.
 - Retirement cells are reserved before effects and remain writable outside the
@@ -242,7 +408,7 @@ configuration mutation routes, return the explicit client-upgrade prerequisite
 before POST or configuration preparation. These older producers need a durable
 owned-job handoff before they can mutate; they do not receive a replacement root
 from an opaque intent. Sync reads and retained legacy observations remain
-available. The future receiver prerequisites below stay closed.
+available.
 
 Settlement requires signed retained structured evidence from the fixed executor:
 a parsed typed result, exact fixed-command completion, or an execution that has
@@ -270,13 +436,90 @@ lease journal writer contention. Adoption retries cover only journal-entry and
 initial-observation contention, before any adoption record is written; later
 failures remain recovery-required. Waiting never removes locks or renews authority.
 
-## Deferred product consumers
+## Known weaknesses
 
-Task02.3 owns durable data-manager HTTP/row admission and containment. The existing
-managed CLI mutation gate and data-manager control-header gate remain closed until
-that receiver lands. Task01.2 owns maintenance decisions and orchestration;
-Task05.3 owns durable paired-pin approval; Task08.3 owns configuration helper drain
-and same-image recreation. Legacy ref-only approval now returns not-wired instead
-of bypassing paired publication. These future consumers must use the fixed
-constructors and original retained identities; named graph slots do not register
-new executable operations or advertise transfer readiness.
+**HMAC keys come from the signing keys.** The configuration source witness
+(`configuration-source-witness.ts`) uses the PKCS #8 bytes of a role's or child's
+Ed25519 private key directly as an HMAC-SHA-256 key for observation digests. One
+key therefore serves two algorithms. No attack is known, but key separation is the
+standard practice. The change that removes role keys and witnesses removes this
+use; until then, treat any exposure of an HMAC digest's inputs and key handling as
+exposure of the signing key.
+
+## Target design (not yet implemented)
+
+These tables describe the design that replaces the signed layer. Nothing in this
+section is implemented yet. Each change that implements part of it moves the
+affected rows into the current sections above and deletes them here.
+
+**One authority.** The ops-agent is the only owner of host mutation. Its state
+lives in `infra/docker/state/ops-agent/`, which no other service mounts. File
+modes alone are not treated as isolation.
+
+**Rules that do not change:** unknown never releases; attempted is recorded before
+any effect; startup never re-dispatches an attempted operation; the same key with
+a different body is a conflict; a lease is released only when every attempted
+child is terminal.
+
+### Operation record
+
+`OperationRecord { key, kind, bodyDigest, state, result?, parentKey?, deadlineAt,
+createdAt, terminalAt? }`, one durable row per operation in the agent store,
+written by atomic rename with fsync.
+
+| From                          | Event                                             | To                             |
+| ----------------------------- | ------------------------------------------------- | ------------------------------ |
+| (none)                        | Authenticated operation admitted                  | `accepted`                     |
+| `accepted`                    | About to begin; recorded before any effect        | `attempted`                    |
+| `attempted`                   | Immediately before the first host effect          | `effect_started`               |
+| `attempted`, `effect_started` | Structured result or failure                      | `terminal`                     |
+| `accepted`                    | Cancelled or past its deadline before any attempt | `terminal` (failed, no effect) |
+| `attempted`, `effect_started` | Restart, or outcome otherwise unknown             | `recovery_required`            |
+| `recovery_required`           | Operator resolves it as committed or failed       | `terminal`                     |
+
+Startup never moves `attempted` or `effect_started` back to `accepted`.
+
+### Lease record
+
+`LeaseRecord { leaseId, ownerOperationKey, targets, children, state }`, where each
+child names a data-manager job or helper container.
+
+| From   | Event                                    | To                                              |
+| ------ | ---------------------------------------- | ----------------------------------------------- |
+| (none) | Owner operation acquires free targets    | `held`                                          |
+| `held` | Owner and every attempted child terminal | `released`                                      |
+| `held` | Owner or a child is `recovery_required`  | stays `held` until an operator exit resolves it |
+
+### Data-job fence row
+
+One row in `data_manager` under the existing advisory lock. `prepare` and `settle`
+are idempotent and callable only by the agent. `prepare` refuses while unfinished
+or unknown data jobs exist; data-job admission refuses while the row is `prepared`.
+
+| From       | Event                                      | To                                     |
+| ---------- | ------------------------------------------ | -------------------------------------- |
+| (none)     | Agent `prepare`                            | `prepared`                             |
+| `prepared` | Agent `prepare` with the same key and body | `prepared` (original receipt returned) |
+| `prepared` | Agent `settle`                             | `settled`                              |
+| `settled`  | Agent `settle` retry                       | `settled` (original receipt returned)  |
+
+### Other target rules
+
+- **Writer lock.** The CLI goes through the agent when it is up. When the agent is
+  down, a lock file records PID, boot ID and process start time, and is reclaimed
+  only when that process is provably gone. The lock is never held across a Docker
+  effect.
+- **Desired configuration.** The payload travels in the authenticated operation.
+  The job row moves through three phases: candidate prepared; rows and decision
+  saved in one transaction; generation applied by a keyed operation. Recovery runs
+  the same forward code.
+- **Generation.** Configuration and image pins sit behind one atomic pointer. The
+  previous pointer is the manual rollback target.
+- **Bounded storage.** A record is pruned when it is terminal, its key has expired
+  and it has no unsettled child. `recovery_required` records are kept until
+  resolved.
+- **Operator exit.** `openmapx control status`, plus `control clear --op <key>` or
+  `control resolve --as committed|failed`: host-only, printing what is believed
+  live, and audited.
+- **Self-update order.** Pull first, drain, run the helper from the current image,
+  recreate in order with verification after each service, agent last.
