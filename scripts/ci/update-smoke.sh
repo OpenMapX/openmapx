@@ -6,10 +6,19 @@
 #
 # Release N is built from this checkout and pushed to a registry:2 container at
 # localhost:5000/openmapx. The operations agent inspects release manifests with
-# its own Docker CLI, inside its container, where localhost is the container:
-# during each update a forwarder in the agent's network namespace passes
-# localhost:5000 on to the registry, which listens on the host's network. Each later release is the previous release's images
-# with one more label (a new digest each), plus a release manifest. Every case
+# its own Docker CLI, inside its container, so before each update the agent is
+# given what a production registry has without help:
+#   - TLS: `docker manifest inspect` never falls back to plain HTTP, not even for
+#     localhost. The registry serves a throwaway certificate, which the agent's
+#     CLI trusts through /etc/docker/certs.d; the Docker daemon accepts it for
+#     localhost without that.
+#   - an address: localhost is the agent's container, so a forwarder in its
+#     network namespace passes localhost:5000 on to the registry, which listens
+#     on the host's network.
+# The agent then inspects the candidate's image exactly as the update does, and
+# the case fails at once, with the CLI's error, if it cannot.
+#
+# Each later release is the previous release's images with one more label (a new digest each), plus a release manifest. Every case
 # starts from a fresh installation of N, selected through the release channel
 # exactly as an operator's installation is:
 #
@@ -44,6 +53,7 @@ registry_image="registry:2.8.3"
 registry="localhost:5000/openmapx"
 release_counter=0
 cookie_file=""
+registry_certs=""
 admin_email="update-smoke@openmapx.org"
 admin_password=""
 release_images=(api web data-manager ops-agent transitous-runner transitous-tools)
@@ -66,13 +76,30 @@ built_image() {
   fi
 }
 
+registry_up() {
+  curl --fail --silent --max-time 5 --cacert "$registry_certs/registry.crt" \
+    https://localhost:5000/v2/ >/dev/null
+}
+
 start_registry() {
   step "Start the local registry"
   docker rm --force "$registry_name" >/dev/null 2>&1 || true
+  registry_certs="$work/registry-certs"
+  mkdir -p "$registry_certs"
+  openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=localhost \
+    -addext "subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1" \
+    -keyout "$registry_certs/registry.key" -out "$registry_certs/registry.crt" 2>/dev/null ||
+    fail "could not create the registry certificate"
+  # The registry runs as root and reads the key through its mount.
+  chmod 644 "$registry_certs/registry.key"
   # Host networking, so the agent's network gateway reaches it on port 5000.
-  docker run --detach --name "$registry_name" --network host "$registry_image" >/dev/null
+  docker run --detach --name "$registry_name" --network host \
+    --volume "$registry_certs:/certs:ro" \
+    --env REGISTRY_HTTP_TLS_CERTIFICATE=/certs/registry.crt \
+    --env REGISTRY_HTTP_TLS_KEY=/certs/registry.key \
+    "$registry_image" >/dev/null
   local deadline=$((SECONDS + 60))
-  until curl --fail --silent http://localhost:5000/v2/ >/dev/null; do
+  until registry_up; do
     ((SECONDS < deadline)) || fail "the local registry did not answer"
     sleep 1
   done
@@ -82,21 +109,34 @@ stop_registry() { docker stop "$registry_name" >/dev/null; }
 resume_registry() {
   docker start "$registry_name" >/dev/null
   local deadline=$((SECONDS + 60))
-  until curl --fail --silent http://localhost:5000/v2/ >/dev/null; do
+  until registry_up; do
     ((SECONDS < deadline)) || fail "the local registry did not come back"
     sleep 1
   done
 }
 
-# Listens on localhost:5000 inside the operations agent's network namespace
-# and forwards to the registry on the host, reached through the agent
-# network's gateway. It runs on the agent's own image, which has Node.
-start_registry_forwarder() {
-  local agent image gateway deadline
+# The operations agent's container as it runs now; the self-update replaces it.
+agent_container() {
+  docker ps --quiet --filter "label=com.docker.compose.project=$project" \
+    --filter "label=com.docker.compose.service=ops-agent" | head -1
+}
+
+# Gives the running operations agent what it needs to reach the registry as it
+# reaches a production one, then checks it does with the candidate's image:
+#   - the registry's certificate in /etc/docker/certs.d/localhost:5000, which
+#     its Docker CLI trusts;
+#   - a forwarder on localhost:5000 in its network namespace, to the registry
+#     on the host through the agent network's gateway. It runs on the agent's
+#     own image, which has Node.
+# Called before every update, so a recreated agent gets both again.
+prepare_agent_registry_access() {
+  local release="$1" agent image gateway reference output
   stop_registry_forwarder
-  agent="$(docker ps --quiet --filter "label=com.docker.compose.project=$project" \
-    --filter "label=com.docker.compose.service=ops-agent" | head -1)"
-  [[ -n "$agent" ]] || fail "no operations agent runs to forward the registry to"
+  agent="$(agent_container)"
+  [[ -n "$agent" ]] || fail "no operations agent runs to give registry access to"
+  docker exec --interactive --user 0 "$agent" sh -c \
+    'mkdir -p /etc/docker/certs.d/localhost:5000 && cat >/etc/docker/certs.d/localhost:5000/ca.crt' \
+    <"$registry_certs/registry.crt" || fail "could not give the operations agent the registry certificate"
   image="$(docker inspect --format '{{.Image}}' "$agent")"
   gateway="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.Gateway}} {{end}}' "$agent")"
   gateway="${gateway%% *}"
@@ -116,12 +156,15 @@ start_registry_forwarder() {
           if (address === "127.0.0.1") throw error;
         })
         .listen(Number(port), address);
-  ' "$gateway" 5000 >/dev/null
-  # While the registry is up (not in the outage case), the agent must reach it.
-  curl --fail --silent http://localhost:5000/v2/ >/dev/null || return 0
-  deadline=$((SECONDS + 30))
-  until docker exec "$agent" curl --fail --silent --max-time 5 http://127.0.0.1:5000/v2/ >/dev/null; do
-    ((SECONDS < deadline)) || fail "the operations agent cannot reach the registry through the forwarder"
+  ' "$gateway" 5000 >/dev/null || fail "could not start the registry forwarder for the operations agent"
+  # While the registry is up (not in the outage case), the agent's own Docker
+  # CLI must read the candidate's image from it, as the update's download does.
+  registry_up || return 0
+  reference="$registry/ops-agent:$release"
+  local deadline=$((SECONDS + 30))
+  until output="$(docker exec "$agent" timeout 20 docker manifest inspect "$reference" 2>&1)"; do
+    ((SECONDS < deadline)) ||
+      fail "the operations agent cannot read $reference from the registry: $(head -3 <<<"$output")"
     sleep 1
   done
 }
@@ -261,7 +304,7 @@ check_release() {
 system_update() {
   local name="$1" release="$2" digest="$3" status=0 follower
   rm -f "$work/receipt-$name"
-  start_registry_forwarder
+  prepare_agent_registry_access "$release"
   follow_helpers "$name" &
   follower=$!
   NODE_TLS_REJECT_UNAUTHORIZED=0 logged "update-$name" openmapx system update \
@@ -269,7 +312,6 @@ system_update() {
     --receipt "$work/receipt-$name" --api-origin https://localhost --no-backup || status=$?
   kill "$follower" 2>/dev/null || true
   wait "$follower" 2>/dev/null || true
-  stop_registry_forwarder
   return "$status"
 }
 
@@ -452,15 +494,18 @@ dump_diagnostics() {
   cp "$work"/*.log "$diagnostics_dir/" 2>/dev/null || true
   docker ps --all --format 'table {{.Names}}\t{{.Image}}\t{{.State}}\t{{.Status}}' \
     >"$diagnostics_dir/containers.txt" 2>&1 || true
-  local agent
-  agent="$(docker ps --quiet --filter "label=com.docker.compose.project=$project" \
-    --filter "label=com.docker.compose.service=ops-agent" | head -1)"
-  if [[ -n "$agent" ]]; then
-    # Whether the agent's own Docker CLI reaches the registry it inspects.
-    docker exec "$agent" curl --silent --output /dev/null --max-time 5 \
-      --write-out 'registry from the agent: HTTP %{http_code}\n' http://127.0.0.1:5000/v2/ \
-      >>"$diagnostics_dir/summary.txt" 2>&1 || echo "registry from the agent: unreachable" \
-      >>"$diagnostics_dir/summary.txt"
+  local agent reference
+  agent="$(agent_container)"
+  if [[ -n "$agent" ]] && ((release_counter > 0)); then
+    # Whether the agent's own Docker CLI reads the newest release's image, as
+    # an update's download does. A self-update replaces the agent, and the new
+    # one has no certificate or forwarder until the next update.
+    reference="$registry/ops-agent:update-smoke-r$release_counter"
+    {
+      echo "registry from the agent ($reference):"
+      docker exec "$agent" timeout 20 docker manifest inspect "$reference" 2>&1 | head -3 ||
+        echo "docker exec failed"
+    } >>"$diagnostics_dir/summary.txt" 2>&1
   fi
   local container name
   while IFS= read -r container; do
