@@ -292,6 +292,10 @@ describe("PostGIS entrypoint child ownership", () => {
       expect(f.read("tile-sync-sql")).toContain(
         "GRANT EXECUTE ON FUNCTION tiles.segment_flow(integer, integer, integer, json) TO openmapx_tiles;",
       );
+      expect(f.read("tile-sync-sql")).toContain(
+        "ALTER FUNCTION tiles.segment_flow(integer, integer, integer, json) OWNER TO openmapx_tiles_owner;",
+      );
+      expect(f.read("tile-sync-sql")).toContain("SET search_path = pg_catalog, public, pg_temp");
       f.mark("exit-now");
       expect(await f.finished).toEqual({ code: 0, childExited: true, synced: true });
     });

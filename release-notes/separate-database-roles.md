@@ -20,7 +20,10 @@ restores.
 Event triggers keep each role's code out of the other's sessions and out of
 the superuser's: data-manager writes no code, the API names its functions
 `openmapx_*`, and check constraints may call only built-in immutable or stable
-functions. A migration grants data-manager's role its tables. Database backups now keep
+functions. Martin's tile functions now run as `openmapx_tiles_owner`, which is no
+superuser and may read only the OpenConditions tables a traffic tile needs;
+PostGIS grants that access on each start. A migration grants data-manager's
+role its tables. Database backups now keep
 each object's owner and grants, and a restore keeps the live database's owner
 and database-level grants.
 
@@ -55,6 +58,10 @@ nothing reads it any more.
 For host-run development, set `DATABASE_URL`, `DATABASE_PASSWORD_FILE` and the
 data-manager token files in `apps/api/.env` and `services/data-manager/.env` as
 their examples show.
+
+After installing or upgrading OpenConditions, restart PostGIS or run the grants
+in [Martin overlays](../docs/docs/guides/map-tiles.md#martin-overlays), or
+traffic tiles fail with a permission error.
 
 Give each community service that uses the shared database its own role with
 only the access it needs, as [Community extensions](../docs/docs/administration/community-extensions.md)

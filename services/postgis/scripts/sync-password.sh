@@ -401,14 +401,21 @@ CREATE EVENT TRIGGER openmapx_guard_check_ddl ON ddl_command_end WHEN TAG IN ('C
 SQL
 echo "[openmapx-postgis] database roles ${API_ROLE} and ${DATA_MANAGER_ROLE} ready"
 
-# The tile server's login. It may only call the functions in the `tiles`
-# schema; each runs as its owner and returns one finished tile, so the role
-# itself can read no table. The traffic-flow function looks up OpenConditions'
-# `conditions.segment_flow` when called, so it can be created before
-# OpenConditions is installed; that function calls PostGIS unqualified, hence
-# `public` on the search path, which only the database owner may write to.
-# Without MARTIN_DB_PASSWORD the role cannot log in.
+# The tile server's login, and the role its functions run as. Martin may only
+# call the functions in the `tiles` schema, so its role reads no table. Each
+# function runs as `openmapx_tiles_owner`, which cannot log in, is no
+# superuser and holds only what rendering a tile needs, so the code a tile
+# reaches, OpenConditions' among it, never runs with more rights than that.
+# The traffic-flow function calls OpenConditions' `conditions.segment_flow`,
+# which reads three of its tables and calls PostGIS unqualified, hence
+# `public` on the search path. Neither the API nor data-manager can put a
+# function there that such a call resolves to, nor create `tiles` or
+# `conditions` (see the event triggers above). The function can be created
+# before OpenConditions is installed; PostGIS grants the owner role read
+# access to those tables on every start, and a restore keeps the grants.
+# Without MARTIN_DB_PASSWORD the tile server cannot log in.
 TILES_ROLE="openmapx_tiles"
+TILES_OWNER="openmapx_tiles_owner"
 if [ -n "${MARTIN_DB_PASSWORD:-}" ]; then
   ESCAPED_TILES_PASSWORD=${MARTIN_DB_PASSWORD//\'/\'\'}
   TILES_LOGIN="LOGIN PASSWORD '${ESCAPED_TILES_PASSWORD}'"
@@ -418,21 +425,36 @@ fi
 run_sql "${POSTGRES_DB:-$PG_USER}" <<SQL
 SELECT 'CREATE ROLE ${TILES_ROLE}' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${TILES_ROLE}')
 \gexec
+SELECT 'CREATE ROLE ${TILES_OWNER}' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${TILES_OWNER}')
+\gexec
 ALTER ROLE ${TILES_ROLE} NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT ${TILES_LOGIN};
+ALTER ROLE ${TILES_OWNER} NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT NOLOGIN PASSWORD NULL;
 CREATE SCHEMA IF NOT EXISTS tiles;
+ALTER SCHEMA tiles OWNER TO CURRENT_USER;
 REVOKE ALL ON SCHEMA tiles FROM PUBLIC;
-GRANT USAGE ON SCHEMA tiles TO ${TILES_ROLE};
+GRANT USAGE ON SCHEMA tiles TO ${TILES_ROLE}, ${TILES_OWNER};
 CREATE OR REPLACE FUNCTION tiles.segment_flow(z integer, x integer, y integer, query_params json)
   RETURNS bytea
   LANGUAGE plpgsql STABLE STRICT PARALLEL SAFE SECURITY DEFINER
-  SET search_path = public, pg_temp
+  SET search_path = pg_catalog, public, pg_temp
 AS \$\$
 BEGIN
   RETURN conditions.segment_flow(z, x, y, query_params);
 END;
 \$\$;
+ALTER FUNCTION tiles.segment_flow(integer, integer, integer, json) OWNER TO ${TILES_OWNER};
 REVOKE ALL ON FUNCTION tiles.segment_flow(integer, integer, integer, json) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION tiles.segment_flow(integer, integer, integer, json) TO ${TILES_ROLE};
+SELECT 'GRANT USAGE ON SCHEMA conditions TO ${TILES_OWNER}'
+  WHERE EXISTS (SELECT FROM pg_namespace WHERE nspname = 'conditions')
+\gexec
+SELECT format('GRANT SELECT ON TABLE %s TO ${TILES_OWNER}', c.oid::regclass)
+  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'conditions' AND c.relname IN ('road_segment', 'segment_speed', 'source')
+\gexec
+SELECT 'GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA conditions TO ${TILES_OWNER}'
+  WHERE EXISTS (SELECT FROM pg_namespace WHERE nspname = 'conditions')
+\gexec
 SQL
 echo "[openmapx-postgis] tile server role ${TILES_ROLE} ready"
 

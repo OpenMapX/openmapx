@@ -251,6 +251,29 @@ pnpm openmapx services start martin
 curl -sf http://localhost:3002/health
 ```
 
+The functions in `tiles` run as `openmapx_tiles_owner`, a role that cannot log
+in, is no superuser and may read only what a tile needs. The traffic-flow
+function calls OpenConditions' `conditions.segment_flow`, which reads
+`conditions.road_segment`, `conditions.segment_speed` and `conditions.source`.
+PostGIS grants `openmapx_tiles_owner` read access to those tables and the use of
+the `conditions` functions each time it starts, and a backup restore keeps the
+grants. After installing or upgrading OpenConditions, restart PostGIS, or run
+as the superuser:
+
+```sql
+GRANT USAGE ON SCHEMA conditions TO openmapx_tiles_owner;
+GRANT SELECT ON conditions.road_segment, conditions.segment_speed, conditions.source
+  TO openmapx_tiles_owner;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA conditions TO openmapx_tiles_owner;
+```
+
+Until then a traffic tile request fails with `permission denied for schema
+conditions` (or for one of its tables) in Martin's log, and no code runs with
+more rights. No role but the superuser can create the `tiles` or `conditions`
+schemas' functions that a tile calls, or a function in `public` that the
+tile's PostGIS calls could resolve to: see
+[Database roles](../install/configuration.md#database-roles).
+
 Martin is independent of TileServer GL. Most deployments that only need a
 self-hosted base map need TileServer GL, not Martin.
 

@@ -453,16 +453,6 @@ standard practice. The change that removes role keys and witnesses removes this
 use; until then, treat any exposure of an HMAC digest's inputs and key handling as
 exposure of the signing key.
 
-**The traffic tile function runs as the superuser.** PostGIS's entrypoint
-creates `tiles.segment_flow`, a `SECURITY DEFINER` function owned by the
-superuser that calls `conditions.segment_flow` with `public` on its search path.
-Whichever role owns the `conditions` schema therefore has its code run as the
-superuser when Martin renders a traffic tile, and the API's role, which owns
-`public`, could add a function overload there that such code then calls.
-Data-manager cannot take either path: it has no `CREATE` on `public` and may
-name schemas only after its indexes. Running the tile function as a role without
-superuser rights removes the weakness.
-
 **The CLI's superuser sessions touch API tables.** `openmapx users` and the
 erasure replay after a restore update API-owned tables as the superuser, so an
 API-owned trigger on those tables runs with superuser rights. The API's own
