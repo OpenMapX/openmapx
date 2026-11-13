@@ -347,11 +347,9 @@ exec "$OPENMAPX_TEST_REAL_DOCKER" "$@"
         );
         const container = await docker([...composeArgs, "ps", "-q", "postgis"]);
         const processes = await docker(["top", container, "-eo", "pid,args"]);
-        expect(
-          processes
-            .split("\n")
-            .some((line) => /pg_dump -U postgres --no-owner --no-privileges target$/.test(line)),
-        ).toBe(false);
+        expect(processes.split("\n").some((line) => /pg_dump -U postgres target$/.test(line))).toBe(
+          false,
+        );
         expect(
           await sql(
             "target",

@@ -1,0 +1,236 @@
+import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import { drizzle } from "drizzle-orm/postgres-js";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
+import postgres, { type Sql } from "postgres";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+const integration = describe.runIf(process.env.OPENMAPX_RUN_DATABASE_TESTS === "1");
+const repoRoot = join(import.meta.dirname, "..", "..", "..", "..", "..");
+const MIGRATIONS = join(import.meta.dirname, "..", "migrations");
+const { container: manifest } = JSON.parse(
+  readFileSync(join(repoRoot, "services", "postgis", "service.json"), "utf8"),
+) as { container: { image: string; tag: string; digest: string } };
+const IMAGE = `${manifest.image}:${manifest.tag}@${manifest.digest}`;
+const ENTRYPOINT = "/usr/local/bin/openmapx-postgis-entrypoint.sh";
+const passwords = {
+  superuser: randomBytes(24).toString("base64url"),
+  api: randomBytes(32).toString("base64url"),
+  dataManager: randomBytes(32).toString("base64url"),
+};
+
+let container: StartedPostgreSqlContainer;
+let api: Sql;
+let dataManager: Sql;
+let superuser: Sql;
+
+function connect(role: string, password: string): Sql {
+  const url = new URL(container.getConnectionUri());
+  url.username = role;
+  url.password = password;
+  return postgres(url.toString(), { max: 1, onnotice: () => {} });
+}
+
+async function permissionDenied(statement: Promise<unknown>): Promise<void> {
+  await expect(statement).rejects.toMatchObject({ code: "42501" });
+}
+
+/** The production PostGIS entrypoint creates the roles before the API migrates as its own role. */
+integration("database roles", () => {
+  beforeAll(async () => {
+    container = await new PostgreSqlContainer(IMAGE)
+      .withDatabase("openmapx")
+      .withUsername("postgres")
+      .withPassword(passwords.superuser)
+      .withEnvironment({
+        OPENMAPX_API_DB_PASSWORD_FILE: "/run/secrets/postgres-api-password",
+        OPENMAPX_DATA_MANAGER_DB_PASSWORD_FILE: "/run/secrets/postgres-data-manager-password",
+      })
+      .withCopyContentToContainer([
+        {
+          content: readFileSync(join(repoRoot, "services/postgis/scripts/sync-password.sh")),
+          target: ENTRYPOINT,
+          mode: 0o755,
+        },
+        { content: passwords.api, target: "/run/secrets/postgres-api-password", mode: 0o600 },
+        {
+          content: passwords.dataManager,
+          target: "/run/secrets/postgres-data-manager-password",
+          mode: 0o600,
+        },
+      ])
+      .withEntrypoint([ENTRYPOINT])
+      .withCommand(["postgres"])
+      .withHealthCheck({
+        test: [
+          "CMD-SHELL",
+          "pg_isready -h 127.0.0.1 -U postgres -d openmapx -q && test -f /var/run/postgresql/openmapx-password-synced",
+        ],
+        interval: 250,
+        timeout: 1000,
+        retries: 1000,
+      })
+      .withStartupTimeout(120_000)
+      .start();
+    superuser = connect("postgres", passwords.superuser);
+    api = connect("openmapx_api", passwords.api);
+    dataManager = connect("openmapx_data_manager", passwords.dataManager);
+    await migrate(drizzle(api), { migrationsFolder: MIGRATIONS });
+  }, 240_000);
+
+  afterAll(async () => {
+    await Promise.allSettled([api?.end(), dataManager?.end(), superuser?.end()]);
+    await container?.stop();
+  });
+
+  it("migrates an empty database as the API role, which owns what it creates", async () => {
+    const owners = await superuser<{ owner: string; tables: number }[]>`
+      SELECT pg_get_userbyid(c.relowner) AS owner, count(*)::int AS tables
+      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relkind = 'r' AND n.nspname IN ('public', 'data_manager', 'drizzle')
+        AND c.relname <> 'spatial_ref_sys'
+      GROUP BY 1`;
+    expect(owners).toEqual([{ owner: "openmapx_api", tables: expect.any(Number) }]);
+    // The API owns its schemas; the database stays the superuser's, so the API
+    // cannot change settings that superuser sessions in it inherit.
+    const [database] = await superuser<{ owner: string; public: string }[]>`
+      SELECT pg_get_userbyid(datdba) AS owner,
+        (SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = 'public') AS public
+      FROM pg_database WHERE datname = current_database()`;
+    expect(database).toEqual({ owner: "postgres", public: "openmapx_api" });
+    await permissionDenied(api.unsafe("ALTER DATABASE openmapx SET search_path = public"));
+  });
+
+  it("keeps data-manager away from the API's tables", async () => {
+    // Accounts, administrative jobs and the desired platform configuration.
+    for (const table of [
+      "user",
+      "session",
+      "admin_job",
+      "service_config",
+      "service_secret",
+      "integration_config",
+      "integration_secret",
+      "system_settings",
+      "platform_configuration_preview",
+    ]) {
+      const [column] = await superuser<{ name: string }[]>`
+        SELECT attname AS name FROM pg_attribute
+        WHERE attrelid = ${`public."${table}"`}::regclass AND attnum > 0 AND NOT attisdropped
+        ORDER BY attnum LIMIT 1`;
+      const name = column?.name;
+      expect(name).toBeTruthy();
+      await permissionDenied(
+        dataManager.unsafe(`UPDATE public."${table}" SET "${name}" = "${name}" WHERE false`),
+      );
+      await permissionDenied(dataManager.unsafe(`SELECT 1 FROM public."${table}" LIMIT 1`));
+      await permissionDenied(dataManager.unsafe(`DELETE FROM public."${table}" WHERE false`));
+    }
+    await permissionDenied(dataManager.unsafe("CREATE TABLE public.data_manager_probe (id int)"));
+  });
+
+  it("stops data-manager from taking a schema name another role trusts", async () => {
+    expect(await api.unsafe("SHOW search_path")).toEqual([{ search_path: "public" }]);
+    expect(await dataManager.unsafe("SHOW search_path")).toEqual([{ search_path: "public" }]);
+    for (const name of ["openmapx_api", "conditions", "tiles_shadow", "Osm_search"])
+      await permissionDenied(dataManager.unsafe(`CREATE SCHEMA "${name}"`));
+    await dataManager.unsafe("CREATE SCHEMA notable_places__staging");
+    await permissionDenied(
+      dataManager.unsafe("ALTER SCHEMA notable_places__staging RENAME TO conditions"),
+    );
+    await dataManager.unsafe("DROP SCHEMA notable_places__staging");
+    // The superuser and the API are not restricted to those names.
+    await api.unsafe("CREATE SCHEMA api_probe");
+    await api.unsafe("DROP SCHEMA api_probe");
+  });
+
+  it("lets data-manager write plain views but no code that the API could run", async () => {
+    // The tables and view data-manager's ambient-places build creates.
+    await dataManager.unsafe(`
+      CREATE SCHEMA ambient_places;
+      CREATE TABLE ambient_places.generations (id uuid PRIMARY KEY, publication_status text NOT NULL);
+      CREATE TABLE ambient_places.features (generation uuid NOT NULL, name text NOT NULL);
+      CREATE TABLE ambient_places.planet_features (generation uuid NOT NULL, name text NOT NULL);
+      INSERT INTO ambient_places.generations VALUES ('00000000-0000-4000-8000-000000000001', 'published');
+      INSERT INTO ambient_places.features VALUES ('00000000-0000-4000-8000-000000000001', 'view');
+      CREATE OR REPLACE VIEW ambient_places.features_all AS
+        SELECT f.* FROM ambient_places.features f JOIN ambient_places.generations g ON g.id=f.generation WHERE g.publication_status='published'
+        UNION ALL
+        SELECT f.* FROM ambient_places.planet_features f JOIN ambient_places.generations g ON g.id=f.generation WHERE g.publication_status='published';
+    `);
+    expect(await api.unsafe("SELECT name FROM ambient_places.features_all")).toEqual([
+      { name: "view" },
+    ]);
+    for (const statement of [
+      "CREATE FUNCTION ambient_places.probe() RETURNS int LANGUAGE sql AS 'SELECT 1'",
+      "CREATE PROCEDURE ambient_places.probe() LANGUAGE sql AS 'SELECT 1'",
+      "DO $$ BEGIN EXECUTE 'CREATE FUNCTION ambient_places.probe() RETURNS int LANGUAGE sql AS ''SELECT 1'''; END $$",
+      "CREATE RULE probe AS ON INSERT TO ambient_places.features DO INSTEAD NOTHING",
+      "CREATE TRIGGER probe BEFORE INSERT ON ambient_places.features FOR EACH ROW EXECUTE FUNCTION suppress_redundant_updates_trigger()",
+      "CREATE AGGREGATE ambient_places.probe(int) (SFUNC = int4pl, STYPE = int)",
+      "CREATE POLICY probe ON ambient_places.features USING (true)",
+      // Views that run SQL as their reader, call a function, read another
+      // schema, or read with the reader's rights.
+      `CREATE VIEW ambient_places.leak AS SELECT query_to_xml('SELECT email FROM public."user"', true, false, '')::text AS name`,
+      "CREATE VIEW ambient_places.leak AS SELECT upper(name) AS name FROM ambient_places.features",
+      'CREATE VIEW ambient_places.leak AS SELECT id AS name FROM public."user"',
+      "CREATE VIEW ambient_places.leak WITH (security_invoker = true) AS SELECT name FROM ambient_places.features",
+      "ALTER VIEW ambient_places.features_all SET (security_invoker = true)",
+      `CREATE OR REPLACE VIEW ambient_places.features_all AS
+        SELECT f.* FROM ambient_places.features f WHERE length(f.name) > 0
+        UNION ALL SELECT f.* FROM ambient_places.planet_features f`,
+    ])
+      await permissionDenied(dataManager.unsafe(statement));
+    expect(await api.unsafe("SELECT name FROM ambient_places.features_all")).toEqual([
+      { name: "view" },
+    ]);
+    await dataManager.unsafe("DROP SCHEMA ambient_places CASCADE");
+  });
+
+  it("lets data-manager change its own tables and the API prune its jobs", async () => {
+    await dataManager.unsafe("SELECT count(*) FROM data_manager.jobs");
+    await dataManager.unsafe(
+      "INSERT INTO data_manager.jobs SELECT * FROM data_manager.jobs WHERE false",
+    );
+    await dataManager.unsafe("UPDATE data_manager.jobs SET status = status WHERE false");
+    await dataManager.unsafe("DELETE FROM data_manager.job_stages WHERE false");
+    await dataManager.unsafe(
+      "UPDATE data_manager.offline_package_jobs SET status = status WHERE false",
+    );
+    await api.unsafe("DELETE FROM data_manager.jobs WHERE false");
+  });
+
+  it("keeps a schema data-manager builds readable by the API across a swap", async () => {
+    const build = async (schema: string, label: string) => {
+      await dataManager.unsafe(`
+        CREATE EXTENSION IF NOT EXISTS postgis;
+        CREATE EXTENSION IF NOT EXISTS pg_trgm;
+        CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;
+        CREATE EXTENSION IF NOT EXISTS btree_gist;
+        DROP SCHEMA IF EXISTS "${schema}" CASCADE;
+        CREATE SCHEMA "${schema}";
+        CREATE TABLE "${schema}".places (name text NOT NULL, geom geometry(Point, 4326));
+        CREATE INDEX ON "${schema}".places USING gin (name gin_trgm_ops);
+        INSERT INTO "${schema}".places VALUES ('${label}', ST_SetSRID(ST_MakePoint(13.4, 52.5), 4326));
+        CREATE TABLE "${schema}".names AS SELECT name FROM "${schema}".places;
+      `);
+    };
+    await build("osm_search__staging", "first");
+    await dataManager.begin(async (tx) => {
+      await tx.unsafe("ALTER SCHEMA osm_search__staging RENAME TO osm_search");
+    });
+    expect(await api.unsafe("SELECT name FROM osm_search.places")).toEqual([{ name: "first" }]);
+
+    await build("osm_search__staging", "second");
+    await dataManager.begin(async (tx) => {
+      await tx.unsafe("ALTER SCHEMA osm_search RENAME TO osm_search__previous");
+      await tx.unsafe("ALTER SCHEMA osm_search__staging RENAME TO osm_search");
+      await tx.unsafe("DROP SCHEMA osm_search__previous CASCADE");
+    });
+    expect(await api.unsafe("SELECT name FROM osm_search.places")).toEqual([{ name: "second" }]);
+    expect(await api.unsafe("SELECT name FROM osm_search.names")).toEqual([{ name: "second" }]);
+    await permissionDenied(api.unsafe("INSERT INTO osm_search.places (name) VALUES ('api')"));
+  });
+});

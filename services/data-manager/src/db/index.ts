@@ -1,4 +1,5 @@
 import { assertProductionDatabaseUrlSecret } from "@openmapx/core/deployment-secret-policy";
+import { resolveDatabaseUrl } from "@openmapx/core/service-secret-files";
 import {
   feedState,
   jobStages,
@@ -11,8 +12,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { withDataSqlCancellation } from "../jobs/execution/worker-scope.js";
 
-const connectionString =
-  process.env.DATABASE_URL ?? "postgresql://postgres:postgres@postgis:5432/openmapx";
+const connectionString = resolveDatabaseUrl("postgresql://postgres:postgres@postgis:5432/openmapx");
 
 assertProductionDatabaseUrlSecret(connectionString, process.env.NODE_ENV);
 

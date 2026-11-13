@@ -717,6 +717,70 @@ describe("renderComposeForRepo", () => {
     }
   });
 
+  it("bootstraps distinct database role passwords that only their own services mount", async () => {
+    for (const id of ["app-api", "data-manager", "ops-agent", "motis", "postgis", "redis"]) {
+      const manifest = JSON.parse(
+        readFileSync(join(REPO_ROOT, "services", id, "service.json"), "utf8"),
+      ) as Record<string, unknown>;
+      writeManifest(id, manifest);
+    }
+
+    await renderComposeForRepo({
+      rootDir: tmp,
+      domain: "example.com",
+      services: ["postgis,app-api,data-manager,ops-agent"],
+    });
+    const secretDir = join(tmp, "infra", "docker", "secrets");
+    const api = readFileSync(join(secretDir, "postgres-api-password"), "utf8");
+    const dataManager = readFileSync(join(secretDir, "postgres-data-manager-password"), "utf8");
+    const yaml = readFileSync(generatedCompose(), "utf8");
+    const rendered = parseYaml(yaml) as {
+      services: Record<string, { environment?: Record<string, string>; volumes?: string[] }>;
+    };
+    const mounts = (id: string) => (rendered.services[id]?.volumes ?? []).join("\n");
+
+    expect(api).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(dataManager).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(api).not.toBe(dataManager);
+    expect(yaml).not.toContain(api);
+    expect(yaml).not.toContain(dataManager);
+    expect(mounts("postgis")).toContain("postgres-api-password:/run/secrets/postgres-api-password");
+    expect(mounts("postgis")).toContain("postgres-data-manager-password");
+    expect(mounts("app-api")).toContain("postgres-api-password");
+    expect(mounts("app-api")).not.toContain("postgres-data-manager-password");
+    expect(mounts("data-manager")).toContain("postgres-data-manager-password");
+    expect(mounts("data-manager")).not.toContain("postgres-api-password");
+    expect(rendered.services["app-api"]?.environment?.DATABASE_URL).toBe(
+      "postgresql://openmapx_api@postgis:5432/openmapx",
+    );
+    expect(rendered.services["data-manager"]?.environment?.DATABASE_URL).toBe(
+      "postgresql://openmapx_data_manager@postgis:5432/openmapx",
+    );
+
+    await renderComposeForRepo({
+      rootDir: tmp,
+      domain: "example.com",
+      services: ["postgis,app-api,data-manager,ops-agent"],
+    });
+    expect(readFileSync(join(secretDir, "postgres-api-password"), "utf8")).toBe(api);
+    expect(readFileSync(join(secretDir, "postgres-data-manager-password"), "utf8")).toBe(
+      dataManager,
+    );
+  });
+
+  it("rejects pre-existing identical database role passwords", async () => {
+    writeManifest("alpha", { ...baseManifest, id: "alpha" });
+    const secretDir = join(tmp, "infra", "docker", "secrets");
+    mkdirSync(secretDir, { recursive: true, mode: 0o700 });
+    const password = Buffer.alloc(32, 22).toString("base64url");
+    writeFileSync(join(secretDir, "postgres-api-password"), password, { mode: 0o444 });
+    writeFileSync(join(secretDir, "postgres-data-manager-password"), password, { mode: 0o444 });
+
+    await expect(
+      renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] }),
+    ).rejects.toThrow("database passwords must be distinct");
+  });
+
   it("rejects pre-existing identical ops-agent role tokens", async () => {
     writeManifest("alpha", { ...baseManifest, id: "alpha" });
     const secretDir = join(tmp, "infra", "docker", "secrets");

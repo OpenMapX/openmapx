@@ -435,6 +435,13 @@
       "when": 1794533946473,
       "tag": "0061_allow_privacy_export_reauthentication",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1794559153744,
+      "tag": "0062_data_manager_role_grants",
+      "breakpoints": true
     }
   ]
 }

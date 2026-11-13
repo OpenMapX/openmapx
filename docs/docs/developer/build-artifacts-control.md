@@ -31,6 +31,7 @@ survives the replacement.
 | Mechanism group                                                                                                 | Failure prevented                                                                                                           | How credible                                                          | Verdict                                                          | Crash-point scenario                                                                                                                                    |
 | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Typed agent operations, per-role agent tokens, resource policy, owned-service resolver                          | A compromised API or data-manager runs arbitrary Docker commands or widens the targets it may touch                         | The real boundary against a compromised service                       | Keep                                                             | Same key with a different body is a conflict                                                                                                            |
+| Separate Postgres roles for the API and data-manager                                                            | A compromised data-manager forges API rows: accounts, administrative jobs or desired configuration                          | Enforced by PostgreSQL; no application code is involved               | Keep                                                             | Restore of the pre-update backup                                                                                                                        |
 | Agent job journal and idempotent operation keys                                                                 | A retry after a lost reply applies an operation twice                                                                       | Observed need: an earlier missing journal caused an eight-hour outage | Keep                                                             | Lost reply on configuration prepare; lost reply on data fence prepare and settle                                                                        |
 | Drain before self-replacement, ordered recreate, agent last                                                     | A self-update leaves services half-replaced, or the agent replaces itself while work is in flight                           | Observed need                                                         | Keep, simplify the helper                                        | Helper killed mid-recreate; agent killed while the helper runs; CLI command while the helper runs                                                       |
 | Configuration generations, one atomic pointer, retention against live containers                                | A crash leaves a half-written configuration, or pruning removes files a running container still uses                        | Observed need                                                         | Keep                                                             | API killed between saving desired rows and applying the generation                                                                                      |
@@ -445,6 +446,18 @@ key therefore serves two algorithms. No attack is known, but key separation is t
 standard practice. The change that removes role keys and witnesses removes this
 use; until then, treat any exposure of an HMAC digest's inputs and key handling as
 exposure of the signing key.
+
+**The traffic tile function runs as the superuser.** PostGIS's entrypoint
+creates `tiles.segment_flow`, a `SECURITY DEFINER` function owned by the
+superuser that calls `conditions.segment_flow` with `public` on its search path.
+Whichever role owns the `conditions` schema therefore has its code run as the
+superuser when Martin renders a traffic tile, and the API's role, which owns
+`public`, could add a function overload there that such code then calls.
+Data-manager cannot take either path: it has no `CREATE` on `public`, one
+event trigger limits the schemas it may create to its own index names, and
+another refuses every function, procedure, aggregate, operator, cast, rule and
+trigger it tries to create, so the API never runs code data-manager wrote. Running
+the tile function as a role without superuser rights removes the weakness.
 
 ## Target design (not yet implemented)
 

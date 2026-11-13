@@ -49,7 +49,7 @@ elif name == "sleep":
     time.sleep(0.05)
 elif name == "psql":
     sql = sys.argv[sys.argv.index("-c") + 1] if "-c" in sys.argv else sys.stdin.read()
-    phase = "tile-sync" if "CREATE ROLE" in sql else "sync"
+    phase = "tile-sync" if "openmapx_tiles" in sql else "role-sync" if "openmapx_api" in sql else "sync"
     mark(phase + "-sql", sql)
     if "-c" not in sys.argv:
         assert sql and "--single-transaction" in sys.argv
@@ -80,6 +80,7 @@ async function fixture(
     | "ready"
     | "readiness"
     | "sync"
+    | "role-sync"
     | "tile-sync"
     | "password-retry"
     | "tile-retry"
@@ -104,13 +105,17 @@ async function fixture(
   const has = (name: string) => existsSync(join(root, name));
   if (phase !== "readiness") mark("ready");
   if (phase !== "sync") mark("finish-sync");
+  if (phase !== "role-sync") mark("finish-role-sync");
   if (phase !== "tile-sync") mark("finish-tile-sync");
   if (phase !== "password-retry" && phase !== "tile-retry") mark("finish-retry");
   const env = Object.fromEntries(
     Object.entries(process.env).filter(
-      ([key]) => !key.startsWith("POSTGRES_") && !key.startsWith("MARTIN_"),
+      ([key]) =>
+        !key.startsWith("POSTGRES_") && !key.startsWith("MARTIN_") && !key.startsWith("OPENMAPX_"),
     ),
   );
+  writeFileSync(join(root, "api-password"), "synthetic-api'password");
+  writeFileSync(join(root, "data-manager-password"), "synthetic-data-manager'password");
   const child = spawn("bash", [resolve("services/postgis/scripts/sync-password.sh"), "fixture"], {
     detached: true,
     stdio: "ignore",
@@ -127,6 +132,8 @@ async function fixture(
             : "",
       POSTGRES_PASSWORD: "synthetic-test'password",
       MARTIN_DB_PASSWORD: "synthetic-tile'password",
+      OPENMAPX_API_DB_PASSWORD_FILE: join(root, "api-password"),
+      OPENMAPX_DATA_MANAGER_DB_PASSWORD_FILE: join(root, "data-manager-password"),
     },
   });
   const finished = new Promise<{ code: number | null; childExited: boolean; synced: boolean }>(
@@ -188,6 +195,7 @@ describe("PostGIS entrypoint child ownership", () => {
     for (const phase of [
       "readiness",
       "sync",
+      "role-sync",
       "tile-sync",
       "password-retry",
       "tile-retry",
@@ -211,6 +219,7 @@ describe("PostGIS entrypoint child ownership", () => {
               "waiting",
             );
             expect(f.has(phase === "sync" ? "sync-finished" : "tile-sync-finished")).toBe(false);
+            if (phase === "role-sync") expect(f.has("role-sync-finished")).toBe(false);
             f.mark("finish-shutdown");
             expect(await f.finished).toEqual({ code, childExited: true, synced: false });
           });
@@ -257,6 +266,22 @@ describe("PostGIS entrypoint child ownership", () => {
       expect(f.read("sync-attempts")).toBe("3");
       expect(f.has("tile-sync-finished")).toBe(true);
       expect(f.read("sync-sql")).toContain("PASSWORD 'synthetic-test''password'");
+      expect(f.has("role-sync-finished")).toBe(true);
+      const roles = f.read("role-sync-sql");
+      expect(roles).toContain("LOGIN PASSWORD 'synthetic-api''password'");
+      expect(roles).toContain("LOGIN PASSWORD 'synthetic-data-manager''password'");
+      expect(roles).toContain("GRANT CREATE ON DATABASE %I TO openmapx_api, openmapx_data_manager");
+      expect(roles).toContain("ALTER SCHEMA public OWNER TO openmapx_api;");
+      expect(roles).not.toContain("ALTER DATABASE");
+      expect(roles).toContain(
+        "ALTER DEFAULT PRIVILEGES FOR ROLE openmapx_data_manager GRANT SELECT ON TABLES TO openmapx_api;",
+      );
+      expect(roles).toContain("ALTER ROLE openmapx_api SET search_path = public;");
+      expect(roles).toContain("ALTER ROLE openmapx_data_manager SET search_path = public;");
+      expect(roles).toContain("CREATE EVENT TRIGGER openmapx_restrict_data_manager_schemas");
+      expect(roles).toContain("CREATE EVENT TRIGGER openmapx_refuse_data_manager_code");
+      expect(roles).toContain("AS $$");
+      expect(roles).toContain("overture_[a-z0-9_]{1,55})$'");
       expect(f.read("tile-sync-sql")).toContain(
         "NOINHERIT LOGIN PASSWORD 'synthetic-tile''password'",
       );
@@ -266,5 +291,57 @@ describe("PostGIS entrypoint child ownership", () => {
       f.mark("exit-now");
       expect(await f.finished).toEqual({ code: 0, childExited: true, synced: true });
     });
+  });
+
+  it.each([
+    ["a missing API password file", { api: undefined, dataManager: "data-manager-secret" }],
+    ["an empty data-manager password file", { api: "api-secret", dataManager: "" }],
+    ["equal passwords", { api: "same-secret", dataManager: "same-secret" }],
+  ])("refuses %s before starting the server", async (_name, passwords) => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-postgis-"));
+    try {
+      const bin = join(root, "bin");
+      mkdirSync(bin);
+      for (const name of ["rm", "touch", "pg_isready", "docker-entrypoint.sh", "psql", "sleep"])
+        writeFileSync(join(bin, name), stub, { mode: 0o755 });
+      if (passwords.api !== undefined) writeFileSync(join(root, "api"), passwords.api);
+      writeFileSync(join(root, "data-manager"), passwords.dataManager);
+      const env = Object.fromEntries(
+        Object.entries(process.env).filter(
+          ([key]) =>
+            !key.startsWith("POSTGRES_") &&
+            !key.startsWith("MARTIN_") &&
+            !key.startsWith("OPENMAPX_"),
+        ),
+      );
+      const child = spawn(
+        "bash",
+        [resolve("services/postgis/scripts/sync-password.sh"), "fixture"],
+        {
+          stdio: ["ignore", "ignore", "pipe"],
+          env: {
+            ...env,
+            PATH: `${bin}:${process.env.PATH}`,
+            FIXTURE_ROOT: root,
+            FIXTURE_EXIT: "0",
+            FIXTURE_RETRY_PHASE: "",
+            POSTGRES_PASSWORD: "synthetic-test-password",
+            OPENMAPX_API_DB_PASSWORD_FILE: join(root, "api"),
+            OPENMAPX_DATA_MANAGER_DB_PASSWORD_FILE: join(root, "data-manager"),
+          },
+        },
+      );
+      let stderr = "";
+      child.stderr.on("data", (chunk) => {
+        stderr += chunk;
+      });
+      const code = await new Promise<number | null>((done) => child.once("exit", done));
+      expect(code).toBe(1);
+      expect(stderr).toMatch(/password file is missing|passwords must differ/);
+      expect(existsSync(join(root, "child-ready"))).toBe(false);
+      expect(existsSync(join(root, "synced"))).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

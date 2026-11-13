@@ -485,11 +485,38 @@ installation does not prove that their database and feed credentials are valid.
    and setup guides.
 2. Set secrets on **Credentials**. `OPENMAPX_SECRETS_KEY` is required for the API
    vault; generated containers receive private secret files through `<KEY>_FILE`.
-   The ingest and contributions services need `DATABASE_URL`. For the shared
-   database, use `postgresql://postgres:<POSTGRES_PASSWORD>@postgis:5432/openmapx`
-   with a correctly URL-encoded password. The contributions service also declares
+   The ingest and contributions services need `DATABASE_URL`. Never give a
+   community service the PostgreSQL superuser or the `openmapx_api` and
+   `openmapx_data_manager` roles: any of them would let it read and change
+   accounts and the platform's configuration. Create a dedicated role for each
+   service with only what it needs, as shown below, and use
+   `postgresql://<role>:<password>@postgis:5432/openmapx` with a correctly
+   URL-encoded password. The contributions service also declares
    `OPENCONDITIONS_GRANT_SECRET` and `OPENCONDITIONS_REVIEWER_TOKEN`; generate
    separate values with `openssl rand -hex 32`.
+   A role is created once, as the superuser, in the `postgis` container. A
+   service that creates its own schemas needs `CREATE` on the database; it then
+   owns those schemas. Grant another service only the access it needs to them:
+
+   ```bash
+   docker exec -it postgis psql -U postgres -d openmapx
+   ```
+
+   ```sql
+   CREATE ROLE openconditions_ingest LOGIN PASSWORD '<openssl rand -hex 32>';
+   GRANT CREATE ON DATABASE openmapx TO openconditions_ingest;
+   CREATE ROLE openconditions_contributions LOGIN PASSWORD '<openssl rand -hex 32>';
+   -- After the ingest service has created its schema:
+   GRANT USAGE ON SCHEMA conditions TO openconditions_contributions;
+   ```
+
+   Read each service's setup guide for the schemas and tables it uses, and
+   grant no more. The role that owns the `conditions` schema is trusted more
+   than the others: Martin's traffic tiles call the function it provides with
+   the superuser's rights, so give that schema only to the OpenConditions
+   service that creates it. The roles live outside the database, so a backup restore
+   keeps their grants only while the roles still exist.
+
 3. Set non-secret options in **Configuration**, or use
    `SERVICE_OPENCONDITIONS_INGEST_<KEY>` and
    `SERVICE_OPENCONDITIONS_CONTRIBUTIONS_API_<KEY>` host overrides. Environment

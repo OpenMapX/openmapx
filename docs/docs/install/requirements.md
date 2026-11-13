@@ -157,7 +157,8 @@ Copy `infra/docker/.env.example` to `infra/docker/.env` and configure:
 - explicit `TRANSITOUS_COUNTRIES` or a MOTIS feed allow-list for the default
   regional profile, even if you do not enable a transit engine.
 
-The renderer creates additional files in `infra/docker/secrets/`. Protect these
+The renderer creates additional files in `infra/docker/secrets/`, including
+the passwords of the API's and data-manager's own database roles. Protect these
 and the deployment configuration separately from ordinary volume backups.
 Per-integration provider credentials are usually configured after startup in
 the admin panel. An external endpoint being configured does not establish that

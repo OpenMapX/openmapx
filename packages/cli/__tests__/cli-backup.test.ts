@@ -1287,6 +1287,69 @@ describe("backup volume modes", () => {
     expect(startApi).toBeGreaterThan(replay);
   });
 
+  it("gives the recreated database the live database's owner and grants before the dump", async () => {
+    const dir = writeBackup("owner-restore", {
+      name: "owner-restore",
+      createdAt: new Date().toISOString(),
+      services: [
+        {
+          id: "timeline",
+          version: "1.0.0",
+          volumes: [
+            {
+              name: "openmapx-db",
+              mode: "pg_dump",
+              file: "timeline__openmapx-db.sql.gz",
+              sizeBytes: 0,
+              postgresUser: "postgres",
+              postgresDb: "timeline",
+            },
+          ],
+        },
+      ],
+    });
+    writeBackupFiles(dir, { "timeline__openmapx-db.sql.gz": "dump" });
+    const settings =
+      "ALTER DATABASE timeline OWNER TO timeline_owner;\nGRANT CREATE ON DATABASE timeline TO timeline_writer;";
+    const inputs: Array<{ args: string; input?: unknown }> = [];
+    vi.mocked(execa).mockImplementation(((
+      command: string,
+      args: string[],
+      options?: { input?: unknown },
+    ) => {
+      if (command === "gunzip") {
+        return Object.assign(Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }), {
+          stdout: Readable.from(["dump"]),
+        });
+      }
+      inputs.push({ args: args.join(" "), input: options?.input });
+      if (command === "docker" && args.includes("--tuples-only")) {
+        expect(args.join(" ")).toContain("datname = 'timeline'");
+        return Promise.resolve({ exitCode: 0, stdout: `${settings}\n`, stderr: "" });
+      }
+      if (command === "docker" && args.includes("ps")) {
+        return Promise.resolve({ exitCode: 0, stdout: '{"Service":"timeline"}\n', stderr: "" });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+    }) as never);
+
+    await restoreBackup({ rootDir: tmp, name: "owner-restore", stopRunning: true });
+
+    const read = inputs.findIndex(({ args }) => args.includes("--tuples-only"));
+    const drop = inputs.findIndex(({ args }) => args.includes(" dropdb "));
+    const create = inputs.findIndex(({ args }) => args.includes(" createdb "));
+    const apply = inputs.findIndex(({ input }) => input === `${settings}\n`);
+    const dump = inputs.findIndex(
+      ({ args, input }) => args.endsWith(" timeline") && args.includes(" psql ") && !!input,
+    );
+    expect(read).toBeGreaterThanOrEqual(0);
+    expect(drop).toBeGreaterThan(read);
+    expect(create).toBeGreaterThan(drop);
+    expect(apply).toBeGreaterThan(create);
+    expect(inputs[apply]?.args).toContain("--single-transaction");
+    expect(dump).toBeGreaterThan(apply);
+  });
+
   it("restarts and probes a mixed-mode database service before delayed erasure replay", async () => {
     const dir = writeBackup("mixed-protected-restore", {
       name: "mixed-protected-restore",

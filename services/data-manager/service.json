@@ -24,7 +24,8 @@
       "HOST": "0.0.0.0",
       "LOG_LEVEL": "${LOG_LEVEL:-}",
       "DATA_MANAGER_AUTH_TOKEN": "${DATA_MANAGER_AUTH_TOKEN:?DATA_MANAGER_AUTH_TOKEN must be set — generate with: openssl rand -hex 32}",
-      "DATABASE_URL": "postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgis:5432/openmapx",
+      "DATABASE_URL": "postgresql://openmapx_data_manager@postgis:5432/openmapx",
+      "DATABASE_PASSWORD_FILE": "/run/secrets/postgres-data-manager-password",
       "OPS_AGENT_URL": "${OPS_AGENT_URL:-http://ops-agent:4300}",
       "OPS_AGENT_TOKEN_FILE": "/run/secrets/ops-agent-data-manager-token",
       "TRANSITOUS_RUNNER_URL": "${TRANSITOUS_RUNNER_URL:-http://transitous-runner:4400}",
@@ -181,6 +182,11 @@
     {
       "source": "@infra:secrets/ops-agent-data-manager-token",
       "target": "/run/secrets/ops-agent-data-manager-token",
+      "readOnly": true
+    },
+    {
+      "source": "@infra:secrets/postgres-data-manager-password",
+      "target": "/run/secrets/postgres-data-manager-password",
       "readOnly": true
     },
     {

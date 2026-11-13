@@ -283,6 +283,17 @@ export async function renderComposeWithWriter(
   if (opsAgentApiToken === opsAgentDataManagerToken) {
     throw new Error("Ops-agent API and data-manager tokens must be distinct");
   }
+  // The API's and data-manager's own database logins. PostGIS creates the
+  // roles from these files on every start; the superuser stays with PostGIS.
+  const apiDatabasePassword = ensurePlatformSecretFile(
+    join(paths.infraDir, "secrets", "postgres-api-password"),
+  );
+  const dataManagerDatabasePassword = ensurePlatformSecretFile(
+    join(paths.infraDir, "secrets", "postgres-data-manager-password"),
+  );
+  if (apiDatabasePassword === dataManagerDatabasePassword) {
+    throw new Error("API and data-manager database passwords must be distinct");
+  }
   reconcileRedisAuthFiles(redisPasswordPath, redisAclPath, opts.redisAuthHooks);
   // Before a generation mounts their directory into data-manager.
   ensureTransitousApiKeysFile(paths.root);

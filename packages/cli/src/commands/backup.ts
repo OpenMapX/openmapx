@@ -1453,6 +1453,25 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
   }
 }
 
+/**
+ * Statements that give a recreated database the live one's owner and
+ * database-level grants. `db` is a validated identifier. Prints nothing when
+ * the database does not exist.
+ */
+function databaseSettingsQuery(db: string): string {
+  return `SELECT statement FROM (
+  SELECT 0 AS step, format('ALTER DATABASE %I OWNER TO %I;', d.datname, pg_get_userbyid(d.datdba)) AS statement
+    FROM pg_database d WHERE d.datname = '${db}'
+  UNION ALL
+  SELECT 1, format('REVOKE ALL ON DATABASE %I FROM PUBLIC;', d.datname)
+    FROM pg_database d WHERE d.datname = '${db}' AND d.datacl IS NOT NULL
+  UNION ALL
+  SELECT 2, format('GRANT %s ON DATABASE %I TO %s;', a.privilege_type, d.datname,
+      CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE quote_ident(pg_get_userbyid(a.grantee)) END)
+    FROM pg_database d CROSS JOIN LATERAL aclexplode(d.datacl) a WHERE d.datname = '${db}'
+) settings ORDER BY step`;
+}
+
 async function pgRestoreFromFile(
   ctx: ComposeContext,
   serviceId: string,
@@ -1462,11 +1481,42 @@ async function pgRestoreFromFile(
 ): Promise<void> {
   // The `pg_dump` we wrote at backup time uses defaults (no `--clean
   // --if-exists --create`), so the dump itself doesn't drop or recreate the
-  // database — it's just `CREATE TABLE …` etc. We therefore drop + create
-  // the target DB up-front to give the dump a clean slate. The `postgis/
-  // postgis` images preload PostGIS into `template1`, so `createdb` produces
-  // a PostGIS-enabled database without needing an explicit
-  // `CREATE EXTENSION` step.
+  // database — it's just `CREATE TABLE …` etc., with their owners and grants.
+  // We therefore drop + create the target DB up-front to give the dump a
+  // clean slate. The dump creates the extensions it uses.
+  //
+  // The database's own owner and grants are not in such a dump. Read them
+  // from the live database first and give them to the new one, so the roles
+  // the deployment created (which live outside any database) keep their
+  // access: the platform database belongs to the API's role, and
+  // data-manager may create schemas in it.
+  const settingsQuery = await execa(
+    "docker",
+    [
+      ...ctx.composeArgs,
+      "exec",
+      "-T",
+      serviceId,
+      "psql",
+      "-X",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-U",
+      user,
+      "-d",
+      "postgres",
+      "--no-align",
+      "--tuples-only",
+      "-c",
+      databaseSettingsQuery(db),
+    ],
+    { ...cliProcessOptions(), cwd: ctx.cwd, reject: false },
+  );
+  if (settingsQuery.exitCode !== 0) {
+    throw new Error(`reading the database owner failed: ${settingsQuery.stderr ?? ""}`);
+  }
+  const settings = (settingsQuery.stdout ?? "").trim();
+
   const drop = await execa(
     "docker",
     [...ctx.composeArgs, "exec", "-T", serviceId, "dropdb", "-U", user, "--if-exists", db],
@@ -1483,6 +1533,30 @@ async function pgRestoreFromFile(
   );
   if (create.exitCode !== 0) {
     throw new Error(`createdb failed: ${create.stderr ?? ""}`);
+  }
+  if (settings) {
+    const apply = await execa(
+      "docker",
+      [
+        ...ctx.composeArgs,
+        "exec",
+        "-T",
+        serviceId,
+        "psql",
+        "-X",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "--single-transaction",
+        "-U",
+        user,
+        "-d",
+        "postgres",
+      ],
+      { ...cliProcessOptions(), cwd: ctx.cwd, reject: false, input: `${settings}\n` },
+    );
+    if (apply.exitCode !== 0) {
+      throw new Error(`restoring the database owner failed: ${apply.stderr ?? ""}`);
+    }
   }
 
   // gunzip <file> | docker compose exec -T <svc> psql -U <user> <db>

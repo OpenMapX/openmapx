@@ -44,13 +44,13 @@ selection changes. `services restart` only restarts the existing container.
 Configure these before the first render or start. Replace example values and
 generate independent secrets for this deployment.
 
-| Variable            | Description                                                                                                                                                                                                                                                                                                                                                    | Required / Default          |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| `DOMAIN`            | Public domain. Drives Traefik routing, the auth URLs (`BETTER_AUTH_URL`, `PASSKEY_RP_ID`, `PASSKEY_ORIGIN`), the web app's `NEXT_PUBLIC_API_URL`, tile-server URLs, and the outbound contact identity (the contact address in third-party User-Agent strings and the email `From` fallback). Point DNS at the host; add an AAAA record only with working IPv6. | Default `localhost`         |
-| `ACME_EMAIL`        | Contact email for Traefik's automatic Let's Encrypt TLS certificates.                                                                                                                                                                                                                                                                                          | Default `admin@example.com` |
-| `POSTGRES_PASSWORD` | Unique password for the PostgreSQL/PostGIS database (used by `postgis`, `app-api`, and `data-manager`). Generate it before the first render with `openssl rand -hex 32`; it must be at least 24 characters and must not be a known placeholder or match `POSTGRES_USER`.                                                                                       | **Required**                |
-| `OPENMAPX_HOST_DIR` | Absolute host path of the OpenMapX repo checkout. The `ops-agent` container shells out to `docker compose` and mounts `infra/docker` (read-only) and its runtime directories from this path at the same paths inside the container, so generated bind sources resolve correctly. Find it with `pwd` from the repo root.                                        | **Required** (no default)   |
-| `DOCKER_GID`        | The host's docker-socket group id. The `ops-agent` container mounts the Docker socket (`/var/run/docker.sock`) as a non-root user and must join this group, or host container lifecycle operations fail with "permission denied". Find it with `stat -c %g /var/run/docker.sock`. Compose has no fallback, so it must be set; `.env.example` pre-fills `999`.  | **Required**                |
+| Variable            | Description                                                                                                                                                                                                                                                                                                                                                                        | Required / Default          |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `DOMAIN`            | Public domain. Drives Traefik routing, the auth URLs (`BETTER_AUTH_URL`, `PASSKEY_RP_ID`, `PASSKEY_ORIGIN`), the web app's `NEXT_PUBLIC_API_URL`, tile-server URLs, and the outbound contact identity (the contact address in third-party User-Agent strings and the email `From` fallback). Point DNS at the host; add an AAAA record only with working IPv6.                     | Default `localhost`         |
+| `ACME_EMAIL`        | Contact email for Traefik's automatic Let's Encrypt TLS certificates.                                                                                                                                                                                                                                                                                                              | Default `admin@example.com` |
+| `POSTGRES_PASSWORD` | Unique password of the PostgreSQL superuser, which only PostGIS administration and the CLI's backups and restores use; `app-api` and `data-manager` have their own roles (see [Database roles](#database-roles)). Generate it before the first render with `openssl rand -hex 32`; it must be at least 24 characters and must not be a known placeholder or match `POSTGRES_USER`. | **Required**                |
+| `OPENMAPX_HOST_DIR` | Absolute host path of the OpenMapX repo checkout. The `ops-agent` container shells out to `docker compose` and mounts `infra/docker` (read-only) and its runtime directories from this path at the same paths inside the container, so generated bind sources resolve correctly. Find it with `pwd` from the repo root.                                                            | **Required** (no default)   |
+| `DOCKER_GID`        | The host's docker-socket group id. The `ops-agent` container mounts the Docker socket (`/var/run/docker.sock`) as a non-root user and must join this group, or host container lifecycle operations fail with "permission denied". Find it with `stat -c %g /var/run/docker.sock`. Compose has no fallback, so it must be set; `.env.example` pre-fills `999`.                      | **Required**                |
 
 :::note[Domain and TLS networking]
 Traefik serves HTTP/3 (QUIC) on UDP/443 and the OpenMapX Docker network is
@@ -70,6 +70,29 @@ repeat the checks for their respective application secrets, so direct Compose
 use cannot bypass the policy. Errors report only the policy reason, never the
 credential or full database URL.
 :::
+
+### Database roles
+
+`app-api` and `data-manager` never use the superuser. Each connects as its own
+role, `openmapx_api` and `openmapx_data_manager`. `openmapx compose render`
+generates their passwords once, in `infra/docker/secrets/postgres-api-password`
+and `infra/docker/secrets/postgres-data-manager-password`, and refuses to render
+when the two are equal. PostGIS creates or updates both roles on every start,
+before it reports healthy.
+
+- `openmapx_api` owns the `public` schema and runs the migrations, so it owns
+  every table they create, including data-manager's `data_manager` tables. The
+  database itself stays the superuser's, so neither role can change settings
+  that superuser sessions inherit.
+- `openmapx_data_manager` may read and change only the `data_manager` tables and
+  create schemas for the indexes it rebuilds (search, Overture, notable and
+  ambient places). The API can read those schemas. Data-manager has no access to
+  accounts, administrative jobs or saved configuration, may not name a schema
+  otherwise, and may not create functions, triggers, rules, row-level policies
+  or views that call functions or read other schemas.
+
+There are no environment variables for these passwords. To change one, delete
+its file, render again and restart PostGIS, `app-api` and `data-manager`.
 
 ## Secrets
 

@@ -174,10 +174,13 @@ macOS or Windows cannot connect through such a socket.
    with `--network none`. Then load the OpenMapX dump into an empty database,
    as `pnpm openmapx backup restore` does. A database created by the image
    already holds the PostGIS extension schemas that the dump creates again,
-   and the load would stop on them.
+   and the load would stop on them. The dump names the API's and
+   data-manager's roles as owners, so create them first; they cannot log in.
 
    ```bash
    until docker exec openmapx-privacy-scratch pg_isready -q -h 127.0.0.1 -U postgres; do sleep 2; done
+   docker exec openmapx-privacy-scratch psql -q -v ON_ERROR_STOP=1 -U postgres \
+     -c 'CREATE ROLE openmapx_api NOLOGIN' -c 'CREATE ROLE openmapx_data_manager NOLOGIN'
    docker exec openmapx-privacy-scratch dropdb -U postgres --if-exists openmapx
    docker exec openmapx-privacy-scratch createdb -U postgres openmapx
    docker exec openmapx-privacy-scratch sh -c \
@@ -334,6 +337,17 @@ dump through `psql` needs it. For an OpenMapX database restore, the CLI also
 stops `app-api` before the database is replaced and restarts it only after the
 erasure journal has been replayed. If restore or replay fails, the API remains
 stopped so it cannot expose resurrected account data.
+
+Database dumps keep each object's owner and grants. A restore drops and
+recreates the database, gives it the owner and database-level grants the live
+database had, then loads the dump. The API therefore keeps its schemas and
+the right to create them, data-manager keeps its own tables and schemas, and
+the API can still read them. The roles themselves belong to the PostgreSQL server, not
+to any database, and are not in the dump. PostGIS creates them each time it
+starts, so to restore onto a new host or an empty volume, render and start
+`postgis` from this checkout first, then restore. A community service's own
+role (see [Community extensions](./community-extensions.md)) must likewise
+exist before its database is restored.
 
 When it restores the OpenMapX database, the CLI also closes every job the
 snapshot still shows as in progress, before the API restarts. That covers queued,

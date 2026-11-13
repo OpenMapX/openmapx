@@ -83,11 +83,11 @@ export async function pgDumpToFile(
       PG_SUPERVISOR,
       "openmapx-backup-pg-dump",
       token,
+      // Owners and grants stay in the dump: the platform database separates
+      // the API's and data-manager's roles, and a restore must keep them.
       "pg_dump",
       "-U",
       user,
-      "--no-owner",
-      "--no-privileges",
       database,
     ],
     { ...options, cwd: ctx.cwd, reject: false, buffer: false, stdin: "pipe" },

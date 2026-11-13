@@ -41,7 +41,7 @@ Edit the file before rendering. Supply these values:
 | ---------------------------- | ------------------------------------------------------ |
 | `DOMAIN`                     | Public hostname pointing to this host                  |
 | `ACME_EMAIL`                 | Certificate contact email                              |
-| `POSTGRES_PASSWORD`          | Unique database password, at least 24 characters       |
+| `POSTGRES_PASSWORD`          | Unique database superuser password, 24+ characters     |
 | `BETTER_AUTH_SECRET`         | Unique signing secret, at least 32 characters          |
 | `OPENMAPX_SECRETS_KEY`       | 32 random bytes encoded as 64 hexadecimal characters   |
 | `DATA_MANAGER_AUTH_TOKEN`    | Unique internal token, at least 32 characters          |
@@ -52,7 +52,9 @@ Edit the file before rendering. Supply these values:
 
 Generate a separate value for each secret with `openssl rand -hex 32`. The
 renderer rejects known placeholders and weak database/application secrets.
-Do not reuse the database username as its password.
+Do not reuse the database username as its password. The API and data-manager do
+not use the superuser: the render generates their own database passwords in
+`infra/docker/secrets/` (see [Database roles](./configuration.md#database-roles)).
 
 `UID` and `GID` name the deployment's user: the stack's own containers
 (`app-api`, `ops-agent`, `data-manager`, the MOTIS and Transitous services)

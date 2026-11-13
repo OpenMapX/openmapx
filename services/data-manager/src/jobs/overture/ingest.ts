@@ -1,5 +1,6 @@
 import { statSync } from "node:fs";
 import { join } from "node:path";
+import { resolveDatabaseUrl } from "@openmapx/core/service-secret-files";
 import { assertSupportedOvertureContributors } from "@openmapx/core/utils/overtureSource";
 import { latLngToCell } from "h3-js";
 import { sql } from "../../db/index.js";
@@ -169,8 +170,7 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
       ),
   });
 
-  const databaseUrl =
-    process.env.DATABASE_URL ?? "postgresql://postgres:postgres@postgis:5432/openmapx";
+  const databaseUrl = resolveDatabaseUrl("postgresql://postgres:postgres@postgis:5432/openmapx");
 
   opts.onProgress?.("Creating staging schema...");
   await sql.unsafe(buildSchemaDDL(stagingSchema, { deferPlacesIndexes: true }));

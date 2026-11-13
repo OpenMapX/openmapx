@@ -154,6 +154,32 @@ if [ "${1:-}" = "postgres" ]; then
   fi
 fi
 
+# The API's and data-manager's own logins, so neither holds the superuser.
+# The API owns the `public` schema and runs the migrations, which grant
+# data-manager its own `data_manager` tables. The database itself stays the
+# superuser's, so neither role can change settings that superuser sessions in
+# it inherit. Data-manager may create schemas for the
+# indexes it rebuilds; whatever it creates stays readable by the API. Both
+# roles are cluster-wide, so they exist before a backup is restored into the
+# database. `openmapx compose render` writes the two password files.
+API_ROLE="openmapx_api"
+DATA_MANAGER_ROLE="openmapx_data_manager"
+read_password_file() {
+  local value escaped
+  if [ -z "${1:-}" ] || [ ! -f "$1" ] || ! value=$(<"$1") || [ -z "$value" ]; then
+    echo "[openmapx-postgis] $2 password file is missing; run openmapx compose render" >&2
+    return 1
+  fi
+  escaped=${value//\'/\'\'}
+  printf '%s' "$escaped"
+}
+ESCAPED_API_PASSWORD=$(read_password_file "${OPENMAPX_API_DB_PASSWORD_FILE:-}" "API database") || exit 1
+ESCAPED_DATA_MANAGER_PASSWORD=$(read_password_file "${OPENMAPX_DATA_MANAGER_DB_PASSWORD_FILE:-}" "data-manager database") || exit 1
+if [ "$ESCAPED_API_PASSWORD" = "$ESCAPED_DATA_MANAGER_PASSWORD" ]; then
+  echo "[openmapx-postgis] the API and data-manager database passwords must differ" >&2
+  exit 1
+fi
+
 # Background-start the upstream entrypoint with whatever args compose passed
 # (typically `postgres`).
 docker-entrypoint.sh "$@" &
@@ -204,6 +230,93 @@ if [ -n "${POSTGRES_PASSWORD:-}" ]; then
   run_sql postgres <<<"ALTER USER \"${PG_USER}\" WITH PASSWORD '${ESCAPED_PASSWORD}';"
   echo "[openmapx-postgis] superuser password synced from env"
 fi
+
+APP_DB="${POSTGRES_DB:-$PG_USER}"
+run_sql "$APP_DB" <<SQL
+SELECT 'CREATE ROLE ${API_ROLE}' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${API_ROLE}')
+\gexec
+SELECT 'CREATE ROLE ${DATA_MANAGER_ROLE}' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${DATA_MANAGER_ROLE}')
+\gexec
+ALTER ROLE ${API_ROLE} NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS LOGIN PASSWORD '${ESCAPED_API_PASSWORD}';
+ALTER ROLE ${DATA_MANAGER_ROLE} NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS LOGIN PASSWORD '${ESCAPED_DATA_MANAGER_PASSWORD}';
+-- Without the default "\$user" entry, a schema named after a role cannot
+-- shadow the tables either role reads unqualified from public.
+ALTER ROLE ${API_ROLE} SET search_path = public;
+ALTER ROLE ${DATA_MANAGER_ROLE} SET search_path = public;
+SELECT format('GRANT CREATE ON DATABASE %I TO ${API_ROLE}, ${DATA_MANAGER_ROLE}', current_database())
+\gexec
+ALTER SCHEMA public OWNER TO ${API_ROLE};
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE ${DATA_MANAGER_ROLE} GRANT USAGE ON SCHEMAS TO ${API_ROLE};
+ALTER DEFAULT PRIVILEGES FOR ROLE ${DATA_MANAGER_ROLE} GRANT SELECT ON TABLES TO ${API_ROLE};
+-- Data-manager may create or rename schemas only to the names of the indexes
+-- it rebuilds, so it can never take a name another component trusts, such as
+-- a role's name or a schema a superuser-owned function calls into.
+CREATE SCHEMA IF NOT EXISTS openmapx_guard;
+REVOKE ALL ON SCHEMA openmapx_guard FROM PUBLIC;
+CREATE OR REPLACE FUNCTION openmapx_guard.restrict_data_manager_schemas()
+  RETURNS event_trigger
+  LANGUAGE plpgsql
+  SET search_path = pg_catalog
+AS \$\$
+DECLARE
+  allowed constant text := '^((osm_search|notable_places)(__staging|__previous)?|ambient_places|overture_[a-z0-9_]{1,55})\$';
+  command record;
+BEGIN
+  IF current_user <> '${DATA_MANAGER_ROLE}' THEN
+    RETURN;
+  END IF;
+  FOR command IN SELECT objid, object_type, object_identity FROM pg_event_trigger_ddl_commands() LOOP
+    IF command.object_type = 'schema' AND command.object_identity !~ allowed THEN
+      RAISE EXCEPTION 'data-manager may not create or rename a schema to %', command.object_identity
+        USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    -- A view runs every function it calls, and with security_invoker every
+    -- table it reads, as the role reading it. The API reads these views, so
+    -- they may read only data-manager's own relations and call no function.
+    IF command.object_type = 'view' AND (
+      EXISTS (SELECT FROM pg_class c WHERE c.oid = command.objid AND c.reloptions::text ~* 'security_invoker')
+      -- Built-in functions are not recorded as dependencies, so look for any
+      -- function, aggregate or window function call in the stored query.
+      OR EXISTS (
+        SELECT FROM pg_rewrite r
+        WHERE r.ev_class = command.objid AND r.ev_action::text ~ '[{](FUNCEXPR|AGGREF|WINDOWFUNC) ')
+      OR EXISTS (
+        SELECT FROM pg_rewrite r
+        JOIN pg_depend d ON d.classid = 'pg_rewrite'::regclass AND d.objid = r.oid
+        WHERE r.ev_class = command.objid AND (
+          d.refclassid = 'pg_proc'::regclass
+          OR (d.refclassid = 'pg_class'::regclass AND NOT EXISTS (
+            SELECT FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE c.oid = d.refobjid AND n.nspname ~ allowed))))
+    ) THEN
+      RAISE EXCEPTION 'data-manager may not define view % that calls functions or reads other schemas', command.object_identity
+        USING ERRCODE = 'insufficient_privilege';
+    END IF;
+  END LOOP;
+END;
+\$\$;
+DROP EVENT TRIGGER IF EXISTS openmapx_restrict_data_manager_schemas;
+CREATE EVENT TRIGGER openmapx_restrict_data_manager_schemas ON ddl_command_end WHEN TAG IN ('CREATE SCHEMA', 'ALTER SCHEMA', 'CREATE VIEW', 'ALTER VIEW', 'ALTER TABLE') EXECUTE FUNCTION openmapx_guard.restrict_data_manager_schemas();
+-- The API reads data-manager's schemas, and a function, rule, trigger or
+-- row-level policy runs as the role whose query fires it. Data-manager
+-- therefore writes no code at all: its schemas hold tables, indexes and the
+-- plain views the check above admits.
+CREATE OR REPLACE FUNCTION openmapx_guard.refuse_data_manager_code()
+  RETURNS event_trigger
+  LANGUAGE plpgsql
+  SET search_path = pg_catalog
+AS \$\$
+BEGIN
+  IF current_user = '${DATA_MANAGER_ROLE}' THEN
+    RAISE EXCEPTION 'data-manager may not run %', tg_tag USING ERRCODE = 'insufficient_privilege';
+  END IF;
+END;
+\$\$;
+DROP EVENT TRIGGER IF EXISTS openmapx_refuse_data_manager_code;
+CREATE EVENT TRIGGER openmapx_refuse_data_manager_code ON ddl_command_start WHEN TAG IN ('CREATE FUNCTION', 'ALTER FUNCTION', 'CREATE PROCEDURE', 'ALTER PROCEDURE', 'ALTER ROUTINE', 'CREATE AGGREGATE', 'ALTER AGGREGATE', 'CREATE OPERATOR', 'ALTER OPERATOR', 'CREATE CAST', 'CREATE RULE', 'ALTER RULE', 'CREATE TRIGGER', 'ALTER TRIGGER', 'CREATE POLICY', 'ALTER POLICY') EXECUTE FUNCTION openmapx_guard.refuse_data_manager_code();
+SQL
+echo "[openmapx-postgis] database roles ${API_ROLE} and ${DATA_MANAGER_ROLE} ready"
 
 # The tile server's login. It may only call the functions in the `tiles`
 # schema; each runs as its owner and returns one finished tile, so the role

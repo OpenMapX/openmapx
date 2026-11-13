@@ -37,7 +37,9 @@
       "TRUST_PROXY_RANGES": "${TRUST_PROXY_RANGES:-uniquelocal}",
       "DOMAIN": "${DOMAIN:-localhost}",
       "OPENMAPX_CUSTOM_INTEGRATIONS_DIR": "${OPENMAPX_CUSTOM_INTEGRATIONS_DIR:-/app/custom_integrations}",
-      "DATABASE_URL": "postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgis:5432/openmapx",
+      "DATABASE_URL": "postgresql://openmapx_api@postgis:5432/openmapx",
+      "DATABASE_PASSWORD_FILE": "/run/secrets/postgres-api-password",
+      "POSTGRES_PASSWORD": "",
       "REDIS_URL": "redis://redis:6379",
       "REDIS_PASSWORD_FILE": "/run/secrets/redis-password",
       "OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE": "/run/secrets/offline-package-principal-key",
@@ -187,6 +189,11 @@
     {
       "source": "@infra:secrets/ops-agent-api-token",
       "target": "/run/secrets/ops-agent-api-token",
+      "readOnly": true
+    },
+    {
+      "source": "@infra:secrets/postgres-api-password",
+      "target": "/run/secrets/postgres-api-password",
       "readOnly": true
     },
     {

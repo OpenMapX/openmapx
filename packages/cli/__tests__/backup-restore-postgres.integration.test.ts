@@ -275,8 +275,6 @@ async function createDatabaseBackup(name: string, includeScratch = false): Promi
       "pg_dump",
       "-U",
       POSTGRES_USER,
-      "--no-owner",
-      "--no-privileges",
       DATABASE,
     ],
     { cwd: fixture.infra, reject: false, stderr: "pipe", buffer: { stdout: false } },

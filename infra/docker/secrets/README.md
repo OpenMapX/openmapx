@@ -70,6 +70,23 @@ resumes. Ordinary compose rendering does not perform that rotation. Until the
 coordinated rotation command lands, do not delete, edit, or move either token
 while any of those containers is running.
 
+### `postgres-api-password` and `postgres-data-manager-password` (generated)
+
+Every CLI compose render creates the database passwords of the API's and
+data-manager's own PostgreSQL roles, `openmapx_api` and
+`openmapx_data_manager`, when they are absent. They follow the same format,
+reuse and file rules as the ops-agent tokens above, and a render fails closed if
+the two files hold the same value. PostGIS mounts both and creates or updates
+the roles from them on every start, before it reports healthy; `app-api` and
+`data-manager` each mount only their own file and receive its path as
+`DATABASE_PASSWORD_FILE`. The PostgreSQL superuser keeps `POSTGRES_PASSWORD`
+from `.env` and is used only by PostGIS administration and the CLI's backups
+and restores.
+
+To change a password, stop `app-api` and `data-manager`, delete the file, run
+`pnpm openmapx compose render`, then restart `postgis` followed by `app-api`
+and `data-manager`.
+
 ### `transitous-runner-capability` (generated)
 
 Every CLI compose render creates this signing key when it is absent, using the
