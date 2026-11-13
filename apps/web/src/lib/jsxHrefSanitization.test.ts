@@ -36,9 +36,6 @@ const ALLOWED: Record<string, string[]> = {
     "href",
     "adminJobHref({ id: job.id, source: job.source })",
   ],
-  // `actionHref` is read only from the module-local CHECK_ACTIONS constant,
-  // whose values are fixed relative admin routes; no runtime URL enters it.
-  "components/admin/privacy/PrivacyReadinessChecklist.tsx": ["actionHref"],
   // Registry entries and validated job-return values are internal administration destinations.
   "components/admin/data/DataWorkspace.tsx": ["entry.href"],
   "components/admin/shared/AdminTopicNavigation.tsx": ["entry.href"],

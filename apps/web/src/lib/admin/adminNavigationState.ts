@@ -44,7 +44,6 @@ export const PRIVACY_CASE_SECTIONS = [
   "tasks",
   "decisions",
   "attachments",
-  "backups",
   "delivery",
   "events",
 ] as const;

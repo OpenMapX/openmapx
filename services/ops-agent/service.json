@@ -34,9 +34,6 @@
       "OPS_AGENT_DATA_MANAGER_TOKEN_FILE": "/run/secrets/ops-agent-data-manager-token",
       "DATA_MANAGER_URL": "${DATA_MANAGER_URL:-http://data-manager:4000}",
       "DATA_MANAGER_AUTH_TOKEN": "${DATA_MANAGER_AUTH_TOKEN:?DATA_MANAGER_AUTH_TOKEN must be set}",
-      "OPS_PRIVACY_BACKUP_CAPABILITY_KEY_FILE": "/run/secrets/privacy-backup-capability-key",
-      "OPS_PRIVACY_BACKUP_COLLECTOR_ENABLED": "${OPS_PRIVACY_BACKUP_COLLECTOR_ENABLED:-false}",
-      "OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE": "${OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE:-}",
       "BACKUP_RETENTION_DAYS": "${BACKUP_RETENTION_DAYS:-30}",
       "OPENMAPX_ARTIFACT_TRANSFER_POLICY_FILE": "/run/openmapx/artifact-transfer-policy.json"
     },
@@ -62,11 +59,6 @@
     {
       "source": "@infra:secrets/ops-agent-data-manager-token",
       "target": "/run/secrets/ops-agent-data-manager-token",
-      "readOnly": true
-    },
-    {
-      "source": "@infra:secrets/privacy-backup-capability-key",
-      "target": "/run/secrets/privacy-backup-capability-key",
       "readOnly": true
     },
     {

@@ -80,25 +80,6 @@ const fetchMock = vi.fn((...args: unknown[]) => {
       ),
     );
   }
-  if (url.endsWith("/api/privacy/admin/readiness")) {
-    return Promise.resolve(
-      new Response(
-        JSON.stringify({
-          ready: false,
-          checkedAt: "2026-09-05T00:00:00.000Z",
-          evidenceVersion: "v1",
-          checks: [
-            {
-              id: "notification-health",
-              status: "fail",
-              detailCode: "notification-unavailable",
-            },
-          ],
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    );
-  }
   throw new Error(`Unexpected request: ${url}`);
 });
 
@@ -108,7 +89,7 @@ afterEach(() => {
   fetchMock.mockClear();
 });
 
-it("groups setup fields, preserves environment locks, and links failed readiness checks", async () => {
+it("groups setup fields and preserves environment locks without a release review step", async () => {
   render(<PrivacySetupPage />, { wrapper: createQueryWrapper() });
 
   expect(await screen.findByRole("heading", { name: "privacySetup.title" })).toBeInTheDocument();
@@ -121,6 +102,7 @@ it("groups setup fields, preserves environment locks, and links failed readiness
   expect(
     screen.getByRole("heading", { name: /privacySetup.steps.retention.title/ }),
   ).toBeInTheDocument();
+  expect(screen.queryByText("privacySetup.steps.reviews.title")).toBeNull();
 
   expect(screen.queryByLabelText("privacySetup.settings.smtpFromAddress.label")).toBeNull();
   expect(screen.getByRole("link", { name: "privacySetup.openEmailSettings" })).toHaveAttribute(
@@ -128,26 +110,23 @@ it("groups setup fields, preserves environment locks, and links failed readiness
     "/admin/settings/email",
   );
 
-  expect(
-    await screen.findByRole("link", {
-      name: "privacySetup.readiness.checks.notification-health.action",
-    }),
-  ).toHaveAttribute("href", "/admin/privacy-setup#notifications");
-
   fireEvent.change(screen.getByLabelText("privacySetup.settings.legalControllerName.label"), {
     target: { value: "Updated GmbH" },
   });
   fireEvent.click(screen.getAllByRole("button", { name: "privacySetup.editor.save" })[0]);
   await waitFor(() =>
     expect(
-      fetchMock.mock.calls.filter(([input]) =>
-        String(input).endsWith("/api/privacy/admin/readiness"),
-      ).length,
-    ).toBeGreaterThanOrEqual(2),
+      fetchMock.mock.calls.some(
+        ([, init]) => (init as RequestInit | undefined)?.method === "PATCH",
+      ),
+    ).toBe(true),
   );
+  expect(
+    fetchMock.mock.calls.every(([input]) => String(input).endsWith("/api/admin/settings")),
+  ).toBe(true);
 });
 
-it("preserves an edited source declaration when readiness refreshes", async () => {
+it("saves an edited source declaration", async () => {
   render(<PrivacySetupPage />, { wrapper: createQueryWrapper() });
   fireEvent.click(
     await screen.findByRole("button", { name: /privacySetup.steps.retention.title/ }),
@@ -159,15 +138,6 @@ it("preserves an edited source declaration when readiness refreshes", async () =
   fireEvent.change(sourceEditor, {
     target: { value: source },
   });
-
-  fireEvent.click(screen.getByRole("button", { name: "privacySetup.readiness.refresh" }));
-  await waitFor(() =>
-    expect(
-      fetchMock.mock.calls.filter(([input]) =>
-        String(input).endsWith("/api/privacy/admin/readiness"),
-      ).length,
-    ).toBeGreaterThanOrEqual(2),
-  );
   expect(screen.getByLabelText("privacySetup.settings.legalPrivacySources.label")).toHaveValue(
     source,
   );

@@ -646,7 +646,9 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     category: "backup-copies",
     source: "operator",
     strategy: "operator_task",
-    locators: [{ type: "manual", field: "backup.snapshot", instructionsCode: "backup-review" }],
+    locators: [
+      { type: "manual", field: "backup.snapshot", instructionsCode: "backup-manual-restore" },
+    ],
     purposes: ["legal-accountability", "security-and-abuse-prevention"],
     legalBases: ["legal-obligation", "legitimate-interest"],
     origin: { kind: "operator", descriptionCode: "retained-backup" },
@@ -659,7 +661,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     recipients: [{ id: "openmapx-controller", roleCode: "controller", country: "DE" }],
     article15: "include",
     portability: { decision: "exclude", reasonCode: "retained-copy" },
-    secretPolicy: { mode: "operator_review", code: "backup-review-required" },
+    secretPolicy: { mode: "operator_review", code: "backup-manual-restore-review" },
     rightsOfOthers: { mode: "operator_review", code: "rights-of-others" },
   },
   {
@@ -732,7 +734,7 @@ export function assertSubjectDataRegistration(value: unknown): SubjectDataRegist
 }
 
 /** IDs with a code path in the current release. Other collector registrations
- * remain visible but block readiness until their source plan is enabled. */
+ * remain visible but stay unavailable until their source plan is enabled. */
 export const AVAILABLE_SUBJECT_COLLECTORS = new Set([
   "openmapx-account",
   "openmapx-authentication",

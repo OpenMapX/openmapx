@@ -15,10 +15,6 @@ import { PrivacyArchiveWriter } from "./artifact-writer.js";
 import { getSubjectDataRegistration } from "./catalogue.js";
 import { collectApprovedAttachments } from "./collectors/attachments.js";
 import {
-  type BackupSubjectCollectorContext,
-  collectApprovedBackupSource,
-} from "./collectors/backup.js";
-import {
   collectManagedDawarich,
   type ManagedDawarichCollectorContext,
 } from "./collectors/dawarich.js";
@@ -27,7 +23,6 @@ import {
   type OpenMapxCollectorContext,
 } from "./openmapx-collectors.js";
 import { recordPrivacyGenerationFailure } from "./operations-monitor.js";
-import { loadReceiptSourceSnapshots, ReceiptSnapshotUnavailableError } from "./receipt-snapshot.js";
 import { resolvePrivacyReportLegalFacts } from "./report-settings.js";
 import { PrivacyRequestError, PrivacyRequestService } from "./request-service.js";
 import { privacyRetention } from "./settings.js";
@@ -44,10 +39,8 @@ export interface PrivacyExportGenerationOptions {
   service?: PrivacyRequestService;
   openmapx?: Omit<OpenMapxCollectorContext, "userId" | "cutoffAt" | "database">;
   dawarich?: Omit<ManagedDawarichCollectorContext, "userId" | "cutoffAt" | "database">;
-  backup?: Omit<BackupSubjectCollectorContext, "requestId" | "userId" | "cutoffAt" | "database">;
   now?: () => Date;
   artifactRetentionHours?: number;
-  deploymentId?: string;
 }
 
 export interface PrivacyExportGenerationResult {
@@ -147,58 +140,19 @@ async function generatePrivacyExportInternal(
         .filter((task) => task.status === "not_applicable")
         .map((task) => task.registrationId),
     );
-    let receipt: Awaited<ReturnType<typeof loadReceiptSourceSnapshots>> = {
-      overrides: new Map(),
-      capturedAt: new Map(),
-      externalParts: [],
-    };
-    let open: Awaited<ReturnType<typeof collectOpenMapxDataSnapshot>>;
-    try {
-      receipt = await loadReceiptSourceSnapshots({
-        database,
-        requestId: current.id,
-        expectedRegistrationIds: taskRows
-          .filter((task) =>
-            ["receipt-snapshot-captured", "redis-exact-locator-review-required"].includes(
-              task.publicCode ?? "",
-            ),
-          )
-          .map((task) => task.registrationId),
-        excludedRegistrationIds,
-        store: options.store,
-        deploymentId: options.deploymentId ?? envString("OPENMAPX_DEPLOYMENT_ID", "openmapx"),
-      });
-      open = subjectUserId
-        ? await collectOpenMapxDataSnapshot({
-            userId: subjectUserId,
-            requestId: current.id,
-            subjectLocatorDigests,
-            cutoffAt,
-            database,
-            ...(options.openmapx ?? {}),
-            ...(offlinePrincipalKey ? { offlinePrincipalKey } : {}),
-            excludedRegistrationIds,
-            receiptSnapshotOverrides: receipt.overrides,
-            receiptSnapshotCapturedAt: receipt.capturedAt,
-          })
-        : { snapshotAt: cutoffAt, parts: [], entries: [] };
-    } catch (error) {
-      if (error instanceof ReceiptSnapshotUnavailableError) {
-        const task = taskRows.find(
-          (candidate) => candidate.registrationId === error.registrationId,
-        );
-        if (task)
-          await service.markTask({
-            taskId: task.id,
-            requestId: current.id,
-            status: "operator_review",
-            reasonCode: "receipt-snapshot-unavailable",
-          });
-        throw new PrivacyRequestError("RECEIPT_SNAPSHOT_UNAVAILABLE", 503);
-      }
-      throw error;
-    }
-    const parts = [...receipt.externalParts, ...open.parts];
+    const open = subjectUserId
+      ? await collectOpenMapxDataSnapshot({
+          userId: subjectUserId,
+          requestId: current.id,
+          subjectLocatorDigests,
+          cutoffAt,
+          database,
+          ...(options.openmapx ?? {}),
+          ...(offlinePrincipalKey ? { offlinePrincipalKey } : {}),
+          excludedRegistrationIds,
+        })
+      : { snapshotAt: cutoffAt, parts: [], entries: [] };
+    const parts = [...open.parts];
     if (open.disposeSources) sourceDisposers.push(open.disposeSources);
     if (subjectUserId) {
       const managed = await collectManagedDawarich({
@@ -209,15 +163,6 @@ async function generatePrivacyExportInternal(
       });
       parts.push(managed);
       if (managed.disposeSources) sourceDisposers.push(managed.disposeSources);
-      const backup = await collectApprovedBackupSource({
-        requestId: current.id,
-        userId: subjectUserId,
-        cutoffAt,
-        database,
-        ...(options.backup ?? {}),
-      });
-      parts.push(backup);
-      if (backup.disposeSources) sourceDisposers.push(backup.disposeSources);
     }
     const supplements = await collectApprovedAttachments({
       requestId: current.id,
@@ -226,22 +171,6 @@ async function generatePrivacyExportInternal(
     });
     parts.push(supplements);
     if (supplements.disposeSources) sourceDisposers.push(supplements.disposeSources);
-    const backupWarning = parts.find(
-      (part) =>
-        part.registrationId === "backup-retained-copies" &&
-        part.warningCodes.includes("backup-extraction-warning-review-required"),
-    );
-    if (backupWarning) {
-      const backupTask = taskRows.find((task) => task.registrationId === "backup-retained-copies");
-      if (backupTask)
-        await service.markTask({
-          taskId: backupTask.id,
-          requestId: current.id,
-          status: "operator_review",
-          reasonCode: "backup-extraction-warning-review-required",
-        });
-      throw new PrivacyRequestError("BACKUP_WARNING_REVIEW_REQUIRED", 409);
-    }
     const policyRows = await database
       .select({ state: dataSubjectRequest.state, version: dataSubjectRequest.version })
       .from(dataSubjectRequest)

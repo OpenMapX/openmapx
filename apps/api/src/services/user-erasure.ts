@@ -13,12 +13,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { currentAccountMutation } from "../account/account-context";
 import { assertAccountDeletionAllowed } from "../account/admin-invariant";
 import { currentAuthDatabase } from "../account/auth-database";
-import {
-  dataExportArtifact,
-  dataSubjectRequest,
-  dataSubjectRequestAttachment,
-  dataSubjectRequestSourceSnapshot,
-} from "../db/schema";
+import { dataExportArtifact, dataSubjectRequest, dataSubjectRequestAttachment } from "../db/schema";
 import { API_VOLUMES, privateVolumeDirectory } from "./private-volume-directory";
 
 interface ErasureUser {
@@ -114,7 +109,7 @@ export async function cleanupResidualUserData(user: ErasureUser): Promise<void> 
   );
   const deletionRequestIds = requestIds.filter((id) => !retainedActiveRequestIds.has(id));
   if (deletionRequestIds.length) {
-    const [artifacts, attachments, sourceSnapshots] = await Promise.all([
+    const [artifacts, attachments] = await Promise.all([
       currentAuthDatabase()
         .select({ id: dataExportArtifact.id, storageKey: dataExportArtifact.storageKey })
         .from(dataExportArtifact)
@@ -126,15 +121,8 @@ export async function cleanupResidualUserData(user: ErasureUser): Promise<void> 
         })
         .from(dataSubjectRequestAttachment)
         .where(inArray(dataSubjectRequestAttachment.requestId, deletionRequestIds)),
-      currentAuthDatabase()
-        .select({
-          id: dataSubjectRequestSourceSnapshot.id,
-          storageKey: dataSubjectRequestSourceSnapshot.storageKey,
-        })
-        .from(dataSubjectRequestSourceSnapshot)
-        .where(inArray(dataSubjectRequestSourceSnapshot.requestId, deletionRequestIds)),
     ]);
-    for (const object of [...artifacts, ...attachments, ...sourceSnapshots]) {
+    for (const object of [...artifacts, ...attachments]) {
       if (configuredPrivacyArtifactDeleter)
         await configuredPrivacyArtifactDeleter(object.storageKey);
       else await deletePrivacyCiphertext(object.storageKey);
@@ -173,23 +161,6 @@ export async function cleanupResidualUserData(user: ErasureUser): Promise<void> 
                 attachments.map((row) => row.id),
               ),
               sql`${dataSubjectRequestAttachment.deletedAt} is null`,
-            ),
-          );
-      }
-      if (sourceSnapshots.length) {
-        await tx
-          .update(dataSubjectRequestSourceSnapshot)
-          .set({
-            state: "deleted",
-            deletedAt: erasedAt,
-            wrappedDek: null,
-            masterKeyVersion: null,
-            tag: null,
-          })
-          .where(
-            inArray(
-              dataSubjectRequestSourceSnapshot.id,
-              sourceSnapshots.map((row) => row.id),
             ),
           );
       }

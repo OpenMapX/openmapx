@@ -21,7 +21,6 @@ import {
 } from "@/lib/admin/privacyAdmin";
 import { PrivacyArtifactDelivery } from "./PrivacyArtifactDelivery";
 import { PrivacyAttachments } from "./PrivacyAttachments";
-import { PrivacyBackupReview } from "./PrivacyBackupReview";
 import { PrivacyCaseDecisionForms } from "./PrivacyCaseDecisionForms";
 import { PrivacyIdentityReview } from "./PrivacyIdentityReview";
 import { PrivacyTaskActions } from "./PrivacyTaskActions";
@@ -53,7 +52,6 @@ export function PrivacyCaseView({
     extendDeadline: "decisions",
     caseDecision: "decisions",
     attachmentWrite: "attachments",
-    backupReview: "backups",
     generate: "delivery",
     assistedDelivery: "delivery",
     representativeDelivery: "delivery",
@@ -150,7 +148,6 @@ export function PrivacyCaseView({
                   <PrivacyCaseDecisionForms detail={detail} client={client} />
                 )}
                 {value === "attachments" && <PrivacyAttachments detail={detail} client={client} />}
-                {value === "backups" && <PrivacyBackupReview detail={detail} client={client} />}
                 {value === "delivery" && expanded === value && (
                   <Stack sx={{ gap: 2 }}>
                     <Button

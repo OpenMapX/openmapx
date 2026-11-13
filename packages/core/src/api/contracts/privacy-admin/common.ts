@@ -82,7 +82,6 @@ export const privacyCaseCapabilitiesSchema = z.strictObject({
   extendDeadline: z.boolean(),
   caseDecision: z.boolean(),
   attachmentWrite: z.boolean(),
-  backupReview: z.boolean(),
   generate: z.boolean(),
   assistedDelivery: z.boolean(),
   representativeDelivery: z.boolean(),
@@ -125,27 +124,6 @@ export const privacyDownloadHeaders = z.object({
   "cache-control": z.literal("private, no-store"),
   "x-content-type-options": z.literal("nosniff"),
   "referrer-policy": z.literal("no-referrer"),
-});
-export const privacyBackupReviewViewSchema = z.strictObject({
-  id: z.uuid(),
-  requestId: z.uuid(),
-  backupId: z.string(),
-  manifestDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  createdAt: date,
-  platformVersion: z.string(),
-  decision: z.enum(["not_applicable", "no_material_difference", "extract", "unavailable"]),
-  reasonCode: z.string(),
-  reviewedBy: z.string().nullable(),
-  reviewedAt: date,
-});
-export const privacyBackupOmissionViewSchema = z.strictObject({
-  backupReviewId: z.string(),
-  manifestDigest: z.string(),
-  warningCodes: z.array(z.string()),
-  warningsDigest: z.string(),
-  accepted: z.boolean(),
-  requestVersion: z.number().int().positive().optional(),
-  reasonCode: z.string().optional(),
 });
 export type PrivacyCaseView = z.infer<typeof privacyCaseViewSchema>;
 export type PrivacyAdminDetail = z.infer<typeof privacyAdminDetailSchema>;

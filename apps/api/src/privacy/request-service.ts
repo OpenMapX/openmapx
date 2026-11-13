@@ -30,10 +30,6 @@ import { findIdempotentEvent, idempotencyFingerprint } from "./idempotency.js";
 import { deriveOperatorTaskActions } from "./operator-task-actions";
 import { withPreservationRetentionLock } from "./preservation.js";
 import {
-  captureReceiptSourceSnapshots,
-  type ReceiptPreservationDependencies,
-} from "./receipt-snapshot.js";
-import {
   assertAssemblyReady,
   assertValidRequestTransition,
   type CreateSubjectRequestInput,
@@ -42,21 +38,6 @@ import {
   identityReviewSchema,
   isValidRequestTransition,
 } from "./request-contracts.js";
-
-/** Reviewed workflow contracts consumed by release readiness. Individual
- * requests still remain blocked until their own required tasks are resolved. */
-export const PRIVACY_ASSISTED_WORKFLOW_CAPABILITY = Object.freeze({
-  version: 1,
-  authoritativeIdentityChallenge: true,
-  representativeAuthorityReview: true,
-  freshAuthenticatedDelivery: true,
-});
-export const PRIVACY_OPERATOR_TASK_WORKFLOW_CAPABILITY = Object.freeze({
-  version: 1,
-  immutableDecisionEvents: true,
-  encryptedSupplements: true,
-  generationRequiresResolvedTasks: true,
-});
 
 export class PrivacyRequestError extends Error {
   constructor(
@@ -78,9 +59,6 @@ export interface PrivacyRequestServiceOptions {
   enqueue?: (requestId: string) => void | Promise<void>;
   /** Physical ciphertext deletion is injected so DB mutations stay testable. */
   deleteArtifactStorage?: (storageKey: string) => Promise<void>;
-  /** Present for every production intake path, even when a dependency is
-   * unavailable, so receipt capture failures become explicit source tasks. */
-  receiptPreservation?: ReceiptPreservationDependencies;
 }
 
 type DbLike = typeof defaultDb;
@@ -193,7 +171,6 @@ export class PrivacyRequestService {
   private readonly deploymentId: string;
   private readonly enqueue?: PrivacyRequestServiceOptions["enqueue"];
   private readonly deleteArtifactStorage?: PrivacyRequestServiceOptions["deleteArtifactStorage"];
-  private readonly receiptPreservation?: ReceiptPreservationDependencies;
 
   constructor(options: PrivacyRequestServiceOptions = {}) {
     this.database = options.database ?? defaultDb;
@@ -205,7 +182,6 @@ export class PrivacyRequestService {
     this.deploymentId = options.deploymentId ?? envString("OPENMAPX_DEPLOYMENT_ID", "openmapx");
     this.enqueue = options.enqueue;
     this.deleteArtifactStorage = options.deleteArtifactStorage;
-    this.receiptPreservation = options.receiptPreservation;
   }
 
   async resolveVerifiedSubjectId(
@@ -303,7 +279,6 @@ export class PrivacyRequestService {
       (registration) => registration.strategy !== "not_personal",
     );
     let racedRequest: typeof dataSubjectRequest.$inferSelect | undefined;
-    const createdReceiptStorageKeys: string[] = [];
     try {
       await withPreservationRetentionLock(this.database, async (tx) => {
         await tx.insert(dataSubjectRequest).values({
@@ -435,11 +410,7 @@ export class PrivacyRequestService {
             startedAt: now,
             status: "held",
           });
-          if (
-            !unresolvedLocator &&
-            registration.strategy === "operator_task" &&
-            registration.id !== "redis-subject-controls"
-          ) {
+          if (!unresolvedLocator && registration.strategy === "operator_task") {
             const outcomeCode = `${registration.source}-preservation-action-required`;
             await tx
               .update(dataSubjectRequestTask)
@@ -478,27 +449,8 @@ export class PrivacyRequestService {
               );
           }
         }
-        if (parsed.userId && this.receiptPreservation) {
-          await captureReceiptSourceSnapshots({
-            database: tx as unknown as typeof defaultDb,
-            requestId: id,
-            userId: parsed.userId,
-            cutoffAt: now,
-            dueAt,
-            timeZone: parsed.timeZone,
-            dependencies: this.receiptPreservation,
-            createdStorageKeys: createdReceiptStorageKeys,
-          });
-        }
       });
     } catch (error: unknown) {
-      if (this.receiptPreservation?.store) {
-        await Promise.allSettled(
-          createdReceiptStorageKeys.map((storageKey) =>
-            this.receiptPreservation?.store?.delete(storageKey),
-          ),
-        );
-      }
       if (
         String(error).includes("data_subject_request_active_user_kind_idx") ||
         String(error).includes("duplicate key")

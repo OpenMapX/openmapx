@@ -13,11 +13,6 @@ import { join } from "node:path";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import { compactErasureJournal } from "@openmapx/core/erasure-journal";
-import {
-  DAWARICH_SUPPORTED_COMMIT,
-  DAWARICH_SUPPORTED_IMAGE,
-  DAWARICH_SUPPORTED_IMAGE_DIGEST,
-} from "@openmapx/core/privacy";
 import { envInt, envString } from "@openmapx/core/server-env";
 import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { eq } from "drizzle-orm";
@@ -59,16 +54,9 @@ import { schedulePrivacyEscalations } from "./privacy/escalations.js";
 import { generatePrivacyExport } from "./privacy/generation.js";
 import { createPrivacyNotificationWorker } from "./privacy/notifications.js";
 import { createPrivacyOperationsMonitor } from "./privacy/operations-monitor.js";
-import { probeOpsPrivacyBackupCapability } from "./privacy/ops-backup-health.js";
-import { IMPLEMENTED_PRIVACY_RELEASE_CAPABILITIES } from "./privacy/release-capabilities.js";
-import { resolvePrivacyReleaseEvidence } from "./privacy/release-evidence.js";
-import { privacyImplementationActorIds } from "./privacy/release-identity.js";
-import { resolvePrivacyReleaseValidationChecks } from "./privacy/release-validation.js";
 import { PrivacyRequestDeferredError, PrivacyRequestRunner } from "./privacy/request-runner.js";
 import { PrivacyRequestError, PrivacyRequestService } from "./privacy/request-service.js";
 import { createPrivacyRequestTaskStore } from "./privacy/request-task-store.js";
-import { loadRuntimeGdprExportReadiness } from "./privacy/runtime-readiness.js";
-import { redis } from "./redis";
 import {
   cameraMediaSourcesOf,
   setCameraMediaSources,
@@ -135,9 +123,8 @@ import {
   stopAdminJobReconciliation,
 } from "./services/job-reconciliation";
 import { jobRunner } from "./services/job-runner";
-import { readOfflinePackagePrincipalKeyFile } from "./services/offline-package-principal.js";
 import { API_VOLUMES, privateVolumeDirectory } from "./services/private-volume-directory";
-import { getServiceRegistry, initServiceRegistry } from "./services/service-registry";
+import { initServiceRegistry } from "./services/service-registry";
 import { handleSystemDiagnosticsJob, handleSystemUpdateJob } from "./services/system-maintenance";
 import { configurePrivacyArtifactDeleter, readJournalKey } from "./services/user-erasure.js";
 import { applyRequiredMigrations } from "./startup-migrations";
@@ -379,24 +366,6 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
     // fail closed until an operator supplies the dedicated key and volume.
     server.log.warn("Privacy export storage is unavailable; automated delivery is disabled");
   }
-  let privacyOfflinePrincipalKey: Buffer | undefined;
-  const offlinePrincipalKeyFile = envString("OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE", "").trim();
-  if (offlinePrincipalKeyFile) {
-    try {
-      privacyOfflinePrincipalKey =
-        await readOfflinePackagePrincipalKeyFile(offlinePrincipalKeyFile);
-    } catch {
-      server.log.warn(
-        "Offline-package principal key is unavailable; receipt preservation requires operator review",
-      );
-    }
-  }
-  const receiptPreservation = {
-    ...(privacyArtifactStore ? { store: privacyArtifactStore } : {}),
-    ...(privacyOfflinePrincipalKey ? { offlinePrincipalKey: privacyOfflinePrincipalKey } : {}),
-    ...(redis ? { redis } : {}),
-  };
-
   // The statutory collection worker is intentionally separate from the general
   // admin-job queue.  A task claim is only a wake-up hint: the request-level
   // state, identity decision and operator gates are re-read before any source is
@@ -405,14 +374,12 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
   let privacyRequestRunner: PrivacyRequestRunner | undefined;
   let privacyRequestService: PrivacyRequestService | undefined;
   let recoverAndStartPrivacyRequests: (() => Promise<void>) | undefined;
-  let privacyReleaseReady = async () => false;
   if (privacyArtifactStore) {
     const artifactStore = privacyArtifactStore;
     const taskStore = createPrivacyRequestTaskStore(db);
     const workerService = new PrivacyRequestService({
       database: db,
       keyRing: privacyKeyRing,
-      receiptPreservation,
       deleteArtifactStorage: (storageKey) => artifactStore.delete(storageKey),
     });
     const requestRunner = new PrivacyRequestRunner(
@@ -466,12 +433,9 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
         } catch (error) {
           if (
             error instanceof PrivacyRequestError &&
-            [
-              "REQUEST_NOT_READY",
-              "IDENTITY_REQUIRED",
-              "REQUEST_VERSION_CONFLICT",
-              "BACKUP_WARNING_REVIEW_REQUIRED",
-            ].includes(error.code)
+            ["REQUEST_NOT_READY", "IDENTITY_REQUIRED", "REQUEST_VERSION_CONFLICT"].includes(
+              error.code,
+            )
           ) {
             throw new PrivacyRequestDeferredError(error.code.toLowerCase());
           }
@@ -484,14 +448,12 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
         maxAttempts: envInt("PRIVACY_RUNNER_MAX_ATTEMPTS", 5),
         retryDelayMs: envInt("PRIVACY_RUNNER_RETRY_DELAY_MS", 30_000),
         deferDelayMs: envInt("PRIVACY_RUNNER_DEFER_DELAY_MS", 60_000),
-        releaseReady: () => privacyReleaseReady(),
       },
     );
     privacyRequestRunner = requestRunner;
     const requestService = new PrivacyRequestService({
       database: db,
       keyRing: privacyKeyRing,
-      receiptPreservation,
       deleteArtifactStorage: (storageKey) => artifactStore.delete(storageKey),
       enqueue: async () => {
         await privacyRequestRunner?.runOnce();
@@ -545,7 +507,6 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
       privacyKeyRing ? masterKeyRingConfigurationMatches(privacyKeyRing) : Promise.resolve(false),
     keyRing: privacyKeyRing ? masterKeyRingMetadata(privacyKeyRing) : null,
     storageHealthy: () => privacyArtifactStore?.probeHealth() ?? false,
-    backupCapability: () => probeOpsPrivacyBackupCapability(),
     cleanupHealthy: () => privacyCleanupProbe,
     notificationHealthy: () => {
       const notification = privacyNotificationWorker.health();
@@ -562,62 +523,17 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
     intervalMs: envInt("PRIVACY_MONITOR_INTERVAL_MS", 60_000),
   });
 
-  const managedDawarichState = () => {
-    try {
-      const managed = getServiceRegistry().get("dawarich-app");
-      if (!managed?.enabled) return { configured: false, available: false };
-      return {
-        configured: true,
-        available: Boolean(
-          managed?.enabled &&
-            managed.manifest.subjectData?.strategy === "collector" &&
-            managed.manifest.subjectData.registrationIds?.includes("managed-dawarich") &&
-            managed.manifest.container.image === DAWARICH_SUPPORTED_IMAGE.split(":")[0] &&
-            managed.manifest.container.tag === "1.19.0" &&
-            managed.manifest.container.digest === DAWARICH_SUPPORTED_IMAGE_DIGEST &&
-            managed.manifest.container.environment?.OPENMAPX_DAWARICH_COMMIT ===
-              DAWARICH_SUPPORTED_COMMIT,
-        ),
-      };
-    } catch {
-      return { configured: false, available: false };
-    }
-  };
-  const privacyReadiness = async () => {
-    const evidence = await resolvePrivacyReleaseEvidence(db);
-    const managedDawarich = managedDawarichState();
-    return loadRuntimeGdprExportReadiness({
-      database: db,
-      evidence,
-      implementationActorIds: privacyImplementationActorIds(),
-      capabilities: IMPLEMENTED_PRIVACY_RELEASE_CAPABILITIES,
-      health: privacyOperationsMonitor.health(),
-      artifactStorageBackupDisabled: process.env.PRIVACY_ARTIFACT_BACKUP_DISABLED === "true",
-      managedDawarichConfigured: managedDawarich.configured,
-      managedDawarichAvailable: managedDawarich.available,
-      contractChecks: await resolvePrivacyReleaseValidationChecks(evidence.sourceBuildFingerprint),
-    });
-  };
-  privacyReleaseReady = async () => (await privacyReadiness()).ready;
-
   await registerCoreRoutes(server, {
     authHandler: auth.handler,
     authUiOrigin: trustedWebOrigins[0],
     privacyRequests: {
       artifactStore: privacyArtifactStore,
-      receiptPreservation,
       ...(privacyRequestService ? { service: privacyRequestService } : {}),
     },
     privacyAdmin: {
       artifactStore: privacyArtifactStore,
-      receiptPreservation,
       ...(privacyRequestService ? { service: privacyRequestService } : {}),
       ...(privacyEmailChallengeService ? { emailChallenge: privacyEmailChallengeService } : {}),
-      operationsHealth: () => privacyOperationsMonitor.health(),
-      managedDawarichConfigured: () => managedDawarichState().configured,
-      managedDawarichAvailable: () => managedDawarichState().available,
-      readiness: privacyReadiness,
-      releaseReady: privacyReleaseReady,
     },
   });
 

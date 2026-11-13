@@ -253,13 +253,6 @@ const ordinarySecretFormat: PlatformSecretFormat = {
   validate: isCanonicalPlatformSecret,
 };
 
-// For keys whose readers (app-api, ops-agent) run as the host owner's uid and
-// refuse a file any other user could read.
-const ownerOnlySecretFormat: PlatformSecretFormat = {
-  ...ordinarySecretFormat,
-  finalMode: 0o400,
-};
-
 const exportsKeyRingFormat: PlatformSecretFormat = {
   finalMode: 0o400,
   invalidMessage: "Platform exports key ring is invalid",
@@ -559,14 +552,6 @@ function ensurePlatformSecretFileWithFormat(
     cleanupTemporaryFile(temporary, options.temporaryFileOps);
     throw error;
   }
-}
-
-/** Provision or preserve a 32-byte secret that only its owner may read (0400). */
-export function ensurePlatformOwnerOnlySecretFile(
-  path: string,
-  options: EnsurePlatformSecretOptions = {},
-): string {
-  return ensurePlatformSecretFileWithFormat(path, options, ownerOnlySecretFormat);
 }
 
 /** Provision or preserve the dedicated exports key file as a strict bounded key ring. */

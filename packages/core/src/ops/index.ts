@@ -27,7 +27,6 @@ export {
 } from "./feed-credential-map";
 export * from "./fingerprint";
 export * from "./job-evidence";
-export * from "./privacy-backup";
 export * from "./service-operation-records";
 export * from "./service-results";
 export * from "./standalone-integrations";

@@ -51,16 +51,14 @@ describe("metrics service", () => {
       artifactCleanupLagSeconds: 0,
       artifactCleanupBacklog: 3,
       attachmentCleanupBacklog: 2,
-      sourceSnapshotCleanupBacklog: 1,
       keyReady: true,
-      backupReviewBacklog: 0,
       notificationFailures: 0,
     });
 
     const text = await handle.renderPrometheus();
     expect(text).toMatch(/privacy_cleanup_backlog\{[^}]*resource_kind="artifact"[^}]*\} 3/);
     expect(text).toMatch(/privacy_cleanup_backlog\{[^}]*resource_kind="attachment"[^}]*\} 2/);
-    expect(text).toMatch(/privacy_cleanup_backlog\{[^}]*resource_kind="source_snapshot"[^}]*\} 1/);
+    expect(text).not.toContain('resource_kind="source_snapshot"');
   });
 
   it("renders Prometheus text containing the registered metric names after one call", async () => {

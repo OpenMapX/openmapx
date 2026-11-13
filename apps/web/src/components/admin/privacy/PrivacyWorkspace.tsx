@@ -15,10 +15,8 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useSession } from "@openmapx/core";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
@@ -36,21 +34,16 @@ import {
 import { useAdminQueryState } from "@/lib/admin/useAdminQueryState";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { PrivacyCaseView } from "./PrivacyCaseView";
-import { privacyReadinessCheckTitle } from "./PrivacyReadinessChecklist";
 export function PrivacyWorkspace() {
   const binding = usePrivacyAdmin();
   return <Workspace key={`${binding.apiOrigin}\0${binding.actorId}`} binding={binding} />;
 }
 function Workspace({ binding }: { binding: PrivacyAdminBinding }) {
   const t = useTranslations("privacyAdmin"),
-    account = useTranslations("account.privacyData"),
-    setup = useTranslations("privacySetup"),
-    nav = useTranslations("adminNavigation");
-  const queue = useQuery(binding.queries.queue()),
-    readiness = useQuery(binding.queries.readiness());
+    account = useTranslations("account.privacyData");
+  const queue = useQuery(binding.queries.queue());
   const { params, update } = useAdminQueryState();
   const { caseId, section } = parseAdminCaseSelection(params);
-  const { data: session } = useSession();
   const initialized = useRef(false),
     previous = useRef<string | null>(null);
   const [ready, setReady] = useState(false),
@@ -85,7 +78,6 @@ function Workspace({ binding }: { binding: PrivacyAdminBinding }) {
             <Button
               onClick={() => {
                 void queue.refetch();
-                void readiness.refetch();
               }}
             >
               {t("refresh")}
@@ -97,40 +89,6 @@ function Workspace({ binding }: { binding: PrivacyAdminBinding }) {
         }
       />
       {queue.isError && <Alert severity="error">{t("loadFailed")}</Alert>}
-      {readiness.isError && <Alert severity="error">{t("notReady")}</Alert>}
-      {readiness.data && (
-        <Alert
-          severity={readiness.data.ready ? "success" : "warning"}
-          action={
-            session?.user.role === "admin" ? (
-              <Button component={Link} href="/admin/privacy-setup">
-                {setup("title")}
-              </Button>
-            ) : undefined
-          }
-        >
-          {readiness.data.ready ? nav("privacyReadinessReady") : nav("privacyReadinessBlocked")}
-          {readiness.data.checks.some((check) => check.status !== "pass") && (
-            <Stack component="ul" sx={{ m: 0, pl: 2, overflowWrap: "anywhere" }}>
-              {readiness.data.checks
-                .filter((check) => check.status !== "pass")
-                .map((check) => (
-                  <Typography component="li" variant="body2" key={check.id}>
-                    {setup(privacyReadinessCheckTitle(check.id))} —{" "}
-                    {setup(
-                      check.status === "warning"
-                        ? "readiness.status.warning"
-                        : "readiness.status.fail",
-                    )}
-                  </Typography>
-                ))}
-            </Stack>
-          )}
-          {!readiness.data.ready && session?.user.role !== "admin" && (
-            <Typography variant="body2">{setup("readiness.contactFullAdmin")}</Typography>
-          )}
-        </Alert>
-      )}
       <TextField
         select
         size="small"

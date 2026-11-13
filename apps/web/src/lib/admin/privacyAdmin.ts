@@ -41,20 +41,6 @@ export function privacyAdminQueries(client: ApiClient, apiOrigin: string, actorI
         enabled: !!actorId && !!requestId,
         retry: false,
       }),
-    readiness: () =>
-      queryOptions({
-        queryKey: [...root, "readiness"],
-        queryFn: ({ signal }) => privacyResult(sdk.getPrivacyAdminReadiness(options(signal))),
-        enabled: !!actorId,
-        retry: false,
-      }),
-    backups: () =>
-      queryOptions({
-        queryKey: [...root, "backups"],
-        queryFn: ({ signal }) => privacyResult(sdk.listPrivacyAdminBackups(options(signal))),
-        enabled: !!actorId,
-        retry: false,
-      }),
     operators: (cursor?: string) =>
       queryOptions({
         queryKey: [...root, "operators", cursor ?? ""],
@@ -66,22 +52,6 @@ export function privacyAdminQueries(client: ApiClient, apiOrigin: string, actorI
             ),
           ),
         enabled: !!actorId,
-        retry: false,
-      }),
-    backupReviews: (requestId: string) =>
-      queryOptions({
-        queryKey: [...privacyCaseKey(apiOrigin, actorId, requestId), "backup-reviews"],
-        queryFn: ({ signal }) =>
-          privacyResult(sdk.listPrivacyAdminBackupReviews(requestId, options(signal))),
-        enabled: !!actorId && !!requestId,
-        retry: false,
-      }),
-    omissions: (requestId: string) =>
-      queryOptions({
-        queryKey: [...privacyCaseKey(apiOrigin, actorId, requestId), "omissions"],
-        queryFn: ({ signal }) =>
-          privacyResult(sdk.listPrivacyAdminBackupOmissions(requestId, options(signal))),
-        enabled: !!actorId && !!requestId,
         retry: false,
       }),
   };

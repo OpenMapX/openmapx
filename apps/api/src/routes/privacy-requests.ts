@@ -15,7 +15,6 @@ import {
 import type { EncryptedBlobStore } from "../privacy/artifact-storage.js";
 import { recordSuccessfulArtifactDelivery } from "../privacy/delivery.js";
 import { PrivacyReauthenticationService, REAUTH_COOKIE_NAME } from "../privacy/reauthentication.js";
-import type { ReceiptPreservationDependencies } from "../privacy/receipt-snapshot.js";
 import {
   artifactIdParamSchema,
   createSubjectRequestSchema,
@@ -31,7 +30,6 @@ export interface PrivacyRequestsRouteOptions {
   database?: typeof db;
   reauthentication?: PrivacyReauthenticationService;
   artifactStore?: EncryptedBlobStore;
-  receiptPreservation?: ReceiptPreservationDependencies;
 }
 
 function publicRequest(row: Record<string, unknown>): Record<string, unknown> {
@@ -150,7 +148,6 @@ export const privacyRequestsRoute: FastifyPluginAsync<PrivacyRequestsRouteOption
     options.service ??
     new PrivacyRequestService({
       database,
-      receiptPreservation: options.receiptPreservation,
       deleteArtifactStorage: artifactStore ? (key) => artifactStore.delete(key) : undefined,
     });
 

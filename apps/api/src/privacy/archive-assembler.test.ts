@@ -163,32 +163,13 @@ describe("subject archive assembler", () => {
   it.each([
     [
       "access",
-      [
-        "authentication",
-        "dawarich-account",
-        "supplement-1",
-        `backup-${"a".repeat(64)}-openmapx-auth-sessions`,
-      ],
-      [
-        "portable-places",
-        "dawarich-portable-areas",
-        `backup-${"a".repeat(64)}-openmapx-portable-saved-lists`,
-      ],
+      ["authentication", "dawarich-account", "supplement-1"],
+      ["portable-places", "dawarich-portable-areas"],
     ],
     [
       "portability",
-      [
-        "portable-places",
-        "dawarich-portable-areas",
-        `backup-${"a".repeat(64)}-openmapx-portable-saved-lists`,
-      ],
-      [
-        "authentication",
-        "dawarich-account",
-        "supplement-1",
-        "processing-information",
-        `backup-${"a".repeat(64)}-openmapx-auth-sessions`,
-      ],
+      ["portable-places", "dawarich-portable-areas"],
+      ["authentication", "dawarich-account", "supplement-1", "processing-information"],
     ],
     [
       "access_and_portability",
@@ -198,8 +179,6 @@ describe("subject archive assembler", () => {
         "dawarich-account",
         "dawarich-portable-areas",
         "supplement-1",
-        `backup-${"a".repeat(64)}-openmapx-auth-sessions`,
-        `backup-${"a".repeat(64)}-openmapx-portable-saved-lists`,
       ],
       [],
     ],
@@ -266,16 +245,6 @@ describe("subject archive assembler", () => {
             logicalId: "supplement-1",
             source: Buffer.from("x"),
             mediaType: "application/octet-stream",
-          },
-          {
-            logicalId: `backup-${"a".repeat(64)}-openmapx-auth-sessions`,
-            source: Buffer.from("{}"),
-            mediaType: "application/jsonl",
-          },
-          {
-            logicalId: `backup-${"a".repeat(64)}-openmapx-portable-saved-lists`,
-            source: Buffer.from("{}"),
-            mediaType: "application/jsonl",
           },
         ],
         writer: writer as never,

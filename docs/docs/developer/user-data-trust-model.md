@@ -97,10 +97,10 @@ accept paths, SQL, image names or Docker flags from the browser.
 
 ## Completeness
 
-`GdprExportReadiness` is fail-closed. It reports registry coverage, encryption,
-retention cleanup, backup review, monitoring, notification, OpenAPI/policy and
-current human approvals. A failed check permits intake and an honest partial
-response. It does not establish deployment readiness or authorize an automatic
-GDPR-compliance claim. See
-[Data-subject requests](../administration/data-subject-requests.md#release-and-operational-gate)
-for deployment prerequisites and readiness checks.
+Every catalogue source is reported in the response: collected, reviewed by an
+operator, or unavailable with a reason. Short-lived categories that may have
+expired before collection are named in the response report, and retained
+backups are handled manually by the operator. An export does not authorize an
+automatic GDPR-compliance claim. See
+[Data-subject requests](../administration/data-subject-requests.md#operational-checks)
+for deployment prerequisites.

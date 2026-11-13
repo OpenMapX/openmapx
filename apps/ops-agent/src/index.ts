@@ -1,5 +1,4 @@
-import { constants, existsSync } from "node:fs";
-import { open } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { loadControlStartup } from "@openmapx/core/build-artifacts";
 import { initializeManagedCatalogPins } from "@openmapx/core/catalog-pins";
@@ -31,12 +30,6 @@ import { recoverInterruptedTrafficMaintenance } from "./docker-runtime";
 import { IntegrationStore } from "./integration-store";
 import { openOpsJobJournal } from "./journal";
 import { createProductionRegistryResourceClaimer } from "./policy";
-import type { PrivacyBackupExtractionRouteOptions } from "./privacy-backup-extraction";
-import {
-  createPrivacyBackupExtractionRuntime,
-  janitorPrivacyBackupScratch,
-  probePrivacyBackupRuntime,
-} from "./privacy-backup-runtime";
 import {
   createProductionOpsRuntime,
   productionOwnedServices,
@@ -60,7 +53,6 @@ import { createTrustedConfigurationAuthorityLoader } from "./trusted-configurati
 
 async function main(): Promise<void> {
   const config = loadOpsAgentConfig();
-  janitorPrivacyBackupScratch(config.rootDir);
   // The release's manifests and service files apply, with the operator's
   // overrides; the checkout's no longer do. Reported, never fatal at start.
   for (const line of describeServiceFilesAtStart(join(config.rootDir, "infra", "docker"))) {
@@ -71,48 +63,6 @@ async function main(): Promise<void> {
       readOpsTokenFile(config.apiTokenFile),
       readOpsTokenFile(config.dataManagerTokenFile),
     ]);
-    let privacyBackupExtraction: Omit<PrivacyBackupExtractionRouteOptions, "apiToken"> | undefined;
-    const privacyBackupRuntimeOptions = {
-      rootDir: config.rootDir,
-      collectorImage: process.env.OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE?.trim(),
-    };
-    if (config.privacyBackupCapabilityKeyFile) {
-      let handle: Awaited<ReturnType<typeof open>> | undefined;
-      try {
-        handle = await open(
-          config.privacyBackupCapabilityKeyFile,
-          constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-        );
-        const stat = await handle.stat();
-        const expectedUid = typeof process.getuid === "function" ? process.getuid() : stat.uid;
-        if (
-          !stat.isFile() ||
-          stat.nlink !== 1 ||
-          stat.size !== 43 ||
-          (stat.mode & 0o077) !== 0 ||
-          stat.uid !== expectedUid
-        )
-          throw new Error("invalid capability key");
-        const buffer = Buffer.alloc(43);
-        const read = await handle.read(buffer, 0, buffer.length, 0);
-        const encoded = buffer.subarray(0, read.bytesRead).toString("utf8");
-        if (read.bytesRead !== 43 || !/^[A-Za-z0-9_-]{43}$/.test(encoded))
-          throw new Error("invalid capability key");
-        const key = Buffer.from(encoded, "base64url");
-        if (key.byteLength !== 32 || key.toString("base64url") !== encoded)
-          throw new Error("invalid capability key");
-        const backupRuntime = createPrivacyBackupExtractionRuntime(privacyBackupRuntimeOptions);
-        privacyBackupExtraction = {
-          capabilityKey: key,
-          enabled:
-            process.env.OPS_PRIVACY_BACKUP_COLLECTOR_ENABLED === "true" && backupRuntime.enabled,
-          inspectBackup: backupRuntime.inspectBackup,
-          runCollector: backupRuntime.runCollector,
-        };
-      } finally {
-        await handle?.close().catch(() => undefined);
-      }
-    }
     const builtInServices = releaseAuthority.services.map((service) => structuredClone(service));
     const paths = repoPaths(config.rootDir);
     const uid = process.geteuid?.() ?? 0;
@@ -373,12 +323,6 @@ async function main(): Promise<void> {
         runtime,
         artifactTransfers,
         audit: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),
-        ...(privacyBackupExtraction ? { privacyBackupExtraction } : {}),
-        privacyBackupHealth: () =>
-          probePrivacyBackupRuntime({
-            ...privacyBackupRuntimeOptions,
-            enabled: privacyBackupExtraction?.enabled === true,
-          }),
         ...(dawarichCollector && dawarichInspector
           ? {
               dawarichExport: {

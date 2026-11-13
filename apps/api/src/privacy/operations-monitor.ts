@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import { db as defaultDb } from "../db/index.js";
 import {
   dataExportArtifact,
@@ -6,7 +6,6 @@ import {
   dataSubjectRequestAttachment,
   dataSubjectRequestEvent,
   dataSubjectRequestNotification,
-  dataSubjectRequestSourceSnapshot,
   dataSubjectRequestTask,
 } from "../db/schema.js";
 import { getMetrics, type PrivacyOperationalMetricSnapshot } from "../services/metrics/index.js";
@@ -31,7 +30,6 @@ export interface PrivacyOperationsHealth {
   keyReady: boolean;
   keyRing?: MasterKeyRingMetadata | null;
   storageHealthy: boolean;
-  backupCapability: boolean;
   lastRunAt: string | null;
   lastErrorCode: string | null;
 }
@@ -56,7 +54,6 @@ export interface PrivacyOperationsMonitorOptions {
   /** Metadata for the exact ring loaded by the running process. */
   keyRing?: MasterKeyRingMetadata | null;
   storageHealthy?: PrivacyOperationalProbe;
-  backupCapability?: PrivacyOperationalProbe;
   cleanupHealthy?: PrivacyOperationalProbe;
   notificationHealthy?: PrivacyOperationalProbe;
   intervalMs?: number;
@@ -186,23 +183,6 @@ async function collectSnapshot(
       artifactCleanupLagSeconds,
       Math.max(0, (now.getTime() - (row.revokedAt?.getTime() ?? row.createdAt.getTime())) / 1_000),
     );
-  const sourceSnapshotRows = await database
-    .select({ id: dataSubjectRequestSourceSnapshot.id })
-    .from(dataSubjectRequestSourceSnapshot)
-    .where(
-      and(
-        inArray(dataSubjectRequestSourceSnapshot.state, ["captured", "delete_failed"]),
-        or(
-          lte(dataSubjectRequestSourceSnapshot.expiresAt, now),
-          sql`exists (
-            select 1 from data_subject_request source_request
-            where source_request.id = ${dataSubjectRequestSourceSnapshot.requestId}
-              and source_request.state in ('delivered', 'artifact_expired', 'withdrawn', 'refused', 'closed')
-          )`,
-        ),
-      ),
-    )
-    .limit(MAX_ROWS);
   const attachmentRows = await database
     .select({ id: dataSubjectRequestAttachment.id })
     .from(dataSubjectRequestAttachment)
@@ -214,16 +194,6 @@ async function collectSnapshot(
     )
     .limit(MAX_ROWS);
 
-  const backupReviewRows = await database
-    .select({ status: dataSubjectRequestTask.status })
-    .from(dataSubjectRequestTask)
-    .where(
-      and(
-        eq(dataSubjectRequestTask.registrationId, "backup-retained-copies"),
-        sql`${dataSubjectRequestTask.status} in ('pending', 'running', 'retryable', 'operator_review')`,
-      ),
-    )
-    .limit(MAX_ROWS);
   const notificationRows = await database
     .select({ id: dataSubjectRequestNotification.id })
     .from(dataSubjectRequestNotification)
@@ -238,9 +208,7 @@ async function collectSnapshot(
     artifactCleanupLagSeconds,
     artifactCleanupBacklog: artifactRows.length,
     attachmentCleanupBacklog: attachmentRows.length,
-    sourceSnapshotCleanupBacklog: sourceSnapshotRows.length,
     keyReady,
-    backupReviewBacklog: backupReviewRows.length,
     notificationFailures: notificationRows.length,
   };
   getMetrics().recordPrivacyOperationalSnapshot(snapshot);
@@ -264,7 +232,6 @@ export function createPrivacyOperationsMonitor(options: PrivacyOperationsMonitor
   let dependencyHealth = {
     keyReady: false,
     storageHealthy: false,
-    backupCapability: false,
     cleanupHealthy: false,
     notificationHealthy: false,
   };
@@ -276,16 +243,11 @@ export function createPrivacyOperationsMonitor(options: PrivacyOperationsMonitor
       dependencyHealth = {
         keyReady: await probe(options.keyReady, now, probeFreshnessMs),
         storageHealthy: await probe(options.storageHealthy, now, probeFreshnessMs),
-        backupCapability: await probe(options.backupCapability, now, probeFreshnessMs),
         cleanupHealthy: await probe(options.cleanupHealthy, now, probeFreshnessMs),
         notificationHealthy: await probe(options.notificationHealthy, now, probeFreshnessMs),
       };
       const snapshot = await collectSnapshot(options, dependencyHealth.keyReady);
-      if (
-        snapshot.artifactCleanupBacklog > 0 ||
-        snapshot.attachmentCleanupBacklog > 0 ||
-        snapshot.sourceSnapshotCleanupBacklog > 0
-      )
+      if (snapshot.artifactCleanupBacklog > 0 || snapshot.attachmentCleanupBacklog > 0)
         dependencyHealth.cleanupHealthy = false;
       lastRunAt = snapshot.capturedAt;
       lastErrorCode = null;
@@ -326,21 +288,9 @@ export function createPrivacyOperationsMonitor(options: PrivacyOperationsMonitor
             }
           : null,
         storageHealthy: dependencyHealth.storageHealthy,
-        backupCapability: dependencyHealth.backupCapability,
         lastRunAt,
         lastErrorCode,
       };
     },
-  };
-}
-
-export function privacyOperationsHealthFromEnvironment(): Pick<
-  PrivacyOperationsHealth,
-  "backupCapability"
-> {
-  return {
-    backupCapability:
-      process.env.OPS_PRIVACY_BACKUP_COLLECTOR_ENABLED === "true" &&
-      Boolean(process.env.OPS_PRIVACY_BACKUP_CAPABILITY_KEY_FILE),
   };
 }

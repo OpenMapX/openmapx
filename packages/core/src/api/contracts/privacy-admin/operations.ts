@@ -6,7 +6,6 @@ import {
   identityReviewSchema,
   privacyAttachmentReviewSchema,
   privacyAttachmentUploadSchema,
-  privacyBackupReviewRequestSchema,
   privacyCaseDecisionSchema,
   privacyCaseExtensionSchema,
   privacyCaseVersionSchema,
@@ -25,8 +24,6 @@ import {
   privacyAdminDetailSchema,
   privacyArtifactViewSchema,
   privacyAttachmentViewSchema,
-  privacyBackupOmissionViewSchema,
-  privacyBackupReviewViewSchema,
   privacyCaseViewSchema,
   privacyDownloadHeaders,
   privacyErrorSchema,
@@ -73,53 +70,6 @@ export const privacyAdminOperations = {
     z.strictObject({ requests: z.array(privacyCaseViewSchema) }),
   ),
   getPrivacyAdminCase: read(`${base}/requests/:requestId`, privacyAdminDetailSchema, params),
-  getPrivacyAdminReadiness: read(
-    `${base}/readiness`,
-    z.object({
-      version: z.literal(1),
-      ready: z.boolean(),
-      checkedAt: date,
-      evidenceVersion: z.string(),
-      keyRing: z
-        .strictObject({ activeVersion: z.number(), availableVersions: z.array(z.number()) })
-        .nullable(),
-      checks: z.array(
-        z.strictObject({
-          id: z.string(),
-          status: z.enum(["pass", "fail", "warning"]),
-          detailCode: z.string(),
-        }),
-      ),
-      approvals: z.array(adminJsonValueSchema),
-    }),
-  ),
-  listPrivacyAdminBackups: read(
-    `${base}/backups`,
-    z.strictObject({
-      backups: z.array(
-        z.object({
-          backupId: z.string(),
-          createdAt: date,
-          platformVersion: z.string().nullable(),
-          formatVersion: z.number().nullable(),
-          manifestDigest: z.string().nullable(),
-          verified: z.boolean(),
-          expired: z.boolean(),
-          unavailableReason: z.string().optional(),
-          volumes: z.array(
-            z.strictObject({
-              serviceId: z.string(),
-              volumeId: z.string(),
-              mode: z.enum(["tar", "pg_dump"]),
-              sizeBytes: z.number(),
-              sha256: z.string(),
-            }),
-          ),
-        }),
-      ),
-      warningCount: z.number(),
-    }),
-  ),
   listPrivacyAdminOperators: {
     ...read(
       `${base}/operators`,
@@ -251,34 +201,6 @@ export const privacyAdminOperations = {
     method: "DELETE",
     responses: { ...errors, 204: adminEmpty() },
   },
-  listPrivacyAdminBackupReviews: read(
-    `${base}/requests/:requestId/backup-reviews`,
-    z.strictObject({ reviews: z.array(privacyBackupReviewViewSchema) }),
-    params,
-  ),
-  createPrivacyAdminBackupReview: write(
-    `${base}/requests/:requestId/backup-reviews`,
-    privacyBackupReviewRequestSchema,
-    z.strictObject({ review: privacyBackupReviewViewSchema }),
-    params,
-    201,
-  ),
-  listPrivacyAdminBackupOmissions: read(
-    `${base}/requests/:requestId/backup-omissions`,
-    z.strictObject({ reviews: z.array(privacyBackupOmissionViewSchema) }),
-    params,
-  ),
-  acceptPrivacyAdminBackupOmissions: write(
-    `${base}/requests/:requestId/backup-omissions/accept`,
-    z.strictObject({
-      requestVersion: z.number().int().positive(),
-      warningsDigest: z.string().regex(/^[a-f0-9]{64}$/),
-      reasonCode: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/),
-    }),
-    z.strictObject({ review: privacyBackupOmissionViewSchema }),
-    params,
-    201,
-  ),
   startPrivacyAdminReauthentication: write(
     `${base}/requests/:requestId/artifacts/:artifactId/reauth/start`,
     assistedReauthStartSchema,

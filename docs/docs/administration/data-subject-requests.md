@@ -1,5 +1,5 @@
 ---
-description: Configure privacy operations, handle access and portability requests, and verify export readiness.
+description: Configure privacy operations and handle access and portability requests.
 sidebar_position: 4
 title: Data-subject requests
 ---
@@ -41,10 +41,10 @@ draft, reloads the case, and requires another explicit confirmation.
   with provenance and a redaction code, reject the original, then review the
   replacement. Downloads are passive and require a recent sufficiently assured
   login. Files are never displayed inline.
-- **Backups:** choose an inventory ID and let the server verify its immutable
-  provenance and derive the review outcome. An unavailable inventory remains an
-  error. Acknowledge only the displayed warning digest with its reason and current
-  case version; do not substitute another backup or force extraction.
+- **Backups:** retained backups are not searched automatically. Handle the
+  retained-backup source task manually, as described in
+  [Backup and restore](./backup-and-restore.md#personal-data-in-backups), and
+  record its outcome on the task.
 - **Assisted delivery:** confirm the artifact, delivery channel and reason, then
   sign in again at `/auth/privacy/admin` and complete verification after returning
   to the case. Use the explicit Download action once. The browser owns supported
@@ -53,17 +53,16 @@ draft, reloads the case, and requires another explicit confirmation.
   before consuming the one-use challenge. After an uncertain or interrupted
   transfer, refresh the server status and start a new deliberate ceremony.
 
-The readiness checklist and capability hints do not grant authority. Every
-mutation and byte response checks the current server state. Independent release
-approvals remain full-administrator actions and are never created by a case form.
+Capability hints do not grant authority. Every mutation and byte response
+checks the current server state.
 
 ## Initial setup
 
 Sign in as a full administrator and open **Privacy setup** at
 `/admin/privacy-setup`. The setup groups controller and contact details,
-notification delivery, retention and source declarations, and independent
-reviews. Privacy administrators can inspect readiness and handle requests;
-changing deployment settings requires a full administrator.
+notification delivery, and retention and source declarations. Privacy
+administrators handle requests; changing deployment settings requires a full
+administrator.
 
 Enter the controller's name and postal address, request contact, jurisdiction
 and supervisory authority. Configure the existing email provider and use its
@@ -74,60 +73,20 @@ sources. Environment values override saved settings and appear locked in the
 editor; remove the environment override to manage that value in the UI. Public
 legal pages refresh their cached facts within about a minute.
 
-Official release manifests pin the backup collector image and provide matching
-machine-validation evidence through the release Compose overlay. The CLI also
-provisions the managed encryption key and private export volume. These technical
-steps do not require copying image digests or validation files by hand.
+The CLI provisions the managed encryption key and private export volume.
+Exclude the export storage from every backup policy, including operator-managed
+copies. Self-service export does not depend on a release approval or build
+fingerprint: once the settings above are complete, requests are generated as
+soon as each case's own source tasks allow it.
 
-The remaining deployment assertions stay explicit: set
-`PRIVACY_EXPORT_IMPLEMENTATION_ACTOR_IDS` to the actual implementation owners'
-user IDs, and set `PRIVACY_ARTIFACT_BACKUP_DISABLED=true` only after checking that
-all backup policies, including operator-managed copies, exclude the export
-storage. Follow the setup checklist to resolve missing settings and operational
-checks, then record the independent reviews. Installing a release does not
-approve it for a deployment or automatically enable generation.
-
-## Release and operational gate
-
-The source release must pass repository tests, real database and configured
-Docker collector fixtures. Official releases generate validation evidence on
-the exact gated checkout and include it in the same atomic release manifest as
-the immutable image pins. Activation downloads the collector and writes
-content-addressed evidence under `infra/docker/state/ops-agent/releases/evidence` before
-atomically replacing the release overlay. The API receives that file read-only,
-including when its root filesystem is read-only. Existing evidence files remain
-available for rollback. Missing evidence, a failed collector download or an
-unpinned collector prevents release activation.
-
-For a custom/local deployment without the managed release overlay, run from the
-exact checkout used to build the API:
-
-```bash
-pnpm validate:privacy-release /absolute/path/privacy-release-validation.json
-```
-
-For that custom deployment, mount the generated file read-only and set
-`PRIVACY_EXPORT_VALIDATION_EVIDENCE_FILE` to its absolute container path. It
-contains no personal data or keys. It binds successful translation, OpenAPI
-and policy checks to the source fingerprint embedded in the API image; a stale
-file cannot enable the release. Set `PRIVACY_EXPORT_EVIDENCE_VERSION` to an
-attributable review label and `PRIVACY_EXPORT_IMPLEMENTATION_ACTOR_IDS` to the
-actual implementation owners' user IDs.
-
-Independent signed-in full administrators record human reviews for `legal-content`,
-`dsar-process` and `security-review` against the evidence version returned by
-`GET /api/privacy/admin/readiness`. Do not copy an approval from another build
-or deployment, enter one on another person's behalf, or treat an environment
-flag as evidence. Missing, expired or superseded approvals keep automatic and
-admin-triggered generation disabled. Intake, identity review, manual casework
-and authorized access to an already-issued artifact remain available.
+## Operational checks
 
 Configure the controller name, postal address, request contact, jurisdiction,
 supervisory authority, privacy sources and retention settings before generation.
 Keep encrypted artifact storage excluded from backups and protect the managed
 key file. Investigate failed storage/key probes, stale cleanup or notifications,
-unsupported collectors and overdue cases in readiness. Cleanup runs hourly;
-physical deletion failures must remain visible until resolved. Key loss makes existing ciphertext unrecoverable. Recover the original ring from a separately protected copy, preserving owner and permissions, then recreate the API and inspect readiness. If no valid copy exists, record the affected source/artifact as unavailable and use reviewed casework; do not invent a replacement key and claim recovery.
+unsupported collectors and overdue cases. Cleanup runs hourly;
+physical deletion failures must remain visible until resolved. Key loss makes existing ciphertext unrecoverable. Recover the original ring from a separately protected copy, preserving owner and permissions, then recreate the API. If no valid copy exists, record the affected source/artifact as unavailable and use reviewed casework; do not invent a replacement key and claim recovery.
 
 ## Export-key provisioning and rotation
 
@@ -160,36 +119,34 @@ rejected:
 The ring accepts at most eight distinct positive key versions. Prepare the
 replacement privately on the same filesystem, preserve the existing version
 exactly, set its owner and `0400` permissions, and replace the managed file
-atomically. Recreate the API container to load the new ring. Readiness detects
-a disk ring that differs from the running ring and stays closed until the
-configured key state matches. New encrypted material uses the active version;
+atomically. Recreate the API container to load the new ring. New encrypted
+material uses the active version;
 retained older versions can still decrypt authorized existing material.
 
 Do not remove an old version merely because the normal artifact window has
-passed. Request locators, protected notes, receipt snapshots, attachments and
+passed. Request locators, protected notes, attachments and
 pending identity challenges can still require it. Confirm that all material
 referencing that version has expired and been physically cleaned, or has been
 safely re-encrypted through a separately reviewed migration, before removing it.
 There is no automatic database-wide rewrapping command in this release. Keep
 necessary key recovery copies separately protected and outside ordinary
 application/database backups. Never put keys into a case attachment, log,
-command argument or release-evidence document.
+command argument or document.
 
 ## Intake and response
 
 An authenticated person starts a request from Account settings or contacts the
 published privacy address. The API records receipt time, locale, time zone,
-request type and a response deadline. A request creates a case with its receipt details, source tasks and preservation records. Minimal safe receipt projections may be
-preserved before identity review; disclosure and broader collection require
-verified identity. Staff must record any clarification,
+request type and a response deadline. A request creates a case with its receipt details, source tasks and preservation records. Disclosure and collection
+require verified identity. Staff must record any clarification,
 restriction, extension or refusal with a reason code.
 
-Short-lived authentication and offline-control metadata is captured into bounded
-encrypted source snapshots at registration. Credentials and usable tokens are
-excluded. Missing capture dependencies create review tasks; later live data is
-not substituted for an expired receipt snapshot.
+Sources are collected when the export is generated, not at registration.
+Short-lived categories, such as sign-in verifications, sessions and rate-limit
+controls, may expire under their own retention between the request and
+collection. The response report names these categories from the catalogue.
 
-The remaining live OpenMapX export uses one repeatable-read snapshot. It includes explicit,
+The live OpenMapX export uses one repeatable-read snapshot. It includes explicit,
 ownership-filtered OpenMapX projections and requests data from a connected
 managed Dawarich instance when that processor is configured. Independent
 controllers, off-host systems and operator-controlled sources become visible
@@ -226,10 +183,9 @@ idempotency keys; reload after a conflict rather than applying a stale decision.
 An unavailable exact account match requires explicit manual source outcomes
 and reviewed supplements, never an invented user ID.
 
-Backup extraction warnings require a separate decision bound to that exact
-review and manifest. Read the proposed omissions before accepting them. A
-changed backup or warning set requires a new review. Unknown off-host copies,
-processor responses and generic text logs remain operator tasks. Do not use
+Retained backups are not extracted automatically; the operator handles a
+request for backup data manually. Unknown off-host copies, processor responses
+and generic text logs remain operator tasks. Do not use
 free-text scans to match a person.
 
 ## Browser-only supplement
@@ -244,7 +200,7 @@ archives are intentionally excluded.
 1. Confirm the request identity and scope; do not accept arbitrary identifiers
    in notes or collector commands.
 2. Preserve applicable sources and inspect every required task. Resolve
-   processor, external-source and backup-review tasks explicitly.
+   processor, external-source and retained-backup tasks explicitly.
 3. Generate the encrypted artifact, inspect the bounded manifest and record
    any redactions or rights-of-others decisions.
 4. Ask the subject to sign in again, deliver once, and verify that the case and

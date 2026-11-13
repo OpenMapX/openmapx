@@ -17,7 +17,6 @@ import { repoPaths } from "../lib/paths";
 import {
   assertPlatformFileTarget,
   ensurePlatformExportsKeyRingFile,
-  ensurePlatformOwnerOnlySecretFile,
   ensurePlatformPrivateDirectory,
   ensurePlatformSecretFile,
   PlatformFileTargetChangedError,
@@ -250,7 +249,6 @@ export async function renderComposeWithWriter(
   ensurePlatformPrivateDirectory(join(paths.infraDir, "catalog-pins"));
   const erasureDirectory = join(paths.infraDir, "data", "erasure");
   ensurePlatformPrivateDirectory(erasureDirectory);
-  ensurePlatformPrivateDirectory(agentState.privacyExtraction);
   ensurePlatformPrivateDirectory(join(paths.infraDir, "backups"));
   const redisPasswordPath = join(paths.infraDir, "secrets", "redis-password");
   const redisAclPath = join(paths.infraDir, "secrets", "redis-acl.conf");
@@ -267,11 +265,6 @@ export async function renderComposeWithWriter(
   );
   const erasureJournalKeyPath = join(paths.infraDir, "secrets", "erasure-journal-key");
   const subjectExportsMasterKeyPath = join(paths.infraDir, "secrets", "subject-exports-master-key");
-  const privacyBackupCapabilityKeyPath = join(
-    paths.infraDir,
-    "secrets",
-    "privacy-backup-capability-key",
-  );
   // Shared only between data-manager and the private Transitous runner: it
   // signs the single-use capability tokens that authorize one upstream run.
   const transitousRunnerCapabilityPath = join(
@@ -287,8 +280,6 @@ export async function renderComposeWithWriter(
   );
   initializeErasureJournal(join(erasureDirectory, "journal.jsonl"), erasureJournalKey);
   ensurePlatformExportsKeyRingFile(subjectExportsMasterKeyPath);
-  // app-api and ops-agent refuse this key unless only their uid can read it.
-  ensurePlatformOwnerOnlySecretFile(privacyBackupCapabilityKeyPath);
   ensurePlatformSecretFile(transitousRunnerCapabilityPath);
   const opsAgentApiToken = ensurePlatformSecretFile(opsAgentApiTokenPath);
   const opsAgentDataManagerToken = ensurePlatformSecretFile(opsAgentDataManagerTokenPath);
@@ -565,9 +556,7 @@ export function registerComposeCommands(program: Command): void {
               ? `Cleared local release selection → ${result.path}`
               : "No local release selection to clear.",
           );
-          log.dim(
-            "Running containers, release evidence, and recorded running state are preserved.",
-          );
+          log.dim("Running containers and recorded running state are preserved.");
           log.dim(
             process.env.OPENMAPX_RELEASE === "local"
               ? "Release resolution is disabled; the next start/update uses manifest image tags."

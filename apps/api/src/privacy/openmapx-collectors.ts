@@ -16,7 +16,6 @@ import {
   dataManagerOfflinePackageJobOwners,
   dataManagerOfflinePackageJobs,
   dataSubjectRequest,
-  dataSubjectRequestBackupReview,
   dataSubjectRequestEmailChallenge,
   dataSubjectRequestEvent,
   dataSubjectRequestIdentity,
@@ -56,7 +55,6 @@ import {
   type CollectorSourcePart,
   type CollectorSourcePartEntry,
   projectSubjectRecord,
-  type SubjectExportRecord,
   stableRecordId,
 } from "./collectors.js";
 import { EncryptedSourceSpool } from "./encrypted-source-spool.js";
@@ -76,8 +74,6 @@ export interface OpenMapxCollectorContext {
   excludedRegistrationIds?: ReadonlySet<string>;
   /** Durable receipt-side safe projections replace live rows that may have
    * expired before generation. Each iterable is consumed at most once. */
-  receiptSnapshotOverrides?: ReadonlyMap<string, AsyncIterable<SubjectExportRecord>>;
-  receiptSnapshotCapturedAt?: ReadonlyMap<string, Date>;
   streamingLimits?: {
     parentDirectory?: string;
     maxMemberBytes?: number;
@@ -258,11 +254,6 @@ export async function* streamOpenMapxRegistrationRecords(
   registrationId: string,
   context: OpenMapxCollectorContext,
 ): AsyncGenerator<ReturnType<typeof projectSubjectRecord>> {
-  const receiptSnapshot = context.receiptSnapshotOverrides?.get(registrationId);
-  if (receiptSnapshot) {
-    for await (const record of receiptSnapshot) yield record;
-    return;
-  }
   const registration = getSubjectDataRegistration(registrationId);
   if (registration?.strategy !== "collector") return;
   const database = dbOf(context);
@@ -1320,39 +1311,6 @@ export async function* streamOpenMapxRegistrationRecords(
           map: ({ id, ...row }) => ({ ...row, challengeDigest: pseudonymousIdentifier(id) }),
         },
       );
-      yield* emit(
-        database
-          .select({
-            id: dataSubjectRequestBackupReview.id,
-            requestId: dataSubjectRequestBackupReview.requestId,
-            backupId: dataSubjectRequestBackupReview.backupId,
-            createdAt: dataSubjectRequestBackupReview.createdAt,
-            platformVersion: dataSubjectRequestBackupReview.platformVersion,
-            decision: dataSubjectRequestBackupReview.decision,
-            reasonCode: dataSubjectRequestBackupReview.reasonCode,
-            reviewedAt: dataSubjectRequestBackupReview.reviewedAt,
-          })
-          .from(dataSubjectRequestBackupReview)
-          .innerJoin(
-            dataSubjectRequest,
-            eq(dataSubjectRequestBackupReview.requestId, dataSubjectRequest.id),
-          )
-          .where(
-            and(
-              requestOwnership,
-              lte(dataSubjectRequestBackupReview.createdAt, cutoff),
-              lte(dataSubjectRequest.receivedAt, cutoff),
-            ),
-          )
-          .orderBy(asc(dataSubjectRequestBackupReview.id)),
-        {
-          policyCodes: ["backup-review-metadata", "backup-identifiers-redacted"],
-          map: ({ id: _id, backupId, ...row }) => ({
-            ...row,
-            backupReferenceDigest: pseudonymousIdentifier(backupId),
-          }),
-        },
-      );
       return;
     }
     case "offline-package-ownership": {
@@ -1495,18 +1453,10 @@ async function collectOpenMapxStreams(
   entries: CollectorSourcePartEntry[];
   disposeSources?: () => Promise<void>;
 }> {
-  const primaryRegistrations = SUBJECT_DATA_CATALOGUE.filter(
+  const registrations = SUBJECT_DATA_CATALOGUE.filter(
     (registration) =>
       registration.source === "openmapx-db" && registration.strategy === "collector",
   );
-  const primaryIds = new Set(primaryRegistrations.map((registration) => registration.id));
-  const receiptRegistrations = [...(context.receiptSnapshotOverrides?.keys() ?? [])]
-    .filter((id) => !primaryIds.has(id))
-    .map((id) => getSubjectDataRegistration(id))
-    .filter((registration): registration is NonNullable<typeof registration> =>
-      Boolean(registration),
-    );
-  const registrations = [...primaryRegistrations, ...receiptRegistrations];
   const spool = await EncryptedSourceSpool.create(context.streamingLimits);
   const counts = new Map<string, number>();
   const entries: NonNullable<CollectorSourcePart["entries"]> = [];
@@ -1605,9 +1555,6 @@ async function collectOpenMapxStreams(
       const offlineUnavailable =
         registration.id === "offline-package-ownership" &&
         (!context.offlinePrincipalKey || context.offlinePrincipalKey.byteLength < 32);
-      const receiptRedis =
-        registration.id === "redis-subject-controls" &&
-        context.receiptSnapshotOverrides?.has(registration.id);
       return {
         registrationId: registration.id,
         category: registration.category,
@@ -1618,14 +1565,8 @@ async function collectOpenMapxStreams(
           : recordCount > 0
             ? ("included" as const)
             : ("reviewed_no_match" as const),
-        warningCodes: offlineUnavailable
-          ? ["offline-principal-key-unavailable"]
-          : receiptRedis
-            ? ["redis-exact-locator-only"]
-            : [],
-        capturedAt:
-          context.receiptSnapshotCapturedAt?.get(registration.id)?.toISOString() ??
-          snapshotAt.toISOString(),
+        warningCodes: offlineUnavailable ? ["offline-principal-key-unavailable"] : [],
+        capturedAt: snapshotAt.toISOString(),
       };
     });
     if (entries.length === 0) {

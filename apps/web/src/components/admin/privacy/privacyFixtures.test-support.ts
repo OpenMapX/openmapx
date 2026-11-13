@@ -67,24 +67,10 @@ export function privacyDetail(
       extendDeadline: true,
       caseDecision: true,
       attachmentWrite: true,
-      backupReview: true,
       generate: false,
       assistedDelivery: false,
       representativeDelivery: false,
       reasons: { generate: "case-sources-not-ready" },
     },
-  };
-}
-export function privacyReadiness() {
-  return {
-    version: 1,
-    ready: false,
-    checkedAt: "2026-09-05T00:00:00.000Z",
-    evidenceVersion: "v1",
-    keyRing: null,
-    checks: [
-      { id: "controller-contact", status: "fail", detailCode: "controller-contact-missing" },
-    ],
-    approvals: [],
   };
 }

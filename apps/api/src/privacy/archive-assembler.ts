@@ -176,28 +176,6 @@ const ARCHIVE_SCHEMAS: ReadonlyArray<{
     },
   },
   {
-    logicalId: "backup-record-schema",
-    schemaId: "backup-history-record-v1",
-    schema: {
-      $schema: "https://json-schema.org/draft/2020-12/schema",
-      $id: "https://openmapx.example/privacy/backup-history-record-v1",
-      type: "object",
-      additionalProperties: true,
-    },
-  },
-  {
-    logicalId: "backup-source-schema",
-    schemaId: "backup-source-v1",
-    schema: {
-      $schema: "https://json-schema.org/draft/2020-12/schema",
-      $id: "https://openmapx.example/privacy/backup-source-v1",
-      type: "object",
-      required: ["version"],
-      properties: { version: { const: 1 } },
-      additionalProperties: true,
-    },
-  },
-  {
     logicalId: "portable-profile-schema",
     schemaId: "article-20-v1",
     schema: {
@@ -390,13 +368,7 @@ function requestedSchema(
   if (["portable-profile-schema", "portable-places-schema"].includes(logicalId))
     return includesPortability(kind);
   if (
-    [
-      "category-schema",
-      "export-record-schema",
-      "processing-information-schema",
-      "backup-record-schema",
-      "backup-source-schema",
-    ].includes(logicalId)
+    ["category-schema", "export-record-schema", "processing-information-schema"].includes(logicalId)
   )
     return includesAccess(kind);
   return true;

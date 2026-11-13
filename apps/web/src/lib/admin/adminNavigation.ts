@@ -118,7 +118,7 @@ export const ADMIN_DESTINATIONS: readonly AdminDestination[] = [
   destination(
     "privacy-setup",
     "Privacy setup",
-    "Operator, policies and readiness reviews",
+    "Operator, notifications and retention",
     "/admin/privacy-setup",
     "privacy",
   ),

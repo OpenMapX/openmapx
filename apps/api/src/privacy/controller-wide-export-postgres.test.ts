@@ -1,5 +1,4 @@
 import { createHash, randomUUID } from "node:crypto";
-import { createReadStream } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,7 +16,6 @@ import {
   account,
   dataDisclosureEvent,
   dataSubjectRequest,
-  dataSubjectRequestBackupReview,
   dataSubjectRequestTask,
   personalTimelineConnection,
   savedList,
@@ -27,18 +25,14 @@ import { tar } from "./__tests__/fixtures/source-tar.js";
 import { artifactResultFromRow, parseWrappedDek } from "./artifact-download.js";
 import { EncryptedBlobStore } from "./artifact-storage.js";
 import { createEncryptedAttachment } from "./attachments.js";
-import { acceptBackupWarnings, listBackupWarningReviews } from "./backup-omission-review.js";
 import { SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
 import { loadMasterKeyRing } from "./crypto.js";
 import { generatePrivacyExport } from "./generation.js";
 import { PrivacyRequestService } from "./request-service.js";
 
-const REAL_BACKUP_FIXTURE = process.env.OPENMAPX_REAL_BACKUP_FIXTURE;
-const SUBJECT_ID = REAL_BACKUP_FIXTURE ? "subject-1" : "controller-acceptance-subject";
+const SUBJECT_ID = "controller-acceptance-subject";
 const FOREIGN_ID = "controller-acceptance-foreign";
-const FIXTURE_NOW = new Date(
-  REAL_BACKUP_FIXTURE ? "2026-09-04T09:00:00.000Z" : "2026-09-05T00:00:00.000Z",
-);
+const FIXTURE_NOW = new Date("2026-09-05T00:00:00.000Z");
 const roots: string[] = [];
 
 function sha256(value: Uint8Array): string {
@@ -92,86 +86,6 @@ function dawarichTar(subjectId: string, cutoff: string): Buffer {
   return tar([
     ...declarations.map(({ path, content }) => [path, content] as [string, Buffer]),
     ["dawarich/source-manifest.json", manifest],
-  ]);
-}
-
-function backupTar(subjectId: string, cutoff: string): Buffer {
-  const profile = Buffer.from(
-    '{"id":"controller-acceptance-subject","name":"Historical subject profile"}\n',
-  );
-  const areas = Buffer.from('{"id":91,"name":"Historical home area"}\n');
-  const dawarichManifest = Buffer.from(
-    JSON.stringify({
-      version: 1,
-      image: "freikin/dawarich:1.19.0",
-      imageDigest: DAWARICH_SUPPORTED_IMAGE_DIGEST,
-      upstreamCommit: DAWARICH_SUPPORTED_COMMIT,
-      subjectUserIdDigest: sha256(Buffer.from(subjectId)),
-      collectorContract: "openmapx-subject-export-v1",
-      cutoff,
-      snapshotAt: "2026-08-20T00:00:00.000Z",
-      schemaFingerprint: DAWARICH_EXPECTED_SCHEMA_FINGERPRINT,
-      entries: [
-        {
-          id: "areas",
-          bytes: areas.byteLength,
-          sha256: sha256(areas),
-          records: 1,
-          article15: true,
-          portability: true,
-          redactionCodes: [],
-        },
-      ],
-      warnings: [],
-    }),
-  );
-  const declarations = [
-    {
-      path: "openmapx/account-profile.jsonl",
-      family: "openmapx",
-      bytes: profile.byteLength,
-      sha256: sha256(profile),
-      records: 1,
-      article15: true,
-      portability: true,
-      redactionCodes: ["credentials-excluded"],
-    },
-    {
-      path: "dawarich/areas.jsonl",
-      family: "dawarich",
-      bytes: areas.byteLength,
-      sha256: sha256(areas),
-      records: 1,
-      article15: true,
-      portability: true,
-      redactionCodes: [],
-    },
-    {
-      path: "dawarich/source-manifest.json",
-      family: "dawarich",
-      bytes: dawarichManifest.byteLength,
-      sha256: sha256(dawarichManifest),
-      records: null,
-      article15: true,
-      portability: false,
-      redactionCodes: [],
-    },
-  ];
-  const outer = Buffer.from(
-    JSON.stringify({
-      version: 1,
-      collectorContract: "openmapx-subject-export-v1",
-      cutoff,
-      subjectUserIdDigest: sha256(Buffer.from(subjectId)),
-      entries: declarations,
-      warnings: [],
-    }),
-  );
-  return tar([
-    ["openmapx/account-profile.jsonl", profile],
-    ["dawarich/areas.jsonl", areas],
-    ["dawarich/source-manifest.json", dawarichManifest],
-    ["backup/source-manifest.json", outer],
   ]);
 }
 
@@ -347,8 +261,18 @@ async function runFixture() {
     .from(dataSubjectRequestTask)
     .where(eq(dataSubjectRequestTask.requestId, request.id));
   for (const task of tasks) {
-    if (["backup-retained-copies", "off-host-processor-sources"].includes(task.registrationId))
+    if (task.registrationId === "off-host-processor-sources")
       await service.markTask({ taskId: task.id, requestId: request.id, status: "retryable" });
+    else if (task.registrationId === "backup-retained-copies")
+      // Retained backups are reviewed manually by the operator; the export
+      // records that review instead of extracting backup contents.
+      await service.markTask({
+        taskId: task.id,
+        requestId: request.id,
+        status: "complete",
+        reasonCode: "retained-backups-reviewed",
+        recordCount: 0,
+      });
     else if (task.registrationId === "application-logs")
       await service.markTask({
         taskId: task.id,
@@ -374,69 +298,19 @@ async function runFixture() {
         reasonCode: "source-not-configured",
       });
   }
-  const manifestDigest = "7".repeat(64);
-  await db.insert(dataSubjectRequestBackupReview).values({
-    requestId: request.id,
-    backupId: "acceptance-retained-2026-08-20",
-    manifestDigest,
-    createdAt: new Date("2026-08-20T00:00:00.000Z"),
-    platformVersion: "1.0.0",
-    decision: "extract",
-    reasonCode: "possible_historical_difference",
-    reviewedBy: SUBJECT_ID,
-    reviewedAt: new Date(FIXTURE_NOW.getTime() - 3_600_000),
-  });
-
   const generate = () =>
     generatePrivacyExport({
       requestId: request.id,
       database: db,
       store,
       service,
-      deploymentId: "controller-acceptance",
       now: () => FIXTURE_NOW,
       openmapx: { offlinePrincipalKey: Buffer.alloc(32, 11) },
       dawarich: {
         fetchExport: async ({ request: sourceRequest }) =>
           Readable.from([dawarichTar(SUBJECT_ID, sourceRequest.cutoff)]),
       },
-      backup: {
-        capabilityKey: Buffer.alloc(32, 19),
-        now: () => FIXTURE_NOW,
-        fetchExport: async ({ request: sourceRequest }) =>
-          REAL_BACKUP_FIXTURE
-            ? createReadStream(REAL_BACKUP_FIXTURE)
-            : Readable.from([backupTar(SUBJECT_ID, sourceRequest.cutoff)]),
-      },
     });
-  if (REAL_BACKUP_FIXTURE) {
-    try {
-      await generate();
-      throw new Error("real retained-backup warnings were not held for review");
-    } catch (error) {
-      if ((error as { code?: string }).code !== "BACKUP_WARNING_REVIEW_REQUIRED") throw error;
-    }
-    const warningReviews = await listBackupWarningReviews(request.id, db);
-    if (warningReviews.length !== 1 || warningReviews[0]?.accepted)
-      throw new Error("real retained-backup warnings were not recorded exactly once");
-    const [reviewableRequest] = await db
-      .select({ version: dataSubjectRequest.version })
-      .from(dataSubjectRequest)
-      .where(eq(dataSubjectRequest.id, request.id))
-      .limit(1);
-    if (!reviewableRequest) throw new Error("acceptance request disappeared during warning review");
-    await acceptBackupWarnings(
-      {
-        requestId: request.id,
-        requestVersion: reviewableRequest.version,
-        warningsDigest: warningReviews[0].warningsDigest,
-        reasonCode: "verified-justified-source-omission",
-        actorId: "controller-acceptance-admin",
-        idempotencyKey: `accept-backup-warnings-${request.id}`,
-      },
-      db,
-    );
-  }
   const result = await generate();
   if (!result.artifact.wrappedDek) throw new Error("acceptance artifact has no wrapped key");
   const plaintext: Buffer[] = [];
@@ -513,7 +387,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(registrations).toEqual(catalogue);
         expect(new Set(registrations).size).toBe(registrations.length);
         expect(outcomes.get("managed-dawarich")).toBe("included");
-        expect(outcomes.get("backup-retained-copies")).toBe("included");
+        expect(outcomes.get("backup-retained-copies")).toBe("reviewed_no_match");
         expect(outcomes.get("off-host-processor-sources")).toBe("included");
         expect(fixture.manifest.request.rights).toEqual({ access: true, portability: true });
         expect(fixture.manifest.timing.snapshotAt).toBe(fixture.request.receivedAt.toISOString());
@@ -522,14 +396,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(archiveText).toContain("Acceptance Route Processor");
         expect(archiveText).toContain("structured-log-match");
         expect(archiveText).toContain("rights-of-others-removed");
-        if (REAL_BACKUP_FIXTURE) {
-          expect(archiveText).toContain("fixture@example.test");
-          expect(archiveText).toContain("timeline@example.test");
-          expect(archiveText).toContain("subject attachment bytes");
-        } else {
-          expect(archiveText).toContain("Historical subject profile");
-          expect(archiveText).toContain("Historical home area");
-        }
         for (const forbidden of [
           "FOREIGN-ADJACENT-RECORD",
           "FOREIGN-SAVED-LIST",
