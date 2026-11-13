@@ -85,6 +85,12 @@ function mountProgram(binds: readonly BindMount[]): string {
   }
   for (const anchor of [...anchors].sort((a, b) => a.length - b.length))
     lines.push(`mount -t tmpfs -o mode=0755 tmpfs ${quote(anchor)}`);
+  // Roles reach Docker only through the shim. The socket path a container
+  // binds must exist, but never leads to a real daemon from inside.
+  lines.push(
+    "[ -e /var/run/docker.sock ] || touch /var/run/docker.sock",
+    "mount --bind /dev/null /var/run/docker.sock",
+  );
   // Outermost first so a nested mount lands on top of its parent.
   const ordered = [...binds].sort((a, b) => a.target.length - b.target.length);
   for (const bind of ordered) {

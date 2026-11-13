@@ -328,6 +328,7 @@ export class CrashHost {
     this.bundles = await runtimeBundles(REPO);
     this.copyCheckout();
     this.engine.traceFile = join(this.workDir, "docker-trace.jsonl");
+    this.engine.volumeRoot = join(this.root, "volumes");
     await this.engine.listen();
     for (const proxy of Object.values(this.proxies)) await proxy.listen();
     await this.createDatabase();
@@ -552,6 +553,9 @@ export class CrashHost {
       DOCKER_GID: String(process.getegid?.() ?? 0),
       TRANSITOUS_COUNTRIES: "de",
       TRANSITOUS_SYNC_CRON: "disabled",
+      // The first notable-places build downloads from Wikidata for minutes and
+      // holds the data-manager target meanwhile; the suite stays offline.
+      NOTABLE_PLACES_REFRESH_CRON: "off",
       OPENMAPX_RELEASE: "main",
       OPENMAPX_RELEASE_MANIFEST_REPOSITORY: MANIFEST_REPOSITORY,
       OPENMAPX_DOCKER_CONFIG_DIR: join(this.root, "docker-config"),
@@ -613,7 +617,9 @@ export class CrashHost {
   }
 
   private binds(container: ContainerRecord): BindMount[] {
-    return container.Mounts.filter((mount) => mount.Type === "bind").map((mount) => ({
+    return container.Mounts.filter(
+      (mount) => (mount.Type === "bind" || mount.Type === "volume") && mount.Source,
+    ).map((mount) => ({
       source: mount.Source,
       target: mount.Destination,
       readOnly: !mount.RW,

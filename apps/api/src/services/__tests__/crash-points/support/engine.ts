@@ -10,7 +10,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { renderGoTemplate } from "./go-template";
 
 export interface Invocation {
@@ -100,7 +100,14 @@ export interface ContainerRecord {
     GroupAdd: string[] | null;
     RestartPolicy: { Name: string };
   };
-  Mounts: Array<{ Type: string; Source: string; Destination: string; RW: boolean; Mode: string }>;
+  Mounts: Array<{
+    Type: string;
+    Name?: string;
+    Source: string;
+    Destination: string;
+    RW: boolean;
+    Mode: string;
+  }>;
   /** Not part of Docker's answer: the compose service and whether it is a role process. */
   service?: string;
 }
@@ -174,6 +181,8 @@ export class FakeDockerEngine {
   private composeQueue: Promise<unknown> = Promise.resolve();
   url = "";
   private readonly secret = randomBytes(24).toString("hex");
+  /** Where named volumes of created containers are backed on the host. */
+  volumeRoot = "/tmp";
   /** Where each answered invocation is appended, for diagnosing a failed run. */
   traceFile?: string;
 
@@ -1082,10 +1091,7 @@ export class FakeDockerEngine {
     if (config.code !== 0) throw new Error(config.stderr ?? "compose config failed");
     const hashes = await this.realCompose([...global, "config", "--hash", "*"], request);
     if (hashes.code !== 0) throw new Error(hashes.stderr ?? "compose config --hash failed");
-    const model = JSON.parse(config.stdout ?? "{}") as {
-      name?: string;
-      services: Record<string, ComposeService>;
-    };
+    const model = JSON.parse(config.stdout ?? "{}") as ComposeModel;
     const hash = new Map(
       (hashes.stdout ?? "")
         .trim()
@@ -1204,15 +1210,7 @@ export class FakeDockerEngine {
         ),
         user: spec.user,
         groups: spec.group_add ?? null,
-        mounts: (spec.volumes ?? [])
-          .filter((volume) => volume.type === "bind")
-          .map((volume) => ({
-            Type: "bind",
-            Source: volume.source,
-            Destination: volume.target,
-            RW: !volume.read_only,
-            Mode: volume.read_only ? "ro" : "rw",
-          })),
+        mounts: this.composeMounts(model, project, spec),
         memory: memoryBytes(spec.deploy?.resources?.limits?.memory ?? spec.mem_limit),
         nanoCpus: Math.round(Number(spec.deploy?.resources?.limits?.cpus ?? spec.cpus ?? 0) * 1e9),
       });
@@ -1225,6 +1223,57 @@ export class FakeDockerEngine {
       }
     }
     return { code: 0, stderr: `${messages.map((line) => ` ${line}`).join("\n")}\n` };
+  }
+
+  /** The mounts Docker reports for a Compose service: its volumes of every
+   * type, and its secrets and configs as read-only file binds. A named
+   * volume is backed by a directory under the engine's volume root. */
+  private composeMounts(model: ComposeModel, project: string, spec: ComposeService) {
+    const mounts: ContainerRecord["Mounts"] = [];
+    for (const volume of spec.volumes ?? []) {
+      const rw = !volume.read_only;
+      if (volume.type === "volume") {
+        const name = model.volumes?.[volume.source]?.name ?? `${project}_${volume.source}`;
+        const source = join(this.volumeRoot, name);
+        mkdirSync(source, { recursive: true, mode: 0o755 });
+        mounts.push({
+          Type: "volume",
+          Name: name,
+          Source: source,
+          Destination: volume.target,
+          RW: rw,
+          Mode: rw ? "rw" : "ro",
+        });
+      } else
+        mounts.push({
+          Type: volume.type,
+          Source: volume.source ?? "",
+          Destination: volume.target,
+          RW: rw,
+          Mode: rw ? "rw" : "ro",
+        });
+    }
+    for (const secret of spec.secrets ?? [])
+      mounts.push({
+        Type: "bind",
+        Source: model.secrets?.[secret.source]?.file ?? "",
+        Destination: `/run/secrets/${secret.target ?? secret.source}`,
+        RW: false,
+        Mode: "ro",
+      });
+    for (const config of spec.configs ?? []) {
+      const target = config.target?.startsWith("/")
+        ? config.target
+        : `/${config.target ?? config.source}`;
+      mounts.push({
+        Type: "bind",
+        Source: model.configs?.[config.source]?.file ?? "",
+        Destination: target,
+        RW: false,
+        Mode: "ro",
+      });
+    }
+    return mounts;
   }
 
   private async composePs(global: string[], args: string[], request: Request): Promise<Answer> {
@@ -1334,8 +1383,18 @@ export class FakeDockerEngine {
   }
 }
 
+interface ComposeModel {
+  name?: string;
+  services: Record<string, ComposeService>;
+  volumes?: Record<string, { name?: string }>;
+  secrets?: Record<string, { file?: string }>;
+  configs?: Record<string, { file?: string }>;
+}
+
 interface ComposeService {
   image: string;
+  secrets?: Array<{ source: string; target?: string }>;
+  configs?: Array<{ source: string; target?: string }>;
   container_name?: string;
   environment?: Record<string, string | null>;
   labels?: Record<string, string>;
