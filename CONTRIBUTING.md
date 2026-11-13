@@ -283,9 +283,12 @@ behind a `docker` shim on `PATH`, HTTP proxies between the roles, and role
 processes that are killed and restarted. Scenarios observe only HTTP answers,
 job and agent operation states, CLI exit codes, the Docker trace and data
 admission. They talk to the system only through `driver.ts`; a policy test
-(`scripts/crash-point-imports.test.ts`) refuses imports of the signed control
-layer, the agent's sources and the data-manager's sources. When the update
-system changes, only the driver may change; scenario files stay as they are.
+(`scripts/crash-point-imports.test.ts`) lets scenario files import only vitest,
+the driver and the scenario wrapper, and refuses the suite any import of the
+signed control layer, the agent or the data-manager. When the update system
+changes, only the driver may change; scenario files stay as they are. Scenarios
+that fail on today's code are listed, with the signature of their failure, in
+`known-failures.json`; the suite's `README.md` gives the rules.
 
 Each role runs in its own mount and PID namespace that reproduces its Compose
 bind mounts and user, so the suite needs Linux, passwordless `sudo`, `unshare`
@@ -294,7 +297,9 @@ and `setpriv` (util-linux) and the Docker CLI with the Compose plugin (only
 scenario creates and drops its own database and role on the server
 `DATABASE_URL` names, whose user must be allowed to create roles and databases.
 `OPENMAPX_RUN_CRASH_POINT_TESTS=1` turns a missing prerequisite into a failure;
-CI sets it. `OPENMAPX_CRASH_DEBUG=1` prints the provisioning steps and
+CI sets it. The scenario with a full agent state filesystem also mounts a small
+filesystem and runs only with `OPENMAPX_RUN_CRASH_DISK_TESTS=1`; without it,
+that scenario is skipped. CI sets it too. `OPENMAPX_CRASH_DEBUG=1` prints the provisioning steps and
 `OPENMAPX_CRASH_KEEP=1` keeps the host directory (role logs and the Docker
 trace are in its `work/`) and the database after a run.
 
@@ -322,6 +327,7 @@ git ls-files -co --exclude-standard | grep -v '^node_modules/' | COPYFILE_DISABL
 docker exec -u runner -w /work crash-dev pnpm install --frozen-lockfile
 docker exec -u runner -w /work \
   -e DATABASE_URL=postgresql://postgres:postgres@crash-pg:5432/openmapx_test \
+  -e OPENMAPX_RUN_CRASH_POINT_TESTS=1 -e OPENMAPX_RUN_CRASH_DISK_TESTS=1 \
   crash-dev pnpm test:database crash-points
 docker rm -f crash-dev crash-pg && docker network rm crash-net
 ```
