@@ -148,6 +148,7 @@ function familySnapshot(family: string) {
   );
 }
 
+// The refusal comes after the family guard's two-second wait for its holder.
 it("distinguishes initial observation contention without changing any adoption or family record", async () => {
   const f = await adoptionFixture(),
     observation = readFileSync(f.observation),
@@ -182,7 +183,7 @@ it("distinguishes initial observation contention without changing any adoption o
   expect(readdirSync(dirname(f.child)).filter((name) => name.endsWith(".json"))).toEqual([
     basename(f.child),
   ]);
-});
+}, 30_000);
 
 it("keeps late family contention raw and retains the already published pending adoption", async () => {
   const f = await adoptionFixture(),
