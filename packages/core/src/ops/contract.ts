@@ -1359,12 +1359,16 @@ export const OPS_RESULT_SCHEMAS = {
   }),
   "valhalla.traffic.disable": changed,
   "valhalla.traffic.inspect": inspection,
-  "valhalla.traffic.maintain": z.strictObject({
-    changed: z.literal(true),
-    graphGeneration: z.string().regex(/^[0-9a-f]{64}$/),
-    extractGeneration: z.string().regex(/^[0-9a-f]{64}$/),
-    waysToEdgesGeneration: z.string().regex(/^[0-9a-f]{64}$/),
-  }),
+  "valhalla.traffic.maintain": z.union([
+    z.strictObject({
+      changed: z.literal(true),
+      graphGeneration: z.string().regex(/^[0-9a-f]{64}$/),
+      extractGeneration: z.string().regex(/^[0-9a-f]{64}$/),
+      waysToEdgesGeneration: z.string().regex(/^[0-9a-f]{64}$/),
+    }),
+    // No Valhalla container exists: nothing was touched.
+    z.strictObject({ changed: z.literal(false), skipped: z.literal("valhalla_absent") }),
+  ]),
   "valhalla.traffic.refreshWaysToEdges": changed,
   "postgis.capacity.inspect": z.strictObject({ availableBytes: z.number().int().nonnegative() }),
   "transitCredentials.inspect": z.strictObject({
