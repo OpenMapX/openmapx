@@ -5,15 +5,7 @@ import Typography from "@mui/material/Typography";
 import { useTranslations } from "next-intl";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { type TransitTime, transitDelayMinutes } from "@/lib/transitTime";
-
-const VISUALLY_HIDDEN = {
-  position: "absolute",
-  width: 1,
-  height: 1,
-  overflow: "hidden",
-  clip: "rect(0 0 0 0)",
-  whiteSpace: "nowrap",
-} as const;
+import { VISUALLY_HIDDEN } from "@/lib/visuallyHidden";
 
 /** The same timetable, prediction and delay treatment on boards and journey timelines. */
 export function DepartureTime({

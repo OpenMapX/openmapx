@@ -23,6 +23,7 @@ import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
 import { planSheetFollow, sheetFollowSx, useSheetFollowTrack } from "@/lib/sheetFollow";
 import { useAlignToStreets } from "@/lib/useAlignToStreets";
+import { VISUALLY_HIDDEN } from "@/lib/visuallyHidden";
 import { AlignToStreetsIcon, gridScreenTilt } from "./AlignToStreetsIcon";
 import { gridCeiling, resolveControlPlacement } from "./controlPlacement";
 import { CrowdApproachPromptLazy, ReportDialogLazy, ReportFabLazy } from "./crowdReportsLazy";
@@ -30,19 +31,6 @@ import { Pegman } from "./Pegman";
 
 const BASE_BOTTOM = 48;
 const PANEL_GAP = 12;
-
-/** Off-screen but readable by assistive technology. `sx` treats a bare 1 as 100%, so the sizes are explicit. */
-const SR_ONLY = {
-  border: 0,
-  clip: "rect(0 0 0 0)",
-  height: "1px",
-  margin: "-1px",
-  overflow: "hidden",
-  padding: 0,
-  position: "absolute",
-  whiteSpace: "nowrap",
-  width: "1px",
-} as const;
 
 export function MapControls() {
   const t = useTranslations("map");
@@ -356,7 +344,7 @@ export function MapControls() {
       />
       {/* The region itself stays mounted — screen readers ignore one that
         appears with its text already in place — and only the child is swapped. */}
-      <Box role="status" aria-live="polite" sx={SR_ONLY}>
+      <Box role="status" aria-live="polite" sx={VISUALLY_HIDDEN}>
         <span key={alignMessage?.seq}>{alignMessage?.text}</span>
       </Box>
     </>

@@ -45,7 +45,8 @@ export const PLACE_DETENTS: DetentConfig = {
 export const DIRECTIONS_DETENTS: DetentConfig = {
   peek: "180px",
   mid: "42dvh",
-  maxHeight: MAX_HEIGHT,
+  // Also below the trip's floating stop card (see PhoneWaypointCard).
+  maxHeight: `min(94dvh, calc(100dvh - var(--omx-safe-top) - 8px), calc(100dvh - var(--omx-waypoint-card-bottom, 0px) - 8px))`,
   initial: "mid",
 };
 

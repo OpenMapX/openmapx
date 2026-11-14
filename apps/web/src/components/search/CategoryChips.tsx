@@ -16,6 +16,7 @@ import {
   useDataSources,
   useDirectionsStore,
   useMapStore,
+  usePlaceStore,
   useSearchStore,
   useSidebarStore,
 } from "@openmapx/core";
@@ -169,6 +170,8 @@ export function CategoryChips() {
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const selectedPlace = usePlaceStore((s) => s.selectedPlace);
+  const sidebarOpen = useSidebarStore((s) => s.activeSidebarId !== null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [chipsEl, setChipsEl] = useState<HTMLDivElement | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -218,7 +221,11 @@ export function CategoryChips() {
     el.scrollTo({ left: target, behavior: prefersReducedMotion() ? "auto" : "smooth" });
   };
 
-  const hidden = directionsOpen || activeCategory || activeSource || textSearchActive;
+  // A phone's place sheet takes over the screen below the search bar, which
+  // then names the place; the chips would only stand between the two.
+  const placeSheetOpen = isMobile && sidebarOpen && selectedPlace !== null;
+  const hidden =
+    directionsOpen || activeCategory || activeSource || textSearchActive || placeSheetOpen;
   const zoomedOut = zoom < 9;
 
   // The chip row only lies across the map on mobile; on desktop it floats in

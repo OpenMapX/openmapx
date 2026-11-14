@@ -96,7 +96,8 @@ export function MapFooter() {
       publishMapFooterCenterCovered(centerCovered());
       const l = links.getBoundingClientRect();
       const c = creditsEl?.getBoundingClientRect();
-      if (!c) {
+      // Without the links (hidden on phones) there is nothing to merge with.
+      if (!c || l.width === 0) {
         setMerged(false);
         return;
       }
@@ -169,11 +170,12 @@ export function MapFooter() {
         },
       }}
     >
+      {/* Phones keep only the credits on the map; the legal pages are in the menu. */}
       <Box
         ref={linksRef}
         sx={{
           ...barSx,
-          display: "flex",
+          display: { xs: "none", sm: "flex" },
           flexWrap: "wrap",
           alignItems: "center",
           alignContent: "center",

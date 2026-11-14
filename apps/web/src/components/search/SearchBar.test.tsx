@@ -5,6 +5,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { Profiler } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getMapObstructionInsets, publishMapObstruction } from "@/lib/mapObstructions";
+import { useStopSearchStore } from "@/stores/stopSearchStore";
 import {
   act,
   createFakeMap,
@@ -368,8 +369,52 @@ describe("SearchBar", () => {
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "Central Cafe" } });
 
-    await waitFor(() => expect(screen.getByText(/0 m search\.fromYou/)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: /Central Cafe/ }).textContent).toContain(
+        "0 m search.fromYou",
+      ),
+    );
     expect(screen.queryByText(/search\.fromMapCenter/)).toBeNull();
+  });
+
+  it("chooses a trip stop for directions instead of opening the place", async () => {
+    useSearchSuggestionsMock.mockReturnValue({
+      data: aggregateResponse([
+        aggregateSuggestion({
+          label: "Central Cafe",
+          coordinates: [6.084, 50.775],
+          searchMatch: { kind: "name", value: "Central Cafe", normalized: "central cafe" },
+        }),
+      ]),
+      isFetching: false,
+    });
+    const onPick = vi.fn();
+    act(() => {
+      useDirectionsStore.getState().open();
+      useStopSearchStore.getState().open({
+        initialQuery: "Central",
+        placeholder: "directions.chooseDestination",
+        onPick,
+      });
+    });
+    try {
+      renderBar();
+      // Directions hide the bar; a stop request brings it back, starting from the stop's text.
+      const input = screen.getByLabelText("search.ariaLabel") as HTMLInputElement;
+      expect(input.placeholder).toBe("directions.chooseDestination");
+      await waitFor(() => expect(input.value).toBe("Central"));
+      fireEvent.change(input, { target: { value: "Central Cafe" } });
+
+      fireEvent.click(await screen.findByRole("option", { name: /Central Cafe/ }));
+      expect(onPick).toHaveBeenCalledWith({ coordinates: [6.084, 50.775], label: "Central Cafe" });
+      expect(useStopSearchStore.getState().request).toBeNull();
+      expect(usePlaceStore.getState().selectedPlace).toBeNull();
+    } finally {
+      act(() => {
+        useStopSearchStore.getState().close();
+        useDirectionsStore.getState().close();
+      });
+    }
   });
 
   it("runs a recent query again on desktop without navigating to a stored result", async () => {

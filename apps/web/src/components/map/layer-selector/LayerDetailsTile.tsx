@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { LayerPreviewTile } from "./LayerPreviewTile";
 
-export function DesktopMoreTile({
+export function LayerDetailsTile({
   item,
   label,
   labelWidth = 96,

@@ -31,6 +31,8 @@ interface WaypointRowProps {
   scheduleLabel?: string;
   scheduleEditLabel?: string;
   placeholder: string;
+  /** The field opens the stop search instead of taking typing. */
+  onFieldPress?: () => void;
 }
 
 export function WaypointRow({
@@ -49,6 +51,7 @@ export function WaypointRow({
   scheduleLabel,
   scheduleEditLabel,
   placeholder,
+  onFieldPress,
 }: WaypointRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: waypoint.id,
@@ -156,9 +159,9 @@ export function WaypointRow({
         {...listeners}
         className="waypoint-handle"
         sx={{
+          display: "flex",
           width: 24,
           height: 38,
-          display: "flex",
           alignItems: "center",
           justifyContent: "center",
           flexShrink: 0,
@@ -192,18 +195,20 @@ export function WaypointRow({
 
       {/* Input */}
       <Box
-        sx={{
-          flex: 1,
-          minWidth: 0,
-          border: "1px solid var(--omx-border)",
-          borderRadius: "8px",
-          bgcolor: "background.paper",
-          "&:focus-within": {
-            borderColor: BRAND,
-            boxShadow: `inset 0 0 0 1px ${BRAND}`,
+        sx={[
+          {
+            flex: 1,
+            minWidth: 0,
+            border: "1px solid var(--omx-border)",
+            borderRadius: "8px",
+            bgcolor: "background.paper",
+            "&:focus-within": {
+              borderColor: BRAND,
+              boxShadow: `inset 0 0 0 1px ${BRAND}`,
+            },
+            transition: "border-color 0.15s, box-shadow 0.15s",
           },
-          transition: "border-color 0.15s, box-shadow 0.15s",
-        }}
+        ]}
       >
         <WaypointInput
           value={inputValue}
@@ -213,6 +218,7 @@ export function WaypointRow({
           onFocus={onFocus}
           onBlur={onBlur}
           useMyLocationLabel={useMyLocationLabel}
+          onPress={onFieldPress}
           trailing={scheduleButton}
         />
       </Box>

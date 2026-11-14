@@ -43,6 +43,7 @@ import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
 import { requestHeadingPermission } from "@/lib/useHeading";
 import { useNow } from "@/lib/useNow";
 import { useRouteTrafficPresentation } from "@/lib/useRouteTrafficPresentation";
+import { VISUALLY_HIDDEN } from "@/lib/visuallyHidden";
 import { RouteTrafficStatus } from "./RouteTrafficStatus";
 import { type RouteArrivalContext, resolveRouteArrival } from "./routeArrival";
 
@@ -434,17 +435,7 @@ export function RouteCard({
               id={trafficCaptionId}
               component="span"
               data-testid="route-traffic-status"
-              sx={{
-                border: 0,
-                clip: "rect(0 0 0 0)",
-                height: "1px",
-                margin: "-1px",
-                overflow: "hidden",
-                padding: 0,
-                position: "absolute",
-                whiteSpace: "nowrap",
-                width: "1px",
-              }}
+              sx={VISUALLY_HIDDEN}
             >
               {tTraffic("summary")}
             </Box>
