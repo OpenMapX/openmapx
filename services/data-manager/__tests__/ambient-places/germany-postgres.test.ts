@@ -1,6 +1,7 @@
 import { VectorTile } from "@mapbox/vector-tile";
 import { AMBIENT_GERMANY_REGION, AMBIENT_LIMITS } from "@openmapx/core/ambient-places";
 import {
+  PUBLISHED_AMBIENT_FEATURES,
   readAmbientManifest,
   readAmbientPlaceByGers,
   readAmbientTile,
@@ -67,7 +68,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             availableBytes: ampleSpace,
           });
           const rows = await pg.sql.unsafe(
-            `SELECT id,name,min_zoom,tenant FROM ambient_places.features_all WHERE generation=$1 ORDER BY id`,
+            `SELECT id,name,min_zoom,tenant FROM ${PUBLISHED_AMBIENT_FEATURES} f WHERE generation=$1 ORDER BY id`,
             [result.generation],
           );
           expect(rows).toEqual([

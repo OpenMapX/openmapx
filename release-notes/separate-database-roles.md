@@ -18,8 +18,8 @@ password, used only by PostGIS administration and the CLI's backups and
 restores.
 
 Data-manager's code never runs with the API's or the superuser's rights. An
-event trigger lets data-manager create only tables, indexes, sequences, its own
-schemas and views that run no code, and refuses extensions, functions, types,
+event trigger lets data-manager create only tables, indexes, sequences and its
+own schemas, and refuses views, extensions, functions, types,
 domains, rules, triggers, policies and grants. The API may create only its two
 schemas and no extension. Martin's tile functions now run as
 `openmapx_tiles_owner`, which is no superuser and only reads OpenConditions'

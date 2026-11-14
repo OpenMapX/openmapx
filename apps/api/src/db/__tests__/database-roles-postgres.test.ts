@@ -154,24 +154,19 @@ integration("database roles", () => {
     await permissionDenied(api.unsafe("CREATE SCHEMA api_probe"));
   });
 
-  it("lets data-manager write plain views but no code that the API could run", async () => {
-    // The tables and view data-manager's ambient-places build creates.
+  it("lets data-manager write tables but no code or view that the API could run", async () => {
+    // The tables data-manager's ambient-places build creates, and its old view.
     await dataManager.unsafe(`
       CREATE SCHEMA ambient_places;
-      CREATE TABLE ambient_places.generations (id uuid PRIMARY KEY, publication_status text NOT NULL);
       CREATE TABLE ambient_places.features (generation uuid NOT NULL, name text NOT NULL);
-      CREATE TABLE ambient_places.planet_features (generation uuid NOT NULL, name text NOT NULL);
-      INSERT INTO ambient_places.generations VALUES ('00000000-0000-4000-8000-000000000001', 'published');
-      INSERT INTO ambient_places.features VALUES ('00000000-0000-4000-8000-000000000001', 'view');
-      CREATE OR REPLACE VIEW ambient_places.features_all AS
-        SELECT f.* FROM ambient_places.features f JOIN ambient_places.generations g ON g.id=f.generation WHERE g.publication_status='published'
-        UNION ALL
-        SELECT f.* FROM ambient_places.planet_features f JOIN ambient_places.generations g ON g.id=f.generation WHERE g.publication_status='published';
+      INSERT INTO ambient_places.features VALUES ('00000000-0000-4000-8000-000000000001', 'kept');
+      DROP VIEW IF EXISTS ambient_places.features_all;
     `);
-    expect(await api.unsafe("SELECT name FROM ambient_places.features_all")).toEqual([
-      { name: "view" },
+    expect(await api.unsafe("SELECT name FROM ambient_places.features")).toEqual([
+      { name: "kept" },
     ]);
     for (const statement of [
+      "CREATE VIEW ambient_places.features_all AS SELECT name FROM ambient_places.features",
       "CREATE FUNCTION ambient_places.probe() RETURNS int LANGUAGE sql AS 'SELECT 1'",
       "CREATE PROCEDURE ambient_places.probe() LANGUAGE sql AS 'SELECT 1'",
       "DO $$ BEGIN EXECUTE 'CREATE FUNCTION ambient_places.probe() RETURNS int LANGUAGE sql AS ''SELECT 1'''; END $$",
@@ -186,22 +181,8 @@ integration("database roles", () => {
       // Extensions, even those PostGIS already installed.
       "CREATE EXTENSION IF NOT EXISTS pg_trgm",
       "CREATE EXTENSION tablefunc SCHEMA ambient_places",
-      // Views that run SQL as their reader, call a function or an extension's
-      // operator, branch, or read another schema.
-      `CREATE VIEW ambient_places.leak AS SELECT query_to_xml('SELECT email FROM public."user"', true, false, '')::text AS name`,
-      "CREATE VIEW ambient_places.leak AS SELECT upper(name) AS name FROM ambient_places.features",
-      "CREATE VIEW ambient_places.leak AS SELECT name FROM ambient_places.features WHERE name % 'view'",
-      "CREATE VIEW ambient_places.leak AS SELECT CASE WHEN name = 'a' THEN name END AS name FROM ambient_places.features",
-      "CREATE VIEW ambient_places.leak AS SELECT name FROM ambient_places.features WHERE name IN (SELECT name FROM ambient_places.features)",
-      'CREATE VIEW ambient_places.leak AS SELECT id AS name FROM public."user"',
-      `CREATE OR REPLACE VIEW ambient_places.features_all AS
-        SELECT f.* FROM ambient_places.features f WHERE length(f.name) > 0
-        UNION ALL SELECT f.* FROM ambient_places.planet_features f`,
     ])
       await permissionDenied(dataManager.unsafe(statement));
-    expect(await api.unsafe("SELECT name FROM ambient_places.features_all")).toEqual([
-      { name: "view" },
-    ]);
     await dataManager.unsafe("DROP SCHEMA ambient_places CASCADE");
   });
 

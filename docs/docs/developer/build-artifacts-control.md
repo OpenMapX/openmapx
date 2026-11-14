@@ -460,7 +460,7 @@ use; until then, treat any exposure of an HMAC digest's inputs and key handling 
 exposure of the signing key.
 
 **Database roles stop data-manager, not a compromised API.** Data-manager may
-create only tables, indexes, sequences, its schemas and views without code. A
+create only tables, indexes, sequences and its schemas: no view or code. A
 restore recreates each role's objects and loads its tables in a session of that
 role, and refuses any other object of a role that cannot log in, before it drops
 anything; the tile roles may create no objects. So no role's code runs as the

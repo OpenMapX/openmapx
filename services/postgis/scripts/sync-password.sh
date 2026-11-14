@@ -278,8 +278,9 @@ SELECT format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC', p.oid::regprocedure)
 \gexec
 -- Code data-manager writes must never run with another role's rights. The
 -- API reads its schemas, and a function, rule, trigger, policy, domain check,
--- coercion or extension runs as whoever's query reaches it, so data-manager
--- may create only tables, indexes, sequences, schemas and plain views. Check
+-- coercion, extension or view runs as whoever's query reaches it, so
+-- data-manager may create only tables, indexes, sequences and schemas, and
+-- drop the view it created before this rule. Check
 -- constraints, defaults and index expressions run as whoever writes the
 -- table: data-manager itself, or a restore session of the table's owner.
 -- The API may install no extension: a trusted extension's script runs as the
@@ -300,7 +301,7 @@ BEGIN
       'CREATE TABLE', 'CREATE TABLE AS', 'ALTER TABLE', 'DROP TABLE',
       'CREATE INDEX', 'ALTER INDEX', 'DROP INDEX',
       'CREATE SEQUENCE', 'ALTER SEQUENCE', 'DROP SEQUENCE',
-      'CREATE VIEW', 'ALTER VIEW', 'DROP VIEW'))
+      'DROP VIEW'))
     OR (current_user = '${API_ROLE}' AND tg_tag IN ('CREATE EXTENSION', 'ALTER EXTENSION'))
     OR current_user IN ('${TILES_ROLE}', '${TILES_OWNER}')
   THEN
@@ -318,7 +319,7 @@ DECLARE
   api_schemas constant text := '^(data_manager|drizzle)\$';
   command record;
 BEGIN
-  FOR command IN SELECT objid, object_type, object_identity FROM pg_event_trigger_ddl_commands() LOOP
+  FOR command IN SELECT object_type, object_identity FROM pg_event_trigger_ddl_commands() LOOP
     -- Each role creates only the schemas it needs, so neither can take a name
     -- another component trusts, such as a role's name or the schemas the
     -- tile server's functions read.
@@ -327,31 +328,6 @@ BEGIN
       OR (current_user = '${API_ROLE}' AND command.object_identity !~ api_schemas))
     THEN
       RAISE EXCEPTION '% may not create or rename a schema to %', current_user, command.object_identity
-        USING ERRCODE = 'insufficient_privilege';
-    END IF;
-    -- A view runs what it contains with the rights of the role reading it,
-    -- the API among them. Data-manager's views may therefore only select,
-    -- join and filter data-manager's own relations, comparing with built-in
-    -- operators: every node in the stored query must be one of these.
-    IF current_user = '${DATA_MANAGER_ROLE}' AND command.object_type = 'view' AND (
-      EXISTS (
-        SELECT FROM pg_rewrite r, regexp_matches(r.ev_action::text, '[{]([A-Z_]+)', 'g') node
-        WHERE r.ev_class = command.objid AND node[1] NOT IN (
-          'QUERY', 'RANGETBLENTRY', 'RTEPERMISSIONINFO', 'RANGETBLREF', 'ALIAS', 'FROMEXPR',
-          'JOINEXPR', 'SETOPERATIONSTMT', 'TARGETENTRY', 'VAR', 'CONST', 'RELABELTYPE',
-          'BOOLEXPR', 'OPEXPR'))
-      -- Operators created at initdb, none of which runs a query.
-      OR EXISTS (
-        SELECT FROM pg_rewrite r, regexp_matches(r.ev_action::text, ':opno ([0-9]+)', 'g') operator
-        WHERE r.ev_class = command.objid AND operator[1]::oid >= 16384)
-      OR EXISTS (
-        SELECT FROM pg_rewrite r
-        JOIN pg_depend d ON d.classid = 'pg_rewrite'::regclass AND d.objid = r.oid
-        JOIN pg_class c ON d.refclassid = 'pg_class'::regclass AND c.oid = d.refobjid
-        JOIN pg_namespace n ON n.oid = c.relnamespace
-        WHERE r.ev_class = command.objid AND n.nspname !~ data_manager_schemas)
-    ) THEN
-      RAISE EXCEPTION 'data-manager may not define view %, which calls code or reads other schemas', command.object_identity
         USING ERRCODE = 'insufficient_privilege';
     END IF;
   END LOOP;
@@ -365,7 +341,7 @@ REVOKE ALL ON FUNCTION openmapx_guard.check_ddl() FROM PUBLIC;
 DROP EVENT TRIGGER IF EXISTS openmapx_guard_refuse_code;
 CREATE EVENT TRIGGER openmapx_guard_refuse_code ON ddl_command_start EXECUTE FUNCTION openmapx_guard.refuse_code();
 DROP EVENT TRIGGER IF EXISTS openmapx_guard_check_ddl;
-CREATE EVENT TRIGGER openmapx_guard_check_ddl ON ddl_command_end WHEN TAG IN ('CREATE SCHEMA', 'ALTER SCHEMA', 'CREATE VIEW', 'ALTER VIEW') EXECUTE FUNCTION openmapx_guard.check_ddl();
+CREATE EVENT TRIGGER openmapx_guard_check_ddl ON ddl_command_end WHEN TAG IN ('CREATE SCHEMA', 'ALTER SCHEMA') EXECUTE FUNCTION openmapx_guard.check_ddl();
 SQL
 echo "[openmapx-postgis] database roles ${API_ROLE} and ${DATA_MANAGER_ROLE} ready"
 

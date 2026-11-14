@@ -1,5 +1,9 @@
 import { AMBIENT_PLANET_REGION } from "@openmapx/core/ambient-places";
-import { readAmbientManifest, readAmbientPlaceByGers } from "@openmapx/core/ambient-places-server";
+import {
+  PUBLISHED_AMBIENT_FEATURES,
+  readAmbientManifest,
+  readAmbientPlaceByGers,
+} from "@openmapx/core/ambient-places-server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as publisher from "../../src/jobs/ambient-places/build.js";
 import { buildSchemaDDL } from "../../src/jobs/overture/schema.js";
@@ -61,7 +65,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         sources: { osm: { count: 4 }, overture: { count: 3 } },
       });
       const rows = await pg.sql.unsafe(
-        `SELECT id,name,name_en,sources FROM ambient_places.features_all ORDER BY id`,
+        `SELECT id,name,name_en,sources FROM ${PUBLISHED_AMBIENT_FEATURES} f ORDER BY id`,
       );
       expect(rows).toHaveLength(5);
       expect(rows.find((r) => r.id === "osm:node/1")).toMatchObject({
@@ -160,7 +164,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       });
       expect(result.placeCount).toBe(2000);
       const [counts] = await pg.sql.unsafe(
-        `SELECT count(*)::INT AS n,count(DISTINCT id)::INT AS unique FROM ambient_places.features_all`,
+        `SELECT count(*)::INT AS n,count(DISTINCT id)::INT AS unique FROM ${PUBLISHED_AMBIENT_FEATURES} f`,
       );
       expect(counts).toEqual({ n: 2000, unique: 2000 });
     }, 60000);
@@ -274,7 +278,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       }
       expect((await readAmbientManifest(pg.sql))?.generation).toBe(active.generation);
       const [count] = await pg.sql.unsafe(
-        "SELECT count(*)::INT AS n FROM ambient_places.features_all WHERE generation<>$1",
+        `SELECT count(*)::INT AS n FROM ${PUBLISHED_AMBIENT_FEATURES} f WHERE generation<>$1`,
         [active.generation],
       );
       expect(count.n).toBe(0);

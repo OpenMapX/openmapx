@@ -42,10 +42,8 @@ CREATE TABLE IF NOT EXISTS ambient_places.planet_builds (
   checkpoint JSONB NOT NULL, error TEXT,
   started_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(), updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
 );
-CREATE OR REPLACE VIEW ambient_places.features_all AS
-  SELECT f.* FROM ambient_places.features f JOIN ambient_places.generations g ON g.id=f.generation WHERE g.publication_status='published'
-  UNION ALL
-  SELECT f.* FROM ambient_places.planet_features f JOIN ambient_places.generations g ON g.id=f.generation WHERE g.publication_status='published';
+-- The API reads the published features itself; data-manager defines no view.
+DROP VIEW IF EXISTS ambient_places.features_all;
 INSERT INTO ambient_places.state(singleton) VALUES(1) ON CONFLICT DO NOTHING;
 `;
 const initialization = new WeakMap<postgres.Sql, Promise<void>>();

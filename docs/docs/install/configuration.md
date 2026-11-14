@@ -93,12 +93,10 @@ Data-manager is the least trusted of the two: its code must never run with the
 API's or the superuser's rights. Two structural rules keep it that way:
 
 - An event trigger installed by PostGIS lets data-manager create, change and
-  drop only tables, indexes, sequences, schemas named after its indexes, and
-  views. It refuses everything else, including extensions, functions,
-  procedures, operators, casts, domains, types, rules, triggers, row-level
-  policies, grants and comments. Its views may only select, join and filter
-  data-manager's own relations, comparing with PostgreSQL's built-in operators,
-  so a view the API reads runs no data-manager code.
+  drop only tables, indexes, sequences and schemas named after its indexes. It
+  refuses everything else, including views, extensions, functions, procedures,
+  operators, casts, domains, types, rules, triggers, row-level policies, grants
+  and comments, so nothing the API reads runs data-manager code.
 - A check constraint, default, generated column or index expression runs in the
   session that writes the row or builds the index. Only data-manager writes its
   tables, and a backup restore recreates each role's objects, and loads its
