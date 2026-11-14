@@ -54,6 +54,7 @@ registry="localhost:5000/openmapx"
 release_counter=0
 cookie_file=""
 registry_certs=""
+update_timeout_seconds="${UPDATE_SMOKE_UPDATE_TIMEOUT_SECONDS:-1200}"
 admin_email="update-smoke@openmapx.org"
 admin_password=""
 release_images=(api web data-manager ops-agent transitous-runner transitous-tools)
@@ -141,7 +142,8 @@ prepare_agent_registry_access() {
   gateway="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.Gateway}} {{end}}' "$agent")"
   gateway="${gateway%% *}"
   [[ -n "$gateway" ]] || fail "the operations agent has no network gateway"
-  docker run --detach --name "$forwarder_name" --network "container:$agent" --entrypoint node "$image" -e '
+  docker run --detach --name "$forwarder_name" --network "container:$agent" --no-healthcheck \
+    --entrypoint node "$image" -e '
     const net = require("node:net");
     const [, host, port] = process.argv;
     for (const address of ["127.0.0.1", "::1"])
@@ -307,9 +309,16 @@ system_update() {
   prepare_agent_registry_access "$release"
   follow_helpers "$name" &
   follower=$!
-  NODE_TLS_REJECT_UNAUTHORIZED=0 logged "update-$name" openmapx system update \
+  # The CLI observes an update for up to an hour. One that has not finished
+  # after update_timeout_seconds has stalled; the case fails then, with the
+  # diagnostics of the stall.
+  NODE_TLS_REJECT_UNAUTHORIZED=0 logged "update-$name" timeout "$update_timeout_seconds" \
+    pnpm --silent openmapx system update \
     --release-id "$release" --digest "$digest" --session-file "$cookie_file" \
     --receipt "$work/receipt-$name" --api-origin https://localhost --no-backup || status=$?
+  if ((status == 124)); then
+    echo "✗ the update to $release did not finish within ${update_timeout_seconds}s" >&2
+  fi
   kill "$follower" 2>/dev/null || true
   wait "$follower" 2>/dev/null || true
   return "$status"
@@ -465,9 +474,10 @@ diagnostics_dir="${UPDATE_SMOKE_DIAGNOSTICS_DIR:-}"
 
 # Writes what explains a failed case into $diagnostics_dir, before the install
 # smoke's cleanup removes the containers: the latest administrative jobs as the
-# API reports them (status, error and result), the CLI receipts, every
-# container's state, and the logs of the roles and of every configuration
-# helper, including exited ones. Secrets and environment files are not copied;
+# API reports them (status, error and result, and each unfinished job alone with
+# its observation), the agent's operations and the states its operation route
+# reports, the CLI receipts, every container's state, and the logs of the
+# roles and of every configuration helper, including exited ones. Secrets and environment files are not copied;
 # the session cookie is only read by curl.
 dump_diagnostics() {
   [[ -n "$diagnostics_dir" ]] || return 0
@@ -486,7 +496,17 @@ dump_diagnostics() {
       for (const job of jobs.jobs ?? jobs.items ?? jobs ?? [])
         console.log([job.id, job.type, job.status, job.error ?? "", JSON.stringify(job.result ?? null)].join("\t"));
     ' "$diagnostics_dir/admin-jobs.json" >"$diagnostics_dir/admin-jobs.tsv" 2>/dev/null || true
+    # Each unfinished or failed job as the API describes it alone, with its
+    # internal observation (state, reason, next check).
+    local job_id
+    while IFS=$'\t' read -r job_id _ job_status _; do
+      [[ -n "$job_id" && "$job_status" != "success" ]] || continue
+      curl --silent --insecure --max-time 30 --cookie "$work/cookies" \
+        --header "origin: https://localhost" \
+        "https://localhost/api/admin/jobs/$job_id" >"$diagnostics_dir/admin-job-$job_id.json" 2>&1 || true
+    done <"$diagnostics_dir/admin-jobs.tsv"
   fi
+  dump_agent_operations
   local receipt
   for receipt in "$work"/receipt-*; do
     if [[ -f "$receipt" ]]; then cp "$receipt" "$diagnostics_dir/" 2>/dev/null || true; fi
@@ -521,6 +541,53 @@ dump_diagnostics() {
       --filter "label=com.docker.compose.service=data-manager"
     docker ps --all --quiet --filter "name=openmapx-configuration-handoff-"
   )
+}
+
+# The agent's operations: one line per journal entry (id, role, kind,
+# resource, state, submitted, updated, terminal, deadline, error class), then, for each of
+# the API's operations, the state the agent's own operation route reports to
+# the API, asked from inside the API container with the API's token file. Only
+# these fields are written: operation bodies and tokens are never copied.
+dump_agent_operations() {
+  local journal="$infra/state/ops-agent/jobs-v1.json" api ids
+  { cat "$journal" 2>/dev/null || sudo -n cat "$journal" 2>/dev/null; } | node -e '
+    let text = "";
+    process.stdin.on("data", (chunk) => (text += chunk)).on("end", () => {
+      if (!text) return console.log("no agent journal");
+      const parsed = JSON.parse(text);
+      const jobs = Array.isArray(parsed) ? parsed : (parsed.jobs ?? parsed.records ?? []);
+      for (const job of jobs)
+        console.log([job.operationId, job.role, job.operation?.kind, job.resourceId, job.state,
+          job.submittedAt, job.updatedAt, job.terminalAt ?? "",
+          new Date(job.deadlineAt).toISOString(), job.errorClass ?? ""].join("\t"));
+    });
+  ' >"$diagnostics_dir/agent-operations.tsv" 2>&1 || true
+  api="$(docker ps --quiet --filter "label=com.docker.compose.project=$project" \
+    --filter "label=com.docker.compose.service=app-api" | head -1)"
+  [[ -n "$api" ]] || return 0
+  ids="$(awk -F '\t' '$2 == "api" { print $1 }' "$diagnostics_dir/agent-operations.tsv" | tail -40)"
+  [[ -n "$ids" ]] || return 0
+  # shellcheck disable=SC2086 # one argument per operation id
+  docker exec "$api" node -e '
+    const token = require("node:fs").readFileSync(process.env.OPS_AGENT_TOKEN_FILE, "utf8").trim();
+    (async () => {
+      for (const id of process.argv.slice(1)) {
+        try {
+          const response = await fetch(`${process.env.OPS_AGENT_URL}/v1/operations/${id}`, {
+            headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" },
+            signal: AbortSignal.timeout(10_000),
+          });
+          const body = await response.json().catch(() => ({}));
+          const result = body.result ?? {};
+          console.log(JSON.stringify({ id, status: response.status, kind: result.kind,
+            state: result.state, error: result.error ?? body.error,
+            observation: result.observation, updatedAt: result.updatedAt }));
+        } catch (error) {
+          console.log(JSON.stringify({ id, failed: String(error) }));
+        }
+      }
+    })();
+  ' $ids >"$diagnostics_dir/agent-operation-states.jsonl" 2>&1 || true
 }
 
 update_exit() {
