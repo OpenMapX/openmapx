@@ -282,14 +282,8 @@ other than the API's and data-manager's could create it, so grant that right
 only to the services that need it. The tile roles may create no objects of
 their own.
 
-The tile functions call PostGIS without a schema, through `public`, which the
-API's role owns, and so do OpenConditions' own functions: a compromised API
-could add a PostGIS function there that a tile calls instead. It would run as
-the role calling it: `openmapx_tiles_owner` during a tile, so it could read
-every OpenConditions table or break the traffic tiles, or OpenConditions' own
-role when that runs the same function, so it could change OpenConditions'
-tables and functions. It cannot reach the superuser, and code that runs as the
-tile owner can leave nothing that a restore would recreate. See
+The tile functions call PostGIS without a schema, so a compromised API could
+run code as the tile owner; see
 [Database roles](../install/configuration.md#database-roles).
 
 Martin is independent of TileServer GL. Most deployments that only need a

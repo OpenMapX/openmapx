@@ -100,10 +100,7 @@ API's or the superuser's rights. Two structural rules keep it that way:
 - A check constraint, default, generated column or index expression runs in the
   session that writes the row or builds the index. Only data-manager writes its
   tables, and a backup restore recreates each role's objects, and loads its
-  tables, in a session of that role. The superuser restores only schemas,
-  casts, its own objects and the tile function, none of which runs code when
-  created, and the extensions, whose scripts it runs before any role's code
-  exists in the restored database (see
+  tables, in a session of that role (see
   [Backup & restore](../administration/backup-and-restore.md#restoring)).
 
 The API may create only the schemas `data_manager` and `drizzle`, so it cannot
@@ -180,11 +177,12 @@ bearer token: `app-api`, the operations agent (including the CLI commands it
 runs), and the CLI on the host. `openmapx compose render` generates the three
 once, in `infra/docker/secrets/data-manager-api-token`,
 `data-manager-ops-agent-token` and `data-manager-host-cli-token`, and refuses to
-render when two are equal. The data-manager reads all three and admits each
-caller only to the routes it uses: the configuration fence only for the
-operations agent, the admin panel's and map's routes only for the API, and the
-data commands for both CLIs. A token presented to another caller's route is
-refused with `403`.
+render when two are equal. The data-manager reads all three. It admits the
+API's token only to the routes the API uses and refuses it with `403`
+elsewhere, for example on the configuration fence. The agent's and the host
+CLI's tokens reach every route, since both can read every token file anyway;
+they stay separate so that each can be rotated alone and the agent's token
+never has to appear in host scripts.
 
 Each service receives only a token **file path**; there are no environment
 variables for these tokens. The host CLI reads its file from
