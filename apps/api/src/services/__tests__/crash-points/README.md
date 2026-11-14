@@ -67,6 +67,24 @@ helper.
   host before the helper's duplicate mounts were fixed. No scenario pins it:
   the helper rewrite planned for a later change is to end such a launch as a
   terminal failure the API reports.
+- **The helper checks a recreated service before it is healthy.** The helper
+  runs `compose up -d --force-recreate --no-deps <service>` and checks the new
+  container's readiness at once. A service with a healthcheck is still
+  `starting` then, so the helper stops with `recovery_required`
+  ("Original applied container not ready") after the first such service.
+  Waiting for health (`--wait`) removes it on a real Docker host. The fake
+  engine reports a recreated container healthy at once, so no scenario shows
+  it.
+- **Bind sources outside the checkout cannot be verified.** The helper's and
+  the agent's mount checks resolve every bind source with `realpath` in their
+  own container, where a host path outside the checkout does not exist. The
+  agent's Docker configuration directory defaults to `/root/.docker`
+  (`OPENMAPX_DOCKER_CONFIG_DIR`), which fails with `EACCES`. The roles of this
+  suite run on the host's file system, so no scenario shows it.
+
+On a real Docker host the self-update and the failure cases of the native
+update smoke pass once the helper waits for health and the configuration
+directory lies inside the checkout.
 
 ## Scenarios
 
