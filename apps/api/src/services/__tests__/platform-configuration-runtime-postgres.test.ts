@@ -25,11 +25,10 @@ import {
 } from "@openmapx/core/api-admin-sdk";
 import {
   closeControlInstallation,
-  controlDigest,
   openControlInstallation,
   openFixedChildInstallation,
+  pruneControlRecords,
   readConfigurationHandoffSpawnIntent,
-  reconcileControlRetention,
   restoreAdmittedControlExecution,
   verifyRetainedArtifactTargetRootRelease,
   verifyRetainedArtifactTargetSettlement,
@@ -484,7 +483,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       "launch-native-release-api-before-save",
       "launch-native-release-api-after-save",
       "launch-native-system-release",
-      "launch-native-system-release-ack-loss",
       "launch-native-system-release-killed",
       "launch-native-system-release-agent-restart",
       "launch-native-system-release-api-before-save",
@@ -557,7 +555,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             "launch-native-release-api-before-save",
             "launch-native-release-api-after-save",
             "launch-native-system-release",
-            "launch-native-system-release-ack-loss",
             "launch-native-system-release-killed",
             "launch-native-system-release-agent-restart",
             "launch-native-system-release-api-before-save",
@@ -772,7 +769,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           journal,
           controlInstallation: installation,
         });
-        let acknowledgementLost = false;
         let inspectionReplyLost = false;
         const rejectedRequests: Array<{ kind?: string; status: number; errorClass?: string }> = [];
         app.addHook("onSend", async (request, reply, payload) => {
@@ -797,22 +793,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               status: reply.statusCode,
               errorClass: body?.error?.class,
             });
-          }
-          if (
-            version === "launch-native-system-release-ack-loss" &&
-            !acknowledgementLost &&
-            reply.statusCode === 200 &&
-            operation?.kind === "controlRetention.acknowledge" &&
-            journal
-              .records()
-              .some(
-                (row) =>
-                  row.operationKey === operation.operationKey &&
-                  row.operation.kind === "configurationHandoff.prepare",
-              )
-          ) {
-            acknowledgementLost = true;
-            reply.raw.destroy();
           }
           return payload;
         });
@@ -869,7 +849,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               "launch-native-release-api-before-save",
               "launch-native-release-api-after-save",
               "launch-native-system-release",
-              "launch-native-system-release-ack-loss",
               "launch-native-system-release-killed",
               "launch-native-system-release-agent-restart",
               "launch-native-system-release-api-before-save",
@@ -910,7 +889,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                         "launch-native-release-api-before-save",
                         "launch-native-release-api-after-save",
                         "launch-native-system-release",
-                        "launch-native-system-release-ack-loss",
                         "launch-native-system-release-killed",
                         "launch-native-system-release-agent-restart",
                         "launch-native-system-release-api-before-save",
@@ -1463,8 +1441,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 digest: checkedRelease.manifestDigest,
               });
             }
-            if (version === "launch-native-system-release-ack-loss")
-              expect(acknowledgementLost).toBe(true);
             expect(dm.settlePosts).toBe(1);
             expect(host.calls.filter((args) => args[0] === "run")).toHaveLength(1);
             expect(
@@ -2129,55 +2105,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                             .map((args) => args.at(-1)),
                         ).toEqual(["app-api", "ops-agent"]);
                         if (version === "launch-native-after-effect") {
-                          const location = (role: string) =>
-                              join(
-                                host.infraDir,
-                                "control-private",
-                                role,
-                                "retention-locations",
-                                `${controlDigest(owner.origin)}.json`,
-                              ),
-                            clock = vi
-                              .spyOn(Date, "now")
-                              .mockReturnValue(Date.now() + 96 * 3600000);
-                          try {
-                            for (
-                              let round = 0;
-                              round < 16 &&
-                              (existsSync(location("ops-agent")) ||
-                                existsSync(location("data-manager")));
-                              round++
-                            ) {
-                              await reconcileControlRetention(installation, { maxFamilies: 64 });
-                              await dm.reconcileRetention();
-                            }
-                            if (existsSync(location("ops-agent"))) {
-                              const family = JSON.parse(
-                                  readFileSync(location("ops-agent"), "utf8"),
-                                ),
-                                progress = JSON.parse(
-                                  readFileSync(
-                                    join(
-                                      host.infraDir,
-                                      "control-private/ops-agent/retention-families",
-                                      family.name,
-                                      "progress.json",
-                                    ),
-                                    "utf8",
-                                  ),
-                                ),
-                                fact = progress.executions[controlDigest(actual.intent.helper)];
-                              console.info("original helper retention fact", {
-                                known: fact?.known,
-                                terminalAt: fact?.terminalAt,
-                                requiresJournal: fact?.requiresJournal,
-                              });
-                            }
-                            expect(existsSync(location("ops-agent"))).toBe(false);
-                            expect(existsSync(location("data-manager"))).toBe(false);
-                          } finally {
-                            clock.mockRestore();
-                          }
+                          // The finished helper root is pruned once 72 hours have
+                          // passed after it finished and after its key expired.
+                          const later = Math.max(Date.now(), owner.origin.notAfter) + 96 * 3600000;
+                          expect(await pruneControlRecords(installation, { now: later })).toContain(
+                            owner.plan.prepare.operationKey,
+                          );
+                          await dm.pruneRecords(later);
                         }
                         return;
                       }

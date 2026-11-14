@@ -1,5 +1,5 @@
+export { CONTROL_PRUNE_AFTER_MS, pruneControlRecords, startControlPrune } from "./control-prune";
 export { DataExecutionPartialResult } from "./data-execution-outcome";
-export { startControlRetentionMaintenance } from "./retention-maintenance";
 // Server-only surface: intentionally absent from core's browser barrels.
 
 export * from "./archive";
@@ -23,8 +23,8 @@ export {
 } from "./configuration-source-witness";
 export {
   type ArtifactDelegationAssertion,
-  acknowledgeControlRetention,
   assertControlExecutionForward,
+  assertControlStorageAvailable,
   assertFreshControlRoot,
   attestParentExecution,
   beginControlEffect,
@@ -39,7 +39,6 @@ export {
   type ControlRecipient,
   cancelControlExecution,
   closeControlInstallation,
-  completeControlJournalExecution,
   controlAdoptionSchema,
   controlChildOperationKey,
   controlHeaders,
@@ -48,7 +47,6 @@ export {
   controlRolePublicKey,
   executionAuthorityState,
   fixedCliArguments,
-  hasRetainedControlOrigin,
   inspectConfigurationPreEffectRefusal,
   loadControlStartup,
   localFeedCredentialTemplateMac,
@@ -65,11 +63,9 @@ export {
   readFixedCliSpawnIntent,
   readPrivateRecord,
   readVerifiedStagedCoordinatorOwnership,
-  reconcileControlRetention,
-  registerControlRetentionJournal,
   repairControlJournalTerminal,
   replaceControlRegisteredServiceIds,
-  requireControlJournalRetention,
+  reserveControlTerminal,
   restoreAdmittedControlExecution,
   restoreConfigurationPreEffectTerminal,
   retainAdmittedControlExecution,
@@ -104,8 +100,6 @@ export {
   writePrivateRecord,
 } from "./control-authority";
 export { controlDigest, signControl, verifyControl } from "./control-records";
-export { CONTROL_RETENTION_LIMITS } from "./control-retention";
-export type { ControlRetentionPreparationContext } from "./coordinator-pull-records";
 export {
   type CoordinatorPullBaseline,
   coordinatorPullBaselineSchema,
@@ -198,11 +192,6 @@ export {
   verifiedParentForArtifactDelegation,
 } from "./peer-admission";
 export * from "./prepared-evidence";
-export {
-  controlRetentionPreparationState,
-  recordStagedCoordinatorRetentionCheck,
-  verifyFamilyOwnedRecord,
-} from "./retention-family";
 export {
   reconcileFailedServiceLifecycle,
   recoverServiceLifecycleByKey,

@@ -1,6 +1,6 @@
 import { createPrivateKey, type KeyObject, randomUUID } from "node:crypto";
-import { fsyncSync, mkdirSync } from "node:fs";
-import { basename } from "node:path";
+import { fsyncSync, mkdirSync, rmSync } from "node:fs";
+import { basename, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
@@ -111,7 +111,6 @@ import {
   validateOriginRecord,
   verifyControl,
 } from "./control-records";
-import { CONTROL_RETENTION_LIMITS, reserveAuthoritySlot } from "./control-retention";
 import {
   AnchoredDirectory,
   acquireGuardDirectory,
@@ -120,22 +119,6 @@ import {
   sameInode,
 } from "./filesystem";
 import { assertFixedConfigurationMaintenancePlan } from "./fixed-configuration-maintenance";
-import { assertOriginClockForward } from "./retention-clock";
-// biome-ignore-start lint/suspicious/noImportCycles: Physical closure, fixed cells and the read-only normal-pull admission observer verify the sole original family index; retirement verifies this same physical owner. These fixed joins run only after initialization.
-import {
-  enlistFamilyIntent,
-  familyRecordWrite,
-  hasLocalRetentionFamily,
-  markFamilyLeaseReleased,
-  registerFamilyLease,
-  reserveControlFamily,
-  trackFamilyDirectory,
-  verifyCoordinatorPullAdmissionReadOnly,
-  verifyFamilyOwnedRecord,
-  verifyImageStageAdmissionReadOnly,
-} from "./retention-family";
-
-// biome-ignore-end lint/suspicious/noImportCycles: Exact deferred original-owner/index guard join.
 
 // biome-ignore lint/suspicious/noImportCycles: Type re-export for the existing shared settlement protocol.
 export type { ChildSettlement } from "./control-authority";
@@ -156,7 +139,7 @@ export type TargetLeaseAuthority = ArtifactTargetLease | BorrowedArtifactTargetL
 const inode = z.strictObject({ dev: z.string().regex(/^\d+$/), ino: z.string().regex(/^\d+$/) });
 const certificateSchema = z.strictObject({
   version: z.union([z.literal(1), z.literal(2)]),
-  origin: controlOriginSchema.optional(),
+  origin: controlOriginSchema,
   installationId: uuid,
   leaseId: uuid,
   dataRootIdentity: inode,
@@ -180,14 +163,6 @@ const releaseProgressSchema = z.strictObject({
   active: z.boolean(),
   activePlanned: z.boolean().optional(),
 });
-// Previously signed name-list progress remains readable within the same byte bound.
-const legacyReleaseProgressSchema = z.strictObject({
-  phase: z.enum(["planned", "released"]),
-  locks: z.array(z.string()).max(256),
-  active: z.boolean(),
-  pending: z.string().optional(),
-  activePlanned: z.boolean().optional(),
-});
 const admissionSlotSchema = z.strictObject({
   version: z.literal(1),
   installationId: uuid,
@@ -195,7 +170,7 @@ const admissionSlotSchema = z.strictObject({
   certificateDigest: digest,
   active: slotSchema,
   history: slotSchema,
-  release: z.union([releaseProgressSchema, legacyReleaseProgressSchema]).optional(),
+  release: releaseProgressSchema.optional(),
   releasedAt: z.number().int().positive().safe().optional(),
 });
 type AdmissionSlots = z.infer<typeof admissionSlotSchema>;
@@ -213,7 +188,7 @@ const outcomeSchema = z.strictObject({
 const phaseSchema = z.enum(["held", "cancel_pending", "recovery_required", "settled"]);
 const rootSchema = z.strictObject({
   version: z.literal(2).optional(),
-  origin: controlOriginSchema.optional(),
+  origin: controlOriginSchema,
   certificate: signedCertificateSchema,
   sequence: z.number().int().nonnegative().safe(),
   phase: phaseSchema,
@@ -223,7 +198,7 @@ const rootSchema = z.strictObject({
 type RootRecord = z.infer<typeof rootSchema>;
 const grantSchema = z.strictObject({
   version: z.union([z.literal(1), z.literal(2)]),
-  origin: controlOriginSchema.optional(),
+  origin: controlOriginSchema,
   installationId: uuid,
   leaseId: uuid,
   ownerCertificateDigest: digest,
@@ -243,7 +218,7 @@ const grantSchema = z.strictObject({
 type Grant = z.infer<typeof grantSchema>;
 const childSchema = z.strictObject({
   version: z.literal(2).optional(),
-  origin: controlOriginSchema.optional(),
+  origin: controlOriginSchema,
   delegationId: uuid,
   grantDigest: digest,
   execution: executionRefSchema,
@@ -638,8 +613,7 @@ function highWater(s: State, nodes: Record<string, { sequence: number; digest: s
     )
       throw Error("Shared ledger rollback or replacement");
   }
-  if (!s.certificate.origin || hasLocalRetentionFamily(s.installation, s.certificate.origin))
-    writePrivateRecord(s.installation, "observations", name, nodes, false, s.certificate.origin);
+  writePrivateRecord(s.installation, "observations", name, nodes, false);
 }
 type LeaseTree = {
   root: RootRecord;
@@ -802,20 +776,7 @@ function writeBounded(
     }
     if (ledgerBytes(s) - old + Buffer.byteLength(bytes) > 131072)
       throw Error("Lease ledger capacity exceeded");
-    if (s.certificate.origin)
-      familyRecordWrite(
-        s.installation,
-        s.certificate.origin,
-        {
-          scope: "shared",
-          namespace: kind === "owner" ? "lease-owner" : `lease-${kind}`,
-          container: s.certificate.leaseId,
-          name,
-        },
-        bytes,
-        (before) => dir.write(name, bytes, exclusive, before),
-        exclusive,
-      );
+    if (s.certificate.origin) dir.write(name, bytes, exclusive);
     else dir.write(name, bytes, exclusive);
   } finally {
     if (dir !== s.ledger) dir.close();
@@ -922,6 +883,32 @@ function admissionIndex(
     throw e;
   }
 }
+/** At most this many leases are held at once, and this many are retained
+ * until the control prune removes released ones. */
+const ACTIVE_LEASES = 256,
+  RETAINED_LEASES = 1024;
+function reserveAuthoritySlot(dir: AnchoredDirectory, maximum: number, until: number) {
+  for (let slot = 0; slot < maximum; slot++) {
+    if (Date.now() >= until) throw Error("Target lease acquisition deadline elapsed");
+    const name = `slot-${slot}`;
+    try {
+      mkdirSync(dir.name(name), { mode: 0o700 });
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "EEXIST") continue;
+      throw e;
+    }
+    fsyncSync(dir.fd);
+    const child = dir.directory(name);
+    try {
+      const generation = randomUUID();
+      child.write("generation.json", JSON.stringify({ generation }), true);
+      return { name, identity: identity(child.stat), generation };
+    } finally {
+      child.close();
+    }
+  }
+  throw Error("Retained lease capacity exhausted; await the control prune or containment");
+}
 function removeSlot(dir: AnchoredDirectory, slot: z.infer<typeof slotSchema>) {
   const child = dir.directory(slot.name);
   try {
@@ -987,8 +974,6 @@ function assertImagePullTargetLeaseCompatibility(
     opsOperationFingerprint(admitted.operation) !== state.execution.operationFingerprint
   )
     throw Error("Actual normal coordinator pull required");
-  if (kind === "service.pull") verifyCoordinatorPullAdmissionReadOnly(authority);
-  else verifyImageStageAdmissionReadOnly(authority);
   if (!("serviceId" in admitted.operation)) throw Error("Image target required");
   const target = admitted.operation.serviceId;
   if (!state.installation.registeredTargets.has(target))
@@ -1037,13 +1022,10 @@ function assertImagePullTargetLeaseCompatibility(
     const snapshot = () =>
         Object.fromEntries(
           active
-            .listBounded(CONTROL_RETENTION_LIMITS.activeLeases)
+            .listBounded(ACTIVE_LEASES)
             .sort()
             .map((name) => {
-              if (
-                !/^slot-\d{1,4}$/.test(name) ||
-                Number(name.slice(5)) >= CONTROL_RETENTION_LIMITS.activeLeases
-              )
+              if (!/^slot-\d{1,4}$/.test(name) || Number(name.slice(5)) >= ACTIVE_LEASES)
                 throw Error("Unknown active target slot");
               const dir = active.directory(name);
               try {
@@ -1064,10 +1046,8 @@ function assertImagePullTargetLeaseCompatibility(
       before = snapshot(),
       matched = new Set<string>();
     if (locks.listBounded(256).includes(target)) throw Error("Coordinator target is held");
-    const names = leases.listBounded(CONTROL_RETENTION_LIMITS.leases + 3).sort();
+    const names = leases.listBounded(RETAINED_LEASES + 3).sort();
     for (const name of names) {
-      if ([".retention-count", ".retention-highwater", ".retention-transaction"].includes(name))
-        continue;
       uuid.parse(name);
       const owner = openState(state.installation.dataRoot, name, state.installation, true);
       try {
@@ -1103,8 +1083,7 @@ function assertImagePullTargetLeaseCompatibility(
     if (
       matched.size !== Object.keys(before).length ||
       canonicalJson(snapshot()) !== canonicalJson(before) ||
-      canonicalJson(leases.listBounded(CONTROL_RETENTION_LIMITS.leases + 3).sort()) !==
-        canonicalJson(names) ||
+      canonicalJson(leases.listBounded(RETAINED_LEASES + 3).sort()) !== canonicalJson(names) ||
       locks.listBounded(256).includes(target)
     )
       throw Error("Physical target index is changing");
@@ -1122,7 +1101,7 @@ function heldTargetError(
 ): Error {
   let holder: string | undefined;
   try {
-    for (const name of leases.listBounded(CONTROL_RETENTION_LIMITS.leases + 3)) {
+    for (const name of leases.listBounded(RETAINED_LEASES + 3)) {
       if (holder || !uuid.safeParse(name).success) continue;
       try {
         const owner = openState(installation.dataRoot, name, installation, true);
@@ -1197,8 +1176,8 @@ export async function acquireArtifactTargetLease(options: {
     const history = index.directory("history"),
       active = index.directory("active");
     try {
-      historySlot = reserveAuthoritySlot(history, CONTROL_RETENTION_LIMITS.leases, until);
-      activeSlot = reserveAuthoritySlot(active, CONTROL_RETENTION_LIMITS.activeLeases, until);
+      historySlot = reserveAuthoritySlot(history, RETAINED_LEASES, until);
+      activeSlot = reserveAuthoritySlot(active, ACTIVE_LEASES, until);
     } finally {
       active.close();
       history.close();
@@ -1226,6 +1205,7 @@ export async function acquireArtifactTargetLease(options: {
     ledger.directory("grants", true).close();
     ledger.directory("children", true).close();
     const key = newControlKey();
+    if (!authority.origin) throw Error("Control origin required");
     const certificate: Certificate = {
       version: 2,
       origin: authority.origin,
@@ -1251,40 +1231,6 @@ export async function acquireArtifactTargetLease(options: {
       active: activeSlot,
       history: historySlot,
     };
-    if (!authority.origin) throw Error("Legacy root cannot acquire a fresh lease");
-    registerFamilyLease(
-      authority.installation,
-      authority.origin,
-      leaseId,
-      controlDigest(certificateEnvelope),
-      authority.execution.executor,
-    );
-    trackFamilyDirectory(
-      authority.installation,
-      authority.origin,
-      { namespace: "lease-directory", container: leaseId, name: leaseId },
-      identity(ledger.stat),
-    );
-    for (const name of ["grants", "children"]) {
-      const dir = ledger.directory(name);
-      try {
-        trackFamilyDirectory(
-          authority.installation,
-          authority.origin,
-          { namespace: "lease-directory", container: leaseId, name },
-          identity(dir.stat),
-        );
-      } finally {
-        dir.close();
-      }
-    }
-    trackFamilyDirectory(
-      authority.installation,
-      authority.origin,
-      { namespace: "history-slot", container: leaseId, name: historySlot.name },
-      historySlot.identity,
-      historySlot.generation,
-    );
     const admissionBytes = canonicalJson(
       signControl(
         authority.installation.privateKey,
@@ -1294,14 +1240,7 @@ export async function acquireArtifactTargetLease(options: {
     );
     if (Buffer.byteLength(admissionBytes) > 4096)
       throw Error("Admission journal exceeds byte capacity");
-    familyRecordWrite(
-      authority.installation,
-      authority.origin,
-      { scope: "shared", namespace: "lease-owner", container: leaseId, name: "admission.json" },
-      admissionBytes,
-      (before) => ledger?.write("admission.json", admissionBytes, true, before),
-      true,
-    );
+    ledger?.write("admission.json", admissionBytes, true);
     writePrivateRecord(
       authority.installation,
       "leases",
@@ -1312,7 +1251,6 @@ export async function acquireArtifactTargetLease(options: {
         executionReceiptDigest: authority.receiptDigest,
       },
       true,
-      authority.origin,
     );
     const record: RootRecord = {
       version: 2,
@@ -1329,20 +1267,12 @@ export async function acquireArtifactTargetLease(options: {
       `${authority.execution.operationKey}.json`,
       { leaseId, certificateDigest: controlDigest(certificateEnvelope) },
       true,
-      authority.origin,
     );
     published = true;
     const ownerBytes = canonicalJson(
       signControl(key.privateKey, "openmapx-lease-owner-v2", record),
     );
-    familyRecordWrite(
-      authority.installation,
-      authority.origin,
-      { scope: "shared", namespace: "lease-owner", container: leaseId, name: "owner.json" },
-      ownerBytes,
-      (before) => ledger?.write("owner.json", ownerBytes, true, before),
-      true,
-    );
+    ledger?.write("owner.json", ownerBytes, true);
     const state: State = {
       data,
       control,
@@ -1599,7 +1529,6 @@ function publishReservedLeaseGrant(
   } else if (child.childPublicKey !== s.installation.publicKeys[child.recipient])
     throw Error("Child role key mismatch");
   if (!s.certificate.origin) throw Error("Legacy lease is observation-only; upgrade producer");
-  assertOriginClockForward(s.installation, s.certificate.origin);
   const grant: Grant = {
     version: 2,
     origin: s.certificate.origin,
@@ -1647,13 +1576,6 @@ function publishReservedLeaseGrant(
     "base64url",
   ) as ArtifactDelegationAssertion;
   parseControlAssertion(assertion);
-  enlistFamilyIntent(
-    s.installation,
-    s.certificate.origin,
-    delegationId,
-    child.execution,
-    child.recipient === "data-manager" ? "data-manager" : "ops-agent",
-  );
   prepareControlChildPublication(authority, plan, {
     delegationId,
     grantDigest,
@@ -1671,7 +1593,6 @@ function publishReservedLeaseGrant(
     `${delegationId}.json`,
     { grant: envelope, transition, assertion },
     true,
-    s.certificate.origin,
   );
   writeBounded(s, "grants", `${delegationId}.json`, { grant: envelope, transition }, true);
   node.grantDigests[delegationId] = grantDigest;
@@ -1842,11 +1763,7 @@ export async function adoptArtifactTargetLease(options: {
         (!forwardAncestry(t, grant.parentNode) || Date.now() >= grant.child.deadlineAt)
       )
         throw Error("Stale or canceled delegation");
-      if (!retained) {
-        if (!grant.origin) throw Error("Legacy lease grant is observation-only; upgrade producer");
-        assertOriginClockForward(peer.installation, grant.origin);
-        reserveControlFamily(peer.installation, grant.origin);
-      }
+      if (!retained && !grant.origin) throw Error("Control origin required");
       const admissionName = `${grant.delegationId}.json`;
       const pending = {
         version: 1,
@@ -1874,15 +1791,7 @@ export async function adoptArtifactTargetLease(options: {
           controlDigest(old.execution) !== controlDigest(grant.child)
         )
           throw Error("Durable duplicate admission conflict");
-      } else
-        writePrivateRecord(
-          peer.installation,
-          "adoptions",
-          admissionName,
-          pending,
-          true,
-          grant.origin,
-        );
+      } else writePrivateRecord(peer.installation, "adoptions", admissionName, pending, true);
       s.key = peer.childPrivateKey;
       s.node = grant.delegationId;
       s.execution = grant.child;
@@ -1913,7 +1822,6 @@ export async function adoptArtifactTargetLease(options: {
           state: "ready",
         },
         false,
-        grant.origin,
       );
       tree(s);
       const handle = Object.freeze({
@@ -2007,7 +1915,6 @@ export function bindBorrowedControlExecution(
         name,
         signControl(a.installation.privateKey, domain, payload),
         true,
-        a.origin,
       );
   }
 }
@@ -2326,17 +2233,6 @@ export async function settleRetainedConfigurationHandoffHelper(
       })
       .parse(adopted),
     assertion = parseControlAssertion(adoption.assertion);
-  verifyFamilyOwnedRecord(
-    owner.installation,
-    owner.origin,
-    {
-      scope: "private",
-      namespace: "adoptions",
-      container: "",
-      name: `${source.intent.delegationId}.json`,
-    },
-    canonicalJson(adopted),
-  );
   if (
     canonicalJson(source.intent.helper) !== canonicalJson(owner.execution) ||
     source.intent.helperPublicKey !== owner.installation.installation.publicKey ||
@@ -2677,24 +2573,12 @@ function finishOwnedRelease(s: State): void {
           ),
         );
       const saved = s.slots.release;
-      let release: z.infer<typeof releaseProgressSchema>;
-      if (saved && !("version" in saved)) {
-        if (
-          saved.locks.some((id, i) => id !== s.certificate.serviceIds[i]) ||
-          (saved.pending !== undefined &&
-            saved.pending !== s.certificate.serviceIds[saved.locks.length])
-        )
-          throw Error("Invalid legacy release prefix");
-        release = {
-          version: 2,
-          phase: saved.phase,
-          completedTargets: saved.locks.length,
-          active: saved.active,
-          ...(saved.pending === undefined ? {} : { pending: saved.locks.length }),
-          ...(saved.activePlanned === undefined ? {} : { activePlanned: saved.activePlanned }),
-        };
-      } else
-        release = saved ?? { version: 2, phase: "planned", completedTargets: 0, active: false };
+      const release: z.infer<typeof releaseProgressSchema> = saved ?? {
+        version: 2,
+        phase: "planned",
+        completedTargets: 0,
+        active: false,
+      };
       releaseProgressSchema.parse(release);
       if (
         release.completedTargets > s.certificate.serviceIds.length ||
@@ -2800,13 +2684,6 @@ function finishOwnedRelease(s: State): void {
       release.phase = "released";
       s.slots.releasedAt ??= Date.now();
       persist();
-      if (s.certificate.origin)
-        markFamilyLeaseReleased(
-          s.installation,
-          s.certificate.origin,
-          s.certificate.leaseId,
-          controlDigest(s.certificateEnvelope),
-        );
     },
     !s.slots?.release,
   );
@@ -2816,6 +2693,38 @@ export async function releaseArtifactTargetLease(lease: ArtifactTargetLease): Pr
   if (s.node !== null) throw Error("Borrower cannot release root");
   finishOwnedRelease(s);
   closeState(s);
+}
+/** Removes the released root lease of an execution whose records are being
+ * pruned: first its retained history slot, then its ledger. */
+export function removeReleasedArtifactTargetLease(authority: VerifiedExecutionAuthority): void {
+  verifyRetainedArtifactTargetRootRelease(authority);
+  const a = executionAuthorityState(authority),
+    { leaseId } = z
+      .object({ leaseId: uuid })
+      .parse(
+        readPrivateRecord(a.installation, "execution-leases", `${a.execution.operationKey}.json`),
+      ),
+    s = openState(a.installation.dataRoot, leaseId, a.installation, true);
+  try {
+    if (s.slots) {
+      const index = s.control.directory("admission-index-v1"),
+        history = index.directory("history");
+      try {
+        removeSlot(history, s.slots.history);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      } finally {
+        history.close();
+        index.close();
+      }
+    }
+  } finally {
+    closeState(s);
+  }
+  rmSync(join(a.installation.dataRoot, ".admin-target-control", "leases", leaseId), {
+    recursive: true,
+    force: true,
+  });
 }
 /** Read-only original root release proof for a data command's parent. */
 export function verifyRetainedArtifactTargetRootRelease(
@@ -3006,12 +2915,6 @@ export function settleUnadmittedConfigurationPrepare(
         controlDigest(adoption.execution) !== controlDigest(grant.child)
       )
         throw Error("Original ready receiver adoption required");
-      verifyFamilyOwnedRecord(
-        local,
-        grant.origin!,
-        { scope: "private", namespace: "adoptions", container: "", name },
-        canonicalJson(raw),
-      );
       // This is checked inside the physical journal guard. An admitted worker
       // always retains its private execution BEFORE any SQL/guard/effect work.
       for (const [namespace, file] of [
@@ -3020,7 +2923,6 @@ export function settleUnadmittedConfigurationPrepare(
         ["effect-started", `${grant.child.operationKey}.json`],
         ["execution-adoptions", `${grant.child.operationKey}.json`],
         ["observations", `terminal-${grant.child.operationKey}.json`],
-        ["configuration-maintenance", `${input.maintenanceId}.json`],
       ]) {
         try {
           readPrivateRecord(local, namespace!, file!);
@@ -3440,20 +3342,8 @@ export async function reconcileConfigurationPreEffectRoot(
   if (state.kind === "service.pull")
     throw Error("Normal coordinator pull cannot own a physical target root");
   const reference = z.strictObject({ leaseId: uuid, certificateDigest: digest }).parse(raw);
-  verifyFamilyOwnedRecord(
-    state.installation,
-    state.origin,
-    { scope: "private", namespace: "execution-leases", container: "", name },
-    canonicalJson(raw),
-  );
   const ownerName = `${reference.leaseId}.json`,
     saved = readPrivateRecord(state.installation, "leases", ownerName);
-  verifyFamilyOwnedRecord(
-    state.installation,
-    state.origin,
-    { scope: "private", namespace: "leases", container: "", name: ownerName },
-    canonicalJson(saved),
-  );
   if (
     controlDigest((saved as { certificate: unknown }).certificate) !== reference.certificateDigest
   )
@@ -3593,7 +3483,6 @@ export function assertArtifactTargetLeaseForward(lease: TargetLeaseAuthority): v
   if (s.settlementOnly) throw Error("Recovered lease permits settlement only");
   if (!s.certificate.origin)
     throw Error("Legacy lease is observation/settlement only; upgrade producer");
-  assertOriginClockForward(s.installation, s.certificate.origin);
   if (s.verifiedAuthority) assertControlExecutionForward(s.verifiedAuthority);
   const t = tree(s);
   const node = s.node === null ? t.root : t.children.get(s.node);
@@ -3701,12 +3590,6 @@ export function readOriginalMaintenanceFinalChildren(
       configurationMaintenanceOwnerRecordSchema,
     );
   assertConfigurationMaintenanceDecisionSource(owner);
-  verifyFamilyOwnedRecord(
-    state.installation,
-    owner.origin,
-    { scope: "private", namespace: "configuration-maintenance", container: "", name },
-    canonicalJson(raw),
-  );
   if (
     state.kind !== "configurationMaintenance.prepare" ||
     !owner.preparedFence ||
@@ -3728,8 +3611,7 @@ export function readOriginalMaintenanceFinalChildren(
         throw Error("Frozen child attempt has no original source");
       continue;
     }
-    if (!source.canonical || !source.receiptDelivery)
-      throw Error("Original frozen child canonical delivery pending");
+    if (!source.canonical) throw Error("Original frozen child canonical delivery pending");
     const actual = configurationMaintenanceChildState(
         verifyConfigurationMaintenanceChildTerminal(
           authority,
@@ -3833,9 +3715,7 @@ export function readOriginalMaintenanceFinalChildren(
     ownerDigest: controlDigest(owner),
     children,
     complete: owner.plan.steps.every((step) =>
-      owner.apiControls.steps.some(
-        (value) => value.ordinal === step.ordinal && value.canonical && value.receiptDelivery,
-      ),
+      owner.apiControls.steps.some((value) => value.ordinal === step.ordinal && value.canonical),
     ),
     generation: children.find((value) => value.planIndex === 0),
     generationResult: owner.apiControls.steps.find((value) => value.ordinal === 0)?.canonical
@@ -3892,7 +3772,7 @@ function assertPreparedAndSettledClosure(
       owner.inspection &&
       owner.preparedFence &&
       owner.receipt.dmFence?.state === "settled" &&
-      owner.apiControls.decide?.receiptDelivery,
+      owner.apiControls.decide,
     "Actual prepared final, inspection and settled fence required",
   );
   need(
@@ -3966,12 +3846,6 @@ export function assertConfigurationMaintenanceRootClosure(
       raw,
       configurationMaintenanceOwnerRecordSchema,
     );
-  verifyFamilyOwnedRecord(
-    state.installation,
-    state.origin,
-    { scope: "private", namespace: "configuration-maintenance", container: "", name },
-    canonicalJson(raw),
-  );
   if (owner.preparedFence !== null || owner.final !== null || owner.inspection !== null) {
     assertPreparedAndSettledClosure(authority, observed, owner);
     return;

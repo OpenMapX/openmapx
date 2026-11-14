@@ -9,7 +9,11 @@ import {
   controlTestKey,
 } from "./__fixtures__/server";
 import type { OpsJobJournal, PersistedOpsJob } from "./journal";
-import { type OpsExecutionContext, OpsHostUpdateRequiredError } from "./runtime";
+import {
+  type OpsExecutionContext,
+  OpsExecutionFailure,
+  OpsHostUpdateRequiredError,
+} from "./runtime";
 import { OPS_AGENT_RETENTION_LIMITS, type OpsAuditEvent } from "./server";
 
 const apiToken = Buffer.alloc(32, 21).toString("base64url");
@@ -789,6 +793,47 @@ describe("ops-agent async foundation", () => {
     });
     expect(afterTtl.statusCode).toBe(202);
     expect(afterTtl.json().result.operationId).not.toBe(firstId);
+    await app.close();
+  });
+
+  it("bounds entries that need recovery separately from capacity for new work", async () => {
+    let randomValue = 60;
+    const app = await buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      resourcePolicy: allowAllResources,
+      now: () => new Date(baseTime),
+      randomBytes: () => Buffer.alloc(18, randomValue++),
+      maxJobEntries: 2,
+      dispatch: async (operation) => {
+        if (operation.kind === "service.stop")
+          throw new OpsExecutionFailure("recovery_required", {});
+        return { changed: true };
+      },
+    });
+    const submit = (kind: "service.stop" | "service.restart", name: string) =>
+      app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: auth(),
+        payload: request({ kind, serviceId: "redis" }, `ops1_${name}`, key(`opk1_${name}`)),
+      });
+    const finish = async (id: string) =>
+      eventually(
+        async () => app.inject({ method: "GET", url: `/v1/operations/${id}`, headers: auth() }),
+        (response) => ["succeeded", "failed"].includes(response.json().result.state),
+      );
+    const stuck = (await submit("service.stop", "recoveryCapStuck0")).json().result
+      .operationId as string;
+    expect((await finish(stuck)).json().result.errorClass).toBe("recovery_required");
+    const first = await submit("service.restart", "recoveryCapFirst0");
+    expect(first.statusCode).toBe(202);
+    await finish(first.json().result.operationId);
+    // Two retained entries, one of them needing recovery: new work still fits.
+    const second = await submit("service.restart", "recoveryCapSecond");
+    expect(second.statusCode).toBe(202);
+    await finish(second.json().result.operationId);
+    expect((await submit("service.restart", "recoveryCapThird0")).statusCode).toBe(429);
+    expect((await finish(stuck)).json().result.errorClass).toBe("recovery_required");
     await app.close();
   });
 });

@@ -143,7 +143,6 @@ export function retainFixedServiceLifecyclePlan(
     `service-lifecycle-${s.execution.operationKey}.json`,
     signControl(s.installation.privateKey, domain, plan),
     true,
-    s.origin,
   );
 }
 export function readFixedServiceLifecyclePlan(

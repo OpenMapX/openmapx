@@ -663,7 +663,7 @@ describe.skipIf(
           reconcileJobs: async () => [],
           setupCronSchedulers: () => ({ stop() {} }) as never,
         });
-        stopRetention = startup.stopControlRetention;
+        stopRetention = startup.stopControlPrune;
         if (phase === "periodic") {
           expect(await store.inspect(id)).not.toBeNull();
           clock = vi.spyOn(Date, "now").mockReturnValue(deadline + 72 * 3600000 + 1);

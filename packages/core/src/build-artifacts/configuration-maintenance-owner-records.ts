@@ -9,7 +9,7 @@ import {
   configurationMaintenanceSettleSchema,
 } from "../ops/configuration-maintenance";
 import { type OpsJobStatus, opsResourceId, parseOpsJobStatus } from "../ops/contract";
-import { controlTerminalReceiptDigest } from "../ops/control-retention-receipt";
+import { controlTerminalReceiptDigest } from "../ops/control-terminal-receipt";
 import {
   executionFingerprint,
   executionRefSchema,
@@ -88,13 +88,6 @@ export const configurationMaintenanceDecisionSourceSchema = z.strictObject({
   result: configurationMaintenanceControlSnapshotSchema,
   canonicalDigest: digest,
   commitment: configurationMaintenanceDecisionCommitmentSchema,
-  receiptDelivery: z
-    .strictObject({
-      terminalCopyId: z.uuid(),
-      checkpointOwnerVersion: sequence,
-      proofDigest: digest,
-    })
-    .nullable(),
 });
 export const configurationMaintenanceStepControlSourceSchema = z.strictObject({
   version: z.literal(1),
@@ -120,13 +113,6 @@ export const configurationMaintenanceStepControlSourceSchema = z.strictObject({
       effectSettlementDigest: digest,
     })
     .nullable(),
-  receiptDelivery: z
-    .strictObject({
-      terminalCopyId: z.uuid(),
-      checkpointOwnerVersion: sequence,
-      proofDigest: digest,
-    })
-    .nullable(),
 });
 export const configurationMaintenanceSettleControlSourceSchema = z.strictObject({
   version: z.literal(1),
@@ -146,13 +132,6 @@ export const configurationMaintenanceSettleControlSourceSchema = z.strictObject(
   completedAt: sequence.nullable(),
   result: configurationMaintenanceControlSnapshotSchema.nullable(),
   canonicalDigest: digest.nullable(),
-  receiptDelivery: z
-    .strictObject({
-      terminalCopyId: z.uuid(),
-      checkpointOwnerVersion: sequence,
-      proofDigest: digest,
-    })
-    .nullable(),
 });
 export const configurationMaintenanceOwnerRecordSchema = z.strictObject({
   version: z.literal(2),
@@ -382,9 +361,7 @@ export function assertConfigurationMaintenanceDecisionSource(
         checkpointVersion: body.checkpointVersion,
         checkpointDigest: body.checkpointDigest,
       }) ||
-    canonicalJson(owner.receipt.decision) !== canonicalJson(result.decision) ||
-    (source.receiptDelivery &&
-      source.receiptDelivery.checkpointOwnerVersion < parent.apiOwnerVersion)
+    canonicalJson(owner.receipt.decision) !== canonicalJson(result.decision)
   )
     throw Error("Original authenticated decision source changed");
   const receipt = configurationMaintenanceReceiptSchema.parse({ ...owner.receipt, ...result });
@@ -420,7 +397,6 @@ export function assertConfigurationMaintenanceDecisionSource(
     if (
       !step ||
       source.operation.decision !== "continue" ||
-      !source.receiptDelivery ||
       actor.issuer !== "api" ||
       original.issuer !== "api" ||
       actor.apiJobId !== original.apiJobId ||
@@ -442,11 +418,7 @@ export function assertConfigurationMaintenanceDecisionSource(
           operationFingerprint: step.operationFingerprint,
           deadlineAt: control.execution.deadlineAt,
           parent,
-        }) ||
-      (control.receiptDelivery &&
-        (!control.grant ||
-          !control.canonical ||
-          control.receiptDelivery.checkpointOwnerVersion < actor.apiOwnerVersion))
+        })
     )
       throw Error("Original purpose-bound frozen maintenance step changed");
     if (control.canonical) {
@@ -501,9 +473,7 @@ export function assertConfigurationMaintenanceDecisionSource(
       settle.acceptedAt < settle.admittedAt ||
       settle.acceptedAt >= settle.execution.deadlineAt ||
       (settle.result === null &&
-        (settle.completedAt !== null ||
-          settle.canonicalDigest !== null ||
-          settle.receiptDelivery !== null)) ||
+        (settle.completedAt !== null || settle.canonicalDigest !== null)) ||
       (settle.result !== null &&
         (settle.completedAt === null ||
           settle.canonicalDigest === null ||

@@ -9,7 +9,7 @@ import {
   integrationBindingRevision,
   systemSettings,
 } from "../../db/schema";
-import { noPendingReceiptDelivery, noUnsettledManagedOperation } from "../admin-job-state";
+import { noUnsettledManagedOperation } from "../admin-job-state";
 import type { ConfigurationWriteTransaction } from "../administrative-configuration-writer-owner";
 import { decrypt, encrypt } from "../secrets";
 
@@ -62,7 +62,7 @@ export async function pruneMigrationStages() {
           lt(configurationMigrationPreview.expiresAt, new Date()),
           sql`not exists(select 1 from ${adminJob} where ${adminJob.result}->'_migrationStage'->>'id'=${configurationMigrationPreview.id} and (${adminJob.status} not in ('success','failed','canceled') or (${adminJob.result}->'_configurationCandidate' is not null and coalesce(${adminJob.result}->'_configurationCandidate'->>'phase','unknown') not in ('settled','discarded'))))`,
         ),
-        sql`exists(select 1 from ${adminJob} where ${adminJob.id}=${configurationMigrationPreview.consumedByJobId} and ${adminJob.status} in ('success','failed','canceled') and ${adminJob.finishedAt} is not null and ${adminJob.result}->'_configurationCandidate'->>'phase' in ('settled','discarded') and ${noPendingReceiptDelivery()} and ${noUnsettledManagedOperation()})`,
+        sql`exists(select 1 from ${adminJob} where ${adminJob.id}=${configurationMigrationPreview.consumedByJobId} and ${adminJob.status} in ('success','failed','canceled') and ${adminJob.finishedAt} is not null and ${adminJob.result}->'_configurationCandidate'->>'phase' in ('settled','discarded') and ${noUnsettledManagedOperation()})`,
       ),
     )
     .returning({ id: configurationMigrationPreview.id });

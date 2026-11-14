@@ -66,11 +66,7 @@ import {
   prepareApiJobChildAttempt,
   prepareApiJobRoot,
 } from "./admin-job-parent";
-import {
-  hasPendingReceiptDelivery,
-  hasUnsettledManagedOperation,
-  jobOwnership,
-} from "./admin-job-state";
+import { hasUnsettledManagedOperation, jobOwnership } from "./admin-job-state";
 import {
   administrativeConfigurationFileObservations,
   closeAdministrativeConfigurationRead,
@@ -529,7 +525,6 @@ async function discardUnissuedMaintenanceCandidate(
       result._configurationMaintenanceDecision !== undefined ||
       result._configurationMaintenanceRollback !== undefined ||
       actual.operations[record.prepareOperationKey!] ||
-      hasPendingReceiptDelivery(result) ||
       hasUnsettledManagedOperation(result) ||
       (helper &&
         (canonicalJson(helper.operation) !== canonicalJson(fixed!.operation) ||
@@ -636,7 +631,6 @@ async function completeUnissuedConfigurationCancellation(
       result._configurationMaintenanceDecision !== undefined ||
       result._configurationMaintenanceRollback !== undefined ||
       projection.operations[record.prepareOperationKey!] ||
-      hasPendingReceiptDelivery(result) ||
       hasUnsettledManagedOperation(result) ||
       (helper &&
         (helper.receiptDelivery?.state !== "confirmed" ||
@@ -741,7 +735,6 @@ export async function discardNeverPreparedProspectiveConfiguration(
         projected.kind !== "configurationMaintenance.prepare" ||
         projected.operationId !== closed.prepare.executionId ||
         projected.fingerprint !== closed.prepare.fingerprint ||
-        hasPendingReceiptDelivery(result) ||
         hasUnsettledManagedOperation(result)
       )
         throw Error("Original unsaved candidate closure checkpoint required");
@@ -924,7 +917,6 @@ export async function discardUnusedPreparedProspectiveConfiguration(
       !canonical ||
       canonicalJson(canonical) !== canonicalJson(remote.receipt) ||
       canonicalJson({ ...closed, preflight: canonical.preflight }) !== canonicalJson(canonical) ||
-      hasPendingReceiptDelivery(result) ||
       hasUnsettledManagedOperation(result)
     )
       throw Error("Original delivered unused candidate checkpoint required");
@@ -1016,7 +1008,6 @@ async function completeUnusedConfigurationCancellation(
       !canonical ||
       canonicalJson(canonical) !== canonicalJson(remote.receipt) ||
       canonicalJson({ ...closed, preflight: canonical.preflight }) !== canonicalJson(canonical) ||
-      hasPendingReceiptDelivery(result) ||
       hasUnsettledManagedOperation(result)
     )
       throw new JobObservationPending("recovery_required");
@@ -1109,7 +1100,6 @@ export async function assertSettledConfigurationCandidate(
           ) &&
         (result.migration as MigrationResult | undefined)?.outcome !== "unknown"
       )) ||
-    hasPendingReceiptDelivery(result) ||
     hasUnsettledManagedOperation(result)
   )
     throw Error("Configuration candidate settlement unavailable");
@@ -1429,7 +1419,6 @@ async function resumeNeverPreparedCleanup(): Promise<Record<string, unknown>> {
       retained?.operationKey !== writer.operationKey ||
       !["discarding_without_guard", "discarded"].includes(String(retained?.phase)) ||
       canonicalJson(cleanup.integrationIds) !== canonicalJson(writer.integrationIds) ||
-      hasPendingReceiptDelivery(original) ||
       hasUnsettledManagedOperation(original) ||
       !(await hasRecoveredMaintenanceCandidate(original, job.jobId))
     )
@@ -1543,7 +1532,6 @@ async function resumeCompletedConfigurationRetirement(): Promise<Record<string, 
       retained?.operationKey !== writer.operationKey ||
       retained.phase !== "settled" ||
       canonicalJson(retirement.integrationIds) !== canonicalJson(writer.integrationIds) ||
-      hasPendingReceiptDelivery(original) ||
       hasUnsettledManagedOperation(original)
     )
       throw new JobObservationPending("recovery_required");
@@ -2640,7 +2628,6 @@ async function discardRetainedUnissuedOrdinaryCandidate(): Promise<Record<string
       result._configurationMaintenanceDecision !== undefined ||
       result._configurationMaintenanceRollback !== undefined ||
       Object.keys(readProjection(result).operations).length !== 0 ||
-      hasPendingReceiptDelivery(result) ||
       hasUnsettledManagedOperation(result)
     )
       throw new JobObservationPending("recovery_required");
@@ -4744,7 +4731,6 @@ export async function commitProspectiveConfigurationMaintenance(
         canonicalJson(remote.receipt) !== canonicalJson(prepared) ||
         result._configurationMaintenanceDecision !== undefined ||
         result._configurationMaintenanceRollback !== undefined ||
-        hasPendingReceiptDelivery(result) ||
         hasUnsettledManagedOperation(result) ||
         preparation?.receiptDelivery?.state !== "confirmed" ||
         preparation.receiptDelivery.terminalReceipt.state !== "succeeded" ||
@@ -4836,7 +4822,6 @@ export async function commitProspectiveConfigurationMaintenance(
           actual._configurationMaintenanceRollback !== undefined ||
           remote?.phase !== "prepared" ||
           canonicalJson(remote.receipt) !== canonicalJson(prepared) ||
-          hasPendingReceiptDelivery(actual) ||
           hasUnsettledManagedOperation(actual)
         )
           throw new JobObservationPending("recovery_required");
@@ -5650,7 +5635,6 @@ export async function prepareConfigurationMaintenanceAbandon(
         delivery?.state !== "confirmed" ||
         delivery.terminalReceipt.state !== "succeeded" ||
         canonicalJson(delivery.terminalReceipt.result) !== canonicalJson(maintenance.receipt) ||
-        hasPendingReceiptDelivery(result) ||
         hasUnsettledManagedOperation(result) ||
         canonicalJson(result._parentExecution) !==
           canonicalJson({
@@ -5947,12 +5931,7 @@ export async function settleConfigurationMaintenance(
       committed = result;
       return original;
     }
-    if (
-      !observed ||
-      hasPendingReceiptDelivery(result) ||
-      hasUnsettledManagedOperation(result) ||
-      !decision.delivery
-    )
+    if (!observed || hasUnsettledManagedOperation(result) || !decision.delivery)
       throw new JobObservationPending("recovery_required");
     const delivered =
       readProjection(result).operations[decision.delivery.root.operationKey]?.receiptDelivery;
@@ -6271,7 +6250,7 @@ export async function inspectConfigurationMaintenance(
     if (
       administrativeConfigurationState(currentAdministrativeConfigurationWriter()).transactionActive
     )
-      throw new JobObservationPending("receipt_delivery");
+      throw new JobObservationPending("transport");
     const projection = readProjection(job.checkpointResult),
       projected = projection.operations[receipt.prepare.operationKey];
     if (
@@ -6582,7 +6561,6 @@ async function advanceCompletedExtensionCandidate(
         canonicalJson(frame) ||
       canonicalJson(result._configurationCandidate) !== canonicalJson(current) ||
       current.phase !== "settled" ||
-      hasPendingReceiptDelivery(result) ||
       hasUnsettledManagedOperation(result)
     )
       throw new JobObservationPending("recovery_required");

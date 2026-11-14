@@ -12,7 +12,6 @@ import {
   watch,
   writeFileSync,
 } from "node:fs";
-import * as nodeFsPromises from "node:fs/promises";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { basename, dirname, join } from "node:path";
@@ -23,7 +22,7 @@ import {
   lookupControlChildPhaseAttempt,
   lookupControlChildPhaseBinding,
   openControlInstallation,
-  reconcileControlRetention,
+  pruneControlRecords,
   restoreAdmittedControlExecution,
   verifyDataControlTerminalWitness,
 } from "@openmapx/core/build-artifacts";
@@ -486,7 +485,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               return (
                 operation.kind === (afterRecreate ? "service.recreate" : applyKind) &&
                 operation.terminal === true &&
-                operation.receiptDelivery?.state === "pending"
+                operation.receiptDelivery !== undefined
               );
             })
           );
@@ -2542,7 +2541,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           host.initial.revisionId,
         );
         expect(
-          await fixture.sql`SELECT id FROM data_manager.jobs WHERE kind='configuration-maintenance'`,
+          await fixture.sql`SELECT maintenance_id FROM data_manager.configuration_fence`,
         ).toEqual([]);
         expect(readdirSync(join(host.queue, ".candidates"))).toHaveLength(1);
         coordinator.State = "running";
@@ -2621,7 +2620,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           host.initial.revisionId,
         );
         expect(
-          await fixture.sql`SELECT id FROM data_manager.jobs WHERE kind='configuration-maintenance'`,
+          await fixture.sql`SELECT maintenance_id FROM data_manager.configuration_fence`,
         ).toEqual([]);
       });
     }, 60000);
@@ -3014,7 +3013,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               }
             }
           } else if (drift === "guard") {
-            await fixture.sql`DELETE FROM data_manager.jobs WHERE id=${prepared.dmFence!.fenceId}::uuid AND kind='configuration-maintenance'`;
+            await fixture.sql`DELETE FROM data_manager.configuration_fence WHERE fence_id=${prepared.dmFence!.fenceId}::uuid`;
             expect(await maintenance.inspectConfigurationMaintenance(identity)).toMatchObject({
               state: "prepared",
               preflight: "unavailable",
@@ -3458,9 +3457,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             "control-private/ops-agent/executions",
             `${prepared.prepare.operationKey}.json`,
           ),
-          originalAdmission = readFileSync(originalAdmissionPath),
-          familiesPath = join(host.infraDir, "control-private/ops-agent/retention-locations"),
-          families = readdirSync(familiesPath).sort();
+          originalAdmission = readFileSync(originalAdmissionPath);
         core.closeArtifactTargetLeaseHandle(lease);
         const nativeFetch = globalThis.fetch,
           admissions: { status: number; errorClass?: string }[] = [],
@@ -3522,7 +3519,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         );
         expect(statSync(leaseDirectory).ino).toBe(ownerInode);
         expect(readFileSync(originalAdmissionPath)).toEqual(originalAdmission);
-        expect(readdirSync(familiesPath).sort()).toEqual(families);
         const step = prepared.steps[0]!,
           projected = (await import("../admin-job-ops")).readProjection(ctx.checkpointResult)
             .operations[step.operationKey];
@@ -3883,7 +3879,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             dmFence: { state: "settled" },
           });
           expect(owner.apiControls.steps).toHaveLength(1);
-          expect(owner.apiControls.steps[0]!.receiptDelivery).not.toBeNull();
           expect(
             existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
           ).toBe(false);
@@ -3900,27 +3895,21 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           ).toBe(false);
           if (mode === "retirement") {
             const core = await import("@openmapx/core/build-artifacts"),
-              location = (role: string) =>
-                join(
-                  host.infraDir,
-                  "control-private",
-                  role,
-                  "retention-locations",
-                  `${core.controlDigest(owner.origin)}.json`,
-                ),
-              clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 96 * 3600000);
+              later = Math.max(Date.now(), owner.origin.notAfter) + 96 * 3600000,
+              clock = vi.spyOn(Date, "now").mockReturnValue(later);
             try {
-              for (
-                let round = 0;
-                round < 16 &&
-                (existsSync(location("ops-agent")) || existsSync(location("data-manager")));
-                round++
-              ) {
-                await core.reconcileControlRetention(installation, { maxFamilies: 64 });
-                await dm!.reconcileRetention();
-              }
+              expect(await core.pruneControlRecords(installation, { now: later })).toContain(
+                owner.plan.prepare.operationKey,
+              );
+              await dm!.pruneRecords(later);
               expect(
-                existsSync(location("ops-agent")) || existsSync(location("data-manager")),
+                existsSync(
+                  join(
+                    host.infraDir,
+                    "control-private/ops-agent/executions",
+                    `${owner.plan.prepare.operationKey}.json`,
+                  ),
+                ),
               ).toBe(false);
               expect(
                 await fixture.sql`SELECT maintenance_id FROM data_manager.configuration_fence WHERE fence_id=${owner.preparedFence!.fenceId}::uuid`,
@@ -4260,28 +4249,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);
           if (mode === "retirement") {
             const core = await import("@openmapx/core/build-artifacts"),
-              retentionPath = (role: string) =>
-                join(
-                  host.infraDir,
-                  "control-private",
-                  role,
-                  "retention-locations",
-                  `${core.controlDigest(owner.origin)}.json`,
-                ),
-              clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 96 * 3600000);
+              later = Math.max(Date.now(), owner.origin.notAfter) + 96 * 3600000,
+              clock = vi.spyOn(Date, "now").mockReturnValue(later);
             try {
-              for (
-                let round = 0;
-                round < 16 &&
-                (existsSync(retentionPath("ops-agent")) ||
-                  existsSync(retentionPath("data-manager")));
-                round++
-              ) {
-                await core.reconcileControlRetention(installation, { maxFamilies: 64 });
-                await dm!.reconcileRetention();
-              }
-              expect(existsSync(retentionPath("ops-agent"))).toBe(false);
-              expect(existsSync(retentionPath("data-manager"))).toBe(false);
+              expect(await core.pruneControlRecords(installation, { now: later })).toContain(
+                owner.plan.prepare.operationKey,
+              );
+              await dm!.pruneRecords(later);
               expect(
                 await fixture.sql`SELECT maintenance_id FROM data_manager.configuration_fence WHERE fence_id=${prepared.dmFence!.fenceId}::uuid`,
               ).toEqual([]);
@@ -4671,7 +4645,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             evidenceDigest: ops.configurationMaintenanceSettleRequestDigest(observed),
           },
           [beforeSql] =
-            await fixture.sql`SELECT metadata,ownership_version,xmin::text AS xmin FROM data_manager.jobs WHERE id=${prepared.dmFence!.fenceId}::uuid`;
+            await fixture.sql`SELECT state,outcome,settled_at,xmin::text AS xmin FROM data_manager.configuration_fence WHERE fence_id=${prepared.dmFence!.fenceId}::uuid`;
         await expect(maintenance.settleConfigurationMaintenance(request)).rejects.toBeInstanceOf(
           Error,
         );
@@ -4743,7 +4717,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(readFileSync(path)).toEqual(original);
         expect(
           (
-            await fixture.sql`SELECT metadata,ownership_version,xmin::text AS xmin FROM data_manager.jobs WHERE id=${prepared.dmFence!.fenceId}::uuid`
+            await fixture.sql`SELECT state,outcome,settled_at,xmin::text AS xmin FROM data_manager.configuration_fence WHERE fence_id=${prepared.dmFence!.fenceId}::uuid`
           )[0],
         ).toEqual(beforeSql);
         await expect(dm!.receiver.admitLocal({ kind: "download-fonts" })).rejects.toThrow(
@@ -5009,7 +4983,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           originalFinal = JSON.stringify(owner.final),
           originalInspection = JSON.stringify(owner.inspection),
           [originalSql] =
-            await fixture.sql`SELECT metadata,ownership_version,xmin::text AS xmin FROM data_manager.jobs WHERE id=${prepared.dmFence!.fenceId}::uuid`;
+            await fixture.sql`SELECT state,outcome,settled_at,xmin::text AS xmin FROM data_manager.configuration_fence WHERE fence_id=${prepared.dmFence!.fenceId}::uuid`;
         expect(owner.receipt.state).toBe("settled");
         expect(owner.apiControls.settle!.result).toBeNull();
         await app.close();
@@ -5043,12 +5017,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           requestEvidenceDigest: request.evidenceDigest,
           result: { state: "settled" },
         });
-        expect(recovered.apiControls.settle!.receiptDelivery).not.toBeNull();
         expect(JSON.stringify(recovered.final)).toBe(originalFinal);
         expect(JSON.stringify(recovered.inspection)).toBe(originalInspection);
         expect(
           (
-            await fixture.sql`SELECT metadata,ownership_version,xmin::text AS xmin FROM data_manager.jobs WHERE id=${prepared.dmFence!.fenceId}::uuid`
+            await fixture.sql`SELECT state,outcome,settled_at,xmin::text AS xmin FROM data_manager.configuration_fence WHERE fence_id=${prepared.dmFence!.fenceId}::uuid`
           )[0],
         ).toEqual(originalSql);
         expect(
@@ -5150,7 +5123,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             requestEvidenceDigest: request.evidenceDigest,
             result: { state: "settled" },
           });
-          expect(owner.apiControls.settle!.receiptDelivery).not.toBeNull();
           expect(owner.final!.evidenceDigest).not.toBe(request.evidenceDigest);
           const final = JSON.stringify(owner.final),
             inspection = JSON.stringify(owner.inspection),
@@ -5344,14 +5316,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             });
             expect(JSON.stringify(row?.result)).not.toContain("synthetic-abandon-credential");
             const executionsPath = join(host.infraDir, "control-private/ops-agent/executions"),
-              familiesPath = join(host.infraDir, "control-private/ops-agent/retention-locations"),
               executionsBefore = readdirSync(executionsPath).sort(),
-              familiesBefore = readdirSync(familiesPath).sort(),
               rootBytes = readFileSync(
                 join(executionsPath, `${prepared.prepare.operationKey}.json`),
               ),
               [guardBefore] =
-                await fixture.sql`SELECT xmin::text AS version FROM data_manager.jobs WHERE id=${prepared.dmFence!.fenceId}::uuid`;
+                await fixture.sql`SELECT xmin::text AS version FROM data_manager.configuration_fence WHERE fence_id=${prepared.dmFence!.fenceId}::uuid`;
             const core = await import("@openmapx/core/build-artifacts"),
               originalAuthority = restoreAdmittedControlExecution(installation, prepared.prepare),
               lease = core.restoreArtifactTargetLeaseForSettlement(originalAuthority),
@@ -5402,7 +5372,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ).toMatchObject({
               execution: { operationKey: control!.operationKey },
               canonicalDigest: control!.receiptDelivery!.terminalDigest,
-              receiptDelivery: { terminalCopyId: control!.receiptDelivery!.terminalCopyId },
             });
             const actualControl =
                 store.readOwnedConfigurationMaintenance(authority).apiControls.decide!,
@@ -5446,14 +5415,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               JSON.stringify(store.readOwnedConfigurationMaintenance(authority).apiControls.decide),
             ).toBe(original);
             expect(readdirSync(executionsPath).sort()).toEqual(executionsBefore);
-            expect(readdirSync(familiesPath).sort()).toEqual(familiesBefore);
             expect(
               readFileSync(join(executionsPath, `${prepared.prepare.operationKey}.json`)),
             ).toEqual(rootBytes);
             expect(readFileSync(ownerPath)).toEqual(ownerBytes);
             expect(statSync(ownerPath).ino).toBe(ownerInode);
             const [guardAfter] =
-              await fixture.sql`SELECT xmin::text AS version FROM data_manager.jobs WHERE id=${prepared.dmFence!.fenceId}::uuid`;
+              await fixture.sql`SELECT xmin::text AS version FROM data_manager.configuration_fence WHERE fence_id=${prepared.dmFence!.fenceId}::uuid`;
             expect(guardAfter?.version).toBe(guardBefore?.version);
             // Lose only the secondary jobs journal entry after the actual private
             // original-owner CAS and authenticated API copy/ACK. Reopen the real
@@ -5545,7 +5513,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             expect(readFileSync(ownerPath)).toEqual(ownerBytes);
             expect(statSync(ownerPath).ino).toBe(ownerInode);
             expect(readdirSync(executionsPath).sort()).toEqual(executionsBefore);
-            expect(readdirSync(familiesPath).sort()).toEqual(familiesBefore);
           }
           expect(dm!.preparePosts).toBe(1);
           expect(
@@ -6151,13 +6118,12 @@ if(args[0]==="compose"&&args.includes("config")&&args.includes("--format")){impo
           const directory = join(host.infraDir, "data/ops-agent/lifecycle"),
             [name] = readdirSync(directory);
           expect(name).toBeDefined();
-          const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 96 * 3600000);
+          const later = Date.now() + 30 * 24 * 3600000,
+            clock = vi.spyOn(Date, "now").mockReturnValue(later);
           try {
-            let retired = 0;
-            for (let i = 0; i < 12 && existsSync(join(directory, name!)); i++)
-              retired += (await reconcileControlRetention(installation, { maxFamilies: 1 }))
-                .retired;
-            expect(retired).toBeGreaterThan(0);
+            expect(await pruneControlRecords(installation, { now: later })).toContain(
+              name!.slice(0, -".json".length),
+            );
             expect(existsSync(join(directory, name!))).toBe(false);
           } finally {
             clock.mockRestore();

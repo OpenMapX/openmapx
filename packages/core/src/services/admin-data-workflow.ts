@@ -12,7 +12,6 @@ import {
   writePrivateRecord,
 } from "../build-artifacts/control-authority";
 import { AnchoredDirectory, identity, sameInode } from "../build-artifacts/filesystem";
-import { verifyFamilyOwnedRecord } from "../build-artifacts/retention-family";
 import { canonicalJson } from "../ops/canonical-json";
 import { type DataWorkflowReceipt, dataWorkflowReceiptSchema } from "../ops/job-evidence";
 
@@ -59,12 +58,6 @@ export async function openAdminDataWorkflow(options: {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw error;
     }
-    verifyFamilyOwnedRecord(
-      state.installation,
-      state.origin!,
-      { scope: "private", namespace: "observations", container: "", name },
-      canonicalJson(raw),
-    );
     const body = verifyControl(state.installation.installation.publicKey, domain, raw, bodySchema);
     if (
       body.operationKey !== state.execution.operationKey ||
@@ -108,7 +101,7 @@ export async function openAdminDataWorkflow(options: {
         });
         if (Buffer.byteLength(canonicalJson(signed)) > 65536)
           throw Error("Workflow checkpoint exceeds retention capacity");
-        writePrivateRecord(state.installation, "observations", name, signed, !prior, state.origin);
+        writePrivateRecord(state.installation, "observations", name, signed, !prior);
       });
     },
   };

@@ -16,8 +16,8 @@ import {
 } from "../../core/src/build-artifacts/test-fixtures/authority";
 import {
   cliControlContext,
-  collectHostControlRetention,
   completeCliCommand,
+  pruneHostControlRecords,
   withCliControlContext,
 } from "../src/lib/control-context";
 
@@ -29,7 +29,7 @@ it("reclaims an expired host-command family before another standalone command", 
   terminalWithoutEffect(owner.authority);
   const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 96 * 3600_000);
   try {
-    await collectHostControlRetention(owner.installation);
+    await pruneHostControlRecords(owner.installation);
     expect(() => c.restoreAdmittedControlExecution(owner.installation, owner.execution)).toThrow();
   } finally {
     clock.mockRestore();

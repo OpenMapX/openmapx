@@ -11,7 +11,7 @@ import {
   opsOperationFingerprint,
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
-import { cliControlContext, collectHostControlRetention } from "./control-context";
+import { cliControlContext, pruneHostControlRecords } from "./control-context";
 import { cliAcquisitionOptions, cliProcessOptions } from "./execution-deadline";
 import { repoPaths } from "./paths";
 
@@ -38,7 +38,7 @@ export async function openCliArtifactOwner(operation: ArtifactOperation, rootDir
   });
   let lease: control.TargetLeaseAuthority | undefined;
   try {
-    await collectHostControlRetention(installation);
+    await pruneHostControlRecords(installation);
     const admittedAt = Date.now(),
       budget =
         cliProcessOptions(opsExecutionBudget(operation.kind).processMs).timeout ??

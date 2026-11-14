@@ -2,13 +2,7 @@ import {
   adminArtifactExportInputSchema,
   adminArtifactImportInputSchema,
 } from "@openmapx/core/api-contracts";
-import {
-  artifactPublicationResultSchema,
-  canonicalJson,
-  type OpsOperation,
-  stageClaimIdentitySchema,
-  transferStageSchema,
-} from "@openmapx/core/ops";
+import { canonicalJson, type OpsOperation } from "@openmapx/core/ops";
 import { z } from "zod/v4";
 import { AdminJobFailure, JobObservationPending } from "./admin-job-failure";
 import { ensureAdminJobReceiptDelivery, executeAdminJobOperation } from "./admin-job-ops";
@@ -110,7 +104,7 @@ async function recoverArtifactPurpose(
       projected.receiptDelivery?.terminalReceipt ??
       (await client.status(operation.kind, projected.operationId));
   } catch {
-    throw new JobObservationPending("receipt_delivery");
+    throw new JobObservationPending("transport");
   }
   if (
     !["succeeded", "failed", "timed_out"].includes(canonical.state) ||

@@ -76,7 +76,7 @@ import {
   type KeyObject,
   randomUUID,
 } from "node:crypto";
-import { existsSync, fsyncSync, mkdirSync, realpathSync } from "node:fs";
+import { existsSync, fsyncSync, mkdirSync, realpathSync, statfsSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { z } from "zod";
 import type { PreparedConfigurationRecord } from "../ops/configuration-preparation";
@@ -88,11 +88,8 @@ import {
   parseBoundedOpsResult,
   parseOpsJobStatus,
 } from "../ops/contract";
-import {
-  controlTerminalReceiptDigest,
-  verifyApiRetentionProof,
-} from "../ops/control-retention-receipt";
 import { type ControlExecutionOrigin, parseControlRootOperationKey } from "../ops/control-root-key";
+import { controlTerminalReceiptDigest } from "../ops/control-terminal-receipt";
 import { coordinatorPullSubmissionDigest } from "../ops/coordinator-lifecycle-records";
 import {
   type ControlIssuer,
@@ -141,9 +138,7 @@ import {
   configurationMaintenanceOwnerRecordSchema,
 } from "./configuration-maintenance-owner-records";
 // biome-ignore-end lint/suspicious/noImportCycles: Live protocol dependency described above.
-import { CONTROL_RETENTION_LIMITS, writeRetainedRecord } from "./control-retention";
 import {
-  type ControlRetentionPreparationContext,
   type CoordinatorPullBaseline,
   coordinatorPullBaselineSchema,
   coordinatorPullObservationDomain,
@@ -162,31 +157,8 @@ import {
 // biome-ignore-end lint/suspicious/noImportCycles: Fixed live proof dependency described above.
 import { AnchoredDirectory, identity } from "./filesystem";
 import { buildFixedConfigurationMaintenancePlan } from "./fixed-configuration-maintenance";
-import {
-  assertOriginClockForward,
-  bootstrapRetentionClock,
-  readRetentionClock,
-} from "./retention-clock";
-// biome-ignore-start lint/suspicious/noImportCycles: Authority records and terminal repair share this sole per-origin index. Runtime calls must consume the same nominal owner, never a second authority map or callback.
-import {
-  acknowledgeRetentionDependency,
-  assertFamilyCanonicalCompatibility,
-  completeFamilyJournal,
-  enlistFamilyIntent,
-  familyRecordWrite,
-  hasLocalRetentionFamily,
-  hasRetentionEvidence,
-  markFamilyTerminal,
-  publishFamilyCanonicalTerminal,
-  readActiveStagedCoordinatorApiCopy,
-  reconcileRetentionFamilies,
-  registerFamilyExecution,
-  requireFamilyJournal,
-  retentionApiDependency,
-  verifyFamilyOwnedRecord,
-} from "./retention-family";
-// biome-ignore-end lint/suspicious/noImportCycles: Exact deferred original-owner/index guard join.
 export const CONTROL_ROLES = ["ops-agent", "data-manager", "host-cli"] as const;
+const PRIVATE_RECORD_BYTES = 131072;
 declare const authorityBrand: unique symbol,
   peerBrand: unique symbol,
   settlementBrand: unique symbol,
@@ -316,20 +288,7 @@ export async function provisionControlInstallation(infraDir: string): Promise<vo
     if (!privateRoot.list().includes("hidden-key")) privateRoot.write("hidden-key", "", true);
     for (const role of CONTROL_ROLES) {
       const roleRoot = privateRoot.directory(role, true, true);
-      try {
-        const saved = roleKeySchema.parse(
-          JSON.parse(secrets.read(`control-${role}.key`, 2048).toString("utf8")),
-        );
-        if (newInstallation)
-          bootstrapRetentionClock({
-            installation: { role, installationId: bundle.installationId },
-            privateRoot: roleRoot,
-            privateKey: parsePrivate(saved.privateKey),
-            publicKeys: bundle.publicKeys,
-          });
-      } finally {
-        roleRoot.close();
-      }
+      roleRoot.close();
     }
   } finally {
     privateRoot?.close();
@@ -483,15 +442,11 @@ export function writePrivateRecord(
   name: string,
   value: unknown,
   exclusive = false,
-  origin?: ControlExecutionOrigin,
 ) {
   const dir = state.privateRoot.directory(namespace, true, true);
   try {
     const bytes = canonicalJson(value);
-    if (
-      Buffer.byteLength(bytes) >
-      (namespace === "hardlinks" ? 1024 * 1024 : CONTROL_RETENTION_LIMITS.privateRecordBytes)
-    )
+    if (Buffer.byteLength(bytes) > (namespace === "hardlinks" ? 1024 * 1024 : PRIVATE_RECORD_BYTES))
       throw Error("Private receipt limit");
     if (
       ![
@@ -520,26 +475,7 @@ export function writePrivateRecord(
       ].includes(namespace)
     )
       throw Error("Unknown fixed authority namespace");
-    const write = (beforePublish?: (inode: import("./filesystem").FileIdentity) => void) =>
-      writeRetainedRecord(
-        dir,
-        name,
-        bytes,
-        exclusive,
-        CONTROL_RETENTION_LIMITS.recordsPerNamespace,
-        beforePublish,
-        namespace === "hardlinks" ? 1024 * 1024 : CONTROL_RETENTION_LIMITS.privateRecordBytes,
-      );
-    if (origin)
-      familyRecordWrite(
-        state,
-        origin,
-        { scope: "private", namespace, name, container: "" },
-        bytes,
-        write,
-        exclusive,
-      );
-    else write();
+    dir.write(name, bytes, exclusive);
   } finally {
     dir.close();
   }
@@ -557,7 +493,7 @@ export function retainedExecutionOrigin(
       .object({
         version: z.union([z.literal(1), z.literal(2)]),
         execution: executionRefSchema,
-        origin: controlOriginSchema.optional(),
+        origin: controlOriginSchema,
       })
       .passthrough(),
   );
@@ -567,93 +503,6 @@ export function retainedExecutionOrigin(
   )
     throw Error("Execution origin identity mismatch");
   return admitted.origin;
-}
-export function reconcileControlRetention(
-  installation: ControlInstallation,
-  options?: { signal?: AbortSignal; maxFamilies?: number },
-): Promise<{ retired: number; pending: number; busy?: true }> {
-  return reconcileRetentionFamilies(installationState(installation), options);
-}
-/** No effect authority: binds the agent's retained API receipt dependency only. */
-export function acknowledgeControlRetention(
-  installation: ControlInstallation,
-  input: {
-    originRootKey: string;
-    operationKey: string;
-    fingerprint: string;
-    terminalDigest: string;
-    proof: string;
-  },
-  token: string,
-): { acknowledged: true } {
-  const state = installationState(installation);
-  if (installation.role !== "ops-agent" || state.fixedChildId)
-    throw Error("Fixed API receipt adapter required");
-  if (Buffer.byteLength(canonicalJson(input)) > 16384)
-    throw Error("Retention acknowledgement exceeds capacity");
-  const proof = verifyApiRetentionProof(token, input.proof);
-  if (
-    proof.operationKey !== input.operationKey ||
-    proof.fingerprint !== input.fingerprint ||
-    proof.terminalDigest !== input.terminalDigest
-  )
-    throw Error("Receipt proof identity conflict");
-  const parsed = parseControlRootOperationKey(input.originRootKey);
-  const origin: ControlExecutionOrigin = {
-    version: 1,
-    rootKey: input.originRootKey,
-    issuer: "ops-agent",
-    notAfter: parsed.notAfter,
-  };
-  if (!hasRetentionEvidence(state, origin)) {
-    if (
-      input.originRootKey !== input.operationKey ||
-      parsed.notAfter > readRetentionClock(state).rejectNotAfterThrough
-    )
-      throw Error("Receipt dependency recovery required");
-    // This discharges no surviving dependency; it asserts no operation outcome.
-    return { acknowledged: true };
-  }
-  const dependency = retentionApiDependency(state, origin);
-  if (
-    !dependency ||
-    dependency.operationKey !== input.operationKey ||
-    dependency.fingerprint !== input.fingerprint ||
-    dependency.parent.apiJobId !== proof.apiJobId ||
-    dependency.parent.apiOwnerVersion !== proof.originalApiOwnerVersion ||
-    dependency.parent.attemptId !== proof.attemptId
-  )
-    throw Error("Receipt parent/attempt conflict");
-  // A copied recovery-required PREPARE canonical says that the worker failed,
-  // not that its target ownership was contained. Require actual known effect
-  // and (for a never-prepared fence) physical release before acknowledging this dependency.
-  const original = z
-      .object({ payload: z.object({ execution: executionRefSchema }) })
-      .parse(readPrivateRecord(state, "executions", `${input.operationKey}.json`, 65536)),
-    authority = restoreAdmittedControlExecution(installation, original.payload.execution),
-    admitted = executionAuthorityState(authority);
-  if (admitted.execution.operationKey !== input.operationKey)
-    throw Error("Receipt original execution changed");
-  if (admitted.kind === "configurationMaintenance.prepare") {
-    const effect = childSettlementState(
-      verifyControlEffectSettlement(installation, admitted.execution),
-    ).evidence;
-    if (effect.outcome === "unknown") throw Error("Original preparation remains uncontained");
-    const source = z
-      .object({ payload: z.object({ receipt: z.unknown() }) })
-      .parse(readPrivateRecord(state, "effects", `${input.operationKey}.json`)).payload.receipt;
-    if (controlDigest(source) !== effect.terminalReceiptDigest)
-      throw Error("Original preparation effect changed");
-    if (z.object({ kind: z.literal("data-configuration-fence-refused") }).safeParse(source).success)
-      verifyRetainedArtifactTargetRootRelease(authority);
-  }
-  acknowledgeRetentionDependency(state, origin, {
-    operationKey: input.operationKey,
-    fingerprint: input.fingerprint,
-    terminalDigest: input.terminalDigest,
-    proofDigest: controlDigest(proof),
-  });
-  return { acknowledged: true };
 }
 const terminalCommitmentSchema = z.strictObject({
   version: z.literal(1),
@@ -735,13 +584,6 @@ export function retainControlTerminalCommitment(
     );
     const prior = raw === null ? undefined : readTerminalCommitment(s);
     const originalTime = prior?.terminalAt ?? terminalAt;
-    assertFamilyCanonicalCompatibility(
-      s.installation,
-      origin,
-      s.execution,
-      value.digest,
-      originalTime,
-    );
     if (prior) {
       if (prior.terminalDigest === value.digest) return originalTime;
       // Configuration results stay masked while confidential claim cleanup
@@ -765,7 +607,6 @@ export function retainControlTerminalCommitment(
       terminalCommitmentName(s.execution),
       signControl(s.installation.privateKey, "openmapx-control-terminal-v1", payload),
       false,
-      origin,
     );
     return originalTime;
   });
@@ -784,13 +625,6 @@ function verifyAndSealTerminalCommitment(
     (terminalAt !== undefined && proof.terminalAt !== terminalAt)
   )
     throw Error("Original canonical terminal tuple/time changed");
-  assertFamilyCanonicalCompatibility(
-    s.installation,
-    origin,
-    s.execution,
-    value.digest,
-    proof.terminalAt,
-  );
   if (proof.phase === "prepared")
     writePrivateRecord(
       s.installation,
@@ -801,7 +635,6 @@ function verifyAndSealTerminalCommitment(
         phase: "canonical" as const,
       }),
       false,
-      origin,
     );
   return proof;
 }
@@ -814,21 +647,9 @@ export function retainControlTerminalStatus(
   const authority = restoreAdmittedControlExecution(installation, execution),
     s = executionAuthorityState(authority);
   withPrivateEffectWriter(s, () => {
-    const proof = verifyAndSealTerminalCommitment(s, status, terminalAt),
-      origin = s.origin;
-    if (!origin) throw Error("Missing terminal origin");
+    const proof = verifyAndSealTerminalCommitment(s, status, terminalAt);
     if (s.kind === "feedProxy.validateAndReload")
       publishFeedProxyCanonicalTerminal(authority, status, proof.terminalAt);
-    const settlement = childSettlementState(verifyControlEffectSettlement(installation, execution));
-    publishFamilyCanonicalTerminal(
-      s.installation,
-      origin,
-      execution,
-      settlement.evidence.outcome !== "unknown" &&
-        (status.state === "succeeded" || settlement.evidence.publication !== "committed"),
-      proof.terminalDigest,
-      proof.terminalAt,
-    );
   });
 }
 /** Rejoin a terminal worker from its original signed admission and known effect
@@ -855,7 +676,6 @@ export function repairControlJournalTerminal(
     terminalAt < terminal.admittedAt
   )
     throw Error("Original terminal journal identity required");
-  const origin = s.origin;
   withPrivateEffectWriter(s, () => {
     const admittedRaw = readPrivateRecord(
       s.installation,
@@ -908,39 +728,13 @@ export function repairControlJournalTerminal(
     const committed = verifyAndSealTerminalCommitment(s, terminal, terminalAt);
     if (s.kind === "feedProxy.validateAndReload")
       publishFeedProxyCanonicalTerminal(authority, terminal, committed.terminalAt);
-    publishFamilyCanonicalTerminal(
-      s.installation,
-      origin,
-      execution,
-      true,
-      committed.terminalDigest,
-      committed.terminalAt,
-    );
-    completeFamilyJournal(s.installation, origin, execution, terminalAt);
   });
   return authority;
 }
-/** Fixed agent adapter, installed before startup reconciliation; no request carries this capability. */
-export function registerControlRetentionJournal(
-  installation: ControlInstallation,
-  journal: NonNullable<InstallationState["retentionJournal"]>,
-): () => void {
-  const s = installationState(installation);
-  if (s.fixedChildId || installation.role !== "ops-agent" || s.retentionJournal)
-    throw Error("Invalid journal retention adapter");
-  s.retentionJournal = journal;
-  return () => {
-    if (s.retentionJournal === journal) s.retentionJournal = undefined;
-  };
-}
-export function completeControlJournalExecution(authority: VerifiedExecutionAuthority): void {
+/** Reserves the execution's terminal commitment record before any effect. */
+export function reserveControlTerminal(authority: VerifiedExecutionAuthority): void {
   const s = executionAuthorityState(authority);
-  if (!s.origin) throw Error("Missing journal origin");
-  completeFamilyJournal(s.installation, s.origin, s.execution);
-}
-export function requireControlJournalRetention(authority: VerifiedExecutionAuthority): void {
-  const s = executionAuthorityState(authority);
-  if (!s.origin) throw Error("Legacy origin is observation-only");
+  if (!s.origin) throw Error("Control origin required");
   // Reserve the immutable terminal authentication cell before any effect.
   writePrivateRecord(
     s.installation,
@@ -948,43 +742,21 @@ export function requireControlJournalRetention(authority: VerifiedExecutionAutho
     terminalCommitmentName(s.execution),
     null,
     true,
-    s.origin,
   );
-  requireFamilyJournal(s.installation, s.origin, s.execution);
 }
-export function hasRetainedControlOrigin(
-  installation: ControlInstallation,
-  rootKey: string,
-): boolean {
-  try {
-    const parsed = parseControlRootOperationKey(rootKey);
-    return hasRetentionEvidence(installationState(installation), {
-      version: 1,
-      rootKey,
-      issuer: installation.role,
-      notAfter: parsed.notAfter,
-    });
-  } catch {
-    return true;
-  } // Legacy, malformed, corrupt or partial evidence is never age-pruned by this adapter.
-}
-export function assertFreshControlRoot(
-  installation: ControlInstallation,
-  key: string,
-  requestedDeadlineAt: number | undefined,
-): void {
-  const state = installationState(installation),
-    parsed = parseControlRootOperationKey(key);
+export function assertFreshControlRoot(key: string, requestedDeadlineAt: number | undefined): void {
+  const parsed = parseControlRootOperationKey(key);
   if (requestedDeadlineAt !== parsed.notAfter || parsed.notAfter - Date.now() > 7 * 24 * 3600_000)
-    throw Error(
-      "Upgrade prerequisite: a persisted timed control root and exact deadline are required",
-    );
-  assertOriginClockForward(state, {
-    version: 1,
-    rootKey: key,
-    issuer: installation.role,
-    notAfter: parsed.notAfter,
-  });
+    throw Error("A timed control root with its exact deadline is required");
+  // An expired root is refused whether or not its records were already pruned.
+  if (parsed.notAfter <= Date.now()) throw Error("Expired control root");
+}
+/** Refuses new control work, before any effect, when the role's private
+ * state filesystem has less than 64 MiB free. */
+export function assertControlStorageAvailable(installation: ControlInstallation): void {
+  const { bavail, bsize } = statfsSync(installationState(installation).privateRoot.anchor);
+  if (bavail * bsize < 64 * 1024 * 1024)
+    throw Error("Control state filesystem is nearly full; free space before retrying");
 }
 export function controlInstallationDataRoot(installation: ControlInstallation): string {
   return installationState(installation).dataRoot;
@@ -1010,31 +782,11 @@ export function controlRolePublicKey(
 ): string {
   return installationState(installation).publicKeys[role];
 }
-function writeExecutionShared(
-  state: InstallationState,
-  execution: ExecutionRef,
-  dir: AnchoredDirectory,
-  name: string,
-  bytes: string,
-  exclusive = false,
-  origin = retainedExecutionOrigin(state, execution),
-) {
-  if (origin)
-    familyRecordWrite(
-      state,
-      origin,
-      { scope: "shared", namespace: "execution", container: execution.executor, name },
-      bytes,
-      (beforePublish) => dir.write(name, bytes, exclusive, beforePublish),
-      exclusive,
-    );
-  else dir.write(name, bytes, exclusive);
-}
 export function readPrivateRecord(
   state: InstallationState,
   namespace: string,
   name: string,
-  max: number = CONTROL_RETENTION_LIMITS.privateRecordBytes,
+  max: number = PRIVATE_RECORD_BYTES,
 ): unknown {
   const dir = state.privateRoot.directory(namespace);
   try {
@@ -1248,7 +1000,7 @@ export function retainAdmittedControlExecution(
         .object({
           version: z.union([z.literal(1), z.literal(2)]),
           installationId: uuid,
-          origin: controlOriginSchema.optional(),
+          origin: controlOriginSchema,
         })
         .passthrough(),
     );
@@ -1289,7 +1041,6 @@ export function retainAdmittedControlExecution(
   }
   if (execution.deadlineAt > origin.notAfter)
     throw Error("Control execution widens origin deadline");
-  assertOriginClockForward(state, origin);
   const receipt = signControl(state.privateKey, "openmapx-control-execution-v2", {
     version: 2,
     installationId: installation.installationId,
@@ -1301,14 +1052,6 @@ export function retainAdmittedControlExecution(
   });
   if (Buffer.byteLength(canonicalJson(receipt)) > 65536)
     throw Error("Execution authority receipt capacity");
-  registerFamilyExecution(
-    state,
-    origin,
-    execution,
-    controlDigest(receipt),
-    input.parent,
-    !!input.coordinatorPullBaseline,
-  );
   const name = `${execution.operationKey}.json`;
   let newlyAdmitted = false;
   try {
@@ -1317,9 +1060,9 @@ export function retainAdmittedControlExecution(
       throw Error("Conflicting retained execution identity");
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-    writePrivateRecord(state, "executions", name, receipt, true, origin);
-    writePrivateRecord(state, "effects", name, null, true, origin);
-    writePrivateRecord(state, "effect-started", name, null, true, origin);
+    writePrivateRecord(state, "executions", name, receipt, true);
+    writePrivateRecord(state, "effects", name, null, true);
+    writePrivateRecord(state, "effect-started", name, null, true);
     newlyAdmitted = true;
   }
   const authority = Object.freeze({ execution }) as VerifiedExecutionAuthority;
@@ -1503,13 +1246,7 @@ export function prepareFixedControlChild(
       ids.includes(delegationId)
     )
       throw Error("Fixed child key capacity/replay");
-    writeExecutionShared(
-      s.installation,
-      s.execution,
-      dir,
-      name,
-      canonicalJson([...ids, delegationId]),
-    );
+    dir.write(name, canonicalJson([...ids, delegationId]));
   });
   const key = newControlKey();
   writePrivateRecord(
@@ -1518,7 +1255,6 @@ export function prepareFixedControlChild(
     `${delegationId}.key`,
     { publicKey: key.publicKey, privateKey: encodePrivate(key.privateKey) },
     true,
-    s.origin,
   );
   writePrivateRecord(
     s.installation,
@@ -1526,7 +1262,6 @@ export function prepareFixedControlChild(
     `${controlDigest(key.publicKey)}.json`,
     { delegationId, publicKey: key.publicKey, execution: s.execution },
     true,
-    s.origin,
   );
   return key.publicKey;
 }
@@ -1740,16 +1475,7 @@ export function retainConfigurationGenerationNonCommit(
       name,
       signControl(state.installation.privateKey, "openmapx-control-settlement-v1", payload),
       false,
-      state.origin,
     );
-    if (state.origin)
-      markFamilyTerminal(
-        state.installation,
-        state.origin,
-        state.execution,
-        true,
-        controlDigest(payload),
-      );
   });
 }
 /** Actual private source, not a caller outcome flag. */
@@ -1776,17 +1502,6 @@ export function inspectConfigurationGenerationNonCommit(
     effect.terminalReceiptDigest !== controlDigest(effect.receipt)
   )
     throw Error("Actual original generation noncommit required");
-  verifyFamilyOwnedRecord(
-    local,
-    state.origin,
-    {
-      scope: "private",
-      namespace: "effects",
-      container: "",
-      name: `${execution.operationKey}.json`,
-    },
-    canonicalJson(raw),
-  );
   return effect.receipt;
 }
 export function withPrivateEffectWriter<T>(s: AuthorityState, write: () => T): T {
@@ -1828,7 +1543,6 @@ export function beginControlEffect(authority: VerifiedExecutionAuthority): void 
         name,
         { execution: s.execution, receiptDigest: s.receiptDigest },
         false,
-        s.origin,
       );
     }),
   );
@@ -1863,17 +1577,6 @@ function configurationPreEffectState(authority: VerifiedExecutionAuthority) {
     )
   )
     throw Error("Fixed managed configuration pre-effect source required");
-  verifyFamilyOwnedRecord(
-    state.installation,
-    state.origin,
-    {
-      scope: "private",
-      namespace: "executions",
-      container: "",
-      name: `${state.execution.operationKey}.json`,
-    },
-    canonicalJson(raw),
-  );
   return state;
 }
 /** Existing not-started evidence, only after the original lifecycle is frozen
@@ -1915,12 +1618,6 @@ export function inspectConfigurationPreEffectRefusal(authority: VerifiedExecutio
     effect.terminalReceiptDigest !== controlDigest(effect.receipt)
   )
     throw Error("Actual unstarted managed configuration receipt required");
-  verifyFamilyOwnedRecord(
-    state.installation,
-    state.origin,
-    { scope: "private", namespace: "effects", container: "", name },
-    canonicalJson(raw),
-  );
   if (
     cancelControlExecution(authority).length ||
     state.reservations.some((slot) => {
@@ -1949,12 +1646,6 @@ export function restoreConfigurationPreEffectTerminal(
     controlDigest((rawProof as { payload: unknown }).payload) !== controlDigest(proof)
   )
     throw Error("Original pre-effect terminal changed");
-  verifyFamilyOwnedRecord(
-    state.installation,
-    state.origin,
-    { scope: "private", namespace: "observations", container: "", name: proofName },
-    canonicalJson(rawProof),
-  );
   const rawAdmission = readPrivateRecord(
     state.installation,
     "executions",
@@ -2004,12 +1695,6 @@ function readDataWorkflowProgress(authority: VerifiedExecutionAuthority) {
   if (s.kind !== "data.update" || !s.origin) throw Error("Original Full Update owner required");
   const name = `data-workflow-${s.execution.operationKey}.json`,
     raw = readPrivateRecord(s.installation, "observations", name, 65536);
-  verifyFamilyOwnedRecord(
-    s.installation,
-    s.origin,
-    { scope: "private", namespace: "observations", container: "", name },
-    canonicalJson(raw),
-  );
   const body = verifyControl(
     s.installation.installation.publicKey,
     "openmapx-admin-data-workflow-v1",
@@ -2042,8 +1727,7 @@ export function retainControlEffectReceipt(
     if (!parsed.success) throw Error("Unsupported effect receipt evidence");
     const receipt = parsed.data;
     let outcome: ChildSettlement["outcome"] = "unknown",
-      publication: ChildSettlement["publication"] = "unknown",
-      helperCompletedAt: number | undefined;
+      publication: ChildSettlement["publication"] = "unknown";
     if (receipt.kind === "catalog-pins-initialized") {
       if (
         s.kind !== "catalog-pins.initialize" ||
@@ -2092,21 +1776,9 @@ export function retainControlEffectReceipt(
         (started as { receiptDigest: unknown }).receiptDigest !== s.receiptDigest
       )
         throw Error("Original started credential template required");
-      verifyFamilyOwnedRecord(
-        s.installation,
-        s.origin,
-        { scope: "private", namespace: "effect-started", container: "", name },
-        canonicalJson(started),
-      );
       const admitted = readPrivateRecord(s.installation, "executions", name, 65536) as {
         payload: { operation: unknown };
       };
-      verifyFamilyOwnedRecord(
-        s.installation,
-        s.origin,
-        { scope: "private", namespace: "executions", container: "", name },
-        canonicalJson(admitted),
-      );
       const operation = localCredentialTemplateOperationSchema.parse(admitted.payload.operation);
       if (
         receipt.fileMac !== operation.fileMac ||
@@ -2240,19 +1912,6 @@ export function retainControlEffectReceipt(
           execution: unknown;
           receiptDigest: unknown;
         };
-      for (const [namespace, name, value] of [
-        ["executions", startedName, admitted],
-        ["observations", progressName, progressRaw],
-        ["observations", completionName, completionRaw],
-        ["spawn-started", spawnName, spawn],
-        ["effect-started", startedName, started],
-      ] as const)
-        verifyFamilyOwnedRecord(
-          s.installation,
-          s.origin,
-          { scope: "private", namespace, container: "", name },
-          canonicalJson(value),
-        );
       if (
         body.intentDigest !== controlDigest(intent.operation) ||
         controlDigest(spawn.execution) !== controlDigest(s.execution) ||
@@ -2279,7 +1938,6 @@ export function retainControlEffectReceipt(
         )
       )
         throw Error("Actual original helper completion required");
-      helperCompletedAt = completion.completedAt;
       outcome = "committed";
       publication = "committed";
     } else if (receipt.kind === "fixed-cli-exit") {
@@ -2374,16 +2032,7 @@ export function retainControlEffectReceipt(
     try {
       const raw = readPrivateRecord(s.installation, "effects", name);
       if (raw === null) {
-        writePrivateRecord(s.installation, "effects", name, signed, false, s.origin);
-        if (s.origin)
-          markFamilyTerminal(
-            s.installation,
-            s.origin,
-            s.execution,
-            outcome !== "unknown",
-            controlDigest(payload),
-            helperCompletedAt,
-          );
+        writePrivateRecord(s.installation, "effects", name, signed, false);
         return;
       }
       const prior = verifyControl(
@@ -2396,33 +2045,15 @@ export function retainControlEffectReceipt(
         // A completed helper may have lost the write acknowledgement after
         // the signed effect landed but before its family terminal fact. Repair
         // only this exact source using its original signed completion time.
-        if (s.origin && helperCompletedAt !== undefined)
-          markFamilyTerminal(
-            s.installation,
-            s.origin,
-            s.execution,
-            true,
-            controlDigest(payload),
-            helperCompletedAt,
-          );
         return;
       }
       // A later transport/journal failure must never erase proved committed effects.
       if (prior.outcome !== "unknown") return;
-      writePrivateRecord(s.installation, "effects", name, signed, false, s.origin);
+      writePrivateRecord(s.installation, "effects", name, signed, false);
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      writePrivateRecord(s.installation, "effects", name, signed, true, s.origin);
+      writePrivateRecord(s.installation, "effects", name, signed, true);
     }
-    if (s.origin)
-      markFamilyTerminal(
-        s.installation,
-        s.origin,
-        s.execution,
-        outcome !== "unknown",
-        controlDigest(payload),
-        helperCompletedAt,
-      );
   });
 }
 export function verifyControlEffectSettlement(
@@ -2523,13 +2154,6 @@ export function verifyMaintenanceCoordinatorPrerequisite(
       .changed !== true
   )
     throw Error("Conclusive successful coordinator prerequisite required");
-  assertFamilyCanonicalCompatibility(
-    local,
-    owner.origin,
-    admitted.execution,
-    canonical.terminalDigest,
-    canonical.terminalAt,
-  );
   verifyRetainedArtifactTargetRootRelease(authority);
   return Object.freeze({
     execution: Object.freeze(admitted.execution),
@@ -2566,7 +2190,6 @@ export function readVerifiedStagedCoordinatorOwnership(
   installation: ControlInstallation,
   execution: ExecutionRef,
   input: OpsJobStatus,
-  context?: ControlRetentionPreparationContext,
 ): VerifiedStagedCoordinatorOwnership {
   const local = installationState(installation);
   if (installation.role !== "ops-agent" || local.fixedChildId)
@@ -2647,46 +2270,13 @@ export function readVerifiedStagedCoordinatorOwnership(
     result.imageReference !== baseline.configImageReference
   )
     throw Error("Original staged coordinator result changed");
-  const canonicalRecord = readPrivateRecord(
-    local,
-    "observations",
-    terminalCommitmentName(execution),
-    4096,
-  );
-  for (const record of [
-    { namespace: "executions", name: `${execution.operationKey}.json`, raw },
-    { namespace: "effects", name: `${execution.operationKey}.json`, raw: effectRecord },
-    { namespace: "observations", name: terminalCommitmentName(execution), raw: canonicalRecord },
-  ])
-    verifyFamilyOwnedRecord(
-      local,
-      state.origin,
-      { scope: "private", namespace: record.namespace, container: "", name: record.name },
-      canonicalJson(record.raw),
-    );
-  assertFamilyCanonicalCompatibility(
-    local,
-    state.origin,
-    execution,
-    canonical.terminalDigest,
-    canonical.terminalAt,
-  );
-  const copy = readActiveStagedCoordinatorApiCopy(
-      local,
-      state.origin,
-      execution,
-      canonical.terminalDigest,
-      parent,
-      context,
-    ),
-    source = stagedCoordinatorSourceSchema.parse({
+  const source = stagedCoordinatorSourceSchema.parse({
       execution,
       admittedAt: admitted.admittedAt,
       baseline,
       admissionDigest: controlDigest(raw),
       canonicalDigest: canonical.terminalDigest,
       effectDigest: controlDigest(childSettlementState(settlement).evidence),
-      apiCopyDigest: copy.apiCopyDigest,
     }),
     proof = Object.freeze({}) as VerifiedStagedCoordinatorOwnership;
   stagedCoordinatorProofs.set(proof, {
@@ -2742,12 +2332,6 @@ export function ownedStagedCoordinatorBaseline(
     raw,
     configurationMaintenanceOwnerRecordSchema,
   );
-  verifyFamilyOwnedRecord(
-    state.installation,
-    state.origin,
-    { scope: "private", namespace: "configuration-maintenance", container: "", name },
-    canonicalJson(raw),
-  );
   const observation = verifyControl(
       state.installation.installation.publicKey,
       stagedCoordinatorObservationDomain,
@@ -2776,7 +2360,6 @@ export function ownedStagedCoordinatorBaseline(
     const generation = owner.apiControls.steps.find((value) => value.ordinal === 0);
     if (
       !generation?.canonical ||
-      !generation.receiptDelivery ||
       owner.receipt.appliedRevisionId !== owner.plan.operation.revisionId
     )
       throw Error("Original staged owner generation required");
@@ -2855,12 +2438,6 @@ export function ownedCoordinatorPullBaseline(
     "openmapx-configuration-maintenance-owner-v2",
     raw,
     configurationMaintenanceOwnerRecordSchema,
-  );
-  verifyFamilyOwnedRecord(
-    state.installation,
-    state.origin,
-    { scope: "private", namespace: "configuration-maintenance", container: "", name },
-    canonicalJson(raw),
   );
   const witness = verifyControl(
     state.installation.installation.publicKey,
@@ -3011,13 +2588,6 @@ export function observeCoordinatorPullForMaintenance(
     canonicalJson(terminal.terminal.result) !== canonicalJson(effect.receipt.result)
   )
     throw Error("Actual successful contained coordinator pull required");
-  assertFamilyCanonicalCompatibility(
-    state.installation,
-    state.origin,
-    admitted.execution,
-    canonical.terminalDigest,
-    canonical.terminalAt,
-  );
   const { changed: _changed, ...result } = servicePullResultSchema.parse(effect.receipt.result),
     fixed = record.privateCoordinatorLifecycle!;
   if (
@@ -3095,12 +2665,6 @@ export function publishConfigurationMaintenanceForwardWitness(
       ownerRaw,
       configurationMaintenanceOwnerRecordSchema,
     );
-  verifyFamilyOwnedRecord(
-    root.installation,
-    root.origin,
-    { scope: "private", namespace: "configuration-maintenance", container: "", name },
-    canonicalJson(ownerRaw),
-  );
   assertConfigurationMaintenanceDecisionSource(owner);
   if (
     owner.admissionDigest !== root.receiptDigest ||
@@ -3125,9 +2689,7 @@ export function publishConfigurationMaintenanceForwardWitness(
       serviceIds: receipt.serviceIds,
       steps: receipt.steps,
     });
-  const decision = owner.apiControls.decide?.receiptDelivery
-    ? owner.apiControls.decide.commitment
-    : null;
+  const decision = owner.apiControls.decide?.commitment ?? null;
   if (decision)
     verifyControl(
       root.installation.installation.publicKey,
@@ -3137,7 +2699,7 @@ export function publishConfigurationMaintenanceForwardWitness(
     );
   const source = owner.apiControls.steps.find((value) => value.ordinal === 0);
   let generation = null;
-  if (source?.canonical && source.receiptDelivery && decision) {
+  if (source?.canonical && decision) {
     verifyConfigurationMaintenanceChildTerminal(
       authority,
       0,
@@ -3181,13 +2743,7 @@ export function publishConfigurationMaintenanceForwardWitness(
     throw Error("Configuration maintenance forward witness capacity");
   const directory = executionWitnessDirectory(root.installation, "ops-agent", true);
   try {
-    writeExecutionShared(
-      root.installation,
-      root.execution,
-      directory.role,
-      `${root.execution.operationKey}.configuration-maintenance.json`,
-      bytes,
-    );
+    directory.role.write(`${root.execution.operationKey}.configuration-maintenance.json`, bytes);
   } finally {
     directory.close();
   }
@@ -3536,12 +3092,6 @@ export function verifyConfigurationMaintenanceChildTerminal(
       raw,
       configurationMaintenanceOwnerRecordSchema,
     );
-  verifyFamilyOwnedRecord(
-    root.installation,
-    root.origin,
-    { scope: "private", namespace: "configuration-maintenance", container: "", name },
-    canonicalJson(raw),
-  );
   assertConfigurationMaintenanceDecisionSource(owner);
   const step = owner.plan.steps[ordinal],
     source = owner.apiControls.steps.find((value) => value.ordinal === ordinal),
@@ -3617,13 +3167,6 @@ export function verifyConfigurationMaintenanceChildTerminal(
       (status.result as { revisionId?: string }).revisionId !== owner.plan.operation.revisionId)
   )
     throw Error("Original candidate generation commit required");
-  assertFamilyCanonicalCompatibility(
-    root.installation,
-    root.origin,
-    child.execution,
-    canonical.terminalDigest,
-    canonical.terminalAt,
-  );
   const { diagnostics: _diagnostics, ...safe } = status,
     value = Object.freeze({}) as VerifiedConfigurationMaintenanceChild;
   const freezeSource = <T>(data: T): T => {
@@ -3723,7 +3266,7 @@ const parentAssertionSchema = z.strictObject({
 });
 const parentGrantSchema = z.strictObject({
   version: z.union([z.literal(1), z.literal(2)]),
-  origin: controlOriginSchema.optional(),
+  origin: controlOriginSchema,
   installationId: uuid,
   parent: executionRefSchema,
   child: executionRefSchema,
@@ -3835,7 +3378,7 @@ export function publishDataControlTerminalWitness(
       if (prior.toString("utf8") !== bytes) throw Error("Canonical data witness changed");
       return;
     }
-    writeExecutionShared(s.installation, s.execution, directory.role, name, bytes, true);
+    directory.role.write(name, bytes, true);
   } finally {
     directory.close();
   }
@@ -3957,9 +3500,8 @@ function readLifecycle(
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
   }
-  const origin = readControlExecutionWitness(state, execution, verifier).origin;
-  if (!origin || hasLocalRetentionFamily(state, origin))
-    writePrivateRecord(state, "lifecycle-observations", observationName, current, false, origin);
+  readControlExecutionWitness(state, execution, verifier);
+  writePrivateRecord(state, "lifecycle-observations", observationName, current, false);
   return current;
 }
 function writeLifecycle(
@@ -3978,16 +3520,8 @@ function writeLifecycle(
     `${lifecycle.execution.operationKey}.json`,
     signed,
     exclusive,
-    retainedExecutionOrigin(state, lifecycle.execution),
   );
-  writeExecutionShared(
-    state,
-    lifecycle.execution,
-    dir,
-    `${lifecycle.execution.operationKey}.lifecycle.json`,
-    bytes,
-    exclusive,
-  );
+  dir.write(`${lifecycle.execution.operationKey}.lifecycle.json`, bytes, exclusive);
   readLifecycle(state, dir, lifecycle.execution, state.installation.publicKey);
 }
 function initializeLifecycle(
@@ -4071,7 +3605,6 @@ function withControlExecutionForward<T>(authority: VerifiedExecutionAuthority, r
     throw Error(
       "Legacy undated control authority is observation/settlement only; upgrade producer",
     );
-  assertOriginClockForward(s.installation, s.origin);
   const check = () =>
     withExecutionWriter(s.installation, s.execution, (dir) => {
       const lifecycle = readLifecycle(
@@ -4128,7 +3661,6 @@ export function withControlDelegationPublication<T>(
 ): T {
   const s = executionAuthorityState(authority);
   if (!s.origin) throw Error("Legacy control admission cannot publish grants");
-  assertOriginClockForward(s.installation, s.origin);
   const own = () =>
     withExecutionWriter(s.installation, s.execution, (directory) => {
       const current = readLifecycle(
@@ -4155,17 +3687,6 @@ export function withControlDelegationPublication<T>(
             raw,
             configurationMaintenanceOwnerRecordSchema,
           );
-        verifyFamilyOwnedRecord(
-          s.installation,
-          s.origin!,
-          {
-            scope: "private",
-            namespace: "configuration-maintenance",
-            container: "",
-            name: `${admission.payload!.operation!.maintenanceId}.json`,
-          },
-          canonicalJson(raw),
-        );
         if (
           owner.admissionDigest !== s.receiptDigest ||
           canonicalJson(owner.plan.prepare) !== canonicalJson(s.execution) ||
@@ -4185,8 +3706,7 @@ export function withControlDelegationPublication<T>(
             !["authorized", "applying"].includes(owner.receipt.state) ||
             owner.receipt.decision?.decision !== "continue" ||
             owner.receipt.dmFence?.state !== "prepared" ||
-            owner.apiControls.decide?.operation.decision !== "continue" ||
-            !owner.apiControls.decide.receiptDelivery)
+            owner.apiControls.decide?.operation.decision !== "continue")
         )
           throw new ControlExecutionFencedError(
             "Original authorized configuration decision required",
@@ -4238,7 +3758,6 @@ export function withControlMaintenanceDecisionPublication<T>(
   const s = executionAuthorityState(authority);
   if (s.kind !== "configurationMaintenance.prepare" || !s.origin)
     throw Error("Original prepared maintenance decision owner required");
-  assertOriginClockForward(s.installation, s.origin);
   const own = () =>
     withExecutionWriter(s.installation, s.execution, (directory) => {
       const current = readLifecycle(
@@ -4418,7 +3937,6 @@ export function recordLeaseControlAttempt(
     `${input.delegationId}.json`,
     { kind: "lease", attempt },
     true,
-    s.origin,
   );
 }
 export function settleExecutionLifecycle(s: AuthorityState) {
@@ -4477,7 +3995,6 @@ export async function attestParentExecution(
     attemptId = fixedControlChildId(s.installation, child.childPublicKey, s.execution);
   }
   if (!s.origin) throw Error("Legacy parent origin is observation-only");
-  assertOriginClockForward(s.installation, s.origin);
   const grant = parentGrantSchema.parse({
     version: 2,
     origin: s.origin,
@@ -4545,13 +4062,6 @@ export async function attestParentExecution(
     const bytes = canonicalJson(witness);
     if (Buffer.byteLength(bytes) > 65536) throw Error("Parent witness capacity");
     if (!s.origin) throw Error("Legacy origin is observation-only");
-    enlistFamilyIntent(
-      s.installation,
-      s.origin,
-      attemptId,
-      child.execution,
-      child.recipient === "data-manager" ? "data-manager" : "ops-agent",
-    );
     prepareControlChildPublication(authority, plan, {
       delegationId: attemptId,
       grantDigest: fields.grantDigest,
@@ -4563,12 +4073,11 @@ export async function attestParentExecution(
       `${attemptId}.json`,
       { grant: signed, assertion },
       true,
-      s.origin,
     );
     lifecycle.childIntents[attemptId] = fields.grantDigest;
     lifecycle.sequence++;
     writeLifecycle(s.installation, dir, lifecycle);
-    writeExecutionShared(s.installation, s.execution, dir, name, bytes);
+    dir.write(name, bytes);
     return assertion;
   });
 }
@@ -4708,7 +4217,6 @@ export function verifyParentExecution(
     }
     if (!retained) {
       if (!grant.origin) throw Error("Legacy parent is observation-only; upgrade producer");
-      assertOriginClockForward(p.installation, grant.origin);
       if (!forward) throw Error("Canceled/terminal parent permits observation only");
       if (Date.now() >= grant.child.deadlineAt) throw Error("Expired parent grant");
       writePrivateRecord(
@@ -4717,9 +4225,8 @@ export function verifyParentExecution(
         `${grant.child.operationKey}.json`,
         { assertion },
         true,
-        grant.origin,
       );
-      writePrivateRecord(p.installation, "parent-adoptions", name, grant, true, grant.origin);
+      writePrivateRecord(p.installation, "parent-adoptions", name, grant, true);
     }
     const binding = z
       .strictObject({ assertion: z.string() })
@@ -4879,7 +4386,6 @@ export function retainFixedCliSpawnIntent(
           }),
     },
     true,
-    s.origin,
   );
 }
 export function fixedCliArguments(operation: import("../ops/contract").OpsOperation): string[] {
@@ -5020,12 +4526,6 @@ export function readConfigurationHandoffSpawnIntent(
       })
   )
     throw Error("Original configuration helper spawn required");
-  verifyFamilyOwnedRecord(
-    s,
-    saved.origin,
-    { scope: "private", namespace: "observations", container: "", name },
-    canonicalJson(raw),
-  );
   s.registeredTargets = new Set(saved.operation.serviceIds);
   return saved;
 }
@@ -5036,14 +4536,7 @@ export function beginFixedCliExecution(
   const s = installationState(installation);
   if (!s.fixedChildId) throw Error("Fixed CLI authority required");
   const begin = () =>
-    writePrivateRecord(
-      s,
-      "spawn-started",
-      `${s.fixedChildId}.json`,
-      { execution },
-      true,
-      retainedExecutionOrigin(s, execution),
-    );
+    writePrivateRecord(s, "spawn-started", `${s.fixedChildId}.json`, { execution }, true);
   if (s.fixedParentAssertion)
     withParentLifecycles(s, s.fixedParentAssertion, (forward) => {
       if (!forward) throw Error("Canceled/terminal parent prevents fixed CLI start");
@@ -5092,18 +4585,6 @@ export function readCompletedConfigurationHandoff(
       effectRaw,
       settlementSchema.extend({ receipt: effectObservationSchema }),
     );
-  for (const [namespace, name, raw] of [
-    ["observations", intentName, intentRaw],
-    ["observations", progressName, progressRaw],
-    ["observations", completionName, completionRaw],
-    ["effects", effectName, effectRaw],
-  ] as const)
-    verifyFamilyOwnedRecord(
-      state,
-      intent.origin,
-      { scope: "private", namespace, container: "", name },
-      canonicalJson(raw),
-    );
   if (
     intent.installationId !== installation.installationId ||
     intent.operation.handoffId !== handoffId ||
@@ -5149,7 +4630,7 @@ export function readCompletedConfigurationHandoff(
 
 const executionWitnessSchema = z.strictObject({
   version: z.union([z.literal(1), z.literal(2)]),
-  origin: controlOriginSchema.optional(),
+  origin: controlOriginSchema,
   installationId: uuid,
   execution: executionRefSchema,
   kind: z.string().max(128),
@@ -5211,15 +4692,7 @@ function publishControlExecutionWitness(
         throw Error("Replaced execution witness");
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      writeExecutionShared(
-        state,
-        input.execution,
-        d.role,
-        name,
-        canonicalJson(witness),
-        true,
-        input.origin,
-      );
+      d.role.write(name, canonicalJson(witness), true);
     }
   } finally {
     d.close();
@@ -5244,7 +4717,7 @@ export function restoreAdmittedControlExecution(
         execution: executionRefSchema,
         kind: z.string(),
         serviceIds: targetSchema,
-        origin: controlOriginSchema.optional(),
+        origin: controlOriginSchema,
         plan: z.array(plannedChildSchema).max(64),
         reservations: z.array(controlChildReservationSchema).max(64).optional(),
       })
@@ -5379,18 +4852,10 @@ export function retainControlPreparedTerminal(authority: VerifiedExecutionAuthor
       `${s.execution.operationKey}.json`,
       signed,
       true,
-      s.origin,
     );
     const d = executionWitnessDirectory(s.installation, "ops-agent", true);
     try {
-      writeExecutionShared(
-        s.installation,
-        s.execution,
-        d.role,
-        `${s.execution.operationKey}.prepared.json`,
-        canonicalJson(signed),
-        true,
-      );
+      d.role.write(`${s.execution.operationKey}.prepared.json`, canonicalJson(signed), true);
     } finally {
       d.close();
     }
@@ -5430,12 +4895,6 @@ export async function verifyDataUpdatePrerequisites(authority: VerifiedExecution
     throw Error("Original Full Update root required");
   const name = `data-update-plan-${s.execution.operationKey}.json`,
     raw = readPrivateRecord(s.installation, "observations", name, 128 * 1024);
-  verifyFamilyOwnedRecord(
-    s.installation,
-    s.origin,
-    { scope: "private", namespace: "observations", container: "", name },
-    canonicalJson(raw),
-  );
   const plan = verifyControl(
       s.installation.installation.publicKey,
       "openmapx-data-update-plan-v1",
@@ -5514,12 +4973,6 @@ function verifyDataUpdateCompletionSource(
   if (s.installation.fixedChildId || !s.origin) throw Error("Original Full Update root required");
   const name = `data-update-plan-${s.execution.operationKey}.json`,
     raw = readPrivateRecord(s.installation, "observations", name, 128 * 1024);
-  verifyFamilyOwnedRecord(
-    s.installation,
-    s.origin,
-    { scope: "private", namespace: "observations", container: "", name },
-    canonicalJson(raw),
-  );
   const plan = verifyControl(
       s.installation.installation.publicKey,
       "openmapx-data-update-plan-v1",

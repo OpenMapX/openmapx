@@ -28,7 +28,7 @@ import {
   executionAuthorityState,
   installationState,
   readPrivateRecord,
-  requireControlJournalRetention,
+  reserveControlTerminal,
   restoreAdmittedControlExecution,
   retainAdmittedControlExecution,
   retainedControlParent,
@@ -42,11 +42,6 @@ import {
 } from "./control-authority";
 import { signControl, verifyControl } from "./control-records";
 import { verifiedParentForArtifactDelegation } from "./peer-admission";
-import {
-  completeFamilyJournal,
-  markFamilyTerminal,
-  publishFamilyCanonicalTerminal,
-} from "./retention-family";
 import {
   adoptArtifactTargetLease,
   assertArtifactDelegationRootHeld,
@@ -219,8 +214,7 @@ export function createDataConfigurationFenceStore(
         publication: outcome === "committed" ? "committed" : "not_started",
         terminalReceiptDigest: controlDigest(receipt),
         receipt,
-      },
-      terminalAt = Date.now();
+      };
     withPrivateEffectWriter(state, () => {
       settleExecutionLifecycle(state);
       writePrivateRecord(
@@ -229,25 +223,13 @@ export function createDataConfigurationFenceStore(
         `${state.execution.operationKey}.json`,
         signControl(local.privateKey, "openmapx-control-settlement-v1", effect),
         false,
-        state.origin,
       );
-      if (state.origin)
-        markFamilyTerminal(local, state.origin, state.execution, true, controlDigest(effect));
     });
     await settleArtifactTargetLeaseChild(
       lease,
       verifyControlEffectSettlement(installation, state.execution),
     );
     if (state.origin) {
-      publishFamilyCanonicalTerminal(
-        local,
-        state.origin,
-        state.execution,
-        true,
-        effect.terminalReceiptDigest,
-        terminalAt,
-      );
-      completeFamilyJournal(local, state.origin, state.execution, terminalAt);
     }
   }
   /** Adopts the agent's delegation as this receiver's leaf execution and runs
@@ -306,7 +288,7 @@ export function createDataConfigurationFenceStore(
         if (!saved) throw new DataFenceBusy();
         return receiptOf(saved);
       }
-      requireControlJournalRetention(authority);
+      reserveControlTerminal(authority);
       assertArtifactTargetLeaseForward(lease);
       beginControlEffect(authority);
       let receipt: DataConfigurationFenceReceipt;
@@ -674,25 +656,4 @@ export function createDataConfigurationFenceStore(
       });
     },
   };
-}
-
-/** Retention adapter for a fence leaf: contained once its effect is known
- * and, when it prepared a fence, that fence is settled. */
-export async function inspectRetainedDataFence(
-  installation: ControlInstallation,
-  execution: ExecutionRef,
-  tx: Tx,
-): Promise<string> {
-  const settled = childSettlementState(
-    verifyControlEffectSettlement(installation, execution),
-  ).evidence;
-  if (settled.outcome === "committed") {
-    const rows = await tx.unsafe(
-      "SELECT state FROM data_manager.configuration_fence WHERE operation_key=$1",
-      [execution.operationKey],
-    );
-    if (rows[0]?.state !== "settled") throw Error("Unsettled configuration fence is retained");
-  } else if (settled.outcome !== "failed_without_effect")
-    throw Error("Configuration fence leaf remains unknown");
-  return settled.terminalReceiptDigest;
 }

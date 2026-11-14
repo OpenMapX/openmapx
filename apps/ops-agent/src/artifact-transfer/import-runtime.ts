@@ -17,7 +17,6 @@ import {
   signControl,
   type VerifiedExecutionAuthority,
   verifyControl,
-  verifyFamilyOwnedRecord,
   writePrivateRecord,
 } from "@openmapx/core/build-artifacts";
 import {
@@ -27,9 +26,7 @@ import {
   retainUnstartedArtifactImport,
 } from "@openmapx/core/build-artifacts/publication";
 import {
-  type ArtifactImportPreview,
   artifactImportPreviewSchema,
-  canonicalJson,
   type ExecutionRef,
   type OpsOperation,
   opsOperationFingerprint,
@@ -78,12 +75,6 @@ function originalImportPlan(authority: VerifiedExecutionAuthority) {
   if (owner.kind !== "artifactTransfer.import" || !owner.origin)
     throw Error("Original import owner required");
   const raw = readPrivateRecord(owner.installation, "observations", name(authority), 8192);
-  verifyFamilyOwnedRecord(
-    owner.installation,
-    owner.origin,
-    { scope: "private", namespace: "observations", container: "", name: name(authority) },
-    canonicalJson(raw),
-  );
   return verifyControl(owner.installation.installation.publicKey, domain, raw, planSchema);
 }
 const configSchema = z.object({
@@ -268,7 +259,6 @@ export function retainArtifactImportPlan(authority: VerifiedExecutionAuthority, 
     name(authority),
     signControl(owner.installation.privateKey, domain, planSchema.parse(plan)),
     true,
-    owner.origin,
   );
 }
 export function installPreparedImportRuntime(
@@ -445,7 +435,7 @@ export function installPreparedImportRuntime(
         );
         await store.completePreparedImport(context, claim, result);
         return { ...result, followUp: "complete" as const };
-      } catch (error) {
+      } catch {
         if (
           hardlinks.reservation &&
           lookupControlChildPhaseBinding(authority, hardlinks.reservation)

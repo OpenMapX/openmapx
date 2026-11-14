@@ -357,30 +357,6 @@ it("bootstraps an actual local initialization root and releases its MOTIS owners
     rmSync(other, { recursive: true, force: true });
   }
 });
-it("refuses a byte-identical receipt copied to a foreign inode", async () => {
-  legacy();
-  const old = await initializeCatalogPinSet({ rootDir: root, lease });
-  if (!old) throw Error("missing fixture pair");
-  const pair = createCatalogPinSet({ ...transitous, comment: "copy check" }, gbfs),
-    commit = identity();
-  await publishCatalogPinSet({
-    rootDir: root,
-    lease,
-    pins: pair,
-    expectedGenerationId: old.generationId,
-    commit,
-  });
-  const path = join(
-      docker,
-      `control-private/ops-agent/catalog-commits/${commit.execution.operationKey}.json`,
-    ),
-    bytes = readFileSync(path);
-  renameSync(path, `${path}.saved`);
-  writeFileSync(path, bytes, { mode: 0o600 });
-  await expect(readCatalogPinCommit({ rootDir: root, commit })).rejects.toThrow(
-    /identity|inode|retained/i,
-  );
-});
 it("retains a conclusive noncommit when the live pointer rename fails before publication", async () => {
   legacy();
   const old = await initializeCatalogPinSet({ rootDir: root, lease });

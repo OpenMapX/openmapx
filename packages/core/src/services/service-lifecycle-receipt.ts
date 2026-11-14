@@ -15,7 +15,6 @@ import {
 } from "../build-artifacts/control-authority";
 import { controlDigest, signControl, verifyControl } from "../build-artifacts/control-records";
 import { AnchoredDirectory, identity, sameInode } from "../build-artifacts/filesystem";
-import { familyRecordWrite } from "../build-artifacts/retention-family";
 import {
   assertArtifactTargetLeaseContainmentOwner,
   assertArtifactTargetLeaseExecution,
@@ -306,7 +305,6 @@ function inspect(dataRoot: string, execution: ExecutionRef, allowRecovery = fals
           highWaterName(execution),
           signControl(local.privateKey, highWaterDomain, repaired),
           false,
-          owner.origin,
         );
       });
       water = repaired;
@@ -458,17 +456,9 @@ export async function openServiceLifecycleReceipt(options: {
           pending: null,
         }),
         true,
-        state.origin,
       );
       if (!state.origin) throw Error("Original lifecycle retention family required");
-      familyRecordWrite(
-        local,
-        state.origin,
-        { scope: "shared", namespace: "service-lifecycle", container: "", name },
-        bytes,
-        (track) => opened.directory.write(name, bytes, true, track),
-        true,
-      );
+      opened.directory.write(name, bytes, true);
     }
   } finally {
     opened.close();
@@ -561,23 +551,13 @@ export async function openServiceLifecycleReceipt(options: {
           highWaterName(options.execution),
           signControl(owner.installation.privateKey, highWaterDomain, pending),
           false,
-          owner.origin,
         );
-        if (!owner.origin) throw Error("Original lifecycle retention family required");
-        familyRecordWrite(
-          owner.installation,
-          owner.origin,
-          { scope: "shared", namespace: "service-lifecycle", container: "", name },
-          bytes,
-          (track) =>
-            directory.directory.write(name, bytes, false, (inode) => {
-              // Physical ownership was checked above, before entering the family writer.
-              assertConfigurationGenerationWriter(writer);
-              if (!sameInode(before, directory.directory.fileIdentity(name)))
-                throw Error("Lifecycle receipt inode changed");
-              track(inode);
-            }),
-        );
+        if (!owner.origin) throw Error("Control origin required");
+        directory.directory.write(name, bytes, false, () => {
+          assertConfigurationGenerationWriter(writer);
+          if (!sameInode(before, directory.directory.fileIdentity(name)))
+            throw Error("Lifecycle receipt inode changed");
+        });
         writePrivateRecord(
           owner.installation,
           "observations",
@@ -589,7 +569,6 @@ export async function openServiceLifecycleReceipt(options: {
             pending: null,
           }),
           false,
-          owner.origin,
         );
       } finally {
         directory.close();

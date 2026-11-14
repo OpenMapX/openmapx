@@ -13,7 +13,6 @@ import {
   signControl,
   verifyControl,
   verifyControlEffectSettlement,
-  verifyFamilyOwnedRecord,
   writePrivateRecord,
 } from "@openmapx/core/build-artifacts";
 import { type ConfigurationReleaseDownloads, canonicalJson } from "@openmapx/core/ops";
@@ -79,12 +78,6 @@ function ownerFor(child: ConfigurationHandoffChild) {
     ),
     step = owner.plan.steps.find((value) => value.phase === "maintenance-handoff"),
     source = step && owner.apiControls.steps.find((value) => value.ordinal === step.ordinal);
-  verifyFamilyOwnedRecord(
-    local,
-    intent.origin,
-    { scope: "private", namespace: "configuration-maintenance", container: "", name: file },
-    canonicalJson(raw),
-  );
   if (
     canonicalJson(owner.origin) !== canonicalJson(intent.origin) ||
     canonicalJson(owner.plan.prepare) !== canonicalJson(intent.ownerPrepare) ||
@@ -102,7 +95,7 @@ function ownerFor(child: ConfigurationHandoffChild) {
     owner.receipt.dmFence?.state !== "prepared" ||
     owner.receipt.state !== "applying" ||
     owner.receipt.decision?.decision !== "continue" ||
-    !owner.apiControls.decide?.receiptDelivery ||
+    !owner.apiControls.decide ||
     owner.receipt.generation !== "committed" ||
     owner.receipt.appliedRevisionId !== intent.operation.expectedCurrentRevisionId ||
     (intent.operation.mode.kind === "release" && !intent.release)
@@ -141,7 +134,6 @@ export async function runConfigurationHandoffApplication(input: {
       file,
       signControl(local.privateKey, domains.completion, value),
       exclusive,
-      intent.origin,
     );
     worker = value;
   };
@@ -165,12 +157,6 @@ export async function runConfigurationHandoffApplication(input: {
         parentRaw,
         configurationHandoffProgressSchema,
       );
-    verifyFamilyOwnedRecord(
-      local,
-      intent.origin,
-      { scope: "private", namespace: "observations", container: "", name: parentName },
-      canonicalJson(parentRaw),
-    );
     if (
       parent.intentDigest !== controlDigest(intent) ||
       parent.phase !== "launched" ||

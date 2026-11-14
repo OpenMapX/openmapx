@@ -59,7 +59,6 @@ describe.skipIf(!enabled)(
     let nativeRecovery = false;
     let releaseAdmission: (() => void) | undefined;
     const children: ReturnType<typeof spawn>[] = [];
-    let ackReplies: unknown[] = [];
     let wire: unknown[] = [];
     let journal: Awaited<ReturnType<typeof openOpsJobJournal>>;
 
@@ -123,7 +122,6 @@ describe.skipIf(!enabled)(
         journal,
         controlInstallation: installation,
       });
-      ackReplies = [];
       wire = [];
       agent.addHook("preHandler", async (request) => {
         const kind = (request.body as { operation?: { kind?: string } } | undefined)?.operation
@@ -154,12 +152,6 @@ describe.skipIf(!enabled)(
             dropped.add(kind);
             reply.raw.destroy();
           }
-          if (kind === "controlRetention.acknowledge")
-            ackReplies.push({
-              status: reply.statusCode,
-              code: body.error?.class,
-              message: body.error?.message,
-            });
         }
         if (
           nativeRecovery &&

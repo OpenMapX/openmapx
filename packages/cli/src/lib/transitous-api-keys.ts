@@ -8,9 +8,7 @@ import {
   fstatSync,
   linkSync,
   lstatSync,
-  mkdirSync,
   openSync,
-  readFileSync,
   readSync,
   realpathSync,
   unlinkSync,
@@ -32,7 +30,7 @@ import {
   TRANSITOUS_CATALOG_DIR,
 } from "@openmapx/transitous-core";
 import { execa } from "execa";
-import { cliControlContext, collectHostControlRetention } from "./control-context";
+import { cliControlContext, pruneHostControlRecords } from "./control-context";
 import { cliProcessOptions } from "./execution-deadline";
 import { repoPaths } from "./paths";
 import {
@@ -339,7 +337,7 @@ export async function generateTransitousApiKeys(
   let began = false;
   let replacement: PreparedPlatformFileReplacement | undefined;
   try {
-    await collectHostControlRetention(installation);
+    await pruneHostControlRecords(installation);
     const operation = {
       kind: "transit.credentials.template",
       catalogRevisionId: pins.generationId,

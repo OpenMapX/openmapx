@@ -846,9 +846,7 @@ it
           ).rejects.toThrow();
           const clock = vi.spyOn(Date, "now").mockReturnValue(deadline + 72 * 3600000 + 1);
           try {
-            expect((await control.reconcileControlRetention(dm, { maxFamilies: 1 })).retired).toBe(
-              0,
-            );
+            expect(await control.pruneControlRecords(dm)).toEqual([]);
             expect((await store.inspect(id))?.finishedAt).toBeNull();
             expect(statSync(lock).ino).toBe(inode);
           } finally {

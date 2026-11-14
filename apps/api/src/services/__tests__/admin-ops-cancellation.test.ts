@@ -3,13 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as realSetTimeout } from "node:timers";
 import {
-  controlTerminalReceiptDigest,
   normalizeExecutionAdmission,
   type OpsOperation,
   opsOperationFingerprint,
   parseOpsJobStatus,
   verifyApiJobParentExecution,
-  verifyApiRetentionProof,
 } from "@openmapx/core/ops";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { JobContext } from "../job-runner.js";
@@ -41,7 +39,6 @@ const agent = vi.hoisted(() => {
       fingerprint: string;
     }>,
     cancelCalls: [] as string[],
-    acknowledgements: [] as string[],
     events: [] as Array<{ cursor: number; type: "log"; stream: "stdout"; message: string }>,
   };
   return value;
@@ -99,28 +96,6 @@ const agentClient = vi.hoisted(() => ({
         parentAssertion?: string;
       },
     ) => {
-      if (operation.kind === "controlRetention.acknowledge") {
-        const proof = verifyApiRetentionProof(token, operation.proof);
-        const retained = projectedOperations()?.[operation.operationKey] as
-          | {
-              attempt?: { attemptId: string };
-              receiptDelivery?: { state: string; terminalDigest: string };
-            }
-          | undefined;
-        expect(retained?.receiptDelivery?.state).toBe("pending");
-        expect(proof).toMatchObject({
-          apiJobId: JOB_ID,
-          originalApiOwnerVersion: 1,
-          checkpointOwnerVersion: 1,
-          attemptId: retained?.attempt?.attemptId,
-          operationKey: operation.operationKey,
-          fingerprint: operation.fingerprint,
-          terminalDigest: controlTerminalReceiptDigest(agentStatus()),
-        });
-        expect(operation.terminalDigest).toBe(proof.terminalDigest);
-        agent.acknowledgements.push(operation.operationKey);
-        return { execution: "sync", kind: operation.kind, value: { acknowledged: true } };
-      }
       if (!options.parentAssertion) throw Error("Original parent assertion required");
       const parent = verifyApiJobParentExecution(options.parentAssertion, token, {
         operationKey: options.operationKey,
@@ -278,7 +253,6 @@ beforeEach(async () => {
   agent.terminationRequestedAt = undefined;
   agent.admissions.length = 0;
   agent.cancelCalls.length = 0;
-  agent.acknowledgements.length = 0;
   agent.events = [];
   database.row.status = "running";
   database.row.result = {
@@ -486,7 +460,6 @@ describe.each(ACTIONS)("single-service $name cancellation", (scenario) => {
     await vi.advanceTimersByTimeAsync(1_000);
     expect(job.outcome.state).toBe("rejected");
     expect(job.outcome.error).toMatchObject({ name: "OpsObservationPending" });
-    expect(agent.acknowledgements).toEqual([expectedKey()]);
     expect(projectedOperations()?.[expectedKey()]).toMatchObject({
       terminal: true,
       receiptDelivery: { state: "confirmed" },
@@ -511,7 +484,6 @@ describe.each(ACTIONS)("single-service $name cancellation", (scenario) => {
     expect(job.controller.signal.aborted).toBe(true);
     expect(job.outcome.state).toBe("rejected");
     expect(database.row.status).toBe("cancel_pending");
-    expect(agent.acknowledgements).toEqual([]);
     expect(database.updates).not.toContainEqual(expect.objectContaining({ status: "canceled" }));
   });
 

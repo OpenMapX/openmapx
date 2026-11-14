@@ -219,7 +219,7 @@ export function assertUnusedConfigurationMaintenanceFinalState(
   const final = owner.final,
     signedInspection = owner.inspection,
     decision = owner.apiControls.decide;
-  if (!final || !signedInspection || !decision?.receiptDelivery || !owner.preparedFence)
+  if (!final || !signedInspection || !decision || !owner.preparedFence)
     throw Error("Actual unused original final source required");
   const inspection = signedInspection.payload,
     original = final.ownerFinal.payload,
@@ -255,7 +255,6 @@ export function assertUnusedConfigurationMaintenanceFinalState(
               completedAt: null,
               result: null,
               canonicalDigest: null,
-              receiptDelivery: null,
             }
           : null,
       },
@@ -361,7 +360,7 @@ function assertExecutedConfigurationMaintenanceFinalState(
   const final = owner.final,
     signedInspection = owner.inspection,
     decision = owner.apiControls.decide;
-  if (!final || !signedInspection || !decision?.receiptDelivery || !owner.preparedFence)
+  if (!final || !signedInspection || !decision || !owner.preparedFence)
     throw Error("Actual applied final sources required");
   const inspection = signedInspection.payload,
     original = final.ownerFinal.payload,
@@ -457,7 +456,6 @@ function assertExecutedConfigurationMaintenanceFinalState(
               completedAt: null,
               result: null,
               canonicalDigest: null,
-              receiptDelivery: null,
             }
           : null,
       },
@@ -502,7 +500,7 @@ function assertExecutedConfigurationMaintenanceFinalState(
         owner.receipt.appliedRevisionId !== owner.plan.operation.revisionId ||
         owner.receipt.followUp !== "complete" ||
         owner.apiControls.steps.length !== owner.plan.steps.length) ||
-    owner.apiControls.steps.some((value) => !value.canonical || !value.receiptDelivery) ||
+    owner.apiControls.steps.some((value) => !value.canonical) ||
     inspection.ownerSourceDigest !== controlDigest(before) ||
     original.ownerSequence !== inspection.ownerSequence + 1 ||
     original.ownerSequence > owner.sequence ||

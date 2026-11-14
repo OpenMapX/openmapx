@@ -15,7 +15,7 @@ import { readCatalogProposalFile, readCatalogValidationFile } from "../catalog-p
 import { canonicalJson } from "../ops/canonical-json";
 import { pairedPinApprovalInputSchema } from "../ops/catalog-pin-approval";
 import { type OpsJobStatus, type OpsOperation, parseOpsJobStatus } from "../ops/contract";
-import { controlTerminalReceiptDigest } from "../ops/control-retention-receipt";
+import { controlTerminalReceiptDigest } from "../ops/control-terminal-receipt";
 import { retainedParentExecutionSchema } from "../ops/execution-identity";
 import { type ExecutionRef, executionRefSchema } from "../ops/execution-ref";
 import { opsOperationFingerprint } from "../ops/fingerprint";
@@ -46,10 +46,6 @@ import {
   verifyControl,
 } from "./control-records";
 import { AnchoredDirectory, identity, sameInode } from "./filesystem";
-// biome-ignore-start lint/suspicious/noImportCycles: Candidate provenance reads original indexed bytes; retirement checks original admissions. These reciprocal read-only verifiers run after module initialization.
-import { familyRecordWrite, verifyFamilyOwnedRecord } from "./retention-family";
-
-// biome-ignore-end lint/suspicious/noImportCycles: Exact deferred original-owner/index guard join.
 
 const schema = z.strictObject({
   version: z.literal(1),
@@ -433,7 +429,6 @@ export function retainOwnedDataTransitCandidate(
     name(authority, input.ordinal),
     signControl(s.installation.privateKey, "openmapx-data-candidate-v1", parsed),
     true,
-    s.origin,
   );
   publishCandidate(authority, parsed);
   return controlDigest(parsed);
@@ -516,22 +511,9 @@ function publishCandidate(
     }
     if (prior) {
       if (prior.toString("utf8") !== bytes) throw Error("Original published candidate changed");
-      verifyFamilyOwnedRecord(
-        s.installation,
-        s.origin,
-        { scope: "shared", namespace: "execution", container: "data-manager", name },
-        bytes,
-      );
       return;
     }
-    familyRecordWrite(
-      s.installation,
-      s.origin,
-      { scope: "shared", namespace: "execution", container: "data-manager", name },
-      bytes,
-      (before) => directory.role.write(name, bytes, true, before),
-      true,
-    );
+    directory.role.write(name, bytes, true);
   } finally {
     directory.close();
   }
@@ -745,12 +727,6 @@ export const {
       }) !== s.execution.operationFingerprint
     )
       throw Error("Original validation proof identity changed");
-    verifyFamilyOwnedRecord(
-      s.installation,
-      p.origin,
-      { scope: "private", namespace: "observations", container: "", name: name(authority) },
-      canonicalJson(raw),
-    );
     return p;
   }
   function write(authority: VerifiedExecutionAuthority, value: Proof, exclusive = false) {
@@ -768,7 +744,6 @@ export const {
       name(authority),
       signControl(s.installation.privateKey, domain, parsed),
       exclusive,
-      s.origin,
     );
   }
   function feedProxyValidationCompletionDigest(
@@ -939,14 +914,7 @@ export const {
       if (room < 0) throw Error("Proxy terminal cell capacity exceeded");
       value.padding = " ".repeat(room);
       const bytes = canonicalJson(signControl(s.installation.privateKey, domain, value));
-      familyRecordWrite(
-        s.installation,
-        payload.origin,
-        { scope: "shared", namespace: "execution", container: "ops-agent", name },
-        bytes,
-        (before) => dir.role.write(name, bytes, exclusive, before),
-        exclusive,
-      );
+      dir.role.write(name, bytes, exclusive);
     } finally {
       dir.close();
     }

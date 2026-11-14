@@ -61,7 +61,6 @@ export const stagedCoordinatorSourceSchema = z.strictObject({
   admissionDigest: digest,
   canonicalDigest: digest,
   effectDigest: digest,
-  apiCopyDigest: digest,
 });
 export const stagedCoordinatorObservationDomain =
   "openmapx-maintenance-staged-coordinator-observation-v1";
@@ -81,50 +80,3 @@ export const stagedCoordinatorObservationSchema = z
   })
   .refine((value) => Buffer.byteLength(canonicalJson(value)) <= 8192);
 export type StagedCoordinatorObservation = z.infer<typeof stagedCoordinatorObservationSchema>;
-
-/** Collector-owned runtime token; no structural phase flag is authority. */
-declare const retentionPreparationBrand: unique symbol;
-export type ControlRetentionPreparationContext = Readonly<{ [retentionPreparationBrand]: true }>;
-export const stagedCoordinatorRetirementDomain = "openmapx-staged-coordinator-retirement-v1";
-export const stagedCoordinatorRankSchema = z.strictObject({
-  admittedAt: z.number().int().nonnegative().safe(),
-  operationKey: executionRefSchema.shape.operationKey,
-});
-export const stagedCoordinatorRetirementPayloadSchema = z
-  .strictObject({
-    version: z.literal(1),
-    installationId: z.uuid(),
-    originDigest: digest,
-    familyId: z.uuid(),
-    generation: z.uuid(),
-    execution: executionRefSchema,
-    terminalDigest: digest,
-    sourceAdmissionDigest: digest,
-    oldContainerDigest: digest,
-    rank: stagedCoordinatorRankSchema,
-    contextMode: z.enum(["preparing", "before-commit", "committed-cleanup"]),
-    checkNonce: z.uuid(),
-    manifestDigest: digest.nullable(),
-    checkedAt: z.number().int().nonnegative().safe(),
-    condition: z.enum(["not-needed", "higher-ranked-successor"]),
-    successor: z
-      .strictObject({
-        execution: executionRefSchema,
-        admissionDigest: digest,
-        canonicalDigest: digest,
-        effectDigest: digest,
-        apiCopyDigest: digest,
-        rank: stagedCoordinatorRankSchema,
-      })
-      .nullable(),
-  })
-  .refine((value) => (value.condition === "not-needed") === (value.successor === null));
-export const stagedCoordinatorRetirementPacketSchema = z
-  .strictObject({
-    payload: stagedCoordinatorRetirementPayloadSchema,
-    signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/),
-  })
-  .refine((value) => Buffer.byteLength(canonicalJson(value)) <= 4096);
-export type StagedCoordinatorRetirementPacket = z.infer<
-  typeof stagedCoordinatorRetirementPacketSchema
->;

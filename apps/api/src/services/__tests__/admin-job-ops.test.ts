@@ -118,9 +118,7 @@ describe("administrative job operations broker", () => {
       ctx.checkpointResult = structuredClone(value);
     });
     const client = {
-      execute: vi.fn(async (operation: OpsOperation) => {
-        if (operation.kind === "controlRetention.acknowledge")
-          return { execution: "sync", kind: operation.kind, value: { acknowledged: true } };
+      execute: vi.fn(async (_operation: OpsOperation) => {
         throw new OpsClientError("timeout");
       }),
       lookup: vi.fn(async (..._args: unknown[]) => {
@@ -812,10 +810,7 @@ it.each([false, true])(
         payload: init?.body as string,
       });
       responses.push({ path: url.pathname, status: response.statusCode, body: response.body });
-      if (
-        init?.method === "POST" &&
-        JSON.parse(String(init.body)).operation.kind !== "controlRetention.acknowledge"
-      ) {
+      if (init?.method === "POST") {
         posts++;
         if (loseResponse) {
           controller.abort();

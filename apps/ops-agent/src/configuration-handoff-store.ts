@@ -24,7 +24,6 @@ import {
   type VerifiedExecutionAuthority,
   verifyControl,
   verifyControlEffectSettlement,
-  verifyFamilyOwnedRecord,
   verifyRetainedArtifactTargetSettlement,
   writePrivateRecord,
 } from "@openmapx/core/build-artifacts";
@@ -80,16 +79,6 @@ function immutable<T>(value: T): T {
   }
   return value;
 }
-function indexed(authority: VerifiedExecutionAuthority, name: string, raw: unknown) {
-  const local = executionAuthorityState(authority);
-  if (!local.origin) throw Error("Original handoff family required");
-  verifyFamilyOwnedRecord(
-    local.installation,
-    local.origin,
-    { scope: "private", namespace: "observations", container: "", name },
-    bytes(raw),
-  );
-}
 function readIntent(authority: VerifiedExecutionAuthority, handoffId: string) {
   const local = executionAuthorityState(authority),
     name = recordName(handoffId, "intent"),
@@ -100,7 +89,6 @@ function readIntent(authority: VerifiedExecutionAuthority, handoffId: string) {
       raw,
       configurationHandoffIntentRecordSchema,
     );
-  indexed(authority, name, raw);
   if (
     value.preparerAdmissionDigest !== local.receiptDigest ||
     bytes(value.preparer) !== bytes(local.execution) ||
@@ -125,7 +113,6 @@ function writeProgress(
     recordName(intent.operation.handoffId, "progress"),
     signControl(local.installation.privateKey, domains.progress, progress),
     exclusive,
-    intent.origin,
   );
 }
 /** Only the real borrowed typed phase can produce this nominal launch. The
@@ -268,7 +255,6 @@ async function prepareConfigurationHandoffLaunch(
     recordName(operation.handoffId, "intent"),
     signControl(local.installation.privateKey, domains.intent, intent),
     true,
-    owned.owner.origin,
   );
 
   writeProgress(
@@ -346,7 +332,6 @@ function readProgress(
       raw,
       configurationHandoffProgressSchema,
     );
-  indexed(authority, name, raw);
   if (
     value.intentDigest !== controlDigest(intent) ||
     bytes(value.targets.map((target) => target.serviceId).sort()) !==
@@ -407,7 +392,6 @@ export function inspectConfigurationHandoff(
           completionRaw,
           configurationHandoffWorkerRecordSchema,
         );
-        indexed(authority, completionName, completionRaw);
         if (
           worker.intentDigest !== controlDigest(intent) ||
           worker.preparationDigest !== controlDigest(progress) ||

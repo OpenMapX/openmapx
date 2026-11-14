@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import * as nodeFs from "node:fs";
-import { mkdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import { dataConfigurationFencePrepareSchema } from "@openmapx/core/data-manager-contracts";
@@ -363,44 +363,29 @@ describe.skipIf(
       } finally {
         writeFileSync(adoptionFile, adoption);
       }
-      for (const identity of ["key", "id", "maintenance"] as const) {
+      for (const identity of ["key", "id"] as const) {
         const id = identity === "id" ? f.child.executionId : randomUUID(),
           key =
-            identity === "key" ? f.child.operationKey : `opk1_${randomUUID().replaceAll("-", "")}`,
-          kind = identity === "maintenance" ? "configuration-maintenance" : "download-fonts",
-          metadata =
-            identity === "maintenance"
-              ? {
-                  configurationMaintenance: {
-                    version: 1,
-                    guardState: "prepared",
-                    input: f.input,
-                    receipt: {
-                      maintenanceId: f.input.maintenanceId,
-                      candidateId: f.input.candidateId,
-                      ownerPrepare: f.owner,
-                      planDigest: f.input.planDigest,
-                      revisionId: f.input.revisionId,
-                      hardlinkPlanDigest: f.input.hardlinkPlanDigest,
-                      fenceId: id,
-                      sequence: 0,
-                      state: "prepared",
-                    },
-                  },
-                }
-              : {};
-        await f.sql`INSERT INTO data_manager.jobs(id,kind,status,operation_key,metadata) VALUES(${id},${kind},'ok',${key},${JSON.stringify(metadata)}::jsonb)`;
+            identity === "key" ? f.child.operationKey : `opk1_${randomUUID().replaceAll("-", "")}`;
+        await f.sql`INSERT INTO data_manager.jobs(id,kind,status,operation_key) VALUES(${id},'download-fonts','ok',${key})`;
         try {
           expect((await request()).status).not.toBe(200);
         } finally {
           await f.sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
         }
       }
+      // A fence row for the same maintenance means the preparation was admitted.
+      await f.sql`INSERT INTO data_manager.configuration_fence(maintenance_id,fence_id,operation_key,candidate_id,plan_digest,owner_certificate_digest,input,state)
+        VALUES(${f.input.maintenanceId},${randomUUID()},${`opk1_${randomUUID().replaceAll("-", "")}`},${f.input.candidateId},${f.input.planDigest},${"0".repeat(64)},${JSON.stringify(f.input)}::jsonb,'prepared')`;
+      try {
+        expect((await request()).status).not.toBe(200);
+      } finally {
+        await f.sql`DELETE FROM data_manager.configuration_fence WHERE maintenance_id=${f.input.maintenanceId}`;
+      }
       for (const [namespace, name] of [
         ["executions", `${f.child.operationKey}.json`],
         ["effects", `${f.child.operationKey}.json`],
         ["effect-started", `${f.child.operationKey}.json`],
-        ["configuration-maintenance", `${f.input.maintenanceId}.json`],
       ]) {
         const directory = join(f.root, "control-private/data-manager", namespace!),
           file = join(directory, name!);
@@ -549,58 +534,25 @@ describe.skipIf(
           "../../../../../apps/ops-agent/src/configuration-maintenance-store"
         ),
         origin = maintenance.readOwnedConfigurationMaintenance(f.authority).origin,
-        locations = ["ops-agent", "data-manager"].map((role) =>
-          join(
-            f.root,
-            "control-private",
-            role,
-            "retention-locations",
-            `${control.controlDigest(origin)}.json`,
-          ),
-        );
-      const closedAt = Date.now();
-      clock.mockReturnValue(closedAt + 71 * 3600000);
-      await control.reconcileControlRetention(f.agent, { maxFamilies: 64 });
-      await f.data.reconcileRetention();
-      expect(locations.map(existsSync)).toEqual([true, true]);
-      clock.mockReturnValue(origin.notAfter + 96 * 3600000);
-      const delegation = JSON.parse(Buffer.from(f.assertion, "base64url").toString("utf8")),
-        adoptionPath = join(
+        admission = join(
           f.root,
-          "control-private/data-manager/adoptions",
-          `${delegation.delegationId}.json`,
+          "control-private/ops-agent/executions",
+          `${f.owner.operationKey}.json`,
         ),
-        adoptionBytes = readFileSync(adoptionPath);
-      try {
-        writeFileSync(adoptionPath, "null");
-        await control.reconcileControlRetention(f.agent, { maxFamilies: 64 });
-        await f.data.reconcileRetention();
-        expect(locations.map(existsSync)).toEqual([true, true]);
-      } finally {
-        writeFileSync(adoptionPath, adoptionBytes);
-      }
-      for (let round = 0; round < 12 && locations.some(existsSync); round++) {
-        await control.reconcileControlRetention(f.agent, { maxFamilies: 64 });
-        await f.data.reconcileRetention();
-      }
-      const remaining = locations.map((path) => {
-        if (!existsSync(path)) return { retired: true };
-        const retained = JSON.parse(readFileSync(path, "utf8")),
-          progress = JSON.parse(
-            readFileSync(
-              join(path, "../../retention-families", retained.name, "progress.json"),
-              "utf8",
-            ),
-          );
-        return {
-          phase: progress.phase,
-          lastError: progress.lastError,
-          executions: progress.executions,
-          intents: progress.intents,
-          leases: progress.leases,
-        };
-      });
-      expect(locations.map(existsSync), JSON.stringify(remaining)).toEqual([false, false]);
+        closedAt = Date.now();
+      // Kept until 72 hours after it finished and until its root key expired.
+      expect(await control.pruneControlRecords(f.agent, { now: closedAt + 60 * 3600000 })).toEqual(
+        [],
+      );
+      expect(existsSync(admission)).toBe(true);
+      const later = Math.max(origin.notAfter, closedAt) + 96 * 3600000;
+      expect(await control.pruneControlRecords(f.agent, { now: later })).toContain(
+        f.owner.operationKey,
+      );
+      await f.data.pruneRecords(later);
+      expect(existsSync(admission)).toBe(false);
+      // A later request under the expired root is refused, never re-admitted.
+      expect(() => control.assertFreshControlRoot(f.owner.operationKey, origin.notAfter)).toThrow();
     } finally {
       clock?.mockRestore();
       await f.close();

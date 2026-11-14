@@ -42,7 +42,7 @@ import {
 } from "@openmapx/core/ops";
 import {
   cliControlContext,
-  collectHostControlRetention,
+  pruneHostControlRecords,
   withHostDataControlContext,
 } from "./control-context";
 import { cliAcquisitionOptions } from "./execution-deadline";
@@ -259,7 +259,7 @@ export async function runCliDataStep(
       role: "host-cli",
       serviceIds: ["data-manager"],
     });
-  await collectHostControlRetention(installation);
+  await pruneHostControlRecords(installation);
   const normalized = normalizeExecutionAdmission({
       kind: operation.kind,
       operationKey,

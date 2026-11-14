@@ -153,35 +153,23 @@ AnchoredDirectory.prototype.write = function (...args) {
 const remove = AnchoredDirectory.prototype.removeDirectory;
 AnchoredDirectory.prototype.removeDirectory = function (...args) {
   const result = remove.apply(this, args);
-  // Stop after the real canonical-digest transaction AND guard removal. No
+  // Stop after the real canonical terminal commitment AND guard removal. No
   // unknown metadata writer is left for startup to steal.
   if (
     input.boundary === "digest" &&
     terminal &&
-    [".family-writer", key].includes(args[0]) &&
-    !existsSync(join(input.root, `control-private/ops-agent/effect-writers/${key}`)) &&
-    !existsSync(
-      join(input.root, "control-private/ops-agent/retention-families/slot-0/.family-writer"),
-    )
+    args[0] === key &&
+    !existsSync(join(input.root, `control-private/ops-agent/effect-writers/${key}`))
   ) {
-    const progress = JSON.parse(
+    const commitment = JSON.parse(
       readFileSync(
-        join(input.root, "control-private/ops-agent/retention-families/slot-0/progress.json"),
+        join(input.root, `control-private/ops-agent/observations/terminal-${key}.json`),
         "utf8",
       ),
-    );
-    const facts = Object.values(progress.executions) as Array<{
-      execution: { executionId: string };
-      terminalDigest?: string;
-      journalContained?: boolean;
-    }>;
+    ) as { payload?: { phase?: string; terminalDigest?: string } } | null;
     if (
-      facts.some(
-        (f) =>
-          f.execution.executionId === terminal?.operationId &&
-          f.terminalDigest === controlTerminalReceiptDigest(wire(terminal)) &&
-          !f.journalContained,
-      )
+      commitment?.payload?.phase === "canonical" &&
+      commitment.payload.terminalDigest === controlTerminalReceiptDigest(wire(terminal))
     )
       stop(terminal);
   }

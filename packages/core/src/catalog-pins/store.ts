@@ -13,10 +13,6 @@ import {
 import { controlDigest, signControl, verifyControl } from "../build-artifacts/control-records";
 import { AnchoredDirectory, identity, sameInode } from "../build-artifacts/filesystem";
 import {
-  verifyCatalogPinReceiptRepairPreimage,
-  verifyFamilyOwnedRecord,
-} from "../build-artifacts/retention-family";
-import {
   assertArtifactTargetLeaseExecution,
   catalogPinTargetOwner,
   type TargetLeaseAuthority,
@@ -167,7 +163,6 @@ export async function initializeCatalogPinSet(options: {
           pointerDigest: marker ? controlDigest(marker) : null,
         }),
         false,
-        owner.origin,
       );
       return pair;
     };
@@ -225,12 +220,6 @@ function readJournal(rootDir: string, commit: CatalogPinCommitIdentity) {
     if (!origin) throw Error("Retained catalog execution origin required");
     const read = (name: string) => {
       const raw = readPrivateRecord(state, "catalog-commits", name, 65536);
-      verifyFamilyOwnedRecord(
-        state,
-        origin,
-        { scope: "private", namespace: "catalog-commits", name, container: "" },
-        canonicalJson(raw),
-      );
       const journal = verifyControl(state.installation.publicKey, DOMAIN, raw, journalSchema);
       if (canonicalJson(journal.receipt.identity) !== canonicalJson(commit))
         throw Error("Catalog commit identity conflict");
@@ -268,10 +257,8 @@ function readJournal(rootDir: string, commit: CatalogPinCommitIdentity) {
           committedAt: intent.next.committedAt,
         },
       };
-      const signed = signControl(state.privateKey, DOMAIN, repaired),
-        bytes = canonicalJson(signed);
-      verifyCatalogPinReceiptRepairPreimage(state, origin, commit.execution.operationKey, bytes);
-      writePrivateRecord(state, "catalog-commits", name, signed, false, origin);
+      const signed = signControl(state.privateKey, DOMAIN, repaired);
+      writePrivateRecord(state, "catalog-commits", name, signed, false);
       return read(name);
     }
   } finally {
@@ -314,7 +301,6 @@ export async function readCatalogPinCommit(options: {
           `${commit.execution.operationKey}.json`,
           signControl(state.privateKey, DOMAIN, { ...journal, receipt }),
           false,
-          origin,
         );
       } finally {
         closeControlInstallation(installation);
@@ -361,7 +347,6 @@ export async function publishCatalogPinSet(options: {
       `${commit.execution.operationKey}${intent ? ".intent" : ""}.json`,
       signed,
       intent,
-      owner.origin,
     );
   };
   return directories(options.rootDir, true, (_docker, store) => {

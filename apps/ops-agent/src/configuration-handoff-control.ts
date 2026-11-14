@@ -28,7 +28,6 @@ import {
   verifiedParentForArtifactDelegation,
   verifyConfigurationHelperReady,
   verifyControl,
-  verifyFamilyOwnedRecord,
   verifyFixedCliControlPeer,
 } from "@openmapx/core/build-artifacts";
 import { canonicalJson, type ExecutionRef, executionRefSchema } from "@openmapx/core/ops";
@@ -215,17 +214,6 @@ export async function reconcileCompletedConfigurationHandoff(input: {
       configurationHandoffRecordDomains.completion,
       raw,
       configurationHandoffWorkerRecordSchema,
-    );
-    await waitForHandoffContention(
-      execution,
-      () =>
-        verifyFamilyOwnedRecord(
-          state,
-          intent.origin,
-          { scope: "private", namespace: "observations", container: "", name: file },
-          canonicalJson(raw),
-        ),
-      sourceReadBusy,
     );
     if (worker.phase !== "applied" || canonicalJson(worker.execution) !== canonicalJson(execution))
       throw Error("Unfinished original helper remains fenced");

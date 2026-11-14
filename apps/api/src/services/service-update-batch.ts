@@ -92,9 +92,7 @@ export async function advanceCompletedBulkCandidate(
   const { completedCoordinatorMaintenance } = await import(
     "./configuration-maintenance-step-records"
   );
-  const { hasPendingReceiptDelivery, hasUnsettledManagedOperation } = await import(
-    "./admin-job-state"
-  );
+  const { hasUnsettledManagedOperation } = await import("./admin-job-state");
   const { completeTrustedConfigurationApply, parseTrustedConfigurationApplyOutcome } = await import(
     "./trusted-config-outcome"
   );
@@ -127,7 +125,6 @@ export async function advanceCompletedBulkCandidate(
         (previous.operationKey === coordinatorKey && writer.operationKey === seedKey)
       ) ||
       previous.phase !== "settled" ||
-      hasPendingReceiptDelivery(result) ||
       hasUnsettledManagedOperation(result)
     )
       throw new JobObservationPending("recovery_required");

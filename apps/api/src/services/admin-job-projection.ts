@@ -1,6 +1,5 @@
 /** Pure retained operation decoder. It never admits a child or opens a writer. */
 import {
-  apiRetentionProofSchema,
   canonicalJson,
   controlTerminalReceiptDigest,
   OPS_KIND_POLICIES,
@@ -16,6 +15,7 @@ import {
   parseControlRootOperationKey,
   processDiagnosticsSchema,
 } from "@openmapx/core/ops";
+import { z } from "zod";
 import { JobObservationPending } from "./admin-job-failure";
 import { type ApiJobChildAttempt, apiJobChildAttemptSchema } from "./admin-job-parent";
 import { ADMIN_JOB_LOG_LIMITS } from "./admin-job-state";
@@ -33,7 +33,6 @@ const ADMISSION_REFUSALS = new Set([
   "busy",
   "not_wired",
   "host_update_required",
-  "control_upgrade_required",
   "unsupported_peer",
   "recovery_required",
 ]);
@@ -61,8 +60,9 @@ export interface ProjectedOperation {
   bytes: number;
   truncated: boolean;
   terminal: boolean;
+  /** The agent's terminal status, checkpointed before the job continues. */
   receiptDelivery?: {
-    state: "pending" | "confirmed";
+    state: "confirmed";
     terminalCopyId: string;
     checkpointOwnerVersion: number;
     terminalDigest: string;
@@ -242,12 +242,12 @@ export function readProjection(result: unknown): OpsProjection {
           operation.terminal !== true ||
           operation.phase !== "terminal" ||
           !d ||
-          !["pending", "confirmed"].includes(d.state) ||
+          d.state !== "confirmed" ||
           (d.maintenanceRecovery !== undefined &&
             (typeof d.maintenanceRecovery !== "string" ||
               d.maintenanceRecovery.length < 1 ||
               d.maintenanceRecovery.length > 4096)) ||
-          !apiRetentionProofSchema.shape.terminalCopyId.safeParse(d.terminalCopyId).success ||
+          !z.uuid().safeParse(d.terminalCopyId).success ||
           !Number.isSafeInteger(d.checkpointOwnerVersion) ||
           d.checkpointOwnerVersion < 1 ||
           controlTerminalReceiptDigest(d.terminalReceipt) !== d.terminalDigest ||

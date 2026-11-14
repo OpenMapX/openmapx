@@ -1,13 +1,10 @@
-import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import type { OpsJobStatus } from "./contract";
 import {
   controlTerminalReceiptDigest,
-  signApiRetentionProof,
   signMaintenanceRecoveryProof,
-  verifyApiRetentionProof,
   verifyMaintenanceRecoveryProof,
-} from "./control-retention-receipt";
+} from "./control-terminal-receipt";
 
 const status: OpsJobStatus = {
   version: 2,
@@ -67,28 +64,10 @@ it("authenticates a bounded recovery observation independently of the unchanged 
       `${payload}.${mac[0] === "A" ? "B" : "A"}${mac.slice(1)}`,
     ),
   ).toThrow();
-  expect(() => verifyApiRetentionProof("original-token", proof)).toThrow();
   expect(
     controlTerminalReceiptDigest({
       ...status,
       diagnostics: { tail: [], truncated: false, maintenanceRecovery: proof },
     }),
   ).toBe(controlTerminalReceiptDigest(status));
-});
-it("requires the fixed token, canonical fields and distinct acknowledgement domain", () => {
-  const fields = {
-    version: 1 as const,
-    apiJobId: randomUUID(),
-    originalApiOwnerVersion: 1,
-    attemptId: randomUUID(),
-    checkpointOwnerVersion: 2,
-    terminalCopyId: randomUUID(),
-    operationKey: status.operationKey,
-    fingerprint: "a".repeat(64),
-    terminalDigest: controlTerminalReceiptDigest(status),
-  };
-  const proof = signApiRetentionProof("token", fields);
-  expect(verifyApiRetentionProof("token", proof)).toEqual(fields);
-  expect(() => verifyApiRetentionProof("wrong", proof)).toThrow();
-  expect(() => verifyApiRetentionProof("token", `${proof}=`)).toThrow();
 });

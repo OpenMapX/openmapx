@@ -74,20 +74,20 @@ it("keeps a fixed pre-admission prerequisite separate from an agent terminal rec
   ctx.checkpoint = async (value) => {
     ctx.checkpointResult = structuredClone(value);
   };
-  const execute = vi.fn().mockRejectedValue(new OpsClientError("control_upgrade_required")),
+  const execute = vi.fn().mockRejectedValue(new OpsClientError("validation")),
     lookup = vi.fn();
   try {
     await expect(
       executeAdminJobOperation(ctx, { kind: "backup.delete", backupId: "daily" }, "test", {
         client: { execute, lookup } as never,
       }),
-    ).rejects.toMatchObject({ errorClass: "control_upgrade_required" });
+    ).rejects.toMatchObject({ errorClass: "validation" });
     const entries = Object.values(readProjection(ctx.checkpointResult).operations);
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({
       phase: "refused",
       terminal: true,
-      errorClass: "control_upgrade_required",
+      errorClass: "validation",
     });
     expect(entries[0]?.receiptDelivery).toBeUndefined();
     expect(lookup).not.toHaveBeenCalled();
@@ -107,6 +107,6 @@ it("refuses an unowned direct mutation before it can send an opaque root", async
       { kind: "backup.delete", backupId: "daily" },
       "opk1_opaqueDirect12345",
     ),
-  ).rejects.toMatchObject({ errorClass: "control_upgrade_required" });
+  ).rejects.toMatchObject({ errorClass: "validation" });
   expect(execute).not.toHaveBeenCalled();
 });

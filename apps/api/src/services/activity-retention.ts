@@ -12,7 +12,7 @@ import {
   preservationAllowsDeletion,
   withPreservationRetentionLock,
 } from "../privacy/preservation.js";
-import { noPendingReceiptDelivery, noUnsettledManagedOperation } from "./admin-job-state";
+import { noUnsettledManagedOperation } from "./admin-job-state";
 import { prunePlatformConfigurationPreviews } from "./platform-preview-store";
 import { pruneTransitCredentialPreviews } from "./transit-credential-retention";
 
@@ -84,7 +84,6 @@ export async function pruneCompletedJobs(days: number): Promise<number> {
       .where(
         and(
           lt(adminJob.finishedAt, cutoff),
-          noPendingReceiptDelivery(),
           noUnsettledManagedOperation(),
           sql`NOT EXISTS (SELECT 1 FROM ${platformConfigurationPreview} WHERE ${platformConfigurationPreview.consumedByJobId}::text = ${adminJob.id})`,
           sql`(coalesce(${adminJob.result}->'opsProjection'->>'version','') <> '3' OR ${adminJob.finishedAt} < ${new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString()}::timestamp)`,

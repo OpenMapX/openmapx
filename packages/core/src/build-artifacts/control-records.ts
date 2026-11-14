@@ -3,8 +3,7 @@ import { createHash, createPublicKey, type KeyObject, sign, verify } from "node:
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
 import { type ControlExecutionOrigin, parseControlRootOperationKey } from "../ops/control-root-key";
-import type { ControlIssuer, ExecutionRef } from "../ops/execution-identity";
-import type { ControlRetentionPreparationContext } from "./coordinator-pull-records";
+import type { ControlIssuer } from "../ops/execution-identity";
 import type { AnchoredDirectory } from "./filesystem";
 
 declare const installationBrand: unique symbol;
@@ -23,17 +22,6 @@ export interface InstallationState {
   privateRoot: AnchoredDirectory;
   dataRoot: string;
   registeredTargets: ReadonlySet<string>;
-  retentionJournal?: {
-    prepare?(
-      executions: readonly { execution: ExecutionRef; digest?: string }[],
-      context?: ControlRetentionPreparationContext,
-    ): Promise<void>;
-    contained(execution: ExecutionRef, digest: string | undefined): boolean;
-    retire(
-      executions: readonly { execution: ExecutionRef; digest: string; terminalAt?: number }[],
-      manifestDigest: string,
-    ): Promise<void>;
-  };
 }
 export const controlOriginSchema = z
   .strictObject({

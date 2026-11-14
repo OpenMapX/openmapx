@@ -11,7 +11,6 @@ import {
 } from "@openmapx/core/build-artifacts";
 import { coordinatorPullSubmissionDigest, parseOpsJobStatus } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
-import { assertProspectiveConfigurationMaintenanceBudget } from "../../../packages/core/src/build-artifacts/configuration-maintenance-budget";
 import type { ConfigurationReleaseSnapshot } from "../../../packages/core/src/build-artifacts/configuration-release-snapshot";
 import {
   readConfigurationHandoffReleaseOverlay,
@@ -63,6 +62,7 @@ import {
   adoptArtifactTargetLease,
   assertArtifactTargetLeaseExecution,
   assertConfigurationMaintenanceRootClosure,
+  assertControlStorageAvailable,
   assertFixedConfigurationMaintenancePlan,
   bindControlChildPhase,
   buildFixedConfigurationMaintenancePlan,
@@ -78,6 +78,7 @@ import {
   type FixedConfigurationMaintenancePlan,
   inspectArtifactDelegation,
   inspectArtifactTargetLeaseChildSettlement,
+  inspectRetainedOwnedArtifactTargetChildSettlement,
   issueControlChildPhase,
   lookupControlChildPhaseBinding,
   readPrivateRecord,
@@ -94,7 +95,6 @@ import {
   verifyControl,
   verifyControlEffectSettlement,
   verifyControlRecoveryAuthority,
-  verifyFamilyOwnedRecord,
   verifyMaintenanceCoordinatorPrerequisite,
   verifyRetainedArtifactTargetRootRelease,
   verifyRetainedLocalControlPeer,
@@ -123,7 +123,6 @@ import {
   controlTerminalReceiptDigest,
   type ExecutionRef,
   executionFingerprint,
-  executionRefSchema,
   type OpsJobStatus,
   type OpsOperation,
   opsOperationFingerprint,
@@ -133,7 +132,6 @@ import {
   type TrustedConfigurationQueueLock,
   type VerifiedParentExecution,
   verifiedApiJobParentBinding,
-  verifyApiRetentionProof,
 } from "@openmapx/core/ops";
 import {
   inspectControlChildPublication,
@@ -178,8 +176,6 @@ import {
   verifyControlPreparedTerminal,
   withPrivateEffectWriter,
 } from "../../../packages/core/src/build-artifacts/control-authority";
-import { CONTROL_RETENTION_LIMITS } from "../../../packages/core/src/build-artifacts/control-retention";
-import { repairIndexedConfigurationMaintenanceSettleCompletion } from "../../../packages/core/src/build-artifacts/retention-family";
 import {
   observeConfigurationMaintenanceRuntimeTree,
   readConfigurationPrepareNonAdmission,
@@ -336,12 +332,6 @@ function read(authority: VerifiedExecutionAuthority): ConfigurationMaintenanceOw
     raw = readPrivateRecord(state.installation, "configuration-maintenance", name);
   const owner = verifyControl(state.installation.installation.publicKey, domain, raw, ownerSchema);
   assertOwner(authority, owner);
-  verifyFamilyOwnedRecord(
-    state.installation,
-    owner.origin,
-    { scope: "private", namespace: "configuration-maintenance", name, container: "" },
-    canonicalJson(raw),
-  );
   return owner;
 }
 function write(
@@ -361,7 +351,6 @@ function write(
     ownerName(authority),
     signed,
     exclusive,
-    owner.origin,
   );
 }
 export function retainOwnedConfigurationMaintenance(
@@ -466,7 +455,7 @@ async function observeOwnedConfigurationHandoff(
     return;
   const step = owner.plan.steps.find((value) => value.phase === "maintenance-handoff"),
     source = owner.apiControls.steps.find((value) => value.ordinal === step?.ordinal);
-  if (!source?.canonical || !source.receiptDelivery) return;
+  if (!source?.canonical) return;
   await settlePreparedConfigurationHandoff(
     restoreAdmittedControlExecution(
       executionAuthorityState(authority).installation.installation,
@@ -656,7 +645,7 @@ export async function prepareOwnedConfigurationMaintenanceStepAdmission(
     actor.parentDeadlineAt !== original.deadlineAt ||
     request.requestedDeadlineAt !== owner.plan.prepare.deadlineAt ||
     owner.receipt.decision?.decision !== "continue" ||
-    !owner.apiControls.decide?.receiptDelivery
+    !owner.apiControls.decide
   )
     throw new ConfigurationMaintenanceControlUnauthorized(
       "Original authorized frozen generation phase required",
@@ -703,7 +692,6 @@ export async function prepareOwnedConfigurationMaintenanceStepAdmission(
         receivedAt: Date.now(),
         grant: null,
         canonical: null,
-        receiptDelivery: null,
       });
       const retained = source;
       withConfigurationMaintenancePhasePublication(lease, authority, step.phase, () => {
@@ -998,7 +986,7 @@ export async function inspectOwnedMaintenanceGenerationRuntime(
     !child.origin ||
     canonicalJson(child.origin) !== canonicalJson(owner.origin) ||
     owner.receipt.decision?.decision !== "continue" ||
-    !owner.apiControls.decide?.receiptDelivery ||
+    !owner.apiControls.decide ||
     owner.receipt.generation !== "not_started"
   )
     throw Error("Original authorized generation source changed");
@@ -1241,7 +1229,7 @@ export function retainConfigurationMaintenanceSettleControl(
         owner.final ||
         owner.inspection ||
         !owner.preparedFence ||
-        !owner.apiControls.decide?.receiptDelivery ||
+        !owner.apiControls.decide ||
         owner.receipt.decision?.decisionId !== operation.decisionId ||
         owner.sequence !== operation.expectedSequence ||
         acceptedAt >= execution.deadlineAt ||
@@ -1269,7 +1257,6 @@ export function retainConfigurationMaintenanceSettleControl(
         completedAt: null,
         result: null,
         canonicalDigest: null,
-        receiptDelivery: null,
       });
       if (Buffer.byteLength(canonicalJson(retained)) > 8192)
         throw new ConfigurationMaintenanceControlConflict(
@@ -1434,7 +1421,6 @@ export function retainConfigurationMaintenanceDecisionControl(
           }),
           requestVersion: request.requestVersion,
           deploymentBudgetMs: request.deploymentBudgetMs,
-          receiptDelivery: null,
         },
         canonicalDigest = controlTerminalReceiptDigest(decisionStatus(owner, pending)),
         commitment = signControl(
@@ -1628,7 +1614,6 @@ export function inspectConfigurationMaintenanceSettleRecovery(
     retained.result ||
     retained.canonicalDigest ||
     retained.completedAt !== null ||
-    retained.receiptDelivery ||
     canonicalJson(retained.operation) !== canonicalJson(operation) ||
     canonicalJson(retained.execution) !== canonicalJson(execution)
   )
@@ -1744,85 +1729,6 @@ export function recordOwnedConfigurationMaintenanceStepTerminal(
     closeArtifactTargetLeaseHandle(lease);
   }
 }
-/** API durable-copy ACK belongs to the original request HMAC, while the
- * effect's execution parent is the original ops root. Neither is substituted. */
-export function acknowledgeConfigurationMaintenanceStep(
-  installation: ControlInstallation,
-  operation: Extract<OpsOperation, { kind: "controlRetention.acknowledge" }>,
-  token: string,
-) {
-  const local = installationState(installation),
-    rootRaw = readPrivateRecord(local, "executions", `${operation.originRootKey}.json`, 65536) as {
-      payload?: { execution?: ExecutionRef };
-    },
-    authority = restoreAdmittedControlExecution(
-      installation,
-      executionRefSchema.parse(rootRaw.payload?.execution),
-    ),
-    owner = read(authority),
-    source = owner.apiControls.steps.find(
-      (value) => value.execution.operationKey === operation.operationKey,
-    ),
-    proof = verifyApiRetentionProof(token, operation.proof);
-  if (
-    !source?.canonical ||
-    !source.grant ||
-    source.apiParent.issuer !== "api" ||
-    operation.originRootKey !== owner.plan.prepare.operationKey ||
-    operation.fingerprint !== source.execution.fingerprint ||
-    operation.terminalDigest !== source.canonical.terminalDigest ||
-    proof.apiJobId !== source.apiParent.apiJobId ||
-    proof.originalApiOwnerVersion !== source.apiParent.apiOwnerVersion ||
-    proof.attemptId !== source.apiParent.attemptId ||
-    proof.operationKey !== source.execution.operationKey ||
-    proof.fingerprint !== source.execution.fingerprint ||
-    proof.terminalDigest !== source.canonical.terminalDigest ||
-    proof.checkpointOwnerVersion < proof.originalApiOwnerVersion
-  )
-    throw Error("Actual original phase canonical copy required");
-  const verified = verifyConfigurationMaintenanceChildTerminal(
-      authority,
-      source.ordinal,
-      source.canonical.status,
-      source.canonical.terminalAt,
-    ),
-    actual = configurationMaintenanceChildState(verified, authority),
-    lease = restoreArtifactTargetLeaseForSettlement(authority);
-  try {
-    const physical = inspectArtifactTargetLeaseChildSettlement(lease, source.execution);
-    if (owner.plan.steps[source.ordinal]?.phase === "maintenance-handoff")
-      verifyControlPreparedTerminal(local, source.execution);
-    else if (!physical || canonicalJson(physical) !== canonicalJson(actual.settlement))
-      throw Error("Original copied phase settlement unavailable");
-    return withConfigurationMaintenanceOwnerObservation(lease, authority, () => {
-      const current = read(authority),
-        retained = current.apiControls.steps.find((value) => value.ordinal === source.ordinal),
-        copy = {
-          terminalCopyId: proof.terminalCopyId,
-          checkpointOwnerVersion: proof.checkpointOwnerVersion,
-          proofDigest: controlDigest(proof),
-        };
-      if (!retained || canonicalJson(retained.canonical) !== canonicalJson(source.canonical))
-        throw Error("Original copied phase source changed");
-      if (retained.receiptDelivery) {
-        if (canonicalJson(retained.receiptDelivery) !== canonicalJson(copy))
-          throw Error("Original phase copy changed");
-      } else
-        write(authority, {
-          ...current,
-          apiControls: {
-            ...current.apiControls,
-            steps: current.apiControls.steps.map((value) =>
-              value.ordinal === source.ordinal ? { ...value, receiptDelivery: copy } : value,
-            ),
-          },
-        });
-      return { acknowledged: true as const };
-    });
-  } finally {
-    closeArtifactTargetLeaseHandle(lease);
-  }
-}
 /** Recover only actual indexed, pinned-role private owner sources. This fixed
  * namespace has at most one owner per retained root family. No public job,
  * current desired state, elapsed clock or missing lookup supplies a result. */
@@ -1841,7 +1747,7 @@ export function restoreConfigurationMaintenanceControlJournal(
   }
   let names: string[];
   try {
-    names = directory.listBounded(CONTROL_RETENTION_LIMITS.familiesPerRole + 5);
+    names = directory.listBounded(1029);
   } finally {
     directory.close();
   }
@@ -1849,15 +1755,6 @@ export function restoreConfigurationMaintenanceControlJournal(
     keys = new Set<string>(),
     ids = new Set<string>();
   for (const name of names.sort()) {
-    if (
-      [
-        ".retention-count",
-        ".retention-highwater",
-        ".retention-transaction",
-        ".retention-writer",
-      ].includes(name)
-    )
-      continue;
     if (
       !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\.json$/.test(name)
     )
@@ -1869,16 +1766,7 @@ export function restoreConfigurationMaintenanceControlJournal(
         ownerSchema,
       ),
       authority = restoreAdmittedControlExecution(installation, observed.plan.prepare);
-    let owner: ConfigurationMaintenanceOwnerRecord;
-    try {
-      owner = read(authority);
-    } catch {
-      // A failed original rename may leave the already-indexed completion
-      // preimage ahead of its old physical owner. Only that exact preimage is
-      // repairable; all other mismatches remain unavailable.
-      repairIndexedConfigurationMaintenanceSettleCompletion(authority);
-      owner = read(authority);
-    }
+    let owner = read(authority);
     if (owner.apiControls.settle?.result === null && owner.receipt.state === "settled") {
       completeOwnedConfigurationMaintenanceSettleControl(authority);
       owner = read(authority);
@@ -1929,99 +1817,6 @@ export function restoreConfigurationMaintenanceControlJournal(
     }
   }
   return records;
-}
-/** Copy-before-ACK for the original owner's metadata control, not an invented
- * ordinary family execution. The API proof must name the actual accepted
- * request/parent and its exact immutable private canonical source. */
-export function acknowledgeConfigurationMaintenanceControl(
-  installation: ControlInstallation,
-  operation: Extract<OpsOperation, { kind: "controlRetention.acknowledge" }>,
-  token: string,
-) {
-  const local = installationState(installation);
-  if (
-    installation.role !== "ops-agent" ||
-    local.fixedChildId ||
-    operation.originRootKey === operation.operationKey
-  )
-    throw new ConfigurationMaintenanceControlUnauthorized(
-      "Original maintenance control receipt required",
-    );
-  const admitted = readPrivateRecord(
-      local,
-      "executions",
-      `${operation.originRootKey}.json`,
-      65536,
-    ) as { payload?: { operation?: unknown; execution?: ExecutionRef } },
-    prepare = configurationMaintenancePrepareSchema.parse(admitted.payload?.operation),
-    authority = restoreAdmittedControlExecution(
-      installation,
-      executionRefSchema.parse(admitted.payload?.execution),
-    ),
-    proof = verifyApiRetentionProof(token, operation.proof);
-  const publish = () => {
-    const owner = read(authority),
-      slot =
-        owner.apiControls.settle?.execution.operationKey === operation.operationKey
-          ? "settle"
-          : "decide",
-      source = owner.apiControls[slot];
-    if (
-      !source ||
-      source.apiParent.issuer !== "api" ||
-      owner.plan.operation.maintenanceId !== prepare.maintenanceId ||
-      owner.plan.prepare.operationKey !== operation.originRootKey ||
-      source.execution.operationKey !== operation.operationKey ||
-      source.execution.fingerprint !== operation.fingerprint ||
-      source.canonicalDigest !== operation.terminalDigest ||
-      source.canonicalDigest !==
-        controlTerminalReceiptDigest(
-          source.operation.kind === "configurationMaintenance.decide"
-            ? decisionStatus(owner, source as DecisionSource)
-            : settleStatus(owner, source as SettleSource),
-        ) ||
-      createHash("sha256").update(source.parentAssertion).digest("hex") !==
-        source.apiParent.assertionDigest ||
-      proof.apiJobId !== source.apiParent.apiJobId ||
-      proof.originalApiOwnerVersion !== source.apiParent.apiOwnerVersion ||
-      proof.attemptId !== source.apiParent.attemptId ||
-      proof.operationKey !== source.execution.operationKey ||
-      proof.fingerprint !== source.execution.fingerprint ||
-      proof.terminalDigest !== source.canonicalDigest ||
-      proof.checkpointOwnerVersion < proof.originalApiOwnerVersion
-    )
-      throw new ConfigurationMaintenanceControlUnauthorized(
-        "Actual durable maintenance receipt copy required",
-      );
-    const copy = {
-      terminalCopyId: proof.terminalCopyId,
-      checkpointOwnerVersion: proof.checkpointOwnerVersion,
-      proofDigest: controlDigest(proof),
-    };
-    if (source.receiptDelivery) {
-      if (canonicalJson(source.receiptDelivery) !== canonicalJson(copy))
-        throw new ConfigurationMaintenanceControlConflict(
-          "Original maintenance receipt copy changed",
-        );
-    } else
-      write(authority, {
-        ...owner,
-        apiControls: { ...owner.apiControls, [slot]: { ...source, receiptDelivery: copy } },
-      });
-    return { acknowledged: true as const };
-  };
-  let lease: ArtifactTargetLease | undefined;
-  try {
-    lease = restoreArtifactTargetLeaseForSettlement(authority);
-    return withConfigurationMaintenanceOwnerObservation(lease, authority, publish);
-  } catch {
-    // Only the actual immutable released-root proof permits late delivery.
-    // No physical handle or forward authority is recreated by this ACK.
-    verifyRetainedArtifactTargetRootRelease(authority);
-    return withPrivateEffectWriter(executionAuthorityState(authority), publish);
-  } finally {
-    if (lease) closeArtifactTargetLeaseHandle(lease);
-  }
 }
 /** This is only a bounded synchronous observation of an authenticated original
  * owner. It produces no forward authority, grant, lease or retained execution;
@@ -2187,7 +1982,7 @@ export function finalizeOwnedMaintenanceState(
         controlDigest(owner) !== payload.ownerSourceDigest ||
         owner.inspection ||
         !owner.preparedFence ||
-        !owner.apiControls.decide?.receiptDelivery ||
+        !owner.apiControls.decide ||
         !(payload.runtime.mode === "unused"
           ? owner.receipt.decision?.decision === "abandon" &&
             owner.receipt.generation === "not_started" &&
@@ -2293,12 +2088,7 @@ export function restoreOwnedMaintenanceFinal(
   const owner = read(authority),
     final = owner.final,
     state = executionAuthorityState(authority);
-  if (
-    !final ||
-    !owner.inspection ||
-    !owner.preparedFence ||
-    !owner.apiControls.decide?.receiptDelivery
-  )
+  if (!final || !owner.inspection || !owner.preparedFence || !owner.apiControls.decide)
     throw Error("Actual immutable maintenance final required");
   if (
     final.ownerFinal.payload.outcome === "applied" ||
@@ -2532,16 +2322,24 @@ export async function recoverUnadmittedConfigurationMaintenance(
   }
 }
 
-/** The recovery result after the never-prepared root released: the
- * data-manager's signed observation that the prepare was never admitted. */
+/** The recovery result after the never-prepared root released: the digest
+ * the data-manager settled its fence child with, its signed observation that
+ * the prepare was never admitted. */
 function configurationMaintenanceRecoverySource(authority: VerifiedExecutionAuthority) {
   assertConfigurationMaintenanceRootClosure(authority);
   const released = verifyRetainedArtifactTargetRootRelease(authority),
-    owner = read(authority);
+    owner = read(authority),
+    fence = owner.plan.reservations.find((value) => value.phase === "configuration-fence"),
+    binding = fence && lookupControlChildPhaseBinding(authority, fence),
+    settled = binding
+      ? inspectRetainedOwnedArtifactTargetChildSettlement(authority, binding.child.execution)
+      : null;
+  if (settled?.outcome !== "failed_without_effect")
+    throw Error("Data-manager non-admission required");
   return {
     maintenanceId: owner.plan.operation.maintenanceId,
     candidateId: owner.plan.operation.candidateId,
-    receiverEvidenceDigest: controlDigest(readConfigurationPrepareNonAdmission(authority)),
+    receiverEvidenceDigest: settled.terminalReceiptDigest,
     releasedAt: released.releasedAt,
   };
 }
@@ -2568,6 +2366,7 @@ function retainConfigurationFenceNotPrepared(authority: VerifiedExecutionAuthori
     ).evidence.outcome !== "failed_without_effect"
   )
     throw Error("Never-prepared maintenance remains unknown");
+  if (read(authority).receipt.state === "settled") return;
   const lease = restoreArtifactTargetLeaseForSettlement(authority);
   try {
     withConfigurationMaintenanceOwnerObservation(lease, authority, () => {
@@ -2584,15 +2383,21 @@ function retainConfigurationFenceNotPrepared(authority: VerifiedExecutionAuthori
     closeArtifactTargetLeaseHandle(lease);
   }
 }
-/** Repeats one idempotent data-manager call until it answers. Transport
- * failures and server errors repeat; any other answer is final. */
-async function retryDataManager<T>(signal: AbortSignal, call: () => Promise<T>): Promise<T> {
+/** Repeats one idempotent data-manager call until it answers or the
+ * operation's deadline passes. Transport failures and server errors repeat;
+ * any other answer is final. */
+async function retryDataManager<T>(
+  signal: AbortSignal,
+  deadlineAt: number,
+  call: () => Promise<T>,
+): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
       return await call();
     } catch (error) {
       if (
         signal.aborted ||
+        Date.now() >= deadlineAt ||
         (error instanceof DataManagerHttpError && error.status < 500 && error.status !== 429)
       )
         throw error;
@@ -2605,6 +2410,7 @@ async function retryDataManager<T>(signal: AbortSignal, call: () => Promise<T>):
 async function settleOwnedConfigurationFence(
   authority: VerifiedExecutionAuthority,
   signal: AbortSignal,
+  deadlineAt: number,
 ): Promise<void> {
   const owner = read(authority);
   if (owner.receipt.dmFence?.state === "settled") return;
@@ -2614,7 +2420,7 @@ async function settleOwnedConfigurationFence(
     prepared = owner.preparedFence;
   if (!attempt || attempt.channel !== "delegation" || !prepared)
     throw Error("Original fence preparation required");
-  const receipt = await retryDataManager(signal, () =>
+  const receipt = await retryDataManager(signal, deadlineAt, () =>
     settleDataConfigurationFence(
       {
         maintenanceId: owner.plan.operation.maintenanceId,
@@ -2769,12 +2575,6 @@ export function configurationHandoffPendingMaintenanceIds(
             file = `${job.operation.maintenanceId}.json`,
             raw = readPrivateRecord(local, "configuration-maintenance", file),
             owner = verifyControl(installation.publicKey, domain, raw, ownerSchema);
-          verifyFamilyOwnedRecord(
-            local,
-            owner.origin,
-            { scope: "private", namespace: "configuration-maintenance", container: "", name: file },
-            canonicalJson(raw),
-          );
           if (
             owner.receipt.state !== "settled" ||
             !owner.plan.handoff ||
@@ -2936,7 +2736,7 @@ export async function verifyFrozenMaintenanceGenerationSource(
     !source?.candidateSource ||
     owner.receipt.state !== "authorized" ||
     owner.receipt.decision?.decision !== "continue" ||
-    !owner.apiControls.decide?.receiptDelivery ||
+    !owner.apiControls.decide ||
     !owner.preparedFence ||
     owner.receipt.generation !== "not_started"
   )
@@ -2999,7 +2799,6 @@ export async function verifyFrozenMaintenanceHardlinksSource(
     owner.receipt.generation !== "committed" ||
     owner.receipt.appliedRevisionId !== owner.plan.operation.revisionId ||
     !generation?.canonical ||
-    !generation.receiptDelivery ||
     !owner.preparedFence ||
     !owner.plan.nestedHardlinks
   )
@@ -3095,7 +2894,7 @@ async function verifyFrozenMaintenanceFollowUpSource(
       step.operation.kind !== "configurationHandoff.prepare") ||
     owner.receipt.state !== "applying" ||
     owner.receipt.decision?.decision !== "continue" ||
-    !owner.apiControls.decide?.receiptDelivery ||
+    !owner.apiControls.decide ||
     !owner.preparedFence ||
     owner.receipt.generation !== "committed" ||
     owner.receipt.appliedRevisionId !== owner.plan.operation.revisionId ||
@@ -3106,8 +2905,7 @@ async function verifyFrozenMaintenanceFollowUpSource(
   try {
     for (const index of step.prerequisites) {
       const child = owner.apiControls.steps.find((value) => value.ordinal === index);
-      if (!child?.canonical || !child.receiptDelivery)
-        throw Error("Original recreation prerequisite copy required");
+      if (!child?.canonical) throw Error("Original recreation prerequisite copy required");
       const proof = configurationMaintenanceChildState(
           verifyConfigurationMaintenanceChildTerminal(
             authority,
@@ -3203,7 +3001,7 @@ export async function inspectFrozenMaintenanceRuntime(
       owner.inspection ||
       !owner.preparedFence ||
       owner.receipt.state !== "applying" ||
-      !owner.apiControls.decide?.receiptDelivery ||
+      !owner.apiControls.decide ||
       (!contained &&
         (owner.receipt.generation !== "committed" ||
           owner.receipt.appliedRevisionId !== owner.plan.operation.revisionId ||
@@ -3419,7 +3217,7 @@ export async function inspectFrozenMaintenanceRuntime(
     !owner.preparedFence ||
     owner.receipt.state !== "authorized" ||
     owner.receipt.decision?.decision !== "abandon" ||
-    !owner.apiControls.decide?.receiptDelivery ||
+    !owner.apiControls.decide ||
     owner.receipt.generation !== "not_started" ||
     owner.receipt.followUp !== "not_started" ||
     owner.apiControls.steps.length
@@ -3622,35 +3420,13 @@ export async function inspectFrozenMaintenanceRuntime(
     if (lease) closeArtifactTargetLeaseHandle(lease);
   }
 }
-declare const unconsumedBrand: unique symbol;
-export type UnconsumedMaintenanceCandidate = Readonly<{ [unconsumedBrand]: true }>;
-const unconsumed = new WeakMap<
-  UnconsumedMaintenanceCandidate,
-  {
-    authority: VerifiedExecutionAuthority;
-    lock: TrustedConfigurationQueueLock;
-    ownerPayloadDigest: string;
-    candidateRecordDigest: string;
-  }
->();
-export function unconsumedMaintenanceCandidateState(
-  value: UnconsumedMaintenanceCandidate,
-  authority: VerifiedExecutionAuthority,
-) {
-  const state = unconsumed.get(value);
-  if (!state || state.authority !== authority)
-    throw Error("Live fixed unconsumed candidate observation required");
-  executionAuthorityState(authority);
-  state.lock.assertHeld();
-  return state;
-}
-/** The callback is fixed internal synchronous publication work. Its proof is
- * invalid outside the existing real queue ownership, including after expiry.
- * Historical seal authentication here never opens a forward/apply payload. */
-export async function withUnconsumedMaintenanceCandidate(
+/** Runs `publish` synchronously while the candidate queue lock is held and the
+ * original candidate is proved neither published nor claimed. Historical seal
+ * authentication here never opens a forward/apply payload. */
+async function withUnconsumedMaintenanceCandidate(
   runtime: OpsRuntime,
   authority: VerifiedExecutionAuthority,
-  publish: (witness: UnconsumedMaintenanceCandidate) => void,
+  publish: () => void,
 ): Promise<void> {
   const source = sources.get(runtime),
     owner = readOwnedConfigurationMaintenance(authority),
@@ -3670,7 +3446,6 @@ export async function withUnconsumedMaintenanceCandidate(
       participant: "ops-agent",
       operationKey: state.execution.operationKey,
     });
-  let witness: UnconsumedMaintenanceCandidate | undefined;
   try {
     const candidate = await readRetainedConfigurationCandidate(
         queue,
@@ -3721,20 +3496,9 @@ export async function withUnconsumedMaintenanceCandidate(
     lock.assertHeld();
     if (canonicalJson(readOwnedConfigurationMaintenance(authority)) !== canonicalJson(owner))
       throw Error("Original owner changed during candidate observation");
-    witness = Object.freeze({}) as UnconsumedMaintenanceCandidate;
-    unconsumed.set(
-      witness,
-      Object.freeze({
-        authority,
-        lock,
-        ownerPayloadDigest: controlDigest(owner),
-        candidateRecordDigest,
-      }),
-    );
-    publish(witness);
+    publish();
     lock.assertHeld();
   } finally {
-    if (witness) unconsumed.delete(witness);
     lock.release();
   }
 }
@@ -3770,7 +3534,7 @@ export function registerConfigurationMaintenanceSource(runtime: OpsRuntime, sour
       const inspection = await inspectFrozenMaintenanceRuntime(runtime, authority, context.signal);
       finalizeOwnedMaintenanceState(authority, inspection);
     } else restoreOwnedMaintenanceFinal(authority);
-    await settleOwnedConfigurationFence(authority, context.signal);
+    await settleOwnedConfigurationFence(authority, context.signal, context.execution.deadlineAt);
     await releaseOwnedConfigurationMaintenanceRoot(authority);
     return completeConfigurationMaintenanceSettleControl(
       context.configurationMaintenanceControl!,
@@ -3798,7 +3562,11 @@ export function registerConfigurationMaintenanceSource(runtime: OpsRuntime, sour
     }
     if (owner.final && owner.apiControls.settle?.result === null) {
       try {
-        await settleOwnedConfigurationFence(authority, context.signal);
+        await settleOwnedConfigurationFence(
+          authority,
+          context.signal,
+          context.execution.deadlineAt,
+        );
         await releaseOwnedConfigurationMaintenanceRoot(authority);
         completeObservedConfigurationMaintenanceSettlement(authority);
       } catch {
@@ -3913,13 +3681,18 @@ export function registerConfigurationMaintenanceSource(runtime: OpsRuntime, sour
       } else assertion = lookupControlChildPhaseAttempt(authority, reserved)?.assertion;
       if (!assertion) throw new OpsExecutionFailure("recovery_required", {});
       try {
-        // The data-manager prepares idempotently: a lost reply repeats the same body.
-        const receipt = await retryDataManager(context.signal, () =>
-          prepareDataConfigurationFence(plan.dmPrepare, {
-            transport: configurationDataManagerTransport(),
-            controlAssertion: assertion,
-            signal: context.signal,
-          }),
+        // The data-manager prepares idempotently: a lost reply repeats the same
+        // body for a short while. A data-manager that stays unreachable leaves
+        // the maintenance held for recovery.
+        const receipt = await retryDataManager(
+          context.signal,
+          Math.min(context.execution.deadlineAt, Date.now() + 15_000),
+          () =>
+            prepareDataConfigurationFence(plan.dmPrepare, {
+              transport: configurationDataManagerTransport(),
+              controlAssertion: assertion,
+              signal: context.signal,
+            }),
         );
         recordOwnedConfigurationMaintenancePrepared(
           authority,
@@ -4328,22 +4101,7 @@ export async function prepareConfigurationMaintenanceAdmission(
     ...(release ? { release } : {}),
     ...(coordinatorImage ? { coordinatorImage } : {}),
   });
-  assertProspectiveConfigurationMaintenanceBudget({
-    ...(release
-      ? {
-          releaseSourceBytes: Buffer.byteLength(
-            canonicalJson({
-              overlay: readConfigurationHandoffReleaseOverlay(source.infraDir),
-              state: readConfigurationHandoffReleaseState(source.infraDir),
-            }),
-          ),
-        }
-      : {}),
-    installationId: input.installation.installationId,
-    plan: frozen,
-    originalContainers: structuredClone(originalContainers),
-    rendered,
-  });
+  assertControlStorageAvailable(input.installation);
   if (
     (await source.loadAuthority()).revisionId !== authority.revisionId ||
     services.currentConfigurationGeneration(source.infraDir) !==
