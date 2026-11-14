@@ -3,7 +3,7 @@
 import { createHmac, type KeyObject, timingSafeEqual } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { canonicalJson } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import {
@@ -86,6 +86,26 @@ export async function inspectMaintenanceDockerRuntime(options: {
   /** Interim fixed-helper check only; the final producer always checks all targets. */
   handoffTargetId?: string;
 }) {
+  // The agent and its helper see the checkout through their mounts, and host
+  // paths outside it mostly not at all, such as the default Docker
+  // configuration directory. Docker records a bind source as Compose gave
+  // it, so such a source is compared as written. Inside the checkout every
+  // source must resolve.
+  const checkout = dirname(dirname(options.stack.infraDir));
+  const bindSource = async (path: string) => {
+    try {
+      return await realpath(path);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? "";
+      if (
+        path === checkout ||
+        path.startsWith(`${checkout}/`) ||
+        !["ENOENT", "EACCES", "ENOTDIR"].includes(code)
+      )
+        throw error;
+      return path;
+    }
+  };
   const { owner, containers, signal } = options,
     checks = [],
     details = [],
@@ -253,7 +273,7 @@ export async function inspectMaintenanceDockerRuntime(options: {
           volume.type === "bind"
             ? !volume.source ||
               !actual.Source ||
-              (await realpath(volume.source)) !== (await realpath(actual.Source))
+              (await bindSource(volume.source)) !== (await bindSource(actual.Source))
             : volume.type === "volume" &&
               (!volume.source ||
                 actual.Name !== (expected.volumes[volume.source]?.name ?? volume.source))
@@ -262,7 +282,7 @@ export async function inspectMaintenanceDockerRuntime(options: {
         mounts.push({
           targetDigest: keyed(volume.target),
           type: actual.Type,
-          sourceDigest: volume.type === "bind" ? keyed(await realpath(volume.source!)) : null,
+          sourceDigest: volume.type === "bind" ? keyed(await bindSource(volume.source!)) : null,
           nameDigest: actual.Name ? keyed(actual.Name) : null,
           readOnly: !actual.RW,
         });

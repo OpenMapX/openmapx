@@ -304,3 +304,35 @@ it("stops waiting at its deadline and leaves the refusal to the readiness check"
   expect(calls).toBeGreaterThan(1);
   expect(Date.now() - started).toBeLessThan(5_000);
 });
+
+// The helper and the agent see only the checkout's mounts; a host path outside
+// it, such as the default Docker configuration directory, does not resolve.
+const unseen = "/nonexistent-openmapx-host/root/.docker";
+
+it("compares a bind source outside the checkout that it cannot see by its path", async () => {
+  const { inspect, spec, observed } = fixture(1, 0, 0);
+  (spec.volumes[0] as { source: string }).source = unseen;
+  (observed.Mounts[0] as { Source: string }).Source = unseen;
+  const first = await inspect();
+  expect(first.checks.some((check) => check.check === "mount")).toBe(true);
+  // The evidence is stable, so the same mount verifies the same way again.
+  expect((await inspect()).details).toEqual(first.details);
+});
+
+it("still refuses a changed bind source outside the checkout that it cannot see", async () => {
+  const { inspect, spec, observed } = fixture(1, 0, 0);
+  (spec.volumes[0] as { source: string }).source = unseen;
+  (observed.Mounts[0] as { Source: string }).Source = "/nonexistent-openmapx-host/elsewhere";
+  await expect(inspect()).rejects.toThrow("Original applied mount source differs");
+});
+
+it("still resolves a bind source it can see and refuses a missing one inside the checkout", async () => {
+  const { inspect, spec, observed, other } = fixture(1, 0, 0);
+  (observed.Mounts[0] as { Source: string }).Source = other;
+  await expect(inspect()).rejects.toThrow("Original applied mount source differs");
+  const missing = fixture(1, 0, 0);
+  const inside = join(missing.other, "missing");
+  (missing.spec.volumes[0] as { source: string }).source = inside;
+  (missing.observed.Mounts[0] as { Source: string }).Source = inside;
+  await expect(missing.inspect()).rejects.toThrow("ENOENT");
+});
