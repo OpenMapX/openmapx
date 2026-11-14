@@ -13,8 +13,8 @@ interface MenuRowProps {
   icon?: ReactNode;
   /** Trailing hint, such as a keyboard shortcut. */
   hint?: string;
-  /** Navigates instead of calling `onClick` alone. */
-  href?: string;
+  /** An in-app page to navigate to, besides calling `onClick`. */
+  href?: `/${string}`;
   onClick?: () => void;
 }
 
