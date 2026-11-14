@@ -82,9 +82,10 @@ helper.
   (`OPENMAPX_DOCKER_CONFIG_DIR`), which fails with `EACCES`. The roles of this
   suite run on the host's file system, so no scenario shows it.
 
-On a real Docker host the self-update and the failure cases of the native
-update smoke pass once the helper waits for health and the configuration
-directory lies inside the checkout.
+On a real Docker host, once the helper waits for health and the configuration
+directory lies inside the checkout, the native update smoke's self-update and
+its registry, unhealthy, helper and agent cases pass. Its host-command case
+fails as C18 does here.
 
 ## Scenarios
 
