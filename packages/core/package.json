@@ -300,7 +300,7 @@
     "react": "19.3.1",
     "tar-stream": "3.2.2",
     "tz-lookup": "^6.1.25",
-    "undici": "8.12.3",
+    "undici": "8.12.4",
     "zod": "^4.6.7",
     "zustand": "^5.0.16",
     "@openmapx/motis-feed-proxy-config": "workspace:^"
