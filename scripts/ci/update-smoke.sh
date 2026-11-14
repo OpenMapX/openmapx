@@ -411,7 +411,9 @@ case_unhealthy() {
   read -r release digest < <(check_release)
   local agent_before
   agent_before="$(image_id_of ops-agent)"
-  if system_update unhealthy "$release" "$digest"; then
+  # An update that cannot finish is held for the operator; ten minutes cover
+  # the helper's wait for the API's health.
+  if update_timeout_seconds=600 system_update unhealthy "$release" "$digest"; then
     fail "the update succeeded although app-api is unhealthy"
   fi
   # The agent is the only release service recreated after the API.
@@ -423,7 +425,8 @@ case_helper() {
   install_release_one
   publish_release
   read -r release digest < <(check_release)
-  system_update helper "$release" "$digest" &
+  # Once its helper is killed, the update is held for the operator.
+  update_timeout_seconds=600 system_update helper "$release" "$digest" &
   local updater=$! helper
   helper="$(wait_helper_after data-manager "$release")"
   docker kill "$helper" >/dev/null || true
