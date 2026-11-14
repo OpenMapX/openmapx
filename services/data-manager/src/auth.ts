@@ -109,10 +109,10 @@ function assertDistinct(tokens: DataManagerCallerTokens): void {
 }
 
 /** The callers a route admits, from its contract; a route without that list admits none. */
-function routePrincipals(req: FastifyRequest): readonly string[] {
-  const schema = req.routeOptions.schema as { "x-openmapx-principals"?: unknown } | undefined;
-  const allowed = schema?.["x-openmapx-principals"];
-  return Array.isArray(allowed) ? allowed : [];
+/** Whether a route admits the API's token; the agent and host CLI reach every route. */
+function admitsApi(req: FastifyRequest): boolean {
+  const schema = req.routeOptions.schema as { "x-openmapx-api-caller"?: unknown } | undefined;
+  return schema?.["x-openmapx-api-caller"] === true;
 }
 
 /**
@@ -154,7 +154,7 @@ export function registerAuth(
       return reply.code(401).send({ error: "Unauthorized" });
     }
     // An unknown path falls through to the not-found reply.
-    if (req.routeOptions.url !== undefined && !routePrincipals(req).includes(principal))
+    if (req.routeOptions.url !== undefined && principal === "api" && !admitsApi(req))
       return reply.code(403).send({ error: "This caller may not use this route" });
     principals.set(req, principal);
     // Durable receiver admission only. Never silently ignore an internal authority header.

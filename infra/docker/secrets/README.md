@@ -78,8 +78,8 @@ same token), and the CLI on the host. They follow the same format, reuse and
 file rules as the ops-agent tokens above, and a render fails closed if any two
 hold the same value.
 
-`data-manager` mounts all three and admits each caller only to the routes it
-uses. `app-api` mounts only the API token and `ops-agent` only the agent token,
+`data-manager` mounts all three, admits the API's token only to the routes the
+API uses, and admits the other two everywhere. `app-api` mounts only the API token and `ops-agent` only the agent token,
 each receiving the path as `DATA_MANAGER_TOKEN_FILE`; data-manager also presents
 the API token when it calls back into the API. The host CLI reads its token
 from this directory. No raw token belongs in Compose environment values, URLs,

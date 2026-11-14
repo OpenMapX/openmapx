@@ -7,8 +7,8 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerAuth, requestPrincipal, resolveCallerTokens } from "../src/auth.js";
 import {
+  DATA_MANAGER_API_ROUTES,
   DATA_MANAGER_PRINCIPALS,
-  DATA_MANAGER_ROUTE_PRINCIPALS,
   type DataManagerPrincipal,
 } from "../src/principals.js";
 import { registerDataManagerRoute } from "../src/route-contract.js";
@@ -16,9 +16,7 @@ import { registerDataManagerRoute } from "../src/route-contract.js";
 const TOKEN = "test-secret-token";
 const TOKENS = { api: TOKEN, "ops-agent": "agent-secret-token", "host-cli": "cli-secret-token" };
 /** A plain route every caller may use, for the hook's generic behaviour. */
-const everyone = {
-  schema: { "x-openmapx-principals": [...DATA_MANAGER_PRINCIPALS] } as Record<string, unknown>,
-};
+const everyone = { schema: { "x-openmapx-api-caller": true } as Record<string, unknown> };
 
 async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify();
@@ -319,25 +317,22 @@ describe("per-caller route allowlist", () => {
       .replace(/:[A-Za-z]+/g, "x");
   }
 
-  it("admits each caller exactly to the routes listed for it", async () => {
+  it("admits the API's token only to its routes, and the other callers to every route", async () => {
     const { app } = await contractApp();
     try {
       for (const [operationId, operation] of Object.entries(dataManagerOperations)) {
-        const allowed = DATA_MANAGER_ROUTE_PRINCIPALS[
-          operationId as keyof typeof dataManagerOperations
-        ] as readonly string[];
+        const api = DATA_MANAGER_API_ROUTES[operationId as keyof typeof dataManagerOperations];
         if (operation.auth !== "service") {
-          expect(allowed, operationId).toEqual([]);
+          expect(api, operationId).toBe(false);
           continue;
         }
-        expect(allowed.length, operationId).toBeGreaterThan(0);
         for (const principal of DATA_MANAGER_PRINCIPALS) {
           const response = await app.inject({
             method: operation.method as "GET",
             url: concretePath(operation.path),
             headers: { authorization: `Bearer ${TOKENS[principal]}` },
           });
-          if (allowed.includes(principal))
+          if (principal !== "api" || api)
             expect(response.statusCode, `${principal} ${operationId}`).not.toBe(403);
           else {
             expect(response.statusCode, `${principal} ${operationId}`).toBe(403);
@@ -353,19 +348,21 @@ describe("per-caller route allowlist", () => {
     }
   });
 
-  it("keeps the configuration fence to the operations agent", async () => {
+  it("keeps the configuration fence and the hardlink receivers from the API's token", async () => {
+    for (const operationId of [
+      "prepareDataConfigurationFence",
+      "recoverUnadmittedConfigurationPreparation",
+      "inspectDataConfigurationFence",
+      "settleDataConfigurationFence",
+      "startGenerationHardlinksExecution",
+      "recoverUnadmittedGenerationHardlinks",
+    ] as const)
+      expect(DATA_MANAGER_API_ROUTES[operationId], operationId).toBe(false);
     const { app } = await contractApp();
     try {
-      for (const operationId of [
-        "prepareDataConfigurationFence",
-        "recoverUnadmittedConfigurationPreparation",
-        "inspectDataConfigurationFence",
-        "settleDataConfigurationFence",
-      ] as const)
-        expect(DATA_MANAGER_ROUTE_PRINCIPALS[operationId]).toEqual(["ops-agent"]);
       for (const [principal, status] of [
         ["api", 403],
-        ["host-cli", 403],
+        ["host-cli", 400],
         ["ops-agent", 400],
       ] as const) {
         const response = await app.inject({
@@ -396,16 +393,21 @@ describe("per-caller route allowlist", () => {
     }
   });
 
-  it("refuses an authenticated caller on a route without a caller list", async () => {
+  it("refuses the API's token on a route that does not admit it", async () => {
     const app = Fastify();
     registerAuth(app, TOKENS);
     app.get("/unlisted", async () => ({ ok: true }));
     try {
-      const response = await app.inject({
+      const api = await app.inject({
         url: "/unlisted",
         headers: { authorization: `Bearer ${TOKEN}` },
       });
-      expect(response.statusCode).toBe(403);
+      expect(api.statusCode).toBe(403);
+      const agent = await app.inject({
+        url: "/unlisted",
+        headers: { authorization: `Bearer ${TOKENS["ops-agent"]}` },
+      });
+      expect(agent.statusCode).toBe(200);
       const missing = await app.inject({
         url: "/missing",
         headers: { authorization: `Bearer ${TOKEN}` },
