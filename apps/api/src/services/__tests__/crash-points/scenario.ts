@@ -1,4 +1,4 @@
-/** How every crash-point scenario declares its test.
+/** How every crash-point scenario declares itself: one fresh host, one test.
  *
  * Scenarios that fail on today's code because of a defect the update-system
  * replacement removes are listed in `known-failures.json`, each with a
@@ -9,9 +9,10 @@
  * may only ever be removed; scenario files never change to make a scenario
  * pass. */
 import { readFileSync } from "node:fs";
-import { it } from "vitest";
+import { afterAll, beforeAll, describe, it } from "vitest";
+import { CrashHost, crashPointsUnavailable, type HostOptions } from "./driver";
 
-export interface KnownFailure {
+interface KnownFailure {
   /** Why the scenario fails today, for readers. */
   readonly reason: string;
   /** A regular expression the failure's text must match. */
@@ -33,7 +34,7 @@ function shown(value: unknown): string {
 
 /** The text a failure signature is matched against: the error's message and,
  * for an assertion, the values it compared. */
-export function failureText(error: unknown): string {
+function failureText(error: unknown): string {
   if (!(error instanceof Error)) return shown(error);
   const parts = [error.message];
   const { actual, expected } = error as Error & { actual?: unknown; expected?: unknown };
@@ -43,10 +44,7 @@ export function failureText(error: unknown): string {
 }
 
 /** Runs a listed scenario: resolves only when it fails with its signature. */
-export async function expectKnownFailure(
-  entry: KnownFailure,
-  run: () => Promise<void>,
-): Promise<void> {
+async function expectKnownFailure(entry: KnownFailure, run: () => Promise<void>): Promise<void> {
   let failure: unknown;
   let failed = false;
   try {
@@ -60,8 +58,30 @@ export async function expectKnownFailure(
   if (!new RegExp(entry.fails).test(failureText(failure))) throw failure;
 }
 
-export function scenario(name: string, run: () => Promise<void>, timeout: number): void {
-  const entry = Object.hasOwn(knownFailures, name) ? knownFailures[name] : undefined;
-  if (entry) it(name, () => expectKnownFailure(entry, run), timeout);
-  else it(name, run, timeout);
+export function crashScenario(scenario: {
+  /** What happens to the host. */
+  title: string;
+  /** What the system must do; the key of `known-failures.json`. */
+  name: string;
+  /** The file's opt-in, which the database CI contract finds in each file. */
+  enabled: boolean;
+  timeout: number;
+  host?: HostOptions;
+  run: (host: CrashHost) => Promise<void>;
+}): void {
+  describe.skipIf(!scenario.enabled || !!crashPointsUnavailable())(scenario.title, () => {
+    let host: CrashHost | undefined;
+    beforeAll(async () => {
+      host = await CrashHost.open(scenario.host);
+    }, 600_000);
+    afterAll(async () => {
+      await host?.close();
+    }, 120_000);
+    const run = () => scenario.run(host as CrashHost);
+    const entry = Object.hasOwn(knownFailures, scenario.name)
+      ? knownFailures[scenario.name]
+      : undefined;
+    if (entry) it(scenario.name, () => expectKnownFailure(entry, run), scenario.timeout);
+    else it(scenario.name, run, scenario.timeout);
+  });
 }

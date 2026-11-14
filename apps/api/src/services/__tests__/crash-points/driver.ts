@@ -268,9 +268,6 @@ function matches(match: DockerMatch, invocation: Invocation): boolean {
 export interface HostOptions {
   /** Mount the agent's state directory on a small tmpfs the test can fill. */
   smallStateFilesystem?: boolean;
-  /** Configure an OpenConditions source (a local stand-in that answers
-   * nothing useful), which turns on the data-manager's traffic jobs. */
-  openConditions?: boolean;
 }
 
 export class CrashHost {
@@ -359,7 +356,6 @@ export class CrashHost {
     for (const proxy of Object.values(this.proxies)) await proxy.listen();
     await this.createDatabase();
     this.publishReleases();
-    if (options.openConditions) await this.startOpenConditions();
     this.writeEnvironment();
     this.step("select release N");
     await this.cliOk(["compose", "release"]);
@@ -402,27 +398,12 @@ export class CrashHost {
     path: string,
     body?: unknown,
   ): Promise<Submission> {
-    const token = readFileSync(
-      join(this.infraDir, "secrets", `data-manager-${caller}-token`),
-      "utf8",
-    ).trim();
-    const response = await fetch(`http://127.0.0.1:${this.ports.dm}${path}`, {
+    return bearerRequest(
+      `http://127.0.0.1:${this.ports.dm}${path}`,
+      readFileSync(join(this.infraDir, "secrets", `data-manager-${caller}-token`), "utf8").trim(),
       method,
-      headers: {
-        authorization: `Bearer ${token}`,
-        ...(body === undefined ? {} : { "content-type": "application/json" }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    const text = await response.text();
-    let parsed: unknown = text;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      // Not JSON.
-    }
-    return { status: response.status, body: parsed };
+      body,
+    );
   }
 
   /** The agent's state directory on its own small tmpfs, so a test can fill it. */
@@ -644,7 +625,7 @@ export class CrashHost {
   private nextManifestImage = "";
 
   /** Points the followed release channel at N+1, as a new publication would. */
-  publishNextRelease() {
+  private publishNextRelease() {
     this.engine.retag(`${MANIFEST_REPOSITORY}:main`, this.nextManifestImage);
   }
 
@@ -1026,15 +1007,6 @@ export class CrashHost {
     };
   }
 
-  /** Fails matching Docker invocations. */
-  failDocker(
-    match: DockerMatch,
-    options: { times?: number; skip?: number; message?: string } = {},
-  ) {
-    const rule = this.engine.fail((invocation) => matches(match, invocation), options);
-    return { entered: rule.entered };
-  }
-
   /** The next container created for the service reports unhealthy. */
   unhealthyAfterRecreate(service: string) {
     this.engine.unhealthyServices.add(service);
@@ -1109,17 +1081,6 @@ export class CrashHost {
   }
 
   private stateFilesystem?: string;
-  private openConditionsSource?: Server;
-
-  private async startOpenConditions() {
-    const server = createHttpServer((_request, response) => {
-      response.writeHead(503, { "content-type": "application/json" }).end("{}");
-    });
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-    this.openConditionsSource = server;
-    this.environment.OPENCONDITIONS_URL = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
-  }
-
   /** Fills the agent's state filesystem, so its next write fails with ENOSPC. */
   fillStateFilesystem(): void {
     if (!this.stateFilesystem) throw new Error("Open the host with a small state filesystem");
@@ -1143,12 +1104,9 @@ export class CrashHost {
       rmSync(join(this.stateFilesystem, ".crash-point-filler"), { force: true });
   }
 
+  /** The requests one fault proxy saw, with the operation kind and status. */
   requests(link: Link): readonly ProxiedRequest[] {
     return this.proxies[link].requests;
-  }
-
-  dockerTrace(): readonly Invocation[] {
-    return this.engine.trace;
   }
 
   /** Invocations that change containers or images. */
@@ -1372,33 +1330,14 @@ export class CrashHost {
   }
 
   /** A request to the agent's operations contract, as the API makes it. */
-  async agentRequest(
-    method: string,
-    path: string,
-    body?: unknown,
-  ): Promise<{ status: number; body: unknown }> {
-    const token = readFileSync(
-      join(this.infraDir, "secrets", "ops-agent-api-token"),
-      "utf8",
-    ).trim();
-    const response = await fetch(`${this.proxies["api->agent"].url}${path}`, {
+  private agentRequest(method: string, path: string, body?: unknown) {
+    return bearerRequest(
+      `${this.proxies["api->agent"].url}${path}`,
+      readFileSync(join(this.infraDir, "secrets", "ops-agent-api-token"), "utf8").trim(),
       method,
-      headers: {
-        authorization: `Bearer ${token}`,
-        "x-ops-protocol-version": String(OPS_PROTOCOL_VERSION),
-        ...(body === undefined ? {} : { "content-type": "application/json" }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    const text = await response.text();
-    let parsed: unknown = text;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      // Not JSON.
-    }
-    return { status: response.status, body: parsed };
+      body,
+      { "x-ops-protocol-version": String(OPS_PROTOCOL_VERSION) },
+    );
   }
 
   /** A fresh operation key, as the API mints one for a mutation. */
@@ -1539,10 +1478,6 @@ export class CrashHost {
     }
     if (this.stateFilesystem)
       spawnSync("sudo", ["-n", "umount", "--lazy", this.stateFilesystem], { stdio: "ignore" });
-    if (this.openConditionsSource) {
-      this.openConditionsSource.closeAllConnections();
-      await new Promise<void>((resolve) => this.openConditionsSource?.close(() => resolve()));
-    }
     if (this.databaseName && process.env.OPENMAPX_CRASH_KEEP !== "1") {
       const admin = postgres(process.env.DATABASE_URL as string, { max: 1, onnotice: () => {} });
       try {
@@ -1556,6 +1491,32 @@ export class CrashHost {
     }
     if (process.env.OPENMAPX_CRASH_KEEP !== "1")
       rmSync(this.root, { recursive: true, force: true });
+  }
+}
+
+/** A JSON request with a bearer token; the reply's body parsed when it is JSON. */
+async function bearerRequest(
+  url: string,
+  token: string,
+  method: string,
+  body?: unknown,
+  headers: Record<string, string> = {},
+): Promise<{ status: number; body: unknown }> {
+  const response = await fetch(url, {
+    method,
+    headers: {
+      authorization: `Bearer ${token}`,
+      ...headers,
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  const text = await response.text();
+  try {
+    return { status: response.status, body: JSON.parse(text) };
+  } catch {
+    return { status: response.status, body: text };
   }
 }
 

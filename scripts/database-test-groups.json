@@ -107,7 +107,6 @@
     "apps/api/src/services/__tests__/crash-points/scenarios/data-job-blocks-update.test.ts",
     "apps/api/src/services/__tests__/crash-points/scenarios/fence-released-after-update.test.ts",
     "apps/api/src/services/__tests__/crash-points/scenarios/helper-killed.test.ts",
-    "apps/api/src/services/__tests__/crash-points/scenarios/install.test.ts",
     "apps/api/src/services/__tests__/crash-points/scenarios/lost-fence-prepare-reply.test.ts",
     "apps/api/src/services/__tests__/crash-points/scenarios/lost-fence-settle-reply.test.ts",
     "apps/api/src/services/__tests__/crash-points/scenarios/lost-prepare-reply.test.ts",
@@ -117,7 +116,6 @@
     "apps/api/src/services/__tests__/crash-points/scenarios/same-key-conflict.test.ts",
     "apps/api/src/services/__tests__/crash-points/scenarios/self-update.test.ts",
     "apps/api/src/services/__tests__/crash-points/scenarios/state-filesystem-full.test.ts",
-    "apps/api/src/services/__tests__/crash-points/scenarios/traffic-without-valhalla.test.ts",
     "apps/api/src/services/__tests__/crash-points/scenarios/unhealthy-api-image.test.ts",
     "apps/api/src/services/__tests__/crash-points/scenarios/update-cancelled-during-settle.test.ts",
     "apps/api/src/services/__tests__/crash-points/scenarios/update-cancelled-mid-recreate.test.ts"

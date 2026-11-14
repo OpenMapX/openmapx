@@ -282,10 +282,10 @@ runtime bundles, and injects faults only from outside: a fake Docker engine
 behind a `docker` shim on `PATH`, HTTP proxies between the roles, and role
 processes that are killed and restarted. Scenarios observe only HTTP answers,
 job and agent operation states, CLI exit codes, the Docker trace and data
-admission. They talk to the system only through `driver.ts`; a policy test
-(`scripts/crash-point-imports.test.ts`) lets scenario files import only vitest,
-the driver and the scenario wrapper, and refuses the suite any import of the
-signed control layer, the agent or the data-manager. When the update system
+admission. They talk to the system only through `driver.ts`; Biome rules in
+`biome.json` let scenario files import only vitest, the driver and the scenario
+wrapper, and refuse the suite any import of the signed control layer, the agent
+or the data-manager. When the update system
 changes, only the driver may change; scenario files stay as they are. Scenarios
 that fail on today's code are listed, with the signature of their failure, in
 `known-failures.json`; the suite's `README.md` gives the rules.

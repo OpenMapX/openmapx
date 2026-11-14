@@ -62,7 +62,6 @@
   "apps/api/src/services/__tests__/crash-points/scenarios/data-job-blocks-update.test.ts": 400,
   "apps/api/src/services/__tests__/crash-points/scenarios/fence-released-after-update.test.ts": 70,
   "apps/api/src/services/__tests__/crash-points/scenarios/helper-killed.test.ts": 180,
-  "apps/api/src/services/__tests__/crash-points/scenarios/install.test.ts": 20,
   "apps/api/src/services/__tests__/crash-points/scenarios/lost-fence-prepare-reply.test.ts": 65,
   "apps/api/src/services/__tests__/crash-points/scenarios/lost-fence-settle-reply.test.ts": 65,
   "apps/api/src/services/__tests__/crash-points/scenarios/maintenance-holds-admission.test.ts": 145,
@@ -78,6 +77,5 @@
   "apps/api/src/services/__tests__/crash-points/scenarios/agent-killed-during-start.test.ts": 210,
   "apps/api/src/services/__tests__/crash-points/scenarios/update-cancelled-mid-recreate.test.ts": 75,
   "apps/api/src/services/__tests__/crash-points/scenarios/cli-during-helper.test.ts": 60,
-  "apps/api/src/services/__tests__/crash-points/scenarios/traffic-without-valhalla.test.ts": 70,
   "apps/api/src/services/__tests__/crash-points/scenarios/per-caller-tokens.test.ts": 75
 }

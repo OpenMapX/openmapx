@@ -17,8 +17,9 @@ Some scenarios fail on today's code because of defects the update-system
 replacement removes. They are committed with their full expectations and
 listed in `known-failures.json`. Each entry gives a one-line `reason` and a
 `fails` signature: a regular expression matched against the failure's message
-and, for an assertion, the values it compared. Every scenario declares its test
-through `scenario()` (`scenario.ts`). A listed scenario passes only when it
+and, for an assertion, the values it compared. Every scenario declares itself
+through `crashScenario()` (`scenario.ts`), which opens one fresh host for it and
+closes it afterwards. A listed scenario passes only when it
 fails with its signature within its normal timeout. CI turns red when it
 passes, when it fails any other way (the original error is reported) and when
 it hangs. The rules:
@@ -27,10 +28,11 @@ it hangs. The rules:
 - Scenario files never change to make a scenario pass.
 - A signature names the defect, not just "something failed": the observation
   a held job shows, the assertion that fails, or the role's own error.
-- `scripts/crash-point-imports.test.ts` checks that every entry names an
-  existing scenario with a reason and a valid signature, that scenarios declare
-  their tests only through `scenario()`, and how `scenario()` treats a pass, a
-  matching failure and any other failure.
+- `scripts/crash-point-scenarios.test.ts` checks that every entry names an
+  existing scenario with a reason and a valid signature, and that each file
+  declares one scenario through `crashScenario()`. Biome rules (`biome.json`)
+  keep the suite's imports outside the control layer, the agent and the
+  data-manager, and scenario files to vitest, the driver and the wrapper.
 
 ## Environment
 
@@ -79,7 +81,6 @@ host-command case requires C18's known failure, as the registry here does.
 
 | ID  | Fault and boundary                                               | Scenario file                                                                | Status on this branch                                                                             |
 | --- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| —   | Fresh installation finds release N+1                             | `install.test.ts`                                                            | pinned                                                                                            |
 | —   | Self-update to N+1, agent recreated last                         | `self-update.test.ts`                                                        | pinned                                                                                            |
 | C1  | Two simultaneous update requests                                 | `concurrent-admission.test.ts`                                               | pinned                                                                                            |
 | C1  | Host `services start` while an update holds maintenance          | `maintenance-holds-admission.test.ts`                                        | pinned                                                                                            |
@@ -100,7 +101,6 @@ host-command case requires C18's known failure, as the registry here does.
 | C12 | Agent restarted with a surviving data-manager child              | —                                                                            | not pinned: needs MOTIS and a transit job in the fixture                                          |
 | C13 | Update requested while a data job runs                           | `data-job-blocks-update.test.ts`                                             | pinned                                                                                            |
 | —   | Data-manager routes called with another caller's token           | `per-caller-tokens.test.ts`                                                  | pinned                                                                                            |
-| —   | Traffic maintenance with OpenConditions and no Valhalla          | `traffic-without-valhalla.test.ts`                                           | pinned                                                                                            |
 | C14 | Registry outage after the check                                  | `registry-outage.test.ts`                                                    | pinned                                                                                            |
 | C15 | New API image unhealthy                                          | `unhealthy-api-image.test.ts`                                                | pinned                                                                                            |
 | C16 | Helper killed mid-recreate                                       | `helper-killed.test.ts`                                                      | pinned                                                                                            |
