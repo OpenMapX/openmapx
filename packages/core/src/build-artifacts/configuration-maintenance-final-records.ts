@@ -1,22 +1,139 @@
 /** Private fixed final producer records. Parsing is never final authority. */
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
+import { executionRefSchema } from "../ops/execution-ref";
 import { ownedServiceSnapshotSchema } from "../ops/owned-service-records";
-import {
-  configurationFinalEvidenceProjectionSchema,
-  configurationFinalEvidenceSchema,
-  configurationOwnerFinalSchema,
-  configurationSettlementDomains,
-  configurationSettlementOwnerIdentitySchema,
-  settlementRecordDigest,
-} from "./configuration-fence-settlement-records";
+import { dataConfigurationFenceReceiptSchema } from "../services/data-manager/contracts/configuration-maintenance";
 import type { ConfigurationMaintenanceOwnerRecord } from "./configuration-maintenance-owner-records";
-import { controlDigest } from "./control-records";
+import { controlDigest, controlOriginSchema } from "./control-records";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/),
   epoch = z.number().int().nonnegative().safe();
 const signed = <T extends z.ZodType>(payload: T) =>
   z.strictObject({ payload, signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/) });
+const id = z.uuid();
+const uniqueSorted = <T extends z.ZodType<string>>(schema: T, max: number) =>
+  z
+    .array(schema)
+    .max(max)
+    .refine((items) => items.every((item, i) => i === 0 || items[i - 1]! < item));
+const digests = uniqueSorted(digest, 64);
+const revision = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
+export const configurationFinalDomains = Object.freeze({
+  finalEvidence: "openmapx-configuration-final-evidence-v2",
+  ownerFinal: "openmapx-configuration-owner-final-v2",
+  inspection: "openmapx-configuration-runtime-inspection-v2",
+});
+export const finalRecordDigest = (
+  domain: (typeof configurationFinalDomains)[keyof typeof configurationFinalDomains],
+  value: unknown,
+) =>
+  createHash("sha256")
+    .update(`${domain}\0${canonicalJson(value)}`)
+    .digest("hex");
+export const configurationOwnerIdentitySchema = z
+  .strictObject({
+    installationId: id,
+    origin: controlOriginSchema,
+    ownerPrepare: executionRefSchema,
+    admissionDigest: digest,
+    rootCertificateDigest: digest,
+    maintenanceId: id,
+    candidateId: id,
+    planDigest: digest,
+  })
+  .refine(
+    (value) =>
+      value.origin.issuer === "ops-agent" &&
+      value.ownerPrepare.executor === "ops-agent" &&
+      value.ownerPrepare.principal === "api" &&
+      value.ownerPrepare.deadlineAt <= value.origin.notAfter,
+  );
+const preparedGuardSchema = z.strictObject({
+  fenceId: id,
+  preparedReceipt: dataConfigurationFenceReceiptSchema.refine(
+    (receipt) => receipt.state === "prepared",
+  ),
+});
+const configurationDecisionEvidenceSchema = z.strictObject({
+  decisionId: id,
+  decision: z.enum(["continue", "abandon"]),
+  checkpointVersion: epoch,
+  checkpointDigest: digest,
+  apiParentAttestationDigest: digest,
+});
+export const configurationChildEvidenceSchema = z.strictObject({
+  planIndex: z.number().int().min(0).max(31),
+  execution: executionRefSchema,
+  terminalDigest: digest,
+  terminalAt: epoch,
+  effectSettlementDigest: digest,
+  publication: z.enum(["not_started", "committed"]),
+});
+const childProjection = configurationChildEvidenceSchema
+  .omit({ execution: true })
+  .extend({ executionDigest: digest });
+const generation = z
+  .strictObject({
+    state: z.enum(["not_committed", "committed"]),
+    revisionId: revision.nullable(),
+    commitReceiptDigest: digest.nullable(),
+  })
+  .refine((value) =>
+    value.state === "committed"
+      ? value.revisionId !== null && value.commitReceiptDigest !== null
+      : value.revisionId === null && value.commitReceiptDigest === null,
+  );
+const followUp = z.strictObject({
+  state: z.enum(["not_started", "complete", "contained"]),
+  receiptDigests: digests,
+});
+const runtime = z.strictObject({
+  verificationId: id,
+  mode: z.enum(["unused", "applied", "contained"]),
+  requiredCheckSetDigest: digest,
+  checkedAt: epoch,
+});
+const finalFields = {
+  identity: configurationOwnerIdentitySchema,
+  guard: preparedGuardSchema,
+  decision: configurationDecisionEvidenceSchema,
+  generation,
+  followUp,
+  runtime,
+  outcome: z.enum(["unused", "applied", "contained"]),
+};
+function eligible(value: z.infer<z.ZodObject<typeof finalFields>>) {
+  return (
+    value.runtime.mode === value.outcome &&
+    (value.outcome === "unused"
+      ? value.decision.decision === "abandon" &&
+        value.generation.state === "not_committed" &&
+        value.followUp.state === "not_started"
+      : value.decision.decision === "continue" &&
+        (value.outcome !== "applied" ||
+          (value.generation.state === "committed" &&
+            value.generation.revisionId === value.guard.preparedReceipt.revisionId &&
+            value.followUp.state === "complete")))
+  );
+}
+export const configurationFinalEvidenceSchema = z
+  .strictObject({ ...finalFields, children: z.array(configurationChildEvidenceSchema).max(64) })
+  .refine(eligible);
+export const configurationFinalEvidenceProjectionSchema = z
+  .strictObject({ ...finalFields, children: z.array(childProjection).max(64) })
+  .refine(eligible);
+export const configurationOwnerFinalSchema = z.strictObject({
+  version: z.literal(2),
+  identity: configurationOwnerIdentitySchema,
+  ownerSequence: epoch,
+  settlingAt: epoch,
+  expectedDmSequence: epoch,
+  evidenceDigest: digest,
+  outcome: z.enum(["unused", "applied", "contained"]),
+  privateInspectionId: id,
+});
 export const configurationMaintenanceRequiredChecksSchema = z
   .array(
     z.strictObject({
@@ -49,7 +166,7 @@ export const configurationMaintenanceRequiredChecksSchema = z
   .max(1024);
 export const configurationMaintenanceRuntimeInspectionSchema = z.strictObject({
   version: z.literal(2),
-  identity: z.lazy(() => configurationSettlementOwnerIdentitySchema),
+  identity: z.lazy(() => configurationOwnerIdentitySchema),
   inspectionId: z.uuid(),
   ownerSequence: epoch,
   ownerSourceDigest: digest,
@@ -102,14 +219,7 @@ export function assertUnusedConfigurationMaintenanceFinalState(
   const final = owner.final,
     signedInspection = owner.inspection,
     decision = owner.apiControls.decide;
-  if (
-    !final ||
-    !signedInspection ||
-    !decision?.receiptDelivery ||
-    !owner.guardSource ||
-    owner.noGuard ||
-    owner.issuance !== "open"
-  )
+  if (!final || !signedInspection || !decision?.receiptDelivery || !owner.preparedFence)
     throw Error("Actual unused original final source required");
   const inspection = signedInspection.payload,
     original = final.ownerFinal.payload,
@@ -153,7 +263,7 @@ export function assertUnusedConfigurationMaintenanceFinalState(
         ...owner.receipt,
         sequence: inspection.ownerSequence,
         state: "authorized",
-        dmFence: owner.guardSource.preparedReceipt,
+        dmFence: owner.preparedFence,
       },
     };
   const details = inspection.observations.map((value) => {
@@ -166,7 +276,7 @@ export function assertUnusedConfigurationMaintenanceFinalState(
   if (
     !same(details[0], { currentRevisionId: owner.plan.operation.expectedCurrentRevisionId }) ||
     !same(details[1], { containers: owner.originalContainers }) ||
-    !same(details[3], { guard: owner.guardSource.preparedReceipt }) ||
+    !same(details[3], { guard: owner.preparedFence }) ||
     candidate.candidateId !== owner.plan.operation.candidateId ||
     candidate.revisionId !== owner.plan.operation.revisionId ||
     candidate.recordDigest !== owner.plan.candidateRecordDigest ||
@@ -200,7 +310,7 @@ export function assertUnusedConfigurationMaintenanceFinalState(
     inspection.observations.length !== requiredChecks.length ||
     !inspection.observations.every((value, index) => value.checkIndex === index && value.passed) ||
     inspection.runtime.requiredCheckSetDigest !==
-      settlementRecordDigest(configurationSettlementDomains.inspection, requiredChecks) ||
+      finalRecordDigest(configurationFinalDomains.inspection, requiredChecks) ||
     !same(inspection.identity, original.identity) ||
     !same(evidence.identity, original.identity) ||
     !same(evidence.runtime, inspection.runtime) ||
@@ -212,7 +322,6 @@ export function assertUnusedConfigurationMaintenanceFinalState(
     original.identity.maintenanceId !== owner.plan.operation.maintenanceId ||
     original.identity.candidateId !== owner.plan.operation.candidateId ||
     original.identity.planDigest !== owner.plan.planDigest ||
-    original.identity.settlementId !== owner.plan.dmSettle.settlementId ||
     evidence.children.length ||
     evidence.generation.state !== "not_committed" ||
     evidence.followUp.state !== "not_started" ||
@@ -222,21 +331,14 @@ export function assertUnusedConfigurationMaintenanceFinalState(
     evidence.decision.checkpointVersion !== decision.operation.checkpointVersion ||
     evidence.decision.checkpointDigest !== decision.operation.checkpointDigest ||
     evidence.decision.apiParentAttestationDigest !== decision.apiParent.assertionDigest ||
-    !same(evidence.guard.preparedReceipt, owner.guardSource.preparedReceipt) ||
-    evidence.guard.fenceId !== owner.guardSource.preparedReceipt.fenceId ||
-    evidence.guard.preparedReceiptDigest !== owner.guardSource.preparedReceiptDigest ||
-    evidence.guard.preparedCanonicalDigest !== owner.guardSource.preparedCanonicalDigest ||
-    evidence.guard.preparedTerminalAt !== owner.guardSource.preparedTerminalAt ||
-    original.expectedDmSequence !== owner.guardSource.preparedReceipt.sequence ||
+    !same(evidence.guard.preparedReceipt, owner.preparedFence) ||
+    evidence.guard.fenceId !== owner.preparedFence.fenceId ||
+    original.expectedDmSequence !== owner.preparedFence.sequence ||
     !same(final.evidenceProjection, evidence) ||
     final.evidenceDigest !==
-      settlementRecordDigest(
-        configurationSettlementDomains.finalEvidence,
-        final.evidenceProjection,
-      ) ||
+      finalRecordDigest(configurationFinalDomains.finalEvidence, final.evidenceProjection) ||
     original.evidenceDigest !== final.evidenceDigest ||
-    final.ownerReceiptDigest !==
-      settlementRecordDigest(configurationSettlementDomains.ownerFinal, original)
+    final.ownerReceiptDigest !== finalRecordDigest(configurationFinalDomains.ownerFinal, original)
   )
     throw Error("Actual original unused final evidence changed");
 }
@@ -259,14 +361,7 @@ function assertExecutedConfigurationMaintenanceFinalState(
   const final = owner.final,
     signedInspection = owner.inspection,
     decision = owner.apiControls.decide;
-  if (
-    !final ||
-    !signedInspection ||
-    !decision?.receiptDelivery ||
-    !owner.guardSource ||
-    owner.noGuard ||
-    owner.issuance !== "open"
-  )
+  if (!final || !signedInspection || !decision?.receiptDelivery || !owner.preparedFence)
     throw Error("Actual applied final sources required");
   const inspection = signedInspection.payload,
     original = final.ownerFinal.payload,
@@ -370,7 +465,7 @@ function assertExecutedConfigurationMaintenanceFinalState(
         ...owner.receipt,
         sequence: inspection.ownerSequence,
         state: "applying",
-        dmFence: owner.guardSource.preparedReceipt,
+        dmFence: owner.preparedFence,
       },
     },
     details = inspection.observations.map((value) => {
@@ -428,14 +523,14 @@ function assertExecutedConfigurationMaintenanceFinalState(
           }
         : {}),
     }) ||
-    !same(details[2], { guard: owner.guardSource.preparedReceipt }) ||
+    !same(details[2], { guard: owner.preparedFence }) ||
     !owner.plan.steps.every((step, index) =>
       same(details[index + 3], {
         children: evidence.children.filter((value) => value.planIndex === step.ordinal),
       }),
     ) ||
     inspection.runtime.requiredCheckSetDigest !==
-      settlementRecordDigest(configurationSettlementDomains.inspection, requiredChecks) ||
+      finalRecordDigest(configurationFinalDomains.inspection, requiredChecks) ||
     !same(inspection.identity, original.identity) ||
     !same(evidence.identity, original.identity) ||
     !same(evidence.runtime, inspection.runtime) ||
@@ -447,17 +542,13 @@ function assertExecutedConfigurationMaintenanceFinalState(
     original.identity.maintenanceId !== owner.plan.operation.maintenanceId ||
     original.identity.candidateId !== owner.plan.operation.candidateId ||
     original.identity.planDigest !== owner.plan.planDigest ||
-    original.identity.settlementId !== owner.plan.dmSettle.settlementId ||
     evidence.decision.decision !== "continue" ||
     evidence.decision.decisionId !== owner.receipt.decision?.decisionId ||
     evidence.decision.checkpointVersion !== decision.operation.checkpointVersion ||
     evidence.decision.checkpointDigest !== decision.operation.checkpointDigest ||
     evidence.decision.apiParentAttestationDigest !== decision.apiParent.assertionDigest ||
-    !same(evidence.guard.preparedReceipt, owner.guardSource.preparedReceipt) ||
-    evidence.guard.preparedReceiptDigest !== owner.guardSource.preparedReceiptDigest ||
-    evidence.guard.preparedCanonicalDigest !== owner.guardSource.preparedCanonicalDigest ||
-    evidence.guard.preparedTerminalAt !== owner.guardSource.preparedTerminalAt ||
-    original.expectedDmSequence !== owner.guardSource.preparedReceipt.sequence ||
+    !same(evidence.guard.preparedReceipt, owner.preparedFence) ||
+    original.expectedDmSequence !== owner.preparedFence.sequence ||
     (contained
       ? evidence.generation.state !== "not_committed" ||
         evidence.generation.revisionId !== null ||
@@ -469,10 +560,9 @@ function assertExecutedConfigurationMaintenanceFinalState(
         evidence.followUp.state !== "complete") ||
     !same(final.evidenceProjection, projection) ||
     final.evidenceDigest !==
-      settlementRecordDigest(configurationSettlementDomains.finalEvidence, projection) ||
+      finalRecordDigest(configurationFinalDomains.finalEvidence, projection) ||
     original.evidenceDigest !== final.evidenceDigest ||
-    final.ownerReceiptDigest !==
-      settlementRecordDigest(configurationSettlementDomains.ownerFinal, original)
+    final.ownerReceiptDigest !== finalRecordDigest(configurationFinalDomains.ownerFinal, original)
   )
     throw Error("Actual original applied final evidence changed");
 }

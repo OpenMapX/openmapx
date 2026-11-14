@@ -31,46 +31,19 @@ import {
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
 import {
   inspectControlChildPublication,
-  lookupControlChildPhaseAttempt,
   lookupControlChildPhaseBinding,
   prepareControlChildPublication,
   resolveControlChildPlan,
 } from "./child-phase";
 // biome-ignore-end lint/suspicious/noImportCycles: Same exact deferred guard import.
-import { configurationSettlementRecordDescriptors } from "./configuration-fence-settlement-descriptors";
-import {
-  configurationChildEvidenceSchema,
-  configurationCommittedSettlementSchema,
-  configurationDmCapacityCellSchema,
-  configurationDmNoGuardRefusalSchema,
-  configurationIssuedPrepareRefusedProofSchema,
-  configurationIssuerUnusedSourceDigest,
-  configurationNeverIssuedProofSchema,
-  configurationNoGuardBundleSchema,
-  configurationNoGuardClosureSchema,
-  configurationNoGuardIntentSchema,
-  configurationOwnerFinalSchema,
-  configurationSettlementAckSchema,
-  configurationSettlementAdmissionSchema,
-  configurationSettlementCapacitySchema,
-  configurationSettlementCommitmentCellSchema,
-  configurationSettlementControlCellSchema,
-  configurationSettlementControlEnvelopeSchema,
-  configurationSettlementEffectSchema,
-  configurationSettlementPublishedTerminalSchema,
-  configurationSettlementReservationProjectionSchema,
-  configurationSettlementSenderAckCellSchema,
-  configurationUnusedCapacityConfirmationSchema,
-  configurationUnusedCapacityIntentSchema,
-  deriveConfigurationFenceSettlementId,
-  configurationSettlementDomains as domains,
-  settlementRecordDigest,
-} from "./configuration-fence-settlement-records";
 import {
   assertAppliedConfigurationMaintenanceFinalState,
   assertContainedConfigurationMaintenanceFinalState,
   assertUnusedConfigurationMaintenanceFinalState,
+  configurationChildEvidenceSchema,
+  configurationFinalDomains,
   configurationMaintenanceRuntimeInspectionSchema,
+  configurationOwnerFinalSchema,
 } from "./configuration-maintenance-final-records";
 import {
   assertConfigurationMaintenanceDecisionSource,
@@ -122,8 +95,6 @@ import {
   withControlDelegationPublication,
   withControlMaintenanceDecisionPublication,
   withControlMaintenanceInitialization,
-  withControlMaintenanceNoGuardPublication,
-  withControlMaintenanceSettlementPublication,
   withPrivateEffectWriter,
   writePrivateRecord,
 } from "./control-authority";
@@ -142,10 +113,6 @@ import {
 } from "./control-records";
 import { CONTROL_RETENTION_LIMITS, reserveAuthoritySlot } from "./control-retention";
 import {
-  dataConfigurationFencePreparedWitnessDomain,
-  dataConfigurationFencePreparedWitnessSchema,
-} from "./data-configuration-fence-witness-records";
-import {
   AnchoredDirectory,
   acquireGuardDirectory,
   type FileIdentity,
@@ -156,21 +123,16 @@ import { assertFixedConfigurationMaintenancePlan } from "./fixed-configuration-m
 import { assertOriginClockForward } from "./retention-clock";
 // biome-ignore-start lint/suspicious/noImportCycles: Physical closure, fixed cells and the read-only normal-pull admission observer verify the sole original family index; retirement verifies this same physical owner. These fixed joins run only after initialization.
 import {
-  assertNoUnissuedConfigurationReceiverPublication,
   enlistFamilyIntent,
   familyRecordWrite,
   hasLocalRetentionFamily,
   markFamilyLeaseReleased,
-  readConfigurationSettlementCell,
-  readConfigurationSettlementFamilySlot,
   registerFamilyLease,
   reserveControlFamily,
   trackFamilyDirectory,
   verifyCoordinatorPullAdmissionReadOnly,
   verifyFamilyOwnedRecord,
   verifyImageStageAdmissionReadOnly,
-  verifyPublishedBoundDmConfigurationSettlementSlots,
-  verifyPublishedUnusedDmConfigurationSettlementSlots,
 } from "./retention-family";
 
 // biome-ignore-end lint/suspicious/noImportCycles: Exact deferred original-owner/index guard join.
@@ -2588,59 +2550,6 @@ export function withConfigurationMaintenanceOwnerInitialization<T>(
     ),
   );
 }
-/** Lease -> original ancestry/execution publication -> private writer. The
- * callback cannot issue a grant or create a forward/replacement authority. */
-export function withConfigurationMaintenanceNoGuardPublication<T>(
-  authority: VerifiedExecutionAuthority,
-  run: () => T,
-): T {
-  const lease = restoreArtifactTargetLeaseForSettlement(authority),
-    s = stateOf(lease),
-    owner = executionAuthorityState(authority);
-  try {
-    if (s.node !== null || owner.kind !== "configurationMaintenance.prepare")
-      throw Error("Original maintenance NoGuard owner required");
-    return guarded(s, () => {
-      if (tree(s).root.phase === "settled" || s.slots?.release)
-        throw Error("Original NoGuard owner already released");
-      return withControlMaintenanceNoGuardPublication(authority, () =>
-        withPrivateEffectWriter(owner, run),
-      );
-    });
-  } finally {
-    closeArtifactTargetLeaseHandle(lease);
-  }
-}
-/** Fixed logical settlement metadata only, including after original expiry or
- * cancellation. Ordinary descendants must already be conclusively settled. */
-export function withConfigurationMaintenanceSettlementPublication<T>(
-  authority: VerifiedExecutionAuthority,
-  run: () => T,
-): T {
-  const lease = restoreArtifactTargetLeaseForSettlement(authority),
-    state = stateOf(lease),
-    owner = executionAuthorityState(authority);
-  try {
-    if (state.node !== null || owner.kind !== "configurationMaintenance.prepare")
-      throw Error("Original settlement root required");
-    return guarded(state, () => {
-      const current = tree(state);
-      if (
-        current.root.phase === "settled" ||
-        state.slots?.release ||
-        [...current.children.values()].some(
-          (child) => child.phase !== "settled" || !knownOutcome(child.settlement),
-        )
-      )
-        throw Error("Original settlement root/ordinary children unresolved");
-      return withControlMaintenanceSettlementPublication(authority, () =>
-        withPrivateEffectWriter(owner, run),
-      );
-    });
-  } finally {
-    closeArtifactTargetLeaseHandle(lease);
-  }
-}
 /** Publication of already proved guard observations remains possible after
  * cancellation/expiry. This returns no forward lease or dispatch capability. */
 export function withConfigurationMaintenanceOwnerObservation<T>(
@@ -3120,7 +3029,6 @@ export function settleUnadmittedConfigurationPrepare(
           if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
         }
       }
-      assertNoUnissuedConfigurationReceiverPublication(local, grant.child.operationKey);
       if (child.nonAdmission) {
         if (
           child.nonAdmission.payload.adoptionDigest !== controlDigest(raw) ||
@@ -3613,112 +3521,6 @@ export function inspectArtifactDelegation(options: {
     closeState(s);
   }
 }
-/** Read-only FIRST-use check for the fixed logical guard settlement receiver.
- * It consumes the DM's ACTUAL retained preparation assertion, checks the same
- * anchored physical root/all ordinary descendants, and returns no lease/peer,
- * execution or forward capability. Historical settled observations omit it. */
-export function verifyConfigurationFenceSettlementHeldOwner(
-  installation: import("./control-authority").ControlInstallation,
-  originalPrepareAssertion: string,
-  expected: {
-    ownerPrepare: ExecutionRef;
-    ownerCertificateDigest: string;
-    serviceIds: readonly string[];
-  },
-): void {
-  const local = installationState(installation),
-    parsed = parseControlAssertion(originalPrepareAssertion),
-    inspected = inspectArtifactDelegation({
-      installation,
-      dataRoot: local.dataRoot,
-      assertion: originalPrepareAssertion,
-    }),
-    state = openState(local.dataRoot, parsed.leaseId, local);
-  try {
-    guarded(state, () => {
-      const current = tree(state);
-      if (
-        installation.role !== "data-manager" ||
-        local.fixedChildId ||
-        inspected.kind !== "configuration-maintenance.prepare" ||
-        inspected.phase !== "configuration-fence" ||
-        inspected.recipient !== "data-manager" ||
-        canonicalJson(inspected.parent) !== canonicalJson(expected.ownerPrepare) ||
-        canonicalJson(inspected.owner) !== canonicalJson(expected.ownerPrepare) ||
-        inspected.ownerCertificateDigest !== expected.ownerCertificateDigest ||
-        canonicalJson(state.certificate.serviceIds) !== canonicalJson(expected.serviceIds) ||
-        current.root.phase === "settled" ||
-        state.slots?.release ||
-        [...current.children.values()].some(
-          (child) => child.phase !== "settled" || !knownOutcome(child.settlement),
-        )
-      )
-        throw Error("Original logical settlement owner/ordinary children unresolved");
-    });
-  } finally {
-    closeState(state);
-  }
-}
-/** Historical retirement only: the original prepared assertion and complete
- * physical tree must prove actual release. Returns no peer/lease/forward grant. */
-export function verifyConfigurationFenceSettlementReleasedOwner(
-  installation: import("./control-authority").ControlInstallation,
-  originalPrepareAssertion: string,
-  expected: {
-    ownerPrepare: ExecutionRef;
-    ownerCertificateDigest: string;
-    serviceIds: readonly string[];
-  },
-): number {
-  const local = installationState(installation),
-    parsed = parseControlAssertion(originalPrepareAssertion),
-    state = openState(local.dataRoot, parsed.leaseId, local, true);
-  try {
-    const current = tree(state),
-      grant = required(
-        current.grants.get(parsed.delegationId),
-        "Original preparation grant required",
-      ),
-      parent = grant.parentNode
-        ? required(current.grants.get(grant.parentNode), "Original preparation parent required")
-        : undefined,
-      parentNode = grant.parentNode
-        ? required(current.children.get(grant.parentNode), "Original preparation adoption required")
-        : current.root,
-      { signature, ...fields } = parsed;
-    verifyControl(
-      parent?.childPublicKey ?? state.certificate.ownerPublicKey,
-      "openmapx-lease-assertion-v1",
-      { payload: fields, signature },
-      assertionSchema.omit({ signature: true }),
-    );
-    if (
-      installation.role !== "data-manager" ||
-      local.fixedChildId ||
-      grant.childKind !== "configuration-maintenance.prepare" ||
-      grant.phase !== "configuration-fence" ||
-      grant.recipient !== "data-manager" ||
-      parentNode.grantDigests[grant.delegationId] !== parsed.grantDigest ||
-      canonicalJson(grant.parent) !== canonicalJson(expected.ownerPrepare) ||
-      canonicalJson(state.certificate.owner) !== canonicalJson(expected.ownerPrepare) ||
-      parsed.ownerCertificateDigest !== controlDigest(state.certificateEnvelope) ||
-      parsed.ownerCertificateDigest !== expected.ownerCertificateDigest ||
-      canonicalJson(state.certificate.serviceIds) !== canonicalJson(expected.serviceIds) ||
-      current.root.phase !== "settled" ||
-      !knownOutcome(current.root.settlement) ||
-      state.slots?.release?.phase !== "released" ||
-      !Number.isSafeInteger(state.slots.releasedAt) ||
-      !state.slots.releasedAt ||
-      [...current.children.values()].some(
-        (child) => child.phase !== "settled" || !knownOutcome(child.settlement),
-      )
-    )
-      throw Error("Original prepared root release required for retirement");
-    return state.slots.releasedAt;
-  } finally {
-    closeState(state);
-  }
-}
 
 export async function cancelArtifactTargetLease(
   lease: TargetLeaseAuthority,
@@ -3889,14 +3691,17 @@ export function readOriginalMaintenanceFinalChildren(
   );
   if (
     state.kind !== "configurationMaintenance.prepare" ||
-    !owner.guardSource ||
+    !owner.preparedFence ||
     tree.certificateDigest !== owner.rootCertificateDigest ||
     owner.admissionDigest !== state.receiptDigest ||
     canonicalJson(owner.plan.prepare) !== canonicalJson(state.execution)
   )
     throw Error("Original final child owner required");
+  const fence = state.reservations.find((value) => value.phase === "configuration-fence"),
+    fenceBinding = fence && lookupControlChildPhaseBinding(authority, fence);
+  if (!fenceBinding) throw Error("Original fence preparation binding required");
   const children: ReturnType<typeof configurationChildEvidenceSchema.parse>[] = [],
-    allowed = new Set([controlDigest(owner.guardSource.prepareExecution)]);
+    allowed = new Set([controlDigest(fenceBinding.child.execution)]);
   for (const step of owner.plan.steps) {
     const source = owner.apiControls.steps.find((value) => value.ordinal === step.ordinal),
       publication = inspectControlChildPublication(authority, step);
@@ -4028,22 +3833,19 @@ export function readOriginalMaintenanceFinalChildren(
   };
 }
 
-const hash = z.string().regex(/^[a-f0-9]{64}$/),
-  same = (a: unknown, b: unknown) => canonicalJson(a) === canonicalJson(b);
+const same = (a: unknown, b: unknown) => canonicalJson(a) === canonicalJson(b);
 function need(value: unknown, message: string): asserts value {
   if (!value) throw Error(message);
 }
-/** PreparedAndSettled uses the actual private inspector/final, original
- * prepared physical child, full signed logical terminal/admission/effect and
- * durable sender copy/ACK. Parsed prepared status alone cannot enter it. */
+/** The original owner's own final and inspection, after the data-manager
+ * confirmed the settle. Parsed prepared status alone cannot enter it. */
 function assertPreparedAndSettledClosure(
   authority: VerifiedExecutionAuthority,
   observation: ConfigurationMaintenanceClosureObservation,
-  input: unknown,
+  owner: z.infer<typeof configurationMaintenanceOwnerRecordSchema>,
 ): void {
-  const tree = configurationMaintenanceClosureObservationState(observation, authority);
-  const state = executionAuthorityState(authority),
-    owner = configurationMaintenanceOwnerRecordSchema.parse(input);
+  const tree = configurationMaintenanceClosureObservationState(observation, authority),
+    state = executionAuthorityState(authority);
   assertConfigurationMaintenanceDecisionSource(owner);
   assertFixedConfigurationMaintenancePlan(owner.plan, owner.installationId);
   if (
@@ -4070,11 +3872,10 @@ function assertPreparedAndSettledClosure(
   need(
     owner.final &&
       owner.inspection &&
-      owner.guardSource &&
-      owner.capacity &&
-      owner.apiControls.decide?.receiptDelivery &&
-      !owner.noGuard,
-    "Actual prepared final/inspection/guard source required",
+      owner.preparedFence &&
+      owner.receipt.dmFence?.state === "settled" &&
+      owner.apiControls.decide?.receiptDelivery,
+    "Actual prepared final, inspection and settled fence required",
   );
   need(
     owner.installationId === state.installation.installation.installationId &&
@@ -4087,13 +3888,13 @@ function assertPreparedAndSettledClosure(
   );
   const final = verifyControl(
       state.installation.installation.publicKey,
-      domains.ownerFinal,
+      configurationFinalDomains.ownerFinal,
       owner.final.ownerFinal,
       configurationOwnerFinalSchema,
     ),
     inspection = verifyControl(
       state.installation.installation.publicKey,
-      domains.inspection,
+      configurationFinalDomains.inspection,
       owner.inspection,
       configurationMaintenanceRuntimeInspectionSchema,
     );
@@ -4105,7 +3906,8 @@ function assertPreparedAndSettledClosure(
   );
   need(
     final.privateInspectionId === inspection.inspectionId &&
-      final.evidenceDigest === owner.final.evidenceDigest,
+      final.evidenceDigest === owner.final.evidenceDigest &&
+      owner.receipt.dmFence.fenceId === owner.preparedFence.fenceId,
     "Original actual final/inspection changed",
   );
   for (const step of final.outcome === "unused" ? owner.plan.steps : []) {
@@ -4115,278 +3917,10 @@ function assertPreparedAndSettledClosure(
       "Unused final has attempted frozen work",
     );
   }
-  const prepare = state.reservations.find((value) => value.phase === "configuration-fence"),
-    settle = state.reservations.find((value) => value.phase === "configuration-fence-settle");
-  need(
-    prepare &&
-      settle &&
-      inspectControlChildPublication(authority, settle).publication.state === "unissued",
-    "Original purpose-only settlement reservation required",
-  );
-  const descriptors = configurationSettlementRecordDescriptors(
-      { ownerPrepare: state.execution, reservation: settle },
-      prepare.execution.operationKey,
-    ),
-    control = verifyControl(
-      state.installation.installation.publicKey,
-      domains.control,
-      readConfigurationSettlementCell(
-        state.installation,
-        { origin: owner.origin },
-        descriptors.sender[2]!,
-      ),
-      configurationSettlementControlCellSchema.shape.payload,
-    ),
-    projection = verifyControl(
-      state.installation.installation.publicKey,
-      domains.signedProjection,
-      control.projection,
-      configurationSettlementReservationProjectionSchema,
-    ),
-    committed = verifyControl(
-      state.installation.installation.publicKey,
-      domains.reference,
-      readConfigurationSettlementCell(state.installation, projection, descriptors.sender[0]!),
-      configurationCommittedSettlementSchema,
-    );
-  need(
-    control.binding &&
-      !("unused" in control) &&
-      same(projection.ownerPrepare, state.execution) &&
-      projection.rootAdmissionDigest === state.receiptDigest &&
-      projection.rootCertificateDigest === tree.certificateDigest &&
-      same(projection.reservation, settle) &&
-      same(projection.operation, {
-        kind: "configuration-maintenance.settle",
-        ...owner.plan.dmSettle,
-      }) &&
-      projection.reservationDigest === settlementRecordDigest(domains.reservationTuple, settle) &&
-      projection.reservation.operationFingerprint === controlDigest(projection.operation) &&
-      projection.settlementId === final.identity.settlementId &&
-      projection.planDigest === owner.plan.planDigest &&
-      same(committed.identity, final.identity) &&
-      same(committed.final, final) &&
-      same(committed.evidence, owner.final.evidenceProjection) &&
-      committed.evidenceDigest === owner.final.evidenceDigest &&
-      committed.ownerReceiptDigest === owner.final.ownerReceiptDigest &&
-      committed.committedAt === final.settlingAt &&
-      committed.referenceOperationFingerprint === settle.operationFingerprint,
-    "Original committed prepared settlement changed",
-  );
-  const envelope = verifyControl(
-      state.installation.installation.publicKey,
-      domains.control,
-      control.binding,
-      configurationSettlementControlEnvelopeSchema,
-    ),
-    binding = verifyControl(
-      state.installation.installation.publicKey,
-      domains.binding,
-      readConfigurationSettlementCell(state.installation, projection, descriptors.sender[1]!),
-      configurationSettlementControlEnvelopeSchema,
-    ),
-    capacity = verifyControl(
-      state.installation.publicKeys["data-manager"],
-      domains.capacity,
-      owner.capacity,
-      configurationSettlementCapacitySchema,
-    ),
-    commitmentDigest = settlementRecordDigest(domains.commitment, committed),
-    {
-      operationFingerprint: _op,
-      fingerprint: _fp,
-      deadlineAt: _deadline,
-      ...address
-    } = envelope.execution,
-    slot = readConfigurationSettlementFamilySlot(state.installation, projection);
-  need(
-    same(binding, envelope) &&
-      envelope.installationId === owner.installationId &&
-      same(envelope.origin, owner.origin) &&
-      same(envelope.ownerPrepare, state.execution) &&
-      envelope.admissionDigest === state.receiptDigest &&
-      envelope.rootCertificateDigest === tree.certificateDigest &&
-      envelope.settlementId === projection.settlementId &&
-      envelope.projectionDigest === settlementRecordDigest(domains.projection, projection) &&
-      envelope.reservationDigest === projection.reservationDigest &&
-      envelope.commitmentDigest === commitmentDigest &&
-      same(envelope.operation, projection.operation) &&
-      same(address, settle.execution) &&
-      envelope.execution.operationFingerprint === settle.operationFingerprint &&
-      same(envelope.serviceIds, owner.plan.serviceIds) &&
-      envelope.execution.fingerprint ===
-        executionFingerprint({
-          kind: projection.operation.kind,
-          operationFingerprint: settle.operationFingerprint,
-          deadlineAt: envelope.controlDeadlineAt,
-          parent: {
-            issuer: "ops-agent",
-            operationKey: state.execution.operationKey,
-            fingerprint: state.execution.fingerprint,
-            deadlineAt: state.execution.deadlineAt,
-            execution: state.execution,
-          },
-        }) &&
-      slot.state === "bound" &&
-      slot.executionDigest === controlDigest(envelope.execution) &&
-      slot.controlBindingDigest === settlementRecordDigest(domains.binding, envelope),
-    "Original prepared logical binding changed",
-  );
-  verifyPublishedBoundDmConfigurationSettlementSlots(
-    state.installation,
-    projection,
-    owner.capacity,
-  );
-  const opened: AnchoredDirectory[] = [],
-    own = (directory: AnchoredDirectory) => {
-      opened.push(directory);
-      return directory;
-    };
-  try {
-    const root = own(new AnchoredDirectory(state.installation.dataRoot)),
-      shared = own(root.directory(".admin-target-control")),
-      executions = own(shared.directory("executions")),
-      dm = own(executions.directory("data-manager")),
-      prepared = verifyControl(
-        state.installation.publicKeys["data-manager"],
-        dataConfigurationFencePreparedWitnessDomain,
-        JSON.parse(
-          dm.read(`${prepare.execution.operationKey}.data-terminal.json`, 8192).toString("utf8"),
-        ),
-        dataConfigurationFencePreparedWitnessSchema,
-      ),
-      terminalBytes = dm.read(
-        `${envelope.execution.operationKey}.configuration-settlement-terminal.json`,
-        4096,
-      ),
-      signedTerminal = JSON.parse(terminalBytes.toString("utf8")),
-      terminal = verifyControl(
-        state.installation.publicKeys["data-manager"],
-        domains.terminal,
-        signedTerminal,
-        configurationSettlementPublishedTerminalSchema,
-      ),
-      tuple = terminal.tuple,
-      guard = owner.guardSource,
-      physical = tree.children.find((value) => same(value.execution, guard.prepareExecution));
-    need(
-      terminalBytes.length === 4096 &&
-        same(prepared, guard) &&
-        physical &&
-        physical.settlement.outcome === "committed" &&
-        physical.settlement.publication === "committed" &&
-        physical.settlement.terminalReceiptDigest === guard.effectReceiptDigest &&
-        guard.effectSettlementDigest ===
-          controlDigest({
-            ...physical.settlement,
-            receipt: {
-              kind: "data-configuration-fence",
-              receipt: guard.preparedReceipt,
-              guardDigest: guard.guardDigest,
-            },
-          }),
-      "Original actual prepared child proof changed",
-    );
-    const admissionPayload = configurationSettlementAdmissionSchema.parse({
-        version: 2,
-        purpose: "configuration-fence-settlement",
-        installationId: owner.installationId,
-        origin: owner.origin,
-        settlementId: projection.settlementId,
-        projectionDigest: envelope.projectionDigest,
-        reservationDigest: envelope.reservationDigest,
-        prepareExecutionDigest: controlDigest(guard.prepareExecution),
-        prepareAdmissionDigest: guard.prepareAdmissionDigest,
-        preparedReceiptDigest: guard.preparedReceiptDigest,
-        capacityReceiptDigest: settlementRecordDigest(domains.capacity, capacity),
-        rootCertificateDigest: tree.certificateDigest,
-        controlEnvelope: control.binding,
-        commitmentDigest,
-        executionOrdinal: capacity.reservedExecutionOrdinal,
-        intentOrdinal: capacity.reservedIntentOrdinal,
-        sqlSessionNonce: envelope.execution.executionId,
-        boundAt: terminal.admissionSource.boundAt,
-      }),
-      admission = verifyControl(
-        state.installation.publicKeys["data-manager"],
-        domains.admission,
-        { payload: admissionPayload, signature: terminal.admissionSource.signature },
-        configurationSettlementAdmissionSchema,
-      ),
-      effect = verifyControl(
-        state.installation.publicKeys["data-manager"],
-        domains.effect,
-        {
-          payload: { ...terminal.effectSource.fields, terminal: tuple },
-          signature: terminal.effectSource.signature,
-        },
-        configurationSettlementEffectSchema,
-      ),
-      { terminalDigest, ...tuplePreimage } = tuple;
-    need(
-      same(terminal.origin, owner.origin) &&
-        same(tuple.execution, envelope.execution) &&
-        tuple.settlementId === projection.settlementId &&
-        tuple.commitmentDigest === commitmentDigest &&
-        tuple.fenceId === guard.preparedReceipt.fenceId &&
-        same(tuple.result, {
-          ...guard.preparedReceipt,
-          state: "settled",
-          sequence: guard.preparedReceipt.sequence + 1,
-        }) &&
-        tuple.terminalAt >= envelope.controlStartedAt &&
-        tuple.terminalAt < envelope.controlDeadlineAt &&
-        terminalDigest === settlementRecordDigest(domains.terminal, tuplePreimage) &&
-        terminal.admissionDigest === settlementRecordDigest(domains.admission, admission) &&
-        admission.boundAt >= envelope.controlStartedAt &&
-        admission.boundAt < envelope.controlDeadlineAt &&
-        effect.phase === "committed" &&
-        same(effect.origin, owner.origin) &&
-        effect.settlementId === projection.settlementId &&
-        effect.controlExecutionDigest === controlDigest(envelope.execution) &&
-        effect.controlEnvelopeDigest === settlementRecordDigest(domains.binding, envelope) &&
-        effect.admissionDigest === terminal.admissionDigest &&
-        effect.commitmentDigest === commitmentDigest &&
-        effect.preparedReceiptDigest === guard.preparedReceiptDigest &&
-        effect.expectedDmSequence === guard.preparedReceipt.sequence &&
-        effect.sqlSession.sessionNonce === envelope.execution.executionId &&
-        effect.attemptedAt >= admission.boundAt &&
-        effect.attemptedAt < envelope.controlDeadlineAt &&
-        terminal.effectSettlementDigest === settlementRecordDigest(domains.effect, effect),
-      "Actual original logical guard settlement required",
-    );
-    const copied = configurationSettlementSenderAckCellSchema.parse(
-        readConfigurationSettlementCell(state.installation, projection, descriptors.sender[4]!),
-      ),
-      sharedAck = readConfigurationSettlementCell(
-        state.installation,
-        projection,
-        descriptors.sender[5]!,
-      );
-    need(
-      same(copied.terminal, signedTerminal) && copied.ack && same(copied.ack, sharedAck),
-      "Original durable sender copy/ACK required",
-    );
-    const ack = verifyControl(
-      state.installation.installation.publicKey,
-      domains.ack,
-      sharedAck,
-      configurationSettlementAckSchema,
-    );
-    need(
-      ack.installationId === owner.installationId &&
-        same(ack.origin, owner.origin) &&
-        ack.settlementId === projection.settlementId &&
-        ack.controlExecutionDigest === controlDigest(envelope.execution) &&
-        ack.commitmentDigest === commitmentDigest &&
-        ack.terminalDigest === tuple.terminalDigest &&
-        ack.terminalAt === tuple.terminalAt,
-      "Original exact sender settlement ACK changed",
-    );
-  } finally {
-    for (const directory of opened.reverse()) directory.close();
-  }
 }
+/** The maintenance root may release once every descendant is contained and
+ * either its fence is settled after a final, or no fence was ever prepared
+ * and its own prepare recorded that it failed without effect. */
 export function assertConfigurationMaintenanceRootClosure(
   authority: VerifiedExecutionAuthority,
   observed: ConfigurationMaintenanceClosureObservation,
@@ -4412,35 +3946,7 @@ export function assertConfigurationMaintenanceRootClosure(
       state.installation.installation.publicKey,
       "openmapx-configuration-maintenance-owner-v2",
       raw,
-      z
-        .object({
-          installationId: z.uuid(),
-          origin: controlOriginSchema,
-          admissionDigest: hash,
-          rootCertificateDigest: hash,
-          sequence: z.number(),
-          plan: z
-            .object({
-              prepare: executionRefSchema,
-              planDigest: hash,
-              operation: z.object({ maintenanceId: z.uuid(), candidateId: z.uuid() }).passthrough(),
-            })
-            .passthrough(),
-          receipt: z
-            .object({
-              state: z.string(),
-              dmFence: z.unknown(),
-              generation: z.string(),
-              decision: z.unknown(),
-            })
-            .passthrough(),
-          guardSource: z.unknown(),
-          final: z.unknown(),
-          inspection: z.unknown(),
-          issuance: z.string(),
-          noGuard: configurationNoGuardIntentSchema.nullable(),
-        })
-        .passthrough(),
+      configurationMaintenanceOwnerRecordSchema,
     );
   verifyFamilyOwnedRecord(
     state.installation,
@@ -4448,507 +3954,31 @@ export function assertConfigurationMaintenanceRootClosure(
     { scope: "private", namespace: "configuration-maintenance", container: "", name },
     canonicalJson(raw),
   );
-  if (owner.guardSource !== null || owner.final !== null || owner.inspection !== null) {
-    need(
-      owner.guardSource !== null && owner.final !== null && owner.inspection !== null,
-      "Conclusive original maintenance guard/NoGuard closure required",
-    );
+  if (owner.preparedFence !== null || owner.final !== null || owner.inspection !== null) {
     assertPreparedAndSettledClosure(authority, observed, owner);
     return;
   }
-  // A genuinely never-prepared root uses the disjoint original NoGuard source.
   need(
-    owner.receipt.state === "settled" &&
-      owner.receipt.dmFence === null &&
+    owner.receipt.dmFence === null &&
       owner.receipt.generation === "not_started" &&
-      owner.guardSource === null &&
-      owner.final === null &&
-      owner.inspection === null &&
-      owner.issuance === "closed_without_guard" &&
-      owner.noGuard,
-    "Conclusive original maintenance guard/NoGuard closure required",
-  );
-  need(
-    owner.installationId === state.installation.installation.installationId &&
+      owner.installationId === state.installation.installation.installationId &&
       owner.admissionDigest === state.receiptDigest &&
       same(owner.origin, state.origin) &&
       same(owner.plan.prepare, state.execution) &&
-      owner.rootCertificateDigest === tree.certificateDigest,
-    "Original maintenance closure identity changed",
+      owner.rootCertificateDigest === tree.certificateDigest &&
+      tree.children.every((child) => child.settlement.outcome !== "committed"),
+    "Never-prepared maintenance closure required",
   );
-  const prepare = state.reservations.find((value) => value.phase === "configuration-fence"),
-    settle = state.reservations.find((value) => value.phase === "configuration-fence-settle");
-  need(prepare && settle, "Original finite prepare/settlement reservations required");
-  const provisional = { origin: state.origin },
-    descriptors = configurationSettlementRecordDescriptors(
-      { ownerPrepare: state.execution, reservation: settle },
-      prepare.execution.operationKey,
-    ),
-    control = verifyControl(
-      state.installation.installation.publicKey,
-      domains.control,
-      readConfigurationSettlementCell(state.installation, provisional, descriptors.sender[2]!),
-      configurationSettlementControlCellSchema.shape.payload,
-    ),
-    projection = verifyControl(
-      state.installation.installation.publicKey,
-      domains.signedProjection,
-      control.projection,
-      configurationSettlementReservationProjectionSchema,
-    ),
-    projectionDigest = settlementRecordDigest(domains.projection, projection),
-    bundle = verifyControl(
-      state.installation.installation.publicKey,
-      domains.reference,
-      readConfigurationSettlementCell(state.installation, projection, descriptors.sender[0]!),
-      configurationSettlementCommitmentCellSchema.shape.payload,
-    );
+  const own = childSettlementState(
+    verifyControlEffectSettlement(state.installation.installation, state.execution),
+  ).evidence;
   need(
-    bundle.phase === "unused" && control.binding === null && "unused" in control,
-    "Both original NoGuard cells required",
-  );
-  configurationNoGuardBundleSchema.parse(bundle);
-  const closure = verifyControl(
-      state.installation.installation.publicKey,
-      domains.closure,
-      bundle.closure,
-      configurationNoGuardClosureSchema,
-    ),
-    identity = closure.identity,
-    { closureDigest: _digest, ...closureSource } = closure,
-    intent = owner.noGuard,
-    slot = readConfigurationSettlementFamilySlot(state.installation, projection),
-    evidence = closure.noGuardEvidence;
-  need(
-    same(bundle, intent.bundle?.payload) &&
-      bundle.settlementId === projection.settlementId &&
-      bundle.projectionDigest === projectionDigest &&
-      projection.installationId === owner.installationId &&
-      same(projection.origin, state.origin) &&
-      same(projection.ownerPrepare, state.execution) &&
-      projection.rootAdmissionDigest === state.receiptDigest &&
-      projection.rootCertificateDigest === tree.certificateDigest &&
-      projection.maintenanceId === owner.plan.operation.maintenanceId &&
-      projection.candidateId === owner.plan.operation.candidateId &&
-      projection.planDigest === owner.plan.planDigest &&
-      same(projection.reservation, settle) &&
-      projection.reservationDigest === settlementRecordDigest(domains.reservationTuple, settle) &&
-      projection.reservation.operationFingerprint === controlDigest(projection.operation) &&
-      projection.operation.maintenanceId === projection.maintenanceId &&
-      projection.operation.candidateId === projection.candidateId &&
-      projection.operation.planDigest === projection.planDigest &&
-      projection.operation.settlementId === projection.settlementId &&
-      projection.settlementId ===
-        deriveConfigurationFenceSettlementId({
-          installationId: owner.installationId,
-          ownerPrepare: state.execution,
-          maintenanceId: projection.maintenanceId,
-          candidateId: projection.candidateId,
-          planDigest: projection.planDigest,
-        }) &&
-      same(identity, {
-        installationId: owner.installationId,
-        origin: state.origin,
-        ownerPrepare: state.execution,
-        admissionDigest: state.receiptDigest,
-        rootCertificateDigest: tree.certificateDigest,
-        maintenanceId: projection.maintenanceId,
-        candidateId: projection.candidateId,
-        planDigest: projection.planDigest,
-        settlementId: projection.settlementId,
-      }) &&
-      closure.ownerSequence === owner.sequence &&
-      closure.ownerSequence === intent.ownerSequence &&
-      closure.closedAt === intent.closedAt &&
-      same(evidence, intent.noGuardEvidence) &&
-      closure.closureDigest === settlementRecordDigest(domains.closure, closureSource) &&
-      same(bundle.issuerFreezeProof, intent.issuerFreezeProof) &&
-      same(bundle.issuerUnused, intent.issuerUnused) &&
-      slot.role === "ops-agent" &&
-      slot.state === "UNUSED" &&
-      slot.executionDigest === null &&
-      slot.controlBindingDigest === null,
-    "Original NoGuard bundle/identity/source changed",
-  );
-  const freezeDomain =
-      evidence.kind === "never_issued" ? domains.neverIssued : domains.issuedRefused,
-    freezeProof =
-      evidence.kind === "never_issued"
-        ? verifyControl(
-            state.installation.installation.publicKey,
-            freezeDomain,
-            bundle.issuerFreezeProof,
-            configurationNeverIssuedProofSchema,
-          )
-        : verifyControl(
-            state.installation.installation.publicKey,
-            freezeDomain,
-            bundle.issuerFreezeProof,
-            configurationIssuedPrepareRefusedProofSchema,
-          ),
-    issued = evidence.kind !== "never_issued",
-    expectedPublications = state.reservations
-      .filter((value) => !issued || value !== prepare)
-      .map((value) => {
-        const actual = inspectControlChildPublication(authority, value);
-        need(
-          actual.publication.state === "unissued" &&
-            lookupControlChildPhaseAttempt(authority, value) === null,
-          "Original frozen phase was issued/attempted",
-        );
-        return {
-          phase: value.phase,
-          ordinal: value.ordinal,
-          operationKey: value.execution.operationKey,
-          grantState: "unissued",
-          intentState: "not_attempted",
-        };
-      });
-  need(
-    same(freezeProof.identity, identity) &&
-      freezeProof.issuerSequence === owner.sequence &&
-      freezeProof.frozenAt === closure.closedAt &&
-      evidence.issuerFreezeProofDigest === settlementRecordDigest(freezeDomain, freezeProof) &&
-      same(
-        expectedPublications,
-        "remainingPublicationStates" in freezeProof
-          ? freezeProof.remainingPublicationStates
-          : freezeProof.publicationStates,
-      ),
-    "Original frozen issuer preimages changed",
-  );
-  for (const descriptor of descriptors.sender.filter(
-    (value) => value.scope === "private" || value.name.endsWith("-ack.json"),
-  ))
-    need(
-      readConfigurationSettlementCell(state.installation, projection, descriptor) === null,
-      "Bound/attempted control cannot close UNUSED",
-    );
-  const ownIntent = verifyControl(
-      state.installation.installation.publicKey,
-      domains.unusedIntent,
-      bundle.issuerUnused.intent,
-      configurationUnusedCapacityIntentSchema,
-    ),
-    ownConfirmation = verifyControl(
-      state.installation.installation.publicKey,
-      domains.unusedConfirmation,
-      bundle.issuerUnused.confirmation,
-      configurationUnusedCapacityConfirmationSchema,
-    ),
-    ownIntentDigest = settlementRecordDigest(domains.unusedIntent, ownIntent),
-    ownConfirmationDigest = settlementRecordDigest(domains.unusedConfirmation, ownConfirmation),
-    safeSlot = {
-      executionOrdinal: slot.executionOrdinal,
-      intentOrdinal: slot.intentOrdinal,
-      recordDescriptorsDigest: slot.recordDescriptorsDigest,
-      allocatedDescriptorDigests: slot.allocatedDescriptorDigests,
-      state: "UNUSED",
-      intentDigest: ownIntentDigest,
-    };
-  need(
-    ownIntent.role === "ops-agent" &&
-      ownIntent.installationId === owner.installationId &&
-      same(ownIntent.origin, state.origin) &&
-      ownIntent.ownerPrepareDigest === controlDigest(state.execution) &&
-      ownIntent.settlementId === projection.settlementId &&
-      ownIntent.projectionDigest === projectionDigest &&
-      ownIntent.prepareExecutionDigest ===
-        (evidence.kind === "receiver_refused" ? evidence.prepareExecutionDigest : null) &&
-      ownIntent.capacityReceiptDigest ===
-        (evidence.kind === "receiver_refused" ? evidence.capacityReceiptDigest : null) &&
-      ownIntent.sourceProofDigest === configurationIssuerUnusedSourceDigest(evidence) &&
-      ownIntent.executionOrdinal === slot.executionOrdinal &&
-      ownIntent.intentOrdinal === slot.intentOrdinal &&
-      ownIntent.recordDescriptorsDigest === controlDigest(descriptors.sender) &&
-      same(
-        ownIntent.allocatedDescriptorDigests,
-        descriptors.sender.map((value) => controlDigest(value)).sort(),
-      ) &&
-      slot.unusedIntentDigest === ownIntentDigest &&
-      ownConfirmation.role === "ops-agent" &&
-      ownConfirmation.installationId === owner.installationId &&
-      same(ownConfirmation.origin, state.origin) &&
-      ownConfirmation.ownerPrepareDigest === ownIntent.ownerPrepareDigest &&
-      ownConfirmation.settlementId === projection.settlementId &&
-      ownConfirmation.projectionDigest === projectionDigest &&
-      ownConfirmation.intentDigest === ownIntentDigest &&
-      ownConfirmation.slotStateDigest === controlDigest(safeSlot) &&
-      ownConfirmation.confirmedAt === slot.unusedConfirmedAt &&
-      ownConfirmation.confirmedAt >= ownIntent.createdAt,
-    "Original issuer UNUSED CAS/confirmation changed",
-  );
-  const opened: AnchoredDirectory[] = [],
-    own = (value: AnchoredDirectory) => {
-      opened.push(value);
-      return value;
-    };
-  let dmContainment: string | undefined,
-    dmUnused:
-      | { role: "data-manager"; intentDigest: string; confirmationDigest: string }
-      | undefined;
-  try {
-    const descriptor = descriptors.receiver[0]!;
-    if (evidence.kind === "never_issued") {
-      need(
-        !("kind" in freezeProof) &&
-          tree.children.length === 0 &&
-          evidence.prepareReservationDigest === controlDigest(prepare) &&
-          evidence.publicationStatesDigest ===
-            settlementRecordDigest(domains.neverIssued, freezeProof) &&
-          evidence.issuerSequence === owner.sequence &&
-          evidence.frozenAt === closure.closedAt,
-        "Original NeverIssued source changed",
-      );
-      assertNoUnissuedConfigurationReceiverPublication(
-        state.installation,
-        prepare.execution.operationKey,
-      );
-    } else if (evidence.kind === "receiver_not_admitted") {
-      const proof = verifyControl(
-          state.installation.publicKeys["data-manager"],
-          CONFIGURATION_PREPARE_NON_ADMISSION_DOMAIN,
-          evidence.nonAdmission,
-          configurationPrepareNonAdmissionPayloadSchema,
-        ),
-        publication = inspectControlChildPublication(authority, prepare),
-        child = tree.children[0];
-      need(
-        "kind" in freezeProof &&
-          tree.children.length === 1 &&
-          child &&
-          publication.publication.state === "grant_prepared" &&
-          publication.publication.grantDigest === proof.grantDigest &&
-          same(publication.binding?.child.execution, proof.child) &&
-          same(proof.input, owner.plan.dmPrepare) &&
-          proof.installationId === owner.installationId &&
-          same(proof.origin, owner.origin) &&
-          proof.certificateDigest === tree.certificateDigest &&
-          same(proof.input.ownerPrepare, state.execution) &&
-          same(child.execution, proof.child) &&
-          child.grantDigest === proof.grantDigest &&
-          child.settlement.outcome === "failed_without_effect" &&
-          child.settlement.publication === "not_started" &&
-          child.settlement.terminalReceiptDigest === controlDigest(proof) &&
-          freezeProof.prepareExecutionDigest === controlDigest(proof.child) &&
-          freezeProof.refusalProjectionDigest === controlDigest(proof) &&
-          proof.observedAt <= closure.closedAt,
-        "Original unadmitted receiver NoGuard source changed",
-      );
-      assertNoUnissuedConfigurationReceiverPublication(
-        state.installation,
-        proof.child.operationKey,
-      );
-      dmContainment = controlDigest(proof);
-    } else {
-      need("kind" in freezeProof, "Issued preparation cannot use NeverIssued proof");
-      const root = own(new AnchoredDirectory(state.installation.dataRoot)),
-        target = own(root.directory(".admin-target-control")),
-        executions = own(target.directory("executions")),
-        dm = own(executions.directory("data-manager")),
-        preparePublication = inspectControlChildPublication(authority, prepare),
-        attempt = preparePublication.binding?.child,
-        bytes = dm.read(descriptor.name, descriptor.cap),
-        cell = configurationDmCapacityCellSchema.parse(JSON.parse(bytes.toString("utf8"))),
-        key = state.installation.publicKeys["data-manager"];
-      need(
-        bytes.length === descriptor.cap &&
-          cell.refusal &&
-          cell.unused?.confirmation &&
-          attempt &&
-          tree.children.length === 1 &&
-          preparePublication.publication.state === "grant_prepared" &&
-          preparePublication.publication.grantDigest === freezeProof.prepareGrantDigest,
-        "Actual original issued/refused DM packet required",
-      );
-      const outbox = readPrivateRecord(
-          state.installation,
-          "attempts",
-          `${preparePublication.publication.delegationId}.json`,
-          65536,
-        ) as { grant: unknown },
-        refusal = verifyControl(
-          key,
-          domains.refusal,
-          cell.refusal,
-          configurationDmNoGuardRefusalSchema,
-        ),
-        capacity =
-          cell.capacity &&
-          verifyControl(
-            key,
-            domains.capacity,
-            cell.capacity,
-            configurationSettlementCapacitySchema,
-          ),
-        refusalDigest = settlementRecordDigest(domains.refusal, refusal),
-        child = tree.children[0]!,
-        witness = readControlExecutionWitness(state.installation, attempt.execution, key),
-        unusedIntent = verifyControl(
-          key,
-          domains.unusedIntent,
-          cell.unused.intent,
-          configurationUnusedCapacityIntentSchema,
-        ),
-        unusedConfirmation = verifyControl(
-          key,
-          domains.unusedConfirmation,
-          cell.unused.confirmation,
-          configurationUnusedCapacityConfirmationSchema,
-        ),
-        unusedIntentDigest = settlementRecordDigest(domains.unusedIntent, unusedIntent),
-        unusedConfirmationDigest = settlementRecordDigest(
-          domains.unusedConfirmation,
-          unusedConfirmation,
-        ),
-        expectedAllocated = (capacity ? descriptors.receiver : [descriptor])
-          .map((value) => controlDigest(value))
-          .sort(),
-        dmSlot = {
-          executionOrdinal: capacity?.reservedExecutionOrdinal ?? null,
-          intentOrdinal: capacity?.reservedIntentOrdinal ?? null,
-          recordDescriptorsDigest: controlDigest(descriptors.receiver),
-          allocatedDescriptorDigests: expectedAllocated,
-          state: "UNUSED",
-          intentDigest: unusedIntentDigest,
-        };
-      need(
-        child.grantDigest === freezeProof.prepareGrantDigest &&
-          controlDigest(outbox.grant) === child.grantDigest &&
-          same(child.execution, attempt.execution) &&
-          child.settlement.outcome === "failed_without_effect" &&
-          child.settlement.publication === "not_started" &&
-          same(refusal.prepareExecution, attempt.execution) &&
-          refusal.prepareAdmissionDigest === witness.authorityDigest &&
-          witness.kind === "configuration-maintenance.prepare" &&
-          same(witness.origin, state.origin) &&
-          refusal.installationId === owner.installationId &&
-          same(refusal.origin, state.origin) &&
-          same(refusal.ownerPrepare, state.execution) &&
-          refusal.rootAdmissionDigest === state.receiptDigest &&
-          refusal.rootCertificateDigest === tree.certificateDigest &&
-          refusal.maintenanceId === projection.maintenanceId &&
-          refusal.candidateId === projection.candidateId &&
-          refusal.planDigest === projection.planDigest &&
-          refusal.settlementId === projection.settlementId &&
-          refusal.projectionDigest === projectionDigest &&
-          refusal.reservationDigest === projection.reservationDigest &&
-          refusal.refusalReceipt.maintenanceId === projection.maintenanceId &&
-          refusal.effectReceiptDigest === controlDigest(refusal.refusalReceipt) &&
-          child.settlement.terminalReceiptDigest === refusal.effectReceiptDigest &&
-          refusal.effectSettlementDigest ===
-            controlDigest({ ...child.settlement, receipt: refusal.refusalReceipt }) &&
-          refusal.canonicalTerminalDigest ===
-            controlDigest({ version: 1, refused: refusal.refusalReceipt }) &&
-          evidence.prepareExecutionDigest === controlDigest(attempt.execution) &&
-          evidence.prepareAdmissionDigest === refusal.prepareAdmissionDigest &&
-          evidence.refusalProjectionDigest === refusalDigest &&
-          evidence.effectSettlementDigest === refusal.effectSettlementDigest &&
-          evidence.canonicalTerminalDigest === refusal.canonicalTerminalDigest &&
-          evidence.canonicalTerminalAt === refusal.canonicalTerminalAt &&
-          evidence.capacityReceiptDigest === refusal.capacityReceiptDigest &&
-          evidence.dmUnusedIntentDigest === unusedIntentDigest &&
-          evidence.dmUnusedConfirmationDigest === unusedConfirmationDigest &&
-          freezeProof.prepareExecutionDigest === evidence.prepareExecutionDigest &&
-          freezeProof.refusalProjectionDigest === refusalDigest &&
-          unusedIntent.role === "data-manager" &&
-          unusedIntent.installationId === owner.installationId &&
-          same(unusedIntent.origin, state.origin) &&
-          unusedIntent.ownerPrepareDigest === controlDigest(state.execution) &&
-          unusedIntent.prepareExecutionDigest === evidence.prepareExecutionDigest &&
-          unusedIntent.settlementId === projection.settlementId &&
-          unusedIntent.projectionDigest === projectionDigest &&
-          unusedIntent.capacityReceiptDigest === refusal.capacityReceiptDigest &&
-          unusedIntent.sourceProofDigest === refusalDigest &&
-          unusedIntent.executionOrdinal === dmSlot.executionOrdinal &&
-          unusedIntent.intentOrdinal === dmSlot.intentOrdinal &&
-          unusedIntent.recordDescriptorsDigest === dmSlot.recordDescriptorsDigest &&
-          same(unusedIntent.allocatedDescriptorDigests, expectedAllocated) &&
-          unusedConfirmation.role === "data-manager" &&
-          unusedConfirmation.installationId === owner.installationId &&
-          same(unusedConfirmation.origin, state.origin) &&
-          unusedConfirmation.ownerPrepareDigest === controlDigest(state.execution) &&
-          unusedConfirmation.settlementId === projection.settlementId &&
-          unusedConfirmation.projectionDigest === projectionDigest &&
-          unusedConfirmation.intentDigest === unusedIntentDigest &&
-          unusedConfirmation.slotStateDigest === controlDigest(dmSlot) &&
-          unusedConfirmation.confirmedAt >= unusedIntent.createdAt,
-        "Actual DM refusal/UNUSED preimages changed",
-      );
-      if (capacity)
-        need(
-          capacity.installationId === owner.installationId &&
-            same(capacity.origin, state.origin) &&
-            capacity.ownerPrepareDigest === controlDigest(state.execution) &&
-            capacity.settlementId === projection.settlementId &&
-            capacity.projectionDigest === projectionDigest &&
-            capacity.reservationDigest === projection.reservationDigest &&
-            same(capacity.proposedExecutionAddress, projection.reservation.execution) &&
-            capacity.recordDescriptorsDigest === controlDigest(descriptors.receiver) &&
-            capacity.maxBytes === descriptors.receiver.reduce((sum, value) => sum + value.cap, 0) &&
-            refusal.capacityReceiptDigest === settlementRecordDigest(domains.capacity, capacity),
-          "Original DM capacity certificate changed",
-        );
-      else
-        need(
-          refusal.capacityReceiptDigest === null && refusal.refusalReceipt.reason === "capacity",
-          "Actual capacity-null refusal required",
-        );
-      verifyPublishedUnusedDmConfigurationSettlementSlots(state.installation, projection, {
-        executionOrdinal: dmSlot.executionOrdinal,
-        intentOrdinal: dmSlot.intentOrdinal,
-        projectionDigest,
-        intentDigest: unusedIntentDigest,
-      });
-      dmContainment = refusal.effectSettlementDigest;
-      dmUnused = {
-        role: "data-manager",
-        intentDigest: unusedIntentDigest,
-        confirmationDigest: unusedConfirmationDigest,
-      };
-    }
-  } finally {
-    for (const directory of opened.reverse()) directory.close();
-  }
-  verifyControlEffectSettlement(state.installation.installation, state.execution);
-  const ownEffect = readPrivateRecord(
-    state.installation,
-    "effects",
-    `${state.execution.operationKey}.json`,
-  ) as {
-    payload: {
-      outcome: string;
-      publication: string;
-      receipt: unknown;
-    };
-  };
-  need(
-    ownEffect.payload.outcome === "failed_without_effect" &&
-      ownEffect.payload.publication === "not_started" &&
-      same(ownEffect.payload.receipt, {
-        kind: "configuration-no-guard",
-        issuerFreezeProofDigest: evidence.issuerFreezeProofDigest,
-        issuerUnusedConfirmationDigest: ownConfirmationDigest,
-      }) &&
-      same(
-        closure.originalContainmentDigests,
-        [controlDigest(ownEffect.payload), ...(dmContainment ? [dmContainment] : [])].sort(),
-      ) &&
-      same(closure.unusedSlotDigests, [
-        ...(dmUnused ? [dmUnused] : []),
-        {
-          role: "ops-agent",
-          intentDigest: ownIntentDigest,
-          confirmationDigest: ownConfirmationDigest,
-        },
-      ]) &&
-      same(control.unused, {
-        bundleDigest: settlementRecordDigest(domains.bundle, bundle),
-        closureDigest: closure.closureDigest,
-        issuerFreezeProofDigest: evidence.issuerFreezeProofDigest,
-        issuerUnusedIntentDigest: ownIntentDigest,
-        issuerUnusedConfirmationDigest: ownConfirmationDigest,
-      }),
-    "Original own containment/bundle links changed",
+    own.outcome === "failed_without_effect" &&
+      own.terminalReceiptDigest ===
+        controlDigest({
+          kind: "configuration-fence-not-prepared",
+          maintenanceId: owner.plan.operation.maintenanceId,
+        }),
+    "Original never-prepared maintenance effect required",
   );
 }

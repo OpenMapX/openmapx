@@ -11,7 +11,6 @@ import {
 } from "@openmapx/core/build-artifacts";
 import { coordinatorPullSubmissionDigest, parseOpsJobStatus } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
-import { assertProspectiveConfigurationSettlementPacketBudget } from "../../../packages/core/src/build-artifacts/configuration-fence-settlement-budget";
 import { assertProspectiveConfigurationMaintenanceBudget } from "../../../packages/core/src/build-artifacts/configuration-maintenance-budget";
 import type { ConfigurationReleaseSnapshot } from "../../../packages/core/src/build-artifacts/configuration-release-snapshot";
 import {
@@ -81,10 +80,6 @@ import {
   inspectArtifactTargetLeaseChildSettlement,
   issueControlChildPhase,
   lookupControlChildPhaseBinding,
-  preparedDataConfigurationFenceState,
-  publishedConfigurationSettlementCapacityState,
-  publishedDmNoGuardRefusalState,
-  publishedDmUnusedCapacityState,
   readPrivateRecord,
   reconcileArtifactTargetLease,
   restoreAdmittedControlExecution,
@@ -94,8 +89,6 @@ import {
   settlePreparedConfigurationHandoff,
   signControl,
   type VerifiedExecutionAuthority,
-  type VerifiedPreparedDataConfigurationFence,
-  type VerifiedPublishedConfigurationSettlementCapacity,
   verifiedParentForArtifactDelegation,
   verifyConfigurationSourceWitness,
   verifyControl,
@@ -103,22 +96,16 @@ import {
   verifyControlRecoveryAuthority,
   verifyFamilyOwnedRecord,
   verifyMaintenanceCoordinatorPrerequisite,
-  verifyPublishedConfigurationSettlementCapacity,
-  verifyPublishedDataConfigurationFencePrepared,
-  verifyPublishedDataConfigurationFenceRefusal,
-  verifyPublishedUnusedConfigurationCapacity,
   verifyRetainedArtifactTargetRootRelease,
   verifyRetainedLocalControlPeer,
   withConfigurationMaintenanceDecisionPublication,
-  withConfigurationMaintenanceNoGuardPublication,
   withConfigurationMaintenanceOwnerInitialization,
   withConfigurationMaintenanceOwnerObservation,
   withConfigurationMaintenancePhasePublication,
-  withConfigurationMaintenanceSettlementPublication,
   writePrivateRecord,
 } from "@openmapx/core/build-artifacts";
 import {
-  type DataManagerTransport,
+  DataManagerHttpError,
   inspectDataConfigurationFence,
   prepareDataConfigurationFence,
   recoverUnadmittedConfigurationPreparation,
@@ -152,52 +139,20 @@ import {
   inspectControlChildPublication,
   lookupControlChildPhaseAttempt,
 } from "../../../packages/core/src/build-artifacts/child-phase";
-import {
-  assertNoUnissuedConfigurationReceiverPublication,
-  configurationSettlementRecordDescriptors,
-  readConfigurationSettlementCell,
-  writeConfigurationSettlementCell,
-} from "../../../packages/core/src/build-artifacts/configuration-fence-settlement-cells";
-import {
-  configurationCommittedSettlementSchema,
-  configurationDmCapacityCellSchema,
-  configurationFinalEvidenceProjectionSchema,
-  configurationFinalEvidenceSchema,
-  configurationIssuedPrepareRefusedProofSchema,
-  configurationIssuerUnusedSourceDigest,
-  configurationNeverIssuedProofSchema,
-  configurationNoGuardBundleSchema,
-  configurationNoGuardClosureSchema,
-  configurationNoGuardEvidenceSchema,
-  configurationNoGuardIntentSchema,
-  configurationOwnerFinalSchema,
-  configurationSettlementAckSchema,
-  configurationSettlementAdmissionSchema,
-  configurationSettlementAssertionSchema,
-  configurationSettlementCapacitySchema,
-  configurationSettlementCommitmentCellSchema,
-  configurationSettlementControlCellSchema,
-  configurationSettlementControlEnvelopeSchema,
-  configurationSettlementDispatchSchema,
-  configurationSettlementDomains,
-  configurationSettlementEffectSchema,
-  configurationSettlementOwnerIdentitySchema,
-  configurationSettlementPublishedTerminalSchema,
-  configurationSettlementReservationProjectionSchema,
-  configurationSettlementSenderAckCellSchema,
-  configurationUnusedCapacityConfirmationSchema,
-  configurationUnusedCapacityIntentSchema,
-  configurationSettlementDomains as domains,
-  settlementRecordDigest,
-} from "../../../packages/core/src/build-artifacts/configuration-fence-settlement-records";
 import { readOriginalMaintenanceFinalChildren } from "../../../packages/core/src/build-artifacts/configuration-maintenance-final-children";
 import {
   assertAppliedConfigurationMaintenanceFinalState,
   assertContainedConfigurationMaintenanceFinalState,
   assertUnusedConfigurationMaintenanceFinalState,
+  configurationFinalEvidenceProjectionSchema,
+  configurationFinalEvidenceSchema,
   configurationMaintenanceFinalRecordSchema,
   configurationMaintenanceRequiredChecksSchema,
   configurationMaintenanceRuntimeInspectionSchema,
+  configurationOwnerFinalSchema,
+  configurationOwnerIdentitySchema,
+  configurationFinalDomains as domains,
+  finalRecordDigest,
 } from "../../../packages/core/src/build-artifacts/configuration-maintenance-final-records";
 import {
   assertConfigurationMaintenanceDecisionSource,
@@ -214,6 +169,7 @@ import {
   configurationMaintenanceOwnerRecordSchema as ownerSchema,
 } from "../../../packages/core/src/build-artifacts/configuration-maintenance-owner-records";
 import {
+  childSettlementState,
   configurationMaintenanceChildState,
   installationState,
   publishConfigurationMaintenanceForwardWitness,
@@ -223,19 +179,12 @@ import {
   withPrivateEffectWriter,
 } from "../../../packages/core/src/build-artifacts/control-authority";
 import { CONTROL_RETENTION_LIMITS } from "../../../packages/core/src/build-artifacts/control-retention";
-import { AnchoredDirectory } from "../../../packages/core/src/build-artifacts/filesystem";
-import {
-  bindOwnedConfigurationSettlementFamilySlot,
-  commitFrozenConfigurationSettlementSlotUnused,
-  readConfigurationSettlementFamilySlot,
-  repairIndexedConfigurationMaintenanceSettleCompletion,
-  verifyPublishedBoundDmConfigurationSettlementSlots,
-  verifyPublishedDmConfigurationSettlementSlots,
-} from "../../../packages/core/src/build-artifacts/retention-family";
+import { repairIndexedConfigurationMaintenanceSettleCompletion } from "../../../packages/core/src/build-artifacts/retention-family";
 import {
   observeConfigurationMaintenanceRuntimeTree,
   readConfigurationPrepareNonAdmission,
 } from "../../../packages/core/src/build-artifacts/target-lease";
+import type { DataConfigurationFenceReceipt } from "../../../packages/core/src/services/data-manager/contracts/configuration-maintenance";
 
 import type { PersistedOpsJob } from "./journal";
 import { OpsExecutionFailure, type OpsRuntime } from "./runtime";
@@ -446,13 +395,10 @@ export function retainOwnedConfigurationMaintenance(
       ? { stagedCoordinatorProvenance: source.stagedCoordinatorProvenance }
       : {}),
     sequence: 0,
-    guardSource: null,
-    capacity: null,
+    preparedFence: null,
     apiControls: { decide: null, settle: null, steps: [] },
     final: null,
     inspection: null,
-    issuance: "open",
-    noGuard: null,
     receipt: {
       version: 1,
       binding,
@@ -1053,8 +999,7 @@ export async function inspectOwnedMaintenanceGenerationRuntime(
     canonicalJson(child.origin) !== canonicalJson(owner.origin) ||
     owner.receipt.decision?.decision !== "continue" ||
     !owner.apiControls.decide?.receiptDelivery ||
-    owner.receipt.generation !== "not_started" ||
-    owner.issuance !== "open"
+    owner.receipt.generation !== "not_started"
   )
     throw Error("Original authorized generation source changed");
   if (!owner.coordinatorPull && !owner.stagedCoordinatorProvenance) return undefined;
@@ -1295,10 +1240,7 @@ export function retainConfigurationMaintenanceSettleControl(
       if (
         owner.final ||
         owner.inspection ||
-        owner.noGuard ||
-        owner.issuance !== "open" ||
-        !owner.guardSource ||
-        !owner.capacity ||
+        !owner.preparedFence ||
         !owner.apiControls.decide?.receiptDelivery ||
         owner.receipt.decision?.decisionId !== operation.decisionId ||
         owner.sequence !== operation.expectedSequence ||
@@ -1445,10 +1387,7 @@ export function retainConfigurationMaintenanceDecisionControl(
       const acceptedAt = Date.now();
       if (
         acceptedAt >= execution.deadlineAt ||
-        owner.issuance !== "open" ||
-        owner.noGuard ||
-        !owner.guardSource ||
-        !owner.capacity ||
+        !owner.preparedFence ||
         owner.receipt.state !== "prepared" ||
         owner.receipt.decision !== null ||
         owner.receipt.dmFence?.state !== "prepared" ||
@@ -2153,44 +2092,44 @@ export function normalizeConfigurationMaintenanceRecoveryControl(
     }),
   };
 }
-/** Only the fixed cross-role verifier can create the source handle. A parsed
- * prepared response or a public terminal status cannot make this transition. */
+/** Records the data-manager's prepared receipt. The receipt is accepted only
+ * when the data-manager's own signed settlement of the fence child in this
+ * lease committed exactly that receipt. */
 export function recordOwnedConfigurationMaintenancePrepared(
   authority: VerifiedExecutionAuthority,
   lease: ArtifactTargetLease,
   expectedSequence: number,
-  verified: VerifiedPreparedDataConfigurationFence,
-  verifiedCapacity: VerifiedPublishedConfigurationSettlementCapacity,
+  child: ExecutionRef,
+  receipt: DataConfigurationFenceReceipt,
 ): void {
-  const source = preparedDataConfigurationFenceState(verified),
-    capacity = publishedConfigurationSettlementCapacityState(verifiedCapacity, authority);
+  const settled = inspectArtifactTargetLeaseChildSettlement(lease, child);
+  if (
+    settled?.outcome !== "committed" ||
+    settled.terminalReceiptDigest !== controlDigest({ kind: "data-configuration-fence", receipt })
+  )
+    throw Error("Data-manager fence preparation required");
   withConfigurationMaintenanceOwnerObservation(lease, authority, () => {
     const owner = read(authority),
-      receipt = source.preparedReceipt,
       plan = owner.plan;
     if (
       owner.sequence !== expectedSequence ||
-      owner.issuance !== "open" ||
-      owner.noGuard ||
       owner.receipt.state !== "preparing" ||
-      owner.guardSource ||
-      owner.capacity ||
-      source.rootCertificateDigest !== owner.rootCertificateDigest ||
-      canonicalJson(source.ownerPrepare) !== canonicalJson(plan.prepare) ||
+      owner.preparedFence ||
+      receipt.state !== "prepared" ||
+      receipt.fenceId !== child.executionId ||
+      canonicalJson(receipt.ownerPrepare) !== canonicalJson(plan.prepare) ||
       receipt.maintenanceId !== plan.operation.maintenanceId ||
       receipt.candidateId !== plan.operation.candidateId ||
       receipt.planDigest !== plan.planDigest ||
       receipt.revisionId !== plan.operation.revisionId ||
-      receipt.hardlinkPlanDigest !== plan.dmPrepare.hardlinkPlanDigest ||
-      capacity.signed.payload.settlementId !== plan.dmSettle.settlementId
+      receipt.hardlinkPlanDigest !== plan.dmPrepare.hardlinkPlanDigest
     )
       throw Error("Original prepared maintenance guard conflict");
     const next = owner.sequence + 1;
     write(authority, {
       ...owner,
       sequence: next,
-      guardSource: source,
-      capacity: capacity.signed,
+      preparedFence: receipt,
       receipt: { ...owner.receipt, sequence: next, state: "prepared", dmFence: receipt },
     });
   });
@@ -2247,10 +2186,8 @@ export function finalizeOwnedMaintenanceState(
         owner.sequence !== payload.ownerSequence ||
         controlDigest(owner) !== payload.ownerSourceDigest ||
         owner.inspection ||
-        !owner.guardSource ||
+        !owner.preparedFence ||
         !owner.apiControls.decide?.receiptDelivery ||
-        owner.noGuard ||
-        owner.issuance !== "open" ||
         !(payload.runtime.mode === "unused"
           ? owner.receipt.decision?.decision === "abandon" &&
             owner.receipt.generation === "not_started" &&
@@ -2282,16 +2219,10 @@ export function finalizeOwnedMaintenanceState(
       }
       const state = executionAuthorityState(authority),
         decision = owner.apiControls.decide,
-        prepared = owner.guardSource,
+        prepared = owner.preparedFence,
         evidence = configurationFinalEvidenceSchema.parse({
           identity: payload.identity,
-          guard: {
-            fenceId: prepared.preparedReceipt.fenceId,
-            preparedReceipt: prepared.preparedReceipt,
-            preparedReceiptDigest: prepared.preparedReceiptDigest,
-            preparedCanonicalDigest: prepared.preparedCanonicalDigest,
-            preparedTerminalAt: prepared.preparedTerminalAt,
-          },
+          guard: { fenceId: prepared.fenceId, preparedReceipt: prepared },
           decision: {
             ...owner.receipt.decision,
             apiParentAttestationDigest: decision.apiParent.assertionDigest,
@@ -2321,14 +2252,14 @@ export function finalizeOwnedMaintenanceState(
             executionDigest: controlDigest(execution),
           })),
         }),
-        evidenceDigest = settlementRecordDigest(domains.finalEvidence, evidenceProjection),
+        evidenceDigest = finalRecordDigest(domains.finalEvidence, evidenceProjection),
         sequence = owner.sequence + 1,
         finalPayload = configurationOwnerFinalSchema.parse({
           version: 2,
           identity: payload.identity,
           ownerSequence: sequence,
           settlingAt: Date.now(),
-          expectedDmSequence: prepared.preparedReceipt.sequence,
+          expectedDmSequence: prepared.sequence,
           evidenceDigest,
           outcome: payload.runtime.mode,
           privateInspectionId: payload.inspectionId,
@@ -2338,7 +2269,7 @@ export function finalizeOwnedMaintenanceState(
           evidence,
           evidenceProjection,
           evidenceDigest,
-          ownerReceiptDigest: settlementRecordDigest(domains.ownerFinal, finalPayload),
+          ownerReceiptDigest: finalRecordDigest(domains.ownerFinal, finalPayload),
         });
       write(authority, {
         ...owner,
@@ -2365,10 +2296,8 @@ export function restoreOwnedMaintenanceFinal(
   if (
     !final ||
     !owner.inspection ||
-    !owner.guardSource ||
-    !owner.apiControls.decide?.receiptDelivery ||
-    owner.noGuard ||
-    owner.issuance !== "open"
+    !owner.preparedFence ||
+    !owner.apiControls.decide?.receiptDelivery
   )
     throw Error("Actual immutable maintenance final required");
   if (
@@ -2433,19 +2362,15 @@ export function restoreOwnedMaintenanceFinal(
     actual.identity.rootCertificateDigest !== owner.rootCertificateDigest ||
     canonicalJson(evidence.runtime) !== canonicalJson(inspection.runtime) ||
     inspection.runtime.requiredCheckSetDigest !==
-      settlementRecordDigest(domains.inspection, inspection.requiredChecks) ||
+      finalRecordDigest(domains.inspection, inspection.requiredChecks) ||
     inspection.observations.length !== inspection.requiredChecks.length ||
     !inspection.observations.every((value, index) => value.checkIndex === index && value.passed) ||
     canonicalJson(projection) !== canonicalJson(final.evidenceProjection) ||
-    settlementRecordDigest(domains.finalEvidence, projection) !== final.evidenceDigest ||
+    finalRecordDigest(domains.finalEvidence, projection) !== final.evidenceDigest ||
     final.evidenceDigest !== actual.evidenceDigest ||
-    settlementRecordDigest(domains.ownerFinal, actual) !== final.ownerReceiptDigest ||
-    canonicalJson(evidence.guard.preparedReceipt) !==
-      canonicalJson(owner.guardSource.preparedReceipt) ||
-    evidence.guard.preparedReceiptDigest !== owner.guardSource.preparedReceiptDigest ||
-    evidence.guard.preparedCanonicalDigest !== owner.guardSource.preparedCanonicalDigest ||
-    evidence.guard.preparedTerminalAt !== owner.guardSource.preparedTerminalAt ||
-    actual.expectedDmSequence !== owner.guardSource.preparedReceipt.sequence ||
+    finalRecordDigest(domains.ownerFinal, actual) !== final.ownerReceiptDigest ||
+    canonicalJson(evidence.guard.preparedReceipt) !== canonicalJson(owner.preparedFence) ||
+    actual.expectedDmSequence !== owner.preparedFence.sequence ||
     evidence.decision.decisionId !== owner.receipt.decision?.decisionId ||
     evidence.decision.decision !== owner.receipt.decision?.decision ||
     evidence.decision.checkpointVersion !== owner.receipt.decision.checkpointVersion ||
@@ -2470,833 +2395,6 @@ export function restoreOwnedMaintenanceFinal(
   };
   maintenanceFinals.set(value, Object.freeze({ authority, record: freezeProof(final) }));
   return value;
-}
-
-/** Publishes ONLY this original owner's restored actual private final. It fills
- * the existing PREPARE-reserved cell; no namespace/capacity is added late. */
-export function publishOwnedConfigurationFenceSettlement(
-  authority: VerifiedExecutionAuthority,
-  maintenanceId: string,
-): void {
-  const proof = restoreOwnedMaintenanceFinal(authority),
-    source = ownedMaintenanceFinalState(proof, authority),
-    state = executionAuthorityState(authority),
-    owner = read(authority),
-    prepare = owner.plan.reservations.find((value) => value.phase === "configuration-fence");
-  if (
-    owner.plan.operation.maintenanceId !== maintenanceId ||
-    !prepare ||
-    !owner.capacity ||
-    !state.origin
-  )
-    throw Error("Original prepared final publisher required");
-  const projectionDescriptor = {
-      scope: "shared" as const,
-      namespace: "execution" as const,
-      role: "ops-agent" as const,
-      name: `${state.execution.operationKey}.configuration-settlement-control.json`,
-      cap: 8192,
-    },
-    raw = readConfigurationSettlementCell(
-      state.installation,
-      { origin: state.origin },
-      projectionDescriptor,
-    ),
-    control = verifyControl(
-      state.installation.installation.publicKey,
-      domains.control,
-      raw,
-      configurationSettlementControlCellSchema.shape.payload,
-    ),
-    projection = verifyControl(
-      state.installation.installation.publicKey,
-      domains.signedProjection,
-      control.projection,
-      configurationSettlementReservationProjectionSchema,
-    ),
-    descriptor = configurationSettlementRecordDescriptors(
-      projection,
-      prepare.execution.operationKey,
-    ).sender[0]!,
-    final = source.record,
-    identity = final.ownerFinal.payload.identity;
-  if (
-    projection.maintenanceId !== maintenanceId ||
-    canonicalJson(projection.ownerPrepare) !== canonicalJson(state.execution) ||
-    projection.rootAdmissionDigest !== state.receiptDigest ||
-    projection.rootCertificateDigest !== owner.rootCertificateDigest ||
-    projection.settlementId !== identity.settlementId ||
-    projection.planDigest !== owner.plan.planDigest ||
-    canonicalJson(projection.reservation) !==
-      canonicalJson(
-        owner.plan.reservations.find((value) => value.phase === "configuration-fence-settle"),
-      )
-  )
-    throw Error("Original final reservation projection changed");
-  const committed = configurationCommittedSettlementSchema.parse({
-      version: 2,
-      phase: "committed",
-      identity,
-      referenceOperationFingerprint: projection.reservation.operationFingerprint,
-      final: final.ownerFinal.payload,
-      evidence: final.evidenceProjection,
-      evidenceDigest: final.evidenceDigest,
-      ownerReceiptDigest: final.ownerReceiptDigest,
-      committedAt: final.ownerFinal.payload.settlingAt,
-    }),
-    signed = signControl(state.installation.privateKey, domains.reference, committed),
-    lease = restoreArtifactTargetLeaseForSettlement(authority);
-  try {
-    withConfigurationMaintenanceOwnerObservation(lease, authority, () => {
-      const current = read(authority);
-      if (
-        canonicalJson(current.final) !== canonicalJson(final) ||
-        current.noGuard ||
-        current.issuance !== "open"
-      )
-        throw Error("Original immutable final publication raced");
-      const prior = readConfigurationSettlementCell(state.installation, projection, descriptor),
-        payload = verifyControl(
-          state.installation.installation.publicKey,
-          domains.reference,
-          prior,
-          configurationSettlementCommitmentCellSchema.shape.payload,
-        );
-      if (payload.phase === "committed") {
-        if (canonicalJson(prior) !== canonicalJson(signed))
-          throw Error("Committed original final changed");
-        return;
-      }
-      if (
-        payload.phase !== "uncommitted" ||
-        canonicalJson(payload.identity) !== canonicalJson(identity) ||
-        payload.referenceOperationFingerprint !== projection.reservation.operationFingerprint
-      )
-        throw Error("Original pending final cell changed");
-      writeConfigurationSettlementCell(state.installation, projection, descriptor, signed);
-    });
-  } finally {
-    closeArtifactTargetLeaseHandle(lease);
-  }
-}
-
-declare const settlementControlBrand: unique symbol, settlementDispatchBrand: unique symbol;
-export type VerifiedConfigurationFenceSettlementControl = Readonly<{
-  [settlementControlBrand]: true;
-}>;
-export type ConfigurationFenceSettlementDispatchTicket = Readonly<{
-  [settlementDispatchBrand]: true;
-}>;
-type LogicalControlSource = {
-  authority: VerifiedExecutionAuthority;
-  maintenanceId: string;
-  final: NonNullable<ConfigurationMaintenanceOwnerRecord["final"]>;
-  projection: ReturnType<typeof configurationSettlementReservationProjectionSchema.parse>;
-  signedProjection: ReturnType<
-    typeof signControl<ReturnType<typeof configurationSettlementReservationProjectionSchema.parse>>
-  >;
-  commitmentDigest: string;
-  prepareKey: string;
-};
-const settlementControls = new WeakMap<
-  VerifiedConfigurationFenceSettlementControl,
-  LogicalControlSource
->();
-const settlementDispatches = new WeakMap<
-  ConfigurationFenceSettlementDispatchTicket,
-  {
-    control: VerifiedConfigurationFenceSettlementControl;
-    envelope: ReturnType<
-      typeof signControl<ReturnType<typeof configurationSettlementControlEnvelopeSchema.parse>>
-    >;
-    assertion: string;
-  }
->();
-function freezeOwnedSource<T>(value: T): T {
-  if (value && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const child of Object.values(value)) freezeOwnedSource(child);
-    Object.freeze(value);
-  }
-  return value;
-}
-/** Reconstructible observation capability. The caller supplies ONLY the actual
- * original authority/ID. Full final source and existing committed cell must
- * agree; this function never chooses a time/address or creates a ticket. */
-export function prepareConfigurationFenceSettlementControl(
-  authority: VerifiedExecutionAuthority,
-  maintenanceId: string,
-): VerifiedConfigurationFenceSettlementControl {
-  const actual = ownedMaintenanceFinalState(restoreOwnedMaintenanceFinal(authority), authority),
-    owner = read(authority),
-    state = executionAuthorityState(authority),
-    prepare = owner.plan.reservations.find((value) => value.phase === "configuration-fence");
-  if (
-    !prepare ||
-    !state.origin ||
-    !owner.guardSource ||
-    !owner.capacity ||
-    owner.plan.operation.maintenanceId !== maintenanceId
-  )
-    throw Error("Original prepared final control source required");
-  const descriptor = {
-      scope: "shared" as const,
-      namespace: "execution" as const,
-      role: "ops-agent" as const,
-      name: `${state.execution.operationKey}.configuration-settlement-control.json`,
-      cap: 8192,
-    },
-    control = verifyControl(
-      state.installation.installation.publicKey,
-      domains.control,
-      readConfigurationSettlementCell(state.installation, { origin: state.origin }, descriptor),
-      configurationSettlementControlCellSchema.shape.payload,
-    ),
-    projection = verifyControl(
-      state.installation.installation.publicKey,
-      domains.signedProjection,
-      control.projection,
-      configurationSettlementReservationProjectionSchema,
-    ),
-    committedDescriptor = configurationSettlementRecordDescriptors(
-      projection,
-      prepare.execution.operationKey,
-    ).sender[0]!,
-    committed = verifyControl(
-      state.installation.installation.publicKey,
-      domains.reference,
-      readConfigurationSettlementCell(state.installation, projection, committedDescriptor),
-      configurationCommittedSettlementSchema,
-    );
-  if (
-    "unused" in control ||
-    projection.maintenanceId !== maintenanceId ||
-    projection.rootAdmissionDigest !== state.receiptDigest ||
-    canonicalJson(projection.ownerPrepare) !== canonicalJson(state.execution) ||
-    projection.rootCertificateDigest !== owner.rootCertificateDigest ||
-    canonicalJson(projection.reservation) !==
-      canonicalJson(
-        owner.plan.reservations.find((value) => value.phase === "configuration-fence-settle"),
-      ) ||
-    canonicalJson(committed.identity) !==
-      canonicalJson(actual.record.ownerFinal.payload.identity) ||
-    canonicalJson(committed.final) !== canonicalJson(actual.record.ownerFinal.payload) ||
-    canonicalJson(committed.evidence) !== canonicalJson(actual.record.evidenceProjection) ||
-    committed.evidenceDigest !== actual.record.evidenceDigest ||
-    committed.ownerReceiptDigest !== actual.record.ownerReceiptDigest ||
-    committed.referenceOperationFingerprint !== projection.reservation.operationFingerprint ||
-    committed.committedAt !== committed.final.settlingAt
-  )
-    throw Error("Actual original committed settlement source required");
-  const value = Object.freeze({}) as VerifiedConfigurationFenceSettlementControl;
-  settlementControls.set(
-    value,
-    freezeOwnedSource({
-      authority,
-      maintenanceId,
-      final: actual.record,
-      projection,
-      signedProjection: control.projection,
-      commitmentDigest: settlementRecordDigest(domains.commitment, committed),
-      prepareKey: prepare.execution.operationKey,
-    }),
-  );
-  return value;
-}
-/** Restore only an ACTUALLY attempted original logical control. This reader
- * cannot bind/issue a ticket, renew its deadline or publish a first attempt. */
-export function restoreAttemptedConfigurationFenceSettlementControl(
-  authority: VerifiedExecutionAuthority,
-  maintenanceId: string,
-): VerifiedConfigurationFenceSettlementControl {
-  const value = prepareConfigurationFenceSettlementControl(authority, maintenanceId),
-    source = actualSettlementControl(value),
-    state = executionAuthorityState(authority),
-    descriptors = configurationSettlementRecordDescriptors(
-      source.projection,
-      source.prepareKey,
-    ).sender,
-    binding = verifyControl(
-      state.installation.installation.publicKey,
-      domains.binding,
-      readConfigurationSettlementCell(state.installation, source.projection, descriptors[1]!),
-      configurationSettlementControlEnvelopeSchema,
-    ),
-    dispatch = verifyControl(
-      state.installation.installation.publicKey,
-      domains.dispatch,
-      readConfigurationSettlementCell(state.installation, source.projection, descriptors[3]!),
-      configurationSettlementDispatchSchema,
-    ),
-    slot = readConfigurationSettlementFamilySlot(state.installation, source.projection);
-  if (
-    dispatch.phase !== "attempted" ||
-    dispatch.attemptedAt === null ||
-    dispatch.attemptedAt < binding.controlStartedAt ||
-    dispatch.attemptedAt >= binding.controlDeadlineAt ||
-    dispatch.dispatchId !== binding.dispatchId ||
-    dispatch.controlEnvelopeDigest !== settlementRecordDigest(domains.binding, binding) ||
-    dispatch.controlExecutionDigest !== controlDigest(binding.execution) ||
-    dispatch.commitmentDigest !== source.commitmentDigest ||
-    binding.commitmentDigest !== source.commitmentDigest ||
-    slot.state !== "bound" ||
-    slot.controlBindingDigest !== dispatch.controlEnvelopeDigest ||
-    slot.executionDigest !== dispatch.controlExecutionDigest
-  )
-    throw Error("Actual original attempted settlement observation required");
-  return value;
-}
-function assertCurrentSettlementFinal(source: LogicalControlSource) {
-  const owner = read(source.authority);
-  if (
-    canonicalJson(owner.final) !== canonicalJson(source.final) ||
-    !owner.inspection ||
-    owner.noGuard ||
-    owner.issuance !== "open"
-  )
-    throw Error("Original immutable settlement final source changed");
-  return owner;
-}
-function actualSettlementControl(
-  value: VerifiedConfigurationFenceSettlementControl,
-): LogicalControlSource {
-  const source = settlementControls.get(value);
-  if (!source) throw Error("Actual fixed configuration settlement control required");
-  return source;
-}
-/** One original binding/publication winner alone gets a process-local ticket.
- * A recovered binding or partial publication is observe-only, forever using
- * the original time/key/UUID/body. No ordinary phase/execution is admitted. */
-export function delegateConfigurationFenceSettlementControl(
-  value: VerifiedConfigurationFenceSettlementControl,
-) {
-  const source = actualSettlementControl(value),
-    state = executionAuthorityState(source.authority),
-    projection = source.projection,
-    descriptors = configurationSettlementRecordDescriptors(projection, source.prepareKey).sender;
-  const current = actualSettlementControl(
-    prepareConfigurationFenceSettlementControl(source.authority, source.maintenanceId),
-  );
-  return withConfigurationMaintenanceSettlementPublication(source.authority, () => {
-    assertCurrentSettlementFinal(source);
-    if (
-      current.commitmentDigest !== source.commitmentDigest ||
-      canonicalJson(current.projection) !== canonicalJson(projection)
-    )
-      throw Error("Original settlement control source changed");
-    const prior = readConfigurationSettlementCell(state.installation, projection, descriptors[1]!),
-      outbox = readConfigurationSettlementCell(state.installation, projection, descriptors[3]!);
-    let envelope: ReturnType<
-        typeof signControl<ReturnType<typeof configurationSettlementControlEnvelopeSchema.parse>>
-      >,
-      fresh = false;
-    if (prior !== null)
-      envelope = signControl(
-        state.installation.privateKey,
-        domains.control,
-        verifyControl(
-          state.installation.installation.publicKey,
-          domains.binding,
-          prior,
-          configurationSettlementControlEnvelopeSchema,
-        ),
-      );
-    else {
-      const slot = readConfigurationSettlementFamilySlot(state.installation, projection),
-        owner = read(source.authority);
-      if (slot.state !== "reserved" || outbox !== null || !owner.capacity)
-        throw Error("Original unbound settlement capacity required");
-      const opened: AnchoredDirectory[] = [],
-        own = (directory: AnchoredDirectory) => {
-          opened.push(directory);
-          return directory;
-        };
-      try {
-        const root = own(new AnchoredDirectory(state.installation.dataRoot)),
-          control = own(root.directory(".admin-target-control")),
-          executions = own(control.directory("executions")),
-          dm = own(executions.directory("data-manager")),
-          bytes = dm.read(`${source.prepareKey}.configuration-settlement-capacity.json`, 8192),
-          compound = configurationDmCapacityCellSchema.parse(JSON.parse(bytes.toString("utf8")));
-        if (
-          bytes.length !== 8192 ||
-          !compound.capacity ||
-          compound.refusal ||
-          compound.unused ||
-          canonicalJson(compound.capacity) !== canonicalJson(owner.capacity)
-        )
-          throw Error("Actual original DM settlement capacity required");
-        const capacity = verifyControl(
-          state.installation.publicKeys["data-manager"],
-          domains.capacity,
-          compound.capacity,
-          configurationSettlementCapacitySchema,
-        );
-        if (
-          capacity.settlementId !== projection.settlementId ||
-          capacity.projectionDigest !== settlementRecordDigest(domains.projection, projection) ||
-          capacity.reservationDigest !== projection.reservationDigest ||
-          canonicalJson(capacity.proposedExecutionAddress) !==
-            canonicalJson(projection.reservation.execution)
-        )
-          throw Error("Actual original DM capacity binding conflict");
-        verifyPublishedDmConfigurationSettlementSlots(state.installation, projection, capacity);
-      } finally {
-        for (const directory of opened.reverse()) directory.close();
-      }
-      const controlStartedAt = Date.now(),
-        controlDeadlineAt = controlStartedAt + 60000,
-        operationFingerprint = projection.reservation.operationFingerprint,
-        execution = {
-          ...projection.reservation.execution,
-          operationFingerprint,
-          deadlineAt: controlDeadlineAt,
-          fingerprint: executionFingerprint({
-            kind: projection.operation.kind,
-            operationFingerprint,
-            deadlineAt: controlDeadlineAt,
-            parent: {
-              issuer: "ops-agent",
-              operationKey: state.execution.operationKey,
-              fingerprint: state.execution.fingerprint,
-              deadlineAt: state.execution.deadlineAt,
-              execution: state.execution,
-            },
-          }),
-        },
-        payload = configurationSettlementControlEnvelopeSchema.parse({
-          version: 2,
-          bindingVersion: 3,
-          purpose: "configuration-fence-settlement",
-          installationId: projection.installationId,
-          origin: projection.origin,
-          ownerPrepare: projection.ownerPrepare,
-          admissionDigest: projection.rootAdmissionDigest,
-          rootCertificateDigest: projection.rootCertificateDigest,
-          settlementId: projection.settlementId,
-          projectionDigest: settlementRecordDigest(domains.projection, projection),
-          reservationDigest: projection.reservationDigest,
-          commitmentDigest: source.commitmentDigest,
-          execution,
-          operation: projection.operation,
-          serviceIds: projection.reservation.serviceIds,
-          controlStartedAt,
-          controlDeadlineAt,
-          originalParentForwardDeadlineAt: state.execution.deadlineAt,
-          dispatchId: randomUUID(),
-        });
-      envelope = signControl(state.installation.privateKey, domains.control, payload);
-      writeConfigurationSettlementCell(
-        state.installation,
-        projection,
-        descriptors[1]!,
-        signControl(state.installation.privateKey, domains.binding, payload),
-      );
-      fresh = true;
-    }
-    const binding = envelope.payload,
-      {
-        operationFingerprint: _operationFingerprint,
-        fingerprint: _fingerprint,
-        deadlineAt: _deadlineAt,
-        ...address
-      } = binding.execution;
-    if (
-      binding.commitmentDigest !== source.commitmentDigest ||
-      binding.projectionDigest !== settlementRecordDigest(domains.projection, projection) ||
-      binding.reservationDigest !== projection.reservationDigest ||
-      canonicalJson(binding.ownerPrepare) !== canonicalJson(state.execution) ||
-      binding.admissionDigest !== state.receiptDigest ||
-      binding.rootCertificateDigest !== projection.rootCertificateDigest ||
-      canonicalJson(binding.operation) !== canonicalJson(projection.operation) ||
-      canonicalJson(address) !== canonicalJson(projection.reservation.execution) ||
-      canonicalJson(binding.serviceIds) !== canonicalJson(projection.reservation.serviceIds)
-    )
-      throw Error("Original logical settlement binding changed");
-    bindOwnedConfigurationSettlementFamilySlot(state.installation, projection);
-    const prepared = signControl(
-      state.installation.privateKey,
-      domains.dispatch,
-      configurationSettlementDispatchSchema.parse({
-        version: 2,
-        origin: projection.origin,
-        settlementId: projection.settlementId,
-        phase: "prepared",
-        dispatchId: binding.dispatchId,
-        controlEnvelopeDigest: settlementRecordDigest(domains.binding, binding),
-        controlExecutionDigest: controlDigest(binding.execution),
-        commitmentDigest: source.commitmentDigest,
-        attemptedAt: null,
-      }),
-    );
-    if (outbox === null)
-      writeConfigurationSettlementCell(state.installation, projection, descriptors[3]!, prepared);
-    else {
-      const original = verifyControl(
-        state.installation.installation.publicKey,
-        domains.dispatch,
-        outbox,
-        configurationSettlementDispatchSchema,
-      );
-      if (
-        original.dispatchId !== binding.dispatchId ||
-        original.controlEnvelopeDigest !== prepared.payload.controlEnvelopeDigest ||
-        original.controlExecutionDigest !== prepared.payload.controlExecutionDigest ||
-        original.commitmentDigest !== source.commitmentDigest
-      )
-        throw Error("Original settlement outbox changed");
-      fresh = false;
-    }
-    const controlCell = verifyControl(
-      state.installation.installation.publicKey,
-      domains.control,
-      readConfigurationSettlementCell(state.installation, projection, descriptors[2]!),
-      configurationSettlementControlCellSchema.shape.payload,
-    );
-    if (
-      "unused" in controlCell ||
-      canonicalJson(controlCell.projection) !== canonicalJson(source.signedProjection) ||
-      (controlCell.binding && canonicalJson(controlCell.binding) !== canonicalJson(envelope))
-    )
-      throw Error("Original settlement shared binding changed");
-    if (!controlCell.binding)
-      writeConfigurationSettlementCell(
-        state.installation,
-        projection,
-        descriptors[2]!,
-        signControl(state.installation.privateKey, domains.control, {
-          version: 2 as const,
-          projection: source.signedProjection,
-          binding: envelope,
-        }),
-      );
-    const assertion = Buffer.from(
-      canonicalJson(
-        signControl(
-          state.installation.privateKey,
-          domains.assertion,
-          configurationSettlementAssertionSchema.parse({
-            version: 2,
-            purpose: "configuration-fence-settlement",
-            settlementId: projection.settlementId,
-            controlEnvelopeDigest: settlementRecordDigest(domains.binding, binding),
-          }),
-        ),
-      ),
-    ).toString("base64url");
-    if (assertion.length > 4096) throw Error("Fixed settlement assertion capacity");
-    freezeOwnedSource(envelope);
-    if (!fresh) return Object.freeze({ envelope, assertion, dispatch: "observe-only" as const });
-    const ticket = Object.freeze({}) as ConfigurationFenceSettlementDispatchTicket;
-    settlementDispatches.set(ticket, Object.freeze({ control: value, envelope, assertion }));
-    return Object.freeze({ envelope, assertion, dispatch: "fresh" as const, ticket });
-  });
-}
-
-/** Consumes the winning process-local ticket once, records attempted before
- * external I/O, then sends ONE fixed typed POST. Lost response/cancellation is
- * observed through the retained guard; this function cannot renew/retry it. */
-export async function dispatchConfigurationFenceSettlementControl(
-  ticket: ConfigurationFenceSettlementDispatchTicket,
-  transport: DataManagerTransport,
-) {
-  const dispatch = settlementDispatches.get(ticket);
-  if (!dispatch) throw Error("Original unconsumed settlement dispatch ticket required");
-  settlementDispatches.delete(ticket);
-  const source = actualSettlementControl(dispatch.control),
-    state = executionAuthorityState(source.authority),
-    projection = source.projection,
-    descriptors = configurationSettlementRecordDescriptors(projection, source.prepareKey).sender;
-  const actual = actualSettlementControl(
-    prepareConfigurationFenceSettlementControl(source.authority, source.maintenanceId),
-  );
-  withConfigurationMaintenanceSettlementPublication(source.authority, () => {
-    assertCurrentSettlementFinal(source);
-    const binding = readConfigurationSettlementCell(
-        state.installation,
-        projection,
-        descriptors[1]!,
-      ),
-      original = verifyControl(
-        state.installation.installation.publicKey,
-        domains.dispatch,
-        readConfigurationSettlementCell(state.installation, projection, descriptors[3]!),
-        configurationSettlementDispatchSchema,
-      ),
-      slot = readConfigurationSettlementFamilySlot(state.installation, projection),
-      attemptedAt = Date.now();
-    if (
-      actual.commitmentDigest !== source.commitmentDigest ||
-      canonicalJson(
-        verifyControl(
-          state.installation.installation.publicKey,
-          domains.binding,
-          binding,
-          configurationSettlementControlEnvelopeSchema,
-        ),
-      ) !== canonicalJson(dispatch.envelope.payload) ||
-      slot.state !== "bound" ||
-      slot.executionDigest !== controlDigest(dispatch.envelope.payload.execution) ||
-      slot.controlBindingDigest !==
-        settlementRecordDigest(domains.binding, dispatch.envelope.payload) ||
-      original.phase !== "prepared" ||
-      original.dispatchId !== dispatch.envelope.payload.dispatchId ||
-      original.controlEnvelopeDigest !== slot.controlBindingDigest ||
-      original.controlExecutionDigest !== slot.executionDigest ||
-      original.commitmentDigest !== source.commitmentDigest ||
-      attemptedAt < dispatch.envelope.payload.controlStartedAt ||
-      attemptedAt >= dispatch.envelope.payload.controlDeadlineAt
-    )
-      throw Error("Original settlement dispatch is fenced");
-    writeConfigurationSettlementCell(
-      state.installation,
-      projection,
-      descriptors[3]!,
-      signControl(state.installation.privateKey, domains.dispatch, {
-        ...original,
-        phase: "attempted" as const,
-        attemptedAt,
-      }),
-    );
-  });
-  const remaining = dispatch.envelope.payload.controlDeadlineAt - Date.now();
-  if (remaining <= 0) throw Error("Original settlement control expired before POST");
-  const { kind: _kind, ...operation } = dispatch.envelope.payload.operation;
-  return settleDataConfigurationFence(operation, {
-    transport,
-    controlAssertion: dispatch.assertion,
-    signal: AbortSignal.timeout(Math.min(15000, remaining)),
-  });
-}
-
-/** Verifies the complete original DM terminal, admission and effect preimages
- * using ONLY shared DM records plus this role's original retained source. The
- * durable copy is fsynced before shared ACK publication; there is no DM-private
- * read, new request/inspection time, SQL effect, ordinary grant or outcome arg. */
-export function observeConfigurationFenceSettlementControl(
-  value: VerifiedConfigurationFenceSettlementControl,
-) {
-  const source = actualSettlementControl(value),
-    state = executionAuthorityState(source.authority),
-    projection = source.projection,
-    descriptors = configurationSettlementRecordDescriptors(projection, source.prepareKey).sender;
-  const currentSource = actualSettlementControl(
-    prepareConfigurationFenceSettlementControl(source.authority, source.maintenanceId),
-  );
-  return withConfigurationMaintenanceSettlementPublication(source.authority, () => {
-    const owner = assertCurrentSettlementFinal(source),
-      control = verifyControl(
-        state.installation.installation.publicKey,
-        domains.control,
-        readConfigurationSettlementCell(state.installation, projection, descriptors[2]!),
-        configurationSettlementControlCellSchema.shape.payload,
-      );
-    if (
-      !control.binding ||
-      "unused" in control ||
-      !owner.capacity ||
-      !owner.guardSource ||
-      currentSource.commitmentDigest !== source.commitmentDigest
-    )
-      throw Error("Original published settlement source required");
-    const envelope = verifyControl(
-        state.installation.installation.publicKey,
-        domains.control,
-        control.binding,
-        configurationSettlementControlEnvelopeSchema,
-      ),
-      binding = verifyControl(
-        state.installation.installation.publicKey,
-        domains.binding,
-        readConfigurationSettlementCell(state.installation, projection, descriptors[1]!),
-        configurationSettlementControlEnvelopeSchema,
-      ),
-      capacity = verifyControl(
-        state.installation.publicKeys["data-manager"],
-        domains.capacity,
-        owner.capacity,
-        configurationSettlementCapacitySchema,
-      );
-    if (
-      canonicalJson(binding) !== canonicalJson(envelope) ||
-      envelope.commitmentDigest !== source.commitmentDigest ||
-      envelope.settlementId !== projection.settlementId ||
-      canonicalJson(control.projection) !== canonicalJson(source.signedProjection)
-    )
-      throw Error("Original control binding changed before observation");
-    const opened: AnchoredDirectory[] = [],
-      own = (directory: AnchoredDirectory) => {
-        opened.push(directory);
-        return directory;
-      };
-    let signedTerminal: ReturnType<
-      typeof signControl<ReturnType<typeof configurationSettlementPublishedTerminalSchema.parse>>
-    >;
-    try {
-      const root = own(new AnchoredDirectory(state.installation.dataRoot)),
-        shared = own(root.directory(".admin-target-control")),
-        executions = own(shared.directory("executions")),
-        dm = own(executions.directory("data-manager")),
-        bytes = dm.read(
-          `${envelope.execution.operationKey}.configuration-settlement-terminal.json`,
-          4096,
-        ),
-        raw = JSON.parse(bytes.toString("utf8")),
-        payload = verifyControl(
-          state.installation.publicKeys["data-manager"],
-          domains.terminal,
-          raw,
-          configurationSettlementPublishedTerminalSchema,
-        );
-      if (bytes.length !== 4096) throw Error("Original DM terminal capacity cell changed");
-      signedTerminal = { payload, signature: (raw as { signature: string }).signature };
-    } finally {
-      for (const directory of opened.reverse()) directory.close();
-    }
-    const terminal = signedTerminal.payload,
-      tuple = terminal.tuple,
-      guard = owner.guardSource,
-      admissionPayload = configurationSettlementAdmissionSchema.parse({
-        version: 2,
-        purpose: "configuration-fence-settlement",
-        installationId: owner.installationId,
-        origin: owner.origin,
-        settlementId: projection.settlementId,
-        projectionDigest: envelope.projectionDigest,
-        reservationDigest: envelope.reservationDigest,
-        prepareExecutionDigest: controlDigest(guard.prepareExecution),
-        prepareAdmissionDigest: guard.prepareAdmissionDigest,
-        preparedReceiptDigest: guard.preparedReceiptDigest,
-        capacityReceiptDigest: settlementRecordDigest(domains.capacity, capacity),
-        rootCertificateDigest: owner.rootCertificateDigest,
-        controlEnvelope: control.binding,
-        commitmentDigest: source.commitmentDigest,
-        executionOrdinal: capacity.reservedExecutionOrdinal,
-        intentOrdinal: capacity.reservedIntentOrdinal,
-        sqlSessionNonce: envelope.execution.executionId,
-        boundAt: terminal.admissionSource.boundAt,
-      }),
-      admission = verifyControl(
-        state.installation.publicKeys["data-manager"],
-        domains.admission,
-        { payload: admissionPayload, signature: terminal.admissionSource.signature },
-        configurationSettlementAdmissionSchema,
-      ),
-      effect = verifyControl(
-        state.installation.publicKeys["data-manager"],
-        domains.effect,
-        {
-          payload: { ...terminal.effectSource.fields, terminal: tuple },
-          signature: terminal.effectSource.signature,
-        },
-        configurationSettlementEffectSchema,
-      ),
-      { terminalDigest, ...tuplePreimage } = tuple;
-    if (
-      canonicalJson(terminal.origin) !== canonicalJson(owner.origin) ||
-      canonicalJson(tuple.execution) !== canonicalJson(envelope.execution) ||
-      tuple.settlementId !== projection.settlementId ||
-      tuple.commitmentDigest !== source.commitmentDigest ||
-      tuple.fenceId !== guard.preparedReceipt.fenceId ||
-      tuple.terminalAt < envelope.controlStartedAt ||
-      tuple.terminalAt >= envelope.controlDeadlineAt ||
-      terminalDigest !== settlementRecordDigest(domains.terminal, tuplePreimage) ||
-      canonicalJson(tuple.result) !==
-        canonicalJson({
-          ...guard.preparedReceipt,
-          state: "settled",
-          sequence: guard.preparedReceipt.sequence + 1,
-        }) ||
-      terminal.admissionDigest !== settlementRecordDigest(domains.admission, admission) ||
-      admission.boundAt < envelope.controlStartedAt ||
-      admission.boundAt >= envelope.controlDeadlineAt ||
-      terminal.effectSettlementDigest !== settlementRecordDigest(domains.effect, effect) ||
-      effect.phase !== "committed" ||
-      canonicalJson(effect.origin) !== canonicalJson(owner.origin) ||
-      effect.settlementId !== projection.settlementId ||
-      effect.controlExecutionDigest !== controlDigest(envelope.execution) ||
-      effect.controlEnvelopeDigest !== settlementRecordDigest(domains.binding, envelope) ||
-      effect.admissionDigest !== terminal.admissionDigest ||
-      effect.commitmentDigest !== source.commitmentDigest ||
-      effect.preparedReceiptDigest !== guard.preparedReceiptDigest ||
-      effect.expectedDmSequence !== guard.preparedReceipt.sequence ||
-      effect.sqlSession.sessionNonce !== envelope.execution.executionId ||
-      effect.attemptedAt < admission.boundAt ||
-      effect.attemptedAt >= envelope.controlDeadlineAt
-    )
-      throw Error("Actual original DM settlement proof changed");
-    verifyPublishedBoundDmConfigurationSettlementSlots(
-      state.installation,
-      projection,
-      owner.capacity,
-    );
-    const ack = signControl(
-        state.installation.privateKey,
-        domains.ack,
-        configurationSettlementAckSchema.parse({
-          version: 2,
-          installationId: owner.installationId,
-          origin: owner.origin,
-          settlementId: projection.settlementId,
-          controlExecutionDigest: controlDigest(envelope.execution),
-          terminalDigest: tuple.terminalDigest,
-          terminalAt: tuple.terminalAt,
-          commitmentDigest: source.commitmentDigest,
-        }),
-      ),
-      copied = readConfigurationSettlementCell(state.installation, projection, descriptors[4]!);
-    if (copied === null)
-      writeConfigurationSettlementCell(
-        state.installation,
-        projection,
-        descriptors[4]!,
-        configurationSettlementSenderAckCellSchema.parse({
-          version: 2,
-          terminal: signedTerminal,
-          ack: null,
-        }),
-      );
-    else {
-      const original = configurationSettlementSenderAckCellSchema.parse(copied);
-      if (
-        canonicalJson(original.terminal) !== canonicalJson(signedTerminal) ||
-        (original.ack && canonicalJson(original.ack) !== canonicalJson(ack))
-      )
-        throw Error("Original sender durable terminal copy changed");
-    }
-    writeConfigurationSettlementCell(
-      state.installation,
-      projection,
-      descriptors[4]!,
-      configurationSettlementSenderAckCellSchema.parse({
-        version: 2,
-        terminal: signedTerminal,
-        ack,
-      }),
-    );
-    const sharedAck = readConfigurationSettlementCell(
-      state.installation,
-      projection,
-      descriptors[5]!,
-    );
-    if (sharedAck === null)
-      writeConfigurationSettlementCell(state.installation, projection, descriptors[5]!, ack);
-    else if (canonicalJson(sharedAck) !== canonicalJson(ack))
-      throw Error("Original shared settlement ACK changed");
-    if (owner.receipt.dmFence?.state === "settled") {
-      if (canonicalJson(owner.receipt.dmFence) !== canonicalJson(tuple.result))
-        throw Error("Original settled owner receipt changed");
-    } else {
-      if (canonicalJson(owner.receipt.dmFence) !== canonicalJson(guard.preparedReceipt))
-        throw Error("Original prepared owner receipt changed");
-      const sequence = owner.sequence + 1;
-      write(source.authority, {
-        ...owner,
-        sequence,
-        receipt: { ...owner.receipt, sequence, dmFence: tuple.result },
-      });
-    }
-    return tuple.result;
-  });
 }
 
 /** Uses the existing original-root recovery sequence, never a new owner or a
@@ -3342,8 +2440,7 @@ export async function releaseOwnedConfigurationMaintenanceRoot(
     const current = read(authority);
     if (
       canonicalJson(current.final) !== canonicalJson(original.final) ||
-      !current.guardSource ||
-      current.noGuard ||
+      !current.preparedFence ||
       current.receipt.dmFence?.state !== "settled" ||
       !["settling", "settled"].includes(current.receipt.state)
     )
@@ -3355,8 +2452,8 @@ export async function releaseOwnedConfigurationMaintenanceRoot(
   });
 }
 
-/** Fixed NoGuard producer. All late fields come from original retained source;
- * it accepts neither a caller proof tuple nor a requested successful outcome. */
+/** Recovers an expired preparation the data-manager never admitted: the
+ * data-manager signs that observation, then the never-prepared root releases. */
 export async function recoverUnadmittedConfigurationMaintenance(
   runtime: OpsRuntime,
   authority: VerifiedExecutionAuthority,
@@ -3366,7 +2463,7 @@ export async function recoverUnadmittedConfigurationMaintenance(
   if (
     state.kind !== "configurationMaintenance.prepare" ||
     Date.now() <= state.execution.deadlineAt ||
-    owner.guardSource ||
+    owner.preparedFence ||
     owner.receipt.dmFence ||
     owner.receipt.generation !== "not_started" ||
     owner.receipt.followUp !== "not_started" ||
@@ -3392,19 +2489,6 @@ export async function recoverUnadmittedConfigurationMaintenance(
   });
   const lease = restoreArtifactTargetLeaseForSettlement(authority);
   try {
-    if (owner.issuance === "closed_without_guard") {
-      if (
-        (await reconcileArtifactTargetLease({
-          dataRoot: state.installation.dataRoot,
-          leaseId: lease.leaseId,
-          authority: verifyControlRecoveryAuthority(authority),
-        })) !== "released"
-      )
-        throw Error("Original NoGuard recovery remains fenced");
-      assertConfigurationMaintenanceRootClosure(authority);
-      verifyRetainedArtifactTargetRootRelease(authority);
-      return configurationMaintenanceRecoverySource(authority);
-    }
     const reservation = owner.plan.reservations.find(
       (value) => value.phase === "configuration-fence",
     );
@@ -3431,7 +2515,7 @@ export async function recoverUnadmittedConfigurationMaintenance(
     }
     if (canonicalJson(negative.payload.input) !== canonicalJson(owner.plan.dmPrepare))
       throw Error("Original preparation recovery body changed");
-    await closeOwnedConfigurationMaintenanceWithoutGuard(runtime, authority);
+    retainConfigurationFenceNotPrepared(authority);
     if (
       (await reconcileArtifactTargetLease({
         dataRoot: state.installation.dataRoot,
@@ -3448,463 +2532,124 @@ export async function recoverUnadmittedConfigurationMaintenance(
   }
 }
 
-/** Fixed source AFTER full original NoGuard closure and physical release. */
+/** The recovery result after the never-prepared root released: the
+ * data-manager's signed observation that the prepare was never admitted. */
 function configurationMaintenanceRecoverySource(authority: VerifiedExecutionAuthority) {
   assertConfigurationMaintenanceRootClosure(authority);
   const released = verifyRetainedArtifactTargetRootRelease(authority),
     owner = read(authority);
-  if (owner.issuance !== "closed_without_guard" || !owner.noGuard?.bundle)
-    throw Error("Original NoGuard recovery completion required");
   return {
     maintenanceId: owner.plan.operation.maintenanceId,
     candidateId: owner.plan.operation.candidateId,
-    closureDigest: owner.noGuard.bundle.payload.closure.payload.closureDigest,
-    receiverEvidenceDigest: controlDigest(owner.noGuard.noGuardEvidence),
+    receiverEvidenceDigest: controlDigest(readConfigurationPrepareNonAdmission(authority)),
     releasedAt: released.releasedAt,
   };
 }
-
-export async function closeOwnedConfigurationMaintenanceWithoutGuard(
-  runtime: OpsRuntime,
-  authority: VerifiedExecutionAuthority,
-): Promise<void> {
-  const state = executionAuthorityState(authority);
-  if (read(authority).issuance === "closed_without_guard") {
-    try {
-      verifyRetainedArtifactTargetRootRelease(authority);
-      assertConfigurationMaintenanceRootClosure(authority);
-      return;
-    } catch {
-      /* A held/partial release still uses the original fixed repair path. */
-    }
+/** Records that this maintenance never prepared a fence, so its root can
+ * release: the fence child was never issued, or the data-manager settled it
+ * without effect. Anything else stays unknown and keeps the root held. */
+function retainConfigurationFenceNotPrepared(authority: VerifiedExecutionAuthority): void {
+  const owner = read(authority);
+  if (owner.preparedFence || owner.receipt.dmFence) throw Error("A prepared fence is held");
+  retainControlEffectReceipt(authority, {
+    outcome: "failed_without_effect",
+    publication: "not_started",
+    receipt: {
+      kind: "configuration-fence-not-prepared",
+      maintenanceId: owner.plan.operation.maintenanceId,
+    },
+  });
+  if (
+    childSettlementState(
+      verifyControlEffectSettlement(
+        executionAuthorityState(authority).installation.installation,
+        executionAuthorityState(authority).execution,
+      ),
+    ).evidence.outcome !== "failed_without_effect"
+  )
+    throw Error("Never-prepared maintenance remains unknown");
+  const lease = restoreArtifactTargetLeaseForSettlement(authority);
+  try {
+    withConfigurationMaintenanceOwnerObservation(lease, authority, () => {
+      const current = read(authority);
+      if (current.receipt.state === "settled") return;
+      const sequence = current.sequence + 1;
+      write(authority, {
+        ...current,
+        sequence,
+        receipt: { ...current.receipt, sequence, state: "settled" },
+      });
+    });
+  } finally {
+    closeArtifactTargetLeaseHandle(lease);
   }
-  await withUnconsumedMaintenanceCandidate(runtime, authority, (witness) => {
-    const owner = read(authority),
-      observation = unconsumedMaintenanceCandidateState(witness, authority),
-      prepare = owner.plan.reservations.find((value) => value.phase === "configuration-fence");
-    if (
-      !prepare ||
-      owner.guardSource ||
-      owner.receipt.dmFence ||
-      owner.receipt.decision?.decision === "continue" ||
-      owner.receipt.generation !== "not_started" ||
-      observation.ownerPayloadDigest !== controlDigest(owner)
-    )
-      throw Error("Actual original never-applied candidate required");
-    const prepareState = inspectControlChildPublication(authority, prepare),
-      issued = prepareState.publication.state !== "unissued",
-      nonAdmission = issued
-        ? (() => {
-            try {
-              return readConfigurationPrepareNonAdmission(authority);
-            } catch {
-              return null;
-            }
-          })()
-        : null,
-      verifiedRefusal =
-        issued && !nonAdmission ? verifyPublishedDataConfigurationFenceRefusal(authority) : null,
-      verifiedUnused = verifiedRefusal
-        ? verifyPublishedUnusedConfigurationCapacity(authority, verifiedRefusal)
-        : null,
-      refusal = verifiedRefusal && publishedDmNoGuardRefusalState(verifiedRefusal, authority),
-      dmUnused = verifiedUnused && publishedDmUnusedCapacityState(verifiedUnused, authority);
-    if (
-      nonAdmission &&
-      (canonicalJson(nonAdmission.payload.input) !== canonicalJson(owner.plan.dmPrepare) ||
-        nonAdmission.payload.certificateDigest !== owner.rootCertificateDigest ||
-        canonicalJson(nonAdmission.payload.input.ownerPrepare) !== canonicalJson(state.execution))
-    )
-      throw Error("Original unadmitted preparation owner changed");
-    // Reservation/projection is the same pre-effect value even on recovery.
-    const projectionDescriptor = {
-      scope: "shared" as const,
-      namespace: "execution" as const,
-      role: "ops-agent" as const,
-      name: `${state.execution.operationKey}.configuration-settlement-control.json`,
-      cap: 8192,
-    };
-    // Only the family-indexed original cell is read; the provisional identity
-    // carries no authority and is used solely by that index verification.
-    const rawProjection = readConfigurationSettlementCell(
-        state.installation,
-        { origin: state.origin! },
-        projectionDescriptor,
-      ),
-      control = verifyControl(
-        state.installation.installation.publicKey,
-        domains.control,
-        rawProjection,
-        configurationSettlementControlCellSchema.shape.payload,
-      ),
-      projection = verifyControl(
-        state.installation.installation.publicKey,
-        domains.signedProjection,
-        control.projection,
-        configurationSettlementReservationProjectionSchema,
-      ),
-      projectionDigest = settlementRecordDigest(domains.projection, projection),
-      descriptors = configurationSettlementRecordDescriptors(
-        projection,
-        prepare.execution.operationKey,
-      ).sender,
-      identity = configurationSettlementOwnerIdentitySchema.parse({
-        installationId: owner.installationId,
-        origin: owner.origin,
-        ownerPrepare: state.execution,
-        admissionDigest: state.receiptDigest,
-        rootCertificateDigest: owner.rootCertificateDigest,
+}
+/** Repeats one idempotent data-manager call until it answers. Transport
+ * failures and server errors repeat; any other answer is final. */
+async function retryDataManager<T>(signal: AbortSignal, call: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await call();
+    } catch (error) {
+      if (
+        signal.aborted ||
+        (error instanceof DataManagerHttpError && error.status < 500 && error.status !== 429)
+      )
+        throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.min(5000, 250 * 2 ** attempt)));
+  }
+}
+/** Settles the data-manager's fence with this owner's final outcome, using
+ * the original prepare delegation, and records the settled receipt. */
+async function settleOwnedConfigurationFence(
+  authority: VerifiedExecutionAuthority,
+  signal: AbortSignal,
+): Promise<void> {
+  const owner = read(authority);
+  if (owner.receipt.dmFence?.state === "settled") return;
+  const final = ownedMaintenanceFinalState(restoreOwnedMaintenanceFinal(authority), authority),
+    reservation = owner.plan.reservations.find((value) => value.phase === "configuration-fence"),
+    attempt = reservation && lookupControlChildPhaseAttempt(authority, reservation),
+    prepared = owner.preparedFence;
+  if (!attempt || attempt.channel !== "delegation" || !prepared)
+    throw Error("Original fence preparation required");
+  const receipt = await retryDataManager(signal, () =>
+    settleDataConfigurationFence(
+      {
         maintenanceId: owner.plan.operation.maintenanceId,
         candidateId: owner.plan.operation.candidateId,
         planDigest: owner.plan.planDigest,
-        settlementId: owner.plan.dmSettle.settlementId,
-      });
-    if (
-      control.binding ||
-      projection.rootAdmissionDigest !== state.receiptDigest ||
-      projection.rootCertificateDigest !== owner.rootCertificateDigest ||
-      projection.settlementId !== identity.settlementId ||
-      canonicalJson(projection.ownerPrepare) !== canonicalJson(state.execution) ||
-      canonicalJson(projection.reservation) !==
-        canonicalJson(
-          owner.plan.reservations.find((value) => value.phase === "configuration-fence-settle"),
-        ) ||
-      (refusal &&
-        (refusal.projectionDigest !== projectionDigest ||
-          refusal.signedRefusal.payload.maintenanceId !== identity.maintenanceId))
-    )
-      throw Error("Original frozen reservation projection changed");
-    withConfigurationMaintenanceNoGuardPublication(authority, () => {
-      const current = read(authority);
-      if (canonicalJson(current) !== canonicalJson(owner))
-        throw Error("Original issuer changed during candidate observation");
-      const publications = owner.plan.reservations
-        .filter((value) => !issued || value !== prepare)
-        .map((value) => {
-          const source = inspectControlChildPublication(authority, value);
-          if (
-            source.publication.state !== "unissued" ||
-            lookupControlChildPhaseAttempt(authority, value)
-          )
-            throw Error("Issued or ambiguous remaining maintenance phase");
-          return {
-            phase: value.phase,
-            ordinal: value.ordinal,
-            operationKey: value.execution.operationKey,
-            grantState: "unissued" as const,
-            intentState: "not_attempted" as const,
-          };
-        });
-      if (!issued)
-        assertNoUnissuedConfigurationReceiverPublication(
-          state.installation,
-          prepare.execution.operationKey,
-        );
-      if (owner.noGuard) {
-        if (
-          owner.issuance === "open" ||
-          owner.sequence !== owner.noGuard.ownerSequence ||
-          canonicalJson(publications) !==
-            canonicalJson(
-              "remainingPublicationStates" in owner.noGuard.issuerFreezeProof.payload
-                ? owner.noGuard.issuerFreezeProof.payload.remainingPublicationStates
-                : owner.noGuard.issuerFreezeProof.payload.publicationStates,
-            )
-        )
-          throw Error("Original issuance freeze conflict");
-        return;
-      }
-      if (owner.issuance !== "open") throw Error("Original issuer cannot reopen");
-      const ownerSequence = owner.sequence + 1,
-        frozenAt = Date.now(),
-        freezeDomain = issued ? domains.issuedRefused : domains.neverIssued,
-        proof = issued
-          ? configurationIssuedPrepareRefusedProofSchema.parse({
-              version: 2,
-              kind: "issued_preparation_refused",
-              identity,
-              issuerSequence: ownerSequence,
-              frozenAt,
-              prepareGrantDigest:
-                prepareState.publication.state === "grant_prepared"
-                  ? prepareState.publication.grantDigest
-                  : "",
-              prepareExecutionDigest: controlDigest(
-                nonAdmission?.payload.child ?? refusal!.signedRefusal.payload.prepareExecution,
-              ),
-              refusalProjectionDigest: nonAdmission
-                ? controlDigest(nonAdmission.payload)
-                : settlementRecordDigest(domains.refusal, refusal!.signedRefusal.payload),
-              remainingPublicationStates: publications,
-              candidateClaimState: "not_consumed",
-            })
-          : configurationNeverIssuedProofSchema.parse({
-              version: 2,
-              identity,
-              issuerSequence: ownerSequence,
-              frozenAt,
-              prepareReservationDigest: controlDigest(prepare),
-              publicationStates: publications,
-            }),
-        issuerFreezeProof = signControl(state.installation.privateKey, freezeDomain, proof),
-        issuerFreezeProofDigest = settlementRecordDigest(freezeDomain, proof),
-        noGuardEvidence = configurationNoGuardEvidenceSchema.parse(
-          nonAdmission
-            ? {
-                kind: "receiver_not_admitted",
-                issuerFreezeProofDigest,
-                nonAdmission,
-              }
-            : issued
-              ? {
-                  kind: "receiver_refused",
-                  issuerFreezeProofDigest,
-                  prepareExecutionDigest: controlDigest(
-                    refusal!.signedRefusal.payload.prepareExecution,
-                  ),
-                  prepareAdmissionDigest: refusal!.signedRefusal.payload.prepareAdmissionDigest,
-                  refusalProjectionDigest: settlementRecordDigest(
-                    domains.refusal,
-                    refusal!.signedRefusal.payload,
-                  ),
-                  effectSettlementDigest: refusal!.signedRefusal.payload.effectSettlementDigest,
-                  canonicalTerminalDigest: refusal!.signedRefusal.payload.canonicalTerminalDigest,
-                  canonicalTerminalAt: refusal!.signedRefusal.payload.canonicalTerminalAt,
-                  dmUnusedIntentDigest: dmUnused!.intentDigest,
-                  dmUnusedConfirmationDigest: dmUnused!.confirmationDigest,
-                  capacityReceiptDigest: refusal!.signedRefusal.payload.capacityReceiptDigest,
-                }
-              : {
-                  kind: "never_issued",
-                  issuerFreezeProofDigest,
-                  prepareReservationDigest: controlDigest(prepare),
-                  publicationStatesDigest: settlementRecordDigest(domains.neverIssued, proof),
-                  issuerSequence: ownerSequence,
-                  frozenAt,
-                },
-        ),
-        slot = readConfigurationSettlementFamilySlot(state.installation, projection),
-        intent = configurationUnusedCapacityIntentSchema.parse({
-          version: 2,
-          installationId: owner.installationId,
-          origin: owner.origin,
-          role: "ops-agent",
-          ownerPrepareDigest: controlDigest(state.execution),
-          prepareExecutionDigest: issued
-            ? noGuardEvidence.kind === "receiver_refused"
-              ? noGuardEvidence.prepareExecutionDigest
-              : null
-            : null,
-          settlementId: identity.settlementId,
-          projectionDigest,
-          capacityReceiptDigest:
-            issued && !nonAdmission ? refusal!.signedRefusal.payload.capacityReceiptDigest : null,
-          sourceProofDigest: configurationIssuerUnusedSourceDigest(noGuardEvidence),
-          executionOrdinal: slot.executionOrdinal,
-          intentOrdinal: slot.intentOrdinal,
-          recordDescriptorsDigest: slot.recordDescriptorsDigest,
-          allocatedDescriptorDigests: slot.allocatedDescriptorDigests,
-          createdAt: frozenAt,
-        });
-      if (Buffer.byteLength(canonicalJson(issuerFreezeProof)) > 4096)
-        throw Error("Original issuer freeze exceeds preallocated proof budget");
-      write(authority, {
-        ...owner,
-        sequence: ownerSequence,
-        issuance: "closing_without_guard",
-        receipt: { ...owner.receipt, sequence: ownerSequence, state: "recovery_required" },
-        noGuard: configurationNoGuardIntentSchema.parse({
-          ownerSequence,
-          closedAt: frozenAt,
-          noGuardEvidence,
-          issuerFreezeProof,
-          issuerUnused: {
-            intent: signControl(state.installation.privateKey, domains.unusedIntent, intent),
-            confirmation: null,
-          },
-          bundle: null,
-        }),
-      });
-    });
-    const slot = commitFrozenConfigurationSettlementSlotUnused(state.installation, projection);
-    withConfigurationMaintenanceNoGuardPublication(authority, () => {
-      const current = read(authority),
-        intent = current.noGuard;
-      if (
-        !intent ||
-        current.issuance === "open" ||
-        slot.unusedIntentDigest !==
-          settlementRecordDigest(domains.unusedIntent, intent.issuerUnused.intent.payload)
-      )
-        throw Error("Original frozen issuer CAS required");
-      if (!intent.issuerUnused.confirmation) {
-        const confirmation = configurationUnusedCapacityConfirmationSchema.parse({
-          version: 2,
-          installationId: current.installationId,
-          origin: current.origin,
-          role: "ops-agent",
-          ownerPrepareDigest: controlDigest(state.execution),
-          settlementId: identity.settlementId,
-          projectionDigest,
-          intentDigest: slot.unusedIntentDigest,
-          slotStateDigest: controlDigest({
-            executionOrdinal: slot.executionOrdinal,
-            intentOrdinal: slot.intentOrdinal,
-            recordDescriptorsDigest: slot.recordDescriptorsDigest,
-            allocatedDescriptorDigests: slot.allocatedDescriptorDigests,
-            state: "UNUSED",
-            intentDigest: slot.unusedIntentDigest,
-          }),
-          confirmedAt: slot.unusedConfirmedAt,
-        });
-        write(authority, {
-          ...current,
-          noGuard: {
-            ...intent,
-            issuerUnused: {
-              ...intent.issuerUnused,
-              confirmation: signControl(
-                state.installation.privateKey,
-                domains.unusedConfirmation,
-                confirmation,
-              ),
-            },
-          },
-        });
-      }
-    });
-    const frozen = read(authority).noGuard!;
-    retainControlEffectReceipt(authority, {
-      outcome: "failed_without_effect",
-      publication: "not_started",
-      receipt: {
-        kind: "configuration-no-guard",
-        issuerFreezeProofDigest: frozen.noGuardEvidence.issuerFreezeProofDigest,
-        issuerUnusedConfirmationDigest: settlementRecordDigest(
-          domains.unusedConfirmation,
-          frozen.issuerUnused.confirmation!.payload,
-        ),
+        outcome: final.record.ownerFinal.payload.outcome,
       },
-    });
-    verifyControlEffectSettlement(state.installation.installation, state.execution);
-    const effect = readPrivateRecord(
-      state.installation,
-      "effects",
-      `${state.execution.operationKey}.json`,
-    ) as { payload: unknown };
-    withConfigurationMaintenanceNoGuardPublication(authority, () => {
-      const current = read(authority),
-        intent = current.noGuard!;
-      if (!intent.issuerUnused.confirmation) throw Error("Original issuer confirmation required");
-      const { issuerUnused } = intent,
-        confirmation = intent.issuerUnused.confirmation!,
-        ownIntentDigest = settlementRecordDigest(domains.unusedIntent, issuerUnused.intent.payload),
-        ownConfirmationDigest = settlementRecordDigest(
-          domains.unusedConfirmation,
-          confirmation.payload,
-        ),
-        containment = [
-          controlDigest(effect.payload),
-          ...(nonAdmission
-            ? [controlDigest(nonAdmission.payload)]
-            : refusal
-              ? [refusal.signedRefusal.payload.effectSettlementDigest]
-              : []),
-        ].sort(),
-        closureSource = {
-          version: 2 as const,
-          identity,
-          ownerSequence: intent.ownerSequence,
-          closedAt: intent.closedAt,
-          noGuardEvidence: intent.noGuardEvidence,
-          originalContainmentDigests: containment,
-          unusedSlotDigests: [
-            ...(dmUnused
-              ? [
-                  {
-                    role: "data-manager" as const,
-                    intentDigest: dmUnused.intentDigest,
-                    confirmationDigest: dmUnused.confirmationDigest,
-                  },
-                ]
-              : []),
-            {
-              role: "ops-agent" as const,
-              intentDigest: ownIntentDigest,
-              confirmationDigest: ownConfirmationDigest,
-            },
-          ],
-        },
-        closure = configurationNoGuardClosureSchema.parse({
-          ...closureSource,
-          closureDigest: settlementRecordDigest(domains.closure, closureSource),
-        }),
-        bundle = configurationNoGuardBundleSchema.parse({
-          version: 2,
-          phase: "unused",
-          settlementId: identity.settlementId,
-          projectionDigest,
-          closure: signControl(state.installation.privateKey, domains.closure, closure),
-          issuerFreezeProof: intent.issuerFreezeProof,
-          issuerUnused: { intent: issuerUnused.intent, confirmation },
-        }),
-        signedBundle =
-          intent.bundle ?? signControl(state.installation.privateKey, domains.reference, bundle);
-      if (canonicalJson(signedBundle.payload) !== canonicalJson(bundle))
-        throw Error("Original immutable NoGuard bundle conflict");
-      const prior = verifyControl(
-        state.installation.installation.publicKey,
-        domains.reference,
-        readConfigurationSettlementCell(state.installation, projection, descriptors[0]!),
-        configurationSettlementCommitmentCellSchema.shape.payload,
-      );
-      if (prior.phase !== "uncommitted" && canonicalJson(prior) !== canonicalJson(bundle))
-        throw Error("Committed settlement cannot become UNUSED");
-      const linked = signControl(state.installation.privateKey, domains.control, {
-        version: 2 as const,
-        projection: control.projection,
-        binding: null,
-        unused: {
-          bundleDigest: settlementRecordDigest(domains.bundle, bundle),
-          closureDigest: closure.closureDigest,
-          issuerFreezeProofDigest: intent.noGuardEvidence.issuerFreezeProofDigest,
-          issuerUnusedIntentDigest: ownIntentDigest,
-          issuerUnusedConfirmationDigest: ownConfirmationDigest,
-        },
+      {
+        transport: configurationDataManagerTransport(),
+        controlAssertion: attempt.assertion,
+        signal,
+      },
+    ),
+  );
+  if (
+    canonicalJson({ ...receipt, sequence: prepared.sequence, state: prepared.state }) !==
+      canonicalJson(prepared) ||
+    receipt.state !== "settled"
+  )
+    throw Error("Original fence settlement changed");
+  const lease = restoreArtifactTargetLeaseForSettlement(authority);
+  try {
+    withConfigurationMaintenanceOwnerObservation(lease, authority, () => {
+      const current = read(authority);
+      if (current.receipt.dmFence?.state === "settled") return;
+      const sequence = current.sequence + 1;
+      write(authority, {
+        ...current,
+        sequence,
+        receipt: { ...current.receipt, sequence, dmFence: receipt },
       });
-      if (
-        Buffer.byteLength(canonicalJson(signedBundle)) > descriptors[0]!.cap ||
-        Buffer.byteLength(canonicalJson(linked)) > descriptors[2]!.cap
-      )
-        throw Error("Complete signed NoGuard packet exceeds original cells");
-      if (!intent.bundle)
-        write(authority, { ...current, noGuard: { ...intent, bundle: signedBundle } });
-      if (prior.phase === "uncommitted")
-        writeConfigurationSettlementCell(
-          state.installation,
-          projection,
-          descriptors[0]!,
-          signedBundle,
-        );
-      const currentControl = readConfigurationSettlementCell(
-        state.installation,
-        projection,
-        descriptors[2]!,
-      );
-      if (canonicalJson(currentControl) !== canonicalJson(linked)) {
-        if (canonicalJson(currentControl) !== canonicalJson(rawProjection))
-          throw Error("Original NoGuard link conflict");
-        writeConfigurationSettlementCell(state.installation, projection, descriptors[2]!, linked);
-      }
-      const complete = read(authority);
-      if (complete.issuance !== "closed_without_guard")
-        write(authority, {
-          ...complete,
-          issuance: "closed_without_guard",
-          receipt: { ...complete.receipt, state: "settled" },
-        });
     });
-  });
+  } finally {
+    closeArtifactTargetLeaseHandle(lease);
+  }
 }
 
 // The actual admission/inspection producer and its private consumer share ONE nominal owner.
@@ -3916,55 +2661,6 @@ interface Source {
   execFile: NonNullable<DockerRuntimeOptions["execFile"]>;
   loadAuthority(): Promise<TrustedConfigurationAuthoritySnapshot>;
   ownedServices: OwnedServiceResolver;
-}
-/** Repair only the already attempted original immutable SQL/proof/ACK chain.
- * This path has no dispatch ticket and never inspects runtime or POSTs again. */
-async function observeCommittedMaintenanceSettlement(
-  authority: VerifiedExecutionAuthority,
-  signal: AbortSignal,
-) {
-  // A physical release already proves the full terminal/copy/ACK chain. Do not
-  // re-enter its now-closed settlement publication scope after a lost owner
-  // metadata write; complete only that original retained release.
-  let released = false;
-  try {
-    verifyRetainedArtifactTargetRootRelease(authority);
-    released = true;
-  } catch {
-    /* Held/partial roots still need the original observation chain. */
-  }
-  if (released) {
-    await releaseOwnedConfigurationMaintenanceRoot(authority);
-    return;
-  }
-  const owner = readOwnedConfigurationMaintenance(authority),
-    state = executionAuthorityState(authority),
-    settlement = restoreAttemptedConfigurationFenceSettlementControl(
-      authority,
-      owner.plan.operation.maintenanceId,
-    ),
-    issuedAt = Date.now(),
-    witness = signControl(
-      state.installation.privateKey,
-      "openmapx-configuration-fence-inspect-v1",
-      {
-        installationId: owner.installationId,
-        maintenanceId: owner.plan.operation.maintenanceId,
-        candidateId: owner.plan.operation.candidateId,
-        ownerCertificateDigest: owner.rootCertificateDigest,
-        issuedAt,
-        expiresAt: issuedAt + 15000,
-      },
-    ),
-    options = {
-      transport: configurationDataManagerTransport(),
-      witness: Buffer.from(canonicalJson(witness)).toString("base64url"),
-      signal,
-    };
-  await inspectDataConfigurationFence(owner.plan.operation.maintenanceId, options);
-  observeConfigurationFenceSettlementControl(settlement);
-  await inspectDataConfigurationFence(owner.plan.operation.maintenanceId, options);
-  await releaseOwnedConfigurationMaintenanceRoot(authority);
 }
 const sources = new WeakMap<OpsRuntime, Source>();
 /** The normal root remains held while this writer-side preflight runs. Release
@@ -4152,9 +2848,7 @@ export async function prepareMaintenanceContinueObservation(
     !source?.candidateSource ||
     owner.receipt.state !== "prepared" ||
     owner.receipt.decision ||
-    owner.noGuard ||
-    !owner.guardSource ||
-    owner.issuance !== "open"
+    !owner.preparedFence
   )
     throw Error("Original prepared maintenance continue source required");
   const fresh = configurationMaintenanceAdmissionState(
@@ -4195,7 +2889,7 @@ export async function prepareMaintenanceContinueObservation(
       signal,
     });
   if (
-    canonicalJson(actual) !== canonicalJson(owner.guardSource.preparedReceipt) ||
+    canonicalJson(actual) !== canonicalJson(owner.preparedFence) ||
     controlDigest(candidate.record) !== owner.plan.candidateRecordDigest ||
     canonicalJson(readOwnedConfigurationMaintenance(authority)) !== canonicalJson(owner)
   )
@@ -4243,9 +2937,7 @@ export async function verifyFrozenMaintenanceGenerationSource(
     owner.receipt.state !== "authorized" ||
     owner.receipt.decision?.decision !== "continue" ||
     !owner.apiControls.decide?.receiptDelivery ||
-    !owner.guardSource ||
-    owner.noGuard ||
-    owner.issuance !== "open" ||
+    !owner.preparedFence ||
     owner.receipt.generation !== "not_started"
   )
     throw Error("Original frozen maintenance generation source required");
@@ -4283,7 +2975,7 @@ export async function verifyFrozenMaintenanceGenerationSource(
       signal,
     });
   if (
-    canonicalJson(actual) !== canonicalJson(owner.guardSource.preparedReceipt) ||
+    canonicalJson(actual) !== canonicalJson(owner.preparedFence) ||
     canonicalJson(readOwnedConfigurationMaintenance(authority)) !== canonicalJson(owner)
   )
     throw Error("Frozen maintenance generation guard/source changed");
@@ -4304,13 +2996,11 @@ export async function verifyFrozenMaintenanceHardlinksSource(
     !source ||
     owner.receipt.state !== "applying" ||
     owner.receipt.decision?.decision !== "continue" ||
-    owner.noGuard ||
-    owner.issuance !== "open" ||
     owner.receipt.generation !== "committed" ||
     owner.receipt.appliedRevisionId !== owner.plan.operation.revisionId ||
     !generation?.canonical ||
     !generation.receiptDelivery ||
-    !owner.guardSource ||
+    !owner.preparedFence ||
     !owner.plan.nestedHardlinks
   )
     throw Error("Original committed maintenance generation prerequisite required");
@@ -4359,7 +3049,7 @@ export async function verifyFrozenMaintenanceHardlinksSource(
       signal,
     });
   if (
-    canonicalJson(actual) !== canonicalJson(owner.guardSource.preparedReceipt) ||
+    canonicalJson(actual) !== canonicalJson(owner.preparedFence) ||
     canonicalJson(readOwnedConfigurationMaintenance(authority)) !== canonicalJson(owner) ||
     services.currentConfigurationGeneration(source.infraDir) !== owner.plan.operation.revisionId
   )
@@ -4406,9 +3096,7 @@ async function verifyFrozenMaintenanceFollowUpSource(
     owner.receipt.state !== "applying" ||
     owner.receipt.decision?.decision !== "continue" ||
     !owner.apiControls.decide?.receiptDelivery ||
-    owner.noGuard ||
-    owner.issuance !== "open" ||
-    !owner.guardSource ||
+    !owner.preparedFence ||
     owner.receipt.generation !== "committed" ||
     owner.receipt.appliedRevisionId !== owner.plan.operation.revisionId ||
     services.currentConfigurationGeneration(source.infraDir) !== owner.plan.operation.revisionId
@@ -4464,7 +3152,7 @@ async function verifyFrozenMaintenanceFollowUpSource(
       signal,
     });
   if (
-    canonicalJson(actual) !== canonicalJson(owner.guardSource.preparedReceipt) ||
+    canonicalJson(actual) !== canonicalJson(owner.preparedFence) ||
     canonicalJson(readOwnedConfigurationMaintenance(authority)) !== canonicalJson(owner) ||
     services.currentConfigurationGeneration(source.infraDir) !== owner.plan.operation.revisionId
   )
@@ -4513,9 +3201,7 @@ export async function inspectFrozenMaintenanceRuntime(
       !source?.candidateSource ||
       owner.final ||
       owner.inspection ||
-      owner.noGuard ||
-      owner.issuance !== "open" ||
-      !owner.guardSource ||
+      !owner.preparedFence ||
       owner.receipt.state !== "applying" ||
       !owner.apiControls.decide?.receiptDelivery ||
       (!contained &&
@@ -4635,7 +3321,7 @@ export async function inspectFrozenMaintenanceRuntime(
         signal,
       });
     if (
-      canonicalJson(guard) !== canonicalJson(owner.guardSource.preparedReceipt) ||
+      canonicalJson(guard) !== canonicalJson(owner.preparedFence) ||
       canonicalJson(containers) !== canonicalJson(await inspectContainers()) ||
       canonicalJson(children) !==
         canonicalJson(
@@ -4648,7 +3334,7 @@ export async function inspectFrozenMaintenanceRuntime(
     )
       throw Error("Original applied runtime source changed");
     signal.throwIfAborted();
-    const identity = configurationSettlementOwnerIdentitySchema.parse({
+    const identity = configurationOwnerIdentitySchema.parse({
         installationId: owner.installationId,
         origin: owner.origin,
         ownerPrepare: owner.plan.prepare,
@@ -4657,7 +3343,6 @@ export async function inspectFrozenMaintenanceRuntime(
         maintenanceId: owner.plan.operation.maintenanceId,
         candidateId: owner.plan.operation.candidateId,
         planDigest: owner.plan.planDigest,
-        settlementId: owner.plan.dmSettle.settlementId,
       }),
       requiredChecks = configurationMaintenanceRequiredChecksSchema.parse([
         ...["generation", "owner-containers", "dm-guard"].map((check) => ({
@@ -4693,7 +3378,7 @@ export async function inspectFrozenMaintenanceRuntime(
       inspectionId = randomUUID(),
       signed = signControl(
         state.installation.privateKey,
-        configurationSettlementDomains.inspection,
+        domains.inspection,
         configurationMaintenanceRuntimeInspectionSchema.parse({
           version: 2,
           identity,
@@ -4709,10 +3394,7 @@ export async function inspectFrozenMaintenanceRuntime(
           runtime: {
             verificationId: inspectionId,
             mode: contained ? "contained" : "applied",
-            requiredCheckSetDigest: settlementRecordDigest(
-              configurationSettlementDomains.inspection,
-              requiredChecks,
-            ),
+            requiredCheckSetDigest: finalRecordDigest(domains.inspection, requiredChecks),
             checkedAt: Date.now(),
           },
         }),
@@ -4734,9 +3416,7 @@ export async function inspectFrozenMaintenanceRuntime(
     !source?.candidateSource ||
     owner.final ||
     owner.inspection ||
-    owner.noGuard ||
-    owner.issuance !== "open" ||
-    !owner.guardSource ||
+    !owner.preparedFence ||
     owner.receipt.state !== "authorized" ||
     owner.receipt.decision?.decision !== "abandon" ||
     !owner.apiControls.decide?.receiptDelivery ||
@@ -4745,7 +3425,7 @@ export async function inspectFrozenMaintenanceRuntime(
     owner.apiControls.steps.length
   )
     throw Error("Conclusive unused maintenance runtime source required");
-  const identity = configurationSettlementOwnerIdentitySchema.parse({
+  const identity = configurationOwnerIdentitySchema.parse({
       installationId: owner.installationId,
       origin: owner.origin,
       ownerPrepare: owner.plan.prepare,
@@ -4754,7 +3434,6 @@ export async function inspectFrozenMaintenanceRuntime(
       maintenanceId: owner.plan.operation.maintenanceId,
       candidateId: owner.plan.operation.candidateId,
       planDigest: owner.plan.planDigest,
-      settlementId: owner.plan.dmSettle.settlementId,
     }),
     queue = source.candidateSource;
   let lease: ReturnType<typeof restoreArtifactTargetLeaseForSettlement> | undefined,
@@ -4779,15 +3458,17 @@ export async function inspectFrozenMaintenanceRuntime(
         publication: publication.publication.state,
       });
     }
-    const prepared = verifyPublishedDataConfigurationFencePrepared(
-        lease,
-        owner.guardSource.prepareExecution,
-      ),
-      physical = inspectArtifactTargetLeaseChildSettlement(
-        lease,
-        owner.guardSource.prepareExecution,
-      );
-    if (!prepared || physical?.outcome !== "committed" || physical.publication !== "committed")
+    const fence = owner.plan.reservations.find((value) => value.phase === "configuration-fence"),
+      fenceBinding = fence && lookupControlChildPhaseBinding(authority, fence),
+      physical =
+        fenceBinding &&
+        inspectArtifactTargetLeaseChildSettlement(lease, fenceBinding.child.execution);
+    if (
+      physical?.outcome !== "committed" ||
+      physical.publication !== "committed" ||
+      physical.terminalReceiptDigest !==
+        controlDigest({ kind: "data-configuration-fence", receipt: owner.preparedFence })
+    )
       throw Error("Original prepared guard settlement unavailable");
     const candidate = await readRetainedConfigurationCandidate(
       queue,
@@ -4866,7 +3547,7 @@ export async function inspectFrozenMaintenanceRuntime(
         signal,
       });
     if (
-      canonicalJson(guard) !== canonicalJson(owner.guardSource.preparedReceipt) ||
+      canonicalJson(guard) !== canonicalJson(owner.preparedFence) ||
       canonicalJson(readOwnedConfigurationMaintenance(authority)) !== canonicalJson(owner)
     )
       throw Error("Original unused guard/owner changed");
@@ -4919,18 +3600,11 @@ export async function inspectFrozenMaintenanceRuntime(
         runtime: {
           verificationId: inspectionId,
           mode: "unused",
-          requiredCheckSetDigest: settlementRecordDigest(
-            configurationSettlementDomains.inspection,
-            requiredChecks,
-          ),
+          requiredCheckSetDigest: finalRecordDigest(domains.inspection, requiredChecks),
           checkedAt,
         },
       }),
-      signed = signControl(
-        state.installation.privateKey,
-        configurationSettlementDomains.inspection,
-        payload,
-      );
+      signed = signControl(state.installation.privateKey, domains.inspection, payload);
     if (Buffer.byteLength(canonicalJson(signed)) > 65536)
       throw Error("Private maintenance inspection capacity");
     const value = Object.freeze({}) as MaintenanceRuntimeInspection;
@@ -4984,7 +3658,7 @@ export async function withUnconsumedMaintenanceCandidate(
   if (
     !source?.candidateSource ||
     state.kind !== "configurationMaintenance.prepare" ||
-    owner.guardSource ||
+    owner.preparedFence ||
     owner.receipt.dmFence ||
     owner.receipt.decision?.decision === "continue" ||
     owner.receipt.generation !== "not_started"
@@ -5096,23 +3770,8 @@ export function registerConfigurationMaintenanceSource(runtime: OpsRuntime, sour
       const inspection = await inspectFrozenMaintenanceRuntime(runtime, authority, context.signal);
       finalizeOwnedMaintenanceState(authority, inspection);
     } else restoreOwnedMaintenanceFinal(authority);
-    publishOwnedConfigurationFenceSettlement(authority, operation.maintenanceId);
-    const settlement = prepareConfigurationFenceSettlementControl(
-        authority,
-        operation.maintenanceId,
-      ),
-      delegated = delegateConfigurationFenceSettlementControl(settlement);
-    if (delegated.dispatch === "fresh") {
-      try {
-        await dispatchConfigurationFenceSettlementControl(
-          delegated.ticket,
-          configurationDataManagerTransport(),
-        );
-      } catch {
-        /* Lookup of that original immutable tuple only; never retry POST. */
-      }
-    }
-    await observeCommittedMaintenanceSettlement(authority, context.signal);
+    await settleOwnedConfigurationFence(authority, context.signal);
+    await releaseOwnedConfigurationMaintenanceRoot(authority);
     return completeConfigurationMaintenanceSettleControl(
       context.configurationMaintenanceControl!,
       operation,
@@ -5139,19 +3798,19 @@ export function registerConfigurationMaintenanceSource(runtime: OpsRuntime, sour
     }
     if (owner.final && owner.apiControls.settle?.result === null) {
       try {
-        if (owner.receipt.state !== "settled")
-          await observeCommittedMaintenanceSettlement(authority, context.signal);
+        await settleOwnedConfigurationFence(authority, context.signal);
+        await releaseOwnedConfigurationMaintenanceRoot(authority);
         completeObservedConfigurationMaintenanceSettlement(authority);
       } catch {
-        /* Missing/unknown source remains fenced; no first-use ticket or retry. */
+        /* An unanswered settle keeps the root held. */
       }
       owner = readOwnedConfigurationMaintenance(authority);
     }
-    if (owner.issuance === "closed_without_guard") {
+    if (owner.receipt.state === "settled" && !owner.preparedFence) {
       assertConfigurationMaintenanceRootClosure(authority);
       verifyRetainedArtifactTargetRootRelease(authority);
     }
-    if (owner.receipt.state === "settled" && owner.guardSource) {
+    if (owner.receipt.state === "settled" && owner.preparedFence) {
       restoreOwnedMaintenanceFinal(authority);
       assertConfigurationMaintenanceRootClosure(authority);
       verifyRetainedArtifactTargetRootRelease(authority);
@@ -5176,7 +3835,7 @@ export function registerConfigurationMaintenanceSource(runtime: OpsRuntime, sour
           ? "current"
           : "drifted";
       if (owner.receipt.dmFence) {
-        if (!owner.guardSource) throw Error("Original prepared guard source unavailable");
+        if (!owner.preparedFence) throw Error("Original prepared guard source unavailable");
         const issuedAt = Date.now(),
           witness = signControl(
             state.installation.privateKey,
@@ -5241,6 +3900,7 @@ export function registerConfigurationMaintenanceSource(runtime: OpsRuntime, sour
       if (!reserved) throw Error("Original DM preparation reservation required");
       const previous = lookupControlChildPhaseBinding(authority, reserved),
         child = await bindControlChildPhase(authority, reserved);
+      let assertion: string | undefined;
       if (!previous) {
         const issued = await issueControlChildPhase(authority, {
           phase: reserved.phase,
@@ -5249,28 +3909,24 @@ export function registerConfigurationMaintenanceSource(runtime: OpsRuntime, sour
           childPublicKey: controlRolePublicKey(state.installation.installation, "data-manager"),
         });
         consumeControlChildDispatch(issued.dispatchTicket);
-        try {
-          await prepareDataConfigurationFence(plan.dmPrepare, {
-            transport: configurationDataManagerTransport(),
-            controlAssertion: issued.assertion,
-            signal: context.signal,
-          });
-        } catch {
-          /* Attempt already retained. Only exact original source observation follows. */
-        }
-      }
+        assertion = issued.assertion;
+      } else assertion = lookupControlChildPhaseAttempt(authority, reserved)?.assertion;
+      if (!assertion) throw new OpsExecutionFailure("recovery_required", {});
       try {
-        const prepared = verifyPublishedDataConfigurationFencePrepared(lease, child.execution),
-          capacity = verifyPublishedConfigurationSettlementCapacity(
-            authority,
-            operation.maintenanceId,
-          );
+        // The data-manager prepares idempotently: a lost reply repeats the same body.
+        const receipt = await retryDataManager(context.signal, () =>
+          prepareDataConfigurationFence(plan.dmPrepare, {
+            transport: configurationDataManagerTransport(),
+            controlAssertion: assertion,
+            signal: context.signal,
+          }),
+        );
         recordOwnedConfigurationMaintenancePrepared(
           authority,
           lease,
           owner.sequence,
-          prepared,
-          capacity,
+          child.execution,
+          receipt,
         );
       } catch {
         throw new OpsExecutionFailure("recovery_required", {});
@@ -5278,9 +3934,9 @@ export function registerConfigurationMaintenanceSource(runtime: OpsRuntime, sour
       return readOwnedConfigurationMaintenance(authority).receipt;
     } catch (error) {
       try {
-        await closeOwnedConfigurationMaintenanceWithoutGuard(runtime, authority);
+        retainConfigurationFenceNotPrepared(authority);
       } catch {
-        /* Ambiguous source/guard/session/publication retains this root. */
+        /* A prepared or unknown fence keeps this root held. */
       }
       throw error;
     }
@@ -5688,7 +4344,6 @@ export async function prepareConfigurationMaintenanceAdmission(
     originalContainers: structuredClone(originalContainers),
     rendered,
   });
-  assertProspectiveConfigurationSettlementPacketBudget(frozen, input.installation.installationId);
   if (
     (await source.loadAuthority()).revisionId !== authority.revisionId ||
     services.currentConfigurationGeneration(source.infraDir) !==

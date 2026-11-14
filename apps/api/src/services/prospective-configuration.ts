@@ -681,7 +681,7 @@ async function completeUnissuedConfigurationCancellation(
   return { configuration: committed.configuration };
 }
 /** Discard only this original inert candidate after the fixed host proves its
- * NoGuard closure and delivers the original canonical failure. Inspection is
+ * never-prepared closure and delivers the original canonical failure. Inspection is
  * performed here; a portable receipt/boolean supplied by a caller is useless. */
 export async function discardNeverPreparedProspectiveConfiguration(
   candidate: ValidatedConfigurationCandidate,
@@ -708,7 +708,7 @@ export async function discardNeverPreparedProspectiveConfiguration(
     closed.appliedRevisionId !== null ||
     closed.followUp !== "not_started"
   )
-    throw Error("Conclusive original NoGuard closure required");
+    throw Error("Conclusive never-prepared maintenance closure required");
   let checkpoint: Record<string, unknown> | undefined;
   try {
     await withConfigurationWriteTransaction(state.writer, async (tx) => {
@@ -751,7 +751,12 @@ export async function discardNeverPreparedProspectiveConfiguration(
           ...retained,
           phase: "discarding_without_guard",
           ...((await hasRecoveredMaintenanceCandidate(result, owner.job.jobId))
-            ? { noGuardCleanup: { version: 1, integrationIds: [...state.writer.integrationIds] } }
+            ? {
+                neverPreparedCleanup: {
+                  version: 1,
+                  integrationIds: [...state.writer.integrationIds],
+                },
+              }
             : {}),
         },
       };
@@ -782,7 +787,7 @@ export async function discardNeverPreparedProspectiveConfiguration(
   });
   candidateStages.set(candidate, "discarded");
 }
-/** A failed prepare is not itself NoGuard evidence. Only the actual fixed
+/** A failed prepare is not itself never-prepared evidence. Only the actual fixed
  * inspector/disjoint closure and original canonical failure above permit this
  * inert cleanup and truthful failed configuration result. */
 async function completeNeverPreparedConfiguration(
@@ -1370,10 +1375,10 @@ const retirementSchema = z.strictObject({
   integrationIds: z.array(id).max(256),
 });
 
-/** Only original negative recovery and a fresh authenticated NoGuard inspection
+/** Only original negative recovery and a fresh authenticated never-prepared inspection
  * authorize finishing an interrupted inert unlink. The marker selects this
  * verifier; it neither proves absence nor grants a new configuration effect. */
-async function resumeRecoveredNoGuardCleanup(): Promise<Record<string, unknown>> {
+async function resumeNeverPreparedCleanup(): Promise<Record<string, unknown>> {
   const writer = currentAdministrativeConfigurationWriter(),
     { job } = administrativeConfigurationState(writer);
   let original: Record<string, unknown> | undefined;
@@ -1385,7 +1390,7 @@ async function resumeRecoveredNoGuardCleanup(): Promise<Record<string, unknown>>
       .for("update");
     original = row?.result as Record<string, unknown> | undefined;
     const retained = original?._configurationCandidate as Record<string, unknown> | undefined,
-      cleanup = retirementSchema.parse(retained?.noGuardCleanup),
+      cleanup = retirementSchema.parse(retained?.neverPreparedCleanup),
       immediate =
         original?._immediateJobId === job.jobId &&
         original?._immediateActorId === writer.actorId &&
@@ -1846,8 +1851,8 @@ export async function retainedConfigurationIntegrationIds(
       return retirementSchema.parse(retained.unissuedCleanup).integrationIds;
     if (retained?.retirement !== undefined)
       return retirementSchema.parse(retained.retirement).integrationIds;
-    if (retained?.noGuardCleanup !== undefined)
-      return retirementSchema.parse(retained.noGuardCleanup).integrationIds;
+    if (retained?.neverPreparedCleanup !== undefined)
+      return retirementSchema.parse(retained.neverPreparedCleanup).integrationIds;
     if (typeof retained?.sealedOperationKey !== "string") throw Error();
     const token = await readOpsTokenFile(envString("OPS_AGENT_TOKEN_FILE", "")),
       { record } = await readPreparedTrustedConfigurationCandidate(
@@ -3049,7 +3054,7 @@ export async function resumeRetainedConfigurationCandidate(): Promise<Record<str
   )
     return discardRetainedUnissuedOrdinaryCandidate();
   if (current?.retirement !== undefined) return resumeCompletedConfigurationRetirement();
-  if (current?.noGuardCleanup !== undefined) return resumeRecoveredNoGuardCleanup();
+  if (current?.neverPreparedCleanup !== undefined) return resumeNeverPreparedCleanup();
   let candidate: ValidatedConfigurationCandidate;
   try {
     const { job } = administrativeConfigurationState(currentAdministrativeConfigurationWriter()),
@@ -6253,7 +6258,7 @@ export async function inspectConfigurationMaintenance(
     { attempt, state: "complete", receipt },
     transaction,
   );
-  // Only the fixed host inspector's full, released NoGuard proof can resolve a
+  // Only the fixed host inspector's full, released never-prepared closure can resolve a
   // historical unknown preparation. Deliver its ORIGINAL canonical failure;
   // neither that failure's classification nor its immutable bytes are changed.
   if (

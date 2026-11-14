@@ -4744,8 +4744,7 @@
                       "type": "string",
                       "enum": [
                         "prepared",
-                        "settled",
-                        "recovery_required"
+                        "settled"
                       ]
                     }
                   },
@@ -6426,8 +6425,7 @@
                       "type": "string",
                       "enum": [
                         "prepared",
-                        "settled",
-                        "recovery_required"
+                        "settled"
                       ]
                     }
                   },
@@ -7012,12 +7010,6 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "version": {
-                    "type": "number",
-                    "enum": [
-                      2
-                    ]
-                  },
                   "maintenanceId": {
                     "type": "string",
                     "format": "uuid",
@@ -7032,17 +7024,20 @@
                     "type": "string",
                     "pattern": "^[a-f0-9]{64}$"
                   },
-                  "settlementId": {
+                  "outcome": {
                     "type": "string",
-                    "pattern": "^[a-f0-9]{64}$"
+                    "enum": [
+                      "applied",
+                      "unused",
+                      "contained"
+                    ]
                   }
                 },
                 "required": [
-                  "version",
                   "maintenanceId",
                   "candidateId",
                   "planDigest",
-                  "settlementId"
+                  "outcome"
                 ],
                 "additionalProperties": false
               }
@@ -7174,8 +7169,7 @@
                       "type": "string",
                       "enum": [
                         "prepared",
-                        "settled",
-                        "recovery_required"
+                        "settled"
                       ]
                     }
                   },

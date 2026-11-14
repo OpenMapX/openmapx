@@ -855,7 +855,7 @@ async function verifiedOriginalMaintenanceRecovery(
 
 /** Routing only: a completed negative recovery does not itself discard the
  * API's sealed candidate. Only the fixed original producer may authenticate
- * that packet and finish its NoGuard cleanup under a replacement owner. */
+ * that packet and finish its never-prepared cleanup under a replacement owner. */
 export async function hasRecoveredMaintenanceCandidate(
   result: unknown,
   jobId: string,

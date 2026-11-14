@@ -83,7 +83,6 @@ const maintenanceRecoveryProofSchema = z.strictObject({
   terminalDigest: apiRetentionProofSchema.shape.terminalDigest,
   maintenanceId: z.uuid(),
   candidateId: z.uuid(),
-  closureDigest: apiRetentionProofSchema.shape.terminalDigest,
   receiverEvidenceDigest: apiRetentionProofSchema.shape.terminalDigest,
   releasedAt: z.number().int().positive().safe(),
 });

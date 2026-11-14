@@ -44,11 +44,7 @@ import {
   signControl,
   verifyControl,
 } from "./control-records";
-import {
-  dataFenceRetirementTuple,
-  verifyRetainedDataFenceRefusal,
-  verifyRetainedDataFenceTerminal,
-} from "./data-configuration-fence";
+import { inspectRetainedDataFence } from "./data-configuration-fence";
 import { retainedDataDatabaseTimestamp } from "./data-database-time";
 import { DataExecutionPartialResult } from "./data-execution-outcome";
 import { verifyFeedProxyCanonicalTerminal } from "./feed-proxy-validation";
@@ -61,7 +57,6 @@ import {
 } from "./retention-family";
 import {
   assertRetainedCatalogActivationChildrenSettled,
-  closeArtifactTargetLeaseHandle,
   inspectArtifactTargetLeaseChildSettlement,
   inspectRetainedOwnedArtifactTargetChildSettlement,
   restoreArtifactTargetLeaseForSettlement,
@@ -486,20 +481,13 @@ export function createDataExecutionControlJournal(
             [item.execution.operationKey],
           );
           if (rows.length === 0) {
-            const proof = verifyRetainedDataFenceRefusal(installation, item.execution);
-            if (item.digest === proof.digest)
-              contained.set(item.execution.operationKey, proof.digest);
+            const digest = await inspectRetainedDataFence(installation, item.execution, database);
+            if (item.digest === digest) contained.set(item.execution.operationKey, digest);
             continue;
           }
           if (rows.length !== 1) continue;
-          if (rows[0]!.kind === "configuration-maintenance") {
-            const proof = verifyRetainedDataFenceTerminal(installation, item.execution, rows[0]!);
-            if (item.digest !== undefined && item.digest !== proof.digest) continue;
-            contained.set(item.execution.operationKey, proof.digest);
-          } else {
-            const { proof } = await verifyStored(item.execution, item.digest);
-            contained.set(item.execution.operationKey, proof.terminalDigest);
-          }
+          const { proof } = await verifyStored(item.execution, item.digest);
+          contained.set(item.execution.operationKey, proof.terminalDigest);
         } catch {
           /* Missing, unfinished or unknown guard/worker evidence is retained. */
         }
@@ -521,30 +509,10 @@ export function createDataExecutionControlJournal(
           [item.execution.operationKey],
         );
         if (rows.length === 0) {
-          const guards = await database.unsafe(
-            "SELECT * FROM data_manager.jobs WHERE kind='configuration-maintenance' AND operation_key=$1",
+          await database.unsafe(
+            "DELETE FROM data_manager.configuration_fence WHERE operation_key=$1 AND state='settled'",
             [item.execution.operationKey],
           );
-          if (guards.length) {
-            const guard = guards[0]!,
-              tuple = dataFenceRetirementTuple(guard);
-            if (
-              guards.length !== 1 ||
-              guard.id !== item.execution.executionId ||
-              tuple.digest !== item.digest ||
-              tuple.terminalAt !== item.terminalAt
-            )
-              throw Error("Retiring guard tuple/time changed");
-            const deleted = await database.unsafe(
-              "DELETE FROM data_manager.jobs WHERE id=$1::uuid AND kind='configuration-maintenance' AND operation_key=$2 AND ownership_version=$3 RETURNING id",
-              [
-                item.execution.executionId,
-                item.execution.operationKey,
-                z.number().int().parse(guard.ownership_version),
-              ],
-            );
-            if (deleted.length !== 1) throw Error("Guard retirement CAS conflict");
-          }
           contained.delete(item.execution.operationKey);
           continue;
         }

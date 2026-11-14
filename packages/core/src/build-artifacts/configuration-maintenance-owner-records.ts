@@ -17,13 +17,10 @@ import {
 } from "../ops/execution-identity";
 import { canonicalJson, opsOperationFingerprint } from "../ops/fingerprint";
 import { ownedServiceSnapshotSchema } from "../ops/owned-service-records";
-import {
-  configurationNoGuardIntentSchema,
-  configurationSettlementOwnerIdentitySchema,
-  signedConfigurationSettlementCapacitySchema,
-} from "./configuration-fence-settlement-records";
+import { dataConfigurationFenceReceiptSchema } from "../services/data-manager/contracts/configuration-maintenance";
 import {
   configurationMaintenanceFinalRecordSchema,
+  configurationOwnerIdentitySchema,
   signedConfigurationMaintenanceRuntimeInspectionSchema,
 } from "./configuration-maintenance-final-records";
 import { controlOriginSchema } from "./control-records";
@@ -31,7 +28,6 @@ import {
   coordinatorPullWitnessSchema,
   stagedCoordinatorObservationSchema,
 } from "./coordinator-pull-records";
-import { dataConfigurationFencePreparedWitnessSchema } from "./data-configuration-fence-witness-records";
 import {
   assertFixedConfigurationMaintenancePlan,
   fixedConfigurationMaintenancePlanSchema,
@@ -55,7 +51,7 @@ export const configurationMaintenanceDecisionCommitmentDomain =
  * non-secret attestation is copied verbatim by the fixed shared publisher. */
 export const configurationMaintenanceDecisionCommitmentPayloadSchema = z.strictObject({
   version: z.literal(1),
-  identity: z.lazy(() => configurationSettlementOwnerIdentitySchema),
+  identity: z.lazy(() => configurationOwnerIdentitySchema),
   operation: z.lazy(() => configurationMaintenanceDecisionSchema),
   execution: executionRefSchema,
   apiParent: z
@@ -171,8 +167,8 @@ export const configurationMaintenanceOwnerRecordSchema = z.strictObject({
   stagedCoordinatorProvenance: stagedCoordinatorObservationSchema.optional(),
   sequence,
   receipt: z.lazy(() => configurationMaintenanceReceiptSchema),
-  guardSource: z.lazy(() => dataConfigurationFencePreparedWitnessSchema).nullable(),
-  capacity: z.lazy(() => signedConfigurationSettlementCapacitySchema).nullable(),
+  /** The data-manager's receipt for the prepared fence. */
+  preparedFence: dataConfigurationFenceReceiptSchema.nullable(),
   apiControls: z.strictObject({
     decide: configurationMaintenanceDecisionSourceSchema.nullable(),
     settle: configurationMaintenanceSettleControlSourceSchema.nullable(),
@@ -186,8 +182,6 @@ export const configurationMaintenanceOwnerRecordSchema = z.strictObject({
   // Only the actual fixed final/inspection producers may install these states.
   final: z.lazy(() => configurationMaintenanceFinalRecordSchema).nullable(),
   inspection: z.lazy(() => signedConfigurationMaintenanceRuntimeInspectionSchema).nullable(),
-  issuance: z.enum(["open", "closing_without_guard", "closed_without_guard"]),
-  noGuard: z.lazy(() => configurationNoGuardIntentSchema).nullable(),
 });
 export type ConfigurationMaintenanceOwnerRecord = z.infer<
   typeof configurationMaintenanceOwnerRecordSchema
@@ -202,9 +196,7 @@ export function configurationMaintenanceReleasedOwner(
   if (
     owner.receipt.state !== "settling" ||
     owner.receipt.dmFence?.state !== "settled" ||
-    !owner.guardSource ||
-    owner.noGuard ||
-    owner.issuance !== "open" ||
+    !owner.preparedFence ||
     !owner.final ||
     !owner.inspection ||
     (retained &&
@@ -302,7 +294,6 @@ export function configurationMaintenanceDecisionCommitmentPayload(
       maintenanceId: owner.plan.operation.maintenanceId,
       candidateId: owner.plan.operation.candidateId,
       planDigest: owner.plan.planDigest,
-      settlementId: owner.plan.dmSettle.settlementId,
     },
     operation: source.operation,
     execution: source.execution,
@@ -344,8 +335,7 @@ export function assertConfigurationMaintenanceDecisionSource(
   if (
     parent.issuer !== "api" ||
     original.issuer !== "api" ||
-    !owner.guardSource ||
-    owner.noGuard ||
+    !owner.preparedFence ||
     body.maintenanceId !== owner.plan.operation.maintenanceId ||
     body.candidateId !== owner.plan.operation.candidateId ||
     body.prepareOperationKey !== owner.plan.prepare.operationKey ||
@@ -384,7 +374,7 @@ export function assertConfigurationMaintenanceDecisionSource(
     result.generation !== "not_started" ||
     result.appliedRevisionId !== null ||
     result.followUp !== "not_started" ||
-    canonicalJson(result.dmFence) !== canonicalJson(owner.guardSource.preparedReceipt) ||
+    canonicalJson(result.dmFence) !== canonicalJson(owner.preparedFence) ||
     canonicalJson(result.decision) !==
       canonicalJson({
         decisionId: body.decisionId,

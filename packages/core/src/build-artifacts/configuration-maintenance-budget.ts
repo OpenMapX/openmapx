@@ -18,7 +18,6 @@ import {
 } from "../services/deployment";
 import { parseReleaseManifest, renderReleaseCompose } from "../services/release-manifest";
 import { releaseStatePaths } from "../services/release-state";
-import { assertProspectiveConfigurationSettlementPacketBudget } from "./configuration-fence-settlement-budget";
 import type { ConfigurationMaintenanceOwnerRecord } from "./configuration-maintenance-owner-records";
 import {
   buildFixedConfigurationMaintenancePlan,
@@ -52,9 +51,8 @@ export function assertProspectiveConfigurationMaintenanceBudget(input: {
       maintenanceId: binding.maintenanceId,
       candidateId: binding.candidateId,
       planDigest: plan.planDigest,
-      settlementId: plan.dmSettle.settlementId,
     },
-    guard = { ...plan.dmPrepare, fenceId: uuid, sequence: at, state: "recovery_required" },
+    guard = { ...plan.dmPrepare, fenceId: uuid, sequence: at, state: "settled" },
     receipt = {
       version: 1,
       binding,
@@ -81,9 +79,7 @@ export function assertProspectiveConfigurationMaintenanceBudget(input: {
       followUp: "not_started",
     },
     reservations = [
-      ...plan.reservations.filter(
-        (value) => !["configuration-fence", "configuration-fence-settle"].includes(value.phase),
-      ),
+      ...plan.reservations.filter((value) => value.phase !== "configuration-fence"),
       ...(plan.nestedHardlinks ? [plan.nestedHardlinks] : []),
       ...(plan.nestedHandoff ? [plan.nestedHandoff] : []),
     ],
@@ -533,5 +529,4 @@ export function assertProspectiveConfigurationMaintenancePreludeBudget(input: {
     originalContainers: containers,
     rendered,
   });
-  assertProspectiveConfigurationSettlementPacketBudget(plan, input.installationId);
 }

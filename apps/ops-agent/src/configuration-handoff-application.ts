@@ -94,11 +94,9 @@ function ownerFor(child: ConfigurationHandoffChild) {
     !source?.grant ||
     canonicalJson(source.execution) !== canonicalJson(intent.preparer) ||
     source.grant.leaseId !== intent.leaseId ||
-    owner.issuance !== "open" ||
-    owner.noGuard ||
     owner.final ||
     owner.inspection ||
-    !owner.guardSource ||
+    !owner.preparedFence ||
     (intent.release !== undefined) !== (owner.plan.release !== undefined) ||
     (intent.release && canonicalJson(intent.release) !== canonicalJson(owner.plan.release)) ||
     owner.receipt.dmFence?.state !== "prepared" ||

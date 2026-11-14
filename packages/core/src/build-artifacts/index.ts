@@ -14,27 +14,6 @@ export {
   lookupControlChildPhaseBinding,
 } from "./child-phase";
 export {
-  type OwnedConfigurationSettlementReservation,
-  ownedConfigurationSettlementReservationState,
-  prepareOwnedConfigurationSettlementReservation,
-  publishConfigurationSettlementReservationProjection,
-  publishedConfigurationSettlementCapacityState,
-  publishedConfigurationSettlementReservationState,
-  reserveReceivedConfigurationSettlementCapacity,
-  type VerifiedPublishedConfigurationSettlementCapacity,
-  type VerifiedPublishedConfigurationSettlementReservation,
-  verifyPublishedConfigurationSettlementCapacity,
-  verifyPublishedConfigurationSettlementReservation,
-} from "./configuration-fence-settlement";
-export {
-  publishedDmNoGuardRefusalState,
-  publishedDmUnusedCapacityState,
-  type VerifiedDmUnusedCapacity,
-  type VerifiedPublishedDmNoGuardRefusal,
-  verifyPublishedDataConfigurationFenceRefusal,
-  verifyPublishedUnusedConfigurationCapacity,
-} from "./configuration-no-guard";
-export {
   assertConfigurationHandoffHostSources,
   captureConfigurationHandoffHostSources,
   configurationHostFields,
@@ -136,11 +115,6 @@ export {
   type DataFenceSql,
   type VerifiedPreparedGenerationAdmission,
 } from "./data-configuration-fence";
-export {
-  preparedDataConfigurationFenceState,
-  type VerifiedPreparedDataConfigurationFence,
-  verifyPublishedDataConfigurationFencePrepared,
-} from "./data-configuration-fence-witness";
 export { retainedDataDatabaseTimestamp } from "./data-database-time";
 export * from "./data-evidence";
 export {

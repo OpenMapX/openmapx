@@ -97,7 +97,7 @@ export async function startLegacyDataMutation<T>(
   };
   const finish = async (status: string) => {
     const rows =
-      await database`UPDATE data_manager.jobs SET status=${status},finished_at=${new Date().toISOString()}::text::timestamptz WHERE id=${id} AND ownership_version=${context.version} AND execution_version IS NULL AND kind <> 'configuration-maintenance' AND finished_at IS NULL RETURNING id`;
+      await database`UPDATE data_manager.jobs SET status=${status},finished_at=${new Date().toISOString()}::text::timestamptz WHERE id=${id} AND ownership_version=${context.version} AND execution_version IS NULL AND finished_at IS NULL RETURNING id`;
     if (rows.length !== 1) throw Error("Legacy writer terminal CAS lost");
   };
   const completion = current.run(context, async () => {

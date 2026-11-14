@@ -22,7 +22,6 @@ import {
   isFixedSingleDataCommand,
   markFeedProxyReloadAttempted,
   planFixedSingleDataCommand,
-  publishConfigurationSettlementReservationProjection,
   controlHeaders as readControlHeaders,
   reconcileConfigurationPreEffectRoot,
   registerControlRetentionJournal,
@@ -921,7 +920,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             if (lease.mode === "owner") {
               await releaseArtifactTargetLease(lease);
               verifyRetainedArtifactTargetRootRelease(authority);
-              // Classify only this freshly proved, fully released no-guard
+              // Classify only this freshly proved, fully released never-prepared
               // refusal before the immutable terminal is first committed.
               // An unknown/partial release never takes this branch.
               if (state === "failed" && updates.errorClass === "recovery_required")
@@ -2963,13 +2962,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                     owner: authority,
                   });
                   controlLeases.set(job.operationId, lease);
-                  if (maintenanceAdmission) {
+                  if (maintenanceAdmission)
                     retainOwnedConfigurationMaintenance(authority, lease, maintenanceAdmission);
-                    publishConfigurationSettlementReservationProjection(
-                      authority,
-                      maintenancePlan!.operation.maintenanceId,
-                    );
-                  }
                 }
               } catch (error) {
                 forceRecoveryRequired(job);

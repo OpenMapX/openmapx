@@ -100,7 +100,7 @@ it("freezes generation, declared middle-owner intent and recreation with one imm
   ]);
   expect(plan.steps[0]!.operation).toEqual(source.apply);
   expect(plan.steps[0]!.operationKey).toBe(source.operation.applyOperationKey);
-  expect(plan.reservations.map((value) => value.ordinal)).toEqual([0, 1, 2, 3, 4]);
+  expect(plan.reservations.map((value) => value.ordinal)).toEqual([0, 1, 2, 3]);
   expect(plan.reservations.map((value) => value.kind)).not.toContain("service.start");
   expect(plan.nestedHardlinks).toMatchObject({
     kind: "generation-hardlinks",
@@ -110,16 +110,9 @@ it("freezes generation, declared middle-owner intent and recreation with one imm
   });
   expect(plan.dmPrepare.planDigest).toBe(plan.planDigest);
   expect(plan.dmPrepare.hardlinkPlanDigest).not.toBe(plan.planDigest);
-  expect(Object.keys(plan.dmSettle).sort()).toEqual([
-    "candidateId",
-    "maintenanceId",
-    "planDigest",
-    "settlementId",
-    "version",
-  ]);
-  const original = JSON.stringify(plan.dmSettle);
-  expect(Reflect.set(plan.dmSettle, "outcome", "applied")).toBe(false);
-  expect(JSON.stringify(plan.dmSettle)).toBe(original);
+  const original = JSON.stringify(plan.dmPrepare);
+  expect(Reflect.set(plan.dmPrepare, "planDigest", "0".repeat(64))).toBe(false);
+  expect(JSON.stringify(plan.dmPrepare)).toBe(original);
   expect(() => assertFixedConfigurationMaintenancePlan(plan, source.installationId)).not.toThrow();
   const changed = structuredClone(plan);
   changed.steps[1]!.prerequisites = [];

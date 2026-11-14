@@ -1,4 +1,4 @@
-import { and, desc, isNotNull, isNull, lt, ne, notInArray, sql } from "drizzle-orm";
+import { and, desc, isNotNull, isNull, lt, notInArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   adminAuditLog,
@@ -123,10 +123,7 @@ export async function pruneDataManagerJobs(days: number): Promise<number> {
   const result = await withPreservationRetentionLock(db, (tx) => {
     // Managed execution receipts belong to the all-role proof GC, including
     // finished rows still referenced by an original owner awaiting recovery.
-    const legacyPipelineJob = and(
-      isNull(dataManagerJobs.executionVersion),
-      ne(dataManagerJobs.kind, "configuration-maintenance"),
-    );
+    const legacyPipelineJob = isNull(dataManagerJobs.executionVersion);
     const newestFinishedOfEachKind = tx
       .selectDistinctOn([dataManagerJobs.kind], { id: dataManagerJobs.id })
       .from(dataManagerJobs)

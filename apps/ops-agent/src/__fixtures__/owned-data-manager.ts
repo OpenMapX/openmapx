@@ -16,56 +16,15 @@ import { createPostgresDataExecutionStore } from "../../../../services/data-mana
 /** Actual HTTP receiver, SQL admission guard, dispatcher, filesystem leaf and journal. */
 export async function ownedDataManager(options: {
   sql: Parameters<typeof createPostgresDataExecutionStore>[0]; infraDir: string; serviceIds: string[]; loseHardlinkResponse?: boolean; losePrepareResponse?: boolean;
-  observeSettlementSql?: boolean;
-  loseSettlementCommitAcknowledgement?: boolean;
-  settlementSqlFault?: "update-ack-loss" | "terminate-before-commit";
-  pauseSettlementBeforeCommit?: boolean;
   pausePrepareResponse?: boolean;
   /** Called once the fence has been prepared successfully. */
   onPrepared?: () => void;
   loseRecoveryResponseOnce?: boolean;
 }) {
-  let settlementCommits = 0, settlementUpdates = 0, settlementRollbacks = 0, terminatedSettlementSession = false;
-  const commitEntered = Promise.withResolvers<void>(), continueCommit = Promise.withResolvers<void>();
   const prepareReplyEntered = Promise.withResolvers<void>(), continuePrepareReply = Promise.withResolvers<void>();
-  const uncertainConnections = new Set<Awaited<ReturnType<typeof options.sql.reserve>>>();
-  // Named external SQL transport fault. The installed production adapter and
-  // original reserved PostgreSQL connection still perform the actual UPDATE
-  // and COMMIT; only the COMMIT acknowledgement is lost.
-  const fenceSql = options.observeSettlementSql || options.loseSettlementCommitAcknowledgement || options.settlementSqlFault ? new Proxy(options.sql, {
-    get(target, name) {
-      if (name !== "reserve") return Reflect.get(target, name);
-      return async () => {
-        const connection = await target.reserve();
-        return new Proxy(connection, { get(owned, member) {
-          if (member !== "unsafe") return Reflect.get(owned, member);
-          return async (query: string, parameters?: Parameters<typeof owned.unsafe>[1]) => {
-            if (query.startsWith("UPDATE data_manager.jobs SET metadata=jsonb_set")) settlementUpdates++;
-            if (query === "COMMIT" && options.pauseSettlementBeforeCommit) { commitEntered.resolve(); await continueCommit.promise; }
-            if (query === "COMMIT" && options.settlementSqlFault === "terminate-before-commit") {
-              const [session] = await owned.unsafe("SELECT pg_backend_pid() AS pid");
-              const [killed] = await options.sql`SELECT pg_terminate_backend(${session!.pid}) AS terminated`;
-              if (killed!.terminated !== true) throw Error("Owned settlement backend not terminated");
-              terminatedSettlementSession = true;
-            }
-            const result = await owned.unsafe(query, parameters);
-            if (query === "ROLLBACK") settlementRollbacks++;
-            if (query.startsWith("UPDATE data_manager.jobs SET metadata=jsonb_set") && options.settlementSqlFault === "update-ack-loss")
-              throw Error("External settlement UPDATE acknowledgement lost");
-            if (query === "COMMIT") settlementCommits++;
-            if (query === "COMMIT" && options.loseSettlementCommitAcknowledgement) {
-              uncertainConnections.add(owned);
-              throw Error("External settlement COMMIT acknowledgement lost");
-            }
-            return result;
-          };
-        } });
-      };
-    },
-  }) : options.sql;
   const installation = openControlInstallation({ infraDir: options.infraDir, role: "data-manager", serviceIds: options.serviceIds });
   const dataDir = join(options.infraDir, "data"), journal = createDataExecutionControlJournal(installation, options.sql);
-  const fence = createDataConfigurationMaintenance(fenceSql, installation);
+  const fence = createDataConfigurationMaintenance(options.sql, installation);
   let startupRecoveryRequired = false;
   try { await fence.startup(); }
   catch {
@@ -139,17 +98,13 @@ export async function ownedDataManager(options: {
     if (stopped) return;
     continuePrepareReply.resolve();
     await runtime.close(); app.server.closeAllConnections(); await app.close();
-    for (const connection of uncertainConnections) connection.release();
-    uncertainConnections.clear(); journal.close(); closeControlInstallation(installation); stopped = true;
+    journal.close(); closeControlInstallation(installation); stopped = true;
   };
   return { baseUrl, token, store, receiver, pauseHttp, resumeHttp, get posts() { return posts; }, get preparePosts() { return preparePosts; }, get settlePosts() { return settlePosts; }, get recoveryPosts() { return recoveryPosts; },
     prepareReplyEntered: prepareReplyEntered.promise, releasePrepareResponse: () => continuePrepareReply.resolve(),
-    get settlementSqlIo() { return { commits: settlementCommits, updates: settlementUpdates }; },
-    get settlementContainmentIo() { return { rollbacks: settlementRollbacks, terminated: terminatedSettlementSession }; },
     get fenceInspections() { return structuredClone(fenceInspectionReplies); }, stopForRestart,
     get startupRecoveryRequired() { return startupRecoveryRequired; },
     assertDataAdmission: () => options.sql.begin(async tx => { await fence.assertAdmission({ unsafe: (query, parameters) => tx.unsafe(query, parameters) }); }),
-    settlementCommitEntered: commitEntered.promise, releaseSettlementCommit: () => continueCommit.resolve(),
     async inspectWithOriginalWitness() {
       if (!originalInspection) throw Error("Original agent inspection request unavailable");
       const response = await fetch(baseUrl + originalInspection.url, { headers: originalInspection.headers });
@@ -165,7 +120,7 @@ export async function ownedDataManager(options: {
       await stopForRestart();
       // Exact fixture-owned execution IDs only; no broad job cleanup.
       for (const key of keys) await options.sql`DELETE FROM data_manager.jobs WHERE operation_key=${key}`;
-      for (const id of maintenanceIds) await options.sql`DELETE FROM data_manager.jobs WHERE kind='configuration-maintenance' AND metadata->'configurationMaintenance'->'receipt'->>'maintenanceId'=${id}`;
+      for (const id of maintenanceIds) await options.sql`DELETE FROM data_manager.configuration_fence WHERE maintenance_id=${id}::uuid`;
     },
   };
 }

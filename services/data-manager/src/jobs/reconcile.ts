@@ -1,5 +1,5 @@
 import { jobs } from "@openmapx/db-schema";
-import { and, eq, isNull, ne } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type postgres from "postgres";
 import { db as defaultDb } from "../db/index.js";
 
@@ -35,11 +35,7 @@ export interface ReconcileOrphanedJobsOptions {
 export async function reconcileOrphanedJobs(
   opts: ReconcileOrphanedJobsOptions = {},
 ): Promise<string[]> {
-  const predicate = and(
-    eq(jobs.status, "running"),
-    isNull(jobs.executionVersion),
-    ne(jobs.kind, "configuration-maintenance"),
-  );
+  const predicate = and(eq(jobs.status, "running"), isNull(jobs.executionVersion));
   const updated = opts.db
     ? await opts.db
         .update(jobs)
@@ -122,7 +118,6 @@ export async function reconcileInterruptedLegacyJobs(
     SELECT id,ownership_version,metadata->'retainedOps' AS operations
     FROM data_manager.jobs
     WHERE execution_version IS NULL AND finished_at IS NULL AND status='interrupted'
-      AND kind <> 'configuration-maintenance'
       AND jsonb_typeof(metadata->'retainedOps')='array'
     ORDER BY started_at,id`;
   const resolved: string[] = [];

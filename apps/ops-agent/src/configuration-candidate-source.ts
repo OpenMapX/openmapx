@@ -84,7 +84,7 @@ export async function readRetainedConfigurationCandidate(
   )
     throw Error("Configuration candidate typed kind rejected");
   // Authenticated historical metadata only. It cannot open a payload, consume
-  // a claim or renew the original seal; NoGuard recovery may observe expiry.
+  // a claim or renew the original seal; never-prepared recovery may observe expiry.
   return { ...match, operation };
 }
 export async function readConfigurationCandidate(

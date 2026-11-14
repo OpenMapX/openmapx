@@ -124,15 +124,11 @@ import {
   inspectControlChildPublication,
   lookupControlChildPhase,
   lookupControlChildPhaseAttempt,
+  lookupControlChildPhaseBinding,
   prepareControlChildPublication,
   resolveControlChildPlan,
   validateControlChildReservations,
 } from "./child-phase";
-import {
-  configurationNoGuardIntentSchema,
-  configurationSettlementDomains,
-  settlementRecordDigest,
-} from "./configuration-fence-settlement-records";
 import {
   configurationMaintenanceForwardDomain,
   configurationMaintenanceForwardGraphSchema,
@@ -630,7 +626,7 @@ export function acknowledgeControlRetention(
     throw Error("Receipt parent/attempt conflict");
   // A copied recovery-required PREPARE canonical says that the worker failed,
   // not that its target ownership was contained. Require actual known effect
-  // and (for NoGuard) physical release before acknowledging this dependency.
+  // and (for a never-prepared fence) physical release before acknowledging this dependency.
   const original = z
       .object({ payload: z.object({ execution: executionRefSchema }) })
       .parse(readPrivateRecord(state, "executions", `${input.operationKey}.json`, 65536)),
@@ -648,7 +644,7 @@ export function acknowledgeControlRetention(
       .parse(readPrivateRecord(state, "effects", `${input.operationKey}.json`)).payload.receipt;
     if (controlDigest(source) !== effect.terminalReceiptDigest)
       throw Error("Original preparation effect changed");
-    if (z.object({ kind: z.literal("configuration-no-guard") }).safeParse(source).success)
+    if (z.object({ kind: z.literal("data-configuration-fence-refused") }).safeParse(source).success)
       verifyRetainedArtifactTargetRootRelease(authority);
   }
   acknowledgeRetentionDependency(state, origin, {
@@ -1622,19 +1618,14 @@ const effectObservationSchema = z.discriminatedUnion("kind", [
     }),
   }),
   z.strictObject({
-    kind: z.literal("configuration-no-guard"),
-    issuerFreezeProofDigest: digest,
-    issuerUnusedConfirmationDigest: digest,
-  }),
-  z.strictObject({
     kind: z.literal("data-configuration-fence-refused"),
     maintenanceId: uuid,
-    reason: z.enum(["busy", "capacity"]),
+    reason: z.literal("busy"),
   }),
+  z.strictObject({ kind: z.literal("configuration-fence-not-prepared"), maintenanceId: uuid }),
   z.strictObject({
     kind: z.literal("data-configuration-fence"),
     receipt: dataConfigurationFenceReceiptSchema,
-    guardDigest: digest,
   }),
   z.strictObject({
     kind: z.literal("data-execution"),
@@ -1658,6 +1649,29 @@ const effectObservationSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("not-started") }),
   z.strictObject({ kind: z.literal("unresolved") }),
 ]);
+/** No fence exists for this maintenance owner: its fence child was never
+ * issued, or the data-manager settled it without effect (a refusal, or the
+ * observation that the prepare was never admitted). */
+function verifyConfigurationFenceNotPrepared(authority: VerifiedExecutionAuthority): void {
+  const s = executionAuthorityState(authority),
+    reservation = s.reservations.find((slot) => slot.phase === "configuration-fence");
+  if (!reservation) throw Error("Original fence preparation reservation required");
+  const binding = lookupControlChildPhaseBinding(authority, reservation);
+  if (
+    !binding &&
+    inspectControlChildPublication(authority, reservation).publication.state === "unissued"
+  )
+    return;
+  if (!binding) throw Error("Original fence preparation binding required");
+  const lease = restoreArtifactTargetLeaseForSettlement(authority);
+  try {
+    const settled = inspectArtifactTargetLeaseChildSettlement(lease, binding.child.execution);
+    if (settled?.outcome !== "failed_without_effect")
+      throw Error("Data-manager fence refusal required");
+  } finally {
+    closeArtifactTargetLeaseHandle(lease);
+  }
+}
 /** Fixed writer producer only. A DTO, caller error or parsed result cannot
  * substitute for the actual completed native writer observation. */
 export function retainConfigurationGenerationNonCommit(
@@ -2306,65 +2320,22 @@ export function retainControlEffectReceipt(
       }
       outcome = "committed";
       publication = "committed";
-    } else if (receipt.kind === "configuration-no-guard") {
+    } else if (receipt.kind === "configuration-fence-not-prepared") {
       if (
         s.kind !== "configurationMaintenance.prepare" ||
         s.installation.fixedChildId ||
-        !s.origin ||
-        s.installation.installation.role !== "ops-agent"
+        s.installation.installation.role !== "ops-agent" ||
+        (
+          readPrivateRecord(
+            s.installation,
+            "executions",
+            `${s.execution.operationKey}.json`,
+            65536,
+          ) as { payload?: { operation?: { maintenanceId?: string } } }
+        ).payload?.operation?.maintenanceId !== receipt.maintenanceId
       )
-        throw Error("Original frozen maintenance effect source required");
-      const admitted = readPrivateRecord(
-          s.installation,
-          "executions",
-          `${s.execution.operationKey}.json`,
-          65536,
-        ) as { payload?: { operation?: { maintenanceId?: string } } },
-        name = `${uuid.parse(admitted.payload?.operation?.maintenanceId)}.json`,
-        raw = readPrivateRecord(s.installation, "configuration-maintenance", name),
-        owner = verifyControl(
-          s.installation.installation.publicKey,
-          "openmapx-configuration-maintenance-owner-v2",
-          raw,
-          z
-            .object({
-              admissionDigest: digest,
-              issuance: z.enum(["closing_without_guard", "closed_without_guard"]),
-              noGuard: configurationNoGuardIntentSchema,
-              guardSource: z.null(),
-              final: z.null(),
-              inspection: z.null(),
-              receipt: z
-                .object({ dmFence: z.null(), generation: z.literal("not_started") })
-                .passthrough(),
-            })
-            .passthrough(),
-        );
-      verifyFamilyOwnedRecord(
-        s.installation,
-        s.origin,
-        { scope: "private", namespace: "configuration-maintenance", name, container: "" },
-        canonicalJson(raw),
-      );
-      const confirmation = owner.noGuard.issuerUnused.confirmation;
-      if (
-        owner.admissionDigest !== s.receiptDigest ||
-        !confirmation ||
-        receipt.issuerFreezeProofDigest !== owner.noGuard.noGuardEvidence.issuerFreezeProofDigest ||
-        receipt.issuerUnusedConfirmationDigest !==
-          settlementRecordDigest(
-            configurationSettlementDomains.unusedConfirmation,
-            confirmation.payload,
-          )
-      )
-        throw Error("Actual frozen issuer UNUSED confirmation required");
-      verifyControl(
-        s.installation.installation.publicKey,
-        configurationSettlementDomains.unusedConfirmation,
-        confirmation,
-        configurationNoGuardIntentSchema.shape.issuerUnused.shape.confirmation.unwrap().shape
-          .payload,
-      );
+        throw Error("Original maintenance owner required");
+      verifyConfigurationFenceNotPrepared(authority);
       outcome = "failed_without_effect";
       publication = "not_started";
     } else if (receipt.kind === "not-started") {
@@ -3421,7 +3392,6 @@ export function verifyConfigurationMaintenanceGenerationWitness(
       identity.maintenanceId !== expected.maintenanceId ||
       identity.candidateId !== expected.candidateId ||
       identity.planDigest !== graph.planDigest ||
-      identity.settlementId !== rebuilt.dmSettle.settlementId ||
       decision.operation.decision !== "continue" ||
       decision.operation.maintenanceId !== expected.maintenanceId ||
       decision.operation.candidateId !== expected.candidateId ||
@@ -4130,83 +4100,6 @@ function withControlExecutionForward<T>(authority: VerifiedExecutionAuthority, r
 /** Internal publication scope. All filesystem writes complete before guards
  * release; callers may not await HTTP/DB or acquire a lease from this scope. */
 const publicationScopes = new WeakMap<VerifiedExecutionAuthority, AnchoredDirectory>();
-/** Original maintenance recovery publication only. It serializes with every
- * ordinary grant, including after cancellation/expiry, and grants no dispatch. */
-export function withControlMaintenanceNoGuardPublication<T>(
-  authority: VerifiedExecutionAuthority,
-  run: () => T,
-): T {
-  return withMaintenanceRecoveryPublication(authority, run);
-}
-function withMaintenanceRecoveryPublication<T>(
-  authority: VerifiedExecutionAuthority,
-  run: () => T,
-): T {
-  const s = executionAuthorityState(authority);
-  if (
-    s.kind !== "configurationMaintenance.prepare" ||
-    !s.origin ||
-    s.installation.fixedChildId ||
-    s.installation.installation.role !== "ops-agent" ||
-    s.origin.rootKey !== s.execution.operationKey
-  )
-    throw Error("Original maintenance issuance freeze required");
-  const own = () =>
-    withExecutionWriter(s.installation, s.execution, (directory) => {
-      readLifecycle(s.installation, directory, s.execution, s.installation.installation.publicKey);
-      return run();
-    });
-  const assertion = retainedParentAssertion(s);
-  return assertion ? withParentLifecycles(s.installation, assertion, () => own()) : own();
-}
-/** Purpose-only metadata serialization for the original logical guard control.
- * This creates no forward authority, child binding or dispatch ticket. The
- * fixed producer still consumes its restored actual final proof. */
-export function withControlMaintenanceSettlementPublication<T>(
-  authority: VerifiedExecutionAuthority,
-  run: () => T,
-): T {
-  return withMaintenanceRecoveryPublication(authority, () => {
-    const state = executionAuthorityState(authority),
-      admitted = readPrivateRecord(
-        state.installation,
-        "executions",
-        `${state.execution.operationKey}.json`,
-        65536,
-      ) as { payload?: { operation?: { maintenanceId?: string } } },
-      raw = readPrivateRecord(
-        state.installation,
-        "configuration-maintenance",
-        `${uuid.parse(admitted.payload?.operation?.maintenanceId)}.json`,
-      ),
-      owner = verifyControl(
-        state.installation.installation.publicKey,
-        "openmapx-configuration-maintenance-owner-v2",
-        raw,
-        configurationMaintenanceOwnerRecordSchema,
-      );
-    verifyFamilyOwnedRecord(
-      state.installation,
-      state.origin!,
-      {
-        scope: "private",
-        namespace: "configuration-maintenance",
-        container: "",
-        name: `${owner.plan.operation.maintenanceId}.json`,
-      },
-      canonicalJson(raw),
-    );
-    if (
-      !owner.final ||
-      !owner.inspection ||
-      owner.noGuard ||
-      owner.admissionDigest !== state.receiptDigest ||
-      canonicalJson(owner.plan.prepare) !== canonicalJson(state.execution)
-    )
-      throw Error("Original final-only settlement publication required");
-    return run();
-  });
-}
 /** Initial private owner publication precedes the first ordinary grant. */
 export function withControlMaintenanceInitialization<T>(
   authority: VerifiedExecutionAuthority,
@@ -4275,7 +4168,6 @@ export function withControlDelegationPublication<T>(
         );
         if (
           owner.admissionDigest !== s.receiptDigest ||
-          owner.issuance !== "open" ||
           canonicalJson(owner.plan.prepare) !== canonicalJson(s.execution) ||
           canonicalJson(owner.origin) !== canonicalJson(s.origin) ||
           canonicalJson(owner.plan.reservations) !== canonicalJson(s.reservations)
