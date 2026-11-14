@@ -897,7 +897,7 @@ export function cleanupRestoredArtifactPublication(authority: VerifiedExecutionA
 
 /** Close only this purpose's proved historical publication. The original
  * canonical status/digest/time remain unchanged even if delivery failed after
- * files committed; containment is a separate, source-verified family fact. */
+ * files committed; containment is a separate, source-verified fact. */
 export function inspectSettledArtifactImport(
   authority: VerifiedExecutionAuthority,
   status: OpsJobStatus,
@@ -1063,7 +1063,7 @@ export function originalArtifactValidationOperation(authority: VerifiedExecution
 }
 /** This fixed private-only operation has no managed target or child. The live
  * store producer first proves its extraction is contained and cleaned. Match
- * its actual signed effect result before upgrading only the family knowledge;
+ * its actual signed effect result before upgrading only the retained knowledge;
  * the original public status tuple, deadline and timestamp remain unchanged. */
 export function retainArtifactValidationObservation(
   authority: VerifiedExecutionAuthority,

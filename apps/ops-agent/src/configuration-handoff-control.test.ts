@@ -24,10 +24,7 @@ vi.mock("node:timers/promises", async (original) => ({
     new Promise<void>((resolve) => setTimeout(resolve, milliseconds)),
 }));
 
-import {
-  ArtifactTargetAdoptionObservationBusyError,
-  ArtifactTargetJournalBusyError,
-} from "@openmapx/core/build-artifacts";
+import { ArtifactTargetJournalBusyError } from "@openmapx/core/build-artifacts";
 import { createControlRootOperationKey } from "@openmapx/core/ops";
 import {
   closeConfigurationHandoffChild,
@@ -83,12 +80,11 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-it.each([
-  () => new ArtifactTargetAdoptionObservationBusyError(Error("held observation guard")),
-  () => new ArtifactTargetJournalBusyError(Error("held journal guard")),
-])("retries only a nominal pre-adoption refusal with the original identity", async (busy) => {
+it("retries only a nominal pre-adoption refusal with the original identity", async () => {
   const f = fixture();
-  mock.adoptArtifactTargetLease.mockRejectedValueOnce(busy());
+  mock.adoptArtifactTargetLease.mockRejectedValueOnce(
+    new ArtifactTargetJournalBusyError(Error("held journal guard")),
+  );
   const pending = openConfigurationHandoffChild(f.input);
   void pending.catch(() => {});
   await vi.advanceTimersByTimeAsync(50);
@@ -113,7 +109,7 @@ it.each([
 
 it("stops at the five-second contention budget without adopting or retaining authority", async () => {
   const f = fixture(),
-    error = new ArtifactTargetAdoptionObservationBusyError(Error("persistent guard"));
+    error = new ArtifactTargetJournalBusyError(Error("persistent guard"));
   mock.adoptArtifactTargetLease.mockRejectedValue(error);
   const failed = expect(openConfigurationHandoffChild(f.input)).rejects.toBe(error);
   await vi.advanceTimersByTimeAsync(5050);
@@ -126,7 +122,7 @@ it("stops at the five-second contention budget without adopting or retaining aut
 
 it("stops at the original deadline before the five-second wait budget", async () => {
   const f = fixture(),
-    error = new ArtifactTargetAdoptionObservationBusyError(Error("held guard"));
+    error = new ArtifactTargetJournalBusyError(Error("held guard"));
   f.input.execution.deadlineAt = Date.now() + 20;
   mock.adoptArtifactTargetLease.mockRejectedValue(error);
   const failed = expect(openConfigurationHandoffChild(f.input)).rejects.toBe(error);
@@ -139,12 +135,12 @@ it("stops at the original deadline before the five-second wait budget", async ()
   expect(mock.closeControlInstallation).toHaveBeenCalledExactlyOnceWith(f.installation);
 });
 
-it("propagates raw family contention after exactly one adoption attempt", async () => {
+it("propagates a raw writer error after exactly one adoption attempt", async () => {
   const f = fixture(),
-    error = Object.assign(Error("family writer busy after adoption started"), {
+    error = Object.assign(Error("writer busy after adoption started"), {
       code: "EEXIST",
       syscall: "mkdir",
-      path: "/synthetic/.family-writer",
+      path: "/synthetic/.writer",
     });
   mock.adoptArtifactTargetLease.mockRejectedValueOnce(error);
   await expect(openConfigurationHandoffChild(f.input)).rejects.toBe(error);
@@ -164,22 +160,4 @@ it("does not retry any failure after the one-use execution marker", async () => 
   expect(mock.beginFixedCliExecution).toHaveBeenCalledTimes(1);
   expect(mock.closeArtifactTargetLeaseHandle).toHaveBeenCalledExactlyOnceWith(f.lease);
   expect(mock.closeControlInstallation).toHaveBeenCalledExactlyOnceWith(f.installation);
-});
-
-it("keeps the existing raw family-writer wait limited to source reads", async () => {
-  const f = fixture(),
-    error = Object.assign(Error("source writer busy"), {
-      code: "EEXIST",
-      syscall: "mkdir",
-      path: "/synthetic/.family-writer",
-    });
-  mock.readConfigurationHandoffSpawnIntent.mockImplementationOnce(() => {
-    throw error;
-  });
-  const pending = openConfigurationHandoffChild(f.input);
-  void pending.catch(() => {});
-  await vi.advanceTimersByTimeAsync(50);
-  closeConfigurationHandoffChild(await pending);
-  expect(mock.readConfigurationHandoffSpawnIntent).toHaveBeenCalledTimes(2);
-  expect(mock.adoptArtifactTargetLease).toHaveBeenCalledTimes(1);
 });

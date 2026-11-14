@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-/** Fixed original-owner helper journal. All cells stay in the existing indexed
- * role-private observations namespace and original retention family. */
+/** Fixed original-owner helper journal. All cells stay in the role-private
+ * observations namespace. */
 import {
   assertArtifactTargetLeaseForward,
   bindControlChildPhase,

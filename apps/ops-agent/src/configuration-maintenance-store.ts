@@ -1729,7 +1729,7 @@ export function recordOwnedConfigurationMaintenanceStepTerminal(
   }
 }
 /** Recover only actual indexed, pinned-role private owner sources. This fixed
- * namespace has at most one owner per retained root family. No public job,
+ * namespace has at most one owner per retained root. No public job,
  * current desired state, elapsed clock or missing lookup supplies a result. */
 export function restoreConfigurationMaintenanceControlJournal(
   installation: ControlInstallation,

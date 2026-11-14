@@ -181,7 +181,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           ],
         ),
       );
-      if (context.task.name.includes("future private mount inspection"))
+      if (context.task.name.includes("eighty future private secret mounts"))
         Object.assign(
           schemas["data-manager"]!.properties,
           Object.fromEntries(
@@ -193,9 +193,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         );
       host = await ownedServiceHost({
         schemas,
-        ...(context.task.name.includes("future private mount inspection (oversized)")
-          ? { extraServiceIds: Array.from({ length: 40 }, (_, index) => `capacity-${index}`) }
-          : {}),
         actualComposeConfig:
           context.task.name.includes("applied final") ||
           context.task.name.includes("contained final") ||

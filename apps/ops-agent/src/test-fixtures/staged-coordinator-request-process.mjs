@@ -20,39 +20,6 @@ import { createTrustedConfigurationAuthorityLoader } from "../trusted-configurat
 let raw = "";
 for await (const chunk of process.stdin) raw += chunk;
 const input = JSON.parse(raw);
-// Pass-through observation of the named filesystem edge. Every original mkdir
-// and rmdir still executes; this records whether an actual busy guard is ours.
-const mkdir = fs.mkdirSync,
-  rmdir = fs.rmdirSync,
-  heldSourceWriters = new Set();
-let busySourceObservations = 0;
-const writerIdentity = (path) => {
-  const parent = fs.statSync(dirname(String(path)));
-  return `${parent.dev}:${parent.ino}`;
-};
-fs.mkdirSync = (path, ...options) => {
-  const sourceWriter = String(path).endsWith("/.family-writer"),
-    key = sourceWriter ? writerIdentity(path) : undefined;
-  try {
-    const result = mkdir(path, ...options);
-    if (sourceWriter) heldSourceWriters.add(key);
-    return result;
-  } catch (error) {
-    if (sourceWriter && error.code === "EEXIST" && busySourceObservations++ < 12)
-      fs.writeSync(
-        1,
-        `${JSON.stringify({ event: "source-writer-busy", sameProcess: heldSourceWriters.has(key), frames: new Error().stack.split("\n").slice(1, 13) })}\n`,
-      );
-    throw error;
-  }
-};
-fs.rmdirSync = (path, ...options) => {
-  const sourceWriter = String(path).endsWith("/.family-writer"),
-    key = sourceWriter ? writerIdentity(path) : undefined;
-  const result = rmdir(path, ...options);
-  if (sourceWriter) heldSourceWriters.delete(key);
-  return result;
-};
 syncBuiltinESMExports();
 if (["held", "unwound"].includes(input.stopAfterFirstTargetRelease)) {
   const remove = fs.rmdirSync,

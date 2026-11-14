@@ -16,8 +16,8 @@ import { createApiOpsClient } from "./ops-client";
 import { assertRetainedMaintenanceJob } from "./retained-maintenance-authorization";
 
 /** Observation never submits a second import/validation. Copy the exact purpose
- * receipt into the owned SQL checkpoint BEFORE acknowledging its immutable
- * canonical operation, so later family/stage retirement cannot erase the result. */
+ * receipt into the owned SQL checkpoint, so a later prune of the agent's records
+ * or stage cannot erase the result. */
 async function recoverArtifactPurpose(
   ctx: JobContext,
   operation: Extract<

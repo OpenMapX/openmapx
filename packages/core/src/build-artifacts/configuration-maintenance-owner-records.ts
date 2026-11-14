@@ -71,7 +71,7 @@ export const configurationMaintenanceDecisionCommitmentSchema = z.strictObject({
 });
 /** The original owner's finite metadata control. This ExecutionRef is ONLY
  * journal/receipt correlation; it is never admitted as a forward execution,
- * target owner/borrower or a separate origin/family. */
+ * target owner/borrower or a separate origin. */
 export const configurationMaintenanceDecisionSourceSchema = z.strictObject({
   version: z.literal(1),
   operation: z.lazy(() => configurationMaintenanceDecisionSchema),

@@ -226,9 +226,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               },
             }
           : {}),
-        ...(test.task.name.includes("full future owner budget")
-          ? { oversizedMaintenancePlan: true }
-          : {}),
         ...(test.task.name.includes("3072-byte baseline") ? { nestedRootSegments: 9 } : {}),
         ...(references
           ? { imageReferences: { motis: references.sibling, "data-manager": references.target } }
@@ -838,11 +835,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         for (const line of lines) {
           const event = JSON.parse(line);
           if (event.event === "ready") ready.resolve(event);
-          if (event.event === "source-writer-busy")
-            console.info(
-              "actual native source writer busy",
-              JSON.stringify({ sameProcess: event.sameProcess, frames: event.frames }),
-            );
           if (event.event === "pre-effect-release-unlinked") {
             observedFault = true;
             fault.resolve();

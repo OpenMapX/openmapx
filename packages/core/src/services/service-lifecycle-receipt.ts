@@ -457,7 +457,7 @@ export async function openServiceLifecycleReceipt(options: {
         }),
         true,
       );
-      if (!state.origin) throw Error("Original lifecycle retention family required");
+      if (!state.origin) throw Error("Original lifecycle origin required");
       opened.directory.write(name, bytes, true);
     }
   } finally {

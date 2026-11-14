@@ -2044,7 +2044,7 @@ export function retainControlEffectReceipt(
       );
       if (controlDigest(prior) === controlDigest(payload)) {
         // A completed helper may have lost the write acknowledgement after
-        // the signed effect landed but before its family terminal fact. Repair
+        // the signed effect landed but before its terminal record. Repair
         // only this exact source using its original signed completion time.
         return;
       }
@@ -2414,7 +2414,7 @@ export function observedCoordinatorPullBaseline(witness: object): VerifiedCoordi
   return proof;
 }
 /** Recovery derives only from the exact indexed signed owner, after the initial
- * successful source copy. It does not depend on a retired normal pull family. */
+ * successful source copy. It does not depend on a pruned normal pull. */
 export function ownedCoordinatorPullBaseline(
   authority: VerifiedExecutionAuthority,
 ): VerifiedCoordinatorPullBaseline {
@@ -2638,7 +2638,7 @@ export function observeCoordinatorPullForMaintenance(
   observedBaselineProofs.set(witness, proof);
   return witness;
 }
-/** Copies actual retained source packets into the original indexed family.
+/** Copies actual retained source packets into the original owner record.
  * The initial empty projection is allocated before the DM guard. No caller
  * supplies a decision, generation result, signature or authority digest. */
 export function publishConfigurationMaintenanceForwardWitness(
@@ -3063,7 +3063,7 @@ const maintenanceChildren = new WeakMap<
   }
 >();
 /** The status is only a canonical preimage. The actual original admission,
- * fixed phase, private effect, private canonical tuple/time and family index
+ * fixed phase, private effect and private canonical tuple/time
  * must ALL agree; a public status/result/digest cannot create this proof. */
 export function verifyConfigurationMaintenanceChildTerminal(
   authority: VerifiedExecutionAuthority,

@@ -147,7 +147,9 @@ it("does not announce an old owner's completion when PostgreSQL rejects its CAS"
   expect(patches.find((patch) => patch._settled)).toEqual({
     _settled: { status: "success", result: { completed: true } },
   });
-  expect(patches.at(-1)).toMatchObject({ observation: { state: "receipt_delivery" } });
+  expect(patches.at(-1)).toMatchObject({
+    observation: { state: "unknown", reason: "transport" },
+  });
   for (const write of store.writes) {
     const query = new PgDialect().sqlToQuery(write.where as SQL);
     expect(query.sql).toContain("->'_execution'");
