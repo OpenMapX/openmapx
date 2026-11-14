@@ -297,8 +297,6 @@ export const cyclingMapPreview: ReactNode = (
   </svg>
 );
 
-export const standardMapPreview: ReactNode = defaultMapPreview;
-
 export const globePreview: ReactNode = (
   <svg
     viewBox="0 0 80 80"

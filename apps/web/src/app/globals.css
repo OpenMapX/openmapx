@@ -12,6 +12,10 @@
   --omx-border-light: rgba(0, 0, 0, 0.1);
   --omx-hover-bg: rgba(0, 0, 0, 0.06);
   --omx-chip-hover: #e0e0e0;
+  /* Floating chips rely on their shadow in light mode; dark mode adds an
+   * outline because a shadow barely separates dark surfaces. */
+  --omx-chip-border: transparent;
+  --omx-scrollbar: rgba(0, 0, 0, 0.28);
   --omx-shadow-soft: rgba(0, 0, 0, 0.15);
   --omx-overlay-bg: #fff;
   --omx-overlay-text: #000;
@@ -83,6 +87,8 @@ button.omx-route-map-pill:focus-visible {
   --omx-border-light: rgba(255, 255, 255, 0.08);
   --omx-hover-bg: rgba(255, 255, 255, 0.08);
   --omx-chip-hover: #424242;
+  --omx-chip-border: rgba(255, 255, 255, 0.12);
+  --omx-scrollbar: rgba(255, 255, 255, 0.28);
   --omx-shadow-soft: rgba(0, 0, 0, 0.4);
   --omx-overlay-bg: #2D2D2D;
   --omx-overlay-text: #E8EAED;
@@ -104,6 +110,13 @@ button.omx-route-map-pill:focus-visible {
 
 body {
   font-family: var(--font-sans), sans-serif;
+}
+
+/* Thin, quiet scrollbars for every panel, menu and list, so a scrollable
+ * side panel doesn't carry a full-height classic gutter beside the map. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--omx-scrollbar) transparent;
 }
 
 html,

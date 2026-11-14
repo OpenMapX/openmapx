@@ -506,7 +506,7 @@
     "nautical": "Seekarten",
     "sunTime": "Tageslicht & Zeitzonen",
     "schematicTransit": "Schematischer Liniennetzplan",
-    "closeMorePanel": "Erweitertes Menü schließen"
+    "closeMorePanel": "Schließen"
   },
   "schematicTransit": {
     "title": "Schematischer Liniennetzplan",
@@ -3139,16 +3139,12 @@
   "menu": {
     "saved": "Gespeichert",
     "timeline": "Ihre Zeitleiste",
-    "recent": "Zuletzt verwendet",
-    "contributions": "Meine Beiträge",
     "shareMap": "Karte teilen oder einbetten",
     "importFile": "Datei importieren (GPX, GeoJSON, KML)",
     "importFailed": "Datei konnte nicht gelesen werden. Unterstützt: GPX, GeoJSON, KML.",
     "offlineMaps": "Offline-Karten",
     "storage": "Speicher",
-    "print": "Drucken",
-    "tips": "Tipps und Tricks",
-    "help": "Hilfe",
+    "commandPalette": "Befehlspalette",
     "language": "Sprache",
     "theme": "Design",
     "themeLight": "Hell",

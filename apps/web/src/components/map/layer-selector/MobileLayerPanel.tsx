@@ -145,7 +145,6 @@ export function MobileLayerPanel() {
               preview={option.preview}
               label={t(option.labelKey)}
               selected={selected}
-              icon={option.icon}
               size={56}
               onClick={() => setActiveLayer(option.id)}
             />

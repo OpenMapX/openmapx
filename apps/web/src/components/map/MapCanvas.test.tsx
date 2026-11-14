@@ -314,6 +314,18 @@ afterEach(() => {
   useNavigationStore.getState().stopNavigation();
 });
 
+/** Answers the theme's `sm` breakpoint query (a `max-width` query) as a phone or a wider screen. */
+function stubScreen(screen: "phone" | "desktop") {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: screen === "phone" && query.includes("max-width"),
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+  }));
+}
+
 /** Render a map and hand back its registered `moveend` listener. */
 async function renderWithMoveEnd() {
   maplibreTest.reset();
@@ -410,34 +422,25 @@ describe("MapCanvas", () => {
     useSettingsStore.setState({ units: "metric" });
   });
 
-  it("keeps the scale at the map corner when desktop panels open", async () => {
+  it("leaves the scale to the map footer on wider screens", async () => {
     maplibreTest.reset();
     mapStyleTest.reset();
-    const previousWidth = window.innerWidth;
-    Object.defineProperty(window, "innerWidth", { configurable: true, value: 900 });
+    stubScreen("desktop");
     vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
     const view = render(<MapCanvas />);
     try {
       await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
       const scale = view.container.querySelector<HTMLElement>(".maplibregl-ctrl-scale");
-      expect(scale).not.toBeNull();
-      act(() => publishMapObstruction("scale-test-left", "left", 800));
-      expect(getComputedStyle(scale as HTMLElement).marginLeft).toBe("12px");
-      expect(getComputedStyle(scale as HTMLElement).display).toBe("block");
-      act(() => publishMapObstruction("scale-test-right", "right", 30));
-      expect(getComputedStyle(scale as HTMLElement).marginLeft).toBe("12px");
-      expect(getComputedStyle(scale as HTMLElement).display).toBe("block");
+      expect(getComputedStyle(scale as HTMLElement).display).toBe("none");
     } finally {
       view.unmount();
-      act(() => publishMapObstruction("scale-test-left", "left", null));
-      act(() => publishMapObstruction("scale-test-right", "right", null));
-      Object.defineProperty(window, "innerWidth", { configurable: true, value: previousWidth });
     }
   });
 
   it("hides the scale during ground navigation only", async () => {
     maplibreTest.reset();
     mapStyleTest.reset();
+    stubScreen("phone");
     vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
     const view = render(<MapCanvas />);
     try {

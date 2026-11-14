@@ -1,9 +1,7 @@
 "use client";
 
 import LayersIcon from "@mui/icons-material/Layers";
-import PublicIcon from "@mui/icons-material/Public";
 import Box from "@mui/material/Box";
-import ButtonBase from "@mui/material/ButtonBase";
 import Divider from "@mui/material/Divider";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
@@ -41,7 +39,6 @@ function DetailOptionTile({ entry }: { entry: GeneratedLayerEntry }) {
         preview={entry.preview}
         label={label}
         selected={overlayActive}
-        icon={entry.icon}
         disabled={disabled}
         onClick={() => {
           if (!disabled) toggleOverlay(entry.overlayId, { kind: "user" });
@@ -68,7 +65,6 @@ function GlobeTile() {
         preview={globePreview}
         label={t("globeView")}
         selected={globeView}
-        icon={<PublicIcon sx={{ fontSize: 14 }} />}
         onClick={() => setGlobeView(!globeView)}
       />
     </Box>
@@ -107,7 +103,6 @@ export function DesktopQuickSelector({ onMoreClick }: DesktopQuickSelectorProps)
               preview={option.preview}
               label={label}
               selected={selected}
-              icon={option.icon}
               onClick={() => setActiveLayer(option.id)}
             />
           </Box>
@@ -124,41 +119,27 @@ export function DesktopQuickSelector({ onMoreClick }: DesktopQuickSelectorProps)
 
       <GlobeTile />
 
-      <ButtonBase
-        onClick={onMoreClick}
-        aria-label={t("openAdvancedMenu")}
-        sx={{
-          width: 80,
-          minWidth: 80,
-          borderRadius: "12px",
-          p: 0.5,
-          textAlign: "center",
-          border: "2px solid transparent",
-        }}
-      >
-        <Box sx={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <Box
-            sx={{
-              width: 48,
-              height: 48,
-              borderRadius: "10px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              bgcolor: "var(--omx-hover-bg)",
-              mb: 0.3,
-              color: "text.secondary",
-            }}
-          >
-            <LayersIcon sx={{ fontSize: 24 }} />
-          </Box>
-          <Typography
-            sx={{ fontSize: 11, lineHeight: 1.15, fontWeight: 500, color: "text.secondary" }}
-          >
-            {t("more")}
-          </Typography>
-        </Box>
-      </ButtonBase>
+      <Box sx={{ width: 72, minWidth: 72, p: 0.5, display: "flex", justifyContent: "center" }}>
+        <LayerPreviewTile
+          preview={
+            <Box
+              sx={{
+                height: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                bgcolor: "var(--omx-hover-bg)",
+                color: "text.secondary",
+              }}
+            >
+              <LayersIcon />
+            </Box>
+          }
+          label={t("more")}
+          ariaLabel={t("openAdvancedMenu")}
+          onClick={onMoreClick}
+        />
+      </Box>
     </Paper>
   );
 }

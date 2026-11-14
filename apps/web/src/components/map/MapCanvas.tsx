@@ -3,8 +3,9 @@
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
-import { useColorScheme } from "@mui/material/styles";
+import { useColorScheme, useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import type { LngLat } from "@openmapx/core";
 import {
   isBuildingStyleLayer,
@@ -134,7 +135,10 @@ export function MapCanvas({
   // Turn-by-turn guidance has no use for a distance scale, and its speed-limit
   // badge sits over the same corner.
   const groundNavigating = useNavigationStore((s) => s.status !== "idle" && s.kind === "ground");
+  // Wider screens show the scale in the map footer instead (see MapScaleBar).
+  const phone = useMediaQuery(useTheme().breakpoints.down("sm"));
   const scaleVisible =
+    phone &&
     !carSurface &&
     !groundNavigating &&
     (viewportHeight === 0 || viewportHeight - insets.top - scaleBottom >= 24) &&

@@ -7,10 +7,8 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
-import ListItemButton from "@mui/material/ListItemButton";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import ListItemText from "@mui/material/ListItemText";
 import { useTranslations } from "next-intl";
+import { MenuRow } from "@/components/menu/MenuRow";
 import Dialog from "@/components/ui/Dialog";
 import { useInstallPrompt } from "./useInstallPrompt";
 
@@ -49,12 +47,11 @@ export function InstallEntry({ onClick, onIosHintNeeded }: InstallEntryProps) {
   };
 
   return (
-    <ListItemButton sx={{ height: 48 }} onClick={handle}>
-      <ListItemIcon sx={{ minWidth: 40 }}>
-        {platform === "ios" ? <IosShareIcon /> : <GetAppIcon />}
-      </ListItemIcon>
-      <ListItemText primary={t("installTitle")} />
-    </ListItemButton>
+    <MenuRow
+      icon={platform === "ios" ? <IosShareIcon /> : <GetAppIcon />}
+      label={t("installTitle")}
+      onClick={() => void handle()}
+    />
   );
 }
 

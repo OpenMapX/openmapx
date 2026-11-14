@@ -18,7 +18,6 @@ import { useTheme } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { formatShortcut, getPlatform, parseShortcut } from "@openmapx/command-palette";
 import type {
   AutocompleteResult,
   CategoryId,
@@ -55,7 +54,6 @@ import {
   useBrandSuggest,
   useCategorySearchStore,
   useChipTranslations,
-  useCommandPaletteStore,
   useCountryFromCoordinates,
   useDataSourceStore,
   useDataSources,
@@ -102,7 +100,6 @@ import {
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { servedAttributions } from "@/lib/servedAttributions";
 import { useBackDismiss } from "@/lib/useBackDismiss";
-import { useHydrated } from "@/lib/useHydrated";
 import { useRecentSearchStore } from "@/stores/recentSearchStore";
 import {
   AutocompleteDropdown,
@@ -118,10 +115,6 @@ import {
 } from "./searchSubmission";
 import { useSearchSubmission } from "./useSearchSubmission";
 import { VoiceSearchButton } from "./VoiceSearchButton";
-
-/** Pre-parsed once at module load — the shortcut never changes, no need to
- *  re-parse it on every SearchBar render. */
-const PALETTE_SHORTCUT = parseShortcut("Mod+K");
 
 export type { SearchBarSurface } from "./searchSubmission";
 
@@ -181,7 +174,6 @@ function searchSelectionContributors(
 export function SearchBar({ surface = "map" }: SearchBarProps) {
   const t = useTranslations("search");
   const tSaved = useTranslations("saved");
-  const tCmd = useTranslations("commandPalette");
   const tCommon = useTranslations("common");
   const locale = useLocale();
   const muiTheme = useTheme();
@@ -190,6 +182,8 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   const { setSelectedPlace } = usePlaceStore();
   const { selectWithEnrichment, cancelEnrichment } = usePlaceEnrichment();
   const { isOpen: hasSidePanel, close: closeSidePanel } = useActiveSidePanel();
+  const sidebarCollapsed = useSidebarStore((s) => s.collapsed);
+  const docked = !isMobile && hasSidePanel && !sidebarCollapsed && !isFocused;
   const { isOpen: directionsOpen, open: openDirections } = useDirectionsStore();
   const activeCategory = useCategorySearchStore((s) => s.activeCategory);
   const setActiveCategory = useCategorySearchStore((s) => s.setActiveCategory);
@@ -213,7 +207,6 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   // different place under the highlight.
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const [barEl, setBarEl] = useState<HTMLDivElement | null>(null);
-  const shortcutPlatform = useHydrated() ? getPlatform() : "other";
   const debouncedQuery = useAdaptiveDebounce(query, 150, 50);
   const debouncedGeoQuery = useDebounce(query, 400);
   const {
@@ -1056,9 +1049,13 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
         }}
       >
         <Paper
-          elevation={fullScreen ? 0 : isFocused ? 4 : 2}
+          elevation={fullScreen || docked ? 0 : isFocused ? 4 : 2}
           sx={{
             width: { xs: "100%", sm: 376 },
+            // Over the open side panel the bar is part of the panel: an outline
+            // instead of a shadow, which would float it above its own surface.
+            outline: docked ? "1px solid var(--omx-border-light)" : "none",
+            outlineOffset: -1,
             borderRadius:
               !fullScreen && (showDropdown || showEmptySearch) ? "24px 24px 16px 16px" : "24px",
             overflow: "hidden",
@@ -1183,45 +1180,6 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
                   <SearchIcon sx={{ fontSize: 22, color: "text.secondary" }} />
                 </IconButton>
               )
-            )}
-
-            {!nearbyMode && (
-              <Tooltip title={tCmd("open")} placement="bottom">
-                <Box
-                  component="kbd"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={tCmd("open")}
-                  onClick={() => useCommandPaletteStore.getState().open()}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      useCommandPaletteStore.getState().open();
-                    }
-                  }}
-                  sx={(theme) => ({
-                    display: { xs: "none", sm: "inline-flex" },
-                    alignItems: "center",
-                    fontFamily: "monospace",
-                    fontSize: 11,
-                    px: 0.75,
-                    py: 0.25,
-                    ml: 0.5,
-                    border: `1px solid ${theme.palette.divider}`,
-                    borderRadius: 1,
-                    color: "text.secondary",
-                    cursor: "pointer",
-                    userSelect: "none",
-                    "&:hover": { bgcolor: "action.hover" },
-                    "&:focus-visible": {
-                      outline: `2px solid ${theme.palette.primary.main}`,
-                      outlineOffset: 1,
-                    },
-                  })}
-                >
-                  {formatShortcut(PALETTE_SHORTCUT, shortcutPlatform)}
-                </Box>
-              </Tooltip>
             )}
 
             {!fullScreen &&

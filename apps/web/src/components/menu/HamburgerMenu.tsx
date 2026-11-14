@@ -2,35 +2,31 @@
 
 import BookmarkBorderIcon from "@mui/icons-material/BookmarkBorder";
 import CloseIcon from "@mui/icons-material/Close";
-import DownloadForOfflineIcon from "@mui/icons-material/DownloadForOffline";
-import HistoryIcon from "@mui/icons-material/History";
-import ImageIcon from "@mui/icons-material/Image";
+import DownloadForOfflineOutlinedIcon from "@mui/icons-material/DownloadForOfflineOutlined";
+import KeyboardOutlinedIcon from "@mui/icons-material/KeyboardOutlined";
 import LinkIcon from "@mui/icons-material/Link";
-import LocalParkingIcon from "@mui/icons-material/LocalParking";
-import PrintIcon from "@mui/icons-material/Print";
-import SettingsIcon from "@mui/icons-material/Settings";
-import StorageIcon from "@mui/icons-material/Storage";
-import TimelineIcon from "@mui/icons-material/Timeline";
-import UploadFileIcon from "@mui/icons-material/UploadFile";
+import LocalParkingOutlinedIcon from "@mui/icons-material/LocalParkingOutlined";
+import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+import StorageOutlinedIcon from "@mui/icons-material/StorageOutlined";
+import TimelineOutlinedIcon from "@mui/icons-material/TimelineOutlined";
+import UploadFileOutlinedIcon from "@mui/icons-material/UploadFileOutlined";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
 import List from "@mui/material/List";
-import ListItemButton from "@mui/material/ListItemButton";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import ListItemText from "@mui/material/ListItemText";
 import Snackbar from "@mui/material/Snackbar";
 import Typography from "@mui/material/Typography";
+import { formatShortcut, getPlatform, parseShortcut } from "@openmapx/command-palette";
 import {
   PANEL,
+  useCommandPaletteStore,
   useMenuStore,
   useParkedLocations,
   useParkingStore,
   useSession,
   useSidebarStore,
 } from "@openmapx/core";
-import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { type ChangeEvent, useRef, useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
@@ -40,6 +36,10 @@ import { StorageDialog } from "@/components/settings/StorageDialog";
 import { shareCurrentUrl } from "@/lib/deepLink";
 import { IMPORT_ACCEPT, importGeoFromFile } from "@/lib/importGeoFile";
 import { useBackDismiss } from "@/lib/useBackDismiss";
+import { useFinePointer } from "@/lib/useFinePointer";
+import { MenuRow } from "./MenuRow";
+
+const PALETTE_SHORTCUT = parseShortcut("Mod+K");
 
 const DRAWER_WIDTH = 280;
 
@@ -58,6 +58,8 @@ export function HamburgerMenu() {
   const [storageOpen, setStorageOpen] = useState(false);
   const [iosHintOpen, setIosHintOpen] = useState(false);
   const [importFailed, setImportFailed] = useState(false);
+  // The command palette is a keyboard tool; touch screens don't list it.
+  const finePointer = useFinePointer();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImportFile = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -92,6 +94,11 @@ export function HamburgerMenu() {
     if (!first) return;
     useParkingStore.getState().select(first.id);
     useSidebarStore.getState().openSidebar(PANEL.PARKING);
+  };
+
+  const handleCommandPalette = () => {
+    close();
+    useCommandPaletteStore.getState().open();
   };
 
   const handleShareMap = async () => {
@@ -140,153 +147,76 @@ export function HamburgerMenu() {
 
         <Divider />
 
-        <List disablePadding>
-          <ListItemButton sx={{ height: 48 }} onClick={handleSaved}>
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <BookmarkBorderIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("saved")} />
-          </ListItemButton>
-
+        <List disablePadding sx={{ py: 1 }}>
+          <MenuRow icon={<BookmarkBorderIcon />} label={t("saved")} onClick={handleSaved} />
           {isSignedIn && (
-            <ListItemButton sx={{ height: 48 }} onClick={handleTimeline}>
-              <ListItemIcon sx={{ minWidth: 40 }}>
-                <TimelineIcon />
-              </ListItemIcon>
-              <ListItemText primary={t("timeline")} />
-            </ListItemButton>
+            <MenuRow
+              icon={<TimelineOutlinedIcon />}
+              label={t("timeline")}
+              onClick={handleTimeline}
+            />
           )}
-
           {/* Conditional rather than disabled: an always-present "Parking" that
               does nothing teaches the user the entry is broken. */}
           {parked && parked.length > 0 && (
-            <ListItemButton sx={{ height: 48 }} onClick={handleParking}>
-              <ListItemIcon sx={{ minWidth: 40 }}>
-                <LocalParkingIcon />
-              </ListItemIcon>
-              <ListItemText primary={t("parking")} />
-            </ListItemButton>
+            <MenuRow
+              icon={<LocalParkingOutlinedIcon />}
+              label={t("parking")}
+              onClick={handleParking}
+            />
           )}
-
-          <ListItemButton
-            sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
-            aria-disabled="true"
-          >
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <HistoryIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("recent")} />
-          </ListItemButton>
-
-          <ListItemButton
-            sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
-            aria-disabled="true"
-          >
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <ImageIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("contributions")} />
-          </ListItemButton>
         </List>
 
         <Divider />
 
-        <List disablePadding>
+        <List disablePadding sx={{ py: 1 }}>
           <InstallEntry onClick={close} onIosHintNeeded={() => setIosHintOpen(true)} />
-
-          <ListItemButton
-            component={Link}
+          <MenuRow
+            icon={<DownloadForOfflineOutlinedIcon />}
+            label={t("offlineMaps")}
             href="/settings/offline"
-            sx={{ height: 48 }}
             onClick={close}
-          >
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <DownloadForOfflineIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("offlineMaps")} />
-          </ListItemButton>
-
-          <ListItemButton
-            sx={{ height: 48 }}
+          />
+          <MenuRow
+            icon={<StorageOutlinedIcon />}
+            label={t("storage")}
             onClick={() => {
               close();
               setStorageOpen(true);
             }}
-          >
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <StorageIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("storage")} />
-          </ListItemButton>
-
-          <ListItemButton sx={{ height: 48 }} onClick={handleShareMap}>
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <LinkIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("shareMap")} />
-          </ListItemButton>
-
-          <ListItemButton sx={{ height: 48 }} onClick={() => fileInputRef.current?.click()}>
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <UploadFileIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("importFile")} />
-          </ListItemButton>
-
-          <ListItemButton
-            sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
-            aria-disabled="true"
-          >
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <PrintIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("print")} />
-          </ListItemButton>
+          />
+          <MenuRow icon={<LinkIcon />} label={t("shareMap")} onClick={handleShareMap} />
+          <MenuRow
+            icon={<UploadFileOutlinedIcon />}
+            label={t("importFile")}
+            onClick={() => fileInputRef.current?.click()}
+          />
         </List>
 
         <Divider />
 
-        <List disablePadding>
-          <ListItemButton
-            sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
-            aria-disabled="true"
-          >
-            <ListItemText primary={t("tips")} />
-          </ListItemButton>
-
-          <ListItemButton
-            sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
-            aria-disabled="true"
-          >
-            <ListItemText primary={t("help")} />
-          </ListItemButton>
+        <List disablePadding sx={{ py: 1 }}>
+          {finePointer && (
+            <MenuRow
+              icon={<KeyboardOutlinedIcon />}
+              label={t("commandPalette")}
+              hint={formatShortcut(PALETTE_SHORTCUT, getPlatform())}
+              onClick={handleCommandPalette}
+            />
+          )}
+          <MenuRow
+            icon={<SettingsOutlinedIcon />}
+            label={t("settings")}
+            onClick={() => setSettingsOpen(true)}
+          />
         </List>
 
         <Divider />
 
-        <List disablePadding>
-          <ListItemButton sx={{ height: 48 }} onClick={() => setSettingsOpen(true)}>
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <SettingsIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("settings")} />
-          </ListItemButton>
-        </List>
-
-        <Divider />
-
-        <List disablePadding>
-          <ListItemButton component={Link} href="/privacy" sx={{ height: 48 }} onClick={close}>
-            <ListItemText primary={t("privacy")} />
-          </ListItemButton>
-
-          <ListItemButton component={Link} href="/terms" sx={{ height: 48 }} onClick={close}>
-            <ListItemText primary={t("terms")} />
-          </ListItemButton>
-
-          <ListItemButton component={Link} href="/imprint" sx={{ height: 48 }} onClick={close}>
-            <ListItemText primary={t("imprint")} />
-          </ListItemButton>
+        <List disablePadding sx={{ py: 1 }}>
+          <MenuRow label={t("privacy")} href="/privacy" onClick={close} />
+          <MenuRow label={t("terms")} href="/terms" onClick={close} />
+          <MenuRow label={t("imprint")} href="/imprint" onClick={close} />
         </List>
       </Drawer>
       <input
