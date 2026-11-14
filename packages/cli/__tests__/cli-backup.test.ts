@@ -1343,7 +1343,12 @@ describe("backup volume modes", () => {
       }
       inputs.push({ args: args.join(" "), input: options?.input });
       if (command === "docker" && args.some((arg) => arg.includes("pg_stat_activity"))) {
-        return Promise.resolve({ exitCode: 0, stdout: "previous|0\n", stderr: "" });
+        // An autovacuum worker on the live database does not hold the swap up.
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: "previous|0|\nsession||autovacuum worker\n",
+          stderr: "",
+        });
       }
       if (command === "docker" && args.includes("--tuples-only")) {
         expect(args.join(" ")).toContain("datname = 'timeline'");
@@ -1405,12 +1410,12 @@ describe("backup volume modes", () => {
   it.each([
     [
       "a session of a service it does not stop",
-      "previous|0\nsession|openmapx_data_manager\nsession|openmapx_tiles\n",
+      "previous|0|\nsession|openmapx_data_manager|client backend\nsession|openmapx_tiles|client backend\nsession||autovacuum worker\n",
       "database timeline is in use by data-manager, martin",
     ],
     [
       "a database left by an earlier restore",
-      "previous|1\n",
+      "previous|1|\n",
       "database timeline__previous, left by an earlier restore, still exists",
     ],
   ])(

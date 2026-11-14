@@ -152,21 +152,38 @@ describe("restoring into a scratch database", () => {
   it("counts only sessions of services the restore leaves running", () => {
     const stopping = new Set(["app-api"]);
     expect(
-      swapPreconditionRefusal("openmapx", "previous|0\nsession|openmapx_api\n", stopping),
+      swapPreconditionRefusal(
+        "openmapx",
+        "previous|0|\nsession|openmapx_api|client backend\n",
+        stopping,
+      ),
     ).toBe(undefined);
     expect(
       swapPreconditionRefusal(
         "openmapx",
-        "previous|0\nsession|openmapx_api\nsession|openmapx_data_manager\nsession|postgres\n",
+        "previous|0|\nsession|openmapx_api|client backend\nsession|openmapx_data_manager|client backend\nsession|postgres|client backend\n",
         stopping,
       ),
     ).toBe(
       "database openmapx is in use by data-manager, role postgres, which would keep the restored database from replacing it; stop them, then restore again",
     );
-    expect(swapPreconditionRefusal("openmapx", "previous|1\n", stopping)).toContain(
+    expect(swapPreconditionRefusal("openmapx", "previous|1|\n", stopping)).toContain(
       "database openmapx__previous, left by an earlier restore, still exists",
     );
     expect(swapPreconditionsQuery("openmapx")).toContain("datname = 'openmapx__previous'");
+    // Autovacuum and other server processes have no role, and the rename
+    // itself makes them leave the database; only client sessions block it.
+    expect(
+      swapPreconditionRefusal(
+        "openmapx",
+        "previous|0|\nsession||autovacuum worker\nsession||parallel worker\nsession||background worker\n",
+        stopping,
+      ),
+    ).toBe(undefined);
+    expect(
+      swapPreconditionRefusal("openmapx", "previous|0|\nsession||client backend\n", stopping),
+    ).toContain("database openmapx is in use by role (unknown)");
+    expect(swapPreconditionsQuery("openmapx")).toContain("backend_type");
     expect(() => swapPreconditionsQuery("bad'name")).toThrow("Unsafe database name");
   });
 
