@@ -3,6 +3,7 @@ import {
   acquireArtifactTargetLease,
   assertArtifactTargetLeaseExecution,
   assertArtifactTargetLeaseForward,
+  assertControlStorageAvailable,
   assertFreshControlRoot,
   beginControlEffect,
   bindBorrowedControlExecution,
@@ -688,6 +689,18 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           jobsByKey.delete(`${job.role}:${job.operationKey}`);
         }
     });
+  };
+  /** A journal entry still describes this key's execution, directly or as the
+   * preparation its maintenance controls belong to; its records stay. */
+  const journalReferences = (operationKey: string) => {
+    for (const job of jobsById.values())
+      if (
+        job.operationKey === operationKey ||
+        ("prepareOperationKey" in job.operation &&
+          job.operation.prepareOperationKey === operationKey)
+      )
+        return true;
+    return false;
   };
   /** Entries that need recovery are bounded separately, so they never use up
    * the capacity for new work. */
@@ -1852,6 +1865,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     await options.artifactTransfers
       ?.reconcileTransferStages({ signal: AbortSignal.timeout(30000) })
       .catch(() => undefined);
+    // Entries past their retention go before any record is restored, so a
+    // record the control prune removed is never looked up for them.
+    await pruneJobs(now().getTime());
     let changed = false;
     if (options.controlInstallation) {
       const accepted = restoreConfigurationMaintenanceControlJournal(options.controlInstallation),
@@ -1904,8 +1920,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           )
             throw Error("Original maintenance control canonical conflict");
           if (canonicalJson(persisted(prior)) === canonicalJson(source)) continue;
-        } else if (next.size >= maxJobEntries)
-          throw Error("Original maintenance control recovery capacity exceeded");
+        }
         const restored: JobRecord = {
           ...source,
           terminalAt: source.terminalAt === undefined ? undefined : Date.parse(source.terminalAt),
@@ -1914,6 +1929,13 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           eventBytes: prior?.eventBytes ?? 0,
           eventsTruncated: true,
         };
+        if (!prior) {
+          // An entry already past its retention is not brought back, so it
+          // cannot keep the records it names from the prune.
+          if (!retainedJob(restored, now().getTime())) continue;
+          if (next.size >= maxJobEntries)
+            throw Error("Original maintenance control recovery capacity exceeded");
+        }
         next.set(restored.operationId, restored);
         changed = true;
       }
@@ -2129,7 +2151,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       const prune = startControlPrune(options.controlInstallation, {
         onError: (error) =>
           (options.logger ?? { warn: console.warn }).warn("Control record prune failed", error),
-        keep: (operationKey) => newestStagedCoordinatorKey() === operationKey,
+        keep: (operationKey) =>
+          newestStagedCoordinatorKey() === operationKey || journalReferences(operationKey),
       });
       stopControlPrune = prune.stop;
       await prune.ready;
@@ -2488,6 +2511,15 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
               return { type: "retained", job: retained } as const;
             }
             if (journalFull()) throw new RequestGuardError("busy", 429);
+            if (
+              options.controlInstallation &&
+              opsKindRequiresControlAuthority(parsed.operation.kind)
+            )
+              try {
+                assertControlStorageAvailable(options.controlInstallation);
+              } catch {
+                throw new RequestGuardError("busy", 429);
+              }
             if (normalized.deadlineAt <= now().getTime())
               throw new RequestGuardError("timeout", 504);
             const timestamp = new Date(normalized.admittedAt).toISOString();

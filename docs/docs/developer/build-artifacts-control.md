@@ -331,8 +331,12 @@ Each role prunes its own records at startup and then hourly
 
 A pass examines at most 64 executions and resumes where the previous pass
 stopped. Records of an unknown or recovery-required execution stay regardless of
-age. The agent also keeps the newest successful staged data-manager pull, which
-describes the running coordinator. Data-manager deletes its settled fence rows and
+age. The agent also keeps the records of any execution its journal still lists,
+directly or as the preparation of a maintenance control entry, and of the newest
+successful staged data-manager pull, which describes the running coordinator. On
+startup the agent drops journal entries past their retention before restoring
+any, and does not bring back a maintenance control entry already past it.
+Data-manager deletes its settled fence rows and
 finished execution rows for pruned executions before their files. Readers never
 treat a pruned record as permission: a missing admission, effect or lease is
 unknown, and an expired key is refused. There is no separate retention clock. A

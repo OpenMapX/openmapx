@@ -147,15 +147,17 @@ function prunable(
   }
   return { key: admitted.execution.operationKey, execution: admitted.execution, leased };
 }
-/** The role's shared execution witnesses and, for the agent, its service
- * lifecycle receipts. Entries are named after the operation key. */
+/** The role's shared execution witnesses, named after the operation key, and
+ * the service lifecycle receipts whose signed seed names a pruned root. */
 function removeShared(local: InstallationState, keys: readonly string[]): void {
   const role = local.installation.role,
     paths = [
-      join(local.dataRoot, ".admin-target-control", "executions", role),
-      ...(role === "ops-agent" ? [join(local.dataRoot, "ops-agent", "lifecycle")] : []),
+      { path: join(local.dataRoot, ".admin-target-control", "executions", role), content: false },
+      ...(role === "ops-agent" || role === "host-cli"
+        ? [{ path: join(local.dataRoot, "ops-agent", "lifecycle"), content: true }]
+        : []),
     ];
-  for (const path of paths) {
+  for (const { path, content } of paths) {
     let dir: AnchoredDirectory;
     try {
       dir = new AnchoredDirectory(path);
@@ -164,9 +166,17 @@ function removeShared(local: InstallationState, keys: readonly string[]): void {
       throw error;
     }
     try {
-      for (const entry of dir.listBounded(MAX_ENTRIES))
-        if (keys.some((key) => entry.startsWith(`${key}.`)))
-          rmSync(dir.name(entry), { recursive: true, force: true });
+      for (const entry of dir.listBounded(MAX_ENTRIES)) {
+        let owned = keys.some((key) => entry.startsWith(`${key}.`));
+        if (!owned && content)
+          try {
+            const text = dir.read(entry, 65536, false).toString("utf8");
+            owned = keys.some((key) => text.includes(key));
+          } catch {
+            /* Unreadable entries are left alone. */
+          }
+        if (owned) rmSync(dir.name(entry), { recursive: true, force: true });
+      }
     } finally {
       dir.close();
     }
