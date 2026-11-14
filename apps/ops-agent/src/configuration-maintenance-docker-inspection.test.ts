@@ -19,21 +19,25 @@ afterEach(() => {
 function fixture(volumes = 3, secrets = 1, configs = 1) {
   const root = mkdtempSync(join(tmpdir(), "maintenance-mounts-"));
   roots.push(root);
-  services.ensureReleaseStateDirectories(root);
+  // The production layout: the stack's directory is <checkout>/infra/docker.
+  const checkout = join(root, "checkout"),
+    infra = join(checkout, "infra", "docker");
+  mkdirSync(infra, { recursive: true, mode: 0o700 });
+  services.ensureReleaseStateDirectories(infra);
   const revision = `cfg1_${"a".repeat(43)}`;
-  const generation = join(root, services.CONFIGURATION_GENERATIONS, revision);
+  const generation = join(infra, services.CONFIGURATION_GENERATIONS, revision);
   mkdirSync(generation, { recursive: true, mode: 0o700 });
   writeFileSync(join(generation, services.GENERATED_COMPOSE_FILE), "services: {}\n", {
     mode: 0o600,
   });
-  symlinkSync(`generations/${revision}`, join(root, services.CURRENT_CONFIGURATION));
+  symlinkSync(`generations/${revision}`, join(infra, services.CURRENT_CONFIGURATION));
   symlinkSync(
     `generations/${revision}`,
-    join(root, services.CONFIGURATION_DIRECTORY, `.base-${revision}`),
+    join(infra, services.CONFIGURATION_DIRECTORY, `.base-${revision}`),
   );
-  const data = join(root, "data"),
-    other = join(root, "other"),
-    file = join(root, "private-file");
+  const data = join(checkout, "data"),
+    other = join(checkout, "other"),
+    file = join(checkout, "private-file");
   mkdirSync(data, { mode: 0o700 });
   mkdirSync(other, { mode: 0o700 });
   writeFileSync(file, "fixture-content", { mode: 0o600 });
@@ -116,9 +120,9 @@ function fixture(volumes = 3, secrets = 1, configs = 1) {
   const inspect = () =>
     inspectMaintenanceDockerRuntime({
       stack: {
-        infraDir: root,
+        infraDir: infra,
         composePath: join(generation, services.GENERATED_COMPOSE_FILE),
-        composeReleasePath: join(root, "unused-release.yml"),
+        composeReleasePath: join(infra, "unused-release.yml"),
       },
       owner,
       containers: [container],

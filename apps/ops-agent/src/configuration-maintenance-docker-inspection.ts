@@ -3,7 +3,7 @@
 import { createHmac, type KeyObject, timingSafeEqual } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { canonicalJson } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import {
@@ -92,17 +92,16 @@ export async function inspectMaintenanceDockerRuntime(options: {
   // it, so such a source is compared as written. Inside the checkout every
   // source must resolve.
   const checkout = dirname(dirname(options.stack.infraDir));
+  const insideCheckout = (path: string) => {
+    const rest = relative(checkout, path);
+    return rest === "" || (!isAbsolute(rest) && rest !== ".." && !rest.startsWith(`..${sep}`));
+  };
   const bindSource = async (path: string) => {
     try {
       return await realpath(path);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code ?? "";
-      if (
-        path === checkout ||
-        path.startsWith(`${checkout}/`) ||
-        !["ENOENT", "EACCES", "ENOTDIR"].includes(code)
-      )
-        throw error;
+      if (insideCheckout(path) || !["ENOENT", "EACCES", "ENOTDIR"].includes(code)) throw error;
       return path;
     }
   };
