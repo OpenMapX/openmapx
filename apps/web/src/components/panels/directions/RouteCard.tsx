@@ -318,7 +318,9 @@ export function RouteCard({
           {ascentLabel}
         </Typography>
       )}
-      {roadConditionNotice && (
+      {/* Route-level notes belong to the chosen route; alternatives stay a
+          compact comparison of time, way and distance. */}
+      {active && roadConditionNotice && (
         <Typography
           variant="caption"
           data-testid="road-condition-route-status"
@@ -373,8 +375,10 @@ export function RouteCard({
         py: 1.5,
         cursor: "pointer",
         borderLeft: active ? `4px solid ${BRAND}` : "4px solid transparent",
-        bgcolor: active ? "rgba(0,123,139,0.04)" : "transparent",
-        "&:hover": { bgcolor: active ? "rgba(0,123,139,0.07)" : "action.hover" },
+        bgcolor: active ? "color-mix(in srgb, var(--omx-brand) 5%, transparent)" : "transparent",
+        "&:hover": {
+          bgcolor: active ? "color-mix(in srgb, var(--omx-brand) 8%, transparent)" : "action.hover",
+        },
         transition: "background-color 0.15s",
       }}
     >
@@ -445,7 +449,7 @@ export function RouteCard({
               {tTraffic("summary")}
             </Box>
           )}
-        {impact ? (
+        {!active ? null : impact ? (
           // biome-ignore lint/plugin/noClickableLayoutElement: keeps the badge's click from selecting the route
           <Box
             sx={{ mt: 0.5 }}
@@ -485,39 +489,22 @@ export function RouteCard({
           </Typography>
         )}
         {active && (
-          <Box sx={{ mt: 0.5, ml: -1.5, display: "flex", alignItems: "center", gap: 0.5 }}>
-            <Typography
-              component="button"
-              type="button"
-              variant="caption"
-              sx={{
-                color: BRAND,
-                cursor: "pointer",
-                fontWeight: 500,
-                px: 1.5,
-                py: 0.75,
-                borderRadius: 99,
-                border: 0,
-                bgcolor: "transparent",
-                "&:hover": { bgcolor: `${BRAND}18` },
-                "&:focus-visible": {
-                  outline: "2px solid",
-                  outlineColor: "primary.main",
-                  outlineOffset: 2,
-                },
-                transition: "background-color 0.15s",
-              }}
+          <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 1 }}>
+            <Button
+              size="small"
+              variant="tonal"
               onClick={(e) => {
                 e.stopPropagation();
                 onDetails();
               }}
             >
               {tc("details")}
-            </Typography>
+            </Button>
             {GROUND_MODES.has(route.mode) && (
               <Button
                 size="small"
                 variant="contained"
+                disableElevation
                 startIcon={<NavigationIcon />}
                 // A second tap while the shell is still preparing would start a
                 // second session nobody is watching.
@@ -525,12 +512,6 @@ export function RouteCard({
                 onClick={(e) => {
                   e.stopPropagation();
                   void handleStart();
-                }}
-                sx={{
-                  bgcolor: BRAND,
-                  textTransform: "none",
-                  borderRadius: 99,
-                  "&:hover": { bgcolor: BRAND },
                 }}
               >
                 {tNav("start")}
