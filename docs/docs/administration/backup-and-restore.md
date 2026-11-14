@@ -24,8 +24,9 @@ the volumes flagged `backup: true`. Common built-in targets are:
 - **`postgis`**: the PostgreSQL/PostGIS database. User
   accounts and sessions, saved places, vehicle and parking state, share payloads,
   Timeline connection metadata, the audit log, all admin and integration
-  configuration, and imported place data live here. It is captured with a streamed `pg_dump` piped through gzip
-  while the database stays running.
+  configuration, and imported place data live here. It is captured as a streamed
+  `pg_dump` archive in PostgreSQL's compressed custom format while the database
+  stays running.
 - **`redis`**: the Valkey (Redis-compatible) cache. Holds the transit registry
   snapshot and assorted app caches. Captured as a gzipped `tar` of the volume.
 - **`traefik`**: the reverse proxy's ACME state, i.e. the Let's Encrypt
@@ -37,7 +38,7 @@ volumes. Community services can declare additional backup-enabled named volumes.
 Inspect the resulting manifest instead of assuming the three core services are
 the complete inventory.
 
-Database dumps stream through gzip while the database stays running. For
+Database dumps stream while the database stays running. For
 `tar`-mode volumes, the producing service stops during the copy and restarts
 afterward. Plan for that interruption. Separate services are captured in
 sequence; this is not a transactionally consistent snapshot of the whole stack.
@@ -137,12 +138,12 @@ macOS or Windows cannot connect through such a socket.
    under `infra/docker/backups/` with its creation time.
 2. **Pick a snapshot within retention and check it.** Choose a snapshot whose
    manifest `expiresAt` has not passed. Its `manifest.json` names each dump
-   file (`postgis__<volume>.sql.gz` for the OpenMapX database) with its size
+   file (`postgis__<volume>.dump` for the OpenMapX database) with its size
    and `sha256`. Compare the digest before using the file:
 
    ```bash
    SNAPSHOT=infra/docker/backups/<name>
-   sha256sum "$SNAPSHOT"/postgis__*.sql.gz   # must equal the manifest sha256
+   sha256sum "$SNAPSHOT"/postgis__*.dump   # must equal the manifest sha256
    ```
 
 3. **Start the scratch database.** Use the PostGIS image that production
@@ -171,18 +172,24 @@ macOS or Windows cannot connect through such a socket.
 4. **Restore the dump into a fresh database.** The entrypoint first runs a
    temporary server that listens only on the socket, then restarts. Wait for
    the final server on the container's loopback address, which still exists
-   with `--network none`. Then load the OpenMapX dump into an empty database,
-   as `pnpm openmapx backup restore` does. A database created by the image
-   already holds the PostGIS extension schemas that the dump creates again,
-   and the load would stop on them.
+   with `--network none`. Then restore the OpenMapX dump into an empty
+   database. A database created by the image already holds the PostGIS
+   extension schemas that the dump creates again, and the restore would stop
+   on them. The scratch restore gives every object to the superuser, so it
+   needs none of the deployment's roles.
 
    ```bash
    until docker exec openmapx-privacy-scratch pg_isready -q -h 127.0.0.1 -U postgres; do sleep 2; done
    docker exec openmapx-privacy-scratch dropdb -U postgres --if-exists openmapx
    docker exec openmapx-privacy-scratch createdb -U postgres openmapx
    docker exec openmapx-privacy-scratch sh -c \
-     'gunzip -c /snapshot/postgis__*.sql.gz | psql -q -v ON_ERROR_STOP=1 -U postgres -d openmapx'
+     'pg_restore --exit-on-error --no-owner --no-privileges -U postgres -d openmapx /snapshot/postgis__*.dump'
    ```
+
+   Unlike `pnpm openmapx backup restore`, which restores each object as the
+   role that owns it, this restore runs every role's check constraints and
+   index expressions as the scratch database's superuser. Keep the container
+   without network, secrets or other mounts, and remove it afterwards.
 
    A managed Dawarich timeline lives in the separate `dawarich-postgis__*`
    dump; check it the same way in its own scratch container if the person had
@@ -322,18 +329,43 @@ must be readable and the journal must be cryptographically bound to that key;
 the backup must not predate the journal's current coverage floor; and
 the platform version in the snapshot's manifest must be compatible. A **major-version**
 mismatch is refused outright, while a minor mismatch prints a warning and
-proceeds. If a targeted tar-volume service is running, or if `app-api` is serving
-the OpenMapX database being restored, the restore refuses unless you opt in:
+proceeds. If a targeted tar-volume service is running, or if a client of the
+OpenMapX database being restored is running, the restore refuses unless you opt
+in:
 
 ```bash
 pnpm openmapx backup restore weekly --stop-running
 ```
 
-With `--stop-running`, the CLI stops the required tar targets and dependent API and restarts them after a successful restore. The database server stays running because replaying the
-dump through `psql` needs it. For an OpenMapX database restore, the CLI also
-stops `app-api` before the database is replaced and restarts it only after the
-erasure journal has been replayed. If restore or replay fails, the API remains
-stopped so it cannot expose resurrected account data.
+With `--stop-running`, the CLI stops the required tar targets and, for an
+OpenMapX database restore, every client of that database (`app-api`,
+`data-manager` and `martin`), and restarts them after a successful restore. The
+database server stays running because restoring the dump needs it. The API
+restarts only after the erasure journal has been replayed. If replay fails after
+the database was replaced, the API remains stopped so it cannot expose
+resurrected account data.
+
+Before it stops or changes anything, the CLI checks every file in the backup and
+plans every database restore against the live server. A backup it refuses leaves
+every service and volume as it was. What an operator needs to know:
+
+- **The database's roles must exist first.** The roles belong to the PostgreSQL
+  server, not to any database, and are not in the dump. PostGIS creates the
+  platform's roles each time it starts, so to restore onto a new host or an
+  empty volume, render and start `postgis` from this checkout first, then
+  restore. A community service's own role (see
+  [Community extensions](./community-extensions.md)) must likewise exist, and
+  be able to log in, before its database is restored. A backup with objects of
+  a role the server lacks, or of a role that cannot log in, is refused.
+- **It needs disk space for a second copy** of the database while it runs: it
+  restores into a scratch database and replaces the live one only once that
+  succeeded.
+- **A failure leaves the live database as it was**, and the stopped services
+  are started again. Clients still connected when the restored database
+  replaces the live one are disconnected.
+- **Backups taken before the database roles** are plain SQL files
+  (`.sql.gz`). The CLI still restores them into other services' databases, but
+  refuses them for the OpenMapX database, whose tables the roles must own.
 
 When it restores the OpenMapX database, the CLI also closes every job the
 snapshot still shows as in progress, before the API restarts. That covers queued,

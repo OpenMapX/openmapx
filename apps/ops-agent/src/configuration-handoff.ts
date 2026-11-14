@@ -207,6 +207,39 @@ export function configurationHandoffRunArgs(
     if (!mount) throw Error("Configuration helper control mounts unavailable");
     return `${mount.source}${target.slice(mount.target.length)}`;
   };
+  // The helper's own mounts: the other roles' keys and private directories
+  // hidden, and its control material. The agent masks some of the same
+  // targets itself; Docker refuses two mounts at one target, so the helper
+  // keeps its own and does not inherit the agent's there.
+  const own = [
+    ...["ops-agent", "data-manager", "host-cli"].map((role) => ({
+      source: hostSource(join(rootDir, "infra/docker/control-private/hidden-key")),
+      target: `${rootDir}/infra/docker/secrets/control-${role}.key`,
+      readOnly: true,
+    })),
+    ...["data-manager", "host-cli"].map((role) => ({
+      source: hostSource(join(rootDir, "infra/docker/control-private/empty")),
+      target: `${rootDir}/infra/docker/control-private/${role}`,
+      readOnly: true,
+    })),
+    {
+      source: hostSource(join(rootDir, "infra/docker/control-private/ops-agent")),
+      target: "/var/lib/openmapx/control-private",
+      readOnly: false,
+    },
+    {
+      source: hostSource(join(rootDir, "infra/docker/secrets/control-verifiers.json")),
+      target: "/run/secrets/openmapx-control-verifiers",
+      readOnly: true,
+    },
+  ];
+  const mounts = [
+    { source: facts.dockerSocketSource, target: "/var/run/docker.sock", readOnly: false },
+    ...facts.rootMounts.filter((mount) => !own.some((entry) => entry.target === mount.target)),
+    ...own,
+  ];
+  if (new Set(mounts.map((mount) => mount.target)).size !== mounts.length)
+    throw Error("Configuration helper launch rejected");
   return [
     "run",
     "--detach",
@@ -231,24 +264,10 @@ export function configurationHandoffRunArgs(
     "256m",
     "--pids-limit",
     "256",
-    "--mount",
-    `type=bind,source=${facts.dockerSocketSource},target=/var/run/docker.sock`,
-    ...facts.rootMounts.flatMap((mount) => [
+    ...mounts.flatMap((mount) => [
       "--mount",
       `type=bind,source=${mount.source},target=${mount.target}${mount.readOnly ? ",readonly" : ""}`,
     ]),
-    ...["ops-agent", "data-manager", "host-cli"].flatMap((role) => [
-      "--mount",
-      `type=bind,source=${hostSource(join(rootDir, "infra/docker/control-private/hidden-key"))},target=${rootDir}/infra/docker/secrets/control-${role}.key,readonly`,
-    ]),
-    ...["data-manager", "host-cli"].flatMap((role) => [
-      "--mount",
-      `type=bind,source=${hostSource(join(rootDir, "infra/docker/control-private/empty"))},target=${rootDir}/infra/docker/control-private/${role},readonly`,
-    ]),
-    "--mount",
-    `type=bind,source=${hostSource(join(rootDir, "infra/docker/control-private/ops-agent"))},target=/var/lib/openmapx/control-private`,
-    "--mount",
-    `type=bind,source=${hostSource(join(rootDir, "infra/docker/secrets/control-verifiers.json"))},target=/run/secrets/openmapx-control-verifiers,readonly`,
     ...inherited.flatMap((name) => ["--env", name]),
     "--env",
     "DOCKER_CONFIG=/tmp/docker",

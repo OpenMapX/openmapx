@@ -8,6 +8,7 @@ import {
 import * as dm from "@openmapx/core/data-manager-sdk";
 import { canonicalJson, executionFingerprint, opsExecutionBudget } from "@openmapx/core/ops";
 import { envString } from "@openmapx/core/server-env";
+import { readDataManagerToken } from "@openmapx/core/service-secret-files";
 import type { FastifyInstance } from "fastify";
 import {
   TransitPinRequestConflict,
@@ -26,7 +27,7 @@ const register = createAdminRouteRegistrar(transitPinOperations, {
 function transport(long = false) {
   return dm.createDataManagerTransport({
     baseUrl: envString("DATA_MANAGER_URL", "http://localhost:4000"),
-    authToken: envString("DATA_MANAGER_AUTH_TOKEN", ""),
+    authToken: readDataManagerToken(),
     requestTimeoutMs: long ? 120000 : 15000,
     maxJsonBytes: 8 * 1024 * 1024,
   });

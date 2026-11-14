@@ -5,6 +5,7 @@ import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { dataManagerTokenFile } from "../../test/data-manager-token";
 
 const policySnapshot = vi.hoisted(() =>
   vi.fn(async () => ({
@@ -144,7 +145,7 @@ let repoRootDir: string;
 beforeAll(async () => {
   repoRootDir = mkdtempSync(join(tmpdir(), "openmapx-dm-state-"));
   vi.stubEnv("OPENMAPX_ROOT_DIR", repoRootDir);
-  vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "test-token");
+  vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile("test-token"));
 
   const { dataManagerRoute } = await import("../data-manager.js");
   app = Fastify({ logger: false });
@@ -241,6 +242,20 @@ describe("transit job filters", () => {
 });
 
 describe("GET /data-manager/transit/state", () => {
+  it("answers 401, not 500, for a bearer token when its token file is unreadable", async () => {
+    vi.stubEnv("DATA_MANAGER_TOKEN_FILE", join(repoRootDir, "missing-token"));
+    try {
+      const res = await app.inject({
+        method: "GET",
+        url: "/data-manager/transit/state",
+        headers: { authorization: "Bearer test-token" },
+      });
+      expect(res.statusCode).toBe(401);
+    } finally {
+      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile("test-token"));
+    }
+  });
+
   it("returns 401 without auth", async () => {
     const res = await app.inject({ method: "GET", url: "/data-manager/transit/state" });
     expect(res.statusCode).toBe(401);

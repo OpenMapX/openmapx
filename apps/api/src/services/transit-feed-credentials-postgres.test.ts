@@ -41,6 +41,7 @@ vi.mock("./service-registry", () => ({
 
 import { AdminActionReauthentication } from "../account/admin-reauthentication";
 import * as schema from "../db/schema";
+import { dataManagerTokenFile } from "../test/data-manager-token";
 import { jobRunner } from "./job-runner";
 import { decrypt, encrypt } from "./secrets";
 import { bindTransitCredentialAuthorization } from "./transit-credential-authorization";
@@ -192,7 +193,7 @@ describe.skipIf(!enabled)(
         loseSettlementCommitAcknowledgement: faults,
       });
       vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-      vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
       const dmRow = {
         ...host.row,
         Id: "c".repeat(64),

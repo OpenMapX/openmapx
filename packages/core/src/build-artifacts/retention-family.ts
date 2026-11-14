@@ -95,7 +95,13 @@ import {
   dataConfigurationFencePreparedWitnessDomain,
   dataConfigurationFencePreparedWitnessSchema,
 } from "./data-configuration-fence-witness-records";
-import { AnchoredDirectory, type FileIdentity, identity, sameInode } from "./filesystem";
+import {
+  AnchoredDirectory,
+  acquireGuardDirectory,
+  type FileIdentity,
+  identity,
+  sameInode,
+} from "./filesystem";
 import { advanceRetentionClock, readRetentionClock } from "./retention-clock";
 // biome-ignore-start lint/suspicious/noImportCycles: Index repair verifies actual physical release/full closure; physical closure verifies this same index. No constructor or verifier runs at module initialization.
 import {
@@ -740,8 +746,8 @@ function progress(f: Family, p: Progress, reserveAdmission = false) {
   cell(f.slot, "progress.json", p, 131072);
   cell(f.slot, "progress-highwater.json", { sequence: p.sequence, digest: controlDigest(p) }, 1024);
 }
-function guard<T>(dir: AnchoredDirectory, name: string, run: () => T): T {
-  mkdirSync(dir.name(name), { mode: 0o700 });
+export function guard<T>(dir: AnchoredDirectory, name: string, run: () => T): T {
+  acquireGuardDirectory(dir.name(name));
   fsyncSync(dir.fd);
   const held = dir.directory(name),
     expected = identity(held.stat);

@@ -46,6 +46,7 @@ import { openOpsJobJournal } from "../../../../ops-agent/src/journal";
 import { buildOpsAgentServer } from "../../../../ops-agent/src/server";
 import * as schema from "../../db/schema";
 import { mockAdminSession } from "../../test/auth";
+import { dataManagerTokenFile } from "../../test/data-manager-token";
 import type { createMigratedPostgresFixture } from "../../test/postgres-fixture";
 import { createPostgresFixturePool } from "../../test/postgres-fixture-pool";
 import type { JobContext } from "../job-runner";
@@ -828,7 +829,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           OPENMAPX_SECRETS_KEY: "31".repeat(32),
           DOMAIN: "example.test",
           DATA_MANAGER_URL: dm.baseUrl,
-          DATA_MANAGER_AUTH_TOKEN: dm.token,
+          DATA_MANAGER_TOKEN_FILE: dataManagerTokenFile(dm.token),
           OPENMAPX_DISABLE_LOCALHOST_AUTH: "1",
         }))
           vi.stubEnv(key, value);

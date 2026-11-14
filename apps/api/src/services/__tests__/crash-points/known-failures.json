@@ -1,0 +1,26 @@
+{
+  "reclaims the job, reuses its operations and finishes as an unkilled update": {
+    "reason": "After an API restart the reclaimed update job is held with observation recovery_required although the agent's image download succeeded.",
+    "fails": "^Timed out waiting for job [0-9a-f-]+\\nlast seen: (?=.*\"status\":\"running\")(?=.*\"observation\":\\{\"state\":\"unknown\",\"reason\":\"recovery_required\")"
+  },
+  "returns the original operation and prepares one data fence": {
+    "reason": "After a lost prepare reply and an API restart the update fails with configuration reason conflict instead of resuming its operation.",
+    "fails": "^expected 'failed' to be 'success'"
+  },
+  "continues with the same candidate and applies the generation once": {
+    "reason": "After an API restart between saving and applying, the reclaimed update job is held with observation transport.",
+    "fails": "^Timed out waiting for job [0-9a-f-]+\\nlast seen: (?=.*\"status\":\"running\")(?=.*\"observation\":\\{\"state\":\"unknown\",\"reason\":\"transport\")"
+  },
+  "never starts the service a second time and keeps the target held": {
+    "reason": "An agent killed during a service start leaves its configuration writer held, so the restarted agent refuses to start.",
+    "fails": "^Timed out waiting for agent to answer: fetch failed\\n[\\s\\S]*ops-agent failed to start: Configuration writer is busy"
+  },
+  "finishes the recreate in flight, starts no further effect and never succeeds": {
+    "reason": "A cancelled update's helper keeps recreating services, including the agent, and the update succeeds.",
+    "fails": "^expected 'success' not to be 'success'"
+  },
+  "exit busy without a Compose effect and succeed after the update": {
+    "reason": "services restart is unleased: it runs compose restart while the helper recreates services.",
+    "fails": "^services restart: [\\s\\S]*expected \\+0 not to be \\+0"
+  }
+}

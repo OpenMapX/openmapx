@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { dataManagerTokenFile } from "../../test/data-manager-token";
 
 vi.mock("../../auth", () => ({
   auth: {
@@ -31,7 +32,7 @@ vi.mock("../../db/index.js", () => {
 const fetchMock = vi.hoisted(() => vi.fn());
 
 beforeAll(() => {
-  vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "service-token");
+  vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile("service-token"));
   vi.stubEnv("DATA_MANAGER_URL", "https://data-manager.test:4000");
   vi.stubGlobal("fetch", fetchMock);
 });

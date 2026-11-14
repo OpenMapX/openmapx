@@ -7,6 +7,7 @@ import {
   requestDataExecutionCancellation,
 } from "@openmapx/core/data-manager-sdk";
 import { envString } from "@openmapx/core/server-env";
+import { readDataManagerToken } from "@openmapx/core/service-secret-files";
 import { and, count, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { unionAll } from "drizzle-orm/pg-core";
 import { db } from "../db";
@@ -306,7 +307,7 @@ export async function cancelDataManagerActivityJob(id: string): Promise<boolean>
   await requestDataExecutionCancellation(identity, {
     transport: createDataManagerTransport({
       baseUrl: envString("DATA_MANAGER_URL", "http://localhost:4000"),
-      authToken: envString("DATA_MANAGER_AUTH_TOKEN", ""),
+      authToken: readDataManagerToken(),
       requestTimeoutMs: 15000,
     }),
     signal: AbortSignal.timeout(15000),

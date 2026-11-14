@@ -8,6 +8,7 @@ import {
 } from "@openmapx/core/build-artifacts";
 import type { CoordinatorMode, ExecutionRef, ServicePreparationResult } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
+import { cliDataManagerToken } from "./data-manager-token";
 
 export type LifecycleOwnershipRequest = {
   execution: ExecutionRef;
@@ -488,7 +489,7 @@ export async function runCliServiceLifecycle(options: {
         { dataManagerUrl } = await import("./data-manager-url");
       const transport = sdk.createDataManagerTransport({
         baseUrl: dataManagerUrl(),
-        authToken: process.env.DATA_MANAGER_AUTH_TOKEN?.trim(),
+        authToken: cliDataManagerToken(),
         requestTimeoutMs: 15000,
         maxJsonBytes: 65536,
       });

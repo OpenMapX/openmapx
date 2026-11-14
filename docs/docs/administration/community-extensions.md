@@ -483,13 +483,51 @@ installation does not prove that their database and feed credentials are valid.
 1. Open **System → Services → openconditions-ingest** and
    **openconditions-contributions-api**. Read each installed manifest's fields
    and setup guides.
-2. Set secrets on **Credentials**. `OPENMAPX_SECRETS_KEY` is required for the API
-   vault; generated containers receive private secret files through `<KEY>_FILE`.
-   The ingest and contributions services need `DATABASE_URL`. For the shared
-   database, use `postgresql://postgres:<POSTGRES_PASSWORD>@postgis:5432/openmapx`
-   with a correctly URL-encoded password. The contributions service also declares
+2. Set secrets on **Credentials**. `OPENMAPX_SECRETS_KEY` is required for the
+   API vault; generated containers receive private secret files through
+   `<KEY>_FILE`. The ingest and contributions services need `DATABASE_URL`.
+   Never give a community service the PostgreSQL superuser's URL, even when its
+   own documentation suggests one, nor the `openmapx_api` and
+   `openmapx_data_manager` roles: any of them would let it read and change
+   accounts and the platform's configuration. The superuser is worse still. A
+   service that calls PostGIS runs whatever functions the API's role has put in
+   `public` (see below), so with the superuser's URL a compromised API would
+   gain superuser rights over the whole server, including running commands in
+   the database container. Create a dedicated role for each service with only
+   what it needs, as shown below, and use
+   `postgresql://<role>:<password>@postgis:5432/openmapx` with a correctly
+   URL-encoded password. The contributions service also declares
    `OPENCONDITIONS_GRANT_SECRET` and `OPENCONDITIONS_REVIEWER_TOKEN`; generate
    separate values with `openssl rand -hex 32`.
+   A role is created once, as the superuser, in the `postgis` container. A
+   service that creates its own schemas needs `CREATE` on the database; it then
+   owns those schemas. Grant another service only the access it needs to them:
+
+   ```bash
+   docker exec -it postgis psql -U postgres -d openmapx
+   ```
+
+   ```sql
+   CREATE ROLE openconditions_ingest LOGIN PASSWORD '<openssl rand -hex 32>';
+   GRANT CREATE ON DATABASE openmapx TO openconditions_ingest;
+   CREATE ROLE openconditions_contributions LOGIN PASSWORD '<openssl rand -hex 32>';
+   -- After the ingest service has created its schema:
+   GRANT USAGE ON SCHEMA conditions TO openconditions_contributions;
+   ```
+
+   Read each service's setup guide for the schemas and tables it uses, and
+   grant no more. Martin's traffic tiles call `conditions.segment_flow` as
+   `openmapx_tiles_owner`, which PostGIS grants read access to every table in
+   `conditions` when it starts; after installing or upgrading OpenConditions,
+   restart PostGIS or run the grants in
+   [Martin overlays](../guides/map-tiles.md#martin-overlays). The roles live
+   outside the database, so a backup restore keeps their grants only while the
+   roles still exist, and those roles must be able to log in.
+
+   A compromised API can make any role that calls PostGIS run its code (see
+   [Database roles](../install/configuration.md#database-roles)); weigh this
+   before giving a service's role rights the API should not have.
+
 3. Set non-secret options in **Configuration**, or use
    `SERVICE_OPENCONDITIONS_INGEST_<KEY>` and
    `SERVICE_OPENCONDITIONS_CONTRIBUTIONS_API_<KEY>` host overrides. Environment

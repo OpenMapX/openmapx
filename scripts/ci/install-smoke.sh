@@ -220,7 +220,6 @@ configure_environment() {
   set_env_secret POSTGRES_PASSWORD
   set_env_secret BETTER_AUTH_SECRET
   set_env_secret OPENMAPX_SECRETS_KEY
-  set_env_secret DATA_MANAGER_AUTH_TOKEN
   set_env_secret OPENMAPX_LOCAL_ADMIN_TOKEN
   set_env OPENMAPX_HOST_DIR "$root"
   set_env DOCKER_GID "$(docker_socket_gid)"

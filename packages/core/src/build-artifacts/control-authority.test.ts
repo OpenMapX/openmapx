@@ -195,7 +195,7 @@ it("retains deadline-only attempts separately from execution witnesses", async (
   });
   const peer = a.verifyControlPeer(receiver, {
     rawHeaders: ["x-openmapx-parent-execution", assertion],
-    transportPrincipal: "shared-data-manager-bearer",
+    transportPrincipal: "ops-agent",
     execution: child,
     kind: body.kind,
   });
@@ -395,7 +395,7 @@ it("verifies the certified ephemeral fixed-CLI deadline chain without exporting 
   });
   const dmPeer = c.verifyControlPeer(dm, {
     rawHeaders: ["x-openmapx-parent-execution", next],
-    transportPrincipal: "shared-data-manager-bearer",
+    transportPrincipal: "ops-agent",
     execution: child,
     kind: body.kind,
   });
@@ -486,7 +486,7 @@ async function deadlineFamily() {
       assertion,
       c.verifyControlPeer(dm, {
         rawHeaders: ["x-openmapx-parent-execution", assertion],
-        transportPrincipal: "shared-data-manager-bearer",
+        transportPrincipal: "ops-agent",
         execution: child,
         kind: plan.kind,
       }),

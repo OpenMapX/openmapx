@@ -1,3 +1,4 @@
+import { resolveDatabaseUrl } from "@openmapx/core/service-secret-files";
 import { defineConfig } from "drizzle-kit";
 
 export default defineConfig({
@@ -5,7 +6,9 @@ export default defineConfig({
   schema: "./src/db/schema.ts",
   out: "./src/db/migrations",
   dbCredentials: {
-    url: process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/openmapx",
+    // The same connection the API uses: its own role, with the password from
+    // DATABASE_PASSWORD_FILE when that is set.
+    url: resolveDatabaseUrl("postgresql://postgres:postgres@localhost:5432/openmapx"),
   },
   extensionsFilters: ["postgis"],
 });

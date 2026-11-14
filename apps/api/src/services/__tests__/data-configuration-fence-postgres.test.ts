@@ -309,7 +309,7 @@ describe.skipIf(
       const fence = createDataConfigurationMaintenance(f.sql, f.dm);
       await fence.startup();
       await expect(
-        fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion]),
+        fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion], "ops-agent"),
       ).resolves.toMatchObject({ state: "prepared" });
       expect(cancellation).toBeDefined();
       await expect(cancellation!).rejects.toThrow("Lease journal writer is busy");
@@ -765,7 +765,11 @@ describe.skipIf(
       expect(f.input.serviceIds).toContain("ops-agent");
       const fence = createDataConfigurationMaintenance(f.sql, f.dm);
       await fence.startup();
-      const receipt = await fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion]);
+      const receipt = await fence.prepare(
+        f.input,
+        ["x-openmapx-control-delegation", f.assertion],
+        "ops-agent",
+      );
       expect(receipt.state).toBe("prepared");
       expect(
         control.preparedDataConfigurationFenceState(
@@ -787,7 +791,11 @@ describe.skipIf(
       expect(f.input.serviceIds).toContain("community-tiles");
       const fence = createDataConfigurationMaintenance(f.sql, f.dm);
       await fence.startup();
-      const receipt = await fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion]);
+      const receipt = await fence.prepare(
+        f.input,
+        ["x-openmapx-control-delegation", f.assertion],
+        "ops-agent",
+      );
       expect(receipt.state).toBe("prepared");
       expect(
         control.preparedDataConfigurationFenceState(
@@ -805,7 +813,11 @@ describe.skipIf(
     try {
       const fence = createDataConfigurationMaintenance(sql, dm);
       await fence.startup();
-      const receipt = await fence.prepare(input, ["x-openmapx-control-delegation", assertion]);
+      const receipt = await fence.prepare(
+        input,
+        ["x-openmapx-control-delegation", assertion],
+        "ops-agent",
+      );
       expect(receipt).toMatchObject({ fenceId: child.executionId, state: "prepared", sequence: 0 });
       expect(
         existsSync(
@@ -891,7 +903,15 @@ describe.skipIf(
           operationsPolicy,
         }),
         app = Fastify();
-      registerAuth(app, "guard-fixture-token", { executionReceiver: () => receiver });
+      registerAuth(
+        app,
+        {
+          api: "guard-fixture-token-api",
+          "ops-agent": "guard-fixture-token",
+          "host-cli": "guard-fixture-token-cli",
+        },
+        { executionReceiver: () => receiver },
+      );
       registerApi(app, {
         executionReceiver: receiver,
         dataDir: join(root, "data"),
@@ -913,19 +933,20 @@ describe.skipIf(
         beforeRows =
           await sql`SELECT id,metadata,status,finished_at FROM data_manager.jobs ORDER BY id`;
       try {
-        for (const [url, payload] of [
-          ["/ambient-places/enabled", { enabled: false }],
-          ["/ambient-places/rollback", {}],
-          ["/transit/sync", { countries: ["de"] }],
-          ["/transit/restart-motis", {}],
-          ["/traffic/predicted/bake", {}],
-          ["/datasets/reload", {}],
+        // Each mutation comes from a caller whose own token may use its route.
+        for (const [url, payload, token] of [
+          ["/ambient-places/enabled", { enabled: false }, "guard-fixture-token-api"],
+          ["/ambient-places/rollback", {}, "guard-fixture-token-api"],
+          ["/transit/sync", { countries: ["de"] }, "guard-fixture-token-api"],
+          ["/transit/restart-motis", {}, "guard-fixture-token-api"],
+          ["/traffic/predicted/bake", {}, "guard-fixture-token-cli"],
+          ["/datasets/reload", {}, "guard-fixture-token-cli"],
         ] as const) {
           const response = await app.inject({
             method: "POST",
             url,
             payload,
-            headers: { authorization: "Bearer guard-fixture-token" },
+            headers: { authorization: `Bearer ${token}` },
           });
           expect(response.statusCode, url + response.body).toBe(409);
         }
@@ -1027,14 +1048,15 @@ describe.skipIf(
         "configuration_maintenance_busy",
       );
       await expect(
-        fence.prepare({ ...input, candidateId: randomUUID() }, [
-          "x-openmapx-control-delegation",
-          assertion,
-        ]),
+        fence.prepare(
+          { ...input, candidateId: randomUUID() },
+          ["x-openmapx-control-delegation", assertion],
+          "ops-agent",
+        ),
       ).rejects.toThrow();
-      expect(await fence.prepare(input, ["x-openmapx-control-delegation", assertion])).toEqual(
-        receipt,
-      );
+      expect(
+        await fence.prepare(input, ["x-openmapx-control-delegation", assertion], "ops-agent"),
+      ).toEqual(receipt);
       expect(control.inspectArtifactTargetLeaseChildSettlement(lease, child)?.publication).toBe(
         "committed",
       );
@@ -1047,6 +1069,7 @@ describe.skipIf(
 
 import { existsSync, readFileSync } from "node:fs";
 import { drizzle } from "drizzle-orm/postgres-js";
+import { dataManagerTokenFile } from "../../test/data-manager-token";
 
 async function ownedFenceFixture(
   options: {
@@ -1134,7 +1157,7 @@ async function ownedFenceFixture(
     BETTER_AUTH_SECRET: "owned-fence-synthetic-secret-at-least-32",
     DOMAIN: "example.test",
     DATA_MANAGER_URL: data.baseUrl,
-    DATA_MANAGER_AUTH_TOKEN: data.token,
+    DATA_MANAGER_TOKEN_FILE: dataManagerTokenFile(data.token),
   }))
     vi.stubEnv(key, value);
   const { initServiceRegistry } = await import(
@@ -1356,7 +1379,7 @@ async function ownedFenceFixture(
         dataRoot = join(root, "data"),
         peer = control.verifyControlPeer(dm, {
           rawHeaders,
-          transportPrincipal: "shared-data-manager-bearer",
+          transportPrincipal: "ops-agent",
           execution: child,
           kind: "configuration-maintenance.prepare",
         }),
@@ -1395,7 +1418,7 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
     try {
       const peer = control.verifyControlPeer(f.dm, {
         rawHeaders: ["x-openmapx-control-delegation", f.assertion],
-        transportPrincipal: "shared-data-manager-bearer",
+        transportPrincipal: "ops-agent",
         execution: f.child,
         kind: "configuration-maintenance.prepare",
       });
@@ -1467,7 +1490,11 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
       },
     });
     await fence.startup();
-    const attempt = fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion]);
+    const attempt = fence.prepare(
+      f.input,
+      ["x-openmapx-control-delegation", f.assertion],
+      "ops-agent",
+    );
     const rejected = expect(attempt).rejects.toThrow("Synthetic process crash");
     try {
       await ready;
@@ -1523,7 +1550,7 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
     let foreignLease: control.ArtifactTargetLease | undefined;
     try {
       await fence.startup();
-      await fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion]);
+      await fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion], "ops-agent");
       const mirror = join(
           f.root,
           "control-private/data-manager/configuration-maintenance",

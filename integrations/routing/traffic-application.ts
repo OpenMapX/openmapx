@@ -17,6 +17,7 @@ import {
   validateDataManagerBaseUrl,
 } from "@openmapx/core/data-manager-sdk";
 import { envString } from "@openmapx/core/server-env";
+import { readDataManagerToken } from "@openmapx/core/service-secret-files";
 import type { IntegrationContext, RoadConditionsProvider } from "@openmapx/integration-framework";
 import { assessRoadConditionForRoute } from "./road-condition-routing.js";
 
@@ -132,7 +133,7 @@ export function snapshotMatchesProof(
 
 async function readSnapshot(ctx: IntegrationContext): Promise<TrafficApplicationSnapshot | null> {
   try {
-    const token = envString("DATA_MANAGER_AUTH_TOKEN", "").trim();
+    const token = readDataManagerToken();
     if (!token) return null;
     const base = validateDataManagerBaseUrl(
       ctx.getRequiredService("data-manager")?.url ??

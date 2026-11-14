@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { CONFIGURATION_RELEASE_IMAGE_NAMES } from "@openmapx/core/ops";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -160,6 +161,49 @@ describe("configuration helper container", () => {
       "type=bind,source=/srv/openmapx/infra/docker/secrets/control-verifiers.json,target=/run/secrets/openmapx-control-verifiers,readonly",
     ]);
     expect(mounts.join("\n")).not.toContain("target=/srv/openmapx,");
+  });
+
+  it("mounts each target once for the agent the real service manifest describes", () => {
+    // The agent's bind mounts as Compose resolves them for a checkout at
+    // rootDir; the helper inherits those under the checkout.
+    const rootDir = "/srv/openmapx";
+    const manifest = JSON.parse(
+      readFileSync(new URL("../../../services/ops-agent/service.json", import.meta.url), "utf8"),
+    ) as { bindMounts: { source: string; target: string; readOnly: boolean }[] };
+    const resolve = (path: string) =>
+      path
+        .replace(/^@infra:/, `${rootDir}/infra/docker/`)
+        .replace(/^\$\{OPENMAPX_HOST_DIR:\?[^}]*\}/, rootDir);
+    const rootMounts = manifest.bindMounts
+      .map((mount) => ({
+        source: resolve(mount.source),
+        target: resolve(mount.target),
+        readOnly: mount.readOnly,
+      }))
+      .filter((mount) => mount.target === rootDir || mount.target.startsWith(`${rootDir}/`))
+      .sort((left, right) => left.target.length - right.target.length);
+    // The agent masks the other roles' keys and private directories itself.
+    expect(rootMounts.map((mount) => mount.target)).toEqual(
+      expect.arrayContaining([
+        `${rootDir}/infra/docker/secrets/control-data-manager.key`,
+        `${rootDir}/infra/docker/control-private/host-cli`,
+      ]),
+    );
+    const args = launch({ ...agent, rootMounts }, rootDir);
+    const targets = args
+      .flatMap((arg, index) => (args[index - 1] === "--mount" ? [arg] : []))
+      .map((mount) => /(?:^|,)target=([^,]+)/.exec(mount)?.[1]);
+    expect(targets).not.toContain(undefined);
+    expect(targets.filter((target, index) => targets.indexOf(target) !== index)).toEqual([]);
+    // Every mask is still in place, read-only.
+    for (const role of ["ops-agent", "data-manager", "host-cli"])
+      expect(args).toContain(
+        `type=bind,source=${rootDir}/infra/docker/control-private/hidden-key,target=${rootDir}/infra/docker/secrets/control-${role}.key,readonly`,
+      );
+    for (const role of ["data-manager", "host-cli"])
+      expect(args).toContain(
+        `type=bind,source=${rootDir}/infra/docker/control-private/empty,target=${rootDir}/infra/docker/control-private/${role},readonly`,
+      );
   });
 
   it("rejects mount paths that would change the mount specification", () => {

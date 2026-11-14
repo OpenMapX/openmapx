@@ -44,13 +44,13 @@ selection changes. `services restart` only restarts the existing container.
 Configure these before the first render or start. Replace example values and
 generate independent secrets for this deployment.
 
-| Variable            | Description                                                                                                                                                                                                                                                                                                                                                    | Required / Default          |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| `DOMAIN`            | Public domain. Drives Traefik routing, the auth URLs (`BETTER_AUTH_URL`, `PASSKEY_RP_ID`, `PASSKEY_ORIGIN`), the web app's `NEXT_PUBLIC_API_URL`, tile-server URLs, and the outbound contact identity (the contact address in third-party User-Agent strings and the email `From` fallback). Point DNS at the host; add an AAAA record only with working IPv6. | Default `localhost`         |
-| `ACME_EMAIL`        | Contact email for Traefik's automatic Let's Encrypt TLS certificates.                                                                                                                                                                                                                                                                                          | Default `admin@example.com` |
-| `POSTGRES_PASSWORD` | Unique password for the PostgreSQL/PostGIS database (used by `postgis`, `app-api`, and `data-manager`). Generate it before the first render with `openssl rand -hex 32`; it must be at least 24 characters and must not be a known placeholder or match `POSTGRES_USER`.                                                                                       | **Required**                |
-| `OPENMAPX_HOST_DIR` | Absolute host path of the OpenMapX repo checkout. The `ops-agent` container shells out to `docker compose` and mounts `infra/docker` (read-only) and its runtime directories from this path at the same paths inside the container, so generated bind sources resolve correctly. Find it with `pwd` from the repo root.                                        | **Required** (no default)   |
-| `DOCKER_GID`        | The host's docker-socket group id. The `ops-agent` container mounts the Docker socket (`/var/run/docker.sock`) as a non-root user and must join this group, or host container lifecycle operations fail with "permission denied". Find it with `stat -c %g /var/run/docker.sock`. Compose has no fallback, so it must be set; `.env.example` pre-fills `999`.  | **Required**                |
+| Variable            | Description                                                                                                                                                                                                                                                                                                                                                                        | Required / Default          |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `DOMAIN`            | Public domain. Drives Traefik routing, the auth URLs (`BETTER_AUTH_URL`, `PASSKEY_RP_ID`, `PASSKEY_ORIGIN`), the web app's `NEXT_PUBLIC_API_URL`, tile-server URLs, and the outbound contact identity (the contact address in third-party User-Agent strings and the email `From` fallback). Point DNS at the host; add an AAAA record only with working IPv6.                     | Default `localhost`         |
+| `ACME_EMAIL`        | Contact email for Traefik's automatic Let's Encrypt TLS certificates.                                                                                                                                                                                                                                                                                                              | Default `admin@example.com` |
+| `POSTGRES_PASSWORD` | Unique password of the PostgreSQL superuser, which only PostGIS administration and the CLI's backups and restores use; `app-api` and `data-manager` have their own roles (see [Database roles](#database-roles)). Generate it before the first render with `openssl rand -hex 32`; it must be at least 24 characters and must not be a known placeholder or match `POSTGRES_USER`. | **Required**                |
+| `OPENMAPX_HOST_DIR` | Absolute host path of the OpenMapX repo checkout. The `ops-agent` container shells out to `docker compose` and mounts `infra/docker` (read-only) and its runtime directories from this path at the same paths inside the container, so generated bind sources resolve correctly. Find it with `pwd` from the repo root.                                                            | **Required** (no default)   |
+| `DOCKER_GID`        | The host's docker-socket group id. The `ops-agent` container mounts the Docker socket (`/var/run/docker.sock`) as a non-root user and must join this group, or host container lifecycle operations fail with "permission denied". Find it with `stat -c %g /var/run/docker.sock`. Compose has no fallback, so it must be set; `.env.example` pre-fills `999`.                      | **Required**                |
 
 :::note[Domain and TLS networking]
 Traefik serves HTTP/3 (QUIC) on UDP/443 and the OpenMapX Docker network is
@@ -71,19 +71,122 @@ use cannot bypass the policy. Errors report only the policy reason, never the
 credential or full database URL.
 :::
 
+### Database roles
+
+`app-api` and `data-manager` never use the superuser. Each connects as its own
+role, `openmapx_api` and `openmapx_data_manager`. `openmapx compose render`
+generates their passwords once, in `infra/docker/secrets/postgres-api-password`
+and `infra/docker/secrets/postgres-data-manager-password`, and refuses to render
+when the two are equal. PostGIS creates or updates both roles on every start,
+before it reports healthy.
+
+- `openmapx_api` owns the `public` schema and runs the migrations, so it owns
+  every table they create, including data-manager's `data_manager` tables. The
+  database itself stays the superuser's, so the API cannot change database-wide
+  settings.
+- `openmapx_data_manager` may read and change only the `data_manager` tables and
+  create schemas for the indexes it rebuilds (search, Overture, notable and
+  ambient places). The API can read those schemas. Data-manager has no access to
+  accounts, administrative jobs or saved configuration.
+
+Data-manager is the least trusted of the two: its code must never run with the
+API's or the superuser's rights. Two structural rules keep it that way:
+
+- An event trigger installed by PostGIS lets data-manager create, change and
+  drop only tables, indexes, sequences and schemas named after its indexes. It
+  refuses everything else, including views, extensions, functions, procedures,
+  operators, casts, domains, types, rules, triggers, row-level policies, grants
+  and comments, so nothing the API reads runs data-manager code.
+- A check constraint, default, generated column or index expression runs in the
+  session that writes the row or builds the index. Only data-manager writes its
+  tables, and a backup restore recreates each role's objects, and loads its
+  tables, in a session of that role (see
+  [Backup & restore](../administration/backup-and-restore.md#restoring)).
+
+The API may create only the schemas `data_manager` and `drizzle`, so it cannot
+take a name that data-manager, the tile server or the superuser trusts. It may
+install no extension, whose script would run as the superuser and find names
+through the `public` schema the API owns. PostGIS's own superuser SQL and the CLI's restore steps
+search only the system catalogs, so no object the API creates in `public` can
+stand in for a built-in they call. The CLI changes API tables (`openmapx users`,
+the erasure replay and the closing of restored jobs after a restore) as
+`openmapx_api`. Make your own changes to API tables the same way:
+`docker exec -it postgis psql -U openmapx_api -d openmapx`.
+
+The tile server's roles may create nothing at all. PostGIS creates the tile
+function itself and hands it to `openmapx_tiles_owner`, and a restore refuses
+a backup holding any other object of a role that cannot log in, so code that
+runs as the tile owner can leave nothing behind for a restoring superuser.
+PostGIS also revokes from every role but the superuser the right to create
+large objects, which no event trigger sees and nothing in OpenMapX or
+OpenConditions uses.
+
+These guarantees have known limits:
+
+- PostGIS lives in `public`, which the API owns, and the API may create
+  functions and operators there. Every role finds PostGIS, and any other
+  function or operator called without a schema, through `public`. A compromised
+  API can therefore make any role that calls such a name, with or without the
+  `public.` prefix, run the API's code instead, when the API's version matches
+  the call's types more closely: data-manager, OpenConditions' roles, including
+  the owner of `conditions`, and `openmapx_tiles_owner` through the tile
+  function. It can also run code as data-manager through a trigger, rule, policy
+  or default on the `data_manager` tables it owns. Each such move gives the API
+  that role's rights: data-manager's right to change its schemas,
+  OpenConditions' right to change its tables and functions, the tile owner's
+  right to read every OpenConditions table. None reaches the superuser, as long
+  as no service connects as the superuser. Moving PostGIS into a schema the API
+  cannot write would close this, but PostGIS cannot be moved in place: it would
+  have to be reinstalled, with every spatial column and index that depends on
+  it, and the new schema put ahead of `public` on every role's search path.
+- As the owner of `public`, a compromised API can revoke other roles' use of
+  it, so that data-manager, OpenConditions and the tile function no longer find
+  PostGIS. That stops them working but gives the API none of their rights.
+- A superuser session of your own runs a role's code with superuser rights
+  when it reads or writes an object that role owns, such as a view, or a table
+  with a trigger, default or check constraint, and when it calls a function or
+  operator in `public`, PostGIS's among them, whether by its `public.` name or
+  through its search path. Connect as the owning role, or run
+  `SET search_path = pg_catalog` first and call no PostGIS function.
+- PostGIS grants every role read access to its catalogue tables
+  (`spatial_ref_sys`, `geometry_columns`, `geography_columns`,
+  `topology.topology` and `topology.layer`).
+- OpenConditions installed after PostGIS started needs a PostGIS restart before
+  traffic tiles work. Until then tiles fail with a permission error, and nothing
+  runs as the superuser.
+
+There are no environment variables for these passwords. To change one, delete
+its file, render again and restart PostGIS, `app-api` and `data-manager`.
+
 ## Secrets
 
-Authentication and internal service secrets. `BETTER_AUTH_SECRET` and
-`DATA_MANAGER_AUTH_TOKEN` must each contain at least 32 characters in production;
-the CLI validates both before deployment and their services validate them again
-at startup. Generate each with the command shown.
+Authentication and internal service secrets. `BETTER_AUTH_SECRET` must contain
+at least 32 characters in production; the CLI validates it before deployment and
+the API validates it again at startup. Generate each with the command shown.
 
 | Variable                     | Description                                                                                                                                                                                                                                                                                                                                                                     | Required / Default                     |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
 | `BETTER_AUTH_SECRET`         | Better Auth session-signing key. The API refuses to start without it and rejects production values shorter than 32 characters. Generate with `npx @better-auth/cli@latest secret`.                                                                                                                                                                                              | **Required**                           |
 | `OPENMAPX_SECRETS_KEY`       | 32-byte key encoded as 64 hexadecimal characters for the secret vault, including personal timeline credentials. Preserve it across restarts and restores; losing or changing it makes existing encrypted values unreadable. Generate with `openssl rand -hex 32`.                                                                                                               | **Required** (to use the secret vault) |
-| `DATA_MANAGER_AUTH_TOKEN`    | Shared secret between `app-api` and the `data-manager` service; every data-manager mutation endpoint (downloads, hardlinks, dataset reload, conversions) requires it. Production rejects values shorter than 32 characters; development generates a random ephemeral token when unset. Generate with `openssl rand -hex 32`.                                                    | **Required** in production             |
 | `OPENMAPX_LOCAL_ADMIN_TOKEN` | Shared secret for the CLI ↔ API loopback admin short-circuit. When set, loopback requests only gain admin if they carry a matching `X-OpenMapX-Local-Admin` header (a CSRF guard); the CLI attaches it automatically. Without the token in production, the loopback bypass is denied; admin API calls need normal session authentication. Generate with `openssl rand -hex 32`. | Optional (recommended). Default unset  |
+
+### Data-manager caller tokens
+
+Three callers use the data-manager's protected routes, and each has its own
+bearer token: `app-api`, the operations agent (including the CLI commands it
+runs), and the CLI on the host. `openmapx compose render` generates the three
+once, in `infra/docker/secrets/data-manager-api-token`,
+`data-manager-ops-agent-token` and `data-manager-host-cli-token`, and refuses to
+render when two are equal. The data-manager reads all three. It admits the
+API's token only to the routes the API uses and refuses it with `403`
+elsewhere, for example on the configuration fence. The agent's and the host
+CLI's tokens reach every route, since both can read every token file anyway;
+they stay separate so that each can be rotated alone and the agent's token
+never has to appear in host scripts.
+
+Each service receives only a token **file path**; there are no environment
+variables for these tokens. The host CLI reads its file from
+`infra/docker/secrets/` itself.
 
 ## Docker & host wiring
 

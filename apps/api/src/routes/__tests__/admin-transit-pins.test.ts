@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({ session: null as unknown, audit: vi.fn() }));
 vi.mock("../../auth", () => ({ auth: { api: { getSession: async () => state.session } } }));
 vi.mock("../../utils/audit-log", () => ({ writeAuditLog: state.audit }));
 
+import { dataManagerTokenFile } from "../../test/data-manager-token";
 import { adminTransitPinsRoute } from "../admin-transit-pins";
 
 let app: FastifyInstance,
@@ -66,7 +67,7 @@ const key = () =>
   });
 beforeEach(async () => {
   vi.stubEnv("OPENMAPX_DISABLE_LOCALHOST_AUTH", "1");
-  vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "component-service-token");
+  vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile("component-service-token"));
   state.session = mockAdminSession();
   state.audit.mockReset();
   rows.clear();

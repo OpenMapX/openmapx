@@ -385,7 +385,7 @@ cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
 ```
 
-Use the Node and pnpm versions pinned by that checkout. Set fresh `POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET` and `DATA_MANAGER_AUTH_TOKEN` values in `infra/docker/.env`; the CLI checks deployment secrets even when rendering the dev preset. Match the password in `apps/api/.env`'s `DATABASE_URL`, set its `BETTER_AUTH_SECRET`, and retain the generated Redis password-file wiring described in Development setup. Do not use example passwords or point this host at an existing deployment's database.
+Use the Node and pnpm versions pinned by that checkout. Set fresh `POSTGRES_PASSWORD` and `BETTER_AUTH_SECRET` values in `infra/docker/.env`; the CLI checks deployment secrets even when rendering the dev preset. Keep `apps/api/.env`'s `DATABASE_URL` and `DATABASE_PASSWORD_FILE` from the example, which connect as the API's own database role with the password the CLI renders, set its `BETTER_AUTH_SECRET`, and retain the generated Redis password-file wiring described in Development setup. Do not use example passwords or point this host at an existing deployment's database.
 
 Start the disposable database/cache and initialize the development schema:
 

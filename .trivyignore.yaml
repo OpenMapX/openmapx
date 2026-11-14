@@ -1,3 +1,16 @@
-# No active vulnerability exceptions. Docker CLI 29.8.1 replaces the
-# Go 1.26.5 binary covered by the expired exceptions.
-vulnerabilities: []
+vulnerabilities:
+  # The fixed Soup Sieve releases (3.0.2 and 4.0) require Python 3.11.5 or
+  # newer, while the transitous-runner and data-manager images, which install
+  # the same Transitous requirements, run Debian 12's Python 3.11.2.
+  # Only the upstream Transitous catalog scripts load it, through
+  # beautifulsoup4, on upstream catalog HTML; no user input reaches a selector.
+  # Keep each exception scoped to the installed package and let it expire so a
+  # newer Python or a backported fix must replace it.
+  - id: CVE-2026-126190
+    paths: ["usr/local/lib/python3.11/dist-packages/soupsieve-3.0.1.dist-info/METADATA"]
+    expired_at: 2026-12-14
+    statement: No fixed Soup Sieve release supports the image's Python 3.11.2; only upstream catalog scripts use it on upstream HTML.
+  - id: CVE-2026-126191
+    paths: ["usr/local/lib/python3.11/dist-packages/soupsieve-3.0.1.dist-info/METADATA"]
+    expired_at: 2026-12-14
+    statement: No fixed Soup Sieve release supports the image's Python 3.11.2; only upstream catalog scripts use it on upstream HTML.

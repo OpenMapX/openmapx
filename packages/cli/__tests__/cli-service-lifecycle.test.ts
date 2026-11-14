@@ -67,7 +67,6 @@ beforeEach(async () => {
     DOMAIN: "example.test",
     POSTGRES_PASSWORD: "p".repeat(24),
     BETTER_AUTH_SECRET: "a".repeat(32),
-    DATA_MANAGER_AUTH_TOKEN: "d".repeat(32),
   }))
     vi.stubEnv(key, value);
   vi.stubEnv("OPENMAPX_ENABLED_SERVICES", "");

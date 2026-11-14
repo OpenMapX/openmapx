@@ -1227,7 +1227,7 @@ describe("backup volume modes", () => {
             {
               name: "openmapx-pgdata",
               mode: "pg_dump",
-              file: "postgis__openmapx-pgdata.sql.gz",
+              file: "postgis__openmapx-pgdata.dump",
               sizeBytes: 0,
               postgresUser: "postgres",
               postgresDb: "openmapx",
@@ -1250,7 +1250,7 @@ describe("backup volume modes", () => {
       ],
     });
     writeBackupFiles(dir, {
-      "postgis__openmapx-pgdata.sql.gz": "dump",
+      "postgis__openmapx-pgdata.dump": "dump",
       "timeline__openmapx-files.tar.gz": "tar",
     });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
@@ -1272,19 +1272,193 @@ describe("backup volume modes", () => {
     await restoreBackup({ rootDir: tmp, name: "protected-restore", stopRunning: true });
 
     const calls = mockedCommandCalls();
+    const planned = calls.findIndex(([, args]) => args.includes("rolcanlogin"));
     const stopApi = calls.findIndex(([, args]) => args.includes(" stop app-api"));
-    const restore = calls.findIndex(
-      ([, args]) => args.includes(" psql ") && !args.includes(" -At "),
-    );
+    const restore = calls.findIndex(([, args]) => args.includes(" createdb "));
     const replay = calls.findIndex(([, args]) => args.includes(" psql ") && args.includes(" -At "));
     const tar = calls.findIndex(([, args]) => args.includes("openmapx_openmapx-files:/target"));
     const startApi = calls.findIndex(([, args]) => args.includes(" start app-api"));
 
-    expect(stopApi).toBeGreaterThanOrEqual(0);
+    // Every database restore is planned before anything is stopped.
+    expect(planned).toBeGreaterThanOrEqual(0);
+    expect(stopApi).toBeGreaterThan(planned);
     expect(restore).toBeGreaterThan(stopApi);
     expect(tar).toBeGreaterThan(restore);
     expect(replay).toBeGreaterThan(tar);
     expect(startApi).toBeGreaterThan(replay);
+    // Erasure replay and job closing, after the volumes, change API tables as
+    // the API's role.
+    const apiSessions = calls.filter(([, args], index) => index > tar && args.includes(" psql "));
+    expect(apiSessions.length).toBeGreaterThanOrEqual(2);
+    for (const [, args] of apiSessions) expect(args).toContain("-U openmapx_api");
+  });
+
+  it.each([
+    ["a role that cannot log in", "1 1 postgres\n0 0 timeline_owner\n", "cannot log in"],
+    ["a role the server lacks", "1 1 postgres\n", "a role this server lacks"],
+  ])(
+    "refuses an archive with an entry of %s before dropping anything",
+    async (_case, roles, error) => {
+      const dir = writeBackup("refused-owner", {
+        name: "refused-owner",
+        createdAt: new Date().toISOString(),
+        services: [
+          {
+            id: "timeline",
+            version: "1.0.0",
+            volumes: [
+              {
+                name: "openmapx-db",
+                mode: "pg_dump",
+                file: "timeline__openmapx-db.dump",
+                sizeBytes: 0,
+                postgresUser: "postgres",
+                postgresDb: "timeline",
+              },
+            ],
+          },
+        ],
+      });
+      writeBackupFiles(dir, { "timeline__openmapx-db.dump": "archive" });
+      vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+        if (command === "docker" && args.includes("ps")) {
+          return Promise.resolve({ exitCode: 0, stdout: '{"Service":"timeline"}\n', stderr: "" });
+        }
+        if (command === "docker" && args.some((arg) => arg.includes("rolcanlogin"))) {
+          return Promise.resolve({ exitCode: 0, stdout: roles, stderr: "" });
+        }
+        if (command === "docker" && args.includes("--section=pre-data")) {
+          return Promise.resolve({
+            exitCode: 0,
+            stdout: "321; 1259 21090 TABLE app t timeline_owner\n",
+            stderr: "",
+          });
+        }
+        return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+      }) as never);
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await expect(
+        restoreBackup({ rootDir: tmp, name: "refused-owner", stopRunning: true }),
+      ).rejects.toThrow(error);
+      errorSpy.mockRestore();
+      const calls = mockedCommandCalls().map(([, args]) => args);
+      expect(calls.some((args) => args.includes(" dropdb "))).toBe(false);
+      expect(calls.some((args) => args.includes("openmapx-restore"))).toBe(false);
+    },
+  );
+
+  it("keeps the live database and restarts the API when a restore pass fails", async () => {
+    const dir = writeBackup("failed-pass", {
+      name: "failed-pass",
+      createdAt: new Date().toISOString(),
+      services: [
+        {
+          id: "postgis",
+          version: "1.0.0",
+          volumes: [
+            {
+              name: "openmapx-pgdata",
+              mode: "pg_dump",
+              file: "postgis.dump",
+              sizeBytes: 0,
+              postgresUser: "postgres",
+              postgresDb: "openmapx",
+            },
+          ],
+        },
+      ],
+    });
+    writeBackupFiles(dir, { "postgis.dump": "archive" });
+    vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+      if (command === "docker" && args.includes("ps")) {
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: '{"Service":"app-api"}\n{"Service":"postgis"}\n',
+          stderr: "",
+        });
+      }
+      if (command === "docker" && args.some((arg) => arg.includes("rolcanlogin"))) {
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: "1 1 postgres\n0 1 openmapx_api\n",
+          stderr: "",
+        });
+      }
+      if (command === "docker" && args.includes("--section=data")) {
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: "5950; 0 21090 TABLE DATA public t openmapx_api\n",
+          stderr: "",
+        });
+      }
+      if (command === "docker" && args.includes("openmapx-restore")) {
+        return Promise.resolve({ exitCode: 1, stdout: "", stderr: "permission denied" });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+    }) as never);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(
+      restoreBackup({ rootDir: tmp, name: "failed-pass", stopRunning: true }),
+    ).rejects.toThrow("permission denied");
+    errorSpy.mockRestore();
+    const calls = mockedCommandCalls().map(([, args]) => args);
+    const failed = calls.findIndex((args) => args.includes("openmapx-restore"));
+    expect(
+      calls.slice(failed + 1).some((args) => args.endsWith(" --if-exists openmapx__restore")),
+    ).toBe(true);
+    // No swap transaction follows the failed pass.
+    expect(calls.slice(failed + 1).some((args) => args.includes("--single-transaction"))).toBe(
+      false,
+    );
+    expect(calls.some((args) => args.endsWith(" openmapx") && args.includes(" dropdb "))).toBe(
+      false,
+    );
+    expect(calls.findIndex((args) => args.includes(" start app-api"))).toBeGreaterThan(failed);
+  });
+
+  it("refuses a plain backup of the platform database written before its roles", async () => {
+    const dir = writeBackup("plain-platform", {
+      name: "plain-platform",
+      createdAt: new Date().toISOString(),
+      services: [
+        {
+          id: "postgis",
+          version: "1.0.0",
+          volumes: [
+            {
+              name: "openmapx-pgdata",
+              mode: "pg_dump",
+              file: "postgis.sql.gz",
+              sizeBytes: 0,
+              postgresUser: "postgres",
+              postgresDb: "openmapx",
+            },
+          ],
+        },
+      ],
+    });
+    writeBackupFiles(dir, { "postgis.sql.gz": "dump" });
+    vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+      if (command === "docker" && args.includes("ps")) {
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: '{"Service":"app-api"}\n{"Service":"postgis"}\n',
+          stderr: "",
+        });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+    }) as never);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(
+      restoreBackup({ rootDir: tmp, name: "plain-platform", stopRunning: true }),
+    ).rejects.toThrow("predates the platform database's roles");
+    errorSpy.mockRestore();
+    // Refused before anything was stopped: the API keeps serving.
+    expect(mockedCommandCalls().some(([, args]) => args.includes(" dropdb "))).toBe(false);
+    expect(mockedCommandCalls().some(([, args]) => args.includes(" stop "))).toBe(false);
   });
 
   it("restarts and probes a mixed-mode database service before delayed erasure replay", async () => {
@@ -1299,7 +1473,7 @@ describe("backup volume modes", () => {
             {
               name: "openmapx-pgdata",
               mode: "pg_dump",
-              file: "postgis.sql.gz",
+              file: "postgis.dump",
               sizeBytes: 0,
               postgresUser: "postgres",
               postgresDb: "openmapx",
@@ -1315,7 +1489,7 @@ describe("backup volume modes", () => {
         },
       ],
     });
-    writeBackupFiles(dir, { "postgis.sql.gz": "dump", "postgis-files.tar.gz": "tar" });
+    writeBackupFiles(dir, { "postgis.dump": "dump", "postgis-files.tar.gz": "tar" });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
       if (command === "gunzip") {
         return Object.assign(Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }), {
@@ -1368,7 +1542,7 @@ describe("backup volume modes", () => {
             {
               name: "openmapx-pgdata",
               mode: "pg_dump",
-              file: "postgis.sql.gz",
+              file: "postgis.dump",
               sizeBytes: 0,
               postgresUser: "postgres",
               postgresDb: "openmapx",
@@ -1377,7 +1551,7 @@ describe("backup volume modes", () => {
         },
       ],
     });
-    writeBackupFiles(dir, { "postgis.sql.gz": "dump" });
+    writeBackupFiles(dir, { "postgis.dump": "dump" });
     await appendErasureRequest(
       join(tmp, "infra", "docker", "data", "erasure", "journal.jsonl"),
       ERASURE_KEY,
@@ -1440,7 +1614,8 @@ describe("backup volume modes", () => {
         Array.isArray(call[1]) &&
         call[1].includes("psql") &&
         !call[1].includes("-At") &&
-        typeof call[2]?.input === "string",
+        typeof call[2]?.input === "string" &&
+        !call[2].input.includes("ALTER DATABASE"),
     );
     expect(replayCall).toBeDefined();
     expect(replayCall?.[1]).not.toContain("deleted-user");
@@ -1471,7 +1646,7 @@ describe("backup volume modes", () => {
             {
               name: "openmapx-pgdata",
               mode: "pg_dump",
-              file: "postgis.sql.gz",
+              file: "postgis.dump",
               sizeBytes: 0,
               postgresUser: "postgres",
               postgresDb: "openmapx",
@@ -1480,7 +1655,7 @@ describe("backup volume modes", () => {
         },
       ],
     });
-    writeBackupFiles(dir, { "postgis.sql.gz": "dump" });
+    writeBackupFiles(dir, { "postgis.dump": "dump" });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
       if (command === "docker" && args.includes("ps")) {
         const keyPath = join(tmp, "infra", "docker", "secrets", "erasure-journal-key");
@@ -1765,7 +1940,13 @@ describe("restore data-protection preflight", () => {
     ).toThrow(/coverage/i);
   });
 
-  it("requires the API to be stopped while a restored account database is replayed", () => {
+  it("stops every running client of the platform database while it is restored", () => {
+    expect(
+      requiredDependentStops(
+        protectedManifest("2026-08-02T00:00:00.000Z"),
+        new Set(["app-api", "data-manager", "martin", "postgis"]),
+      ),
+    ).toEqual(["app-api", "data-manager", "martin"]);
     expect(
       requiredDependentStops(
         protectedManifest("2026-08-02T00:00:00.000Z"),

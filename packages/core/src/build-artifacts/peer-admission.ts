@@ -4,6 +4,7 @@ import { opsOperationFingerprint } from "../ops/fingerprint";
 import { verifiedParentOrigins, verifiedParents } from "../ops/verified-parent-internal";
 import {
   type ControlInstallation,
+  type ControlTransportPrincipal,
   controlDigest,
   controlHeaders,
   installationState,
@@ -18,7 +19,7 @@ export function inspectControlAdmission(
   installation: ControlInstallation,
   input: {
     rawHeaders: readonly string[];
-    transportPrincipal: "data-manager" | "shared-data-manager-bearer" | "host-cli";
+    transportPrincipal: ControlTransportPrincipal;
     kind: string;
     operation: unknown;
     operationKey: string;
@@ -126,6 +127,7 @@ export function inspectDataExecutionAdmission(
   input: {
     rawHeaders: readonly string[];
     input: import("../services/data-manager/contracts/executions").DataExecutionInput;
+    transportPrincipal: Exclude<ControlTransportPrincipal, "data-manager">;
     operationKey: string;
     operationFingerprint: string;
     requestedDeadlineAt?: number;
@@ -149,7 +151,7 @@ export function inspectDataExecutionAdmission(
       throw Error("Signed data parent identity mismatch");
     const peer = verifyControlPeer(installation, {
       rawHeaders: input.rawHeaders,
-      transportPrincipal: "shared-data-manager-bearer",
+      transportPrincipal: input.transportPrincipal,
       execution: grant.child,
       kind: grant.kind,
     });
@@ -182,7 +184,7 @@ export function inspectDataExecutionAdmission(
     throw Error("Unsupported or mismatched borrowed data leaf");
   const peer = verifyControlPeer(installation, {
     rawHeaders: input.rawHeaders,
-    transportPrincipal: "shared-data-manager-bearer",
+    transportPrincipal: input.transportPrincipal,
     execution: grant.execution,
     kind: grant.kind,
   });

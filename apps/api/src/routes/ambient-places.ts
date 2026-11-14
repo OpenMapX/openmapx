@@ -7,6 +7,7 @@ import {
 import { dataManagerAdminOperations } from "@openmapx/core/api-contracts";
 import * as dm from "@openmapx/core/data-manager-sdk";
 import { envString } from "@openmapx/core/server-env";
+import { readDataManagerToken } from "@openmapx/core/service-secret-files";
 import type { FastifyInstance } from "fastify";
 import { sql } from "../db/index.js";
 import { writeAuditLog } from "../utils/audit-log.js";
@@ -24,7 +25,7 @@ async function proxy(action: AmbientAction, body?: unknown) {
   const options = {
     transport: dm.createDataManagerTransport({
       baseUrl: envString("DATA_MANAGER_URL", "http://localhost:4000"),
-      authToken: envString("DATA_MANAGER_AUTH_TOKEN", ""),
+      authToken: readDataManagerToken(),
       maxJsonBytes: 256 * 1024,
       requestTimeoutMs: 15_000,
     }),

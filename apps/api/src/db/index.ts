@@ -1,11 +1,10 @@
 import { assertProductionDatabaseUrlSecret } from "@openmapx/core/deployment-secret-policy";
-import { envString } from "@openmapx/core/server-env";
+import { resolveDatabaseUrl } from "@openmapx/core/service-secret-files";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
 
-const connectionString = envString(
-  "DATABASE_URL",
+const connectionString = resolveDatabaseUrl(
   "postgresql://postgres:postgres@localhost:5432/openmapx",
 );
 

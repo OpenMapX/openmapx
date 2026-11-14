@@ -1108,6 +1108,18 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
       throw new Error("Predicted traffic maintenance requires a prepared generation");
     }
 
+    // A host that runs no Valhalla has nothing to maintain. A read-only
+    // look decides it before any effect, so this definite no-effect outcome
+    // completes and releases the Valhalla target instead of leaving an
+    // unknown stop behind.
+    const present = await run(
+      ["ps", "--all", "--quiet", "--no-trunc", "--filter", `name=^/${VALHALLA_CONTAINER}$`],
+      context.signal,
+      5_000,
+    );
+    if (!present.stdout.trim())
+      return { changed: false as const, skipped: "valhalla_absent" as const };
+
     // Serving is fenced before asking the writer to quiesce. Even if the
     // authority process fails immediately afterwards, no request can observe
     // a graph or traffic extract while either is being replaced.

@@ -8,6 +8,7 @@ import {
 import * as dm from "@openmapx/core/data-manager-sdk";
 import { diffCatalogFeeds, parseRefShaPair } from "@openmapx/transitous-core";
 import type { Command } from "commander";
+import { cliDataManagerToken } from "../lib/data-manager-token";
 import { dataManagerUrl } from "../lib/data-manager-url";
 import { cliAcquisitionOptions, constrainCliDataManagerTransport } from "../lib/execution-deadline";
 import { log } from "../lib/output";
@@ -64,7 +65,7 @@ export async function proposeReviewedCatalog(branch: string) {
     dm.createDataManagerTransport({
       ...cliAcquisitionOptions(),
       baseUrl: dataManagerUrl(),
-      authToken: process.env.DATA_MANAGER_AUTH_TOKEN?.trim(),
+      authToken: cliDataManagerToken(),
     }),
   );
   return transitBumpResultSchema.parse(

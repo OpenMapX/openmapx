@@ -19,6 +19,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { erasureVerificationIdentifiers } from "@openmapx/core/erasure-cleanup";
 import {
   assertErasureJournalKey,
@@ -45,7 +47,7 @@ import {
   tarVolumeToFile,
 } from "./backup-processes";
 
-const { ServiceRegistry, isSafePostgresIdentifier } = coreServices;
+const { API_DATABASE_ROLE, ServiceRegistry, isSafePostgresIdentifier } = coreServices;
 
 // ─── Public types ───────────────────────────────────────────────────────────
 
@@ -295,6 +297,17 @@ export async function sha256File(filePath: string): Promise<string> {
 }
 
 /** Verify a file's size and digest immediately before any restore or privacy extraction reads it. */
+/** A volume's backup file, which must exist inside the backup directory. */
+function backupFilePath(backupDir: string, vol: BackupVolumeEntry): string {
+  // Defense-in-depth backstop for the filename validation in readBackupManifest.
+  const file = resolve(backupDir, vol.file);
+  if (!file.startsWith(`${resolve(backupDir)}/`)) {
+    throw new Error(`Refusing to read a backup file outside ${backupDir}: ${file}`);
+  }
+  if (!existsSync(file)) throw new Error(`Backup file missing: ${file}`);
+  return file;
+}
+
 export async function verifyBackupVolumeFile(
   volume: BackupVolumeEntry,
   backupDir: string,
@@ -737,8 +750,9 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
         assertForward();
         // Postgres: pg_dump while running. One dump file per declared volume
         // keeps the manifest schema simple even though the volume is just a
-        // marker for "this service has data to back up".
-        const file = `${svc.id}__${v.volumeName}.sql.gz`;
+        // marker for "this service has data to back up". The custom format
+        // lets a restore load each table as its owner.
+        const file = `${svc.id}__${v.volumeName}.dump`;
         const out = join(backupDir, file);
         const user = svc.postgresUser ?? "postgres";
         const db = svc.postgresDb ?? "openmapx";
@@ -971,15 +985,18 @@ function containsOpenMapXDatabase(manifest: BackupManifest): boolean {
 }
 
 /**
- * Services outside the restore manifest that must be isolated while the
- * account database is restored. Keeping the API stopped prevents a deleted
- * account from becoming observable between pg_restore and erasure replay.
+ * Services outside the restore manifest that must be stopped while the
+ * account database is restored: every client of the platform database, whose
+ * sessions would keep the restored database from replacing it. Keeping the
+ * API stopped also prevents a deleted account from becoming observable
+ * between pg_restore and erasure replay.
  */
 export function requiredDependentStops(
   manifest: BackupManifest,
   running: ReadonlySet<string>,
 ): string[] {
-  return containsOpenMapXDatabase(manifest) && running.has("app-api") ? ["app-api"] : [];
+  if (!containsOpenMapXDatabase(manifest)) return [];
+  return ["app-api", "data-manager", "martin"].filter((id) => running.has(id));
 }
 
 function erasureJournalPaths(rootDir?: string): { journalPath: string; keyPath: string } {
@@ -1217,20 +1234,23 @@ function postgresCopyTextField(value: string): string {
     .join("\\v");
 }
 
+/**
+ * Replays erasures as the API's role, which owns the tables involved. Its
+ * triggers on those tables then run with its own rights, never a superuser's.
+ */
 async function replayOpenMapXErasures(
   ctx: ComposeContext,
   rootDir: string | undefined,
   serviceId: string,
-  postgresUser: string,
   database: string,
 ): Promise<number> {
   const { journalPath } = erasureJournalPaths(rootDir);
   return replayErasureRequests({
     journalPath,
     key: readErasureJournalKey(rootDir),
-    listUsers: () => listRestoredUsers(ctx, serviceId, postgresUser, database),
+    listUsers: () => listRestoredUsers(ctx, serviceId, API_DATABASE_ROLE, database),
     eraseUser: (restoredUser) =>
-      eraseRestoredUser(ctx, serviceId, postgresUser, database, restoredUser),
+      eraseRestoredUser(ctx, serviceId, API_DATABASE_ROLE, database, restoredUser),
   });
 }
 
@@ -1311,9 +1331,55 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
     );
   }
 
-  const stopped: string[] = [];
   const active = new Set(running);
   const startedForRestore = new Set<string>();
+  // Check every file and plan every database restore before anything is
+  // stopped or changed, so a backup that cannot be restored leaves the
+  // deployment as it was.
+  const plans = new Map<BackupVolumeEntry, coreServices.RestorePass[] | null>();
+  try {
+    for (const svc of pre.targets) {
+      for (const vol of svc.volumes) {
+        const file = backupFilePath(pre.backupDir, vol);
+        await verifyBackupVolumeFile(vol, pre.backupDir);
+        if (vol.mode === "tar" && !vol.resolvedName) {
+          throw new Error(
+            `Backup entry ${vol.name} is missing its resolved docker volume name — re-create the backup.`,
+          );
+        }
+        if (vol.mode !== "pg_dump") continue;
+        if (!vol.postgresUser || !vol.postgresDb) {
+          throw new Error(
+            `Backup entry ${vol.name} is missing postgres credentials — re-create the backup.`,
+          );
+        }
+        // pg_dump restores require a live server. A service can use this mode
+        // regardless of its id, so never infer the behavior from `postgis`.
+        if (!active.has(svc.id)) {
+          log.dim(`  starting ${svc.id} for restore…`);
+          await dockerCompose(ctx, ["start", svc.id]);
+          active.add(svc.id);
+          startedForRestore.add(svc.id);
+        }
+        plans.set(
+          vol,
+          await planDatabaseRestore(ctx, svc.id, file, vol.postgresUser, vol.postgresDb),
+        );
+      }
+    }
+  } catch (err) {
+    log.err(`Restore refused, nothing was changed: ${(err as Error).message}`);
+    for (const id of startedForRestore) {
+      try {
+        await dockerCompose(ctx, ["stop", id]);
+      } catch (e) {
+        log.warn(`Failed to stop ${id}: ${(e as Error).message}`);
+      }
+    }
+    throw err;
+  }
+
+  const stopped: string[] = [];
   const protectedDatabases: Array<{
     serviceId: string;
     postgresUser: string;
@@ -1339,32 +1405,25 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
       const tarVolumes = svc.volumes.filter((volume) => volume.mode === "tar");
 
       for (const vol of pgVolumes) {
-        // Defense-in-depth backstop for the filename validation in readBackupManifest.
-        const file = resolve(pre.backupDir, vol.file);
-        if (!file.startsWith(`${resolve(pre.backupDir)}/`)) {
-          throw new Error(`Refusing to read a backup file outside ${pre.backupDir}: ${file}`);
-        }
-        if (!existsSync(file)) throw new Error(`Backup file missing: ${file}`);
-        await verifyBackupVolumeFile(vol, pre.backupDir);
-
-        // pg_dump restores require a live server. A service can use this mode
-        // regardless of its id, so never infer the behavior from `postgis`.
+        const file = backupFilePath(pre.backupDir, vol);
         if (!active.has(svc.id)) {
           log.dim(`  starting ${svc.id} for restore…`);
           await dockerCompose(ctx, ["start", svc.id]);
           active.add(svc.id);
           if (!running.has(svc.id)) startedForRestore.add(svc.id);
         }
-        if (!vol.postgresUser || !vol.postgresDb) {
-          throw new Error(
-            `Backup entry ${vol.name} is missing postgres credentials — re-create the backup.`,
-          );
-        }
-        const user = vol.postgresUser;
-        const db = vol.postgresDb;
+        const user = vol.postgresUser ?? "";
+        const db = vol.postgresDb ?? "";
         log.dim(`  restoring database ${db} (user=${user}) from ${vol.file}…`);
-        if (db === "openmapx") protectedDatabaseSafe = false;
-        await pgRestoreFromFile(ctx, svc.id, file, user, db);
+        // The live database stays in place until the restored one replaces it.
+        await pgRestoreFromFile(ctx, svc.id, file, user, db, plans.get(vol) ?? null, {
+          before: () => {
+            if (db === "openmapx") protectedDatabaseSafe = false;
+          },
+          failed: () => {
+            if (db === "openmapx") protectedDatabaseSafe = true;
+          },
+        });
         if (db === "openmapx") {
           protectedDatabases.push({ serviceId: svc.id, postgresUser: user, database: db });
         }
@@ -1378,19 +1437,9 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
       }
 
       for (const vol of tarVolumes) {
-        const file = resolve(pre.backupDir, vol.file);
-        if (!file.startsWith(`${resolve(pre.backupDir)}/`)) {
-          throw new Error(`Refusing to read a backup file outside ${pre.backupDir}: ${file}`);
-        }
-        if (!existsSync(file)) throw new Error(`Backup file missing: ${file}`);
-        await verifyBackupVolumeFile(vol, pre.backupDir);
-        if (!vol.resolvedName) {
-          throw new Error(
-            `Backup entry ${vol.name} is missing its resolved docker volume name — re-create the backup.`,
-          );
-        }
+        backupFilePath(pre.backupDir, vol);
         log.dim(`  restoring volume ${vol.resolvedName} from ${vol.file}…`);
-        await tarRestoreFromFile(vol.resolvedName, pre.backupDir, vol.file);
+        await tarRestoreFromFile(vol.resolvedName ?? "", pre.backupDir, vol.file);
       }
     }
 
@@ -1407,11 +1456,11 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
         ctx,
         opts.rootDir,
         target.serviceId,
-        target.postgresUser,
         target.database,
       );
       log.dim(`  replayed ${erased} retained user-erasure request(s)`);
-      await failRestoredJobs(ctx, target.serviceId, target.postgresUser, target.database);
+      // As the API's role, which owns the job tables, for the same reason.
+      await failRestoredJobs(ctx, target.serviceId, API_DATABASE_ROLE, target.database);
       log.dim("  closed jobs that were in progress when the backup was taken");
       if (startedForRestore.has(target.serviceId)) {
         log.dim(`  stopping ${target.serviceId} after erasure replay…`);
@@ -1453,39 +1502,111 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
   }
 }
 
+/**
+ * Checks a database backup against the live server before anything changes:
+ * the passes that restore a custom-format archive, or `null` for an older
+ * plain-SQL backup. Throws when the backup cannot be restored safely.
+ */
+async function planDatabaseRestore(
+  ctx: ComposeContext,
+  serviceId: string,
+  file: string,
+  user: string,
+  db: string,
+): Promise<coreServices.RestorePass[] | null> {
+  coreServices.restoreDatabaseNames(db);
+  // Backups before the database roles hold plain SQL, which only a superuser
+  // session can load. Such a backup of the platform database cannot serve
+  // this release, whose roles must own their objects.
+  if (file.endsWith(".sql.gz")) {
+    if (db === "openmapx")
+      throw new Error(
+        `${file} predates the platform database's roles; restore it with the release that wrote it`,
+      );
+    return null;
+  }
+  return coreServices.planArchiveRestore(databaseContainer(ctx, serviceId, file), user);
+}
+
+/** The service's database container, as the restore reaches it. */
+function databaseContainer(
+  ctx: ComposeContext,
+  serviceId: string,
+  archive: string,
+): coreServices.RestoreContainer {
+  return {
+    async run(command, stdin, catalogsOnly) {
+      const result =
+        stdin && "preamble" in stdin
+          ? await execWithArchive(ctx, serviceId, [...command], archive, stdin.preamble)
+          : await execa(
+              "docker",
+              [
+                ...ctx.composeArgs,
+                "exec",
+                "-T",
+                ...(catalogsOnly ? ["-e", `PGOPTIONS=${coreServices.SUPERUSER_PGOPTIONS}`] : []),
+                serviceId,
+                ...command,
+              ],
+              {
+                ...cliProcessOptions(),
+                cwd: ctx.cwd,
+                reject: false,
+                ...(stdin ? { input: stdin.input } : {}),
+              },
+            );
+      return {
+        exitCode: result.exitCode ?? 1,
+        stdout: result.stdout ?? "",
+        stderr: result.stderr ?? "",
+      };
+    },
+  };
+}
+
+/**
+ * Restores a database backup into a scratch database, then swaps it in for
+ * the live one; see `restoreIntoScratchDatabase`. A custom-format archive is
+ * restored entry by entry in sessions of each entry's owner, an older
+ * plain-SQL backup by the superuser.
+ */
 async function pgRestoreFromFile(
+  ctx: ComposeContext,
+  serviceId: string,
+  file: string,
+  user: string,
+  db: string,
+  passes: readonly coreServices.RestorePass[] | null,
+  swap: { before(): void; failed(): void },
+): Promise<void> {
+  const container = databaseContainer(ctx, serviceId, file);
+  const kept = await coreServices.restoreIntoScratchDatabase(container, {
+    superuser: user,
+    db,
+    load: (scratch) =>
+      passes === null
+        ? loadPlainDump(ctx, serviceId, file, user, scratch)
+        : coreServices.restoreArchivePasses(container, passes, user, scratch),
+    beforeSwap: swap.before,
+    swapFailed: swap.failed,
+  });
+  if (kept)
+    log.warn(
+      `The replaced database is kept as ${coreServices.restoreDatabaseNames(db).previous}; drop it once you no longer need it.`,
+    );
+}
+
+/** Older backups: `gunzip <file> | docker compose exec -T <svc> psql -U <user> <db>`. */
+async function loadPlainDump(
   ctx: ComposeContext,
   serviceId: string,
   gzFile: string,
   user: string,
   db: string,
 ): Promise<void> {
-  // The `pg_dump` we wrote at backup time uses defaults (no `--clean
-  // --if-exists --create`), so the dump itself doesn't drop or recreate the
-  // database — it's just `CREATE TABLE …` etc. We therefore drop + create
-  // the target DB up-front to give the dump a clean slate. The `postgis/
-  // postgis` images preload PostGIS into `template1`, so `createdb` produces
-  // a PostGIS-enabled database without needing an explicit
-  // `CREATE EXTENSION` step.
-  const drop = await execa(
-    "docker",
-    [...ctx.composeArgs, "exec", "-T", serviceId, "dropdb", "-U", user, "--if-exists", db],
-    { ...cliProcessOptions(), cwd: ctx.cwd, reject: false },
-  );
-  if (drop.exitCode !== 0) {
-    throw new Error(`dropdb failed: ${drop.stderr ?? ""}`);
-  }
-
-  const create = await execa(
-    "docker",
-    [...ctx.composeArgs, "exec", "-T", serviceId, "createdb", "-U", user, db],
-    { ...cliProcessOptions(), cwd: ctx.cwd, reject: false },
-  );
-  if (create.exitCode !== 0) {
-    throw new Error(`createdb failed: ${create.stderr ?? ""}`);
-  }
-
-  // gunzip <file> | docker compose exec -T <svc> psql -U <user> <db>
+  // The dump sets an empty search path itself. PostGIS's extension scripts
+  // reset it to the session default, so this load keeps that default.
   const gunzip = execa("gunzip", ["-c", gzFile], {
     ...cliProcessOptions(),
     cwd: ctx.cwd,
@@ -1505,6 +1626,44 @@ async function pgRestoreFromFile(
   if (psqlRes.exitCode !== 0) {
     throw new Error(`psql restore failed: ${psqlRes.stderr ?? ""}`);
   }
+}
+
+/** Runs a command in the service container with `preamble` and the archive on stdin. */
+async function execWithArchive(
+  ctx: ComposeContext,
+  serviceId: string,
+  command: string[],
+  archive: string,
+  preamble: string,
+): Promise<{ exitCode?: number; stdout?: string; stderr?: string }> {
+  const sub = execa("docker", [...ctx.composeArgs, "exec", "-T", serviceId, ...command], {
+    ...cliProcessOptions(),
+    cwd: ctx.cwd,
+    reject: false,
+    stdin: "pipe",
+  });
+  // The command may stop reading once it has what it needs, so a stdin that
+  // closes early is no failure; its exit status decides.
+  const feed = sub.stdin
+    ? pipeline(
+        Readable.from(
+          (async function* () {
+            yield Buffer.from(preamble);
+            yield* createReadStream(archive);
+          })(),
+        ),
+        sub.stdin,
+      ).catch((error: NodeJS.ErrnoException) => {
+        if (
+          !["EPIPE", "ERR_STREAM_PREMATURE_CLOSE", "ERR_STREAM_DESTROYED"].includes(
+            error.code ?? "",
+          )
+        )
+          throw error;
+      })
+    : Promise.resolve();
+  const [result] = await Promise.all([sub, feed]);
+  return result;
 }
 
 async function tarRestoreFromFile(

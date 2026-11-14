@@ -1363,6 +1363,8 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           ownedServices,
           trafficDataRoot: dataRoot,
           execFile: async (_file, args) => {
+            // Valhalla runs here; maintenance proceeds.
+            if (args[0] === "ps") return { stdout: `${"f".repeat(64)}\n`, stderr: "" };
             calls.push([...args]);
             if (args[0] === "inspect" && args.includes("{{.State.Running}}")) {
               return { stdout: "false\n", stderr: "" };
@@ -1460,6 +1462,8 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
             trafficDataRoot: dataRoot,
             descriptorAnchorRoot: mode === "descriptor" ? "/proc/self/fd" : null,
             execFile: async (_file, args) => {
+              // Valhalla runs here; maintenance proceeds.
+              if (args[0] === "ps") return { stdout: `${"f".repeat(64)}\n`, stderr: "" };
               if (args[0] === "inspect" && args.includes("{{.State.Running}}")) {
                 return { stdout: "false\n", stderr: "" };
               }
@@ -1510,9 +1514,11 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           fileExists: () => false,
           trafficDataRoot: dataRoot,
           execFile: async (_file, args) =>
-            args[0] === "inspect" && args.includes("{{.State.Running}}")
-              ? { stdout: "false\n", stderr: "" }
-              : { stdout: "", stderr: "" },
+            args[0] === "ps"
+              ? { stdout: `${"f".repeat(64)}\n`, stderr: "" }
+              : args[0] === "inspect" && args.includes("{{.State.Running}}")
+                ? { stdout: "false\n", stderr: "" }
+                : { stdout: "", stderr: "" },
         });
         await expect(
           dispatchOpsOperation(
@@ -1522,6 +1528,43 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           ),
         ).rejects.toThrow();
         expect(readdirSync(join(outside, "osm-pbf"))).toEqual([]);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it("touches nothing and completes when no Valhalla container exists", async () => {
+      const root = mkdtempSync(join(tmpdir(), "valhalla-maintenance-absent-"));
+      const dataRoot = join(root, "data");
+      mkdirSync(join(dataRoot, "valhalla", "osm-pbf"), { mode: 0o755, recursive: true });
+      const calls: string[][] = [];
+      try {
+        const runtime = createDockerRuntime({
+          stack: {
+            infraDir: "/trusted",
+            composePath: "/trusted/compose.yml",
+            composeReleasePath: "/trusted/release.yml",
+          },
+          fileExists: () => false,
+          trafficDataRoot: dataRoot,
+          execFile: async (_file, args) => {
+            calls.push([...args]);
+            // `docker ps --filter name=…` lists nothing: the host runs no Valhalla.
+            return { stdout: "", stderr: "" };
+          },
+        });
+        await expect(
+          dispatchOpsOperation(
+            runtime,
+            { kind: "valhalla.traffic.maintain", plan: "rebuild-extract" },
+            context(),
+          ),
+        ).resolves.toEqual({ changed: false, skipped: "valhalla_absent" });
+        // Only the read-only listing ran: no stop, no fence, no tool container.
+        expect(calls).toEqual([
+          ["ps", "--all", "--quiet", "--no-trunc", "--filter", "name=^/openmapx-valhalla-1$"],
+        ]);
+        expect(readdirSync(join(dataRoot, "valhalla", "osm-pbf"))).toEqual([]);
       } finally {
         rmSync(root, { recursive: true, force: true });
       }
@@ -1541,6 +1584,8 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           ownedServices,
           trafficDataRoot: dataRoot,
           execFile: async (_file, args) => {
+            // Valhalla runs here; maintenance proceeds.
+            if (args[0] === "ps") return { stdout: `${"f".repeat(64)}\n`, stderr: "" };
             calls.push([...args]);
             if (args[0] === "inspect" && args.includes("{{.State.Running}}")) {
               return { stdout: "false\n", stderr: "" };
@@ -1591,6 +1636,8 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           ownedServices,
           trafficDataRoot: dataRoot,
           execFile: async (_file, args) => {
+            // Valhalla runs here; maintenance proceeds.
+            if (args[0] === "ps") return { stdout: `${"f".repeat(64)}\n`, stderr: "" };
             if (args[0] === "inspect" && args.includes("{{.State.Running}}")) {
               return { stdout: "false\n", stderr: "" };
             }

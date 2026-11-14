@@ -3,7 +3,7 @@
 import { createHmac, type KeyObject, timingSafeEqual } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { canonicalJson } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import {
@@ -16,6 +16,66 @@ import { verifyConfigurationRuntimeResources } from "./configuration-resource-in
 import type { DockerRuntimeOptions } from "./docker-runtime";
 import type { OwnedServiceSnapshot } from "./owned-services";
 
+/** How long the inspection waits for another live holder of the release
+ * store lock. The agent takes it for short reads while it observes the same
+ * maintenance, so a helper's inspection waits for a gap instead of failing at
+ * the first collision, then refuses as before. */
+const RELEASE_STORE_BUSY_WAIT_MS = 2_000;
+
+export async function acquireReleaseStoreLockBriefly(store: string) {
+  const deadline = Date.now() + RELEASE_STORE_BUSY_WAIT_MS;
+  for (let delay = 5; ; delay = Math.min(delay * 2, 100)) {
+    try {
+      return await services.acquireReleaseStoreLock(store, {}, { failIfBusy: true });
+    } catch (error) {
+      if (
+        !(error instanceof Error && error.message === "Release store is busy") ||
+        Date.now() >= deadline
+      )
+        throw error;
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(delay, Math.max(1, deadline - Date.now()))),
+    );
+  }
+}
+
+/** How long the helper waits for one recreated service's healthcheck. */
+const APPLIED_HEALTH_WAIT_MS = 300_000;
+
+/** Waits while Docker reports a recreated container's healthcheck as
+ * `starting`, until it passes or fails, or until the wait or the helper's
+ * deadline ends. It decides nothing: the readiness check that follows still
+ * refuses a container that is not healthy, as before. */
+export async function awaitAppliedContainerHealth(options: {
+  containerId: string;
+  execFile: NonNullable<DockerRuntimeOptions["execFile"]>;
+  signal: AbortSignal;
+  deadlineAt: number;
+  pollMs?: number;
+}) {
+  const until = Math.min(options.deadlineAt, Date.now() + APPLIED_HEALTH_WAIT_MS),
+    pollMs = options.pollMs ?? 2_000;
+  for (;;) {
+    options.signal.throwIfAborted();
+    const { stdout } = await options.execFile(
+      "docker",
+      [
+        "container",
+        "inspect",
+        "--format",
+        "{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}",
+        options.containerId,
+      ],
+      { signal: options.signal, timeout: 15_000, maxBuffer: 4096 },
+    );
+    if (stdout.trim() !== "starting" || Date.now() >= until) return;
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(pollMs, Math.max(1, until - Date.now()))),
+    );
+  }
+}
+
 export async function inspectMaintenanceDockerRuntime(options: {
   stack: services.StackPaths;
   execFile: NonNullable<DockerRuntimeOptions["execFile"]>;
@@ -26,6 +86,25 @@ export async function inspectMaintenanceDockerRuntime(options: {
   /** Interim fixed-helper check only; the final producer always checks all targets. */
   handoffTargetId?: string;
 }) {
+  // The agent and its helper see the checkout through their mounts, and host
+  // paths outside it mostly not at all, such as the default Docker
+  // configuration directory. Docker records a bind source as Compose gave
+  // it, so such a source is compared as written. Inside the checkout every
+  // source must resolve.
+  const checkout = dirname(dirname(options.stack.infraDir));
+  const insideCheckout = (path: string) => {
+    const rest = relative(checkout, path);
+    return rest === "" || (!isAbsolute(rest) && rest !== ".." && !rest.startsWith(`..${sep}`));
+  };
+  const bindSource = async (path: string) => {
+    try {
+      return await realpath(path);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? "";
+      if (insideCheckout(path) || !["ENOENT", "EACCES", "ENOTDIR"].includes(code)) throw error;
+      return path;
+    }
+  };
   const { owner, containers, signal } = options,
     checks = [],
     details = [],
@@ -61,10 +140,8 @@ export async function inspectMaintenanceDockerRuntime(options: {
         .update("openmapx-private-maintenance-runtime-v1\0")
         .update(value)
         .digest("hex"),
-    lock = await services.acquireReleaseStoreLock(
+    lock = await acquireReleaseStoreLockBriefly(
       services.releaseStatePaths(options.stack.infraDir).store,
-      {},
-      { failIfBusy: true },
     );
   try {
     if (
@@ -195,7 +272,7 @@ export async function inspectMaintenanceDockerRuntime(options: {
           volume.type === "bind"
             ? !volume.source ||
               !actual.Source ||
-              (await realpath(volume.source)) !== (await realpath(actual.Source))
+              (await bindSource(volume.source)) !== (await bindSource(actual.Source))
             : volume.type === "volume" &&
               (!volume.source ||
                 actual.Name !== (expected.volumes[volume.source]?.name ?? volume.source))
@@ -204,7 +281,7 @@ export async function inspectMaintenanceDockerRuntime(options: {
         mounts.push({
           targetDigest: keyed(volume.target),
           type: actual.Type,
-          sourceDigest: volume.type === "bind" ? keyed(await realpath(volume.source!)) : null,
+          sourceDigest: volume.type === "bind" ? keyed(await bindSource(volume.source!)) : null,
           nameDigest: actual.Name ? keyed(actual.Name) : null,
           readOnly: !actual.RW,
         });
@@ -300,7 +377,7 @@ export async function inspectMaintenanceDockerRuntime(options: {
           !spec.healthcheck.disable &&
           observed.State.Health?.Status !== "healthy")
       )
-        throw Error("Original applied container not ready");
+        throw Error(`Original applied container not ready: ${id}`);
       checks.push({
         serviceId: id,
         ordinal: null,

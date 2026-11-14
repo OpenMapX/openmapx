@@ -150,14 +150,16 @@ Copy `infra/docker/.env.example` to `infra/docker/.env` and configure:
 
 - a public `DOMAIN` and `ACME_EMAIL`, with DNS and inbound TCP 80/443 reaching
   Traefik; publish an AAAA record only if IPv6 works end to end;
-- unique `POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET`, `OPENMAPX_SECRETS_KEY`,
-  `DATA_MANAGER_AUTH_TOKEN`, and `OPENMAPX_LOCAL_ADMIN_TOKEN` values;
+- unique `POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET`, `OPENMAPX_SECRETS_KEY` and
+  `OPENMAPX_LOCAL_ADMIN_TOKEN` values;
 - `OPENMAPX_HOST_DIR` as the absolute checkout path and `DOCKER_GID` as the local
   Docker socket's group ID;
 - explicit `TRANSITOUS_COUNTRIES` or a MOTIS feed allow-list for the default
   regional profile, even if you do not enable a transit engine.
 
-The renderer creates additional files in `infra/docker/secrets/`. Protect these
+The renderer creates additional files in `infra/docker/secrets/`, including
+the passwords of the API's and data-manager's own database roles and each
+data-manager caller's token. Protect these
 and the deployment configuration separately from ordinary volume backups.
 Per-integration provider credentials are usually configured after startup in
 the admin panel. An external endpoint being configured does not establish that

@@ -31,7 +31,6 @@ describe("check deployment-secret preflight", () => {
         env: {
           POSTGRES_PASSWORD: "change-me",
           BETTER_AUTH_SECRET: "a".repeat(32),
-          DATA_MANAGER_AUTH_TOKEN: "b".repeat(32),
         },
         dockerCompose: docker,
       }),
@@ -49,7 +48,6 @@ describe("check deployment-secret preflight", () => {
           POSTGRES_PASSWORD: "x".repeat(24),
           POSTGRES_USER: "postgres",
           BETTER_AUTH_SECRET: "a".repeat(32),
-          DATA_MANAGER_AUTH_TOKEN: "b".repeat(32),
         },
         dockerCompose: docker,
       }),
@@ -57,16 +55,15 @@ describe("check deployment-secret preflight", () => {
     expect(docker).toHaveBeenCalledOnce();
   });
 
-  it.each(["BETTER_AUTH_SECRET", "DATA_MANAGER_AUTH_TOKEN"] as const)(
+  it.each(["BETTER_AUTH_SECRET"] as const)(
     "rejects a weak %s before invoking Docker",
     async (name) => {
       const docker = vi.fn();
-      const env = {
+      const env: Record<string, string> = {
         POSTGRES_PASSWORD: "x".repeat(24),
         BETTER_AUTH_SECRET: "a".repeat(32),
-        DATA_MANAGER_AUTH_TOKEN: "b".repeat(32),
-        [name]: "short",
       };
+      env[name] = "short";
 
       await expect(
         dockerComposeAfterDeploymentSecretCheck(["ps"], { env, dockerCompose: docker }),

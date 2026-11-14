@@ -4,6 +4,7 @@ import type {
   AddTransitSource202,
   AddTransitSource400,
   AddTransitSource401,
+  AddTransitSource403,
   AddTransitSource404,
   AddTransitSource409,
   AddTransitSource413,
@@ -15,6 +16,7 @@ import type {
   ApproveTransitBump200,
   ApproveTransitBump400,
   ApproveTransitBump401,
+  ApproveTransitBump403,
   ApproveTransitBump404,
   ApproveTransitBump409,
   ApproveTransitBump413,
@@ -27,6 +29,7 @@ import type {
   BakePredictedTraffic202,
   BakePredictedTraffic400,
   BakePredictedTraffic401,
+  BakePredictedTraffic403,
   BakePredictedTraffic409,
   BakePredictedTraffic413,
   BakePredictedTraffic415,
@@ -37,6 +40,7 @@ import type {
   BuildAmbientPlaces202,
   BuildAmbientPlaces400,
   BuildAmbientPlaces401,
+  BuildAmbientPlaces403,
   BuildAmbientPlaces409,
   BuildAmbientPlaces413,
   BuildAmbientPlaces415,
@@ -47,6 +51,7 @@ import type {
   CancelDataExecution200,
   CancelDataExecution400,
   CancelDataExecution401,
+  CancelDataExecution403,
   CancelDataExecution404,
   CancelDataExecution409,
   CancelDataExecution413,
@@ -58,6 +63,7 @@ import type {
   DisableTransitSource202,
   DisableTransitSource400,
   DisableTransitSource401,
+  DisableTransitSource403,
   DisableTransitSource404,
   DisableTransitSource409,
   DisableTransitSource413,
@@ -69,6 +75,7 @@ import type {
   DiscardAmbientPlaces200,
   DiscardAmbientPlaces400,
   DiscardAmbientPlaces401,
+  DiscardAmbientPlaces403,
   DiscardAmbientPlaces409,
   DiscardAmbientPlaces413,
   DiscardAmbientPlaces415,
@@ -79,6 +86,7 @@ import type {
   EnableTransitSource202,
   EnableTransitSource400,
   EnableTransitSource401,
+  EnableTransitSource403,
   EnableTransitSource404,
   EnableTransitSource409,
   EnableTransitSource413,
@@ -90,6 +98,7 @@ import type {
   GetAmbientPlacesStatus200,
   GetAmbientPlacesStatus400,
   GetAmbientPlacesStatus401,
+  GetAmbientPlacesStatus403,
   GetAmbientPlacesStatus413,
   GetAmbientPlacesStatus415,
   GetAmbientPlacesStatus429,
@@ -97,6 +106,7 @@ import type {
   GetAppliedTrafficConditions200,
   GetAppliedTrafficConditions400,
   GetAppliedTrafficConditions401,
+  GetAppliedTrafficConditions403,
   GetAppliedTrafficConditions413,
   GetAppliedTrafficConditions415,
   GetAppliedTrafficConditions429,
@@ -105,6 +115,7 @@ import type {
   GetCoverageEvidence200,
   GetCoverageEvidence400,
   GetCoverageEvidence401,
+  GetCoverageEvidence403,
   GetCoverageEvidence409,
   GetCoverageEvidence413,
   GetCoverageEvidence415,
@@ -115,6 +126,7 @@ import type {
   GetDataExecution200,
   GetDataExecution400,
   GetDataExecution401,
+  GetDataExecution403,
   GetDataExecution404,
   GetDataExecution410,
   GetDataExecution413,
@@ -125,6 +137,7 @@ import type {
   GetDatasets200,
   GetDatasets400,
   GetDatasets401,
+  GetDatasets403,
   GetDatasets413,
   GetDatasets415,
   GetDatasets429,
@@ -135,6 +148,7 @@ import type {
   GetNotablePlacesStatus200,
   GetNotablePlacesStatus400,
   GetNotablePlacesStatus401,
+  GetNotablePlacesStatus403,
   GetNotablePlacesStatus404,
   GetNotablePlacesStatus413,
   GetNotablePlacesStatus415,
@@ -142,6 +156,7 @@ import type {
   GetNotablePlacesStatus500,
   GetOfflineGlyph400,
   GetOfflineGlyph401,
+  GetOfflineGlyph403,
   GetOfflineGlyph404,
   GetOfflineGlyph409,
   GetOfflineGlyph413,
@@ -152,6 +167,7 @@ import type {
   GetOfflineGlyphCatalog200,
   GetOfflineGlyphCatalog400,
   GetOfflineGlyphCatalog401,
+  GetOfflineGlyphCatalog403,
   GetOfflineGlyphCatalog404,
   GetOfflineGlyphCatalog409,
   GetOfflineGlyphCatalog413,
@@ -161,6 +177,7 @@ import type {
   GetOfflineGlyphCatalog503,
   GetOfflinePackageArchive400,
   GetOfflinePackageArchive401,
+  GetOfflinePackageArchive403,
   GetOfflinePackageArchive404,
   GetOfflinePackageArchive409,
   GetOfflinePackageArchive413,
@@ -172,6 +189,7 @@ import type {
   GetOfflinePackageCapability200,
   GetOfflinePackageCapability400,
   GetOfflinePackageCapability401,
+  GetOfflinePackageCapability403,
   GetOfflinePackageCapability413,
   GetOfflinePackageCapability415,
   GetOfflinePackageCapability429,
@@ -179,6 +197,7 @@ import type {
   GetOfflinePackageJob200,
   GetOfflinePackageJob400,
   GetOfflinePackageJob401,
+  GetOfflinePackageJob403,
   GetOfflinePackageJob404,
   GetOfflinePackageJob409,
   GetOfflinePackageJob413,
@@ -190,6 +209,7 @@ import type {
   GetOfflinePackageManifest200,
   GetOfflinePackageManifest400,
   GetOfflinePackageManifest401,
+  GetOfflinePackageManifest403,
   GetOfflinePackageManifest404,
   GetOfflinePackageManifest409,
   GetOfflinePackageManifest413,
@@ -200,6 +220,7 @@ import type {
   GetOvertureRecovery200,
   GetOvertureRecovery400,
   GetOvertureRecovery401,
+  GetOvertureRecovery403,
   GetOvertureRecovery413,
   GetOvertureRecovery415,
   GetOvertureRecovery429,
@@ -209,6 +230,7 @@ import type {
   GetOvertureStatus200,
   GetOvertureStatus400,
   GetOvertureStatus401,
+  GetOvertureStatus403,
   GetOvertureStatus404,
   GetOvertureStatus413,
   GetOvertureStatus415,
@@ -217,6 +239,7 @@ import type {
   GetPlannedTrafficClosures200,
   GetPlannedTrafficClosures400,
   GetPlannedTrafficClosures401,
+  GetPlannedTrafficClosures403,
   GetPlannedTrafficClosures413,
   GetPlannedTrafficClosures415,
   GetPlannedTrafficClosures429,
@@ -227,6 +250,7 @@ import type {
   GetSearchIndexStatus200,
   GetSearchIndexStatus400,
   GetSearchIndexStatus401,
+  GetSearchIndexStatus403,
   GetSearchIndexStatus404,
   GetSearchIndexStatus413,
   GetSearchIndexStatus415,
@@ -239,6 +263,7 @@ import type {
   GetTransitCatalog200,
   GetTransitCatalog400,
   GetTransitCatalog401,
+  GetTransitCatalog403,
   GetTransitCatalog404,
   GetTransitCatalog409,
   GetTransitCatalog413,
@@ -247,6 +272,7 @@ import type {
   GetTransitCatalog500,
   GetTransitOperatorFeed400,
   GetTransitOperatorFeed401,
+  GetTransitOperatorFeed403,
   GetTransitOperatorFeed410,
   GetTransitOperatorFeed413,
   GetTransitOperatorFeed415,
@@ -256,6 +282,7 @@ import type {
   GetTransitProfile200,
   GetTransitProfile400,
   GetTransitProfile401,
+  GetTransitProfile403,
   GetTransitProfile413,
   GetTransitProfile415,
   GetTransitProfile429,
@@ -263,6 +290,7 @@ import type {
   GetTransitSources200,
   GetTransitSources400,
   GetTransitSources401,
+  GetTransitSources403,
   GetTransitSources404,
   GetTransitSources409,
   GetTransitSources413,
@@ -274,6 +302,7 @@ import type {
   InspectCatalogReview200,
   InspectCatalogReview400,
   InspectCatalogReview401,
+  InspectCatalogReview403,
   InspectCatalogReview409,
   InspectCatalogReview413,
   InspectCatalogReview415,
@@ -294,6 +323,7 @@ import type {
   InspectTransitSyncPreflight200,
   InspectTransitSyncPreflight400,
   InspectTransitSyncPreflight401,
+  InspectTransitSyncPreflight403,
   InspectTransitSyncPreflight409,
   InspectTransitSyncPreflight413,
   InspectTransitSyncPreflight415,
@@ -305,6 +335,7 @@ import type {
   Link200,
   Link400,
   Link401,
+  Link403,
   Link409,
   Link413,
   Link415,
@@ -315,6 +346,7 @@ import type {
   LookupDataExecution200,
   LookupDataExecution400,
   LookupDataExecution401,
+  LookupDataExecution403,
   LookupDataExecution404,
   LookupDataExecution410,
   LookupDataExecution413,
@@ -325,6 +357,7 @@ import type {
   PreflightTransit200,
   PreflightTransit400,
   PreflightTransit401,
+  PreflightTransit403,
   PreflightTransit409,
   PreflightTransit413,
   PreflightTransit415,
@@ -348,6 +381,7 @@ import type {
   PrepareOfflinePackage202,
   PrepareOfflinePackage400,
   PrepareOfflinePackage401,
+  PrepareOfflinePackage403,
   PrepareOfflinePackage404,
   PrepareOfflinePackage409,
   PrepareOfflinePackage413,
@@ -360,6 +394,7 @@ import type {
   ProposeTransitBump200,
   ProposeTransitBump400,
   ProposeTransitBump401,
+  ProposeTransitBump403,
   ProposeTransitBump409,
   ProposeTransitBump413,
   ProposeTransitBump415,
@@ -393,6 +428,7 @@ import type {
   ReloadDatasets200,
   ReloadDatasets400,
   ReloadDatasets401,
+  ReloadDatasets403,
   ReloadDatasets409,
   ReloadDatasets413,
   ReloadDatasets415,
@@ -402,6 +438,7 @@ import type {
   RemoveTransitSource202,
   RemoveTransitSource400,
   RemoveTransitSource401,
+  RemoveTransitSource403,
   RemoveTransitSource404,
   RemoveTransitSource409,
   RemoveTransitSource413,
@@ -413,6 +450,7 @@ import type {
   RestartMotis200,
   RestartMotis400,
   RestartMotis401,
+  RestartMotis403,
   RestartMotis409,
   RestartMotis413,
   RestartMotis415,
@@ -422,6 +460,7 @@ import type {
   ResumeAmbientPlaces202,
   ResumeAmbientPlaces400,
   ResumeAmbientPlaces401,
+  ResumeAmbientPlaces403,
   ResumeAmbientPlaces409,
   ResumeAmbientPlaces413,
   ResumeAmbientPlaces415,
@@ -432,6 +471,7 @@ import type {
   RollbackAmbientPlaces200,
   RollbackAmbientPlaces400,
   RollbackAmbientPlaces401,
+  RollbackAmbientPlaces403,
   RollbackAmbientPlaces409,
   RollbackAmbientPlaces413,
   RollbackAmbientPlaces415,
@@ -441,6 +481,7 @@ import type {
   SetAmbientPlacesEnabled200,
   SetAmbientPlacesEnabled400,
   SetAmbientPlacesEnabled401,
+  SetAmbientPlacesEnabled403,
   SetAmbientPlacesEnabled409,
   SetAmbientPlacesEnabled413,
   SetAmbientPlacesEnabled415,
@@ -485,6 +526,7 @@ import type {
   SyncTransit202,
   SyncTransit400,
   SyncTransit401,
+  SyncTransit403,
   SyncTransit409,
   SyncTransit413,
   SyncTransit415,
@@ -1316,6 +1358,11 @@ export type lookupDataExecutionResponse401 = {
   status: 401;
 };
 
+export type lookupDataExecutionResponse403 = {
+  data: LookupDataExecution403;
+  status: 403;
+};
+
 export type lookupDataExecutionResponse404 = {
   data: LookupDataExecution404;
   status: 404;
@@ -1357,6 +1404,7 @@ export type lookupDataExecutionResponseSuccess = lookupDataExecutionResponse200 
 export type lookupDataExecutionResponseError = (
   | lookupDataExecutionResponse400
   | lookupDataExecutionResponse401
+  | lookupDataExecutionResponse403
   | lookupDataExecutionResponse404
   | lookupDataExecutionResponse410
   | lookupDataExecutionResponse413
@@ -1404,6 +1452,11 @@ export type getDataExecutionResponse401 = {
   status: 401;
 };
 
+export type getDataExecutionResponse403 = {
+  data: GetDataExecution403;
+  status: 403;
+};
+
 export type getDataExecutionResponse404 = {
   data: GetDataExecution404;
   status: 404;
@@ -1445,6 +1498,7 @@ export type getDataExecutionResponseSuccess = getDataExecutionResponse200 & {
 export type getDataExecutionResponseError = (
   | getDataExecutionResponse400
   | getDataExecutionResponse401
+  | getDataExecutionResponse403
   | getDataExecutionResponse404
   | getDataExecutionResponse410
   | getDataExecutionResponse413
@@ -1489,6 +1543,11 @@ export type cancelDataExecutionResponse401 = {
   status: 401;
 };
 
+export type cancelDataExecutionResponse403 = {
+  data: CancelDataExecution403;
+  status: 403;
+};
+
 export type cancelDataExecutionResponse404 = {
   data: CancelDataExecution404;
   status: 404;
@@ -1530,6 +1589,7 @@ export type cancelDataExecutionResponseSuccess = cancelDataExecutionResponse200 
 export type cancelDataExecutionResponseError = (
   | cancelDataExecutionResponse400
   | cancelDataExecutionResponse401
+  | cancelDataExecutionResponse403
   | cancelDataExecutionResponse404
   | cancelDataExecutionResponse409
   | cancelDataExecutionResponse413
@@ -1596,6 +1656,11 @@ export type getAmbientPlacesStatusResponse401 = {
   status: 401;
 };
 
+export type getAmbientPlacesStatusResponse403 = {
+  data: GetAmbientPlacesStatus403;
+  status: 403;
+};
+
 export type getAmbientPlacesStatusResponse413 = {
   data: GetAmbientPlacesStatus413;
   status: 413;
@@ -1622,6 +1687,7 @@ export type getAmbientPlacesStatusResponseSuccess = getAmbientPlacesStatusRespon
 export type getAmbientPlacesStatusResponseError = (
   | getAmbientPlacesStatusResponse400
   | getAmbientPlacesStatusResponse401
+  | getAmbientPlacesStatusResponse403
   | getAmbientPlacesStatusResponse413
   | getAmbientPlacesStatusResponse415
   | getAmbientPlacesStatusResponse429
@@ -1665,6 +1731,11 @@ export type buildAmbientPlacesResponse401 = {
   status: 401;
 };
 
+export type buildAmbientPlacesResponse403 = {
+  data: BuildAmbientPlaces403;
+  status: 403;
+};
+
 export type buildAmbientPlacesResponse409 = {
   data: BuildAmbientPlaces409;
   status: 409;
@@ -1701,6 +1772,7 @@ export type buildAmbientPlacesResponseSuccess = buildAmbientPlacesResponse202 & 
 export type buildAmbientPlacesResponseError = (
   | buildAmbientPlacesResponse400
   | buildAmbientPlacesResponse401
+  | buildAmbientPlacesResponse403
   | buildAmbientPlacesResponse409
   | buildAmbientPlacesResponse413
   | buildAmbientPlacesResponse415
@@ -1765,6 +1837,11 @@ export type resumeAmbientPlacesResponse401 = {
   status: 401;
 };
 
+export type resumeAmbientPlacesResponse403 = {
+  data: ResumeAmbientPlaces403;
+  status: 403;
+};
+
 export type resumeAmbientPlacesResponse409 = {
   data: ResumeAmbientPlaces409;
   status: 409;
@@ -1801,6 +1878,7 @@ export type resumeAmbientPlacesResponseSuccess = resumeAmbientPlacesResponse202 
 export type resumeAmbientPlacesResponseError = (
   | resumeAmbientPlacesResponse400
   | resumeAmbientPlacesResponse401
+  | resumeAmbientPlacesResponse403
   | resumeAmbientPlacesResponse409
   | resumeAmbientPlacesResponse413
   | resumeAmbientPlacesResponse415
@@ -1865,6 +1943,11 @@ export type discardAmbientPlacesResponse401 = {
   status: 401;
 };
 
+export type discardAmbientPlacesResponse403 = {
+  data: DiscardAmbientPlaces403;
+  status: 403;
+};
+
 export type discardAmbientPlacesResponse409 = {
   data: DiscardAmbientPlaces409;
   status: 409;
@@ -1901,6 +1984,7 @@ export type discardAmbientPlacesResponseSuccess = discardAmbientPlacesResponse20
 export type discardAmbientPlacesResponseError = (
   | discardAmbientPlacesResponse400
   | discardAmbientPlacesResponse401
+  | discardAmbientPlacesResponse403
   | discardAmbientPlacesResponse409
   | discardAmbientPlacesResponse413
   | discardAmbientPlacesResponse415
@@ -1965,6 +2049,11 @@ export type setAmbientPlacesEnabledResponse401 = {
   status: 401;
 };
 
+export type setAmbientPlacesEnabledResponse403 = {
+  data: SetAmbientPlacesEnabled403;
+  status: 403;
+};
+
 export type setAmbientPlacesEnabledResponse409 = {
   data: SetAmbientPlacesEnabled409;
   status: 409;
@@ -2001,6 +2090,7 @@ export type setAmbientPlacesEnabledResponseSuccess = setAmbientPlacesEnabledResp
 export type setAmbientPlacesEnabledResponseError = (
   | setAmbientPlacesEnabledResponse400
   | setAmbientPlacesEnabledResponse401
+  | setAmbientPlacesEnabledResponse403
   | setAmbientPlacesEnabledResponse409
   | setAmbientPlacesEnabledResponse413
   | setAmbientPlacesEnabledResponse415
@@ -2068,6 +2158,11 @@ export type rollbackAmbientPlacesResponse401 = {
   status: 401;
 };
 
+export type rollbackAmbientPlacesResponse403 = {
+  data: RollbackAmbientPlaces403;
+  status: 403;
+};
+
 export type rollbackAmbientPlacesResponse409 = {
   data: RollbackAmbientPlaces409;
   status: 409;
@@ -2104,6 +2199,7 @@ export type rollbackAmbientPlacesResponseSuccess = rollbackAmbientPlacesResponse
 export type rollbackAmbientPlacesResponseError = (
   | rollbackAmbientPlacesResponse400
   | rollbackAmbientPlacesResponse401
+  | rollbackAmbientPlacesResponse403
   | rollbackAmbientPlacesResponse409
   | rollbackAmbientPlacesResponse413
   | rollbackAmbientPlacesResponse415
@@ -2149,6 +2245,11 @@ export type getCoverageEvidenceResponse401 = {
   status: 401;
 };
 
+export type getCoverageEvidenceResponse403 = {
+  data: GetCoverageEvidence403;
+  status: 403;
+};
+
 export type getCoverageEvidenceResponse409 = {
   data: GetCoverageEvidence409;
   status: 409;
@@ -2185,6 +2286,7 @@ export type getCoverageEvidenceResponseSuccess = getCoverageEvidenceResponse200 
 export type getCoverageEvidenceResponseError = (
   | getCoverageEvidenceResponse400
   | getCoverageEvidenceResponse401
+  | getCoverageEvidenceResponse403
   | getCoverageEvidenceResponse409
   | getCoverageEvidenceResponse413
   | getCoverageEvidenceResponse415
@@ -2243,6 +2345,11 @@ export type getOfflinePackageCapabilityResponse401 = {
   status: 401;
 };
 
+export type getOfflinePackageCapabilityResponse403 = {
+  data: GetOfflinePackageCapability403;
+  status: 403;
+};
+
 export type getOfflinePackageCapabilityResponse413 = {
   data: GetOfflinePackageCapability413;
   status: 413;
@@ -2269,6 +2376,7 @@ export type getOfflinePackageCapabilityResponseSuccess = getOfflinePackageCapabi
 export type getOfflinePackageCapabilityResponseError = (
   | getOfflinePackageCapabilityResponse400
   | getOfflinePackageCapabilityResponse401
+  | getOfflinePackageCapabilityResponse403
   | getOfflinePackageCapabilityResponse413
   | getOfflinePackageCapabilityResponse415
   | getOfflinePackageCapabilityResponse429
@@ -2317,6 +2425,11 @@ export type prepareOfflinePackageResponse401 = {
   status: 401;
 };
 
+export type prepareOfflinePackageResponse403 = {
+  data: PrepareOfflinePackage403;
+  status: 403;
+};
+
 export type prepareOfflinePackageResponse404 = {
   data: PrepareOfflinePackage404;
   status: 404;
@@ -2361,6 +2474,7 @@ export type prepareOfflinePackageResponseSuccess = (
 export type prepareOfflinePackageResponseError = (
   | prepareOfflinePackageResponse400
   | prepareOfflinePackageResponse401
+  | prepareOfflinePackageResponse403
   | prepareOfflinePackageResponse404
   | prepareOfflinePackageResponse409
   | prepareOfflinePackageResponse413
@@ -2430,6 +2544,11 @@ export type getOfflinePackageJobResponse401 = {
   status: 401;
 };
 
+export type getOfflinePackageJobResponse403 = {
+  data: GetOfflinePackageJob403;
+  status: 403;
+};
+
 export type getOfflinePackageJobResponse404 = {
   data: GetOfflinePackageJob404;
   status: 404;
@@ -2471,6 +2590,7 @@ export type getOfflinePackageJobResponseSuccess = getOfflinePackageJobResponse20
 export type getOfflinePackageJobResponseError = (
   | getOfflinePackageJobResponse400
   | getOfflinePackageJobResponse401
+  | getOfflinePackageJobResponse403
   | getOfflinePackageJobResponse404
   | getOfflinePackageJobResponse409
   | getOfflinePackageJobResponse413
@@ -2539,6 +2659,11 @@ export type getOfflinePackageManifestResponse401 = {
   status: 401;
 };
 
+export type getOfflinePackageManifestResponse403 = {
+  data: GetOfflinePackageManifest403;
+  status: 403;
+};
+
 export type getOfflinePackageManifestResponse404 = {
   data: GetOfflinePackageManifest404;
   status: 404;
@@ -2580,6 +2705,7 @@ export type getOfflinePackageManifestResponseSuccess = getOfflinePackageManifest
 export type getOfflinePackageManifestResponseError = (
   | getOfflinePackageManifestResponse400
   | getOfflinePackageManifestResponse401
+  | getOfflinePackageManifestResponse403
   | getOfflinePackageManifestResponse404
   | getOfflinePackageManifestResponse409
   | getOfflinePackageManifestResponse413
@@ -2627,6 +2753,11 @@ export type getOfflineGlyphCatalogResponse401 = {
   status: 401;
 };
 
+export type getOfflineGlyphCatalogResponse403 = {
+  data: GetOfflineGlyphCatalog403;
+  status: 403;
+};
+
 export type getOfflineGlyphCatalogResponse404 = {
   data: GetOfflineGlyphCatalog404;
   status: 404;
@@ -2668,6 +2799,7 @@ export type getOfflineGlyphCatalogResponseSuccess = getOfflineGlyphCatalogRespon
 export type getOfflineGlyphCatalogResponseError = (
   | getOfflineGlyphCatalogResponse400
   | getOfflineGlyphCatalogResponse401
+  | getOfflineGlyphCatalogResponse403
   | getOfflineGlyphCatalogResponse404
   | getOfflineGlyphCatalogResponse409
   | getOfflineGlyphCatalogResponse413
@@ -2715,6 +2847,11 @@ export type headOfflineGlyphResponse401 = {
   status: 401;
 };
 
+export type headOfflineGlyphResponse403 = {
+  data: void;
+  status: 403;
+};
+
 export type headOfflineGlyphResponse404 = {
   data: void;
   status: 404;
@@ -2736,6 +2873,7 @@ export type headOfflineGlyphResponseSuccess = headOfflineGlyphResponse200 & {
 export type headOfflineGlyphResponseError = (
   | headOfflineGlyphResponse400
   | headOfflineGlyphResponse401
+  | headOfflineGlyphResponse403
   | headOfflineGlyphResponse404
   | headOfflineGlyphResponse429
   | headOfflineGlyphResponse500
@@ -2781,6 +2919,11 @@ export type getOfflineGlyphResponse401 = {
   status: 401;
 };
 
+export type getOfflineGlyphResponse403 = {
+  data: GetOfflineGlyph403;
+  status: 403;
+};
+
 export type getOfflineGlyphResponse404 = {
   data: GetOfflineGlyph404;
   status: 404;
@@ -2822,6 +2965,7 @@ export type getOfflineGlyphResponseSuccess = getOfflineGlyphResponse200 & {
 export type getOfflineGlyphResponseError = (
   | getOfflineGlyphResponse400
   | getOfflineGlyphResponse401
+  | getOfflineGlyphResponse403
   | getOfflineGlyphResponse404
   | getOfflineGlyphResponse409
   | getOfflineGlyphResponse413
@@ -2874,6 +3018,11 @@ export type headOfflinePackageArchiveResponse401 = {
   status: 401;
 };
 
+export type headOfflinePackageArchiveResponse403 = {
+  data: void;
+  status: 403;
+};
+
 export type headOfflinePackageArchiveResponse404 = {
   data: void;
   status: 404;
@@ -2903,6 +3052,7 @@ export type headOfflinePackageArchiveResponseSuccess = (
 export type headOfflinePackageArchiveResponseError = (
   | headOfflinePackageArchiveResponse400
   | headOfflinePackageArchiveResponse401
+  | headOfflinePackageArchiveResponse403
   | headOfflinePackageArchiveResponse404
   | headOfflinePackageArchiveResponse416
   | headOfflinePackageArchiveResponse429
@@ -2973,6 +3123,11 @@ export type getOfflinePackageArchiveResponse401 = {
   status: 401;
 };
 
+export type getOfflinePackageArchiveResponse403 = {
+  data: GetOfflinePackageArchive403;
+  status: 403;
+};
+
 export type getOfflinePackageArchiveResponse404 = {
   data: GetOfflinePackageArchive404;
   status: 404;
@@ -3022,6 +3177,7 @@ export type getOfflinePackageArchiveResponseSuccess = (
 export type getOfflinePackageArchiveResponseError = (
   | getOfflinePackageArchiveResponse400
   | getOfflinePackageArchiveResponse401
+  | getOfflinePackageArchiveResponse403
   | getOfflinePackageArchiveResponse404
   | getOfflinePackageArchiveResponse409
   | getOfflinePackageArchiveResponse413
@@ -3128,6 +3284,11 @@ export type getTransitOperatorFeedResponse401 = {
   status: 401;
 };
 
+export type getTransitOperatorFeedResponse403 = {
+  data: GetTransitOperatorFeed403;
+  status: 403;
+};
+
 export type getTransitOperatorFeedResponse410 = {
   data: GetTransitOperatorFeed410;
   status: 410;
@@ -3164,6 +3325,7 @@ export type getTransitOperatorFeedResponseSuccess = getTransitOperatorFeedRespon
 export type getTransitOperatorFeedResponseError = (
   | getTransitOperatorFeedResponse400
   | getTransitOperatorFeedResponse401
+  | getTransitOperatorFeedResponse403
   | getTransitOperatorFeedResponse410
   | getTransitOperatorFeedResponse413
   | getTransitOperatorFeedResponse415
@@ -3256,6 +3418,11 @@ export type getDatasetsResponse401 = {
   status: 401;
 };
 
+export type getDatasetsResponse403 = {
+  data: GetDatasets403;
+  status: 403;
+};
+
 export type getDatasetsResponse413 = {
   data: GetDatasets413;
   status: 413;
@@ -3282,6 +3449,7 @@ export type getDatasetsResponseSuccess = getDatasetsResponse200 & {
 export type getDatasetsResponseError = (
   | getDatasetsResponse400
   | getDatasetsResponse401
+  | getDatasetsResponse403
   | getDatasetsResponse413
   | getDatasetsResponse415
   | getDatasetsResponse429
@@ -3320,6 +3488,11 @@ export type getTransitProfileResponse401 = {
   status: 401;
 };
 
+export type getTransitProfileResponse403 = {
+  data: GetTransitProfile403;
+  status: 403;
+};
+
 export type getTransitProfileResponse413 = {
   data: GetTransitProfile413;
   status: 413;
@@ -3346,6 +3519,7 @@ export type getTransitProfileResponseSuccess = getTransitProfileResponse200 & {
 export type getTransitProfileResponseError = (
   | getTransitProfileResponse400
   | getTransitProfileResponse401
+  | getTransitProfileResponse403
   | getTransitProfileResponse413
   | getTransitProfileResponse415
   | getTransitProfileResponse429
@@ -3386,6 +3560,11 @@ export type getTransitSourcesResponse401 = {
   status: 401;
 };
 
+export type getTransitSourcesResponse403 = {
+  data: GetTransitSources403;
+  status: 403;
+};
+
 export type getTransitSourcesResponse404 = {
   data: GetTransitSources404;
   status: 404;
@@ -3422,6 +3601,7 @@ export type getTransitSourcesResponseSuccess = getTransitSourcesResponse200 & {
 export type getTransitSourcesResponseError = (
   | getTransitSourcesResponse400
   | getTransitSourcesResponse401
+  | getTransitSourcesResponse403
   | getTransitSourcesResponse404
   | getTransitSourcesResponse409
   | getTransitSourcesResponse413
@@ -3477,6 +3657,11 @@ export type addTransitSourceResponse401 = {
   status: 401;
 };
 
+export type addTransitSourceResponse403 = {
+  data: AddTransitSource403;
+  status: 403;
+};
+
 export type addTransitSourceResponse404 = {
   data: AddTransitSource404;
   status: 404;
@@ -3518,6 +3703,7 @@ export type addTransitSourceResponseSuccess = addTransitSourceResponse202 & {
 export type addTransitSourceResponseError = (
   | addTransitSourceResponse400
   | addTransitSourceResponse401
+  | addTransitSourceResponse403
   | addTransitSourceResponse404
   | addTransitSourceResponse409
   | addTransitSourceResponse413
@@ -3583,6 +3769,11 @@ export type getTransitCatalogResponse401 = {
   status: 401;
 };
 
+export type getTransitCatalogResponse403 = {
+  data: GetTransitCatalog403;
+  status: 403;
+};
+
 export type getTransitCatalogResponse404 = {
   data: GetTransitCatalog404;
   status: 404;
@@ -3619,6 +3810,7 @@ export type getTransitCatalogResponseSuccess = getTransitCatalogResponse200 & {
 export type getTransitCatalogResponseError = (
   | getTransitCatalogResponse400
   | getTransitCatalogResponse401
+  | getTransitCatalogResponse403
   | getTransitCatalogResponse404
   | getTransitCatalogResponse409
   | getTransitCatalogResponse413
@@ -3659,6 +3851,11 @@ export type removeTransitSourceResponse400 = {
 export type removeTransitSourceResponse401 = {
   data: RemoveTransitSource401;
   status: 401;
+};
+
+export type removeTransitSourceResponse403 = {
+  data: RemoveTransitSource403;
+  status: 403;
 };
 
 export type removeTransitSourceResponse404 = {
@@ -3702,6 +3899,7 @@ export type removeTransitSourceResponseSuccess = removeTransitSourceResponse202 
 export type removeTransitSourceResponseError = (
   | removeTransitSourceResponse400
   | removeTransitSourceResponse401
+  | removeTransitSourceResponse403
   | removeTransitSourceResponse404
   | removeTransitSourceResponse409
   | removeTransitSourceResponse413
@@ -3771,6 +3969,11 @@ export type enableTransitSourceResponse401 = {
   status: 401;
 };
 
+export type enableTransitSourceResponse403 = {
+  data: EnableTransitSource403;
+  status: 403;
+};
+
 export type enableTransitSourceResponse404 = {
   data: EnableTransitSource404;
   status: 404;
@@ -3812,6 +4015,7 @@ export type enableTransitSourceResponseSuccess = enableTransitSourceResponse202 
 export type enableTransitSourceResponseError = (
   | enableTransitSourceResponse400
   | enableTransitSourceResponse401
+  | enableTransitSourceResponse403
   | enableTransitSourceResponse404
   | enableTransitSourceResponse409
   | enableTransitSourceResponse413
@@ -3881,6 +4085,11 @@ export type disableTransitSourceResponse401 = {
   status: 401;
 };
 
+export type disableTransitSourceResponse403 = {
+  data: DisableTransitSource403;
+  status: 403;
+};
+
 export type disableTransitSourceResponse404 = {
   data: DisableTransitSource404;
   status: 404;
@@ -3922,6 +4131,7 @@ export type disableTransitSourceResponseSuccess = disableTransitSourceResponse20
 export type disableTransitSourceResponseError = (
   | disableTransitSourceResponse400
   | disableTransitSourceResponse401
+  | disableTransitSourceResponse403
   | disableTransitSourceResponse404
   | disableTransitSourceResponse409
   | disableTransitSourceResponse413
@@ -3991,6 +4201,11 @@ export type preflightTransitResponse401 = {
   status: 401;
 };
 
+export type preflightTransitResponse403 = {
+  data: PreflightTransit403;
+  status: 403;
+};
+
 export type preflightTransitResponse409 = {
   data: PreflightTransit409;
   status: 409;
@@ -4032,6 +4247,7 @@ export type preflightTransitResponseSuccess = preflightTransitResponse200 & {
 export type preflightTransitResponseError = (
   | preflightTransitResponse400
   | preflightTransitResponse401
+  | preflightTransitResponse403
   | preflightTransitResponse409
   | preflightTransitResponse413
   | preflightTransitResponse415
@@ -4097,6 +4313,11 @@ export type reloadDatasetsResponse401 = {
   status: 401;
 };
 
+export type reloadDatasetsResponse403 = {
+  data: ReloadDatasets403;
+  status: 403;
+};
+
 export type reloadDatasetsResponse409 = {
   data: ReloadDatasets409;
   status: 409;
@@ -4133,6 +4354,7 @@ export type reloadDatasetsResponseSuccess = reloadDatasetsResponse200 & {
 export type reloadDatasetsResponseError = (
   | reloadDatasetsResponse400
   | reloadDatasetsResponse401
+  | reloadDatasetsResponse403
   | reloadDatasetsResponse409
   | reloadDatasetsResponse413
   | reloadDatasetsResponse415
@@ -4171,6 +4393,11 @@ export type bakePredictedTrafficResponse400 = {
 export type bakePredictedTrafficResponse401 = {
   data: BakePredictedTraffic401;
   status: 401;
+};
+
+export type bakePredictedTrafficResponse403 = {
+  data: BakePredictedTraffic403;
+  status: 403;
 };
 
 export type bakePredictedTrafficResponse409 = {
@@ -4214,6 +4441,7 @@ export type bakePredictedTrafficResponseSuccess = bakePredictedTrafficResponse20
 export type bakePredictedTrafficResponseError = (
   | bakePredictedTrafficResponse400
   | bakePredictedTrafficResponse401
+  | bakePredictedTrafficResponse403
   | bakePredictedTrafficResponse409
   | bakePredictedTrafficResponse413
   | bakePredictedTrafficResponse415
@@ -4257,6 +4485,11 @@ export type getAppliedTrafficConditionsResponse401 = {
   status: 401;
 };
 
+export type getAppliedTrafficConditionsResponse403 = {
+  data: GetAppliedTrafficConditions403;
+  status: 403;
+};
+
 export type getAppliedTrafficConditionsResponse413 = {
   data: GetAppliedTrafficConditions413;
   status: 413;
@@ -4288,6 +4521,7 @@ export type getAppliedTrafficConditionsResponseSuccess = getAppliedTrafficCondit
 export type getAppliedTrafficConditionsResponseError = (
   | getAppliedTrafficConditionsResponse400
   | getAppliedTrafficConditionsResponse401
+  | getAppliedTrafficConditionsResponse403
   | getAppliedTrafficConditionsResponse413
   | getAppliedTrafficConditionsResponse415
   | getAppliedTrafficConditionsResponse429
@@ -4332,6 +4566,11 @@ export type getPlannedTrafficClosuresResponse401 = {
   status: 401;
 };
 
+export type getPlannedTrafficClosuresResponse403 = {
+  data: GetPlannedTrafficClosures403;
+  status: 403;
+};
+
 export type getPlannedTrafficClosuresResponse413 = {
   data: GetPlannedTrafficClosures413;
   status: 413;
@@ -4368,6 +4607,7 @@ export type getPlannedTrafficClosuresResponseSuccess = getPlannedTrafficClosures
 export type getPlannedTrafficClosuresResponseError = (
   | getPlannedTrafficClosuresResponse400
   | getPlannedTrafficClosuresResponse401
+  | getPlannedTrafficClosuresResponse403
   | getPlannedTrafficClosuresResponse413
   | getPlannedTrafficClosuresResponse415
   | getPlannedTrafficClosuresResponse429
@@ -4426,6 +4666,11 @@ export type getSearchIndexStatusResponse401 = {
   status: 401;
 };
 
+export type getSearchIndexStatusResponse403 = {
+  data: GetSearchIndexStatus403;
+  status: 403;
+};
+
 export type getSearchIndexStatusResponse404 = {
   data: GetSearchIndexStatus404;
   status: 404;
@@ -4457,6 +4702,7 @@ export type getSearchIndexStatusResponseSuccess = getSearchIndexStatusResponse20
 export type getSearchIndexStatusResponseError = (
   | getSearchIndexStatusResponse400
   | getSearchIndexStatusResponse401
+  | getSearchIndexStatusResponse403
   | getSearchIndexStatusResponse404
   | getSearchIndexStatusResponse413
   | getSearchIndexStatusResponse415
@@ -4498,6 +4744,11 @@ export type getNotablePlacesStatusResponse401 = {
   status: 401;
 };
 
+export type getNotablePlacesStatusResponse403 = {
+  data: GetNotablePlacesStatus403;
+  status: 403;
+};
+
 export type getNotablePlacesStatusResponse404 = {
   data: GetNotablePlacesStatus404;
   status: 404;
@@ -4529,6 +4780,7 @@ export type getNotablePlacesStatusResponseSuccess = getNotablePlacesStatusRespon
 export type getNotablePlacesStatusResponseError = (
   | getNotablePlacesStatusResponse400
   | getNotablePlacesStatusResponse401
+  | getNotablePlacesStatusResponse403
   | getNotablePlacesStatusResponse404
   | getNotablePlacesStatusResponse413
   | getNotablePlacesStatusResponse415
@@ -4573,6 +4825,11 @@ export type linkResponse401 = {
   status: 401;
 };
 
+export type linkResponse403 = {
+  data: Link403;
+  status: 403;
+};
+
 export type linkResponse409 = {
   data: Link409;
   status: 409;
@@ -4609,6 +4866,7 @@ export type linkResponseSuccess = linkResponse200 & {
 export type linkResponseError = (
   | linkResponse400
   | linkResponse401
+  | linkResponse403
   | linkResponse409
   | linkResponse413
   | linkResponse415
@@ -4671,6 +4929,11 @@ export type getOvertureRecoveryResponse401 = {
   status: 401;
 };
 
+export type getOvertureRecoveryResponse403 = {
+  data: GetOvertureRecovery403;
+  status: 403;
+};
+
 export type getOvertureRecoveryResponse413 = {
   data: GetOvertureRecovery413;
   status: 413;
@@ -4702,6 +4965,7 @@ export type getOvertureRecoveryResponseSuccess = getOvertureRecoveryResponse200 
 export type getOvertureRecoveryResponseError = (
   | getOvertureRecoveryResponse400
   | getOvertureRecoveryResponse401
+  | getOvertureRecoveryResponse403
   | getOvertureRecoveryResponse413
   | getOvertureRecoveryResponse415
   | getOvertureRecoveryResponse429
@@ -4759,6 +5023,11 @@ export type getOvertureStatusResponse401 = {
   status: 401;
 };
 
+export type getOvertureStatusResponse403 = {
+  data: GetOvertureStatus403;
+  status: 403;
+};
+
 export type getOvertureStatusResponse404 = {
   data: GetOvertureStatus404;
   status: 404;
@@ -4790,6 +5059,7 @@ export type getOvertureStatusResponseSuccess = getOvertureStatusResponse200 & {
 export type getOvertureStatusResponseError = (
   | getOvertureStatusResponse400
   | getOvertureStatusResponse401
+  | getOvertureStatusResponse403
   | getOvertureStatusResponse404
   | getOvertureStatusResponse413
   | getOvertureStatusResponse415
@@ -4829,6 +5099,11 @@ export type inspectTransitSyncPreflightResponse400 = {
 export type inspectTransitSyncPreflightResponse401 = {
   data: InspectTransitSyncPreflight401;
   status: 401;
+};
+
+export type inspectTransitSyncPreflightResponse403 = {
+  data: InspectTransitSyncPreflight403;
+  status: 403;
 };
 
 export type inspectTransitSyncPreflightResponse409 = {
@@ -4872,6 +5147,7 @@ export type inspectTransitSyncPreflightResponseSuccess = inspectTransitSyncPrefl
 export type inspectTransitSyncPreflightResponseError = (
   | inspectTransitSyncPreflightResponse400
   | inspectTransitSyncPreflightResponse401
+  | inspectTransitSyncPreflightResponse403
   | inspectTransitSyncPreflightResponse409
   | inspectTransitSyncPreflightResponse413
   | inspectTransitSyncPreflightResponse415
@@ -4940,6 +5216,11 @@ export type syncTransitResponse401 = {
   status: 401;
 };
 
+export type syncTransitResponse403 = {
+  data: SyncTransit403;
+  status: 403;
+};
+
 export type syncTransitResponse409 = {
   data: SyncTransit409;
   status: 409;
@@ -4981,6 +5262,7 @@ export type syncTransitResponseSuccess = syncTransitResponse202 & {
 export type syncTransitResponseError = (
   | syncTransitResponse400
   | syncTransitResponse401
+  | syncTransitResponse403
   | syncTransitResponse409
   | syncTransitResponse413
   | syncTransitResponse415
@@ -5044,6 +5326,11 @@ export type restartMotisResponse401 = {
   status: 401;
 };
 
+export type restartMotisResponse403 = {
+  data: RestartMotis403;
+  status: 403;
+};
+
 export type restartMotisResponse409 = {
   data: RestartMotis409;
   status: 409;
@@ -5080,6 +5367,7 @@ export type restartMotisResponseSuccess = restartMotisResponse200 & {
 export type restartMotisResponseError = (
   | restartMotisResponse400
   | restartMotisResponse401
+  | restartMotisResponse403
   | restartMotisResponse409
   | restartMotisResponse413
   | restartMotisResponse415
@@ -5120,6 +5408,11 @@ export type inspectCatalogReviewResponse401 = {
   status: 401;
 };
 
+export type inspectCatalogReviewResponse403 = {
+  data: InspectCatalogReview403;
+  status: 403;
+};
+
 export type inspectCatalogReviewResponse409 = {
   data: InspectCatalogReview409;
   status: 409;
@@ -5156,6 +5449,7 @@ export type inspectCatalogReviewResponseSuccess = inspectCatalogReviewResponse20
 export type inspectCatalogReviewResponseError = (
   | inspectCatalogReviewResponse400
   | inspectCatalogReviewResponse401
+  | inspectCatalogReviewResponse403
   | inspectCatalogReviewResponse409
   | inspectCatalogReviewResponse413
   | inspectCatalogReviewResponse415
@@ -5212,6 +5506,11 @@ export type proposeTransitBumpResponse401 = {
   status: 401;
 };
 
+export type proposeTransitBumpResponse403 = {
+  data: ProposeTransitBump403;
+  status: 403;
+};
+
 export type proposeTransitBumpResponse409 = {
   data: ProposeTransitBump409;
   status: 409;
@@ -5253,6 +5552,7 @@ export type proposeTransitBumpResponseSuccess = proposeTransitBumpResponse200 & 
 export type proposeTransitBumpResponseError = (
   | proposeTransitBumpResponse400
   | proposeTransitBumpResponse401
+  | proposeTransitBumpResponse403
   | proposeTransitBumpResponse409
   | proposeTransitBumpResponse413
   | proposeTransitBumpResponse415
@@ -5318,6 +5618,11 @@ export type approveTransitBumpResponse401 = {
   status: 401;
 };
 
+export type approveTransitBumpResponse403 = {
+  data: ApproveTransitBump403;
+  status: 403;
+};
+
 export type approveTransitBumpResponse404 = {
   data: ApproveTransitBump404;
   status: 404;
@@ -5364,6 +5669,7 @@ export type approveTransitBumpResponseSuccess = approveTransitBumpResponse200 & 
 export type approveTransitBumpResponseError = (
   | approveTransitBumpResponse400
   | approveTransitBumpResponse401
+  | approveTransitBumpResponse403
   | approveTransitBumpResponse404
   | approveTransitBumpResponse409
   | approveTransitBumpResponse413

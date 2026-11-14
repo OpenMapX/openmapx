@@ -1409,12 +1409,14 @@ export function controlHeaders(rawHeaders: readonly string[]): {
     throw Error("Control header limit");
   return { delegation, parent };
 }
+/** The caller a receiver authenticated by its own bearer token. */
+export type ControlTransportPrincipal = "data-manager" | "api" | "ops-agent" | "host-cli";
 /** Transport authentication is required by the fixed caller. Signature authentication finishes during anchored adoption. */
 export function verifyControlPeer(
   installation: ControlInstallation,
   input: {
     rawHeaders: readonly string[];
-    transportPrincipal: "data-manager" | "host-cli" | "shared-data-manager-bearer";
+    transportPrincipal: ControlTransportPrincipal;
     execution: ExecutionRef;
     kind: string;
   },

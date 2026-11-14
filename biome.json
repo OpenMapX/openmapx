@@ -148,6 +148,61 @@
           }
         }
       }
+    },
+    {
+      "includes": ["apps/api/src/services/__tests__/crash-points/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@openmapx/core/build-artifacts": "The crash-point suite observes the system from outside: not the signed control layer.",
+                  "@openmapx/ops-agent": "The crash-point suite observes the system from outside: not the agent's sources.",
+                  "@openmapx/data-manager": "The crash-point suite observes the system from outside: not the data-manager's sources."
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "@openmapx/core/build-artifacts/*",
+                      "@openmapx/ops-agent/*",
+                      "@openmapx/data-manager/*",
+                      "**/core/src/build-artifacts",
+                      "**/core/src/build-artifacts/**",
+                      "**/ops-agent/src",
+                      "**/ops-agent/src/**",
+                      "**/data-manager/src",
+                      "**/data-manager/src/**"
+                    ],
+                    "message": "The crash-point suite observes the system from outside: not the control layer, the agent or the data-manager."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/api/src/services/__tests__/crash-points/scenarios/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**", "!vitest", "!../driver", "!../scenario"],
+                    "message": "Crash-point scenarios talk to the system only through the driver."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
     }
   ],
   "javascript": {

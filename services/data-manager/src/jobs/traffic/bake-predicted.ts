@@ -344,7 +344,7 @@ export async function bakePredicted(deps: BakePredictedDeps): Promise<BakePredic
   // Tile mutation, extract rebuilding, final way-edge generation, validation,
   // and restart are one fenced operations-authority transaction. Splitting
   // these into calls lets the live writer mmap a replacement mid-sequence.
-  await runOpsOperation({
+  const maintained = await runOpsOperation({
     kind: "valhalla.traffic.maintain",
     plan: "apply-predicted-and-rebuild",
     preparedGeneration,
@@ -354,7 +354,8 @@ export async function bakePredicted(deps: BakePredictedDeps): Promise<BakePredic
     ...counts,
     rows,
     tiles: tiles.size,
-    built: true,
+    // Without a Valhalla container the agent changes nothing.
+    built: maintained.changed,
     wayCount: waysResult.wayCount,
     edgeCount: waysResult.edgeCount,
   };

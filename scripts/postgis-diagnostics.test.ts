@@ -30,6 +30,9 @@ else if (name === 'awk') console.log('1024000');
       "awk",
     ])
       writeFileSync(join(root, name), stub, { mode: 0o755 });
+    // The entrypoint refuses to start PostgreSQL without the two role passwords.
+    writeFileSync(join(root, "api-password"), "synthetic-api-password");
+    writeFileSync(join(root, "data-manager-password"), "synthetic-data-manager-password");
     const result = spawnSync(
       resolve("services/postgis/scripts/sync-password.sh"),
       ["postgres", "-c", "max_wal_size=4GB"],
@@ -39,6 +42,8 @@ else if (name === 'awk') console.log('1024000');
           ARGS: join(root, "args"),
           PRELOADS: preloads,
           LOOKUP_FAIL: lookupFails ? "1" : "0",
+          OPENMAPX_API_DB_PASSWORD_FILE: join(root, "api-password"),
+          OPENMAPX_DATA_MANAGER_DB_PASSWORD_FILE: join(root, "data-manager-password"),
           ...flags,
           PATH: `${root}:/usr/bin:/bin`,
         },

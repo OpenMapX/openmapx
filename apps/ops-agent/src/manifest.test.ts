@@ -45,16 +45,36 @@ describe("ops-agent deployment manifest", () => {
     );
     expect(api.container.environment).not.toHaveProperty("OPS_AGENT_TOKEN");
     expect(dataManager.container.environment).not.toHaveProperty("OPS_AGENT_TOKEN");
-    expect(api.bindMounts?.filter((mount) => mount.source.includes("ops-agent-"))).toEqual([
+    expect(
+      api.bindMounts?.filter((mount) => mount.source.startsWith("@infra:secrets/ops-agent-")),
+    ).toEqual([
       expect.objectContaining({ source: "@infra:secrets/ops-agent-api-token", readOnly: true }),
     ]);
-    expect(dataManager.bindMounts?.filter((mount) => mount.source.includes("ops-agent-"))).toEqual([
+    expect(
+      dataManager.bindMounts?.filter((mount) =>
+        mount.source.startsWith("@infra:secrets/ops-agent-"),
+      ),
+    ).toEqual([
       expect.objectContaining({
         source: "@infra:secrets/ops-agent-data-manager-token",
         readOnly: true,
       }),
     ]);
-    expect(ops.bindMounts?.filter((mount) => mount.source.includes("ops-agent-"))).toHaveLength(2);
+    expect(
+      ops.bindMounts?.filter((mount) => mount.source.startsWith("@infra:secrets/ops-agent-")),
+    ).toHaveLength(2);
+    // Each data-manager caller presents its own token; data-manager reads all three.
+    const dataManagerTokens = (manifest: typeof api) =>
+      (manifest.bindMounts ?? [])
+        .map((mount) => mount.source)
+        .filter((source) => source.startsWith("@infra:secrets/data-manager-"));
+    expect(dataManagerTokens(api)).toEqual(["@infra:secrets/data-manager-api-token"]);
+    expect(dataManagerTokens(ops)).toEqual(["@infra:secrets/data-manager-ops-agent-token"]);
+    expect(dataManagerTokens(dataManager)).toEqual([
+      "@infra:secrets/data-manager-api-token",
+      "@infra:secrets/data-manager-ops-agent-token",
+      "@infra:secrets/data-manager-host-cli-token",
+    ]);
     expect(ops.exposure).toBeUndefined();
     // Only the operator's override: without it the agent reads the selection file.
     expect(ops.container.environment?.OPENMAPX_ENABLED_SERVICES).toBe(

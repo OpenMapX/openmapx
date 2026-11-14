@@ -102,7 +102,7 @@ describe.skipIf(!supported)("the agent's Transitous pin", () => {
     const owner = statSync(target);
     writeFileSync(
       join(infra, ".env"),
-      `UID=${owner.uid}\nGID=${owner.gid}\nPOSTGRES_PASSWORD=${secret()}\nBETTER_AUTH_SECRET=${secret()}\nDATA_MANAGER_AUTH_TOKEN=${secret()}\nOPENMAPX_HOST_DIR=${target}\n`,
+      `UID=${owner.uid}\nGID=${owner.gid}\nPOSTGRES_PASSWORD=${secret()}\nBETTER_AUTH_SECRET=${secret()}\nOPENMAPX_HOST_DIR=${target}\n`,
       { mode: 0o600 },
     );
     const rendered = await cli(target, "compose", "render");

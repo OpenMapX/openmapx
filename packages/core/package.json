@@ -62,6 +62,10 @@
       "types": "./src/server-env.ts",
       "default": "./src/server-env.ts"
     },
+    "./service-secret-files": {
+      "types": "./src/service-secret-files.ts",
+      "default": "./src/service-secret-files.ts"
+    },
     "./undici-fetch": {
       "types": "./src/undici-fetch.ts",
       "default": "./src/undici-fetch.ts"

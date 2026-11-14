@@ -2,6 +2,7 @@ import type { DatasetMetadata } from "@openmapx/core/data-manager-contracts";
 import * as dm from "@openmapx/core/data-manager-sdk";
 import type { OpsResultFor } from "@openmapx/core/ops";
 import { envString } from "@openmapx/core/server-env";
+import { readDataManagerToken } from "@openmapx/core/service-secret-files";
 
 const DATA_MANAGER_URL_DEFAULT = "http://localhost:4000";
 const DATA_MANAGER_TIMEOUT_MS = 5_000;
@@ -71,7 +72,7 @@ export async function readDataManagerDatasets(): Promise<DatasetMetadata[]> {
     const response = await dm.getDatasets({
       transport: dm.createDataManagerTransport({
         baseUrl: envString("DATA_MANAGER_URL", DATA_MANAGER_URL_DEFAULT),
-        authToken: envString("DATA_MANAGER_AUTH_TOKEN", ""),
+        authToken: readDataManagerToken(),
         requestTimeoutMs: DATA_MANAGER_TIMEOUT_MS,
         maxJsonBytes: DATA_MANAGER_MAX_BYTES,
       }),

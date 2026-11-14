@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type {
   RoadConditionEvent,
   Route,
@@ -22,6 +25,13 @@ import {
   snapshotMatchesProof,
   verifyRouteTraffic,
 } from "./traffic-application.js";
+
+/** A private file holding `token`, for `DATA_MANAGER_TOKEN_FILE`. */
+function dataManagerTokenFile(token: string): string {
+  const path = join(mkdtempSync(join(tmpdir(), "openmapx-dm-token-")), "token");
+  writeFileSync(path, token, { mode: 0o600 });
+  return path;
+}
 
 const NOW = Date.parse("2026-09-12T12:00:00Z");
 
@@ -153,7 +163,7 @@ describe("engine application reconciliation", () => {
   it("uses fresh authenticated evidence and covers all events, including speed caps", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
-    vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "test-secret");
+    vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile("test-secret"));
     const get = vi.fn().mockResolvedValue(snapshot());
     const getEvents = vi.fn().mockResolvedValue([event()]);
     const getRoutingEvents = vi.fn(async () => ({ complete: true, events: await getEvents() }));
@@ -270,7 +280,7 @@ describe("route handler proof orchestration", () => {
     async (path) => {
       vi.useFakeTimers();
       vi.setSystemTime(NOW);
-      vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "test-secret");
+      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile("test-secret"));
       const getRoute = vi.fn(async () => ({
         waypoints: [
           [7, 50],

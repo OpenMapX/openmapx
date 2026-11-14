@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
 import { afterEach, expect, it } from "vitest";
-import { inspectMaintenanceDockerRuntime } from "./configuration-maintenance-docker-inspection";
+import {
+  acquireReleaseStoreLockBriefly,
+  awaitAppliedContainerHealth,
+  inspectMaintenanceDockerRuntime,
+} from "./configuration-maintenance-docker-inspection";
 import type { ConfigurationMaintenanceOwnerRecord } from "./configuration-maintenance-store";
 
 const roots: string[] = [];
@@ -15,21 +19,25 @@ afterEach(() => {
 function fixture(volumes = 3, secrets = 1, configs = 1) {
   const root = mkdtempSync(join(tmpdir(), "maintenance-mounts-"));
   roots.push(root);
-  services.ensureReleaseStateDirectories(root);
+  // The production layout: the stack's directory is <checkout>/infra/docker.
+  const checkout = join(root, "checkout"),
+    infra = join(checkout, "infra", "docker");
+  mkdirSync(infra, { recursive: true, mode: 0o700 });
+  services.ensureReleaseStateDirectories(infra);
   const revision = `cfg1_${"a".repeat(43)}`;
-  const generation = join(root, services.CONFIGURATION_GENERATIONS, revision);
+  const generation = join(infra, services.CONFIGURATION_GENERATIONS, revision);
   mkdirSync(generation, { recursive: true, mode: 0o700 });
   writeFileSync(join(generation, services.GENERATED_COMPOSE_FILE), "services: {}\n", {
     mode: 0o600,
   });
-  symlinkSync(`generations/${revision}`, join(root, services.CURRENT_CONFIGURATION));
+  symlinkSync(`generations/${revision}`, join(infra, services.CURRENT_CONFIGURATION));
   symlinkSync(
     `generations/${revision}`,
-    join(root, services.CONFIGURATION_DIRECTORY, `.base-${revision}`),
+    join(infra, services.CONFIGURATION_DIRECTORY, `.base-${revision}`),
   );
-  const data = join(root, "data"),
-    other = join(root, "other"),
-    file = join(root, "private-file");
+  const data = join(checkout, "data"),
+    other = join(checkout, "other"),
+    file = join(checkout, "private-file");
   mkdirSync(data, { mode: 0o700 });
   mkdirSync(other, { mode: 0o700 });
   writeFileSync(file, "fixture-content", { mode: 0o600 });
@@ -112,9 +120,9 @@ function fixture(volumes = 3, secrets = 1, configs = 1) {
   const inspect = () =>
     inspectMaintenanceDockerRuntime({
       stack: {
-        infraDir: root,
+        infraDir: infra,
         composePath: join(generation, services.GENERATED_COMPOSE_FILE),
-        composeReleasePath: join(root, "unused-release.yml"),
+        composeReleasePath: join(infra, "unused-release.yml"),
       },
       owner,
       containers: [container],
@@ -210,3 +218,125 @@ it.each(["source", "access", "duplicate", "contents"])(
     );
   },
 );
+
+it("waits briefly for another holder of the release store lock", async () => {
+  const store = mkdtempSync(join(tmpdir(), "openmapx-release-store-"));
+  try {
+    const held = await services.acquireReleaseStoreLock(store);
+    setTimeout(() => held.release(), 300);
+    const started = Date.now();
+    const lock = await acquireReleaseStoreLockBriefly(store);
+    lock.release();
+    expect(Date.now() - started).toBeGreaterThanOrEqual(250);
+  } finally {
+    rmSync(store, { recursive: true, force: true });
+  }
+});
+
+it("still refuses the release store lock while another holder keeps it", async () => {
+  const store = mkdtempSync(join(tmpdir(), "openmapx-release-store-"));
+  try {
+    const held = await services.acquireReleaseStoreLock(store);
+    const started = Date.now();
+    await expect(acquireReleaseStoreLockBriefly(store)).rejects.toThrow("Release store is busy");
+    expect(Date.now() - started).toBeGreaterThanOrEqual(1_900);
+    held.release();
+  } finally {
+    rmSync(store, { recursive: true, force: true });
+  }
+});
+
+it("refuses an applied container whose healthcheck has not passed, naming its service", async () => {
+  const { inspect, observed } = fixture(1, 0, 0);
+  Object.assign(observed.State, { Health: { Status: "starting" } });
+  await expect(inspect()).rejects.toThrow("Original applied container not ready: app-api");
+});
+
+it("waits for a recreated container's healthcheck before it is checked", async () => {
+  const answers = ["starting", "starting", "healthy"];
+  const asked: (readonly string[])[] = [];
+  await awaitAppliedContainerHealth({
+    containerId: "1".repeat(64),
+    deadlineAt: Date.now() + 60_000,
+    pollMs: 1,
+    signal: new AbortController().signal,
+    execFile: async (_file, args) => {
+      asked.push(args);
+      return { stdout: `${answers.shift() ?? "healthy"}\n`, stderr: "" };
+    },
+  });
+  expect(asked).toHaveLength(3);
+  expect(asked[0]).toEqual([
+    "container",
+    "inspect",
+    "--format",
+    "{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}",
+    "1".repeat(64),
+  ]);
+});
+
+it("stops waiting at once for a container without a healthcheck or one already unhealthy", async () => {
+  for (const status of ["none", "unhealthy", "healthy"]) {
+    let calls = 0;
+    await awaitAppliedContainerHealth({
+      containerId: "1".repeat(64),
+      deadlineAt: Date.now() + 60_000,
+      pollMs: 1,
+      signal: new AbortController().signal,
+      execFile: async () => {
+        calls++;
+        return { stdout: status, stderr: "" };
+      },
+    });
+    expect(calls, status).toBe(1);
+  }
+});
+
+it("stops waiting at its deadline and leaves the refusal to the readiness check", async () => {
+  let calls = 0;
+  const started = Date.now();
+  await awaitAppliedContainerHealth({
+    containerId: "1".repeat(64),
+    deadlineAt: Date.now() + 50,
+    pollMs: 5,
+    signal: new AbortController().signal,
+    execFile: async () => {
+      calls++;
+      return { stdout: "starting", stderr: "" };
+    },
+  });
+  expect(calls).toBeGreaterThan(1);
+  expect(Date.now() - started).toBeLessThan(5_000);
+});
+
+// The helper and the agent see only the checkout's mounts; a host path outside
+// it, such as the default Docker configuration directory, does not resolve.
+const unseen = "/nonexistent-openmapx-host/root/.docker";
+
+it("compares a bind source outside the checkout that it cannot see by its path", async () => {
+  const { inspect, spec, observed } = fixture(1, 0, 0);
+  (spec.volumes[0] as { source: string }).source = unseen;
+  (observed.Mounts[0] as { Source: string }).Source = unseen;
+  const first = await inspect();
+  expect(first.checks.some((check) => check.check === "mount")).toBe(true);
+  // The evidence is stable, so the same mount verifies the same way again.
+  expect((await inspect()).details).toEqual(first.details);
+});
+
+it("still refuses a changed bind source outside the checkout that it cannot see", async () => {
+  const { inspect, spec, observed } = fixture(1, 0, 0);
+  (spec.volumes[0] as { source: string }).source = unseen;
+  (observed.Mounts[0] as { Source: string }).Source = "/nonexistent-openmapx-host/elsewhere";
+  await expect(inspect()).rejects.toThrow("Original applied mount source differs");
+});
+
+it("still resolves a bind source it can see and refuses a missing one inside the checkout", async () => {
+  const { inspect, spec, observed, other } = fixture(1, 0, 0);
+  (observed.Mounts[0] as { Source: string }).Source = other;
+  await expect(inspect()).rejects.toThrow("Original applied mount source differs");
+  const missing = fixture(1, 0, 0);
+  const inside = join(missing.other, "missing");
+  (missing.spec.volumes[0] as { source: string }).source = inside;
+  (missing.observed.Mounts[0] as { Source: string }).Source = inside;
+  await expect(missing.inspect()).rejects.toThrow("ENOENT");
+});

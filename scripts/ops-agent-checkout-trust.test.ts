@@ -81,7 +81,6 @@ async function umask002Checkout(): Promise<string> {
       `GID=${owner.gid}`,
       `POSTGRES_PASSWORD=${secret()}`,
       `BETTER_AUTH_SECRET=${secret()}`,
-      `DATA_MANAGER_AUTH_TOKEN=${secret()}`,
       `OPENMAPX_HOST_DIR=${checkout}`,
       "",
     ].join("\n"),

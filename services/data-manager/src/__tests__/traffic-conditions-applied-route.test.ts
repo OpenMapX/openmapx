@@ -31,7 +31,7 @@ describe("GET /traffic/conditions/applied", () => {
 
   it("requires authentication for application evidence", async () => {
     const app = Fastify();
-    registerAuth(app, "s3cret");
+    registerAuth(app, { api: "s3cret", "ops-agent": "s3cret-agent", "host-cli": "s3cret-cli" });
     registerApi(app, { getTrafficConditionsApplied: () => APPLIED });
     const denied = await app.inject({ method: "GET", url: "/traffic/conditions/applied" });
     expect(denied.statusCode).toBe(401);
@@ -64,7 +64,7 @@ describe("GET /traffic/conditions/applied", () => {
 
   it("still requires a bearer token on other traffic routes", async () => {
     const app = Fastify();
-    registerAuth(app, "s3cret");
+    registerAuth(app, { api: "s3cret", "ops-agent": "s3cret-agent", "host-cli": "s3cret-cli" });
     registerApi(app, { getTrafficConditionsApplied: () => APPLIED });
     const res = await app.inject({ method: "POST", url: "/traffic/predicted/bake" });
     expect(res.statusCode).toBe(401);

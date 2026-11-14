@@ -61,6 +61,7 @@ import { readPreparedConfigurationSettlementRetirement } from "./configuration-f
 import {
   beginControlEffect,
   type ControlInstallation,
+  type ControlTransportPrincipal,
   controlDigest,
   controlHeaders,
   executionAuthorityState,
@@ -1245,7 +1246,13 @@ export function createDataConfigurationFenceStore(
         .passthrough()
         .parse(raw.payload?.operation),
       input = dataConfigurationFencePrepareSchema.parse(fields),
-      verified = inspectGrant(input, ["x-openmapx-control-delegation", assertion], kind),
+      // The agent's own retained grant, read back here rather than received.
+      verified = inspectGrant(
+        input,
+        ["x-openmapx-control-delegation", assertion],
+        kind,
+        "ops-agent",
+      ),
       reservation = publishedConfigurationSettlementReservationState(
         verifyPublishedConfigurationSettlementReservation(installation, verified.peer, input),
         installation,
@@ -1729,6 +1736,7 @@ export function createDataConfigurationFenceStore(
     body: DataConfigurationFencePrepare | DataConfigurationFenceSettle,
     rawHeaders: readonly string[],
     kind: "configuration-maintenance.prepare" | "configuration-maintenance.settle",
+    transportPrincipal: Exclude<ControlTransportPrincipal, "data-manager">,
     owner?: DataConfigurationFencePrepare,
   ) {
     try {
@@ -1767,7 +1775,7 @@ export function createDataConfigurationFenceStore(
         throw Error("Configuration fence target subset conflict");
       const peer = verifyControlPeer(installation, {
         rawHeaders,
-        transportPrincipal: "shared-data-manager-bearer",
+        transportPrincipal,
         execution: grant.execution,
         kind,
       });
@@ -2358,9 +2366,18 @@ export function createDataConfigurationFenceStore(
         return run(tx);
       });
     },
-    async prepare(value: DataConfigurationFencePrepare, rawHeaders: readonly string[]) {
+    async prepare(
+      value: DataConfigurationFencePrepare,
+      rawHeaders: readonly string[],
+      transportPrincipal: Exclude<ControlTransportPrincipal, "data-manager">,
+    ) {
       const input = dataConfigurationFencePrepareSchema.parse(value),
-        verified = inspectGrant(input, rawHeaders, "configuration-maintenance.prepare");
+        verified = inspectGrant(
+          input,
+          rawHeaders,
+          "configuration-maintenance.prepare",
+          transportPrincipal,
+        );
       const existing = await row(sql, input.maintenanceId);
       if (existing) {
         if (

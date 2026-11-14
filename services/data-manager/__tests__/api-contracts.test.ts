@@ -26,7 +26,11 @@ afterEach(async () => {
 describe("data-manager producer contracts", () => {
   it("enforces the declared authentication boundary on every actual operation", async () => {
     const { app, dataDir } = fixture();
-    registerAuth(app, "fixture-service-token");
+    registerAuth(app, {
+      api: "fixture-service-token",
+      "ops-agent": "fixture-service-token-agent",
+      "host-cli": "fixture-service-token-cli",
+    });
     registerApi(app, {
       dataDir,
       offlinePackages: new Proxy(

@@ -56,17 +56,16 @@ pwd
 
 Edit `infra/docker/.env` before starting services:
 
-| Setting                   | Development value                                         |
-| ------------------------- | --------------------------------------------------------- |
-| `DOMAIN`                  | `localhost`                                               |
-| `OPENMAPX_HOST_DIR`       | Absolute checkout path printed by `pwd`                   |
-| `POSTGRES_PASSWORD`       | Unique password of at least 24 characters; not `postgres` |
-| `BETTER_AUTH_SECRET`      | Separate random secret of at least 32 characters          |
-| `DATA_MANAGER_AUTH_TOKEN` | Separate random token of at least 32 characters           |
+| Setting              | Development value                                         |
+| -------------------- | --------------------------------------------------------- |
+| `DOMAIN`             | `localhost`                                               |
+| `OPENMAPX_HOST_DIR`  | Absolute checkout path printed by `pwd`                   |
+| `POSTGRES_PASSWORD`  | Unique password of at least 24 characters; not `postgres` |
+| `BETTER_AUTH_SECRET` | Separate random secret of at least 32 characters          |
 
 Generate each credential separately with `openssl rand -hex 32`. Keep the
-values stable when reusing database volumes. The last two credentials and the
-host path are needed to validate/render the configuration even though this
+values stable when reusing database volumes. The auth secret and the host path
+are needed to validate/render the configuration even though this
 preset starts only PostgreSQL and Valkey. The CLI loads this file itself; it
 does not export the values to your shell or the host-run API.
 
@@ -95,17 +94,20 @@ The API reads its own environment file, `apps/api/.env`. Copy the example:
 cp apps/api/.env.example apps/api/.env
 ```
 
-In `apps/api/.env`, replace the example password in `DATABASE_URL` with the
-`POSTGRES_PASSWORD` from `infra/docker/.env`. Keep the database/user and host
-consistent with the dev preset:
+The API connects as its own database role, `openmapx_api`, as in production.
+The dev preset's PostGIS creates that role on start, with the password the CLI
+rendered into `infra/docker/secrets/postgres-api-password`. The example
+already points at it; the path is relative to `apps/api`:
 
 ```dotenv
-DATABASE_URL=postgresql://postgres:YOUR_GENERATED_PASSWORD@localhost:5432/openmapx
+DATABASE_URL=postgresql://openmapx_api@localhost:5432/openmapx
+DATABASE_PASSWORD_FILE=../../infra/docker/secrets/postgres-api-password
 ```
 
-Replace `YOUR_GENERATED_PASSWORD`; it is not a working credential. Hexadecimal
-output from `openssl rand -hex 32` needs no URL escaping. Other passwords may
-need percent-encoding in a connection URL.
+`DATABASE_URL` carries no password when `DATABASE_PASSWORD_FILE` is set. The
+role owns the `public` schema and runs the migrations. Use the `postgres` superuser
+with `POSTGRES_PASSWORD` only for manual administration; tables it creates are
+not the API's.
 
 The cache defaults are `REDIS_URL=redis://localhost:6379` and
 `REDIS_PASSWORD_FILE=../../infra/docker/secrets/redis-password`. The file is
@@ -122,8 +124,10 @@ Use that value for `OPENMAPX_SECRETS_KEY` in `apps/api/.env`; it must contain
 exactly 64 hexadecimal characters. The integration host refuses startup without
 it when discovered integrations declare vault-backed credentials. Keep the auth
 and vault keys stable so existing sessions and encrypted credentials remain
-usable. The host API does not need the data-manager token unless you also
-configure it to call a data-manager.
+usable. The host API needs a data-manager token only when it calls a
+host-run data-manager: set `DATA_MANAGER_TOKEN_FILE` in `apps/api/.env` to
+`../../infra/docker/secrets/data-manager-api-token`, which the render created,
+and keep the data-manager's three token-file settings from its example.
 
 Apply the committed migrations to the development database and start the server
 with hot reload. Run these commands from the repository root:

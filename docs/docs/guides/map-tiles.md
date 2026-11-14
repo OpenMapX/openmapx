@@ -251,6 +251,41 @@ pnpm openmapx services start martin
 curl -sf http://localhost:3002/health
 ```
 
+The functions in `tiles` run as `openmapx_tiles_owner`, a role that cannot log
+in, is no superuser and only reads. The traffic-flow function calls
+OpenConditions' `conditions.segment_flow`, which reads OpenConditions' tables
+through OpenConditions' own helper functions. PostGIS grants
+`openmapx_tiles_owner` read access to every table in `conditions`, and the use
+of its functions, each time it starts, and a backup restore keeps the grants.
+The whole schema is granted so that tiles keep working when an OpenConditions
+release reads another of its tables; the role never writes. After installing or
+upgrading OpenConditions, restart PostGIS, or run as the superuser:
+
+```sql
+GRANT USAGE ON SCHEMA conditions TO openmapx_tiles_owner;
+GRANT SELECT ON ALL TABLES IN SCHEMA conditions TO openmapx_tiles_owner;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA conditions TO openmapx_tiles_owner;
+```
+
+Until then a traffic tile request fails with `permission denied for schema
+conditions` (or for one of its tables) in Martin's log, and no code runs with
+more rights.
+
+PostGIS grants every role read access to its own catalogue tables:
+`spatial_ref_sys`, `geometry_columns`, `geography_columns`, `topology.topology`
+and `topology.layer`. The tile roles can read them as well.
+
+Only the superuser can create or replace the functions in `tiles`, and only
+the superuser and the owner of `conditions` those in `conditions`. Until
+OpenConditions creates `conditions`, any role with `CREATE` on the database
+other than the API's and data-manager's could create it, so grant that right
+only to the services that need it. The tile roles may create no objects of
+their own.
+
+The tile functions call PostGIS without a schema, so a compromised API could
+run code as the tile owner; see
+[Database roles](../install/configuration.md#database-roles).
+
 Martin is independent of TileServer GL. Most deployments that only need a
 self-hosted base map need TileServer GL, not Martin.
 

@@ -9,8 +9,10 @@ import type {
   generationHardlinksNonAdmissionSchema,
   startGenerationHardlinksExecutionSchema,
 } from "@openmapx/core/data-manager-contracts";
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type z from "zod/v4";
+import { requestPrincipal } from "../../auth.js";
+import type { DataManagerPrincipal } from "../../principals.js";
 import { registerDataManagerRoute } from "../../route-contract.js";
 
 /** The receiver performs signed admission/adoption, separately from bearer
@@ -43,11 +45,17 @@ export interface DataExecutionReceiver {
   legacyResult(id: string): Record<string, unknown> | undefined;
   admit(
     input: DataExecutionInput,
-    options: { operationKey: string; requestedDeadlineAt?: number; rawHeaders: readonly string[] },
+    options: {
+      operationKey: string;
+      requestedDeadlineAt?: number;
+      rawHeaders: readonly string[];
+      transportPrincipal: DataManagerPrincipal;
+    },
   ): Promise<DataExecutionStatus>;
   admitHardlinks(
     request: z.infer<typeof startGenerationHardlinksExecutionSchema>,
     rawHeaders: readonly string[],
+    transportPrincipal: DataManagerPrincipal,
   ): Promise<DataExecutionStatus>;
   inspect(id: string): Promise<DataExecutionStatus | null>;
   lookup(operationKey: string): Promise<DataExecutionStatus | null>;
@@ -55,6 +63,7 @@ export interface DataExecutionReceiver {
   prepareFence(
     input: DataConfigurationFencePrepare,
     rawHeaders: readonly string[],
+    transportPrincipal: DataManagerPrincipal,
   ): Promise<DataConfigurationFenceReceipt>;
   inspectFence(
     maintenanceId: string,
@@ -64,6 +73,12 @@ export interface DataExecutionReceiver {
     input: DataConfigurationFenceSettle,
     rawHeaders: readonly string[],
   ): Promise<DataConfigurationFenceReceipt>;
+}
+/** The authenticated caller; the auth hook admits no request here without one. */
+function principal(request: FastifyRequest): DataManagerPrincipal {
+  const caller = requestPrincipal(request);
+  if (!caller) throw Object.assign(Error("Unauthenticated execution request"), { statusCode: 401 });
+  return caller;
 }
 function unavailable(reply: FastifyReply) {
   return reply.code(503).send({ error: "Durable data execution receiver is unavailable" });
@@ -75,15 +90,21 @@ export function registerDataExecutionApi(
   registerDataManagerRoute(app, "startDataExecution", async (request, reply) => {
     if (!receiver) return unavailable(reply);
     const { input, ...admission } = request.body;
-    return reply
-      .code(202)
-      .send(await receiver.admit(input, { ...admission, rawHeaders: request.raw.rawHeaders }));
+    return reply.code(202).send(
+      await receiver.admit(input, {
+        ...admission,
+        rawHeaders: request.raw.rawHeaders,
+        transportPrincipal: principal(request),
+      }),
+    );
   });
   registerDataManagerRoute(app, "startGenerationHardlinksExecution", async (request, reply) => {
     if (!receiver) return unavailable(reply);
     return reply
       .code(202)
-      .send(await receiver.admitHardlinks(request.body, request.raw.rawHeaders));
+      .send(
+        await receiver.admitHardlinks(request.body, request.raw.rawHeaders, principal(request)),
+      );
   });
   registerDataManagerRoute(app, "recoverUnadmittedGenerationHardlinks", async (request, reply) => {
     if (!receiver?.attestUnadoptedHardlinks) return unavailable(reply);
@@ -91,7 +112,7 @@ export function registerDataExecutionApi(
   });
   registerDataManagerRoute(app, "prepareDataConfigurationFence", async (request, reply) => {
     if (!receiver) return unavailable(reply);
-    return receiver.prepareFence(request.body, request.raw.rawHeaders);
+    return receiver.prepareFence(request.body, request.raw.rawHeaders, principal(request));
   });
   registerDataManagerRoute(
     app,

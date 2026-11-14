@@ -320,9 +320,8 @@ its own timeout. Lifted spans are pruned when current feed evidence is available
 ### The applied set
 
 Read `GET /traffic/conditions/applied` on Data Manager from the trusted service
-network, using its configured `Authorization: Bearer` service token. The running Data Manager requires authentication for this route. Production
-requires `DATA_MANAGER_AUTH_TOKEN`; development generates an ephemeral token
-when none is configured. Do not publish it as an anonymous monitoring endpoint.
+network, using a caller's `Authorization: Bearer` token. The running Data Manager requires authentication for this route; from the host,
+use the CLI's token in `infra/docker/secrets/data-manager-host-cli-token`. Do not publish it as an anonymous monitoring endpoint.
 
 The response includes mode, write ID, engine boot, graph generation, policy
 revision, expiry, per-effect receipts, `writtenAt` and applied observation IDs.
@@ -413,7 +412,11 @@ maintenance. The operations agent stops Valhalla, writes
 Valhalla tools and starts Valhalla again. While that fence file exists, Data
 Manager keeps its service stopped (its health check fails) and logs
 `Traffic worker paused for Valhalla maintenance`. A rebuild takes a few
-minutes.
+minutes. Data Manager checks and rebuilds the traffic extract only when
+`OPENCONDITIONS_URL` is set, because only the traffic writers use it; without
+it, Data Manager logs `traffic-extract: startup check skipped`. When no Valhalla
+container exists, the operations agent completes a requested rebuild without
+changing anything and reports it as skipped.
 
 If the agent itself is stopped during maintenance (an update recreating it, a
 crash or a reboot), its next start releases the fence and logs

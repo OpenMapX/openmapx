@@ -79,7 +79,11 @@ const receiver = createDataExecutionReceiver({
   operationsPolicy: policy,
 });
 const app = Fastify();
-registerAuth(app, input.token, { executionReceiver: () => receiver });
+registerAuth(
+  app,
+  { api: input.token, "ops-agent": `${input.token}-agent`, "host-cli": `${input.token}-cli` },
+  { executionReceiver: () => receiver },
+);
 registerApi(app, {
   dataDir: input.dataDir,
   singleFlight,

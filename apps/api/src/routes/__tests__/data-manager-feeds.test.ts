@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { dataManagerTokenFile } from "../../test/data-manager-token";
 
 const fakeDb = vi.hoisted(() => ({
   feeds: [] as Array<Record<string, unknown>>,
@@ -66,7 +67,7 @@ vi.mock("../../db/index.js", () => {
 let app: FastifyInstance;
 
 beforeAll(async () => {
-  vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "test-token");
+  vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile("test-token"));
   const { dataManagerRoute } = await import("../data-manager.js");
   app = Fastify({ logger: false });
   await app.register(dataManagerRoute);

@@ -96,7 +96,11 @@ const receiver = createDataExecutionReceiver({
 });
 await runtime.reconcile();
 const app = Fastify();
-registerAuth(app, token, { executionReceiver: () => receiver });
+registerAuth(
+  app,
+  { api: token, "ops-agent": `${token}-agent`, "host-cli": `${token}-cli` },
+  { executionReceiver: () => receiver },
+);
 registerApi(app, {
   dataDir: join(root, "data"),
   singleFlight,

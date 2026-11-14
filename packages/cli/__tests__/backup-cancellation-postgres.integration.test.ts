@@ -12,7 +12,6 @@ import {
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
-import { gunzipSync } from "node:zlib";
 import { services } from "@openmapx/core/server";
 import { execa } from "execa";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -350,7 +349,7 @@ exec "$OPENMAPX_TEST_REAL_DOCKER" "$@"
         expect(
           processes
             .split("\n")
-            .some((line) => /pg_dump -U postgres --no-owner --no-privileges target$/.test(line)),
+            .some((line) => /pg_dump --format=custom -U postgres target$/.test(line)),
         ).toBe(false);
         expect(
           await sql(
@@ -379,27 +378,26 @@ exec "$OPENMAPX_TEST_REAL_DOCKER" "$@"
     60000,
   );
 
-  it("restores the confirmed SQL gzip without changing the backup format", async () => {
+  it("restores the confirmed archive without changing the manifest format", async () => {
     const result = await createBackup({ rootDir: root, name: "normal" });
     const volume = result.manifest.services[0]?.volumes[0];
-    if (!volume) throw Error("Missing SQL fixture backup");
+    if (!volume) throw Error("Missing fixture backup");
     expect(result.manifest.formatVersion).toBe(2);
-    const sqlBytes = gunzipSync(readFileSync(join(result.directory, volume.file)));
+    const archive = readFileSync(join(result.directory, volume.file));
     await docker(
       [
         ...composeArgs,
         "exec",
         "-T",
         "postgis",
-        "psql",
+        "pg_restore",
+        "--exit-on-error",
         "-U",
         "postgres",
         "-d",
         "restored",
-        "-v",
-        "ON_ERROR_STOP=1",
       ],
-      sqlBytes,
+      archive,
     );
     expect(await sql("restored", "SELECT id || ':' || label FROM backup_probe ORDER BY id")).toBe(
       "1:synthetic\n2:retained",

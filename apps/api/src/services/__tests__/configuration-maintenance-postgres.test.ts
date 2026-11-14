@@ -37,6 +37,7 @@ import { openOpsJobJournal } from "../../../../ops-agent/src/journal";
 import { buildOpsAgentServer } from "../../../../ops-agent/src/server";
 import * as schema from "../../db/schema";
 import { createConfigurationPostgresFixture } from "../../test/configuration-postgres-fixture";
+import { dataManagerTokenFile } from "../../test/data-manager-token";
 import type { JobContext } from "../job-runner";
 import { postgresCommitRelay } from "./fixtures/postgres-commit-relay";
 
@@ -712,7 +713,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((value) => value.manifest.id),
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         const initialCoordinator = {
           ...host.row,
           Id: "c".repeat(64),
@@ -2180,7 +2181,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((value) => value.manifest.id),
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         if (mode === "disabled-coordinator") await host.select(["motis"]);
         const source = join(host.infraDir, "data/source-osm");
         mkdirSync(source, { recursive: true });
@@ -2276,7 +2277,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((value) => value.manifest.id),
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         host.setRows(
           host.loaded.map((service, index) => ({
             ...host.row,
@@ -2355,7 +2356,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         serviceIds: host.loaded.map((service) => service.manifest.id),
       });
       vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-      vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
       const dmRow = {
         ...host.row,
         Id: "c".repeat(64),
@@ -2523,7 +2524,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         serviceIds: host.loaded.map((service) => service.manifest.id),
       });
       vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-      vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
       const coordinator = {
         ...host.row,
         Id: "c".repeat(64),
@@ -2631,7 +2632,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         serviceIds: host.loaded.map((service) => service.manifest.id),
       });
       vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-      vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
       const coordinator = {
         ...host.row,
         Id: "c".repeat(64),
@@ -2734,7 +2735,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         serviceIds: host.loaded.map((service) => service.manifest.id),
       });
       vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-      vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
       const coordinator = {
         ...host.row,
         Id: "c".repeat(64),
@@ -2831,7 +2832,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         serviceIds: host.loaded.map((service) => service.manifest.id),
       });
       vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-      vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
       const coordinator = {
         ...host.row,
         Id: "c".repeat(64),
@@ -2916,7 +2917,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           losePrepareResponse: lost,
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         const coordinator = {
           ...host.row,
           Id: "c".repeat(64),
@@ -3183,7 +3184,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((service) => service.manifest.id),
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         host.setRows([
           host.row,
           {
@@ -3343,7 +3344,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         serviceIds: host.loaded.map((service) => service.manifest.id),
       });
       vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-      vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
       host.setRows([
         host.row,
         {
@@ -3438,7 +3439,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((service) => service.manifest.id),
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         host.setRows([
           host.row,
           {
@@ -3592,7 +3593,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         serviceIds: host.loaded.map((service) => service.manifest.id),
       });
       vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-      vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
       host.setRows([
         host.row,
         {
@@ -3676,7 +3677,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         serviceIds: host.loaded.map((service) => service.manifest.id),
       });
       vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-      vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
       host.setRows([
         host.row,
         {
@@ -3815,7 +3816,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((service) => service.manifest.id),
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         host.setRows([
           host.row,
           {
@@ -3976,7 +3977,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((service) => service.manifest.id),
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         const args = services.stackComposeArgs(host.stack),
           signal = new AbortController().signal,
           options = { signal, timeout: 15000, maxBuffer: 1024 * 1024 },
@@ -4288,7 +4289,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           pauseSettlementBeforeCommit: mode === "sql-session-live",
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         const dmRow = {
           ...host.row,
           Id: "c".repeat(64),
@@ -5282,7 +5283,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         serviceIds: host.loaded.map((service) => service.manifest.id),
       });
       vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-      vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
       host.setRows([
         host.row,
         {
@@ -5397,7 +5398,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((service) => service.manifest.id),
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         host.setRows([
           host.row,
           {
@@ -5484,7 +5485,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((service) => service.manifest.id),
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         host.setRows([
           host.row,
           {
@@ -5600,7 +5601,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         serviceIds: host.loaded.map((service) => service.manifest.id),
       });
       vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-      vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
       host.setRows([
         host.row,
         {
@@ -5755,7 +5756,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         serviceIds: host.loaded.map((service) => service.manifest.id),
       });
       vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-      vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
       host.setRows([
         host.row,
         {
@@ -5906,7 +5907,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((service) => service.manifest.id),
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         host.setRows([
           host.row,
           {
@@ -6044,7 +6045,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         serviceIds: host.loaded.map((service) => service.manifest.id),
       });
       vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-      vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
       host.setRows([
         host.row,
         {
@@ -6206,7 +6207,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((service) => service.manifest.id),
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         host.setRows([
           host.row,
           {
@@ -6509,7 +6510,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((service) => service.manifest.id),
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         host.setRows([
           host.row,
           {
@@ -6919,7 +6920,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((service) => service.manifest.id),
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         host.setRows([
           host.row,
           {
@@ -7244,7 +7245,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((service) => service.manifest.id),
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         const coordinator = {
           ...host.row,
           Id: "c".repeat(64),
@@ -7476,7 +7477,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         serviceIds: host.loaded.map((service) => service.manifest.id),
       });
       vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-      vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
       const coordinator = {
         ...host.row,
         Id: "c".repeat(64),
@@ -7615,7 +7616,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((service) => service.manifest.id),
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         host.setRows([
           host.row,
           {
@@ -8183,7 +8184,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((service) => service.manifest.id),
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         const coordinator = {
           ...host.row,
           Id: "c".repeat(64),
@@ -8238,7 +8239,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((service) => service.manifest.id),
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         host.setRows([
           host.row,
           {
@@ -8284,7 +8285,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((service) => service.manifest.id),
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         const coordinator = {
           ...host.row,
           Id: "c".repeat(64),
@@ -8342,7 +8343,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           loseHardlinkResponse: loseResponse,
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         const source = join(host.infraDir, "data/source-osm");
         mkdirSync(source, { recursive: true });
         writeFileSync(join(source, "fixture.pbf"), "public-osm-fixture");
@@ -8427,7 +8428,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((service) => service.manifest.id),
         });
         vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", dm.token);
+        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
         const dmRow = {
           ...host.row,
           Id: "c".repeat(64),
@@ -8560,7 +8561,6 @@ if(args.includes("--force-recreate")){${mode === "recreate" ? "process.exit(9);"
           DOMAIN: "example.test",
           POSTGRES_PASSWORD: "p".repeat(24),
           BETTER_AUTH_SECRET: "a".repeat(32),
-          DATA_MANAGER_AUTH_TOKEN: "d".repeat(32),
           OPENMAPX_ENABLED_SERVICES: "",
         }))
           vi.stubEnv(key, value);
@@ -8720,7 +8720,6 @@ if(args[0]==="compose"&&args.includes("config")&&args.includes("--format")){impo
           DOMAIN: "example.test",
           POSTGRES_PASSWORD: "p".repeat(24),
           BETTER_AUTH_SECRET: "a".repeat(32),
-          DATA_MANAGER_AUTH_TOKEN: "d".repeat(32),
           OPENMAPX_ENABLED_SERVICES: "",
         }))
           vi.stubEnv(key, value);
@@ -8821,7 +8820,7 @@ if(args[0]==="compose"&&args.includes("config")&&args.includes("--format")){impo
         DOMAIN: "example.test",
         POSTGRES_PASSWORD: "p".repeat(24),
         BETTER_AUTH_SECRET: "a".repeat(32),
-        DATA_MANAGER_AUTH_TOKEN: dm.token,
+        DATA_MANAGER_TOKEN_FILE: dataManagerTokenFile(dm.token),
         OPENMAPX_ENABLED_SERVICES: "",
       }))
         vi.stubEnv(key, value);

@@ -69,6 +69,7 @@ import {
 import { buildOpsAgentServer } from "../../../../ops-agent/src/server";
 import * as schema from "../../db/schema";
 import { createConfigurationPostgresFixture } from "../../test/configuration-postgres-fixture";
+import { dataManagerTokenFile } from "../../test/data-manager-token";
 
 const coordinatorReferenceCases = [
   {
@@ -574,7 +575,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         OPENMAPX_LOCAL_ADMIN_TOKEN: "task012-coordinator-local-admin",
         OPENMAPX_DISABLE_LOCALHOST_AUTH: "0",
         DATA_MANAGER_URL: dm.baseUrl,
-        DATA_MANAGER_AUTH_TOKEN: dm.token,
+        DATA_MANAGER_TOKEN_FILE: dataManagerTokenFile(dm.token),
         DOMAIN: "example.test",
         POSTGRES_PASSWORD: "p".repeat(24),
         PATH: `${bin}:${process.env.PATH}`,

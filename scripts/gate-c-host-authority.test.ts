@@ -60,6 +60,33 @@ function renderedVolumes(composeYaml: string): Record<string, RenderedService> {
   return (parseYaml(composeYaml) as { services: Record<string, RenderedService> }).services;
 }
 
+/** Violations of the agent-state rule alone; the control and secret rules have their own cases. */
+function stateDetails(violations: ReturnType<typeof findAuthorityViolations>): string[] {
+  return violations
+    .map((violation) => violation.detail)
+    .filter((detail) => !/ control | reaches \S+ through /.test(detail));
+}
+
+/** A checkout holding only the given manifests, for the gate's rule cases. */
+function withManifests(
+  manifests: Record<string, Record<string, unknown>>,
+  check: (details: string[]) => void,
+): void {
+  const root = mkdtempSync(join(tmpdir(), "openmapx-authority-"));
+  try {
+    for (const [id, manifest] of Object.entries(manifests)) {
+      mkdirSync(join(root, "services", id), { recursive: true });
+      writeFileSync(
+        join(root, "services", id, "service.json"),
+        JSON.stringify({ id, ...manifest }),
+      );
+    }
+    check(findAuthorityViolations(root).map((violation) => violation.detail));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 describe("Gate C — host authority", () => {
   const services = renderFullStack();
 
@@ -269,7 +296,7 @@ describe("Gate C — host authority", () => {
       manifest("app-api", ["@infra:state/ops-agent/trusted-config", "@infra:state/ops-agent"]);
       manifest("data-manager", ["@infra:data", "@infra:state", "@infra:."]);
       manifest("ops-agent", ["@infra:state/ops-agent/trusted-config"]);
-      expect(findAuthorityViolations(root).map((violation) => violation.detail)).toEqual([
+      expect(stateDetails(findAuthorityViolations(root))).toEqual([
         `service "app-api" mounts the operations agent's state (@infra:state/ops-agent)`,
         `service "data-manager" mounts the operations agent's state (@infra:state)`,
         `service "data-manager" mounts the operations agent's state (@infra:.)`,
@@ -318,7 +345,7 @@ describe("Gate C — host authority", () => {
         "/srv/openmapx/infra/docker/state",
       ]);
       manifest("ops-agent", ["${OPENMAPX_HOST_DIR}/infra/docker/state"]);
-      expect(findAuthorityViolations(root).map((violation) => violation.detail)).toEqual([
+      expect(stateDetails(findAuthorityViolations(root))).toEqual([
         ...[
           "${OPENMAPX_HOST_DIR}/infra/docker/state/ops-agent",
           "$OPENMAPX_HOST_DIR/infra/docker/state",
@@ -345,6 +372,170 @@ describe("Gate C — host authority", () => {
     }
   });
 
+  // biome-ignore-end lint/suspicious/noTemplateCurlyInString: literal Compose variable sources under test
+
+  // biome-ignore-start lint/suspicious/noTemplateCurlyInString: literal Compose variable sources under test
+  it("lets each service mount only its own control role's key and private records", () => {
+    const host = "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}";
+    const mask = (sibling: string, kind: "hidden-key" | "empty") => ({
+      source: `@infra:control-private/${kind}`,
+      target: `${host}/infra/docker/${sibling}`,
+    });
+    withManifests(
+      {
+        "data-manager": {
+          bindMounts: [
+            { source: "@infra:control-private/data-manager", target: "/var/lib/control-private" },
+            { source: "@infra:secrets/control-data-manager.key", target: "/run/secrets/key" },
+            { source: "@infra:control-private/ops-agent", target: "/mnt/agent" },
+            { source: "@infra:secrets/control-host-cli.key", target: "/mnt/cli-key" },
+          ],
+        },
+        "app-api": {
+          bindMounts: [{ source: "@infra:secrets/control-data-manager.key", target: "/mnt/key" }],
+        },
+        // The agent's wide mount is allowed only with every sibling masked.
+        "ops-agent": {
+          bindMounts: [
+            { source: `${host}/infra/docker/secrets`, target: `${host}/infra/docker/secrets` },
+            { source: "@infra:control-private/ops-agent", target: "/var/lib/control-private" },
+            mask("secrets/control-data-manager.key", "hidden-key"),
+          ],
+        },
+      },
+      (details) =>
+        expect(details).toEqual([
+          'service "app-api" mounts the data-manager control key (@infra:secrets/control-data-manager.key)',
+          'service "data-manager" mounts the ops-agent control private directory (@infra:control-private/ops-agent)',
+          'service "data-manager" mounts the host-cli control key (@infra:secrets/control-host-cli.key)',
+          `service "ops-agent" reaches the host-cli control key through ${host}/infra/docker/secrets without a mask`,
+        ]),
+    );
+    withManifests(
+      {
+        "ops-agent": {
+          bindMounts: [
+            { source: `${host}/infra/docker`, target: `${host}/infra/docker` },
+            mask("secrets/control-data-manager.key", "hidden-key"),
+            mask("secrets/control-host-cli.key", "hidden-key"),
+            mask("control-private/data-manager", "empty"),
+            mask("control-private/host-cli", "empty"),
+          ],
+        },
+      },
+      (details) => expect(details).toEqual([]),
+    );
+  });
+
+  it("keeps data-manager tokens and database role passwords with their holders", () => {
+    const secret = (name: string) => ({
+      source: `@infra:secrets/${name}`,
+      target: `/run/secrets/${name}`,
+    });
+    withManifests(
+      {
+        "data-manager": {
+          bindMounts: [
+            secret("data-manager-api-token"),
+            secret("data-manager-ops-agent-token"),
+            secret("data-manager-host-cli-token"),
+            secret("postgres-data-manager-password"),
+          ],
+        },
+        "app-api": {
+          bindMounts: [
+            secret("data-manager-api-token"),
+            secret("data-manager-ops-agent-token"),
+            secret("postgres-api-password"),
+          ],
+        },
+        "ops-agent": {
+          // The agent alone may mount the whole secrets directory.
+          bindMounts: [
+            secret("data-manager-ops-agent-token"),
+            { source: "@infra:secrets", target: "/s" },
+          ],
+        },
+        postgis: {
+          bindMounts: [secret("postgres-api-password"), secret("postgres-data-manager-password")],
+        },
+        "app-web": {
+          bindMounts: [
+            secret("data-manager-host-cli-token"),
+            secret("data-manager-unknown-token"),
+            secret("postgres-api-password"),
+          ],
+        },
+        martin: { bindMounts: [{ source: "@infra:secrets", target: "/s" }] },
+      },
+      (details) =>
+        expect(details.filter((detail) => !/ control /.test(detail)).sort()).toEqual(
+          [
+            'service "app-api" mounts data-manager-ops-agent-token (@infra:secrets/data-manager-ops-agent-token)',
+            'service "app-web" mounts data-manager-host-cli-token (@infra:secrets/data-manager-host-cli-token)',
+            'service "app-web" mounts an unknown data-manager token (@infra:secrets/data-manager-unknown-token)',
+            'service "app-web" mounts postgres-api-password (@infra:secrets/postgres-api-password)',
+            ...[
+              "data-manager-api-token",
+              "data-manager-ops-agent-token",
+              "data-manager-host-cli-token",
+              "postgres-api-password",
+              "postgres-data-manager-password",
+            ].map((name) => `service "martin" reaches ${name} through @infra:secrets`),
+          ].sort(),
+        ),
+    );
+  });
+
+  it("keeps the database superuser to PostGIS and the API and data-manager on their own roles", () => {
+    const own = (
+      role: string,
+      password: string,
+      url = `postgresql://${role}@postgis:5432/openmapx`,
+    ) => ({
+      container: {
+        environment: { DATABASE_URL: url, DATABASE_PASSWORD_FILE: `/run/secrets/${password}` },
+      },
+      bindMounts: [{ source: `@infra:secrets/${password}`, target: `/run/secrets/${password}` }],
+    });
+    const url = (value: string) => ({ container: { environment: { DATABASE_URL: value } } });
+    withManifests(
+      {
+        postgis: { container: { environment: { POSTGRES_USER: "postgres" } } },
+        "app-api": own(
+          "openmapx_api",
+          "postgres-api-password",
+          "postgresql://openmapx_data_manager@postgis:5432/openmapx",
+        ),
+        "data-manager": url("postgresql://openmapx_data_manager:secret@postgis:5432/openmapx"),
+        openconditions: url("postgresql://postgres:secret@postgis:5432/openmapx"),
+        martin: url("postgresql://openmapx_tiles:${MARTIN_DB_PASSWORD}@postgis:5432/openmapx"),
+      },
+      (details) =>
+        expect([...details].sort()).toEqual(
+          [
+            'service "app-api" must connect to PostgreSQL as openmapx_api, without a password in the URL',
+            'service "data-manager" must connect to PostgreSQL as openmapx_data_manager, without a password in the URL',
+            'service "data-manager" must read its database password from its own mounted postgres-data-manager-password',
+            'service "openconditions" connects to PostgreSQL as the superuser',
+          ].sort(),
+        ),
+    );
+    // A container without DATABASE_URL would fall back to the superuser default.
+    withManifests({ "app-api": { container: { environment: {} } } }, (details) =>
+      expect(details).toEqual([
+        'service "app-api" must connect to PostgreSQL as openmapx_api, without a password in the URL',
+        'service "app-api" must read its database password from its own mounted postgres-api-password',
+      ]),
+    );
+    withManifests(
+      {
+        "app-api": own("openmapx_api", "postgres-api-password"),
+        "data-manager": own("openmapx_data_manager", "postgres-data-manager-password"),
+      },
+      (details) => expect(details).toEqual([]),
+    );
+  });
   // biome-ignore-end lint/suspicious/noTemplateCurlyInString: literal Compose variable sources under test
 
   it("declares no Docker provider anywhere in production service configuration", () => {

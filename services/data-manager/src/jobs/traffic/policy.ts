@@ -1,5 +1,6 @@
 import { type RoadConditionRightsPolicy, readBoundedResponseText } from "@openmapx/core";
 import { services } from "@openmapx/core/server";
+import { readServiceSecretFile } from "@openmapx/core/service-secret-files";
 
 export interface TrafficPolicy {
   revision: string;
@@ -17,7 +18,11 @@ export async function fetchTrafficPolicy(
     options.baseUrl ?? process.env.APP_API_BASE_URL ?? "http://app-api:3001",
     { allowPlaintextHosts: ["app-api"] },
   );
-  const token = options.token ?? process.env.DATA_MANAGER_AUTH_TOKEN;
+  // The API accepts the token it presents here, so the two share one secret.
+  const apiTokenFile = process.env.DATA_MANAGER_API_TOKEN_FILE?.trim();
+  const token =
+    options.token ??
+    (apiTokenFile ? readServiceSecretFile(apiTokenFile, "Data-manager api token") : undefined);
   if (!token) throw new Error("Road-condition policy service authentication unavailable");
   const response = await (options.fetch ?? fetch)(
     `${base}/api/data-manager/road-conditions/policy`,

@@ -361,7 +361,15 @@ it.skipIf(
       }),
     );
     const app = Fastify();
-    registerAuth(app, "synthetic-dm-token", { executionReceiver: () => receiver });
+    registerAuth(
+      app,
+      {
+        api: "synthetic-dm-token-api",
+        "ops-agent": "synthetic-dm-token",
+        "host-cli": "synthetic-dm-token-cli",
+      },
+      { executionReceiver: () => receiver },
+    );
     registerApi(app, {
       dataDir: join(root, "data"),
       singleFlight,
@@ -377,9 +385,10 @@ it.skipIf(
 
     try {
       const observer = new AbortController();
+      // Only the API may restart MOTIS.
       const observation = fetch(`${baseUrl}/transit/restart-motis`, {
         method: "POST",
-        headers: { authorization: "Bearer synthetic-dm-token" },
+        headers: { authorization: "Bearer synthetic-dm-token-api" },
         signal: observer.signal,
       }).catch((error) => error);
       expect(
@@ -692,7 +701,15 @@ it
       }),
     );
     const app = Fastify();
-    registerAuth(app, "late-fixture-token", { executionReceiver: () => receiver });
+    registerAuth(
+      app,
+      {
+        api: "late-fixture-token-api",
+        "ops-agent": "late-fixture-token",
+        "host-cli": "late-fixture-token-cli",
+      },
+      { executionReceiver: () => receiver },
+    );
     registerApi(app, {
       dataDir: data,
       singleFlight,

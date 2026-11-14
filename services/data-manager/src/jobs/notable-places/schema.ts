@@ -11,11 +11,6 @@ export function assertValidNotablePlacesSchema(
 export function buildNotablePlacesSchemaDDL(schema: NotablePlacesSchema): string {
   assertValidNotablePlacesSchema(schema);
   return `
-CREATE EXTENSION IF NOT EXISTS postgis;
--- Names spelled close to the text: trigrams find candidates, edit distance
--- keeps the near ones.
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;
 DROP SCHEMA IF EXISTS "${schema}" CASCADE;
 CREATE SCHEMA "${schema}";
 
@@ -101,6 +96,8 @@ ALTER TABLE "${schema}".labels
 DROP TABLE "${schema}".fetched_names;
 
 CREATE INDEX idx_notable_names_prefix ON "${schema}".names (normalized text_pattern_ops);
+-- Names spelled close to the text: trigrams find candidates, edit distance
+-- keeps the near ones. PostGIS installs pg_trgm and fuzzystrmatch.
 CREATE INDEX idx_notable_names_trigram ON "${schema}".names USING GIN (normalized gin_trgm_ops);
 CREATE INDEX idx_notable_places_geom ON "${schema}".places USING GIST (geom);
 `;

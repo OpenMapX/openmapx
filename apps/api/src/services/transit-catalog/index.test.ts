@@ -1,5 +1,6 @@
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { dataManagerTokenFile } from "../../test/data-manager-token";
 
 const discovery = vi.hoisted(() => ({ integrations: [] as unknown[] }));
 vi.mock("../../integration-host.js", () => ({
@@ -8,7 +9,7 @@ vi.mock("../../integration-host.js", () => ({
 
 beforeEach(() => {
   vi.stubEnv("DATA_MANAGER_URL", "http://localhost:4000");
-  vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "catalog-fixture-token");
+  vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile("catalog-fixture-token"));
 });
 
 afterEach(() => {

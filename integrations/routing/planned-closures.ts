@@ -17,6 +17,7 @@ import {
   validateDataManagerBaseUrl,
 } from "@openmapx/core/data-manager-sdk";
 import { envString } from "@openmapx/core/server-env";
+import { readDataManagerToken } from "@openmapx/core/service-secret-files";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { clearOfEndpoints } from "./local-access.js";
 
@@ -60,7 +61,7 @@ export async function readPlannedClosures(
   at: Date,
 ): Promise<PlannedTrafficClosures | null> {
   try {
-    const token = envString("DATA_MANAGER_AUTH_TOKEN", "").trim();
+    const token = readDataManagerToken();
     if (!token) return null;
     const base = validateDataManagerBaseUrl(
       ctx.getRequiredService("data-manager")?.url ??

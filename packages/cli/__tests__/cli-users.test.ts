@@ -63,7 +63,7 @@ afterEach(() => {
 });
 
 describe("user mutation commands", () => {
-  it("promotes a user with the resolved postgres target and CTE update SQL", async () => {
+  it("promotes a user as the API's database role with CTE update SQL", async () => {
     await promoteUserToAdmin("a@b.test", tmp);
 
     expect(mockExeca).toHaveBeenCalledTimes(1);
@@ -78,15 +78,16 @@ describe("user mutation commands", () => {
       "postgis",
       "psql",
       "-U",
-      "omx",
+      "openmapx_api",
       "-d",
       "openmapx",
       "-c",
     ]) {
       expect(args).toContain(token);
     }
-    // args order: -U omx, -d openmapx
-    expect(args.indexOf("-U")).toBeLessThan(args.indexOf("omx"));
+    // The account tables' owner, so their triggers never run as the superuser.
+    expect(args.indexOf("-U")).toBeLessThan(args.indexOf("openmapx_api"));
+    expect(args).not.toContain("omx");
     expect(args.indexOf("-d")).toBeLessThan(args.indexOf("openmapx"));
     const sql = lastSql();
     expect(sql.startsWith('WITH updated AS (UPDATE "user" SET')).toBe(true);

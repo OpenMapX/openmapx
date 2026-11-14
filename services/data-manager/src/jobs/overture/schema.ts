@@ -73,7 +73,6 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
   assertValidOvertureSchema(schema);
   return (
     `
-    CREATE EXTENSION IF NOT EXISTS postgis;
     DROP SCHEMA IF EXISTS "${schema}" CASCADE;
     CREATE SCHEMA "${schema}";
 

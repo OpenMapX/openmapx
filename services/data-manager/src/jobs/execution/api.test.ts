@@ -10,7 +10,11 @@ afterEach(async () => {
 it("keeps observation and mutation routes closed without a durable receiver", async () => {
   const app = Fastify();
   apps.push(app);
-  registerAuth(app, "synthetic-execution-token");
+  registerAuth(app, {
+    api: "synthetic-execution-token-api",
+    "ops-agent": "synthetic-execution-token",
+    "host-cli": "synthetic-execution-token-cli",
+  });
   registerApi(app, { dataDir: "/tmp/openmapx-nonexistent-execution-fixture" });
   const headers = { authorization: "Bearer synthetic-execution-token" };
   const id = "00000000-0000-4000-8000-000000000001";

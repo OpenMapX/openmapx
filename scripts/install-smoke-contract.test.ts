@@ -154,10 +154,11 @@ describe("install smoke script", () => {
       "POSTGRES_PASSWORD",
       "BETTER_AUTH_SECRET",
       "OPENMAPX_SECRETS_KEY",
-      "DATA_MANAGER_AUTH_TOKEN",
       "OPENMAPX_LOCAL_ADMIN_TOKEN",
     ])
       expect(script).toContain(`set_env_secret ${key}\n`);
+    // Render generates the data-manager tokens and database role passwords.
+    expect(script).not.toContain("DATA_MANAGER_AUTH_TOKEN");
     expect(script).toContain("openssl rand -hex 32");
     expect(script).not.toMatch(
       /\bcat\b[^\n]*\.env|docker inspect[^\n]*\.Config\.Env|docker compose[^\n]* config\b/,

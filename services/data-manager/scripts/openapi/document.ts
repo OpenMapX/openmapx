@@ -63,7 +63,11 @@ export async function generateDocument(): Promise<string> {
         auth: schema?.["x-openmapx-auth"],
       });
     });
-    registerAuth(app, "openapi-collection-only");
+    registerAuth(app, {
+      api: "openapi-collection-only",
+      "ops-agent": "openapi-collection-only-agent",
+      "host-cli": "openapi-collection-only-cli",
+    });
     // Registration only stores this collaborator; invoking a generator while
     // collecting the surface is a bug and fails immediately.
     const offlinePackages = new Proxy(

@@ -1,7 +1,11 @@
 import { writeFile } from "node:fs/promises";
 import { VectorTile } from "@mapbox/vector-tile";
 import { AMBIENT_PLANET_REGION } from "@openmapx/core/ambient-places";
-import { readAmbientPlaceByGers, readAmbientTile } from "@openmapx/core/ambient-places-server";
+import {
+  PUBLISHED_AMBIENT_FEATURES,
+  readAmbientPlaceByGers,
+  readAmbientTile,
+} from "@openmapx/core/ambient-places-server";
 import Fastify from "fastify";
 import { PbfReader } from "pbf";
 import { describe, expect, it } from "vitest";
@@ -127,7 +131,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")("global ambient
       expect(layer.length).toBe(256);
       expect(bytes!.length).toBeLessThanOrEqual(128 * 1024);
       const plan = await pg.sql.unsafe(
-        `EXPLAIN (FORMAT JSON) SELECT id FROM ambient_places.features_all WHERE generation=$1 AND ST_GeomFromEWKB(geom) && ST_TileEnvelope($2,$3,$4,margin=>64.0/4096)`,
+        `EXPLAIN (FORMAT JSON) SELECT id FROM ${PUBLISHED_AMBIENT_FEATURES} f WHERE generation=$1 AND ST_GeomFromEWKB(geom) && ST_TileEnvelope($2,$3,$4,margin=>64.0/4096)`,
         [first.generation, z, x, y],
       );
       const planText = JSON.stringify(plan);

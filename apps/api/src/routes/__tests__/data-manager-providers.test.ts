@@ -3,6 +3,7 @@ import { getApiDataManagerProviders } from "@openmapx/core/api-admin-sdk";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProviderHealthObservation } from "../../services/provider-health/index.js";
+import { dataManagerTokenFile } from "../../test/data-manager-token";
 import { administrationSdkFetch } from "./helpers/administration-sdk-fetch";
 
 vi.mock("../../db/index.js", () => {
@@ -41,7 +42,7 @@ vi.mock("../../services/provider-health/registry.js", () => ({
 }));
 
 beforeAll(() => {
-  vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "service-token");
+  vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile("service-token"));
 });
 
 let app: FastifyInstance;

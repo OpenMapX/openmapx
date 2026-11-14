@@ -9,7 +9,6 @@ export function assertValidSearchIndexSchema(schema: string): asserts schema is 
 export function buildSearchIndexSchemaDDL(schema: SearchIndexSchema): string {
   assertValidSearchIndexSchema(schema);
   return `
-CREATE EXTENSION IF NOT EXISTS postgis;
 DROP SCHEMA IF EXISTS "${schema}" CASCADE;
 CREATE SCHEMA "${schema}";
 

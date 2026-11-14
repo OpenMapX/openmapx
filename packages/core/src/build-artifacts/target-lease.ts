@@ -145,7 +145,13 @@ import {
   dataConfigurationFencePreparedWitnessDomain,
   dataConfigurationFencePreparedWitnessSchema,
 } from "./data-configuration-fence-witness-records";
-import { AnchoredDirectory, type FileIdentity, identity, sameInode } from "./filesystem";
+import {
+  AnchoredDirectory,
+  acquireGuardDirectory,
+  type FileIdentity,
+  identity,
+  sameInode,
+} from "./filesystem";
 import { assertFixedConfigurationMaintenancePlan } from "./fixed-configuration-maintenance";
 import { assertOriginClockForward } from "./retention-clock";
 // biome-ignore-start lint/suspicious/noImportCycles: Physical closure, fixed cells and the read-only normal-pull admission observer verify the sole original family index; retirement verifies this same physical owner. These fixed joins run only after initialization.
@@ -876,7 +882,7 @@ function guarded<T>(s: State, run: () => T, checkTargets = true): T {
   }
   const path = s.ledger.name(".journal-writer");
   try {
-    mkdirSync(path, { mode: 0o700 });
+    acquireGuardDirectory(path);
     fsyncSync(s.ledger.fd);
   } catch (cause) {
     throw new ArtifactTargetJournalBusyError(cause);

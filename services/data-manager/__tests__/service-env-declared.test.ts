@@ -55,8 +55,12 @@ const INTENTIONALLY_UNDECLARED = new Set([
   "TRANSITOUS_API_KEYS_FILE",
 ]);
 
-/** Runtime knobs consumed by Node rather than by our own code. */
-const DECLARED_WITHOUT_SOURCE_READ = new Set(["HOME"]);
+/**
+ * Runtime knobs consumed by Node rather than by our own code, and the
+ * connection settings `resolveDatabaseUrl` in
+ * `@openmapx/core/service-secret-files` reads for the daemon.
+ */
+const DECLARED_WITHOUT_SOURCE_READ = new Set(["HOME", "DATABASE_URL", "DATABASE_PASSWORD_FILE"]);
 
 const manifest = JSON.parse(
   readFileSync(join(process.cwd(), "services/data-manager/service.json"), "utf-8"),

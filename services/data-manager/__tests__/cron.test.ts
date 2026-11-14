@@ -876,6 +876,23 @@ describe("setupCron", () => {
       handles.stop();
     });
 
+    it("leaves the Valhalla traffic extract alone when no traffic writer can use it", async () => {
+      const ensureTrafficExtract = vi.fn().mockResolvedValue({ built: true });
+      const isTrafficExtractStale = vi.fn().mockResolvedValue(true);
+      const handles = setupCron(
+        baseOptions({ openConditionsUrl: "", ensureTrafficExtract, isTrafficExtractStale }),
+      );
+
+      await handles.runTrafficExtractStartupNow();
+      await handles.runTrafficExtractGuardNow();
+
+      // A rebuild on a host without Valhalla fails after its first effect and
+      // keeps the Valhalla target held, refusing later service starts.
+      expect(ensureTrafficExtract).not.toHaveBeenCalled();
+      expect(isTrafficExtractStale).not.toHaveBeenCalled();
+      handles.stop();
+    });
+
     it("bootstraps the way-to-edge map on startup when it is missing", async () => {
       const prev = process.env.DATA_DIR;
       // The map path derives from DATA_DIR; a fresh tmp dir has no traffic/ subdir.

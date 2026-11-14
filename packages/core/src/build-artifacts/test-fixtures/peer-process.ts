@@ -65,7 +65,7 @@ for await (const line of createInterface({ input: process.stdin })) {
       });
       const peer = c.verifyControlPeer(installation, {
         rawHeaders: ["x-openmapx-parent-execution", input.assertion],
-        transportPrincipal: "shared-data-manager-bearer",
+        transportPrincipal: "ops-agent",
         execution: input.execution,
         kind: input.operation.kind,
       });
@@ -231,7 +231,7 @@ for await (const line of createInterface({ input: process.stdin })) {
               rawHeaders: ["x-openmapx-control-delegation", input.assertion],
               transportPrincipal:
                 input.transportPrincipal ??
-                (input.role === "ops-agent" ? "data-manager" : "shared-data-manager-bearer"),
+                (input.role === "ops-agent" ? "data-manager" : "ops-agent"),
               kind: input.kind,
               operation: input.operation,
               operationKey: input.execution.operationKey,
@@ -249,7 +249,7 @@ for await (const line of createInterface({ input: process.stdin })) {
                 rawHeaders: ["x-openmapx-control-delegation", input.assertion],
                 transportPrincipal:
                   input.transportPrincipal ??
-                  (input.role === "ops-agent" ? "data-manager" : "shared-data-manager-bearer"),
+                  (input.role === "ops-agent" ? "data-manager" : "ops-agent"),
                 execution: input.execution,
                 kind: input.kind,
               });

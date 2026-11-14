@@ -42,16 +42,22 @@ an image or rely on emulation without reviewing volume compatibility.
 
 ### The password
 
+`POSTGRES_PASSWORD` is the PostgreSQL superuser's password. Only PostGIS
+administration and the CLI's backups and restores use it; `app-api` and
+`data-manager` connect as their own roles, whose passwords the render generates
+(see [Database roles](../install/configuration.md#database-roles)).
+
 Set a unique `POSTGRES_PASSWORD` in `infra/docker/.env` before the first render.
 Generate one with `openssl rand -hex 32`; production rejects known placeholders,
 username matches, and values shorter than 24 characters. Use hexadecimal output
 to avoid database-URL escaping issues.
 
-OpenMapX's PostGIS wrapper synchronizes this password on every start, including
-an initialized volume. Its health check waits for synchronization. To rotate,
-choose a maintenance window, stop database clients, edit the secret, recreate
-PostGIS, verify health, then recreate clients with the same value. Restarting
-only existing client containers does not reload their environment.
+OpenMapX's PostGIS wrapper synchronizes this password, and the role passwords,
+on every start, including an initialized volume. Its health check waits for
+synchronization. To rotate the superuser's password, edit the secret, recreate
+PostGIS and verify health; no service connects with it, so nothing else needs
+recreating. To rotate a role's password, follow
+[Database roles](../install/configuration.md#database-roles).
 
 The wrapper forwards stop signals and allows PostgreSQL a five-minute grace
 period. Do not force-kill a slow shutdown without investigating it.

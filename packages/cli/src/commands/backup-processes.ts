@@ -3,7 +3,6 @@ import { createWriteStream, existsSync, lstatSync } from "node:fs";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { StringDecoder } from "node:string_decoder";
-import { createGzip } from "node:zlib";
 import { execa } from "execa";
 import { assertCliExecutionAvailable, cliProcessOptions } from "../lib/execution-deadline";
 
@@ -52,7 +51,7 @@ wait "$owned"
 finish "$?"
 `;
 
-/** Stream SQL without buffering it; client exit alone is not a dump receipt. */
+/** Stream a custom-format archive without buffering it; client exit alone is not a dump receipt. */
 export async function pgDumpToFile(
   ctx: BackupComposeContext,
   serviceId: string,
@@ -83,11 +82,14 @@ export async function pgDumpToFile(
       PG_SUPERVISOR,
       "openmapx-backup-pg-dump",
       token,
+      // Owners and grants stay in the archive: the platform database
+      // separates the API's and data-manager's roles, and a restore must keep
+      // them. The custom format compresses itself and can be restored entry
+      // by entry, each table by its owner.
       "pg_dump",
+      "--format=custom",
       "-U",
       user,
-      "--no-owner",
-      "--no-privileges",
       database,
     ],
     { ...options, cwd: ctx.cwd, reject: false, buffer: false, stdin: "pipe" },
@@ -146,12 +148,10 @@ export async function pgDumpToFile(
   if (effectiveSignal.aborted) abort();
   // Keep stderr parsing and cancellation live until both streams and client settle.
   const transfer = sub.stdout
-    ? pipeline(sub.stdout, createGzip(), createWriteStream(outFile, { mode: 0o600 })).catch(
-        (error: unknown) => {
-          cancel(error);
-          throw error;
-        },
-      )
+    ? pipeline(sub.stdout, createWriteStream(outFile, { mode: 0o600 })).catch((error: unknown) => {
+        cancel(error);
+        throw error;
+      })
     : Promise.reject(Error("pg_dump subprocess has no stdout stream"));
   try {
     const [processResult, streamResult] = await Promise.allSettled([sub, transfer]);
