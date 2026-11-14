@@ -10,7 +10,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { dirname, join } from "node:path";
+import { dirname, join, posix } from "node:path";
 import { renderGoTemplate } from "./go-template";
 
 export interface Invocation {
@@ -971,6 +971,12 @@ export class FakeDockerEngine {
         Mode: "",
       });
     }
+    const duplicate = duplicateMountPoint(mounts);
+    if (duplicate)
+      return {
+        code: 125,
+        stderr: `docker: Error response from daemon: Duplicate mount point: ${duplicate}\n\nRun 'docker run --help' for more information\n`,
+      };
     const env = [...(values["--env"] ?? []), ...(values["-e"] ?? [])];
     const container = this.newContainer({
       name,
@@ -1183,6 +1189,14 @@ export class FakeDockerEngine {
         } else messages.push(`Container ${current.Name.slice(1)} Running`);
         continue;
       }
+      // The daemon refuses the new container before the old one is replaced.
+      const mounts = this.composeMounts(model, project, spec);
+      const duplicate = duplicateMountPoint(mounts);
+      if (duplicate)
+        return {
+          code: 1,
+          stderr: `${messages.map((line) => ` ${line}`).join("\n")}\nError response from daemon: Duplicate mount point: ${duplicate}\n`,
+        };
       for (const old of existing) {
         if (ROLE_SERVICES.has(name)) await this.hooks.stopRole(name);
         this.containers.delete(old.Id);
@@ -1210,7 +1224,7 @@ export class FakeDockerEngine {
         ),
         user: spec.user,
         groups: spec.group_add ?? null,
-        mounts: this.composeMounts(model, project, spec),
+        mounts,
         memory: memoryBytes(spec.deploy?.resources?.limits?.memory ?? spec.mem_limit),
         nanoCpus: Math.round(Number(spec.deploy?.resources?.limits?.cpus ?? spec.cpus ?? 0) * 1e9),
       });
@@ -1487,3 +1501,15 @@ function positional(args: readonly string[], valueFlags: string[]): string[] {
 }
 
 export { digestOf };
+
+/** The first container path mounted twice, which the daemon refuses with
+ * "Duplicate mount point". Paths compare as Docker cleans them. */
+function duplicateMountPoint(mounts: ContainerRecord["Mounts"]): string | undefined {
+  const seen = new Set<string>();
+  for (const mount of mounts) {
+    const target = posix.normalize(mount.Destination).replace(/(.)\/+$/, "$1");
+    if (seen.has(target)) return target;
+    seen.add(target);
+  }
+  return undefined;
+}

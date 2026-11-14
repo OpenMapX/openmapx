@@ -51,6 +51,23 @@ meanwhile does not proceed, but instead of a "busy" refusal the operator sees a
 generic runtime failure and a held job (C13 pins the same refusal for any data
 job). The single admission path is to report it as busy.
 
+The fake engine refuses two mounts at one container path with the daemon's
+"Duplicate mount point" error. Before it did, every scenario that reached the
+configuration helper passed while every real self-update failed to start the
+helper.
+
+## Known gaps
+
+- **A failed helper launch never ends.** When the daemon refuses the helper's
+  `docker run`, the agent swallows the error by design, finds no helper
+  container and marks the handoff for recovery. Its operation route then
+  reports `configurationHandoff.prepare` as `termination_pending` from two
+  seconds after admission onwards, and the worker never settles. The API job
+  stays `running`, and the CLI waits for its full hour. Seen on a real Docker
+  host before the helper's duplicate mounts were fixed. No scenario pins it:
+  the helper rewrite planned for a later change is to end such a launch as a
+  terminal failure the API reports.
+
 ## Scenarios
 
 | ID  | Fault and boundary                                               | Scenario file                                                                | Status on this branch                                                                             |
