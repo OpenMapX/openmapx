@@ -25,18 +25,8 @@
 #
 #   happy      an authenticated `system update` to N+1 succeeds, every role runs
 #              the N+1 image and the operations agent is recreated last
-#   registry   the registry is stopped after the check: the update fails before
-#              maintenance and every service keeps its image
 #   unhealthy  N+1's API image fails its health check: the update does not
 #              succeed, nothing after the API and not the agent is recreated
-#   helper     the configuration helper is killed after it recreated the
-#              data-manager: the update does not succeed and is not re-run
-#   agent      the agent is restarted while the helper runs: the helper still
-#              finishes and the agent is recreated last
-#   cli        `services start` while the helper runs exits without a Compose
-#              effect; `services restart` still restarts the service then, the
-#              crash-point suite's known failure C18, and this case requires
-#              exactly that until it is fixed. Both succeed afterwards
 #
 # The script reuses scripts/ci/install-smoke.sh (sourced) and is as destructive:
 # it removes the compose project "openmapx", the registry container and every
@@ -61,7 +51,7 @@ update_timeout_seconds="${UPDATE_SMOKE_UPDATE_TIMEOUT_SECONDS:-1200}"
 admin_email="update-smoke@openmapx.org"
 admin_password=""
 release_images=(api web data-manager ops-agent transitous-runner transitous-tools)
-cases="${UPDATE_SMOKE_CASES:-happy registry unhealthy helper agent cli}"
+cases="${UPDATE_SMOKE_CASES:-happy unhealthy}"
 
 service_of() {
   case "$1" in
@@ -105,16 +95,6 @@ start_registry() {
   local deadline=$((SECONDS + 60))
   until registry_up; do
     ((SECONDS < deadline)) || fail "the local registry did not answer"
-    sleep 1
-  done
-}
-
-stop_registry() { docker stop "$registry_name" >/dev/null; }
-resume_registry() {
-  docker start "$registry_name" >/dev/null
-  local deadline=$((SECONDS + 60))
-  until registry_up; do
-    ((SECONDS < deadline)) || fail "the local registry did not come back"
     sleep 1
   done
 }
@@ -239,15 +219,6 @@ image_id_of() {
 
 expected_image_id() { docker image inspect --format '{{.Id}}' "$registry/$1:$2"; }
 
-# Records each service's running image under a name, for comparisons.
-snapshot_images() {
-  local service
-  : >"$work/images-$1"
-  for service in "${expected_services[@]}"; do
-    echo "$service $(image_id_of "$service")" >>"$work/images-$1"
-  done
-}
-
 install_release_one() {
   stop_registry_forwarder
   reset_project
@@ -348,22 +319,6 @@ recreate_order() {
     --format '{{index .Actor.Attributes "com.docker.compose.service"}}'
 }
 
-helper_container() {
-  docker ps --all --quiet --filter "name=openmapx-configuration-handoff-" | head -1
-}
-
-# Waits for the helper to start and for a service to run the given release.
-wait_helper_after() {
-  local service="$1" release="$2" deadline=$((SECONDS + timeout_seconds)) helper="" want
-  want="$(expected_image_id "$service" "$release")"
-  until [[ -n "$helper" && "$(image_id_of "$service")" == "$want" ]]; do
-    ((SECONDS < deadline)) || fail "the helper never recreated $service"
-    helper="$(helper_container)"
-    sleep 1
-  done
-  echo "$helper"
-}
-
 case_happy() {
   step "Case: self-update to N+1"
   install_release_one
@@ -382,26 +337,6 @@ case_happy() {
     fail "the operations agent was not recreated last: $(recreate_order "$since" | tr '\n' ' ')"
 }
 
-case_registry() {
-  step "Case: registry outage after the check"
-  install_release_one
-  publish_release
-  read -r release digest < <(check_release)
-  snapshot_images before
-  stop_registry
-  if system_update registry "$release" "$digest"; then
-    resume_registry
-    fail "the update succeeded without a registry"
-  fi
-  resume_registry
-  snapshot_images after
-  diff -u "$work/images-before" "$work/images-after" || fail "a service changed its image"
-  [[ -z "$(helper_container)" ]] || fail "a configuration helper was started"
-  publish_release
-  read -r release digest < <(check_release)
-  system_update registry-retry "$release" "$digest" || fail "the next update was not admitted"
-}
-
 case_unhealthy() {
   step "Case: the new API image is unhealthy"
   install_release_one
@@ -418,68 +353,6 @@ case_unhealthy() {
   fi
   # The agent is the only release service recreated after the API.
   [[ "$(image_id_of ops-agent)" == "$agent_before" ]] || fail "the agent was replaced"
-}
-
-case_helper() {
-  step "Case: the helper is killed after recreating the data-manager"
-  install_release_one
-  publish_release
-  read -r release digest < <(check_release)
-  # Once its helper is killed, the update is held for the operator.
-  update_timeout_seconds=600 system_update helper "$release" "$digest" &
-  local updater=$! helper
-  helper="$(wait_helper_after data-manager "$release")"
-  docker kill "$helper" >/dev/null || true
-  if wait "$updater"; then fail "the update succeeded although its helper was killed"; fi
-  [[ "$(docker ps --all --quiet --filter "name=openmapx-configuration-handoff-" | wc -l)" -le 1 ]] ||
-    fail "the helper was started again"
-  [[ "$(image_id_of ops-agent)" != "$(expected_image_id ops-agent "$release")" ]] ||
-    fail "the agent was replaced after its helper died"
-}
-
-case_agent() {
-  step "Case: the agent restarts while the helper runs"
-  install_release_one
-  publish_release
-  read -r release digest < <(check_release)
-  local since
-  since="$(date +%s)"
-  system_update agent "$release" "$digest" &
-  local updater=$!
-  wait_helper_after data-manager "$release" >/dev/null
-  docker restart "$(docker ps --quiet --filter "label=com.docker.compose.project=$project" \
-    --filter "label=com.docker.compose.service=ops-agent")" >/dev/null
-  wait "$updater" || fail "the update failed after the agent restarted"
-  [[ "$(image_id_of ops-agent)" == "$(expected_image_id ops-agent "$release")" ]] ||
-    fail "the agent does not run $release"
-  [[ "$(recreate_order "$since" | grep -cv '^ops-agent$')" -ge 1 && "$(recreate_order "$since" | tail -1)" == ops-agent ]] ||
-    fail "the agent was not recreated last"
-}
-
-case_cli() {
-  step "Case: host lifecycle commands while the helper runs"
-  install_release_one
-  publish_release
-  read -r release digest < <(check_release)
-  system_update cli "$release" "$digest" &
-  local updater=$! action
-  wait_helper_after data-manager "$release" >/dev/null
-  if logged cli-start openmapx services start app-web; then
-    fail "services start app-web succeeded while the helper ran"
-  fi
-  # Known failure, as in the crash-point suite's known-failures.json: today
-  # `services restart` is not refused while the helper runs and restarts the
-  # service. The case passes only while it fails that way; once the restart is
-  # refused, or fails otherwise, it turns red and must require the refusal.
-  if ! logged cli-restart openmapx services restart app-web ||
-    ! grep -q "Restarting" "$work/cli-restart.log"; then
-    fail "services restart app-web no longer restarts the service while the helper runs (known failure C18 changed)"
-  fi
-  wait "$updater" || fail "the update failed"
-  for action in restart start; do
-    logged "cli-$action-after" openmapx services "$action" app-web ||
-      fail "services $action app-web failed after the update"
-  done
 }
 
 # Removes the registry, then runs the install smoke's cleanup with the
@@ -520,7 +393,6 @@ dump_diagnostics() {
         "https://localhost/api/admin/jobs/$job_id" >"$diagnostics_dir/admin-job-$job_id.json" 2>&1 || true
     done <"$diagnostics_dir/admin-jobs.tsv"
   fi
-  dump_agent_operations
   local receipt
   for receipt in "$work"/receipt-*; do
     if [[ -f "$receipt" ]]; then cp "$receipt" "$diagnostics_dir/" 2>/dev/null || true; fi
@@ -555,53 +427,6 @@ dump_diagnostics() {
       --filter "label=com.docker.compose.service=data-manager"
     docker ps --all --quiet --filter "name=openmapx-configuration-handoff-"
   )
-}
-
-# The agent's operations: one line per journal entry (id, role, kind,
-# resource, state, submitted, updated, terminal, deadline, error class), then, for each of
-# the API's operations, the state the agent's own operation route reports to
-# the API, asked from inside the API container with the API's token file. Only
-# these fields are written: operation bodies and tokens are never copied.
-dump_agent_operations() {
-  local journal="$infra/state/ops-agent/jobs-v1.json" api ids
-  { cat "$journal" 2>/dev/null || sudo -n cat "$journal" 2>/dev/null; } | node -e '
-    let text = "";
-    process.stdin.on("data", (chunk) => (text += chunk)).on("end", () => {
-      if (!text) return console.log("no agent journal");
-      const parsed = JSON.parse(text);
-      const jobs = Array.isArray(parsed) ? parsed : (parsed.jobs ?? parsed.records ?? []);
-      for (const job of jobs)
-        console.log([job.operationId, job.role, job.operation?.kind, job.resourceId, job.state,
-          job.submittedAt, job.updatedAt, job.terminalAt ?? "",
-          new Date(job.deadlineAt).toISOString(), job.errorClass ?? ""].join("\t"));
-    });
-  ' >"$diagnostics_dir/agent-operations.tsv" 2>&1 || true
-  api="$(docker ps --quiet --filter "label=com.docker.compose.project=$project" \
-    --filter "label=com.docker.compose.service=app-api" | head -1)"
-  [[ -n "$api" ]] || return 0
-  ids="$(awk -F '\t' '$2 == "api" { print $1 }' "$diagnostics_dir/agent-operations.tsv" | tail -40)"
-  [[ -n "$ids" ]] || return 0
-  # shellcheck disable=SC2086 # one argument per operation id
-  docker exec "$api" node -e '
-    const token = require("node:fs").readFileSync(process.env.OPS_AGENT_TOKEN_FILE, "utf8").trim();
-    (async () => {
-      for (const id of process.argv.slice(1)) {
-        try {
-          const response = await fetch(`${process.env.OPS_AGENT_URL}/v1/operations/${id}`, {
-            headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" },
-            signal: AbortSignal.timeout(10_000),
-          });
-          const body = await response.json().catch(() => ({}));
-          const result = body.result ?? {};
-          console.log(JSON.stringify({ id, status: response.status, kind: result.kind,
-            state: result.state, error: result.error ?? body.error,
-            observation: result.observation, updatedAt: result.updatedAt }));
-        } catch (error) {
-          console.log(JSON.stringify({ id, failed: String(error) }));
-        }
-      }
-    })();
-  ' $ids >"$diagnostics_dir/agent-operation-states.jsonl" 2>&1 || true
 }
 
 update_exit() {

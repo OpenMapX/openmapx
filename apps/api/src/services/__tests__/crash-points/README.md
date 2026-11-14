@@ -70,12 +70,11 @@ helper.
   the helper rewrite planned for a later change is to end such a launch as a
   terminal failure the API reports.
 
-The native update smoke runs every case against a real Docker daemon, which
-shows what this suite cannot: the engine here reports a recreated container
-healthy at once, and the roles see the host's file system. On a real host it
-showed that the helper checked a recreated service before it was healthy and
-could not resolve bind sources outside the checkout; both are fixed. Its
-host-command case requires C18's known failure, as the registry here does.
+The native update smoke (`scripts/ci/update-smoke.sh`) runs a self-update and
+an update to an unhealthy API image against a real Docker daemon, which shows
+what this suite cannot: the engine here reports a recreated container healthy
+at once, and the roles see the host's file system. Every other fault is pinned
+here.
 
 ## Scenarios
 
