@@ -52,7 +52,7 @@ it is.
 | Release overlay and selection receipts                                                                                                     | Images and configuration drift apart                                                                                        | Two pointers where one suffices                                                                                                                                                                                                                                                                                                                                 | Simplify to image pins inside the generation                                                           | Registry outage before maintenance (pinned)                                                                                                                                                                                                                                                                                                            |
 | Two data-manager admission models                                                                                                          | A crashed legacy data job blocks all data work                                                                              | The second model caused that failure                                                                                                                                                                                                                                                                                                                            | Merge                                                                                                  | Data-manager killed during a data job while the agent is down (not yet pinned)                                                                                                                                                                                                                                                                         |
 | Role keys, certificates, per-lease and child keys, signed assertions, witnesses                                                            | A role forges another role's lease records on the shared ledger                                                             | Exists only because lease state sits on shared `/data`                                                                                                                                                                                                                                                                                                          | Cut once lease state moves to the agent store                                                          | Covered by the authority gate (agent state mounted nowhere else) and the pinned scenarios above                                                                                                                                                                                                                                                        |
-| Sequence numbers, retention clock, quotas, retention families, retirement commits, byte budgets, `mkdir` guards                            | Unbounded growth of signed records, replay after deletion                                                                   | Self-inflicted by the signed records; a time-based prune replaces it                                                                                                                                                                                                                                                                                            | Cut                                                                                                    | Agent state filesystem full right after an effect (pinned)                                                                                                                                                                                                                                                                                             |
+| Sequence numbers, retention clock, quotas, retention families, retirement commits, byte budgets, `mkdir` guards                            | Unbounded growth of signed records, replay after deletion                                                                   | Self-inflicted by the signed records; a time-based prune replaces it                                                                                                                                                                                                                                                                                            | Done: one prune 72 hours after the root key expires; a free-space check at admission                   | Agent state filesystem full right after an effect (pinned)                                                                                                                                                                                                                                                                                             |
 | Settlement cells and slots, the no-guard closure, recovery proofs                                                                          | A lost settle reply leaves the fence held forever                                                                           | Third-order machinery                                                                                                                                                                                                                                                                                                                                           | Cut for the fence: settle is idempotent on the fence row. Recovery proofs stay until the operator exit | Lost reply on data fence settle (pinned)                                                                                                                                                                                                                                                                                                               |
 | Sealed configuration snapshot queue and its lock                                                                                           | The agent applies a configuration the API did not approve                                                                   | File transport created the need                                                                                                                                                                                                                                                                                                                                 | Cut, the payload travels in the authenticated operation                                                | API killed between saving desired rows and applying the generation (expected failure today)                                                                                                                                                                                                                                                            |
 
@@ -72,12 +72,11 @@ it is.
 - **Settlement.** Recording the final outcome of a child or effect from structured
   evidence, so that its lease or fence can be released. Errors alone, expired
   deadlines and dead processes do not settle anything.
-- **Fence.** The data-job fence: a `data_manager.jobs` row with
-  `kind = 'configuration-maintenance'` that blocks data-job admission while
-  configuration maintenance holds it. Its `guardState` is the fence's state.
-- **Guard.** Either the fence's `guardState`, or a `mkdir` writer guard: a
-  directory whose existence excludes a second writer from a record family. A crash
-  inside a `mkdir` guard leaves the directory behind until an operator removes it.
+- **Fence.** The data-job fence: a `data_manager.configuration_fence` row that
+  blocks data-job admission while its state is `prepared`.
+- **Guard.** A `mkdir` writer guard: a directory whose existence excludes a second
+  writer from a record. A crash inside a `mkdir` guard leaves the directory behind
+  until an operator removes it.
 - **Generation.** An immutable rendered configuration directory under
   `infra/docker/state/ops-agent/configuration/generations/`, named `cfg1_…`.
 - **Pointer.** The symbolic link `infra/docker/state/ops-agent/configuration/current`
@@ -92,8 +91,8 @@ it is.
   is a conflict.
 - **Origin.** The `{rootKey, issuer, notAfter}` identity of the root operation that
   started a tree of executions. Descendants inherit it.
-- **Family.** All retained signed records that share one origin. Retention
-  collects records family by family.
+- **Prune.** The periodic removal of a role's records for a finished execution,
+  72 hours after its root key expired.
 - **Receipt.** A signed record of an execution's terminal outcome, retained so that
   another role can verify it.
 - **Witness.** A signed observation of host configuration sources, used to show
@@ -159,16 +158,16 @@ fails without effect and its maintenance lease releases.
 
 `admin_job.status` in `apps/api`.
 
-| From                        | Event                                                        | To                                    |
-| --------------------------- | ------------------------------------------------------------ | ------------------------------------- |
-| (none)                      | Job created                                                  | `queued`                              |
-| `queued`                    | Cancel with no pending receipt delivery or managed operation | `canceled`                            |
-| `queued`                    | Claimed by a job owner                                       | `running`                             |
-| `running`                   | Job completed                                                | `success`                             |
-| `running`                   | Job failed                                                   | `failed`                              |
-| `running`, `cancel_pending` | Cancel requested                                             | `cancel_pending`                      |
-| `cancel_pending`            | Agent operations contained                                   | `canceled`                            |
-| `cancel_pending`            | Recovered failure that still needs candidate cleanup         | `running`, with observation `unknown` |
+| From                        | Event                                                | To                                    |
+| --------------------------- | ---------------------------------------------------- | ------------------------------------- |
+| (none)                      | Job created                                          | `queued`                              |
+| `queued`                    | Cancel with no managed operation                     | `canceled`                            |
+| `queued`                    | Claimed by a job owner                               | `running`                             |
+| `running`                   | Job completed                                        | `success`                             |
+| `running`                   | Job failed                                           | `failed`                              |
+| `running`, `cancel_pending` | Cancel requested                                     | `cancel_pending`                      |
+| `cancel_pending`            | Agent operations contained                           | `canceled`                            |
+| `cancel_pending`            | Recovered failure that still needs candidate cleanup | `running`, with observation `unknown` |
 
 ### API observation state
 
@@ -176,10 +175,9 @@ fails without effect and its maintenance lease releases.
 finishing. A job with an observation, or with status `cancel_pending`, is picked up
 again when `nextCheckAt` passes.
 
-| Observation state  | Reason                                                                                     | Set when                                                                           | Cleared when                                                       |
-| ------------------ | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `unknown`          | `transport`, `observer_deadline`, `recovery_required`, `unavailable` or `invalid_identity` | The API cannot yet read a terminal agent outcome                                   | A later observation reads the terminal outcome and the job settles |
-| `receipt_delivery` | `receipt_delivery`                                                                         | A terminal outcome is copied but its acknowledgement to the agent is not confirmed | The acknowledgement is confirmed                                   |
+| Observation state | Reason                                                                                     | Set when                                         | Cleared when                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------------------ |
+| `unknown`         | `transport`, `observer_deadline`, `recovery_required`, `unavailable` or `invalid_identity` | The API cannot yet read a terminal agent outcome | A later observation reads the terminal outcome and the job settles |
 
 Retries back off from 5 seconds to at most 60 seconds.
 
@@ -271,7 +269,7 @@ Use `acquireArtifactTargetLease`, `delegateArtifactTargetLease`,
 contexts are nominal. An inherited borrower cannot expand targets or acquire a
 second root. Acquisition has one five-second budget. The limits are 256
 registered targets, 64 child intents, 128 KiB per lease ledger and 256 unsettled
-leases. Settled receipts remain retained under the capacity policy below.
+leases. Settled receipts remain until the control prune below removes them.
 
 Host ordering is target lease, nonblocking transit reservation, configuration
 writer, then release store. A busy reservation must settle an unused owner without
@@ -305,75 +303,58 @@ Target borrowers also check every intermediate ancestor. Canceling an intermedia
 borrower fences its retained descendants and returns their original attempted
 identities without deleting or settling any descendant evidence.
 
-### Authority storage capacity and retirement
+### Authority keys and the control prune
 
 New root authority uses `opk1_t1_<14 lower-case hex expiry>_<22 canonical
 base64url nonce>` keys. The nonce contains 16 random bytes; the expiry is an exact
 millisecond deadline, explicitly supplied before first submission and no more
 than seven days ahead. The browser-safe `@openmapx/core/ops/control-root-key`
 entry point formats and parses these keys without Node imports. The runtime may
-clamp its execution budget independently. Existing undated admissions remain
-available for observation, cancellation and settlement; a missing undated root
-returns `control_upgrade_required` before effects. Retrying an opaque intent with
-a newly minted timed key is not recovery.
+clamp its execution budget independently. A root key whose expiry has passed is
+refused at admission, whether or not its records still exist. Retrying an opaque
+intent with a newly minted timed key is not recovery.
 
 A version 2 signed admission, witness, lease certificate or grant binds the
 original `{version, rootKey, issuer, notAfter}` origin. Descendants, including a
 child's independent lease, inherit this origin through verified parent authority.
-Raw caller JSON cannot supply it. Each role holds a signed private retirement
-clock and high-water record. A zero floor is provisioned only with a verified new
-installation's trust bundle. Missing, corrupt or rolled-back state in an existing
-installation requires supervised recovery; provisioning never resets its floor.
-A backward wall clock blocks new forward work and collection while retained
-observation and settlement stay available.
+Raw caller JSON cannot supply it, and a record without an origin is refused.
 
-`CONTROL_RETENTION_LIMITS` bounds retained state and admission work:
+Each role prunes its own records at startup and then hourly
+(`startControlPrune`). An execution's records go when all of these hold:
 
-- Each role has 1,024 reusable origin-family slots. The physical installation has
-  256 active lease slots and 1,024 retained lease-history slots. Slot identities
-  include both inode and generation; partial reservations consume capacity.
-- An origin permits 128 executions and 256 attempted intents, with at most 64
-  children per node and the fixed protocol depth of two. Fixed-child keys have a
-  direct digest index, not a scan through historical keys.
-- Each role-family has at most 4,096 indexed records in 64 pages of 64 entries,
-  each page at most 16 KiB. Its ordinary index, proof, acknowledgement and progress
-  metadata together are capped at 2 MiB. The 22 fixed private receipt namespaces
-  each permit at most 65,536 records of at most 128 KiB. Namespace creation
-  counters and high-water records reserve capacity before publication.
-- Retirement cells are reserved before effects and remain writable outside the
-  ordinary record quota. A capacity refusal occurs before effects. Reconciliation
-  examines at most 16 families by default, accepts 1–64, saves a round-robin cursor
-  past pending families, and reads index pages incrementally.
+- its own-effect outcome is known;
+- for an agent execution, its canonical terminal commitment is sealed;
+- its root key expired at least 72 hours ago, and its effect settled at least
+  72 hours ago;
+- any root lease it owns is released. The prune then removes that lease's ledger
+  and frees its retained history slot.
 
-A family becomes eligible only after its origin expires, at least 72 hours after
-its latest authoritative terminal receipt, and after every attempted execution,
-child and independent lease is known contained. Target locks must have been
-physically released. Live helpers, journal workers, effect writers and streams
-keep it pending. An unaccepted attempted child, unknown effect, corrupt index,
-offline participant, missing proof or unknown writer keeps the original evidence
-regardless of age or PID.
+A pass examines at most 64 executions and resumes where the previous pass
+stopped. Records of an unknown or recovery-required execution stay regardless of
+age. The agent also keeps the newest successful staged data-manager pull, which
+describes the running coordinator. Data-manager deletes its settled fence rows and
+finished execution rows for pruned executions before their files. Readers never
+treat a pruned record as permission: a missing admission, effect or lease is
+unknown, and an expired key is refused. There is no separate retention clock. A
+wall clock set back past a pruned key's expiry would admit that key again, so keep
+host clocks synchronised.
 
-The origin's coordinator freezes a signed manifest. The coordinator raises its private durable expiry floor before preparing the
-manifest. Each actual participant retains its exact proof copy, then signs ready. All ready acknowledgements and any API terminal-copy acknowledgement
-are required before commit. Each role raises its private durable expiry floor before deleting its own private
-indexed records and signing clean. Shared semantic evidence is removed only after every
-participant is clean and a signed final proof exists. Each participant retains a
-private final proof before release; the shared family slot is reusable only after
-all required releases. Participants never open sibling-private directories.
-Namespace deletion records `planned`, `unlinked`, `counted` and `item_done` in a
-preallocated exact-identity transaction. Only an already retained matching plan
-can resume an absent unlink. Counter decrements and slot reuse check the original
-family, generation, manifest, ordinal and inode. A killed unknown writer is never
-stolen automatically. Target release progress uses a certified sorted-target
-prefix count and a pending target index, so all 256 maximum-length target IDs fit
-within the signed admission journal's 4 KiB read/write budget. Writes validate the
-actual schema and byte limit. Retained signed name-list progress within that
-budget is checked against the exact certified prefix before compact recovery.
+The physical installation has 256 active lease slots and 1,024 retained
+lease-history slots; a released lease holds its history slot until the prune.
+Private records are at most 128 KiB. A role refuses new control work with a busy
+error, before any effect, while its private state filesystem has less than 64 MiB
+free.
+
+The agent journal holds at most 512 entries for new work. Entries that need
+recovery have their own bound of the same size, so they cannot use up the capacity
+for new work. A terminal control entry stays in the journal until 72 hours after
+it finished and until its root key expired; other entries stay for the configured
+job retention.
 
 Before an agent publishes a terminal journal row, its fixed live producer signs
 the complete canonical terminal tuple digest and original terminal time in a
-preallocated private `observations` record. This uses the existing role key,
-namespace quota, family index and collection path. Own-effect settlement and
+preallocated private `observations` record signed with the role key. Own-effect
+settlement and
 canonical terminal publication have separate digests. Configuration cleanup can
 refine a prepared result while public status remains running, preserving its
 first terminal time; sealing the canonical receipt freezes its tuple and time.
@@ -391,12 +372,10 @@ terminal state, age and missing processes do not prove containment. Missing,
 mismatched or unknown proof keeps the fence. Repair publishes only the missing
 canonical terminal digest and journal completion, preserving original admission,
 result/failure, deadline and terminal time; duplicate restarts do not restart work
-or postpone the 72-hour retention window.
-Legacy families without the terminal authentication record or canonical
-publication reservation remain observation/recovery-required; startup does not
-upgrade them by trusting their public journal.
+or postpone the prune. An execution without the terminal authentication record
+remains recovery-required; startup does not trust its public journal.
 
-### API parent checkpoints and terminal receipt delivery
+### API parent checkpoints and terminal copies
 
 Owned administrative jobs use `OpsProjection` version 3. A timeless logical step
 address resolves its retained entry before time, body preparation or configuration
@@ -409,18 +388,14 @@ siblings or exceed the current row's limit. Parent preparation is pure until the
 checkpoint succeeds. Unknown checkpoint outcome sends no POST.
 
 Before consuming any authority-bearing terminal result, failure or cancellation,
-the API checkpoints a bounded copy and `receiptDelivery: pending`. It then sends
-the API-only, no-effect `controlRetention.acknowledge` operation with a canonical
-HMAC proof using the existing API token. The terminal digest covers exact typed
-version 2 terminal identity and result/failure fields, excluding changing progress
-and diagnostic fields. Acknowledgement has a separate 15-second signal so a
-stopped worker cannot strand a copied receipt. Only a confirmed checkpoint allows
-return or throw of the terminal outcome. Pending copies keep the parent running
-or `cancel_pending` with `receipt_delivery`; both completion SQL and actual expiry
-cleanup preserve them. Terminal version 3 parents are retained for at least 72
-hours. After full family collection, an exact valid acknowledgement retry is
-accepted without creating records only when no retained/index/semantic evidence
-remains and the timed root's expiry is covered by the private floor.
+the API checkpoints a bounded copy of it in the job row. The terminal digest
+covers exact typed version 2 terminal identity and result/failure fields,
+excluding changing progress and diagnostic fields. Only that checkpoint allows
+return or throw of the terminal outcome; a failed checkpoint leaves the job to be
+observed again. The agent does not wait for the API's copy: once the agent prunes
+the operation, 72 hours after its root key expired, an API that never copied the
+terminal can no longer read it. Terminal version 3 parents are retained for at
+least 72 hours.
 
 Current owned-job adapters persist the new root identity. Fixed CLI entry retains
 its original phase key and verified inherited origin; it does not issue a new root.
@@ -452,8 +427,8 @@ signed terminal preparation exists. Maintenance continuations remain frozen,
 one-use subsets; helper descendants have no further edge.
 
 The detached configuration helper may wait up to five seconds per source read or
-initial adoption attempt sequence, within its original deadline, for family or
-lease journal writer contention. Adoption retries cover only journal-entry and
+initial adoption attempt sequence, within its original deadline, for lease
+journal writer contention. Adoption retries cover only journal-entry and
 initial-observation contention, before any adoption record is written; later
 failures remain recovery-required. Waiting never removes locks or renews authority.
 
@@ -535,9 +510,6 @@ child names a data-manager job or helper container.
   the same forward code.
 - **Generation.** Configuration and image pins sit behind one atomic pointer. The
   previous pointer is the manual rollback target.
-- **Bounded storage.** A record is pruned when it is terminal, its key has expired
-  and it has no unsettled child. `recovery_required` records are kept until
-  resolved.
 - **Operator exit.** `openmapx control status`, plus `control clear --op <key>` or
   `control resolve --as committed|failed`: host-only, printing what is believed
   live, and audited.
