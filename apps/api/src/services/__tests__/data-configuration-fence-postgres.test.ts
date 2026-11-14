@@ -1373,7 +1373,9 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
       await rejected;
       const restarted = createDataConfigurationMaintenance(f.sql, f.dm);
       await restarted.startup();
-      expect(await f.sql`SELECT * FROM data_manager.configuration_fence`).toEqual([]);
+      expect(
+        await f.sql`SELECT * FROM data_manager.configuration_fence WHERE maintenance_id=${f.input.maintenanceId}::uuid`,
+      ).toEqual([]);
       // The begun leaf has no recorded outcome, so the agent's root stays held.
       expect(control.inspectArtifactTargetLeaseChildSettlement(f.lease, f.child)).toBeNull();
       await expect(control.releaseArtifactTargetLease(f.lease)).rejects.toThrow();

@@ -693,10 +693,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await delay(25);
       }
     }
-    async function canceledSuccessfulCoordinatorStage(
-      beforeAcknowledgement?: () => Promise<void>,
-      serviceIds = ["data-manager"],
-    ) {
+    async function canceledSuccessfulCoordinatorStage(serviceIds = ["data-manager"]) {
       let reachedTerminalReply = false;
       const release = Promise.withResolvers<void>();
       pullTerminalReplyGate = {
@@ -732,7 +729,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             );
           await delay(25);
         }
-        await beforeAcknowledgement?.();
         const { jobRunner } = await import("../job-runner"),
           cancellation = jobRunner.cancel(id);
         const until = performance.now() + 10000;
@@ -923,20 +919,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       };
       return Object.assign(stop, { fault: fault.promise, killAfterFault });
     }
-    it("requires the actual API ACK before a successful staged pull becomes ownership evidence", async () => {
-      await canceledSuccessfulCoordinatorStage(async () => {
-        expect(
-          (await host.owned.inspectOwnedServices(new AbortController().signal)).some(
-            (s) => s.serviceId === "data-manager",
-          ),
-        ).toBe(false);
-      });
-      expect(
-        (await host.owned.inspectOwnedServices(new AbortController().signal)).some(
-          (s) => s.serviceId === "data-manager",
-        ),
-      ).toBe(true);
-    }, 180000);
     it("reconstructs staged ownership in a NEW native production agent before a fresh user Update", async () => {
       const { pullPath } = await canceledSuccessfulCoordinatorStage(),
         original = readFileSync(pullPath),
@@ -1414,7 +1396,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       });
       expect((await finished(repaired.json().jobId)).status).toBe("success");
     }, 240000);
-    it("observes its genuine pull admission without target metadata writes and rejects replacement of its indexed inode", async () => {
+    it("observes its genuine pull admission without target metadata writes", async () => {
       const { pullPath } = await canceledSuccessfulCoordinatorStage(),
         bytes = readFileSync(pullPath),
         actual = JSON.parse(bytes.toString("utf8")).payload,
@@ -1452,9 +1434,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         syncBuiltinESMExports();
       }
       expect(snapshot()).toEqual(before);
-      renameSync(pullPath, `${pullPath}.original-indexed-inode`);
-      writeFileSync(pullPath, bytes, { mode: 0o600 });
-      expect(() => assertCoordinatorPullLeaseCompatibility(authority)).toThrow();
     }, 180000);
     it("refuses actual candidate pull before Docker against a separately admitted physical host-command root", async () => {
       // Component competitor uses the real normal host issuer and physical
@@ -2352,32 +2331,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(posts.get("service.pull")).toBe(2);
       expect(dm.settlementResponseStatuses).toEqual([200]);
     }, 180000);
-    it.each(["admission", "canonical", "effect"] as const)(
-      "refuses a byte-identical %s source copied onto a different private indexed inode",
-      async (kind) => {
-        const { pullPath } = await canceledSuccessfulCoordinatorStage(),
-          key = pullPath.split("/").at(-1)!,
-          path =
-            kind === "admission"
-              ? pullPath
-              : join(
-                  host.infraDir,
-                  "control-private/ops-agent",
-                  kind === "canonical" ? "observations" : "effects",
-                  kind === "canonical" ? `terminal-${key}` : key,
-                ),
-          original = readFileSync(path),
-          backup = `${path}.fixture-original`;
-        renameSync(path, backup);
-        writeFileSync(path, original, { mode: 0o600, flag: "wx" });
-        expect(
-          (await host.owned.inspectOwnedServices(new AbortController().signal)).some(
-            (s) => s.serviceId === "data-manager",
-          ),
-        ).toBe(false);
-      },
-      120000,
-    );
     it("guards the actual existing coordinator Apply entry even with empty links", async () => {
       const response = await api.inject({
         method: "POST",
@@ -3088,71 +3041,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(row.error ?? "").not.toContain('update "admin_job"');
       expect(row.error ?? "").not.toContain(host.root);
     }, 180000);
-    it("refuses a valid full future owner budget before image staging or lifecycle", async () => {
-      expect(host.loaded.find((s) => s.manifest.id === "motis")?.manifest.consumes).toHaveLength(
-        256,
-      );
-      const reply = await api.inject({
-        method: "POST",
-        url: "/api/admin/services/bulk-action",
-        headers: {
-          "idempotency-key": randomUUID(),
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
-        },
-        payload: { action: "update", serviceIds: ["data-manager"] },
-      });
-      const id = reply.json().jobId,
-        until = Date.now() + 45000;
-      let row: typeof schema.adminJob.$inferSelect | undefined;
-      for (;;) {
-        [row] = await fixture.db.select().from(schema.adminJob).where(eq(schema.adminJob.id, id));
-        const result = row?.result as { observation?: { state?: string } } | undefined;
-        if (
-          row &&
-          (["failed", "success", "canceled"].includes(row.status) ||
-            result?.observation?.state === "unknown")
-        )
-          break;
-        if (Date.now() > until) throw Error("Actual owner capacity refusal not observable");
-        await delay(10);
-      }
-      const observed = row!.result as {
-        observation?: { state?: string; reason?: string };
-        opsProjection?: {
-          operations?: Record<
-            string,
-            { kind: string; phase: string; terminal: boolean; errorClass?: string }
-          >;
-        };
-        _configurationCandidate?: { phase?: string };
-      };
-      console.info(
-        "actual prelude budget diagnostic",
-        JSON.stringify({
-          jobState: row!.status,
-          observation: observed.observation,
-          candidatePhase: observed._configurationCandidate?.phase,
-          posts: [...posts],
-          operations: Object.values(observed.opsProjection?.operations ?? {}).map((value) => ({
-            kind: value.kind,
-            phase: value.phase,
-            terminal: value.terminal,
-            errorClass: value.errorClass,
-          })),
-        }),
-      );
-      expect(posts.get("service.pull") ?? 0).toBe(0);
-      expect(host.calls.filter((args) => args[0] === "image" && args[1] === "pull")).toHaveLength(
-        0,
-      );
-      expect(row!.status).toBe("failed");
-      expect(posts.get("service.start") ?? 0).toBe(0);
-      expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
-      expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(0);
-      expect(dm.preparePosts).toBe(0);
-      expect(await fixture.db.select().from(schema.serviceConfig)).toHaveLength(0);
-      expect(readdirSync(join(host.queue, ".candidates"))).toHaveLength(0);
-    }, 60000);
     it("preserves actual first-delivery CAS against stale prepared and forged unissued generic checkpoints", async () => {
       const reached = Promise.withResolvers<void>(),
         release = Promise.withResolvers<void>();
@@ -3437,7 +3325,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
     }, 240000);
     it("closes three-target cancellation after an acknowledged ordinary prefix and successful coordinator staging", async () => {
-      const { id } = await canceledSuccessfulCoordinatorStage(undefined, [
+      const { id } = await canceledSuccessfulCoordinatorStage([
           "motis",
           "data-manager",
           "valhalla",

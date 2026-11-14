@@ -10,7 +10,6 @@
   "reclaims the same killed native API through its durable nonempty original preparation (mode=during-save)": 67.6,
   "reclaims the same killed native API through its durable nonempty original preparation (mode=after-save)": 95.29,
   "reclaims the same killed native API through its durable nonempty original preparation (mode=after-settle)": 80.36,
-  "reclaims the same killed native API through its durable nonempty original preparation (mode=after-ack-loss)": 83.19,
   "reclaims the same killed native API through its durable nonempty original preparation (mode=before-root-start)": 82.89,
   "reclaims the same killed native API through its durable nonempty original preparation (mode=before-root-start-source)": 68.99,
   "reclaims the same killed native API through its durable nonempty original preparation (mode=before-root-start-daemon)": 83.18,

@@ -120,7 +120,7 @@ export async function pruneDataManagerJobs(days: number): Promise<number> {
   }
   const cutoff = new Date(Date.now() - days * MS_PER_DAY);
   const result = await withPreservationRetentionLock(db, (tx) => {
-    // Managed execution receipts belong to the all-role proof GC, including
+    // Managed execution rows belong to data-manager's control prune, including
     // finished rows still referenced by an original owner awaiting recovery.
     const legacyPipelineJob = isNull(dataManagerJobs.executionVersion);
     const newestFinishedOfEachKind = tx

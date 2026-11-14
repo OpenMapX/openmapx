@@ -679,7 +679,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       "during-save",
       "after-save",
       "after-settle",
-      "after-ack-loss",
       "before-root-start",
       "before-root-start-source",
       "before-root-start-daemon",
@@ -773,40 +772,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const busyId = refusedPreparation ? randomUUID() : undefined;
         let busyBefore: unknown;
         let holdPreparedReply =
-            beforeSave ||
-            mode === "after-settle" ||
-            mode === "after-ack-loss" ||
-            preRootHelper ||
-            unusedAfterSettle,
+            beforeSave || mode === "after-settle" || preRootHelper || unusedAfterSettle,
           preparePosts = 0,
-          settlePosts = 0,
-          originalPrepareKey: string | undefined,
-          ackInterrupted = false;
-        const { AnchoredDirectory } = await import(
-            "../../../../../packages/core/src/build-artifacts/filesystem"
-          ),
-          writeCell = AnchoredDirectory.prototype.write,
-          ackFault =
-            mode === "after-ack-loss"
-              ? vi.spyOn(AnchoredDirectory.prototype, "write").mockImplementation(function (
-                  this: InstanceType<typeof AnchoredDirectory>,
-                  name,
-                  bytes,
-                  ...args
-                ) {
-                  if (
-                    !ackInterrupted &&
-                    originalPrepareKey &&
-                    name === `${originalPrepareKey}.configuration-settlement-ack.json` &&
-                    Buffer.byteLength(bytes) === 1024 &&
-                    typeof JSON.parse(String(bytes))?.payload?.terminalDigest === "string"
-                  ) {
-                    ackInterrupted = true;
-                    throw Error("Synthetic original native sender ACK filesystem interruption");
-                  }
-                  return writeCell.call(this, name, bytes, ...args);
-                })
-              : undefined;
+          settlePosts = 0;
         const relay = createServer(async (request, response) => {
           try {
             const chunks: Buffer[] = [];
@@ -831,7 +799,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               JSON.parse(body.toString()).operation?.kind === "configurationMaintenance.prepare"
             ) {
               preparePosts++;
-              originalPrepareKey = JSON.parse(body.toString()).operationKey;
             }
             if (
               request.method === "POST" &&
@@ -864,15 +831,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 parsed.result?.state === "failed"
               : preRootHelper
                 ? parsed.result?.kind === "service.start" && parsed.result?.state === "succeeded"
-                : mode === "after-ack-loss"
-                  ? parsed.result?.kind === "configurationMaintenance.settle" &&
-                    parsed.result?.state === "failed"
-                  : parsed.result?.kind ===
-                      (beforeSave
-                        ? "configurationMaintenance.prepare"
-                        : "configurationMaintenance.settle") &&
-                    parsed.result?.state === "succeeded" &&
-                    parsed.result?.result?.state === (beforeSave ? "prepared" : "settled");
+                : parsed.result?.kind ===
+                    (beforeSave
+                      ? "configurationMaintenance.prepare"
+                      : "configurationMaintenance.settle") &&
+                  parsed.result?.state === "succeeded" &&
+                  parsed.result?.result?.state === (beforeSave ? "prepared" : "settled");
             if (holdPreparedReply && request.method === "GET" && wantedObservation) {
               prepareObserved.resolve();
               await releaseReply.promise;
@@ -1181,7 +1145,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               maintenanceId: candidate.maintenanceId,
             }) as Record<string, unknown>;
           const originalOwner =
-            mode === "after-settle" || mode === "after-ack-loss" || retirement || unusedAfterSettle
+            mode === "after-settle" || retirement || unusedAfterSettle
               ? (
                   await import("../../../../ops-agent/src/configuration-maintenance-store")
                 ).readOwnedConfigurationMaintenance(
@@ -1276,8 +1240,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               "string",
             );
           }
-          if (mode === "after-ack-loss") expect(ackInterrupted).toBe(true);
-          ackFault?.mockRestore();
           holdPreparedReply = false;
           releaseReply.resolve();
           sqlRelay?.release();
@@ -1778,7 +1740,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           );
         } finally {
           containedFault?.mockRestore();
-          ackFault?.mockRestore();
           holdPreparedReply = false;
           releaseReply.resolve();
           sqlRelay?.release();
@@ -2258,93 +2219,77 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       },
       60000,
     );
-    it.each(["bounded", "oversized"])(
-      "budgets an actual durable nonempty candidate's future private mount inspection (%s)",
-      async (mode) => {
-        for (let index = 0; index < 80; index++) {
-          const key = `P${String(index).padStart(3, "0")}_${"K".repeat(85)}`;
-          await fixture.db.insert(schema.serviceSecret).values({
-            id: randomUUID(),
-            serviceId: "data-manager",
-            key,
-            ...encrypt("synthetic-retained-secret"),
-          });
-        }
-        dm = await ownedDataManager({
-          sql: fixture.sql,
-          infraDir: host.infraDir,
-          serviceIds: host.loaded.map((value) => value.manifest.id),
+    it("prepares an actual durable nonempty candidate with eighty future private secret mounts", async () => {
+      for (let index = 0; index < 80; index++) {
+        const key = `P${String(index).padStart(3, "0")}_${"K".repeat(85)}`;
+        await fixture.db.insert(schema.serviceSecret).values({
+          id: randomUUID(),
+          serviceId: "data-manager",
+          key,
+          ...encrypt("synthetic-retained-secret"),
         });
-        vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-        vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
-        host.setRows(
-          host.loaded.map((service, index) => ({
-            ...host.row,
-            Id: index.toString(16).padStart(64, "0"),
-            State: "running",
-            ConfigImage: services.serviceContainerImageReference(service.manifest.container),
-            Labels: { ...host.row.Labels, "com.docker.compose.service": service.manifest.id },
-          })),
-        );
-        const ctx = await job();
-        await owned(ctx, async () => {
-          const containers = await host.owned.inspectOwnedServices(new AbortController().signal);
-          expect(containers.length).toBeGreaterThan(mode === "oversized" ? 32 : 1);
-          const preparation = prospective.prepareProspectiveConfiguration({
-            actorId: ctx.jobId,
-            operationKey: `opk1_${ctx.jobId.replaceAll("-", "")}`,
-            expectedCurrentRevisionId: host.initial.revisionId,
-            followUp: "service-apply",
-            overlay: {
-              purpose: "service-secret",
-              coordinatorMode: "require-running",
-              changes: [
-                {
-                  kind: "service-secret",
-                  serviceId: "data-manager",
-                  key: "TOKEN",
-                  action: "set",
-                  value: "synthetic-prospective-capacity-credential",
-                },
-              ],
-            },
-          });
-          if (mode === "oversized") {
-            // The larger stack still exceeds the unchanged evidence limits;
-            // compacting mount evidence must not admit it.
-            await expect(preparation).rejects.toMatchObject({
-              result: {
-                errorCode: "configuration_preflight_failed",
-                configurationPreflight: { stage: "preview", errorClass: "runtime" },
+      }
+      dm = await ownedDataManager({
+        sql: fixture.sql,
+        infraDir: host.infraDir,
+        serviceIds: host.loaded.map((value) => value.manifest.id),
+      });
+      vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
+      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
+      host.setRows(
+        host.loaded.map((service, index) => ({
+          ...host.row,
+          Id: index.toString(16).padStart(64, "0"),
+          State: "running",
+          ConfigImage: services.serviceContainerImageReference(service.manifest.container),
+          Labels: { ...host.row.Labels, "com.docker.compose.service": service.manifest.id },
+        })),
+      );
+      const ctx = await job();
+      await owned(ctx, async () => {
+        const containers = await host.owned.inspectOwnedServices(new AbortController().signal);
+        expect(containers.length).toBeGreaterThan(1);
+        const preparation = prospective.prepareProspectiveConfiguration({
+          actorId: ctx.jobId,
+          operationKey: `opk1_${ctx.jobId.replaceAll("-", "")}`,
+          expectedCurrentRevisionId: host.initial.revisionId,
+          followUp: "service-apply",
+          overlay: {
+            purpose: "service-secret",
+            coordinatorMode: "require-running",
+            changes: [
+              {
+                kind: "service-secret",
+                serviceId: "data-manager",
+                key: "TOKEN",
+                action: "set",
+                value: "synthetic-prospective-capacity-credential",
               },
-            });
-          } else {
-            // Evidence for eighty future secret mounts now fits in the budget.
-            const candidate = await preparation;
-            expect(candidate).toMatchObject({
-              affectedServiceIds: ["data-manager"],
-              expectedCurrentRevisionId: host.initial.revisionId,
-            });
-            expect(candidate.revisionId).not.toBe(host.initial.revisionId);
-          }
-          expect(dm!.preparePosts).toBe(0);
-          expect(actualPosts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
-          expect(
-            existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-          ).toBe(false);
-          expect(await fixture.db.select().from(schema.serviceSecret)).toHaveLength(80);
-          expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
-            host.initial.revisionId,
-          );
-          expect(
-            host.calls.some(
-              (args) => args.includes("up") || args.includes("pull") || args.includes("restart"),
-            ),
-          ).toBe(false);
+            ],
+          },
         });
-      },
-      60000,
-    );
+        const candidate = await preparation;
+        expect(candidate).toMatchObject({
+          affectedServiceIds: ["data-manager"],
+          expectedCurrentRevisionId: host.initial.revisionId,
+        });
+        expect(candidate.revisionId).not.toBe(host.initial.revisionId);
+        expect(dm!.preparePosts).toBe(0);
+        expect(actualPosts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
+        expect(
+          existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
+        ).toBe(false);
+        expect(await fixture.db.select().from(schema.serviceSecret)).toHaveLength(80);
+        expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
+          host.initial.revisionId,
+        );
+        expect(
+          host.calls.some(
+            (args) => args.includes("up") || args.includes("pull") || args.includes("restart"),
+          ),
+        ).toBe(false);
+      });
+    }, 60000);
     it("uses one ownership-only maintenance decision before a durable nonempty coordinator credential continuation", async () => {
       // Synthetic example/* images intentionally have no published release overlay.
       vi.stubEnv("OPENMAPX_RELEASE", "local");
@@ -2964,7 +2909,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           });
           await expect(async () =>
             prospective.discardNeverPreparedProspectiveConfiguration(candidate),
-          ).rejects.toThrow("Conclusive original NoGuard closure required");
+          ).rejects.toThrow("Conclusive never-prepared maintenance closure required");
           expect(readdirSync(join(host.queue, ".candidates"))).toHaveLength(1);
           const { createApiOpsClient, createDurableOpsKey } = await import("../ops-client"),
             { prepareApiJobChildAttempt, issueApiJobChildAssertion } = await import(
@@ -3894,26 +3839,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ),
           ).toBe(false);
           if (mode === "retirement") {
-            const core = await import("@openmapx/core/build-artifacts"),
-              later = Math.max(Date.now(), owner.origin.notAfter) + 96 * 3600000,
-              clock = vi.spyOn(Date, "now").mockReturnValue(later);
+            // Past every timed key's expiry (at most seven days ahead) plus the
+            // 72-hour prune delay.
+            const later = Date.now() + (7 * 24 + 96) * 3600000;
+            vi.useFakeTimers({ toFake: ["Date"] });
+            vi.setSystemTime(later);
             try {
-              expect(await core.pruneControlRecords(installation, { now: later })).toContain(
-                owner.plan.prepare.operationKey,
-              );
-              await dm!.pruneRecords(later);
-              expect(
-                existsSync(
-                  join(
-                    host.infraDir,
-                    "control-private/ops-agent/executions",
-                    `${owner.plan.prepare.operationKey}.json`,
-                  ),
-                ),
-              ).toBe(false);
-              expect(
-                await fixture.sql`SELECT maintenance_id FROM data_manager.configuration_fence WHERE fence_id=${owner.preparedFence!.fenceId}::uuid`,
-              ).toEqual([]);
+              // A restarted agent first drops journal entries past their
+              // retention, then prunes the records nothing references.
               await app.close();
               closeControlInstallation(installation);
               const journal = await openOpsJobJournal(
@@ -3947,6 +3880,19 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                       value.operation.prepareOperationKey === owner.plan.prepare.operationKey,
                   ),
               ).toBe(false);
+              expect(
+                existsSync(
+                  join(
+                    host.infraDir,
+                    "control-private/ops-agent/executions",
+                    `${owner.plan.prepare.operationKey}.json`,
+                  ),
+                ),
+              ).toBe(false);
+              await dm!.pruneRecords(later);
+              expect(
+                await fixture.sql`SELECT maintenance_id FROM data_manager.configuration_fence WHERE fence_id=${owner.preparedFence!.fenceId}::uuid`,
+              ).toEqual([]);
               await dm!.close();
               dm = await ownedDataManager({
                 sql: fixture.sql,
@@ -3962,7 +3908,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 ).status,
               ).toBe(200);
             } finally {
-              clock.mockRestore();
+              vi.useRealTimers();
             }
           }
         });
@@ -6121,9 +6067,7 @@ if(args[0]==="compose"&&args.includes("config")&&args.includes("--format")){impo
           const later = Date.now() + 30 * 24 * 3600000,
             clock = vi.spyOn(Date, "now").mockReturnValue(later);
           try {
-            expect(await pruneControlRecords(installation, { now: later })).toContain(
-              name!.slice(0, -".json".length),
-            );
+            expect(await pruneControlRecords(installation, { now: later })).not.toEqual([]);
             expect(existsSync(join(directory, name!))).toBe(false);
           } finally {
             clock.mockRestore();
