@@ -182,6 +182,11 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
       const pending = inventoryProcess;
       inventoryProcess = undefined;
       await pending?.();
+    } else if (args[0] === "container" && args[1] === "inspect" && args[3] === "{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}") {
+      // A container's health as Docker prints it for this format; the synthetic
+      // containers report none unless a test gives one a healthcheck state.
+      const inspected = (runtimeInspections[args[4]!] ?? rows.find((row) => row.Id === args[4])) as { State?: { Health?: { Status?: string } } } | undefined;
+      stdout = inspected?.State?.Health?.Status ?? "none";
     } else if (args[0] === "container" && args[1] === "inspect")
       stdout = malformedInspect ? "{" : args[3] === "{{json .}}"
         ? args.slice(4).map(id => JSON.stringify(runtimeInspections[id] ?? null)).join("\n") : rows.map((r) => JSON.stringify(r)).join("\n");
