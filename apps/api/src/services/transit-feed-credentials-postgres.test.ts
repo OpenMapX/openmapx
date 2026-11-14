@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -189,8 +189,7 @@ describe.skipIf(!enabled)(
         serviceIds: host.loaded.map((service) => service.manifest.id),
         losePrepareResponse: faults,
         loseHardlinkResponse: faults,
-        observeSettlementSql: true,
-        loseSettlementCommitAcknowledgement: faults,
+        loseSettleResponseOnce: faults,
       });
       vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
       vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
@@ -636,7 +635,7 @@ describe.skipIf(!enabled)(
       expect(proof?.state).toBe("consumed");
       expect(dm.preparePosts).toBe(1);
       expect(dm.posts).toBe(1);
-      expect(dm.settlementSqlIo).toEqual({ updates: 1, commits: 1 });
+      expect(await dm.fenceStates()).toEqual(["settled"]);
       expect(dropped.size).toBe(3);
       expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);
       expect(services.readAppliedTransitCredentialsRevision(host.infraDir)).toBe(

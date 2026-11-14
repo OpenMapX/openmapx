@@ -272,7 +272,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         }
       }
       dm = await ownedDataManager({
-        observeSettlementSql: true,
         sql: fixture.sql,
         infraDir: host.infraDir,
         serviceIds: host.loaded.map((s) => s.manifest.id),
@@ -2776,7 +2775,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(owner.apiControls.settle.result.state).toBe("settled");
       expect(owner.apiControls.settle.receiptDelivery).not.toBeNull();
       expect(dm.settlePosts).toBe(1);
-      expect(dm.settlementSqlIo).toEqual({ commits: 1, updates: 1 });
+      expect(await dm.fenceStates()).toEqual(["settled"]);
       expect(host.calls.filter((a) => a.includes("--force-recreate"))).toHaveLength(1);
       const actual = (await host.owned.inspectOwnedServices(new AbortController().signal)).find(
         (s) => s.serviceId === "data-manager",
@@ -3276,7 +3275,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(snapshots.find((s) => s.serviceId === "data-manager")?.provenance.imageId).toBe(
         pulledImageId,
       );
-      expect(dm.settlementSqlIo).toEqual({ updates: 1, commits: 1 });
+      expect(await dm.fenceStates()).toEqual(["settled"]);
     }, 180000);
     it.each([
       "generic resolver",
@@ -3379,7 +3378,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(pull).toBeGreaterThan(start);
       expect(recreate).toBeGreaterThan(pull);
       expect(host.calls.filter((args) => args.includes("--no-recreate"))).toHaveLength(1);
-      expect(dm.settlementSqlIo).toEqual({ updates: 1, commits: 1 });
+      expect(await dm.fenceStates()).toEqual(["settled"]);
     }, 180000);
     it("closes a prepared pull locally after whole-candidate coordinator refusal without inventing an admission", async () => {
       services.writeServiceSelectionFile(host.infraDir, ["motis"]);
@@ -3485,7 +3484,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(0);
       expect(posts.get("configurationMaintenance.prepare")).toBe(1);
       expect(posts.get("configurationMaintenance.settle")).toBe(1);
-      expect(dm.settlementSqlIo).toEqual({ updates: 1, commits: 1 });
+      expect(await dm.fenceStates()).toEqual(["settled"]);
       expect(services.currentConfigurationGeneration(host.infraDir)).toBe(host.initial.revisionId);
       const original = await inspectOriginalCoordinatorServices(
         host.owned,

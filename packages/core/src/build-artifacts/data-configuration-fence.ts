@@ -49,6 +49,7 @@ import {
 } from "./retention-family";
 import {
   adoptArtifactTargetLease,
+  assertArtifactDelegationRootHeld,
   assertArtifactTargetLeaseForward,
   bindBorrowedControlExecution,
   closeArtifactTargetLeaseHandle,
@@ -619,11 +620,16 @@ export function createDataConfigurationFenceStore(
     /** Settles the prepared row once. The header is the agent's original
      * prepare delegation; a repeated settle with the same outcome returns the
      * settled receipt, another outcome is a conflict. */
-    async settle(value: DataConfigurationFenceSettle, rawHeaders: readonly string[]) {
+    async settle(
+      value: DataConfigurationFenceSettle,
+      rawHeaders: readonly string[],
+      transportPrincipal: Exclude<ControlTransportPrincipal, "data-manager">,
+    ) {
       const input = dataConfigurationFenceSettleSchema.parse(value);
       let execution: ExecutionRef;
       try {
         const headers = controlHeaders(rawHeaders);
+        if (transportPrincipal !== "ops-agent") throw Error("Agent transport required");
         if (!headers.delegation || headers.parent) throw Error("Prepare delegation required");
         const grant = inspectArtifactDelegation({
           dataRoot: local.dataRoot,
@@ -637,11 +643,14 @@ export function createDataConfigurationFenceStore(
           grant.phase !== "configuration-fence"
         )
           throw Error("Configuration fence grant identity conflict");
+        // Only the owner that still holds the maintenance root may settle.
+        assertArtifactDelegationRootHeld(installation, headers.delegation);
         execution = grant.execution;
       } catch {
         throw forbidden("Pinned agent configuration fence grant rejected");
       }
       return sql.transaction(async (tx) => {
+        await lock(tx);
         const saved = await row(tx, "maintenance_id", input.maintenanceId);
         if (!saved)
           throw Object.assign(Error("Configuration maintenance identity is unknown"), {

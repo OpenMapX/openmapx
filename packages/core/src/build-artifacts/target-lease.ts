@@ -3522,6 +3522,24 @@ export function inspectArtifactDelegation(options: {
   }
 }
 
+/** The delegation's root lease is still held by its owner: not released and
+ * not settled. Observation only; it returns no lease or capability. */
+export function assertArtifactDelegationRootHeld(
+  installation: import("./control-authority").ControlInstallation,
+  assertion: string,
+): void {
+  const local = installationState(installation),
+    parsed = parseControlAssertion(assertion),
+    state = openState(local.dataRoot, parsed.leaseId, local);
+  try {
+    guarded(state, () => {
+      if (tree(state).root.phase === "settled" || state.slots?.release)
+        throw Error("Original owner lease is no longer held");
+    });
+  } finally {
+    closeState(state);
+  }
+}
 export async function cancelArtifactTargetLease(
   lease: TargetLeaseAuthority,
 ): Promise<readonly ExecutionRef[]> {

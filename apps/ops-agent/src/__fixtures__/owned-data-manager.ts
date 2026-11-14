@@ -17,6 +17,8 @@ import { createPostgresDataExecutionStore } from "../../../../services/data-mana
 export async function ownedDataManager(options: {
   sql: Parameters<typeof createPostgresDataExecutionStore>[0]; infraDir: string; serviceIds: string[]; loseHardlinkResponse?: boolean; losePrepareResponse?: boolean;
   pausePrepareResponse?: boolean;
+  /** Drops the first successful settle reply after the row was settled. */
+  loseSettleResponseOnce?: boolean;
   /** Called once the fence has been prepared successfully. */
   onPrepared?: () => void;
   loseRecoveryResponseOnce?: boolean;
@@ -50,7 +52,7 @@ export async function ownedDataManager(options: {
       recoveryPosts++;
       if (options.loseRecoveryResponseOnce && recoveryPosts === 1 && reply.statusCode === 200) reply.raw.destroy();
     }
-    if (request.method === "POST" && /^\/executions\/configuration-maintenance\/[a-f0-9-]{36}\/settle$/.test(request.url)) {settlePosts++;settlementResponseStatuses.push(reply.statusCode);}
+    if (request.method === "POST" && /^\/executions\/configuration-maintenance\/[a-f0-9-]{36}\/settle$/.test(request.url)) {settlePosts++;settlementResponseStatuses.push(reply.statusCode);if(options.loseSettleResponseOnce&&reply.statusCode===200&&settlementResponseStatuses.filter(status=>status===200).length===1)reply.raw.destroy();}
     if (request.method === "GET" && request.url.startsWith("/executions/configuration-maintenance/")) {
       fenceInspectionReplies.push({ status: reply.statusCode, body: typeof payload === "string" ? JSON.parse(payload) : null });
       originalInspection = { url: request.url, headers: Object.fromEntries(Object.entries(request.headers).filter((entry): entry is [string,string] => typeof entry[1] === "string")) };
@@ -111,6 +113,12 @@ export async function ownedDataManager(options: {
       return { status: response.status, body: await response.json() };
     },
     get settlementResponseStatuses(){return [...settlementResponseStatuses];},
+    /** States of the fences this fixture prepared. */
+    async fenceStates() {
+      const ids = [...maintenanceIds];
+      if (!ids.length) return [];
+      return (await options.sql`SELECT state FROM data_manager.configuration_fence WHERE maintenance_id = ANY(${ids}::uuid[]) ORDER BY prepared_at`).map(row => row.state as string);
+    },
     get hardlinkResponseStatuses() { return replies.map(reply => reply.status); },
     get hardlinkResponses() { return structuredClone(replies); },
     reconcileRetention: () => reconcileControlRetention(installation, { maxFamilies: 64 }),

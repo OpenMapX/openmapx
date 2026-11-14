@@ -72,6 +72,7 @@ export interface DataExecutionReceiver {
   settleFence(
     input: DataConfigurationFenceSettle,
     rawHeaders: readonly string[],
+    transportPrincipal: DataManagerPrincipal,
   ): Promise<DataConfigurationFenceReceipt>;
 }
 /** The authenticated caller; the auth hook admits no request here without one. */
@@ -136,7 +137,7 @@ export function registerDataExecutionApi(
     if (!receiver) return unavailable(reply);
     if (request.params.maintenanceId !== request.body.maintenanceId)
       return reply.code(409).send({ error: "Configuration maintenance identity conflict" });
-    return receiver.settleFence(request.body, request.raw.rawHeaders);
+    return receiver.settleFence(request.body, request.raw.rawHeaders, principal(request));
   });
   registerDataManagerRoute(app, "lookupDataExecution", async (request, reply) => {
     if (!receiver) return unavailable(reply);

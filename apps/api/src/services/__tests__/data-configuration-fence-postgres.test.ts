@@ -607,7 +607,7 @@ describe.skipIf(
     }
   }, 60000);
 
-  it.each(["child", "owner", "bundle", "link", "release"] as const)(
+  it.each(["child", "owner", "release"] as const)(
     "rejoins only original negative recovery after lost %s publication acknowledgement",
     async (boundary) => {
       const f = await ownedFenceFixture({ productionRegistration: true });
@@ -630,11 +630,7 @@ describe.skipIf(
               ? `${assertion.delegationId}.json`
               : boundary === "owner"
                 ? `${f.input.maintenanceId}.json`
-                : boundary === "bundle"
-                  ? `${f.owner.operationKey}.configuration-settlement.json`
-                  : boundary === "link"
-                    ? `${f.owner.operationKey}.configuration-settlement-control.json`
-                    : "admission.json",
+                : "admission.json",
           nativeRename = (await vi.importActual<typeof import("node:fs")>("node:fs")).renameSync,
           maintenance = await import(
             "../../../../../apps/ops-agent/src/configuration-maintenance-store"
@@ -743,14 +739,9 @@ describe.skipIf(
       const maintenance = await import(
         "../../../../../apps/ops-agent/src/configuration-maintenance-store"
       );
-      await maintenance.closeOwnedConfigurationMaintenanceWithoutGuard(f.host.runtime, f.authority);
-      expect(
-        await control.reconcileArtifactTargetLease({
-          dataRoot: join(f.root, "data"),
-          leaseId: assertion.leaseId,
-          authority: control.verifyControlRecoveryAuthority(f.authority),
-        }),
-      ).toBe("released");
+      await expect(
+        maintenance.recoverUnadmittedConfigurationMaintenance(f.host.runtime, f.authority),
+      ).resolves.toMatchObject({ maintenanceId: f.input.maintenanceId });
       expect(control.verifyRetainedArtifactTargetRootRelease(f.authority)).toBeDefined();
     } finally {
       clock?.mockRestore();
@@ -771,11 +762,10 @@ describe.skipIf(
         "ops-agent",
       );
       expect(receipt.state).toBe("prepared");
-      expect(
-        control.preparedDataConfigurationFenceState(
-          control.verifyPublishedDataConfigurationFencePrepared(f.lease, f.child),
-        ).preparedReceipt,
-      ).toEqual(receipt);
+      expect(control.inspectArtifactTargetLeaseChildSettlement(f.lease, f.child)).toMatchObject({
+        outcome: "committed",
+        terminalReceiptDigest: control.controlDigest({ kind: "data-configuration-fence", receipt }),
+      });
     } finally {
       await f.close();
     }
@@ -797,11 +787,10 @@ describe.skipIf(
         "ops-agent",
       );
       expect(receipt.state).toBe("prepared");
-      expect(
-        control.preparedDataConfigurationFenceState(
-          control.verifyPublishedDataConfigurationFencePrepared(f.lease, f.child),
-        ).preparedReceipt,
-      ).toEqual(receipt);
+      expect(control.inspectArtifactTargetLeaseChildSettlement(f.lease, f.child)).toMatchObject({
+        outcome: "committed",
+        terminalReceiptDigest: control.controlDigest({ kind: "data-configuration-fence", receipt }),
+      });
     } finally {
       await f.close();
     }
@@ -819,36 +808,15 @@ describe.skipIf(
         "ops-agent",
       );
       expect(receipt).toMatchObject({ fenceId: child.executionId, state: "prepared", sequence: 0 });
-      expect(
-        existsSync(
-          join(
-            root,
-            "data/.admin-target-control/executions/data-manager",
-            `${child.operationKey}.data-terminal.json`,
-          ),
-        ),
-      ).toBe(true);
       const rows =
-        await sql`SELECT status,finished_at,metadata FROM data_manager.jobs WHERE id=${child.executionId}`;
-      expect(rows[0]?.status).toBe("ok");
-      const finishedAt = rows[0]?.finished_at,
-        preparedTerminalAt =
-          finishedAt instanceof Date ? finishedAt.getTime() : Date.parse(String(finishedAt));
-      expect(Number.isFinite(preparedTerminalAt)).toBe(true);
-      const preparedSource = control.verifyPublishedDataConfigurationFencePrepared(lease, child);
-      expect(control.preparedDataConfigurationFenceState(preparedSource)).toMatchObject({
-        preparedReceipt: receipt,
-        preparedTerminalAt,
+        await sql`SELECT state,operation_key,outcome FROM data_manager.configuration_fence WHERE fence_id=${child.executionId}`;
+      expect(rows).toEqual([
+        { state: "prepared", operation_key: child.operationKey, outcome: null },
+      ]);
+      expect(control.inspectArtifactTargetLeaseChildSettlement(lease, child)).toMatchObject({
+        outcome: "committed",
+        terminalReceiptDigest: control.controlDigest({ kind: "data-configuration-fence", receipt }),
       });
-      expect(() =>
-        control.preparedDataConfigurationFenceState({} as typeof preparedSource),
-      ).toThrow();
-      expect(() =>
-        control.verifyPublishedDataConfigurationFencePrepared(lease, {
-          ...child,
-          executionId: randomUUID(),
-        }),
-      ).toThrow();
       const store = createPostgresDataExecutionStore(sql),
         deadline = Date.now() + 30000,
         key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) });
@@ -923,15 +891,9 @@ describe.skipIf(
           throw Error("Guard must precede bake");
         },
       });
-      const beforeMirror = readFileSync(
-          join(
-            root,
-            "control-private/data-manager/configuration-maintenance",
-            `${input.maintenanceId}.json`,
-          ),
-        ),
-        beforeRows =
-          await sql`SELECT id,metadata,status,finished_at FROM data_manager.jobs ORDER BY id`;
+      const beforeRows =
+          await sql`SELECT id,metadata,status,finished_at FROM data_manager.jobs ORDER BY id`,
+        beforeFences = await sql`SELECT * FROM data_manager.configuration_fence`;
       try {
         // Each mutation comes from a caller whose own token may use its route.
         for (const [url, payload, token] of [
@@ -1028,15 +990,7 @@ describe.skipIf(
         expect(
           await sql`SELECT id,metadata,status,finished_at FROM data_manager.jobs ORDER BY id`,
         ).toEqual(beforeRows);
-        expect(
-          readFileSync(
-            join(
-              root,
-              "control-private/data-manager/configuration-maintenance",
-              `${input.maintenanceId}.json`,
-            ),
-          ),
-        ).toEqual(beforeMirror);
+        expect(await sql`SELECT * FROM data_manager.configuration_fence`).toEqual(beforeFences);
       } finally {
         await app.close();
         await runtime.close();
@@ -1400,7 +1354,7 @@ async function ownedFenceFixture(
       transport.mockRestore();
       await app.close();
       await data.close();
-      await fixture.sql`DELETE FROM data_manager.jobs WHERE id=${child.executionId}`;
+      await fixture.sql`DELETE FROM data_manager.configuration_fence WHERE fence_id=${child.executionId}`;
       control.closeArtifactTargetLeaseHandle(lease);
       control.closeControlInstallation(agent);
       control.closeControlInstallation(dm);
@@ -1412,55 +1366,7 @@ async function ownedFenceFixture(
 }
 
 it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
-  "refuses settlement capacity authority from a valid ordinary prepare grant without the original published reservation preimage",
-  async () => {
-    const f = await ownedFenceFixture();
-    try {
-      const peer = control.verifyControlPeer(f.dm, {
-        rawHeaders: ["x-openmapx-control-delegation", f.assertion],
-        transportPrincipal: "ops-agent",
-        execution: f.child,
-        kind: "configuration-maintenance.prepare",
-      });
-      const reservation = join(
-          f.root,
-          "data/.admin-target-control/executions/ops-agent",
-          `${f.owner.operationKey}.configuration-settlement-control.json`,
-        ),
-        held = `${reservation}.held`;
-      expect(() =>
-        control.verifyPublishedConfigurationSettlementReservation(f.dm, peer, f.input),
-      ).not.toThrow();
-      renameSync(reservation, held);
-      try {
-        expect(() =>
-          control.verifyPublishedConfigurationSettlementReservation(f.dm, peer, f.input),
-        ).toThrow();
-      } finally {
-        renameSync(held, reservation);
-      }
-      expect(() =>
-        control.publishedConfigurationSettlementReservationState({} as never, f.dm),
-      ).toThrow();
-      expect(await f.sql`SELECT id FROM data_manager.jobs WHERE id=${f.child.executionId}`).toEqual(
-        [],
-      );
-      expect(
-        existsSync(
-          join(
-            f.root,
-            "control-private/data-manager/configuration-maintenance",
-            `${f.input.maintenanceId}.json`,
-          ),
-        ),
-      ).toBe(false);
-    } finally {
-      await f.close();
-    }
-  },
-);
-it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
-  "retains a half-written signed guard before insert and blocks a racing real admission on another connection",
+  "blocks a racing real admission while the fence insert is in flight and keeps the unknown leaf held",
   async () => {
     const f = await ownedFenceFixture();
     let release = () => {},
@@ -1477,7 +1383,7 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
         const result = await f.sql.begin(async (tx) => ({
           value: await run({
             unsafe: async (query, parameters) => {
-              if (query.startsWith("INSERT INTO data_manager.jobs")) {
+              if (query.startsWith("INSERT INTO data_manager.configuration_fence")) {
                 pause();
                 await held;
                 throw Error("Synthetic process crash before guard insert");
@@ -1514,19 +1420,9 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
       release();
       await rejected;
       const restarted = createDataConfigurationMaintenance(f.sql, f.dm);
-      await expect(restarted.startup()).rejects.toThrow(/Half-written/);
-      await expect(restarted.withAdmission(async () => undefined)).rejects.toThrow(
-        "configuration_maintenance_busy",
-      );
-      expect(
-        existsSync(
-          join(
-            f.root,
-            "control-private/data-manager/configuration-maintenance",
-            `${f.input.maintenanceId}.json`,
-          ),
-        ),
-      ).toBe(true);
+      await restarted.startup();
+      expect(await f.sql`SELECT * FROM data_manager.configuration_fence`).toEqual([]);
+      // The begun leaf has no recorded outcome, so the agent's root stays held.
       expect(control.inspectArtifactTargetLeaseChildSettlement(f.lease, f.child)).toBeNull();
       await expect(control.releaseArtifactTargetLease(f.lease)).rejects.toThrow();
     } finally {
@@ -1551,14 +1447,7 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
     try {
       await fence.startup();
       await fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion], "ops-agent");
-      const mirror = join(
-          f.root,
-          "control-private/data-manager/configuration-maintenance",
-          `${f.input.maintenanceId}.json`,
-        ),
-        original = readFileSync(mirror),
-        before =
-          await f.sql`SELECT metadata,ownership_version FROM data_manager.jobs WHERE id=${f.child.executionId}`;
+      const before = await f.sql`SELECT * FROM data_manager.configuration_fence`;
       const now = Date.now(),
         deadline = now + 30000,
         operation = { kind: "data.link" as const },
@@ -1653,10 +1542,7 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
         ).rejects.toMatchObject({ statusCode: 403 });
         expect(await f.sql`SELECT id FROM data_manager.jobs WHERE execution_version=2`).toEqual([]);
       }
-      expect(readFileSync(mirror)).toEqual(original);
-      expect(
-        await f.sql`SELECT metadata,ownership_version FROM data_manager.jobs WHERE id=${f.child.executionId}`,
-      ).toEqual(before);
+      expect(await f.sql`SELECT * FROM data_manager.configuration_fence`).toEqual(before);
       await expect(
         fence.withAdmission(async () => {
           throw Error("No data effects may run");

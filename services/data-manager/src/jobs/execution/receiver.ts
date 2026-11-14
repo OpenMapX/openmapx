@@ -145,7 +145,8 @@ export function createDataExecutionReceiver(deps: {
     prepareFence: (input, headers, transportPrincipal) =>
       configurationFence.prepare(input, headers, transportPrincipal),
     inspectFence: (id, headers) => configurationFence.inspect(id, headers),
-    settleFence: (input, headers) => configurationFence.settle(input, headers),
+    settleFence: (input, headers, transportPrincipal) =>
+      configurationFence.settle(input, headers, transportPrincipal),
     subscribe: deps.dispatcher.subscribe,
     legacyResult: deps.dispatcher.legacyResult,
   };
