@@ -15,7 +15,7 @@
  * job and operation states over public or contract routes, CLI exit codes and
  * messages, the Docker trace, and the API's configuration inspect route. */
 import { spawn, spawnSync } from "node:child_process";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import {
   appendFileSync,
@@ -115,15 +115,42 @@ function realDocker(): string | undefined {
   return undefined;
 }
 
-async function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
+/** Whether a listener could bind the port on the loopback address now. */
+async function portFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
     const server = createServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      server.close(() => resolve(typeof address === "object" && address ? address.port : 0));
-    });
+    server.once("error", () => resolve(false));
+    server.listen(port, "127.0.0.1", () => server.close(() => resolve(true)));
   });
+}
+
+/** The first port of the kernel's ephemeral range, which outgoing connections
+ * and listeners on port 0 draw from. */
+function ephemeralPortStart(): number {
+  try {
+    const start = Number(
+      readFileSync("/proc/sys/net/ipv4/ip_local_port_range", "utf8").split(/\s+/)[0],
+    );
+    if (Number.isInteger(start) && start > 2048) return start;
+  } catch {}
+  return 32768;
+}
+
+const portsGiven = new Set<number>();
+
+/** A port for a role, below the ephemeral range. The roles bind theirs minutes
+ * after the host is created, and meanwhile the driver's own connections,
+ * proxies and engine take ephemeral ports; one of them must not take a role's. */
+async function rolePort(): Promise<number> {
+  const end = ephemeralPortStart();
+  const start = Math.max(1024, end - 12_000);
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const port = randomInt(start, end);
+    if (portsGiven.has(port) || !(await portFree(port))) continue;
+    portsGiven.add(port);
+    return port;
+  }
+  throw new Error(`No free port between ${start} and ${end}`);
 }
 
 function secret(): string {
@@ -325,9 +352,9 @@ export class CrashHost {
     const root = mkdtempSync(join(tmpdir(), "openmapx-crash-"));
     chmodSync(root, 0o755);
     const host = new CrashHost(root, {
-      api: await freePort(),
-      agent: await freePort(),
-      dm: await freePort(),
+      api: await rolePort(),
+      agent: await rolePort(),
+      dm: await rolePort(),
     });
     try {
       await host.provision(options);
@@ -776,6 +803,13 @@ export class CrashHost {
 
   private async startRoleProcess(role: Role, container: ContainerRecord) {
     await this.stopRoleProcess(role);
+    // A role started again must not race its predecessor's socket.
+    const port = this.ports[role];
+    await waitFor(async () => ((await portFree(port)) ? true : undefined), {
+      timeoutMs: 30_000,
+      what: `${role}'s port ${port} to be free`,
+      intervalMs: 200,
+    });
     const command = this.roleCommand(role);
     const launched = launchContained({
       name: `${role}-${Date.now()}`,
