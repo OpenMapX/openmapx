@@ -40,6 +40,42 @@ export async function acquireReleaseStoreLockBriefly(store: string) {
   }
 }
 
+/** How long the helper waits for one recreated service's healthcheck. */
+const APPLIED_HEALTH_WAIT_MS = 300_000;
+
+/** Waits while Docker reports a recreated container's healthcheck as
+ * `starting`, until it passes or fails, or until the wait or the helper's
+ * deadline ends. It decides nothing: the readiness check that follows still
+ * refuses a container that is not healthy, as before. */
+export async function awaitAppliedContainerHealth(options: {
+  containerId: string;
+  execFile: NonNullable<DockerRuntimeOptions["execFile"]>;
+  signal: AbortSignal;
+  deadlineAt: number;
+  pollMs?: number;
+}) {
+  const until = Math.min(options.deadlineAt, Date.now() + APPLIED_HEALTH_WAIT_MS),
+    pollMs = options.pollMs ?? 2_000;
+  for (;;) {
+    options.signal.throwIfAborted();
+    const { stdout } = await options.execFile(
+      "docker",
+      [
+        "container",
+        "inspect",
+        "--format",
+        "{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}",
+        options.containerId,
+      ],
+      { signal: options.signal, timeout: 15_000, maxBuffer: 4096 },
+    );
+    if (stdout.trim() !== "starting" || Date.now() >= until) return;
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(pollMs, Math.max(1, until - Date.now()))),
+    );
+  }
+}
+
 export async function inspectMaintenanceDockerRuntime(options: {
   stack: services.StackPaths;
   execFile: NonNullable<DockerRuntimeOptions["execFile"]>;
@@ -322,7 +358,7 @@ export async function inspectMaintenanceDockerRuntime(options: {
           !spec.healthcheck.disable &&
           observed.State.Health?.Status !== "healthy")
       )
-        throw Error("Original applied container not ready");
+        throw Error(`Original applied container not ready: ${id}`);
       checks.push({
         serviceId: id,
         ordinal: null,

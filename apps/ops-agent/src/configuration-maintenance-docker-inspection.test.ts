@@ -6,6 +6,7 @@ import { services } from "@openmapx/core/server";
 import { afterEach, expect, it } from "vitest";
 import {
   acquireReleaseStoreLockBriefly,
+  awaitAppliedContainerHealth,
   inspectMaintenanceDockerRuntime,
 } from "./configuration-maintenance-docker-inspection";
 import type { ConfigurationMaintenanceOwnerRecord } from "./configuration-maintenance-store";
@@ -239,4 +240,67 @@ it("still refuses the release store lock while another holder keeps it", async (
   } finally {
     rmSync(store, { recursive: true, force: true });
   }
+});
+
+it("refuses an applied container whose healthcheck has not passed, naming its service", async () => {
+  const { inspect, observed } = fixture(1, 0, 0);
+  Object.assign(observed.State, { Health: { Status: "starting" } });
+  await expect(inspect()).rejects.toThrow("Original applied container not ready: app-api");
+});
+
+it("waits for a recreated container's healthcheck before it is checked", async () => {
+  const answers = ["starting", "starting", "healthy"];
+  const asked: (readonly string[])[] = [];
+  await awaitAppliedContainerHealth({
+    containerId: "1".repeat(64),
+    deadlineAt: Date.now() + 60_000,
+    pollMs: 1,
+    signal: new AbortController().signal,
+    execFile: async (_file, args) => {
+      asked.push(args);
+      return { stdout: `${answers.shift() ?? "healthy"}\n`, stderr: "" };
+    },
+  });
+  expect(asked).toHaveLength(3);
+  expect(asked[0]).toEqual([
+    "container",
+    "inspect",
+    "--format",
+    "{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}",
+    "1".repeat(64),
+  ]);
+});
+
+it("stops waiting at once for a container without a healthcheck or one already unhealthy", async () => {
+  for (const status of ["none", "unhealthy", "healthy"]) {
+    let calls = 0;
+    await awaitAppliedContainerHealth({
+      containerId: "1".repeat(64),
+      deadlineAt: Date.now() + 60_000,
+      pollMs: 1,
+      signal: new AbortController().signal,
+      execFile: async () => {
+        calls++;
+        return { stdout: status, stderr: "" };
+      },
+    });
+    expect(calls, status).toBe(1);
+  }
+});
+
+it("stops waiting at its deadline and leaves the refusal to the readiness check", async () => {
+  let calls = 0;
+  const started = Date.now();
+  await awaitAppliedContainerHealth({
+    containerId: "1".repeat(64),
+    deadlineAt: Date.now() + 50,
+    pollMs: 5,
+    signal: new AbortController().signal,
+    execFile: async () => {
+      calls++;
+      return { stdout: "starting", stderr: "" };
+    },
+  });
+  expect(calls).toBeGreaterThan(1);
+  expect(Date.now() - started).toBeLessThan(5_000);
 });

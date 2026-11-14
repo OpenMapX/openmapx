@@ -40,7 +40,10 @@ import {
   configurationHandoffChildState,
   waitForConfigurationHandoffPreparation,
 } from "./configuration-handoff-control";
-import { inspectMaintenanceDockerRuntime } from "./configuration-maintenance-docker-inspection";
+import {
+  awaitAppliedContainerHealth,
+  inspectMaintenanceDockerRuntime,
+} from "./configuration-maintenance-docker-inspection";
 import { readCheckedConfigurationRelease } from "./configuration-release";
 import { inspectConfigurationReleaseImages } from "./configuration-release-images";
 import { type DockerRuntimeOptions, runContainedProcess } from "./docker-runtime";
@@ -433,6 +436,18 @@ export async function runConfigurationHandoffApplication(input: {
         timeout: Math.max(1, intent.helper.deadlineAt - Date.now()),
         maxBuffer: 1024 * 1024,
       });
+      // A recreated service with a healthcheck reports `starting` at first;
+      // the readiness check below refuses it until it is healthy.
+      const applied = (await owned.inspectOwnedServices(signal)).find(
+        (value) => value.serviceId === id,
+      );
+      if (applied)
+        await awaitAppliedContainerHealth({
+          containerId: applied.containerId,
+          execFile,
+          signal,
+          deadlineAt: intent.helper.deadlineAt,
+        });
       const containers = await owned.inspectOwnedServices(signal),
         inspection = await inspectMaintenanceDockerRuntime({
           stack,
