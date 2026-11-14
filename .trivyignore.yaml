@@ -1,6 +1,7 @@
 vulnerabilities:
   # The fixed Soup Sieve releases (3.0.2 and 4.0) require Python 3.11.5 or
-  # newer, while the transitous-runner image runs Debian 12's Python 3.11.2.
+  # newer, while the transitous-runner and data-manager images, which install
+  # the same Transitous requirements, run Debian 12's Python 3.11.2.
   # Only the upstream Transitous catalog scripts load it, through
   # beautifulsoup4, on upstream catalog HTML; no user input reaches a selector.
   # Keep each exception scoped to the installed package and let it expire so a
