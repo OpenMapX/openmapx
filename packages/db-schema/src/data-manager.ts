@@ -61,14 +61,6 @@ export const jobs = dataManager.table(
     uniqueIndex("data_manager_jobs_execution_key_uq")
       .on(table.operationKey)
       .where(sql`${table.operationKey} IS NOT NULL`),
-    uniqueIndex("data_manager_jobs_configuration_maintenance_uq")
-      .on(sql`(${table.metadata}->'configurationMaintenance'->'receipt'->>'maintenanceId')`)
-      .where(sql`${table.kind} = 'configuration-maintenance'`),
-    uniqueIndex("data_manager_jobs_configuration_guard_uq")
-      .on(table.kind)
-      .where(
-        sql`${table.kind} = 'configuration-maintenance' AND coalesce(${table.metadata}->'configurationMaintenance'->>'guardState','recovery_required') <> 'settled'`,
-      ),
     check(
       "data_manager_jobs_execution_bounds",
       sql`${table.ownershipVersion} >= 0 AND jsonb_typeof(${table.executionChildren}) = 'array' AND jsonb_array_length(${table.executionChildren}) <= 32 AND octet_length(${table.executionChildren}::text) <= 131072`,
@@ -77,9 +69,40 @@ export const jobs = dataManager.table(
       "data_manager_jobs_execution_shape",
       sql`${table.executionVersion} IS NULL OR coalesce((${table.executionVersion} = 2 AND ${table.operationKey} ~ '^opk1_[A-Za-z0-9_-]{16,64}$' AND ${table.operationFingerprint} ~ '^[a-f0-9]{64}$' AND ${table.executionFingerprint} ~ '^[a-f0-9]{64}$' AND ${table.admittedAt} >= 0 AND ${table.deadlineAt} > ${table.admittedAt} AND ${table.executionInput} IS NOT NULL AND ${table.executionState} IS NOT NULL), false)`,
     ),
+  ],
+);
+
+/**
+ * The configuration fence: while a row is `prepared`, a configuration
+ * maintenance owns the data plane and no data job is admitted. The agent
+ * prepares and settles it; both calls are idempotent on the same body.
+ */
+export const configurationFence = dataManager.table(
+  "configuration_fence",
+  {
+    maintenanceId: uuid("maintenance_id").primaryKey(),
+    /** The agent's prepare execution id and operation key. */
+    fenceId: uuid("fence_id").notNull().unique(),
+    operationKey: text("operation_key").notNull().unique(),
+    candidateId: uuid("candidate_id").notNull(),
+    planDigest: text("plan_digest").notNull(),
+    ownerCertificateDigest: text("owner_certificate_digest").notNull(),
+    /** The prepare request body, compared on a repeated prepare. */
+    input: jsonb("input").notNull(),
+    /** "prepared" | "settled" */
+    state: text("state").notNull(),
+    /** "applied" | "unused" | "contained", set by the settle. */
+    outcome: text("outcome"),
+    preparedAt: timestamp("prepared_at", { withTimezone: true }).notNull().defaultNow(),
+    settledAt: timestamp("settled_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("configuration_fence_one_prepared_uq")
+      .on(table.state)
+      .where(sql`${table.state} = 'prepared'`),
     check(
-      "data_manager_jobs_configuration_guard_shape",
-      sql`${table.kind} <> 'configuration-maintenance' OR coalesce((jsonb_typeof(${table.metadata}->'configurationMaintenance') = 'object' AND ${table.metadata}->'configurationMaintenance'->>'version' = '1' AND ${table.metadata}->'configurationMaintenance'->>'guardState' IN ('preparing','prepared','settling','settled','recovery_required') AND jsonb_typeof(${table.metadata}->'configurationMaintenance'->'receipt') = 'object' AND octet_length((${table.metadata}->'configurationMaintenance')::text) <= 65536), false)`,
+      "configuration_fence_state",
+      sql`(${table.state} = 'prepared' AND ${table.outcome} IS NULL AND ${table.settledAt} IS NULL) OR (${table.state} = 'settled' AND ${table.outcome} IN ('applied','unused','contained') AND ${table.settledAt} IS NOT NULL)`,
     ),
   ],
 );
