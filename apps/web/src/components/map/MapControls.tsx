@@ -178,6 +178,14 @@ export function MapControls() {
             outlineColor: "primary.main",
             outlineOffset: -3,
           },
+          // While navigating the few remaining controls are larger, round
+          // buttons a driver can hit at a glance.
+          ...(navigating && {
+            gap: 1.5,
+            "& .MuiPaper-root": { borderRadius: "50%" },
+            "&& .MuiIconButton-root": { width: 48, height: 48, borderRadius: "50%" },
+            "& .MuiIconButton-root svg": { fontSize: 24 },
+          }),
         }}
       >
         <Box

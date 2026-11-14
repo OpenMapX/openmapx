@@ -495,7 +495,6 @@ export function RouteCard({
               <Button
                 size="small"
                 variant="contained"
-                disableElevation
                 startIcon={<NavigationIcon />}
                 // A second tap while the shell is still preparing would start a
                 // second session nobody is watching.

@@ -62,7 +62,6 @@ export function AccountAvatarButton({ size = 36, sx, labelledSignIn = false }: P
     labelledSignIn && !user ? (
       <Button
         variant="contained"
-        disableElevation
         onClick={handleAvatarClick}
         sx={{ height: size, borderRadius: size / 2, px: 2.5, opacity: pending ? 0.5 : 1 }}
       >

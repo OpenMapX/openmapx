@@ -62,6 +62,8 @@ export const appTheme = createTheme({
       defaultProps: { elevation: 0 },
     },
     MuiButton: {
+      // Flat filled buttons; elevation belongs to floating surfaces, not actions.
+      defaultProps: { disableElevation: true },
       styleOverrides: {
         // Pill-shaped buttons; fields and cards keep the shared corner radius.
         root: { borderRadius: 999 },

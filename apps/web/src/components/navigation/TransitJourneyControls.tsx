@@ -232,7 +232,6 @@ export function TransitJourneyControls({
         {!arrived && (riding || canBoard) && (
           <Button
             variant={!walking && (!riding || alightNudge) ? "contained" : "outlined"}
-            disableElevation
             startIcon={riding ? <DirectionsWalkIcon /> : <DirectionsTransitIcon />}
             loading={pending}
             disabled={pending || !supported}
@@ -246,7 +245,6 @@ export function TransitJourneyControls({
           <Button
             startIcon={<AltRouteIcon />}
             variant={recovering ? "contained" : "text"}
-            disableElevation
             aria-label={t("findTransitAlternatives")}
             onClick={onAlternatives}
             disabled={pending}
