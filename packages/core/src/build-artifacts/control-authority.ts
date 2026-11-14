@@ -1060,6 +1060,7 @@ export function retainAdmittedControlExecution(
       throw Error("Conflicting retained execution identity");
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+    assertControlStorageAvailable(installation);
     writePrivateRecord(state, "executions", name, receipt, true);
     writePrivateRecord(state, "effects", name, null, true);
     writePrivateRecord(state, "effect-started", name, null, true);

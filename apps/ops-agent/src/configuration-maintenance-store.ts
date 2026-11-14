@@ -62,7 +62,6 @@ import {
   adoptArtifactTargetLease,
   assertArtifactTargetLeaseExecution,
   assertConfigurationMaintenanceRootClosure,
-  assertControlStorageAvailable,
   assertFixedConfigurationMaintenancePlan,
   bindControlChildPhase,
   buildFixedConfigurationMaintenancePlan,
@@ -4101,7 +4100,6 @@ export async function prepareConfigurationMaintenanceAdmission(
     ...(release ? { release } : {}),
     ...(coordinatorImage ? { coordinatorImage } : {}),
   });
-  assertControlStorageAvailable(input.installation);
   if (
     (await source.loadAuthority()).revisionId !== authority.revisionId ||
     services.currentConfigurationGeneration(source.infraDir) !==
