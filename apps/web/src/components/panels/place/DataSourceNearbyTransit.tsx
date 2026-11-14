@@ -29,7 +29,7 @@ import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { usePlaceEnrichment } from "@/hooks/usePlaceEnrichment";
 import { useMap } from "@/integration-api/map/MapContext";
-import { BRAND } from "@/integration-api/runtime/theme";
+import { PanelSectionTitle } from "../shared/PanelSectionTitle";
 
 const DEFAULT_RADIUS_M = 500;
 const MAX_STOPS = 6;
@@ -140,16 +140,9 @@ export function DataSourceNearbyTransit({
     <Box sx={{ px: 2, py: 1 }}>
       <Divider sx={{ mb: 1.5 }} />
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 1 }}>
-        <DirectionsTransitIcon sx={{ fontSize: 20, color: BRAND }} />
-        <Typography
-          variant="subtitle2"
-          sx={{
-            fontWeight: 600,
-            color: "text.primary",
-          }}
-        >
+        <PanelSectionTitle icon={<DirectionsTransitIcon />} gutterBottom={false}>
           {t("dataSources.sectionNearbyTransit")}
-        </Typography>
+        </PanelSectionTitle>
       </Box>
       <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25 }}>
         {rows.map(({ stop, distance }) => {

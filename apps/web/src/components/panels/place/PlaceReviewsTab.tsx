@@ -162,11 +162,10 @@ export function PlaceReviewsTab({ place }: Props) {
       />
       {/* Write / edit CTA — logged-out users get the same button but it
           opens the auth dialog instead of starting the gated review flow. */}
-      <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
+      <Box sx={{ display: "flex", justifyContent: "center", mb: 2 }}>
         <Button
-          variant="contained"
+          variant="tonal"
           disabled={isLoading}
-          color="primary"
           startIcon={ownReview ? <EditIcon /> : <RateReviewIcon />}
           onClick={() => {
             if (!isSignedIn) {
@@ -175,7 +174,6 @@ export function PlaceReviewsTab({ place }: Props) {
             }
             gatedAction(ownReview ? { kind: "edit", review: ownReview } : { kind: "write" });
           }}
-          sx={{ flex: 1, textTransform: "none" }}
         >
           {ownReview ? t("editReview") : t("writeReview")}
         </Button>

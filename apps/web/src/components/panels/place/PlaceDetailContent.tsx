@@ -359,11 +359,17 @@ function PlaceDetailContentInner({ place, isLoading, onClose }: Props) {
   // target for `noWrap`'s ellipsis to kick in at peek.
   const titleProps = {
     ref: titleRef,
+    component: "h1" as const,
     variant: "h6" as const,
-    gutterBottom: true,
     noWrap: detent === "peek",
   };
-  const titleSx = { fontWeight: 600, pr: onClose && !showHeaderWeather ? 4 : 0 };
+  const titleSx = {
+    fontSize: 22,
+    fontWeight: 500,
+    lineHeight: 1.3,
+    mb: 0.5,
+    pr: onClose && !showHeaderWeather ? 4 : 0,
+  };
 
   return (
     <AttributionDetailsGroup placement="footer">

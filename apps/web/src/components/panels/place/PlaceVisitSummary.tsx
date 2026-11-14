@@ -1,7 +1,6 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
 import { openingHoursTone } from "@/lib/openingHoursTone";
@@ -21,83 +20,56 @@ export function PlaceVisitSummary({
 
   if (!place.category && !status) return null;
 
-  if (compact) {
-    const category = place.category?.toLowerCase() === "poi" ? "POI" : place.category;
-    const detail = status ? hoursText.detail(status) : "";
-    return (
-      <Typography
-        data-testid="place-peek-summary"
-        variant="body2"
-        noWrap
-        color="text.secondary"
-        sx={{ display: "flex", columnGap: "0.25em", minWidth: 0, maxWidth: "100%" }}
-      >
-        {category && (
-          <Box component="span" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
-            {category}
-          </Box>
-        )}
-        {category && status && (
-          <Box component="span" sx={{ flexShrink: 0 }}>
-            {" "}
-            ·{" "}
-          </Box>
-        )}
-        {status && (
-          <Box
-            component="span"
-            sx={{
-              minWidth: 0,
-              flexShrink: 0,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              color: openingHoursTone(status),
-              fontWeight: status.isUnknown ? 500 : 700,
-            }}
-          >
-            {hoursText.state(status)}
-          </Box>
-        )}
-        {detail && (
-          <Box component="span" sx={{ flexShrink: 0 }}>
-            {" "}
-            ·{" "}
-          </Box>
-        )}
-        {detail && (
-          <Box component="span" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
-            {detail}
-          </Box>
-        )}
-      </Typography>
-    );
-  }
-
+  const category = place.category?.toLowerCase() === "poi" ? "POI" : place.category;
+  const detail = status ? hoursText.detail(status) : "";
+  // One line: category · hours state · detail. The compact (peek) form keeps it
+  // to a single line and truncates; the full form wraps.
+  const part = { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" } as const;
+  const separator = (
+    <Box component="span" sx={{ flexShrink: 0 }}>
+      {" "}
+      ·{" "}
+    </Box>
+  );
   return (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, overflow: "hidden" }}>
-      {place.category && (
-        <Chip
-          label={place.category.toLowerCase() === "poi" ? "POI" : place.category}
-          size="small"
-          sx={{
-            borderRadius: "4px",
-            fontSize: 12,
-            minWidth: 0,
-            maxWidth: "100%",
-            "& .MuiChip-label": { overflow: "hidden", textOverflow: "ellipsis" },
-          }}
-        />
+    <Typography
+      data-testid={compact ? "place-peek-summary" : "place-visit-summary"}
+      variant="body2"
+      noWrap={compact}
+      color="text.secondary"
+      sx={{
+        display: "flex",
+        flexWrap: compact ? "nowrap" : "wrap",
+        columnGap: "0.25em",
+        minWidth: 0,
+        maxWidth: "100%",
+      }}
+    >
+      {category && (
+        <Box component="span" sx={part}>
+          {category}
+        </Box>
       )}
+      {category && status && separator}
       {status && (
-        <Typography
-          variant="body2"
+        <Box
           component="span"
-          noWrap
-          sx={{ color: openingHoursTone(status), fontWeight: 700, flexShrink: 0 }}
+          sx={{
+            ...part,
+            flexShrink: 0,
+            color: openingHoursTone(status),
+            fontWeight: status.isUnknown ? 500 : 600,
+          }}
         >
           {hoursText.state(status)}
-        </Typography>
+        </Box>
       )}
-    </Box>
+      {detail && separator}
+      {detail && (
+        <Box component="span" sx={part}>
+          {detail}
+        </Box>
+      )}
+    </Typography>
   );
 }
