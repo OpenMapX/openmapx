@@ -18,8 +18,9 @@
 # The agent then inspects the candidate's image exactly as the update does, and
 # the case fails at once, with the CLI's error, if it cannot.
 #
-# Each later release is the previous release's images with one more label (a new digest each), plus a release manifest. Every case
-# starts from a fresh installation of N, selected through the release channel
+# Each later release is the previous release's images with one more label (a
+# new digest each), plus a release manifest. Every case starts from a fresh
+# installation of N, selected through the release channel
 # exactly as an operator's installation is:
 #
 #   happy      an authenticated `system update` to N+1 succeeds, every role runs
@@ -402,7 +403,9 @@ case_registry() {
 case_unhealthy() {
   step "Case: the new API image is unhealthy"
   install_release_one
-  EXTRA_api='HEALTHCHECK --interval=5s --timeout=3s --retries=2 CMD ["false"]' publish_release
+  # The service's own healthcheck (HTTP on the API's port) overrides any image
+  # HEALTHCHECK, so N+1's API starts a process that never answers it.
+  EXTRA_api=$'ENTRYPOINT ["node", "-e", "setInterval(() => {}, 1e9)"]\nCMD []' publish_release
   read -r release digest < <(check_release)
   local agent_before
   agent_before="$(image_id_of ops-agent)"
