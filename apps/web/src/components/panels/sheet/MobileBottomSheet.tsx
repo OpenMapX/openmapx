@@ -120,6 +120,9 @@ interface Props {
   ariaLabel?: string;
   /** Applied to the scrollable content, not the host. */
   contentSx?: SxProps<Theme>;
+  /** Optional pinned chrome. Descendant registrations remain the default. */
+  header?: ReactNode;
+  footer?: ReactNode;
   children: ReactNode;
 }
 
@@ -136,6 +139,8 @@ export function MobileBottomSheet({
   obscured,
   ariaLabel,
   contentSx,
+  header,
+  footer,
   children,
 }: Props) {
   const theme = useTheme();
@@ -253,11 +258,22 @@ export function MobileBottomSheet({
 
   const settleControlledTransition = useCallback(() => {
     const requested = pendingDetentRef.current;
+    // Chrome can dispatch scrollend before the library's IntersectionObserver
+    // reports the full snap. Reaching the physical end is not an interruption.
+    // Keep the request until that observer catches up, rather than reversing it.
+    if (
+      requested === "full" &&
+      host &&
+      host.clientHeight > 0 &&
+      host.scrollHeight > host.clientHeight &&
+      host.scrollHeight - host.clientHeight - host.scrollTop <= 2
+    )
+      return;
     pendingDetentRef.current = null;
     if (requested != null && requested !== detentRef.current) {
       onDetentChangeRef.current?.(detentRef.current);
     }
-  }, []);
+  }, [host]);
 
   // The React wrapper only spreads props onto the custom element; it wires no
   // events, so the listener has to be attached imperatively.
@@ -611,12 +627,12 @@ export function MobileBottomSheet({
                 style={{ "--snap": slot.snap } as CSSProperties}
               />
             ))}
-            {chromeHeader ? <div slot="header">{chromeHeader}</div> : null}
+            {(header ?? chromeHeader) ? <div slot="header">{header ?? chromeHeader}</div> : null}
             <Box ref={setPeekEl} sx={contentSx}>
               {children}
             </Box>
             <div slot="footer">
-              {chromeFooter}
+              {footer ?? chromeFooter}
               <div ref={setFooterOutlet} data-map-footer-outlet={id} />
             </div>
           </Box>

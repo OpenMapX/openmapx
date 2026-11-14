@@ -1,38 +1,19 @@
 "use client";
-
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Typography from "@mui/material/Typography";
 import { type TransitProgress, useNavigationStore } from "@openmapx/core";
 import { changedFromPlatform, collectActiveAlerts } from "@openmapx/core/navigation";
 import type { ServiceAlert, TripItinerary } from "@openmapx/mobility-core/transit";
-import { useLocale, useTranslations } from "next-intl";
-import { useEffect } from "react";
-import { AlertCard } from "@/components/panels/transit/AlertCard";
-import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
-import { useNavigationVoice } from "@/lib/navigation/useNavigationVoice";
+import { useTranslations } from "next-intl";
+import { SEVERITY_CONFIG } from "@/components/panels/transit/AlertCard";
 
-/** Cap so a noisy feed can't push the banner over the map. */
-const MAX_CARDS = 2;
-
-/**
- * Surfaces service alerts/disruptions for the rest of the trip during transit
- * navigation — reusing the planning {@link AlertCard} — plus a prominent
- * cancellation card when a current/upcoming ride is cancelled. Shows the most
- * severe alerts first, capped. Renders nothing when there's nothing to say.
- */
-export function TransitAlertBanner({
-  itinerary,
-  currentLegIndex,
-  transitProgress,
-}: {
-  itinerary: TripItinerary;
-  currentLegIndex: number;
-  transitProgress: TransitProgress | null;
-}) {
-  const { browserAuthority } = useMobileRuntime();
-  const t = useTranslations("navigation");
-  const locale = useLocale();
-  const speak = useNavigationVoice(locale);
-  const voiceEnabled = useNavigationStore((s) => s.voiceEnabled);
+export function collectTransitNavigationAlerts(
+  itinerary: TripItinerary,
+  currentLegIndex: number,
+  transitProgress: TransitProgress | null,
+  t: (key: string, values?: Record<string, string | number>) => string,
+): ServiceAlert[] {
   const legs = itinerary.legs;
   const alerts = collectActiveAlerts(legs, currentLegIndex);
 
@@ -78,33 +59,84 @@ export function TransitAlertBanner({
 
   cards.push(...alerts);
 
-  const shown = cards.slice(0, MAX_CARDS);
+  return cards;
+}
 
-  // Announce the most urgent alert once (keyed on its id), using the feed's
-  // TTS-optimized text when present. Effect must precede the early return.
-  const topAlert = shown[0];
-  const topId = topAlert?.id;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: announce once per distinct alert.
-  useEffect(() => {
-    if (browserAuthority && topAlert && voiceEnabled) speak(topAlert.ttsTitle ?? topAlert.title);
-  }, [topId]);
-
-  if (shown.length === 0) return null;
-
+/** Flat, readable service notices inside the journey sheet. */
+export function TransitAlertBanner({
+  itinerary,
+  currentLegIndex,
+  transitProgress,
+  expanded = true,
+  onExpand,
+}: {
+  itinerary: TripItinerary;
+  currentLegIndex: number;
+  transitProgress: TransitProgress | null;
+  expanded?: boolean;
+  onExpand?: () => void;
+}) {
+  const t = useTranslations("navigation");
+  const voiceEnabled = useNavigationStore((s) => s.voiceEnabled);
+  const cards = collectTransitNavigationAlerts(itinerary, currentLegIndex, transitProgress, t);
+  const shown = expanded ? cards : cards.slice(0, 1);
+  if (!shown.length) return null;
   return (
-    <Box
-      sx={{
-        pointerEvents: "auto",
-        display: "flex",
-        flexDirection: "column",
-        gap: 0.5,
-        borderRadius: 2,
-        overflow: "hidden",
-      }}
-    >
-      {shown.map((alert) => (
-        <AlertCard key={alert.id} alert={alert} expandable={false} />
-      ))}
+    <Box role={!voiceEnabled && !expanded ? "status" : undefined}>
+      {shown.map((alert) => {
+        const config = SEVERITY_CONFIG[alert.severity];
+        const Icon = config.icon;
+        return (
+          <Box
+            key={alert.id}
+            sx={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 1,
+              px: 2,
+              py: 1,
+              bgcolor: config.bg,
+              color: config.color,
+              borderBottom: "1px solid",
+              borderColor: "divider",
+            }}
+          >
+            <Icon sx={{ fontSize: 20, mt: 0.1, flexShrink: 0 }} />
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 600,
+                  overflowWrap: "anywhere",
+                  ...(!expanded
+                    ? {
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                      }
+                    : {}),
+                }}
+              >
+                {alert.title}
+              </Typography>
+              {expanded && alert.description && (
+                <Typography
+                  variant="caption"
+                  sx={{ display: "block", mt: 0.5, color: "text.primary" }}
+                >
+                  {alert.description}
+                </Typography>
+              )}
+            </Box>
+          </Box>
+        );
+      })}
+      {!expanded && cards.length > 1 && (
+        <Button onClick={onExpand} sx={{ minHeight: 44, mx: 2, borderRadius: "999px" }}>
+          {t("moreTransitAlerts", { count: cards.length - 1 })}
+        </Button>
+      )}
     </Box>
   );
 }

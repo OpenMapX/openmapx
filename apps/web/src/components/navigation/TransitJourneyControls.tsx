@@ -2,17 +2,19 @@
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import DirectionsTransitIcon from "@mui/icons-material/DirectionsTransit";
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
+import ErrorOutlinedIcon from "@mui/icons-material/ErrorOutlined";
 import GpsNotFixedIcon from "@mui/icons-material/GpsNotFixed";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import UndoIcon from "@mui/icons-material/Undo";
 import UpdateDisabledIcon from "@mui/icons-material/UpdateDisabled";
-import Alert from "@mui/material/Alert";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import { haversineDistance, useNavigationStore } from "@openmapx/core";
 import { selectLegPlatform } from "@openmapx/core/navigation";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { DepartureTime } from "@/components/panels/transit/DepartureTime";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
@@ -20,11 +22,51 @@ import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { useTransitRiderAction } from "@/lib/mobile/useTransitRiderAction";
 import { legTransitTime, transitDelayMinutes } from "@/lib/transitTime";
 import { useNow } from "@/lib/useNow";
+
+function RiderNotice({
+  children,
+  severity,
+}: {
+  children: ReactNode;
+  severity: "info" | "warning" | "error";
+}) {
+  const Icon =
+    severity === "error"
+      ? ErrorOutlinedIcon
+      : severity === "warning"
+        ? WarningAmberIcon
+        : InfoOutlinedIcon;
+  return (
+    <Box
+      role="status"
+      sx={{
+        display: "flex",
+        gap: 0.75,
+        alignItems: "flex-start",
+        py: 0.75,
+        borderTop: "1px solid",
+        borderColor: "divider",
+      }}
+    >
+      <Icon
+        sx={{
+          fontSize: 18,
+          flexShrink: 0,
+          mt: 0.15,
+          color: severity === "error" ? "error.main" : "text.secondary",
+        }}
+      />
+      <Typography variant="caption">{children}</Typography>
+    </Box>
+  );
+}
 export function TransitJourneyControls({
   onAlternatives,
   walkRepair,
+  showRidingDestination = true,
 }: {
   onAlternatives: () => void;
+  showRidingDestination?: boolean;
   walkRepair?: "idle" | "repairing" | "unavailable" | "accessibility";
 }) {
   const t = useTranslations("navigation");
@@ -96,39 +138,50 @@ export function TransitJourneyControls({
       component="section"
       aria-label={t("selectedConnection")}
       aria-busy={pending}
-      sx={{ px: 2, pt: 1.5, pb: 1.5, display: "flex", flexDirection: "column", gap: 1.25 }}
+      sx={{ px: 2, pt: 0.5, pb: 1.5, display: "flex", flexDirection: "column", gap: 1.5 }}
     >
       {!riding && canBoard && (
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5 }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="caption" color="text.secondary">
-              {t("selectedConnection")}
-            </Typography>
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, lineHeight: 1.4 }}>
+            <Typography
+              variant="subtitle1"
+              sx={{ fontWeight: 600, lineHeight: 1.4, overflowWrap: "anywhere" }}
+            >
               {ride.from.name}
             </Typography>
-            {walking && (
-              <Box
-                sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 0.5 }}
-              >
+            <Box
+              sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 0.5 }}
+            >
+              {ride.route ? (
                 <RouteBadge
-                  shortName={ride.route?.shortName ?? ""}
+                  shortName={ride.route.shortName || ride.route.longName || ""}
                   mode={ride.mode}
-                  color={ride.route?.color}
-                  textColor={ride.route?.textColor}
+                  color={ride.route.color}
+                  textColor={ride.route.textColor}
                 />
-                <Typography variant="body2" sx={{ minWidth: 0, overflowWrap: "anywhere" }}>
-                  {ride.headsign ?? ride.to.name}
+              ) : (
+                <DirectionsTransitIcon sx={{ fontSize: 20 }} />
+              )}
+              <Typography variant="body2" sx={{ minWidth: 0, overflowWrap: "anywhere" }}>
+                {ride.headsign ?? ride.to.name}
+              </Typography>
+              {boarding?.code ? (
+                <PlatformBadge
+                  code={boarding.code}
+                  scheduledCode={boarding.scheduledCode}
+                  changed={boarding.changed}
+                />
+              ) : ride.from.stopCode ? (
+                <Typography variant="caption" color="text.secondary">
+                  {t("stopCode", { code: ride.from.stopCode })}
                 </Typography>
-                {boarding?.code && (
-                  <PlatformBadge
-                    code={boarding.code}
-                    scheduledCode={boarding.scheduledCode}
-                    changed={boarding.changed}
-                  />
-                )}
-              </Box>
-            )}
+              ) : null}
+              {ride.from.level != null && ride.from.level !== 0 && (
+                <Typography variant="caption" color="text.secondary">
+                  {t("levelShort", { level: ride.from.level })}
+                </Typography>
+              )}
+            </Box>
           </Box>
           <Box sx={{ textAlign: "right", flexShrink: 0, maxWidth: 120 }}>
             {Number.isFinite(departure) ? (
@@ -152,7 +205,7 @@ export function TransitJourneyControls({
           </Box>
         </Box>
       )}
-      {riding && !alightNudge && (
+      {riding && showRidingDestination && !alightNudge && (
         <Typography variant="body2" sx={{ fontWeight: 500 }}>
           {t("alightAt", { place: leg.to.name })}
         </Typography>
@@ -172,7 +225,7 @@ export function TransitJourneyControls({
           {t("boardPrompt")}
         </Typography>
       )}
-      {alightNudge && (
+      {alightNudge && showRidingDestination && (
         <Typography variant="caption" color="text.secondary">
           {t("alightPrompt")}
         </Typography>
@@ -194,16 +247,8 @@ export function TransitJourneyControls({
           </Typography>
         </Box>
       )}
-      {p?.offPlan && (
-        <Alert severity="warning" sx={{ py: 0 }}>
-          {t("alightedElsewhere")}
-        </Alert>
-      )}
-      {!supported && (
-        <Alert severity="info" sx={{ py: 0 }}>
-          {t("transitActionsUpdateRequired")}
-        </Alert>
-      )}
+      {p?.offPlan && <RiderNotice severity="warning">{t("alightedElsewhere")}</RiderNotice>}
+      {!supported && <RiderNotice severity="info">{t("transitActionsUpdateRequired")}</RiderNotice>}
       {liveUnavailable && (
         <Box
           sx={{ display: "flex", gap: 0.75, alignItems: "flex-start", color: "text.secondary" }}
@@ -213,17 +258,13 @@ export function TransitJourneyControls({
           <Typography variant="caption">{t("transitLiveUpdatesUnavailable")}</Typography>
         </Box>
       )}
-      {failed && (
-        <Alert severity="error" sx={{ py: 0 }}>
-          {t("transitActionFailed")}
-        </Alert>
-      )}
+      {failed && <RiderNotice severity="error">{t("transitActionFailed")}</RiderNotice>}
       {riding && itinerary.legs[current + 1]?.interlineWithPrevious && (
         <Button
           variant="outlined"
           disabled={pending || !supported}
           onClick={() => void run("continue")}
-          sx={{ minHeight: 44 }}
+          sx={{ minHeight: 44, borderRadius: "999px" }}
         >
           {t("stayOnBoard")}
         </Button>
@@ -237,7 +278,14 @@ export function TransitJourneyControls({
             loading={pending}
             disabled={pending || !supported}
             onClick={() => void run(riding ? "alight" : "board")}
-            sx={{ minHeight: 44, flex: "1 1 180px", minWidth: 0, lineHeight: 1.4, py: 1 }}
+            sx={{
+              minHeight: 44,
+              flex: "1 1 140px",
+              minWidth: 0,
+              lineHeight: 1.4,
+              py: 1,
+              borderRadius: "999px",
+            }}
           >
             {t(riding ? "confirmAlight" : "confirmBoard")}
           </Button>
@@ -252,9 +300,9 @@ export function TransitJourneyControls({
             disabled={pending}
             sx={{
               minHeight: 44,
-              flex: "1 0 auto",
-              flexShrink: 0,
+              flex: "0 0 auto",
               px: 1.25,
+              borderRadius: "999px",
             }}
           >
             {t("transitAlternativesShort")}
@@ -265,7 +313,7 @@ export function TransitJourneyControls({
             startIcon={<UndoIcon />}
             disabled={pending || !supported}
             onClick={() => void run("undo")}
-            sx={{ minHeight: 44, flex: 1 }}
+            sx={{ minHeight: 44, flex: 1, borderRadius: "999px" }}
           >
             {t("undoTransitAction")}
           </Button>
@@ -277,7 +325,7 @@ export function TransitJourneyControls({
           size="small"
           disabled={pending || !supported}
           onClick={() => void run("undo")}
-          sx={{ alignSelf: "flex-end", minHeight: 44, mt: -0.75, mb: -0.75 }}
+          sx={{ alignSelf: "flex-end", minHeight: 44, mt: -0.75, mb: -0.75, borderRadius: "999px" }}
         >
           {t("undoTransitAction")}
         </Button>

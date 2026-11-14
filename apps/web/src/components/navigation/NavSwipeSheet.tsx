@@ -2,40 +2,56 @@
 
 import Box from "@mui/material/Box";
 import { useTranslations } from "next-intl";
-import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { DetentConfig } from "@/components/panels/sheet/detents";
 import { MobileBottomSheet } from "@/components/panels/sheet/MobileBottomSheet";
-import { useWindowHeight } from "@/lib/mobilePanelHeight";
+import { useMapFooterBox } from "@/lib/mapFooterCenter";
+import { getMapObstructionInsets, subscribeMapObstructions } from "@/lib/mapObstructions";
+import { DEFAULT_FOLLOW_CAP_FRACTION, useWindowHeight } from "@/lib/mobilePanelHeight";
+
+/** Predict docking from the summary alone, not from the credits' current parent. */
+export function navigationPeekFooterHeight(
+  summaryPx: number,
+  viewportPx: number,
+  topClearance: number,
+  footerPx: number,
+): number {
+  if (viewportPx <= 0 || footerPx <= 0) return 0;
+  const followPx = Math.min(summaryPx, viewportPx * DEFAULT_FOLLOW_CAP_FRACTION);
+  const mapBudget = Math.max(0, viewportPx - topClearance - followPx);
+  return summaryPx > followPx + 1 || footerPx > mapBudget + 1 ? footerPx : 0;
+}
+
+const getTopInset = () => getMapObstructionInsets().top;
+const getServerTopInset = () => 0;
+
+export function navigationUsesCompactPeek(
+  requiredPx: number,
+  viewportPx: number,
+  topClearance: number,
+  safeTopPx: number,
+): boolean {
+  return (
+    viewportPx > 0 && requiredPx > Math.max(0, viewportPx - Math.max(topClearance, safeTopPx) - 8)
+  );
+}
 
 // Cap the expanded sheet so the maneuver banner up top stays visible.
 const MAX_HEIGHT_FRACTION = 0.9;
 
 /**
- * The navigation sheet: a bottom-anchored card with a pinned header (the summary
- * bar) that swipes up to reveal the menu below it. A thin adapter over the
- * shared mobile bottom sheet, configured with a two-snap detent (no mid) so the
- * two rest positions are exactly the header and the header-plus-menu, rather
- * than viewport fractions like every other sheet in the app. Controlled:
- * `expanded` drives which of the two snaps the sheet rests at, and a drag or a
- * tap on the handle reports back through `onExpandedChange`.
- *
- * The header and menu are measured with a `ResizeObserver` and fed to the
- * shared sheet as pixel peek/max-height detents, rather than using its
- * `content-height` mode — that mode is mutually exclusive with the
- * `nested-scroll` + `expand-to-scroll` mode this sheet (like every other one)
- * runs in. The measurement is seeded synchronously in a layout effect, so the
- * first paint already has the right numbers instead of momentarily collapsing
- * to a 0px sheet.
- *
- * Safe-area handling is a dedicated spacer that swaps position instead of
- * padding baked onto either measured box: it sits right after the header while
- * collapsed (so the summary bar lifts above the home indicator with nothing
- * else visible below it) and right after the menu while expanded (matching the
- * generic sheet's convention of landing the inset once, after the content).
- * Moving it keeps `headerPx`/`menuPx` themselves invariant across `expanded`
- * toggling — the inset is composed into the detent lengths as a CSS `calc()`
- * against `--omx-safe-bottom` instead, so there is nothing to re-measure or
- * resnap to when the swap happens.
+ * Two measured detents: summary and full journey/menu. Optional toolbar/footer
+ * use the shared sheet's pinned slots, leaving the entire body scrollable on
+ * short screens. Without pinned chrome, driving keeps its existing handle and
+ * safe-area spacer. Measurements exclude the safe inset, which is counted once
+ * in the detent and supplied by the shared footer when it owns map attribution.
  */
 export function NavSwipeSheet({
   expanded,
@@ -43,6 +59,8 @@ export function NavSwipeSheet({
   header,
   children,
   topClearance = 0,
+  toolbar,
+  footer,
 }: {
   expanded: boolean;
   onExpandedChange: (next: boolean) => void;
@@ -50,6 +68,9 @@ export function NavSwipeSheet({
   children: ReactNode;
   /** Keep expanded content below the measured instruction banner. */
   topClearance?: number;
+  /** Transit supplies compact pinned chrome. Driving retains the default handle. */
+  toolbar?: ReactNode;
+  footer?: ReactNode;
 }) {
   const t = useTranslations("navigation");
   const headerRef = useRef<HTMLDivElement | null>(null);
@@ -57,6 +78,33 @@ export function NavSwipeSheet({
   const [headerPx, setHeaderPx] = useState(0);
   const [menuPx, setMenuPx] = useState(0);
   const viewportH = useWindowHeight();
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const footerRef = useRef<HTMLDivElement | null>(null);
+  const [chromePx, setChromePx] = useState(0);
+  const safeBottomRef = useRef<HTMLDivElement | null>(null);
+  const [safeBottomPx, setSafeBottomPx] = useState(0);
+  const [safeTopPx, setSafeTopPx] = useState(0);
+  const mapTop = useSyncExternalStore(subscribeMapObstructions, getTopInset, getServerTopInset);
+  const mapFooter = useMapFooterBox();
+  const pinned = toolbar != null || footer != null;
+  useLayoutEffect(() => {
+    if (!pinned) return;
+    const measure = () => {
+      setChromePx((toolbarRef.current?.offsetHeight ?? 0) + (footerRef.current?.offsetHeight ?? 0));
+      const probe = safeBottomRef.current;
+      if (probe) {
+        const style = getComputedStyle(probe);
+        setSafeBottomPx(Number.parseFloat(style.height) || 0);
+        setSafeTopPx(Number.parseFloat(style.paddingTop) || 0);
+      }
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    if (toolbarRef.current) observer.observe(toolbarRef.current);
+    if (footerRef.current) observer.observe(footerRef.current);
+    if (safeBottomRef.current) observer.observe(safeBottomRef.current);
+    return () => observer.disconnect();
+  }, [pinned]);
 
   // Layout effects so the first paint already has the right numbers: an
   // ordinary effect only fills these in after the browser has already painted
@@ -83,22 +131,44 @@ export function NavSwipeSheet({
 
   // `headerPx` and `menuPx` are pure content measurements — no safe-area inset
   // baked in — so this stays invariant across `expanded` toggling too.
-  const cap = viewportH > 0 ? viewportH * MAX_HEIGHT_FRACTION : headerPx + menuPx;
-  const expandedContentPx = Math.min(headerPx + menuPx, cap);
+  const cap =
+    viewportH > 0 ? viewportH * (pinned ? 1 : MAX_HEIGHT_FRACTION) : headerPx + menuPx + chromePx;
+  const peekFooterPx = pinned
+    ? navigationPeekFooterHeight(
+        headerPx + chromePx + safeBottomPx,
+        viewportH,
+        Math.max(topClearance, mapTop),
+        mapFooter.height,
+      )
+    : 0;
+  // When the whole summary cannot fit, use a compact route-strip peek.
+  // Expanding restores the summary in the scrollable body, so its actions stay reachable.
+  const compactPeek =
+    pinned &&
+    navigationUsesCompactPeek(
+      headerPx + chromePx + safeBottomPx + peekFooterPx,
+      viewportH,
+      topClearance,
+      safeTopPx,
+    );
+  const peekContentPx = compactPeek ? chromePx : headerPx + chromePx + peekFooterPx;
+  const expandedContentPx = Math.min(
+    headerPx + menuPx + chromePx + (pinned ? mapFooter.height : 0),
+    cap,
+  );
 
   // No mid: the shared sheet then falls back to the default follow-cap
   // fraction for the map chrome above it, instead of tracking this sheet.
-  const detents = useMemo<DetentConfig>(
-    () => ({
-      peek: `calc(${Math.round(headerPx)}px + var(--omx-safe-bottom))`,
-      maxHeight:
-        topClearance > 0
-          ? `min(calc(${Math.round(expandedContentPx)}px + var(--omx-safe-bottom)), calc(100dvh - ${Math.ceil(topClearance + 8)}px))`
-          : `calc(${Math.round(expandedContentPx)}px + var(--omx-safe-bottom))`,
-      initial: "peek",
-    }),
-    [headerPx, expandedContentPx, topClearance],
-  );
+  const detents = useMemo<DetentConfig>(() => {
+    const maxHeight =
+      topClearance > 0
+        ? `min(calc(${Math.round(expandedContentPx)}px + var(--omx-safe-bottom)), calc(100dvh - ${Math.ceil(topClearance + 8)}px))`
+        : pinned
+          ? `min(calc(${Math.round(expandedContentPx)}px + var(--omx-safe-bottom)), calc(100dvh - var(--omx-safe-top) - 8px))`
+          : `calc(${Math.round(expandedContentPx)}px + var(--omx-safe-bottom))`;
+    const peek = `calc(${Math.round(peekContentPx)}px + var(--omx-safe-bottom))`;
+    return { peek, maxHeight, initial: "peek" };
+  }, [peekContentPx, expandedContentPx, topClearance, pinned]);
 
   return (
     <MobileBottomSheet
@@ -110,44 +180,76 @@ export function NavSwipeSheet({
       onDetentChange={(next) => onExpandedChange(next === "full")}
       hideHandle
       disableContentSafeArea
+      header={toolbar != null ? <Box ref={toolbarRef}>{toolbar}</Box> : undefined}
+      footer={footer != null ? <Box ref={footerRef}>{footer}</Box> : undefined}
+      contentSx={pinned ? { scrollPaddingTop: 8, scrollPaddingBottom: 8 } : undefined}
     >
-      <Box ref={headerRef}>
+      {pinned && (
         <Box
-          component="button"
-          type="button"
-          onClick={() => onExpandedChange(!expanded)}
-          aria-label={t("resizePanel")}
-          aria-expanded={expanded}
+          ref={safeBottomRef}
+          aria-hidden
           sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: "100%",
-            minHeight: 44,
-            border: 0,
-            bgcolor: "transparent",
-            color: "inherit",
-            cursor: "pointer",
-            p: 0,
-            "&:focus-visible": {
-              outline: "2px solid",
-              outlineColor: "primary.main",
-              outlineOffset: -2,
-              borderRadius: 2,
-            },
+            position: "absolute",
+            width: 0,
+            height: "var(--omx-safe-bottom)",
+            paddingTop: "var(--omx-safe-top)",
+            boxSizing: "content-box",
+            pointerEvents: "none",
+            visibility: "hidden",
           }}
-        >
-          <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: "action.disabled" }} />
+        />
+      )}
+      <Box
+        aria-hidden={compactPeek && !expanded ? true : undefined}
+        inert={compactPeek && !expanded ? true : undefined}
+        sx={compactPeek && !expanded ? { maxHeight: 0, overflow: "hidden" } : undefined}
+      >
+        <Box ref={headerRef}>
+          {!pinned && (
+            <Box
+              component="button"
+              type="button"
+              onClick={() => onExpandedChange(!expanded)}
+              aria-label={t("resizePanel")}
+              aria-expanded={expanded}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "100%",
+                minHeight: 44,
+                border: 0,
+                bgcolor: "transparent",
+                color: "inherit",
+                cursor: "pointer",
+                p: 0,
+                "&:focus-visible": {
+                  outline: "2px solid",
+                  outlineColor: "primary.main",
+                  outlineOffset: -2,
+                  borderRadius: 2,
+                },
+              }}
+            >
+              <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: "action.disabled" }} />
+            </Box>
+          )}
+          {header}
         </Box>
-        {header}
       </Box>
-      {!expanded && (
+      {!pinned && !expanded && (
         <Box
           sx={{ height: "var(--omx-safe-bottom)", "[data-map-footer-owned] &": { height: 0 } }}
         />
       )}
-      <Box ref={menuRef}>{children}</Box>
-      {expanded && (
+      <Box
+        ref={menuRef}
+        aria-hidden={pinned && !expanded ? true : undefined}
+        inert={pinned && !expanded ? true : undefined}
+      >
+        {children}
+      </Box>
+      {!pinned && expanded && (
         <Box
           sx={{ height: "var(--omx-safe-bottom)", "[data-map-footer-owned] &": { height: 0 } }}
         />
