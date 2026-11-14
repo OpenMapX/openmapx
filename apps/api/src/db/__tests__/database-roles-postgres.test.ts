@@ -298,90 +298,47 @@ integration("code planted for another role", () => {
       ],
       sql,
     );
+  /** The database container as the CLI's restore reaches it, with the last
+   * dump as the archive; the restore below is the CLI's own code. */
+  const container: services.RestoreContainer = {
+    async run(command, stdin, catalogsOnly) {
+      const env = catalogsOnly ? ["env", `PGOPTIONS=${services.SUPERUSER_PGOPTIONS}`] : [];
+      let argv = [...env, ...command];
+      if (stdin) {
+        const preamble = "preamble" in stdin;
+        await db.copyContentToContainer([
+          { content: preamble ? stdin.preamble : stdin.input, target: "/tmp/restore-stdin" },
+        ]);
+        argv = [
+          "sh",
+          "-c",
+          preamble
+            ? 'cat /tmp/restore-stdin /tmp/openmapx.dump | "$@"'
+            : '"$@" < /tmp/restore-stdin',
+          "restore",
+          ...argv,
+        ];
+      }
+      const result = await db.exec(argv);
+      return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr };
+    },
+  };
   /** Dumps the live database through a pipe and plans its restore, as the CLI does first. */
   const dumpAndPlan = async () => {
     await run(
       ["sh", "-c", "pg_dump --format=custom -U postgres openmapx | cat > /tmp/openmapx.dump"],
       "dump",
     );
-    const list = (section: string) =>
-      run(["sh", "-c", `pg_restore --list --section=${section} < /tmp/openmapx.dump`], section);
-    const roleList = await query(services.RESTORE_ROLES_QUERY);
-    const listings = {
-      preData: await list("pre-data"),
-      data: await list("data"),
-      postData: await list("post-data"),
-    };
-    return () => services.planOwnerRestore(listings, roleList);
+    return services.planArchiveRestore(container, "postgres");
   };
-  /**
-   * The CLI's restore of a planned dump, step for step: create a scratch
-   * database with the live one's owner and grants, run each pass into it,
-   * then swap it in and drop the replaced database; a failed pass drops the
-   * scratch database instead. Returns the output of a failed pass.
-   */
-  const restoreLikeTheCli = async (passes: ReturnType<typeof services.planOwnerRestore>) => {
-    const { scratch, previous } = services.restoreDatabaseNames("openmapx");
-    const settings = await query(services.databaseSettingsQuery("openmapx", scratch));
-    expect(settings).toContain(`GRANT CREATE ON DATABASE ${scratch} TO openmapx_data_manager;`);
-    await run(["dropdb", "-U", "postgres", "--if-exists", scratch], "drop a leftover scratch");
-    await run(["createdb", "-U", "postgres", scratch], "createdb");
-    await db.copyContentToContainer([{ content: settings, target: "/tmp/settings.sql" }]);
-    await run(
-      [
-        ...superuserPsql,
-        "-v",
-        "ON_ERROR_STOP=1",
-        "--single-transaction",
-        "-U",
-        "postgres",
-        "-d",
-        "postgres",
-        "-f",
-        "/tmp/settings.sql",
-      ],
-      "settings apply",
-    );
-    const version = await db.exec(["psql", "-U", "postgres", "-tAc", "SHOW server_version_num"]);
-    const serverVersion = Number(version.output.trim());
-    for (const [index, pass] of passes.entries()) {
-      const preamble = `/tmp/preamble-${index}`;
-      await db.copyContentToContainer([
-        { content: services.restorePassPreamble(pass), target: preamble },
-      ]);
-      const result = await db.exec([
-        "sh",
-        "-c",
-        'cat "$0" /tmp/openmapx.dump | "$@"',
-        preamble,
-        ...services.restorePassCommand(pass, "postgres", scratch, serverVersion),
-      ]);
-      if (result.exitCode !== 0) {
-        await run(["dropdb", "-U", "postgres", "--if-exists", scratch], "drop the scratch");
-        return result.output;
-      }
-    }
-    await db.copyContentToContainer([
-      { content: services.databaseSwapSql("openmapx"), target: "/tmp/swap.sql" },
-    ]);
-    await run(
-      [
-        ...superuserPsql,
-        "-v",
-        "ON_ERROR_STOP=1",
-        "--single-transaction",
-        "-U",
-        "postgres",
-        "-d",
-        "postgres",
-        "-f",
-        "/tmp/swap.sql",
-      ],
-      "swap",
-    );
-    await run(["dropdb", "-U", "postgres", "--if-exists", previous], "drop the replaced database");
-    return undefined;
-  };
+  /** The CLI's restore of a planned dump into a scratch database swapped in on
+   * success; resolves whether the replaced database had to be kept. */
+  const restoreAsTheCli = (passes: services.RestorePass[]) =>
+    services.restoreIntoScratchDatabase(container, {
+      superuser: "postgres",
+      db: "openmapx",
+      load: (scratch) => services.restoreArchivePasses(container, passes, "postgres", scratch),
+    });
   /** The live platform database still holds the API's accounts and no restore leftovers. */
   const liveDatabaseIntact = async () => {
     expect(
@@ -683,25 +640,30 @@ integration("code planted for another role", () => {
       await openConditions.end();
     }
     await close();
-    expect(await restoreLikeTheCli((await dumpAndPlan())())).toContain(
+    await expect(restoreAsTheCli(await dumpAndPlan())).rejects.toThrow(
       "permission denied to set session authorization",
     );
     await liveDatabaseIntact();
     open();
     await roles.api.unsafe("DROP TABLE public.openmapx_granted");
-    // Data-manager makes its own sessions read-only, which the restore's
-    // sessions as data-manager pin back.
+    // Data-manager makes its own sessions read-only: its restore pass fails,
+    // and the live database stays as it was.
     await roles.dataManager.unsafe(
       "ALTER ROLE openmapx_data_manager SET default_transaction_read_only = on",
     );
     await close();
-    expect(await restoreLikeTheCli((await dumpAndPlan())())).toBeUndefined();
+    await expect(restoreAsTheCli(await dumpAndPlan())).rejects.toThrow("read-only transaction");
     await liveDatabaseIntact();
-    // PostGIS resets each role's own settings when it starts.
+    // PostGIS resets each role's own settings when it starts, and the restore
+    // then succeeds.
     await restart();
     expect(await roles.dataManager.unsafe("SHOW default_transaction_read_only")).toEqual([
       { default_transaction_read_only: "off" },
     ]);
+    await close();
+    await expect(restoreAsTheCli(await dumpAndPlan())).resolves.toBe(false);
+    await liveDatabaseIntact();
+    open();
   }, 240_000);
 
   it("restores a backup with every owner, grant and guard intact", async () => {
@@ -757,7 +719,9 @@ integration("code planted for another role", () => {
       ],
       "plant an object of a role that cannot log in",
     );
-    expect(await dumpAndPlan()).toThrow("openmapx_nologin_owner, a role that cannot log in");
+    await expect(dumpAndPlan()).rejects.toThrow(
+      "openmapx_nologin_owner, a role that cannot log in",
+    );
     await run(
       [
         ...superuserPsql,
@@ -777,7 +741,7 @@ integration("code planted for another role", () => {
     // roles, read the live database's owner and grants, recreate the
     // database, give them back, then restore each entry in a session of its
     // owner.
-    const passes = (await dumpAndPlan())();
+    const passes = await dumpAndPlan();
     // Each role restores its own entries; the superuser's event triggers
     // come last.
     const sessions = new Set(
@@ -798,7 +762,7 @@ integration("code planted for another role", () => {
       "pre-data superuser",
     ]);
     expect(passes.at(-1)).toMatchObject({ role: null, section: "post-data" });
-    expect(await restoreLikeTheCli(passes)).toBeUndefined();
+    await expect(restoreAsTheCli(passes)).resolves.toBe(false);
     open();
     // Every row came back, and loading them ran no role's code as the superuser.
     expect(

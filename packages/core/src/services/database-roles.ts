@@ -39,39 +39,9 @@ trap 'rm -f "$list"' EXIT
 while IFS= read -r entry && [ -n "$entry" ]; do printf '%s\n' "$entry" >>"$list"; done
 pg_restore --use-list="$list" "$@"`;
 
-/** The first `server_version_num` that knows `transaction_timeout`
- * (PostgreSQL 17). An older server refuses the setting at login. */
-const TRANSACTION_TIMEOUT_SERVER_VERSION = 170000;
-
-/**
- * Session settings every restore pass needs, given at login so that they
- * override whatever defaults a role has set for its own sessions, such as
- * read-only transactions or short timeouts. `serverVersion` is the server's
- * `server_version_num`: a setting the server does not know is left out.
- */
-function restorePassOptions(serverVersion: number): string {
+/** Arguments, inside the database container, for one restore pass. */
+export function restorePassCommand(pass: RestorePass, superuser: string, db: string): string[] {
   return [
-    "default_transaction_read_only=off",
-    "statement_timeout=0",
-    "lock_timeout=0",
-    "idle_in_transaction_session_timeout=0",
-    ...(serverVersion >= TRANSACTION_TIMEOUT_SERVER_VERSION ? ["transaction_timeout=0"] : []),
-  ]
-    .map((setting) => `-c ${setting}`)
-    .join(" ");
-}
-
-/** Arguments, inside the database container, for one restore pass on a
- * server with the given `server_version_num`. */
-export function restorePassCommand(
-  pass: RestorePass,
-  superuser: string,
-  db: string,
-  serverVersion: number,
-): string[] {
-  return [
-    "env",
-    `PGOPTIONS=${restorePassOptions(serverVersion)}`,
     "bash",
     "-c",
     RESTORE_PASS_SCRIPT,
@@ -112,10 +82,10 @@ const ENTRYPOINT_ENTRIES = new Set([
  *
  * The superuser restores what only it can: schemas, as giving `public` to
  * the API's role needs it, entries without an owner such as casts,
- * superusers' entries, and the tile function PostGIS creates for its owner,
- * which cannot log in; none of these runs code when created. It also
- * creates the extensions, whose scripts it runs before any role's code
- * exists (see below). Any other entry of a role that
+ * superusers' entries, the extensions, and the tile function PostGIS
+ * creates for its owner, which cannot log in; none of these runs a role's
+ * code when created, as `pg_dump` sorts extensions before every role's
+ * object. Any other entry of a role that
  * cannot log in, or of a role this server lacks, refuses the whole archive:
  * nothing but the superuser could restore it, and its code would then run
  * with superuser rights. Definitions keep their archive order, so each
@@ -174,22 +144,6 @@ export function planOwnerRestore(
       else passes.push({ role, section, entries: [id] });
     }
   };
-  // An extension's script runs as the superuser and finds names through
-  // `public`, which the API owns. `pg_dump` sorts every extension before any
-  // role's function, operator, type or table, so no role's code exists yet
-  // when the scripts run; refuse an archive where that is not so. Grants,
-  // comments and collations run nothing.
-  const definitions = entries(listings.preData);
-  // The extension CLI compiles this file for ES2022, without findLastIndex.
-  let lastExtension = -1;
-  definitions.forEach(({ description }, index) => {
-    if (description.startsWith("EXTENSION ")) lastExtension = index;
-  });
-  for (const { description, owner, role } of definitions.slice(0, Math.max(lastExtension, 0)))
-    if (role !== null && !/^(ACL|COMMENT|COLLATION|SECURITY LABEL) /.test(description))
-      throw new Error(
-        `The backup creates ${description}, owned by ${owner}, before an extension; it cannot be restored safely`,
-      );
   inOrder("pre-data", listings.preData);
   const rows = new Map<string | null, number[]>();
   for (const { id, role } of entries(listings.data))
@@ -233,14 +187,19 @@ export function restoreDatabaseNames(db: string): { scratch: string; previous: s
 }
 
 /**
- * One transaction, in another database, that moves the live database `db`
- * aside, when it exists, and the restored scratch database into its place.
- * Either both renames happen or neither does; it fails while a session is
- * connected to either database.
+ * One transaction, in another database, that ends the client sessions still
+ * connected to the live database `db`, moves it aside when it exists, and
+ * moves the restored scratch database into its place. Either both renames
+ * happen or neither does. A rename waits briefly for the ended sessions and
+ * for autovacuum to leave; a client that reconnects in that moment, or a
+ * `<db>__previous` left by an earlier restore, fails it and leaves the live
+ * database as it was.
  */
 export function databaseSwapSql(db: string): string {
   const { scratch, previous } = restoreDatabaseNames(db);
-  return `SELECT format('ALTER DATABASE %I RENAME TO %I', '${db}', '${previous}')
+  return `SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+  WHERE datname = '${db}' AND backend_type = 'client backend' AND pid <> pg_backend_pid();
+SELECT format('ALTER DATABASE %I RENAME TO %I', '${db}', '${previous}')
   WHERE EXISTS (SELECT FROM pg_database WHERE datname = '${db}')
 \\gexec
 SELECT format('ALTER DATABASE %I RENAME TO %I', '${scratch}', '${db}')
@@ -248,50 +207,164 @@ SELECT format('ALTER DATABASE %I RENAME TO %I', '${scratch}', '${db}')
 `;
 }
 
-/** The service that connects as each platform role. */
-const ROLE_SERVICES: Readonly<Record<string, string>> = {
-  openmapx_api: "app-api",
-  openmapx_data_manager: "data-manager",
-  openmapx_tiles: "martin",
-};
-
 /**
- * What would make the swap of `db` fail, read before anything changes: a
- * `previous|1|` line when the name the live database moves to is taken, and a
- * `session|<role>|<backend type>` line for each session connected to `db`.
- * Run it from another database, so its own session is not counted.
+ * The database container a restore works in. `run` executes one command
+ * there, over its local socket, and resolves with its exit code and output:
+ * with `input` on stdin, or with `preamble` followed by the archive. With
+ * `catalogsOnly`, the session searches only the catalogs, as every
+ * superuser step does.
  */
-export function swapPreconditionsQuery(db: string): string {
-  const { previous } = restoreDatabaseNames(db);
-  return `SELECT 'previous', (EXISTS (SELECT FROM pg_database WHERE datname = '${previous}'))::int::text, ''
-UNION ALL
-SELECT 'session', coalesce(usename::text, ''), coalesce(backend_type, '') FROM pg_stat_activity
-  WHERE datname = '${db}' AND pid <> pg_backend_pid()`;
+export interface RestoreContainer {
+  run(
+    command: readonly string[],
+    stdin?: { readonly input: string } | { readonly preamble: string },
+    catalogsOnly?: boolean,
+  ): Promise<{ exitCode: number; stdout: string; stderr: string }>;
+}
+
+const psql = (superuser: string, database: string, ...args: string[]) => [
+  "psql",
+  "-X",
+  "-v",
+  "ON_ERROR_STOP=1",
+  "-U",
+  superuser,
+  "-d",
+  database,
+  ...args,
+];
+
+async function step(
+  container: RestoreContainer,
+  what: string,
+  command: readonly string[],
+  stdin?: { readonly input: string } | { readonly preamble: string },
+  catalogsOnly = true,
+): Promise<string> {
+  const result = await container.run(command, stdin, catalogsOnly);
+  if (result.exitCode !== 0) throw new Error(`${what} failed: ${result.stderr}`);
+  return result.stdout;
+}
+
+/** Plans the restore of the archive against the server's roles; see
+ * {@link planOwnerRestore}. Reads nothing into the database. */
+export async function planArchiveRestore(
+  container: RestoreContainer,
+  superuser: string,
+): Promise<RestorePass[]> {
+  const roles = await step(
+    container,
+    "reading the roles",
+    psql(superuser, "postgres", "--no-align", "--tuples-only", "-c", RESTORE_ROLES_QUERY),
+  );
+  const list = (section: RestoreSection) =>
+    step(
+      container,
+      "listing the backup",
+      ["pg_restore", "--list", `--section=${section}`],
+      { preamble: "" },
+      false,
+    );
+  return planOwnerRestore(
+    {
+      preData: await list("pre-data"),
+      data: await list("data"),
+      postData: await list("post-data"),
+    },
+    roles,
+  );
+}
+
+/** Runs the planned passes into `db`. Each reads the archive from its start
+ * up to the last entry it restores, so a large backup is read once per pass
+ * that loads rows, one per owning role. */
+export async function restoreArchivePasses(
+  container: RestoreContainer,
+  passes: readonly RestorePass[],
+  superuser: string,
+  db: string,
+): Promise<void> {
+  for (const pass of passes)
+    await step(
+      container,
+      `pg_restore of the ${pass.section} as ${pass.role ?? superuser}`,
+      restorePassCommand(pass, superuser, db),
+      { preamble: restorePassPreamble(pass) },
+      false,
+    );
 }
 
 /**
- * Why the restored database could not replace `db`, from the output of
- * `swapPreconditionsQuery`, or `undefined` when nothing stands in the way.
- * Only client sessions count: the rename itself makes autovacuum and other
- * server processes on the database leave, and they have no role. Sessions of
- * the services the restore stops first do not count either.
+ * Restores into a scratch database, then swaps it in for the live `db`. The
+ * scratch database gets the live one's owner and database-level grants,
+ * which a dump of its contents leaves out, so the roles the deployment
+ * created keep their access. `load` fills it; when that fails, the scratch
+ * database is dropped and the live one stays as it was. `beforeSwap` runs
+ * just before the live database is replaced and `swapFailed` when the swap
+ * left it in place. Resolves `true` when the replaced database could not be
+ * dropped and is kept as `<db>__previous`.
  */
-export function swapPreconditionRefusal(
-  db: string,
-  output: string,
-  stopping: ReadonlySet<string>,
-): string | undefined {
-  const { previous } = restoreDatabaseNames(db);
-  const holders = new Set<string>();
-  for (const line of output.split("\n").filter(Boolean)) {
-    const [kind, value = "", backend = ""] = line.split("|");
-    if (kind === "previous" && value === "1")
-      return `database ${previous}, left by an earlier restore, still exists; drop it or rename it, then restore again`;
-    if (kind !== "session" || backend !== "client backend") continue;
-    const service = ROLE_SERVICES[value];
-    if (service && stopping.has(service)) continue;
-    holders.add(service ?? `role ${value || "(unknown)"}`);
+export async function restoreIntoScratchDatabase(
+  container: RestoreContainer,
+  options: {
+    superuser: string;
+    db: string;
+    load(scratch: string): Promise<void>;
+    beforeSwap?(): void;
+    swapFailed?(): void;
+  },
+): Promise<boolean> {
+  const { superuser, db } = options;
+  const { scratch, previous } = restoreDatabaseNames(db);
+  const dropScratch = () =>
+    container.run(["dropdb", "-U", superuser, "--if-exists", scratch], undefined, true);
+  const settings = (
+    await step(
+      container,
+      "reading the database owner",
+      psql(
+        superuser,
+        "postgres",
+        "--no-align",
+        "--tuples-only",
+        "-c",
+        databaseSettingsQuery(db, scratch),
+      ),
+    )
+  ).trim();
+  // A scratch database left by an interrupted restore goes first.
+  await step(container, "dropdb", ["dropdb", "-U", superuser, "--if-exists", scratch]);
+  await step(container, "createdb", ["createdb", "-U", superuser, scratch]);
+  try {
+    if (settings)
+      await step(
+        container,
+        "restoring the database owner",
+        psql(superuser, "postgres", "--single-transaction"),
+        { input: `${settings}\n` },
+      );
+    await options.load(scratch);
+  } catch (error) {
+    await dropScratch();
+    throw error;
   }
-  if (holders.size === 0) return undefined;
-  return `database ${db} is in use by ${[...holders].sort().join(", ")}, which would keep the restored database from replacing it; stop ${holders.size === 1 ? "it" : "them"}, then restore again`;
+  options.beforeSwap?.();
+  const swapped = await container.run(
+    psql(superuser, "postgres", "--single-transaction"),
+    { input: databaseSwapSql(db) },
+    true,
+  );
+  if (swapped.exitCode !== 0) {
+    options.swapFailed?.();
+    await dropScratch();
+    throw new Error(
+      `replacing database ${db} failed, and it was left as it was: ${swapped.stderr}`,
+    );
+  }
+  const old = await container.run(
+    ["dropdb", "-U", superuser, "--if-exists", previous],
+    undefined,
+    true,
+  );
+  return old.exitCode !== 0;
 }

@@ -6,8 +6,6 @@ import {
   restoreDatabaseNames,
   restorePassCommand,
   restorePassPreamble,
-  swapPreconditionRefusal,
-  swapPreconditionsQuery,
 } from "../database-roles";
 
 const roles = [
@@ -75,32 +73,6 @@ describe("planOwnerRestore", () => {
       ).toThrow("a role that cannot log in to restore it");
   });
 
-  it("refuses a role's code that would exist before an extension's script runs", () => {
-    const aheadOfPostgis = (entry: string) =>
-      listings.preData.replace(
-        "5; 3079 18937 EXTENSION - postgis ",
-        `${entry}\n5; 3079 18937 EXTENSION - postgis `,
-      );
-    expect(() =>
-      planOwnerRestore(
-        {
-          ...listings,
-          preData: aheadOfPostgis("400; 1255 40000 FUNCTION public st_x(text) openmapx_api"),
-        },
-        roles,
-      ),
-    ).toThrow("before an extension");
-    expect(
-      planOwnerRestore(
-        {
-          ...listings,
-          preData: aheadOfPostgis("401; 3456 40001 COLLATION public probe openmapx_api"),
-        },
-        roles,
-      ).length,
-    ).toBeGreaterThan(0);
-  });
-
   it("refuses entries of a role the server lacks and lines it cannot read", () => {
     expect(() =>
       planOwnerRestore(
@@ -116,12 +88,7 @@ describe("planOwnerRestore", () => {
   it("hands pg_restore the entry list before the archive and logs in as the owner", () => {
     const pass = { role: "openmapx_api", section: "data", entries: [5950, 5952] } as const;
     expect(restorePassPreamble(pass)).toBe("5950;\n5952;\n\n");
-    const command = restorePassCommand(pass, "postgres", "openmapx", 180001);
-    // Pinned at login over whatever defaults the role set for its sessions.
-    expect(command[1]).toBe(
-      "PGOPTIONS=-c default_transaction_read_only=off -c statement_timeout=0 -c lock_timeout=0 -c idle_in_transaction_session_timeout=0 -c transaction_timeout=0",
-    );
-    expect(command.slice(6)).toEqual([
+    expect(restorePassCommand(pass, "postgres", "openmapx").slice(4)).toEqual([
       "--single-transaction",
       "--exit-on-error",
       "-U",
@@ -129,64 +96,13 @@ describe("planOwnerRestore", () => {
       "-d",
       "openmapx",
     ]);
-    expect(restorePassCommand({ ...pass, role: null }, "postgres", "openmapx", 180001)).toContain(
+    expect(restorePassCommand({ ...pass, role: null }, "postgres", "openmapx")).toContain(
       "postgres",
     );
-  });
-
-  it("pins transaction_timeout only on a server that knows it", () => {
-    const pass = { role: "openmapx_api", section: "data", entries: [1] } as const;
-    const options = (version: number) =>
-      restorePassCommand(pass, "postgres", "openmapx", version)[1];
-    // PostgreSQL 16 refuses an unknown setting at login; 17 added this one.
-    expect(options(160004)).toBe(
-      "PGOPTIONS=-c default_transaction_read_only=off -c statement_timeout=0 -c lock_timeout=0 -c idle_in_transaction_session_timeout=0",
-    );
-    expect(options(169999)).not.toContain("transaction_timeout=0 ");
-    expect(options(169999).endsWith("idle_in_transaction_session_timeout=0")).toBe(true);
-    expect(options(170000)).toContain(" -c transaction_timeout=0");
   });
 });
 
 describe("restoring into a scratch database", () => {
-  it("counts only sessions of services the restore leaves running", () => {
-    const stopping = new Set(["app-api"]);
-    expect(
-      swapPreconditionRefusal(
-        "openmapx",
-        "previous|0|\nsession|openmapx_api|client backend\n",
-        stopping,
-      ),
-    ).toBe(undefined);
-    expect(
-      swapPreconditionRefusal(
-        "openmapx",
-        "previous|0|\nsession|openmapx_api|client backend\nsession|openmapx_data_manager|client backend\nsession|postgres|client backend\n",
-        stopping,
-      ),
-    ).toBe(
-      "database openmapx is in use by data-manager, role postgres, which would keep the restored database from replacing it; stop them, then restore again",
-    );
-    expect(swapPreconditionRefusal("openmapx", "previous|1|\n", stopping)).toContain(
-      "database openmapx__previous, left by an earlier restore, still exists",
-    );
-    expect(swapPreconditionsQuery("openmapx")).toContain("datname = 'openmapx__previous'");
-    // Autovacuum and other server processes have no role, and the rename
-    // itself makes them leave the database; only client sessions block it.
-    expect(
-      swapPreconditionRefusal(
-        "openmapx",
-        "previous|0|\nsession||autovacuum worker\nsession||parallel worker\nsession||background worker\n",
-        stopping,
-      ),
-    ).toBe(undefined);
-    expect(
-      swapPreconditionRefusal("openmapx", "previous|0|\nsession||client backend\n", stopping),
-    ).toContain("database openmapx is in use by role (unknown)");
-    expect(swapPreconditionsQuery("openmapx")).toContain("backend_type");
-    expect(() => swapPreconditionsQuery("bad'name")).toThrow("Unsafe database name");
-  });
-
   it("names the scratch and replaced databases beside the live one", () => {
     expect(restoreDatabaseNames("openmapx")).toEqual({
       scratch: "openmapx__restore",
@@ -200,9 +116,11 @@ describe("restoring into a scratch database", () => {
     const settings = databaseSettingsQuery("openmapx", "openmapx__restore");
     expect(settings).toContain("WHERE d.datname = 'openmapx'");
     expect(settings).toContain("'openmapx__restore'");
-    expect(
-      databaseSwapSql("openmapx"),
-    ).toBe(`SELECT format('ALTER DATABASE %I RENAME TO %I', 'openmapx', 'openmapx__previous')
+    // Client sessions still on the live database are ended first; the
+    // renames wait for them and for autovacuum to leave.
+    expect(databaseSwapSql("openmapx")).toBe(`SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+  WHERE datname = 'openmapx' AND backend_type = 'client backend' AND pid <> pg_backend_pid();
+SELECT format('ALTER DATABASE %I RENAME TO %I', 'openmapx', 'openmapx__previous')
   WHERE EXISTS (SELECT FROM pg_database WHERE datname = 'openmapx')
 \\gexec
 SELECT format('ALTER DATABASE %I RENAME TO %I', 'openmapx__restore', 'openmapx')

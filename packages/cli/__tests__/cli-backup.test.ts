@@ -57,13 +57,6 @@ vi.mock("../src/commands/backup-processes", async (original) => ({
 let tmp: string;
 const ERASURE_KEY = Buffer.from("0123456789abcdef0123456789abcdef");
 
-/** Every restore plan reads the server's version; these tests use PostgreSQL 18. */
-function serverVersionReply(command: string, args: readonly string[]) {
-  return command === "docker" && args.includes("SHOW server_version_num")
-    ? Promise.resolve({ exitCode: 0, stdout: "180001\n", stderr: "" })
-    : undefined;
-}
-
 function setupRepo(): void {
   // Workspace marker so findRepoRoot accepts this dir.
   writeFileSync(join(tmp, "pnpm-workspace.yaml"), "packages: []\n");
@@ -1083,8 +1076,6 @@ describe("backup volume modes", () => {
       writeFileSync(join(directory, name), "synthetic archive");
     });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
-      const version = serverVersionReply(command, args);
-      if (version) return version;
       if (command === "gunzip") {
         return Object.assign(Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }), {
           stdout: Readable.from(["dump"]),
@@ -1263,8 +1254,6 @@ describe("backup volume modes", () => {
       "timeline__openmapx-files.tar.gz": "tar",
     });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
-      const version = serverVersionReply(command, args);
-      if (version) return version;
       if (command === "gunzip") {
         return Object.assign(Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }), {
           stdout: Readable.from(["dump"]),
@@ -1304,233 +1293,6 @@ describe("backup volume modes", () => {
     for (const [, args] of apiSessions) expect(args).toContain("-U openmapx_api");
   });
 
-  it("restores into a scratch database with the live owner and grants, then swaps it in", async () => {
-    const dir = writeBackup("owner-restore", {
-      name: "owner-restore",
-      createdAt: new Date().toISOString(),
-      services: [
-        {
-          id: "timeline",
-          version: "1.0.0",
-          volumes: [
-            {
-              name: "openmapx-db",
-              mode: "pg_dump",
-              file: "timeline__openmapx-db.sql.gz",
-              sizeBytes: 0,
-              postgresUser: "postgres",
-              postgresDb: "timeline",
-            },
-          ],
-        },
-      ],
-    });
-    writeBackupFiles(dir, { "timeline__openmapx-db.sql.gz": "dump" });
-    const settings =
-      "ALTER DATABASE timeline OWNER TO timeline_owner;\nGRANT CREATE ON DATABASE timeline TO timeline_writer;";
-    const inputs: Array<{ args: string; input?: unknown }> = [];
-    vi.mocked(execa).mockImplementation(((
-      command: string,
-      args: string[],
-      options?: { input?: unknown },
-    ) => {
-      const version = serverVersionReply(command, args);
-      if (version) return version;
-      if (command === "gunzip") {
-        return Object.assign(Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }), {
-          stdout: Readable.from(["dump"]),
-        });
-      }
-      inputs.push({ args: args.join(" "), input: options?.input });
-      if (command === "docker" && args.some((arg) => arg.includes("pg_stat_activity"))) {
-        // An autovacuum worker on the live database does not hold the swap up.
-        return Promise.resolve({
-          exitCode: 0,
-          stdout: "previous|0|\nsession||autovacuum worker\n",
-          stderr: "",
-        });
-      }
-      if (command === "docker" && args.includes("--tuples-only")) {
-        expect(args.join(" ")).toContain("datname = 'timeline'");
-        expect(args.join(" ")).toContain("'timeline__restore'");
-        return Promise.resolve({ exitCode: 0, stdout: `${settings}\n`, stderr: "" });
-      }
-      if (command === "docker" && args.includes("ps")) {
-        return Promise.resolve({ exitCode: 0, stdout: '{"Service":"timeline"}\n', stderr: "" });
-      }
-      return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
-    }) as never);
-
-    await restoreBackup({ rootDir: tmp, name: "owner-restore", stopRunning: true });
-
-    const preconditions = inputs.findIndex(({ args }) => args.includes("pg_stat_activity"));
-    const read = inputs.findIndex(
-      ({ args }) => args.includes("--tuples-only") && !args.includes("pg_stat_activity"),
-    );
-    const drop = inputs.findIndex(({ args }) =>
-      args.endsWith(" dropdb -U postgres --if-exists timeline__restore"),
-    );
-    // What could block the swap is read while planning, before any change.
-    expect(preconditions).toBeGreaterThanOrEqual(0);
-    expect(preconditions).toBeLessThan(read);
-    const create = inputs.findIndex(({ args }) =>
-      args.endsWith(" createdb -U postgres timeline__restore"),
-    );
-    const apply = inputs.findIndex(({ input }) => input === `${settings}\n`);
-    const dump = inputs.findIndex(
-      ({ args, input }) =>
-        args.endsWith(" timeline__restore") && args.includes(" psql ") && !!input,
-    );
-    const swap = inputs.findIndex(
-      ({ input }) => typeof input === "string" && input.includes("ALTER DATABASE %I RENAME"),
-    );
-    const dropPrevious = inputs.findIndex(({ args }) =>
-      args.endsWith(" --if-exists timeline__previous"),
-    );
-    expect(read).toBeGreaterThanOrEqual(0);
-    expect(drop).toBeGreaterThan(read);
-    expect(create).toBeGreaterThan(drop);
-    expect(apply).toBeGreaterThan(create);
-    expect(inputs[apply]?.args).toContain("--single-transaction");
-    expect(dump).toBeGreaterThan(apply);
-    expect(swap).toBeGreaterThan(dump);
-    expect(inputs[swap]?.args).toContain("--single-transaction");
-    expect(dropPrevious).toBeGreaterThan(swap);
-    // The live database is never dropped, only renamed aside by the swap.
-    expect(inputs.some(({ args }) => args.endsWith(" timeline") && args.includes(" dropdb "))).toBe(
-      false,
-    );
-    // Every superuser step but the load, whose dump sets its own search path,
-    // searches only the catalogs.
-    expect(inputs[dump]?.args).not.toContain("PGOPTIONS");
-    for (const step of [preconditions, read, drop, create, apply, swap, dropPrevious])
-      expect(inputs[step]?.args).toContain("-e PGOPTIONS=-c search_path=pg_catalog,pg_temp");
-  });
-
-  it.each([
-    [
-      "a session of a service it does not stop",
-      "previous|0|\nsession|openmapx_data_manager|client backend\nsession|openmapx_tiles|client backend\nsession||autovacuum worker\n",
-      "database timeline is in use by data-manager, martin",
-    ],
-    [
-      "a database left by an earlier restore",
-      "previous|1|\n",
-      "database timeline__previous, left by an earlier restore, still exists",
-    ],
-  ])(
-    "refuses a restore that %s would block before changing anything",
-    async (_case, state, message) => {
-      const dir = writeBackup("blocked-swap", {
-        name: "blocked-swap",
-        createdAt: new Date().toISOString(),
-        services: [
-          {
-            id: "timeline",
-            version: "1.0.0",
-            volumes: [
-              {
-                name: "openmapx-db",
-                mode: "pg_dump",
-                file: "timeline__openmapx-db.sql.gz",
-                sizeBytes: 0,
-                postgresUser: "postgres",
-                postgresDb: "timeline",
-              },
-            ],
-          },
-        ],
-      });
-      writeBackupFiles(dir, { "timeline__openmapx-db.sql.gz": "dump" });
-      vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
-        if (command === "docker" && args.includes("ps")) {
-          return Promise.resolve({ exitCode: 0, stdout: '{"Service":"timeline"}\n', stderr: "" });
-        }
-        if (command === "docker" && args.some((arg) => arg.includes("pg_stat_activity"))) {
-          return Promise.resolve({ exitCode: 0, stdout: state, stderr: "" });
-        }
-        return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
-      }) as never);
-      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-      try {
-        await expect(
-          restoreBackup({ rootDir: tmp, name: "blocked-swap", stopRunning: true }),
-        ).rejects.toThrow(message);
-      } finally {
-        errorSpy.mockRestore();
-      }
-      const calls = mockedCommandCalls().map(([, args]) => args);
-      for (const step of [" stop ", " dropdb ", " createdb ", "gunzip"])
-        expect(calls.filter((args) => args.includes(step))).toEqual([]);
-    },
-  );
-
-  it("restores each entry of an archive in a session of its owner", async () => {
-    const dir = writeBackup("owner-sessions", {
-      name: "owner-sessions",
-      createdAt: new Date().toISOString(),
-      services: [
-        {
-          id: "timeline",
-          version: "1.0.0",
-          volumes: [
-            {
-              name: "openmapx-db",
-              mode: "pg_dump",
-              file: "timeline__openmapx-db.dump",
-              sizeBytes: 0,
-              postgresUser: "postgres",
-              postgresDb: "timeline",
-            },
-          ],
-        },
-      ],
-    });
-    writeBackupFiles(dir, { "timeline__openmapx-db.dump": "archive" });
-    const listings: Record<string, string> = {
-      "--section=pre-data":
-        "16; 2615 21089 SCHEMA - app timeline_app\n321; 1259 21090 TABLE app t timeline_app\n",
-      "--section=data": "5950; 0 21090 TABLE DATA app t timeline_app\n",
-      "--section=post-data": "5999; 3466 18301 EVENT TRIGGER - guard postgres\n",
-    };
-    vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
-      const version = serverVersionReply(command, args);
-      if (version) return version;
-      if (command === "docker" && args.includes("ps")) {
-        return Promise.resolve({ exitCode: 0, stdout: '{"Service":"timeline"}\n', stderr: "" });
-      }
-      if (command === "docker" && args.some((arg) => arg.includes("rolcanlogin"))) {
-        return Promise.resolve({
-          exitCode: 0,
-          stdout: "1 1 postgres\n0 1 timeline_app\n",
-          stderr: "",
-        });
-      }
-      const section = args.find((arg) => arg.startsWith("--section="));
-      if (command === "docker" && args.includes("--list") && section) {
-        return Promise.resolve({ exitCode: 0, stdout: listings[section], stderr: "" });
-      }
-      return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
-    }) as never);
-
-    await restoreBackup({ rootDir: tmp, name: "owner-sessions", stopRunning: true });
-
-    const calls = mockedCommandCalls().map(([, args]) => args);
-    expect(calls.find((args) => args.includes("rolcanlogin"))).toContain(
-      "-e PGOPTIONS=-c search_path=pg_catalog,pg_temp",
-    );
-    const sessions = calls
-      .filter((args) => args.includes(" pg_restore ") || args.includes("openmapx-restore"))
-      .filter((args) => !args.includes("--list"))
-      .map((args) => /-U (\S+) -d timeline/.exec(args)?.[1]);
-    expect(sessions).toEqual(["postgres", "timeline_app", "timeline_app", "postgres"]);
-    // The planned server version reaches every pass: PostgreSQL 18 knows
-    // transaction_timeout.
-    const passes = calls.filter((args) => args.includes("openmapx-restore"));
-    expect(passes.length).toBeGreaterThan(0);
-    for (const pass of passes) expect(pass).toContain("-c transaction_timeout=0");
-  });
-
   it.each([
     ["a role that cannot log in", "1 1 postgres\n0 0 timeline_owner\n", "cannot log in"],
     ["a role the server lacks", "1 1 postgres\n", "a role this server lacks"],
@@ -1559,8 +1321,6 @@ describe("backup volume modes", () => {
       });
       writeBackupFiles(dir, { "timeline__openmapx-db.dump": "archive" });
       vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
-        const version = serverVersionReply(command, args);
-        if (version) return version;
         if (command === "docker" && args.includes("ps")) {
           return Promise.resolve({ exitCode: 0, stdout: '{"Service":"timeline"}\n', stderr: "" });
         }
@@ -1611,8 +1371,6 @@ describe("backup volume modes", () => {
     });
     writeBackupFiles(dir, { "postgis.dump": "archive" });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
-      const version = serverVersionReply(command, args);
-      if (version) return version;
       if (command === "docker" && args.includes("ps")) {
         return Promise.resolve({
           exitCode: 0,
@@ -1683,8 +1441,6 @@ describe("backup volume modes", () => {
     });
     writeBackupFiles(dir, { "postgis.sql.gz": "dump" });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
-      const version = serverVersionReply(command, args);
-      if (version) return version;
       if (command === "docker" && args.includes("ps")) {
         return Promise.resolve({
           exitCode: 0,
@@ -1735,8 +1491,6 @@ describe("backup volume modes", () => {
     });
     writeBackupFiles(dir, { "postgis.dump": "dump", "postgis-files.tar.gz": "tar" });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
-      const version = serverVersionReply(command, args);
-      if (version) return version;
       if (command === "gunzip") {
         return Object.assign(Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }), {
           stdout: Readable.from(["dump"]),
@@ -1808,8 +1562,6 @@ describe("backup volume modes", () => {
       args: string[],
       options?: { input?: unknown },
     ) => {
-      const version = serverVersionReply(command, args);
-      if (version) return version;
       if (command === "gunzip") {
         return Object.assign(Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }), {
           stdout: Readable.from(["dump"]),
@@ -1905,8 +1657,6 @@ describe("backup volume modes", () => {
     });
     writeBackupFiles(dir, { "postgis.dump": "dump" });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
-      const version = serverVersionReply(command, args);
-      if (version) return version;
       if (command === "docker" && args.includes("ps")) {
         const keyPath = join(tmp, "infra", "docker", "secrets", "erasure-journal-key");
         rmSync(keyPath);
@@ -2190,7 +1940,13 @@ describe("restore data-protection preflight", () => {
     ).toThrow(/coverage/i);
   });
 
-  it("requires the API to be stopped while a restored account database is replayed", () => {
+  it("stops every running client of the platform database while it is restored", () => {
+    expect(
+      requiredDependentStops(
+        protectedManifest("2026-08-02T00:00:00.000Z"),
+        new Set(["app-api", "data-manager", "martin", "postgis"]),
+      ),
+    ).toEqual(["app-api", "data-manager", "martin"]);
     expect(
       requiredDependentStops(
         protectedManifest("2026-08-02T00:00:00.000Z"),

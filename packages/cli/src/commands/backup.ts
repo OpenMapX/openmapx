@@ -985,15 +985,18 @@ function containsOpenMapXDatabase(manifest: BackupManifest): boolean {
 }
 
 /**
- * Services outside the restore manifest that must be isolated while the
- * account database is restored. Keeping the API stopped prevents a deleted
- * account from becoming observable between pg_restore and erasure replay.
+ * Services outside the restore manifest that must be stopped while the
+ * account database is restored: every client of the platform database, whose
+ * sessions would keep the restored database from replacing it. Keeping the
+ * API stopped also prevents a deleted account from becoming observable
+ * between pg_restore and erasure replay.
  */
 export function requiredDependentStops(
   manifest: BackupManifest,
   running: ReadonlySet<string>,
 ): string[] {
-  return containsOpenMapXDatabase(manifest) && running.has("app-api") ? ["app-api"] : [];
+  if (!containsOpenMapXDatabase(manifest)) return [];
+  return ["app-api", "data-manager", "martin"].filter((id) => running.has(id));
 }
 
 function erasureJournalPaths(rootDir?: string): { journalPath: string; keyPath: string } {
@@ -1333,7 +1336,7 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
   // Check every file and plan every database restore before anything is
   // stopped or changed, so a backup that cannot be restored leaves the
   // deployment as it was.
-  const plans = new Map<BackupVolumeEntry, DatabaseRestorePlan | null>();
+  const plans = new Map<BackupVolumeEntry, coreServices.RestorePass[] | null>();
   try {
     for (const svc of pre.targets) {
       for (const vol of svc.volumes) {
@@ -1360,14 +1363,7 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
         }
         plans.set(
           vol,
-          await planDatabaseRestore(
-            ctx,
-            svc.id,
-            file,
-            vol.postgresUser,
-            vol.postgresDb,
-            new Set(dependentStops),
-          ),
+          await planDatabaseRestore(ctx, svc.id, file, vol.postgresUser, vol.postgresDb),
         );
       }
     }
@@ -1506,20 +1502,10 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
   }
 }
 
-/** How a custom-format archive is restored: its passes, and the server's
- * `server_version_num`, which decides the settings each pass pins. */
-interface DatabaseRestorePlan {
-  readonly passes: readonly coreServices.RestorePass[];
-  readonly serverVersion: number;
-}
-
 /**
  * Checks a database backup against the live server before anything changes:
- * the plan that restores a custom-format archive, or `null` for an older
- * plain-SQL backup. Throws when the backup cannot be restored safely, or when
- * the restored database could not replace the live one: a session of a
- * service the restore does not stop (`stopping`), or a database left by an
- * earlier restore under the name the live one moves to.
+ * the passes that restore a custom-format archive, or `null` for an older
+ * plain-SQL backup. Throws when the backup cannot be restored safely.
  */
 async function planDatabaseRestore(
   ctx: ComposeContext,
@@ -1527,70 +1513,63 @@ async function planDatabaseRestore(
   file: string,
   user: string,
   db: string,
-  stopping: ReadonlySet<string>,
-): Promise<DatabaseRestorePlan | null> {
+): Promise<coreServices.RestorePass[] | null> {
+  coreServices.restoreDatabaseNames(db);
   // Backups before the database roles hold plain SQL, which only a superuser
   // session can load. Such a backup of the platform database cannot serve
   // this release, whose roles must own their objects.
-  const plain = file.endsWith(".sql.gz");
-  if (plain && db === "openmapx")
-    throw new Error(
-      `${file} predates the platform database's roles; restore it with the release that wrote it`,
-    );
-  const preconditions = await superuserCommand(ctx, serviceId, [
-    "psql",
-    "-X",
-    "-v",
-    "ON_ERROR_STOP=1",
-    "-U",
-    user,
-    "-d",
-    "postgres",
-    "--no-align",
-    "--tuples-only",
-    "-c",
-    coreServices.swapPreconditionsQuery(db),
-  ]);
-  if (preconditions.exitCode !== 0)
-    throw new Error(`reading the database's sessions failed: ${preconditions.stderr ?? ""}`);
-  const refusal = coreServices.swapPreconditionRefusal(db, preconditions.stdout ?? "", stopping);
-  if (refusal) throw new Error(refusal);
-  if (plain) return null;
-  return planOwnerRestore(ctx, serviceId, file, user);
+  if (file.endsWith(".sql.gz")) {
+    if (db === "openmapx")
+      throw new Error(
+        `${file} predates the platform database's roles; restore it with the release that wrote it`,
+      );
+    return null;
+  }
+  return coreServices.planArchiveRestore(databaseContainer(ctx, serviceId, file), user);
 }
 
-/** A superuser command in the database container that searches only the catalogs. */
-async function superuserCommand(
+/** The service's database container, as the restore reaches it. */
+function databaseContainer(
   ctx: ComposeContext,
   serviceId: string,
-  command: string[],
-  input?: string,
-): Promise<{ exitCode?: number; stdout?: string; stderr?: string }> {
-  return execa(
-    "docker",
-    [
-      ...ctx.composeArgs,
-      "exec",
-      "-T",
-      "-e",
-      `PGOPTIONS=${coreServices.SUPERUSER_PGOPTIONS}`,
-      serviceId,
-      ...command,
-    ],
-    {
-      ...cliProcessOptions(),
-      cwd: ctx.cwd,
-      reject: false,
-      ...(input === undefined ? {} : { input }),
+  archive: string,
+): coreServices.RestoreContainer {
+  return {
+    async run(command, stdin, catalogsOnly) {
+      const result =
+        stdin && "preamble" in stdin
+          ? await execWithArchive(ctx, serviceId, [...command], archive, stdin.preamble)
+          : await execa(
+              "docker",
+              [
+                ...ctx.composeArgs,
+                "exec",
+                "-T",
+                ...(catalogsOnly ? ["-e", `PGOPTIONS=${coreServices.SUPERUSER_PGOPTIONS}`] : []),
+                serviceId,
+                ...command,
+              ],
+              {
+                ...cliProcessOptions(),
+                cwd: ctx.cwd,
+                reject: false,
+                ...(stdin ? { input: stdin.input } : {}),
+              },
+            );
+      return {
+        exitCode: result.exitCode ?? 1,
+        stdout: result.stdout ?? "",
+        stderr: result.stderr ?? "",
+      };
     },
-  );
+  };
 }
 
 /**
  * Restores a database backup into a scratch database, then swaps it in for
- * the live one. A pass that fails leaves the live database as it was and
- * drops the scratch one. `swap.before` runs just before the live database is
- * replaced, and `swap.failed` when the swap left it in place.
+ * the live one; see `restoreIntoScratchDatabase`. A custom-format archive is
+ * restored entry by entry in sessions of each entry's owner, an older
+ * plain-SQL backup by the superuser.
  */
 async function pgRestoreFromFile(
   ctx: ComposeContext,
@@ -1598,88 +1577,24 @@ async function pgRestoreFromFile(
   file: string,
   user: string,
   db: string,
-  plan: DatabaseRestorePlan | null,
+  passes: readonly coreServices.RestorePass[] | null,
   swap: { before(): void; failed(): void },
 ): Promise<void> {
-  const { scratch, previous } = coreServices.restoreDatabaseNames(db);
-  const psql = (database: string, ...args: string[]) => [
-    "psql",
-    "-X",
-    "-v",
-    "ON_ERROR_STOP=1",
-    "-U",
-    user,
-    "-d",
-    database,
-    ...args,
-  ];
-  const dropScratch = () =>
-    superuserCommand(ctx, serviceId, ["dropdb", "-U", user, "--if-exists", scratch]);
-  // The backup holds the database's contents with their owners and grants,
-  // but not the database itself, nor its own owner and grants. Read those
-  // from the live database and give them to the scratch one, so the roles
-  // the deployment created (which live outside any database) keep their
-  // access: the platform database stays the superuser's, and the API and
-  // data-manager keep the right to create schemas in it. A scratch database
-  // left by an interrupted restore is dropped first.
-  const settings = await superuserCommand(
-    ctx,
-    serviceId,
-    psql(
-      "postgres",
-      "--no-align",
-      "--tuples-only",
-      "-c",
-      coreServices.databaseSettingsQuery(db, scratch),
-    ),
-  );
-  if (settings.exitCode !== 0)
-    throw new Error(`reading the database owner failed: ${settings.stderr ?? ""}`);
-  const leftover = await dropScratch();
-  if (leftover.exitCode !== 0) throw new Error(`dropdb failed: ${leftover.stderr ?? ""}`);
-  const create = await superuserCommand(ctx, serviceId, ["createdb", "-U", user, scratch]);
-  if (create.exitCode !== 0) throw new Error(`createdb failed: ${create.stderr ?? ""}`);
-  try {
-    const statements = (settings.stdout ?? "").trim();
-    if (statements) {
-      const apply = await superuserCommand(
-        ctx,
-        serviceId,
-        psql("postgres", "--single-transaction"),
-        `${statements}\n`,
-      );
-      if (apply.exitCode !== 0)
-        throw new Error(`restoring the database owner failed: ${apply.stderr ?? ""}`);
-    }
-    if (plan === null) await loadPlainDump(ctx, serviceId, file, user, scratch);
-    else await restoreAsOwners(ctx, serviceId, file, user, scratch, plan);
-  } catch (error) {
-    await dropScratch();
-    throw error;
-  }
-  swap.before();
-  const swapped = await superuserCommand(
-    ctx,
-    serviceId,
-    psql("postgres", "--single-transaction"),
-    coreServices.databaseSwapSql(db),
-  );
-  if (swapped.exitCode !== 0) {
-    swap.failed();
-    await dropScratch();
-    throw new Error(
-      `replacing database ${db} failed, and it was left as it was: ${swapped.stderr ?? ""}`,
+  const container = databaseContainer(ctx, serviceId, file);
+  const kept = await coreServices.restoreIntoScratchDatabase(container, {
+    superuser: user,
+    db,
+    load: (scratch) =>
+      passes === null
+        ? loadPlainDump(ctx, serviceId, file, user, scratch)
+        : coreServices.restoreArchivePasses(container, passes, user, scratch),
+    beforeSwap: swap.before,
+    swapFailed: swap.failed,
+  });
+  if (kept)
+    log.warn(
+      `The replaced database is kept as ${coreServices.restoreDatabaseNames(db).previous}; drop it once you no longer need it.`,
     );
-  }
-  const old = await superuserCommand(ctx, serviceId, [
-    "dropdb",
-    "-U",
-    user,
-    "--if-exists",
-    previous,
-  ]);
-  if (old.exitCode !== 0)
-    log.warn(`The replaced database is kept as ${previous}; drop it once you no longer need it.`);
 }
 
 /** Older backups: `gunzip <file> | docker compose exec -T <svc> psql -U <user> <db>`. */
@@ -1710,102 +1625,6 @@ async function loadPlainDump(
   }
   if (psqlRes.exitCode !== 0) {
     throw new Error(`psql restore failed: ${psqlRes.stderr ?? ""}`);
-  }
-}
-
-/**
- * Plans the restore of a custom-format archive against the server's roles,
- * so that each entry is restored by a session logged in as its owner, over
- * the database container's local socket; see `planOwnerRestore`. A role's
- * generated columns, check constraints, defaults and index expressions then
- * never run as the superuser, which a session that only switched roles could
- * switch back to. Reads neither database nor archive into the container.
- */
-async function planOwnerRestore(
-  ctx: ComposeContext,
-  serviceId: string,
-  archive: string,
-  user: string,
-): Promise<DatabaseRestorePlan> {
-  const query = (sql: string) =>
-    execa(
-      "docker",
-      [
-        ...ctx.composeArgs,
-        "exec",
-        "-T",
-        "-e",
-        `PGOPTIONS=${coreServices.SUPERUSER_PGOPTIONS}`,
-        serviceId,
-        "psql",
-        "-X",
-        "-v",
-        "ON_ERROR_STOP=1",
-        "-U",
-        user,
-        "-d",
-        "postgres",
-        "--no-align",
-        "--tuples-only",
-        "-c",
-        sql,
-      ],
-      { ...cliProcessOptions(), cwd: ctx.cwd, reject: false },
-    );
-  const roles = await query(coreServices.RESTORE_ROLES_QUERY);
-  if (roles.exitCode !== 0) throw new Error(`reading the roles failed: ${roles.stderr ?? ""}`);
-  const version = await query("SHOW server_version_num");
-  const serverVersion = Number((version.stdout ?? "").trim());
-  if (version.exitCode !== 0 || !Number.isInteger(serverVersion) || serverVersion <= 0)
-    throw new Error(`reading the server version failed: ${version.stderr ?? version.stdout ?? ""}`);
-  const list = async (section: string) => {
-    const result = await execWithArchive(
-      ctx,
-      serviceId,
-      ["pg_restore", "--list", `--section=${section}`],
-      archive,
-      "",
-    );
-    if (result.exitCode !== 0) throw new Error(`listing the backup failed: ${result.stderr ?? ""}`);
-    return result.stdout ?? "";
-  };
-  const passes = coreServices.planOwnerRestore(
-    {
-      preData: await list("pre-data"),
-      data: await list("data"),
-      postData: await list("post-data"),
-    },
-    roles.stdout ?? "",
-  );
-  return { passes, serverVersion };
-}
-
-/**
- * Runs the planned passes. Each reads the archive from its start up to the
- * last entry it restores, so a large backup is read once per pass that loads
- * rows, one per owning role.
- */
-async function restoreAsOwners(
-  ctx: ComposeContext,
-  serviceId: string,
-  archive: string,
-  user: string,
-  db: string,
-  plan: DatabaseRestorePlan,
-): Promise<void> {
-  for (const pass of plan.passes) {
-    const result = await execWithArchive(
-      ctx,
-      serviceId,
-      coreServices.restorePassCommand(pass, user, db, plan.serverVersion),
-      archive,
-      coreServices.restorePassPreamble(pass),
-    );
-    if (result.exitCode !== 0) {
-      throw new Error(
-        `pg_restore of the ${pass.section} as ${pass.role ?? user} failed: ${result.stderr ?? ""}`,
-      );
-    }
   }
 }
 

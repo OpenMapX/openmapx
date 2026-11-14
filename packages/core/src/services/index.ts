@@ -128,14 +128,16 @@ export {
   API_DATABASE_ROLE,
   databaseSettingsQuery,
   databaseSwapSql,
+  planArchiveRestore,
   planOwnerRestore,
   RESTORE_ROLES_QUERY,
+  type RestoreContainer,
+  restoreArchivePasses,
   restoreDatabaseNames,
+  restoreIntoScratchDatabase,
   restorePassCommand,
   restorePassPreamble,
   SUPERUSER_PGOPTIONS,
-  swapPreconditionRefusal,
-  swapPreconditionsQuery,
 } from "./database-roles";
 export {
   assertDeploymentEnvironmentFile,
