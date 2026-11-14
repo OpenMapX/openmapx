@@ -3,11 +3,9 @@
 import DirectionsBikeIcon from "@mui/icons-material/DirectionsBike";
 import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
-import NavigationIcon from "@mui/icons-material/Navigation";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import TwoWheelerIcon from "@mui/icons-material/TwoWheeler";
 import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import type {
   PersonalVehicle,
@@ -46,6 +44,7 @@ import { useRouteTrafficPresentation } from "@/lib/useRouteTrafficPresentation";
 import { VISUALLY_HIDDEN } from "@/lib/visuallyHidden";
 import { RouteTrafficStatus } from "./RouteTrafficStatus";
 import { type RouteArrivalContext, resolveRouteArrival } from "./routeArrival";
+import { RouteCardActions, routeCardFrameSx } from "./routeCardChrome";
 
 const GROUND_MODES = new Set<Route["mode"]>(["driving", "walking", "cycling", "motorcycle"]);
 
@@ -132,7 +131,7 @@ export function RouteCard({
   arrivalContext,
 }: RouteCardProps) {
   const t = useTranslations("directions");
-  const tc = useTranslations("common");
+  const _tc = useTranslations("common");
   const tNav = useTranslations("navigation");
   const tTraffic = useTranslations("trafficStatus");
   const locale = useLocale();
@@ -369,19 +368,7 @@ export function RouteCard({
         if (!(event.target as Element).closest("button, input, label, a, [role='button']"))
           onSelect();
       }}
-      sx={{
-        display: "flex",
-        gap: 1.5,
-        px: 2,
-        py: 1.5,
-        cursor: "pointer",
-        borderLeft: active ? `4px solid ${BRAND}` : "4px solid transparent",
-        bgcolor: active ? "color-mix(in srgb, var(--omx-brand) 5%, transparent)" : "transparent",
-        "&:hover": {
-          bgcolor: active ? "color-mix(in srgb, var(--omx-brand) 8%, transparent)" : "action.hover",
-        },
-        transition: "background-color 0.15s",
-      }}
+      sx={{ ...routeCardFrameSx(active), display: "flex", gap: 1.5 }}
     >
       <Box
         sx={{
@@ -480,34 +467,13 @@ export function RouteCard({
           </Typography>
         )}
         {active && (
-          <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 1 }}>
-            <Button
-              size="small"
-              variant="tonal"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDetails();
-              }}
-            >
-              {tc("details")}
-            </Button>
-            {GROUND_MODES.has(route.mode) && (
-              <Button
-                size="small"
-                variant="contained"
-                startIcon={<NavigationIcon />}
-                // A second tap while the shell is still preparing would start a
-                // second session nobody is watching.
-                disabled={starting}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void handleStart();
-                }}
-              >
-                {tNav("start")}
-              </Button>
-            )}
-          </Box>
+          <RouteCardActions
+            onDetails={onDetails}
+            onStart={GROUND_MODES.has(route.mode) ? () => void handleStart() : undefined}
+            // A second tap while the shell is still preparing would start a
+            // second session nobody is watching.
+            startDisabled={starting}
+          />
         )}
         {startError && (
           <Typography role="alert" sx={{ fontSize: 12, color: "error.main", mt: 0.5 }}>
