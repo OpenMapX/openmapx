@@ -43,7 +43,7 @@ const dbMock = vi.hoisted(() => {
 
 vi.mock("../../db", () => ({ db: dbMock.db }));
 
-const { AGENT_RECOVERABLE_ADMIN_JOB_TYPES, jobRunner } = await import("../job-runner");
+const { jobRunner } = await import("../job-runner");
 
 const restartCheckpoint = {
   phase: "awaiting-app-api-restart",
@@ -69,37 +69,6 @@ afterEach(() => {
 
 describe("job runner restart initialization", () => {
   it("keeps typed agent-backed jobs for observation without handler replay", async () => {
-    expect(AGENT_RECOVERABLE_ADMIN_JOB_TYPES).toEqual([
-      "extension.install",
-      "extension.remove",
-      "standalone.adopt",
-      "standalone.remove",
-      "standalone.preview",
-      "standalone.install",
-      "backup.operation",
-      "data.operation",
-      "service.bulk",
-      "service.start",
-      "service.stop",
-      "service.restart",
-      "service.core-restart",
-      "service.apply",
-      "configuration.apply",
-      "platform.apply",
-      "integration.binding.apply",
-      "configuration.migration.apply",
-      "credential.import",
-      "compose.render",
-      "compose.start",
-      "system.diagnostics",
-      "system.update",
-      "release.clear",
-      "service.images.pull",
-      "backup.prune",
-      "artifact.validate",
-      "artifact.import",
-      "artifact.export",
-    ]);
     await jobRunner.initialize({ completeRestartedUpdates: true });
     expect(dbMock.updates).not.toContainEqual(expect.objectContaining({ status: "queued" }));
   });

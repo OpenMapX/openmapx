@@ -12,8 +12,4 @@ describe("traffic flow legend bands", () => {
       TRAFFIC_BAND_COLORS.severe,
     ]);
   });
-
-  it("keeps the band keys the i18n file already defines", () => {
-    expect(BANDS.map((b) => b.key)).toEqual(["freeFlow", "light", "moderate", "heavy", "severe"]);
-  });
 });

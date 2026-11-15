@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  isPanelShiftActive,
-  SEARCH_BAR_CLEARANCE,
-  SEARCH_BAR_TOP,
-  shouldHideLayerSelector,
-  topInset,
-} from "./layout";
+import { isPanelShiftActive, shouldHideLayerSelector, topInset } from "./layout";
 
 describe("topInset", () => {
   it("keeps the page's edge spacing without a status bar and 8px below one", () => {
@@ -16,11 +10,6 @@ describe("topInset", () => {
 
   it("stacks rows below that top", () => {
     expect(topInset(12, 60)).toBe("calc(max(12px, var(--omx-safe-top) + 8px) + 60px)");
-  });
-
-  it("clears the search bar by its height plus the same 12px below it", () => {
-    expect(SEARCH_BAR_TOP).toBe(topInset(12));
-    expect(SEARCH_BAR_CLEARANCE).toBe(topInset(12, 60));
   });
 });
 

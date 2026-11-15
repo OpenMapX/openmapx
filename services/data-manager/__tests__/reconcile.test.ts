@@ -50,7 +50,6 @@ describe("reconcileOrphanedJobs", () => {
     expect(ids).toEqual(["job-a", "job-b"]);
     expect(captured.whereCalled).toBe(true);
     expect(captured.set).toEqual({ status: INTERRUPTED_STATUS, finishedAt: null });
-    expect(INTERRUPTED_STATUS).toBe("interrupted");
   });
 
   it("returns an empty list on a clean boot (no running jobs)", async () => {

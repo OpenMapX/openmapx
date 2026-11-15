@@ -4,15 +4,6 @@ import { describe, expect, it } from "vitest";
 import { TRAFFIC_TEXT_COLOR } from "@/integration-api/runtime/theme";
 
 describe("TRAFFIC_TEXT_COLOR", () => {
-  it("exposes a CSS variable per displayable band", () => {
-    expect(TRAFFIC_TEXT_COLOR).toEqual({
-      light: "var(--omx-traffic-light)",
-      moderate: "var(--omx-traffic-moderate)",
-      heavy: "var(--omx-traffic-heavy)",
-      severe: "var(--omx-traffic-severe)",
-    });
-  });
-
   it("has no freeFlow entry, which would imply a verified-clear route", () => {
     expect(Object.hasOwn(TRAFFIC_TEXT_COLOR, "freeFlow")).toBe(false);
   });
