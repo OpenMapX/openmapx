@@ -20,8 +20,7 @@ vi.mock("@openmapx/mangrove-react", () => ({
   useReviewAggregate: () => ({ data: aggregateState.data, isLoading: false }),
 }));
 
-// useBrandDetail is the only hook here that hits the network; stub it so
-// the brand-header tests below control `logoFile` deterministically instead
+// Stub useBrandDetail so the brand-header tests below control `logoFile` deterministically instead
 // of depending on a real fetch. All other @openmapx/core exports pass through
 // untouched — in particular firstBrandIdentity, which PlaceDetailContent
 // itself now calls to resolve a place's brand identity from its osmTags.
@@ -86,6 +85,24 @@ class StubIntersectionObserver {
   disconnect() {}
 }
 vi.stubGlobal("IntersectionObserver", StubIntersectionObserver);
+
+// Loads the detail makes on its own. Service capabilities are still loading (once
+// loaded, an unlisted service would count as unavailable); the place has no tide
+// station or marine forecast (204) and no resolved country.
+const unmockedFetch = globalThis.fetch;
+beforeEach(() => {
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const { pathname } = new URL(String(input), "http://localhost");
+    if (pathname === "/api/capabilities") return new Promise<Response>(() => {});
+    if (/^\/api\/integrations\/knowledge-[a-z-]+\/(tides|marine)$/.test(pathname)) {
+      return new Response(null, { status: 204 });
+    }
+    if (pathname === "/api/integrations/geocoding/geocode/country") {
+      return Response.json({ countryCode: null });
+    }
+    return unmockedFetch(input, init);
+  });
+});
 
 const place = {
   id: "p1",

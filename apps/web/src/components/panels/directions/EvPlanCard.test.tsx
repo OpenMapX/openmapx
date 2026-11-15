@@ -5,6 +5,12 @@ import { createQueryWrapper, fireEvent, render, screen } from "@/test";
 import { EvPlanCard } from "./EvPlanCard";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
+// The card looks up the data-source list for the charger category; no source is
+// listed here, as when the list has not loaded.
+vi.mock("@openmapx/core", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@openmapx/core")>()),
+  useDataSources: () => ({ data: { sources: [] }, isLoading: false }),
+}));
 
 const baseResult: EvDirectionsResult = {
   routes: [

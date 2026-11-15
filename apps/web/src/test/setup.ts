@@ -17,6 +17,46 @@ if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
 
+// A request nobody mocked must not reach the network or pass unnoticed. Node's
+// real fetch would reject a relative URL with a vague TypeError and send an
+// absolute one to the real host, and the test would usually still pass. This
+// stand-in records the URL, rejects, and the afterEach below fails the test.
+// It is a plain function rather than vi.fn so restoreAllMocks/resetAllMocks
+// cannot change it; vi.stubGlobal, vi.spyOn and tests that save and restore
+// globalThis.fetch all put it back after their test.
+const unmockedFetchCalls: string[] = [];
+
+function requestUrl(input: unknown): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.href;
+  if (typeof Request !== "undefined" && input instanceof Request) return input.url;
+  return String(input);
+}
+
+export function unmockedFetch(input: unknown): Promise<Response> {
+  const url = requestUrl(input);
+  unmockedFetchCalls.push(url);
+  return Promise.reject(
+    new TypeError(`Unmocked fetch in a web test: ${url}. Mock the request in the test.`),
+  );
+}
+
+/** Returns the URLs fetched without a mock since the last call, and forgets them. */
+export function takeUnmockedFetchCalls(): string[] {
+  return unmockedFetchCalls.splice(0);
+}
+
+globalThis.fetch = unmockedFetch as typeof fetch;
+
+afterEach(() => {
+  const urls = takeUnmockedFetchCalls();
+  if (urls.length > 0) {
+    throw new Error(
+      `Unmocked fetch in a web test. Mock these requests in the test:\n${urls.map((url) => `  ${url}`).join("\n")}`,
+    );
+  }
+});
+
 // Dialogs, menus, sheets and panels write history entries, and a Back that
 // crossed only leftovers steps on by itself. jsdom's history lives for the
 // whole file, so let such a step land before the next test, then forget the

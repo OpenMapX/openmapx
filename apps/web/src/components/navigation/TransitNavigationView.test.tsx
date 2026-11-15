@@ -69,6 +69,21 @@ const shellScope = () => ({
   ReactNativeWebView: { postMessage: () => {} },
 });
 
+// The bottom bar loads the ridden trip's stops; these tests check what the
+// view owns while that load is still on its way.
+beforeEach(() => {
+  const unmocked = globalThis.fetch;
+  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
+    String(input).includes("/api/integrations/transit/vehicles/")
+      ? new Promise<Response>(() => {})
+      : unmocked(input, init),
+  );
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 function mount(scope?: unknown) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
