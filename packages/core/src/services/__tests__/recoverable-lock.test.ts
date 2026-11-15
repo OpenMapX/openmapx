@@ -199,4 +199,44 @@ describe("recoverable lock", () => {
     expect(readLockHolder(path)?.purpose).toBe("new writer");
     expect(existsSync(`${path}.reclaim`)).toBe(false);
   });
+  it("refuses with the guard named when a reclaimer died before it wrote its guard", async () => {
+    const path = lockPath();
+    writeFileSync(path, JSON.stringify(foreign({ pid: exitedPid() })));
+    writeFileSync(`${path}.reclaim`, "");
+    const started = performance.now();
+    const error = await acquireRecoverableLock(path, {
+      purpose: "next writer",
+      waitMs: 200,
+      signal: AbortSignal.timeout(3_000),
+      containerRunning: neverAsked,
+    }).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(LockBusyError);
+    expect((error as LockBusyError).message).toContain("control clear --lock store.lock.reclaim");
+    expect(performance.now() - started).toBeLessThan(2_000);
+    clearRecoverableLock(path);
+    expect(readdirSync(join(path, ".."))).toEqual([]);
+  });
+
+  it("reclaims an unreadable holder only after it stayed the same for a second, with no wait", async () => {
+    const path = lockPath();
+    writeFileSync(path, "");
+    const started = performance.now();
+    const release = await acquireRecoverableLock(path, {
+      purpose: "next writer",
+      waitMs: 0,
+      containerRunning: neverAsked,
+    });
+    expect(performance.now() - started).toBeGreaterThanOrEqual(1_000);
+    release();
+  });
+
+  it("does not reclaim a holder that finishes writing its record within the wait", async () => {
+    const path = lockPath();
+    writeFileSync(path, "");
+    setTimeout(() => writeFileSync(path, JSON.stringify(currentLockHolder("slow writer"))), 100);
+    await expect(
+      acquireRecoverableLock(path, { purpose: "next writer", waitMs: 300 }),
+    ).rejects.toBeInstanceOf(LockBusyError);
+    expect(readLockHolder(path)?.purpose).toBe("slow writer");
+  });
 });

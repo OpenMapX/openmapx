@@ -352,10 +352,15 @@ system update receipt each use one lock file. It records the holder's PID, boot 
 PID namespace, container and process start time, and another writer reclaims it
 only when that holder is provably gone: the machine booted since, the holder shares
 this PID namespace and its process ended, or its container is no longer running.
-Reclaimers take turns through a short guard file beside the lock. A live holder is
-waited for briefly and then named in a busy error. The writer and lease locks are
-never held across a Docker effect; the backup-store lock is held for a whole backup
-effect, and a second backup waits up to a minute.
+A holder record that cannot be read, because its holder died between creating and
+writing the file, is reclaimed only after it stayed the same for the wait (one
+second for a lock that does not wait). Reclaimers take turns through a short guard
+file beside the lock. A live holder, or a guard that is still there when the wait
+ends, is named in a busy error. The writer and lease locks are never held across a
+Docker effect. Agent backups and prunes hold the backup-store lock for the whole
+effect, and a second one waits up to a minute; the host CLI's `backup
+create|restore` takes a lease on every target instead, so a second one is refused
+as busy.
 
 Some dead holders cannot be proved gone, and their lock stays until
 `openmapx control clear --lock <name>`:
@@ -365,8 +370,10 @@ Some dead holders cannot be proved gone, and their lock stays until
 - any holder on macOS, which records no process start time, so a reused process
   ID counts as alive.
 
-Check that the named process is gone first. The same command also removes a
-reclaim guard that a dead reclaimer left beside the lock.
+Check that the named process is gone first. The command accepts the short name,
+the file name a busy message prints, and that name with `.reclaim` for a guard a
+dead reclaimer left beside the lock; it removes both. An update receipt's lock is
+named by its full path, because the receipt lives wherever the operator put it.
 
 ### Release pins and rollback
 

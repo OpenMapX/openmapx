@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { closeSync, fsyncSync, openSync, readFileSync, writeSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import {
   type LeaseRecord,
   leaseStoreDirectory,
@@ -33,6 +33,20 @@ const LOCKS = {
   writer: () => services.configurationWriterLockPath(repoPaths().infraDir),
   backups: () => services.backupStoreLockPath(repoPaths().infraDir),
 } as const;
+
+/**
+ * A busy message names an installation lock, or its reclaim guard, by its file;
+ * the short name works too. An update receipt's lock is named by its path.
+ */
+function lockPath(value: string): string {
+  const name = value.replace(/\.reclaim$/, "");
+  const known = Object.entries(LOCKS).find(
+    ([short, path]) => name === short || name === basename(path()),
+  );
+  if (known) return known[1]();
+  if (isAbsolute(name) && /^\..+\.lock$/.test(basename(name))) return name;
+  throw new Error(`Unknown lock ${value}`);
+}
 
 function store() {
   return openLeaseStore({
@@ -186,14 +200,13 @@ export function registerControlCommands(program: Command): void {
     .command("clear")
     .description("Drop the lease of an operation, or a lock, whose holder is gone")
     .option("--op <key>", "Operation key that owns or appears in the lease")
-    .option("--lock <name>", `Lock to clear: ${Object.keys(LOCKS).join(", ")}`)
+    .option(
+      "--lock <name>",
+      `Lock to clear: ${Object.keys(LOCKS).join(", ")}, or the name a busy message prints`,
+    )
     .action(async (options: { op?: string; lock?: string }) => {
       if (options.lock) {
-        // A busy message names the lock by its file; the short name works too.
-        const path = Object.entries(LOCKS)
-          .map(([name, path]) => ({ name, path: path() }))
-          .find(({ name, path }) => options.lock === name || options.lock === basename(path))?.path;
-        if (!path) throw new Error(`Unknown lock ${options.lock}`);
+        const path = lockPath(options.lock);
         const holder = services.clearRecoverableLock(path);
         audit({ action: "clear-lock", lock: options.lock, holder: holder ?? null });
         completeCliCommand(0);

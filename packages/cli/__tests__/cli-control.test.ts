@@ -137,6 +137,38 @@ describe("openmapx control", () => {
     expect(auditLog()).toMatchObject([{ action: "clear-lock", lock: "leases.lock", holder }]);
   });
 
+  it("knows every lock name a busy message prints", async () => {
+    mkdirSync(control.leaseStoreDirectory(infraDir), { recursive: true });
+    const receiptDir = join(root, "receipts");
+    mkdirSync(receiptDir, { mode: 0o700 });
+    const locks = [
+      join(control.leaseStoreDirectory(infraDir), "leases.lock"),
+      services.configurationWriterLockPath(infraDir),
+      services.backupStoreLockPath(infraDir),
+      join(receiptDir, ".update.json.lock"),
+    ];
+    for (const [index, path] of locks.entries()) {
+      mkdirSync(join(path, ".."), { recursive: true });
+      const named = index === 3 ? { name: path } : {};
+      const busy = await services.withRecoverableLock(
+        path,
+        { purpose: "live writer", ...named },
+        () =>
+          services
+            .withRecoverableLock(path, { purpose: "second", waitMs: 0, ...named }, () => "")
+            .catch((error: Error) => error.message),
+      );
+      const name = String(busy).match(/control clear --lock ([^`]+)`/)?.[1];
+      expect(name).toBeDefined();
+      writeFileSync(path, "");
+      writeFileSync(`${path}.reclaim`, "");
+      await run("clear", "--lock", name!);
+      expect(services.readLockHolder(path)).toBeUndefined();
+      await run("clear", "--lock", `${name}.reclaim`);
+    }
+    expect(auditLog()).toHaveLength(8);
+  });
+
   it("warns that clearing a maintenance leaves its fence, which resolve then settles", async () => {
     const agent: ExecutionRef = {
       ...owner(),

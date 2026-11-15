@@ -240,7 +240,6 @@ export {
 } from "./platform-preview";
 export { expandPresets, PRESETS, type PresetName, UnknownPresetError } from "./presets";
 export {
-  acquireRecoverableLock,
   clearRecoverableLock,
   LockBusyError,
   readLockHolder,

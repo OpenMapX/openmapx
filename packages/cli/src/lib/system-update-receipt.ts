@@ -70,10 +70,11 @@ export class SystemUpdateReceiptStore {
   }
   /** One writer at a time; a second update command is refused at once while one runs. */
   private async locked<T>(run: () => T): Promise<T> {
-    const dir = this.parent();
+    const lock = join(this.parent(), `.${basename(this.path)}.lock`);
+    // The receipt is wherever the operator put it, so a busy message names the whole path.
     return services.withRecoverableLock(
-      join(dir, `.${basename(this.path)}.lock`),
-      { purpose: "system-update-receipt", waitMs: 0 },
+      lock,
+      { purpose: "system-update-receipt", waitMs: 0, name: lock },
       run,
     );
   }

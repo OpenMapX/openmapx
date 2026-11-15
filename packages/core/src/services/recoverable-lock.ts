@@ -22,8 +22,8 @@ import { fsyncDirectory } from "../release-files";
 
 /**
  * A lock file that records who holds it, so that a holder that died can be told
- * apart from one that is still working. It is held only around short file
- * updates, never across a Docker effect.
+ * apart from one that is still working. Most are held only around short file
+ * updates; the backup-store lock is held for a whole backup.
  *
  * Holders run in different PID namespaces: the agent and its fixed CLI in the
  * agent's container, the configuration helper in its own container and the
@@ -53,11 +53,12 @@ export class LockBusyError extends Error {
   constructor(
     readonly path: string,
     readonly holder: LockHolder | undefined,
+    name = basename(path),
   ) {
     super(
       holder
-        ? `${basename(path)} is held by ${holder.purpose} (pid ${holder.pid}${holder.containerId ? ` in container ${holder.containerId.slice(0, 12)}` : ""}, since ${new Date(holder.acquiredAt).toISOString()}). If that process is gone, run \`openmapx control status\` and \`openmapx control clear --lock ${basename(path)}\`.`
-        : `${basename(path)} is busy`,
+        ? `${name} is held by ${holder.purpose} (pid ${holder.pid}${holder.containerId ? ` in container ${holder.containerId.slice(0, 12)}` : ""}, since ${new Date(holder.acquiredAt).toISOString()}). If that process is gone, run \`openmapx control status\` and \`openmapx control clear --lock ${name}\`.`
+        : `${name} is busy. If no process holds it, run \`openmapx control clear --lock ${name}\`.`,
     );
   }
 }
@@ -230,7 +231,8 @@ function moveAside(path: string, judged: LockFile): void {
  * file beside the lock, and the one holding it removes the lock only if it is
  * still the file it judged: a new holder's file is never removed, because
  * nobody else removes or replaces the lock while the guard is held. Resolves
- * false when another reclaimer holds the guard; the caller looks again.
+ * true when the caller should look again at once, and false while another
+ * reclaimer holds the guard.
  */
 async function reclaim(
   path: string,
@@ -250,8 +252,10 @@ async function reclaim(
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     // A reclaimer that died while holding the guard leaves it behind.
     const other = readHolderFile(guard);
-    if (other?.holder && (await lockHolderGone(other.holder, self, containerRunning)))
+    if (other?.holder && (await lockHolderGone(other.holder, self, containerRunning))) {
       moveAside(guard, other);
+      return true;
+    }
     return false;
   }
   try {
@@ -273,6 +277,8 @@ export interface RecoverableLockOptions {
   purpose: string;
   /** How long to wait for a live holder, 5 seconds by default. */
   waitMs?: number;
+  /** The name busy messages give for `openmapx control clear --lock`; the file name by default. */
+  name?: string;
   signal?: AbortSignal;
   containerRunning?: ContainerRunning;
 }
@@ -281,7 +287,10 @@ export async function acquireRecoverableLock(
   path: string,
   options: RecoverableLockOptions,
 ): Promise<() => void> {
-  const deadline = performance.now() + (options.waitMs ?? 5_000);
+  const waitMs = options.waitMs ?? 5_000;
+  const deadline = performance.now() + waitMs;
+  // An unreadable holder record, and since when it has stayed exactly the same.
+  let unreadable: { file: LockFile; since: number } | undefined;
   for (;;) {
     options.signal?.throwIfAborted();
     const self = currentLockHolder(options.purpose);
@@ -322,19 +331,31 @@ export async function acquireRecoverableLock(
     }
     const existing = readHolderFile(path);
     if (!existing) continue;
+    // An unreadable holder record is only trusted as stale once it has stayed the
+    // same past the wait, or a second, so a holder still writing it is not displaced.
+    if (!existing.holder && !(unreadable && sameFile(existing, unreadable.file)))
+      unreadable = { file: existing, since: performance.now() };
+    const pending =
+      !existing.holder && performance.now() - (unreadable?.since ?? 0) < (waitMs || 1_000);
     if (
-      !existing.holder ||
-      (await lockHolderGone(existing.holder, self, options.containerRunning))
+      existing.holder
+        ? await lockHolderGone(existing.holder, self, options.containerRunning)
+        : !pending
     ) {
-      // An unreadable holder record is only trusted as stale once it has stayed
-      // unreadable past the wait, so a holder still writing it is not displaced.
-      if (existing.holder || performance.now() >= deadline) {
-        if (await reclaim(path, existing, self, options.containerRunning)) continue;
-        await delay(5, undefined, { signal: options.signal });
-        continue;
-      }
+      if (await reclaim(path, existing, self, options.containerRunning)) continue;
+      // Another reclaimer holds the guard; one that died there is named once the wait is over.
+      const guard = `${path}.reclaim`;
+      if (performance.now() >= deadline)
+        throw new LockBusyError(
+          guard,
+          readLockHolder(guard),
+          `${options.name ?? basename(path)}.reclaim`,
+        );
+      await delay(5, undefined, { signal: options.signal });
+      continue;
     }
-    if (performance.now() >= deadline) throw new LockBusyError(path, existing.holder);
+    if (performance.now() >= deadline && !pending)
+      throw new LockBusyError(path, existing.holder, options.name);
     await delay(25, undefined, { signal: options.signal });
   }
 }
