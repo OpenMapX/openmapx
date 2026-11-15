@@ -40,6 +40,7 @@ import {
 import { services } from "@openmapx/core/server";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyRequest } from "fastify";
+import type postgres from "postgres";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { releaseProvenance } from "../../../../../packages/core/src/services/__fixtures__/release-provenance";
 import { ownedDataManager } from "../../../../ops-agent/src/__fixtures__/owned-data-manager";
@@ -144,7 +145,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                     if (member !== "unsafe") return Reflect.get(connection, member, owned);
                     return (
                       query: string,
-                      parameters?: Parameters<typeof connection.unsafe>[1],
+                      // postgres v4 adds an `unsafe(query, options)` overload, which
+                      // `Parameters<>` would pick; name the values parameter directly.
+                      parameters?: postgres.ParameterOrJSON<never>[],
                     ) => {
                       const continuation = parameters?.some((value) => {
                         if (typeof value !== "string" || !value.startsWith("{")) return false;
