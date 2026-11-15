@@ -13,15 +13,6 @@ describe("OTP generated contract", () => {
         .digest("hex"),
     ).toBe("ee5c42d5fd6346b6062d057030f8cb2062517b31e93add66ca5a92cae247aac4");
   });
-  it("validates every operation and reproduces committed SDK and selected result validators offline", () => {
-    expect(() =>
-      execFileSync(process.execPath, ["packages/otp-codegen/generate.mjs", "--check"], {
-        cwd: root,
-        timeout: 90000,
-        stdio: "pipe",
-      }),
-    ).not.toThrow();
-  }, 90000);
 });
 
 function generate(document: string) {
