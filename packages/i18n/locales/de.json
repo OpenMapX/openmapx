@@ -12,7 +12,9 @@
     "copied": "Kopiert",
     "copyFailed": "Kopieren fehlgeschlagen",
     "linkCopied": "Link in die Zwischenablage kopiert",
-    "shareFailed": "Teilen fehlgeschlagen"
+    "shareFailed": "Teilen fehlgeschlagen",
+    "copyCoordinates": "Koordinaten kopieren",
+    "searchNearby": "In der Nähe suchen"
   },
   "crowdReports": {
     "reportButton": "Zustand melden",
