@@ -38,7 +38,6 @@ function fixture() {
   fixtures.push(dir);
   for (const file of [
     ".husky/pre-commit",
-    ".husky/pre-push",
     ".husky/commit-msg",
     "scripts/check-staged.mjs",
     "scripts/verify-full.sh",
@@ -210,10 +209,8 @@ describe("ordinary hooks", () => {
     expect(f.run().status).toBe(0);
   });
 
-  it("never runs the full suite or acquires the heavy verification lock on push", () => {
-    const f = fixture();
-    expect(f.run(".husky/pre-push").status).toBe(0);
-    expect(f.calls()).toEqual([]);
+  it("ships no pre-push hook, so a push never runs the full suite", () => {
+    expect(existsSync(join(root, ".husky/pre-push"))).toBe(false);
   });
 });
 
