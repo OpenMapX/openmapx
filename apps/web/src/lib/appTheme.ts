@@ -60,8 +60,13 @@ export const appTheme = createTheme({
   components: {
     MuiPaper: {
       defaultProps: { elevation: 0 },
+      // Raised surfaces keep the palette's surface colour in dark mode; MUI's
+      // elevation overlay would lift each one to its own lighter grey.
+      styleOverrides: { root: { backgroundImage: "none" } },
     },
     MuiButton: {
+      // Flat filled buttons; elevation belongs to floating surfaces, not actions.
+      defaultProps: { disableElevation: true },
       styleOverrides: {
         // Pill-shaped buttons; fields and cards keep the shared corner radius.
         root: { borderRadius: 999 },

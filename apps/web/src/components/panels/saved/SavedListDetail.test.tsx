@@ -198,7 +198,7 @@ it("adds and edits notes without opening the place, and opens rows through openS
   expect(screen.getByPlaceholderText("Note")).toHaveValue("Visit in daylight");
   expect(open).not.toHaveBeenCalled();
   fireEvent.keyDown(screen.getByPlaceholderText("Note"), { key: "Escape" });
-  fireEvent.click(screen.getByRole("button", { name: /Public landmark/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Public landmark/ }));
   expect(open).toHaveBeenCalledWith(state.places[0], expect.any(Function));
 });
 

@@ -10,6 +10,7 @@ import {
   signHeadline,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { emphasizeRoadNames } from "@/lib/navigation/emphasizeRoadNames";
 import { type Maneuver, maneuverIconFor } from "@/lib/navigation/maneuverIcon";
 import { LaneGuidance } from "./LaneGuidance";
 import { NavBannerShell } from "./NavBannerShell";
@@ -73,6 +74,8 @@ export interface ManeuverBannerProps {
   /** Country of the route origin, for the sign palette. */
   country?: string | null;
   units: "metric" | "imperial";
+  /** The roads the step follows, set in bold where the instruction names them. */
+  roadNames?: string[];
 }
 
 export function ManeuverBanner({
@@ -87,6 +90,7 @@ export function ManeuverBanner({
   sign,
   country,
   units,
+  roadNames,
 }: ManeuverBannerProps) {
   const t = useTranslations("navigation");
   const Icon = maneuverIconFor(maneuver).component;
@@ -140,13 +144,29 @@ export function ManeuverBanner({
     ) : undefined;
   return (
     <NavBannerShell
-      leading={<Icon sx={{ fontSize: 44 }} />}
+      leading={
+        // The arrow with the distance to it underneath, read together at a glance.
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            minWidth: 56,
+            flexShrink: 0,
+          }}
+        >
+          <Icon sx={{ fontSize: 44 }} />
+          <Typography
+            sx={{ fontSize: 18, fontWeight: 600, lineHeight: 1.2, whiteSpace: "nowrap" }}
+            aria-label={t("in", { distance: formatMeasurementDistance(distanceToManeuver, units) })}
+          >
+            {formatMeasurementDistance(distanceToManeuver, units)}
+          </Typography>
+        </Box>
+      }
       secondary={secondary}
       trailing={trailing}
     >
-      <Typography variant="h6" sx={{ lineHeight: 1.1 }}>
-        {t("in", { distance: formatMeasurementDistance(distanceToManeuver, units) })}
-      </Typography>
       {sign && (
         <ExitSignStrip
           sign={sign}
@@ -155,7 +175,18 @@ export function ManeuverBanner({
           hideHeadline={instructionRepeatsSignHeadline(instruction, sign)}
         />
       )}
-      <Typography variant="body1">{instruction}</Typography>
+      <Typography sx={{ fontSize: 20, lineHeight: 1.25 }}>
+        {emphasizeRoadNames(instruction, roadNames).map((part, index) =>
+          part.road ? (
+            // biome-ignore lint/suspicious/noArrayIndexKey: parts are positional and static per render
+            <Box key={index} component="span" sx={{ fontWeight: 700 }}>
+              {part.text}
+            </Box>
+          ) : (
+            part.text
+          ),
+        )}
+      </Typography>
     </NavBannerShell>
   );
 }

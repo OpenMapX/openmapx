@@ -3,9 +3,7 @@
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import DirectionsRunIcon from "@mui/icons-material/DirectionsRun";
 import DirectionsTransitIcon from "@mui/icons-material/DirectionsTransit";
-import NavigationIcon from "@mui/icons-material/Navigation";
 import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import type { TransitReplanOptions } from "@openmapx/core";
 import {
@@ -32,7 +30,6 @@ import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicat
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RemarkChip } from "@/components/panels/transit/RemarkChip";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
-import { ClickableRow } from "@/components/ui/ClickableRow";
 import { BRAND, BRAND_HEX } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
@@ -46,7 +43,9 @@ import {
   transitDelayMinutes,
 } from "@/lib/transitTime";
 import { formatCo2Emission } from "../../../lib/formatCo2";
+import { RouteCardActions, routeCardFrameSx } from "./routeCardChrome";
 import { TransitAccessibilityIndicator } from "./TransitAccessibilityIndicator";
+import { summaryChainLegs } from "./transitSummary";
 
 const OCCUPANCY_RANK: Record<OccupancyLevel, number> = {
   low: 0,
@@ -268,7 +267,7 @@ export function TransitItineraryCard({
   onRefreshed?: (itinerary: TripItinerary, changed: boolean, fallbackOccurred: boolean) => void;
 }) {
   const t = useTranslations("directions");
-  const tc = useTranslations("common");
+  const _tc = useTranslations("common");
   const tNav = useTranslations("navigation");
   const locale = useLocale();
   const fmt = useDateTimeFormat();
@@ -334,20 +333,48 @@ export function TransitItineraryCard({
     );
   }
 
+  const summaryLegs = summaryChainLegs(itinerary.legs);
+
+  const startNavigation = async () => {
+    // Unlock TTS from this gesture so board/alight cues can speak on iOS.
+    // A no-op inside the shell, where native owns the voice.
+    primeSpeechSynthesis();
+    // Ask for notification permission so the background get-off alarm
+    // can fire when the screen is locked. Also a no-op in the shell,
+    // which already holds the OS permission.
+    void ensureNotificationPermission();
+    if (starting) return;
+    setStarting(true);
+    const plannedAt = itinerary.refreshedAt ?? itinerary.plannedAt;
+    const oldEnough = !plannedAt || Date.now() - new Date(plannedAt).getTime() >= 60_000;
+    if (itinerary.refreshToken && oldEnough) {
+      try {
+        const response = await refreshMutation.mutateAsync(itinerary.refreshToken);
+        const next = response.data.itinerary;
+        const changed =
+          next.startTime !== itinerary.startTime ||
+          next.endTime !== itinerary.endTime ||
+          next.legs.length !== itinerary.legs.length ||
+          next.legs.some(
+            (leg, index) =>
+              leg.startTime !== itinerary.legs[index]?.startTime ||
+              leg.endTime !== itinerary.legs[index]?.endTime ||
+              leg.from.platformCode !== itinerary.legs[index]?.from.platformCode ||
+              leg.to.platformCode !== itinerary.legs[index]?.to.platformCode,
+          );
+        onRefreshed?.(next, changed, response.data.fallbackOccurred);
+        await begin(next);
+        return;
+      } catch {
+        // A failed optional refresh must not block navigation; the
+        // existing missed-connection path still performs a full replan.
+      }
+    }
+    await begin(itinerary);
+  };
+
   return (
-    <Box
-      onClick={onSelect}
-      role="button"
-      sx={{
-        px: 2,
-        py: 1.5,
-        cursor: "pointer",
-        borderLeft: active ? `4px solid ${BRAND}` : "4px solid transparent",
-        bgcolor: active ? "rgba(0,123,139,0.04)" : "transparent",
-        "&:hover": { bgcolor: active ? "rgba(0,123,139,0.07)" : "action.hover" },
-        transition: "background-color 0.15s",
-      }}
-    >
+    <Box onClick={onSelect} role="button" sx={routeCardFrameSx(active)}>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
           <DirectionsTransitIcon sx={{ fontSize: 18, color: active ? BRAND : "text.disabled" }} />
@@ -385,7 +412,7 @@ export function TransitItineraryCard({
         <Box
           sx={{ display: "flex", alignItems: "center", gap: 0.5, flexWrap: "wrap", minWidth: 0 }}
         >
-          {itinerary.legs.map((leg, i) => (
+          {summaryLegs.map((leg, i) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: legs have no stable id
             <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
               {i > 0 && <ChevronRightIcon sx={{ fontSize: 14, color: "text.disabled" }} />}
@@ -475,84 +502,17 @@ export function TransitItineraryCard({
         </Box>
       )}
       {active && (
-        <Box sx={{ mt: 0.5, ml: -1.5, display: "flex", alignItems: "center", gap: 0.5 }}>
-          <ClickableRow
-            sx={{
-              width: "auto",
-              typography: "caption",
-              color: BRAND,
-              fontWeight: 500,
-              px: 1.5,
-              py: 0.75,
-              borderRadius: 99,
-              "&:hover": { bgcolor: `${BRAND}18` },
-              transition: "background-color 0.15s",
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              onDetails();
-            }}
-          >
-            {tc("details")}
-          </ClickableRow>
-          <Button
-            size="small"
-            variant="contained"
-            startIcon={<NavigationIcon />}
-            disabled={refreshMutation.isPending || starting}
-            onClick={async (e) => {
-              e.stopPropagation();
-              // Unlock TTS from this gesture so board/alight cues can speak on iOS.
-              // A no-op inside the shell, where native owns the voice.
-              primeSpeechSynthesis();
-              // Ask for notification permission so the background get-off alarm
-              // can fire when the screen is locked. Also a no-op in the shell,
-              // which already holds the OS permission.
-              void ensureNotificationPermission();
-              if (starting) return;
-              setStarting(true);
-              const plannedAt = itinerary.refreshedAt ?? itinerary.plannedAt;
-              const oldEnough = !plannedAt || Date.now() - new Date(plannedAt).getTime() >= 60_000;
-              if (itinerary.refreshToken && oldEnough) {
-                try {
-                  const response = await refreshMutation.mutateAsync(itinerary.refreshToken);
-                  const next = response.data.itinerary;
-                  const changed =
-                    next.startTime !== itinerary.startTime ||
-                    next.endTime !== itinerary.endTime ||
-                    next.legs.length !== itinerary.legs.length ||
-                    next.legs.some(
-                      (leg, index) =>
-                        leg.startTime !== itinerary.legs[index]?.startTime ||
-                        leg.endTime !== itinerary.legs[index]?.endTime ||
-                        leg.from.platformCode !== itinerary.legs[index]?.from.platformCode ||
-                        leg.to.platformCode !== itinerary.legs[index]?.to.platformCode,
-                    );
-                  onRefreshed?.(next, changed, response.data.fallbackOccurred);
-                  await begin(next);
-                  return;
-                } catch {
-                  // A failed optional refresh must not block navigation; the
-                  // existing missed-connection path still performs a full replan.
-                }
-              }
-              await begin(itinerary);
-            }}
-            sx={{
-              bgcolor: BRAND,
-              textTransform: "none",
-              borderRadius: 99,
-              "&:hover": { bgcolor: BRAND },
-            }}
-          >
-            {tNav("start")}
-          </Button>
+        <RouteCardActions
+          onDetails={onDetails}
+          onStart={() => void startNavigation()}
+          startDisabled={refreshMutation.isPending || starting}
+        >
           {startError && (
             <Typography role="alert" sx={{ fontSize: 12, color: "error.main", ml: 1 }}>
               {tNav(startError === "incompatible" ? "startUpdateRequired" : "startFailed")}
             </Typography>
           )}
-        </Box>
+        </RouteCardActions>
       )}
     </Box>
   );

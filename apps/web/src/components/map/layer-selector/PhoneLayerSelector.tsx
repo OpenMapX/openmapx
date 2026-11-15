@@ -69,11 +69,13 @@ export function PhoneLayerSelector({ hidden }: { hidden: boolean }) {
           paper: {
             id: SHEET_ID,
             "aria-label": t("layers"),
-            sx: {
+            sx: (theme) => ({
               borderTopLeftRadius: 16,
               borderTopRightRadius: 16,
               maxHeight: "85dvh",
-            },
+              // The same surface as the other bottom sheets.
+              ...theme.applyStyles("dark", { bgcolor: "background.default" }),
+            }),
           },
         }}
       >

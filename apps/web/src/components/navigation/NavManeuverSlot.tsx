@@ -92,6 +92,7 @@ export function NavManeuverSlot() {
       sign={step.sign}
       country={country}
       units={units}
+      roadNames={step.roadNames}
     />
   );
 }

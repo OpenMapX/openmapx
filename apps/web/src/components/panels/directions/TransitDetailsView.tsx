@@ -67,6 +67,7 @@ import {
   TransitLiveBadge,
 } from "@/components/panels/directions/TransitRouteView";
 import { TransitTransferSummary } from "@/components/panels/directions/TransitTransferSummary";
+import { summaryChainLegs } from "@/components/panels/directions/transitSummary";
 import { LegAlerts } from "@/components/panels/transit/LegAlerts";
 import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
@@ -361,7 +362,7 @@ export function TransitDetailsView({
         )}
         {/* Leg badges summary */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 0.75, flexWrap: "wrap" }}>
-          {itinerary.legs.map((leg, i) => (
+          {summaryChainLegs(itinerary.legs).map((leg, i) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: legs have no stable id
             <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
               {i > 0 && <ChevronRightIcon sx={{ fontSize: 14, color: "text.disabled" }} />}
@@ -451,7 +452,9 @@ export function TransitDetailsView({
                 >
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
                     <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      {leg.from.name}
+                      {/* The trip's own start is a point, not a stop; the planner
+                          only names it with a placeholder. */}
+                      {i === 0 && !leg.from.stopId ? originLabel || leg.from.name : leg.from.name}
                     </Typography>
                     {!isWalk && leg.from.platformCode && (
                       <PlatformBadge
@@ -767,7 +770,7 @@ export function TransitDetailsView({
                       sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}
                     >
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {leg.to.name}
+                        {!leg.to.stopId ? destinationLabel || leg.to.name : leg.to.name}
                       </Typography>
                       {!isWalk && leg.to.platformCode && (
                         <PlatformBadge

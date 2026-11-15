@@ -94,6 +94,8 @@ const ALLOWED: Record<string, string[]> = {
   "components/panels/place/DataSourceSections.tsx": ["rentalUri"],
   "components/admin/integrations/IntegrationDetail.tsx": ["href", "privacyHref"],
   "components/ui/AttributionStrip.tsx": ["link.href"],
+  // A `safeHref(...)` result held in a const so the Website pill can be conditional.
+  "components/ui/PlaceResultRow.tsx": ["website"],
 };
 
 function collectTsxFiles(dir: string): string[] {

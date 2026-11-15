@@ -173,7 +173,6 @@ export function PlaceActionButtons({ place, layout = "circles" }: Props) {
             <Button
               key={action.key}
               variant={action.filled ? "contained" : "tonal"}
-              disableElevation
               startIcon={action.icon}
               onClick={action.onClick}
               sx={{ flexShrink: 0, height: 36, whiteSpace: "nowrap" }}
