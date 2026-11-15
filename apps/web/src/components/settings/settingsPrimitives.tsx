@@ -175,11 +175,46 @@ export function LinkRow({
   );
 }
 
-/** A row for a one-off action, such as playing a voice sample. */
-export function ActionRow({ label, onClick }: { label: string; onClick: () => void }) {
+/** A row for a one-off action, such as playing a voice sample, with what it does underneath. */
+export function ActionRow({
+  label,
+  description,
+  onClick,
+  disabled = false,
+}: {
+  label: string;
+  description?: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  const labelId = useId();
+  const descriptionId = useId();
   return (
-    <ListItemButton onClick={onClick} sx={ROW_SX}>
-      <ListItemText primary={label} slotProps={{ primary: { sx: { color: "primary.main" } } }} />
+    <ListItemButton
+      onClick={onClick}
+      disabled={disabled}
+      aria-labelledby={labelId}
+      aria-describedby={description ? descriptionId : undefined}
+      sx={ROW_SX}
+    >
+      <ListItemText
+        primary={label}
+        secondary={description}
+        slotProps={{
+          primary: { id: labelId, sx: { color: "primary.main" } },
+          secondary: { ...SECONDARY_SX, id: descriptionId },
+        }}
+      />
     </ListItemButton>
+  );
+}
+
+/** A row that shows a value: a label with the value at its end. */
+export function ValueRow({ label, value }: { label: string; value: string }) {
+  return (
+    <Box sx={{ ...ROW_SX, display: "flex", gap: 2, py: 1 }}>
+      <Typography sx={{ flex: 1, minWidth: 0 }}>{label}</Typography>
+      <Typography sx={{ color: "text.secondary" }}>{value}</Typography>
+    </Box>
   );
 }

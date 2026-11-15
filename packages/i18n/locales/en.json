@@ -2605,6 +2605,8 @@
     "removeAreaDescription": "This will delete the cached map data for \"{name}\" ({size}).",
     "storageTitle": "Storage",
     "storageDescription": "Cached map tiles, optional recent map data, and offline map packages.",
+    "storageUsage": "Usage",
+    "storageMapData": "Map data",
     "totalUsed": "Used: {used} of {total} ({percent}%)",
     "appShell": "App shell",
     "preferences": "Preferences",

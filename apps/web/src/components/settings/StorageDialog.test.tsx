@@ -59,7 +59,7 @@ describe("StorageDialog clear cached tiles", () => {
     );
 
     const clear = await screen.findByRole("button", { name: "settings.clearTiles" });
-    await waitFor(() => expect((clear as HTMLButtonElement).disabled).toBe(false));
+    await waitFor(() => expect(clear).not.toHaveAttribute("aria-disabled", "true"));
     await userEvent.click(clear);
 
     await waitFor(() => expect(deleted).toHaveLength(CLEARABLE_TILE_CACHES.length));

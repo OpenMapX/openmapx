@@ -2605,6 +2605,8 @@
     "removeAreaDescription": "Dies löscht die gecachten Kartendaten für \"{name}\" ({size}).",
     "storageTitle": "Speicher",
     "storageDescription": "Zwischengespeicherte Kartenkacheln, optionale kürzliche Kartendaten und Offline-Kartenpakete.",
+    "storageUsage": "Belegung",
+    "storageMapData": "Kartendaten",
     "totalUsed": "Belegt: {used} von {total} ({percent}%)",
     "appShell": "App-Shell",
     "preferences": "Einstellungen",
