@@ -12,7 +12,7 @@ import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import type { Departure, MergedDeparture } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
-import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { SectionAttribution } from "@/components/ui/SectionAttribution";
 import { useNow } from "@/lib/useNow";
 import { useSearchBarClearance } from "../searchBarClearance";
 import { AlertsBanner } from "./AlertsBanner";
@@ -131,11 +131,6 @@ export function StopBoardView({ stopId, title, onBack, onDepartureClick }: StopB
           </ToggleButtonGroup>
         </Box>
       )}
-      <AttributionStrip
-        attributions={mergedAttributions}
-        variant="panel-header"
-        label={tc("dataSources")}
-      />
       <Box sx={{ flex: 1, overflowY: { xs: "visible", sm: "auto" } }}>
         {alerts && alerts.length > 0 && (
           <Box sx={{ px: 1.5, pt: 1, pb: 0.5 }}>
@@ -193,6 +188,8 @@ export function StopBoardView({ stopId, title, onBack, onDepartureClick }: StopB
             </Typography>
           </Box>
         ) : null}
+        {/* Credits follow the list, where they don't push departures down. */}
+        <SectionAttribution attributions={mergedAttributions} inset />
       </Box>
     </Box>
   );

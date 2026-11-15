@@ -17,7 +17,7 @@ import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import type { MergedDeparture, TransportMode } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
-import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { SectionAttribution } from "@/components/ui/SectionAttribution";
 import { useNow } from "@/lib/useNow";
 import { useSearchBarClearance } from "../searchBarClearance";
 import { DepartureRow } from "./DepartureRow";
@@ -158,11 +158,6 @@ export function PlaceDeparturesView({
           </ToggleButtonGroup>
         </Box>
       )}
-      <AttributionStrip
-        attributions={mergedAttributions}
-        variant="panel-header"
-        label={tc("dataSources")}
-      />
       {/* Scrollable list area — on desktop this is the only thing that scrolls */}
       <Box sx={{ flex: 1, overflowY: { xs: "visible", sm: "auto" } }}>
         <TransitQueryNotice
@@ -226,6 +221,8 @@ export function PlaceDeparturesView({
             </Typography>
           </Box>
         ) : null}
+        {/* Credits follow the list, where they don't push departures down. */}
+        <SectionAttribution attributions={mergedAttributions} inset />
       </Box>
     </Box>
   );
