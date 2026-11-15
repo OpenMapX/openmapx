@@ -3149,7 +3149,7 @@
   "menu": {
     "saved": "Gespeichert",
     "timeline": "Ihre Zeitleiste",
-    "shareMap": "Karte teilen oder einbetten",
+    "shareMap": "Karte teilen",
     "importFile": "Datei importieren (GPX, GeoJSON, KML)",
     "importFailed": "Datei konnte nicht gelesen werden. Unterstützt: GPX, GeoJSON, KML.",
     "offlineMaps": "Offline-Karten",

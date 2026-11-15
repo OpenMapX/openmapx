@@ -3149,7 +3149,7 @@
   "menu": {
     "saved": "Saved",
     "timeline": "Your timeline",
-    "shareMap": "Share or embed map",
+    "shareMap": "Share map",
     "importFile": "Import file (GPX, GeoJSON, KML)",
     "importFailed": "Couldn't read that file. Supported: GPX, GeoJSON, KML.",
     "offlineMaps": "Offline maps",
