@@ -167,8 +167,19 @@ export function TransitNavigationView() {
     >
       {browserAuthority && <BrowserTransitRuntime active={active} />}
       {status === "arrived" ? (
+        // A sheet on a phone's bottom edge, as the drive's arrival; centred on wider screens.
         <Box
-          sx={{ pointerEvents: "auto", m: "auto", bgcolor: "background.paper", borderRadius: 3 }}
+          sx={{
+            pointerEvents: "auto",
+            mt: "auto",
+            mx: { xs: 0, sm: "auto" },
+            mb: { xs: 0, sm: "auto" },
+            width: { xs: "100%", sm: 440 },
+            bgcolor: "background.paper",
+            borderRadius: { xs: "16px 16px 0 0", sm: 3 },
+            boxShadow: 6,
+            pb: { xs: "var(--omx-safe-bottom)", sm: 0 },
+          }}
         >
           <TransitArrivalCard itinerary={itinerary} onClose={() => void completeArrival()} />
           <TransitJourneyControls

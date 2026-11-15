@@ -10,7 +10,7 @@ import {
   signHeadline,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { emphasizeRoadNames } from "@/lib/navigation/emphasizeRoadNames";
+import { bannerInstruction, emphasizeRoadNames } from "@/lib/navigation/emphasizeRoadNames";
 import { type Maneuver, maneuverIconFor } from "@/lib/navigation/maneuverIcon";
 import { LaneGuidance } from "./LaneGuidance";
 import { NavBannerShell } from "./NavBannerShell";
@@ -114,7 +114,7 @@ export function ManeuverBanner({
     <>
       <NextIcon sx={{ fontSize: 20, opacity: 0.85 }} />
       <Typography variant="body2" sx={{ opacity: 0.85 }} noWrap>
-        {t("then", { instruction: lowercaseFirstWord(nextInstruction) })}
+        {t("then", { instruction: lowercaseFirstWord(bannerInstruction(nextInstruction)) })}
       </Typography>
     </>
   ) : undefined;
@@ -176,7 +176,7 @@ export function ManeuverBanner({
         />
       )}
       <Typography sx={{ fontSize: 20, lineHeight: 1.25 }}>
-        {emphasizeRoadNames(instruction, roadNames).map((part, index) =>
+        {emphasizeRoadNames(bannerInstruction(instruction), roadNames).map((part, index) =>
           part.road ? (
             // biome-ignore lint/suspicious/noArrayIndexKey: parts are positional and static per render
             <Box key={index} component="span" sx={{ fontWeight: 700 }}>

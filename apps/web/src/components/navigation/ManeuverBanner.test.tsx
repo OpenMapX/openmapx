@@ -1,6 +1,7 @@
 import type { ManeuverSign } from "@openmapx/core";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { bannerInstruction } from "@/lib/navigation/emphasizeRoadNames";
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string, values?: Record<string, unknown>) => {
@@ -68,7 +69,7 @@ describe("ManeuverBanner", () => {
     const strip = container.querySelector('[data-testid="exit-sign-strip"]');
     expect(strip?.textContent).toBe("Exit 20A 46");
     expect(strip?.querySelector('[aria-label="A 46"]')).not.toBeNull();
-    expect(container.textContent).toContain(instruction);
+    expect(container.textContent).toContain(bannerInstruction(instruction));
     expect(container.textContent?.match(/Heinsberg/g)).toHaveLength(1);
     expect(container.textContent).not.toContain("Kreuz Neuss-West");
   });
@@ -83,7 +84,7 @@ describe("ManeuverBanner", () => {
     expect(container.querySelector('[data-testid="exit-sign-strip"]')?.textContent).toContain(
       "Kreuz Holz",
     );
-    expect(container.textContent).toContain(instruction);
+    expect(container.textContent).toContain(bannerInstruction(instruction));
   });
 
   it.each([
@@ -96,7 +97,7 @@ describe("ManeuverBanner", () => {
     expect(container.querySelector('[data-testid="exit-sign-strip"]')?.textContent).toBe(
       "Exit 20A 46",
     );
-    expect(container.textContent).toContain(instruction);
+    expect(container.textContent).toContain(bannerInstruction(instruction));
   });
 
   it("recognizes equivalent Unicode spelling and whitespace without changing the instruction", () => {
@@ -108,7 +109,7 @@ describe("ManeuverBanner", () => {
     expect(container.querySelector('[data-testid="exit-sign-strip"]')?.textContent).toBe(
       "Exit 20A 46",
     );
-    expect(container.textContent).toContain(instruction);
+    expect(container.textContent).toContain(bannerInstruction(instruction));
   });
 
   it("keeps the whole headline when only some destinations are repeated", () => {
@@ -127,7 +128,7 @@ describe("ManeuverBanner", () => {
     expect(container.querySelector('[data-testid="exit-sign-strip"]')?.textContent).toBe(
       "Exit 20A 46",
     );
-    expect(container.textContent).toContain(instruction);
+    expect(container.textContent).toContain(bannerInstruction(instruction));
   });
 
   it.each([
@@ -180,7 +181,7 @@ describe("ManeuverBanner", () => {
   it("omits an otherwise empty sign row when its headline repeats the instruction", () => {
     const container = bannerWithSign("Keep right toward Aachen.", { exitToward: ["Aachen"] });
     expect(container.querySelector('[data-testid="exit-sign-strip"]')).toBeNull();
-    expect(container.textContent).toContain("Keep right toward Aachen.");
+    expect(container.textContent).toContain("Keep right toward Aachen");
   });
 
   it("renders the instruction and distance to the maneuver", () => {
