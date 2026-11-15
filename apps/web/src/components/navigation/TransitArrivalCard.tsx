@@ -31,20 +31,28 @@ export function TransitArrivalCard({
   const destination = last && tripPlaceName(last.to, labels.destination);
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1.5, p: 3 }}>
-      <PlaceIcon color="primary" sx={{ fontSize: 48 }} />
-      <Typography variant="h6">{t("arrived")}</Typography>
-      {destination && (
-        <Typography variant="subtitle1" sx={{ fontWeight: 600, textAlign: "center" }}>
-          {destination}
-        </Typography>
-      )}
-      <Typography variant="body2" color="text.secondary">
-        {formatDuration(itinerary.duration, locale)} · {fmt.time(itinerary.endTime)}
-      </Typography>
-      <Button variant="contained" onClick={onClose} sx={{ mt: 1 }}>
-        {t("done")}
-      </Button>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2, p: { xs: 2, sm: 3 } }}>
+      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5 }}>
+        <PlaceIcon color="primary" sx={{ fontSize: 28, mt: 0.25 }} />
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="body2" color="text.secondary">
+            {t("arrived")}
+          </Typography>
+          {destination && (
+            <Typography component="h2" sx={{ fontSize: 22, fontWeight: 500, lineHeight: 1.3 }}>
+              {destination}
+            </Typography>
+          )}
+          <Typography variant="body2" color="text.secondary">
+            {formatDuration(itinerary.duration, locale)} · {fmt.time(itinerary.endTime)}
+          </Typography>
+        </Box>
+      </Box>
+      <Box>
+        <Button variant="contained" onClick={onClose}>
+          {t("done")}
+        </Button>
+      </Box>
     </Box>
   );
 }

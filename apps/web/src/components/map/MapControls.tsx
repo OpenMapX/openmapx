@@ -37,6 +37,9 @@ export function MapControls() {
   const tNav = useTranslations("navigation");
   const { zoomIn, zoomOut, resetBearing } = useMap();
   const navigating = useNavigationStore((s) => s.status !== "idle");
+  // On arrival a phone's sheet covers the bottom edge and voice and reporting
+  // no longer apply, so the stack steps aside until the trip is closed.
+  const arrived = useNavigationStore((s) => s.status === "arrived");
   const navKind = useNavigationStore((s) => s.kind);
   const navCameraMode = useNavigationStore((s) => s.cameraMode);
   const setCameraMode = useNavigationStore((s) => s.setCameraMode);
@@ -167,6 +170,7 @@ export function MapControls() {
           alignItems: "center",
           gap: 1,
           zIndex: 10,
+          ...(arrived && { visibility: { xs: "hidden", sm: "visible" } }),
           // No `bottom` transition: the sheet republishes its height on every
           // frame it moves, and an eased transition restarted per frame would
           // trail the sheet by a few hundred pixels instead of riding on it.

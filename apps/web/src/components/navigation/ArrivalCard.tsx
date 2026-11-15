@@ -57,7 +57,7 @@ export function ArrivalCard({ onClose, destinationName }: ArrivalCardProps) {
       sx={{
         display: "flex",
         flexDirection: "column",
-        alignItems: "center",
+        alignItems: "stretch",
         gap: 2,
         p: { xs: 2, sm: 3 },
         width: "100%",
@@ -65,25 +65,27 @@ export function ArrivalCard({ onClose, destinationName }: ArrivalCardProps) {
         boxSizing: "border-box",
       }}
     >
-      <PlaceIcon color="primary" sx={{ fontSize: 48 }} />
-      <Box sx={{ textAlign: "center" }}>
-        <Typography variant="h6" component="h2">
-          {t("arrived")}
-        </Typography>
-        {resolvedDestinationName && (
-          <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 0.5 }}>
-            {resolvedDestinationName}
+      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, width: "100%" }}>
+        <PlaceIcon color="primary" sx={{ fontSize: 28, mt: 0.25 }} />
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="body2" color="text.secondary">
+            {t("arrived")}
           </Typography>
-        )}
+          {resolvedDestinationName && (
+            <Typography component="h2" sx={{ fontSize: 22, fontWeight: 500, lineHeight: 1.3 }}>
+              {resolvedDestinationName}
+            </Typography>
+          )}
+        </Box>
       </Box>
 
-      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", justifyContent: "center" }}>
+      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", width: "100%" }}>
         <Button variant="contained" onClick={handleDone}>
           {t("done")}
         </Button>
         {canSaveParking && (
           <Button
-            variant="outlined"
+            variant="tonal"
             startIcon={<LocalParkingIcon />}
             disabled={isSavingParking || isParkingSaved || isStartingHandoff}
             onClick={() => void onSaveParkingPress()}
