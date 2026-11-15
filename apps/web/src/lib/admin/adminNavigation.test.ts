@@ -1,5 +1,8 @@
+import { readdirSync } from "node:fs";
+import { resolve } from "node:path";
 import { expect, it } from "vitest";
 import {
+  ADMIN_DESTINATIONS,
   adminDestinations,
   adminPrimaryNavigation,
   adminWorkspaceForPath,
@@ -88,3 +91,30 @@ it.each([
 ])("rejects unsupported return state %s", (path) =>
   expect(safeAdminNavigationReturn(path)).toBeNull(),
 );
+
+// Route groups such as `(full-admin)` add no URL segment; `[id]` matches any one segment.
+const adminRoutes = readdirSync(resolve(import.meta.dirname, "../../app/admin"), {
+  recursive: true,
+  encoding: "utf8",
+})
+  .filter((file) => /(^|\/)page\.tsx$/.test(file))
+  .map((file) =>
+    ["admin", ...file.split("/").slice(0, -1)].filter((segment) => !/^\(.*\)$/.test(segment)),
+  );
+const hasPage = (href: string) => {
+  const segments = href.split("/").filter(Boolean);
+  return adminRoutes.some(
+    (route) =>
+      route.length === segments.length &&
+      route.every((segment, index) => /^\[.*\]$/.test(segment) || segment === segments[index]),
+  );
+};
+it.each(ADMIN_DESTINATIONS.map((entry) => entry.href))(
+  "serves a page for the admin destination %s",
+  (href) => {
+    expect(hasPage(href)).toBe(true);
+  },
+);
+it("does not treat a path without a page file as served", () => {
+  expect(hasPage("/admin/data/missing")).toBe(false);
+});
