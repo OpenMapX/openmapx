@@ -245,3 +245,39 @@ it("keeps an execution whose effect record is absent, with its lease held", asyn
   await expect(releaseArtifactTargetLease(lease)).rejects.toThrow();
   expect(readdirSync(join(root, "data/.admin-target-control/leases"))).toEqual([lease.leaseId]);
 });
+
+it("keeps a borrower while the lease it adopted is held, and while any adoption is unreadable", async () => {
+  const owner = admit(),
+    borrower = admit(),
+    lease = await acquireArtifactTargetLease({
+      dataRoot: join(root, "data"),
+      serviceIds: ["osrm"],
+      owner: owner.authority,
+    });
+  settle(borrower.authority);
+  // The prune reads only an adoption's execution and the lease named in its
+  // assertion, so the borrower's adoption record is written directly.
+  const adoption = record("adoptions", randomUUID()),
+    assertion = Buffer.from(JSON.stringify({ leaseId: lease.leaseId })).toString("base64url");
+  mkdirSync(dirname(adoption), { recursive: true, mode: 0o700 });
+  writeFileSync(adoption, JSON.stringify({ execution: borrower.execution, assertion }), {
+    mode: 0o600,
+  });
+  const later =
+    Math.max(owner.execution.deadlineAt, borrower.execution.deadlineAt) + 30 * 24 * 3600_000;
+  expect(await pruneControlRecords(installation, { now: later })).toEqual([]);
+  settle(owner.authority);
+  await settleArtifactTargetLeaseChild(
+    lease,
+    verifyControlEffectSettlement(installation, owner.execution),
+  );
+  await releaseArtifactTargetLease(lease);
+  const unreadable = record("adoptions", randomUUID());
+  writeFileSync(unreadable, "{", { mode: 0o600 });
+  expect(await pruneControlRecords(installation, { now: later })).toEqual([]);
+  rmSync(unreadable);
+  expect((await pruneControlRecords(installation, { now: later })).sort()).toEqual(
+    [owner.execution.operationKey, borrower.execution.operationKey].sort(),
+  );
+  expect(existsSync(adoption)).toBe(false);
+});

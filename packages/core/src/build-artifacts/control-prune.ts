@@ -144,7 +144,8 @@ function withNamespace<T>(
 function entries(dir: AnchoredDirectory, onFull: () => void): string[] {
   try {
     return dir.listBounded(MAX_ENTRIES);
-  } catch {
+  } catch (error) {
+    if ((error as Error).message !== "Authority directory capacity exceeded") throw error;
     onFull();
     return dir.list().slice(0, MAX_ENTRIES);
   }
@@ -173,37 +174,47 @@ function assertionLeaseId(assertion: string): string {
     JSON.parse(Buffer.from(assertion, "base64url").toString("utf8")),
   ).leaseId;
 }
+type Borrowed = { leaseId: string; delegationId: string }[];
+/** Borrower adoptions by operation key, read once per pass; null when an entry
+ * is unreadable, so no execution is taken for unleased. */
+function adoptionIndex(local: InstallationState, onFull: () => void): Map<string, Borrowed> | null {
+  const index = new Map<string, Borrowed>();
+  let unreadable = false;
+  withNamespace(local, "adoptions", (dir) => {
+    for (const entry of entries(dir, onFull))
+      try {
+        const value = borrowedSchema.parse(JSON.parse(dir.read(entry, 65536).toString("utf8")));
+        const key = value.execution.operationKey;
+        index.set(key, [
+          ...(index.get(key) ?? []),
+          {
+            leaseId: assertionLeaseId(value.assertion),
+            delegationId: entry.replace(/\.json$/, ""),
+          },
+        ]);
+      } catch {
+        unreadable = true;
+      }
+  });
+  return unreadable ? null : index;
+}
 /** Leases this execution borrowed, with the delegation it adopted. */
 function borrowedLeases(
   local: InstallationState,
   admitted: Admission,
   name: string,
-  onFull: () => void,
-): { leaseId: string; delegationId: string }[] {
-  const leases: { leaseId: string; delegationId: string }[] = [];
+  adoptions: Map<string, Borrowed>,
+): Borrowed {
   const fence = optional(() =>
     adoptionReferenceSchema.parse(
       (readPrivateRecord(local, "execution-adoptions", name, 8192) as { payload?: unknown })
         .payload,
     ),
   );
-  if (fence) leases.push({ leaseId: fence.leaseId, delegationId: fence.delegationId });
-  withNamespace(local, "adoptions", (dir) => {
-    for (const entry of entries(dir, onFull)) {
-      let value: z.infer<typeof borrowedSchema>;
-      try {
-        value = borrowedSchema.parse(JSON.parse(dir.read(entry, 65536).toString("utf8")));
-      } catch {
-        continue;
-      }
-      if (value.execution.operationKey === admitted.execution.operationKey)
-        leases.push({
-          leaseId: assertionLeaseId(value.assertion),
-          delegationId: entry.replace(/\.json$/, ""),
-        });
-    }
-  });
-  return leases;
+  return [
+    ...(fence ? [{ leaseId: fence.leaseId, delegationId: fence.delegationId }] : []),
+    ...(adoptions.get(admitted.execution.operationKey) ?? []),
+  ];
 }
 /** The execution and the identifiers of its own records, when they may go. */
 function prunable(
@@ -212,6 +223,7 @@ function prunable(
   name: string,
   now: number,
   onFull: () => void,
+  adoptions: () => Map<string, Borrowed> | null,
 ): Prunable | null {
   const admitted = admissionSchema.parse(
     readPrivateRecord(local, "executions", name, 65536),
@@ -303,7 +315,9 @@ function prunable(
   ])
     add(issued, id);
   // As a borrower: only its own adoption record, once the lease is released.
-  for (const lease of borrowedLeases(local, admitted, name, onFull)) {
+  const index = adoptions();
+  if (!index) return null;
+  for (const lease of borrowedLeases(local, admitted, name, index)) {
     if (!artifactTargetLeaseReleased(local, lease.leaseId)) return null;
     add(["adoptions"], lease.delegationId);
   }
@@ -418,10 +432,16 @@ export async function pruneControlRecords(
     batch = [...names.slice(start), ...names.slice(0, start)].slice(0, limit);
   cursors.set(local, start + batch.length);
   const found: Prunable[] = [];
+  let index: Map<string, Borrowed> | null | undefined;
+  const adoptions = () => {
+    if (index === undefined) index = adoptionIndex(local, onFull);
+    return index;
+  };
   for (const name of batch) {
+    if (options.keep?.(name.replace(/\.json$/, ""))) continue;
     try {
-      const value = prunable(installation, local, name, now, onFull);
-      if (value && !options.keep?.(value.key)) found.push(value);
+      const value = prunable(installation, local, name, now, onFull, adoptions);
+      if (value) found.push(value);
     } catch {
       /* An unreadable or unverifiable record is kept. */
     }
@@ -448,6 +468,9 @@ export async function pruneControlRecords(
       for (const { ownerRecord } of found)
         if (ownerRecord) optional(() => dir.removeFile(ownerRecord));
     });
+    // A namespace read only in part may still hold records of these
+    // executions; their admissions stay so a later pass finds them again.
+    if (reported) return [];
     // The admission goes first, then its terminal commitment and effect: a pass
     // interrupted in between leaves only those, removed as strays below.
     for (const [namespace, name] of [
