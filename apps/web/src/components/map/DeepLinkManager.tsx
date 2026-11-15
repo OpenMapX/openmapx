@@ -499,9 +499,11 @@ function applyMeasurement(parsed: ParsedDeepLink["measurement"]): void {
   const mode = oneOf(parsed.mode, MEASUREMENT_MODES);
   const units = oneOf(parsed.unitSystem, UNIT_SYSTEMS);
   const store = useMeasurementStore.getState();
+  // Activating starts a fresh measurement in the viewer's own units; the
+  // link's mode and units then apply on top.
+  store.activate();
   if (mode) store.setMode(mode);
   if (units) store.setUnitSystem(units);
-  store.activate();
   for (const point of parsed.points) store.addPoint(point);
   if (parsed.finalized) store.finalize();
 }

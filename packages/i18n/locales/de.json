@@ -14,7 +14,8 @@
     "linkCopied": "Link in die Zwischenablage kopiert",
     "shareFailed": "Teilen fehlgeschlagen",
     "copyCoordinates": "Koordinaten kopieren",
-    "searchNearby": "In der Nähe suchen"
+    "searchNearby": "In der Nähe suchen",
+    "measureDistance": "Entfernung messen"
   },
   "crowdReports": {
     "reportButton": "Zustand melden",
@@ -3345,14 +3346,19 @@
   "measurement": {
     "lineMode": "Entfernung messen",
     "polygonMode": "Fläche messen",
-    "clickToStart": "Klicke auf die Karte, um zu messen",
+    "clickToStart": "Klicke auf die Karte, um Punkte zu setzen",
     "clickToClose": "Klicke den ersten Punkt oder doppelklicke zum Schließen",
     "total": "Gesamt",
     "perimeter": "Umfang",
     "undo": "Rückgängig",
     "redo": "Wiederherstellen",
     "clearMeasurement": "Löschen",
-    "closeTool": "Messwerkzeug schließen"
+    "closeTool": "Messwerkzeug schließen",
+    "distance": "Entfernung",
+    "area": "Fläche",
+    "tapToStart": "Tippe auf die Karte, um Punkte zu setzen",
+    "tapToClose": "Tippe auf den ersten Punkt, um die Fläche zu schließen",
+    "perimeterValue": "Umfang {distance}"
   },
   "travelTime": {
     "driving": "Auto",

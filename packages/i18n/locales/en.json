@@ -14,7 +14,8 @@
     "linkCopied": "Link copied to clipboard",
     "shareFailed": "Couldn’t share",
     "copyCoordinates": "Copy coordinates",
-    "searchNearby": "Search nearby"
+    "searchNearby": "Search nearby",
+    "measureDistance": "Measure distance"
   },
   "crowdReports": {
     "reportButton": "Report a condition",
@@ -3345,14 +3346,19 @@
   "measurement": {
     "lineMode": "Measure distance",
     "polygonMode": "Measure area",
-    "clickToStart": "Click on the map to start measuring",
+    "clickToStart": "Click the map to add points",
     "clickToClose": "Click first point or double-click to close",
     "total": "Total",
     "perimeter": "Perimeter",
     "undo": "Undo",
     "redo": "Redo",
     "clearMeasurement": "Clear",
-    "closeTool": "Close measurement tool"
+    "closeTool": "Close measurement tool",
+    "distance": "Distance",
+    "area": "Area",
+    "tapToStart": "Tap the map to add points",
+    "tapToClose": "Tap the first point to close the area",
+    "perimeterValue": "Perimeter {distance}"
   },
   "travelTime": {
     "driving": "Driving",

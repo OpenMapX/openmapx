@@ -1,4 +1,6 @@
+import { useMeasurementStore } from "@integrations/overlay-tool-measurement/store";
 import {
+  type LngLat,
   PANEL,
   type Place,
   useDirectionsStore,
@@ -48,4 +50,12 @@ export function shareLocationLink(place: Place): Promise<ShareCurrentUrlResult> 
     rawCategory: place.rawCategory,
   });
   return shareUrl({ url, title: place.name });
+}
+
+/** Starts measuring a distance from the location; each tap or click on the map adds a point. */
+export function measureFrom(point: LngLat): void {
+  const measurement = useMeasurementStore.getState();
+  measurement.activate();
+  measurement.setMode("line");
+  measurement.addPoint(point);
 }

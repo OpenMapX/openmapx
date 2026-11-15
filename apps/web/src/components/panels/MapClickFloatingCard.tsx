@@ -7,6 +7,7 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import LocalParkingIcon from "@mui/icons-material/LocalParking";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
 import ShareIcon from "@mui/icons-material/Share";
+import StraightenIcon from "@mui/icons-material/Straighten";
 import TripOriginIcon from "@mui/icons-material/TripOrigin";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -43,7 +44,7 @@ import Menu from "@/components/ui/Menu";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
-import { routeFromOrTo, shareLocationLink } from "@/lib/locationActions";
+import { measureFrom, routeFromOrTo, shareLocationLink } from "@/lib/locationActions";
 import { useMapFooterBox } from "@/lib/mapFooterCenter";
 import { subscribeMobileFooterSurfaces, topMobileFooterSurface } from "@/lib/mobileFooterSurface";
 import { useBackDismiss } from "@/lib/useBackDismiss";
@@ -291,6 +292,15 @@ export function MapClickFloatingCard() {
               label={tc("copy")}
               onClick={(event) => handleCopy(event.currentTarget)}
               menuOpen={copyRows.length > 1 ? copyAnchor !== null : undefined}
+            />
+            <Action
+              icon={<StraightenIcon />}
+              label={tm("measureDistance")}
+              onClick={() => {
+                if (!clickedLngLat) return;
+                measureFrom(clickedLngLat);
+                setClickedLngLat(null);
+              }}
             />
             <Action icon={<InfoOutlinedIcon />} label={tc("details")} onClick={handleCoordClick} />
           </Box>

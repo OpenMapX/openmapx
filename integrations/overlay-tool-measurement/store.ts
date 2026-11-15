@@ -1,4 +1,4 @@
-import type { LngLat, UnitSystem } from "@openmapx/core";
+import { type LngLat, type UnitSystem, useSettingsStore } from "@openmapx/core";
 import { create } from "zustand";
 
 export type MeasurementMode = "line" | "polygon";
@@ -33,7 +33,15 @@ export const useMeasurementStore = create<MeasurementState>((set, get) => ({
   unitSystem: "metric",
   isFinalized: false,
 
-  activate: () => set({ isActive: true, points: [], undonePoints: [], isFinalized: false }),
+  // A measurement starts in the units the app is set to.
+  activate: () =>
+    set({
+      isActive: true,
+      points: [],
+      undonePoints: [],
+      isFinalized: false,
+      unitSystem: useSettingsStore.getState().units,
+    }),
 
   deactivate: () => set({ isActive: false, points: [], undonePoints: [], isFinalized: false }),
 
