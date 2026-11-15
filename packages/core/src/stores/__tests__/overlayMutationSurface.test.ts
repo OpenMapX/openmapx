@@ -108,8 +108,7 @@ const TOGGLE_OVERLAY_CALLERS = [
   "apps/web/src/components/command-palette/useCommandSources.ts",
   "apps/web/src/components/map/Pegman.tsx",
   "apps/web/src/components/map/layer-selector/DesktopQuickSelector.tsx",
-  "apps/web/src/components/map/layer-selector/DesktopMorePanel.tsx",
-  "apps/web/src/components/map/layer-selector/MobileLayerPanel.tsx",
+  "apps/web/src/components/map/layer-selector/LayerDetailsPanel.tsx",
   REGISTRY_IMPL_FILE,
 ];
 

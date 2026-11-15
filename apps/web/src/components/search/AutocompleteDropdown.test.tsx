@@ -65,9 +65,9 @@ describe("AutocompleteDropdown", () => {
     );
 
     screen.getByText("search.resultTypeStop · Lagerhausstrasse, Aachen, Germany");
-    screen.getByText("search.resultTypePlace · Main Street, Frankfurt, Germany");
+    screen.getByText("Main Street, Frankfurt, Germany");
     screen.getByText("search.resultTypeStop · Aachen, Germany");
-    screen.getByText("search.resultTypePlace · Aachen, Germany");
+    screen.getByText("Aachen, Germany");
   });
 
   it("keeps different localities visible for places with the same name", () => {
@@ -101,7 +101,12 @@ describe("AutocompleteDropdown", () => {
       />,
     );
 
-    screen.getByText("search.resultTypePlace · Station Road, Aachen · 0 m search.fromYou");
+    // The address stays whole; the distance sits under the icon, with its
+    // reference spelled out for assistive technology.
+    screen.getByText("Station Road, Aachen");
+    expect(screen.getByRole("option").textContent).toContain("0 m search.fromYou");
+    // The name leads; the distance is read after the address, not before the place.
+    expect(screen.getByRole("option", { name: /^Central Cafe/ })).toBeInTheDocument();
   });
 
   it("uses the map center only without a user fix and leaves unknown positions unmeasured", () => {
@@ -116,7 +121,9 @@ describe("AutocompleteDropdown", () => {
       />,
     );
 
-    screen.getByText("search.resultTypeAddress · 0 m search.fromMapCenter");
+    expect(screen.getByRole("option", { name: /Near/ }).textContent).toContain(
+      "0 m search.fromMapCenter",
+    );
     expect(screen.getByRole("option", { name: /Unknown/ }).textContent).not.toContain(
       "fromMapCenter",
     );
@@ -140,7 +147,7 @@ describe("AutocompleteDropdown", () => {
 
     screen.getByText("search.resultTypeStreet");
     expect(screen.getAllByRole("option")[1].querySelector("p")?.textContent).toBe(
-      "search.resultTypePlace · Near the old bridge,  upstairs",
+      "Near the old bridge,  upstairs",
     );
   });
 
@@ -168,7 +175,7 @@ describe("AutocompleteDropdown", () => {
 
     screen.getByText("search.searchCategory");
     screen.getByText("search.searchBrand · Coffee shops");
-    screen.getByText("search.resultTypePlace · Main Street, Aachen");
+    screen.getByText("Main Street, Aachen");
   });
 
   it("selects the original suggestion object and full address after display shortening", async () => {
@@ -191,9 +198,7 @@ describe("AutocompleteDropdown", () => {
     expect(screen.getAllByRole("option")).toHaveLength(2);
     expect(screen.getByText("Berlin")).toBeVisible();
     expect(screen.getByText("search.resultTypeArea · Germany")).toBeInTheDocument();
-    expect(
-      screen.getByText("search.resultTypePlace · Lagerhausstrasse, Aachen, Germany"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Lagerhausstrasse, Aachen, Germany")).toBeInTheDocument();
     expect(screen.queryByText(/Aachen Hauptbahnhof, Lagerhausstrasse/)).toBeNull();
 
     await user.click(screen.getByRole("option", { name: /Aachen Hauptbahnhof/ }));

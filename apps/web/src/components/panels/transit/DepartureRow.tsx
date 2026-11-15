@@ -10,6 +10,7 @@ import type { Freshness } from "@openmapx/mobility-core/freshness";
 import type { Departure, MergedDeparture, TripRemark } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { departureRealtimeEvidence } from "@/lib/transit-data-status";
+import { VISUALLY_HIDDEN } from "@/lib/visuallyHidden";
 import { DepartureTime } from "./DepartureTime";
 import { OccupancyIndicator } from "./OccupancyIndicator";
 import { PlatformBadge } from "./PlatformBadge";
@@ -28,15 +29,6 @@ interface DepartureRowProps {
   /** Show a warning indicator when the route has an active severe/critical alert. */
   hasAlert?: boolean;
 }
-
-const VISUALLY_HIDDEN = {
-  position: "absolute",
-  width: 1,
-  height: 1,
-  overflow: "hidden",
-  clip: "rect(0 0 0 0)",
-  whiteSpace: "nowrap",
-} as const;
 
 function topRemark(remarks: TripRemark[]): TripRemark {
   return [...remarks].sort((a, b) => REMARK_PRIORITY[b.type] - REMARK_PRIORITY[a.type])[0];

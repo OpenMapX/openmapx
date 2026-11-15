@@ -26,6 +26,7 @@ import {
   useCoverageRegions,
   useCoverageReport,
 } from "@/lib/admin/coverageHooks";
+import { VISUALLY_HIDDEN } from "@/lib/visuallyHidden";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { CompactAlert } from "../shared/CompactAlert";
 import { CoverageSourcesTable } from "./CoverageSourcesTable";
@@ -214,17 +215,7 @@ export function CoveragePage() {
         }
       />
 
-      <Box
-        role="status"
-        aria-live="polite"
-        sx={{
-          position: "absolute",
-          width: 1,
-          height: 1,
-          overflow: "hidden",
-          clip: "rect(0 0 0 0)",
-        }}
-      >
+      <Box role="status" aria-live="polite" sx={VISUALLY_HIDDEN}>
         {announcement}
       </Box>
 

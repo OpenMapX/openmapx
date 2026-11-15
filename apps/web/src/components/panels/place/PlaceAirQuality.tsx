@@ -22,6 +22,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { SectionAttribution } from "@/components/ui/SectionAttribution";
+import { VISUALLY_HIDDEN } from "@/lib/visuallyHidden";
 import {
   categoryPresentation,
   dominantPollutantKeys,
@@ -498,21 +499,7 @@ export function PlaceAirQuality({ lat, lng, enabled = true, countryCode, subdivi
   if (current.isLoading) {
     return (
       <Box role="status" aria-label={t("airQuality.loading")} sx={{ py: 1 }}>
-        <Typography
-          sx={{
-            position: "absolute",
-            width: 1,
-            height: 1,
-            p: 0,
-            m: -1,
-            overflow: "hidden",
-            clip: "rect(0 0 0 0)",
-            whiteSpace: "nowrap",
-            border: 0,
-          }}
-        >
-          {t("airQuality.loading")}
-        </Typography>
+        <Typography sx={VISUALLY_HIDDEN}>{t("airQuality.loading")}</Typography>
         <Skeleton variant="text" width="65%" />
         <Skeleton variant="text" width="45%" />
       </Box>

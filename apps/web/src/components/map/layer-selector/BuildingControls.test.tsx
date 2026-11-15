@@ -7,9 +7,8 @@ import { IntegrationRegistryContext } from "@openmapx/integration-framework/reac
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeMap, type FakeMap } from "@/test";
-import { DesktopMorePanel } from "./DesktopMorePanel";
 import { DesktopQuickSelector } from "./DesktopQuickSelector";
-import { MobileLayerPanel } from "./MobileLayerPanel";
+import { LayerDetailsPanel } from "./LayerDetailsPanel";
 
 let fake: FakeMap;
 let mapRef: { current: FakeMap["map"] };
@@ -72,15 +71,15 @@ describe.each(["desktop", "mobile", "quick"] as const)("%s building controls", (
       <IntegrationRegistryContext.Provider value={registry}>
         <BuildingExtrusionLayer />
         {surface === "desktop" ? (
-          <DesktopMorePanel onClose={() => undefined} />
+          <LayerDetailsPanel onClose={() => undefined} />
         ) : surface === "mobile" ? (
-          <MobileLayerPanel />
+          <LayerDetailsPanel variant="sheet" onClose={() => undefined} />
         ) : (
           <DesktopQuickSelector onMoreClick={() => undefined} />
         )}
       </IntegrationRegistryContext.Provider>,
     );
-    return screen.getByRole(surface === "mobile" ? "switch" : "button", { name: /^3D view/ });
+    return screen.getByRole("button", { name: /^3D view/ });
   }
 
   it.each([
@@ -104,8 +103,7 @@ describe.each(["desktop", "mobile", "quick"] as const)("%s building controls", (
     fireEvent.click(control);
     act(() => useMapStore.getState().setZoom(13.9));
     expect(control.hasAttribute("disabled")).toBe(false);
-    if (surface === "mobile") expect((control as HTMLInputElement).checked).toBe(true);
-    else expect(control.getAttribute("aria-pressed")).toBe("true");
+    expect(control.getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByText("Zoom 16.5+")).toBeTruthy();
     fireEvent.click(control);
     expect(useBuildingsStore.getState().layerVisible).toBe(false);

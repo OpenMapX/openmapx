@@ -16,13 +16,15 @@ import { SEARCH_BAR_HEIGHT, SEARCH_BAR_INSET, topInset } from "@/lib/layout";
  * use the theme-aware `--omx-chip-hover` so the inactive hover stays dark in
  * dark mode.
  */
-/** Height of a floating chip; controls placed beside chips match it. */
+/** Height of a floating chip on wider screens; controls placed beside chips match it. */
 export const FLOATING_CHIP_HEIGHT = 32;
+/** A phone's chips are taller, for the touch target. */
+const PHONE_CHIP_HEIGHT = 36;
 
 export function floatingChipSx(active: boolean, variant: "category" | "toggle"): SxProps<Theme> {
   const base = {
-    height: FLOATING_CHIP_HEIGHT,
-    borderRadius: `${FLOATING_CHIP_HEIGHT / 2}px`,
+    height: { xs: PHONE_CHIP_HEIGHT, sm: FLOATING_CHIP_HEIGHT },
+    borderRadius: 999,
     fontWeight: 500,
     fontSize: 14,
     bgcolor: active ? BRAND : "background.paper",
@@ -58,7 +60,7 @@ export function floatingChipSx(active: boolean, variant: "category" | "toggle"):
  * starts from here.
  */
 export const CHIP_ROW_END = {
-  xs: SEARCH_BAR_HEIGHT + 8 + FLOATING_CHIP_HEIGHT,
+  xs: SEARCH_BAR_HEIGHT + 8 + PHONE_CHIP_HEIGHT,
   sm: (SEARCH_BAR_HEIGHT + FLOATING_CHIP_HEIGHT) / 2,
 } as const;
 

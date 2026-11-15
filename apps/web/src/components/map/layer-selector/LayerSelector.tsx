@@ -3,10 +3,8 @@
 import LayersIcon from "@mui/icons-material/Layers";
 import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
-import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
 import { useTheme } from "@mui/material/styles";
-import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useLayerStore, useNavigationStore, usePlaceStore, useSidebarStore } from "@openmapx/core";
@@ -16,14 +14,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { LAYER_SELECTOR_OPEN_EVENT, SEARCH_INPUT_ID } from "@/components/command-palette/constants";
 import Popover, { type PopoverActions } from "@/components/ui/Popover";
 import { isPanelShiftActive, PANEL_WIDTH, shouldHideLayerSelector } from "@/lib/layout";
-import { MAP_FOOTER_OBSTRUCTION_ID, useMapFooterBox } from "@/lib/mapFooterCenter";
+import { MAP_FOOTER_OBSTRUCTION_ID } from "@/lib/mapFooterCenter";
 import { useMapObstructionExtent } from "@/lib/mapObstructions";
-import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
-import { planAboveFooter, sheetFollowSx, useSheetFollowTrack } from "@/lib/sheetFollow";
-import { DesktopMorePanel } from "./DesktopMorePanel";
 import { DesktopQuickSelector } from "./DesktopQuickSelector";
+import { LayerDetailsPanel } from "./LayerDetailsPanel";
 import { BASE_LAYER_OPTIONS } from "./layerSelectorConfig";
-import { MobileLayerPanel } from "./MobileLayerPanel";
+import { PhoneLayerSelector } from "./PhoneLayerSelector";
 
 const PANEL_SHIFT_TRANSITION = "left 0.25s ease";
 const PANEL_POPOVER_TRANSITION = `${PANEL_SHIFT_TRANSITION}, opacity 0.18s ease, transform 0.16s ease !important`;
@@ -37,7 +33,7 @@ export function LayerSelector() {
   const t = useTranslations("layers");
   const theme = useTheme();
   const desktopDock = useMediaQuery(theme.breakpoints.up("sm"));
-  const [anchorEl, setAnchorEl] = useState<HTMLElement | LayerPopoverAnchor | null>(null);
+  const [anchorEl, setAnchorEl] = useState<LayerPopoverAnchor | null>(null);
   const [desktopExpanded, setDesktopExpanded] = useState(false);
   const desktopAnchorRef = useRef<HTMLDivElement | null>(null);
   const popoverActionRef = useRef<PopoverActions | null>(null);
@@ -49,15 +45,8 @@ export function LayerSelector() {
   const selectedPlace = usePlaceStore((s) => s.selectedPlace);
   const navigating = useNavigationStore((s) => s.status !== "idle");
   const activeLayer = useLayerStore((s) => s.activeLayer);
-  // Stands on the footer, or on a sheet whose follow cap has taken the footer
-  // inside it, read live so the button rides a moving sheet.
+  // The desktop dock stands on the map footer.
   const footerExtent = useMapObstructionExtent(MAP_FOOTER_OBSTRUCTION_ID);
-  const sheetClearance = useMobilePanelClearance(useWindowHeight());
-  // While a sheet drives the follow, the same edges come from its track and
-  // the button rides them on the compositor (see lib/sheetFollow).
-  const followTrack = useSheetFollowTrack();
-  const footerBox = useMapFooterBox();
-  const follow = followTrack ? planAboveFooter(followTrack, footerBox, 8, 26) : null;
 
   const panelShiftActive = isPanelShiftActive({
     sidebarOpen: activeSidebarId !== null,
@@ -93,18 +82,14 @@ export function LayerSelector() {
     closeTimerRef.current = undefined;
   };
 
-  const handleOpen = (event: MouseEvent<HTMLElement>) => {
+  const handleOpen = () => {
     // The "Map Details" panel supersedes the quick selector — collapse it right
     // away. It is usually opened from the quick selector's own "More" tile, so
     // neither the mouse-leave nor the blur heuristic below fires on its own
     // (the pointer stays on the tile, and the popover keeps focus where it is).
     clearDesktopCloseTimer();
     setDesktopExpanded(false);
-    if (desktopDock && desktopAnchorRef.current) {
-      setAnchorEl(desktopPopoverAnchor);
-      return;
-    }
-    setAnchorEl((current) => (current ? null : event.currentTarget));
+    if (desktopAnchorRef.current) setAnchorEl(desktopPopoverAnchor);
   };
 
   const handleClose = () => {
@@ -170,7 +155,6 @@ export function LayerSelector() {
   }, [desktopDock]);
 
   const open = Boolean(anchorEl);
-  const popoverAnchorEl = desktopDock && open ? desktopPopoverAnchor : anchorEl;
 
   // The desktop panel has no backdrop and stacks above the map chrome, so it
   // would cover the search suggestions; starting a search puts it away.
@@ -189,10 +173,13 @@ export function LayerSelector() {
   // CSS transition on a real anchor by itself. The virtual anchor reports the
   // final panel-aware coordinate, and this layout-time update lets MUI animate
   // its inline left value in the same commit as the visible dock.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the anchor changes with the panel offset, which is when MUI must re-measure
   useLayoutEffect(() => {
-    if (!desktopDock || !open || !popoverAnchorEl) return;
+    if (!desktopDock || !open) return;
     popoverActionRef.current?.updatePosition();
-  }, [desktopDock, open, popoverAnchorEl]);
+  }, [desktopDock, open, desktopPopoverAnchor]);
+
+  if (!desktopDock) return <PhoneLayerSelector hidden={hiddenByFloatingCard} />;
 
   return (
     <>
@@ -201,8 +188,7 @@ export function LayerSelector() {
         sx={[
           {
             position: "absolute",
-            bottom: follow ? follow.base : Math.max(26, footerExtent + 8, sheetClearance + 8),
-            ...sheetFollowSx(follow),
+            bottom: Math.max(26, footerExtent + 8),
             left: 12,
             transition: "opacity 0.18s ease",
             zIndex: 10,
@@ -224,7 +210,7 @@ export function LayerSelector() {
             transition: PANEL_SHIFT_TRANSITION,
           }}
         >
-          {hiddenByFloatingCard ? null : desktopDock ? (
+          {hiddenByFloatingCard ? null : (
             <Box sx={{ position: "relative" }}>
               <Box
                 sx={{
@@ -310,26 +296,6 @@ export function LayerSelector() {
                 <DesktopQuickSelector onMoreClick={handleOpen} />
               </Box>
             </Box>
-          ) : (
-            <Tooltip title={t("layers")} placement="right">
-              <Paper elevation={3} sx={{ borderRadius: "50%", overflow: "hidden" }}>
-                <IconButton
-                  onClick={handleOpen}
-                  aria-label={t("openLayerMenu")}
-                  aria-controls={open ? "map-layer-selector" : undefined}
-                  aria-expanded={open ? "true" : undefined}
-                  aria-haspopup="dialog"
-                  sx={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: "50%",
-                    color: "text.primary",
-                  }}
-                >
-                  <LayersIcon sx={{ fontSize: 22 }} />
-                </IconButton>
-              </Paper>
-            </Tooltip>
           )}
         </Box>
       </Box>
@@ -337,43 +303,37 @@ export function LayerSelector() {
       <Popover
         id="map-layer-selector"
         open={open}
-        anchorEl={popoverAnchorEl}
+        anchorEl={open ? desktopPopoverAnchor : null}
         action={popoverActionRef}
         onClose={handleClose}
         disableScrollLock
         disableEnforceFocus
         disableAutoFocus
         disableRestoreFocus
-        hideBackdrop={desktopDock}
-        anchorOrigin={
-          desktopDock
-            ? { vertical: "bottom", horizontal: "left" }
-            : { vertical: "top", horizontal: "left" }
-        }
+        hideBackdrop
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
         transformOrigin={{ vertical: "bottom", horizontal: "left" }}
         slotProps={{
-          root: desktopDock ? { sx: { pointerEvents: "none" } } : undefined,
-          backdrop: desktopDock ? undefined : { invisible: true },
+          root: { sx: { pointerEvents: "none" } },
           paper: {
             sx: {
               pointerEvents: "auto",
-              mb: desktopDock ? 0 : 1.25,
               // Grow writes an inline transition on the paper; keep the
               // synchronized horizontal transition from being replaced.
-              transition: desktopDock ? PANEL_POPOVER_TRANSITION : undefined,
-              borderRadius: desktopDock ? "22px" : "16px",
-              width: desktopDock ? 336 : 346,
-              minWidth: desktopDock ? 0 : undefined,
+              transition: PANEL_POPOVER_TRANSITION,
+              borderRadius: "22px",
+              width: 336,
+              minWidth: 0,
               maxWidth: "calc(100vw - 24px)",
-              maxHeight: desktopDock ? "min(76vh, 700px)" : "min(70dvh, 560px)",
-              boxShadow: "0 4px 20px var(--omx-shadow-soft), 0 1px 6px var(--omx-shadow-soft)",
+              maxHeight: "min(76vh, 700px)",
+              boxShadow: 4,
               bgcolor: "background.paper",
               overflowY: "auto",
             },
           },
         }}
       >
-        {desktopDock ? <DesktopMorePanel onClose={handleClose} /> : <MobileLayerPanel />}
+        <LayerDetailsPanel onClose={handleClose} />
       </Popover>
     </>
   );

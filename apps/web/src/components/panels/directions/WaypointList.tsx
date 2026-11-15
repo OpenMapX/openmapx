@@ -26,6 +26,17 @@ import { WaypointRow } from "@/components/panels/directions/WaypointRow";
 import { ClickableRow } from "@/components/ui/ClickableRow";
 import { BRAND } from "@/integration-api/runtime/theme";
 
+/** A stop field's placeholder: origin, destination or a numbered stop between. */
+export function waypointPlaceholder(
+  t: ReturnType<typeof useTranslations>,
+  index: number,
+  total: number,
+): string {
+  if (index === 0) return t("chooseOrigin");
+  if (index === total - 1) return t("chooseDestination");
+  return `${t("addStop")} ${index}`;
+}
+
 interface WaypointListProps {
   waypoints: Waypoint[];
   inputValues: string[];
@@ -41,6 +52,11 @@ interface WaypointListProps {
   onEditSchedule?: (index: number) => void;
   /** EV mode only supports origin + destination (see ev-plan.ts re-route assumption) — hides the add-stop affordance. */
   isEvMode?: boolean;
+  /**
+   * On a phone the fields don't take typing: pressing one opens the main
+   * search to choose that stop.
+   */
+  onFieldPress?: (index: number) => void;
   t: ReturnType<typeof useTranslations>;
 }
 
@@ -57,6 +73,7 @@ export function WaypointList({
   onUseMyLocation,
   onEditSchedule,
   isEvMode = false,
+  onFieldPress,
   t,
 }: WaypointListProps) {
   const sensors = useSensors(
@@ -97,6 +114,7 @@ export function WaypointList({
                   waypoint={wp}
                   index={i}
                   total={waypoints.length}
+                  onFieldPress={onFieldPress ? () => onFieldPress(i) : undefined}
                   inputValue={inputValues[i] ?? ""}
                   onInputChange={(v) => onInputChange(i, v)}
                   onFocus={() => onFocus(i)}
@@ -108,13 +126,7 @@ export function WaypointList({
                   useMyLocationLabel={t("useMyLocation")}
                   scheduleLabel={t("scheduleStop")}
                   scheduleEditLabel={t("scheduleEdit")}
-                  placeholder={
-                    i === 0
-                      ? t("chooseOrigin")
-                      : i === waypoints.length - 1
-                        ? t("chooseDestination")
-                        : `${t("addStop")} ${i}`
-                  }
+                  placeholder={waypointPlaceholder(t, i, waypoints.length)}
                 />
               ))}
             </SortableContext>

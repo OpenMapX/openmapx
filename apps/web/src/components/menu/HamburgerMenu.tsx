@@ -46,6 +46,7 @@ const DRAWER_WIDTH = 280;
 export function HamburgerMenu() {
   const t = useTranslations("menu");
   const tCommon = useTranslations("common");
+  const tFooter = useTranslations("footer");
   const isOpen = useMenuStore((s) => s.isOpen);
   const close = useMenuStore((s) => s.close);
   useBackDismiss(isOpen, close);
@@ -217,6 +218,7 @@ export function HamburgerMenu() {
           <MenuRow label={t("privacy")} href="/privacy" onClick={close} />
           <MenuRow label={t("terms")} href="/terms" onClick={close} />
           <MenuRow label={t("imprint")} href="/imprint" onClick={close} />
+          <MenuRow label={tFooter("licenses")} href="/licenses" onClick={close} />
         </List>
       </Drawer>
       <input

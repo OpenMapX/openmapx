@@ -40,6 +40,7 @@ import { MapControls } from "@/components/map/MapControls";
 import { MapFooter } from "@/components/map/MapFooter";
 import { MapLayerHost } from "@/components/map/MapLayerHost";
 import { MapPaddingSync } from "@/components/map/MapPaddingSync";
+import { MapScaleBar } from "@/components/map/MapScaleBar";
 import { MapStylePoiClickHandler } from "@/components/map/MapStylePoiClickHandler";
 import { ParkedVehicleMarkers } from "@/components/map/ParkedVehicleMarkers";
 import { SearchInAreaChip } from "@/components/map/SearchInAreaChip";
@@ -159,6 +160,7 @@ export default function HomePage() {
               <LayerSelector />
             </HideDuringNavigation>
             <MapControls />
+            <MapScaleBar variant="overlay" />
             <MapFooter />
             <Suspense>
               <DeepLinkManager />

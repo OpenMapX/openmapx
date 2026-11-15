@@ -98,7 +98,6 @@ vi.mock("@/lib/offlineAreas", () => ({
 
 vi.mock("maplibre-gl", () => {
   const instances: FakeMap[] = [];
-  const scales: FakeScaleControl[] = [];
   const options: Array<{
     center: [number, number];
     container: HTMLElement;
@@ -112,12 +111,6 @@ vi.mock("maplibre-gl", () => {
   let onCallCount = 0;
   let initialStyleLoaded = true;
   let initialStyleDefinitionLoaded = true;
-  class FakeScaleControl {
-    setUnit = vi.fn();
-    constructor(readonly options: { maxWidth?: number; unit?: string }) {
-      scales.push(this);
-    }
-  }
   class FakeMap {
     container: HTMLElement;
     jumpTo = vi.fn();
@@ -164,17 +157,8 @@ vi.mock("maplibre-gl", () => {
       throw error;
     });
     once = vi.fn();
-    addControl = vi.fn(() => {
-      const corner = document.createElement("div");
-      corner.className = "maplibregl-ctrl-bottom-left";
-      const scale = document.createElement("div");
-      scale.className = "maplibregl-ctrl maplibregl-ctrl-scale";
-      corner.append(scale);
-      this.container.append(corner);
-    });
-    removeControl = vi.fn(() => {
-      this.container.querySelector(".maplibregl-ctrl-bottom-left")?.remove();
-    });
+    addControl = vi.fn();
+    removeControl = vi.fn();
     canvas = document.createElement("canvas");
     getCanvas = () => this.canvas;
     // Like MapLibre: tearing the map down loses its WebGL context.
@@ -202,7 +186,6 @@ vi.mock("maplibre-gl", () => {
   return {
     __test: {
       instances,
-      scales,
       options,
       workerUrlsAtConstruction,
       failSetup(error: Error, onCall = 1) {
@@ -219,7 +202,6 @@ vi.mock("maplibre-gl", () => {
       },
       reset() {
         instances.length = 0;
-        scales.length = 0;
         options.length = 0;
         workerUrlsAtConstruction.length = 0;
         workerUrl = "";
@@ -233,7 +215,6 @@ vi.mock("maplibre-gl", () => {
     getVersion: () => "6.1.0",
     getWorkerUrl: () => workerUrl,
     Map: FakeMap,
-    ScaleControl: FakeScaleControl,
     setWorkerUrl: (url: string) => {
       workerUrl = url;
     },
@@ -267,10 +248,6 @@ const maplibreTest = (
         on: ReturnType<typeof vi.fn>;
         removeControl: ReturnType<typeof vi.fn>;
         remove: ReturnType<typeof vi.fn>;
-      }>;
-      scales: Array<{
-        options: { maxWidth?: number; unit?: string };
-        setUnit: ReturnType<typeof vi.fn>;
       }>;
       options: Array<{
         center: [number, number];
@@ -313,18 +290,6 @@ afterEach(() => {
   vi.clearAllMocks();
   useNavigationStore.getState().stopNavigation();
 });
-
-/** Answers the theme's `sm` breakpoint query (a `max-width` query) as a phone or a wider screen. */
-function stubScreen(screen: "phone" | "desktop") {
-  vi.stubGlobal("matchMedia", (query: string) => ({
-    matches: screen === "phone" && query.includes("max-width"),
-    media: query,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    addListener: () => {},
-    removeListener: () => {},
-  }));
-}
 
 /** Render a map and hand back its registered `moveend` listener. */
 async function renderWithMoveEnd() {
@@ -393,94 +358,6 @@ describe("MapCanvas", () => {
     onSurfaceError.mockClear();
     unmount();
     expect(onSurfaceError).not.toHaveBeenCalled();
-  });
-
-  it("keeps one scale per map through unit and style changes, then removes it", async () => {
-    maplibreTest.reset();
-    mapStyleTest.reset();
-    useSettingsStore.setState({ units: "metric" });
-    vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
-
-    const { unmount } = render(<MapCanvas />);
-    await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
-    const map = maplibreTest.instances[0];
-    const scale = maplibreTest.scales[0];
-    expect(maplibreTest.scales).toHaveLength(1);
-    expect(scale?.options).toMatchObject({ unit: "metric" });
-    expect(map?.addControl).toHaveBeenCalledWith(scale, "bottom-left");
-
-    act(() => useSettingsStore.setState({ units: "imperial" }));
-    expect(maplibreTest.instances).toHaveLength(1);
-    expect(scale?.setUnit).toHaveBeenCalledWith("imperial");
-    act(() => map?.emitStyleLoad());
-    expect(map?.addControl).toHaveBeenCalledTimes(1);
-    expect(maplibreTest.scales).toHaveLength(1);
-
-    unmount();
-    expect(map?.removeControl).toHaveBeenCalledWith(scale);
-    expect(map?.remove).toHaveBeenCalledTimes(1);
-    useSettingsStore.setState({ units: "metric" });
-  });
-
-  it("leaves the scale to the map footer on wider screens", async () => {
-    maplibreTest.reset();
-    mapStyleTest.reset();
-    stubScreen("desktop");
-    vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
-    const view = render(<MapCanvas />);
-    try {
-      await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
-      const scale = view.container.querySelector<HTMLElement>(".maplibregl-ctrl-scale");
-      expect(getComputedStyle(scale as HTMLElement).display).toBe("none");
-    } finally {
-      view.unmount();
-    }
-  });
-
-  it("hides the scale during ground navigation only", async () => {
-    maplibreTest.reset();
-    mapStyleTest.reset();
-    stubScreen("phone");
-    vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
-    const view = render(<MapCanvas />);
-    try {
-      await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
-      const scale = view.container.querySelector<HTMLElement>(".maplibregl-ctrl-scale");
-      expect(getComputedStyle(scale as HTMLElement).display).toBe("block");
-      act(() => useNavigationStore.setState({ status: "navigating", kind: "ground" }));
-      expect(getComputedStyle(scale as HTMLElement).display).toBe("none");
-      act(() => useNavigationStore.setState({ status: "navigating", kind: "transit" }));
-      expect(getComputedStyle(scale as HTMLElement).display).toBe("block");
-      act(() => useNavigationStore.setState({ status: "idle", kind: "ground" }));
-      expect(getComputedStyle(scale as HTMLElement).display).toBe("block");
-    } finally {
-      view.unmount();
-    }
-  });
-
-  it("keeps the scale on the live footer rather than a sheet's settled extent", async () => {
-    maplibreTest.reset();
-    mapStyleTest.reset();
-    vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
-    const view = render(<MapCanvas />);
-    try {
-      await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
-      const scale = view.container.querySelector<HTMLElement>(".maplibregl-ctrl-scale");
-      act(() => {
-        publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 300);
-        publishMapObstruction("scale-test-sheet", "bottom", 500);
-      });
-      expect(getComputedStyle(scale as HTMLElement).marginBottom).toBe("312px");
-      act(() => publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", 200));
-      expect(getComputedStyle(scale as HTMLElement).marginBottom).toBe("212px");
-      expect(getComputedStyle(scale as HTMLElement).transition).toBe("");
-    } finally {
-      view.unmount();
-      act(() => {
-        publishMapObstruction(MAP_FOOTER_OBSTRUCTION_ID, "bottom", null);
-        publishMapObstruction("scale-test-sheet", "bottom", null);
-      });
-    }
   });
 
   it("renders the base map without waiting for a granted geolocation callback", async () => {
@@ -623,7 +500,6 @@ describe("MapCanvas", () => {
 
     expect(maplibreTest.instances).toHaveLength(1);
     expect(maplibreTest.instances[0]?.remove).toHaveBeenCalledTimes(1);
-    expect(maplibreTest.instances[0]?.removeControl).toHaveBeenCalledWith(maplibreTest.scales[0]);
     expect(mapContextTest.mapRef.current).toBeNull();
     expect(mapContextTest.notifyMapReady).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent("The map could not be loaded.");
@@ -632,12 +508,7 @@ describe("MapCanvas", () => {
     await waitFor(() => expect(maplibreTest.instances).toHaveLength(2));
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
     expect(maplibreTest.instances[0]?.remove).toHaveBeenCalledTimes(1);
-    expect(maplibreTest.instances[0]?.removeControl).toHaveBeenCalledWith(maplibreTest.scales[0]);
     expect(maplibreTest.instances[1]?.remove).not.toHaveBeenCalled();
-    expect(maplibreTest.instances[1]?.addControl).toHaveBeenCalledWith(
-      maplibreTest.scales[1],
-      "bottom-left",
-    );
     expect(mapContextTest.mapRef.current).toBe(maplibreTest.instances[1]);
     expect(mapContextTest.notifyMapReady).toHaveBeenCalledTimes(1);
   });
