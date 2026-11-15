@@ -133,16 +133,20 @@ export function WaypointList({
         <ClickableRow
           onClick={() => onAdd(waypoints.length - 2)}
           sx={{
-            gap: 1.5,
+            gap: 0.5,
             mt: 0.5,
             py: 0.75,
-            px: 0.25,
             color: "text.secondary",
             "&:hover": { color: BRAND },
           }}
         >
-          <AddCircleOutlineIcon sx={{ fontSize: 18, ml: 3 }} />
-          <Typography variant="body2">{t("addStop")}</Typography>
+          {/* Lined up with the waypoint markers and the text inside the fields. */}
+          <Box sx={{ width: 24, display: "flex", justifyContent: "center", flexShrink: 0 }}>
+            <AddCircleOutlineIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="body2" sx={{ pl: 1.5 }}>
+            {t("addStop")}
+          </Typography>
         </ClickableRow>
       )}
     </Box>

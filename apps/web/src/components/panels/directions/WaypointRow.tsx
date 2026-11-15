@@ -71,49 +71,123 @@ export function WaypointRow({
   );
   const waypointNumber = index; // intermediates are 1-based, but origin is 0
 
+  const marker = isOrigin ? (
+    <Box
+      sx={{
+        width: 12,
+        height: 12,
+        borderRadius: "50%",
+        border: "2px solid",
+        borderColor: "text.secondary",
+      }}
+    />
+  ) : isDestination ? (
+    <LocationOnIcon sx={{ fontSize: 20, color: "#EA4335" }} />
+  ) : (
+    <Box
+      sx={{
+        width: 20,
+        height: 20,
+        borderRadius: "4px",
+        bgcolor: BRAND,
+        color: "#fff",
+        fontWeight: 700,
+        fontSize: 11,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        lineHeight: 1,
+      }}
+    >
+      {waypointNumber}
+    </Box>
+  );
+
+  const scheduleButton = onEditSchedule && (
+    <Tooltip title={scheduleSummary ? (scheduleEditLabel ?? "") : (scheduleLabel ?? "")}>
+      <IconButton
+        size="small"
+        onClick={onEditSchedule}
+        aria-label={
+          scheduleSummary ? `${scheduleEditLabel ?? ""}: ${scheduleSummary}` : (scheduleLabel ?? "")
+        }
+        sx={{
+          p: 0.25,
+          flexShrink: 0,
+          color: scheduleSummary ? BRAND : "text.secondary",
+          // Inside the field and out of the way on an unconstrained trip: it
+          // appears on hover, and keyboard focus still reaches it.
+          display: scheduleSummary ? "inline-flex" : "none",
+          "*:hover > * > &, *:focus-within > * > &": { display: "inline-flex" },
+        }}
+      >
+        {scheduleSummary ? (
+          <Typography variant="caption" sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+            {scheduleSummary}
+          </Typography>
+        ) : (
+          <ScheduleOutlinedIcon sx={{ fontSize: 18 }} />
+        )}
+      </IconButton>
+    </Tooltip>
+  );
+
   return (
-    <Box ref={setNodeRef} style={style} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-      {/* Marker icon column */}
+    <Box
+      ref={setNodeRef}
+      style={style}
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 0.5,
+        "@media (hover: hover)": {
+          "&:hover .waypoint-marker": { display: "none" },
+          "&:hover .waypoint-grip": { display: "flex" },
+        },
+        "& .waypoint-handle:focus-visible .waypoint-marker": { display: "none" },
+        "& .waypoint-handle:focus-visible .waypoint-grip": { display: "flex" },
+      }}
+    >
+      {/* The marker doubles as the drag handle: hovering the row shows a grip
+          in its place, and the whole column drags (or, focused, moves with the
+          keyboard). */}
       <Box
+        {...attributes}
+        {...listeners}
+        className="waypoint-handle"
         sx={{
           width: 24,
+          height: 38,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           flexShrink: 0,
+          cursor: "grab",
+          touchAction: "none",
+          borderRadius: 1,
+          position: "relative",
+          // A dotted line joins this stop's marker to the next one.
+          ...(!isDestination && {
+            "&::after": {
+              content: '""',
+              position: "absolute",
+              left: "calc(50% - 1px)",
+              top: 27,
+              bottom: -13,
+              borderLeft: "2px dotted",
+              borderColor: "text.disabled",
+              pointerEvents: "none",
+            },
+          }),
+          "&:focus-visible": { outline: "2px solid", outlineColor: "primary.main" },
         }}
       >
-        {isOrigin ? (
-          <Box
-            sx={{
-              width: 12,
-              height: 12,
-              borderRadius: "50%",
-              border: "2px solid",
-              borderColor: "text.secondary",
-            }}
-          />
-        ) : isDestination ? (
-          <LocationOnIcon sx={{ fontSize: 18, color: "#EA4335" }} />
-        ) : (
-          <Box
-            sx={{
-              width: 20,
-              height: 20,
-              borderRadius: "4px",
-              bgcolor: BRAND,
-              color: "#fff",
-              fontWeight: 700,
-              fontSize: 11,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              lineHeight: 1,
-            }}
-          >
-            {waypointNumber}
-          </Box>
-        )}
+        <Box className="waypoint-marker" sx={{ display: "flex" }}>
+          {marker}
+        </Box>
+        <Box className="waypoint-grip" sx={{ display: "none", color: "text.secondary" }}>
+          <DragIndicatorIcon sx={{ fontSize: 20 }} />
+        </Box>
       </Box>
 
       {/* Input */}
@@ -121,16 +195,14 @@ export function WaypointRow({
         sx={{
           flex: 1,
           minWidth: 0,
-          border: "1px solid",
-          borderColor: "divider",
+          border: "1px solid var(--omx-border)",
           borderRadius: "8px",
-          bgcolor: "action.hover",
+          bgcolor: "background.paper",
           "&:focus-within": {
             borderColor: BRAND,
-            bgcolor: "background.paper",
-            boxShadow: `0 0 0 2px ${BRAND}22`,
+            boxShadow: `inset 0 0 0 1px ${BRAND}`,
           },
-          transition: "box-shadow 0.15s",
+          transition: "border-color 0.15s, box-shadow 0.15s",
         }}
       >
         <WaypointInput
@@ -141,41 +213,9 @@ export function WaypointRow({
           onFocus={onFocus}
           onBlur={onBlur}
           useMyLocationLabel={useMyLocationLabel}
+          trailing={scheduleButton}
         />
       </Box>
-
-      {/* Stop time */}
-      {onEditSchedule && (
-        <Tooltip title={scheduleSummary ? (scheduleEditLabel ?? "") : (scheduleLabel ?? "")}>
-          <IconButton
-            size="small"
-            onClick={onEditSchedule}
-            aria-label={
-              scheduleSummary
-                ? `${scheduleEditLabel ?? ""}: ${scheduleSummary}`
-                : (scheduleLabel ?? "")
-            }
-            sx={{
-              p: 0.25,
-              flexShrink: 0,
-              color: scheduleSummary ? BRAND : "text.disabled",
-              // Stay out of the way on an unconstrained trip. Focus-within still
-              // reveals it, so it stays reachable by keyboard.
-              opacity: scheduleSummary ? 1 : 0,
-              "*:hover > &, &:focus-visible": { opacity: 1 },
-              "&:hover": { color: scheduleSummary ? BRAND : "text.secondary" },
-            }}
-          >
-            {scheduleSummary ? (
-              <Typography variant="caption" sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
-                {scheduleSummary}
-              </Typography>
-            ) : (
-              <ScheduleOutlinedIcon sx={{ fontSize: 16 }} />
-            )}
-          </IconButton>
-        </Tooltip>
-      )}
 
       {/* Remove button */}
       {canRemove && (
@@ -183,34 +223,13 @@ export function WaypointRow({
           <IconButton
             size="small"
             onClick={onRemove}
-            sx={{
-              p: 0.25,
-              flexShrink: 0,
-              color: "text.disabled",
-              "&:hover": { color: "text.secondary" },
-            }}
+            aria-label={removeLabel}
+            sx={{ p: 0.5, flexShrink: 0, color: "text.secondary" }}
           >
-            <CloseIcon sx={{ fontSize: 16 }} />
+            <CloseIcon sx={{ fontSize: 18 }} />
           </IconButton>
         </Tooltip>
       )}
-
-      {/* Drag handle */}
-      <Box
-        {...attributes}
-        {...listeners}
-        sx={{
-          cursor: "grab",
-          display: "flex",
-          alignItems: "center",
-          flexShrink: 0,
-          color: "text.disabled",
-          "&:hover": { color: "text.secondary" },
-          touchAction: "none",
-        }}
-      >
-        <DragIndicatorIcon sx={{ fontSize: 18 }} />
-      </Box>
     </Box>
   );
 }

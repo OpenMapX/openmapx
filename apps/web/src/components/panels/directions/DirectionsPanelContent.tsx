@@ -1237,23 +1237,15 @@ export function DirectionsPanelContent() {
               </ClickableRow>
             )}
 
-            <ClickableRow
+            <Button
+              size="small"
               aria-expanded={showOptions}
-              sx={{
-                width: "auto",
-                typography: "body2",
-                color: showOptions ? BRAND : "text.secondary",
-                fontWeight: 500,
-                px: 1.5,
-                py: 0.75,
-                borderRadius: 99,
-                "&:hover": { bgcolor: `${BRAND}18`, color: BRAND },
-                transition: "background-color 0.15s, color 0.15s",
-              }}
+              color={showOptions ? "primary" : "inherit"}
               onClick={() => setShowOptions((v) => !v)}
+              sx={{ px: 1.5, color: showOptions ? undefined : "text.secondary" }}
             >
               {t("options")}
-            </ClickableRow>
+            </Button>
           </Box>
         )}
 
@@ -1271,42 +1263,10 @@ export function DirectionsPanelContent() {
 
         {/* Share row — sits between the options row and the offered routes */}
         {!hidesRouteControls && allWaypointsFilled && (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              px: 2,
-              py: 0.75,
-              borderTop: "1px solid",
-              borderColor: "divider",
-              bgcolor: "action.hover",
-            }}
-          >
-            <Box
-              component="button"
-              type="button"
-              onClick={handleShare}
-              sx={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 0.75,
-                border: 0,
-                bgcolor: "transparent",
-                color: BRAND,
-                cursor: "pointer",
-                fontWeight: 500,
-                fontFamily: "inherit",
-                fontSize: "0.875rem",
-                px: 1,
-                py: 0.5,
-                borderRadius: 99,
-                "&:hover": { bgcolor: `${BRAND}18` },
-                transition: "background-color 0.15s",
-              }}
-            >
-              <ShareIcon sx={{ fontSize: 18 }} />
+          <Box sx={{ px: 1.5, py: 0.5 }}>
+            <Button size="small" startIcon={<ShareIcon />} onClick={handleShare}>
               {tp("share")}
-            </Box>
+            </Button>
           </Box>
         )}
 
