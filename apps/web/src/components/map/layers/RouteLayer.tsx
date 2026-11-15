@@ -139,10 +139,10 @@ export function RouteLayer() {
   // A walk is drawn as dots, the way maps mark a footpath, without the
   // casing that would join them back into a line.
   const walking = mode === "walking";
-  const dotted = walking ? { "line-dasharray": [0, 2] } : {};
-  const casingOpacity = walking ? 0 : undefined;
-  const routeGroup = useMemo<MapLayerGroup>(
-    () => ({
+  const routeGroup = useMemo<MapLayerGroup>(() => {
+    const dotted = walking ? { "line-dasharray": [0, 2] } : {};
+    const casingOpacity = walking ? 0 : undefined;
+    return {
       sources: { [SOURCE_ID]: { type: "geojson", data: routeFeatures } },
       layers: [
         {
@@ -203,10 +203,8 @@ export function RouteLayer() {
           order: 1,
         },
       ] satisfies SlottedLayer[],
-    }),
-    // biome-ignore lint/correctness/useExhaustiveDependencies: `dotted` and `casingOpacity` follow `walking`.
-    [routeFeatures, walking],
-  );
+    };
+  }, [routeFeatures, walking]);
   useMapLayerGroup(routeGroup);
 
   // DOM pills are keyboard-focusable and remain on the map while a style swap
