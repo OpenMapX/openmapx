@@ -251,6 +251,13 @@ launcher partitions explicit files and verifies each resulting collection. More 
 | `configuration-recovery` | 4          | Expanded native scenario partitions; owned migrated schemas and independent host/process fixtures                                        |
 | `coordinator-recovery`   | 4          | Expanded native lifecycle scenarios, including unchanged real SQL/wall-clock expiry waits                                                |
 | `export-restore`         | 1          | Exact-image Dawarich, controller export and restore replay together                                                                      |
+| `crash-points`           | 4          | Explicit file partitions; one process-level scenario per file, each with its own database, role, host directory and namespaces           |
+
+The crash-point suite ran in two partitions of about 28 minutes each between
+12 and 15 November 2026, which made it the longest job of every pull request.
+Its 22 scenarios take about 2,970 seconds in total by the recorded durations.
+Four partitions pack to about 750 seconds each, below the `test (node)` job.
+The scenarios, their clocks and their one-worker execution are unchanged.
 
 `scripts/database-test-shards.json` is the runner inventory. Group membership stays
 in `database-test-groups.json`, validated against discovered opt-in suites. Every
@@ -268,7 +275,7 @@ collection must equal the planned scenario set before execution. Sequential
 lifecycle cases stay whole; no product clock, lease, assertion or timeout changes.
 
 Every partition uploads a source-bound receipt with the full and selected inventory.
-The aggregate requires all thirteen receipts and verifies that each group's union
+The aggregate requires all seventeen receipts and verifies that each group's union
 is complete, disjoint and identical across runners. Missing/duplicate cases,
 changed-source receipts, failed/cancelled jobs and unexpected skips fail the gate.
 Fixtures and individual deadlines retain their existing budgets. The 90-minute
@@ -294,14 +301,50 @@ missing/empty inputs fail rather than selecting synthetic fallback. See
 The selector reads the complete immutable Git diff, including old rename/deletion
 paths, rather than GitHub's truncated path-filter/API result. Unknown inputs,
 symlinks, incomplete comparisons and base retargets fail closed to full validation.
-Only ordinary docs prose and narrowly scoped web-component/mobile-runtime leaves
-are candidates for avoiding unrelated native jobs. Initially the selector records
-`proposedScope` in shadow mode while running every check. After ten comparable
-normal PRs, review dependency/asset evidence and approve `docs` first, then proven
-`web`/`mobile` scopes in `scripts/ci-impact-rollout.json`. Only trusted main's policy
+Only ordinary docs prose, web components, mobile runtime source and client source
+are candidates for avoiding unrelated native jobs. The selector records
+`proposedScope` for every run and applies it only when trusted main's
+`scripts/ci-impact-rollout.json` approves that scope. Only trusted main's policy
 is read; missing/malformed policy and candidate policy edits cannot enable skips.
 Relevant types, portable source contracts, actual builds and image scans remain.
 Main push/schedule/manual events run the full union.
+
+`docs`, `web`, `mobile` and `client` are approved. In shadow mode, 108 pull-request
+code runs between 12 and 15 November 2026 proposed `web` twice and `full` 106
+times: UI changes also touch `apps/web/src/lib`, `apps/web/src/app` and
+translations, which the `web` scope excludes. The `client` scope covers those
+diffs: `apps/web/src/**`, `apps/mobile/src/**`, `packages/i18n/locales/*.json`
+and docs prose. It leaves out the database partitions, the Linux deployment-user
+partitions and the ops-agent image test, and keeps the mobile job, because the
+mobile boundary check reads web sources and the mobile runtime imports the
+translations. Replayed on the same window, 42 of 112 code runs fall into `web`
+or `client`.
+
+The dependency review behind `client`, on revision `f86338349`:
+
+- No source under `apps/api`, `apps/ops-agent`, `apps/transitous-runner`,
+  `services` or `packages/cli` reads a path under `apps/web/src` or
+  `apps/mobile/src`. The `packages/core` and `scripts` tests that read web
+  sources run in the `test (node)` job, which every scope keeps.
+- The ops-agent, core, CLI and data-manager code does not import the
+  translations, so the deployment-user partitions and the ops-agent image do
+  not depend on them.
+- The API's privacy module imports the translations. Its unit tests run in
+  `test (node)`, and `pnpm check-translations` runs in lint. The database
+  partitions of a translation-only change run on main, before publication,
+  instead of on the pull request. This is the one input of a skipped job that
+  `client` admits.
+
+## Stopping a pull request's run after a lint failure
+
+The `lint` job's last step cancels its own run when the job failed on a pull
+request. The required aggregate still runs and reports the lint failure, so the
+gate is red either way. No job waits for lint, so a passing run is not longer.
+Between 12 and 15 November 2026, the other jobs of the 25 pull-request runs with
+a failed lint job used a median of 238 runner-minutes each, 5,945 in total. Main
+and scheduled runs do not cancel and keep collecting every result. The cost is
+evidence: a run cancelled this way reports the lint failure without the test
+results of the same push.
 The aggregate requires positive success for each selected job and an expected skip
 only for explicit inapplicability; malformed selection receipts cannot pass.
 

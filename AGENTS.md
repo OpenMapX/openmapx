@@ -38,6 +38,11 @@ Select checks and shared test fixtures from [Contributing: Quality bar](CONTRIBU
 and the affected packages' current scripts. Verify the affected runtime and report which
 checks ran, including any database, browser or native-device verification left unperformed.
 
+Before every push to a pull request, run `pnpm lint`, `pnpm check:policy` and
+`pnpm check-release-information` as [Contributing](CONTRIBUTING.md#quality-bar) describes.
+A push starts the whole pipeline on shared runners, and a failed `lint` job cancels the
+rest of its run. Collect your changes into one push instead of several.
+
 ## Pull request writing and visual evidence
 
 Use the concise prompts in [Contributing](CONTRIBUTING.md#descriptions-and-visual-evidence).

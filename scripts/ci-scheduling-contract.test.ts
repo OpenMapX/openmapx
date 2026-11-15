@@ -101,6 +101,22 @@ describe("CI scheduling and context preservation", () => {
     expect(ci.jobs.select.permissions.actions).toBe("read");
     expect(ci.jobs.ci.permissions.actions).toBe("read");
   });
+  it("cancels a pull request's own run after a lint failure without gating other jobs on lint", () => {
+    const steps = ci.jobs.lint.steps;
+    const cancel = steps.at(-1);
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: Literal shell variables.
+    expect(cancel.run).toBe('gh run cancel "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}"');
+    expect(cancel.if).toBe("failure() && github.event_name == 'pull_request'");
+    expect(cancel["continue-on-error"]).toBe(true);
+    expect(ci.jobs.lint.permissions.actions).toBe("write");
+    for (const [id, job] of Object.entries<{ permissions?: { actions?: string } }>(ci.jobs))
+      if (id !== "lint") expect(job.permissions?.actions ?? "read", id).toBe("read");
+    // Every validation job still starts with lint, so a passing run is no longer.
+    for (const id of validationJobs) expect(ci.jobs[id].needs, id).toBe("select");
+    // The aggregate runs after a cancellation and reports the lint failure.
+    expect(ci.jobs.ci.if.startsWith("always() &&")).toBe(true);
+    expect(ci.jobs.ci.needs).toContain("lint");
+  });
   it("keeps the unenforced type report out of the required aggregate", () => {
     const job = ci.jobs["types-unenforced"];
     expect(ci.jobs.ci.needs).not.toContain("types-unenforced");

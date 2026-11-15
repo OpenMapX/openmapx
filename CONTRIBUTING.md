@@ -149,22 +149,46 @@ affected tests or run a hidden full-suite fallback. Documentation-only changes
 normally need formatting and the affected documentation build; record any
 checks left to CI in the PR.
 
-CI proposes checks from the complete immutable PR diff. The initial affected-job
-rollout is in shadow mode: all jobs still run. After at least ten comparable
-hosted PRs and dependency/asset review, approve `docs`, then proven `web`/`mobile`
-classes in `scripts/ci-impact-rollout.json` on trusted main. PR edits to this file
-cannot enable their own skips. Shared/backend/toolchain changes run the full gate.
-Approved ordinary docs prose runs lint/policy, portable node contracts and the docs image; approved web
-component or mobile runtime edits retain their relevant runtime, types, portable
-contracts and builds without unrelated native recovery.
-Unknown paths, incomplete diffs, symlinks and base retargets select full coverage.
-Main pushes, daily reconciliation and manual CI run the full validation union.
+Before pushing, run the checks the CI `lint` job runs, because each push to a
+pull request starts the whole pipeline and shares the hosted runners with every
+other open pull request:
 
-The five logical database groups run across thirteen isolated runner partitions;
+```bash
+pnpm lint
+pnpm check:policy
+pnpm check-release-information --base origin/main --head HEAD --body-file <description.md>
+```
+
+Run `pnpm check-openapi` after route or schema changes and `pnpm check-types`
+for the packages you touched. When the `lint` job fails on a pull request, CI
+cancels that run's remaining jobs: the required gate is already red, and the
+runners go to other pull requests. Fix the lint failure and push again to get
+the test results.
+
+CI selects checks from the complete immutable PR diff. Trusted main approves
+the selectable classes in `scripts/ci-impact-rollout.json`; PR edits to this file
+cannot enable their own skips. Four classes are approved:
+
+| Class    | Diff consists only of                                                                | Jobs left out                                               |
+| -------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| `docs`   | Docs and blog prose (`docs/docs/**/*.md`, `docs/blog/**/*.md`)                       | All except lint/policy and the portable node tests          |
+| `web`    | Web components, except the two files the mobile boundary check reads                 | Database, mobile, Linux deployment user, ops-agent image    |
+| `mobile` | Mobile runtime source (`apps/mobile/src/**`)                                         | Database, web tests, Linux deployment user, ops-agent image |
+| `client` | Any mix of `apps/web/src/**`, `apps/mobile/src/**`, translation files and docs prose | Database, Linux deployment user, ops-agent image            |
+
+Types, the portable node tests, the production build and affected image builds
+run for every code class. Any other path selects the full gate: shared packages,
+the API, services, integrations, scripts, manifests, the lockfile and workflows.
+So do incomplete diffs, symlinks and base retargets.
+Main pushes, daily reconciliation and manual CI run the full validation union,
+so a change that a class left partly untested is still tested before any image
+is published.
+
+The six logical database groups run across seventeen isolated runner partitions;
 recovery scenarios are balanced without shortening real clocks or changing native
 lifecycle assertions. Each group keeps one worker per runner. API/privacy and
-ingestion use two file shards each; configuration and coordinator recovery use
-four scenario partitions each; export/restore stays together. The final required
+ingestion use two file shards each; configuration recovery, coordinator recovery
+and the crash-point suite use four partitions each; export/restore stays together. The final required
 `lint / types / test` gate verifies every selected job and the complete disjoint
 partition inventories. Linux deployment-user tests retain uid 1001/umask 002 with
 two isolated single-worker file shards. Required failure/cancellation cannot pass.

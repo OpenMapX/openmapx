@@ -67,11 +67,21 @@
   {
     "group": "crash-points",
     "part": 1,
-    "total": 2
+    "total": 4
   },
   {
     "group": "crash-points",
     "part": 2,
-    "total": 2
+    "total": 4
+  },
+  {
+    "group": "crash-points",
+    "part": 3,
+    "total": 4
+  },
+  {
+    "group": "crash-points",
+    "part": 4,
+    "total": 4
   }
 ]

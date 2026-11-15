@@ -83,6 +83,8 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      # Only the last step uses this: it cancels this pull request's own run.
+      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -148,6 +150,18 @@ jobs:
           BASE_SHA="$(node -e 'const p=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")); if(!/^[a-f0-9]{40}$/.test(p.base?.sha)) process.exit(1); console.log(p.base.sha)' "${RUNNER_TEMP}/release-pr.json")"
           git fetch --no-tags origin "${BASE_SHA}"
           pnpm check-release-information --base "${BASE_SHA}" --head "${HEAD_SHA}" --pr-json "${RUNNER_TEMP}/release-pr.json"
+
+      # A failed lint job already fails the required gate, so the tests,
+      # database partitions and image builds of this run cannot change the
+      # result. Cancel them instead of holding runners other pull requests are
+      # queued for. Main and scheduled runs keep collecting every result. A
+      # fork's read-only token cannot cancel; its run then continues as before.
+      - name: Stop this pull request's remaining jobs after a lint failure
+        if: failure() && github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run cancel "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}"
 
   types:
     needs: select
