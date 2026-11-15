@@ -128,6 +128,7 @@ describe("openmapx control", () => {
       pidNamespace: "elsewhere",
       containerId: null,
       acquiredAt: Date.now(),
+      nonce: "d".repeat(32),
     };
     writeFileSync(path, JSON.stringify(holder));
     expect(services.readLockHolder(path)).toEqual(holder);

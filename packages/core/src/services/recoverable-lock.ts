@@ -6,7 +6,6 @@ import {
   fstatSync,
   fsyncSync,
   linkSync,
-  lstatSync,
   openSync,
   readFileSync,
   readlinkSync,
@@ -45,6 +44,8 @@ const holderSchema = z.strictObject({
     .regex(/^[a-f0-9]{64}$/)
     .nullable(),
   acquiredAt: z.number().int().nonnegative().safe(),
+  /** Unique per acquisition: a freed inode number is reused at once, so it alone names no file. */
+  nonce: z.string().regex(/^[a-f0-9]{32}$/),
 });
 export type LockHolder = z.infer<typeof holderSchema>;
 
@@ -101,6 +102,7 @@ export function currentLockHolder(purpose: string, now = Date.now()): LockHolder
     pidNamespace: currentPidNamespace(),
     containerId: currentContainerId(),
     acquiredAt: now,
+    nonce: randomBytes(16).toString("hex"),
   };
 }
 
@@ -156,7 +158,18 @@ export async function lockHolderGone(
   return false;
 }
 
-function readHolderFile(path: string): { holder?: LockHolder; ino: number } | undefined {
+/** A lock file as one reader saw it: its inode and its bytes, which carry the holder's nonce. */
+interface LockFile {
+  holder?: LockHolder;
+  ino: number;
+  raw: string;
+}
+
+function sameFile(current: LockFile | undefined, judged: LockFile): boolean {
+  return current !== undefined && current.ino === judged.ino && current.raw === judged.raw;
+}
+
+function readHolderFile(path: string): LockFile | undefined {
   let descriptor: number;
   try {
     // Never block on a FIFO someone placed at the lock path.
@@ -169,14 +182,15 @@ function readHolderFile(path: string): { holder?: LockHolder; ino: number } | un
     const stat = fstatSync(descriptor);
     // Waiting never turns another kind of file into a lock; leave it to the operator.
     if (!stat.isFile()) throw new Error(`${path} is not a lock file; remove it by hand`);
-    if (stat.size > 4096) return { ino: stat.ino };
+    if (stat.size > 4096) return { ino: stat.ino, raw: `oversized:${stat.size}` };
     const buffer = Buffer.alloc(stat.size);
     readSync(descriptor, buffer, 0, buffer.length, 0);
+    const raw = buffer.toString("utf8");
     try {
-      return { holder: holderSchema.parse(JSON.parse(buffer.toString("utf8"))), ino: stat.ino };
+      return { holder: holderSchema.parse(JSON.parse(raw)), ino: stat.ino, raw };
     } catch {
       // A holder that died between creating and writing its file left it empty.
-      return { ino: stat.ino };
+      return { ino: stat.ino, raw };
     }
   } finally {
     closeSync(descriptor);
@@ -188,11 +202,11 @@ export function readLockHolder(path: string): LockHolder | undefined {
 }
 
 /**
- * Moves the file at `path` aside if it is still the one judged (`ino`); one
- * that changed meanwhile is put back. Used for the reclaim guard, and by the
+ * Moves the file at `path` aside if it is still the one judged; one that
+ * changed meanwhile is put back. Used for the reclaim guard, and by the
  * operator's clear, which acts on a holder it named.
  */
-function moveAside(path: string, ino: number): void {
+function moveAside(path: string, judged: LockFile): void {
   const aside = `${path}.stale-${randomBytes(6).toString("hex")}`;
   try {
     renameSync(path, aside);
@@ -200,7 +214,7 @@ function moveAside(path: string, ino: number): void {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
     throw error;
   }
-  if (lstatSync(aside).ino !== ino) {
+  if (!sameFile(readHolderFile(aside), judged)) {
     try {
       linkSync(aside, path);
     } catch (error) {
@@ -220,7 +234,7 @@ function moveAside(path: string, ino: number): void {
  */
 async function reclaim(
   path: string,
-  ino: number,
+  judged: LockFile,
   self: LockHolder,
   containerRunning?: ContainerRunning,
 ): Promise<boolean> {
@@ -237,7 +251,7 @@ async function reclaim(
     // A reclaimer that died while holding the guard leaves it behind.
     const other = readHolderFile(guard);
     if (other?.holder && (await lockHolderGone(other.holder, self, containerRunning)))
-      moveAside(guard, other.ino);
+      moveAside(guard, other);
     return false;
   }
   try {
@@ -246,7 +260,7 @@ async function reclaim(
     closeSync(descriptor);
   }
   try {
-    if (readHolderFile(path)?.ino !== ino) return true;
+    if (!sameFile(readHolderFile(path), judged)) return true;
     unlinkSync(path);
     fsyncDirectory(dirname(path));
     return true;
@@ -286,11 +300,12 @@ export async function acquireRecoverableLock(
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     }
     if (descriptor !== undefined) {
-      let ino: number;
+      let own: LockFile;
       try {
-        writeSync(descriptor, JSON.stringify(self));
+        const raw = JSON.stringify(self);
+        writeSync(descriptor, raw);
         fsyncSync(descriptor);
-        ino = fstatSync(descriptor).ino;
+        own = { ino: fstatSync(descriptor).ino, raw };
       } finally {
         closeSync(descriptor);
       }
@@ -299,8 +314,8 @@ export async function acquireRecoverableLock(
       return () => {
         if (released) return;
         released = true;
-        const current = readHolderFile(path);
-        if (current?.ino !== ino) throw new Error(`${basename(path)} was taken from this holder`);
+        if (!sameFile(readHolderFile(path), own))
+          throw new Error(`${basename(path)} was taken from this holder`);
         unlinkSync(path);
         fsyncDirectory(dirname(path));
       };
@@ -314,7 +329,7 @@ export async function acquireRecoverableLock(
       // An unreadable holder record is only trusted as stale once it has stayed
       // unreadable past the wait, so a holder still writing it is not displaced.
       if (existing.holder || performance.now() >= deadline) {
-        if (await reclaim(path, existing.ino, self, options.containerRunning)) continue;
+        if (await reclaim(path, existing, self, options.containerRunning)) continue;
         await delay(5, undefined, { signal: options.signal });
         continue;
       }
@@ -340,9 +355,9 @@ export async function withRecoverableLock<T>(
 /** The operator exit for a lock whose holder cannot be proved gone, and for its reclaim guard. */
 export function clearRecoverableLock(path: string): LockHolder | undefined {
   const guard = readHolderFile(`${path}.reclaim`);
-  if (guard) moveAside(`${path}.reclaim`, guard.ino);
+  if (guard) moveAside(`${path}.reclaim`, guard);
   const existing = readHolderFile(path);
   if (!existing) return undefined;
-  moveAside(path, existing.ino);
+  moveAside(path, existing);
   return existing.holder;
 }
