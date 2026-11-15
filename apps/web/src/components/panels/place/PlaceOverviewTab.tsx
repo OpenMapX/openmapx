@@ -1107,6 +1107,14 @@ export function PlaceOverviewTab({
       {overviewAttributions.length > 0 && (
         <SectionAttribution attributions={overviewAttributions} inset />
       )}
+      {/* A station's lines and departures lead, ahead of its details. Self-hides
+          without linked stops. */}
+      <PlaceTransitSection
+        place={place}
+        onOpenDepartures={onOpenDepartures}
+        onOpenLineDetail={onOpenLineDetail}
+        onOpenTripDetail={onOpenTripDetail}
+      />
       {aboutSection}
       {/* Structured OSM tag details (access, indoor, multilingual descriptions, etc.) */}
       {place.osmTags && Object.keys(place.osmTags).length > 0 && (
@@ -1125,13 +1133,6 @@ export function PlaceOverviewTab({
           </Button>
         </Box>
       )}
-      {/* Transit section — self-hides if no linked stops */}
-      <PlaceTransitSection
-        place={place}
-        onOpenDepartures={onOpenDepartures}
-        onOpenLineDetail={onOpenLineDetail}
-        onOpenTripDetail={onOpenTripDetail}
-      />
       {/* Data source detail sections (e.g. EV charging connectors) */}
       {place.dataSourceDetail && (
         <DataSourceSections detail={place.dataSourceDetail} domain={place.primaryScheme} />
