@@ -10,11 +10,14 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { backupPruneInventory } from "../backup-prune-plan";
 import {
+  backupStoreLockPath,
   retainBackupExpiryCeilings,
   withBackupRetentionPolicyChange,
+  withBackupStoreLock,
 } from "../backup-retention-store";
-import { acquireStoreLock } from "../release-store-lock";
+import { readLockHolder, withRecoverableLock } from "../recoverable-lock";
 
 let root: string;
 beforeEach(() => {
@@ -34,9 +37,10 @@ beforeEach(() => {
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 it("keeps the existing backup lock through policy publication and preserves shorter ceilings", async () => {
   await withBackupRetentionPolicyChange(root, 30, 60, async () => {
+    expect(readLockHolder(backupStoreLockPath(root))?.purpose).toBe("backup-store");
     await expect(
-      acquireStoreLock(join(root, "backups"), ".backup-store.lock", {}, Date.now, true),
-    ).rejects.toThrow(/busy/);
+      withRecoverableLock(backupStoreLockPath(root), { purpose: "other", waitMs: 0 }, () => {}),
+    ).rejects.toThrow(/held by backup-store/);
     const manifest = JSON.parse(
       readFileSync(join(root, "backups", "original", "manifest.json"), "utf8"),
     );
@@ -78,3 +82,23 @@ it.each(["symlink", "hardlink"])(
     expect(readFileSync(other)).toEqual(before);
   },
 );
+it("serialises backup effects on one lock file that inventories skip", async () => {
+  const order: string[] = [];
+  let releaseFirst!: () => void;
+  const first = withBackupStoreLock(root, async () => {
+    order.push("first");
+    await new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    order.push("first done");
+  });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(() => backupPruneInventory(root, 30, new Date())).not.toThrow();
+  const second = withBackupStoreLock(root, async () => {
+    order.push("second");
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  releaseFirst();
+  await Promise.all([first, second]);
+  expect(order).toEqual(["first", "first done", "second"]);
+});

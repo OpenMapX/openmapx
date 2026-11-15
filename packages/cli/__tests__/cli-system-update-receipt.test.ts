@@ -1,6 +1,8 @@
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { services } from "@openmapx/core/server";
 import { afterEach, expect, it } from "vitest";
 import { SystemUpdateReceiptStore } from "../src/lib/system-update-receipt";
 
@@ -51,4 +53,29 @@ it("keeps backups enabled when reading an older receipt without a backup choice"
   delete original.createBackup;
   writeFileSync(store.path, JSON.stringify(original));
   expect(store.read().createBackup).toBe(true);
+});
+it("refuses a second writer at once while the receipt lock is held", async () => {
+  const store = fixture();
+  const lock = join(store.path, "..", ".update.json.lock");
+  await services.withRecoverableLock(lock, { purpose: "other update" }, async () => {
+    await expect(store.create(identity)).rejects.toThrow(/held by other update/);
+  });
+  await expect(store.create(identity)).resolves.toMatchObject({ version: 1 });
+  expect(existsSync(lock)).toBe(false);
+});
+it("reclaims the receipt lock of a writer that has exited", async () => {
+  const store = fixture();
+  const lock = join(store.path, "..", ".update.json.lock");
+  const exited = spawnSync(process.execPath, ["-e", "process.stdout.write(String(process.pid))"], {
+    encoding: "utf8",
+  });
+  let self: ReturnType<typeof services.readLockHolder> | undefined;
+  await services.withRecoverableLock(lock, { purpose: "crashed update" }, () => {
+    self = services.readLockHolder(lock);
+  });
+  writeFileSync(lock, JSON.stringify({ ...self, pid: Number(exited.stdout), startTime: null }), {
+    mode: 0o600,
+  });
+  await expect(store.create(identity)).resolves.toMatchObject({ version: 1 });
+  expect(existsSync(lock)).toBe(false);
 });

@@ -24,7 +24,7 @@ import { repoPaths } from "../lib/paths";
 const LOCKS = {
   leases: () => join(leaseStoreDirectory(repoPaths().infraDir), "leases.lock"),
   writer: () => services.configurationWriterLockPath(repoPaths().infraDir),
-  backups: () => join(repoPaths().infraDir, "backups", ".backup-store.lock"),
+  backups: () => services.backupStoreLockPath(repoPaths().infraDir),
 } as const;
 
 function store() {

@@ -7,7 +7,11 @@ export {
 export { prepareAgentStores } from "./agent-stores";
 export { type BackupPruneCandidate, backupPruneInventory } from "./backup-prune-plan";
 export { backupRetentionExpiry } from "./backup-retention";
-export { BACKUP_STORE_LOCK_TTL_MS, retainBackupExpiryCeilings } from "./backup-retention-store";
+export {
+  backupStoreLockPath,
+  retainBackupExpiryCeilings,
+  withBackupStoreLock,
+} from "./backup-retention-store";
 export {
   type BuiltInManifestSource,
   type BuiltInServiceManifestSource,
@@ -325,7 +329,6 @@ export {
 } from "./release-state";
 export {
   acquireReleaseStoreLock,
-  acquireStoreLock,
   assertReleaseStoreLock,
   RELEASE_STORE_LOCK_NAME,
   type ReleaseStoreLock,

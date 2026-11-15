@@ -1,7 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { fsyncSync } from "node:fs";
 import { rmdir, unlink } from "node:fs/promises";
-import { join } from "node:path";
 import {
   AnchoredDirectory,
   beginControlEffect,
@@ -84,23 +83,18 @@ export function installBackupPruneRuntime(
               if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
             }
             if (!root) return run();
-            const lock = await services.acquireStoreLock(
-              join(options.infraDir, "backups"),
-              ".backup-store.lock",
-              {},
-              Date.now,
-              false,
-              services.BACKUP_STORE_LOCK_TTL_MS,
+            const opened = root;
+            return await services.withBackupStoreLock(
+              options.infraDir,
+              async () => {
+                signal.throwIfAborted();
+                opened.check();
+                const result = await run();
+                opened.check();
+                return result;
+              },
+              signal,
             );
-            try {
-              signal.throwIfAborted();
-              root.check();
-              const result = await run();
-              root.check();
-              return result;
-            } finally {
-              lock.release();
-            }
           } finally {
             root?.close();
             infra.close();

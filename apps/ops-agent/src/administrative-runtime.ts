@@ -58,8 +58,7 @@ import {
   type OpsRuntime,
 } from "./runtime";
 
-const { acquireStoreLock, acquireReleaseStoreLock } = coreServices;
-type ReleaseStoreLock = coreServices.ReleaseStoreLock;
+const { acquireReleaseStoreLock } = coreServices;
 
 const MAX_BACKUP_MANIFEST_BYTES = 1024 * 1024;
 const MAX_BACKUP_SERVICES = 256;
@@ -80,7 +79,6 @@ const INSPECT_RELEASE_SERVICE_IDS = [
 const MAX_RELEASE_MANIFEST_BYTES = coreServices.RELEASE_STORE_LIMITS.manifestBytes;
 const MAX_RELEASE_STATE_BYTES = coreServices.RELEASE_STORE_LIMITS.stateBytes;
 const MAX_RELEASE_SELECTIONS_BYTES = coreServices.RELEASE_STORE_LIMITS.selectionsBytes;
-const BACKUP_STORE_LOCK_NAME = ".backup-store.lock";
 const BACKUP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const SERVICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const _REGION_ID = /^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*$/;
@@ -545,17 +543,9 @@ function releaseDigest(contents: string): string {
   return createHash("sha256").update(contents).digest("hex");
 }
 
-function acquireBackupStoreLock(rootDir: string): Promise<ReleaseStoreLock> {
-  const root = backupRoot(rootDir);
-  mkdirSync(root, { recursive: true, mode: 0o700 });
-  return acquireStoreLock(
-    root,
-    BACKUP_STORE_LOCK_NAME,
-    {},
-    Date.now,
-    false,
-    coreServices.BACKUP_STORE_LOCK_TTL_MS,
-  );
+function withBackupStoreLock<T>(rootDir: string, run: () => Promise<T>): Promise<T> {
+  mkdirSync(backupRoot(rootDir), { recursive: true, mode: 0o700 });
+  return coreServices.withBackupStoreLock(infraDirectory(rootDir), run);
 }
 
 export async function pruneBackupRetention(
@@ -566,8 +556,7 @@ export async function pruneBackupRetention(
   if (!Number.isSafeInteger(retentionDays) || retentionDays <= 0 || retentionDays > 36_500) {
     throw new Error("Backup retention days must be an integer between 1 and 36500");
   }
-  const lock = await acquireBackupStoreLock(rootDir);
-  try {
+  await withBackupStoreLock(rootDir, async () => {
     if (
       coreServices.readAppliedPlatformValues(join(rootDir, "infra", "docker"))
         .backupRetentionDays !== retentionDays
@@ -577,9 +566,7 @@ export async function pruneBackupRetention(
       signal: new AbortController().signal,
       emitLog: () => {},
     });
-  } finally {
-    lock.release();
-  }
+  });
 }
 
 /**
@@ -1110,15 +1097,12 @@ export function createAdministrativeRuntime(
   };
   runtime["backup.list"] = async () => inspectBackupInventory(options.rootDir);
   runtime["backup.create"] = async (operation, context) => {
-    const lock = await acquireBackupStoreLock(options.rootDir);
-    try {
-      await runFixedCli(["backup", "create", "--name", operation.backupId], {
+    await withBackupStoreLock(options.rootDir, () =>
+      runFixedCli(["backup", "create", "--name", operation.backupId], {
         ...context,
         operationKind: context.claim.operation.kind,
-      });
-    } finally {
-      lock.release();
-    }
+      }),
+    );
     return { backupId: operation.backupId };
   };
   runtime["backup.restore"] = async (operation, context) => {
@@ -1127,8 +1111,7 @@ export function createAdministrativeRuntime(
     // exact bytes immediately before dispatch, so a manifest replaced between
     // the resource claim and the effect cannot supply different service
     // authority under the same caller-visible backup ID.
-    const lock = await acquireBackupStoreLock(options.rootDir);
-    try {
+    await withBackupStoreLock(options.rootDir, async () => {
       const digest = inspectBackupManifestDigest(options.rootDir, operation.backupId);
       if (digest === null) throw new Error("Backup authority rejected");
       const manifest = parseManifest(options.rootDir, operation.backupId);
@@ -1149,21 +1132,16 @@ export function createAdministrativeRuntime(
       if (inspectBackupManifestDigest(options.rootDir, operation.backupId) !== digest) {
         throw new Error("Backup authority rejected");
       }
-    } finally {
-      lock.release();
-    }
+    });
     return { backupId: operation.backupId };
   };
   runtime["backup.delete"] = async (operation, context) => {
-    const lock = await acquireBackupStoreLock(options.rootDir);
-    try {
-      await runFixedCli(["backup", "delete", operation.backupId], {
+    await withBackupStoreLock(options.rootDir, () =>
+      runFixedCli(["backup", "delete", operation.backupId], {
         ...context,
         operationKind: context.claim.operation.kind,
-      });
-    } finally {
-      lock.release();
-    }
+      }),
+    );
     return { backupId: operation.backupId };
   };
   runtime["data.inspect"] = async (operation) => inspectDataInventory(options.rootDir, operation);

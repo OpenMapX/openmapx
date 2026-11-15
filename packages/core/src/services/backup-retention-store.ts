@@ -1,12 +1,38 @@
-/** Node-only migration of portable expiry ceilings under the existing backup lock. */
+/** Node-only migration of portable expiry ceilings under the backup-store lock. */
 import { join } from "node:path";
 import { AnchoredDirectory, sameInode } from "../build-artifacts/filesystem";
 import { backupRetentionExpiry } from "./backup-retention";
-import { acquireStoreLock } from "./release-store-lock";
+import { withRecoverableLock } from "./recoverable-lock";
 
 const namePattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
-/** Existing backup effects allow30 minutes; retain exclusion through cleanup. */
-export const BACKUP_STORE_LOCK_TTL_MS = 35 * 60000;
+const BACKUP_STORE_LOCK_FILE = ".backup-store.lock";
+
+/** The lock every backup create, restore, delete, prune and retention change holds. */
+export function backupStoreLockPath(infraDir: string): string {
+  return join(infraDir, "backups", BACKUP_STORE_LOCK_FILE);
+}
+
+/** Whether a name in the backups directory is the store lock or one of its reclaim files. */
+export function isBackupStoreLockEntry(name: string): boolean {
+  return name.startsWith(BACKUP_STORE_LOCK_FILE);
+}
+
+/**
+ * Runs `run` holding the backup-store lock. It is held across a whole backup
+ * effect, so a second one waits up to a minute and is then refused as busy. A
+ * holder that died is reclaimed under the recoverable lock's rules.
+ */
+export function withBackupStoreLock<T>(
+  infraDir: string,
+  run: () => Promise<T> | T,
+  signal?: AbortSignal,
+): Promise<T> {
+  return withRecoverableLock(
+    backupStoreLockPath(infraDir),
+    { purpose: "backup-store", waitMs: 60_000, ...(signal ? { signal } : {}) },
+    run,
+  );
+}
 export function retainBackupExpiryCeilings(infraDir: string, retentionDays: number): void {
   backupRetentionExpiry(new Date(0).toISOString(), retentionDays);
   const infra = new AnchoredDirectory(infraDir);
@@ -19,7 +45,7 @@ export function retainBackupExpiryCeilings(infraDir: string, retentionDays: numb
       throw error;
     }
     for (const name of root.listBounded(129)) {
-      if (name === ".backup-store.lock") continue;
+      if (isBackupStoreLockEntry(name)) continue;
       if (!namePattern.test(name)) throw Error("Backup retention inventory is unsafe");
       const directory = root.directory(name);
       try {
@@ -94,24 +120,15 @@ export async function withBackupRetentionPolicyChange<T>(
       throw error;
     }
     // Use the actual store path while retaining its opened identity. Both remain
-    // checked before and after the existing lock's critical section.
-    const lock = await acquireStoreLock(
-      join(infraDir, "backups"),
-      ".backup-store.lock",
-      {},
-      Date.now,
-      false,
-      BACKUP_STORE_LOCK_TTL_MS,
-    );
-    try {
-      root.check();
+    // checked before and after the lock's critical section.
+    const opened = root;
+    return await withBackupStoreLock(infraDir, async () => {
+      opened.check();
       retainBackupExpiryCeilings(infraDir, Math.min(oldDays, newDays));
       const value = await run();
-      root.check();
+      opened.check();
       return value;
-    } finally {
-      lock.release();
-    }
+    });
   } finally {
     root?.close();
     infra.close();
