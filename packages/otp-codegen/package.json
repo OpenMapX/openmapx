@@ -11,7 +11,7 @@
   "devDependencies": {
     "@graphql-codegen/core": "6.2.2",
     "@graphql-codegen/typescript-generic-sdk": "5.0.1",
-    "@graphql-codegen/typescript-operations": "6.2.0",
+    "@graphql-codegen/typescript-operations": "7.0.0",
     "graphql": "16.15.0",
     "graphql-codegen-typescript-validation-schema": "0.19.0",
     "graphql-sock": "1.0.1",
