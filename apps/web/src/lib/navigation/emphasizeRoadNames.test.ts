@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emphasizeRoadNames } from "./emphasizeRoadNames";
+import { bannerInstruction, emphasizeRoadNames } from "./emphasizeRoadNames";
 
 describe("emphasizeRoadNames", () => {
   it("prefers a name and ref joined the way the instruction writes them", () => {
@@ -24,5 +24,13 @@ describe("emphasizeRoadNames", () => {
     expect(emphasizeRoadNames("Drive northeast.", undefined)).toEqual([
       { text: "Drive northeast.", road: false },
     ]);
+  });
+});
+
+describe("bannerInstruction", () => {
+  it("drops the sentence's closing full stop and keeps the rest", () => {
+    expect(bannerInstruction("Turn left onto the walkway.")).toBe("Turn left onto the walkway");
+    expect(bannerInstruction("Continue on B 1")).toBe("Continue on B 1");
+    expect(bannerInstruction("Take exit 3 toward St. Pauli")).toBe("Take exit 3 toward St. Pauli");
   });
 });

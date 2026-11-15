@@ -36,3 +36,11 @@ export function emphasizeRoadNames(
   if (rest) parts.push({ text: rest, road: false });
   return parts;
 }
+
+/**
+ * A routing engine writes each instruction as a sentence ("Turn left onto
+ * Hauptstraße."). A banner reads like a sign, so the closing full stop goes.
+ */
+export function bannerInstruction(instruction: string): string {
+  return instruction.replace(/\s*\.$/, "");
+}
