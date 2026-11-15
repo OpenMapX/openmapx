@@ -1537,7 +1537,10 @@
     "minAge": "Mindestalter {age}",
     "source": "Quelle",
     "dataSources": "Datenquellen",
-    "removeReviewPhoto": "Foto entfernen"
+    "removeReviewPhoto": "Foto entfernen",
+    "directionsTo": "Route zu {name}",
+    "call": "Anrufen",
+    "website": "Website"
   },
   "airportsOverlay": {
     "title": "Flughäfen",

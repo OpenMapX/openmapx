@@ -1,6 +1,10 @@
 "use client";
 
+import DirectionsIcon from "@mui/icons-material/Directions";
+import LanguageIcon from "@mui/icons-material/Language";
+import PhoneIcon from "@mui/icons-material/Phone";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import type {
   CategoryCardEnrichmentResponse,
@@ -13,6 +17,7 @@ import {
   isDisplayablePhoto,
   proxyImageUrl,
   resultDistanceMetres,
+  safeHref,
   useSettingsStore,
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
@@ -28,6 +33,7 @@ import { PhotoAttribution } from "@/components/panels/place/PhotoAttribution";
 import { BrandLogo } from "@/components/search/BrandLogo";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { ResultItemName, ResultListItem, ResultRowSkeleton } from "@/components/ui/ResultListItem";
+import { routeFromOrTo } from "@/lib/locationActions";
 import { openingHoursTone } from "@/lib/openingHoursTone";
 import { useOpeningHoursText } from "@/lib/useOpeningHoursText";
 
@@ -69,6 +75,60 @@ export function categoryCardContributors(
   return snapshotContributors(
     contributorsForRecordFields(place, fields),
     summary?.rating?.contributors ?? [],
+  );
+}
+
+function ResultQuickActions({ place }: { place: CategoryPlace }) {
+  const tp = useTranslations("place");
+  const website = place.website ? safeHref(place.website) : undefined;
+  const pill = { flexShrink: 0, whiteSpace: "nowrap" } as const;
+  return (
+    <Box
+      sx={{
+        display: { xs: "flex", sm: "none" },
+        gap: 1,
+        px: 2,
+        pb: 1.25,
+        overflowX: "auto",
+        scrollbarWidth: "none",
+        "&::-webkit-scrollbar": { display: "none" },
+      }}
+    >
+      <Button
+        size="small"
+        variant="tonal"
+        startIcon={<DirectionsIcon />}
+        aria-label={tp("directionsTo", { name: place.name })}
+        onClick={() => routeFromOrTo("destination", place.coordinates, place.name)}
+        sx={pill}
+      >
+        {tp("directions")}
+      </Button>
+      {place.phone && (
+        <Button
+          size="small"
+          variant="tonal"
+          startIcon={<PhoneIcon />}
+          href={`tel:${place.phone}`}
+          sx={pill}
+        >
+          {tp("call")}
+        </Button>
+      )}
+      {website && (
+        <Button
+          size="small"
+          variant="tonal"
+          startIcon={<LanguageIcon />}
+          href={website}
+          target="_blank"
+          rel="noopener noreferrer"
+          sx={pill}
+        >
+          {tp("website")}
+        </Button>
+      )}
+    </Box>
   );
 }
 
@@ -286,6 +346,9 @@ export function PlaceResultRow({
         </Box>
       )}
       {footer && <Box sx={{ px: 2, pb: 0.75 }}>{footer}</Box>}
+      {/* A phone's quick actions, as one scrollable row; desktop rows stay
+          compact. Outside the row's own button, which can't contain another. */}
+      {!loading && <ResultQuickActions place={place} />}
     </>
   );
   return brandIdentity ? (

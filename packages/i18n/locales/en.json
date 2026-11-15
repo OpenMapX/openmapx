@@ -1537,7 +1537,10 @@
     "minAge": "Min. age {age}",
     "source": "Source",
     "dataSources": "Data sources",
-    "removeReviewPhoto": "Remove photo"
+    "removeReviewPhoto": "Remove photo",
+    "directionsTo": "Directions to {name}",
+    "call": "Call",
+    "website": "Website"
   },
   "airportsOverlay": {
     "title": "Airports",

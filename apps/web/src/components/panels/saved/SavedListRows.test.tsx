@@ -2,6 +2,7 @@ import {
   apiClient,
   createPlace,
   type SavedPlace,
+  useDirectionsStore,
   useMapStore,
   useMergedPlace,
   usePlaceDetails,
@@ -127,8 +128,17 @@ describe("saved result rows", () => {
       screen.getByRole("button", { name: "Visit in daylight" }).closest("button button"),
     ).toBeNull();
     expect(screen.getByRole("button", { name: "+ Note" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Landmark one/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Landmark one/ }));
     expect(select).toHaveBeenCalledWith(place);
+  });
+  it("routes to a row's place from its Directions pill without opening the place", () => {
+    const { select } = setup([saved("one")]);
+    fireEvent.click(screen.getByRole("button", { name: "Directions to Landmark one" }));
+    const { waypoints, isOpen } = useDirectionsStore.getState();
+    expect(isOpen).toBe(true);
+    expect(waypoints[waypoints.length - 1].label).toBe("Landmark one");
+    expect(select).not.toHaveBeenCalled();
+    act(() => useDirectionsStore.getState().close());
   });
   it("does not fetch offscreen rows and shows a credited photo when a saved identity resolves", async () => {
     setup([saved("one"), saved("two")]);
@@ -161,7 +171,7 @@ describe("saved result rows", () => {
       }
       await waitFor(() => expect(document.querySelector(".MuiSkeleton-root")).toBeNull());
       expect(document.querySelector("img")).toBeNull();
-      expect(screen.getByRole("button", { name: /Landmark one/ })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /^Landmark one/ })).toBeInTheDocument();
     },
   );
   it("credits stored coordinates for distance and resolved fields independently", async () => {
