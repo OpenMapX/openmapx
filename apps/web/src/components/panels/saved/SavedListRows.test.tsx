@@ -133,7 +133,11 @@ describe("saved result rows", () => {
   });
   it("routes to a row's place from its Directions pill without opening the place", () => {
     const { select } = setup([saved("one")]);
-    fireEvent.click(screen.getByRole("button", { name: "Directions to Landmark one" }));
+    // The quick-action pills only show on phones; jsdom lays the page out at a
+    // fixed 1024px width, where their row is display: none.
+    fireEvent.click(
+      screen.getByRole("button", { name: "Directions to Landmark one", hidden: true }),
+    );
     const { waypoints, isOpen } = useDirectionsStore.getState();
     expect(isOpen).toBe(true);
     expect(waypoints[waypoints.length - 1].label).toBe("Landmark one");
