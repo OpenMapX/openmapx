@@ -8,7 +8,11 @@ const state = vi.hoisted(() => ({
   vehicles: [] as unknown[],
   update: vi.fn(),
   clear: vi.fn(),
+  backfill: vi.fn(async () => {}),
+  reverse: null as { address: string } | null,
 }));
+
+vi.mock("./useSaveParking", () => ({ useParkingAddressBackfill: () => state.backfill }));
 
 vi.mock("@openmapx/core", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@openmapx/core")>()),
@@ -16,6 +20,7 @@ vi.mock("@openmapx/core", async (importOriginal) => ({
   useVehicles: () => ({ data: state.vehicles }),
   useUpdateParkedLocation: () => ({ mutate: state.update, isPending: false }),
   useClearParkedLocation: () => ({ mutate: state.clear, isPending: false }),
+  useReverseGeocoding: (coords: unknown) => ({ data: coords ? state.reverse : undefined }),
 }));
 
 vi.mock("next-intl", async () => {
@@ -50,6 +55,8 @@ const RECORD = {
 };
 
 beforeEach(() => {
+  state.backfill.mockClear();
+  state.reverse = null;
   state.parked = [RECORD];
   state.vehicles = [];
   state.update.mockReset();
@@ -93,6 +100,15 @@ describe("ParkingPanelContent", () => {
       ),
     );
     await waitFor(() => expect(useParkingStore.getState().pickedCoords).toBeNull());
+    // The old address described the old spot; the new one is looked up and stored.
+    expect(state.backfill).toHaveBeenCalledWith("p1", [6.7, 51.6]);
+  });
+
+  it("looks up the address of a spot saved without one", () => {
+    state.parked = [{ ...RECORD, address: null }];
+    state.reverse = { address: "Unter den Linden 37" };
+    render(<ParkingPanelContent />);
+    expect(screen.getByText("Unter den Linden 37")).toBeInTheDocument();
   });
 
   it("marks an elapsed expiry as expired", () => {
