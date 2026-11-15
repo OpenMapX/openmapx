@@ -73,13 +73,7 @@ it("does not confuse an attempted release pull/publication with verified local i
     phase: "pending",
     imageId: null,
   };
-  const initial = {
-    images: [image],
-    publication: "not_attempted",
-    overlay: null,
-    statePublication: "not_attempted",
-    state: null,
-  };
+  const initial = { images: [image] };
   expect(configurationHandoffReleaseProgressSchema.parse(initial)).toEqual(initial);
   expect(
     configurationHandoffReleaseProgressSchema.safeParse({
@@ -96,6 +90,9 @@ it("does not confuse an attempted release pull/publication with verified local i
   expect(
     configurationHandoffReleaseProgressSchema.safeParse({ ...initial, publication: "published" })
       .success,
+  ).toBe(false);
+  expect(
+    configurationHandoffReleaseProgressSchema.safeParse({ ...initial, overlay: null }).success,
   ).toBe(false);
   expect(
     configurationHandoffReleaseProgressSchema.safeParse({ ...initial, images: [image, image] })

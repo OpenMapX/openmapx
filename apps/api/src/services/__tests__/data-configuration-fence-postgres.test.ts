@@ -1031,12 +1031,7 @@ async function ownedFenceFixture(
       releaseId: manifest.release,
       manifestDigest: createHash("sha256").update(raw).digest("hex"),
     };
-    mkdirSync(services.releaseStatePaths(host.infraDir).store, { recursive: true, mode: 0o700 });
-    writeFileSync(
-      join(services.releaseStatePaths(host.infraDir).store, `${manifest.release}.json`),
-      raw,
-      { mode: 0o600 },
-    );
+    services.cacheReleaseManifest(host.infraDir, manifest);
   }
   const jobId = randomUUID(),
     actorId = options.guardedRecovery ? randomUUID() : jobId,

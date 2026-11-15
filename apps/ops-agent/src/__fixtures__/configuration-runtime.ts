@@ -19,7 +19,6 @@ export function installConfigurationRuntimeFixture(
   const stack = {
     infraDir: options.infraDir,
     composePath: services.currentConfigurationFile(options.infraDir, services.GENERATED_COMPOSE_FILE),
-    composeReleasePath: services.releaseStatePaths(options.infraDir).overlay,
   };
   const execFile = async (_file: string, args: readonly string[]) => {
     if (args[0] !== "container" || args[1] !== "ls")

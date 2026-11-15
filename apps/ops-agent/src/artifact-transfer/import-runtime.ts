@@ -1,8 +1,7 @@
 /** Fixed prepared-artifact consumer. Filesystem paths and Docker acquisition stay agent-local. */
 import { existsSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { join } from "node:path";
 import {
-  AnchoredDirectory,
   buildArtifactSpec,
   controlDigest,
   executeOwnedGenerationHardlinks,
@@ -359,53 +358,16 @@ export function installPreparedImportRuntime(
         expectedFingerprint: plan.targetFingerprint,
         materializeMotis,
         signal: context.signal,
+        // The release a generation pins is part of its revision, which the
+        // compatibility fingerprint names.
         beforePublication: async () => {
-          const infra = new AnchoredDirectory(source.infraDir);
-          const releaseParents: AnchoredDirectory[] = [];
-          let releases = infra;
-          try {
-            for (const part of relative(
-              source.infraDir,
-              services.releaseStatePaths(source.infraDir).store,
-            ).split(sep)) {
-              releases = releases.directory(part, true, true);
-              releaseParents.push(releases);
-            }
-          } catch (error) {
-            for (const parent of releaseParents.reverse()) parent.close();
-            infra.close();
-            throw error;
-          }
-          let lock: Awaited<ReturnType<typeof services.acquireReleaseStoreLock>> | undefined;
-          try {
-            lock = await services.acquireReleaseStoreLock(
-              releases.anchor,
-              {},
-              { failIfBusy: true },
-            );
-            const current = await snapshot(source, operation, context.signal);
-            if (
-              current.preview.blockers.length ||
-              current.preview.fingerprint !== plan.preview.fingerprint
-            )
-              throw Error("Prepared compatibility changed");
-            return () => {
-              try {
-                lock?.release();
-              } finally {
-                for (const parent of releaseParents.reverse()) parent.close();
-                infra.close();
-              }
-            };
-          } catch (error) {
-            try {
-              lock?.release();
-            } finally {
-              for (const parent of releaseParents.reverse()) parent.close();
-              infra.close();
-            }
-            throw error;
-          }
+          const current = await snapshot(source, operation, context.signal);
+          if (
+            current.preview.blockers.length ||
+            current.preview.fingerprint !== plan.preview.fingerprint
+          )
+            throw Error("Prepared compatibility changed");
+          return () => {};
         },
       }).catch((cause) => {
         const failure = new OpsExecutionFailure("recovery_required", {});

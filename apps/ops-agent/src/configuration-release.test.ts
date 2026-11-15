@@ -15,8 +15,7 @@ beforeEach(() => {
   vi.stubEnv("OPENMAPX_RELEASE", "main");
   vi.stubEnv("OPENMAPX_RELEASE_MANIFEST_REPOSITORY", "ghcr.io/openmapx/release-manifest");
   root = mkdtempSync(join(tmpdir(), "openmapx-configuration-release-"));
-  directory = services.releaseStatePaths(root).store;
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  directory = services.releaseCacheDirectory(root);
   raw = services.canonicalReleaseManifest(
     services.parseReleaseManifest(
       JSON.stringify({
@@ -33,8 +32,9 @@ beforeEach(() => {
     ),
   );
   manifestDigest = createHash("sha256").update(raw).digest("hex");
-  writeFileSync(join(directory, `${releaseId}.json`), raw, { mode: 0o600 });
+  services.cacheReleaseManifest(root, services.parseReleaseManifest(raw));
 });
+const cached = (digest = manifestDigest) => join(directory, `${digest}.json`);
 afterEach(() => {
   rmSync(root, { recursive: true, force: true });
   vi.unstubAllEnvs();
@@ -66,11 +66,11 @@ it("rejects digest drift and noncanonical cached bytes", () => {
   expect(() =>
     readCheckedConfigurationRelease(root, { releaseId, manifestDigest: "0".repeat(64) }),
   ).toThrow();
-  writeFileSync(join(directory, `${releaseId}.json`), `${raw}\n`);
+  writeFileSync(cached(), `${raw}\n`);
   expect(() => readCheckedConfigurationRelease(root, { releaseId, manifestDigest })).toThrow();
 });
 it.each(["symlink", "hardlink"])("rejects a %s cached manifest", (kind) => {
-  const path = join(directory, `${releaseId}.json`),
+  const path = cached(),
     original = join(root, "original.json");
   writeFileSync(original, raw, { mode: 0o600 });
   rmSync(path);
@@ -93,8 +93,8 @@ it.each(["foreign", "tag", "oversized", "local"])("rejects ineligible checked da
       event: "push",
     };
   const modified = services.canonicalReleaseManifest(manifest);
-  writeFileSync(join(directory, `${releaseId}.json`), modified);
   const digest = createHash("sha256").update(modified).digest("hex");
+  writeFileSync(cached(digest), modified, { mode: 0o600 });
   expect(() =>
     readCheckedConfigurationRelease(root, { releaseId, manifestDigest: digest }),
   ).toThrow();
@@ -262,7 +262,7 @@ it("inspects all six images concurrently and retains release order under reverse
 });
 
 it.each(["sibling failure", "caller abort"])(
-  "keeps the release lock until every metadata child settles after %s",
+  "settles only after every metadata child settles after %s",
   async (failure) => {
     const { preflightConfigurationRelease } = await import("./configuration-release-preflight");
     const held = heldMetadata();
@@ -297,9 +297,6 @@ it.each(["sibling failure", "caller abort"])(
       });
       await flushMetadata();
       expect(settled).toBe(false);
-      await expect(
-        services.acquireReleaseStoreLock(directory, {}, { failIfBusy: true }),
-      ).rejects.toThrow("Release store is busy");
       // A late valid index must not launch a platform lookup after sibling failure.
       for (const call of held.calls) call.resolve(platformIndex());
       expect(await result).toEqual(
@@ -310,8 +307,6 @@ it.each(["sibling failure", "caller abort"])(
         ),
       );
       expect(held.calls).toHaveLength(failure === "sibling failure" ? 6 : 12);
-      const lock = await services.acquireReleaseStoreLock(directory, {}, { failIfBusy: true });
-      lock.release();
     } finally {
       controller.abort();
       held.drain();
@@ -374,53 +369,40 @@ it.each([
   if (kind === "aborted") expect(execFile).not.toHaveBeenCalled();
 });
 
-// The checked preflight joins the real private cache/lock to registry reads;
+// The checked preflight joins the private manifest cache to registry reads;
 // this is not a target grant, pull or release runtime acceptance test.
-it.each([false, true])(
-  "binds one checked preflight snapshot and rejects metadata-time source drift: %s",
-  async (drift) => {
-    const { preflightConfigurationRelease } = await import("./configuration-release-preflight");
-    let changed = false;
-    const execFile = vi.fn(async (_file: string, args: readonly string[]) => {
-      if (args[0] === "info") return { stdout: "linux/amd64", stderr: "" };
-      expect(args.slice(0, 2)).toEqual(["manifest", "inspect"]);
-      if (drift && !changed) {
-        changed = true;
-        writeFileSync(join(directory, `${releaseId}.json`), `${raw}\n`, { mode: 0o600 });
-      }
-      return {
-        stdout: JSON.stringify({
-          schemaVersion: 2,
-          config: { digest: `sha256:${"c".repeat(64)}`, size: 32 },
-          layers: [{ digest: `sha256:${"d".repeat(64)}`, size: 64 }],
-        }),
-        stderr: "",
-      };
-    });
-    const run = () =>
-      preflightConfigurationRelease({
-        infraDir: root,
-        selection: { releaseId, manifestDigest },
-        execFile,
-        signal: new AbortController().signal,
-      });
-    if (drift) await expect(run()).rejects.toThrow("Checked configuration release changed");
-    else
-      expect(await run()).toMatchObject({
-        releaseId,
-        manifestDigest,
-        canonicalManifest: raw,
-        imagePrefix: "ghcr.io/openmapx",
-        downloads: { declaredBytes: 6 * 96 },
-      });
-    expect(
-      execFile.mock.calls.every(([, args]) => args[0] === "info" || args[0] === "manifest"),
-    ).toBe(true);
-    writeFileSync(join(directory, `${releaseId}.json`), raw, { mode: 0o600 });
-    // Original lock is released on either return path; no cleanup/admission is needed.
-    expect(await run()).toMatchObject({ releaseId, manifestDigest });
-  },
-);
+it("freezes the cached manifest with its registry metadata", async () => {
+  const { preflightConfigurationRelease } = await import("./configuration-release-preflight");
+  const execFile = vi.fn(async (_file: string, args: readonly string[]) => {
+    if (args[0] === "info") return { stdout: "linux/amd64", stderr: "" };
+    expect(args.slice(0, 2)).toEqual(["manifest", "inspect"]);
+    return {
+      stdout: JSON.stringify({
+        schemaVersion: 2,
+        config: { digest: `sha256:${"c".repeat(64)}`, size: 32 },
+        layers: [{ digest: `sha256:${"d".repeat(64)}`, size: 64 }],
+      }),
+      stderr: "",
+    };
+  });
+  expect(
+    await preflightConfigurationRelease({
+      infraDir: root,
+      selection: { releaseId, manifestDigest },
+      execFile,
+      signal: new AbortController().signal,
+    }),
+  ).toMatchObject({
+    releaseId,
+    manifestDigest,
+    canonicalManifest: raw,
+    imagePrefix: "ghcr.io/openmapx",
+    downloads: { declaredBytes: 6 * 96 },
+  });
+  expect(
+    execFile.mock.calls.every(([, args]) => args[0] === "info" || args[0] === "manifest"),
+  ).toBe(true);
+});
 
 function frozenIo(options: { missing?: boolean } = {}) {
   const calls: string[][] = [];
@@ -482,7 +464,6 @@ it("re-checks a frozen release from local state only, so a registry outage canno
 
   expect(
     await verifyFrozenConfigurationRelease({
-      infraDir: root,
       selection,
       frozen,
       execFile: local.execFile,
@@ -494,7 +475,7 @@ it("re-checks a frozen release from local state only, so a registry outage canno
   frozenIo.registryDown = false;
 });
 
-it.each(["a missing image", "a changed checked release"])(
+it.each(["a missing image", "another configured repository"])(
   "refuses a frozen release when %s",
   async (problem) => {
     const { preflightConfigurationRelease, verifyFrozenConfigurationRelease } = await import(
@@ -507,12 +488,14 @@ it.each(["a missing image", "a changed checked release"])(
       execFile: frozenIo().execFile,
       signal: new AbortController().signal,
     });
-    if (problem === "a changed checked release")
-      writeFileSync(join(directory, `${releaseId}.json`), `${raw}\n`, { mode: 0o600 });
+    if (problem === "another configured repository")
+      vi.stubEnv(
+        "OPENMAPX_RELEASE_MANIFEST_REPOSITORY",
+        "registry.example.org/fork/release-manifest",
+      );
 
     await expect(
       verifyFrozenConfigurationRelease({
-        infraDir: root,
         selection,
         frozen,
         execFile: frozenIo({ missing: problem === "a missing image" }).execFile,

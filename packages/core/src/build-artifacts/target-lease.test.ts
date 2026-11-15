@@ -310,11 +310,10 @@ it("keeps a bare terminal maintenance summary fenced without the fixed owner sou
   a.closeArtifactTargetLeaseHandle(lease);
   c.closeControlInstallation(agent);
 });
-it("holds a target lease, the configuration writer and the release-store lock together", async () => {
+it("holds a target lease and the configuration writer together", async () => {
   const { acquireConfigurationOwnership, configurationWriterLockPath } = await import(
     "../services/configuration-ownership"
   );
-  const { acquireReleaseStoreLock } = await import("../services/release-store-lock");
   const a = await api();
   const c = await import("./control-authority");
   const authority = owner();
@@ -324,9 +323,7 @@ it("holds a target lease, the configuration writer and the release-store lock to
   });
   expect(heldLeases()).toHaveLength(1);
   const releaseWriter = await acquireConfigurationOwnership(root);
-  const store = await acquireReleaseStoreLock(root, {}, { failIfBusy: true });
   expect(existsSync(configurationWriterLockPath(root))).toBe(true);
-  store.release();
   releaseWriter();
   c.retainControlEffectReceipt(authority, {
     outcome: "failed_without_effect",

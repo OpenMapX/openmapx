@@ -231,7 +231,7 @@ describe("Docker release trust gate", () => {
     const build = load(release).jobs.build.steps.find((step) =>
       step.uses?.startsWith("docker/build-push-action@"),
     );
-    const expression = (value: string) => "$" + `{{ ${value} }}`;
+    const expression = (value: string) => `\${{ ${value} }}`;
     const cacheRef = `type=registry,ref=${expression("env.IMAGE_PREFIX")}/${expression("matrix.app")}:buildcache`;
     expect(build?.with?.["cache-from"]).toBe(cacheRef);
     const cacheTo = String(build?.with?.["cache-to"]);
@@ -321,6 +321,16 @@ describe("Docker release trust gate", () => {
           ]),
         ),
       };
+      mkdirSync(join(temp, "source/apps/api/src/db/migrations/meta"), { recursive: true });
+      writeFileSync(
+        join(temp, "source/apps/api/src/db/migrations/meta/_journal.json"),
+        JSON.stringify({
+          entries: [
+            { idx: 0, tag: "0000_initial", when: 1 },
+            { idx: 1, tag: "0001_newest_change", when: 1794754360788 },
+          ],
+        }),
+      );
       mkdirSync(join(temp, "release-plan"));
       writeFileSync(
         join(temp, "release-plan/release-plan.json"),
@@ -365,6 +375,7 @@ describe("Docker release trust gate", () => {
         schemaVersion: 1,
         release: `${"a".repeat(40)}-1-2`,
         buildMetadata,
+        databaseMigrationHead: { tag: "0001_newest_change", when: 1794754360788 },
         producer: {
           repository: "OpenMapX/openmapx",
           workflowPath: ".github/workflows/ci.yml",

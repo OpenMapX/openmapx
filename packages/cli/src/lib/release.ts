@@ -1,16 +1,6 @@
-import { createHash } from "node:crypto";
-import {
-  closeSync,
-  constants,
-  fstatSync,
-  lstatSync,
-  mkdtempSync,
-  openSync,
-  readSync,
-  rmSync,
-} from "node:fs";
+import { closeSync, constants, fstatSync, mkdtempSync, openSync, readSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
 import { execa } from "execa";
 import { cliProcessOptions } from "./execution-deadline";
@@ -21,24 +11,10 @@ const {
   RELEASE_SELECTOR_ENV,
   RELEASE_PINNED_SERVICE_IDS,
   parseReleaseManifest,
-  writeReleaseComposeArtifacts,
 } = coreServices;
 
 export type ReleaseManifest = coreServices.ReleaseManifest;
-
-/**
- * Where the release selection lives: the agent's release state under
- * `infra/docker`, shared with the host CLI, which runs as the agent's user.
- * `uid` is the owner that state must have; tests inject another.
- */
-export interface ReleaseStateLocation {
-  infraDir?: string;
-  uid?: number;
-}
-
-function releaseState(opts: ReleaseStateLocation) {
-  return coreServices.releaseStatePaths(opts.infraDir ?? repoPaths().infraDir);
-}
+const MAX_RELEASE_MANIFEST_BYTES = 32 * 1024;
 
 function appliedReleaseChannel(
   infraDir = repoPaths().infraDir,
@@ -122,7 +98,10 @@ async function inspectCoordinator(docker: ReleaseDockerRunner) {
   return { imageId: row.Image, reference: row.ConfigImage };
 }
 
-async function assertCoordinatorSelection(manifest: ReleaseManifest, docker: ReleaseDockerRunner) {
+export async function assertCoordinatorSelection(
+  manifest: ReleaseManifest,
+  docker: ReleaseDockerRunner,
+) {
   const current = await inspectCoordinator(docker);
   if (!current) return;
   const reference = manifest.images["data-manager"];
@@ -143,7 +122,7 @@ function readManifestFromPrivateTemp(path: string): string {
       !before.isFile() ||
       before.nlink !== 1 ||
       before.size < 1 ||
-      before.size > coreServices.RELEASE_STORE_LIMITS.manifestBytes
+      before.size > MAX_RELEASE_MANIFEST_BYTES
     )
       throw Error("Release manifest exceeds its file bound");
     const bytes = Buffer.alloc(before.size);
@@ -226,251 +205,110 @@ export async function resolveReleaseManifest(
   return manifest;
 }
 
-/** Cache a checked candidate; never publish an overlay or recorded running state. */
-export async function checkRelease(
-  opts: { docker?: ReleaseDockerRunner } & ReleaseStateLocation = {},
-) {
+/** Check a candidate and cache its manifest; the pins and running services stay as they are. */
+export async function checkRelease(opts: { docker?: ReleaseDockerRunner; infraDir?: string } = {}) {
   const infraDir = opts.infraDir ?? repoPaths().infraDir;
-  const paths = coreServices.ensureReleaseStateDirectories(infraDir, { uid: opts.uid });
   const selection = coreServices.readAppliedReleaseSelection(infraDir);
   if (selection.kind === "local") throw new coreServices.ReleaseChannelDisabledError();
-  const configurationIdentity = coreServices.releaseConfigurationIdentity(
-    coreServices.readAppliedReleaseSelection(infraDir),
-  );
   const candidate = await resolveReleaseCandidate(opts.docker, infraDir);
-  const lock = await coreServices.acquireReleaseStoreLock(paths.store, {}, { failIfBusy: true });
-  try {
-    if (
-      coreServices.releaseConfigurationIdentity(
-        coreServices.readAppliedReleaseSelection(infraDir),
-      ) !== configurationIdentity
-    )
-      throw Error("Release configuration changed during check; check again");
-    const cached = coreServices.cacheCheckedReleaseManifest({
-      infraDir,
-      ...candidate,
-      configurationIdentity,
-      lock,
-      uid: opts.uid,
-    });
-    return {
-      ...candidate,
-      ...cached,
-      configurationIdentity,
-      configuredSelector: selection.selector,
-    };
-  } finally {
-    lock.release();
-  }
-}
-
-/** Write the overlay atomically into the agent's release state. */
-export function writeReleaseOverlay(manifest: ReleaseManifest, opts: ReleaseStateLocation = {}) {
-  return writeReleaseComposeArtifacts(manifest, opts.infraDir ?? repoPaths().infraDir, {
-    uid: opts.uid,
-  }).overlayPath;
+  const cached = coreServices.cacheReleaseManifest(infraDir, candidate.manifest);
+  return { ...candidate, ...cached, configuredSelector: selection.selector };
 }
 
 export function touchesReleasePinnedServices(serviceIds: readonly string[]): boolean {
   return serviceIds.some((id) => (RELEASE_PINNED_SERVICE_IDS as readonly string[]).includes(id));
 }
 
-export type ReleaseOverlayState =
-  | { status: "present"; path: string }
-  | { status: "resolved"; path: string; release: string }
-  | { status: "disabled" }
-  | { status: "unpinned"; reason: string }
-  | { status: "held"; reason: string };
-
 /**
- * Make sure `docker-compose.release.yml` exists before a command that would
- * otherwise start release runtime images from their manifest `:latest` tags
- * without the release lockfile's atomic release selection. Never
- * overwrites an existing overlay — the admin updater and `compose release`
- * own deliberate release changes.
+ * The release a start renders: the applied generation's pins, else, at
+ * bootstrap, the release the configured selection resolves to now. Null under
+ * `OPENMAPX_RELEASE=local`. Throws when release images would start without
+ * pins.
  */
-export async function ensureReleaseOverlay(
-  opts: {
-    docker?: ReleaseDockerRunner;
-    releaseStoreLock?: coreServices.ReleaseStoreLock;
-  } & ReleaseStateLocation = {},
-): Promise<ReleaseOverlayState> {
+export async function releaseForStart(
+  opts: { docker?: ReleaseDockerRunner; infraDir?: string } = {},
+): Promise<{ manifest: ReleaseManifest | null; resolved: boolean }> {
   const infraDir = opts.infraDir ?? repoPaths().infraDir;
-  const path = releaseState(opts).overlay;
-  const selected = readSelection(path, opts);
-  if (selected) {
-    assertCompatibleSelection(selected, infraDir);
-    return { status: "present", path };
-  }
-  // An operator running local images opts out once instead of paying a
-  // failed registry pull (and a warning) on every start.
-  if (appliedReleaseChannel(infraDir).kind === "disabled") return { status: "disabled" };
-  let acquired: coreServices.ReleaseStoreLock | undefined;
+  const applied = coreServices.readAppliedRelease(infraDir);
+  if (applied) return { manifest: applied.manifest, resolved: false };
+  if (appliedReleaseChannel(infraDir).kind === "disabled")
+    return { manifest: null, resolved: false };
+  let manifest: ReleaseManifest;
   try {
-    const paths = releaseState(opts);
-    coreServices.ensureReleaseStateDirectory(paths.store, { uid: opts.uid });
-    if (opts.releaseStoreLock)
-      coreServices.assertReleaseStoreLock(opts.releaseStoreLock, paths.store);
-    else
-      acquired = await coreServices.acquireReleaseStoreLock(paths.store, {}, { failIfBusy: true });
-    // Up/pull may have observed absence before another owner selected a release.
-    const current = readSelection(path, opts);
-    if (current) {
-      assertCompatibleSelection(current, infraDir);
-      return { status: "present", path };
-    }
-    let manifest: ReleaseManifest;
-    try {
-      manifest = await resolveReleaseManifest(opts.docker, infraDir);
-    } catch (error) {
-      return { status: "unpinned", reason: (error as Error).message };
-    }
-    await assertCoordinatorSelection(manifest, opts.docker ?? defaultDocker);
-    const activeLock = opts.releaseStoreLock ?? acquired;
-    if (!activeLock) throw Error("Release store lock unavailable");
-    coreServices.assertReleaseStoreLock(activeLock, paths.store);
-    writeReleaseOverlay(manifest, opts);
-    return { status: "resolved", path, release: manifest.release };
+    manifest = await resolveReleaseManifest(opts.docker, infraDir);
   } catch (error) {
-    return { status: "held", reason: (error as Error).message };
-  } finally {
-    acquired?.release();
+    throw new Error(unpinnedReleaseWarning((error as Error).message));
   }
+  await assertCoordinatorSelection(manifest, opts.docker ?? defaultDocker);
+  coreServices.cacheReleaseManifest(infraDir, manifest);
+  return { manifest, resolved: true };
 }
 
 export function unpinnedReleaseWarning(reason: string): string {
   return (
-    `No ${repoPaths().composeReleasePath} and the release lockfile could not be resolved (${reason}). ` +
-    "Refusing to start release runtime images without atomic release selection. " +
-    "For bootstrap, run `pnpm openmapx compose release` once the registry is reachable. Existing installations use System → Updates or authenticated system update after compose release --check. Alternatively set " +
+    `The applied configuration pins no release and the release manifest could not be resolved (${reason}). ` +
+    "Refusing to start release images without pins. " +
+    "Select a release with `pnpm openmapx compose release` once the registry is reachable, or set " +
     `${RELEASE_SELECTOR_ENV}=local to run local images deliberately.`
   );
 }
 
-/** The overlay's selection; an overlay anyone but the agent's user could write is refused. */
-function readSelection(
-  path: string,
-  opts: ReleaseStateLocation,
-): coreServices.ReleaseComposeSelection | null {
-  const raw = coreServices.readReleaseOverlayFile(path, { uid: opts.uid });
-  return raw === null ? null : coreServices.parseReleaseComposeSelection(raw);
-}
-
-function assertCompatibleSelection(
-  selected: coreServices.ReleaseComposeSelection,
-  infraDir: string,
-) {
-  const channel = appliedReleaseChannel(infraDir);
-  const prefix =
-    channel.kind === "enabled" ? channel.imagePrefix : selected.images.api?.split("/api@")[0];
-  if (
-    !selected.release ||
-    !prefix ||
-    !coreServices.RELEASE_IMAGE_NAMES.every((name) =>
-      selected.images[name]?.startsWith(`${prefix}/${name}@`),
-    )
-  )
-    throw Error(
-      "Existing release overlay is malformed or belongs to another configured repository; explicitly reselect or clear it",
-    );
-}
-
-/** Read-only local status; an existing overlay still applies when resolution is disabled. */
-export function releaseStatusLines(
-  path = repoPaths().composeReleasePath,
-  opts: Pick<ReleaseStateLocation, "uid"> = {},
-): string[] {
-  const selected = readSelection(path, opts);
-  const channel = appliedReleaseChannel();
-  const disabled = channel.kind === "disabled";
-  if (!selected)
+/** What the applied generation pins, read locally without the registry. */
+export function releaseStatusLines(infraDir = repoPaths().infraDir): string[] {
+  const applied = coreServices.readAppliedRelease(infraDir);
+  const disabled = appliedReleaseChannel(infraDir).kind === "disabled";
+  if (!applied)
     return [
       disabled
-        ? "Release pinning disabled; no release overlay selected."
-        : "No release lockfile selected locally. Run `pnpm openmapx compose release`.",
+        ? "Release pinning disabled; the applied configuration pins no release."
+        : "The applied configuration pins no release. Run `pnpm openmapx compose release`.",
     ];
   return [
-    `Configured selection: ${process.env.OPENMAPX_RELEASE ?? "main"}; existing pins remain selected until explicit reselection.`,
-    ...(disabled ? ["Release resolution disabled; existing overlay still applies."] : []),
-    `Selected release: ${selected.release ?? "unknown (modified overlay)"}`,
-    ...coreServices.RELEASE_IMAGE_NAMES.map(
-      (name) => `${name}: ${selected.images[name] ?? "unknown"}`,
-    ),
-    "These are locally selected pins; running containers have not been inspected.",
+    `Configured selection: ${process.env.OPENMAPX_RELEASE ?? "main"}; the pins stay until a release is selected or cleared.`,
+    ...(disabled ? ["Release resolution disabled; the applied pins still apply."] : []),
+    `Pinned release: ${applied.manifest.release} (manifest ${applied.manifestDigest})`,
+    ...coreServices.RELEASE_IMAGE_NAMES.map((name) => `${name}: ${applied.manifest.images[name]}`),
+    "These are the applied configuration's pins; running containers have not been inspected.",
   ];
 }
 
+/** Resolves a release and reports how its pins differ from the applied ones; nothing is written. */
 export async function selectRelease(
   opts: {
     resolve?: () => Promise<ReleaseManifest>;
     report?: (line: string) => void;
     docker?: ReleaseDockerRunner;
-  } & ReleaseStateLocation = {},
-): Promise<{ path: string; release: string }> {
-  const { directory, store, overlay: path } = releaseState(opts);
-  coreServices.ensureReleaseStateDirectory(directory, { uid: opts.uid });
-  coreServices.ensureReleaseStateDirectory(store, { uid: opts.uid });
-  const lock = await coreServices.acquireReleaseStoreLock(store, {}, { failIfBusy: true });
-  try {
-    const previous = readSelection(path, opts);
-    const manifest = await (
-      opts.resolve ?? (() => resolveReleaseManifest(defaultDocker, opts.infraDir))
-    )();
-    await assertCoordinatorSelection(manifest, opts.docker ?? defaultDocker);
-    const report = opts.report ?? (() => undefined);
+    infraDir?: string;
+  } = {},
+): Promise<ReleaseManifest> {
+  const infraDir = opts.infraDir ?? repoPaths().infraDir;
+  const previous = coreServices.readAppliedRelease(infraDir)?.manifest;
+  const manifest = await (
+    opts.resolve ?? (() => resolveReleaseManifest(defaultDocker, infraDir))
+  )();
+  await assertCoordinatorSelection(manifest, opts.docker ?? defaultDocker);
+  coreServices.cacheReleaseManifest(infraDir, manifest);
+  const report = opts.report ?? (() => undefined);
+  report(`Previous release: ${previous?.release ?? "none"}`);
+  report(`Candidate release: ${manifest.release}`);
+  for (const name of coreServices.RELEASE_IMAGE_NAMES) {
+    const before = previous?.images[name].split("@")[1];
+    const after = manifest.images[name].split("@")[1];
     report(
-      `Previous release: ${previous ? (previous.release ?? "unknown (modified overlay)") : "none"}`,
+      `${name}: ${before ? (before === after ? "reused" : "changed") : "no previous pin"} (${before ?? "none"} → ${after})`,
     );
-    report(`Candidate release: ${manifest.release}`);
-    for (const name of coreServices.RELEASE_IMAGE_NAMES) {
-      const before = previous?.images[name]?.split("@")[1];
-      const after = manifest.images[name].split("@")[1];
-      report(
-        `${name}: ${before ? (before === after ? "reused" : "changed") : "previous digest unknown"} (${before ?? "unknown"} → ${after})`,
-      );
-    }
-    coreServices.assertReleaseStoreLock(lock, store);
-    writeReleaseOverlay(manifest, opts);
-    return { path, release: manifest.release };
-  } finally {
-    lock.release();
   }
+  return manifest;
 }
 
-/** Clear only selection with the shared conditional release-store writer. */
-export async function clearReleaseSelection(
-  opts: ReleaseStateLocation & { expectedReleaseId?: string; docker?: ReleaseDockerRunner } = {},
-): Promise<{ path: string; cleared: boolean }> {
-  const path = releaseState(opts).overlay;
-  let raw: Buffer | undefined;
-  try {
-    lstatSync(path);
-    coreServices.assertReleaseStateDirectory(dirname(path), { uid: opts.uid });
-    raw = coreServices.readReleaseStateBytes(path, 128 * 1024, { uid: opts.uid });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT")
-      throw Error("Release selection overlay is unsafe", { cause: error });
-  }
-  let selected: coreServices.ReleaseComposeSelection | undefined;
-  if (raw !== undefined) {
-    try {
-      selected = coreServices.parseReleaseComposeSelection(
-        new TextDecoder("utf-8", { fatal: true }).decode(raw),
-      );
-    } catch {
-      // A malformed overlay is already unusable; retain conditional recovery.
-    }
-    if (selected?.images["data-manager"]) {
-      const current = await inspectCoordinator(opts.docker ?? defaultDocker);
-      if (current?.reference === selected.images["data-manager"]) throw Error(coordinatorGuidance);
-    }
-  }
-  return coreServices.clearReleaseComposeSelection({
-    infraDir: opts.infraDir ?? repoPaths().infraDir,
-    uid: opts.uid,
-    path,
-    expectedReleaseId: opts.expectedReleaseId ?? selected?.release ?? undefined,
-    expectedOverlayDigest:
-      raw === undefined ? null : createHash("sha256").update(raw).digest("hex"),
-  });
+/** Refuses to clear pins whose data-manager image the running coordinator uses. */
+export async function assertReleaseClearable(
+  opts: { docker?: ReleaseDockerRunner; infraDir?: string } = {},
+): Promise<string | null> {
+  const applied = coreServices.readAppliedRelease(opts.infraDir ?? repoPaths().infraDir);
+  if (!applied) return null;
+  const current = await inspectCoordinator(opts.docker ?? defaultDocker);
+  if (current?.reference === applied.manifest.images["data-manager"])
+    throw Error(coordinatorGuidance);
+  return applied.manifest.release;
 }

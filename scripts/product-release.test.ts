@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseReleaseComposeSelection } from "../packages/core/src/services/release-manifest";
+import { parse } from "yaml";
 import { fixture } from "./product-release.fixtures";
 import {
   inspectPublication,
@@ -281,9 +281,15 @@ it.each([
 it("provides an auditable usable overlay and exact evidence links before publishing approval", async () => {
   const t = setup();
   const review = await t.stage();
-  expect(
-    parseReleaseComposeSelection(t.state.draft.assets["docker-compose.release.yml"]),
-  ).toMatchObject({ release: t.candidate.version, images: t.candidate.manifest.images });
+  const summary = parse(t.state.draft.assets["docker-compose.release.yml"]) as {
+    "x-openmapx-release": { release: string; images: Record<string, string> };
+    services: Record<string, { image: string }>;
+  };
+  expect(summary["x-openmapx-release"]).toMatchObject({
+    release: t.candidate.version,
+    images: t.candidate.manifest.images,
+  });
+  expect(summary.services["app-api"]?.image).toBe(t.candidate.manifest.images.api);
   expect(review.readiness.checks.cleanInstall.evidence).toBe(
     "https://example.invalid/synthetic/cleanInstall",
   );

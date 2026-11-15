@@ -113,10 +113,7 @@ export async function buildProvenance(
   const paths = repoPaths(rootDir);
   let release: string | undefined;
   try {
-    const overlay = services.readReleaseOverlay(paths.infraDir);
-    release =
-      (overlay === null ? null : services.parseReleaseComposeSelection(overlay).release) ??
-      undefined;
+    release = services.readAppliedRelease(paths.infraDir)?.manifest.release;
   } catch {
     release = undefined;
   }

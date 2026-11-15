@@ -26,7 +26,7 @@ const identitySchema = z.strictObject({
   origin: z.url(),
   actorId: z.string().min(1),
   release: z.strictObject({
-    releaseId: z.string().regex(services.RELEASE_ID_PATTERN),
+    releaseId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
     manifestDigest: z.string().regex(/^[a-f0-9]{64}$/),
   }),
   configuredSelector: z.string().min(1),

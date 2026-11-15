@@ -108,9 +108,8 @@ describe("assembled production service authority", () => {
     },
   );
 
-  it("clears only the exact selected pin through the production runtime without Docker mutation", async () => {
-    const host = await fixture(),
-      path = services.releaseStatePaths(host.infraDir).overlay;
+  it("clears only the exact pinned release by rendering a generation without it, without Docker mutation", async () => {
+    const host = await fixture();
     const manifest: services.ReleaseManifest = {
       schemaVersion: 1,
       release: "checked-pin",
@@ -122,9 +121,19 @@ describe("assembled production service authority", () => {
       ) as services.ReleaseManifest["images"],
       ...releaseProvenance(),
     };
-    services.writeReleaseComposeArtifacts(manifest, host.infraDir);
+    await services.commitConfigurationGeneration({
+      infraDir: host.infraDir,
+      services: host.loaded,
+      input: {
+        ...services.readAppliedConfiguration(host.infraDir),
+        domain: "example.test",
+        selectedRoots: ["motis"],
+      },
+      release: manifest,
+    });
     expect(await productionReleaseEffects(host.runtime).inspect()).toMatchObject({
       selectedReleaseId: "checked-pin",
+      currentReleaseId: "checked-pin",
     });
     const inspection = await productionReleaseEffects(host.runtime).inspectSystem({
       signal: new AbortController().signal,
@@ -133,19 +142,23 @@ describe("assembled production service authority", () => {
     expect(parseOpsResult("system.inspect", inspection).release.selectedReleaseId).toBe(
       "checked-pin",
     );
-    const before = readFileSync(path, "utf8"),
-      pointer = services.currentConfigurationGeneration(host.infraDir);
+    const pinned = services.currentConfigurationGeneration(host.infraDir);
     const changed = { kind: "release.clear", releaseId: "different-pin" } as OpsOperation;
     await expect(
       dispatchOpsOperation(host.runtime, changed, await host.context(changed)),
     ).rejects.toThrow(/changed/);
-    expect(readFileSync(path, "utf8")).toBe(before);
+    expect(services.currentConfigurationGeneration(host.infraDir)).toBe(pinned);
     const operation = { kind: "release.clear", releaseId: "checked-pin" } as OpsOperation;
     expect(
       await dispatchOpsOperation(host.runtime, operation, await host.context(operation)),
     ).toEqual({ releaseId: "checked-pin", cleared: true });
-    expect(existsSync(path)).toBe(false);
-    expect(services.currentConfigurationGeneration(host.infraDir)).toBe(pointer);
+    const cleared = services.currentConfigurationGeneration(host.infraDir);
+    expect(cleared).not.toBe(pinned);
+    expect(services.readAppliedRelease(host.infraDir)).toBeNull();
+    expect(services.readPreviousConfigurationGeneration(host.infraDir, cleared!)).toBe(pinned);
+    expect(services.readGenerationRelease(host.infraDir, pinned!)?.manifest.release).toBe(
+      "checked-pin",
+    );
     expect(
       host.calls.some(
         (args) =>

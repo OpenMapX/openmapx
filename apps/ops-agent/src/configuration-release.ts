@@ -1,4 +1,4 @@
-/** Reuse canonical checked data from the agent's own release store. */
+/** Reuse canonical checked data from the agent's own manifest cache. */
 import { services } from "@openmapx/core/server";
 export function readCheckedConfigurationRelease(
   infraDir: string,

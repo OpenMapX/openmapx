@@ -31,6 +31,7 @@ import { assertConfigurationCoordinatorReady } from "./configuration-hardlinks-r
 import {
   assertStagedCoordinatorConfigurationWrite,
   inspectOwnedMaintenanceGenerationRuntime,
+  readMaintenanceRelease,
   readPreparedMaintenanceRelease,
 } from "./configuration-maintenance-store";
 import {
@@ -235,8 +236,29 @@ async function commitGeneration(
         coreServices.prepareAgentStateDirectories(options.infraDir);
         // And its stores, which the generation mounts into app-api.
         coreServices.prepareAgentStores(options.infraDir);
+        // A release update's maintenance pins its frozen release in the generation it commits.
+        let release: coreServices.ReleaseManifest | undefined;
+        if (operation.kind === "stack.render" && operation.maintenanceId) {
+          const reading = openControlInstallation({
+            infraDir: options.infraDir,
+            role: "ops-agent",
+            serviceIds: services.map((service) => service.manifest.id),
+            container: existsSync("/run/secrets/openmapx-control-verifiers"),
+          });
+          try {
+            const frozen = readMaintenanceRelease(reading, operation.maintenanceId);
+            if (frozen)
+              release = coreServices.parseReleaseManifest(
+                frozen.canonicalManifest,
+                frozen.imagePrefix,
+              );
+          } finally {
+            closeControlInstallation(reading);
+          }
+        }
         const mounts = await options.containerBindMounts?.();
         const committed = await writer.commit({
+          ...(release ? { release } : {}),
           ...(mounts ? { containerBindMounts: mounts } : {}),
           services,
           ownedServiceGenerations,
@@ -452,7 +474,6 @@ export function installTrustedConfigurationRuntime(
       }
       if (releaseSelection && frozenRelease)
         await verifyFrozenConfigurationRelease({
-          infraDir: options.infraDir,
           selection: releaseSelection,
           frozen: frozenRelease,
           execFile: options.execFile ?? runContainedProcess,

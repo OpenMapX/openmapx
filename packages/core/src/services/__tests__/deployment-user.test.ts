@@ -173,7 +173,6 @@ describe("the deployment's user", () => {
     const paths = {
       infraDir,
       composePath: join(infraDir, "docker-compose.generated.yml"),
-      composeReleasePath: join(infraDir, "docker-compose.release.yml"),
     };
     const inherited = { UID: process.env.UID, GID: process.env.GID };
     try {

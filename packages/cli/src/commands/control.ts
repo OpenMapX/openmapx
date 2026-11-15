@@ -11,9 +11,16 @@ import { services } from "@openmapx/core/server";
 import type { Command } from "commander";
 import { completeCliCommand } from "../lib/control-context";
 import { settleMaintenanceFence } from "../lib/control-resolve";
-import { dockerCompose } from "../lib/docker";
+import { dockerCompose, dockerComposeStream } from "../lib/docker";
+import { applyGeneratedHardlinksBeforeStart } from "../lib/hardlinks";
+import { leasedHostEffect } from "../lib/host-effect";
 import { log } from "../lib/output";
 import { repoPaths } from "../lib/paths";
+import {
+  assertDatabaseAllowsRollback,
+  planRollback,
+  readNewestAppliedMigration,
+} from "../lib/rollback";
 
 /**
  * The operator exit for the update system: what the agent's store believes is
@@ -259,5 +266,64 @@ export function registerControlCommands(program: Command): void {
       });
       audit({ action: "resolve", operationKey: options.op, as: options.as, lease });
       completeCliCommand(0);
+    });
+
+  control
+    .command("rollback")
+    .description(
+      "Return to the configuration applied before the current one, with the release it pins",
+    )
+    .option("--yes", "Roll back; without it the plan is printed and nothing changes")
+    .action(async (options: { yes?: boolean }) => {
+      const infraDir = repoPaths().infraDir;
+      const plan = planRollback(infraDir);
+      log.info(
+        `Applied configuration: ${plan.currentRevisionId} (release ${plan.current?.manifest.release ?? "none"})`,
+      );
+      log.info(
+        `Previous configuration: ${plan.targetRevisionId} (release ${plan.target?.manifest.release ?? "none"})`,
+      );
+      log.warn(
+        "Rolling back also reverts every configuration change made since then: the release selection, the selected services, service configuration and secrets return to the previous configuration's.",
+      );
+      const sameRelease = plan.current?.manifestDigest === plan.target?.manifestDigest;
+      assertDatabaseAllowsRollback(plan, sameRelease ? null : await readNewestAppliedMigration());
+      if (!options.yes) {
+        log.info("Nothing was changed. Run again with --yes to roll back.");
+        completeCliCommand(0);
+      }
+      const { renderComposeForRepo } = await import("./compose");
+      const target = services.readGenerationConfiguration(infraDir, plan.targetRevisionId);
+      const code = await leasedHostEffect("control.rollback", "all", async () => {
+        const rendered = await renderComposeForRepo({
+          services: target.selectedRoots,
+          release: target.release,
+          configurationFrom: plan.targetRevisionId,
+          expectedCurrentRevisionId: plan.currentRevisionId,
+        });
+        log.ok(`Rendered the previous configuration again → ${rendered.revisionId}`);
+        // Later renders keep the restored selection.
+        if (services.readDesiredSelection(infraDir).source !== "env")
+          services.writeServiceSelectionFile(infraDir, target.selectedRoots);
+        await applyGeneratedHardlinksBeforeStart();
+        // The self-update order: the database before its clients, the agent last.
+        for (const id of services.selfUpdateServiceOrder(rendered.enabledServiceIds)) {
+          const exit = await dockerComposeStream(["up", "-d", "--no-deps", id]);
+          if (exit !== 0) {
+            log.err(
+              `Recreating ${id} failed (exit ${exit}); the services after it were not touched.`,
+            );
+            return exit;
+          }
+        }
+        return 0;
+      });
+      audit({
+        action: "rollback",
+        from: plan.currentRevisionId,
+        to: plan.targetRevisionId,
+        exitCode: code,
+      });
+      completeCliCommand(code);
     });
 }

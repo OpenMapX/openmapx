@@ -65,14 +65,13 @@ async function preparedStack(ids = ["motis", "postgis", "redis"]) {
     stack: {
       infraDir,
       composePath: services.currentConfigurationFile(infraDir, services.GENERATED_COMPOSE_FILE),
-      composeReleasePath: join(infraDir, "docker-compose.release.yml"),
     },
   };
 }
 
 /** The unit adapter boundary returns Docker's config read from the real generated inputs. */
 function readPreparedDockerConfig(
-  stack: { composePath: string; composeReleasePath: string },
+  stack: { composePath: string },
   file: string,
   args: readonly string[],
 ) {
@@ -82,11 +81,9 @@ function readPreparedDockerConfig(
   for (let index = 0; index < args.length; index++) {
     if (args[index] !== "-f") continue;
     const path = args[++index];
-    expect(
-      [stack.composePath, stack.composeReleasePath]
-        .filter(existsSync)
-        .map((path) => realpathSync(path)),
-    ).toContain(realpathSync(path!));
+    expect([stack.composePath].filter(existsSync).map((path) => realpathSync(path))).toContain(
+      realpathSync(path!),
+    );
     const configuration = parseYaml(readFileSync(path!, "utf8")) as {
       services: Record<string, unknown>;
     };
@@ -660,7 +657,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
               { timeout: 5_000 },
             );
             const runtime = createDockerRuntime({
-              stack: { infraDir: infra, composePath: compose, composeReleasePath: release },
+              stack: { infraDir: infra, composePath: compose },
               fileExists: existsSync,
             });
             const diagnosticPaths = { live, staging, previous: `${live}.previous` };
@@ -678,7 +675,7 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
             ).toBe("0");
             if (scenario === "failed-staging-stop") {
               const failing = createDockerRuntime({
-                stack: { infraDir: infra, composePath: compose, composeReleasePath: release },
+                stack: { infraDir: infra, composePath: compose },
                 fileExists: existsSync,
                 execFile: async (file, args, options) => {
                   if (args[0] === "stop" && args[1] === "motis-staging")
@@ -936,14 +933,9 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
     );
   });
 
-  it("names only the frozen generated closure when a release overlay declares disabled services", async () => {
+  it("names only the frozen generated closure", async () => {
     const prepared = await preparedStack(),
       calls: string[][] = [];
-    writeFileSync(
-      prepared.stack.composeReleasePath,
-      "services:\n  app-api:\n    image: example/api:1\n  data-manager:\n    image: example/data:1\n",
-      { mode: 0o600 },
-    );
     const runtime = createDockerRuntime({
       stack: prepared.stack,
       fileExists: existsSync,
@@ -1037,7 +1029,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         stack: {
           infraDir: "/trusted",
           composePath: "/trusted/compose.yml",
-          composeReleasePath: "/trusted/release.yml",
         },
         fileExists: () => false,
         ownedServices,
@@ -1056,7 +1047,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
 
   it("maps lifecycle effects to fixed Compose argv without accepting caller argv or paths", async () => {
     const prepared = await preparedStack();
-    writeFileSync(prepared.stack.composeReleasePath, "services: {}\n", { mode: 0o644 });
     writeFileSync(join(prepared.stack.infraDir, ".env"), "", { mode: 0o644 });
     const calls: Array<{ file: string; args: readonly string[] }> = [];
     const runtime = createDockerRuntime({
@@ -1104,7 +1094,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       stack: {
         infraDir: "/trusted",
         composePath: "/trusted/compose.yml",
-        composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
       ownedServices,
@@ -1156,7 +1145,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         stack: {
           infraDir: "/trusted",
           composePath: "/trusted/compose.yml",
-          composeReleasePath: "/trusted/release.yml",
         },
         fileExists: () => false,
         ownedServices,
@@ -1297,7 +1285,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       stack: {
         infraDir: "/trusted",
         composePath: "/trusted/compose.yml",
-        composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
       ownedServices,
@@ -1341,7 +1328,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         stack: {
           infraDir: "/trusted",
           composePath: "/trusted/compose.yml",
-          composeReleasePath: "/trusted/release.yml",
         },
         fileExists: () => false,
         ownedServices,
@@ -1357,7 +1343,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           stack: {
             infraDir: "/trusted",
             composePath: "/trusted/compose.yml",
-            composeReleasePath: "/trusted/release.yml",
           },
           fileExists: () => false,
           ownedServices,
@@ -1456,7 +1441,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
             stack: {
               infraDir: "/trusted",
               composePath: "/trusted/compose.yml",
-              composeReleasePath: "/trusted/release.yml",
             },
             fileExists: () => false,
             trafficDataRoot: dataRoot,
@@ -1509,7 +1493,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           stack: {
             infraDir: "/trusted",
             composePath: "/trusted/compose.yml",
-            composeReleasePath: "/trusted/release.yml",
           },
           fileExists: () => false,
           trafficDataRoot: dataRoot,
@@ -1543,7 +1526,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           stack: {
             infraDir: "/trusted",
             composePath: "/trusted/compose.yml",
-            composeReleasePath: "/trusted/release.yml",
           },
           fileExists: () => false,
           trafficDataRoot: dataRoot,
@@ -1578,7 +1560,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           stack: {
             infraDir: "/trusted",
             composePath: "/trusted/compose.yml",
-            composeReleasePath: "/trusted/release.yml",
           },
           fileExists: () => false,
           ownedServices,
@@ -1630,7 +1611,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           stack: {
             infraDir: "/trusted",
             composePath: "/trusted/compose.yml",
-            composeReleasePath: "/trusted/release.yml",
           },
           fileExists: () => false,
           ownedServices,
@@ -1713,7 +1693,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         stack: {
           infraDir: "/trusted",
           composePath: "/trusted/compose.yml",
-          composeReleasePath: "/trusted/release.yml",
         },
         fileExists: () => false,
         ownedServices,
@@ -1761,7 +1740,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         stack: {
           infraDir: "/trusted",
           composePath: "/trusted/compose.yml",
-          composeReleasePath: "/trusted/release.yml",
         },
         fileExists: () => false,
         trafficDataRoot: dataRoot,
@@ -1819,7 +1797,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       stack: {
         infraDir: "/trusted",
         composePath: "/trusted/compose.yml",
-        composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
       ownedServices,
@@ -1863,7 +1840,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
           stack: {
             infraDir: "/trusted",
             composePath: "/trusted/compose.yml",
-            composeReleasePath: "/trusted/release.yml",
           },
           fileExists: () => false,
           execFile: async (_file, args) => {
@@ -1958,7 +1934,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       stack: {
         infraDir: "/trusted",
         composePath: "/trusted/compose.yml",
-        composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
       ownedServices,
@@ -2039,7 +2014,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       stack: {
         infraDir: "/trusted",
         composePath: "/trusted/compose.yml",
-        composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
       ownedServices,
@@ -2080,7 +2054,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
         stack: {
           infraDir: "/trusted",
           composePath: "/trusted/compose.yml",
-          composeReleasePath: "/trusted/release.yml",
         },
         fileExists: () => false,
         ownedServices,
@@ -2104,7 +2077,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       stack: {
         infraDir: "/trusted",
         composePath: "/trusted/compose.yml",
-        composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
       ownedServices,
@@ -2241,7 +2213,6 @@ while :; do printf "WRITE %s\\n" "$name" >&3; sleep 0.1; done
       stack: {
         infraDir: "/trusted",
         composePath: "/trusted/compose.yml",
-        composeReleasePath: "/trusted/release.yml",
       },
       fileExists: () => false,
       ownedServices,
@@ -2401,7 +2372,6 @@ it("streams the actual default fixed Docker human output without the JSON collec
     stack: {
       infraDir: root,
       composePath: join(root, "compose.yml"),
-      composeReleasePath: join(root, "release.yml"),
     },
     fileExists: () => false,
   });

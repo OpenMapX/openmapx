@@ -31,13 +31,12 @@ import {
 } from "../lib/platform-secret-files";
 import { combineServiceSelection } from "../lib/preset-selection";
 import {
+  assertReleaseClearable,
   checkRelease,
-  clearReleaseSelection,
-  ensureReleaseOverlay,
+  releaseForStart,
   releaseStatusLines,
   selectRelease,
   touchesReleasePinnedServices,
-  unpinnedReleaseWarning,
 } from "../lib/release";
 import { selectedReleaseServiceFiles } from "../lib/release-service-files";
 import { applyServiceSelection } from "../lib/service-selection";
@@ -62,6 +61,10 @@ export interface RenderRepoOptions {
   expectedCurrentRevisionId?: string | null;
   revisionId?: string;
   redisAuthHooks?: RedisAuthReconciliationHooks;
+  /** The release to pin; omitted, the applied generation's pins are kept. */
+  release?: coreServices.ReleaseManifest | null;
+  /** A retained generation whose saved configuration to render instead of the applied one's. */
+  configurationFrom?: string;
 }
 
 export interface RenderRepoResult {
@@ -318,7 +321,9 @@ export async function renderComposeWithWriter(
     : loadIntegrationSchemas(paths.root);
   // The database is the admin panel's: what it saved arrives through the
   // generation it last applied. The env layer is this host's.
-  const saved = readAppliedConfiguration(paths.infraDir);
+  const saved = opts.configurationFrom
+    ? coreServices.readGenerationConfiguration(paths.infraDir, opts.configurationFrom)
+    : readAppliedConfiguration(paths.infraDir);
   const savedConfigs = new Map(saved.serviceConfigs.map((entry) => [entry.serviceId, entry]));
   const serviceConfigs = services.flatMap((service) => {
     const { id } = service.manifest;
@@ -354,13 +359,17 @@ export async function renderComposeWithWriter(
     return [{ serviceId: id, values, ...(envKeys.length > 0 ? { envKeys } : {}) }];
   });
   const mounts = await containerBindMounts();
-  // Run from the checkout with a release selected, render uses that
-  // release's service files, read from its image, and refuses while the
-  // checkout's built-in services differ from them.
-  const selected = await selectedReleaseServiceFiles(paths.infraDir);
+  // Run from the checkout with a release pinned, render uses that release's
+  // service files, read from its image, and refuses while the checkout's
+  // built-in services differ from them.
+  const release =
+    opts.release === undefined
+      ? (coreServices.readAppliedRelease(paths.infraDir)?.manifest ?? null)
+      : opts.release;
+  const selected = await selectedReleaseServiceFiles(release);
   if (selected === "none") {
     log.dim(
-      "No release is selected yet: the services' files come from this checkout. Bootstrap can select with `pnpm openmapx compose release`; existing installations use System → Updates or `system update`.",
+      "No release is pinned: the services' files come from this checkout. Select one with `pnpm openmapx compose release`.",
     );
   } else if (selected) {
     const overrides = coreServices.readServiceOverrides(paths.infraDir, selected.files);
@@ -383,6 +392,7 @@ export async function renderComposeWithWriter(
   }
   assertCliExecutionAvailable();
   const committed = await writer.commit({
+    release,
     ...(mounts ? { containerBindMounts: mounts } : {}),
     ...(selected && selected !== "none" ? { releaseServiceFiles: selected.files } : {}),
     services,
@@ -498,7 +508,16 @@ export function registerComposeCommands(program: Command): void {
       let enabledServiceIds: string[] = [];
       try {
         const services = combineServiceSelection(options.services, options.preset);
-        const r = await renderComposeForRepo({ domain: options.domain, services });
+        const release = await releaseForStart();
+        if (release.resolved && release.manifest)
+          log.ok(`Pinned release ${release.manifest.release}`);
+        else if (!release.manifest)
+          log.dim("Release pinning disabled (OPENMAPX_RELEASE=local); using manifest image tags.");
+        const r = await renderComposeForRepo({
+          domain: options.domain,
+          services,
+          release: release.manifest,
+        });
         enabledServiceIds = r.enabledServiceIds;
         log.ok(`Rendered ${r.servicesRendered} services → ${r.revisionId}`);
         for (const warning of r.selectionWarnings) log.warn(warning);
@@ -507,20 +526,6 @@ export function registerComposeCommands(program: Command): void {
       } catch (err) {
         log.err(`Render failed: ${(err as Error).message}`);
         process.exit(1);
-      }
-      const overlay = await ensureReleaseOverlay();
-      if (overlay.status === "resolved") {
-        log.ok(`Atomic release selection ${overlay.release} → ${overlay.path}`);
-      } else if (overlay.status === "present") {
-        for (const line of releaseStatusLines(overlay.path)) log.dim(line);
-      } else if (overlay.status === "unpinned") {
-        log.err(unpinnedReleaseWarning(overlay.reason));
-        process.exit(1);
-      } else if (overlay.status === "held") {
-        log.err(overlay.reason);
-        process.exit(1);
-      } else if (overlay.status === "disabled") {
-        log.dim("Release pinning disabled (OPENMAPX_RELEASE=local); using manifest image tags.");
       }
       if (enabledServiceIds.length === 0) {
         log.dim("No enabled services to start");
@@ -535,20 +540,17 @@ export function registerComposeCommands(program: Command): void {
 
   compose
     .command("release")
-    .description(
-      "Resolve the release lockfile for atomic release selection in docker-compose.release.yml",
-    )
-    .option("--status", "Show locally selected release and image pins without registry access")
+    .description("Pin the release the configured selection resolves to in a new configuration")
+    .option("--status", "Show the applied configuration's release pins without registry access")
     .addOption(
-      new Option(
-        "--check",
-        "Check and cache release metadata without changing selected pins",
-      ).conflicts(["status", "clear"]),
+      new Option("--check", "Check and cache release metadata without changing the pins").conflicts(
+        ["status", "clear"],
+      ),
     )
     .addOption(
       new Option(
         "--clear",
-        "Clear an unused or mismatched release selection; refuses a matching Data Manager",
+        "Render the configuration without release pins; refuses while Data Manager runs the pinned image",
       ).conflicts(["status", "check"]),
     )
     .action(async (options: { status?: boolean; clear?: boolean; check?: boolean }) => {
@@ -564,31 +566,28 @@ export function registerComposeCommands(program: Command): void {
           log.info(`Metadata image digest: ${checked.ociDigest}`);
           for (const name of coreServices.RELEASE_IMAGE_NAMES)
             log.info(`${name}: ${checked.manifest.images[name]}`);
-          log.dim("Selected pins and running services were not changed.");
+          log.dim("The pins and running services were not changed.");
           return;
         }
         if (options.clear) {
-          const result = await clearReleaseSelection();
-          log.ok(
-            result.cleared
-              ? `Cleared local release selection → ${result.path}`
-              : "No local release selection to clear.",
-          );
-          log.dim("Running containers and recorded running state are preserved.");
-          log.dim(
-            process.env.OPENMAPX_RELEASE === "local"
-              ? "Release resolution is disabled; the next start/update uses manifest image tags."
-              : "Automatic release resolution will select a release on the next start/update. To use local images, separately set OPENMAPX_RELEASE=local.",
-          );
+          const cleared = await assertReleaseClearable();
+          if (!cleared) {
+            log.ok("The applied configuration pins no release.");
+            return;
+          }
+          const r = await renderComposeForRepo({ release: null });
+          log.ok(`Cleared the pins of ${cleared} → ${r.revisionId}`);
+          log.dim("Running containers keep their images until they are next recreated.");
           return;
         }
-        const selected = await selectRelease({ report: log.info });
-        log.ok(`Atomic release selection ${selected.release} → ${selected.path}`);
+        const manifest = await selectRelease({ report: log.info });
+        const r = await renderComposeForRepo({ release: manifest });
+        log.ok(`Pinned release ${manifest.release} → ${r.revisionId}`);
         log.dim(
-          "Bootstrap: start the selected release with `pnpm openmapx compose up`. Existing installations: use System → Updates or authenticated `system update` after `compose release --check`.",
+          "Start it with `pnpm openmapx compose up`. Existing installations update through System → Updates or authenticated `system update`.",
         );
       } catch (err) {
-        log.err(`Release lockfile operation failed: ${(err as Error).message}`);
+        log.err(`Release operation failed: ${(err as Error).message}`);
         process.exit(1);
       }
     });
@@ -609,9 +608,8 @@ export function registerComposeCommands(program: Command): void {
     .description("Pull selected images (no args = all services)")
     .action(async (ids: string[]) => {
       if (ids.length === 0 || touchesReleasePinnedServices(ids)) {
-        const overlay = await ensureReleaseOverlay();
-        if (overlay.status === "unpinned") throw new Error(unpinnedReleaseWarning(overlay.reason));
-        if (overlay.status === "held") throw new Error(overlay.reason);
+        const release = await releaseForStart();
+        if (release.resolved) await renderComposeForRepo({ release: release.manifest });
       }
       const code = await dockerComposeStream(["pull", ...ids]);
       process.exit(code);

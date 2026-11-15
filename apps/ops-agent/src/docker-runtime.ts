@@ -746,48 +746,39 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
                 },
               },
             });
-          const store = services.releaseStatePaths(options.stack.infraDir).store;
-          await mkdir(store, { mode: 0o700, recursive: true });
-          const release = await services.acquireReleaseStoreLock(store);
-          try {
-            const command = args();
-            // Direct DM Start is fixed --no-recreate; guarded DM recreation is
-            // checked by the actual frozen-step verifier before this adapter.
-            // All implicit coordinator creation stays outside this generic path.
-            if (operation.serviceId !== "data-manager" && !command.includes("--no-deps")) {
-              const configuration = JSON.parse(
-                  (
-                    await run(
-                      [...composePrefix(), "config", "--format", "json"],
-                      context.signal,
-                      15000,
-                    )
-                  ).stdout,
-                ),
-                targets = operation.serviceId
-                  ? [operation.serviceId]
-                  : services.readAppliedComposeServiceIds(
-                      options.stack.infraDir,
-                      operation.expectedConfigurationRevisionId,
-                    );
-              if (
-                services
-                  .composeCreationDependencyIds(configuration, targets)
-                  .includes("data-manager")
-              )
-                throw Error("Coordinator maintenance required before service creation");
-            }
-            const result = await changed(command, context, LIFECYCLE_TIMEOUT_MS);
-            const next = continuation?.();
-            if (next) {
-              if (context.artifactLease) assertArtifactTargetLeaseForward(context.artifactLease);
-              if (context.controlAuthority) assertControlExecutionForward(context.controlAuthority);
-              return await changed(next, context, LIFECYCLE_TIMEOUT_MS);
-            }
-            return result;
-          } finally {
-            release.release();
+          const command = args();
+          // Direct DM Start is fixed --no-recreate; guarded DM recreation is
+          // checked by the actual frozen-step verifier before this adapter.
+          // All implicit coordinator creation stays outside this generic path.
+          if (operation.serviceId !== "data-manager" && !command.includes("--no-deps")) {
+            const configuration = JSON.parse(
+                (
+                  await run(
+                    [...composePrefix(), "config", "--format", "json"],
+                    context.signal,
+                    15000,
+                  )
+                ).stdout,
+              ),
+              targets = operation.serviceId
+                ? [operation.serviceId]
+                : services.readAppliedComposeServiceIds(
+                    options.stack.infraDir,
+                    operation.expectedConfigurationRevisionId,
+                  );
+            if (
+              services.composeCreationDependencyIds(configuration, targets).includes("data-manager")
+            )
+              throw Error("Coordinator maintenance required before service creation");
           }
+          const result = await changed(command, context, LIFECYCLE_TIMEOUT_MS);
+          const next = continuation?.();
+          if (next) {
+            if (context.artifactLease) assertArtifactTargetLeaseForward(context.artifactLease);
+            if (context.controlAuthority) assertControlExecutionForward(context.controlAuthority);
+            return await changed(next, context, LIFECYCLE_TIMEOUT_MS);
+          }
+          return result;
         },
         context.signal,
       );

@@ -132,7 +132,6 @@ async function fixture(
       stack: {
         infraDir: root,
         composePath: join(root, "compose.yml"),
-        composeReleasePath: join(root, "release.yml"),
       },
       fileExists: () => false,
       execFile: async (_file, args, options) => {

@@ -1,4 +1,5 @@
 /** Drives the existing real-admin producer. No host mutation or new principal. */
+import { createHash } from "node:crypto";
 import {
   adminActivityJobDetailSchema,
   adminActivityJobsResponseSchema,
@@ -29,6 +30,11 @@ class HttpFailure extends Error {
   }
 }
 const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+/** The configured release selection, so a resumed update notices that it changed. */
+const selectionIdentity = (infraDir: string) =>
+  createHash("sha256")
+    .update(JSON.stringify(services.readAppliedReleaseSelection(infraDir)))
+    .digest("hex");
 const targets = ["app-api", "app-web", "data-manager", "ops-agent", "transitous-runner"];
 export interface SystemUpdateOptions {
   infraDir: string;
@@ -128,9 +134,7 @@ export async function runSystemUpdate(options: SystemUpdateOptions): Promise<{ j
     actorId: actor.user.id,
     release: { releaseId: options.releaseId, manifestDigest: options.manifestDigest },
     configuredSelector: selection.selector,
-    configurationIdentity: services.releaseConfigurationIdentity(
-      services.readAppliedReleaseSelection(options.infraDir),
-    ),
+    configurationIdentity: selectionIdentity(options.infraDir),
     createBackup: options.createBackup !== false,
   };
   let receipt: SystemUpdateReceipt;
@@ -164,11 +168,7 @@ export async function runSystemUpdate(options: SystemUpdateOptions): Promise<{ j
       identity.release,
       services.readAppliedReleaseSelection(options.infraDir),
     );
-    if (
-      services.releaseConfigurationIdentity(
-        services.readAppliedReleaseSelection(options.infraDir),
-      ) !== identity.configurationIdentity
-    )
+    if (selectionIdentity(options.infraDir) !== identity.configurationIdentity)
       throw Error("Configured release selection changed");
     const configuration = await get(
       "/api/admin/platform/configuration",

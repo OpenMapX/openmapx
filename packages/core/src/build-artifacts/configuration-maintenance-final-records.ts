@@ -508,19 +508,7 @@ function assertExecutedConfigurationMaintenanceFinalState(
     !same(inspection.requiredChecks, requiredChecks) ||
     inspection.observations.length !== requiredChecks.length ||
     !inspection.observations.every((value, index) => value.checkIndex === index && value.passed) ||
-    !same(details[0], {
-      currentRevisionId: inspectedRevision,
-      ...(!contained && owner.plan.release
-        ? {
-            currentRelease: {
-              releaseId: owner.plan.release.releaseId,
-              digest: owner.plan.release.manifestDigest,
-              updateJobId:
-                owner.plan.apiParent.issuer === "api" ? owner.plan.apiParent.apiJobId : null,
-            },
-          }
-        : {}),
-    }) ||
+    !same(details[0], { currentRevisionId: inspectedRevision }) ||
     !same(details[2], { guard: owner.preparedFence }) ||
     !owner.plan.steps.every((step, index) =>
       same(details[index + 3], {

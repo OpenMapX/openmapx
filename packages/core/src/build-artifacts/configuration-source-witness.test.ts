@@ -4,11 +4,6 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { commitConfigurationGeneration } from "../services/configuration-generation";
 import { writeServiceSelectionFile } from "../services/deployment";
-import {
-  parseReleaseComposeSelection,
-  TRANSITOUS_TOOLS_IMAGE_ENV,
-} from "../services/release-manifest";
-import { ensureReleaseStateDirectories } from "../services/release-state";
 import type { LoadedService } from "../services/types";
 import {
   configurationHostFields,
@@ -28,60 +23,6 @@ beforeEach(async () => {
   await provisionControlInstallation(root);
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
-it("retains the original private release selection instead of accepting a changed image pin", () => {
-  const installation = openControlInstallation({
-    infraDir: root,
-    role: "ops-agent",
-    serviceIds: ["data-manager"],
-  });
-  try {
-    const pins = Object.fromEntries(
-      ["api", "web", "data-manager", "ops-agent", "transitous-runner", "transitous-tools"].map(
-        (name) => [name, `ghcr.io/openmapx/${name}@sha256:${"b".repeat(64)}`],
-      ),
-    );
-    const document = {
-      services: {
-        "app-api": { image: pins.api },
-        "app-web": { image: pins.web },
-        "data-manager": {
-          image: pins["data-manager"],
-          environment: { [TRANSITOUS_TOOLS_IMAGE_ENV]: pins["transitous-tools"] },
-        },
-        "ops-agent": { image: pins["ops-agent"] },
-        "transitous-runner": { image: pins["transitous-runner"] },
-      },
-      "x-openmapx-release": { release: "public-release-fixture", images: pins },
-    };
-    const path = ensureReleaseStateDirectories(root).overlay;
-    writeFileSync(path, JSON.stringify(document), { mode: 0o600 });
-    expect(parseReleaseComposeSelection(JSON.stringify(document)).release).toBe(
-      "public-release-fixture",
-    );
-    const options = {
-        installation,
-        infraDir: root,
-        services: [] as LoadedService[],
-        authorityRevision: "v1",
-        env: {},
-      },
-      observed = observeConfigurationSources(options),
-      verify = () =>
-        verifyConfigurationSourceWitness({
-          ...options,
-          sourceRevision: observed.sourceRevision,
-          expectedCurrentRevisionId: null,
-        });
-    expect(Object.keys(observed).sort()).toEqual(["revisionId", "services", "sourceRevision"]);
-    verify();
-    pins["data-manager"] = `ghcr.io/openmapx/data-manager@sha256:${"c".repeat(64)}`;
-    document.services["data-manager"].image = pins["data-manager"];
-    writeFileSync(path, JSON.stringify(document), { mode: 0o600 });
-    expect(() => verify()).toThrow("Host sources changed");
-  } finally {
-    closeControlInstallation(installation);
-  }
-});
 it("keeps host values private while detecting a changed persisted full selection", () => {
   const installation = openControlInstallation({
     infraDir: root,

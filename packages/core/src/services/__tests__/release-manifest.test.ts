@@ -1,28 +1,12 @@
-import {
-  closeSync,
-  fstatSync,
-  lstatSync,
-  mkdtempSync,
-  openSync,
-  readFileSync,
-  rmSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { load } from "js-yaml";
 import { describe, expect, it } from "vitest";
 import { releaseProvenance } from "../__fixtures__/release-provenance";
 import {
   canonicalReleaseManifest,
-  parseReleaseComposeSelection,
   parseReleaseManifest,
   type ReleaseManifest,
   releaseChannel,
-  renderReleaseCompose,
-  transitousToolsImageFromReleaseCompose,
-  writeReleaseComposeArtifacts,
+  releaseServiceImages,
 } from "../release-manifest";
-import { releaseStatePaths } from "../release-state";
 
 const digest = (c: string) => `sha256:${c.repeat(64)}`;
 const manifest: ReleaseManifest = {
@@ -40,7 +24,7 @@ const manifest: ReleaseManifest = {
 };
 
 describe("shared release manifest", () => {
-  it("accepts a run-qualified mixed release and renders its exact reused digests", () => {
+  it("accepts a run-qualified mixed release and keeps its exact reused digests", () => {
     const mixed = {
       ...manifest,
       release: `${"a".repeat(40)}-123-2`,
@@ -58,9 +42,24 @@ describe("shared release manifest", () => {
     };
     const parsed = parseReleaseManifest(JSON.stringify(mixed));
     expect(parsed).toEqual(mixed);
-    const overlay = renderReleaseCompose(parsed);
-    expect(overlay).toContain(`image: ${manifest.images.api}`);
-    expect(overlay).toContain(`image: ${manifest.images["ops-agent"]}`);
+    expect(releaseServiceImages(parsed)["app-api"]).toBe(manifest.images.api);
+    expect(releaseServiceImages(parsed)["ops-agent"]).toBe(manifest.images["ops-agent"]);
+  });
+
+  it("carries the release's database migration head through parsing and canonical bytes", () => {
+    const head = { tag: "0064_configuration_fence_drop_certificate", when: 1794754360788 };
+    const withHead = { ...manifest, databaseMigrationHead: head };
+    expect(parseReleaseManifest(JSON.stringify(withHead)).databaseMigrationHead).toEqual(head);
+    expect(JSON.parse(canonicalReleaseManifest(withHead)).databaseMigrationHead).toEqual(head);
+    expect(canonicalReleaseManifest(manifest)).not.toContain("databaseMigrationHead");
+    for (const invalid of [
+      { tag: "latest", when: 1 },
+      { tag: head.tag, when: -1 },
+      { tag: head.tag },
+    ])
+      expect(() =>
+        parseReleaseManifest(JSON.stringify({ ...manifest, databaseMigrationHead: invalid })),
+      ).toThrow(/databaseMigrationHead/);
   });
 
   it("parses an approved manifest and rejects tag references", () => {
@@ -77,52 +76,8 @@ describe("shared release manifest", () => {
 
   it("pins only the six release images and no privacy collector or validation evidence", () => {
     expect(Object.keys(manifest.images)).toHaveLength(6);
-    const rendered = renderReleaseCompose(manifest);
-    const overlay = load(rendered) as {
-      services: Record<string, { environment?: Record<string, string>; configs?: unknown[] }>;
-      configs?: unknown;
-    };
-    expect(overlay.configs).toBeUndefined();
-    expect(overlay.services["app-api"]).toEqual({ image: manifest.images.api });
-    expect(overlay.services["ops-agent"]).toEqual({ image: manifest.images["ops-agent"] });
-    expect(rendered).not.toMatch(/privacy/i);
+    expect(Object.keys(releaseServiceImages(manifest))).toHaveLength(5);
     expect(canonicalReleaseManifest(manifest)).not.toMatch(/privacy/i);
-  });
-
-  it("writes a private release overlay", () => {
-    const root = mkdtempSync(join(tmpdir(), "openmapx-release-artifacts-"));
-    try {
-      const overlayPath = join(
-        root,
-        "state",
-        "ops-agent",
-        "releases",
-        "docker-compose.release.yml",
-      );
-      expect(writeReleaseComposeArtifacts(manifest, root)).toEqual({ overlayPath });
-      expect(lstatSync(releaseStatePaths(root).directory).mode & 0o777).toBe(0o700);
-      const overlay = openSync(overlayPath, "r");
-      try {
-        expect(fstatSync(overlay).mode & 0o777).toBe(0o600);
-        expect(readFileSync(overlay, "utf8")).toBe(renderReleaseCompose(manifest));
-      } finally {
-        closeSync(overlay);
-      }
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-
-  it("replaces the overlay atomically when another release is selected", () => {
-    const root = mkdtempSync(join(tmpdir(), "openmapx-release-artifacts-"));
-    try {
-      const { overlayPath } = writeReleaseComposeArtifacts(manifest, root);
-      const next = { ...manifest, release: "def456" };
-      writeReleaseComposeArtifacts(next, root);
-      expect(readFileSync(overlayPath, "utf8")).toBe(renderReleaseCompose(next));
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
   });
 });
 
@@ -173,38 +128,4 @@ describe("release lockfile image contract and selection", () => {
       expect(canonicalReleaseManifest(input)).toBe(JSON.stringify(manifest));
     },
   );
-
-  it("round trips selected identity and six images, including quoted release IDs", () => {
-    const selected = { ...manifest, release: "release-test" };
-    const images = manifest.images;
-    const rendered = renderReleaseCompose(selected);
-    expect(parseReleaseComposeSelection(rendered)).toEqual({ release: selected.release, images });
-    expect(transitousToolsImageFromReleaseCompose(rendered)).toBe(images["transitous-tools"]);
-    expect(transitousToolsImageFromReleaseCompose("services: {}\n")).toBeNull();
-    expect(rendered).not.toContain("ghcr.io/openmapx/docs");
-  });
-
-  it("reads legacy service pins without inventing a release identity", () => {
-    expect(
-      parseReleaseComposeSelection(`services:
-  app-api:
-    image: ${manifest.images.api}
-`),
-    ).toEqual({
-      release: null,
-      images: { api: manifest.images.api },
-    });
-    expect(() => parseReleaseComposeSelection("services: [")).toThrow();
-    expect(() => parseReleaseComposeSelection("hello")).toThrow();
-  });
-});
-
-it("does not attribute a modified service pin to stale release metadata", () => {
-  const rendered = renderReleaseCompose(manifest).replace(
-    `image: ${manifest.images.api}`,
-    `image: ghcr.io/openmapx/api@${digest("0")}`,
-  );
-  const selected = parseReleaseComposeSelection(rendered);
-  expect(selected.release).toBeNull();
-  expect(selected.images.api).toBe(`ghcr.io/openmapx/api@${digest("0")}`);
 });

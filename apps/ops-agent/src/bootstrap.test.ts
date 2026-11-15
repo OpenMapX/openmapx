@@ -1,5 +1,5 @@
 import { fork } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -93,13 +93,11 @@ it.each(["SIGTERM", "SIGINT"] as const)(
   60000,
 );
 
-it("production bootstrap retains health and observation when the release store is unreadable", async () => {
+it("production bootstrap retains health and observation when the release cache is unsafe", async () => {
   const root = mkdtempSync(join(tmpdir(), "openmapx-bootstrap-"));
-  const directory = services.releaseStatePaths(join(root, "infra/docker")).store;
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  writeFileSync(join(directory, "unexpected entry"), "{}", { mode: 0o600 });
-  const overlay = services.releaseStatePaths(join(root, "infra/docker")).overlay;
-  writeFileSync(overlay, "operator-state\n");
+  const directory = services.releaseCacheDirectory(join(root, "infra/docker"));
+  mkdirSync(directory, { recursive: true });
+  chmodSync(directory, 0o755);
   const dispatch = vi.fn(async () => ({ reachable: true, version: "test" }));
   const token = Buffer.alloc(32, 1).toString("base64url");
   const retained = persistedJob(
@@ -193,10 +191,9 @@ it("production bootstrap retains health and observation when the release store i
       ).statusCode,
     ).toBe(200);
     expect(ready).not.toHaveBeenCalled();
-    expect(readFileSync(overlay, "utf8")).toBe("operator-state\n");
     // The operator is told to repair and restart; a retry cannot succeed.
     const written = stderr.mock.calls.map(([chunk]) => String(chunk)).join("");
-    expect(written).toContain("release store");
+    expect(written).toContain("release cache");
     expect(written).toContain("restart the agent");
     expect(written).not.toMatch(/retry/i);
   } finally {

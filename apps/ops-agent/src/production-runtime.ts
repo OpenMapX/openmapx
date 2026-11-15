@@ -77,7 +77,7 @@ export async function productionRegisteredServiceIds(runtime: OpsRuntime): Promi
 const resolvers = new WeakMap<OpsRuntime, OwnedServiceResolver>();
 const releaseAdapters = new WeakMap<OpsRuntime, AdministrativeReleaseEffects>();
 
-/** Release resolution and the selection clear run under the configuration
+/** Release resolution and the pin clear run under the configuration
  * generation writer, after the staged-coordinator release-write check. */
 function installReleaseCapabilityBoundary(
   runtime: OpsRuntime,
@@ -86,20 +86,18 @@ function installReleaseCapabilityBoundary(
   base: AdministrativeReleaseEffects,
   owned: OwnedServiceResolver,
   execFile: NonNullable<DockerRuntimeOptions["execFile"]>,
+  loadAuthority: ProductionOpsRuntimeOptions["loadAuthority"],
 ): AdministrativeReleaseEffects {
-  const directory = services.releaseStatePaths(infraDir).store;
-  const withSource = async <T>(signal: AbortSignal, action: () => Promise<T>): Promise<T> => {
+  const withSource = async <T>(
+    signal: AbortSignal,
+    action: (writer: services.ConfigurationGenerationWriter) => Promise<T>,
+  ): Promise<T> => {
     try {
       return await services.withConfigurationGenerationWriter(
         infraDir,
-        async () => {
-          const lock = await services.acquireReleaseStoreLock(directory);
-          try {
-            await assertStagedCoordinatorReleaseWrite(runtime, signal);
-          } finally {
-            lock.release();
-          }
-          return action();
+        async (writer) => {
+          await assertStagedCoordinatorReleaseWrite(runtime, signal);
+          return action(writer);
         },
         signal,
       );
@@ -113,14 +111,31 @@ function installReleaseCapabilityBoundary(
       throw error;
     }
   };
+  // Clearing the pin renders the applied generation again without it; running
+  // containers keep their images until they are next recreated.
   runtime["release.clear"] = async (operation, context) =>
-    withSource(context.signal, async () => {
+    withSource(context.signal, async (writer) => {
       context.signal.throwIfAborted();
-      const result = await services.clearReleaseComposeSelection({
-        path: services.releaseStatePaths(infraDir).overlay,
-        expectedReleaseId: operation.releaseId,
+      const current = services.currentConfigurationGeneration(infraDir);
+      if (
+        !current ||
+        services.readGenerationRelease(infraDir, current)?.manifest.release !== operation.releaseId
+      )
+        throw Error("Release selection changed");
+      const { release: _pinned, ...input } = services.readGenerationConfiguration(
+        infraDir,
+        current,
+      );
+      const authority = await loadAuthority();
+      await writer.commit({
+        services: authority.services,
+        integrationSchemas: authority.integrationSchemas,
+        input,
+        allowMissingSelected: true,
+        expectedCurrentRevisionId: current,
+        release: null,
+        signal: context.signal,
       });
-      if (!result.cleared) throw Error("Release selection changed");
       return { releaseId: operation.releaseId, cleared: true as const };
     });
   return {
@@ -205,12 +220,7 @@ export async function createProductionOpsRuntime(
   });
   const runtime = createDockerRuntime({
     stack: options.stack,
-    fileExists:
-      options.docker?.fileExists ??
-      ((path) =>
-        path === options.stack.composeReleasePath
-          ? services.ownedStateFilePresent(path)
-          : existsSync(path)),
+    fileExists: options.docker?.fileExists ?? existsSync,
     execFile: options.docker?.execFile,
     followLogs: options.docker?.followLogs,
     trafficDataRoot: join(options.stack.infraDir, "data"),
@@ -285,6 +295,7 @@ export async function createProductionOpsRuntime(
     createDefaultReleaseEffects(options.rootDir, options.releaseRuntimeOptions),
     owned,
     options.docker?.execFile ?? runContainedProcess,
+    options.loadAuthority,
   );
   createTransitousLockRuntime(runtime, { rootDir: options.rootDir });
   installTransitCredentialsRuntime(runtime, {

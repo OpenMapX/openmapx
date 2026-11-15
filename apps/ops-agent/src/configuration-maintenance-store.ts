@@ -13,10 +13,6 @@ import { coordinatorPullSubmissionDigest, parseOpsJobStatus } from "@openmapx/co
 import { services } from "@openmapx/core/server";
 import type { ConfigurationReleaseSnapshot } from "../../../packages/core/src/build-artifacts/configuration-release-snapshot";
 import {
-  readConfigurationHandoffReleaseOverlay,
-  readConfigurationHandoffReleaseState,
-} from "../../../packages/core/src/build-artifacts/configuration-source-witness";
-import {
   type CoordinatorPullWitness,
   coordinatorPullObservationDomain,
   coordinatorPullWitnessPayloadSchema,
@@ -436,19 +432,33 @@ export function readPreparedMaintenanceRelease(
   installation: ControlInstallation,
   maintenanceId: string,
 ): ConfigurationReleaseSnapshot | undefined {
-  let raw: unknown;
+  let owner: ConfigurationMaintenanceOwnerRecord;
   try {
-    raw = readPrivateRecord(
-      installationState(installation),
-      "configuration-maintenance",
-      `${maintenanceId}.json`,
-    );
+    owner = readMaintenanceOwner(installation, maintenanceId);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw error;
   }
-  const owner = verifyControl(installation.publicKey, domain, raw, ownerSchema);
   return owner.receipt.dmFence ? owner.plan.release : undefined;
+}
+/** The release a maintenance pins in the generation it commits; undefined when it keeps the
+ * applied release. A maintenance that was never prepared is an error. */
+export function readMaintenanceRelease(
+  installation: ControlInstallation,
+  maintenanceId: string,
+): ConfigurationReleaseSnapshot | undefined {
+  return readMaintenanceOwner(installation, maintenanceId).plan.release;
+}
+function readMaintenanceOwner(
+  installation: ControlInstallation,
+  maintenanceId: string,
+): ConfigurationMaintenanceOwnerRecord {
+  const raw = readPrivateRecord(
+    installationState(installation),
+    "configuration-maintenance",
+    `${maintenanceId}.json`,
+  );
+  return verifyControl(installation.publicKey, domain, raw, ownerSchema);
 }
 /** Observation-only completion of the original prepared handoff. All sources
  * and physical descendants must already be settled; this runs no Docker I/O. */
@@ -3041,43 +3051,22 @@ export async function inspectFrozenMaintenanceRuntime(
       throw Error("Unchanged original owned runtime differs");
     if (contained && canonicalJson(containers) !== canonicalJson(owner.originalContainers))
       throw Error("Original noncommitted runtime changed");
-    let currentRelease: { releaseId: string; digest: string; updateJobId: string } | undefined;
     if (!contained && owner.plan.release) {
       if (!owner.plan.handoff || owner.plan.apiParent.issuer !== "api")
-        throw Error("Original release helper/current-state owner required");
+        throw Error("Original release helper owner required");
       const original = readCompletedConfigurationHandoff(
-          state.installation.installation,
-          owner.plan.handoff.handoffId,
-        ),
-        published = original.completion.release,
-        overlay = readConfigurationHandoffReleaseOverlay(source.infraDir),
-        pointer = readConfigurationHandoffReleaseState(source.infraDir);
-      currentRelease = {
-        releaseId: owner.plan.release.releaseId,
-        digest: owner.plan.release.manifestDigest,
-        updateJobId: owner.plan.apiParent.apiJobId,
-      };
+        state.installation.installation,
+        owner.plan.handoff.handoffId,
+      );
       if (
         canonicalJson(original.intent.ownerPrepare) !== canonicalJson(owner.plan.prepare) ||
         original.intent.leaseId !== owner.leaseId ||
         original.intent.operation.planDigest !== owner.plan.planDigest ||
         canonicalJson(original.intent.release) !== canonicalJson(owner.plan.release) ||
-        published?.publication !== "published" ||
-        published.statePublication !== "published" ||
-        canonicalJson(overlay) !== canonicalJson(published.overlay) ||
-        canonicalJson(pointer) !== canonicalJson(published.state) ||
-        !overlay ||
-        !pointer ||
-        Buffer.from(pointer.bytes, "base64").toString("utf8") !== JSON.stringify(currentRelease) ||
-        Buffer.from(overlay.bytes, "base64").toString("utf8") !==
-          services.renderReleaseCompose(
-            services.parseReleaseManifest(
-              owner.plan.release.canonicalManifest,
-              owner.plan.release.imagePrefix,
-            ),
-          )
+        services.readAppliedRelease(source.infraDir)?.manifestDigest !==
+          owner.plan.release.manifestDigest
       )
-        throw Error("Original helper release publication changed before final inspection");
+        throw Error("The applied generation does not pin the release this update froze");
     }
     const docker = await inspectMaintenanceDockerRuntime({
       stack: source.stack,
@@ -3133,10 +3122,7 @@ export async function inspectFrozenMaintenanceRuntime(
         ...docker.checks,
       ]),
       details = [
-        {
-          currentRevisionId: services.currentConfigurationGeneration(source.infraDir),
-          ...(currentRelease ? { currentRelease } : {}),
-        },
+        { currentRevisionId: services.currentConfigurationGeneration(source.infraDir) },
         { containers },
         { guard },
         ...owner.plan.steps.map((step) => ({
@@ -3760,7 +3746,6 @@ export async function prepareConfigurationMaintenanceAdmission(
   const release = platform?.release
     ? input.frozenRelease
       ? await verifyFrozenConfigurationRelease({
-          infraDir: source.infraDir,
           selection: platform.release,
           frozen: input.frozenRelease,
           execFile: source.execFile,
@@ -3818,6 +3803,9 @@ export async function prepareConfigurationMaintenanceAdmission(
       selectedRoots: candidate.payload.selectedRoots ?? desired.roots,
     },
     allowMissingSelected: !candidate.payload.selectedRoots && desired.source === "default",
+    ...(release
+      ? { release: services.parseReleaseManifest(release.canonicalManifest, release.imagePrefix) }
+      : {}),
   });
   const prospective = new Set(rendered.resolved.enabled.map((service) => service.manifest.id));
   if (!prospective.has("data-manager") || recreateServiceIds.some((id) => !prospective.has(id)))

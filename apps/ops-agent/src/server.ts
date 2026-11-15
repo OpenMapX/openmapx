@@ -208,7 +208,7 @@ export const OPS_AGENT_RETENTION_LIMITS = {
   maxAggregateJournalBytes: 24 * 1024 * 1024,
   maxAggregateEventBytes: 2 * DEFAULT_JOB_ENTRIES * MAX_RETAINED_EVENT_BYTES_PER_JOB,
 } as const;
-// Conservative read-only surface while the release store cannot be read safely.
+// Conservative read-only surface while the release cache cannot be read safely.
 /**
  * Operations that change containers claim their targets in the lease store
  * before any effect. Pulls, builds, execs and probes leave running containers

@@ -283,8 +283,6 @@ it("freezes the checked release helper graph and plans a complete 13-service sta
     helperContainerName: `openmapx-configuration-handoff-${handoff.handoffId}`,
     preparedAt: Date.now(),
     release,
-    previousReleaseOverlay: null,
-    previousReleaseState: null,
   };
   expect(configurationHandoffIntentRecordSchema.parse(intent).release).toEqual(release);
   expect(

@@ -1,16 +1,15 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services } from "@openmapx/core/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { releaseProvenance } from "../../core/src/services/__fixtures__/release-provenance";
 import {
-  clearReleaseSelection,
-  ensureReleaseOverlay,
+  assertReleaseClearable,
   type ReleaseDockerRunner,
   type ReleaseManifest,
+  releaseForStart,
   selectRelease,
-  writeReleaseOverlay,
 } from "../src/lib/release";
 
 const digest = (letter: string) => `sha256:${letter.repeat(64)}`;
@@ -32,15 +31,24 @@ function manifest(release: string, dmDigest = "c"): ReleaseManifest {
   };
 }
 
-function fixture() {
+/** An installation whose applied generation pins `before`, or nothing. */
+async function fixture(pinned = true) {
   const infraDir = mkdtempSync(join(tmpdir(), "openmapx-release-coordinator-"));
   roots.push(infraDir);
   const before = manifest("before");
-  writeReleaseOverlay(before, { infraDir });
-  const paths = services.releaseStatePaths(infraDir);
-  services.ensureReleaseStateDirectory(paths.store);
-  const overlay = readFileSync(paths.overlay, "utf8");
-  return { infraDir, before, paths, overlay };
+  await services.commitConfigurationGeneration({
+    infraDir,
+    services: [],
+    input: {
+      domain: "maps.example.test",
+      selectedRoots: [],
+      serviceConfigs: [],
+      integrationConfigs: [],
+      serviceSecrets: [],
+    },
+    release: pinned ? before : null,
+  });
+  return { infraDir, before };
 }
 
 function dockerFixture(
@@ -118,8 +126,8 @@ afterEach(() => {
 });
 
 describe("coordinator-safe release selection", () => {
-  it("preserves the live pin when the candidate changes Data Manager", async () => {
-    const f = fixture();
+  it("refuses a candidate that changes the running Data Manager and caches nothing", async () => {
+    const f = await fixture();
     const next = manifest("after", "0");
     await expect(
       selectRelease({
@@ -128,7 +136,8 @@ describe("coordinator-safe release selection", () => {
         docker: dockerFixture(next),
       }),
     ).rejects.toThrow(/coordinator|Data Manager/i);
-    expect(readFileSync(f.paths.overlay, "utf8")).toBe(f.overlay);
+    expect(services.readAppliedRelease(f.infraDir)?.manifest.release).toBe("before");
+    expect(services.cachedReleases(f.infraDir, "ghcr.io/openmapx")).toEqual([]);
   });
 
   it.each([
@@ -138,7 +147,7 @@ describe("coordinator-safe release selection", () => {
     { malformedInspect: true },
     { cachedImageId: digest("0") },
   ])("refuses an ambiguous or unreadable coordinator (%j)", async (observation) => {
-    const f = fixture();
+    const f = await fixture();
     const next = manifest("after");
     await expect(
       selectRelease({
@@ -147,151 +156,102 @@ describe("coordinator-safe release selection", () => {
         docker: dockerFixture(next, observation),
       }),
     ).rejects.toThrow();
-    expect(readFileSync(f.paths.overlay, "utf8")).toBe(f.overlay);
   });
 
   it.each([{ ids: [] }, { ids: [containerId] }])(
-    "permits bootstrap or the exact running pin (%j)",
+    "permits bootstrap or the exact running pin and reports the change (%j)",
     async ({ ids }) => {
-      const f = fixture();
+      const f = await fixture();
       const next = manifest("after");
+      const lines: string[] = [];
       await expect(
         selectRelease({
           infraDir: f.infraDir,
           resolve: async () => next,
           docker: dockerFixture(next, { ids }),
+          report: (line) => lines.push(line),
         }),
       ).resolves.toMatchObject({ release: "after" });
+      expect(lines).toContain("Previous release: before");
+      expect(lines).toContain(`data-manager: reused (${digest("c")} → ${digest("c")})`);
+      expect(services.cachedReleases(f.infraDir, "ghcr.io/openmapx")[0]?.manifest.release).toBe(
+        "after",
+      );
+      // Selection renders nothing by itself; the command commits the generation.
+      expect(services.readAppliedRelease(f.infraDir)?.manifest.release).toBe("before");
     },
   );
+});
 
-  it("can restore the immutable pin of the actual container after an unsafe reselection", async () => {
-    const f = fixture();
-    writeReleaseOverlay(manifest("mismatched", "0"), { infraDir: f.infraDir });
-    await selectRelease({
-      infraDir: f.infraDir,
-      resolve: async () => f.before,
-      docker: dockerFixture(f.before),
+describe("the release a start renders", () => {
+  it("keeps the applied pins without asking the registry", async () => {
+    const f = await fixture();
+    const docker = dockerFixture(manifest("after"));
+    await expect(releaseForStart({ infraDir: f.infraDir, docker })).resolves.toEqual({
+      manifest: f.before,
+      resolved: false,
     });
-    expect(readFileSync(f.paths.overlay, "utf8")).toBe(f.overlay);
+    expect(docker).not.toHaveBeenCalled();
+  });
+
+  it("resolves and caches a release at bootstrap", async () => {
+    const f = await fixture(false);
+    const next = manifest("after");
+    await expect(
+      releaseForStart({ infraDir: f.infraDir, docker: dockerFixture(next, { ids: [] }) }),
+    ).resolves.toEqual({ manifest: next, resolved: true });
+    expect(services.cachedReleases(f.infraDir, "ghcr.io/openmapx")).toHaveLength(1);
+  });
+
+  it("refuses to start release images without pins when the registry cannot be reached", async () => {
+    const f = await fixture(false);
+    const docker: ReleaseDockerRunner = async () => ({
+      stdout: "",
+      stderr: "no network",
+      exitCode: 1,
+    });
+    await expect(releaseForStart({ infraDir: f.infraDir, docker })).rejects.toThrow(
+      /pins no release.*OPENMAPX_RELEASE=local/s,
+    );
+  });
+
+  it("renders no pins under OPENMAPX_RELEASE=local", async () => {
+    vi.stubEnv("OPENMAPX_RELEASE", "local");
+    const f = await fixture(false);
+    const docker = dockerFixture(manifest("after"));
+    await expect(releaseForStart({ infraDir: f.infraDir, docker })).resolves.toEqual({
+      manifest: null,
+      resolved: false,
+    });
+    expect(docker).not.toHaveBeenCalled();
   });
 });
 
-describe("automatic selection and clearing", () => {
-  it.each([{ reference: manifest("after", "0").images["data-manager"] }, { listFailure: true }])(
-    "reports coordinator refusal as held without publishing automatic pins (%j)",
-    async (observation) => {
-      const f = fixture();
-      unlinkSync(f.paths.overlay);
-      const result = await ensureReleaseOverlay({
-        infraDir: f.infraDir,
-        docker: dockerFixture(f.before, observation),
-      });
-      expect(result.status).toBe("held");
-      expect(existsSync(f.paths.overlay)).toBe(false);
-    },
-  );
-
-  it("does not publish automatic pins while another process owns the release store", async () => {
-    const f = fixture();
-    unlinkSync(f.paths.overlay);
-    const lock = await services.acquireReleaseStoreLock(f.paths.store, {}, { failIfBusy: true });
-    try {
-      const result = await ensureReleaseOverlay({
-        infraDir: f.infraDir,
-        docker: dockerFixture(f.before, { ids: [] }),
-      });
-      expect(result.status).toBe("held");
-      expect(existsSync(f.paths.overlay)).toBe(false);
-    } finally {
-      lock.release();
-    }
-  });
-
-  it("uses the lifecycle's actual held release lock without reacquiring it", async () => {
-    const f = fixture();
-    unlinkSync(f.paths.overlay);
-    const releaseStoreLock = await services.acquireReleaseStoreLock(
-      f.paths.store,
-      {},
-      { failIfBusy: true },
-    );
-    try {
-      const result = await ensureReleaseOverlay({
-        infraDir: f.infraDir,
-        releaseStoreLock,
-        docker: dockerFixture(f.before, { ids: [] }),
-      });
-      expect(result.status).toBe("resolved");
-      expect(readFileSync(f.paths.overlay, "utf8")).toBe(f.overlay);
-    } finally {
-      releaseStoreLock.release();
-    }
-  });
-
-  it("keeps the overlay needed by an existing pinned coordinator", async () => {
-    const f = fixture();
+describe("clearing the pins", () => {
+  it("refuses while the running Data Manager uses the pinned image", async () => {
+    const f = await fixture();
     await expect(
-      clearReleaseSelection({ infraDir: f.infraDir, docker: dockerFixture(f.before) }),
-    ).rejects.toThrow(/coordinator|Data Manager/i);
-    expect(readFileSync(f.paths.overlay, "utf8")).toBe(f.overlay);
+      assertReleaseClearable({ infraDir: f.infraDir, docker: dockerFixture(f.before) }),
+    ).rejects.toThrow(/System → Updates/);
   });
 
-  it.each(["malformed", "mismatched"])(
-    "can clear an already %s overlay for recovery",
-    async (kind) => {
-      const f = fixture();
-      if (kind === "malformed") writeFileSync(f.paths.overlay, "services: [", { mode: 0o600 });
-      const docker = dockerFixture(f.before, {
-        reference: manifest("other", "0").images["data-manager"],
-      });
-      await expect(clearReleaseSelection({ infraDir: f.infraDir, docker })).resolves.toMatchObject({
-        cleared: true,
-      });
-      expect(existsSync(f.paths.overlay)).toBe(false);
-    },
-  );
-
-  it("does not clear a different selection published after the guarded observation", async () => {
-    const f = fixture();
-    const newer = manifest("concurrent", "0");
-    const docker = dockerFixture(f.before, {
-      reference: newer.images["data-manager"],
-      onInspect: () => writeReleaseOverlay(newer, { infraDir: f.infraDir }),
-    });
-    await expect(clearReleaseSelection({ infraDir: f.infraDir, docker })).rejects.toThrow(
-      /changed/i,
-    );
-    expect(
-      services.parseReleaseComposeSelection(readFileSync(f.paths.overlay, "utf8")).release,
-    ).toBe("concurrent");
-  });
-
-  it("does not replace malformed-overlay recovery with deletion of a newly valid selection", async () => {
-    const f = fixture();
-    writeFileSync(f.paths.overlay, "services: [", { mode: 0o600 });
-    const pending = clearReleaseSelection({
-      infraDir: f.infraDir,
-      docker: dockerFixture(f.before),
-    });
-    writeReleaseOverlay(manifest("concurrent"), { infraDir: f.infraDir });
-    await expect(pending).rejects.toThrow(/changed/i);
-    expect(
-      services.parseReleaseComposeSelection(readFileSync(f.paths.overlay, "utf8")).release,
-    ).toBe("concurrent");
-  });
-
-  it("does not clear a newly selected release after observing an absent overlay", async () => {
-    const f = fixture();
-    unlinkSync(f.paths.overlay);
-    const pending = clearReleaseSelection({
-      infraDir: f.infraDir,
-      docker: dockerFixture(f.before),
-    });
-    writeReleaseOverlay(manifest("concurrent"), { infraDir: f.infraDir });
-    await expect(pending).rejects.toThrow(/changed/i);
-    expect(
-      services.parseReleaseComposeSelection(readFileSync(f.paths.overlay, "utf8")).release,
-    ).toBe("concurrent");
+  it("names the pinned release when the coordinator runs something else or nothing", async () => {
+    const f = await fixture();
+    await expect(
+      assertReleaseClearable({
+        infraDir: f.infraDir,
+        docker: dockerFixture(f.before, {
+          reference: manifest("other", "0").images["data-manager"],
+        }),
+      }),
+    ).resolves.toBe("before");
+    await expect(
+      assertReleaseClearable({
+        infraDir: f.infraDir,
+        docker: dockerFixture(f.before, { ids: [] }),
+      }),
+    ).resolves.toBe("before");
+    const unpinned = await fixture(false);
+    await expect(assertReleaseClearable({ infraDir: unpinned.infraDir })).resolves.toBeNull();
   });
 });

@@ -22,7 +22,9 @@ export async function serviceFileReport(): Promise<
   let release: coreServices.ReleaseServiceFiles;
   let selected: Awaited<ReturnType<typeof selectedReleaseServiceFiles>> = null;
   try {
-    selected = await selectedReleaseServiceFiles(paths.infraDir);
+    selected = await selectedReleaseServiceFiles(
+      coreServices.readAppliedRelease(paths.infraDir)?.manifest ?? null,
+    );
     release =
       selected && selected !== "none" ? selected.files : coreServices.releaseServiceFiles(services);
   } catch (error) {

@@ -124,7 +124,6 @@ async function fixture() {
     stack: {
       infraDir,
       composePath: join(infraDir, "docker-compose.generated.yml"),
-      composeReleasePath: join(infraDir, "docker-compose.release.yml"),
     },
     ownedServices: {
       inspectOwnedServices: async () =>

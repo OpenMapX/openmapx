@@ -17,7 +17,6 @@ afterEach(async () => {
 async function fixture(mode = "success") {
   const root = mkdtempSync(join(tmpdir(), "openmapx-update-client-"));
   cleanup.push(() => rmSync(root, { recursive: true, force: true }));
-  const paths = services.ensureReleaseStateDirectories(root);
   vi.stubEnv("OPENMAPX_RELEASE", "main");
   vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "must-never-be-sent");
   const manifest: services.ReleaseManifest = {
@@ -31,17 +30,7 @@ async function fixture(mode = "success") {
     ) as services.ReleaseManifest["images"],
     ...releaseProvenance(),
   };
-  const lock = await services.acquireReleaseStoreLock(paths.store, {}, { failIfBusy: true });
-  const checked = services.cacheCheckedReleaseManifest({
-    infraDir: root,
-    manifest,
-    ociDigest: `sha256:${"c".repeat(64)}`,
-    configurationIdentity: services.releaseConfigurationIdentity(
-      services.readAppliedReleaseSelection(root),
-    ),
-    lock,
-  });
-  lock.release();
+  const checked = services.cacheReleaseManifest(root, manifest);
   const sessionFile = join(root, "session");
   writeFileSync(sessionFile, "better-auth.session_token=synthetic.signed", { mode: 0o600 });
   const requests: Array<{

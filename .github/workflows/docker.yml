@@ -305,6 +305,15 @@ jobs:
         with:
           pattern: docker-digest-*-${{ github.run_id }}
           path: digests
+      # Rollback compares the database with the release's newest migration.
+      - name: Check out the release's migration journal
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          path: source
+          persist-credentials: false
+          sparse-checkout: apps/api/src/db/migrations/meta/_journal.json
+          sparse-checkout-cone-mode: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -395,6 +404,11 @@ jobs:
               !["push", "schedule"].includes(process.env.GITHUB_EVENT_NAME)) throw new Error("Invalid trusted producer identity");
           manifest.producer = {repository: process.env.GITHUB_REPOSITORY, workflowPath: ".github/workflows/ci.yml", sourceRevision: process.env.RELEASE_SHA, runId, runAttempt, event: process.env.GITHUB_EVENT_NAME};
           manifest.buildMetadata = plan.buildMetadata;
+          const journal = JSON.parse(readFileSync("source/apps/api/src/db/migrations/meta/_journal.json", "utf8"));
+          const head = journal.entries?.at(-1);
+          if (!head || !/^\d{4}_[a-z0-9_]{1,120}$/.test(head.tag) || !Number.isSafeInteger(head.when) || head.when < 1)
+            throw new Error("The migration journal has no valid newest entry");
+          manifest.databaseMigrationHead = {tag: head.tag, when: head.when};
           writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
           NODE
 

@@ -56,7 +56,6 @@ const runtime = createDockerRuntime({
   stack: {
     infraDir: root,
     composePath: join(root, "compose.yml"),
-    composeReleasePath: join(root, "release.yml"),
   },
   fileExists: existsSync,
   // Only external Docker I/O is substituted. Production handlers, admission,

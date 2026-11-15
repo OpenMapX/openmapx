@@ -229,7 +229,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               },
             }
           : {}),
-        ...(test.task.name.includes("3072-byte baseline") ? { nestedRootSegments: 9 } : {}),
+        ...(test.task.name.includes("3072-byte baseline") ? { nestedRootSegments: 20 } : {}),
         ...(references
           ? { imageReferences: { motis: references.sibling, "data-manager": references.target } }
           : {}),
@@ -266,35 +266,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         infraDir: host.infraDir,
         serviceIds: host.loaded.map((s) => s.manifest.id),
       });
-      if (test.task.name.includes("3072-byte baseline")) {
-        const images = Object.fromEntries(
-          services.RELEASE_IMAGE_NAMES.map((name) => [
-            name,
-            `example/${name}@sha256:${"b".repeat(64)}`,
-          ]),
-        );
-        writeFileSync(
-          host.stack.composeReleasePath,
-          JSON.stringify({
-            "x-openmapx-release": { release: "task012-baseline-budget", images },
-            services: {
-              "app-api": { image: images.api },
-              "app-web": { image: images.web },
-              "ops-agent": { image: images["ops-agent"] },
-              "data-manager": {
-                image: images["data-manager"],
-                environment: { [services.TRANSITOUS_TOOLS_IMAGE_ENV]: images["transitous-tools"] },
-              },
-              "transitous-runner": { image: images["transitous-runner"] },
-            },
-          }),
-          { mode: 0o600 },
-        );
-        host.row.Labels["com.docker.compose.project.config_files"] = [
-          host.firstCompose,
-          host.stack.composeReleasePath,
-        ].join(",");
-      }
       const old = {
         ...host.row,
         Id: "c".repeat(64),
@@ -1189,7 +1160,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const { productionReleaseEffects } = await import(
           "../../../../ops-agent/src/production-runtime"
         ),
-        directory = services.releaseStatePaths(host.infraDir).store,
+        directory = services.releaseCacheDirectory(host.infraDir),
         manifest = services.parseReleaseManifest(
           JSON.stringify({
             schemaVersion: 1,
@@ -1203,11 +1174,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ...releaseProvenance(),
           }),
         );
-      writeFileSync(
-        join(directory, "interlock-release.json"),
-        services.canonicalReleaseManifest(manifest),
-        { mode: 0o600 },
-      );
+      services.cacheReleaseManifest(host.infraDir, manifest);
       const effects = productionReleaseEffects(host.runtime),
         context = { signal: new AbortController().signal, emitLog() {} },
         before = services.currentConfigurationGeneration(host.infraDir),
@@ -1216,7 +1183,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           () => null,
           (error) => error,
         );
-      expect(existsSync(host.stack.composeReleasePath)).toBe(false);
+      expect(services.readAppliedRelease(host.infraDir)).toBeNull();
       expect(services.currentConfigurationGeneration(host.infraDir)).toBe(before);
       expect(readdirSync(directory).sort()).toEqual(originalFiles);
       expect(readFileSync(pullPath)).toEqual(originalPull);
@@ -2667,7 +2634,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const owned = await host.owned.inspectOwnedServices(new AbortController().signal);
       const dmOwned = owned.find((value) => value.serviceId === "data-manager");
       expect(dmOwned?.state).toBe("running");
-      expect(dmOwned?.provenance.composeConfigFiles).toHaveLength(2);
+      expect(dmOwned?.provenance.composeConfigFiles).toHaveLength(1);
       const observed = new Promise<number>((resolve) => {
         observePullReply = resolve;
       });

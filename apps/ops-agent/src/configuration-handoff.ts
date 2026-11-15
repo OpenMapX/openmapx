@@ -16,8 +16,6 @@ const CONFIGURATION_HANDOFF_ENTRYPOINT = "dist/configuration-handoff-main.mjs";
 export const CONFIGURATION_HANDOFF_LABEL = "openmapx.configuration-handoff";
 const CONFIGURATION_HANDOFF_VERSION = "1";
 const CONFIGURATION_HANDOFF_IMAGE_LABEL = "openmapx.configuration-handoff.version";
-const protectedOrder = ["postgis", "redis", "app-web", "app-api", "traefik", "ops-agent"] as const;
-const id = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
 const MOUNT_PATH = /^\/[^,\n\r]*$/;
 /** More would be no layout this release mounts. */
 const MAX_ROOT_MOUNTS = 16;
@@ -157,15 +155,6 @@ export function configurationHandoffEnvironmentNames(facts: AgentContainerFacts)
     .max(256)
     .refine((names) => Buffer.byteLength(JSON.stringify(names)) <= 8192)
     .parse([...new Set(facts.envNames.filter((name) => !NOT_INHERITED.has(name)))].sort());
-}
-export function configurationHandoffServiceOrder(serviceIds: readonly string[]): string[] {
-  const values = z.array(id).min(1).max(64).parse(serviceIds);
-  if (new Set(values).size !== values.length) throw Error("Duplicate frozen handoff target");
-  const protectedIds = new Set<string>(protectedOrder);
-  return [
-    ...values.filter((value) => !protectedIds.has(value)).sort(),
-    ...protectedOrder.filter((value) => values.includes(value)),
-  ];
 }
 /** Runs the running agent's image with its identity and mounts, sibling role keys
  * and private receipts hidden, no network and confined resources. */

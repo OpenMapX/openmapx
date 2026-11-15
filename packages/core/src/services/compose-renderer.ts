@@ -11,6 +11,7 @@ import {
   PROXY_ENTRYPOINT_LABEL_VALUE,
   readExternalProxyNetwork,
 } from "./external-proxy";
+import { TRANSITOUS_TOOLS_IMAGE_ENV } from "./release-manifest";
 import { detectConsumesCycle } from "./resolver";
 import {
   isRuntimeResourceKey,
@@ -203,6 +204,14 @@ function hardlinkTargetDir(consumerId: string, c: ServiceConsumes): string {
 }
 
 export interface RenderContext {
+  /**
+   * The release a generation pins: the image of each pinned built-in service,
+   * and the Transitous tools image data-manager runs its jobs with.
+   */
+  releasePins?: {
+    images: Readonly<Record<string, string>>;
+    transitousTools: string;
+  };
   platform?: import("./platform-configuration").PlatformConfiguration;
   platformValues?: import("./platform-configuration").PlatformValues;
   domain?: string;
@@ -591,8 +600,9 @@ export function renderServiceSnippet(
 
   const m = service.manifest;
   const c = m.container;
+  const pinned = service.isBuiltIn ? ctx.releasePins?.images[m.id] : undefined;
   const snippet: ComposeServiceSnippet = {
-    image: serviceContainerImageReference(c),
+    image: pinned ?? serviceContainerImageReference(c),
   };
 
   // Pin the container name when the manifest opts in — see ServiceContainer.
@@ -730,6 +740,11 @@ export function renderServiceSnippet(
       );
     snippet.environment = env;
   }
+  if (service.isBuiltIn && m.id === "data-manager" && ctx.releasePins)
+    snippet.environment = {
+      ...snippet.environment,
+      [TRANSITOUS_TOOLS_IMAGE_ENV]: ctx.releasePins.transitousTools,
+    };
   // Vault secrets (the container track): mount each as a Docker secret at
   // `/run/secrets/<KEY>` and point `<KEY>_FILE` at it. The value never enters
   // the environment (which is exposed via `docker inspect`/`/proc/environ`);

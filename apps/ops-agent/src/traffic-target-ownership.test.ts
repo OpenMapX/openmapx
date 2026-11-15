@@ -46,7 +46,6 @@ it.each(["succeeded", "canceled"] as const)(
         stack: {
           infraDir: root,
           composePath: join(root, "compose.yml"),
-          composeReleasePath: join(root, "release.yml"),
         },
         execFile: async (_file, args, options) => {
           if (args.includes("valhalla_ways_to_edges")) {
