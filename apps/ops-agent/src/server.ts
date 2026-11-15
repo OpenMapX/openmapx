@@ -2953,6 +2953,11 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                     retainOwnedConfigurationMaintenance(authority, lease, maintenanceAdmission);
                 }
               } catch (error) {
+                // Nothing has started yet, so a lease taken at admission holds nothing.
+                if (admittedLease && options.leaseStore) {
+                  controlLeases.delete(job.operationId);
+                  await abandonUnstartedLease(options.leaseStore, admittedLease, executionFor(job));
+                }
                 forceRecoveryRequired(job);
                 await journal.replace([...jobsById.values()].map(persisted));
                 throw error;

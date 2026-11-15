@@ -940,6 +940,67 @@ describe("one admission path for target effects", () => {
     }
   });
 
+  it("drops the lease of an update whose configuration revision is no longer current", async () => {
+    const control = await import("@openmapx/core/build-artifacts");
+    const { installServiceLifecycleRuntime } = await import("./service-lifecycle-runtime");
+    const { mkdtempSync, mkdirSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const root = mkdtempSync(join(tmpdir(), "omx-leased-stale-"));
+    mkdirSync(join(root, "data"), { mode: 0o700 });
+    await control.provisionControlInstallation(root);
+    const installation = control.openControlInstallation({
+      infraDir: root,
+      role: "ops-agent",
+      serviceIds: ["redis", "osrm"],
+    });
+    const leaseStore = control.openLeaseStore({
+      directory: control.leaseStoreDirectory(root),
+      purpose: "test",
+    });
+    const runtime = {} as import("./runtime").OpsRuntime;
+    installServiceLifecycleRuntime(runtime, {
+      rootDir: root,
+      infraDir: root,
+      runFixedCli: async () => {
+        throw new Error("no child may start");
+      },
+    });
+    const app = await buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      resourcePolicy: allowAllResources,
+      controlInstallation: installation,
+      leaseStore,
+      runtime,
+    });
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/operations",
+        headers: auth(),
+        payload: {
+          ...request(
+            {
+              kind: "service.update",
+              serviceId: "redis",
+              expectedConfigurationRevisionId: `cfg1_${"c".repeat(43)}`,
+            },
+            "ops1_staleUpdateLease",
+            key("opk1_staleUpdateLease"),
+          ),
+          issuedAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 20_000).toISOString(),
+        },
+      });
+      expect(response.statusCode).toBeGreaterThanOrEqual(400);
+      expect(leaseStore.list()).toEqual([]);
+    } finally {
+      await app.close();
+      control.closeControlInstallation(installation);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("releases the targets of a stop that reported a failure, and keeps those of a killed one", async () => {
     const control = await import("@openmapx/core/build-artifacts");
     const { runContainedStreamingProcess } = await import("./docker-runtime");
