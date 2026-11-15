@@ -4,7 +4,7 @@ import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
-import { createControlRootOperationKey } from "@openmapx/core/ops";
+import { createControlRootOperationKey, OpsClientError } from "@openmapx/core/ops";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { describe, expect, it, vi } from "vitest";
@@ -192,6 +192,75 @@ describe.skipIf(
       }
     },
   );
+  it("repeats a lease acquisition whose reply was lost and releases the lease it recorded", async () => {
+    const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
+    if (!url) throw Error("Owned PostgreSQL required");
+    const sql = postgres(url, { max: 4 });
+    const root = mkdtempSync(join(tmpdir(), "omx-runtime-lost-reply-"));
+    mkdirSync(join(root, "data"), { mode: 0o700 });
+    await control.provisionControlInstallation(root);
+    const agent = control.agentStoreLeases(root, "ops-agent");
+    let lostReplies = 1;
+    const installation = control.openControlInstallation({
+        infraDir: root,
+        role: "data-manager",
+        serviceIds: ["data-manager"],
+        leases: {
+          ...agent,
+          // The agent records the lease, and its reply never arrives.
+          async acquire(input) {
+            const lease = await agent.acquire(input);
+            if (lostReplies-- > 0) throw new OpsClientError("timeout");
+            return lease;
+          },
+        },
+      }),
+      journal = control.createDataExecutionControlJournal(installation, sql),
+      store = createPostgresDataExecutionStore(sql, { controlJournal: journal });
+    let effects = 0;
+    const runtime = createDataExecutionRuntime({
+      store,
+      dispatch: async () => {
+        effects++;
+        return { kind: "download-fonts", completed: true };
+      },
+    });
+    let id: string | undefined;
+    try {
+      const deadline = Date.now() + 60000;
+      const key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) });
+      id = (
+        await runtime.admit(
+          { kind: "download-fonts" },
+          { operationKey: key, requestedDeadlineAt: deadline },
+        )
+      ).id;
+      await expect
+        .poll(async () => (await runtime.inspect(id!))?.status, { timeout: 15000 })
+        .toBe("ok");
+      expect(effects).toBe(1);
+      expect(lostReplies).toBe(-1);
+      await expect
+        .poll(
+          async () =>
+            control
+              .openLeaseStore({
+                directory: control.leaseStoreDirectory(root),
+                purpose: "test",
+              })
+              .list(),
+          { timeout: 15000 },
+        )
+        .toEqual([]);
+    } finally {
+      await runtime.close();
+      if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      journal.close();
+      control.closeControlInstallation(installation);
+      await sql.end();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
   it("repairs a worker-completion/publication crash from the original signed completion without redispatch", async () => {
     const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
     if (!url) throw Error("Owned PostgreSQL required");

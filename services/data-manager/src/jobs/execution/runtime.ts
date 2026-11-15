@@ -121,6 +121,8 @@ async function releaseOwnLease(
   await journal.recordContainedTerminal(execution);
   await releaseArtifactTargetLease(lease);
 }
+/** Agent answers that refuse a lease acquisition before it records anything. */
+const PRE_EFFECT_REFUSALS = new Set(["authorization", "validation", "busy", "conflict"]);
 export function dataExecutionTargetIds(input: DataExecutionInput): string[] {
   return ["transit-sync", "catalog.validate", "catalog.activate"].includes(input.kind)
     ? ["data-manager", "motis", "motis-feed-proxy", "motis-staging"]
@@ -285,14 +287,22 @@ export function createDataExecutionRuntime(deps: {
     // Other executions claim their targets first: a held target, or an agent
     // that cannot answer, ends the execution as failed before any effect, with
     // its publication unchanged.
+    // A timeout or transport failure may come after the agent recorded the lease,
+    // so the same acquisition, which returns an existing lease, is repeated.
     let lease: ArtifactTargetLease | undefined;
     let refusal: unknown;
-    if (!leaf)
+    for (let attempt = 1; !leaf && !lease && !refusal; attempt += 1)
       try {
         lease = await acquireArtifactTargetLease({ serviceIds: targets, owner: authority });
       } catch (error) {
         if (!(error instanceof TargetBusyError || error instanceof OpsClientError)) throw error;
-        refusal = error;
+        if (
+          error instanceof TargetBusyError ||
+          PRE_EFFECT_REFUSALS.has(error.errorClass) ||
+          attempt >= 3
+        )
+          refusal = error;
+        else await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
       }
     await owner.begin(authority);
     const controller = new AbortController();
