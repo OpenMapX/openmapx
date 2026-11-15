@@ -5,6 +5,7 @@ import Picker from "@emoji-mart/react";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
+import EditNoteOutlinedIcon from "@mui/icons-material/EditNoteOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import LockIcon from "@mui/icons-material/Lock";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
@@ -405,16 +406,11 @@ export function SavedListDetail() {
               ) : (
                 <Button
                   size="small"
+                  startIcon={<EditNoteOutlinedIcon />}
                   onClick={(e) => handleAddNoteClick(e, place)}
-                  sx={{
-                    color: BRAND,
-                    p: 0,
-                    minWidth: 0,
-                    fontSize: 12,
-                    textTransform: "none",
-                  }}
+                  sx={{ ml: -1, px: 1 }}
                 >
-                  + {t("note")}
+                  {t("addNote")}
                 </Button>
               )
             }

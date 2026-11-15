@@ -345,10 +345,10 @@ export function PlaceResultRow({
           <PhotoAttribution photo={photo} color="currentColor" />
         </Box>
       )}
-      {footer && <Box sx={{ px: 2, pb: 0.75 }}>{footer}</Box>}
       {/* A phone's quick actions, as one scrollable row; desktop rows stay
           compact. Outside the row's own button, which can't contain another. */}
       {!loading && <ResultQuickActions place={place} />}
+      {footer && <Box sx={{ px: 2, pb: 0.75 }}>{footer}</Box>}
     </>
   );
   return brandIdentity ? (

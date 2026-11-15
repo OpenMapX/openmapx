@@ -90,7 +90,7 @@ function setup(
         <SavedListRows
           places={places}
           onSelect={select}
-          renderNote={(place) => <button type="button">{place.note ?? "+ Note"}</button>}
+          renderNote={(place) => <button type="button">{place.note ?? "Add note"}</button>}
         />
       </NextIntlClientProvider>
     </QueryClientProvider>,
@@ -127,7 +127,7 @@ describe("saved result rows", () => {
     expect(
       screen.getByRole("button", { name: "Visit in daylight" }).closest("button button"),
     ).toBeNull();
-    expect(screen.getByRole("button", { name: "+ Note" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add note" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^Landmark one/ }));
     expect(select).toHaveBeenCalledWith(place);
   });
