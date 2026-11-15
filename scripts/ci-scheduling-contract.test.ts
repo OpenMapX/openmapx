@@ -102,15 +102,20 @@ describe("CI scheduling and context preservation", () => {
     expect(ci.jobs.ci.permissions.actions).toBe("read");
   });
   it("cancels a pull request's own run after a lint failure without gating other jobs on lint", () => {
-    const steps = ci.jobs.lint.steps;
-    const cancel = steps.at(-1);
+    const job = ci.jobs["stop-after-lint-failure"];
+    expect(job.needs).toBe("lint");
+    expect(job.if).toBe("failure() && github.event_name == 'pull_request'");
+    expect(job.permissions).toEqual({ actions: "write" });
+    // The write token must never reach candidate code: no checkout, one command.
+    expect(job.steps).toHaveLength(1);
+    expect(job.steps[0].uses).toBeUndefined();
     // biome-ignore lint/suspicious/noTemplateCurlyInString: Literal shell variables.
-    expect(cancel.run).toBe('gh run cancel "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}"');
-    expect(cancel.if).toBe("failure() && github.event_name == 'pull_request'");
-    expect(cancel["continue-on-error"]).toBe(true);
-    expect(ci.jobs.lint.permissions.actions).toBe("write");
-    for (const [id, job] of Object.entries<{ permissions?: { actions?: string } }>(ci.jobs))
-      if (id !== "lint") expect(job.permissions?.actions ?? "read", id).toBe("read");
+    expect(job.steps[0].run).toBe('gh run cancel "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}"');
+    expect(job.steps[0]["continue-on-error"]).toBe(true);
+    expect(ci.jobs.ci.needs).not.toContain("stop-after-lint-failure");
+    for (const [id, other] of Object.entries<{ permissions?: { actions?: string } }>(ci.jobs))
+      if (id !== "stop-after-lint-failure")
+        expect(other.permissions?.actions ?? "read", id).toBe("read");
     // Every validation job still starts with lint, so a passing run is no longer.
     for (const id of validationJobs) expect(ci.jobs[id].needs, id).toBe("select");
     // The aggregate runs after a cancellation and reports the lint failure.

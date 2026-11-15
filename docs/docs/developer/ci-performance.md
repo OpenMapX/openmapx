@@ -337,8 +337,9 @@ The dependency review behind `client`, on revision `f86338349`:
 
 ## Stopping a pull request's run after a lint failure
 
-The `lint` job's last step cancels its own run when the job failed on a pull
-request. The required aggregate still runs and reports the lint failure, so the
+When the `lint` job fails on a pull request, the `stop run after lint failure`
+job cancels that run. It holds the only `actions: write` token of the workflow
+and checks out no code. The required aggregate still runs and reports the lint failure, so the
 gate is red either way. No job waits for lint, so a passing run is not longer.
 Between 12 and 15 November 2026, the other jobs of the 25 pull-request runs with
 a failed lint job used a median of 238 runner-minutes each, 5,945 in total. Main

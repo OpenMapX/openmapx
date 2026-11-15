@@ -83,8 +83,6 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-      # Only the last step uses this: it cancels this pull request's own run.
-      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -151,13 +149,22 @@ jobs:
           git fetch --no-tags origin "${BASE_SHA}"
           pnpm check-release-information --base "${BASE_SHA}" --head "${HEAD_SHA}" --pr-json "${RUNNER_TEMP}/release-pr.json"
 
-      # A failed lint job already fails the required gate, so the tests,
-      # database partitions and image builds of this run cannot change the
-      # result. Cancel them instead of holding runners other pull requests are
-      # queued for. Main and scheduled runs keep collecting every result. A
-      # fork's read-only token cannot cancel; its run then continues as before.
-      - name: Stop this pull request's remaining jobs after a lint failure
-        if: failure() && github.event_name == 'pull_request'
+  # A failed lint job already fails the required gate, so the tests, database
+  # partitions and image builds of this run cannot change the result. Cancel
+  # them instead of holding runners other pull requests are queued for. Main
+  # and scheduled runs keep collecting every result. This job checks out and
+  # runs no repository code, so the write token never reaches candidate code.
+  # A fork's read-only token cannot cancel; its run then continues as before.
+  stop-after-lint-failure:
+    needs: lint
+    if: failure() && github.event_name == 'pull_request'
+    name: stop run after lint failure
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel this pull request's remaining jobs
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
