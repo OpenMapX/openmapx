@@ -23,7 +23,7 @@ WORKDIR /tmp/gtfsclean-build
 COPY --chmod=0755 services/motis/tools/transitous/build-gtfsclean.sh /usr/local/bin/build-gtfsclean
 RUN build-gtfsclean
 
-FROM node:24.22.2-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS base
+FROM node:24.22.2-trixie-slim@sha256:0820eaa85e07d0490446dd01d14707e17e6108a36988cf374899cd057eb3812d AS base
 COPY package.json /tmp/package.json
 RUN corepack enable && \
     corepack prepare "$(node -e "console.log(require('/tmp/package.json').packageManager)")" --activate && \
@@ -82,26 +82,28 @@ RUN node scripts/copy-runtime-packages.mjs /tmp/runtime-packages.json /app /runt
 # The runner needs no package manager: starting from the plain Node image keeps
 # the pnpm that corepack prepared for the build stages, and its bundled
 # dependencies, out of the shipped image.
-FROM node:24.22.2-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS runner
+FROM node:24.22.2-trixie-slim@sha256:0820eaa85e07d0490446dd01d14707e17e6108a36988cf374899cd057eb3812d AS runner
 WORKDIR /app
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # git is required because the upstream attribution script reads the catalog's
 # submodule metadata; there is no credential helper and no remote configured.
 # Explicitly upgrade PCRE2 and Expat inherited from the pinned base, and
-# libssl3 and openssl (3.0.22-1~deb12u2 fixes CVE-2026-84782) that curl, git,
-# Python and ca-certificates pull in, to their security fixes. The version
-# checks fail a stale mirror and, when raised, invalidate this layer in the
-# registry build cache.
-# apt and libapt-pkg6.0 2.6.2 fix CVE-2026-109518 (Debian DLA-4880-1).
+# libssl3t64 and openssl (3.5.7-1~deb13u3 fixes CVE-2026-84782, DSA-6531-1)
+# that curl, git, Python and ca-certificates pull in, to their security fixes.
+# Expat 2.9.0-1~deb13u1 fixes CVE-2026-77214 (DSA-6566-1). Trixie's PCRE2
+# 10.46-1~deb13u2 point release already fixes CVE-2026-86145, CVE-2026-89157
+# and CVE-2026-89161, so it needs no floor. The version checks fail a stale
+# mirror and, when raised, invalidate this layer in the registry build cache.
+# apt and libapt-pkg7.0 3.0.4 fix CVE-2026-109518 (Debian DSA-6607-1).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-      ca-certificates curl git python3 python3-pip python3-venv age tini apt libapt-pkg6.0 libpcre2-8-0 libexpat1 libssl3 openssl \
-    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' apt)" ge 2.6.2 \
-    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libapt-pkg6.0)" ge 2.6.2 \
-    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libexpat1)" ge 2.5.0-1+deb12u5 \
-    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3)" ge 3.0.22-1~deb12u2 \
-    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' openssl)" ge 3.0.22-1~deb12u2 \
+      ca-certificates curl git python3 python3-pip python3-venv age tini apt libapt-pkg7.0 libpcre2-8-0 libexpat1 libssl3t64 openssl \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' apt)" ge 3.0.4 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libapt-pkg7.0)" ge 3.0.4 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libexpat1)" ge 2.9.0-1~deb13u1 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3t64)" ge 3.5.7-1~deb13u3 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' openssl)" ge 3.5.7-1~deb13u3 \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED
