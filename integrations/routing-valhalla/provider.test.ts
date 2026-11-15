@@ -450,8 +450,12 @@ describe("valhallaService.getRoute exclusion body params", () => {
     capturedBody = {};
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (_url: string, init?: RequestInit) => {
-        capturedBody = JSON.parse(init?.body as string) as Record<string, unknown>;
+      vi.fn(async (url: string, init?: RequestInit) => {
+        // Walking routes follow up with edge and street-name lookups; these
+        // tests inspect the route request itself.
+        if (/\/(route|optimized_route)(\?|$)/.test(url)) {
+          capturedBody = JSON.parse(init?.body as string) as Record<string, unknown>;
+        }
         return Response.json(MINIMAL_VALHALLA_RESPONSE);
       }),
     );

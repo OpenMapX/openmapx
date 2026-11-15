@@ -6,6 +6,7 @@
   "type": "module",
   "dependencies": {
     "@openmapx/core": "workspace:^",
+    "@openmapx/i18n": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/integration-routing": "workspace:^"
   }

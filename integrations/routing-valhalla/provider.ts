@@ -33,6 +33,17 @@ import {
   sanitizeValhallaExclusions,
   type LngLat as ValhallaLngLat,
 } from "./valhalla-exclusions.js";
+import {
+  composeWalkingSteps,
+  type LocatedEdge,
+  longestStreet,
+  type NameLookup,
+  nameLookups,
+  nameStretches,
+  nearestStreetName,
+  planWalkingLeg,
+  type WalkEdge,
+} from "./walking-guidance.js";
 
 // Populated by setup(ctx) from ctx.resolvePlatformEndpoint("valhalla").
 const DEFAULT_VALHALLA_URL = "https://api.stadiamaps.com";
@@ -136,6 +147,103 @@ async function attachTrafficCoverage(
     const evidence = coverage[index];
     if (evidence) route.trafficCoverage = evidence;
   });
+}
+
+/** Walking guidance lookups are refinements: a slow one leaves Valhalla's own steps. */
+const WALKING_LOOKUP_TIMEOUT_MS = 4_000;
+/** Street-name lookups per request; stretches past this keep no name. */
+const MAX_NAME_LOOKUPS = 60;
+
+const postJson = <T>(path: string, body: Record<string, unknown>, label: string) =>
+  fetchJson<T>(endpoint(path), {
+    timeoutMs: WALKING_LOOKUP_TIMEOUT_MS,
+    userAgent: null,
+    headers: { "Content-Type": "application/json" },
+    errorMessage: valhallaErrorMessage(label),
+    init: { method: "POST", body: JSON.stringify(body) },
+  });
+
+/** Each edge's use along a leg's own shape, for finding its crosswalks. */
+async function walkingEdges(shape: string): Promise<WalkEdge[] | undefined> {
+  const data = await postJson<{ edges?: WalkEdge[] }>(
+    "/trace_attributes",
+    {
+      encoded_polyline: shape,
+      shape_match: "walk_or_snap",
+      costing: "pedestrian",
+      filters: {
+        attributes: ["edge.use", "edge.begin_shape_index", "edge.end_shape_index"],
+        action: "include",
+      },
+    },
+    "Valhalla walking trace error",
+  ).catch(() => undefined);
+  return Array.isArray(data?.edges) ? data.edges : undefined;
+}
+
+/** The street nearest each lookup's point, in one `/locate` request. */
+async function streetNamesNear(
+  lookups: ReadonlyArray<Pick<NameLookup, "field" | "point" | "radius">>,
+): Promise<Array<string | undefined>> {
+  if (lookups.length === 0) return [];
+  const data = await postJson<Array<{ edges?: LocatedEdge[] | null }>>(
+    "/locate",
+    {
+      locations: lookups.map(({ point: [lon, lat], radius }) => ({ lon, lat, radius })),
+      costing: "pedestrian",
+      verbose: true,
+    },
+    "Valhalla locate error",
+  ).catch(() => undefined);
+  return lookups.map((lookup, i) =>
+    Array.isArray(data) ? nearestStreetName(data[i]?.edges, lookup) : undefined,
+  );
+}
+
+/**
+ * Rewrite walking steps so they name streets and crossings instead of "the
+ * walkway" (see walking-guidance.ts). `routes[i]` came from `trips[i]`.
+ */
+async function refineWalkingRoutes(
+  routes: Route[],
+  trips: ValhallaTrip[],
+  lang: string | undefined,
+): Promise<void> {
+  const legs = trips.flatMap((trip, r) =>
+    trip.legs.flatMap((leg, l) => {
+      const routeLeg = routes[r]?.legs[l];
+      return routeLeg && routeLeg.steps.length === leg.maneuvers.length ? [{ leg, routeLeg }] : [];
+    }),
+  );
+  const plans = await Promise.all(
+    legs.map(async ({ leg, routeLeg }) =>
+      planWalkingLeg(
+        leg.maneuvers,
+        routeLeg.steps,
+        routeLeg.geometry,
+        await walkingEdges(leg.shape),
+      ),
+    ),
+  );
+  const lookups = plans
+    .flatMap((plan, p) => nameLookups(plan).map((lookup) => ({ p, ...lookup })))
+    .slice(0, MAX_NAME_LOOKUPS);
+  const names = await streetNamesNear(lookups);
+  plans.forEach((plan, p) => {
+    nameStretches(
+      plan,
+      lookups.flatMap((lookup, i) => (lookup.p === p ? [{ ...lookup, name: names[i] }] : [])),
+    );
+    const leg = legs[p].routeLeg;
+    leg.steps = composeWalkingSteps(plan, lang);
+    const street = longestStreet(leg.steps);
+    if (street) leg.summary = `via ${street}`;
+  });
+  for (const route of routes) {
+    route.steps = route.legs.flatMap((leg) => leg.steps);
+    const street = longestStreet(route.steps);
+    if (street) route.summary = `via ${street}`;
+  }
 }
 
 interface ValhallaLaneRaw {
@@ -940,12 +1048,9 @@ export const valhallaService: RoutingProvider = {
           )
         : undefined;
 
-    const routes: Route[] = [transformTrip(data.trip, travelMode, options.units)];
-    if (data.alternates) {
-      for (const alt of data.alternates) {
-        routes.push(transformTrip(alt.trip, travelMode, options.units));
-      }
-    }
+    const trips = [data.trip, ...(data.alternates ?? []).map((alt) => alt.trip)];
+    const routes: Route[] = trips.map((trip) => transformTrip(trip, travelMode, options.units));
+    if (mode === "walking") await refineWalkingRoutes(routes, trips, options.lang);
 
     for (const route of routes) {
       route.sourceIds = sourceIds;
@@ -1011,6 +1116,7 @@ export const valhallaService: RoutingProvider = {
         : undefined;
 
     const routes: Route[] = [transformTrip(data.trip, travelMode, options.units)];
+    if (mode === "walking") await refineWalkingRoutes(routes, [data.trip], options.lang);
 
     // Extract optimized order from trip.locations[].original_index
     const optimizedOrder =
