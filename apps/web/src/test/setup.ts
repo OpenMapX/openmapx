@@ -3,6 +3,8 @@
 // @testing-library/react auto-cleans the DOM after each test when Vitest globals
 // are enabled, so no explicit afterEach(cleanup) is needed here.
 import "@testing-library/jest-dom/vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, vi } from "vitest";
 import { isBackNavigationIdle, resetBackNavigationForTests } from "@/lib/backNavigation";
 import { resetMapTouchForTests } from "@/lib/mapTouch";
@@ -15,6 +17,21 @@ import { settleHistory } from "./history";
 // files that opt into `// @vitest-environment node`, where there is no DOM.
 if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
+}
+
+// jsdom resolves var() in computed styles the way a browser does: a reference
+// to an undefined custom property makes the declaration fall back to its
+// inherited or initial value. Components style themselves with the --omx-*
+// design tokens, so give the document the same :root tokens the app loads from
+// globals.css (the light theme, as on first paint).
+if (typeof document !== "undefined") {
+  const css = readFileSync(join(import.meta.dirname, "../app/globals.css"), "utf8");
+  const rootRules = css.match(/^:root\s*\{[\s\S]*?^\}/gm);
+  if (!rootRules) throw new Error("globals.css no longer declares top-level :root tokens");
+  const tokens = document.createElement("style");
+  tokens.dataset.testTokens = "globals.css";
+  tokens.textContent = rootRules.join("\n");
+  document.head.prepend(tokens);
 }
 
 // Dialogs, menus, sheets and panels write history entries, and a Back that
