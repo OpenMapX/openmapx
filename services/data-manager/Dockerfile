@@ -102,17 +102,19 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # with the versions it held then. Raising a version check here changes the
 # instruction, so that layer is not reused.
 # apt and libapt-pkg7.0 3.0.4 fix CVE-2026-109518 (Debian DSA-6607-1).
+# zlib1g 1:1.3.dfsg+really1.3.1-1+deb13u1 fixes CVE-2026-76844 and CVE-2026-85091.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
       osmium-tool curl unzip bzip2 lbzip2 ca-certificates age \
       git python3 python3-pip python3-venv wget rsync openssh-client \
-      apt libapt-pkg7.0 libexpat1 libpcre2-8-0 libbrotli1 libssl3t64 openssl \
+      apt libapt-pkg7.0 libexpat1 libpcre2-8-0 libbrotli1 libssl3t64 openssl zlib1g \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' apt)" ge '3.0.4' \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libapt-pkg7.0)" ge '3.0.4' \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libexpat1)" ge '2.9.0-1~deb13u1' \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge '1.1.0-2+deb13u1' \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3t64)" ge '3.5.7-1~deb13u3' \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' openssl)" ge '3.5.7-1~deb13u3' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge '1:1.3.dfsg+really1.3.1-1+deb13u1' \
     && rm -rf /var/lib/apt/lists/*
 
 ARG DUCKDB_VERSION=2.0.0
