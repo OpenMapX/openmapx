@@ -105,6 +105,8 @@ describe("AutocompleteDropdown", () => {
     // reference spelled out for assistive technology.
     screen.getByText("Station Road, Aachen");
     expect(screen.getByRole("option").textContent).toContain("0 m search.fromYou");
+    // The name leads; the distance is read after the address, not before the place.
+    expect(screen.getByRole("option", { name: /^Central Cafe/ })).toBeInTheDocument();
   });
 
   it("uses the map center only without a user fix and leaves unknown positions unmeasured", () => {

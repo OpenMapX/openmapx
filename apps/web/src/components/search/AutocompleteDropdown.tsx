@@ -272,6 +272,8 @@ export function AutocompleteDropdown({
                 {showDistance && distance !== null && (
                   <Typography
                     component="span"
+                    // Read after the name instead (below); here it only shows.
+                    aria-hidden
                     sx={{
                       fontSize: 11,
                       lineHeight: 1.2,
@@ -284,9 +286,6 @@ export function AutocompleteDropdown({
                     }}
                   >
                     {formatMeasurementDistance(distance, units)}
-                    <Box component="span" sx={VISUALLY_HIDDEN}>
-                      {` ${t(distanceReference?.kind === "user_location" ? "fromYou" : "fromMapCenter")}`}
-                    </Box>
                   </Typography>
                 )}
               </ListItemIcon>
@@ -316,7 +315,18 @@ export function AutocompleteDropdown({
                     )}
                   </Box>
                 }
-                secondary={description}
+                secondary={
+                  <>
+                    {description}
+                    {showDistance && distance !== null && (
+                      <Box component="span" sx={VISUALLY_HIDDEN}>
+                        {`, ${formatMeasurementDistance(distance, units)} ${t(
+                          distanceReference?.kind === "user_location" ? "fromYou" : "fromMapCenter",
+                        )}`}
+                      </Box>
+                    )}
+                  </>
+                }
                 slotProps={{
                   primary: { sx: { fontSize: 14, fontWeight: 400 } },
                   secondary: { sx: { fontSize: 12 } },
