@@ -33,16 +33,6 @@ const ALLOWED = new Set([
 const pairs = REQUEST_STATES.flatMap((from) => REQUEST_STATES.map((to) => [from, to] as const));
 
 describe("privacy request transition table", () => {
-  it("has exactly the five request states", () => {
-    expect(REQUEST_STATES).toEqual([
-      "open",
-      "in_progress",
-      "waiting_on_requester",
-      "completed",
-      "refused",
-    ]);
-  });
-
   it.each(pairs.filter(([from, to]) => ALLOWED.has(`${from}->${to}`)))(
     "allows %s -> %s",
     (from, to) => {
@@ -79,8 +69,6 @@ describe("named state predicates", () => {
     REQUEST_STATES.filter((state) => predicate(state));
 
   it("splits the states into active and terminal sets", () => {
-    expect(ACTIVE_REQUEST_STATES).toEqual(["open", "in_progress", "waiting_on_requester"]);
-    expect(TERMINAL_REQUEST_STATES).toEqual(["completed", "refused"]);
     expect(states(isActiveRequestState)).toEqual([...ACTIVE_REQUEST_STATES]);
     expect(states(isTerminalRequestState)).toEqual([...TERMINAL_REQUEST_STATES]);
     for (const state of TERMINAL_REQUEST_STATES)

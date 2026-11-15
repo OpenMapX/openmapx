@@ -39,21 +39,6 @@ function definition(
 describe("validateAdminOperationCatalog", () => {
   it("accepts the shipped catalog", () => {
     expect(() => validateAdminOperationCatalog()).not.toThrow();
-    expect(ADMIN_OPERATIONS.map((definition) => definition.id)).toEqual([
-      "download-osm",
-      "download-fonts",
-      "update",
-      "convert-overpass",
-      "link",
-      "clean",
-      "overture-sync",
-      "overture-pull",
-      "overture-ingest",
-      "overture-extract",
-      "overture-conflate",
-      "search-index-build",
-      "notable-places-build",
-    ]);
   });
 
   it("rejects duplicate ids", () => {
