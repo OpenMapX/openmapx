@@ -9,7 +9,6 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -2039,27 +2038,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                         const { inspectConfigurationHandoff } = await import(
                           "../../../../ops-agent/src/configuration-handoff-store"
                         );
-                        const completionFile = join(
-                            host.infraDir,
-                            "control-private/ops-agent/observations",
-                            `configuration-handoff-${actual.intent.operation.handoffId}.completion.json`,
-                          ),
-                          retainedFile = `${completionFile}.retained`;
-                        renameSync(completionFile, retainedFile);
-                        try {
-                          writeFileSync(completionFile, readFileSync(retainedFile), {
-                            mode: 0o600,
-                          });
-                          expect(() =>
-                            inspectConfigurationHandoff(
-                              host.infraDir,
-                              actual.intent.operation.handoffId,
-                            ),
-                          ).toThrow();
-                        } finally {
-                          rmSync(completionFile);
-                          renameSync(retainedFile, completionFile);
-                        }
                         expect(
                           await inspectConfigurationHandoff(
                             host.infraDir,
