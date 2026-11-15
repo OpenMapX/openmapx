@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { useMeasurementStore } from "@integrations/overlay-tool-measurement/store";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createFakeMap, fireEvent, render, screen, userEvent, waitFor, within } from "@/test";
@@ -806,6 +807,7 @@ describe("MapContextMenu dismissal and semantics", () => {
       "mapContextMenu.copyLocation",
       "mapContextMenu.openPlaceDetails",
       "mapContextMenu.searchNearby",
+      "mapContextMenu.measureDistance",
       "parking.saveHere",
       "mapContextMenu.shareLocation",
     ]);
@@ -822,6 +824,19 @@ describe("MapContextMenu dismissal and semantics", () => {
     expect(anchor?.coordinates).toEqual([-77.02573, 38.88859]);
     expect(useCategorySearchStore.getState().exploreBoxOpen).toBe(true);
     act(() => useCategorySearchStore.getState().closeExploreBox());
+  });
+
+  it("starts measuring a distance from the right-clicked spot", async () => {
+    render(<MapContextMenu />);
+    openAtMapPoint();
+
+    await userEvent.click(screen.getByRole("menuitem", { name: "mapContextMenu.measureDistance" }));
+
+    const measurement = useMeasurementStore.getState();
+    expect(measurement.isActive).toBe(true);
+    expect(measurement.mode).toBe("line");
+    expect(measurement.points).toEqual([[-77.02573, 38.88859]]);
+    act(() => useMeasurementStore.getState().deactivate());
   });
 
   it("hands the right-clicked coordinate to the shared save action", async () => {

@@ -10,6 +10,7 @@ import PinDropOutlinedIcon from "@mui/icons-material/PinDropOutlined";
 import PlaceIcon from "@mui/icons-material/Place";
 import SearchIcon from "@mui/icons-material/Search";
 import ShareIcon from "@mui/icons-material/Share";
+import StraightenIcon from "@mui/icons-material/Straighten";
 import {
   Box,
   ButtonBase,
@@ -47,7 +48,12 @@ import Menu from "@/components/ui/Menu";
 import Popover from "@/components/ui/Popover";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
-import { openLocationDetails, routeFromOrTo, shareLocationLink } from "@/lib/locationActions";
+import {
+  measureFrom,
+  openLocationDetails,
+  routeFromOrTo,
+  shareLocationLink,
+} from "@/lib/locationActions";
 import { cameFromTouch } from "@/lib/mapTouch";
 import {
   describeMapLocation,
@@ -62,7 +68,16 @@ interface MapContextTarget extends MapLocation {
   anchorPosition: { top: number; left: number };
 }
 
-type ActionId = "from" | "to" | "coords" | "copy" | "details" | "nearby" | "parking" | "share";
+type ActionId =
+  | "from"
+  | "to"
+  | "coords"
+  | "copy"
+  | "details"
+  | "nearby"
+  | "measure"
+  | "parking"
+  | "share";
 const ALL_ACTIONS: ActionId[] = [
   "from",
   "to",
@@ -70,6 +85,7 @@ const ALL_ACTIONS: ActionId[] = [
   "copy",
   "details",
   "nearby",
+  "measure",
   "parking",
   "share",
 ];
@@ -98,6 +114,7 @@ export function MapContextMenu(): React.ReactNode {
     copy: null,
     details: null,
     nearby: null,
+    measure: null,
     parking: null,
     share: null,
   });
@@ -306,6 +323,12 @@ export function MapContextMenu(): React.ReactNode {
     usePlaceStore.getState().setSelectedPlace(null);
     useSidebarStore.getState().closeDetail();
     useCategorySearchStore.getState().openExploreBox(place);
+    closeMenu();
+  };
+
+  const measureFromHere = () => {
+    if (!target) return;
+    measureFrom(target.coordinates);
     closeMenu();
   };
 
@@ -561,6 +584,16 @@ export function MapContextMenu(): React.ReactNode {
                       <SearchIcon fontSize="small" />
                     </ListItemIcon>
                     <ListItemText>{t("searchNearby")}</ListItemText>
+                  </MenuItem>
+                  <MenuItem
+                    {...commonActionProps("measure")}
+                    onClick={measureFromHere}
+                    sx={{ minHeight: "44px !important" }}
+                  >
+                    <ListItemIcon>
+                      <StraightenIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>{t("measureDistance")}</ListItemText>
                   </MenuItem>
                   <MenuItem
                     {...commonActionProps("parking")}
