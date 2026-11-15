@@ -97,9 +97,10 @@ export interface DataExecutionRuntime {
   reconcile(): Promise<void>;
   close(): Promise<void>;
 }
-/** Settles and releases the execution's own lease after its terminal record,
- * or, for a hardlink leaf, settles its child in the issuer's lease; then
- * records the terminal for later steps that build on it. */
+/** Settles the execution's own lease after its terminal record, or, for a
+ * hardlink leaf, its child in the issuer's lease; records the terminal for
+ * later steps that build on it, while the lease still shows how its children
+ * settled; then releases the lease. */
 async function releaseOwnLease(
   journal: {
     installation: ControlInstallation;
@@ -108,14 +109,17 @@ async function releaseOwnLease(
   execution: ExecutionRef,
   lease: ArtifactTargetLease | undefined,
 ) {
-  if (lease) {
-    await settleArtifactTargetLeaseChild(
-      lease,
-      verifyControlEffectSettlement(journal.installation, execution),
-    );
-    await releaseArtifactTargetLease(lease);
-  } else await settleOwnLeaseChild(journal.installation, execution);
+  if (!lease) {
+    await settleOwnLeaseChild(journal.installation, execution);
+    await journal.recordContainedTerminal(execution);
+    return;
+  }
+  await settleArtifactTargetLeaseChild(
+    lease,
+    verifyControlEffectSettlement(journal.installation, execution),
+  );
   await journal.recordContainedTerminal(execution);
+  await releaseArtifactTargetLease(lease);
 }
 export function dataExecutionTargetIds(input: DataExecutionInput): string[] {
   return ["transit-sync", "catalog.validate", "catalog.activate"].includes(input.kind)

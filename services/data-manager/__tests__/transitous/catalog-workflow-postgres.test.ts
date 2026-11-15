@@ -797,20 +797,14 @@ it
         installation,
         proof.sourceExecution,
       );
+      // The validation released its lease only after every child settled; the
+      // store keeps no released lease, so the settled child is no longer listed.
       expect(
-        (
-          await control.inspectRetainedOwnedArtifactTargetChildSettlement(
-            originalOwner,
-            child.execution,
-          )
-        )?.outcome,
-      ).toBe("committed");
-      await expect(
-        await control.inspectRetainedOwnedArtifactTargetChildSettlement(originalOwner, {
-          ...child.execution,
-          executionId: randomUUID(),
-        }),
-      ).rejects.toThrow(/original child/);
+        await control.inspectRetainedOwnedArtifactTargetChildSettlement(
+          originalOwner,
+          child.execution,
+        ),
+      ).toBeNull();
       expect(control.heldTargets(dirname(data)).includes("motis")).toBe(false);
       const validationBytes = readFileSync(
         join(data, "motis/proposals", proposalId, `validation-${validation.id}.json`),
