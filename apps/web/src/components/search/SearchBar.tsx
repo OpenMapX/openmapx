@@ -1153,6 +1153,13 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
               >
                 <ArrowBackIcon sx={{ fontSize: 22, color: "text.secondary" }} />
               </IconButton>
+            ) : isMobile ? (
+              // On a phone the avatar opens the one menu, so the field
+              // starts with its own glyph instead of a second menu button.
+              <SearchIcon
+                aria-hidden
+                sx={{ fontSize: 22, color: "text.secondary", ml: 1.25, mr: 0.75, flexShrink: 0 }}
+              />
             ) : (
               <IconButton
                 size="small"
@@ -1275,7 +1282,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
               while the user is typing a query. */}
             {!fullScreen && !nearbyMode && (
               <Box sx={{ display: { xs: "inline-flex", sm: "none" }, ml: 0.25, mr: 0.25 }}>
-                <AccountAvatarButton size={32} />
+                <AccountAvatarButton size={32} onOpen={openMenu} openLabel={t("menuAriaLabel")} />
               </Box>
             )}
 

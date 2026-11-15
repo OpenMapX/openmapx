@@ -1,11 +1,13 @@
 "use client";
 
+import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettingsOutlined";
 import BookmarkBorderIcon from "@mui/icons-material/BookmarkBorder";
 import CloseIcon from "@mui/icons-material/Close";
 import DownloadForOfflineOutlinedIcon from "@mui/icons-material/DownloadForOfflineOutlined";
 import KeyboardOutlinedIcon from "@mui/icons-material/KeyboardOutlined";
 import LinkIcon from "@mui/icons-material/Link";
 import LocalParkingOutlinedIcon from "@mui/icons-material/LocalParkingOutlined";
+import LogoutIcon from "@mui/icons-material/Logout";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import StorageOutlinedIcon from "@mui/icons-material/StorageOutlined";
 import TimelineOutlinedIcon from "@mui/icons-material/TimelineOutlined";
@@ -16,7 +18,9 @@ import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
 import List from "@mui/material/List";
 import Snackbar from "@mui/material/Snackbar";
+import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import { formatShortcut, getPlatform, parseShortcut } from "@openmapx/command-palette";
 import {
   PANEL,
@@ -27,9 +31,11 @@ import {
   useSession,
   useSidebarStore,
 } from "@openmapx/core";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { type ChangeEvent, useRef, useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
+import { useSignOut } from "@/components/auth/useSignOut";
 import { InstallEntry, IosInstallHintDialog } from "@/components/pwa/InstallEntry";
 import { SettingsDialog } from "@/components/settings/SettingsDialog";
 import { StorageDialog } from "@/components/settings/StorageDialog";
@@ -37,6 +43,8 @@ import { shareCurrentUrl } from "@/lib/deepLink";
 import { IMPORT_ACCEPT, importGeoFromFile } from "@/lib/importGeoFile";
 import { useBackDismiss } from "@/lib/useBackDismiss";
 import { useFinePointer } from "@/lib/useFinePointer";
+import { useAccountSettingsStore } from "@/stores/accountSettingsStore";
+import { MenuAccountHeader } from "./MenuAccountHeader";
 import { MenuRow } from "./MenuRow";
 
 const PALETTE_SHORTCUT = parseShortcut("Mod+K");
@@ -47,12 +55,20 @@ export function HamburgerMenu() {
   const t = useTranslations("menu");
   const tCommon = useTranslations("common");
   const tFooter = useTranslations("footer");
+  const tAccount = useTranslations("account");
   const isOpen = useMenuStore((s) => s.isOpen);
   const close = useMenuStore((s) => s.close);
   useBackDismiss(isOpen, close);
   const { data: session, isPending: sessionPending } = useSession();
   const { data: parked } = useParkedLocations();
   const isSignedIn = !sessionPending && !!session?.user?.id;
+  const user = isSignedIn ? (session?.user ?? null) : null;
+  // On a phone the avatar opens this menu, so it carries the account too and
+  // slides in from the avatar's side across the screen.
+  const theme = useTheme();
+  const isPhone = useMediaQuery(theme.breakpoints.down("sm"));
+  const signOut = useSignOut();
+  const router = useRouter();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
@@ -112,39 +128,54 @@ export function HamburgerMenu() {
     <>
       <Drawer
         variant="temporary"
-        anchor="left"
+        anchor={isPhone ? "right" : "left"}
         open={isOpen}
         onClose={close}
         slotProps={{
           paper: {
-            sx: { width: DRAWER_WIDTH },
+            sx: { width: isPhone ? "100%" : DRAWER_WIDTH },
           },
         }}
       >
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            px: 2,
-            py: 1.5,
-          }}
-        >
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-            <Box
-              component="img"
-              src="/icons/app/icon-192.png"
-              alt=""
-              sx={{ width: 32, height: 32, borderRadius: "22%", flexShrink: 0 }}
-            />
-            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              OpenMapX
-            </Typography>
+        {isPhone ? (
+          <MenuAccountHeader
+            user={user}
+            onClose={close}
+            onSignIn={() => {
+              close();
+              setAuthOpen(true);
+            }}
+            onAccountSettings={() => {
+              close();
+              useAccountSettingsStore.getState().show();
+            }}
+          />
+        ) : (
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              px: 2,
+              py: 1.5,
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+              <Box
+                component="img"
+                src="/icons/app/icon-192.png"
+                alt=""
+                sx={{ width: 32, height: 32, borderRadius: "22%", flexShrink: 0 }}
+              />
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                OpenMapX
+              </Typography>
+            </Box>
+            <IconButton onClick={close} aria-label={tCommon("close")} size="small">
+              <CloseIcon />
+            </IconButton>
           </Box>
-          <IconButton onClick={close} aria-label={tCommon("close")} size="small">
-            <CloseIcon />
-          </IconButton>
-        </Box>
+        )}
 
         <Divider />
 
@@ -213,6 +244,26 @@ export function HamburgerMenu() {
               setSettingsOpen(true);
             }}
           />
+          {isPhone && user?.role === "admin" && (
+            <MenuRow
+              icon={<AdminPanelSettingsOutlinedIcon />}
+              label={tAccount("adminPanel")}
+              onClick={() => {
+                close();
+                router.push("/admin");
+              }}
+            />
+          )}
+          {isPhone && user && (
+            <MenuRow
+              icon={<LogoutIcon />}
+              label={tAccount("signOut")}
+              onClick={() => {
+                close();
+                void signOut();
+              }}
+            />
+          )}
         </List>
 
         <Divider />

@@ -11,17 +11,11 @@ import ListItemText from "@mui/material/ListItemText";
 import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 import type { User } from "@openmapx/core";
-import { authClient, getInitials, proxyImageUrl } from "@openmapx/core";
-import {
-  clearMangroveSignerStorage,
-  MANGROVE_KEYPAIR_QUERY_KEY,
-  useKeypairStore,
-  useMangroveSigner,
-} from "@openmapx/mangrove-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { getInitials, proxyImageUrl } from "@openmapx/core";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import Menu from "@/components/ui/Menu";
+import { useSignOut } from "./useSignOut";
 
 interface AccountMenuProps {
   anchorEl: HTMLElement | null;
@@ -34,37 +28,13 @@ export function AccountMenu({ anchorEl, onClose, user, onOpenSettings }: Account
   const open = Boolean(anchorEl);
   const t = useTranslations("account");
   const router = useRouter();
-  const queryClient = useQueryClient();
-  const signer = useMangroveSigner();
   const isAdmin = user.role === "admin";
 
+  const signOut = useSignOut();
   const handleSignOut = async () => {
     onClose();
-    // Wipe the in-memory Mangrove keypair and its query-cached envelope before
-    // tearing down the session so the private JWK isn't reachable through
-    // application state afterwards. The server is the source of truth for the
-    // encrypted envelope — we only hold decrypted material while a session is
-    // live.
-    useKeypairStore.getState().clear();
-    queryClient.removeQueries({ queryKey: MANGROVE_KEYPAIR_QUERY_KEY });
-    const revocation = signer.controller?.disconnect();
-    clearMangroveSignerStorage(window.sessionStorage);
-    if (revocation) {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        await Promise.race([
-          revocation.catch(() => undefined),
-          new Promise<void>((resolve) => {
-            timer = setTimeout(resolve, 500);
-          }),
-        ]);
-      } finally {
-        clearTimeout(timer);
-      }
-    }
-    await authClient.signOut();
+    await signOut();
   };
-
   const handleSettings = () => {
     onClose();
     onOpenSettings();

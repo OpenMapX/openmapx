@@ -3178,7 +3178,8 @@
     "privacy": "Privacy",
     "terms": "Terms",
     "imprint": "Imprint",
-    "parking": "Parking"
+    "parking": "Parking",
+    "signInHint": "Sign in to save places, keep your parking spot and see your timeline."
   },
   "timeline": {
     "onboardingTitle": "Your timeline",
