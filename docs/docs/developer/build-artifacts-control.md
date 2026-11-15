@@ -133,10 +133,14 @@ Terminal states carry `errorClass` when they are not `succeeded`.
 
 ### Data-manager fence states
 
-One row per maintenance in `data_manager.configuration_fence`, written under the
-data-admission advisory lock. Only the operations agent calls `prepare` and
-`settle`, each with its signed prepare delegation; settle also requires the
-agent's own data-manager token and the agent's maintenance lease still held.
+One row per maintenance in `data_manager.configuration_fence`. `prepare` inserts
+it under the data-admission advisory lock; `settle` is a conditional update
+(`WHERE state='prepared'`) read back in the same transaction, so a racing data
+admission sees the row either prepared or settled. Only the operations agent calls
+`prepare` and `settle`, each with its signed prepare delegation; settle also
+requires the agent's own data-manager token and the agent's maintenance lease
+still held. A repeated prepare also settles the data-manager's lease child again,
+which heals a crash between its effect record and that child.
 
 | From       | Event                                                      | To                                      |
 | ---------- | ---------------------------------------------------------- | --------------------------------------- |

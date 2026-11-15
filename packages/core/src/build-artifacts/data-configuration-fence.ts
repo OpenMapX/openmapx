@@ -137,11 +137,11 @@ export function createDataConfigurationFenceStore(
     if (rows[0]?.held !== true) throw new DataFenceBusy();
   }
   async function row(tx: Tx, where: "maintenance_id" | "state", value: string) {
+    // The primary key and the one-prepared index allow at most one row.
     const rows = await tx.unsafe(
-      `SELECT * FROM data_manager.configuration_fence WHERE ${where}=$1 LIMIT 2`,
+      `SELECT * FROM data_manager.configuration_fence WHERE ${where}=$1`,
       [value],
     );
-    if (rows.length > 1) throw Error("Duplicate configuration fence");
     return rows[0] ? fenceRowSchema.parse(rows[0]) : null;
   }
   function inspectGrant(
@@ -229,8 +229,6 @@ export function createDataConfigurationFenceStore(
       lease,
       verifyControlEffectSettlement(installation, state.execution),
     );
-    if (state.origin) {
-    }
   }
   /** Adopts the agent's delegation as this receiver's leaf execution and runs
    * the fence transition once. A repeated request returns the recorded result. */
@@ -280,9 +278,11 @@ export function createDataConfigurationFenceStore(
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
       if (prior !== undefined && prior !== null) {
-        const settled = childSettlementState(
-          verifyControlEffectSettlement(installation, grant.execution),
-        ).evidence;
+        const settlement = verifyControlEffectSettlement(installation, grant.execution);
+        // A crash between the effect record and the lease child leaves the
+        // child unsettled; settling it again is idempotent.
+        await settleArtifactTargetLeaseChild(lease, settlement);
+        const settled = childSettlementState(settlement).evidence;
         if (settled.outcome !== "committed") throw new DataFenceBusy();
         const saved = await row(sql, "maintenance_id", verified.operation.maintenanceId);
         if (!saved) throw new DataFenceBusy();
@@ -631,8 +631,9 @@ export function createDataConfigurationFenceStore(
       } catch {
         throw forbidden("Pinned agent configuration fence grant rejected");
       }
+      // The conditional UPDATE and its read-back are the guard: a racing data
+      // admission sees the row either prepared (busy) or settled (open).
       return sql.transaction(async (tx) => {
-        await lock(tx);
         const saved = await row(tx, "maintenance_id", input.maintenanceId);
         if (!saved)
           throw Object.assign(Error("Configuration maintenance identity is unknown"), {
