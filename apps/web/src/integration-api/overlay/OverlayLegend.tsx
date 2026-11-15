@@ -20,7 +20,7 @@ export interface OverlayLegendProps {
   loading: boolean;
   /** Header toggle handler. */
   setLayerVisible: (visible: boolean) => void;
-  /** Translated aria-label for the header toggle (e.g. t("toggleOverlay")). */
+  /** Translated aria-label for the header toggle, such as the overlay's own "Toggle …" string. */
   toggleAriaLabel: string;
   /** Per-overlay swatch / control content rendered below the header. */
   children: ReactNode;
