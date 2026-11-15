@@ -6,6 +6,7 @@ import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { RouteFuelPrices } from "@/lib/navigation/useRouteFuelPrices";
 
 const fixture = vi.hoisted(() => ({
   results: [] as AlongRoutePoi<CategoryPlace>[],
@@ -13,15 +14,23 @@ const fixture = vi.hoisted(() => ({
   cancel: vi.fn(),
   photo: undefined as unknown,
   matches: [] as unknown[],
+  fuelPrices: null as RouteFuelPrices | null,
 }));
 vi.mock("@/lib/navigation/useRouteSearch", () => ({
   routeSearchQueryFor: (value: unknown) => value,
   useRouteSearch: () => ({
     results: fixture.results,
     isLoading: false,
+    fuelPrices: fixture.fuelPrices,
     addStop: fixture.addStop,
     cancelAddStop: fixture.cancel,
   }),
+}));
+vi.mock("@/components/panels/place/useDataSourceI18nResolver", () => ({
+  useDataSourceI18nResolver: (integrationId: string | undefined) => (value: unknown) =>
+    value && typeof value === "object" && "$t" in value
+      ? `${integrationId}:${String(value.$t)}`
+      : "",
 }));
 vi.mock("@/integration-api/map/MapContext", () => ({ useMapOptional: () => null }));
 vi.mock("@openmapx/core", async (original) => ({
@@ -66,11 +75,59 @@ beforeEach(() => {
   fixture.results = [poi()];
   fixture.photo = undefined;
   fixture.matches = [];
+  fixture.fuelPrices = null;
   fixture.cancel.mockReset();
   fixture.addStop.mockReset();
   useRouteSearchStore.getState().reset();
   useRouteSearchStore.getState().setCategoryKey("preset:amenity/fuel");
 });
+describe("route stop fuel price", () => {
+  it("shows the selected station's price and age and credits its source", () => {
+    fixture.fuelPrices = new Map([
+      [
+        "stop",
+        {
+          status: "priced",
+          result: {
+            id: "tk",
+            name: "River services",
+            coordinates: [0.001, 0.001],
+            source: "tankerkoenig",
+            variant: "open",
+            labelSummary: { $t: "summary.priceAge" },
+            contributors: [{ sourceId: "tankerkoenig", name: "Tankerkönig prices" }],
+          },
+        },
+      ],
+    ]);
+    render(view());
+    fireEvent.click(screen.getByText("Select stop"));
+    expect(screen.getByText("fuel:summary.priceAge")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: en.footer.attributions }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Tankerkönig prices");
+  });
+
+  it("says the price is unknown when no station matched", () => {
+    fixture.fuelPrices = new Map([["stop", { status: "unknown" }]]);
+    render(view());
+    fireEvent.click(screen.getByText("Select stop"));
+    expect(screen.getByText("Price unknown")).toBeInTheDocument();
+  });
+
+  it("shows no price line while the price is looked up or for other stops", () => {
+    fixture.fuelPrices = new Map([["stop", { status: "loading" }]]);
+    const { unmount } = render(view());
+    fireEvent.click(screen.getByText("Select stop"));
+    expect(screen.queryByText("Price unknown")).toBeNull();
+    unmount();
+    fixture.fuelPrices = null;
+    useRouteSearchStore.getState().setCategoryKey("parking");
+    render(view());
+    fireEvent.click(screen.getByText("Select stop"));
+    expect(screen.queryByText("Price unknown")).toBeNull();
+  });
+});
+
 describe("route stop confidence", () => {
   it("credits only selected-card name, access and displayed detour metrics", () => {
     const name = { sourceId: "poi", name: "Stop name" };

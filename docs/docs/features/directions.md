@@ -224,6 +224,21 @@ area returned only a selection of its places. Fuel and charging stations come
 from map data. A station mapped without a name is listed under its brand or
 operator, here and in other category results.
 
+When the server offers fuel prices, each fuel station shows the price of one
+grade and how long ago it was reported, as the fuel layer's map labels do. The
+grade is the first fuel type selected in the fuel layer's filter while that
+layer is shown, otherwise diesel. A station is matched to the price data when
+the two lie within 100 m of each other and their brands do not differ; each
+price goes to the closest station only, so a station across the road never
+shows its neighbour's price. A station without a match, or without a price
+for that grade, says **Price unknown**, but only once some station along the
+route has a price; where the price data has none, stations show no price line.
+Stations are listed at once and their prices fill in as they arrive, looked up
+in small areas two at a time; a failed lookup marks its stations' prices
+unknown under the same rule. Prices are looked up again when the
+search is opened after a few minutes, not while it stays on screen. The price
+source is credited with the list.
+
 The straight-line estimate shown for each result does not prove road access.
 Selecting a result plans the trip through that stop by road, with the same
 routing provider and options as the displayed route. The card shows the extra
@@ -237,7 +252,7 @@ then recalculated as for any waypoint change; with an intermediate stop the
 engine returns no alternatives. The search stays available for the next stop.
 A route takes at most ten waypoints in total,
 and the panel says when that limit is reached. The search does not check
-opening hours or prices.
+opening hours, and shows prices only for fuel.
 
 ## Elevation
 
@@ -366,6 +381,9 @@ with and without each stop. **By road** labels show the extra routing time; the
 card also shows extra distance. Both itineraries use the active mode, avoidance
 preferences and routing provider. Existing user stops keep their order, and the
 new stop is inserted before the next stop beyond its position on the route.
+
+A selected fuel station's card shows its price and age, or **Price unknown**,
+by the same rules as **Stops along the route** before you start.
 
 A known routing entrance is preferred when the place source supplies one.
 Otherwise the card explicitly says it routes to place coordinates and the

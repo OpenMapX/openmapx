@@ -226,6 +226,7 @@
     "rsDetourDistance": "+{kilometers} km",
     "rsDetourCoordinate": "Route zu den Ortskoordinaten; Eingang unbekannt",
     "rsDetourEntrance": "Route zum bekannten Eingang",
+    "rsFuelPriceUnknown": "Preis unbekannt",
     "rsPinNetwork": "+{minutes} Min. · Straße",
     "rsPinApproximate": "~+{minutes} Min.",
     "rsPinChecking": "Wird geprüft…",

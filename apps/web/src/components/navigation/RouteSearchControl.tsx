@@ -32,10 +32,12 @@ import {
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
+import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
 import { BrandLogo } from "@/components/search/BrandLogo";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
+import { FUEL_SOURCE_ID } from "@/lib/fuel/fuelGrades";
 import { NAV_CHROME_INSET, NAV_CHROME_TOP } from "@/lib/layout";
 import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
 import { routeStopCopy } from "@/lib/navigation/routeStopCopy";
@@ -46,6 +48,7 @@ import {
   PLACE_ICON_PATH,
   ROUTE_SEARCH_CATEGORIES,
 } from "./routeSearchCategories";
+import { routeStopFuelPriceCredits, routeStopFuelPriceText } from "./routeStopFuelPrice";
 
 /**
  * "Search along route" picker sheet, result pins and POI card. The entry button
@@ -88,9 +91,12 @@ export function RouteSearchControl() {
     : brand
       ? routeSearchQueryFor({ brand })
       : null;
-  const { results, isLoading, addStop, cancelAddStop } = useRouteSearch(query);
+  const { results, isLoading, fuelPrices, addStop, cancelAddStop } = useRouteSearch(query);
+  const resolveFuel = useDataSourceI18nResolver(FUEL_SOURCE_ID);
   const selected = results.find((poi) => poi.place.id === selectedId) ?? null;
   const copy = selected ? routeStopCopy(selected) : null;
+  const selectedPrice = selected ? fuelPrices?.get(selected.place.id) : undefined;
+  const priceText = routeStopFuelPriceText(selectedPrice, resolveFuel, t("rsFuelPriceUnknown"));
   const selectedAttributions = selected
     ? snapshotContributors(
         contributorsForRecordFields(selected.place, [
@@ -102,6 +108,7 @@ export function RouteSearchControl() {
         selected.detour?.kind === "network"
           ? contributorsForRecordFields(selected.detour, ["seconds", "meters"])
           : [],
+        routeStopFuelPriceCredits(selectedPrice),
       )
     : [];
   // A new search or route must retire any pending selection in this sheet.
@@ -254,6 +261,11 @@ export function RouteSearchControl() {
                 {t("rsDetourDistance", {
                   kilometers: (selected.detour.meters / 1000).toFixed(1),
                 })}
+              </Typography>
+            )}
+            {priceText && (
+              <Typography variant="body2" color="text.secondary">
+                {priceText}
               </Typography>
             )}
           </Box>

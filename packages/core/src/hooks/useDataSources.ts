@@ -27,8 +27,9 @@ interface DataSourcesResponse {
   })[];
 }
 
-export function useDataSources() {
+export function useDataSources({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
+    enabled,
     queryKey: ["data-sources"],
     queryFn: ({ signal }) =>
       apiClient.get<DataSourcesResponse>(
@@ -43,7 +44,7 @@ export function useDataSources() {
 }
 
 /** A data-source search answer as the API sends it. */
-interface DataSourceSearchEnvelope extends MobilityEnvelope<DataSourceResult[]> {
+export interface DataSourceSearchEnvelope extends MobilityEnvelope<DataSourceResult[]> {
   /** Present when the area may hold results the answer lacks, saying why. */
   partial?: DataSourcePartialReason;
 }
@@ -74,14 +75,15 @@ function partialRefetchInterval(query: {
   return data?.partial && dataUpdateCount <= PARTIAL_REFETCHES ? PARTIAL_REFETCH_MS : false;
 }
 
-export function useDataSourceSearch(
+/** The query for one data-source search of a box, shared by every caller that reads it. */
+export function dataSourceSearchQueryOptions(
   sourceId: string | null,
   bbox: BoundingBox | null,
   filters: Record<string, unknown>,
-): DataSourceSearchQueryResult {
-  const query = useQuery({
-    queryKey: ["data-source-search", sourceId, bbox, filters],
-    queryFn: ({ signal }) => {
+) {
+  return {
+    queryKey: ["data-source-search", sourceId, bbox, filters] as const,
+    queryFn: ({ signal }: { signal: AbortSignal }) => {
       if (!bbox) throw new Error("bbox is required");
       const params: Record<string, string> = {
         south: String(bbox.south),
@@ -104,10 +106,20 @@ export function useDataSourceSearch(
         apiQueryRequestOptions(signal, MAP_QUERY_POLICY),
       );
     },
+    gcTime: MAP_QUERY_POLICY.gcTime,
+  };
+}
+
+export function useDataSourceSearch(
+  sourceId: string | null,
+  bbox: BoundingBox | null,
+  filters: Record<string, unknown>,
+): DataSourceSearchQueryResult {
+  const query = useQuery({
+    ...dataSourceSearchQueryOptions(sourceId, bbox, filters),
     enabled: sourceId !== null && bbox !== null,
     staleTime: (q) => (q.state.data?.partial ? 0 : SEARCH_STALE_MS),
     refetchInterval: partialRefetchInterval,
-    gcTime: MAP_QUERY_POLICY.gcTime,
   });
   return { ...wrapMobilityEnvelope(query), partial: query.data?.partial ?? null };
 }
