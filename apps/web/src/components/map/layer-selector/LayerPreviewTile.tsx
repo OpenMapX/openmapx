@@ -3,26 +3,28 @@
 import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
 import Typography from "@mui/material/Typography";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { BRAND } from "@/integration-api/runtime/theme";
 
 interface LayerPreviewTileProps {
   preview: ReactNode;
   label: string;
+  /** Whether the layer is on. Left out for a tile that is an action, not a toggle. */
   selected?: boolean;
-  icon?: ReactNode;
+  /** Accessible name when it should say more than the visible label. */
+  ariaLabel?: string;
   size?: number;
   labelWidth?: number;
   disabled?: boolean;
-  onClick?: () => void;
+  onClick?: (event: MouseEvent<HTMLElement>) => void;
   children?: ReactNode;
 }
 
 export function LayerPreviewTile({
   preview,
   label,
-  selected = false,
-  icon,
+  selected,
+  ariaLabel,
   size = 48,
   labelWidth,
   disabled = false,
@@ -45,8 +47,7 @@ export function LayerPreviewTile({
           height: size,
           borderRadius: `${Math.round(size * 0.22)}px`,
           overflow: "hidden",
-          border: selected ? `2px solid ${BRAND}` : "1px solid rgba(60,64,67,0.1)",
-          boxShadow: selected ? "0 0 0 1px rgba(11,125,139,0.22)" : "0 1px 3px rgba(0,0,0,0.06)",
+          border: selected ? `2px solid ${BRAND}` : "1px solid var(--omx-border-light)",
           "& > svg, & > img": {
             display: "block",
             width: "100%",
@@ -57,32 +58,21 @@ export function LayerPreviewTile({
       >
         {preview}
       </Box>
-      <Box
+      <Typography
         sx={{
-          mt: 0.4,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 0.3,
+          mt: 0.5,
           width: labelWidth,
+          fontSize: size >= 48 ? 12 : 11,
+          lineHeight: 1.25,
+          fontWeight: selected ? 600 : 500,
+          color: selected ? BRAND : "text.secondary",
+          // A fixed label width wraps long names; otherwise the label stays on one line.
+          whiteSpace: labelWidth ? "pre-line" : "nowrap",
+          textAlign: "center",
         }}
       >
-        {icon ? (
-          <Box sx={{ display: "flex", color: selected ? BRAND : "text.secondary" }}>{icon}</Box>
-        ) : null}
-        <Typography
-          sx={{
-            fontSize: size >= 48 ? 12 : 11,
-            lineHeight: 1.2,
-            fontWeight: selected ? 600 : 500,
-            color: selected ? BRAND : "text.secondary",
-            whiteSpace: "pre-line",
-            textAlign: "center",
-          }}
-        >
-          {label}
-        </Typography>
-      </Box>
+        {label}
+      </Typography>
       {children}
     </Box>
   );
@@ -94,7 +84,10 @@ export function LayerPreviewTile({
       onClick={onClick}
       disabled={disabled}
       aria-pressed={selected}
+      aria-label={ariaLabel}
       sx={{
+        // Tiles in a row line up by their previews, whatever their label length.
+        alignItems: "flex-start",
         borderRadius: `${Math.round(size * 0.22)}px`,
         cursor: disabled ? "not-allowed" : "pointer",
       }}

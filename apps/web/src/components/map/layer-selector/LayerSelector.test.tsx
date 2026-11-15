@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode, Ref } from "react";
 import { useImperativeHandle } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LAYER_SELECTOR_OPEN_EVENT } from "@/components/command-palette/constants";
+import { LAYER_SELECTOR_OPEN_EVENT, SEARCH_INPUT_ID } from "@/components/command-palette/constants";
 import { MAP_FOOTER_OBSTRUCTION_ID, publishMapFooterBox } from "@/lib/mapFooterCenter";
 import { publishMapObstruction } from "@/lib/mapObstructions";
 import { publishMobilePanelHeight } from "@/lib/mobilePanelHeight";
@@ -200,6 +200,23 @@ describe("LayerSelector desktop dock", () => {
 
     expect(await screen.findByText("map-details-panel")).toBeDefined();
     expect(quickSelectorOpen()).toBe(false);
+  });
+
+  it("puts the desktop panel away when a search starts, so it can't cover the suggestions", async () => {
+    render(
+      <>
+        <input id={SEARCH_INPUT_ID} aria-label="search" />
+        <LayerSelector />
+      </>,
+    );
+    act(() => {
+      window.dispatchEvent(new Event(LAYER_SELECTOR_OPEN_EVENT));
+    });
+    expect(await screen.findByText("map-details-panel")).toBeDefined();
+
+    act(() => screen.getByRole("textbox", { name: "search" }).focus());
+
+    await waitFor(() => expect(screen.queryByText("map-details-panel")).toBeNull());
   });
 
   it("keeps the desktop dock visible when an expanded sidebar has a selected place", () => {

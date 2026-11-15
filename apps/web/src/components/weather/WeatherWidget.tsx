@@ -13,6 +13,7 @@ import {
   weatherCodeToInfo,
 } from "@openmapx/core";
 import { useCallback, useEffect, useState } from "react";
+import { CHIP_ROW_END } from "@/components/search/floatingChipSx";
 import { WeatherIcon } from "@/integration-api/components/WeatherIcon";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useContributorResolver } from "@/integration-api/overlay/useContributorResolver";
@@ -81,7 +82,7 @@ export function WeatherWidget() {
       sx={{
         position: "absolute",
         top: {
-          xs: topInset(SEARCH_BAR_INSET, 106),
+          xs: topInset(SEARCH_BAR_INSET, CHIP_ROW_END.xs + 8),
           sm: topInset(SEARCH_BAR_INSET, 62),
         },
         left: "calc(12px + var(--omx-safe-left))",

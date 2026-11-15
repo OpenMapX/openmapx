@@ -1657,10 +1657,10 @@ describe("category result ordering", () => {
     });
     renderPanel(vi.fn());
     expect(screen.queryByRole("button", { name: /search.sortShownResults/ })).toBeNull();
-    const updateSwitch = screen.getByRole("switch", { name: "search.updateOnMapMove" });
-    expect(updateSwitch).not.toBeChecked();
+    const updateToggle = screen.getByRole("checkbox", { name: "search.updateOnMapMove" });
+    expect(updateToggle).not.toBeChecked();
     fireEvent.click(screen.getByText("search.updateOnMapMove"));
-    expect(updateSwitch).toBeChecked();
+    expect(updateToggle).toBeChecked();
     expect(useCategorySearchStore.getState().autoRefresh).toBe(true);
   });
 

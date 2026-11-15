@@ -24,9 +24,10 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
+import { FINE_POINTER_QUERY } from "@/lib/useFinePointer";
 import { FLOATING_CHIP_HEIGHT, floatingChipSx, floatingToolbarSx } from "./floatingChipSx";
 
-const FINE_POINTER = "@media (hover: hover) and (pointer: fine)";
+const FINE_POINTER = `@media ${FINE_POINTER_QUERY}`;
 const TOUCH_FADE = 24;
 /** Wide enough to fade the chips out behind an arrow. */
 const ARROW_FADE = FLOATING_CHIP_HEIGHT + 16;
@@ -252,8 +253,8 @@ export function CategoryChips() {
     height: FLOATING_CHIP_HEIGHT,
     borderRadius: "50%",
     bgcolor: "background.paper",
-    border: "1px solid var(--omx-border)",
-    boxShadow: "0 1px 3px var(--omx-shadow-soft)",
+    border: "1px solid var(--omx-chip-border)",
+    boxShadow: 1,
     "&:hover": { bgcolor: "var(--omx-chip-hover)" },
     display: "none",
     [FINE_POINTER]: { display: "inline-flex" },

@@ -6,8 +6,9 @@ import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
 import SortIcon from "@mui/icons-material/Sort";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Checkbox from "@mui/material/Checkbox";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import MenuItem from "@mui/material/MenuItem";
-import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
 import type { DistanceReference } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
@@ -188,28 +189,23 @@ export function CategoryResultsHeader({
         </Box>
       )}
       {showMapUpdate && (
-        <Box
-          component="label"
+        <FormControlLabel
+          control={
+            <Checkbox
+              size="small"
+              checked={autoRefresh}
+              onChange={(event) => onAutoRefresh(event.target.checked)}
+            />
+          }
+          label={ts("updateOnMapMove")}
+          slotProps={{ typography: { variant: "body2" } }}
           sx={{
             display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 1,
-            minHeight: 40,
-            cursor: "pointer",
-            mt: count !== null || showTravelTime ? 0.5 : 0,
-            "@media (pointer: coarse)": { minHeight: 48 },
+            mx: 0,
+            ml: -0.75,
+            mt: count !== null || showTravelTime ? 0.25 : 0,
           }}
-        >
-          <Typography variant="body2" sx={{ minWidth: 0, overflowWrap: "anywhere" }}>
-            {ts("updateOnMapMove")}
-          </Typography>
-          <Switch
-            size="small"
-            checked={autoRefresh}
-            onChange={(event) => onAutoRefresh(event.target.checked)}
-          />
-        </Box>
+        />
       )}
       {attributions && attributions.length > 0 && (
         <Box sx={{ mt: 0.5, minWidth: 0 }}>

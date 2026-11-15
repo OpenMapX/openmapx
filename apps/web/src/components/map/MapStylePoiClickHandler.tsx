@@ -1,6 +1,5 @@
 "use client";
 
-import useMediaQuery from "@mui/material/useMediaQuery";
 import type { Place } from "@openmapx/core";
 import {
   categoryPlaceToPlace,
@@ -25,12 +24,12 @@ import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useMapObstructionInsets } from "@/lib/mapObstructions";
+import { useFinePointer } from "@/lib/useFinePointer";
 import { findStylePoiAtPoint, getStylePoiLayerIds, type StylePoiTarget } from "./mapStylePoiTarget";
 import { StylePoiHoverCard } from "./StylePoiHoverCard";
 import { hoverCardPlacement } from "./stylePoiHoverPlacement";
 
 /** Hover previews need a pointer that can rest on a POI without pressing it. */
-const FINE_POINTER = "(hover: hover) and (pointer: fine)";
 /** How long the pointer rests on a POI before its card appears. */
 const SHOW_DELAY_MS = 120;
 /**
@@ -101,7 +100,7 @@ export function MapStylePoiClickHandler() {
   const { setSelectedPlace } = usePlaceStore();
   const locale = useLocale();
   const poiLayerIdsRef = useRef<string[]>([]);
-  const finePointer = useMediaQuery(FINE_POINTER, { noSsr: true });
+  const finePointer = useFinePointer();
   const insets = useMapObstructionInsets();
 
   const [hovered, setHovered] = useState<HoveredPoi | null>(null);

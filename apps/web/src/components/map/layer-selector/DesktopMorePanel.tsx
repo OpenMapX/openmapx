@@ -7,13 +7,13 @@ import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
-import type { MapLayer } from "@openmapx/core";
 import { OVERLAY_REGISTRY, toggleOverlay, useCapabilities, useLayerStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import type { ReactNode } from "react";
 import { useOverlayZoomGate } from "@/integration-api/overlay/overlayZoomGate";
 import { DesktopMoreTile } from "./DesktopMoreTile";
 import { globePreview } from "./layerPreviewSvgs";
-import { DESKTOP_MORE_MAP_TYPES } from "./layerSelectorConfig";
+import { BASE_LAYER_OPTIONS } from "./layerSelectorConfig";
 import type { GeneratedLayerEntry } from "./useLayerSelectorConfig";
 import { useLayerSelectorConfig } from "./useLayerSelectorConfig";
 
@@ -52,6 +52,16 @@ function OverlayDetailTile({ item, label }: { item: GeneratedLayerEntry; label: 
   );
 }
 
+function SectionTitle({ children }: { children: ReactNode }) {
+  return (
+    <Typography
+      sx={{ fontSize: 16, fontWeight: 600, color: "text.primary", lineHeight: 1.5, mb: 0.5 }}
+    >
+      {children}
+    </Typography>
+  );
+}
+
 export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
   const t = useTranslations("layers");
   const activeLayer = useLayerStore((s) => s.activeLayer);
@@ -78,15 +88,9 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
           mb: 0.6,
         }}
       >
-        <Typography sx={{ fontSize: 18, fontWeight: 700, color: "text.primary", lineHeight: 1 }}>
-          {t("mapDetails")}
-        </Typography>
-        <IconButton
-          onClick={onClose}
-          aria-label={t("closeMorePanel")}
-          sx={{ color: "text.primary", mt: -0.5 }}
-        >
-          <CloseIcon sx={{ fontSize: 23 }} />
+        <SectionTitle>{t("mapDetails")}</SectionTitle>
+        <IconButton onClick={onClose} aria-label={t("closeMorePanel")} size="small">
+          <CloseIcon fontSize="small" />
         </IconButton>
       </Box>
 
@@ -117,11 +121,7 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
 
       <Divider sx={{ my: 0.8 }} />
 
-      <Typography
-        sx={{ fontSize: 16, fontWeight: 700, color: "text.primary", lineHeight: 1, mb: 0.6 }}
-      >
-        {t("mapTools")}
-      </Typography>
+      <SectionTitle>{t("mapTools")}</SectionTitle>
       <Box
         sx={{
           display: "grid",
@@ -177,11 +177,7 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
 
       <Divider sx={{ my: 0.8 }} />
 
-      <Typography
-        sx={{ fontSize: 16, fontWeight: 700, color: "text.primary", lineHeight: 1, mb: 0.6 }}
-      >
-        {t("mapType")}
-      </Typography>
+      <SectionTitle>{t("mapType")}</SectionTitle>
       <Box
         sx={{
           display: "grid",
@@ -191,15 +187,13 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
           rowGap: 0.4,
         }}
       >
-        {DESKTOP_MORE_MAP_TYPES.map((item) => (
+        {BASE_LAYER_OPTIONS.map((option) => (
           <DesktopMoreTile
-            key={item.id}
-            item={{ ...item, selected: item.id === activeLayer }}
-            label={t(item.labelKey)}
+            key={option.id}
+            item={{ preview: option.preview, selected: option.id === activeLayer }}
+            label={t(option.labelKey)}
             labelWidth={96}
-            onClick={() => {
-              setActiveLayer(item.id as MapLayer);
-            }}
+            onClick={() => setActiveLayer(option.id)}
           />
         ))}
       </Box>

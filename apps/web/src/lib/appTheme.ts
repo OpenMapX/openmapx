@@ -1,4 +1,4 @@
-import { createTheme } from "@mui/material/styles";
+import { createTheme, type Shadows } from "@mui/material/styles";
 import { THEME_COLORS, THEME_CORNER_RADIUS, type ThemeColors } from "@openmapx/core/theme";
 
 /** The shared OpenMapX colours, which the installed app's native screens use too. */
@@ -10,6 +10,28 @@ function muiPalette(colors: ThemeColors) {
     text: { primary: colors.text, secondary: colors.textSecondary },
     error: { main: colors.error },
   };
+}
+
+/**
+ * Five soft, two-layer elevation levels (a tight key shadow under a wider
+ * ambient one), spread over MUI's 25 elevation steps. They replace MUI's
+ * default three-layer shadows, which read heavy and dated on floating map
+ * chrome.
+ */
+function elevationShadows(): Shadows {
+  const level = (keyY: number, keyBlur: number, y: number, blur: number, spread: number) =>
+    `0 ${keyY}px ${keyBlur}px rgb(0 0 0 / 30%), 0 ${y}px ${blur}px ${spread}px rgb(0 0 0 / 15%)`;
+  const levels = [
+    level(1, 2, 1, 3, 1),
+    level(1, 2, 2, 6, 2),
+    level(1, 3, 4, 8, 3),
+    level(2, 3, 6, 10, 4),
+    level(4, 4, 8, 12, 6),
+  ];
+  // Steps 1–2 → level 1, 3–4 → 2, 5–8 → 3, 9–12 → 4, 13–24 → 5.
+  const forStep = (step: number) =>
+    levels[step <= 2 ? 0 : step <= 4 ? 1 : step <= 8 ? 2 : step <= 12 ? 3 : 4];
+  return ["none", ...Array.from({ length: 24 }, (_, i) => forStep(i + 1))] as Shadows;
 }
 
 /** Reuse in visual previews so their typography, palette and overrides match production. */
@@ -34,6 +56,7 @@ export const appTheme = createTheme({
   shape: {
     borderRadius: THEME_CORNER_RADIUS,
   },
+  shadows: elevationShadows(),
   components: {
     MuiPaper: {
       defaultProps: { elevation: 0 },

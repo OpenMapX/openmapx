@@ -13,7 +13,7 @@ import { useLayerStore, useNavigationStore, usePlaceStore, useSidebarStore } fro
 import { useTranslations } from "next-intl";
 import type { FocusEvent, MouseEvent } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { LAYER_SELECTOR_OPEN_EVENT } from "@/components/command-palette/constants";
+import { LAYER_SELECTOR_OPEN_EVENT, SEARCH_INPUT_ID } from "@/components/command-palette/constants";
 import Popover, { type PopoverActions } from "@/components/ui/Popover";
 import { isPanelShiftActive, PANEL_WIDTH, shouldHideLayerSelector } from "@/lib/layout";
 import { MAP_FOOTER_OBSTRUCTION_ID, useMapFooterBox } from "@/lib/mapFooterCenter";
@@ -171,6 +171,19 @@ export function LayerSelector() {
 
   const open = Boolean(anchorEl);
   const popoverAnchorEl = desktopDock && open ? desktopPopoverAnchor : anchorEl;
+
+  // The desktop panel has no backdrop and stacks above the map chrome, so it
+  // would cover the search suggestions; starting a search puts it away.
+  useEffect(() => {
+    if (!open || !desktopDock) return;
+    const onFocusIn = (event: globalThis.FocusEvent) => {
+      if (event.target instanceof HTMLElement && event.target.id === SEARCH_INPUT_ID) {
+        setAnchorEl(null);
+      }
+    };
+    document.addEventListener("focusin", onFocusIn);
+    return () => document.removeEventListener("focusin", onFocusIn);
+  }, [open, desktopDock]);
 
   // MUI portals the Popover away from this map overlay, so it cannot follow a
   // CSS transition on a real anchor by itself. The virtual anchor reports the
