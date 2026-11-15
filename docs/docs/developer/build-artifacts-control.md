@@ -326,8 +326,20 @@ Each role prunes its own records at startup and then hourly
 - for an agent execution, its canonical terminal commitment is sealed;
 - its root key expired at least 72 hours ago, and its effect settled at least
   72 hours ago;
-- any root lease it owns is released. The prune then removes that lease's ledger
-  and frees its retained history slot.
+- every lease it owns or borrowed has released its root. The prune then removes an
+  owned lease's ledger and frees its retained history slot;
+- for a maintenance step, the maintenance owner record is gone. That record goes
+  only with its own preparation, so a step of a held maintenance is never pruned.
+
+Only records whose names derive from the execution's own identifiers are
+removed: its operation key, the keys of children it planned that have no
+admission of their own, its fixed children, the attempts and leases it issued,
+its own borrower adoption, its handoff and, for a preparation, its owner record
+and source witness. A record of another execution that merely names it stays.
+Source witnesses no owner record references go 72 hours after they were
+observed. The admission goes before its terminal commitment and effect, and a
+pass that stopped in between leaves strays that a later pass removes. A
+directory too large for one pass is reported and pruned in part.
 
 A pass examines at most 64 executions and resumes where the previous pass
 stopped. Records of an unknown or recovery-required execution stay regardless of

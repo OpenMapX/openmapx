@@ -2674,6 +2674,25 @@ export async function releaseArtifactTargetLease(lease: ArtifactTargetLease): Pr
   finishOwnedRelease(s);
   closeState(s);
 }
+/** Whether a lease in the shared ledger is gone or has released its root.
+ * Read-only; used by the prune to keep borrowers of a still-held lease. */
+export function artifactTargetLeaseReleased(
+  installation: InstallationState,
+  leaseId: string,
+): boolean {
+  let s: State;
+  try {
+    s = openState(installation.dataRoot, leaseId, installation, true);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
+    throw error;
+  }
+  try {
+    return s.slots?.release?.phase === "released";
+  } finally {
+    closeState(s);
+  }
+}
 /** Removes the released root lease of an execution whose records are being
  * pruned: first its retained history slot, then its ledger. */
 export function removeReleasedArtifactTargetLease(authority: VerifiedExecutionAuthority): void {

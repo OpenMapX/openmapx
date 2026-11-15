@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { createControlRootOperationKey } from "../ops";
 import { executionFingerprint } from "../ops/execution-identity";
@@ -12,6 +12,7 @@ import {
   closeControlInstallation,
   openControlInstallation,
   provisionControlInstallation,
+  restoreAdmittedControlExecution,
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
   verifyControlEffectSettlement,
@@ -40,9 +41,15 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-function admit(notAfter = Date.now() + 60_000, role: "host-cli" | "ops-agent" = "host-cli") {
-  const operation = { kind: "service.restart" as const, serviceId: "osrm" },
-    operationFingerprint = opsOperationFingerprint(operation);
+function admit(
+  notAfter = Date.now() + 60_000,
+  role: "host-cli" | "ops-agent" = "host-cli",
+  operation: Parameters<typeof opsOperationFingerprint>[0] = {
+    kind: "service.restart",
+    serviceId: "osrm",
+  },
+) {
+  const operationFingerprint = opsOperationFingerprint(operation);
   const execution = {
     executor: role,
     principal: role === "ops-agent" ? ("api" as const) : role,
@@ -187,4 +194,54 @@ it("keeps an agent execution until its canonical terminal commitment is sealed",
   } finally {
     closeControlInstallation(target);
   }
+});
+
+it("keeps a finished maintenance step while its owner record exists, and that record with it", async () => {
+  const maintenanceId = randomUUID(),
+    { execution, authority } = admit(undefined, "host-cli", {
+      kind: "service.recreate",
+      serviceId: "osrm",
+      expectedConfigurationRevisionId: `cfg1_${"a".repeat(43)}`,
+      maintenanceId,
+    });
+  settle(authority);
+  // The owner record of a still-held maintenance names each step it ran.
+  const owner = record("configuration-maintenance", maintenanceId);
+  mkdirSync(dirname(owner), { recursive: true, mode: 0o700 });
+  writeFileSync(owner, JSON.stringify({ payload: { apiControls: { steps: [{ execution }] } } }), {
+    mode: 0o600,
+  });
+  const later = execution.deadlineAt + 30 * 24 * 3600_000;
+  expect(await pruneControlRecords(installation, { now: later })).toEqual([]);
+  expect(existsSync(owner)).toBe(true);
+  expect(existsSync(record("executions", execution.operationKey))).toBe(true);
+  // Once the preparation and its owner record are gone, the step goes too.
+  rmSync(owner);
+  expect(await pruneControlRecords(installation, { now: later })).toEqual([execution.operationKey]);
+});
+
+it("refuses a pruned and expired execution to its readers", async () => {
+  const notAfter = Date.now() + 60_000,
+    { execution, authority } = admit(notAfter);
+  settle(authority);
+  expect(
+    await pruneControlRecords(installation, { now: notAfter + CONTROL_PRUNE_AFTER_MS + 1 }),
+  ).toEqual([execution.operationKey]);
+  expect(() => restoreAdmittedControlExecution(installation, execution)).toThrow();
+  expect(() => verifyControlEffectSettlement(installation, execution)).toThrow();
+});
+
+it("keeps an execution whose effect record is absent, with its lease held", async () => {
+  const { execution } = admit(),
+    lease = await acquireArtifactTargetLease({
+      dataRoot: join(root, "data"),
+      serviceIds: ["osrm"],
+      owner: restoreAdmittedControlExecution(installation, execution),
+    });
+  rmSync(record("effects", execution.operationKey));
+  for (const now of [Date.now(), execution.deadlineAt + 30 * 24 * 3600_000])
+    expect(await pruneControlRecords(installation, { now })).toEqual([]);
+  expect(existsSync(record("executions", execution.operationKey))).toBe(true);
+  await expect(releaseArtifactTargetLease(lease)).rejects.toThrow();
+  expect(readdirSync(join(root, "data/.admin-target-control/leases"))).toEqual([lease.leaseId]);
 });
