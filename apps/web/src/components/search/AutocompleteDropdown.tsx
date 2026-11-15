@@ -149,7 +149,8 @@ function conciseAddress(label: string, sublabel?: string): string | undefined {
 }
 
 function resultDescription(s: AutocompleteResult, t: (key: string) => string): string | undefined {
-  if (s.type === "category") return s.sublabel ?? t("searchCategory");
+  // A category's icon and name say what it is; only a specific sublabel adds anything.
+  if (s.type === "category") return s.sublabel;
   if (s.type === "brand") {
     const action = t("searchBrand");
     return s.sublabel && s.sublabel !== action ? `${action} · ${s.sublabel}` : action;
