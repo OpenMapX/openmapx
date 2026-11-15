@@ -106,7 +106,14 @@ export function registerDataExecutionApi(
   });
   registerDataManagerRoute(app, "prepareDataConfigurationFence", async (request, reply) => {
     if (!receiver) return unavailable(reply);
-    return receiver.prepareFence(request.body, request.raw.rawHeaders, principal(request));
+    try {
+      return await receiver.prepareFence(request.body, request.raw.rawHeaders, principal(request));
+    } catch (error) {
+      // The agent tells a busy refusal, which wrote nothing, from other conflicts by this name.
+      if ((error as Error).message === "configuration_maintenance_busy")
+        return reply.code(409).send({ error: "configuration_maintenance_busy" });
+      throw error;
+    }
   });
   registerDataManagerRoute(
     app,
