@@ -1164,10 +1164,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   projection = (
                     row.result as {
                       opsProjection?: {
-                        operations?: Record<
-                          string,
-                          { kind: string; receiptDelivery?: { state: string } }
-                        >;
+                        operations?: Record<string, { kind: string; receiptDelivery?: object }>;
                       };
                     } | null
                   )?.opsProjection;
@@ -1175,7 +1172,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   Object.values(projection?.operations ?? {}).some(
                     (operation) =>
                       operation.kind === "configurationHandoff.prepare" &&
-                      operation.receiptDelivery?.state === "confirmed",
+                      operation.receiptDelivery !== undefined,
                   )
                 )
                   break;

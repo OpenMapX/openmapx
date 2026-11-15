@@ -2689,7 +2689,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                     | {
                         operations?: Record<
                           string,
-                          { kind?: string; phase?: string; receiptDelivery?: { state?: string } }
+                          { kind?: string; phase?: string; receiptDelivery?: object }
                         >;
                       }
                     | undefined
@@ -2697,7 +2697,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               ).map(({ kind, phase, receiptDelivery }) => ({
                 kind,
                 phase,
-                delivery: receiptDelivery?.state,
+                delivered: receiptDelivery !== undefined,
               })),
             }),
           ).toBe(0);

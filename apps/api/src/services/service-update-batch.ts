@@ -196,7 +196,7 @@ export async function completedServiceUpdatePrefix(
       entry.phase !== "terminal" ||
       entry.errorClass ||
       entry.attempt?.apiJobId !== jobId ||
-      entry.receiptDelivery?.state !== "confirmed" ||
+      !entry.receiptDelivery ||
       entry.receiptDelivery.terminalReceipt.state !== "succeeded"
     )
       throw new JobObservationPending("recovery_required");

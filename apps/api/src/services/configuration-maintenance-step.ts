@@ -97,7 +97,7 @@ export async function prepareOwnedConfigurationMaintenanceStep(
       delivered = control?.receiptDelivery;
     if (
       !control?.terminal ||
-      delivered?.state !== "confirmed" ||
+      !delivered ||
       delivered.terminalReceipt.state !== "succeeded" ||
       configurationMaintenanceReceiptSchema.parse(delivered.terminalReceipt.result).decision
         ?.decisionId !== decision.operation.decisionId
@@ -129,7 +129,7 @@ export async function prepareOwnedConfigurationMaintenanceStep(
         actual.errorClass ||
         actual.kind !== prior.operation.kind ||
         canonicalJson(actual.operation) !== canonicalJson(prior.operation) ||
-        actual.receiptDelivery?.state !== "confirmed" ||
+        !actual.receiptDelivery ||
         actual.receiptDelivery.terminalReceipt.state !== "succeeded"
       )
         throw Error("Original frozen maintenance prerequisite is unresolved");

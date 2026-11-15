@@ -5,7 +5,7 @@ import {
 import { canonicalJson, type OpsOperation } from "@openmapx/core/ops";
 import { z } from "zod/v4";
 import { AdminJobFailure, JobObservationPending } from "./admin-job-failure";
-import { ensureAdminJobReceiptDelivery, executeAdminJobOperation } from "./admin-job-ops";
+import { checkpointTerminalCopy, executeAdminJobOperation } from "./admin-job-ops";
 import { readProjection } from "./admin-job-projection";
 import {
   purposeObservationSchema,
@@ -126,7 +126,7 @@ async function recoverArtifactPurpose(
   else projected.errorClass = canonical.errorClass;
   if (canonical.failureResult === undefined) delete projected.failureResult;
   else projected.failureResult = canonical.failureResult;
-  await ensureAdminJobReceiptDelivery(ctx, projection, projected, client, canonical);
+  await checkpointTerminalCopy(ctx, projection, projected, canonical);
   return observation;
 }
 

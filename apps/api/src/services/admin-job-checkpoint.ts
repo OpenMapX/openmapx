@@ -96,7 +96,7 @@ export async function checkpointOwnedAdminJob(
           maintenance = current._configurationMaintenance as Record<string, unknown> | undefined;
         if (
           original?.kind !== "configurationMaintenance.prepare" ||
-          delivery?.state !== "confirmed" ||
+          !delivery ||
           delivery.terminalReceipt.state !== "succeeded"
         )
           throw new JobOwnershipLost();

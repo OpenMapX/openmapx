@@ -41,7 +41,7 @@ export async function assertOwnershipSettlementCheckpoint(
     sources.length !== 1 ||
     !source?.terminal ||
     source.attempt?.apiJobId !== row.id ||
-    receipt?.state !== "confirmed" ||
+    !receipt ||
     receipt.terminalReceipt.state !== "succeeded" ||
     receipt.terminalReceipt.operationKey !== source.operationKey ||
     receipt.terminalReceipt.fingerprint !== source.fingerprint ||

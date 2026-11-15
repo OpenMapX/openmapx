@@ -174,15 +174,13 @@ vi.mock("../../db", () => {
   function update(value: Record<string, unknown>) {
     const apply = () => {
       const p = database.row.result?.opsProjection as
-        | { operations: Record<string, { terminal: boolean; receiptDelivery?: { state: string } }> }
+        | { operations: Record<string, { terminal: boolean; receiptDelivery?: object }> }
         | undefined;
       if (
         value.status === "canceled" &&
         (database.row.status !== "cancel_pending" ||
           !p ||
-          Object.values(p.operations).some(
-            (o) => !o.terminal || o.receiptDelivery?.state !== "confirmed",
-          ))
+          Object.values(p.operations).some((o) => !o.terminal || !o.receiptDelivery))
       )
         return [];
       database.updates.push(value);
@@ -462,7 +460,7 @@ describe.each(ACTIONS)("single-service $name cancellation", (scenario) => {
     expect(job.outcome.error).toMatchObject({ name: "OpsObservationPending" });
     expect(projectedOperations()?.[expectedKey()]).toMatchObject({
       terminal: true,
-      receiptDelivery: { state: "confirmed" },
+      receiptDelivery: expect.anything(),
     });
     expect(job.log).not.toHaveBeenCalledWith(expect.stringMatching(/ (stopped|restarted)\.$/));
   });
@@ -507,7 +505,7 @@ describe.each(ACTIONS)("single-service $name cancellation", (scenario) => {
     expect(projectedOperations()?.[expectedKey()]).toMatchObject({
       terminal: true,
       result: { changed: true },
-      receiptDelivery: { state: "confirmed", terminalReceipt: { state: "succeeded" } },
+      receiptDelivery: { terminalReceipt: { state: "succeeded" } },
     });
     const { resumeAdminJobObservation } = await import("../admin-job-ops");
     const recovered: JobContext = {
@@ -546,7 +544,7 @@ describe.each(ACTIONS)("single-service $name cancellation", (scenario) => {
     expect(database.row.status).toBe("cancel_pending");
     expect(projectedOperations()?.[expectedKey()]).toMatchObject({
       terminal: true,
-      receiptDelivery: { state: "confirmed", terminalReceipt: { state: "failed" } },
+      receiptDelivery: { terminalReceipt: { state: "failed" } },
     });
     expect(job.outcome.state).toBe("rejected");
   });

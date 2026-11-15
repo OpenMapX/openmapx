@@ -51,8 +51,8 @@ import { resolveIntegrationConfigWithSourcesStrict } from "../integration-config
 import { getIntegration, inspectIntegrationRuntime } from "../integration-host";
 import { AdminJobFailure, JobObservationPending } from "./admin-job-failure";
 import {
+  checkpointTerminalCopy,
   deliverCoordinatorPullSubmission,
-  ensureAdminJobReceiptDelivery,
   executeAdminJobOperation,
   hasRecoveredMaintenanceCandidate,
   prepareAdminJobOperationRoot,
@@ -528,7 +528,7 @@ async function discardUnissuedMaintenanceCandidate(
       hasUnsettledManagedOperation(result) ||
       (helper &&
         (canonicalJson(helper.operation) !== canonicalJson(fixed!.operation) ||
-          helper.receiptDelivery?.state !== "confirmed" ||
+          !helper.receiptDelivery ||
           helper.receiptDelivery.terminalReceipt.state !== "succeeded")) ||
       Object.values(actual.operations).some(
         (entry) =>
@@ -633,7 +633,7 @@ async function completeUnissuedConfigurationCancellation(
       projection.operations[record.prepareOperationKey!] ||
       hasUnsettledManagedOperation(result) ||
       (helper &&
-        (helper.receiptDelivery?.state !== "confirmed" ||
+        (!helper.receiptDelivery ||
           helper.receiptDelivery.terminalReceipt.state !== "succeeded" ||
           canonicalJson(helper.operation) !== canonicalJson(fixed!.operation))) ||
       Object.values(projection.operations).some(
@@ -731,7 +731,7 @@ export async function discardNeverPreparedProspectiveConfiguration(
         inspection?.state !== "complete" ||
         canonicalJson(inspection.receipt) !== canonicalJson(closed) ||
         !projected?.terminal ||
-        projected.receiptDelivery?.state !== "confirmed" ||
+        !projected.receiptDelivery ||
         projected.kind !== "configurationMaintenance.prepare" ||
         projected.operationId !== closed.prepare.executionId ||
         projected.fingerprint !== closed.prepare.fingerprint ||
@@ -792,7 +792,7 @@ async function completeNeverPreparedConfiguration(
       state.record.prepareOperationKey &&
       readProjection(owner.job.checkpointResult).operations[state.record.prepareOperationKey],
     terminal =
-      projected && projected.receiptDelivery?.state === "confirmed"
+      projected && projected.receiptDelivery !== undefined
         ? projected.receiptDelivery.terminalReceipt
         : undefined;
   if (
@@ -913,7 +913,7 @@ export async function discardUnusedPreparedProspectiveConfiguration(
       settle.operation.candidateId !== candidate.candidateId ||
       settle.operation.maintenanceId !== state.record.maintenanceId ||
       settle.operation.decisionId !== decision.operation.decisionId ||
-      delivered?.state !== "confirmed" ||
+      !delivered ||
       !canonical ||
       canonicalJson(canonical) !== canonicalJson(remote.receipt) ||
       canonicalJson({ ...closed, preflight: canonical.preflight }) !== canonicalJson(canonical) ||
@@ -1004,7 +1004,7 @@ async function completeUnusedConfigurationCancellation(
       settle.operation.candidateId !== candidate.candidateId ||
       settle.operation.maintenanceId !== record.maintenanceId ||
       settle.operation.decisionId !== decision.operation.decisionId ||
-      delivered?.state !== "confirmed" ||
+      !delivered ||
       !canonical ||
       canonicalJson(canonical) !== canonicalJson(remote.receipt) ||
       canonicalJson({ ...closed, preflight: canonical.preflight }) !== canonicalJson(canonical) ||
@@ -1136,7 +1136,7 @@ export async function assertSettledConfigurationCandidate(
         : settled.generation !== "committed" ||
           settled.appliedRevisionId !== candidate.revisionId ||
           settled.followUp !== "complete") ||
-      delivered?.receiptDelivery?.state !== "confirmed" ||
+      !delivered?.receiptDelivery ||
       delivered.receiptDelivery.terminalReceipt.state !== "succeeded" ||
       canonicalJson(delivered.receiptDelivery.terminalReceipt.result) !== canonicalJson(settled)
     )
@@ -2204,7 +2204,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         prepared.binding.applyOperationFingerprint !== opsOperationFingerprint(operation) ||
         prepared.binding.revisionId !== inspected.snapshot.revisionId ||
         prepared.prepare.operationKey !== record.prepareOperationKey ||
-        delivery?.state !== "confirmed" ||
+        !delivery ||
         delivery.terminalReceipt.state !== "succeeded" ||
         canonicalJson(observed.binding) !== canonicalJson(prepared.binding) ||
         canonicalJson(observed.prepare) !== canonicalJson(prepared.prepare) ||
@@ -2234,7 +2234,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
                 canonicalJson(entry.operation) !==
                   canonicalJson(record.coordinatorPrerequisite?.operation))) ||
               !entry.terminal ||
-              entry.receiptDelivery?.state !== "confirmed"),
+              !entry.receiptDelivery),
         )
       )
         throw new JobObservationPending("recovery_required");
@@ -2262,7 +2262,7 @@ async function restoreRetainedMaintenanceCandidate(): Promise<ValidatedConfigura
         receipt.binding.applyOperationKey !== record.operationKey ||
         receipt.binding.applyOperationFingerprint !== opsOperationFingerprint(operation) ||
         receipt.binding.revisionId !== inspected.snapshot.revisionId ||
-        preparation?.receiptDelivery?.state !== "confirmed"
+        !preparation?.receiptDelivery
       )
         throw new JobObservationPending("recovery_required");
       await assertConfigurationSavedRows(tx, decision.rowVersions);
@@ -3200,7 +3200,7 @@ export async function resumeRetainedConfigurationCandidate(): Promise<Record<str
     if (
       preparation &&
       preparation.terminal &&
-      preparation.receiptDelivery?.state === "confirmed" &&
+      preparation.receiptDelivery !== undefined &&
       ["failed", "timed_out"].includes(preparation.receiptDelivery.terminalReceipt.state)
     )
       return { configuration: await completeNeverPreparedConfiguration(candidate) };
@@ -4606,7 +4606,7 @@ export async function stageProspectiveConfigurationMaintenance(
         error.errorClass !== "recovery_required" &&
         pull?.phase === "terminal" &&
         pull.terminal &&
-        pull.receiptDelivery?.state === "confirmed" &&
+        pull.receiptDelivery !== undefined &&
         ["failed", "timed_out"].includes(pull.receiptDelivery.terminalReceipt.state)
       )
         rejectUnissuedCandidate(candidate, "Original coordinator pull failed before maintenance");
@@ -4732,7 +4732,7 @@ export async function commitProspectiveConfigurationMaintenance(
         result._configurationMaintenanceDecision !== undefined ||
         result._configurationMaintenanceRollback !== undefined ||
         hasUnsettledManagedOperation(result) ||
-        preparation?.receiptDelivery?.state !== "confirmed" ||
+        !preparation?.receiptDelivery ||
         preparation.receiptDelivery.terminalReceipt.state !== "succeeded" ||
         canonicalJson(preparation.receiptDelivery.terminalReceipt.result) !==
           canonicalJson(prepared)
@@ -4919,7 +4919,7 @@ export async function persistAndApplyProspectiveConfiguration(
         candidateStages.get(candidate) === "prepared" &&
         preparation &&
         preparation.terminal &&
-        preparation.receiptDelivery?.state === "confirmed" &&
+        preparation.receiptDelivery !== undefined &&
         ["failed", "timed_out"].includes(preparation.receiptDelivery.terminalReceipt.state)
       ) {
         await completeNeverPreparedConfiguration(candidate);
@@ -5632,7 +5632,7 @@ export async function prepareConfigurationMaintenanceAbandon(
         maintenance.prepareOperationFingerprint !== prepared.prepare.operationFingerprint ||
         !projected?.terminal ||
         projected.kind !== "configurationMaintenance.prepare" ||
-        delivery?.state !== "confirmed" ||
+        !delivery ||
         delivery.terminalReceipt.state !== "succeeded" ||
         canonicalJson(delivery.terminalReceipt.result) !== canonicalJson(maintenance.receipt) ||
         hasUnsettledManagedOperation(result) ||
@@ -5936,7 +5936,7 @@ export async function settleConfigurationMaintenance(
     const delivered =
       readProjection(result).operations[decision.delivery.root.operationKey]?.receiptDelivery;
     if (
-      delivered?.state !== "confirmed" ||
+      !delivered ||
       delivered.terminalReceipt.state !== "succeeded" ||
       configurationMaintenanceReceiptSchema.parse(delivered.terminalReceipt.result).decision
         ?.decisionId !== exact.decisionId
@@ -6285,8 +6285,8 @@ export async function inspectConfigurationMaintenance(
     projected.errorClass = status.errorClass;
     projected.failureResult = status.failureResult;
     delete projected.outcome;
-    await ensureAdminJobReceiptDelivery(job, projection, projected, client, status);
-    if (projected.receiptDelivery?.state !== "confirmed")
+    await checkpointTerminalCopy(job, projection, projected, status);
+    if (!projected.receiptDelivery)
       throw Error("Original closed maintenance receipt delivery unavailable");
   }
   return receipt;

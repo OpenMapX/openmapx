@@ -696,7 +696,6 @@ describe.skipIf(
         ...(attempt
           ? {
               receiptDelivery: {
-                state: "confirmed",
                 terminalCopyId: randomUUID(),
                 checkpointOwnerVersion: 1,
                 terminalDigest: controlTerminalReceiptDigest(status),

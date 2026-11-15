@@ -62,7 +62,6 @@ export interface ProjectedOperation {
   terminal: boolean;
   /** The agent's terminal status, checkpointed before the job continues. */
   receiptDelivery?: {
-    state: "confirmed";
     terminalCopyId: string;
     checkpointOwnerVersion: number;
     terminalDigest: string;
@@ -242,7 +241,6 @@ export function readProjection(result: unknown): OpsProjection {
           operation.terminal !== true ||
           operation.phase !== "terminal" ||
           !d ||
-          d.state !== "confirmed" ||
           (d.maintenanceRecovery !== undefined &&
             (typeof d.maintenanceRecovery !== "string" ||
               d.maintenanceRecovery.length < 1 ||

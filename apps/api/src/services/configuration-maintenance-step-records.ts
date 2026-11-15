@@ -97,7 +97,6 @@ export function completedCoordinatorMaintenance(result: Record<string, unknown>)
                 operation?: OpsOperation;
                 result?: unknown;
                 receiptDelivery?: {
-                  state?: string;
                   terminalReceipt?: { state?: string; result?: unknown };
                 };
               }
@@ -125,7 +124,7 @@ export function completedCoordinatorMaintenance(result: Record<string, unknown>)
     settle.operation.prepareFingerprint !== receipt.prepare.operationFingerprint ||
     settle.operation.planDigest !== receipt.planDigest ||
     settle.operation.decisionId !== receipt.decision.decisionId ||
-    settle.receiptDelivery?.state !== "confirmed" ||
+    !settle.receiptDelivery ||
     settle.receiptDelivery.terminalReceipt?.state !== "succeeded" ||
     canonicalJson(settle.receiptDelivery.terminalReceipt.result) !== canonicalJson(receipt) ||
     canonicalJson(settle.result) !== canonicalJson(receipt)
@@ -138,7 +137,7 @@ export function completedCoordinatorMaintenance(result: Record<string, unknown>)
       !step ||
       !actual?.terminal ||
       actual.phase !== "terminal" ||
-      actual.receiptDelivery?.state !== "confirmed" ||
+      !actual.receiptDelivery ||
       actual.receiptDelivery.terminalReceipt?.state !== "succeeded" ||
       canonicalJson(actual.operation) !== canonicalJson(step.operation)
     )
