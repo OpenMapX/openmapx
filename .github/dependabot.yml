@@ -79,6 +79,11 @@ updates:
       # receive 17.x updates; move a major deliberately.
       - dependency-name: "graphql"
         update-types: ["version-update:semver-major"]
+      # Dependabot writes one target version to every manifest that lists a
+      # dependency, so a 16.x update for the code generator also downgraded
+      # the workspaces on 17. Update the generator's graphql 16 by hand.
+      - dependency-name: "graphql"
+        versions: ["< 17"]
       # Expo owns the compatible React Native and test-preset versions. Upgrade
       # this pair with the Expo SDK instead of accepting standalone bumps.
       - dependency-name: "react-native"

@@ -45,6 +45,7 @@ vi.mock("./RouteSearchResultsLayer", () => ({
 
 import { NAV_CHROME_TOP } from "@/lib/layout";
 import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
+import { resolvedStyle } from "@/test/resolvedStyle";
 import { RouteSearchControl } from "./RouteSearchControl";
 
 function view() {
@@ -259,11 +260,13 @@ it("lines the picker and stop card up with the maneuver banner and bottom bar in
   useRouteSearchStore.getState().openPicker();
   const { unmount } = render(view());
   const picker = screen.getByText("Search along route").closest(".MuiPaper-root") as HTMLElement;
-  expect(getComputedStyle(picker).top).toBe(NAV_CHROME_TOP);
+  expect(getComputedStyle(picker).top).toBe(resolvedStyle("top", NAV_CHROME_TOP));
   unmount();
   useRouteSearchStore.getState().setCategoryKey("preset:amenity/fuel");
   render(view());
   fireEvent.click(screen.getByRole("button", { name: "Select stop" }));
   const card = screen.getByText("River services").closest(".MuiPaper-root") as HTMLElement;
-  expect(getComputedStyle(card).bottom).toBe("calc(var(--omx-safe-bottom) + 16px)");
+  expect(getComputedStyle(card).bottom).toBe(
+    resolvedStyle("bottom", "calc(var(--omx-safe-bottom) + 16px)"),
+  );
 });

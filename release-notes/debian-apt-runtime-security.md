@@ -5,7 +5,7 @@ impacts: [security]
 ## What changes
 
 The Data Manager, Transitous runner and Transitous tools images explicitly upgrade
-`apt` and `libapt-pkg6.0` to at least Debian Bookworm version 2.6.2. These
+`apt` and `libapt-pkg7.0` to at least Debian Trixie version 3.0.4. These
 upgrades fix
 [CVE-2026-109518](https://security-tracker.debian.org/tracker/CVE-2026-109518), as
 documented in Debian's

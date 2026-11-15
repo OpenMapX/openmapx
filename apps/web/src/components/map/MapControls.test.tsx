@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { announceAlign, clearAlignAnnouncement } from "@/lib/alignAnnouncement";
 import { publishMapObstruction } from "@/lib/mapObstructions";
 import type { StreetGridAlignment } from "@/lib/streetGrid";
-import { act, createFakeMap, fireEvent, render, screen, waitFor } from "@/test";
+import { act, createFakeMap, fireEvent, render, resolvedStyle, screen, waitFor } from "@/test";
 
 type AlignStatus = StreetGridAlignment["status"];
 
@@ -267,7 +267,9 @@ describe("MapControls sheet following", () => {
     render(<MapControls />);
     const stack = document.querySelector<HTMLElement>("[data-map-controls-columns]");
     expect(stack).not.toBeNull();
-    expect(getComputedStyle(stack as HTMLElement).transition).toBe("");
+    // No transition of any property: every computed duration is zero.
+    const durations = getComputedStyle(stack as HTMLElement).transitionDuration.split(", ");
+    expect(durations.every((duration) => parseFloat(duration) === 0)).toBe(true);
   });
 
   it("rides a driving sheet's top edge on the compositor, 12px above it", () => {
@@ -278,7 +280,7 @@ describe("MapControls sheet following", () => {
       const style = getComputedStyle(
         document.querySelector<HTMLElement>("[data-map-controls-columns]") as HTMLElement,
       );
-      expect(style.bottom).toBe("calc(12px + var(--omx-safe-bottom))");
+      expect(style.bottom).toBe(resolvedStyle("bottom", "calc(12px + var(--omx-safe-bottom))"));
       expect(style.animationName).toBe("omx-sheet-follow");
       expect(style.getPropertyValue("animation-range")).toBe("4px 444px");
     } finally {
@@ -311,7 +313,7 @@ describe("MapControls sheet following", () => {
       const style = getComputedStyle(stack);
       const [start, end] = style.getPropertyValue("animation-range").split(" ").map(parseFloat);
       // It rises from 12px to the grid's ceiling, 400 - (100 + 12) - grid.
-      expect(style.bottom).toBe("calc(12px + var(--omx-safe-bottom))");
+      expect(style.bottom).toBe(resolvedStyle("bottom", "calc(12px + var(--omx-safe-bottom))"));
       expect(end - start).toBe(400 - 112 - grid - 12);
     } finally {
       rect.mockRestore();

@@ -7,6 +7,7 @@ import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MobileRuntimeProvider } from "@/lib/mobile/MobileRuntimeProvider";
+import { resolvedStyle } from "@/test/resolvedStyle";
 import { RouteCard } from "./RouteCard";
 
 // Pin the viewer's zone so the arrival offset assertions do not depend on the
@@ -390,7 +391,7 @@ describe("RouteCard compact traffic explanation", () => {
     (duration, band) => {
       renderCard({ ...baseRoute, duration, baselineDuration: 3600 });
       expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
-        `var(--omx-traffic-${band})`,
+        resolvedStyle("color", `var(--omx-traffic-${band})`),
       );
     },
   );
@@ -435,7 +436,7 @@ describe("RouteCard compact traffic explanation", () => {
       </NextIntlClientProvider>,
     );
     expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
-      "var(--omx-traffic-heavy)",
+      resolvedStyle("color", "var(--omx-traffic-heavy)"),
     );
     expect(screen.getByText("(+45 min)")).toBeInTheDocument();
   });
@@ -928,7 +929,7 @@ describe("RouteCard current congestion coverage", () => {
         trafficCoverage: freshCoverage,
       });
       expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
-        "var(--omx-brand)",
+        resolvedStyle("color", "var(--omx-brand)"),
       );
       expect(screen.queryByTestId("route-traffic-status")).toBeNull();
       expect(screen.queryByTestId("traffic-delay")).toBeNull();
@@ -1012,7 +1013,7 @@ describe("RouteCard expired congestion estimates", () => {
     });
     expect(screen.getByTestId("traffic-delay")).toHaveTextContent(/^\(\+45 min\)$/);
     expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
-      "var(--omx-traffic-heavy)",
+      resolvedStyle("color", "var(--omx-traffic-heavy)"),
     );
     expect(screen.queryByText("Traffic data unavailable")).toBeNull();
     act(() => vi.advanceTimersByTime(30000));
