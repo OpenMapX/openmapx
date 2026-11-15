@@ -179,7 +179,7 @@ describe.skipIf(!enabled)(
         sql: state.fixture.sql,
         infraDir: host.infraDir,
         serviceIds: host.loaded.map((service) => service.manifest.id),
-        losePrepareResponse: faults,
+        losePrepareResponseOnce: faults,
         loseHardlinkResponse: faults,
         loseSettleResponseOnce: faults,
       });
@@ -625,7 +625,8 @@ describe.skipIf(!enabled)(
         .from(schema.adminActionReauthentication)
         .where(eq(schema.adminActionReauthentication.id, challenge.challengeId));
       expect(proof?.state).toBe("consumed");
-      expect(dm.preparePosts).toBe(1);
+      // The first prepare reply is lost; the agent repeats the same body.
+      expect(dm.preparePosts).toBe(2);
       expect(dm.posts).toBe(1);
       expect(await dm.fenceStates()).toEqual(["settled"]);
       expect(dropped.size).toBe(3);
@@ -640,7 +641,7 @@ describe.skipIf(!enabled)(
       });
       expect(JSON.stringify(view)).not.toContain("synthetic-private-key");
       expect(await jobRunner.applyImmediateTransitCredentials(input)).toEqual(result);
-      expect(dm.preparePosts).toBe(1);
+      expect(dm.preparePosts).toBe(2);
       const [job] = await state.fixture.db.select().from(schema.adminJob);
       expect(job?.status).toBe("success");
       const logs = await state.fixture.db.select().from(schema.adminJobLog),

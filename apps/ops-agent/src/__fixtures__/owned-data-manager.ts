@@ -16,7 +16,9 @@ import { createPostgresDataExecutionStore } from "../../../../services/data-mana
 
 /** Actual HTTP receiver, SQL admission guard, dispatcher, filesystem leaf and journal. */
 export async function ownedDataManager(options: {
-  sql: Parameters<typeof createPostgresDataExecutionStore>[0]; infraDir: string; serviceIds: string[]; loseHardlinkResponse?: boolean; losePrepareResponse?: boolean;
+  sql: Parameters<typeof createPostgresDataExecutionStore>[0]; infraDir: string; serviceIds: string[]; loseHardlinkResponse?: boolean;
+  /** Drops the first prepare reply; the agent repeats the same body. */
+  losePrepareResponseOnce?: boolean;
   pausePrepareResponse?: boolean;
   /** Drops the first successful settle reply after the row was settled. */
   loseSettleResponseOnce?: boolean;
@@ -65,7 +67,7 @@ export async function ownedDataManager(options: {
       maintenanceReplies.push({ status: reply.statusCode, error: typeof payload === "string" ? JSON.parse(payload).error : null });
       if (reply.statusCode === 200) options.onPrepared?.();
       if (options.pausePrepareResponse && reply.statusCode === 200) { prepareReplyEntered.resolve(); await continuePrepareReply.promise; }
-      if (options.losePrepareResponse) reply.raw.destroy();
+      if (options.losePrepareResponseOnce && preparePosts === 1) reply.raw.destroy();
     }
     if (request.method === "POST" && request.url === "/executions/generation-hardlinks") {
       const key = (request.body as { operationKey?: string } | undefined)?.operationKey;
