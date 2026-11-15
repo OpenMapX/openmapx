@@ -130,8 +130,6 @@ describe("lease operations for data-manager", () => {
             phase: "hardlinks",
             recipient: "data-manager",
             targets: ["osrm"],
-            permittedFurtherEdges: [],
-            depth: 1,
           },
         },
         Date.now(),

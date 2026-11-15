@@ -1101,8 +1101,6 @@ const delegatedRowSchema = z.strictObject({
   phase: z.string().max(64),
   recipient: z.enum(["fixed-cli", "data-manager", "ops-agent", "configuration-helper"]),
   targets: targetSchema,
-  permittedFurtherEdges: z.array(z.string().max(64)).max(1),
-  depth: z.number().int().min(1).max(2),
 });
 /**
  * A child row of the agent's lease store, sent to the child's recipient. A

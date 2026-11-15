@@ -14,8 +14,7 @@ import { z } from "zod";
 import { readCatalogProposalFile, readCatalogValidationFile } from "../catalog-pins/record-files";
 import { canonicalJson } from "../ops/canonical-json";
 import { pairedPinApprovalInputSchema } from "../ops/catalog-pin-approval";
-import { type OpsJobStatus, type OpsOperation, parseOpsJobStatus } from "../ops/contract";
-import { controlTerminalReceiptDigest } from "../ops/control-terminal-receipt";
+import type { OpsOperation } from "../ops/contract";
 import { retainedParentExecutionSchema } from "../ops/execution-identity";
 import { type ExecutionRef, executionRefSchema } from "../ops/execution-ref";
 import { opsOperationFingerprint } from "../ops/fingerprint";
@@ -41,10 +40,11 @@ import {
   controlOriginSchema,
   sameControlOrigin,
   signControl,
-  targetSchema,
   verifyControl,
 } from "./control-records";
 import { AnchoredDirectory, identity, sameInode } from "./filesystem";
+// biome-ignore lint/suspicious/noImportCycles: The candidate reads the agent's store through the same lease module as its issuer.
+import { localLeases } from "./target-lease";
 
 const schema = z.strictObject({
   version: z.literal(1),
@@ -448,15 +448,8 @@ export function assertOwnedDataTransitCandidate(
   return controlDigest(saved);
 }
 
-const publishedSchema = z.strictObject({
-  version: z.literal(2),
-  installationId: z.uuid(),
-  origin: controlOriginSchema,
-  candidate: schema,
-  childOperationKey: z.string(),
-  operationFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-  serviceIds: targetSchema,
-});
+/** The candidate on the child's row; the row itself names the child, its body and targets. */
+const publishedSchema = z.strictObject({ candidate: schema });
 /**
  * The candidate a transit phase acts on, as the agent receives it with the
  * child's grant. Null when the phase has no retained candidate.
@@ -484,18 +477,7 @@ export function publishedDataTransitCandidate(
     s.plan.find((r) => r.phase === candidate.phase && r.ordinal === candidate.ordinal);
   if (!slot || candidate.phase !== input.phase)
     throw Error("Dated original candidate slot required");
-  return publishedSchema.parse({
-    version: 2,
-    installationId: s.installation.installation.installationId,
-    origin: s.origin,
-    candidate,
-    childOperationKey: slot.execution.operationKey,
-    operationFingerprint:
-      "operationFingerprint" in slot
-        ? slot.operationFingerprint
-        : slot.execution.operationFingerprint,
-    serviceIds: [...slot.serviceIds],
-  });
+  return publishedSchema.parse({ candidate });
 }
 /**
  * Fixed registry resource input: the candidate data-manager recorded with the
@@ -513,20 +495,19 @@ export function inspectDataTransitCandidate(
   )
     throw Error("Fixed transit candidate required");
   const local = installationState(installation);
-  if (!local.leases.listSync) throw Error("This role cannot read delegations");
-  const grant = local.leases
+  const leases = localLeases(local.leases);
+  if (!leases) throw Error("This role cannot read delegations");
+  const grant = leases
     .listSync()
     .flatMap((lease) => lease.children)
     .find(
       (child) => child.execution.operationKey === operationKey && child.recipient === "ops-agent",
     );
   if (!grant?.evidence) throw Error("Transit candidate missing from the child grant");
-  const proof = publishedSchema.parse(grant.evidence),
-    candidate = proof.candidate;
+  const candidate = publishedSchema.parse(grant.evidence).candidate,
+    proof = { candidate, serviceIds: grant.targets };
   if (
-    proof.installationId !== installation.installationId ||
-    proof.childOperationKey !== operationKey ||
-    proof.operationFingerprint !== controlDigest(operation) ||
+    grant.execution.operationFingerprint !== controlDigest(operation) ||
     operationKey !==
       controlChildOperationKey(
         candidate.execution.operationKey,
@@ -626,7 +607,6 @@ export function verifyDataTransitCandidateForExecution(
     checked.digest !== expectedDigest ||
     canonicalJson(admission.parent) !==
       canonicalJson(retainedControlParent(checked.proof.candidate.execution)) ||
-    !sameControlOrigin(checked.proof.origin, s.origin) ||
     canonicalJson(s.serviceIds) !== canonicalJson(checked.proof.serviceIds)
   )
     throw Error("Candidate differs from original borrowed admission");

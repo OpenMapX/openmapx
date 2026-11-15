@@ -29,8 +29,6 @@ export const leaseChildIntentSchema = z.strictObject({
   phase: z.string().min(1).max(64),
   recipient: z.enum(["fixed-cli", "data-manager", "ops-agent", "configuration-helper"]),
   targets: leaseTargetsSchema,
-  permittedFurtherEdges: z.array(z.string().max(64)).max(1),
-  depth: z.number().int().min(1).max(2),
   /**
    * What the issuer prepared for the recipient to act on, such as the transit
    * candidate data-manager staged for the agent. The recipient re-checks it

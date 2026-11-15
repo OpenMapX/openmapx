@@ -167,8 +167,6 @@ describe("openmapx control", () => {
             phase: "configuration-fence",
             recipient: "data-manager",
             targets: ["alpha"],
-            permittedFurtherEdges: [],
-            depth: 1,
             evidence,
           },
         },

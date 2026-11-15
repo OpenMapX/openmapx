@@ -97,12 +97,10 @@ describe("the agent's lease store", () => {
         parentKey: null,
         parent: owner,
         execution: child,
-        kind: "download-osm",
-        phase: "osm",
+        kind: "generation-hardlinks",
+        phase: "hardlinks",
         recipient: "data-manager",
         targets: ["osrm"],
-        permittedFurtherEdges: [],
-        depth: 1,
       },
     });
     // A widened target subset and a replayed child key are refused.
@@ -114,12 +112,10 @@ describe("the agent's lease store", () => {
           parentKey: null,
           parent: owner,
           execution: execution("data-manager"),
-          kind: "download-osm",
-          phase: "osm",
+          kind: "generation-hardlinks",
+          phase: "hardlinks",
           recipient: "data-manager",
           targets: ["motis"],
-          permittedFurtherEdges: [],
-          depth: 1,
         },
       }),
     ).rejects.toThrow(/Widened/);
@@ -129,7 +125,7 @@ describe("the agent's lease store", () => {
     await leases.settle({ leaseId: lease.leaseId, key, settlement: settled(child) });
     await leases.settle({ leaseId: lease.leaseId, key: null, settlement: settled(owner) });
     await leases.release({ leaseId: lease.leaseId });
-    expect(await leases.list()).toEqual([]);
+    expect(leases.listSync()).toEqual([]);
   });
 
   it("marks an unknown outcome as needing recovery and keeps the lease", async () => {
@@ -164,6 +160,6 @@ describe("the agent's lease store", () => {
       ),
     );
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
-    expect((await leases.list()).map((lease) => lease.targets)).toEqual([["shared"]]);
+    expect(leases.listSync().map((lease) => lease.targets)).toEqual([["shared"]]);
   });
 });

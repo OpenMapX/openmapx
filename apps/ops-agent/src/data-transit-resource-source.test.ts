@@ -372,7 +372,6 @@ it.each([
   "foreign-phase",
   "foreign-body",
   "foreign-target",
-  "foreign-origin",
   "inode",
   "bytes",
   "directory",
@@ -387,13 +386,17 @@ it.each([
       let key = f.slot.execution.operationKey,
         operation = f.operation;
       if (mode === "missing") await f.published(() => undefined);
-      if (mode === "forged" || mode === "foreign-target" || mode === "foreign-origin")
-        await f.published((evidence) => {
-          if (mode === "forged") return { ...evidence, version: 3 };
-          if (mode === "foreign-target") return { ...evidence, serviceIds: ["motis"] };
-          const origin = evidence.origin as { notAfter: number };
-          return { ...evidence, origin: { ...origin, notAfter: origin.notAfter + 1 } };
-        });
+      if (mode === "forged") await f.published((evidence) => ({ ...evidence, version: 3 }));
+      // The child's row names its targets; one naming another service is refused.
+      if (mode === "foreign-target")
+        await control
+          .openLeaseStore({ directory: control.leaseStoreDirectory(f.root), purpose: "test" })
+          .update((leases) => {
+            for (const held of leases)
+              for (const child of held.children)
+                if (child.execution.operationKey === f.slot.execution.operationKey)
+                  child.targets = ["motis"];
+          });
       // A candidate belongs to the child whose grant carries it; another key has none.
       if (mode === "foreign-root" || mode === "foreign-phase")
         key = control.controlChildOperationKey(

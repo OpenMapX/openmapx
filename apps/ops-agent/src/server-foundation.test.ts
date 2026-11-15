@@ -970,7 +970,8 @@ describe("one admission path for target effects", () => {
         await runContainedStreamingProcess("sh", ["-c", script], {
           signal: context.signal,
           timeout: 10_000,
-          maxBuffer: 4096,
+          onLine: () => {},
+          redact: (message) => message,
         });
         return { changed: true };
       },

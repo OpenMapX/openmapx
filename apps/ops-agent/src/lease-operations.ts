@@ -5,7 +5,6 @@ import {
   type LeaseStore,
   leaseRules,
   TargetBusyError,
-  verifyFiniteControlEdge,
 } from "@openmapx/core/build-artifacts";
 import {
   canonicalJson,
@@ -77,19 +76,13 @@ export async function runLeaseOperation(
     const action = operation.action;
     switch (action.action) {
       case "delegate": {
+        // The store's rules check the edge itself; data-manager issues only
+        // the agent's own operations, directly under its own execution.
         const child = action.child;
-        const edges = verifyFiniteControlEdge(
-          role,
-          current.ownerKind,
-          child.phase as never,
-          child.recipient,
-        );
         if (
           child.parentKey !== null ||
-          child.depth !== 1 ||
           child.recipient !== "ops-agent" ||
           canonicalJson(child.parent) !== canonicalJson(current.owner) ||
-          canonicalJson(child.permittedFurtherEdges) !== canonicalJson(edges) ||
           !(childPhaseKinds as Record<string, readonly string[]>)[child.phase]?.includes(
             child.kind,
           ) ||

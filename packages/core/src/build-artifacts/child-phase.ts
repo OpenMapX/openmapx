@@ -49,6 +49,7 @@ import {
 import {
   delegateArtifactTargetLease,
   inspectArtifactDelegation,
+  localLeases,
   type TargetLeaseAuthority,
   verifyFiniteControlEdge,
 } from "./target-lease";
@@ -385,7 +386,7 @@ export function lookupControlChildPhaseAttempt(
     throw Error("Original phase outbox digest changed");
   // A role that reaches the lease store only through the agent relies on its
   // own outbox; the agent checked the row when it recorded it.
-  if (channel === "delegation" && s.installation.leases.readSync) {
+  if (channel === "delegation" && localLeases(s.installation.leases)) {
     const observed = inspectArtifactDelegation({
       assertion: saved.assertion,
       installation: s.installation.installation,

@@ -108,9 +108,9 @@ export type BorrowedArtifactTargetLease = {
 export type TargetLeaseAuthority = ArtifactTargetLease | BorrowedArtifactTargetLease;
 
 /**
- * Where a role keeps its leases. The agent, its fixed CLI children and its
- * configuration helper use the store directly; data-manager and the host CLI
- * ask the agent, which applies the same rules on their behalf.
+ * The lease calls every role makes. The agent, its fixed CLI children, its
+ * configuration helper and the host CLI use the store directly; data-manager
+ * asks the agent, which applies the same rules on its behalf.
  */
 export interface LeaseBackend {
   acquire(input: {
@@ -119,15 +119,10 @@ export interface LeaseBackend {
     targets: readonly string[];
   }): Promise<LeaseRecord>;
   read(leaseId: string): Promise<LeaseRecord | undefined>;
-  /** Only the store itself can answer without waiting. */
-  readSync?(leaseId: string): LeaseRecord | undefined;
-  listSync?(): LeaseRecord[];
-  list(): Promise<LeaseRecord[]>;
   delegate(input: {
     leaseId: string;
     child: Omit<LeaseChild, "state" | "adopted" | "settlement">;
   }): Promise<LeaseRecord>;
-  adopt(input: { leaseId: string; key: string; execution: ExecutionRef }): Promise<LeaseRecord>;
   settle(input: {
     leaseId: string;
     key: string | null;
@@ -137,6 +132,21 @@ export interface LeaseBackend {
   release(input: { leaseId: string }): Promise<void>;
   /** Settles the data-manager child named by the settlement's identity, if it is still held. */
   settleChild(settlement: LeaseSettlement): Promise<LeaseRecord | undefined>;
+}
+/** A role that reads the store itself also reads it without waiting and adopts children. */
+export interface LocalLeaseBackend extends LeaseBackend {
+  readSync(leaseId: string): LeaseRecord | undefined;
+  listSync(): LeaseRecord[];
+  adopt(input: { leaseId: string; key: string; execution: ExecutionRef }): Promise<LeaseRecord>;
+}
+/** The store-reading backend of a local role, or undefined for data-manager. */
+export function localLeases(backend: LeaseBackend): LocalLeaseBackend | undefined {
+  return "readSync" in backend ? (backend as LocalLeaseBackend) : undefined;
+}
+function requireLocalLeases(backend: LeaseBackend): LocalLeaseBackend {
+  const local = localLeases(backend);
+  if (!local) throw Error("This role cannot read the lease store");
+  return local;
 }
 
 const MAX_DESCENDANTS = 64;
@@ -165,7 +175,26 @@ function settledKnown(node: { state: string; settlement?: LeaseSettlement }): bo
   return node.state === "settled" && knownSettlement(node.settlement);
 }
 
-/** The lease rules, applied under the store lock by every writer. */
+/** Who issues under `parentKey`, and the kind it runs: that child, or the lease's owner. */
+function issuerOf(lease: LeaseRecord, parentKey: string | null) {
+  if (parentKey === null)
+    return { role: lease.owner.executor, kind: lease.ownerKind, parent: undefined };
+  const parent = lease.children.find((entry) => entry.key === parentKey);
+  if (!parent) throw Error("Missing retained child node");
+  return { role: parent.recipient, kind: parent.kind, parent };
+}
+/** The phase a child may issue under itself, if any; a grandchild issues none. */
+function furtherEdges(lease: LeaseRecord, child: LeaseChild): string[] {
+  if (child.parentKey !== null) return [];
+  return verifyFiniteControlEdge(
+    lease.owner.executor,
+    lease.ownerKind,
+    child.phase as ControlChildPhase,
+    child.recipient,
+  );
+}
+
+/** The lease rules, applied under the store lock by every writer; the edge grammar is checked here. */
 export const leaseRules = {
   acquire(leases: LeaseRecord[], input: Parameters<LeaseBackend["acquire"]>[0], now: number) {
     const existing = leases.find((lease) => sameExecution(lease.owner, input.owner));
@@ -201,20 +230,21 @@ export const leaseRules = {
       )
     )
       throw Error("Attempted child cannot be replayed");
-    const parent =
-      input.child.parentKey === null ? undefined : nodeOf(lease, input.child.parentKey);
-    const scope = parent && "targets" in parent ? parent.targets : lease.targets;
+    const issuer = issuerOf(lease, input.child.parentKey);
+    const scope = issuer.parent?.targets ?? lease.targets;
     if (input.child.targets.some((id) => !scope.includes(id))) throw Error("Widened target subset");
-    if (
-      parent &&
-      "permittedFurtherEdges" in parent &&
-      (!parent.permittedFurtherEdges.includes(input.child.phase) || parent.depth >= 2)
-    )
+    if (issuer.parent && !furtherEdges(lease, issuer.parent).includes(input.child.phase))
       throw Error("Unauthorized descendant edge");
+    verifyFiniteControlEdge(
+      issuer.role,
+      issuer.kind,
+      input.child.phase as ControlChildPhase,
+      input.child.recipient,
+    );
     lease.children.push({ ...input.child, adopted: false, state: "held" });
     return lease;
   },
-  adopt(leases: LeaseRecord[], input: Parameters<LeaseBackend["adopt"]>[0], now: number) {
+  adopt(leases: LeaseRecord[], input: Parameters<LocalLeaseBackend["adopt"]>[0], now: number) {
     const lease = leases.find((value) => value.leaseId === input.leaseId);
     const child = lease?.children.find((value) => value.key === input.key);
     if (!lease || !child || !sameExecution(child.execution, input.execution))
@@ -286,14 +316,16 @@ export const leaseRules = {
 };
 
 /** The agent's own lease backend over its store. */
-export function localLeaseBackend(store: LeaseStore, now: () => number = Date.now): LeaseBackend {
+export function localLeaseBackend(
+  store: LeaseStore,
+  now: () => number = Date.now,
+): LocalLeaseBackend {
   const get = (leaseId: string) => store.get(leaseId);
   return {
     acquire: (input) => store.update((leases) => leaseRules.acquire(leases, input, now())),
     read: async (leaseId) => get(leaseId),
     readSync: get,
     listSync: () => store.list(),
-    list: async () => store.list(),
     delegate: (input) => store.update((leases) => leaseRules.delegate(leases, input, now())),
     adopt: (input) => store.update((leases) => leaseRules.adopt(leases, input, now())),
     settle: (input) => store.update((leases) => leaseRules.settle(leases, input)),
@@ -346,8 +378,9 @@ function handleFor(state: State): TargetLeaseAuthority {
 }
 /** The current record of a lease the role can read without waiting, else the last one seen. */
 function current(s: State): LeaseRecord | undefined {
-  if (s.backend.readSync) {
-    const record = s.backend.readSync(s.leaseId);
+  const local = localLeases(s.backend);
+  if (local) {
+    const record = local.readSync(s.leaseId);
     s.seen = record;
     return record;
   }
@@ -426,11 +459,7 @@ export function verifyFiniteControlEdge(
   )
     return [];
   if (role === "ops-agent" && kind === "configurationMaintenance.prepare") {
-    if (
-      recipient === "data-manager" &&
-      ["configuration-fence", "configuration-fence-settle"].includes(phase)
-    )
-      return [];
+    if (recipient === "data-manager" && phase === "configuration-fence") return [];
     if (
       recipient === "ops-agent" &&
       [
@@ -549,7 +578,7 @@ export async function delegateArtifactTargetLease(
   if (!plan && parent) {
     const kinds = childPhaseKinds[child.phase];
     if (
-      parent.permittedFurtherEdges.includes(child.phase) &&
+      furtherEdges(record, parent).includes(child.phase) &&
       kinds.length === 1 &&
       child.execution.operationKey ===
         controlChildOperationKey(s.execution.operationKey, child.phase, 0)
@@ -559,14 +588,6 @@ export async function delegateArtifactTargetLease(
   if (!plan) throw Error("Child is absent from immutable admitted plan");
   if (child.serviceIds.some((id) => !lease.serviceIds.includes(id)))
     throw Error("Widened target subset");
-  if (parent && (!parent.permittedFurtherEdges.includes(child.phase) || parent.depth >= 2))
-    throw Error("Unauthorized descendant edge");
-  const edges = verifyFiniteControlEdge(
-    parent?.recipient ?? owner.installation.installation.role,
-    owner.kind,
-    child.phase,
-    child.recipient,
-  );
   if (
     owner.kind === "configurationMaintenance.prepare" &&
     [
@@ -590,8 +611,6 @@ export async function delegateArtifactTargetLease(
     phase: child.phase,
     recipient: child.recipient,
     targets: [...child.serviceIds],
-    permittedFurtherEdges: edges,
-    depth: (parent?.depth ?? 0) + 1,
   };
   // What the child acts on stays in the store row, out of the header; a
   // recipient that needs it reads the store.
@@ -643,8 +662,7 @@ export function inspectArtifactDelegation(options: {
 }) {
   const parsed = parseControlAssertion(options.assertion);
   const local = installationState(options.installation);
-  if (!local.leases.readSync) throw Error("This role cannot read delegations");
-  const lease = local.leases.readSync(parsed.leaseId),
+  const lease = requireLocalLeases(local.leases).readSync(parsed.leaseId),
     grant = lease?.children.find((child) => child.key === parsed.delegationId);
   if (!lease || !grant) throw Error("Unanchored delegation");
   const {
@@ -699,7 +717,7 @@ export async function adoptArtifactTargetLease(options: {
     assertion: options.assertion,
     installation: peer.installation.installation,
   });
-  const lease = peer.installation.leases.readSync?.(assertion.leaseId);
+  const lease = localLeases(peer.installation.leases)?.readSync(assertion.leaseId);
   if (!lease) throw Error("Unanchored delegation");
   if (
     !sameExecution(inspected.execution, options.execution) ||
@@ -749,7 +767,7 @@ export async function adoptArtifactTargetLease(options: {
     )
       throw Error("Durable duplicate admission conflict");
   } else writePrivateRecord(peer.installation, "adoptions", name, pending, true);
-  const adopted = await peer.installation.leases.adopt({
+  const adopted = await requireLocalLeases(peer.installation.leases).adopt({
     leaseId: assertion.leaseId,
     key: inspected.delegationId,
     execution: inspected.execution,
@@ -938,8 +956,8 @@ export function verifyLocalArtifactTargetRootRelease(
   childSettlementState(verifyControlEffectSettlement(a.installation.installation, a.execution));
   const recorded = executionLease(authority).releasedAt;
   if (recorded) return Object.freeze({ releasedAt: recorded });
-  if (!a.installation.leases.readSync) throw Error("This role cannot read the lease store");
-  if (a.installation.leases.readSync(leaseId)) throw Error("Original root release is not proved");
+  if (requireLocalLeases(a.installation.leases).readSync(leaseId))
+    throw Error("Original root release is not proved");
   return Object.freeze({ releasedAt: rootReleasedAt(authority) });
 }
 
@@ -1045,9 +1063,9 @@ function assertImagePullTargetFree(
   const target = admitted.operation.serviceId;
   if (!state.installation.registeredTargets.has(target))
     throw Error("Registered image target required");
-  const list = state.installation.leases.listSync;
-  if (!list) throw Error("Image pulls run in the agent");
-  for (const lease of list())
+  const local = localLeases(state.installation.leases);
+  if (!local) throw Error("Image pulls run in the agent");
+  for (const lease of local.listSync())
     if (lease.targets.includes(target)) throw Error("Coordinator target is held");
 }
 
@@ -1206,7 +1224,7 @@ export function inspectLocalLeaseChildSettlement(
   execution: ExecutionRef,
 ): ChildSettlement | null {
   const s = stateOf(lease);
-  if (!s.backend.readSync) throw Error("This role cannot read the lease store");
+  requireLocalLeases(s.backend);
   return childSettlementOf(current(s), s.node, execution);
 }
 /**
@@ -1355,7 +1373,7 @@ export function assertArtifactDelegationRootHeld(
 ): void {
   const local = installationState(installation),
     parsed = parseControlAssertion(assertion),
-    lease = local.leases.readSync?.(parsed.leaseId);
+    lease = localLeases(local.leases)?.readSync(parsed.leaseId);
   if (!lease || lease.state === "settled") throw Error("Original owner lease is no longer held");
 }
 /** Read-only terminal evidence of a borrowed child after the agent restarted. */
@@ -1365,7 +1383,7 @@ export function verifyRetainedArtifactTargetSettlement(
   execution: ExecutionRef,
 ): void {
   const local = installationState(installation);
-  const lease = local.leases.readSync?.(adoption.leaseId);
+  const lease = localLeases(local.leases)?.readSync(adoption.leaseId);
   const child = lease?.children.find((value) => value.key === adoption.delegationId);
   const proof = childSettlementState(verifyControlEffectSettlement(installation, execution));
   if (
@@ -1429,7 +1447,7 @@ function maintenanceLease(authority: VerifiedExecutionAuthority): LeaseRecord {
     owner.installation.fixedChildId
   )
     throw Error("Original maintenance runtime tree required");
-  const lease = owner.installation.leases.readSync?.(executionLeaseId(authority));
+  const lease = localLeases(owner.installation.leases)?.readSync(executionLeaseId(authority));
   if (!lease || !sameExecution(lease.owner, owner.execution))
     throw Error("Original maintenance root is not held");
   return lease;
@@ -1447,7 +1465,7 @@ export function verifyConfigurationMaintenanceRootClosure(
   // owner records the release; the released tree is no longer kept.
   const state = executionAuthorityState(authority);
   if (
-    !state.installation.leases.readSync?.(executionLeaseId(authority)) &&
+    !localLeases(state.installation.leases)?.readSync(executionLeaseId(authority)) &&
     executionLease(authority).releasedAt
   )
     return;

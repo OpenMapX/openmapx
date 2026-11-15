@@ -45,16 +45,10 @@ export function remoteLeaseBackend(send: LeaseSender): LeaseBackend {
       return result.lease;
     },
     read: async (leaseId) => (await run({ kind: "lease.read", leaseId })).lease ?? undefined,
-    list: async () => {
-      throw Error("Only the agent lists every lease");
-    },
     async delegate(input) {
       const lease = await update(input.leaseId, { action: "delegate", child: input.child });
       if (!lease) throw Error("Target lease is not held");
       return lease;
-    },
-    adopt: async () => {
-      throw Error("Children of another role are adopted in the agent");
     },
     async settle(input) {
       const lease = await update(input.leaseId, {
