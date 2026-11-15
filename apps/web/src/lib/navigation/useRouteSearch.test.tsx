@@ -13,6 +13,11 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next-intl", () => ({ useLocale: () => "en" }));
+// Fuel prices have their own tests (useRouteSearch.fuel.test.tsx); these run without a query client.
+vi.mock("./useRouteFuelPrices", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./useRouteFuelPrices")>()),
+  useRouteFuelPrices: () => null,
+}));
 const directions = vi.hoisted(() => vi.fn());
 
 // POIs along the corridor, standing in for the category search response.

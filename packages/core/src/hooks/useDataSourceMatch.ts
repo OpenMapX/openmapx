@@ -5,7 +5,7 @@ import { API_ENDPOINTS } from "../api/endpoints";
 import { apiQueryRequestOptions, DETAIL_QUERY_POLICY, MAP_QUERY_POLICY } from "../api/queryPolicy";
 import type { DataSourceDetail, DataSourceResult } from "../types/dataSource";
 import type { Place } from "../types/place";
-import { haversineDistance } from "../utils/coordinates";
+import { matchDataSourceResults } from "../utils/dataSourceMatch";
 import { refetchWhileHoursShown } from "./useDataSources";
 
 /**
@@ -35,9 +35,6 @@ const RAW_CATEGORY_TO_DATA_SOURCE: Record<string, string> = {
   "amenity/parking": "parking",
   "car/parking": "parking",
 };
-
-/** Maximum distance in metres for a match to be considered valid. */
-const MAX_MATCH_DISTANCE = 100;
 
 /**
  * Small bbox around a point for searching nearby data source items.
@@ -100,22 +97,13 @@ export function useDataSourceMatch(place: Place | null): DataSourceDetail | null
   });
   const nearbyResults = nearbyEnvelope?.data;
 
-  // Find the closest match by coordinate proximity
-  let bestMatch: DataSourceResult | null = null;
-  if (nearbyResults && nearbyResults.length > 0 && place) {
-    let bestDistance = Number.POSITIVE_INFINITY;
-    for (const r of nearbyResults) {
-      const dist = haversineDistance(place.coordinates, r.coordinates);
-      if (dist < bestDistance) {
-        bestDistance = dist;
-        bestMatch = r;
-      }
-    }
-    // Only accept if within threshold
-    if (bestDistance > MAX_MATCH_DISTANCE) {
-      bestMatch = null;
-    }
-  }
+  const bestMatch =
+    place && nearbyResults
+      ? (matchDataSourceResults(
+          [{ id: "place", coordinates: place.coordinates }],
+          nearbyResults,
+        ).get("place") ?? null)
+      : null;
 
   // Fetch detail for the closest match
   const { data: detailEnvelope } = useQuery({

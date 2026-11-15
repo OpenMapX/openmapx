@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 
-import type { BoundingBox, CategoryPlace, LngLat, OverpassFilter, Route } from "@openmapx/core";
+import type {
+  BoundingBox,
+  CategoryPlace,
+  DataSourceResult,
+  LngLat,
+  OverpassFilter,
+  Route,
+} from "@openmapx/core";
 import { act, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHookWithQuery } from "@/test";
@@ -16,6 +23,10 @@ const search = vi.hoisted(() => ({
   pending: [] as Pending[],
   calls: [] as string[],
   filterCalls: [] as string[],
+  fuel: [] as {
+    resolve: (value: { data: DataSourceResult[] }) => void;
+    reject: (error: Error) => void;
+  }[],
 }));
 const directions = vi.hoisted(() => vi.fn());
 
@@ -39,6 +50,15 @@ vi.mock("@openmapx/core", async (importOriginal) => {
       options("category-search", category, bbox, lang),
     filterSearchQueryOptions: (filter: OverpassFilter, bbox: BoundingBox, lang?: string) =>
       options("filter-search", JSON.stringify(filter), bbox, lang),
+    useDataSources: () => ({ data: { sources: [{ id: "fuel" }] }, isError: false }),
+    dataSourceSearchQueryOptions: (sourceId: string, bbox: BoundingBox, filters: object) => ({
+      queryKey: ["data-source-search", sourceId, bbox, filters] as const,
+      queryFn: () =>
+        new Promise((resolve, reject) => {
+          search.fuel.push({ resolve, reject });
+        }),
+      gcTime: 300_000,
+    }),
   };
 });
 
@@ -67,6 +87,7 @@ beforeEach(() => {
   search.pending = [];
   search.calls = [];
   search.filterCalls = [];
+  search.fuel = [];
   directions.mockReset();
 });
 
@@ -207,6 +228,69 @@ describe("usePlannedRouteSearch", () => {
     renderHookWithQuery(() => usePlannedRouteSearch(geometry, { filter }, "en"));
     await waitFor(() => expect(search.filterCalls).toHaveLength(1));
     expect(search.calls).toEqual([]);
+  });
+
+  it("looks up the prices of the fuel stations it lists", async () => {
+    const geometry = eastLine(20);
+    const { result } = renderHookWithQuery(() =>
+      usePlannedRouteSearch(geometry, { category: "preset:amenity/fuel" }, "en"),
+    );
+    await waitFor(() => expect(search.calls).toHaveLength(1));
+    await settle(0, [place("aral", 5), place("jet", 15)]);
+    await waitFor(() => expect(search.fuel.length).toBeGreaterThan(0));
+    expect(result.current.results.map((r) => r.place.id)).toEqual(["aral", "jet"]);
+    expect(result.current.fuelPrices?.get("aral")).toEqual({ status: "loading" });
+    await act(async () =>
+      search.fuel[0].resolve({
+        data: [
+          {
+            id: "tk-aral",
+            name: "Aral",
+            coordinates: place("aral", 5).coordinates,
+            source: "tankerkoenig",
+            variant: "open",
+            labelSummary: { $t: "summary.priceAge" },
+            sortValues: { diesel: 1.559 },
+          },
+        ],
+      }),
+    );
+    await waitFor(() => expect(result.current.fuelPrices?.get("aral")?.status).toBe("priced"));
+  });
+
+  it("makes no fuel lookup for other kinds of stop or a chain", async () => {
+    const geometry = eastLine(20);
+    const { result } = renderHookWithQuery(() =>
+      usePlannedRouteSearch(geometry, { category: "parking" }, "en"),
+    );
+    await waitFor(() => expect(search.calls).toHaveLength(1));
+    await settle(0, [place("p", 5)]);
+    await waitFor(() => expect(result.current.isSearching).toBe(false));
+    const filter: OverpassFilter = {
+      selectors: [{ tags: [{ key: "brand:wikidata", op: "=", value: "Q1" }] }],
+    };
+    renderHookWithQuery(() => usePlannedRouteSearch(geometry, { filter }, "en"));
+    await waitFor(() => expect(search.filterCalls).toHaveLength(1));
+    await act(async () => search.pending[1].resolve({ results: [place("q", 5)], partial: false }));
+    await act(async () => {});
+    expect(search.fuel).toEqual([]);
+    expect(result.current.fuelPrices).toBeNull();
+  });
+
+  it("keeps listing fuel stations when their price lookup fails", async () => {
+    const geometry = eastLine(20);
+    const { result } = renderHookWithQuery(() =>
+      usePlannedRouteSearch(geometry, { category: "preset:amenity/fuel" }, "en"),
+    );
+    await waitFor(() => expect(search.calls).toHaveLength(1));
+    await settle(0, [place("aral", 5)]);
+    await waitFor(() => expect(search.fuel).toHaveLength(1));
+    await act(async () => search.fuel[0].reject(new Error("fuel_unavailable")));
+    // No answer carried a price, so the failed stop gets no marker rather than "unknown".
+    await waitFor(() => expect(result.current.fuelPrices?.has("aral")).toBe(false));
+    expect(result.current.results.map((r) => r.place.id)).toEqual(["aral"]);
+    expect(result.current.failedChunks).toBe(0);
+    expect(result.current.isSearching).toBe(false);
   });
 });
 

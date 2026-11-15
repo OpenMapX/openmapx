@@ -37,12 +37,18 @@ import {
   ROUTE_SEARCH_CATEGORIES,
   RouteSearchGlyph,
 } from "@/components/navigation/routeSearchCategories";
+import {
+  routeStopFuelPriceCredits,
+  routeStopFuelPriceText,
+} from "@/components/navigation/routeStopFuelPrice";
+import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
 import { useMobileSheet } from "@/components/panels/sheet/sheetState";
 import { BrandLogo } from "@/components/search/BrandLogo";
 import { floatingChipSx } from "@/components/search/floatingChipSx";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
+import { FUEL_SOURCE_ID } from "@/lib/fuel/fuelGrades";
 import { routeStopCopy } from "@/lib/navigation/routeStopCopy";
 import {
   usePlannedRouteSearch,
@@ -94,6 +100,7 @@ export function RouteStopSearch({ route, provider, request, units }: RouteStopSe
   const tc = useTranslations("common");
   const locale = useLocale();
   const mapCtx = useMapOptional();
+  const resolveFuel = useDataSourceI18nResolver(FUEL_SOURCE_ID);
   const { inSheet, detent, snapTo } = useMobileSheet();
   const waypoints = useDirectionsStore((s) => s.waypoints);
   const activeRouteIndex = useDirectionsStore((s) => s.activeRouteIndex);
@@ -262,12 +269,14 @@ export function RouteStopSearch({ route, provider, request, units }: RouteStopSe
     () => search.results.slice(0, visibleCount),
     [search.results, visibleCount],
   );
+  const fuelPrices = search.fuelPrices;
   const listAttributions = useMemo(
     () =>
       snapshotContributors(
         ...shown.map((r) => contributorsForRecordFields(r.place, ["name", "coordinates"])),
+        ...shown.map((r) => routeStopFuelPriceCredits(fuelPrices?.get(r.place.id))),
       ),
-    [shown],
+    [shown, fuelPrices],
   );
 
   const renderSelectedCard = (poi: AlongRoutePoi<CategoryPlace>) => {
@@ -458,6 +467,11 @@ export function RouteStopSearch({ route, provider, request, units }: RouteStopSe
               const isSelected = poi.place.id === selectedId;
               const row = isSelected && selected ? selected : poi;
               const copy = routeStopCopy(row, true);
+              const price = routeStopFuelPriceText(
+                fuelPrices?.get(poi.place.id),
+                resolveFuel,
+                t("rsFuelPriceUnknown"),
+              );
               return (
                 <Box key={poi.place.id} ref={isSelected ? selectedRowRef : undefined}>
                   <ListItemButton
@@ -471,9 +485,13 @@ export function RouteStopSearch({ route, provider, request, units }: RouteStopSe
                     </ListItemIcon>
                     <ListItemText
                       primary={poi.place.name}
-                      secondary={`${t("rsPlanFromStart", {
-                        distance: formatOverviewDistance(poi.alongMeters, units),
-                      })} · ${t(copy.key, "values" in copy ? copy.values : undefined)}`}
+                      secondary={[
+                        t("rsPlanFromStart", {
+                          distance: formatOverviewDistance(poi.alongMeters, units),
+                        }),
+                        t(copy.key, "values" in copy ? copy.values : undefined),
+                        ...(price ? [price] : []),
+                      ].join(" · ")}
                     />
                   </ListItemButton>
                   {isSelected && selected && renderSelectedCard(selected)}

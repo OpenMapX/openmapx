@@ -1,4 +1,5 @@
 import { CATEGORY_DEFINITIONS, type CategoryId } from "@openmapx/core";
+import { ROUTE_FUEL_CATEGORY } from "@/lib/fuel/fuelGrades";
 
 // MUI LocalGasStation glyph — fuel isn't a poi-search chip category, so we carry
 // its icon here and query it via the `preset:amenity/fuel` server path.
@@ -31,7 +32,7 @@ export interface RouteSearchCategory {
 
 /** The stop kinds both along-route searches offer, in display order. */
 export const ROUTE_SEARCH_CATEGORIES: readonly RouteSearchCategory[] = [
-  { key: "preset:amenity/fuel", labelKey: "rsFuel", iconPath: FUEL_ICON_PATH },
+  { key: ROUTE_FUEL_CATEGORY, labelKey: "rsFuel", iconPath: FUEL_ICON_PATH },
   { key: "ev_charging", labelKey: "rsCharging", iconPath: CHARGING_ICON_PATH },
   { key: "restaurants", labelKey: "rsRestaurants", iconPath: iconFor("restaurants") },
   { key: "cafes", labelKey: "rsCafes", iconPath: iconFor("cafes") },

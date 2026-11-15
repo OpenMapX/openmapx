@@ -3,7 +3,6 @@
 import {
   type AlongRoutePoi,
   type CategoryPlace,
-  type CategorySearchResponse,
   categorySearchQueryOptions,
   type DirectionsQueryParams,
   directionsRequestFor,
@@ -24,12 +23,15 @@ import {
 } from "@openmapx/core";
 import {
   hashKey,
-  type QueryObserverResult,
+  type QueryState,
   useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ROUTE_FUEL_CATEGORY } from "@/lib/fuel/fuelGrades";
+import { combineGatedQueries, useElementwiseStable, useRequestGate } from "./requestGate";
+import { type RouteFuelPrices, useRouteFuelPrices } from "./useRouteFuelPrices";
 import type { RouteSearchQuery } from "./useRouteSearch";
 
 /** Area requests a planning search keeps in flight at once. */
@@ -54,29 +56,15 @@ export interface PlannedRouteSearch {
   searchedMeters: number;
   /** Request the failed areas again. */
   retry: () => void;
+  /** Fuel prices by result id while fuel is searched and a fuel source is offered, else null. */
+  fuelPrices: RouteFuelPrices | null;
 }
 
 const NO_CHUNKS: RouteSearchChunks = { chunks: [], totalMeters: 0, searchedMeters: 0 };
 
-type AreaResult = QueryObserverResult<CategorySearchResponse>;
-
-function combineAreas(results: AreaResult[]) {
-  return {
-    data: results.map((r) => r.data),
-    statuses: results.map((r) => r.status),
-    // Observed so a refetch that starts or ends re-renders and re-runs the gate.
-    fetchStatuses: results.map((r) => r.fetchStatus),
-    refetches: results.map((r) => r.refetch),
-  };
-}
-
-/** The same array for as long as every element is the same object. */
-function useElementwiseStable<T>(values: T[]): T[] {
-  const ref = useRef(values);
-  if (ref.current.length !== values.length || values.some((v, i) => v !== ref.current[i])) {
-    ref.current = values;
-  }
-  return ref.current;
+/** An area with an answer or a final error; it never holds a slot until it is asked again. */
+function isAnswered(state: QueryState | undefined): boolean {
+  return state?.status === "success" || state?.status === "error";
 }
 
 /**
@@ -104,26 +92,20 @@ export function usePlannedRouteSearch(
       ? filterSearchQueryOptions(filter, bbox, lang)
       : categorySearchQueryOptions(category ?? "", bbox, lang),
   );
-  // An area is settled once it has an answer or a final error and nothing is
-  // fetching for it; until then it holds one of the in-flight slots. Read from
-  // the cache, so a render after any area settles already sees it. Planned
-  // areas never refetch on their own (focus, reconnect, remount): that would
-  // start every stale area at once.
+  // An area with an answer or a final error joins at once; the others take one
+  // of the in-flight slots in route order. Planned areas never refetch on their
+  // own (focus, reconnect, remount): that would start every stale area at once.
   const client = useQueryClient();
   const isFetching = (key: readonly unknown[]) =>
     client.getQueryState(key)?.fetchStatus === "fetching";
-  let unsettled = 0;
-  const queries = base.map((options) => {
-    const state = client.getQueryState(options.queryKey);
-    const answered = state?.status === "success" || state?.status === "error";
-    const settled = answered && !isFetching(options.queryKey);
-    // An answered area stays enabled: toggling it back on would refetch it
-    // outside the gate (an errored area has no data and is always stale).
-    const enabled = active && (answered || unsettled < PLANNED_SEARCH_CONCURRENCY);
-    if (!settled) unsettled++;
+  const enabled = useRequestGate(
+    base.map((options) => options.queryKey),
+    { active, concurrency: PLANNED_SEARCH_CONCURRENCY, ready: isAnswered },
+  );
+  const queries = base.map((options, index) => {
     return {
       ...options,
-      enabled,
+      enabled: enabled[index],
       staleTime: PLANNED_SEARCH_STALE_MS,
       refetchOnMount: false,
       refetchOnWindowFocus: false,
@@ -131,7 +113,7 @@ export function usePlannedRouteSearch(
       retryOnMount: false,
     };
   });
-  const areas = useQueries({ queries, combine: combineAreas });
+  const areas = useQueries({ queries, combine: combineGatedQueries });
 
   // Retry re-requests failed areas through the same two slots. The queue is a
   // ref so an area leaves it the moment it starts: a render landing between a
@@ -179,6 +161,11 @@ export function usePlannedRouteSearch(
       lookaheadMeters: plan.searchedMeters,
     });
   }, [active, matcher, places, plan.searchedMeters]);
+  const resultPlaces = useMemo(() => results.map((poi) => poi.place), [results]);
+  const fuelPrices = useRouteFuelPrices(
+    resultPlaces,
+    filter === null && category === ROUTE_FUEL_CATEGORY,
+  );
 
   const settledChunks = active
     ? areas.statuses.filter((status) => status === "success" || status === "error").length
@@ -204,6 +191,7 @@ export function usePlannedRouteSearch(
     capped: plan.searchedMeters < plan.totalMeters,
     searchedMeters: plan.searchedMeters,
     retry,
+    fuelPrices,
   };
 }
 
