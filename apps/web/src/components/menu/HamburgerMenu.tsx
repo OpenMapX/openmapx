@@ -208,7 +208,10 @@ export function HamburgerMenu() {
           <MenuRow
             icon={<SettingsOutlinedIcon />}
             label={t("settings")}
-            onClick={() => setSettingsOpen(true)}
+            onClick={() => {
+              close();
+              setSettingsOpen(true);
+            }}
           />
         </List>
 
