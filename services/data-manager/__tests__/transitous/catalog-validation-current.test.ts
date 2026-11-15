@@ -67,7 +67,6 @@ async function fixture(kind: "catalog.validate" | "transit-sync" | "download-fon
       serviceIds: ids,
     }),
     lease = await acquireArtifactTargetLease({
-      dataRoot: dataDir,
       owner: authority,
       serviceIds: ids,
     });

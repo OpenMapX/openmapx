@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import {
   createControlRootOperationKey,
@@ -66,7 +66,7 @@ it.each(["succeeded", "canceled"] as const)(
       runtime,
       journal,
       controlInstallation: installation,
-      tokens: { api: "a".repeat(43), "data-manager": token },
+      tokens: { api: "a".repeat(43), "data-manager": token, "host-cli": "h".repeat(43) },
       resourceClaimer: createProductionRegistryResourceClaimer({
         services: [{ serviceId: "valhalla", enabled: true, isBuiltIn: true }],
         integrationIds: [],
@@ -92,7 +92,7 @@ it.each(["succeeded", "canceled"] as const)(
       if (admitted.execution !== "async") throw Error("Async traffic root required");
       await started;
       expect(effects).toBe(1);
-      expect(existsSync(join(data, ".admin-target-control/locks/valhalla"))).toBe(true);
+      expect(control.heldTargets(dirname(data)).includes("valhalla")).toBe(true);
       if (mode === "canceled") {
         const status = await client.status(operation.kind, admitted.operationId),
           lossy = new OpsClient({
@@ -114,7 +114,7 @@ it.each(["succeeded", "canceled"] as const)(
         expect((await client.status(operation.kind, admitted.operationId)).state).toBe(
           "termination_pending",
         );
-        expect(existsSync(join(data, ".admin-target-control/locks/valhalla"))).toBe(true);
+        expect(control.heldTargets(dirname(data)).includes("valhalla")).toBe(true);
         if (!status.fingerprint || !status.deadlineAt)
           throw Error("Original dated traffic identity required");
         const authority = control.restoreAdmittedControlExecution(installation, {
@@ -133,7 +133,7 @@ it.each(["succeeded", "canceled"] as const)(
             timeout: 10000,
           })
           .toBe("failed");
-        expect(existsSync(join(data, ".admin-target-control/locks/valhalla"))).toBe(true);
+        expect(control.heldTargets(dirname(data)).includes("valhalla")).toBe(true);
       } else {
         release();
         await expect
@@ -141,7 +141,7 @@ it.each(["succeeded", "canceled"] as const)(
             timeout: 10000,
           })
           .toBe("succeeded");
-        expect(existsSync(join(data, ".admin-target-control/locks/valhalla"))).toBe(false);
+        expect(control.heldTargets(dirname(data)).includes("valhalla")).toBe(false);
       }
     } finally {
       release();

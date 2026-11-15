@@ -111,7 +111,6 @@ async function fixture(
       reservations: [slot],
     }),
     lease = await control.acquireArtifactTargetLease({
-      dataRoot: data,
       serviceIds: ["motis-feed-proxy"],
       owner: authority,
     });
@@ -121,6 +120,7 @@ async function fixture(
       ...slot,
       lease,
       childPublicKey: agent.publicKey,
+      evidence: control.publishedDataTransitCandidate(authority, slot),
     });
   const claimer = createProductionRegistryResourceClaimer({
     services: [{ serviceId: "motis-feed-proxy", isBuiltIn: true, enabled: true }],
@@ -178,17 +178,27 @@ async function fixture(
     ...(admissionPolicy === "late" ? { now: () => new Date(Date.now() + 120000) } : {}),
     controlInstallation: agent,
     resourceClaimer: claimer,
-    tokens: { api: "a".repeat(43), "data-manager": token },
+    tokens: { api: "a".repeat(43), "data-manager": token, "host-cli": "h".repeat(43) },
   });
   await app.listen({ host: "127.0.0.1", port: 0 });
   const address = app.server.address();
   if (!address || typeof address === "string") throw Error("Missing actual agent address");
   const client = new OpsClient({ baseUrl: `http://127.0.0.1:${address.port}`, tokenFile }),
-    published = join(
-      data,
-      ".admin-target-control/executions/data-manager",
-      `${slot.execution.operationKey}.data-candidate.json`,
-    );
+    /** Changes the candidate data-manager recorded with the child's grant. */
+    published = (
+      change: (evidence: Record<string, unknown>) => Record<string, unknown> | undefined,
+    ) =>
+      control
+        .openLeaseStore({ directory: control.leaseStoreDirectory(root), purpose: "test" })
+        .update((leases) => {
+          for (const held of leases)
+            for (const child of held.children)
+              if (child.execution.operationKey === slot.execution.operationKey && child.evidence) {
+                const next = change(structuredClone(child.evidence));
+                if (next) child.evidence = next;
+                else delete child.evidence;
+              }
+        });
   return {
     root,
     data,
@@ -245,12 +255,6 @@ it.each(["validation", "validation-replaced", "transport", "reload", "marker"] a
           )
           .toMatchObject({ outcome: "contained", publication: "not_started" });
         expect(control.inspectFeedProxyValidationFailure(authority)).toMatch(/^[a-f0-9]{64}$/);
-        await expect
-          .poll(
-            () => control.verifyFeedProxyCanonicalTerminal(f.authority, f.bound.execution).state,
-            { timeout: 15000 },
-          )
-          .toBe("failed");
         const raw = JSON.parse(
           readFileSync(
             join(
@@ -323,7 +327,7 @@ it.each(["validation", "validation-replaced", "transport", "reload", "marker"] a
         ).toThrow();
       } else {
         expect(
-          control.inspectArtifactTargetLeaseChildSettlement(f.lease, f.bound.execution),
+          await control.inspectArtifactTargetLeaseChildSettlement(f.lease, f.bound.execution),
         ).toBeNull();
         expect(control.inspectFeedProxyValidationFailure(authority)).toBeNull();
         expect(() =>
@@ -382,15 +386,16 @@ it.each([
     try {
       let key = f.slot.execution.operationKey,
         operation = f.operation;
-      if (mode === "missing") rmSync(f.published);
-      if (mode === "forged" || mode === "foreign-target" || mode === "foreign-origin") {
-        const raw = JSON.parse(readFileSync(f.published, "utf8"));
-        if (mode === "forged") raw.signature = "a".repeat(86);
-        else if (mode === "foreign-target") raw.payload.serviceIds = ["motis"];
-        else raw.payload.origin.notAfter++;
-        writeFileSync(f.published, JSON.stringify(raw), { mode: 0o600 });
-      }
-      if (mode === "foreign-root" || mode === "foreign-phase") {
+      if (mode === "missing") await f.published(() => undefined);
+      if (mode === "forged" || mode === "foreign-target" || mode === "foreign-origin")
+        await f.published((evidence) => {
+          if (mode === "forged") return { ...evidence, version: 3 };
+          if (mode === "foreign-target") return { ...evidence, serviceIds: ["motis"] };
+          const origin = evidence.origin as { notAfter: number };
+          return { ...evidence, origin: { ...origin, notAfter: origin.notAfter + 1 } };
+        });
+      // A candidate belongs to the child whose grant carries it; another key has none.
+      if (mode === "foreign-root" || mode === "foreign-phase")
         key = control.controlChildOperationKey(
           mode === "foreign-root"
             ? createControlRootOperationKey({
@@ -401,15 +406,6 @@ it.each([
           mode === "foreign-phase" ? "proxy-commit" : "proxy-stage",
           0,
         );
-        copyFileSync(
-          f.published,
-          join(
-            f.data,
-            ".admin-target-control/executions/data-manager",
-            `${key}.data-candidate.json`,
-          ),
-        );
-      }
       if (mode === "foreign-body")
         operation = { ...operation, candidateId: "ctrl-" + "b".repeat(32) };
       if (mode === "inode") {

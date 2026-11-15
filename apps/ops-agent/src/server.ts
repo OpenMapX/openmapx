@@ -20,6 +20,7 @@ import {
   inspectControlAdmission,
   inspectFeedProxyValidationFailure,
   isFixedSingleDataCommand,
+  type LeaseStore,
   markFeedProxyReloadAttempted,
   planFixedSingleDataCommand,
   controlHeaders as readControlHeaders,
@@ -45,10 +46,11 @@ import {
   retainGenerationHardlinksOwnerPlan,
   settleArtifactTargetLeaseChild,
   startControlPrune,
+  TargetBusyError,
   type TargetLeaseAuthority,
   type VerifiedExecutionAuthority,
   verifyControlEffectSettlement,
-  verifyRetainedArtifactTargetRootRelease,
+  verifyLocalArtifactTargetRootRelease,
   verifyRetainedArtifactTargetSettlement,
 } from "@openmapx/core/build-artifacts";
 import {
@@ -156,6 +158,7 @@ import {
 } from "./dawarich-subject-export";
 import { registerOpsIngressRateLimit } from "./ingress-rate-limit";
 import type { OpsJobJournal, PersistedOpsJob } from "./journal";
+import { LeaseRefused, runLeaseOperation } from "./lease-operations";
 import {
   type CoordinatorPullOwnershipObservation,
   consumeCoordinatorPullOwnershipCapture,
@@ -202,6 +205,32 @@ export const OPS_AGENT_RETENTION_LIMITS = {
   maxAggregateEventBytes: 2 * DEFAULT_JOB_ENTRIES * MAX_RETAINED_EVENT_BYTES_PER_JOB,
 } as const;
 // Conservative read-only surface while the release store cannot be read safely.
+/**
+ * Operations that change containers claim their targets in the lease store
+ * before any effect. Pulls, builds, execs and probes leave running containers
+ * alone and claim nothing.
+ */
+const LEASED_KINDS = new Set<OpsOperationKind>([
+  "configurationMaintenance.prepare",
+  "artifactTransfer.import",
+  "artifactTransfer.export",
+  "stack.start",
+  "stack.stop",
+  "coreService.restart",
+  "service.start",
+  "service.stop",
+  "service.restart",
+  "service.remove",
+  "service.recreate",
+  "service.recreateIsolated",
+  "service.update",
+  "serviceRepository.remove",
+  "backup.create",
+  "backup.restore",
+  "configuration.hardlinks.apply",
+  "valhalla.traffic.maintain",
+  "valhalla.traffic.refreshWaysToEdges",
+]);
 const RELEASE_RECOVERY_READ_KINDS = new Set<OpsOperationKind>([
   "configurationHandoff.inspect",
   "configurationMaintenance.inspect",
@@ -239,11 +268,15 @@ export interface OpsAuditEvent {
   result: "success" | "denied" | "error" | "timeout" | "terminated" | "late_completion";
   durationMs: number;
   errorClass?: OpsErrorClass;
+  /** The lease that refused a busy operation. */
+  heldBy?: string;
 }
 
 export interface BuildOpsAgentServerOptions {
   artifactTransfers?: ArtifactTransferStore;
   controlInstallation?: ControlInstallation;
+  /** The agent's lease store, for the leases data-manager and the host CLI hold. */
+  leaseStore?: LeaseStore;
   terminalClaimCleanup?: VerifiedTerminalClaimCleanup;
   tokens: Record<OpsRole, string>;
   releaseRecovery?: { ready: boolean; reason?: "recovery_required" };
@@ -271,7 +304,6 @@ export interface BuildOpsAgentServerOptions {
 }
 
 interface JobRecord extends Omit<PersistedOpsJob, "terminalAt"> {
-  role: OpsRole;
   operation: OpsOperation;
   operationId: string;
   operationKey: string;
@@ -302,9 +334,11 @@ function resolveRole(
   const candidate = digest(match?.[1] ?? "");
   const apiMatches = timingSafeEqual(candidate, digest(tokens.api));
   const dataManagerMatches = timingSafeEqual(candidate, digest(tokens["data-manager"]));
+  const hostCliMatches = timingSafeEqual(candidate, digest(tokens["host-cli"]));
   if (!match) return null;
   if (apiMatches) return "api";
   if (dataManagerMatches) return "data-manager";
+  if (hostCliMatches) return "host-cli";
   return null;
 }
 
@@ -428,7 +462,7 @@ function classify(error: unknown): { errorClass: OpsErrorClass; statusCode: numb
 }
 
 export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): FastifyInstance {
-  if (options.tokens.api === options.tokens["data-manager"]) {
+  if (new Set(Object.values(options.tokens)).size !== Object.keys(options.tokens).length) {
     throw new Error("Ops agent caller credentials must be distinct");
   }
   const app = Fastify({
@@ -991,7 +1025,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             );
             if (lease.mode === "owner") {
               await releaseArtifactTargetLease(lease);
-              verifyRetainedArtifactTargetRootRelease(authority);
+              verifyLocalArtifactTargetRootRelease(authority);
               // Classify only this freshly proved, fully released never-prepared
               // refusal before the immutable terminal is first committed.
               // An unknown/partial release never takes this branch.
@@ -1056,7 +1090,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       }
       if (releaseUnstartedRoot && lease?.mode === "owner" && authority) {
         await releaseArtifactTargetLease(lease);
-        verifyRetainedArtifactTargetRootRelease(authority);
+        verifyLocalArtifactTargetRootRelease(authority);
         if (job.operation.kind === "artifactTransfer.import")
           await options.artifactTransfers?.reconcileReleasedPreparedImport(authority);
       }
@@ -2200,6 +2234,31 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         const nowMs = now().getTime();
         const timing = validateTiming(parsed.issuedAt, parsed.expiresAt, nowMs);
         replay.accept(parsed.requestId, timing.expiresAtMs, nowMs);
+        if (
+          operation.kind === "lease.acquire" ||
+          operation.kind === "lease.read" ||
+          operation.kind === "lease.update"
+        ) {
+          if (!options.controlInstallation || !options.leaseStore)
+            throw new RequestGuardError("recovery_required", 409);
+          let value: unknown;
+          try {
+            value = await runLeaseOperation(
+              options.controlInstallation,
+              options.leaseStore,
+              role,
+              operation,
+            );
+          } catch (error) {
+            if (error instanceof LeaseRefused) throw new RequestGuardError("authorization", 403);
+            throw new RequestGuardError("conflict", 409);
+          }
+          return reply
+            .code(200)
+            .send(opsSuccess(parsed.requestId, { execution: "sync", kind, value }));
+        }
+        // Only lease operations are open to the host CLI's token.
+        if (role === "host-cli") throw new RequestGuardError("authorization", 403);
         const policy = OPS_KIND_POLICIES[operation.kind];
         const operationFingerprint = opsOperationFingerprint(operation);
         if (
@@ -2698,6 +2757,43 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 throw new RequestGuardError("authorization", 403);
               }
             }
+            // A held target refuses the operation as busy before it is recorded, so
+            // nothing is left to recover. The holder is named in the audit line.
+            if (
+              !controlAdmission &&
+              !configurationMaintenanceControl &&
+              LEASED_KINDS.has(operation.kind) &&
+              options.controlInstallation &&
+              options.leaseStore
+            ) {
+              const wanted = operation.kind.startsWith("valhalla.")
+                ? ["valhalla"]
+                : "serviceId" in operation &&
+                    ![
+                      "service.start",
+                      "service.recreate",
+                      "service.recreateIsolated",
+                      "service.update",
+                      "artifactTransfer.export",
+                    ].includes(operation.kind)
+                  ? [operation.serviceId]
+                  : controlRegisteredServiceIds(options.controlInstallation);
+              const holder = options.leaseStore
+                .list()
+                .find((lease) => lease.targets.some((target) => wanted.includes(target)));
+              if (holder) {
+                options.audit?.({
+                  role,
+                  kind,
+                  resourceId,
+                  result: "denied",
+                  durationMs: Date.now() - startedAt,
+                  errorClass: "busy",
+                  heldBy: `${holder.owner.executor} ${holder.owner.operationKey} (${holder.ownerKind}, ${holder.state})`,
+                });
+                throw new RequestGuardError("busy", 409);
+              }
+            }
             await journal.replace([...jobsById.values()].map(persisted).concat(persisted(job)));
             jobsById.set(job.operationId, job);
             jobsByKey.set(ownerKey, job);
@@ -2813,38 +2909,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                 if (lifecyclePlan) retainFixedServiceLifecyclePlan(authority, lifecyclePlan);
                 reserveControlTerminal(authority);
                 controlAuthorities.set(job.operationId, authority);
-                if (
-                  [
-                    "configurationMaintenance.prepare",
-                    "artifactTransfer.import",
-                    "artifactTransfer.export",
-                    "stack.start",
-                    "coreService.restart",
-                    "service.start",
-                    "service.recreate",
-                    "service.recreateIsolated",
-                    "service.update",
-                    "configuration.hardlinks.apply",
-                    "valhalla.traffic.maintain",
-                    "valhalla.traffic.refreshWaysToEdges",
-                  ].includes(job.operation.kind)
-                ) {
+                if (LEASED_KINDS.has(job.operation.kind)) {
                   const lease = await acquireArtifactTargetLease({
-                    dataRoot: controlInstallationDataRoot(options.controlInstallation),
-                    serviceIds:
-                      maintenancePlan ||
-                      hardlinksPlan ||
-                      lifecyclePlan ||
-                      job.operation.kind === "artifactTransfer.export" ||
-                      [
-                        "stack.start",
-                        "service.start",
-                        "coreService.restart",
-                        "service.recreate",
-                        "service.recreateIsolated",
-                      ].includes(job.operation.kind)
-                        ? targets
-                        : ["valhalla"],
+                    serviceIds: job.operation.kind.startsWith("valhalla.") ? ["valhalla"] : targets,
                     owner: authority,
                   });
                   controlLeases.set(job.operationId, lease);
@@ -2919,7 +2986,9 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
             active -= 1;
             throw error instanceof RequestGuardError
               ? error
-              : new RequestGuardError("runtime", 500);
+              : error instanceof TargetBusyError
+                ? new RequestGuardError("busy", 409)
+                : new RequestGuardError("runtime", 500);
           });
           if (admission.type === "retained") {
             await claimAdmission?.rollback().catch(() => undefined);

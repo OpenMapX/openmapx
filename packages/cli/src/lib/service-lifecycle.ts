@@ -176,6 +176,7 @@ export async function runCliServiceLifecycle(options: {
       infraDir: paths.infraDir,
       role: "host-cli",
       serviceIds: targets,
+      leases: (await import("./host-leases")).hostCliLeases(paths.infraDir),
     });
   if (!inherited) await pruneHostControlRecords(installation);
   const admittedAt = Date.now(),
@@ -400,7 +401,6 @@ export async function runCliServiceLifecycle(options: {
       lease =
         inherited?.lease ??
         (await control.acquireArtifactTargetLease({
-          dataRoot: join(paths.infraDir, "data"),
           owner: authority,
           serviceIds: targets,
           signal: inner.signal,

@@ -1,0 +1,240 @@
+import { createHash } from "node:crypto";
+import { closeSync, fsyncSync, openSync, readFileSync, writeSync } from "node:fs";
+import { basename, join } from "node:path";
+import {
+  type LeaseOperation,
+  type LeaseRecord,
+  leaseStoreDirectory,
+  openLeaseStore,
+} from "@openmapx/core/build-artifacts";
+import { canonicalJson, OpsClient, opsOperationSchema } from "@openmapx/core/ops";
+import { services } from "@openmapx/core/server";
+import type { Command } from "commander";
+import { runsInAgent } from "../lib/agent-integrations";
+import { completeCliCommand } from "../lib/control-context";
+import { settleMaintenanceFence } from "../lib/control-resolve";
+import { dockerCompose } from "../lib/docker";
+import { log } from "../lib/output";
+import { repoPaths } from "../lib/paths";
+
+/**
+ * The operator exit for the update system: what the agent's store believes is
+ * held, and the two host-only ways to end an operation whose outcome is
+ * unknown. Every clear and resolve is appended to an audit file in the
+ * agent's state and printed.
+ */
+const LOCKS = {
+  leases: () => join(leaseStoreDirectory(repoPaths().infraDir), "leases.lock"),
+  writer: () => services.configurationWriterLockPath(repoPaths().infraDir),
+  backups: () => join(repoPaths().infraDir, "backups", ".backup-store.lock"),
+} as const;
+
+function store() {
+  return openLeaseStore({
+    directory: leaseStoreDirectory(repoPaths().infraDir),
+    purpose: "host-cli",
+  });
+}
+
+function audit(entry: Record<string, unknown>): void {
+  const line = JSON.stringify({ at: new Date().toISOString(), ...entry });
+  const path = join(leaseStoreDirectory(repoPaths().infraDir), "control-audit.jsonl");
+  const fd = openSync(path, "a", 0o600);
+  try {
+    writeSync(fd, `${line}\n`);
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+  log.info(`control audit: ${line}`);
+}
+
+function describe(lease: LeaseRecord): string[] {
+  const lines = [
+    `${lease.owner.executor} ${lease.ownerKind} ${lease.owner.operationKey} (${lease.state})`,
+    `  lease ${lease.leaseId}, since ${new Date(lease.createdAt).toISOString()}`,
+    `  targets: ${lease.targets.join(", ")}`,
+  ];
+  for (const child of lease.children)
+    lines.push(
+      `  child ${child.kind} ${child.execution.operationKey} → ${child.recipient} (${child.state}${child.settlement ? `, ${child.settlement.outcome}` : ""})`,
+    );
+  return lines;
+}
+
+/** What Docker says runs for the targets, printed before anything is changed. */
+async function printLive(targets: readonly string[]): Promise<void> {
+  const result = await dockerCompose(["ps", "--all", "--format", "{{.Service}} {{.State}}"]);
+  const rows = result.exitCode === 0 ? result.stdout.split("\n").filter(Boolean) : [];
+  log.info("Containers of the held targets, as Docker reports them now:");
+  for (const target of targets) {
+    const row = rows.find((value) => value.split(" ")[0] === target);
+    log.info(`  ${target}: ${row ? row.split(" ").slice(1).join(" ") : "no container"}`);
+  }
+}
+
+function findLease(operationKey: string): LeaseRecord {
+  const lease = store()
+    .list()
+    .find(
+      (value) =>
+        value.owner.operationKey === operationKey ||
+        value.children.some((child) => child.execution.operationKey === operationKey),
+    );
+  if (!lease) throw new Error(`No lease names operation ${operationKey}`);
+  return lease;
+}
+
+function readJournal(): {
+  operationKey: string;
+  kind: string;
+  state: string;
+  errorClass?: string;
+}[] {
+  try {
+    const journal = JSON.parse(
+      readFileSync(services.agentStatePaths(repoPaths().infraDir).journal, "utf8"),
+    ) as {
+      jobs?: {
+        operationKey: string;
+        operation: { kind: string };
+        state: string;
+        errorClass?: string;
+      }[];
+    };
+    return (journal.jobs ?? []).map((job) => ({
+      operationKey: job.operationKey,
+      kind: job.operation.kind,
+      state: job.state,
+      errorClass: job.errorClass,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export function registerControlCommands(program: Command): void {
+  const control = program
+    .command("control")
+    .description("Inspect and end held update-system operations (host only)");
+
+  control
+    .command("status")
+    .description("Show held leases, unfinished operations and lock holders")
+    .action(() => {
+      const leases = store().list();
+      log.info(leases.length ? "Held leases:" : "No leases are held.");
+      for (const lease of leases) for (const line of describe(lease)) log.info(line);
+      const open = readJournal().filter(
+        (job) =>
+          ["queued", "running", "termination_pending"].includes(job.state) ||
+          job.errorClass === "recovery_required",
+      );
+      if (open.length) {
+        log.info("Agent operations without a final outcome:");
+        for (const job of open)
+          log.info(`  ${job.kind} ${job.operationKey} (${job.errorClass ?? job.state})`);
+      }
+      for (const [name, path] of Object.entries(LOCKS)) {
+        const holder = services.readLockHolder(path());
+        if (holder)
+          log.info(
+            `Lock ${name} held by ${holder.purpose} (pid ${holder.pid}, since ${new Date(holder.acquiredAt).toISOString()})`,
+          );
+      }
+      completeCliCommand(0);
+    });
+
+  control
+    .command("clear")
+    .description("Drop the lease of an operation, or a lock, whose holder is gone")
+    .option("--op <key>", "Operation key that owns or appears in the lease")
+    .option("--lock <name>", `Lock to clear: ${Object.keys(LOCKS).join(", ")}`)
+    .action(async (options: { op?: string; lock?: string }) => {
+      if (options.lock) {
+        // A busy message names the lock by its file; the short name works too.
+        const path = Object.entries(LOCKS)
+          .map(([name, path]) => ({ name, path: path() }))
+          .find(({ name, path }) => options.lock === name || options.lock === basename(path))?.path;
+        if (!path) throw new Error(`Unknown lock ${options.lock}`);
+        const holder = services.clearRecoverableLock(path);
+        audit({ action: "clear-lock", lock: options.lock, holder: holder ?? null });
+        completeCliCommand(0);
+      }
+      if (!options.op) throw new Error("Pass --op <key> or --lock <name>");
+      const lease = findLease(options.op);
+      for (const line of describe(lease)) log.info(line);
+      await printLive(lease.targets);
+      const removed = await store().update((leases) => {
+        const index = leases.findIndex((value) => value.leaseId === lease.leaseId);
+        return index < 0 ? undefined : leases.splice(index, 1)[0];
+      });
+      audit({ action: "clear", operationKey: options.op, lease: removed ?? null });
+      completeCliCommand(0);
+    });
+
+  control
+    .command("resolve")
+    .description("Record the outcome of an operation whose outcome is unknown, and release it")
+    .requiredOption("--op <key>", "Operation key that owns the lease")
+    .requiredOption("--as <outcome>", "committed or failed")
+    .action(async (options: { op: string; as: string }) => {
+      if (options.as !== "committed" && options.as !== "failed")
+        throw new Error("--as must be committed or failed");
+      const lease = findLease(options.op);
+      if (lease.owner.operationKey !== options.op)
+        throw new Error("Resolve the operation that owns the lease");
+      for (const line of describe(lease)) log.info(line);
+      await printLive(lease.targets);
+      // A maintenance root also holds the data-manager fence; the same idempotent
+      // settle the agent uses releases it.
+      if (lease.ownerKind === "configurationMaintenance.prepare")
+        await settleMaintenanceFence(repoPaths().infraDir, lease, options.as);
+      const outcome: "committed" | "contained" =
+        options.as === "committed" ? "committed" : "contained";
+      const evidence = (identity: LeaseRecord["owner"]) => ({
+        identity,
+        outcome,
+        publication: "committed" as const,
+        terminalReceiptDigest: createHash("sha256")
+          .update(
+            canonicalJson({
+              kind: "operator-resolution",
+              operationKey: options.op,
+              as: options.as,
+            }),
+          )
+          .digest("hex"),
+      });
+      await store().update((leases) => {
+        const current = leases.find((value) => value.leaseId === lease.leaseId);
+        if (!current) return;
+        for (const child of current.children)
+          if (child.state !== "settled") {
+            child.state = "settled";
+            child.settlement = evidence(child.execution);
+          }
+        current.state = "settled";
+        current.settlement = evidence(current.owner);
+        leases.splice(leases.indexOf(current), 1);
+      });
+      audit({ action: "resolve", operationKey: options.op, as: options.as, lease });
+      completeCliCommand(0);
+    });
+
+  // The host CLI's transport to the agent: run as the fixed CLI in the agent's
+  // container, with the host-CLI token the agent created.
+  control.command("lease <request>", { hidden: true }).action(async (request: string) => {
+    if (!runsInAgent()) throw new Error("Runs only in the operations agent's container");
+    const operation = opsOperationSchema.parse(JSON.parse(request)) as LeaseOperation;
+    if (!operation.kind.startsWith("lease.")) throw new Error("Lease operations only");
+    const client = new OpsClient({
+      baseUrl: `http://127.0.0.1:${process.env.PORT?.trim() || "4300"}`,
+      tokenFile: services.hostCliTokenPath(repoPaths().infraDir),
+    });
+    const submitted = await client.execute(operation);
+    if (submitted.execution !== "sync") throw new Error("Lease operations answer at once");
+    process.stdout.write(`${JSON.stringify(submitted.value)}\n`);
+    completeCliCommand(0);
+  });
+}

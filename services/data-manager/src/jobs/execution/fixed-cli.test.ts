@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import {
   createControlRootOperationKey,
@@ -184,7 +184,7 @@ it.skipIf(
       runtime: agentRuntime,
       journal: agentJournal,
       controlInstallation: agentInstallation,
-      tokens: { api: token, "data-manager": "d".repeat(43) },
+      tokens: { api: token, "data-manager": "d".repeat(43), "host-cli": "h".repeat(43) },
       resourcePolicy: { allowGlobal: () => true, allowService: () => true },
     });
     await agent.listen({ host: "127.0.0.1", port: 0 });
@@ -240,12 +240,12 @@ it.skipIf(
       expect(rows[0]?.status.status).toBe("ok");
       expect(rows[0]?.parent?.issuer).toBe("host-cli");
       expect(rows[0]?.execution.principal).toBe("host-cli");
-      control.verifyDataControlTerminalWitness(
+      control.readDataControlTerminalObservation(
         agentInstallation,
         rows[0]!.execution,
         rows[0]!.status,
       );
-      expect(existsSync(join(data, ".admin-target-control/locks/data-manager"))).toBe(false);
+      expect(control.heldTargets(dirname(data)).includes("data-manager")).toBe(false);
     } finally {
       await runtime.close();
       agent.server.closeAllConnections();

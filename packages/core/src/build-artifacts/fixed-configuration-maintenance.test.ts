@@ -140,10 +140,7 @@ it.each(["body", "source", "parent", "foreign-target", "protected-target", "capa
   },
 );
 
-it("retains the frozen coordinator image in the cross-role graph used to reconstruct nonempty hardlinks", async () => {
-  const { configurationMaintenanceForwardGraphSchema } = await import(
-    "./configuration-maintenance-forward-records"
-  );
+it("rebuilds the same plan from the frozen coordinator image", () => {
   const source = input();
   const coordinatorImage = {
     action: "apply" as const,
@@ -154,24 +151,9 @@ it("retains the frozen coordinator image in the cross-role graph used to reconst
     pullSubmissionDigest: null,
   };
   const plan = buildFixedConfigurationMaintenancePlan({ ...source, coordinatorImage });
-  const { kind: _kind, ...binding } = plan.operation;
-  const graph = configurationMaintenanceForwardGraphSchema.parse({
-    version: 1,
-    binding,
-    prepare: plan.prepare,
-    apiJobId: plan.apiParent.apiJobId,
-    parentOperationKey: plan.apiParent.operationKey,
-    parentFingerprint: plan.apiParent.fingerprint,
-    parentDeadlineAt: plan.apiParent.deadlineAt,
-    planDigest: plan.planDigest,
-    serviceIds: plan.serviceIds,
-    steps: plan.steps,
-    coordinatorImage,
-  });
-  expect(graph.coordinatorImage).toEqual(coordinatorImage);
   const rebuilt = buildFixedConfigurationMaintenancePlan({
     ...source,
-    coordinatorImage: graph.coordinatorImage,
+    coordinatorImage: structuredClone(coordinatorImage),
   });
   expect(rebuilt.planDigest).toBe(plan.planDigest);
   expect(rebuilt.steps).toEqual(plan.steps);
@@ -295,7 +277,6 @@ it("freezes the checked release helper graph and plans a complete 13-service sta
     sourceDigest: "b".repeat(64),
     environmentNames: [],
     preparerAdmissionDigest: "c".repeat(64),
-    ownerCertificateDigest: "d".repeat(64),
     leaseId: "88888888-8888-4888-8888-888888888888",
     delegationId: "99999999-9999-4999-8999-999999999999",
     assertion: "original-fixed-assertion",
@@ -321,26 +302,7 @@ it("freezes the checked release helper graph and plans a complete 13-service sta
       operation: { ...intent.operation, mode: { kind: "configuration" } },
     }).success,
   ).toBe(false);
-  const { configurationMaintenanceForwardGraphSchema } = await import(
-    "./configuration-maintenance-forward-records"
-  );
-  const { kind: _kind, ...binding } = operation;
-  if (source.apiParent.issuer !== "api") throw Error("API graph required");
-  const graph = configurationMaintenanceForwardGraphSchema.parse({
-    version: 1,
-    binding,
-    prepare,
-    apiJobId: source.apiParent.apiJobId,
-    parentOperationKey: source.apiParent.operationKey,
-    parentFingerprint: source.apiParent.fingerprint,
-    parentDeadlineAt: source.apiParent.deadlineAt,
-    planDigest: plan.planDigest,
-    serviceIds: plan.serviceIds,
-    steps: plan.steps,
-    handoff: plan.handoff,
-    release: plan.release,
-  });
-  expect(graph.release).toEqual(release);
+  expect(plan.release).toEqual(release);
 
   // A realistic stack must fit without relaxing the private-record limits.
   const names = [
@@ -460,25 +422,7 @@ it("freezes protected handoff after the original generation and ordinary childre
     recipient: "configuration-helper",
     serviceIds: handoff.serviceIds,
   });
-  const { configurationMaintenanceForwardGraphSchema } = await import(
-    "./configuration-maintenance-forward-records"
-  );
-  const { kind: _kind, ...binding } = operation;
-  if (source.apiParent.issuer !== "api") throw Error("API plan fixture required");
-  const graph = configurationMaintenanceForwardGraphSchema.parse({
-    version: 1,
-    binding,
-    prepare,
-    apiJobId: source.apiParent.apiJobId,
-    parentOperationKey: source.apiParent.operationKey,
-    parentFingerprint: source.apiParent.fingerprint,
-    parentDeadlineAt: source.apiParent.deadlineAt,
-    planDigest: plan.planDigest,
-    serviceIds: plan.serviceIds,
-    steps: plan.steps,
-    handoff: plan.handoff,
-  });
-  expect(graph).toHaveProperty("handoff", handoff);
+  expect(plan.handoff).toEqual(handoff);
   expect(plan.nestedHandoff?.execution.operationKey).toBe(
     controlChildOperationKey(step.operationKey, "configuration-handoff", 0),
   );

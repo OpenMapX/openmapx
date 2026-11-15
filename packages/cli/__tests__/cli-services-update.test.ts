@@ -181,7 +181,7 @@ describe("services update pull failures", () => {
         events.push("pull");
       } else {
         expect(current).not.toBe(seed);
-        const directory = join(root, "infra/docker/data/ops-agent/lifecycle");
+        const directory = join(root, "infra/docker/state/ops-agent/lifecycle");
         const raw = JSON.parse(readFileSync(join(directory, readdirSync(directory)[0]!), "utf8"));
         const receipt = await services.readServiceLifecycleReceipt({
           dataRoot: join(root, "infra/docker/data"),

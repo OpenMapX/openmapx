@@ -449,6 +449,13 @@
       "when": 1794669803740,
       "tag": "0063_configuration_fence_table",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1794734781139,
+      "tag": "0064_configuration_fence_owner_lease",
+      "breakpoints": true
     }
   ]
 }

@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import * as control from "@openmapx/core/build-artifacts";
 import {
@@ -17,6 +17,14 @@ import { applyHardlinkPlan } from "@openmapx/hardlinks";
 import { build } from "esbuild";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { transitChildCandidateId } from "./ops-children.js";
+
+/** The lease holding `target` in the installation whose data root is `data`. */
+function targetLease(data: string, target: string): string | undefined {
+  return control
+    .openLeaseStore({ directory: control.leaseStoreDirectory(dirname(data)), purpose: "test" })
+    .list()
+    .find((lease) => lease.targets.includes(target))?.leaseId;
+}
 
 let bundle: string, bundleRoot: string;
 beforeAll(async () => {
@@ -111,7 +119,6 @@ it.each(["promotion", "reload"] as const)(
       plan: [plan],
     });
     const lease = await control.acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
       serviceIds,
       owner: authority,
     });
@@ -135,6 +142,7 @@ it.each(["promotion", "reload"] as const)(
     const assertion = await control.delegateArtifactTargetLease(lease, {
       ...plan,
       childPublicKey: agentVerifier.publicKey,
+      evidence: control.publishedDataTransitCandidate(authority, { phase, ordinal: 0 }),
     });
     const token = "b".repeat(43),
       tokenFile = join(root, "token");
@@ -438,7 +446,7 @@ it.skipIf(
       const pending = await store.inspect(id);
       expect(pending?.status.status).toBe("cancel_pending");
       expect(pending?.finishedAt).toBeNull();
-      expect(existsSync(join(root, "data/.admin-target-control/locks/motis"))).toBe(true);
+      expect(control.heldTargets(root).includes("motis")).toBe(true);
       send({ type: "probe" });
       expect(await next()).toMatchObject({
         forward: false,
@@ -456,7 +464,7 @@ it.skipIf(
         changed: true,
       });
       await expect
-        .poll(() => existsSync(join(root, "data/.admin-target-control/locks/motis")), {
+        .poll(() => control.heldTargets(root).includes("motis"), {
           timeout: 10000,
         })
         .toBe(false);
@@ -764,8 +772,9 @@ it
               { timeout: 15000 },
             )
             .toBe("bound");
-        const lock = join(data, ".admin-target-control/locks/motis-feed-proxy"),
-          inode = statSync(lock).ino;
+        const lease = () => targetLease(data, "motis-feed-proxy"),
+          held = lease();
+        expect(held).toBeDefined();
         await expect(
           journal.assertOwnedProxyRecoverySettled((await store.inspect(id))!.execution),
         ).rejects.toThrow();
@@ -783,7 +792,7 @@ it
         await restarted.reconcile();
         expect((await store.inspect(id))?.finishedAt).toBeNull();
         expect((await store.inspect(id))?.status.publication).toBe("unknown");
-        expect(statSync(lock).ino).toBe(inode);
+        expect(lease()).toBe(held);
         expect(posts).toBe(1);
         await restarted.close();
         return;
@@ -801,8 +810,9 @@ it
               { timeout: 15000 },
             )
             .toBe(2);
-          const lock = join(data, ".admin-target-control/locks/motis-feed-proxy"),
-            inode = statSync(lock).ino;
+          const lease = () => targetLease(data, "motis-feed-proxy"),
+            held = lease();
+          expect(held).toBeDefined();
           await expect
             .poll(
               () =>
@@ -840,7 +850,7 @@ it
           await restarted.reconcile();
           expect((await store.inspect(id))?.finishedAt).toBeNull();
           expect((await receiver.inspect(id))?.publication).toBe("unknown");
-          expect(statSync(lock).ino).toBe(inode);
+          expect(lease()).toBe(held);
           await expect(
             journal.assertOwnedProxyRecoverySettled((await store.inspect(id))!.execution),
           ).rejects.toThrow();
@@ -848,7 +858,7 @@ it
           try {
             expect(await control.pruneControlRecords(dm)).toEqual([]);
             expect((await store.inspect(id))?.finishedAt).toBeNull();
-            expect(statSync(lock).ino).toBe(inode);
+            expect(lease()).toBe(held);
           } finally {
             clock.mockRestore();
           }
@@ -884,18 +894,15 @@ it
         kind === "promotion" ? 600000 : 120000,
       );
       expect(record.status.deadlineAt).toBe(deadline);
-      const lock = join(
-          data,
-          ".admin-target-control/locks",
-          kind === "promotion" ? "motis" : "motis-feed-proxy",
-        ),
-        inode = statSync(lock).ino,
+      const lease = () => targetLease(data, kind === "promotion" ? "motis" : "motis-feed-proxy"),
+        held = lease(),
         rootReceipt = join(root, "control-private/data-manager/executions", `${key}.json`),
         original = readFileSync(rootReceipt);
       await receiver.requestCancel({ id, operationKey: key, fingerprint: admitted.fingerprint });
       expect((await next()).type).toBe("aborted");
+      expect(held).toBeDefined();
       expect((await store.inspect(id))?.finishedAt).toBeNull();
-      expect(statSync(lock).ino).toBe(inode);
+      expect(lease()).toBe(held);
       expect((await receiver.inspect(id))?.status).toBe("cancel_pending");
       send({ type: "probe" });
       expect(await next()).toMatchObject({
@@ -909,7 +916,7 @@ it
         .poll(async () => (await receiver.inspect(id!))?.status, { timeout: 15000 })
         .toBe("canceled");
       expect((await receiver.inspect(id))?.publication).toBe("committed");
-      await expect.poll(() => existsSync(lock), { timeout: 10000 }).toBe(false);
+      await expect.poll(lease, { timeout: 10000 }).toBeUndefined();
       expect(readFileSync(rootReceipt)).toEqual(original);
       expect(posts).toBe(1);
       expect(cancels).toBe(1);
@@ -1035,7 +1042,6 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
       reservations: [reservation],
     });
     const lease = await control.acquireArtifactTargetLease({
-      dataRoot: data,
       serviceIds: ["motis-feed-proxy"],
       owner: authority,
     });
@@ -1045,6 +1051,7 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
         ...reservation,
         lease,
         childPublicKey: agentVerifier.publicKey,
+        evidence: control.publishedDataTransitCandidate(authority, reservation),
       });
     const token = "e".repeat(43),
       tokenFile = join(root, "token");
@@ -1115,25 +1122,26 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
       if (crash === "after-terminal") {
         expect(status.state).toBe("failed");
         expect(status.errorClass).toBe("runtime");
-        expect(control.verifyFeedProxyCanonicalTerminal(authority, bound.execution).state).toBe(
-          "failed",
-        );
-        expect(
-          control.inspectArtifactTargetLeaseChildSettlement(lease, bound.execution),
-        ).toMatchObject({ outcome: "contained", publication: "not_started" });
+        // data-manager records the agent's terminal status it observed.
+        control.recordOpsControlTerminalObservation(dm, bound.execution, status);
+        expect(control.readOpsControlTerminalObservation(dm, bound.execution).state).toBe("failed");
+        await expect(
+          await control.inspectArtifactTargetLeaseChildSettlement(lease, bound.execution),
+        ).resolves.toMatchObject({ outcome: "contained", publication: "not_started" });
         const repaired = JSON.parse(readFileSync(terminalPath, "utf8")).payload;
         expect(repaired.terminalDigest).toBe(originalTerminal.terminalDigest);
         expect(repaired.terminalAt).toBe(originalTerminal.terminalAt);
       } else {
         expect(status.errorClass).toBe("recovery_required");
+        // A status that is not terminal is never recorded.
         expect(() =>
-          control.verifyFeedProxyCanonicalTerminal(authority, bound.execution),
+          control.recordOpsControlTerminalObservation(dm, bound.execution, status),
         ).toThrow();
       }
       const jobs = JSON.parse(readFileSync(join(root, "state/ops-agent/jobs-v1.json"), "utf8"));
       expect(JSON.stringify(jobs)).toContain(bound.execution.operationKey);
       await expect(control.releaseArtifactTargetLease(lease)).rejects.toThrow();
-      expect(existsSync(join(data, ".admin-target-control/locks/motis-feed-proxy"))).toBe(true);
+      expect(control.heldTargets(dirname(data)).includes("motis-feed-proxy")).toBe(true);
       // No POST is sent to the restarted process; original admission remains.
     } finally {
       await first?.close();

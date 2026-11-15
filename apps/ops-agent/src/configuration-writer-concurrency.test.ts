@@ -1,5 +1,13 @@
 import { type ChildProcess, fork } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -213,23 +221,17 @@ describe("overlapping configuration writers", () => {
       outcome: "committed",
     });
   }, 20_000);
-  it("does not steal a killed holder's ownership or allow a timed-out contender to write later", async () => {
+  it("reclaims the lock of a killed holder and commits the next writer's generation", async () => {
     const root = fixture();
     const infra = join(root, "infra/docker");
     const a = start(root, "ops", "a", "", "before");
     await a.wait("held");
     a.child.kill("SIGKILL");
     await new Promise<void>((resolve) => a.child.once("exit", () => resolve()));
+    // The dead holder's lock file stays until the next writer proves it gone.
+    expect(existsSync(coreServices.configurationWriterLockPath(infra))).toBe(true);
     const b = start(root, "ops", "b");
-    expect((await b.wait("done")).result).toMatchObject({
-      outcome: "not_committed",
-      reason: "busy",
-    });
-    expect(coreServices.currentConfigurationGeneration(infra)).toBeNull();
-    expect(
-      readdirSync(join(infra, coreServices.CONFIGURATION_GENERATIONS)).some((n) =>
-        n.endsWith(".tmp"),
-      ),
-    ).toBe(true);
+    expect((await b.wait("done")).result).toMatchObject({ outcome: "committed" });
+    expect(coreServices.currentConfigurationGeneration(infra)).not.toBeNull();
   }, 20_000);
 });

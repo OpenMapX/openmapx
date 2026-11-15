@@ -4,6 +4,7 @@ import type { DataExecutionInput } from "@openmapx/core/data-manager-contracts";
 import { prepareTransitSourceMutation } from "../../transit-sources.js";
 import { resolveTransitOverlayPath } from "../transitous/internal.js";
 import type { MotisOperationsPolicy } from "../transitous/operations-profile.js";
+import { ownedLease } from "./owned-lease.js";
 import type { DataExecutionContext } from "./runtime.js";
 import { dataExecutionWorkerContext, publishDataChange } from "./worker-scope.js";
 /** Fixed first phase of the original transit-sync, not an HTTP-side mutation. */
@@ -16,7 +17,7 @@ export async function publishOwnedTransitSourceMutation(
   if (!input.sourceMutation) return;
   if (dataExecutionWorkerContext() !== context) throw Error("Owned transit worker required");
   context.assertForward();
-  assertArtifactTargetLeaseForward(context.targetAuthority);
+  assertArtifactTargetLeaseForward(ownedLease(context));
   const retained = await context.record();
   if (
     retained.input.kind !== "transit-sync" ||
@@ -34,7 +35,7 @@ export async function publishOwnedTransitSourceMutation(
   );
   await publishDataChange(() => {
     context.assertForward();
-    assertArtifactTargetLeaseForward(context.targetAuthority);
+    assertArtifactTargetLeaseForward(ownedLease(context));
     mutation.persist();
   });
 }

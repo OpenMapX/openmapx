@@ -94,7 +94,6 @@ export async function withCliControlContext<T>(
     if (delegation) {
       parent = verifiedParentForArtifactDelegation(installation, assertion, execution);
       lease = await adoptArtifactTargetLease({
-        dataRoot: join(infraDir, "data"),
         assertion,
         peer,
         execution,

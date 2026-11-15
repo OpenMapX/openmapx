@@ -355,7 +355,6 @@ describe("per-caller route allowlist", () => {
       "inspectDataConfigurationFence",
       "settleDataConfigurationFence",
       "startGenerationHardlinksExecution",
-      "recoverUnadmittedGenerationHardlinks",
     ] as const)
       expect(DATA_MANAGER_API_ROUTES[operationId], operationId).toBe(false);
     const { app } = await contractApp();

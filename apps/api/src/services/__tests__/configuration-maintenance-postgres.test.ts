@@ -19,12 +19,15 @@ import { setTimeout as nativeDelay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import {
   closeControlInstallation,
+  heldTargets,
+  leaseStoreDirectory,
   lookupControlChildPhaseAttempt,
   lookupControlChildPhaseBinding,
   openControlInstallation,
+  openLeaseStore,
   pruneControlRecords,
+  readDataControlTerminalObservation,
   restoreAdmittedControlExecution,
-  verifyDataControlTerminalWitness,
 } from "@openmapx/core/build-artifacts";
 import { canonicalJson } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
@@ -46,6 +49,19 @@ import { postgresCommitRelay } from "./fixtures/postgres-commit-relay";
  * session with this name, so such sessions belong to the spawned API.
  */
 const NATIVE_API_APPLICATION_NAME = "openmapx-api";
+
+/** The lease in the agent's store that holds `target`, or null. */
+function targetLease(infraDir: string, target: string): string | null {
+  return (
+    openLeaseStore({ directory: leaseStoreDirectory(infraDir), purpose: "test" })
+      .list()
+      .find((lease) => lease.targets.includes(target))?.leaseId ?? null
+  );
+}
+/** One lease as the agent's store records it now. */
+function heldLease(infraDir: string, leaseId: string) {
+  return openLeaseStore({ directory: leaseStoreDirectory(infraDir), purpose: "test" }).get(leaseId);
+}
 
 /**
  * A lease renewal a native API sent before it was killed can still commit after
@@ -216,7 +232,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       });
       const journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json"));
       app = buildOpsAgentServer({
-        tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+        tokens: {
+          api: host.token,
+          "data-manager": Buffer.alloc(32, 23).toString("base64url"),
+          "host-cli": "h".repeat(43),
+        },
         runtime: host.runtime,
         resourceClaimer: host.claimer,
         journal,
@@ -1159,8 +1179,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               `${candidate.sealedOperationKey}.json`,
             ),
             candidateBytes = retired ? undefined : readFileSync(candidatePath),
-            rootLock = join(host.infraDir, "data/.admin-target-control/locks/data-manager"),
-            rootInode = existsSync(rootLock) ? statSync(rootLock).ino : null;
+            rootLease = () => targetLease(host.infraDir, "data-manager"),
+            rootInode = rootLease();
           expect(rootInode === null).toBe(
             mode === "after-settle" ||
               preRootHelper ||
@@ -1256,7 +1276,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               ? !existsSync(candidatePath)
               : readFileSync(candidatePath).equals(candidateBytes!),
           ).toBe(true);
-          expect(existsSync(rootLock) ? statSync(rootLock).ino : null).toBe(rootInode);
+          expect(rootLease()).toBe(rootInode);
           if (mode === "before-root-start-source")
             await fixture.db
               .insert(schema.serviceConfig)
@@ -1314,9 +1334,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               ),
               authority = restoreAdmittedControlExecution(installation, owner.plan.prepare);
             core.assertConfigurationMaintenanceRootClosure(authority);
-            core.verifyRetainedArtifactTargetRootRelease(authority);
+            await core.verifyRetainedArtifactTargetRootRelease(authority);
             expect(existsSync(candidatePath)).toBe(false);
-            expect(existsSync(rootLock)).toBe(false);
+            expect(rootLease()).toBeNull();
             expect(await fixture.db.select().from(schema.serviceSecret)).toEqual([]);
             expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
               host.initial.revisionId,
@@ -1387,7 +1407,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               ),
             ).toBe(false);
             expect(existsSync(candidatePath)).toBe(false);
-            expect(existsSync(rootLock)).toBe(false);
+            expect(rootLease()).toBeNull();
             expect(await fixture.db.select().from(schema.serviceSecret)).toEqual([]);
             expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
               host.initial.revisionId,
@@ -1399,7 +1419,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               ).receipt,
               core = await import("@openmapx/core/build-artifacts");
             expect(final.prepare.operationKey).toBe(candidate.prepareOperationKey);
-            core.verifyRetainedArtifactTargetRootRelease(
+            await core.verifyRetainedArtifactTargetRootRelease(
               restoreAdmittedControlExecution(installation, final.prepare),
             );
             expect((await start().exited).code).toBe(2);
@@ -1461,7 +1481,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 ).equals(helperAdmission!),
               ).toBe(true);
             expect(existsSync(candidatePath)).toBe(false);
-            expect(existsSync(rootLock)).toBe(false);
+            expect(rootLease()).toBeNull();
             expect(await fixture.db.select().from(schema.serviceSecret)).toEqual([]);
             expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
               host.initial.revisionId,
@@ -1520,7 +1540,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               ).equals(helperAdmission!),
             ).toBe(true);
             expect(existsSync(candidatePath)).toBe(false);
-            expect(existsSync(rootLock)).toBe(false);
+            expect(rootLease()).toBeNull();
             expect(await fixture.db.select().from(schema.serviceSecret)).toEqual([]);
             expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
               host.initial.revisionId,
@@ -1569,7 +1589,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               receipt: { state: "prepared", decision: null, generation: "not_started" },
             });
             expect(readFileSync(candidatePath).equals(candidateBytes!)).toBe(true);
-            expect(statSync(rootLock).ino).toBe(rootInode);
+            expect(rootLease()).toBe(rootInode);
             expect(preparePosts).toBe(1);
             expect(settlePosts).toBe(0);
             expect(dm!.settlePosts).toBe(0);
@@ -1628,7 +1648,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             expect(result._configurationMaintenanceSettle).toEqual(
               originalResult._configurationMaintenanceSettle,
             );
-            expect(finalOwner.rootCertificateDigest).toBe(originalOwner.rootCertificateDigest);
+            expect(finalOwner.leaseId).toBe(originalOwner.leaseId);
           }
           if (knownRollback) {
             expect(result._configurationMaintenanceRollback).toEqual(
@@ -1661,9 +1681,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           expect(
             existsSync(join(host.queue, ".candidates", `${candidate.sealedOperationKey}.json`)),
           ).toBe(false);
-          expect(
-            existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-          ).toBe(false);
+          expect(heldTargets(host.infraDir).includes("data-manager")).toBe(false);
           expect(host.calls.filter((args) => args.includes("up"))).toHaveLength(
             unused || contained ? 0 : preRootHelper ? 2 : 1,
           );
@@ -2273,9 +2291,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(candidate.revisionId).not.toBe(host.initial.revisionId);
         expect(dm!.preparePosts).toBe(0);
         expect(actualPosts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
-        expect(
-          existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-        ).toBe(false);
+        expect(heldTargets(host.infraDir).includes("data-manager")).toBe(false);
         expect(await fixture.db.select().from(schema.serviceSecret)).toHaveLength(80);
         expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
           host.initial.revisionId,
@@ -2554,9 +2570,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             },
           }),
         ).toThrow();
-        expect(
-          existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-        ).toBe(false);
+        expect(heldTargets(host.infraDir).includes("data-manager")).toBe(false);
         expect(await fixture.db.select().from(schema.serviceSecret)).toEqual([]);
         expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
           host.initial.revisionId,
@@ -2626,9 +2640,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await prospective.stageProspectiveConfigurationMaintenance(candidate);
         expect(starts).toBe(1);
         expect(dm!.preparePosts).toBe(0);
-        expect(
-          existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-        ).toBe(false);
+        expect(heldTargets(host.infraDir).includes("data-manager")).toBe(false);
         const helperPath = join(
             host.infraDir,
             "control-private/ops-agent/executions",
@@ -2833,9 +2845,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
           host.initial.revisionId,
         );
-        expect(
-          existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-        ).toBe(false);
+        expect(heldTargets(host.infraDir).includes("data-manager")).toBe(false);
         expect(coordinator.State).toBe("running");
         expect(ctx.checkpointResult!._configurationCandidate).toMatchObject({
           candidateId: candidate.candidateId,
@@ -3252,9 +3262,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             host.initial.revisionId,
           );
           expect(readdirSync(host.queue).filter((name) => name.startsWith("cfg1_"))).toEqual([]);
-          expect(
-            existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-          ).toBe(true);
+          expect(heldTargets(host.infraDir).includes("data-manager")).toBe(true);
         });
       },
       60000,
@@ -3326,9 +3334,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             },
           },
         });
-        expect(
-          existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-        ).toBe(false);
+        expect(heldTargets(host.infraDir).includes("data-manager")).toBe(false);
         expect(
           host.calls.some(
             (args) => args.includes("up") || args.includes("pull") || args.includes("restart"),
@@ -3390,10 +3396,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           core = await import("@openmapx/core/build-artifacts"),
           authority = restoreAdmittedControlExecution(installation, prepared.prepare),
           lease = core.restoreArtifactTargetLeaseForSettlement(authority),
-          leaseDirectory = join(host.infraDir, "data/.admin-target-control/leases", lease.leaseId),
-          ownerPath = join(leaseDirectory, "owner.json"),
-          ownerBytes = readFileSync(ownerPath),
-          ownerInode = statSync(leaseDirectory).ino,
+          ownerRecord = () => JSON.stringify(heldLease(host.infraDir, lease.leaseId)),
+          ownerBytes = ownerRecord(),
           originalAdmissionPath = join(
             host.infraDir,
             "control-private/ops-agent/executions",
@@ -3453,13 +3457,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ),
         ).toBe(false);
         expect(dm!.preparePosts).toBe(1);
-        expect(JSON.parse(readFileSync(ownerPath, "utf8")).payload.certificate).toEqual(
-          JSON.parse(ownerBytes.toString()).payload.certificate,
-        );
-        expect(JSON.parse(readFileSync(ownerPath, "utf8")).payload.origin).toEqual(
-          JSON.parse(ownerBytes.toString()).payload.origin,
-        );
-        expect(statSync(leaseDirectory).ino).toBe(ownerInode);
+        // The root lease still names the same owner and targets.
+        const after = heldLease(host.infraDir, lease.leaseId),
+          before = JSON.parse(ownerBytes);
+        expect(after?.owner).toEqual(before.owner);
+        expect(after?.targets).toEqual(before.targets);
         expect(readFileSync(originalAdmissionPath)).toEqual(originalAdmission);
         const step = prepared.steps[0]!,
           projected = (await import("../admin-job-ops")).readProjection(ctx.checkpointResult)
@@ -3472,9 +3474,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           receiptDelivery: expect.anything(),
         });
         expect(await maintenance.executeConfigurationMaintenanceStep(candidate, 0)).toEqual(result);
-        expect(
-          existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-        ).toBe(true);
+        expect(heldTargets(host.infraDir).includes("data-manager")).toBe(true);
       });
     }, 60000);
     it.each([false, true])(
@@ -3606,12 +3606,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               (args) => args.includes("up") || args.includes("pull") || args.includes("restart"),
             ),
           ).toBe(false);
-          expect(
-            existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-          ).toBe(true);
-          expect(existsSync(join(host.infraDir, "data/.admin-target-control/locks/motis"))).toBe(
-            true,
-          );
+          expect(heldTargets(host.infraDir).includes("data-manager")).toBe(true);
+          expect(heldTargets(host.infraDir).includes("motis")).toBe(true);
           if (recreate) {
             expect(prepared.steps[2]).toMatchObject({
               phase: "maintenance-recreate",
@@ -3753,7 +3749,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         });
         const restartedRuntime = await host.reopenRuntime();
         app = buildOpsAgentServer({
-          tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+          tokens: {
+            api: host.token,
+            "data-manager": Buffer.alloc(32, 23).toString("base64url"),
+            "host-cli": "h".repeat(43),
+          },
           runtime: restartedRuntime,
           resourceClaimer: host.createResourceClaimer(restartedRuntime),
           journal,
@@ -3890,9 +3890,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             expect(owner.final).toBeNull();
             expect(owner.inspection).toBeNull();
             expect(owner.receipt.dmFence!.state).toBe("prepared");
-            expect(
-              existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-            ).toBe(true);
+            expect(heldTargets(host.infraDir).includes("data-manager")).toBe(true);
             await expect(dm!.receiver.admitLocal({ kind: "download-fonts" })).rejects.toThrow(
               "configuration_maintenance_busy",
             );
@@ -3946,9 +3944,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             dmFence: { state: "settled" },
           });
           expect(owner.apiControls.steps).toHaveLength(1);
-          expect(
-            existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-          ).toBe(false);
+          expect(heldTargets(host.infraDir).includes("data-manager")).toBe(false);
           expect(
             existsSync(
               join(host.queue, ".candidates", `${owner.plan.operation.applyOperationKey}.json`),
@@ -3984,6 +3980,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 tokens: {
                   api: host.token,
                   "data-manager": Buffer.alloc(32, 23).toString("base64url"),
+                  "host-cli": "h".repeat(43),
                 },
                 runtime: restartedRuntime,
                 resourceClaimer: host.createResourceClaimer(restartedRuntime),
@@ -4223,9 +4220,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               followUp: "complete",
               dmFence: { state: "settled" },
             });
-            expect(
-              existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-            ).toBe(false);
+            expect(heldTargets(host.infraDir).includes("data-manager")).toBe(false);
           } else if (mode === "component") {
             const shapes = await import(
                 "../../../../../packages/core/src/build-artifacts/configuration-maintenance-docker-records"
@@ -4338,119 +4333,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       },
       180000,
     );
-    it("rejects a real durable nonempty middle-owner grant with only the original pending decision witness", async () => {
-      dm = await ownedDataManager({
-        sql: fixture.sql,
-        infraDir: host.infraDir,
-        serviceIds: host.loaded.map((service) => service.manifest.id),
-      });
-      vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
-      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
-      host.setRows([
-        host.row,
-        {
-          ...host.row,
-          Id: "c".repeat(64),
-          State: "running",
-          ConfigImage: "example/data-manager:1",
-          Labels: { ...host.row.Labels, "com.docker.compose.service": "data-manager" },
-        },
-      ]);
-      const ctx = await job(),
-        observation = new AbortController();
-      ctx.signal = observation.signal;
-      await owned(ctx, async () => {
-        const candidate = await prospective.prepareProspectiveConfiguration({
-            actorId: ctx.jobId,
-            operationKey: `opk1_${ctx.jobId.replaceAll("-", "")}`,
-            expectedCurrentRevisionId: host.initial.revisionId,
-            followUp: "service-apply",
-            overlay: {
-              purpose: "service-secret",
-              coordinatorMode: "require-running",
-              changes: [
-                {
-                  kind: "service-secret",
-                  serviceId: "data-manager",
-                  key: "TOKEN",
-                  action: "set",
-                  value: "synthetic-no-decision-credential",
-                },
-              ],
-            },
-          }),
-          maintenance = await import("../configuration-maintenance"),
-          prepared = await maintenance.prepareConfigurationMaintenance(candidate),
-          witnessPath = join(
-            host.infraDir,
-            "data/.admin-target-control/executions/ops-agent",
-            `${prepared.prepare.operationKey}.configuration-maintenance.json`,
-          ),
-          pending = readFileSync(witnessPath),
-          decision = await prospective.commitProspectiveConfigurationMaintenance(candidate);
-        expect(JSON.parse(pending.toString()).payload).toMatchObject({
-          decision: null,
-          generation: null,
-        });
-        await maintenance.decideConfigurationMaintenance(decision);
-        await maintenance.executeConfigurationMaintenanceStep(candidate, 0);
-        const nativeFetch = globalThis.fetch,
-          core = await import("@openmapx/core/build-artifacts");
-        let denied = 0,
-          validGrant = false,
-          leafKey = "";
-        const transport = vi.spyOn(globalThis, "fetch").mockImplementation(async (...args) => {
-          if (
-            !String(args[0]).endsWith("/executions/generation-hardlinks") ||
-            args[1]?.method !== "POST"
-          )
-            return nativeFetch(...args);
-          const headers = new Headers(args[1].headers),
-            grant = core.inspectArtifactDelegation({
-              installation,
-              dataRoot: join(host.infraDir, "data"),
-              assertion: headers.get("x-openmapx-control-delegation")!,
-            });
-          leafKey = grant.execution.operationKey;
-          validGrant =
-            grant.kind === "generation-hardlinks" &&
-            grant.parent.operationKey === prepared.steps[1]!.operationKey &&
-            grant.owner.operationKey === prepared.prepare.operationKey;
-          const current = readFileSync(witnessPath);
-          // Named native shared-publication rollback only; both packets are the
-          // actual producer's signatures. No private source/grant is fabricated.
-          writeFileSync(witnessPath, pending);
-          try {
-            const response = await nativeFetch(...args);
-            denied = response.status;
-            observation.abort();
-            return response;
-          } finally {
-            writeFileSync(witnessPath, current);
-          }
-        });
-        try {
-          await expect(
-            maintenance.executeConfigurationMaintenanceStep(candidate, 1),
-          ).rejects.toMatchObject({ name: "OpsObservationPending" });
-        } finally {
-          transport.mockRestore();
-        }
-        expect(validGrant).toBe(true);
-        expect(denied).toBe(409);
-        expect(
-          await fixture.sql`SELECT id FROM data_manager.jobs WHERE kind='generation-hardlinks' AND operation_key=${leafKey}`,
-        ).toHaveLength(0);
-        expect(
-          existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-        ).toBe(true);
-        expect(
-          host.calls.some(
-            (args) => args.includes("up") || args.includes("pull") || args.includes("restart"),
-          ),
-        ).toBe(false);
-      });
-    }, 120000);
     it.each(["expired", "host-source"])(
       "refuses actual durable nonempty committed continue after %s drift without admitting any effect",
       async (reason) => {
@@ -4528,9 +4410,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 ),
             ).toBe(false);
             expect(dm!.preparePosts).toBe(1);
-            expect(
-              existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-            ).toBe(true);
+            expect(heldTargets(host.infraDir).includes("data-manager")).toBe(true);
           });
         } finally {
           vi.useRealTimers();
@@ -4648,9 +4528,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               : { status: 409, errorClass: "conflict" },
           ]);
           expect(readFileSync(path)).toEqual(before);
-          expect(
-            existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-          ).toBe(true);
+          expect(heldTargets(host.infraDir).includes("data-manager")).toBe(true);
           expect(dm!.preparePosts).toBe(1);
         });
       },
@@ -4754,7 +4632,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         });
         const restartedRuntime = await host.reopenRuntime();
         app = buildOpsAgentServer({
-          tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+          tokens: {
+            api: host.token,
+            "data-manager": Buffer.alloc(32, 23).toString("base64url"),
+            "host-cli": "h".repeat(43),
+          },
           runtime: restartedRuntime,
           resourceClaimer: host.createResourceClaimer(restartedRuntime),
           journal,
@@ -4791,9 +4673,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await expect(dm!.receiver.admitLocal({ kind: "download-fonts" })).rejects.toThrow(
           "configuration_maintenance_busy",
         );
-        expect(
-          existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-        ).toBe(true);
+        expect(heldTargets(host.infraDir).includes("data-manager")).toBe(true);
         expect(
           host.calls.some(
             (args) => args.includes("up") || args.includes("pull") || args.includes("restart"),
@@ -4929,9 +4809,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               dmFence: { state: "settled" },
             });
             expect(readFileSync(admissionPath)).toEqual(originalAdmission);
-            expect(
-              existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-            ).toBe(false);
+            expect(heldTargets(host.infraDir).includes("data-manager")).toBe(false);
             expect(
               host.calls.some(
                 (args) => args.includes("up") || args.includes("pull") || args.includes("restart"),
@@ -5047,7 +4925,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ),
             records.configurationMaintenanceOwnerRecordSchema,
           ),
-          released = core.verifyRetainedArtifactTargetRootRelease(authority),
+          released = await core.verifyRetainedArtifactTargetRootRelease(authority),
           originalFinal = JSON.stringify(owner.final),
           originalInspection = JSON.stringify(owner.inspection),
           [originalSql] =
@@ -5066,7 +4944,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         });
         const restartedRuntime = await host.reopenRuntime();
         app = buildOpsAgentServer({
-          tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+          tokens: {
+            api: host.token,
+            "data-manager": Buffer.alloc(32, 23).toString("base64url"),
+            "host-cli": "h".repeat(43),
+          },
           runtime: restartedRuntime,
           resourceClaimer: host.createResourceClaimer(restartedRuntime),
           journal,
@@ -5092,9 +4974,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             await fixture.sql`SELECT state,outcome,settled_at,xmin::text AS xmin FROM data_manager.configuration_fence WHERE fence_id=${prepared.dmFence!.fenceId}::uuid`
           )[0],
         ).toEqual(originalSql);
-        expect(
-          existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-        ).toBe(false);
+        expect(heldTargets(host.infraDir).includes("data-manager")).toBe(false);
         expect(
           host.calls.some(
             (args) => args.includes("up") || args.includes("pull") || args.includes("restart"),
@@ -5208,9 +5088,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               await fixture.sql`SELECT state,outcome,settled_at,xmin::text AS xmin FROM data_manager.configuration_fence WHERE fence_id=${prepared.dmFence!.fenceId}::uuid`
             )[0],
           ).toEqual(beforeSql);
-          expect(
-            existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-          ).toBe(false);
+          expect(heldTargets(host.infraDir).includes("data-manager")).toBe(false);
           expect(
             host.calls.some(
               (args) => args.includes("up") || args.includes("pull") || args.includes("restart"),
@@ -5244,7 +5122,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           });
           const runtime = await host.reopenRuntime();
           app = buildOpsAgentServer({
-            tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+            tokens: {
+              api: host.token,
+              "data-manager": Buffer.alloc(32, 23).toString("base64url"),
+              "host-cli": "h".repeat(43),
+            },
             runtime,
             resourceClaimer: host.createResourceClaimer(runtime),
             journal,
@@ -5393,14 +5275,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             const core = await import("@openmapx/core/build-artifacts"),
               originalAuthority = restoreAdmittedControlExecution(installation, prepared.prepare),
               lease = core.restoreArtifactTargetLeaseForSettlement(originalAuthority),
-              ownerPath = join(
-                host.infraDir,
-                "data/.admin-target-control/leases",
-                lease.leaseId,
-                "owner.json",
-              ),
-              ownerBytes = readFileSync(ownerPath),
-              ownerInode = statSync(ownerPath).ino;
+              ownerRecord = () => JSON.stringify(heldLease(host.infraDir, lease.leaseId)),
+              ownerBytes = ownerRecord();
             core.closeArtifactTargetLeaseHandle(lease);
             await expect(
               maintenance.decideConfigurationMaintenance({
@@ -5486,8 +5362,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             expect(
               readFileSync(join(executionsPath, `${prepared.prepare.operationKey}.json`)),
             ).toEqual(rootBytes);
-            expect(readFileSync(ownerPath)).toEqual(ownerBytes);
-            expect(statSync(ownerPath).ino).toBe(ownerInode);
+            expect(ownerRecord()).toEqual(ownerBytes);
             const [guardAfter] =
               await fixture.sql`SELECT xmin::text AS version FROM data_manager.configuration_fence WHERE fence_id=${prepared.dmFence!.fenceId}::uuid`;
             expect(guardAfter?.version).toBe(guardBefore?.version);
@@ -5516,6 +5391,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               tokens: {
                 api: host.token,
                 "data-manager": Buffer.alloc(32, 23).toString("base64url"),
+                "host-cli": "h".repeat(43),
               },
               runtime: restartedRuntime,
               resourceClaimer: host.createResourceClaimer(restartedRuntime),
@@ -5562,6 +5438,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 tokens: {
                   api: host.token,
                   "data-manager": Buffer.alloc(32, 23).toString("base64url"),
+                  "host-cli": "h".repeat(43),
                 },
                 runtime: restartedRuntime,
                 resourceClaimer: host.createResourceClaimer(restartedRuntime),
@@ -5578,8 +5455,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             } finally {
               nodeFs.renameSync(hiddenOwner, privateOwner);
             }
-            expect(readFileSync(ownerPath)).toEqual(ownerBytes);
-            expect(statSync(ownerPath).ino).toBe(ownerInode);
+            expect(ownerRecord()).toEqual(ownerBytes);
             expect(readdirSync(executionsPath).sort()).toEqual(executionsBefore);
           }
           expect(dm!.preparePosts).toBe(1);
@@ -5592,9 +5468,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
             host.initial.revisionId,
           );
-          expect(
-            existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-          ).toBe(true);
+          expect(heldTargets(host.infraDir).includes("data-manager")).toBe(true);
         });
       },
       60000,
@@ -5813,7 +5687,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           if (bound) {
             const child = await dm!.store.lookup(bound.child.execution.operationKey);
             try {
-              verifyDataControlTerminalWitness(installation, bound.child.execution, child?.status);
+              readDataControlTerminalObservation(
+                installation,
+                bound.child.execution,
+                child?.status,
+              );
               witness = "verified";
             } catch (failure) {
               witness = String(failure);
@@ -5823,11 +5701,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             phase: "hardlinks",
             ordinal: 0,
           });
-          const files = attempt?.leaseId
-            ? readdirSync(join(host.infraDir, "data/.admin-target-control/leases", attempt.leaseId))
-            : [];
+          const held = attempt?.leaseId ? heldLease(host.infraDir, attempt.leaseId) : undefined;
           throw Error(
-            `${String(error)}; witness=${String(witness)}; lease files=${JSON.stringify(files)}; DM replies: ${JSON.stringify(await dm?.diagnostics())}`,
+            `${String(error)}; witness=${String(witness)}; lease=${JSON.stringify(held)}; DM replies: ${JSON.stringify(await dm?.diagnostics())}`,
           );
         });
         expect(result).toMatchObject({ applied: true, entries: 1, linked: 1, via: "data-manager" });
@@ -5837,9 +5713,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(host.calls.some((args) => args.includes("up") || args.includes("restart"))).toBe(
           false,
         );
-        expect(existsSync(join(host.infraDir, "data/.admin-target-control/locks/motis"))).toBe(
-          false,
-        );
+        expect(heldTargets(host.infraDir).includes("motis")).toBe(false);
       },
       60000,
     );
@@ -5936,9 +5810,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               ),
             ),
           ).toBe(true);
-          expect(
-            existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-          ).toBe(true);
+          expect(heldTargets(host.infraDir).includes("data-manager")).toBe(true);
         });
         const next = await job();
         await expect(owned(next, async () => undefined)).rejects.toThrow(
@@ -5963,7 +5835,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const bin = join(host.root, "fixture-bin"),
           trace = join(host.root, "docker-argv.jsonl"),
           marker = join(host.root, "pull-started"),
-          receiptDirectory = join(host.infraDir, "data/ops-agent/lifecycle"),
+          receiptDirectory = join(host.infraDir, "state/ops-agent/lifecycle"),
           recreated = ["recreate", "crash-recreate", "missing-receipt"].includes(mode),
           crash =
             "fs.writeFileSync(" +
@@ -6044,10 +5916,8 @@ if(args.includes("--force-recreate")){${mode === "recreate" ? "process.exit(9);"
           .map((line) => JSON.parse(line) as string[]);
         expect(calls.filter((args) => args.includes("pull"))).toHaveLength(1);
         expect(calls.filter((args) => args.includes("up"))).toHaveLength(recreated ? 1 : 0);
-        expect(existsSync(join(host.infraDir, "data/.admin-target-control/locks/motis"))).toBe(
-          true,
-        );
-        expect(() => core.verifyRetainedArtifactTargetRootRelease(root)).toThrow();
+        expect(heldTargets(host.infraDir).includes("motis")).toBe(true);
+        await expect(core.verifyRetainedArtifactTargetRootRelease(root)).rejects.toThrow();
         if (mode === "missing-receipt") {
           await expect(receiptRead).rejects.toThrow();
           expect(readdirSync(receiptDirectory)).toEqual([]);
@@ -6183,7 +6053,7 @@ if(args[0]==="compose"&&args.includes("config")&&args.includes("--format")){impo
         expect(lifecycleCalls[0]?.slice(-2)).toEqual(["pull", "motis"]);
         expect(lifecycleCalls[1]?.slice(-4)).toEqual(["up", "-d", "--force-recreate", "motis"]);
         if (!competing) {
-          const directory = join(host.infraDir, "data/ops-agent/lifecycle"),
+          const directory = join(host.infraDir, "state/ops-agent/lifecycle"),
             [name] = readdirSync(directory);
           expect(name).toBeDefined();
           const later = Date.now() + 30 * 24 * 3600000,
@@ -6312,11 +6182,10 @@ if(args[0]==="compose"&&args.includes("config")&&args.includes("--format")){impo
           ),
         ).selected,
       ).toEqual(["data-manager", "motis"]);
-      expect(existsSync(join(host.infraDir, services.CONFIGURATION_DIRECTORY, ".writer"))).toBe(
+      expect(existsSync(join(host.infraDir, services.CONFIGURATION_DIRECTORY, "writer.lock"))).toBe(
         false,
       );
-      for (const id of ["data-manager", "motis"])
-        expect(existsSync(join(host.infraDir, "data/.admin-target-control/locks", id))).toBe(false);
+      expect(heldTargets(host.infraDir)).toEqual([]);
     }, 60000);
   },
 );

@@ -3,7 +3,6 @@ import {
   beginControlEffect,
   controlDigest,
   executionAuthorityState,
-  installationState,
   retainAdmittedControlExecution,
   retainControlEffectReceipt,
   verifyControlEffectSettlement,
@@ -60,11 +59,7 @@ export async function initializeManagedCatalogPins(options: {
   });
   let lease: ArtifactTargetLease | undefined;
   try {
-    lease = await acquireArtifactTargetLease({
-      dataRoot: installationState(options.installation).dataRoot,
-      serviceIds: ["motis"],
-      owner: authority,
-    });
+    lease = await acquireArtifactTargetLease({ serviceIds: ["motis"], owner: authority });
     beginControlEffect(authority);
     const pins = await initializeCatalogPinSet({ rootDir: options.rootDir, lease });
     retainControlEffectReceipt(authority, {

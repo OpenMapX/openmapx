@@ -5,9 +5,9 @@ import { join } from "node:path";
 import {
   type ControlInstallation,
   controlDigest,
+  readDataControlTerminalObservation,
   signControl,
   verifyControl,
-  verifyDataControlTerminalWitness,
 } from "@openmapx/core/build-artifacts";
 import {
   type CatalogProposal,
@@ -338,7 +338,7 @@ export function createCatalogReviewService(options: {
         );
         validation = retained.validation;
         if (validation.status === "passed") {
-          const completed = verifyDataControlTerminalWitness(
+          const completed = readDataControlTerminalObservation(
               options.installation,
               retained.sourceExecution,
             ),

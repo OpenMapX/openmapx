@@ -73,7 +73,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       installArtifactTransferRuntime(state.host.runtime, store);
       installStandaloneIntegrationRuntime(state.host.runtime, { rootDir: state.host.root, store });
       agent = buildOpsAgentServer({
-        tokens: { api: state.host.token, "data-manager": "b".repeat(43) },
+        tokens: {
+          api: state.host.token,
+          "data-manager": "b".repeat(43),
+          "host-cli": "h".repeat(43),
+        },
         runtime: state.host.runtime,
         resourceClaimer: state.host.claimer,
         journal: await openOpsJobJournal(join(state.host.infraDir, "state/ops-agent/jobs-v1.json")),

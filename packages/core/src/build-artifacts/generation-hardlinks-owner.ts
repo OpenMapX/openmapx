@@ -39,17 +39,18 @@ import {
   assertControlExecutionForward,
   controlRolePublicKey,
   executionAuthorityState,
+  readDataControlTerminalObservation,
   readPrivateRecord,
   type VerifiedExecutionAuthority,
-  verifyDataControlTerminalWitness,
   writePrivateRecord,
 } from "./control-authority";
 import { controlDigest, signControl, verifyControl } from "./control-records";
 import {
   assertArtifactTargetLeaseExecution,
-  inspectArtifactTargetLeaseChildSettlement,
+  inspectLocalLeaseChildSettlement,
+  settleDataManagerLeaseChild,
   type TargetLeaseAuthority,
-  verifyRetainedArtifactTargetRootRelease,
+  verifyLocalArtifactTargetRootRelease,
 } from "./target-lease";
 
 const schema = z.strictObject({
@@ -249,24 +250,14 @@ export async function executeOwnedGenerationHardlinks(options: {
       signal?.aborted ? "interrupted" : "transport",
     );
   }
-  let contained = false;
-  const until = Math.min(Date.now() + 5000, authority.execution.deadlineAt + 30000);
-  do {
-    try {
-      // The fixed DM publisher verifies physical settlement before signing this
-      // witness. Observe it without taking the lease writer; polling that writer
-      // here can itself make the publisher fail its nonblocking guard.
-      verifyDataControlTerminalWitness(s.installation.installation, bound.execution, status);
-      const settlement = inspectArtifactTargetLeaseChildSettlement(lease, bound.execution);
-      contained = settlement?.outcome === "committed" && settlement.publication === "committed";
-    } catch {
-      /* SQL terminal and borrowed-node settlement precede the final shared
-       * contained-terminal witness. Both actual sources must be visible. */
-    }
-    if (contained || Date.now() >= until) break;
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  } while (!contained && Date.now() < until);
-  if (!contained || status.status !== "ok" || status.result?.kind !== "generation-hardlinks")
+  // Data-manager's terminal status, read over its authenticated route, settles
+  // the leaf in this owner's lease. An unknown publication leaves it held.
+  const settlement = await settleDataManagerLeaseChild(lease, bound.execution, status);
+  if (
+    settlement?.outcome !== "committed" ||
+    status.status !== "ok" ||
+    status.result?.kind !== "generation-hardlinks"
+  )
     throw new DataExecutionObservationPending(identity, "transport");
   return hardlinkApplySummarySchema.parse(status.result.hardlinks);
 }
@@ -277,19 +268,17 @@ export function inspectOwnedGenerationHardlinks(
   authority: VerifiedExecutionAuthority,
   lease?: TargetLeaseAuthority,
 ) {
-  if (!lease) verifyRetainedArtifactTargetRootRelease(authority);
+  if (!lease) verifyLocalArtifactTargetRootRelease(authority);
   const owner = executionAuthorityState(authority),
     plan = readGenerationHardlinksOwnerPlan(authority);
   if (!plan.reservation) return "complete" as const;
   const binding = lookupControlChildPhaseBinding(authority, plan.reservation);
   if (!binding) return "not_attempted" as const;
-  const proof = verifyDataControlTerminalWitness(
+  const proof = readDataControlTerminalObservation(
       owner.installation.installation,
       binding.child.execution,
     ),
-    settled = lease
-      ? inspectArtifactTargetLeaseChildSettlement(lease, binding.child.execution)
-      : null;
+    settled = lease ? inspectLocalLeaseChildSettlement(lease, binding.child.execution) : null;
   if (
     lease &&
     (!settled ||

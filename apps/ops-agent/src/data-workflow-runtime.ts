@@ -137,7 +137,7 @@ export function installDataWorkflowRuntime(
           );
         control.verifyControlEffectSettlement(installation, bound.execution);
         if (lease) {
-          const settled = control.inspectArtifactTargetLeaseChildSettlement(lease, bound.execution);
+          const settled = control.inspectLocalLeaseChildSettlement(lease, bound.execution);
           if (settled?.outcome !== "committed" || settled.publication !== "committed")
             throw new OpsExecutionFailure("recovery_required", { dataWorkflow: receipt });
         }
@@ -152,7 +152,6 @@ export function installDataWorkflowRuntime(
     const initial = await control.verifyDataUpdatePrerequisites(authority);
     await assertStagedCoordinatorConfigurationWrite(runtime, operation, context, context.signal);
     const lease = await control.acquireArtifactTargetLease({
-      dataRoot: join(infraDir, "data"),
       serviceIds: plan.dataReservation.serviceIds,
       owner: authority,
       signal: context.signal,

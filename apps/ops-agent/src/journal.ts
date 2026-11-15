@@ -60,7 +60,8 @@ export interface PersistedOpsJob {
   failureResult?: OpsFailureResult;
   /** Private checkpoint, never a terminal outcome or authority. */
   progressResult?: OpsFailureResult;
-  role: OpsRole;
+  /** Only the API and data-manager submit journaled operations. */
+  role: Exclude<OpsRole, "host-cli">;
   operation: OpsOperation;
   operationId: string;
   operationKey: string;

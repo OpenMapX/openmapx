@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import { createControlRootOperationKey, OpsClient, type OpsOperation } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
@@ -121,8 +121,8 @@ it.skipIf(
       journal = control.createDataExecutionControlJournal(dm, sql),
       fence = createDataConfigurationMaintenance(sql, dm);
     const publicationFailures: Record<string, string> = {};
-    const publishContained = journal.publishContainedTerminal;
-    journal.publishContainedTerminal = async (execution) => {
+    const publishContained = journal.recordContainedTerminal;
+    journal.recordContainedTerminal = async (execution) => {
       try {
         return await publishContained(execution);
       } catch (error) {
@@ -249,7 +249,7 @@ it.skipIf(
       runtime: host.runtime,
       journal: agentJournal,
       controlInstallation: agentInstallation,
-      tokens: { api: token, "data-manager": "d".repeat(43) },
+      tokens: { api: token, "data-manager": "d".repeat(43), "host-cli": "h".repeat(43) },
       resourceClaimer: createProductionRegistryResourceClaimer({
         services: host.loaded.map((s) => ({
           serviceId: s.manifest.id,
@@ -322,7 +322,7 @@ it.skipIf(
       expect(existsSync(commands) ? readFileSync(commands, "utf8") : "").not.toContain(
         "osrm-extract",
       );
-      expect(existsSync(join(data, ".admin-target-control/locks/osrm"))).toBe(false);
+      expect(control.heldTargets(dirname(data)).includes("osrm")).toBe(false);
       releaseTransit();
       const until = Date.now() + 90000;
       let terminal = await client.status(operation.kind, operationId!);
@@ -353,7 +353,7 @@ it.skipIf(
       expect(services.currentConfigurationGeneration(host.infraDir)).not.toBe(
         host.initial.revisionId,
       );
-      expect(existsSync(join(data, ".admin-target-control/locks/osrm"))).toBe(false);
+      expect(control.heldTargets(dirname(data)).includes("osrm")).toBe(false);
     } catch (error) {
       const witnessProblems: Record<string, string> = {};
       for (const row of await store.listUnsettled()) {
@@ -368,7 +368,7 @@ it.skipIf(
         )
           continue;
         try {
-          control.verifyDataControlTerminalWitness(agentInstallation, row.execution, row.status);
+          control.readDataControlTerminalObservation(agentInstallation, row.execution, row.status);
           witnessProblems[row.input.kind] = "verified";
         } catch (problem) {
           witnessProblems[row.input.kind] =

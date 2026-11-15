@@ -1,4 +1,6 @@
 import {
+  type ConfigurationPrepareNonAdmission,
+  configurationPrepareNonAdmissionSchema,
   type DataConfigurationFencePrepare,
   type DataConfigurationFenceReceipt,
   type DataConfigurationFenceSettle,
@@ -40,14 +42,33 @@ export async function prepareDataConfigurationFence(
 }
 export async function inspectDataConfigurationFence(
   maintenanceId: string,
-  options: { transport: DataManagerTransport; witness: string; signal?: AbortSignal },
+  options: {
+    transport: DataManagerTransport;
+    candidateId: string;
+    ownerLeaseId: string;
+    signal?: AbortSignal;
+  },
 ): Promise<DataConfigurationFenceReceipt> {
-  const result = await sdk.inspectDataConfigurationFence(maintenanceId, {
-    transport: options.transport,
-    signal: options.signal,
-    headers: { "x-openmapx-configuration-fence-witness": boundedHeader(options.witness) },
-  });
+  const result = await sdk.inspectDataConfigurationFence(
+    maintenanceId,
+    { candidateId: options.candidateId, ownerLeaseId: options.ownerLeaseId },
+    { transport: options.transport, signal: options.signal },
+  );
   return dataConfigurationFenceReceiptSchema.parse(unwrapDataManagerResponse(result));
+}
+export async function recoverUnadmittedDataConfigurationFence(
+  input: DataConfigurationFencePrepare,
+  options: ControlOptions,
+): Promise<ConfigurationPrepareNonAdmission> {
+  const result = await sdk.recoverUnadmittedConfigurationPreparation(
+    boundedBody(dataConfigurationFencePrepareSchema.parse(input)),
+    {
+      transport: options.transport,
+      signal: options.signal,
+      headers: { "x-openmapx-control-delegation": boundedHeader(options.controlAssertion) },
+    },
+  );
+  return configurationPrepareNonAdmissionSchema.parse(unwrapDataManagerResponse(result));
 }
 export async function settleDataConfigurationFence(
   input: DataConfigurationFenceSettle,

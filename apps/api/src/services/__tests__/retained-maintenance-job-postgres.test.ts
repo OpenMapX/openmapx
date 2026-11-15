@@ -140,7 +140,7 @@ dbDescribe("retained finite maintenance requests", () => {
         journal,
         controlInstallation: installation,
         artifactTransfers: store,
-        tokens: { api: host.token, "data-manager": "d".repeat(43) },
+        tokens: { api: host.token, "data-manager": "d".repeat(43), "host-cli": "h".repeat(43) },
       });
       agent.addHook("preHandler", async (request, reply) => {
         const operation = (
@@ -353,7 +353,7 @@ dbDescribe("retained finite maintenance requests", () => {
             resourceClaimer: host.createResourceClaimer(runtime),
             controlInstallation: installation,
             artifactTransfers: store,
-            tokens: { api: host.token, "data-manager": "d".repeat(43) },
+            tokens: { api: host.token, "data-manager": "d".repeat(43), "host-cli": "h".repeat(43) },
           });
           agent.addHook("onSend", async (request, reply, payload) => {
             const op = (
@@ -516,7 +516,7 @@ dbDescribe("retained finite maintenance requests", () => {
         resourceClaimer: host.claimer,
         journal,
         controlInstallation: installation,
-        tokens: { api: host.token, "data-manager": "d".repeat(43) },
+        tokens: { api: host.token, "data-manager": "d".repeat(43), "host-cli": "h".repeat(43) },
       });
     const tokenFile = join(host.root, "render-api-token");
     writeFileSync(tokenFile, host.token, { mode: 0o600 });
@@ -625,7 +625,7 @@ dbDescribe("retained finite maintenance requests", () => {
       resourceClaimer: host.claimer,
       journal,
       controlInstallation: installation,
-      tokens: { api: host.token, "data-manager": "d".repeat(43) },
+      tokens: { api: host.token, "data-manager": "d".repeat(43), "host-cli": "h".repeat(43) },
     });
     let lost = false;
     agent.addHook("onSend", async (request, reply, payload) => {
@@ -817,7 +817,11 @@ dbDescribe("retained finite maintenance requests", () => {
     });
     const journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json"));
     const agent = buildOpsAgentServer({
-      tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+      tokens: {
+        api: host.token,
+        "data-manager": Buffer.alloc(32, 23).toString("base64url"),
+        "host-cli": "h".repeat(43),
+      },
       runtime: host.runtime,
       resourceClaimer: host.claimer,
       journal,
@@ -1028,7 +1032,11 @@ dbDescribe("retained finite maintenance requests", () => {
         }),
         journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json"));
       const agent = buildOpsAgentServer({
-        tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+        tokens: {
+          api: host.token,
+          "data-manager": Buffer.alloc(32, 23).toString("base64url"),
+          "host-cli": "h".repeat(43),
+        },
         runtime,
         resourceClaimer: host.claimer,
         journal,

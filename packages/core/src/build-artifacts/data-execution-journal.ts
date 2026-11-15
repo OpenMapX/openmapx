@@ -28,8 +28,9 @@ import {
   controlDigest,
   executionAuthorityState,
   installationState,
-  publishDataControlTerminalWitness,
+  readOpsControlTerminalObservation,
   readPrivateRecord,
+  recordDataControlTerminalObservation,
   reserveControlTerminal,
   restoreAdmittedControlExecution,
   settleExecutionLifecycle,
@@ -46,16 +47,12 @@ import {
 } from "./control-records";
 import { retainedDataDatabaseTimestamp } from "./data-database-time";
 import { DataExecutionPartialResult } from "./data-execution-outcome";
-import { verifyFeedProxyCanonicalTerminal } from "./feed-proxy-validation";
 import {
   assertRetainedCatalogActivationChildrenSettled,
   inspectArtifactTargetLeaseChildSettlement,
   inspectRetainedOwnedArtifactTargetChildSettlement,
   restoreArtifactTargetLeaseForSettlement,
-  restoreGenerationHardlinksLeaseForSettlement,
   type TargetLeaseAuthority,
-  verifyRetainedArtifactTargetRootRelease,
-  verifyRetainedGenerationHardlinksSettlement,
 } from "./target-lease";
 
 export interface DataExecutionJournalDatabase {
@@ -280,11 +277,14 @@ export function createDataExecutionControlJournal(
         )
           throw Error("Original proxy phase changed");
         if (child.state !== "terminal" || !child.execution) continue;
-        const shared = inspectRetainedOwnedArtifactTargetChildSettlement(
+        const shared = await inspectRetainedOwnedArtifactTargetChildSettlement(
           authority,
           child.execution,
         );
-        const canonical = verifyFeedProxyCanonicalTerminal(authority, child.execution);
+        const canonical = readOpsControlTerminalObservation(
+          s.installation.installation,
+          child.execution,
+        );
         if (
           restore &&
           child.phase !== "proxy-restore" &&
@@ -309,8 +309,11 @@ export function createDataExecutionControlJournal(
         child.execution.operationKey !== restore.execution.operationKey
       )
         throw Error("Original proxy restore obligation remains pending");
-      const shared = inspectRetainedOwnedArtifactTargetChildSettlement(authority, child.execution),
-        canonical = verifyFeedProxyCanonicalTerminal(authority, child.execution);
+      const shared = await inspectRetainedOwnedArtifactTargetChildSettlement(
+          authority,
+          child.execution,
+        ),
+        canonical = readOpsControlTerminalObservation(s.installation.installation, child.execution);
       const result = z
         .strictObject({ candidateId: z.string(), reloaded: z.literal(true) })
         .parse(canonical.result);
@@ -342,7 +345,7 @@ export function createDataExecutionControlJournal(
       controlDigest(input) !== state.execution.operationFingerprint
     )
       throw Error("Original reviewed catalog activation required");
-    assertRetainedCatalogActivationChildrenSettled(authority);
+    await assertRetainedCatalogActivationChildrenSettled(authority);
     const children = value.row.execution_children.map((raw) =>
       z
         .object({
@@ -369,7 +372,7 @@ export function createDataExecutionControlJournal(
         slot.operationFingerprint !== child.operationFingerprint ||
         controlDigest(child.operation) !== child.operationFingerprint ||
         controlDigest(child.parentExecution) !== controlDigest(state.execution) ||
-        !inspectRetainedOwnedArtifactTargetChildSettlement(authority, child.execution)
+        !(await inspectRetainedOwnedArtifactTargetChildSettlement(authority, child.execution))
       )
         throw Error("Original settled activation child required");
     }
@@ -380,7 +383,10 @@ export function createDataExecutionControlJournal(
     const child = matches[0]!,
       operation = pairedPinApprovalInputSchema.parse(child.operation),
       result = pairedPinApprovalResultSchema.parse(child.approvalResult);
-    const physical = inspectRetainedOwnedArtifactTargetChildSettlement(authority, child.execution);
+    const physical = await inspectRetainedOwnedArtifactTargetChildSettlement(
+      authority,
+      child.execution,
+    );
     if (
       !physical ||
       physical.outcome !== "committed" ||
@@ -903,9 +909,10 @@ export function createDataExecutionControlJournal(
       )
         throw Error("Original worker child snapshot changed");
       await assertOwnedProxyRecoverySettled(execution);
+      // A hardlink leaf runs under its caller's lease; it holds none of its own.
       const lease =
           value.status.kind === "generation-hardlinks"
-            ? restoreGenerationHardlinksLeaseForSettlement(authority)
+            ? undefined
             : restoreArtifactTargetLeaseForSettlement(authority),
         error = proof.outcome === "failed" ? Error("Original contained worker failed") : undefined;
       const completion = Object.freeze({ [completionBrand]: true as const });
@@ -985,7 +992,7 @@ export function createDataExecutionControlJournal(
       for (const child of children) {
         if (child.state !== "terminal" || !child.execution || !child.settlement || !owned.lease)
           throw Error("Unsettled data descendant");
-        const proof = inspectArtifactTargetLeaseChildSettlement(owned.lease, child.execution);
+        const proof = await inspectArtifactTargetLeaseChildSettlement(owned.lease, child.execution);
         if (
           !proof ||
           controlDigest(proof) !==
@@ -1089,12 +1096,11 @@ export function createDataExecutionControlJournal(
       });
       contained.set(execution.operationKey, proof.terminalDigest);
     },
-    async publishContainedTerminal(execution: ExecutionRef) {
-      const { value, authority, proof } = await verifyStored(execution);
-      if (value.status.kind === "generation-hardlinks")
-        verifyRetainedGenerationHardlinksSettlement(authority);
-      else verifyRetainedArtifactTargetRootRelease(authority);
-      publishDataControlTerminalWitness(authority, value.status, proof.terminalAt);
+    /** Records the committed terminal once the execution's own lease is released,
+     * for later steps of this role that build on it. */
+    async recordContainedTerminal(execution: ExecutionRef) {
+      const { value } = await verifyStored(execution);
+      recordDataControlTerminalObservation(installation, execution, value.status);
     },
     repairTerminal: async (execution: ExecutionRef) => {
       await assertOwnedProxyRecoverySettled(execution);

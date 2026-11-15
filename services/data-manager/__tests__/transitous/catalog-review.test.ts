@@ -184,7 +184,7 @@ it.skipIf(!enabled)(
       tokenFile = join(root, "dm-token");
     writeFileSync(tokenFile, token, { mode: 0o600 });
     agent = buildOpsAgentServer({
-      tokens: { api: "a".repeat(43), "data-manager": token },
+      tokens: { api: "a".repeat(43), "data-manager": token, "host-cli": "h".repeat(43) },
       runtime: createTransitousLockRuntime(createUnavailableRuntime(), { rootDir: root }),
       resourcePolicy: createRegistryResourcePolicy({
         serviceIds: ["motis"],

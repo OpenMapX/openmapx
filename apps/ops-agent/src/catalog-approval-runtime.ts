@@ -17,7 +17,6 @@ import {
   retainedControlParent,
   verifyControl,
   verifyControlEffectSettlement,
-  verifyDataControlTerminalWitness,
   verifyRetainedArtifactTargetSettlement,
 } from "@openmapx/core/build-artifacts";
 import {
@@ -46,6 +45,7 @@ import {
 } from "../../../packages/core/src/build-artifacts/control-authority";
 import { verifyDataTransitCandidateForExecution } from "../../../packages/core/src/build-artifacts/data-execution-candidate";
 import { AnchoredDirectory } from "../../../packages/core/src/build-artifacts/filesystem";
+import { dataManagerTerminal } from "./data-manager-terminal";
 import type { OpsRuntime } from "./runtime";
 
 const installedRoots = new WeakMap<OpsRuntime, string>();
@@ -186,7 +186,7 @@ export function installCatalogApprovalRuntime(
       currentValidation.selected.validationDigest !== controlDigest(validation)
     )
       throw Error("Validation was invalidated before slot reuse");
-    const validated = verifyDataControlTerminalWitness(installation, validation.sourceExecution);
+    const validated = await dataManagerTerminal(installation, validation.sourceExecution);
     if (
       validated.status.status !== "ok" ||
       validated.status.result?.kind !== "catalog.validate" ||
@@ -222,11 +222,7 @@ export function installCatalogApprovalRuntime(
         activation.promotion.adoption,
         activation.promotion.execution,
       ),
-      grant = inspectArtifactDelegation({
-        dataRoot: own.installation.dataRoot,
-        installation,
-        assertion,
-      });
+      grant = inspectArtifactDelegation({ installation, assertion });
     if (
       grant.phase !== "promote-primary" ||
       controlDigest(grant.parent) !== controlDigest(activation.parent) ||

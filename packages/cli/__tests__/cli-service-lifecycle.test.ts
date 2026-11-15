@@ -86,7 +86,9 @@ afterEach(() => {
   if (root) rmSync(root, { recursive: true, force: true });
 });
 function expectConfigurationWriterFree() {
-  expect(existsSync(join(root, "infra/docker/state/ops-agent/configuration/.writer"))).toBe(false);
+  expect(existsSync(join(root, "infra/docker/state/ops-agent/configuration/writer.lock"))).toBe(
+    false,
+  );
   expect(
     existsSync(
       join(
@@ -114,11 +116,11 @@ function command(action: "start" | "update", args: string[] = [], target = "alph
 }
 function lifecycleEnvelope(name: string) {
   return JSON.parse(
-    readFileSync(join(root, "infra/docker/data/ops-agent/lifecycle", name), "utf8"),
+    readFileSync(join(root, "infra/docker/state/ops-agent/lifecycle", name), "utf8"),
   );
 }
 function lifecycleOperationKeys() {
-  return readdirSync(join(root, "infra/docker/data/ops-agent/lifecycle")).map((name) =>
+  return readdirSync(join(root, "infra/docker/state/ops-agent/lifecycle")).map((name) =>
     name.replace(/\.json$/, ""),
   );
 }
@@ -139,8 +141,7 @@ async function retainedReceipt() {
   return receipts[0]!;
 }
 function targetLocks() {
-  const directory = join(root, "infra/docker/data/.admin-target-control/locks");
-  return existsSync(directory) ? readdirSync(directory).sort() : [];
+  return control.heldTargets(join(root, "infra/docker"));
 }
 /** A selection whose rendered hardlink plan has one entry, so a Start issues a child to data-manager. */
 async function renderWithHardlinkPlan() {
@@ -313,9 +314,7 @@ describe("actual CLI service lifecycle preparation", () => {
   it("holds physical target ownership through target-only Start after full-selection preparation", async () => {
     vi.mocked(dockerComposeStream).mockImplementation(async (args) => {
       expect(args).toEqual(["up", "-d", "alpha"]);
-      expect(existsSync(join(root, "infra/docker/data/.admin-target-control/locks/alpha"))).toBe(
-        true,
-      );
+      expect(targetLocks()).toContain("alpha");
       expect(
         JSON.parse(
           readFileSync(
@@ -331,7 +330,7 @@ describe("actual CLI service lifecycle preparation", () => {
     });
     await expect(command("start")).rejects.toThrow("exit:0");
     expect(dockerComposeStream).toHaveBeenCalledTimes(1);
-    expect(existsSync(join(root, "infra/docker/state/ops-agent/configuration/.writer"))).toBe(
+    expect(existsSync(join(root, "infra/docker/state/ops-agent/configuration/writer.lock"))).toBe(
       false,
     );
   });
@@ -339,9 +338,7 @@ describe("actual CLI service lifecycle preparation", () => {
     const calls: string[][] = [];
     vi.mocked(dockerComposeStream).mockImplementation(async (args) => {
       calls.push([...args]);
-      expect(existsSync(join(root, "infra/docker/data/.admin-target-control/locks/alpha"))).toBe(
-        true,
-      );
+      expect(targetLocks()).toContain("alpha");
       if (args[0] === "pull")
         expect(services.currentConfigurationGeneration(join(root, "infra/docker"))).toBe(seed);
       else {
@@ -478,13 +475,13 @@ describe("actual CLI service lifecycle preparation", () => {
       failure: { reason: "pull", failedServiceIds: ["alpha"] },
     });
     expect(targetLocks()).toEqual([]);
-    expect(existsSync(join(root, "infra/docker/state/ops-agent/configuration/.writer"))).toBe(
+    expect(existsSync(join(root, "infra/docker/state/ops-agent/configuration/writer.lock"))).toBe(
       false,
     );
   });
   it("records failure when the execution deadline passes during pull", async () => {
     vi.mocked(dockerComposeStream).mockImplementation(async () => {
-      const directory = join(root, "infra/docker/data/ops-agent/lifecycle"),
+      const directory = join(root, "infra/docker/state/ops-agent/lifecycle"),
         envelope = JSON.parse(readFileSync(join(directory, readdirSync(directory)[0]!), "utf8"));
       vi.spyOn(Date, "now").mockReturnValue(envelope.seed.payload.execution.deadlineAt + 1);
       return 0;
@@ -503,7 +500,9 @@ describe("actual CLI service lifecycle preparation", () => {
   });
   it("keeps the original failure and warns when its receipt cannot be recorded", async () => {
     vi.mocked(dockerComposeStream).mockImplementation(async () => {
-      mkdirSync(join(root, "infra/docker/state/ops-agent/configuration/.writer"), { mode: 0o700 });
+      mkdirSync(join(root, "infra/docker/state/ops-agent/configuration/writer.lock"), {
+        mode: 0o700,
+      });
       return 7;
     });
     await expect(command("update")).rejects.toThrow("exit:7");
@@ -532,7 +531,7 @@ describe("actual CLI service lifecycle preparation", () => {
     );
     expect(receipt.finalRevisionId).not.toBe(seed);
     expect(targetLocks()).toEqual([]);
-    expect(existsSync(join(root, "infra/docker/state/ops-agent/configuration/.writer"))).toBe(
+    expect(existsSync(join(root, "infra/docker/state/ops-agent/configuration/writer.lock"))).toBe(
       false,
     );
   });
@@ -647,7 +646,7 @@ describe("actual CLI service lifecycle preparation", () => {
     await expect(command("start")).rejects.toThrow("exit:0");
     expect(String(refusal)).toContain("exit:1");
     expect(String(refusal)).toContain(`operation ${holder}`);
-    expect(String(refusal)).toContain(`ops-agent/lifecycle/${holder}.json`);
+    expect(String(refusal)).toContain("openmapx control status");
     expect(dockerComposeStream).toHaveBeenCalledTimes(1);
     expect(targetLocks()).toEqual([]);
   });

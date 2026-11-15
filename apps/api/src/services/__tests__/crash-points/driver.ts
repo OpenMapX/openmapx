@@ -338,6 +338,8 @@ export class CrashHost {
       stopRole: async (service) => this.stopRoleProcess(ROLE_OF_SERVICE[service] as Role),
       roleState: (service) => this.roleState(ROLE_OF_SERVICE[service] as Role),
       runContainer: (container, request) => this.runContainer(container, request.env),
+      execRole: (service, container, command) =>
+        this.execRole(ROLE_OF_SERVICE[service] as Role, container, command),
     });
     this.proxies = {
       "api->agent": new FaultProxy(`http://127.0.0.1:${ports.agent}`),
@@ -865,6 +867,34 @@ export class CrashHost {
     const current = this.roles.get(role);
     if (!current || current.killedByTest) return "exited";
     return "running";
+  }
+
+  /**
+   * `compose exec` in the agent's container: the command runs from the agent's
+   * bundle with the role's environment and mounts, as `docker exec` would.
+   */
+  private async execRole(role: Role, container: ContainerRecord, command: string[]) {
+    if (role !== "agent")
+      return { code: 126, stdout: "", stderr: "crash-point engine execs only in the agent\n" };
+    const bundles = this.bundles as RuntimeBundles;
+    const argv = command.map((value, index) =>
+      index === 0 && value === "node"
+        ? process.execPath
+        : value.startsWith("dist/")
+          ? join(bundles.opsAgent, value.slice("dist/".length))
+          : value,
+    );
+    const launched = launchContained({
+      name: `exec-${role}-${Date.now()}`,
+      workDir: this.workDir,
+      argv,
+      env: this.roleEnvironment(role, container),
+      binds: this.binds(container),
+      ...this.identity(container),
+      cwd: join(REPO, "apps/ops-agent"),
+    });
+    const { code } = await launched.exited;
+    return { code: code ?? 137, stdout: launched.stdout(), stderr: launched.stderr() };
   }
 
   /** `docker run` of a release image: its command runs from the matching bundle. */

@@ -34,7 +34,6 @@ import {
 } from "./docker-runtime";
 import { installImageStageRuntime } from "./image-stage-runtime";
 import { type IntegrationStore, installIntegrationRuntime } from "./integration-store";
-import { ServiceLifecycleExclusion } from "./lifecycle-exclusion";
 import { createOwnedServiceResolver, type OwnedServiceResolver } from "./owned-services";
 import { installPlatformConfigurationRuntime } from "./platform-configuration-runtime";
 import { serviceActionForOperation } from "./policy";
@@ -199,7 +198,6 @@ export async function createProductionOpsRuntime(
   options: ProductionOpsRuntimeOptions,
 ): Promise<OpsRuntime> {
   const initial = await options.loadAuthority();
-  const lifecycle = new ServiceLifecycleExclusion(options.stack.infraDir);
   const owned = createOwnedServiceResolver({
     stack: options.stack,
     execFile: options.docker?.execFile ?? runContainedProcess,
@@ -240,7 +238,7 @@ export async function createProductionOpsRuntime(
       ),
   });
   if (options.integrationStore) installIntegrationRuntime(runtime, options.integrationStore);
-  installCommunityRepositoryRuntime(runtime, options.communityRepositories, owned, lifecycle);
+  installCommunityRepositoryRuntime(runtime, options.communityRepositories, owned);
   installConfigurationHardlinksRuntime(runtime, { infraDir: options.stack.infraDir });
   registerConfigurationMaintenanceSource(runtime, {
     rootDir: options.rootDir,
@@ -410,54 +408,14 @@ export async function createProductionOpsRuntime(
       }
       return handler(operation, context);
     };
-    const guarded = async (
-      operation: Extract<OpsOperation, { serviceId: string }>,
-      context: OpsExecutionContext,
-    ) => {
-      if (
-        ![
-          "service.start",
-          "service.restart",
-          "service.recreate",
-          "service.recreateIsolated",
-          "service.update",
-        ].includes(kind)
-      )
-        return execute(operation, context);
-      // Compose up may also create dependencies, including release-overlay
-      // dependencies. Conservatively exclude every registered service for those
-      // commands; this local boundary does not acquire or replace root authority.
-      const ids =
-        kind === "service.start" || kind === "service.recreate" || kind === "service.update"
-          ? (await options.loadAuthority()).services.map((service) => service.manifest.id).sort()
-          : [operation.serviceId];
-      return lifecycle.creating(ids, context.signal, async (begin) => {
-        if (kind === "service.start" || kind === "service.recreate" || kind === "service.update") {
-          const current = (await options.loadAuthority()).services
-            .map((service) => service.manifest.id)
-            .sort();
-          if (JSON.stringify(current) !== JSON.stringify(ids))
-            throw new Error("Service authority changed while waiting");
-        }
-        return execute(operation, { ...context, beginServiceCreation: begin });
-      });
-    };
     // The finite loop preserves each handler's operation/result correspondence.
-    Object.assign(runtime, { [kind]: guarded });
+    // Exclusion between writers is the lease the agent holds while this runs.
+    Object.assign(runtime, { [kind]: execute });
   }
   const stackStart = runtime["stack.start"];
   runtime["stack.start"] = async (operation, context) => {
-    const ids = (await options.loadAuthority()).services
-      .map((service) => service.manifest.id)
-      .sort();
-    return lifecycle.creating(ids, context.signal, async (begin) => {
-      const authority = await options.loadAuthority();
-      const current = authority.services.map((service) => service.manifest.id).sort();
-      if (JSON.stringify(current) !== JSON.stringify(ids))
-        throw new Error("Service authority changed while waiting");
-      serviceActionAuthority(authority, options.stack.infraDir);
-      return stackStart(operation, { ...context, beginServiceCreation: begin });
-    });
+    serviceActionAuthority(await options.loadAuthority(), options.stack.infraDir);
+    return stackStart(operation, context);
   };
   resolvers.set(runtime, owned);
   registeredServiceSources.set(runtime, options.loadAuthority);

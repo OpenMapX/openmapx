@@ -81,7 +81,7 @@ function ownerFor(child: ConfigurationHandoffChild) {
   if (
     canonicalJson(owner.origin) !== canonicalJson(intent.origin) ||
     canonicalJson(owner.plan.prepare) !== canonicalJson(intent.ownerPrepare) ||
-    owner.rootCertificateDigest !== intent.ownerCertificateDigest ||
+    owner.leaseId !== intent.leaseId ||
     !step ||
     canonicalJson(step.operation) !== canonicalJson(intent.operation) ||
     !source?.grant ||

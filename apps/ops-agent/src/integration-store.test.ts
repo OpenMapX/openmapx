@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import {
   closeControlInstallation,
+  heldTargets,
   openControlInstallation,
   provisionControlInstallation,
 } from "@openmapx/core/build-artifacts";
@@ -293,7 +294,11 @@ describe("integration store", () => {
     const runtime = createUnavailableRuntime();
     installIntegrationRuntime(runtime, f.store);
     const app = buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": Buffer.alloc(32, 32).toString("base64url") },
+      tokens: {
+        api: apiToken,
+        "data-manager": Buffer.alloc(32, 32).toString("base64url"),
+        "host-cli": "h".repeat(43),
+      },
       resourcePolicy: allowAllResources,
       journal,
       controlInstallation: installation,
@@ -381,7 +386,11 @@ describe("integration store", () => {
     const runtime = createUnavailableRuntime();
     installIntegrationRuntime(runtime, f.store);
     const app = buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": Buffer.alloc(32, 32).toString("base64url") },
+      tokens: {
+        api: apiToken,
+        "data-manager": Buffer.alloc(32, 32).toString("base64url"),
+        "host-cli": "h".repeat(43),
+      },
       resourcePolicy: allowAllResources,
       journal,
       controlInstallation: installation,
@@ -425,7 +434,7 @@ describe("integration store", () => {
         );
       });
       expect(readdirSync(privateRoot, { recursive: true }).sort()).toEqual(before);
-      expect(existsSync(join(infraDir, "data/.admin-target-control"))).toBe(false);
+      expect(heldTargets(infraDir)).toEqual([]);
       expect(record(f, "weather-radar")).toBeUndefined();
     } finally {
       await app.close();

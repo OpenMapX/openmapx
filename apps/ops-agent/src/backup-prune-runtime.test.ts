@@ -74,7 +74,7 @@ it.each([7, 30, 365])(
         journal,
         resourceClaimer: host.claimer,
         controlInstallation: installation,
-        tokens: { api: host.token, "data-manager": "d".repeat(43) },
+        tokens: { api: host.token, "data-manager": "d".repeat(43), "host-cli": "h".repeat(43) },
       });
     const tokenFile = join(host.root, "api-token");
     writeFileSync(tokenFile, host.token, { mode: 0o600 });
@@ -178,7 +178,7 @@ it("previews and prunes only the unchanged original eligible set through the pro
       resourceClaimer: host.claimer,
       journal,
       controlInstallation: installation,
-      tokens: { api: host.token, "data-manager": "d".repeat(43) },
+      tokens: { api: host.token, "data-manager": "d".repeat(43), "host-cli": "h".repeat(43) },
     });
   const baseUrl = await app.listen({ host: "127.0.0.1", port: 0 }),
     client = new OpsClient({ baseUrl, tokenFile });

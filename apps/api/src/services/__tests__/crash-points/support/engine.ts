@@ -121,6 +121,12 @@ export interface EngineHooks {
   stopRole(service: string): Promise<void>;
   /** Whether a role service's process is up and answering. */
   roleState(service: string): "running" | "starting" | "exited";
+  /** `compose exec` of a command in a role service's running container. */
+  execRole(
+    service: string,
+    container: ContainerRecord,
+    command: string[],
+  ): Promise<{ code: number; stdout: string; stderr: string }>;
   /** `docker run` of an image's command, such as the configuration helper. */
   runContainer(
     container: ContainerRecord,
@@ -1039,6 +1045,9 @@ export class FakeDockerEngine {
     const rest = args.slice(index + 1);
     if (sub === "config") return this.realCompose([...global, "config", ...rest], request);
     if (sub === "version") return { code: 0, stdout: "Docker Compose version v2.40.3\n" };
+    // A command in a running container changes no container, so it never
+    // waits behind another caller's Compose effect.
+    if (sub === "exec") return this.composeExec(global, rest, request);
     // Mutating compose commands of different callers never interleave, as in
     // Docker where each container operation is atomic on the daemon.
     const run = async () => {
@@ -1309,6 +1318,11 @@ export class FakeDockerEngine {
           services.includes(c.Config.Labels["com.docker.compose.service"] as string),
       );
     if (quiet) return { code: 0, stdout: rows.map((c) => `${c.Id}\n`).join("") };
+    if (args.includes("--services"))
+      return {
+        code: 0,
+        stdout: rows.map((c) => `${c.Config.Labels["com.docker.compose.service"]}\n`).join(""),
+      };
     const format = flagValue(args, "--format");
     const objects = rows.map((c) => ({
       ID: c.Id,
@@ -1330,6 +1344,27 @@ export class FakeDockerEngine {
     if (format)
       return { code: 0, stdout: objects.map((o) => `${renderGoTemplate(format, o)}\n`).join("") };
     return { code: 0, stdout: objects.map((o) => `${o.Name} ${o.State}\n`).join("") };
+  }
+
+  /** `compose exec [-T] <service> <command…>` in a role service's running container. */
+  private async composeExec(global: string[], args: string[], request: Request): Promise<Answer> {
+    let index = 0;
+    while (args[index] === "-T" || args[index] === "--no-TTY") index++;
+    const service = args[index];
+    const command = args.slice(index + 1);
+    if (!service || args[index]?.startsWith("-") || command.length === 0)
+      return this.unsupportedAnswer(["compose", "exec", ...args]);
+    const { project } = await this.composeModel(global, request);
+    const container = this.composeContainers(project).find(
+      (c) => c.Config.Labels["com.docker.compose.service"] === service,
+    );
+    if (
+      !container?.State.Running ||
+      !ROLE_SERVICES.has(service) ||
+      this.hooks.roleState(service) !== "running"
+    )
+      return { code: 1, stderr: `service "${service}" is not running\n` };
+    return this.hooks.execRole(service, container, command);
   }
 
   private servicesOf(args: string[], skipValue: string[]): string[] {

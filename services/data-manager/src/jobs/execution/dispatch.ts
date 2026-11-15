@@ -55,6 +55,7 @@ import { buildJobContext, runTransitousPipeline } from "../transitous/pipeline.j
 import type { SingleFlightController } from "../transitous/single-flight.js";
 import { dataExecutionDiagnostic } from "./diagnostics.js";
 import { runOwnedDataOpsOperation } from "./ops-children.js";
+import { ownedLease } from "./owned-lease.js";
 import type { DataExecutionContext } from "./runtime.js";
 import { publishOwnedTransitSourceMutation } from "./source-mutation.js";
 import {
@@ -177,7 +178,7 @@ export function createDataExecutionDispatcher(deps: {
         );
         try {
           await publishDataChange(() =>
-            publishCatalogValidationCurrent(context.authority, context.targetAuthority),
+            publishCatalogValidationCurrent(context.authority, ownedLease(context)),
           );
           await isolateOwnedTransitProducer(
             context,

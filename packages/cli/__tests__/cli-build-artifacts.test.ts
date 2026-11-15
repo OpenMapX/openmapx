@@ -214,7 +214,6 @@ describe("build bundles", () => {
             serviceIds: ["osrm"],
           });
         lease = await control.acquireArtifactTargetLease({
-          dataRoot: dataDir(targetHost),
           serviceIds: ["osrm"],
           owner: authority,
         });

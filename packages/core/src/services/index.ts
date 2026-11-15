@@ -2,6 +2,8 @@ export { openAdminDataWorkflow } from "./admin-data-workflow";
 export {
   type AgentStatePaths,
   agentStatePaths,
+  ensureHostCliToken,
+  hostCliTokenPath,
   prepareAgentStateDirectories,
 } from "./agent-state";
 export { prepareAgentStores } from "./agent-stores";
@@ -97,7 +99,10 @@ export {
   renderConfiguration,
   withConfigurationGenerationWriter,
 } from "./configuration-generation";
-export { acquireConfigurationOwnership } from "./configuration-ownership";
+export {
+  acquireConfigurationOwnership,
+  configurationWriterLockPath,
+} from "./configuration-ownership";
 export {
   assertTrustedConfigurationSchema,
   validateTrustedConfigurationValues,
@@ -234,6 +239,13 @@ export {
   type PlatformConfigurationPreview,
 } from "./platform-preview";
 export { expandPresets, PRESETS, type PresetName, UnknownPresetError } from "./presets";
+export {
+  acquireRecoverableLock,
+  clearRecoverableLock,
+  LockBusyError,
+  readLockHolder,
+  withRecoverableLock,
+} from "./recoverable-lock";
 export { ServiceRegistry, type ServiceRegistryOptions } from "./registry";
 export {
   type BuiltInServiceReadOptions,

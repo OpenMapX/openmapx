@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { z } from "zod";
 // biome-ignore-start lint/suspicious/noImportCycles: Recovery reads original receipts only after initialization; nominal writer/lease checks already depend on this control graph.
 import {
@@ -185,8 +185,9 @@ function assertDataRoot(dataRoot: string, trusted: string) {
     expected.close();
   }
 }
+/** Receipts live in the agent's own state, which data-manager does not mount. */
 function directories(dataRoot: string) {
-  const root = new AnchoredDirectory(dataRoot);
+  const root = new AnchoredDirectory(join(dirname(dataRoot), "state"));
   const agent = root.directory("ops-agent", true, true),
     directory = agent.directory("lifecycle", true, true);
   return {

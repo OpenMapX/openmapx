@@ -34,6 +34,26 @@ import { openOpsJobJournal } from "../../../../../apps/ops-agent/src/journal";
 import { buildOpsAgentServer } from "../../../../../apps/ops-agent/src/server";
 import { releaseProvenance } from "../../../../../packages/core/src/services/__fixtures__/release-provenance";
 
+/** What the agent records after data-manager's prepare reply; data-manager never writes the store. */
+async function settledByAgent(
+  lease: control.TargetLeaseAuthority,
+  child: import("@openmapx/core/ops").ExecutionRef,
+  receipt: unknown,
+) {
+  await control.settleIssuedLeaseChild(lease, child, {
+    outcome: "committed",
+    publication: "committed",
+    terminalReceiptDigest: control.controlDigest({ kind: "data-configuration-fence", receipt }),
+  });
+}
+/** One delegated child as the agent's lease store records it now. */
+function storeChild(infraDir: string, leaseId: string, delegationId: string) {
+  return control
+    .openLeaseStore({ directory: control.leaseStoreDirectory(infraDir), purpose: "test" })
+    .get(leaseId)
+    ?.children.find((child) => child.key === delegationId);
+}
+
 // Keep real filesystem checks and writes; expose only the publication boundary
 // so an acknowledged rename can lose its reply in the recovery tests.
 vi.mock("node:fs", async (importOriginal) => {
@@ -100,7 +120,6 @@ describe.skipIf(
       try {
         const fence = createDataConfigurationMaintenance(f.sql, f.dm);
         await fence.startup();
-        await f.adoptPreparationWithoutAdmission();
         await f.failPreparation();
         const { cancelAdminJobOperations } = await import("../admin-job-ops"),
           { jobRunner } = await import("../job-runner"),
@@ -248,7 +267,7 @@ describe.skipIf(
           existsSync(join(f.host.queue, ".candidates", `${candidate.sealedOperationKey}.json`)),
         ).toBe(false);
         expect(readFileSync(canonicalPath)).toEqual(canonical);
-        expect(control.verifyRetainedArtifactTargetRootRelease(f.authority)).toBeDefined();
+        expect(await control.verifyRetainedArtifactTargetRootRelease(f.authority)).toBeDefined();
         expect(f.data.preparePosts).toBe(0);
         expect(f.host.calls.some((args) => args.includes("up") || args.includes("restart"))).toBe(
           false,
@@ -285,40 +304,6 @@ describe.skipIf(
     90000,
   );
 
-  it("serializes receiver admission with original-root cancellation and negative settlement", async () => {
-    const f = await ownedFenceFixture({ productionRegistration: true }),
-      authority = await import(
-        "../../../../../packages/core/src/build-artifacts/control-authority"
-      ),
-      retain = authority.retainAdmittedControlExecution;
-    let cancellation: Promise<readonly ExecutionRef[]> | undefined;
-    const admission = vi
-      .spyOn(authority, "retainAdmittedControlExecution")
-      .mockImplementation((installation, input) => {
-        if (
-          installation.role === "data-manager" &&
-          input.kind === "configuration-maintenance.prepare" &&
-          !cancellation
-        ) {
-          cancellation = control.cancelArtifactTargetLease(f.lease);
-          void cancellation.catch(() => {});
-        }
-        return retain(installation, input);
-      });
-    try {
-      const fence = createDataConfigurationMaintenance(f.sql, f.dm);
-      await fence.startup();
-      await expect(
-        fence.prepare(f.input, ["x-openmapx-control-delegation", f.assertion], "ops-agent"),
-      ).resolves.toMatchObject({ state: "prepared" });
-      expect(cancellation).toBeDefined();
-      await expect(cancellation!).rejects.toThrow("Lease journal writer is busy");
-    } finally {
-      admission.mockRestore();
-      await f.close();
-    }
-  }, 60000);
-
   it("keeps ownership when negative receiver evidence is live, changed, admitted, or unavailable", async () => {
     const f = await ownedFenceFixture({ productionRegistration: true });
     let clock: ReturnType<typeof vi.spyOn> | undefined;
@@ -336,10 +321,10 @@ describe.skipIf(
     try {
       const fence = createDataConfigurationMaintenance(f.sql, f.dm);
       await fence.startup();
-      await f.adoptPreparationWithoutAdmission();
       expect((await request()).status).not.toBe(200); // live original
+      // Data-manager answers from the expired delegation and its own SQL; it
+      // never reads the agent's lease store. The agent cancels before asking.
       clock = vi.spyOn(Date, "now").mockReturnValue(f.owner.deadlineAt + 1);
-      expect((await request()).status).not.toBe(200); // issuer not frozen
       control.cancelControlExecution(f.authority);
       await control.cancelArtifactTargetLease(f.lease);
       expect((await request(f.input, { authorization: "Bearer wrong" })).status).toBe(401);
@@ -347,22 +332,6 @@ describe.skipIf(
         (await request(f.input, { "x-openmapx-control-delegation": "changed" })).status,
       ).not.toBe(200);
       expect((await request({ ...f.input, candidateId: randomUUID() })).status).not.toBe(200);
-      const delegation = JSON.parse(Buffer.from(f.assertion, "base64url").toString("utf8")),
-        adoptionFile = join(
-          f.root,
-          "control-private/data-manager/adoptions",
-          `${delegation.delegationId}.json`,
-        ),
-        adoption = readFileSync(adoptionFile, "utf8");
-      writeFileSync(
-        adoptionFile,
-        JSON.stringify({ ...JSON.parse(adoption), state: "pending-adoption" }),
-      );
-      try {
-        expect((await request()).status).not.toBe(200);
-      } finally {
-        writeFileSync(adoptionFile, adoption);
-      }
       for (const identity of ["key", "id"] as const) {
         const id = identity === "id" ? f.child.executionId : randomUUID(),
           key =
@@ -375,8 +344,8 @@ describe.skipIf(
         }
       }
       // A fence row for the same maintenance means the preparation was admitted.
-      await f.sql`INSERT INTO data_manager.configuration_fence(maintenance_id,fence_id,operation_key,candidate_id,plan_digest,owner_certificate_digest,input,state)
-        VALUES(${f.input.maintenanceId},${randomUUID()},${`opk1_${randomUUID().replaceAll("-", "")}`},${f.input.candidateId},${f.input.planDigest},${"0".repeat(64)},${JSON.stringify(f.input)}::jsonb,'prepared')`;
+      await f.sql`INSERT INTO data_manager.configuration_fence(maintenance_id,fence_id,operation_key,candidate_id,plan_digest,owner_lease_id,input,state)
+        VALUES(${f.input.maintenanceId},${randomUUID()},${`opk1_${randomUUID().replaceAll("-", "")}`},${f.input.candidateId},${f.input.planDigest},${randomUUID()},${JSON.stringify(f.input)}::jsonb,'prepared')`;
       try {
         expect((await request()).status).not.toBe(200);
       } finally {
@@ -401,16 +370,9 @@ describe.skipIf(
         await tx`SELECT pg_advisory_xact_lock(${0x4f4d58},2)`;
         expect((await request()).status).not.toBe(200);
       });
-      expect(() => control.verifyRetainedArtifactTargetRootRelease(f.authority)).toThrow();
-      const assertion = JSON.parse(Buffer.from(f.assertion, "base64url").toString("utf8")),
-        childFile = join(
-          f.root,
-          "data/.admin-target-control/leases",
-          assertion.leaseId,
-          "children",
-          `${assertion.delegationId}.json`,
-        );
-      expect(JSON.parse(readFileSync(childFile, "utf8")).payload.phase).toBe("held");
+      await expect(control.verifyRetainedArtifactTargetRootRelease(f.authority)).rejects.toThrow();
+      const assertion = JSON.parse(Buffer.from(f.assertion, "base64url").toString("utf8"));
+      expect(storeChild(f.root, assertion.leaseId, assertion.delegationId)?.state).toBe("held");
     } finally {
       clock?.mockRestore();
       await f.close();
@@ -426,7 +388,6 @@ describe.skipIf(
     try {
       const fence = createDataConfigurationMaintenance(f.sql, f.dm);
       await fence.startup();
-      await f.adoptPreparationWithoutAdmission();
       await f.failPreparation();
       const { createApiOpsClient } = await import("../ops-client"),
         client = createApiOpsClient(),
@@ -442,7 +403,7 @@ describe.skipIf(
           pollIntervalMs: 1,
         }),
       ).toBe("pending");
-      expect(() => control.verifyRetainedArtifactTargetRootRelease(f.authority)).toThrow();
+      await expect(control.verifyRetainedArtifactTargetRootRelease(f.authority)).rejects.toThrow();
       vi.stubEnv("DATA_MANAGER_URL", f.data.baseUrl);
       const cancel = client.cancel.bind(client),
         legacy = vi.spyOn(client, "cancel").mockImplementation(async (...args) => {
@@ -456,7 +417,7 @@ describe.skipIf(
           pollIntervalMs: 1,
         }),
       ).toBe("pending");
-      expect(() => control.verifyRetainedArtifactTargetRootRelease(f.authority)).toThrow();
+      await expect(control.verifyRetainedArtifactTargetRootRelease(f.authority)).rejects.toThrow();
       expect(
         await cancelAdminJobOperations(f.ctx.checkpointResult, client, {
           context: f.ctx,
@@ -516,7 +477,7 @@ describe.skipIf(
       expect(finished?.status).toBe("failed");
       expect(finished?.finished_at).not.toBeNull();
       expect(finished?.result._cancelRequestedAt).toBeDefined();
-      expect(control.verifyRetainedArtifactTargetRootRelease(f.authority)).toBeDefined();
+      expect(await control.verifyRetainedArtifactTargetRootRelease(f.authority)).toBeDefined();
       expect(await client.status("configurationMaintenance.prepare", f.owner.executionId)).toEqual(
         original,
       );
@@ -526,7 +487,8 @@ describe.skipIf(
         ),
       ).toBe(controlTerminalReceiptDigest(original));
       expect(f.data.preparePosts).toBe(0);
-      expect(f.data.recoveryPosts).toBe(1);
+      // Asking data-manager again is read-only and answers the same.
+      expect(f.data.recoveryPosts).toBeGreaterThanOrEqual(1);
       expect(
         await f.sql`SELECT id FROM data_manager.jobs WHERE id=${f.child.executionId}`,
       ).toHaveLength(0);
@@ -559,7 +521,7 @@ describe.skipIf(
     }
   }, 60000);
 
-  it.each(["child", "owner", "release"] as const)(
+  it.each(["owner", "release"] as const)(
     "rejoins only original negative recovery after lost %s publication acknowledgement",
     async (boundary) => {
       const f = await ownedFenceFixture({ productionRegistration: true });
@@ -568,7 +530,6 @@ describe.skipIf(
       try {
         const fence = createDataConfigurationMaintenance(f.sql, f.dm);
         await fence.startup();
-        await f.adoptPreparationWithoutAdmission();
         await f.failPreparation();
         const canonicalPath = join(
             f.root,
@@ -576,13 +537,8 @@ describe.skipIf(
             `terminal-${f.owner.operationKey}.json`,
           ),
           canonical = readFileSync(canonicalPath),
-          assertion = JSON.parse(Buffer.from(f.assertion, "base64url").toString("utf8")),
-          suffix =
-            boundary === "child"
-              ? `${assertion.delegationId}.json`
-              : boundary === "owner"
-                ? `${f.input.maintenanceId}.json`
-                : "admission.json",
+          // The agent's own owner record, and the lease store it releases the root in.
+          suffix = boundary === "owner" ? `${f.input.maintenanceId}.json` : "leases.json",
           nativeRename = (await vi.importActual<typeof import("node:fs")>("node:fs")).renameSync,
           maintenance = await import(
             "../../../../../apps/ops-agent/src/configuration-maintenance-store"
@@ -600,15 +556,13 @@ describe.skipIf(
           f.host.runtime,
           f.authority,
         );
-        // The DM publication can be read from the exact child after its lost
-        // HTTP reply, so that case may finish without another operator request.
-        if (boundary === "child")
-          await expect(recovery).resolves.toMatchObject({ maintenanceId: f.input.maintenanceId });
-        else await expect(recovery).rejects.toThrow();
+        // A lost write ends this attempt; the retry reuses what was kept and
+        // asks data-manager no second time.
+        await expect(recovery).rejects.toThrow();
         fault.mockRestore();
         expect(faulted).toBe(true);
         await maintenance.recoverUnadmittedConfigurationMaintenance(f.host.runtime, f.authority);
-        expect(control.verifyRetainedArtifactTargetRootRelease(f.authority)).toBeDefined();
+        expect(await control.verifyRetainedArtifactTargetRootRelease(f.authority)).toBeDefined();
         expect(readFileSync(canonicalPath)).toEqual(canonical);
         expect(f.data.preparePosts).toBe(0);
         expect(f.data.recoveryPosts).toBe(1);
@@ -624,26 +578,18 @@ describe.skipIf(
     60000,
   );
 
-  it("settles only the expired adopted but unadmitted original preparation through receiver recovery", async () => {
+  it("settles only the expired unadmitted original preparation through receiver recovery", async () => {
     const f = await ownedFenceFixture({ productionRegistration: true });
     let clock: ReturnType<typeof vi.spyOn> | undefined;
     try {
       const fence = createDataConfigurationMaintenance(f.sql, f.dm);
       await fence.startup();
-      await f.adoptPreparationWithoutAdmission();
       const assertion = JSON.parse(Buffer.from(f.assertion, "base64url").toString("utf8")),
-        adoption = join(
-          f.root,
-          "control-private/data-manager/adoptions",
-          `${assertion.delegationId}.json`,
-        ),
-        originalAdoption = readFileSync(adoption, "utf8"),
         execution = join(
           f.root,
           "control-private/data-manager/executions",
           `${f.child.operationKey}.json`,
         );
-      expect(JSON.parse(originalAdoption).state).toBe("ready");
       expect(existsSync(execution)).toBe(false);
       clock = vi.spyOn(Date, "now").mockReturnValue(f.owner.deadlineAt + 1);
       control.cancelControlExecution(f.authority);
@@ -662,29 +608,16 @@ describe.skipIf(
       );
       expect(response.status).toBe(200);
       const proof = await response.json();
-      expect(proof.payload).toMatchObject({
+      expect(proof).toMatchObject({
         kind: "configuration-prepare-not-admitted",
         input: f.input,
         child: f.child,
       });
-      expect(readFileSync(adoption, "utf8")).toBe(originalAdoption);
       expect(existsSync(execution)).toBe(false);
-      const child = JSON.parse(
-        readFileSync(
-          join(
-            f.root,
-            "data/.admin-target-control/leases",
-            assertion.leaseId,
-            "children",
-            `${assertion.delegationId}.json`,
-          ),
-          "utf8",
-        ),
+      // data-manager answers; the agent settles its child from that answer.
+      expect(storeChild(f.root, assertion.leaseId, assertion.delegationId)?.state).not.toBe(
+        "settled",
       );
-      expect(child.payload).toMatchObject({
-        phase: "settled",
-        settlement: { outcome: "failed_without_effect", publication: "not_started" },
-      });
       expect(
         await f.sql`SELECT id FROM data_manager.jobs WHERE id=${f.child.executionId}`,
       ).toHaveLength(0);
@@ -694,7 +627,7 @@ describe.skipIf(
       await expect(
         maintenance.recoverUnadmittedConfigurationMaintenance(f.host.runtime, f.authority),
       ).resolves.toMatchObject({ maintenanceId: f.input.maintenanceId });
-      expect(control.verifyRetainedArtifactTargetRootRelease(f.authority)).toBeDefined();
+      expect(await control.verifyRetainedArtifactTargetRootRelease(f.authority)).toBeDefined();
     } finally {
       clock?.mockRestore();
       await f.close();
@@ -714,7 +647,10 @@ describe.skipIf(
         "ops-agent",
       );
       expect(receipt.state).toBe("prepared");
-      expect(control.inspectArtifactTargetLeaseChildSettlement(f.lease, f.child)).toMatchObject({
+      await settledByAgent(f.lease, f.child, receipt);
+      expect(
+        await control.inspectArtifactTargetLeaseChildSettlement(f.lease, f.child),
+      ).toMatchObject({
         outcome: "committed",
         terminalReceiptDigest: control.controlDigest({ kind: "data-configuration-fence", receipt }),
       });
@@ -739,7 +675,10 @@ describe.skipIf(
         "ops-agent",
       );
       expect(receipt.state).toBe("prepared");
-      expect(control.inspectArtifactTargetLeaseChildSettlement(f.lease, f.child)).toMatchObject({
+      await settledByAgent(f.lease, f.child, receipt);
+      expect(
+        await control.inspectArtifactTargetLeaseChildSettlement(f.lease, f.child),
+      ).toMatchObject({
         outcome: "committed",
         terminalReceiptDigest: control.controlDigest({ kind: "data-configuration-fence", receipt }),
       });
@@ -765,7 +704,8 @@ describe.skipIf(
       expect(rows).toEqual([
         { state: "prepared", operation_key: child.operationKey, outcome: null },
       ]);
-      expect(control.inspectArtifactTargetLeaseChildSettlement(lease, child)).toMatchObject({
+      await settledByAgent(lease, child, receipt);
+      expect(await control.inspectArtifactTargetLeaseChildSettlement(lease, child)).toMatchObject({
         outcome: "committed",
         terminalReceiptDigest: control.controlDigest({ kind: "data-configuration-fence", receipt }),
       });
@@ -963,9 +903,6 @@ describe.skipIf(
       expect(
         await fence.prepare(input, ["x-openmapx-control-delegation", assertion], "ops-agent"),
       ).toEqual(receipt);
-      expect(control.inspectArtifactTargetLeaseChildSettlement(lease, child)?.publication).toBe(
-        "committed",
-      );
       await expect(control.releaseArtifactTargetLease(lease)).rejects.toThrow();
     } finally {
       await f.close();
@@ -1046,7 +983,11 @@ async function ownedFenceFixture(
       runtime: host.runtime,
       resourceClaimer: host.claimer,
       controlInstallation: agent,
-      tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+      tokens: {
+        api: host.token,
+        "data-manager": Buffer.alloc(32, 23).toString("base64url"),
+        "host-cli": "h".repeat(43),
+      },
       journal: await openOpsJobJournal(join(root, "state/ops-agent/jobs-v1.json")),
     }),
     tokenFile = join(host.root, "api-token");
@@ -1247,7 +1188,6 @@ async function ownedFenceFixture(
   // The original API producer must reach the actual agent-issued child grant.
   const { input, assertion } = await Promise.race([captured.promise, pending]);
   const child = control.inspectArtifactDelegation({
-      dataRoot: join(root, "data"),
       assertion,
       installation: dm,
     }).execution,
@@ -1276,29 +1216,6 @@ async function ownedFenceFixture(
         }),
       );
       await preparation.catch(() => {});
-    },
-    /** The receiver's state after a PREPARE stopped between adopting the
-     * signed lease and admitting its execution, for example because the Data
-     * Manager was killed there: a ready adoption and no admitted execution. */
-    async adoptPreparationWithoutAdmission() {
-      const rawHeaders = ["x-openmapx-control-delegation", assertion],
-        dataRoot = join(root, "data"),
-        peer = control.verifyControlPeer(dm, {
-          rawHeaders,
-          transportPrincipal: "ops-agent",
-          execution: child,
-          kind: "configuration-maintenance.prepare",
-        }),
-        grant = control.inspectArtifactDelegation({ dataRoot, assertion, installation: dm });
-      control.closeArtifactTargetLeaseHandle(
-        await control.adoptArtifactTargetLease({
-          dataRoot,
-          assertion,
-          peer,
-          execution: child,
-          serviceIds: grant.serviceIds,
-        }),
-      );
     },
     async close() {
       response.reject(Error("Named fixture HTTP transport closed"));
@@ -1377,7 +1294,7 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
         await f.sql`SELECT * FROM data_manager.configuration_fence WHERE maintenance_id=${f.input.maintenanceId}::uuid`,
       ).toEqual([]);
       // The begun leaf has no recorded outcome, so the agent's root stays held.
-      expect(control.inspectArtifactTargetLeaseChildSettlement(f.lease, f.child)).toBeNull();
+      expect(await control.inspectArtifactTargetLeaseChildSettlement(f.lease, f.child)).toBeNull();
       await expect(control.releaseArtifactTargetLease(f.lease)).rejects.toThrow();
     } finally {
       release();
@@ -1474,7 +1391,6 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
         plan: requests.map((request) => request.slot),
       });
       foreignLease = await control.acquireArtifactTargetLease({
-        dataRoot: join(f.root, "data"),
         serviceIds: ["foreign-consumer"],
         owner: authority,
       });
@@ -1492,6 +1408,7 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
               plan,
             },
             ["x-openmapx-control-delegation", assertion],
+            "ops-agent",
           ),
         ).rejects.toMatchObject({ statusCode: 403 });
         expect(await f.sql`SELECT id FROM data_manager.jobs WHERE execution_version=2`).toEqual([]);

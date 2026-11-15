@@ -7,14 +7,19 @@ import {
   type ControlTransportPrincipal,
   controlDigest,
   controlHeaders,
+  inspectRemoteDelegation,
   installationState,
-  readParentGrant,
+  parseControlAssertion,
   retainedControlParent,
+  verifiedRemoteParentExecution,
   verifyControlPeer,
-  verifyParentExecution,
 } from "./control-authority";
 import { adoptArtifactTargetLease, inspectArtifactDelegation } from "./target-lease";
-/** Both receivers keep transport auth and resource policy. This verifies only the exact signed internal attempt. */
+/**
+ * The agent's receiver for data-manager's delegated operations. The child was
+ * recorded in the agent's own lease store when data-manager asked for it; this
+ * checks the request against that row. Transport auth and resource policy stay.
+ */
 export function inspectControlAdmission(
   installation: ControlInstallation,
   input: {
@@ -56,26 +61,23 @@ export function inspectControlAdmission(
     throw Error("Receiving typed operation mismatch");
   const { delegation } = controlHeaders(input.rawHeaders);
   if (!delegation) throw Error("Missing control assertion");
-  const inspected = inspectArtifactDelegation({
-    dataRoot: state.dataRoot,
-    assertion: delegation,
-    installation,
-  });
+  const inspected = inspectArtifactDelegation({ assertion: delegation, installation });
   if (
     inspected.kind !== input.kind ||
     inspected.execution.operationKey !== input.operationKey ||
     inspected.execution.operationFingerprint !== input.operationFingerprint ||
     inspected.execution.deadlineAt !== input.requestedDeadlineAt ||
-    inspected.execution.executor !== installation.role
+    inspected.execution.executor !== installation.role ||
+    inspected.owner.executor !== "data-manager"
   )
-    throw Error("Signed immutable admission mismatch");
+    throw Error("Recorded admission mismatch");
   if (
     operation.kind === "transitousLock.approve" &&
     (inspected.phase !== "paired-pin-commit" || inspected.owner.executor !== "data-manager")
   )
     throw Error("Original paired activation leaf required");
   if (targets.some((id) => !state.registeredTargets.has(id) || !inspected.serviceIds.includes(id)))
-    throw Error("Grant does not contain operation-derived target closure");
+    throw Error("Delegation does not contain operation-derived target closure");
   const peer = verifyControlPeer(installation, {
     rawHeaders: input.rawHeaders,
     transportPrincipal: input.transportPrincipal,
@@ -84,15 +86,14 @@ export function inspectControlAdmission(
   });
   const parent = Object.freeze(retainedControlParent(inspected.parent)) as VerifiedParentExecution;
   verifiedParents.add(parent);
-  if (inspected.origin) verifiedParentOrigins.set(parent, inspected.origin);
+  verifiedParentOrigins.set(parent, parseControlAssertion(delegation).origin);
   return Object.freeze({
     ...inspected,
     parent,
     async adopt(execution: ExecutionRef) {
       if (controlDigest(execution) !== controlDigest(inspected.execution))
-        throw Error("Normalized execution identity differs from grant");
+        throw Error("Normalized execution identity differs from delegation");
       return adoptArtifactTargetLease({
-        dataRoot: state.dataRoot,
         assertion: delegation,
         peer,
         execution,
@@ -101,27 +102,9 @@ export function inspectControlAdmission(
     },
   });
 }
-export function verifiedParentForArtifactDelegation(
-  installation: ControlInstallation,
-  assertion: string,
-  execution: ExecutionRef,
-): VerifiedParentExecution {
-  const state = installationState(installation);
-  const inspected = inspectArtifactDelegation({
-    dataRoot: state.dataRoot,
-    assertion,
-    installation,
-  });
-  if (controlDigest(inspected.execution) !== controlDigest(execution))
-    throw Error("Wrong delegated execution");
-  const parent = Object.freeze(retainedControlParent(inspected.parent)) as VerifiedParentExecution;
-  verifiedParents.add(parent);
-  if (inspected.origin) verifiedParentOrigins.set(parent, inspected.origin);
-  return parent;
-}
 
-/** Fixed DM receiver: the only proposed ID comes from the authenticated grant.
- * Reading the grant is observation; normalized equality is checked at adoption. */
+/** Data-manager's receiver for executions the agent or the host CLI issued.
+ * The caller's token says who sent them; the delegation or parent names them. */
 export function inspectDataExecutionAdmission(
   installation: ControlInstallation,
   input: {
@@ -133,78 +116,51 @@ export function inspectDataExecutionAdmission(
     requestedDeadlineAt?: number;
   },
 ) {
-  const local = installationState(installation),
-    headers = controlHeaders(input.rawHeaders);
   if (installation.role !== "data-manager") throw Error("Data-manager receiver required");
+  const headers = controlHeaders(input.rawHeaders);
   if (!headers.parent && !headers.delegation) return null;
   if (headers.parent) {
-    const grant = readParentGrant(local, headers.parent),
-      assertion = headers.parent;
-    if (
-      grant.recipient !== "data-manager" ||
-      grant.child.executor !== "data-manager" ||
-      grant.kind !== input.input.kind ||
-      grant.child.operationKey !== input.operationKey ||
-      grant.child.operationFingerprint !== input.operationFingerprint ||
-      grant.child.deadlineAt !== input.requestedDeadlineAt
-    )
-      throw Error("Signed data parent identity mismatch");
-    const peer = verifyControlPeer(installation, {
-      rawHeaders: input.rawHeaders,
+    const { parent, execution } = verifiedRemoteParentExecution(installation, headers.parent, {
       transportPrincipal: input.transportPrincipal,
-      execution: grant.child,
-      kind: grant.kind,
-    });
-    const parent = verifyParentExecution(assertion, peer, {
-      execution: grant.child,
-      kind: grant.kind,
-      requestedDeadlineAt: grant.child.deadlineAt,
+      operationKey: input.operationKey,
+      operationFingerprint: input.operationFingerprint,
+      kind: input.input.kind,
+      requestedDeadlineAt: input.requestedDeadlineAt,
     });
     return Object.freeze({
-      execution: grant.child,
+      execution,
       parent,
       serviceIds: [] as string[],
-      async adopt(execution: ExecutionRef) {
-        if (controlDigest(execution) !== controlDigest(grant.child))
-          throw Error("Normalized data child differs from grant");
+      async adopt(adopted: ExecutionRef) {
+        if (controlDigest(adopted) !== controlDigest(execution))
+          throw Error("Normalized data child differs from parent");
         return undefined;
       },
     });
   }
-  const assertion = headers.delegation!;
-  const grant = inspectArtifactDelegation({ dataRoot: local.dataRoot, assertion, installation });
+  const delegation = inspectRemoteDelegation(
+    installation,
+    input.rawHeaders,
+    input.transportPrincipal,
+  );
   if (
     input.input.kind !== "generation-hardlinks" ||
-    grant.kind !== input.input.kind ||
-    grant.execution.executor !== "data-manager" ||
-    grant.execution.operationKey !== input.operationKey ||
-    grant.execution.operationFingerprint !== input.operationFingerprint ||
-    grant.execution.deadlineAt !== input.requestedDeadlineAt
+    delegation.kind !== input.input.kind ||
+    delegation.execution.operationKey !== input.operationKey ||
+    delegation.execution.operationFingerprint !== input.operationFingerprint ||
+    delegation.execution.deadlineAt !== input.requestedDeadlineAt
   )
-    throw Error("Unsupported or mismatched borrowed data leaf");
-  const peer = verifyControlPeer(installation, {
-    rawHeaders: input.rawHeaders,
-    transportPrincipal: input.transportPrincipal,
-    execution: grant.execution,
-    kind: grant.kind,
-  });
-  const parent = verifiedParentForArtifactDelegation(installation, assertion, grant.execution);
+    throw Error("Unsupported or mismatched delegated data leaf");
+  const local = installationState(installation);
+  local.registeredTargets = new Set([...local.registeredTargets, ...delegation.serviceIds]);
   return Object.freeze({
-    execution: grant.execution,
-    parent,
-    serviceIds: [] as string[],
+    execution: delegation.execution,
+    parent: delegation.verifiedParent,
+    serviceIds: delegation.serviceIds,
     async adopt(execution: ExecutionRef) {
-      if (controlDigest(execution) !== controlDigest(grant.execution))
-        throw Error("Normalized data child differs from grant");
-      const lease = await adoptArtifactTargetLease({
-        dataRoot: local.dataRoot,
-        assertion,
-        peer,
-        execution,
-        serviceIds: grant.serviceIds,
-      });
-      local.registeredTargets = new Set([...local.registeredTargets, ...lease.serviceIds]);
-      return lease;
+      if (controlDigest(execution) !== controlDigest(delegation.execution))
+        throw Error("Normalized data child differs from delegation");
+      return undefined;
     },
   });
 }

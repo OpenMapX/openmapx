@@ -3,8 +3,6 @@ export {
   commitFeedProxyValidationFailure,
   feedProxyValidationCompletionDigest,
   inspectFeedProxyValidationFailure,
-  publishFeedProxyCanonicalTerminal,
   recordFeedProxyReloadAttempted,
   reserveFeedProxyValidation,
-  verifyFeedProxyCanonicalTerminal,
 } from "./data-execution-candidate";

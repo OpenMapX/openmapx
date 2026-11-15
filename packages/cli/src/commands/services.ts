@@ -5,12 +5,12 @@ import { cliControlContext, completeCliCommand } from "../lib/control-context";
 
 import { dockerComposeStream } from "../lib/docker";
 import { applyGeneratedHardlinks, logAppliedHardlinks } from "../lib/hardlinks";
+import { leasedHostEffect } from "../lib/host-effect";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { expandPresets, UnknownPresetError } from "../lib/presets";
 import { buildServices } from "../lib/service-builds";
 import { runCliServiceLifecycle, ServiceLifecycleCommandError } from "../lib/service-lifecycle";
-import { recoverServiceUpdate } from "../lib/service-recovery";
 import {
   applyServiceSelection,
   disableSelectedServices,
@@ -187,25 +187,6 @@ function mergeIdsWithPresets(ids: string[], preset: string | undefined): string[
 
 export function registerServicesCommands(program: Command): void {
   const services = program.command("services").description("Manage services");
-
-  services
-    .command("recover-update")
-    .description(
-      "Settle an expired original failed update only when its hardlink child was never adopted",
-    )
-    .requiredOption("--operation-key <key>", "Original host service-update operation key")
-    .action(async (options: { operationKey: string }) => {
-      try {
-        const result = await recoverServiceUpdate(options);
-        log.info(
-          `Recovered original failed lifecycle ${result.operationKey}; configuration ${result.revisionId} is preserved. No update was replayed.`,
-        );
-      } catch (error) {
-        log.err(error instanceof Error ? error.message : "Original service update remains fenced");
-        completeCliCommand(1);
-      }
-      completeCliCommand(0);
-    });
 
   services
     .command("selected")
@@ -424,8 +405,11 @@ export function registerServicesCommands(program: Command): void {
         log.err("No services selected. Pass <ids...> or --preset.");
         completeCliCommand(1);
       }
-      const code = await dockerComposeStream(["stop", ...allIds]);
-      completeCliCommand(code);
+      completeCliCommand(
+        await leasedHostEffect("services.stop", allIds, () =>
+          dockerComposeStream(["stop", ...allIds]),
+        ),
+      );
     });
 
   services
@@ -440,8 +424,11 @@ export function registerServicesCommands(program: Command): void {
         log.err("No services selected. Pass <ids...> or --preset.");
         completeCliCommand(1);
       }
-      const code = await dockerComposeStream(["restart", ...allIds]);
-      completeCliCommand(code);
+      completeCliCommand(
+        await leasedHostEffect("services.restart", allIds, () =>
+          dockerComposeStream(["restart", ...allIds]),
+        ),
+      );
     });
 
   services

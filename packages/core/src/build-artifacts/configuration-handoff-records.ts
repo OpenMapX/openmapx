@@ -98,7 +98,6 @@ export const configurationHandoffIntentRecordSchema = z
       .refine((names) => Buffer.byteLength(JSON.stringify(names)) <= 8192)
       .refine((names) => names.every((name, index) => index === 0 || names[index - 1]! < name)),
     preparerAdmissionDigest: digest,
-    ownerCertificateDigest: digest,
     leaseId: z.uuid(),
     delegationId: z.uuid(),
     assertion: z.string().min(1).max(4096),

@@ -166,7 +166,7 @@ it.each(
         });
         const journal = await openOpsJobJournal(file);
         app = buildOpsAgentServer({
-          tokens: { api: token, "data-manager": "b".repeat(32) },
+          tokens: { api: token, "data-manager": "b".repeat(32), "host-cli": "h".repeat(43) },
           controlInstallation: installation,
           journal,
           dispatch,
@@ -310,6 +310,7 @@ it.each(
           tokens: {
             api: Buffer.alloc(32, 7).toString("base64url"),
             "data-manager": "b".repeat(32),
+            "host-cli": "h".repeat(43),
           },
           controlInstallation: installation,
           journal,
@@ -334,6 +335,7 @@ it.each(
           tokens: {
             api: Buffer.alloc(32, 7).toString("base64url"),
             "data-manager": "b".repeat(32),
+            "host-cli": "h".repeat(43),
           },
           controlInstallation: installation,
           journal: unproved,
@@ -476,7 +478,6 @@ it("repairs a borrowed terminal worker after the actual canonical-digest restart
       plan: [plan],
     });
     const lease = await c.acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
       serviceIds: ["motis"],
       owner: authority,
     });
@@ -498,7 +499,11 @@ it("repairs a borrowed terminal worker after the actual canonical-digest restart
     });
     const journal = await openOpsJobJournal(coreServices.agentStatePaths(root).journal);
     app = buildOpsAgentServer({
-      tokens: { api: Buffer.alloc(32, 7).toString("base64url"), "data-manager": "b".repeat(32) },
+      tokens: {
+        api: Buffer.alloc(32, 7).toString("base64url"),
+        "data-manager": "b".repeat(32),
+        "host-cli": "h".repeat(43),
+      },
       controlInstallation: installation,
       journal,
       dispatch,
@@ -506,7 +511,7 @@ it("repairs a borrowed terminal worker after the actual canonical-digest restart
     });
     await app.ready();
     expect(journal.records()).toEqual([stopped.job]);
-    expect(existsSync(join(root, "data/.admin-target-control/locks/motis"))).toBe(true);
+    expect(c.heldTargets(root).includes("motis")).toBe(true);
     c.retainControlEffectReceipt(authority, {
       outcome: "failed_without_effect",
       publication: "not_started",

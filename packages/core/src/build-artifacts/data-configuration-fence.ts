@@ -1,11 +1,12 @@
 /** The data-manager's configuration fence: one row in
  * `data_manager.configuration_fence`. While a row is `prepared`, no data job
- * is admitted. The agent prepares and settles it with its signed delegation;
- * both calls are idempotent on the same body. */
+ * is admitted. Only the operations agent prepares and settles it, authenticated
+ * by its own data-manager token; both calls are idempotent on the same body.
+ * The agent records the fence leaf in its lease store and settles it from the
+ * receipt this returns. */
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
 import { executionFingerprint, type VerifiedParentExecution } from "../ops/execution-identity";
-import type { ExecutionRef } from "../ops/execution-ref";
 import {
   type DataConfigurationFencePrepare,
   type DataConfigurationFenceReceipt,
@@ -14,18 +15,15 @@ import {
   dataConfigurationFencePrepareSchema,
   dataConfigurationFenceSettleSchema,
 } from "../services/data-manager/contracts/configuration-maintenance";
-import {
-  GENERATION_HARDLINKS_NON_ADMISSION_DOMAIN,
-  startGenerationHardlinksExecutionSchema,
-} from "../services/data-manager/contracts/executions";
+import { startGenerationHardlinksExecutionSchema } from "../services/data-manager/contracts/executions";
 import {
   beginControlEffect,
   type ControlInstallation,
   type ControlTransportPrincipal,
   childSettlementState,
   controlDigest,
-  controlHeaders,
   executionAuthorityState,
+  inspectRemoteDelegation,
   installationState,
   readPrivateRecord,
   reserveControlTerminal,
@@ -34,26 +32,11 @@ import {
   retainedControlParent,
   settleExecutionLifecycle,
   type VerifiedExecutionAuthority,
-  verifyConfigurationMaintenanceGenerationWitness,
   verifyControlEffectSettlement,
-  verifyControlPeer,
   withPrivateEffectWriter,
   writePrivateRecord,
 } from "./control-authority";
-import { signControl, verifyControl } from "./control-records";
-import { verifiedParentForArtifactDelegation } from "./peer-admission";
-import {
-  adoptArtifactTargetLease,
-  assertArtifactDelegationRootHeld,
-  assertArtifactTargetLeaseForward,
-  bindBorrowedControlExecution,
-  closeArtifactTargetLeaseHandle,
-  inspectArtifactDelegation,
-  observeUnadoptedServiceHardlinkGrant,
-  settleArtifactTargetLeaseChild,
-  settleUnadmittedConfigurationPrepare,
-  withConfigurationFenceReceiverAdmission,
-} from "./target-lease";
+import { signControl } from "./control-records";
 
 export interface DataFenceSql {
   unsafe(
@@ -63,21 +46,13 @@ export interface DataFenceSql {
   transaction<T>(run: (tx: Pick<DataFenceSql, "unsafe">) => Promise<T>): Promise<T>;
 }
 type Tx = Pick<DataFenceSql, "unsafe">;
-const inspectWitnessSchema = z.strictObject({
-  installationId: z.uuid(),
-  maintenanceId: z.uuid(),
-  candidateId: z.uuid(),
-  ownerCertificateDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  issuedAt: z.number().int().nonnegative().safe(),
-  expiresAt: z.number().int().nonnegative().safe(),
-});
 const fenceRowSchema = z.object({
   maintenance_id: z.uuid(),
   fence_id: z.uuid(),
   operation_key: z.string(),
   candidate_id: z.uuid(),
   plan_digest: z.string(),
-  owner_certificate_digest: z.string(),
+  owner_lease_id: z.uuid(),
   input: dataConfigurationFencePrepareSchema,
   state: z.enum(["prepared", "settled"]),
   outcome: dataConfigurationFenceOutcomeSchema.nullable(),
@@ -116,9 +91,10 @@ const preparedGenerations = new WeakMap<
     installation: ControlInstallation;
     request: ReturnType<typeof startGenerationHardlinksExecutionSchema.parse>;
     headers: readonly string[];
+    principal: ControlTransportPrincipal;
     parent: VerifiedParentExecution;
     fenceDigest: string;
-    execution: ReturnType<typeof inspectArtifactDelegation>["execution"];
+    execution: ReturnType<typeof inspectRemoteDelegation>["execution"];
   }
 >();
 export function createDataConfigurationFenceStore(
@@ -144,65 +120,41 @@ export function createDataConfigurationFenceStore(
     );
     return rows[0] ? fenceRowSchema.parse(rows[0]) : null;
   }
-  function inspectGrant(
+  function inspectDelegation(
     body: DataConfigurationFencePrepare,
     rawHeaders: readonly string[],
-    transportPrincipal: Exclude<ControlTransportPrincipal, "data-manager">,
+    transportPrincipal: ControlTransportPrincipal,
   ) {
     const kind = "configuration-maintenance.prepare";
     try {
-      const headers = controlHeaders(rawHeaders);
-      if (!headers.delegation || headers.parent) throw Error("Pinned agent fence grant required");
-      const grant = inspectArtifactDelegation({
-        dataRoot: local.dataRoot,
-        assertion: headers.delegation,
-        installation,
-      });
+      if (transportPrincipal !== "ops-agent") throw Error("Agent transport required");
+      const delegation = inspectRemoteDelegation(installation, rawHeaders, transportPrincipal);
       const operation = { kind, ...body };
       if (
-        grant.recipient !== "data-manager" ||
-        grant.parent.executor !== "ops-agent" ||
-        grant.kind !== kind ||
-        grant.phase !== "configuration-fence" ||
-        controlDigest(grant.parent) !== controlDigest(body.ownerPrepare) ||
-        grant.execution.operationFingerprint !== controlDigest(operation) ||
-        grant.execution.executor !== "data-manager" ||
-        grant.execution.fingerprint !==
+        delegation.parent.executor !== "ops-agent" ||
+        delegation.kind !== kind ||
+        delegation.phase !== "configuration-fence" ||
+        controlDigest(delegation.parent) !== controlDigest(body.ownerPrepare) ||
+        controlDigest(delegation.owner) !== controlDigest(body.ownerPrepare) ||
+        delegation.execution.operationFingerprint !== controlDigest(operation) ||
+        delegation.execution.fingerprint !==
           executionFingerprint({
             kind,
             operationFingerprint: controlDigest(operation),
-            deadlineAt: grant.execution.deadlineAt,
-            parent: retainedControlParent(grant.parent),
+            deadlineAt: delegation.execution.deadlineAt,
+            parent: retainedControlParent(delegation.parent),
           }) ||
-        canonicalJson(grant.serviceIds) !== canonicalJson(body.serviceIds)
+        canonicalJson(delegation.serviceIds) !== canonicalJson(body.serviceIds)
       )
-        throw Error("Configuration fence grant identity conflict");
-      const peer = verifyControlPeer(installation, {
-        rawHeaders,
-        transportPrincipal,
-        execution: grant.execution,
-        kind,
-      });
-      return {
-        grant,
-        peer,
-        operation,
-        parent: verifiedParentForArtifactDelegation(
-          installation,
-          headers.delegation,
-          grant.execution,
-        ),
-        assertion: headers.delegation,
-      };
+        throw Error("Configuration fence delegation identity conflict");
+      return { delegation, operation };
     } catch {
-      // Classify verification failures before any fence SQL or adoption.
-      throw forbidden("Pinned agent configuration fence grant rejected");
+      // Classify verification failures before any fence SQL.
+      throw forbidden("Agent configuration fence delegation rejected");
     }
   }
-  /** Writes the leaf's terminal effect and settles it in the agent's lease, so
-   * the agent can release its root once every child is known. */
-  async function settleLeaf(
-    lease: Awaited<ReturnType<typeof adoptArtifactTargetLease>>,
+  /** Writes the leaf's own terminal effect record. */
+  function recordLeaf(
     authority: VerifiedExecutionAuthority,
     outcome: "committed" | "failed_without_effect",
     receipt: unknown,
@@ -225,93 +177,71 @@ export function createDataConfigurationFenceStore(
         false,
       );
     });
-    await settleArtifactTargetLeaseChild(
-      lease,
-      verifyControlEffectSettlement(installation, state.execution),
-    );
   }
-  /** Adopts the agent's delegation as this receiver's leaf execution and runs
-   * the fence transition once. A repeated request returns the recorded result. */
+  /** Records the agent's fence leaf as this receiver's execution and runs the
+   * fence transition once. A repeated request returns the recorded result. */
   async function withLeaf(
-    verified: ReturnType<typeof inspectGrant>,
+    verified: ReturnType<typeof inspectDelegation>,
     run: () => Promise<DataConfigurationFenceReceipt>,
   ): Promise<DataConfigurationFenceReceipt> {
-    const { grant, peer } = verified;
-    const lease = await adoptArtifactTargetLease({
-      dataRoot: local.dataRoot,
-      assertion: verified.assertion,
-      peer,
-      execution: grant.execution,
-      serviceIds: grant.serviceIds,
-    });
-    // The fence holds the whole application closure the agent signed into
-    // the lease. Startup registers only the release's built-in services;
-    // installed community-extension services are known to the agent alone.
-    local.registeredTargets = new Set([...local.registeredTargets, ...lease.serviceIds]);
+    const { delegation } = verified;
+    // The fence holds the whole application closure the agent leased.
+    // Startup registers only the release's built-in services; installed
+    // community-extension services are known to the agent alone.
+    local.registeredTargets = new Set([...local.registeredTargets, ...delegation.serviceIds]);
+    let authority: VerifiedExecutionAuthority | undefined;
     try {
-      const authority = withConfigurationFenceReceiverAdmission(lease, () => {
-        let admitted: VerifiedExecutionAuthority | undefined;
-        try {
-          admitted = restoreAdmittedControlExecution(installation, grant.execution);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-        }
-        if (!admitted) {
-          assertArtifactTargetLeaseForward(lease);
-          admitted = retainAdmittedControlExecution(installation, {
-            execution: grant.execution,
-            kind: grant.kind,
-            operation: verified.operation,
-            admittedAt: Date.now(),
-            requestedDeadlineAt: grant.execution.deadlineAt,
-            parent: verified.parent,
-            serviceIds: grant.serviceIds,
-          });
-        }
-        bindBorrowedControlExecution(lease, admitted);
-        return admitted;
-      });
-      let prior: unknown;
-      try {
-        prior = readPrivateRecord(local, "effects", `${grant.execution.operationKey}.json`);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      }
-      if (prior !== undefined && prior !== null) {
-        const settlement = verifyControlEffectSettlement(installation, grant.execution);
-        // A crash between the effect record and the lease child leaves the
-        // child unsettled; settling it again is idempotent.
-        await settleArtifactTargetLeaseChild(lease, settlement);
-        const settled = childSettlementState(settlement).evidence;
-        if (settled.outcome !== "committed") throw new DataFenceBusy();
-        const saved = await row(sql, "maintenance_id", verified.operation.maintenanceId);
-        if (!saved) throw new DataFenceBusy();
-        return receiptOf(saved);
-      }
-      reserveControlTerminal(authority);
-      assertArtifactTargetLeaseForward(lease);
-      beginControlEffect(authority);
-      let receipt: DataConfigurationFenceReceipt;
-      try {
-        receipt = await run();
-      } catch (error) {
-        // A busy refusal made no write: settle this leaf as failed without effect.
-        if (error instanceof DataFenceBusy)
-          await settleLeaf(lease, authority, "failed_without_effect", {
-            kind: "data-configuration-fence-refused",
-            maintenanceId: verified.operation.maintenanceId,
-            reason: "busy",
-          });
-        throw error;
-      }
-      await settleLeaf(lease, authority, "committed", {
-        kind: "data-configuration-fence",
-        receipt: { ...receipt, sequence: 0, state: "prepared" },
-      });
-      return receipt;
-    } finally {
-      closeArtifactTargetLeaseHandle(lease);
+      authority = restoreAdmittedControlExecution(installation, delegation.execution);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
+    if (!authority) {
+      if (Date.now() >= delegation.execution.deadlineAt) throw new DataFenceBusy();
+      authority = retainAdmittedControlExecution(installation, {
+        execution: delegation.execution,
+        kind: delegation.kind,
+        operation: verified.operation,
+        admittedAt: Date.now(),
+        requestedDeadlineAt: delegation.execution.deadlineAt,
+        parent: delegation.verifiedParent,
+        serviceIds: delegation.serviceIds,
+      });
+    }
+    let prior: unknown;
+    try {
+      prior = readPrivateRecord(local, "effects", `${delegation.execution.operationKey}.json`);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    if (prior !== undefined && prior !== null) {
+      const settled = childSettlementState(
+        verifyControlEffectSettlement(installation, delegation.execution),
+      ).evidence;
+      if (settled.outcome !== "committed") throw new DataFenceBusy();
+      const saved = await row(sql, "maintenance_id", verified.operation.maintenanceId);
+      if (!saved) throw new DataFenceBusy();
+      return receiptOf(saved);
+    }
+    reserveControlTerminal(authority);
+    beginControlEffect(authority);
+    let receipt: DataConfigurationFenceReceipt;
+    try {
+      receipt = await run();
+    } catch (error) {
+      // A busy refusal made no write: the leaf failed without effect.
+      if (error instanceof DataFenceBusy)
+        recordLeaf(authority, "failed_without_effect", {
+          kind: "data-configuration-fence-refused",
+          maintenanceId: verified.operation.maintenanceId,
+          reason: "busy",
+        });
+      throw error;
+    }
+    recordLeaf(authority, "committed", {
+      kind: "data-configuration-fence",
+      receipt: { ...receipt, sequence: 0, state: "prepared" },
+    });
+    return receipt;
   }
   async function assertAdmission(tx: Tx) {
     if (!open) throw new DataFenceBusy();
@@ -321,119 +251,86 @@ export function createDataConfigurationFenceStore(
   async function inspectGenerationAdmission(
     value: unknown,
     rawHeaders: readonly string[],
-    parent: VerifiedParentExecution | undefined,
+    principal: ControlTransportPrincipal,
     tx: Tx,
   ) {
-    const request = startGenerationHardlinksExecutionSchema.parse(value),
-      headers = controlHeaders(rawHeaders);
-    if (!headers.delegation || headers.parent) throw forbidden("Signed generation grant required");
-    const grant = inspectArtifactDelegation({
-      dataRoot: local.dataRoot,
-      assertion: headers.delegation,
-      installation,
-    });
+    const request = startGenerationHardlinksExecutionSchema.parse(value);
+    let delegation: ReturnType<typeof inspectRemoteDelegation>;
+    try {
+      delegation = inspectRemoteDelegation(installation, rawHeaders, principal);
+    } catch {
+      throw forbidden("Generation delegation required");
+    }
     if (
-      grant.recipient !== "data-manager" ||
-      grant.kind !== "generation-hardlinks" ||
-      grant.phase !== "hardlinks" ||
-      grant.execution.operationKey !== request.operationKey ||
-      grant.execution.operationFingerprint !== controlDigest(request.input) ||
+      delegation.kind !== "generation-hardlinks" ||
+      delegation.phase !== "hardlinks" ||
+      delegation.execution.operationKey !== request.operationKey ||
+      delegation.execution.operationFingerprint !== controlDigest(request.input) ||
       request.input.planDigest !== controlDigest(request.plan) ||
-      request.plan.plan.some((entry) => !grant.serviceIds.includes(entry.consumerService))
+      request.plan.plan.some((entry) => !delegation.serviceIds.includes(entry.consumerService))
     )
-      throw forbidden("Generation plan/grant binding conflict");
+      throw forbidden("Generation plan/delegation binding conflict");
     if (!open) throw new DataFenceBusy();
     const fence = await row(tx, "state", "prepared");
     if (!fence) return;
     const receipt = receiptOf(fence);
+    // During maintenance only the maintenance owner's own hardlink leaf runs:
+    // the agent issued it under the lease the fence was prepared for.
     if (
-      grant.ownerCertificateDigest !== fence.owner_certificate_digest ||
-      canonicalJson(grant.owner) !== canonicalJson(receipt.ownerPrepare) ||
-      grant.owner.executor !== "ops-agent" ||
+      principal !== "ops-agent" ||
+      delegation.leaseId !== fence.owner_lease_id ||
+      canonicalJson(delegation.owner) !== canonicalJson(receipt.ownerPrepare) ||
       request.input.revisionId !== receipt.revisionId ||
       request.input.planDigest !== receipt.hardlinkPlanDigest ||
       request.input.coordinatorMode !== fence.input.coordinatorMode ||
-      grant.serviceIds.some((id) => !fence.input.serviceIds.includes(id))
+      delegation.serviceIds.some((id) => !fence.input.serviceIds.includes(id))
     )
       throw forbidden("Generation maintenance owner/revision/hash conflict");
-    if (!parent) throw new DataFenceBusy();
-    try {
-      verifyConfigurationMaintenanceGenerationWitness(installation, request, parent, grant, {
-        maintenanceId: receipt.maintenanceId,
-        candidateId: receipt.candidateId,
-        ownerPrepare: receipt.ownerPrepare,
-        revisionId: receipt.revisionId,
-        hardlinkPlanDigest: receipt.hardlinkPlanDigest!,
-        coordinatorMode: fence.input.coordinatorMode,
-        serviceIds: fence.input.serviceIds,
-        rootCertificateDigest: fence.owner_certificate_digest,
-      });
-    } catch {
-      throw new DataFenceBusy();
-    }
     if ((await tx.unsafe(UNKNOWN_DATA_JOB)).length) throw new DataFenceBusy();
-    return { request, grant, fenceDigest: controlDigest(fence) };
+    return { request, delegation, fenceDigest: controlDigest(fence) };
   }
   return {
-    /** Negative receiver observation under the same admission lock. It cannot
-     * admit or replay the original expired preparation. */
-    async recoverUnadmittedPreparation(value: unknown, rawHeaders: readonly string[]) {
-      const input = dataConfigurationFencePrepareSchema.parse(value),
-        headers = controlHeaders(rawHeaders);
-      if (!headers.delegation || headers.parent)
-        throw forbidden("Original signed configuration delegation required");
-      const grant = inspectArtifactDelegation({
-        dataRoot: local.dataRoot,
-        installation,
-        assertion: headers.delegation,
-      });
+    /** Whether the original expired preparation was ever admitted, observed
+     * under the admission lock. An expired preparation can no longer be
+     * admitted, so a negative answer stays true. */
+    async recoverUnadmittedPreparation(
+      value: unknown,
+      rawHeaders: readonly string[],
+      transportPrincipal: ControlTransportPrincipal,
+    ) {
+      const input = dataConfigurationFencePrepareSchema.parse(value);
+      const { delegation } = inspectDelegation(input, rawHeaders, transportPrincipal);
+      if (Date.now() <= Math.max(delegation.execution.deadlineAt, delegation.owner.deadlineAt))
+        throw conflict("Original configuration preparation has not expired");
       return sql.transaction(async (tx) => {
         await lock(tx);
         const admitted = await tx.unsafe(
           "SELECT maintenance_id FROM data_manager.configuration_fence WHERE operation_key=$1 OR fence_id=$2::uuid OR maintenance_id=$3::uuid UNION ALL SELECT id FROM data_manager.jobs WHERE operation_key=$1 OR id=$2::uuid LIMIT 1",
-          [grant.execution.operationKey, grant.execution.executionId, input.maintenanceId],
+          [
+            delegation.execution.operationKey,
+            delegation.execution.executionId,
+            input.maintenanceId,
+          ],
         );
         if (admitted.length) throw conflict("Original configuration preparation was admitted");
-        return settleUnadmittedConfigurationPrepare(installation, headers.delegation!, input);
-      });
-    },
-    /** A fixed receiver observes its own locked SQL and private admission facts.
-     * The bearer, an HTTP 404, or an owner assertion alone is never this proof. */
-    async attestUnadoptedGenerationHardlinks(value: unknown, rawHeaders: readonly string[]) {
-      const request = startGenerationHardlinksExecutionSchema.parse(value),
-        headers = controlHeaders(rawHeaders);
-      if (!headers.delegation || headers.parent)
-        throw forbidden("Original signed delegation required");
-      const observe = () => observeUnadoptedServiceHardlinkGrant(installation, headers.delegation!);
-      const original = observe();
-      if (
-        request.operationKey !== original.child.operationKey ||
-        request.requestedDeadlineAt !== original.child.deadlineAt ||
-        controlDigest(request.input) !== original.child.operationFingerprint ||
-        request.input.planDigest !== controlDigest(request.plan)
-      )
-        throw Error("Original hardlink request changed");
-      return sql.transaction(async (tx) => {
-        await lock(tx);
-        const admitted = await tx.unsafe(
-          "SELECT id FROM data_manager.jobs WHERE operation_key=$1 OR id=$2 LIMIT 1",
-          [original.child.operationKey, original.child.executionId],
-        );
-        if (admitted.length) throw conflict("Original hardlink execution was already admitted");
-        for (const [namespace, name] of [
-          ["executions", `${original.child.operationKey}.json`],
-          ["adoptions", `${original.delegationId}.json`],
-        ] as const) {
+        // Any private trace of the execution means it may have been admitted.
+        for (const namespace of ["executions", "effects", "effect-started"]) {
           try {
-            readPrivateRecord(local, namespace, name);
-            throw Error("Original receiver admission or adoption requires recovery");
+            readPrivateRecord(local, namespace, `${delegation.execution.operationKey}.json`);
+            throw conflict("Original configuration preparation was admitted");
           } catch (error) {
             if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
           }
         }
-        if (canonicalJson(observe()) !== canonicalJson(original))
-          throw Error("Original canceled grant changed during observation");
-        return signControl(local.privateKey, GENERATION_HARDLINKS_NON_ADMISSION_DOMAIN, original);
+        return {
+          version: 2 as const,
+          kind: "configuration-prepare-not-admitted" as const,
+          leaseId: delegation.leaseId,
+          delegationId: delegation.delegationId,
+          child: delegation.execution,
+          input,
+          observedAt: Date.now(),
+        };
       });
     },
     /** Admission opens once the fence table is readable. */
@@ -446,18 +343,21 @@ export function createDataConfigurationFenceStore(
     async assertGenerationAdmission(
       value: unknown,
       rawHeaders: readonly string[],
+      principal: ControlTransportPrincipal,
       parent?: VerifiedParentExecution,
     ): Promise<VerifiedPreparedGenerationAdmission | undefined> {
-      const checked = await inspectGenerationAdmission(value, rawHeaders, parent, sql);
+      const checked = await inspectGenerationAdmission(value, rawHeaders, principal, sql);
       if (!checked) return undefined;
+      if (!parent) throw new DataFenceBusy();
       const proof = Object.freeze({}) as VerifiedPreparedGenerationAdmission;
       preparedGenerations.set(proof, {
         installation,
         request: checked.request,
         headers: Object.freeze([...rawHeaders]),
-        parent: parent!,
+        principal,
+        parent,
         fenceDigest: checked.fenceDigest,
-        execution: checked.grant.execution,
+        execution: checked.delegation.execution,
       });
       return proof;
     },
@@ -488,13 +388,13 @@ export function createDataConfigurationFenceStore(
       const checked = await inspectGenerationAdmission(
         source.request,
         source.headers,
-        source.parent,
+        source.principal,
         tx,
       );
       if (
         !checked ||
         checked.fenceDigest !== source.fenceDigest ||
-        canonicalJson(checked.grant.execution) !== canonicalJson(source.execution)
+        canonicalJson(checked.delegation.execution) !== canonicalJson(source.execution)
       )
         throw new DataFenceBusy();
     },
@@ -510,11 +410,11 @@ export function createDataConfigurationFenceStore(
     async prepare(
       value: DataConfigurationFencePrepare,
       rawHeaders: readonly string[],
-      transportPrincipal: Exclude<ControlTransportPrincipal, "data-manager">,
+      transportPrincipal: ControlTransportPrincipal,
     ) {
       const input = dataConfigurationFencePrepareSchema.parse(value),
-        verified = inspectGrant(input, rawHeaders, transportPrincipal),
-        execution = verified.grant.execution,
+        verified = inspectDelegation(input, rawHeaders, transportPrincipal),
+        execution = verified.delegation.execution,
         assertSame = (existing: FenceRow) => {
           if (
             canonicalJson(existing.input) !== canonicalJson(input) ||
@@ -542,14 +442,14 @@ export function createDataConfigurationFenceStore(
           );
           if (active.length || transfers.length) throw new DataFenceBusy();
           const inserted = await tx.unsafe(
-            "INSERT INTO data_manager.configuration_fence(maintenance_id,fence_id,operation_key,candidate_id,plan_digest,owner_certificate_digest,input,state) VALUES($1::uuid,$2::uuid,$3,$4::uuid,$5,$6,$7::text::jsonb,'prepared') RETURNING *",
+            "INSERT INTO data_manager.configuration_fence(maintenance_id,fence_id,operation_key,candidate_id,plan_digest,owner_lease_id,input,state) VALUES($1::uuid,$2::uuid,$3,$4::uuid,$5,$6::uuid,$7::text::jsonb,'prepared') RETURNING *",
             [
               input.maintenanceId,
               execution.executionId,
               execution.operationKey,
               input.candidateId,
               input.planDigest,
-              verified.grant.ownerCertificateDigest,
+              verified.delegation.leaseId,
               canonicalJson(input),
             ],
           );
@@ -557,44 +457,18 @@ export function createDataConfigurationFenceStore(
         }),
       );
     },
-    async inspect(maintenanceId: string, rawHeaders: readonly string[]) {
-      const index = rawHeaders.findIndex(
-          (name, i) =>
-            i % 2 === 0 && name.toLowerCase() === "x-openmapx-configuration-fence-witness",
-        ),
-        encoded = rawHeaders[index + 1];
-      if (
-        index < 0 ||
-        rawHeaders.some(
-          (name, i) =>
-            i !== index &&
-            i % 2 === 0 &&
-            name.toLowerCase() === "x-openmapx-configuration-fence-witness",
-        )
-      )
-        throw Error("Purpose-bound agent fence witness required");
-      if (!encoded || encoded.length > 4096 || !/^[A-Za-z0-9_-]+$/.test(encoded))
-        throw Error("Invalid fence witness");
-      const witness = verifyControl(
-          local.publicKeys["ops-agent"],
-          "openmapx-configuration-fence-inspect-v1",
-          JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")),
-          inspectWitnessSchema,
-        ),
-        now = Date.now();
-      if (
-        witness.installationId !== installation.installationId ||
-        witness.maintenanceId !== maintenanceId ||
-        witness.issuedAt > now ||
-        witness.expiresAt <= now ||
-        witness.expiresAt - witness.issuedAt > 15000
-      )
-        throw Error("Expired or foreign fence witness");
+    /** The fence row of `maintenanceId`, for the agent only. */
+    async inspect(
+      maintenanceId: string,
+      expected: { candidateId: string; ownerLeaseId: string },
+      transportPrincipal: ControlTransportPrincipal,
+    ) {
+      if (transportPrincipal !== "ops-agent") throw forbidden("Agent transport required");
       const saved = await row(sql, "maintenance_id", maintenanceId);
       if (!saved) return null;
       if (
-        saved.candidate_id !== witness.candidateId ||
-        saved.owner_certificate_digest !== witness.ownerCertificateDigest
+        saved.candidate_id !== expected.candidateId ||
+        saved.owner_lease_id !== expected.ownerLeaseId
       )
         throw Error("Configuration fence owner changed");
       return receiptOf(saved);
@@ -605,31 +479,22 @@ export function createDataConfigurationFenceStore(
     async settle(
       value: DataConfigurationFenceSettle,
       rawHeaders: readonly string[],
-      transportPrincipal: Exclude<ControlTransportPrincipal, "data-manager">,
+      transportPrincipal: ControlTransportPrincipal,
     ) {
       const input = dataConfigurationFenceSettleSchema.parse(value);
-      let execution: ExecutionRef;
+      let execution: z.infer<typeof fenceRowSchema>["input"]["ownerPrepare"];
       try {
-        const headers = controlHeaders(rawHeaders);
         if (transportPrincipal !== "ops-agent") throw Error("Agent transport required");
-        if (!headers.delegation || headers.parent) throw Error("Prepare delegation required");
-        const grant = inspectArtifactDelegation({
-          dataRoot: local.dataRoot,
-          assertion: headers.delegation,
-          installation,
-        });
+        const delegation = inspectRemoteDelegation(installation, rawHeaders, transportPrincipal);
         if (
-          grant.recipient !== "data-manager" ||
-          grant.parent.executor !== "ops-agent" ||
-          grant.kind !== "configuration-maintenance.prepare" ||
-          grant.phase !== "configuration-fence"
+          delegation.parent.executor !== "ops-agent" ||
+          delegation.kind !== "configuration-maintenance.prepare" ||
+          delegation.phase !== "configuration-fence"
         )
-          throw Error("Configuration fence grant identity conflict");
-        // Only the owner that still holds the maintenance root may settle.
-        assertArtifactDelegationRootHeld(installation, headers.delegation);
-        execution = grant.execution;
+          throw Error("Configuration fence delegation identity conflict");
+        execution = delegation.execution;
       } catch {
-        throw forbidden("Pinned agent configuration fence grant rejected");
+        throw forbidden("Agent configuration fence delegation rejected");
       }
       // The conditional UPDATE and its read-back are the guard: a racing data
       // admission sees the row either prepared (busy) or settled (open).
@@ -643,7 +508,7 @@ export function createDataConfigurationFenceStore(
           saved.fence_id !== execution.executionId ||
           saved.operation_key !== execution.operationKey
         )
-          throw forbidden("Configuration fence grant identity conflict");
+          throw forbidden("Configuration fence delegation identity conflict");
         if (saved.candidate_id !== input.candidateId || saved.plan_digest !== input.planDigest)
           throw conflict("Configuration fence settlement conflict");
         await tx.unsafe(

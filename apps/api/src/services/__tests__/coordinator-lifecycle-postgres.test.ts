@@ -19,8 +19,11 @@ import {
   acquireArtifactTargetLease,
   assertCoordinatorPullLeaseCompatibility,
   closeControlInstallation,
+  heldTargets,
+  leaseStoreDirectory,
   lookupControlChildPhase,
   openControlInstallation,
+  openLeaseStore,
   ownedCoordinatorPullBaseline,
   releaseArtifactTargetLease,
   restoreAdmittedControlExecution,
@@ -427,7 +430,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       });
       agent = buildOpsAgentServer({
         operationTimeoutMs: 180000,
-        tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+        tokens: {
+          api: host.token,
+          "data-manager": Buffer.alloc(32, 23).toString("base64url"),
+          "host-cli": "h".repeat(43),
+        },
         runtime: host.runtime,
         resourceClaimer: {
           claim: async (...args) => {
@@ -782,9 +789,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         release.resolve();
       }
     }
-    async function restartNativeStagedAgent(
-      options: { stopAfterFirstTargetRelease?: "held" | "unwound" } = {},
-    ) {
+    async function restartNativeStagedAgent() {
       await agent.close();
       const bridge = Fastify({ logger: false, bodyLimit: 64 * 1024 });
       bridge.post("/docker", async (request, reply) => {
@@ -821,11 +826,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           env: process.env,
           stdio: ["pipe", "pipe", "pipe"],
         }),
-        ready = Promise.withResolvers<{ url: string; ownedDM: boolean }>(),
-        fault = Promise.withResolvers<void>();
-      let observedFault = false,
-        killedForFault = false,
-        closed = false;
+        ready = Promise.withResolvers<{ url: string; ownedDM: boolean }>();
+      let closed = false;
       let output = "",
         stderr = "";
       child.stdout.on("data", (chunk) => {
@@ -835,10 +837,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         for (const line of lines) {
           const event = JSON.parse(line);
           if (event.event === "ready") ready.resolve(event);
-          if (event.event === "pre-effect-release-unlinked") {
-            observedFault = true;
-            fault.resolve();
-          }
           if (event.event === "operation") {
             posts.set(event.kind, (posts.get(event.kind) ?? 0) + 1);
             if (event.status >= 400)
@@ -875,9 +873,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           token: host.token,
           serviceIds: host.loaded.map((service) => service.manifest.id),
           dockerBridge: `${dockerBridge}/docker`,
-          ...(options.stopAfterFirstTargetRelease
-            ? { stopAfterFirstTargetRelease: options.stopAfterFirstTargetRelease }
-            : {}),
         }),
       );
       try {
@@ -890,26 +885,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await bridge.close();
         throw error;
       }
-      const killAfterFault = async () => {
-        await fault.promise;
-        expect(observedFault).toBe(true);
-        expect(child.kill("SIGKILL")).toBe(true);
-        killedForFault = true;
-        const result = await exited;
-        expect(result).toEqual({ code: null, signal: "SIGKILL" });
-      };
-      const stop = async () => {
+      return async () => {
         if (closed) return;
-        if (observedFault && !killedForFault) await killAfterFault();
-        if (!killedForFault) child.kill("SIGTERM");
+        child.kill("SIGTERM");
         const result = await exited;
         await bridge.close();
         closed = true;
-        expect(result).toEqual(
-          killedForFault ? { code: null, signal: "SIGKILL" } : { code: 0, signal: null },
-        );
+        expect(result).toEqual({ code: 0, signal: null });
       };
-      return Object.assign(stop, { fault: fault.promise, killAfterFault });
     }
     it("reconstructs staged ownership in a NEW native production agent before a fresh user Update", async () => {
       const { pullPath } = await canceledSuccessfulCoordinatorStage(),
@@ -1349,13 +1332,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               "utf8",
             ),
           ),
-          owner = JSON.parse(
-            readFileSync(
-              join(host.infraDir, "data/.admin-target-control/leases", lease.leaseId, "owner.json"),
-              "utf8",
-            ),
-          );
-        expect(owner.payload.certificate.payload.serviceIds).toContain("data-manager");
+          owner = openLeaseStore({
+            directory: leaseStoreDirectory(host.infraDir),
+            purpose: "test",
+          }).get(lease.leaseId);
+        expect(owner?.targets).toContain("data-manager");
         const request = await api.inject({
             method: "POST",
             url: "/api/admin/services/bulk-action",
@@ -1395,8 +1376,18 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         authority = restoreAdmittedControlExecution(installation, actual.execution),
         snapshot = () =>
           Object.fromEntries(
-            ["data/.admin-target-control", "control-private/ops-agent/observations"].flatMap(
-              (base) => {
+            [
+              [
+                "leases",
+                JSON.stringify(
+                  openLeaseStore({
+                    directory: leaseStoreDirectory(host.infraDir),
+                    purpose: "test",
+                  }).list(),
+                ),
+              ],
+            ].concat(
+              ["control-private/ops-agent/observations"].flatMap((base) => {
                 const directory = join(host.infraDir, base);
                 return readdirSync(directory, { recursive: true })
                   .map(String)
@@ -1409,12 +1400,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                       `${stat.dev}:${stat.ino}:${stat.mode}:${stat.isFile() ? createHash("sha256").update(readFileSync(path)).digest("hex") : "directory"}`,
                     ];
                   });
-              },
+              }),
             ),
           );
-      expect(existsSync(join(host.infraDir, "data/.admin-target-control/admission-index-v1"))).toBe(
-        false,
-      );
       const before = snapshot(),
         writes = vi.spyOn(filesystem, "mkdirSync");
       syncBuiltinESMExports();
@@ -1469,33 +1457,33 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: host.loaded.map((service) => service.manifest.id).sort(),
         }),
         lease = await acquireArtifactTargetLease({
-          dataRoot: join(host.infraDir, "data"),
           owner: authority,
           serviceIds: host.loaded.map((service) => service.manifest.id).sort(),
         });
       expect(lease.serviceIds).toContain("data-manager");
       let pullObserver: ReturnType<typeof restoreAdmittedControlExecution> | undefined;
+      const leases = () =>
+        JSON.stringify(
+          openLeaseStore({ directory: leaseStoreDirectory(host.infraDir), purpose: "test" }).list(),
+        );
       const snapshot = () =>
         Object.fromEntries(
-          [
-            "data/.admin-target-control/locks",
-            "data/.admin-target-control/leases",
-            "data/.admin-target-control/admission-index-v1",
-            "control-private/ops-agent/observations",
-          ].flatMap((base) => {
-            const directory = join(host.infraDir, base);
-            return readdirSync(directory, { recursive: true })
-              .map(String)
-              .sort()
-              .map((name) => {
-                const path = join(directory, name),
-                  stat = statSync(path);
-                return [
-                  `${base}/${name}`,
-                  `${stat.dev}:${stat.ino}:${stat.mode}:${stat.isFile() ? createHash("sha256").update(readFileSync(path)).digest("hex") : "directory"}`,
-                ];
-              });
-          }),
+          [["leases", leases()]].concat(
+            ["control-private/ops-agent/observations"].flatMap((base) => {
+              const directory = join(host.infraDir, base);
+              return readdirSync(directory, { recursive: true })
+                .map(String)
+                .sort()
+                .map((name) => {
+                  const path = join(directory, name),
+                    stat = statSync(path);
+                  return [
+                    `${base}/${name}`,
+                    `${stat.dev}:${stat.ino}:${stat.mode}:${stat.isFile() ? createHash("sha256").update(readFileSync(path)).digest("hex") : "directory"}`,
+                  ];
+                });
+            }),
+          ),
         );
       // Make a forbidden Docker dispatch conclusively observable without
       // progressing to the separately held maintenance target. This controls
@@ -1546,22 +1534,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           actualPulls[0].payload.execution,
         );
         pullObserver = observer;
-        const journal = join(
-          host.infraDir,
-          "data/.admin-target-control/leases",
-          lease.leaseId,
-          ".journal-writer",
-        );
-        mkdirSync(journal, { mode: 0o700 });
-        try {
-          const before = snapshot(),
-            started = performance.now();
-          expect(() => assertCoordinatorPullLeaseCompatibility(observer)).toThrow();
-          expect(performance.now() - started).toBeLessThan(5000);
-          expect(snapshot()).toEqual(before);
-        } finally {
-          rmdirSync(journal);
-        }
+        const before = snapshot(),
+          started = performance.now();
+        expect(() => assertCoordinatorPullLeaseCompatibility(observer)).toThrow();
+        expect(performance.now() - started).toBeLessThan(5000);
+        expect(snapshot()).toEqual(before);
         await delay(Math.max(0, deadlineAt - Date.now() + 25));
         expect(Date.now()).toBeGreaterThan(deadlineAt);
         const expired = snapshot();
@@ -1585,21 +1562,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const released = snapshot();
       assertCoordinatorPullLeaseCompatibility(pullObserver);
       expect(snapshot()).toEqual(released);
-      const slot = join(
-        host.infraDir,
-        "data/.admin-target-control/admission-index-v1/active/slot-255",
-      );
-      mkdirSync(slot, { mode: 0o700 });
-      writeFileSync(join(slot, "generation.json"), JSON.stringify({ generation: randomUUID() }), {
-        mode: 0o600,
-      });
-      try {
-        const partial = snapshot();
-        expect(() => assertCoordinatorPullLeaseCompatibility(releasedObserver)).toThrow();
-        expect(snapshot()).toEqual(partial);
-      } finally {
-        rmSync(slot, { recursive: true });
-      }
       // A second independent component root holds only a certified unrelated
       // target. Its body/clock/certificate are issued by the real normal host
       // producer; this is kernel observation, not a native CLI-effect claim.
@@ -1641,7 +1603,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           serviceIds: ["motis"],
         }),
         unrelatedLease = await acquireArtifactTargetLease({
-          dataRoot: join(host.infraDir, "data"),
           owner: unrelatedAuthority,
           serviceIds: ["motis"],
         });
@@ -1828,7 +1789,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(effect.outcome).toBe("failed_without_effect");
       const originalRoot = restoreAdmittedControlExecution(installation, admitted.execution);
       expect(lookupControlChildPhase(originalRoot, { phase: "lifecycle", ordinal: 0 })).toBeNull();
-      verifyRetainedArtifactTargetRootRelease(originalRoot);
+      await verifyRetainedArtifactTargetRootRelease(originalRoot);
       const repaired = await api.inject({
         method: "POST",
         url: "/api/admin/services/bulk-action",
@@ -1906,9 +1867,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ),
           ),
         ).toBeNull();
-        expect(
-          existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-        ).toBe(true);
+        expect(heldTargets(host.infraDir).includes("data-manager")).toBe(true);
         release.resolve();
         await terminalReached.promise;
         let state = await client.status("service.update", admitted.operationId);
@@ -1921,7 +1880,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(state).toMatchObject({ state: "failed", errorClass: "configuration_prerequisite" });
         const authority = restoreAdmittedControlExecution(installation, source.execution);
         expect(lookupControlChildPhase(authority, { phase: "lifecycle", ordinal: 0 })).toBeNull();
-        verifyRetainedArtifactTargetRootRelease(authority);
+        await verifyRetainedArtifactTargetRootRelease(authority);
         expect(services.currentConfigurationGeneration(host.infraDir)).toBe(
           host.initial.revisionId,
         );
@@ -2016,148 +1975,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         );
       },
       420000,
-    );
-    it.each(["held", "unwound"] as const)(
-      "observes native pre-effect first-unlink SIGKILL with journal guard %s",
-      async (guard) => {
-        await canceledSuccessfulCoordinatorStage();
-        const first = await restartNativeStagedAgent({ stopAfterFirstTargetRelease: guard }),
-          { createApiOpsClient } = await import("../ops-client"),
-          client = createApiOpsClient(),
-          deadlineAt = Date.now() + 120000,
-          operation = {
-            kind: "service.update" as const,
-            serviceId: "motis",
-            expectedConfigurationRevisionId: host.initial.revisionId,
-          },
-          operationKey = createControlRootOperationKey({
-            notAfter: deadlineAt,
-            nonce: randomBytes(16),
-          }),
-          request = client
-            .execute(operation, { operationKey, execution: { requestedDeadlineAt: deadlineAt } })
-            .catch(() => undefined);
-        try {
-          await Promise.race([
-            first.fault,
-            delay(45000).then(() => {
-              throw Error("Actual native release fault not reached");
-            }),
-          ]);
-          const privateRoot = join(host.infraDir, "control-private/ops-agent"),
-            admissionPath = join(privateRoot, "executions", `${operationKey}.json`),
-            admissionBytes = readFileSync(admissionPath),
-            source = JSON.parse(admissionBytes.toString("utf8")).payload,
-            effect = JSON.parse(
-              readFileSync(join(privateRoot, "effects", `${operationKey}.json`), "utf8"),
-            ).payload,
-            terminal = JSON.parse(
-              readFileSync(
-                join(privateRoot, "observations", `terminal-${operationKey}.json`),
-                "utf8",
-              ),
-            ).payload;
-          expect(effect).toMatchObject({
-            identity: source.execution,
-            outcome: "failed_without_effect",
-            publication: "not_started",
-            receipt: { kind: "not-started" },
-          });
-          expect(existsSync(join(host.infraDir, "data/.admin-target-control/locks/app-api"))).toBe(
-            false,
-          );
-          expect(
-            existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-          ).toBe(true);
-          const leaseRef = JSON.parse(
-              readFileSync(join(privateRoot, "execution-leases", `${operationKey}.json`), "utf8"),
-            ),
-            journalGuard = join(
-              host.infraDir,
-              "data/.admin-target-control/leases",
-              leaseRef.leaseId,
-              ".journal-writer",
-            );
-          expect(existsSync(journalGuard)).toBe(guard === "held");
-          console.info(
-            "actual native pre-effect kill",
-            JSON.stringify({
-              terminalPhase: terminal.phase,
-              originalDeadline: source.execution.deadlineAt,
-              firstTargetAbsent: true,
-              dmStillHeld: true,
-            }),
-          );
-          await first.killAfterFault();
-          await request;
-          await first();
-          const next = await restartNativeStagedAgent();
-          try {
-            const observed = await createApiOpsClient()
-              .lookup(operation, operationKey, {
-                execution: { requestedDeadlineAt: deadlineAt },
-                fingerprint: source.execution.fingerprint,
-              })
-              .catch((error: unknown) => {
-                if (
-                  guard === "held" &&
-                  error instanceof Error &&
-                  "errorClass" in error &&
-                  error.errorClass === "recovery_required"
-                )
-                  return undefined;
-                throw error;
-              });
-            if (guard === "held") {
-              if (observed) expect(observed.errorClass).toBe("recovery_required");
-              expect(existsSync(journalGuard)).toBe(true);
-              expect(
-                existsSync(join(host.infraDir, "data/.admin-target-control/locks/data-manager")),
-              ).toBe(true);
-              expect(readFileSync(admissionPath)).toEqual(admissionBytes);
-              return;
-            }
-            expect(observed).toBeDefined();
-            if (!observed) throw Error("Missing original pre-effect failure");
-            console.info(
-              "actual native pre-effect restored",
-              JSON.stringify({
-                state: observed.state,
-                errorClass: observed.errorClass,
-                originalDeadlinePreserved: observed.deadlineAt === source.execution.deadlineAt,
-              }),
-            );
-            expect(observed).toMatchObject({
-              state: "failed",
-              errorClass: "configuration_prerequisite",
-              operationId: source.execution.executionId,
-              deadlineAt: source.execution.deadlineAt,
-              fingerprint: source.execution.fingerprint,
-            });
-            expect(observed.updatedAt).toBe(new Date(terminal.terminalAt).toISOString());
-            expect(readFileSync(admissionPath)).toEqual(admissionBytes);
-            verifyRetainedArtifactTargetRootRelease(
-              restoreAdmittedControlExecution(installation, source.execution),
-            );
-            const repaired = await api.inject({
-              method: "POST",
-              url: "/api/admin/services/bulk-action",
-              headers: {
-                "idempotency-key": randomUUID(),
-                "x-openmapx-local-admin": "task012-coordinator-local-admin",
-              },
-              payload: { action: "update", serviceIds: ["data-manager"] },
-            });
-            expect((await finished(repaired.json().jobId)).status).toBe("success");
-          } finally {
-            await next();
-          }
-        } finally {
-          await first();
-          await request;
-        }
-      },
-      240000,
     );
     it("refuses an ordinary unrelated configuration write until explicit guarded DM repair and a NEW request", async () => {
       await fixture.db

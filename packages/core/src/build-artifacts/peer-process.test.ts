@@ -24,6 +24,7 @@ import {
   retainedControlParent,
   verifyControlEffectSettlement,
 } from "./control-authority";
+import { leaseStoreDirectory, openLeaseStore } from "./lease-store";
 import {
   acquireArtifactTargetLease,
   closeArtifactTargetLeaseHandle,
@@ -160,7 +161,6 @@ describe("separate-process physical-mount delegation", () => {
         plan: [plan],
       });
       const lease = await acquireArtifactTargetLease({
-        dataRoot: join(root, "host-alias/data"),
         serviceIds: ["motis"],
         owner: authority,
       });
@@ -241,7 +241,6 @@ it("keeps owner-death recovery fenced until a separately admitted child settles"
   };
   const authority = retainAdmittedControlExecution(installation, admitted);
   const lease = await acquireArtifactTargetLease({
-    dataRoot: join(root, "data"),
     serviceIds: ["motis"],
     owner: authority,
   });
@@ -273,7 +272,6 @@ it("keeps owner-death recovery fenced until a separately admitted child settles"
   const recovery = verifyControlRecoveryAuthority(recovered);
   expect(
     await reconcileArtifactTargetLease({
-      dataRoot: join(root, "host-alias/data"),
       leaseId: lease.leaseId,
       authority: recovery,
     }),
@@ -281,7 +279,6 @@ it("keeps owner-death recovery fenced until a separately admitted child settles"
   expect(await child({ ...input, settle: true })).toMatchObject({ ok: true });
   expect(
     await reconcileArtifactTargetLease({
-      dataRoot: join(root, "data"),
       leaseId: lease.leaseId,
       authority: recovery,
     }),
@@ -321,7 +318,6 @@ it.each([false, true])(
       plan: [plan],
     });
     const lease = await acquireArtifactTargetLease({
-      dataRoot: join(root, "data"),
       serviceIds: ["motis"],
       owner: authority,
     });
@@ -459,7 +455,6 @@ it("keeps an attempted child fenced after SIGKILL of its actual owner process", 
   const recovery = c.verifyControlRecoveryAuthority(authority);
   expect(
     await l.reconcileArtifactTargetLease({
-      dataRoot: join(root, "data"),
       leaseId: owned.leaseId,
       authority: recovery,
     }),
@@ -476,7 +471,6 @@ it("keeps an attempted child fenced after SIGKILL of its actual owner process", 
   expect(await child({ ...input, cancel: true })).toMatchObject({ ok: true });
   expect(
     await l.reconcileArtifactTargetLease({
-      dataRoot: join(root, "data"),
       leaseId: owned.leaseId,
       authority: recovery,
     }),
@@ -484,7 +478,6 @@ it("keeps an attempted child fenced after SIGKILL of its actual owner process", 
   expect(await child({ ...input, settle: true })).toMatchObject({ ok: true });
   expect(
     await l.reconcileArtifactTargetLease({
-      dataRoot: join(root, "data"),
       leaseId: owned.leaseId,
       authority: recovery,
     }),
@@ -631,7 +624,6 @@ it("keeps paired-pin approval a one-use leaf under its original activation root"
     plan: [plan],
   });
   const lease = await acquireArtifactTargetLease({
-    dataRoot: join(root, "data"),
     serviceIds: ["motis"],
     owner: authority,
   });
@@ -707,7 +699,6 @@ it("rejects a logical configuration-fence delegation without the actual maintena
     plan: [plan],
   });
   const lease = await acquireArtifactTargetLease({
-    dataRoot: join(root, "data"),
     serviceIds: ["motis"],
     owner: authority,
   });
@@ -722,94 +713,12 @@ it("rejects a logical configuration-fence delegation without the actual maintena
     ).rejects.toThrow();
     await expect(releaseArtifactTargetLease(lease)).rejects.toThrow();
     expect(
-      readFileSync(
-        join(root, `data/.admin-target-control/leases/${lease.leaseId}/owner.json`),
-        "utf8",
-      ),
-    ).toContain(execution.operationKey);
+      openLeaseStore({ directory: leaseStoreDirectory(root), purpose: "test" })
+        .list()
+        .map((value) => value.owner.operationKey),
+    ).toEqual([execution.operationKey]);
   } finally {
     closeArtifactTargetLeaseHandle(lease);
     c.closeControlInstallation(installation);
   }
-});
-
-it("serializes a paused observer and a newer writer across actual processes", async () => {
-  const c = await import("./control-authority");
-  const l = await import("./target-lease");
-  const fs = await import("node:fs");
-  const operation = { kind: "transit-sync" };
-  const execution = ref("data-manager", operation.kind, operation);
-  const body = { kind: "motis.primary.stop" };
-  const receiver = ref("ops-agent", body.kind, body, execution, "stop-primary");
-  const installation = c.openControlInstallation({
-    infraDir: root,
-    role: "data-manager",
-    serviceIds: ["motis"],
-  });
-  const plan: ControlPlannedChild = {
-    phase: "stop-primary",
-    ordinal: 0,
-    kind: body.kind,
-    execution: receiver,
-    serviceIds: ["motis"],
-    recipient: "ops-agent",
-  };
-  const authority = c.retainAdmittedControlExecution(installation, {
-    requestedDeadlineAt: execution.deadlineAt,
-    execution,
-    operation,
-    kind: operation.kind,
-    admittedAt: execution.deadlineAt - 60000,
-    serviceIds: ["motis"],
-    plan: [plan],
-  });
-  const lease = await l.acquireArtifactTargetLease({
-    dataRoot: join(root, "data"),
-    serviceIds: ["motis"],
-    owner: authority,
-  });
-  const publicKey = JSON.parse(readFileSync(join(root, "secrets/control-verifiers.json"), "utf8"))
-    .publicKeys["ops-agent"];
-  const assertion = await l.delegateArtifactTargetLease(lease, {
-    ...plan,
-    childPublicKey: publicKey,
-  });
-  const ready = join(root, "observer-ready"),
-    resume = join(root, "observer-resume");
-  const observing = child({
-    mode: "observe-interleaving",
-    infraDir: root,
-    assertion,
-    ready,
-    resume,
-  });
-  let busy = false;
-  try {
-    await expect.poll(() => fs.existsSync(ready)).toBe(true);
-    try {
-      await l.cancelArtifactTargetLease(lease);
-    } catch (error) {
-      busy = /writer.*busy/.test(String(error));
-    }
-  } finally {
-    fs.writeFileSync(resume, "resume");
-  }
-  expect(await observing).toMatchObject({ ok: true });
-  expect(busy, "observer must hold the same CAS guard as the writer").toBe(true);
-  const ownerPath = join(root, `data/.admin-target-control/leases/${lease.leaseId}/owner.json`);
-  const old = readFileSync(ownerPath);
-  await l.cancelArtifactTargetLease(lease);
-  const mark = JSON.parse(
-    readFileSync(
-      join(root, `control-private/data-manager/observations/${lease.leaseId}.json`),
-      "utf8",
-    ),
-  );
-  expect(mark.owner.sequence).toBe(JSON.parse(readFileSync(ownerPath, "utf8")).payload.sequence);
-  fs.writeFileSync(ownerPath, old);
-  expect(() =>
-    l.inspectArtifactDelegation({ dataRoot: join(root, "data"), assertion, installation }),
-  ).toThrow(/rollback/);
-  l.closeArtifactTargetLeaseHandle(lease);
-  c.closeControlInstallation(installation);
 });

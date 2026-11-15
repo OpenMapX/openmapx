@@ -1,6 +1,11 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { loadControlStartup } from "@openmapx/core/build-artifacts";
+import {
+  leaseStoreDirectory,
+  loadControlStartup,
+  localLeaseBackend,
+  openLeaseStore,
+} from "@openmapx/core/build-artifacts";
 import { initializeManagedCatalogPins } from "@openmapx/core/catalog-pins";
 import { readOpsTokenFile } from "@openmapx/core/ops";
 import { repoPaths, services } from "@openmapx/core/server";
@@ -144,12 +149,20 @@ async function main(): Promise<void> {
     await services.withConfigurationGenerationWriter(paths.infraDir, async () =>
       services.prepareAgentStateDirectories(paths.infraDir),
     );
+    // Every lease lives in the agent's own state; the agent applies its rules
+    // to its own operations and on behalf of data-manager and the host CLI.
+    const leaseStore = openLeaseStore({
+      directory: leaseStoreDirectory(paths.infraDir),
+      purpose: "ops-agent",
+    });
     const controlStartup = loadControlStartup({
       infraDir: paths.infraDir,
       role: "ops-agent",
       serviceIds: [...builtInServices, ...communityServices].map((s) => s.manifest.id),
       container: existsSync("/run/secrets/openmapx-control-verifiers"),
+      leases: localLeaseBackend(leaseStore),
     });
+    const hostCliToken = services.ensureHostCliToken(paths.infraDir);
     if (controlStartup.reason) console.error(controlStartup.reason);
     if (controlStartup.installation) {
       try {
@@ -272,7 +285,8 @@ async function main(): Promise<void> {
     const initialPolicyAuthority = await policyAuthority();
     await startOpsAgentServer(
       {
-        tokens: { api: apiToken, "data-manager": dataManagerToken },
+        tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": hostCliToken },
+        leaseStore,
         resourceClaimer: createProductionRegistryResourceClaimer({
           services: initialPolicyAuthority.services,
           integrationIds: initialPolicyAuthority.integrationIds,

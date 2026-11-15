@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { promisify } from "node:util";
 import * as control from "@openmapx/core/build-artifacts";
@@ -765,7 +765,7 @@ it
         const [row] = await state.db
           .sql`SELECT finished_at FROM data_manager.jobs WHERE id=${validation.id}`;
         expect(row!.finished_at).toBeNull();
-        expect(existsSync(join(data, ".admin-target-control/locks/motis"))).toBe(true);
+        expect(control.heldTargets(dirname(data)).includes("motis")).toBe(true);
         return;
       }
       expect(
@@ -785,7 +785,7 @@ it
       await vi.waitFor(
         () =>
           expect(() =>
-            control.verifyDataControlTerminalWitness(installation!, proof.sourceExecution),
+            control.readDataControlTerminalObservation(installation!, proof.sourceExecution),
           ).not.toThrow(),
         { timeout: 10000, interval: 100 },
       );
@@ -798,16 +798,20 @@ it
         proof.sourceExecution,
       );
       expect(
-        control.inspectRetainedOwnedArtifactTargetChildSettlement(originalOwner, child.execution)
-          ?.outcome,
+        (
+          await control.inspectRetainedOwnedArtifactTargetChildSettlement(
+            originalOwner,
+            child.execution,
+          )
+        )?.outcome,
       ).toBe("committed");
-      expect(() =>
-        control.inspectRetainedOwnedArtifactTargetChildSettlement(originalOwner, {
+      await expect(
+        await control.inspectRetainedOwnedArtifactTargetChildSettlement(originalOwner, {
           ...child.execution,
           executionId: randomUUID(),
         }),
-      ).toThrow(/original child/);
-      expect(existsSync(join(data, ".admin-target-control/locks/motis"))).toBe(false);
+      ).rejects.toThrow(/original child/);
+      expect(control.heldTargets(dirname(data)).includes("motis")).toBe(false);
       const validationBytes = readFileSync(
         join(data, "motis/proposals", proposalId, `validation-${validation.id}.json`),
       );
@@ -869,7 +873,7 @@ it
           );
           expect(await cancelResponse).toBe(true);
           expect(lostCancellationResponse).toBe(true);
-          expect(existsSync(join(data, ".admin-target-control/locks/motis"))).toBe(true);
+          expect(control.heldTargets(dirname(data)).includes("motis")).toBe(true);
         }
         if (nativeDm) {
           // Freeze between lifecycle writes before injecting the pin-pointer crash.
@@ -886,8 +890,8 @@ it
           expect(
             existsSync(
               join(
-                data,
-                ".admin-target-control/executions/data-manager",
+                dirname(data),
+                "control-private/data-manager/execution-witnesses/data-manager",
                 `${activation.operationKey}.writer`,
               ),
             ),
@@ -935,7 +939,7 @@ it
         const [row] = await state.db
           .sql`SELECT finished_at FROM data_manager.jobs WHERE id=${activation.id}`;
         expect(row!.finished_at).toBeNull();
-        expect(existsSync(join(data, ".admin-target-control/locks/motis"))).toBe(true);
+        expect(control.heldTargets(dirname(data)).includes("motis")).toBe(true);
         const next = await sdk.startDataExecution(
           {
             input: { kind: "catalog.validate", proposalId, countries: ["de"] },

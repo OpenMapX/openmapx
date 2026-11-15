@@ -47,10 +47,8 @@ export function createDataExecutionReceiver(deps: {
     return input;
   };
   return {
-    recoverUnadmittedPreparation: (request, rawHeaders) =>
-      configurationFence.recoverUnadmittedPreparation(request, rawHeaders),
-    attestUnadoptedHardlinks: (request, rawHeaders) =>
-      configurationFence.attestUnadoptedGenerationHardlinks(request, rawHeaders),
+    recoverUnadmittedPreparation: (request, rawHeaders, transportPrincipal) =>
+      configurationFence.recoverUnadmittedPreparation(request, rawHeaders, transportPrincipal),
     async observeReviewedTransit(request) {
       const record = await runtime.lookupByIdempotencyKey?.(request.key);
       if (!record) return null;
@@ -97,10 +95,11 @@ export function createDataExecutionReceiver(deps: {
           operationFingerprint: dataExecutionInputFingerprint(request.input),
         });
       if (!verified || !controlHeaders(rawHeaders).delegation)
-        throw Object.assign(Error("Signed borrowed generation leaf required"), { statusCode: 403 });
+        throw Object.assign(Error("Delegated generation leaf required"), { statusCode: 403 });
       const preparedGeneration = await configurationFence.assertGenerationAdmission(
         request,
         rawHeaders,
+        transportPrincipal,
         verified.parent,
       );
       return runtime.admit(request.input, {
@@ -144,7 +143,8 @@ export function createDataExecutionReceiver(deps: {
     requestCancel: runtime.requestCancel,
     prepareFence: (input, headers, transportPrincipal) =>
       configurationFence.prepare(input, headers, transportPrincipal),
-    inspectFence: (id, headers) => configurationFence.inspect(id, headers),
+    inspectFence: (id, expected, transportPrincipal) =>
+      configurationFence.inspect(id, expected, transportPrincipal),
     settleFence: (input, headers, transportPrincipal) =>
       configurationFence.settle(input, headers, transportPrincipal),
     subscribe: deps.dispatcher.subscribe,

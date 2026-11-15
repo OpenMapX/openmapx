@@ -178,9 +178,11 @@ describe("the writer lock", () => {
   it("is taken in the agent's state directory and released", async () => {
     const { infraDir } = checkout();
     const release = await acquireConfigurationOwnership(infraDir);
-    expect(existsSync(join(infraDir, "state", "ops-agent", "configuration", ".writer"))).toBe(true);
+    expect(existsSync(join(infraDir, "state", "ops-agent", "configuration", "writer.lock"))).toBe(
+      true,
+    );
     release();
-    expect(existsSync(join(infraDir, "state", "ops-agent", "configuration", ".writer"))).toBe(
+    expect(existsSync(join(infraDir, "state", "ops-agent", "configuration", "writer.lock"))).toBe(
       false,
     );
   });

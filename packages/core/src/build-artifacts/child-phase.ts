@@ -383,9 +383,10 @@ export function lookupControlChildPhaseAttempt(
     );
   if (controlDigest(saved.grant) !== reference.grantDigest)
     throw Error("Original phase outbox digest changed");
-  if (channel === "delegation") {
+  // A role that reaches the lease store only through the agent relies on its
+  // own outbox; the agent checked the row when it recorded it.
+  if (channel === "delegation" && s.installation.leases.readSync) {
     const observed = inspectArtifactDelegation({
-      dataRoot: s.installation.dataRoot,
       assertion: saved.assertion,
       installation: s.installation.installation,
     });
@@ -473,6 +474,8 @@ export async function issueControlChildPhase(
     ordinal: number;
     childPublicKey: string;
     lease?: TargetLeaseAuthority;
+    /** What the child acts on, recorded with its grant for the recipient. */
+    evidence?: Record<string, unknown>;
   },
 ) {
   const child = lookupControlChildPhase(authority, input);
@@ -489,6 +492,7 @@ export async function issueControlChildPhase(
     ? await delegateArtifactTargetLease(input.lease, {
         ...child,
         childPublicKey: input.childPublicKey,
+        ...(input.evidence ? { evidence: input.evidence } : {}),
       })
     : await attestParentExecution(authority, { ...child, childPublicKey: input.childPublicKey });
   const saved = inspectControlChildPublication(authority, input);

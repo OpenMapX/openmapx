@@ -11,7 +11,7 @@ import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
 import { dockerComposeStream } from "../lib/docker";
 import { assertCliExecutionAvailable } from "../lib/execution-deadline";
 import { applyGeneratedHardlinksBeforeStart } from "../lib/hardlinks";
-
+import { leasedHostEffect } from "../lib/host-effect";
 import { log } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import {
@@ -526,8 +526,10 @@ export function registerComposeCommands(program: Command): void {
         log.dim("No enabled services to start");
         process.exit(0);
       }
-      const code = await dockerComposeStream(["up", "-d", ...enabledServiceIds]);
-
+      // Compose may also start dependencies, so every service is claimed.
+      const code = await leasedHostEffect("compose.up", "all", () =>
+        dockerComposeStream(["up", "-d", ...enabledServiceIds]),
+      );
       process.exit(code);
     });
 
@@ -598,7 +600,7 @@ export function registerComposeCommands(program: Command): void {
     .action(async (options: { volumes?: boolean }) => {
       const args = ["down"];
       if (options.volumes) args.push("-v");
-      const code = await dockerComposeStream(args);
+      const code = await leasedHostEffect("compose.down", "all", () => dockerComposeStream(args));
       process.exit(code);
     });
 

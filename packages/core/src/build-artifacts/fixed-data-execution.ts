@@ -21,10 +21,10 @@ import {
   controlDigest,
   executionAuthorityState,
   readPrivateRecord,
+  recordDataControlTerminalObservation,
   signControl,
   type VerifiedExecutionAuthority,
   verifyControl,
-  verifyDataControlTerminalWitness,
   withPrivateEffectWriter,
   writePrivateRecord,
 } from "./control-authority";
@@ -271,7 +271,12 @@ export function verifyCliDataTerminal(
     binding.execution.fingerprint !== status.fingerprint
   )
     throw Error("Original bound data command required");
-  return verifyDataControlTerminalWitness(s.installation.installation, binding.execution, status);
+  // The status was read from data-manager over its authenticated route.
+  return recordDataControlTerminalObservation(
+    s.installation.installation,
+    binding.execution,
+    status,
+  );
 }
 
 export function cliDataReservation(

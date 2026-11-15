@@ -303,12 +303,14 @@ describe("trusted configuration ownership and outcomes", () => {
     expect(f.label()).toBe("b");
     expect(f.followUp()).toBe(routes);
   });
-  it("retains a committed revision when real writer cleanup fails and leaves the foreign contents intact", async () => {
+  it("retains a committed revision when real writer cleanup fails and leaves the foreign lock intact", async () => {
     const f = fixture();
-    const foreign = join(f.infraDir, coreServices.CONFIGURATION_DIRECTORY, ".writer", "foreign");
+    const foreign = coreServices.configurationWriterLockPath(f.infraDir);
     const result = await f.apply("a", undefined, {
       afterCommit: async () => {
-        writeFileSync(foreign, "preserve", { mode: 0o644 });
+        // Another file took the lock's place; release must not remove it.
+        rmSync(foreign);
+        writeFileSync(foreign, "preserve", { mode: 0o600 });
       },
     });
     expect(result).toMatchObject({
@@ -529,7 +531,11 @@ describe("authenticated conditional configuration admission", () => {
         },
       });
       const app = buildOpsAgentServer({
-        tokens: { api: token, "data-manager": Buffer.alloc(32, 8).toString("base64url") },
+        tokens: {
+          api: token,
+          "data-manager": Buffer.alloc(32, 8).toString("base64url"),
+          "host-cli": "h".repeat(43),
+        },
         resourceClaimer: claimer,
         controlInstallation: installation,
         // This deliberately holds one authenticated claim across the other real

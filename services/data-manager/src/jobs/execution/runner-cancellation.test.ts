@@ -24,6 +24,14 @@ import { createTransitousScriptRunner } from "../transitous/script-runner";
 import { createDataExecutionRuntime } from "./runtime";
 import { createPostgresDataExecutionStore } from "./store";
 
+/** The lease that holds MOTIS in the installation at `infraDir`, if any. */
+function motisLease(infraDir: string): string | undefined {
+  return control
+    .openLeaseStore({ directory: control.leaseStoreDirectory(infraDir), purpose: "test" })
+    .list()
+    .find((lease) => lease.targets.includes("motis"))?.leaseId;
+}
+
 let recoveryBundleRoot: string, dmBundle: string, agentBundle: string;
 beforeAll(async () => {
   recoveryBundleRoot = mkdtempSync(join(tmpdir(), "omx-dm-crash-bundle-"));
@@ -224,8 +232,8 @@ it.skipIf(
       expect(posts).toBe(2);
       const [original] = await sql`SELECT * FROM data_manager.jobs WHERE id=${id}`;
       if (!original) throw Error("Original row missing");
-      const lock = join(root, "data/.admin-target-control/locks/motis"),
-        inode = statSync(lock).ino;
+      const lease = motisLease(root);
+      expect(lease).toBeDefined();
       const proof = join(
         root,
         `control-private/data-manager/observations/worker-${original.operation_key}.json`,
@@ -297,7 +305,7 @@ it.skipIf(
         "triggered_by",
       ])
         expect(current?.[key]).toEqual(original[key]);
-      expect(statSync(lock).ino).toBe(inode);
+      expect(motisLease(root)).toBe(lease);
       expect(existsSync(proof)).toBe(false);
       expect(posts).toBe(2);
       for (const [name, controlDigest] of controlledDigests)
@@ -431,8 +439,8 @@ it
       const [original] = await sql`SELECT * FROM data_manager.jobs WHERE id=${id}`;
       if (!original) throw Error("Original row missing");
       const operationKey = String(original.operation_key),
-        lock = join(root, "data/.admin-target-control/locks/motis");
-      const inode = statSync(lock).ino;
+        lease = motisLease(root);
+      expect(lease).toBeDefined();
       await dm!.kill();
       dm = undefined;
       // SIGKILL occurred while dispatcher awaited the independent child.
@@ -503,7 +511,7 @@ it
         "triggered_by",
       ])
         expect(current?.[key]).toEqual(original[key]);
-      expect(statSync(lock).ino).toBe(inode);
+      expect(motisLease(root)).toBe(lease);
       expect(existsSync(join(observations, `worker-${operationKey}.json`))).toBe(false);
       dm!.send({ type: "probe" });
       expect((await dm!.next("probe")).dispatches).toBe(0);
@@ -647,24 +655,27 @@ it.skipIf(
         .poll(async () => (await store.inspect(id!))?.status.status, { timeout: 15000 })
         .toBe("canceled");
       await expect.poll(() => terminalPublished, { timeout: 15000 }).toBe(true);
-      const terminal = await store.inspect(id),
-        lock = join(root, "data/.admin-target-control/locks/motis");
+      const terminal = await store.inspect(id);
       if (!terminal) throw Error("Original terminal row missing");
-      expect(existsSync(lock)).toBe(true);
+      expect(motisLease(root)).toBeDefined();
       expect(() =>
-        control.verifyDataControlTerminalWitness(installation, terminal.execution, terminal.status),
+        control.readDataControlTerminalObservation(
+          installation,
+          terminal.execution,
+          terminal.status,
+        ),
       ).toThrow(/ENOENT/);
       expect(terminal.status.publication).toBe("not_started");
       expect(terminal.finishedAt).not.toBeNull();
       expect(posts).toBe(1);
       expect(cancels).toBeGreaterThanOrEqual(1);
       resumeCleanup();
-      // The signed contained-terminal witness is published only after lease
-      // release; the canceled database row above is visible before that point.
+      // The contained terminal is recorded only after lease release; the
+      // canceled database row above is visible before that point.
       await expect
         .poll(
           () =>
-            control.verifyDataControlTerminalWitness(
+            control.readDataControlTerminalObservation(
               installation,
               terminal.execution,
               terminal.status,
@@ -672,7 +683,7 @@ it.skipIf(
           { timeout: 15000 },
         )
         .toEqual(terminal.status);
-      expect(existsSync(lock)).toBe(false);
+      expect(motisLease(root)).toBeUndefined();
     } finally {
       resumeCleanup();
       writeFileSync(released, "release");

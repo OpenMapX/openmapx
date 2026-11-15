@@ -18,13 +18,13 @@ import {
   artifactFingerprint,
   assertArtifactTargetLeaseExecution,
   executionAuthorityState,
-  inspectArtifactTargetLeaseChildSettlement,
+  inspectLocalLeaseChildSettlement,
   lookupControlChildPhaseBinding,
   parseBundleManifest,
   readGenerationHardlinksOwnerPlan,
   type ValidatedBuildBundle,
   validateBuildBundle,
-  verifyRetainedArtifactTargetRootRelease,
+  verifyLocalArtifactTargetRootRelease,
 } from "@openmapx/core/build-artifacts";
 import {
   type ArtifactFilePublicationResult,
@@ -1372,7 +1372,7 @@ export class ArtifactTransferStore {
     if (plan.reservation) {
       const binding = lookupControlChildPhaseBinding(authority, plan.reservation),
         settlement = binding
-          ? inspectArtifactTargetLeaseChildSettlement(lease, binding.child.execution)
+          ? inspectLocalLeaseChildSettlement(lease, binding.child.execution)
           : null;
       if (
         (!binding && result.followUp !== "failed") ||
@@ -1534,7 +1534,7 @@ export class ArtifactTransferStore {
       publication.archiveSha256 !== operation.expectedSha256
     )
       failed(409, "Restored original publication required");
-    verifyRetainedArtifactTargetRootRelease(authority);
+    verifyLocalArtifactTargetRootRelease(authority);
     const retained = this.lock(() => {
       const meta = this.owned(operation.stageId, operation.ownerId, "prepared-artifact"),
         entry = meta.claims.find(

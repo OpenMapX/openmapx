@@ -605,7 +605,6 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   ) => {
     const remaining = context.execution.deadlineAt - Date.now();
     if (remaining <= 0 || context.signal.aborted) throw new OpsExecutionFailure("timeout", {});
-    context.beginServiceCreation?.();
     if (options.execFile) await run(args, context.signal, Math.min(timeout, remaining));
     else
       await runContainedStreamingProcess("docker", args, {

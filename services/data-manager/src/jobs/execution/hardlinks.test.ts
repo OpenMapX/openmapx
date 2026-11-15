@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import {
   createDataManagerTransport,
@@ -135,7 +135,6 @@ it
         plan: [slot],
       }),
       lease = await control.acquireArtifactTargetLease({
-        dataRoot: data,
         serviceIds: services,
         owner: authority,
       }),
@@ -246,9 +245,8 @@ it
           .toBe("unknown");
         await runtime.close();
         const recovered = await journal.restoreCompletion(child);
-        expect(recovered.lease.mode).toBe("borrowed");
-        expect(() => control.assertArtifactTargetLeaseForward(recovered.lease)).toThrow();
-        control.closeArtifactTargetLeaseHandle(recovered.lease);
+        // The hardlink leaf holds no lease of its own; its parent's lease fences the target.
+        expect(recovered.lease).toBeUndefined();
         restarted = createDataExecutionRuntime({
           store,
           dispatch: async () => {
@@ -261,7 +259,7 @@ it
             timeout: 15000,
           })
           .toBe("ok");
-        expect(existsSync(join(data, ".admin-target-control/locks/data-manager"))).toBe(true);
+        expect(control.heldTargets(dirname(data)).includes("data-manager")).toBe(true);
       }
       const terminal = await observeDataExecution(
         { id: admitted.id, operationKey: child.operationKey, fingerprint: child.fingerprint },
@@ -271,11 +269,11 @@ it
         status: "ok",
         result: { kind: "generation-hardlinks", hardlinks: { linked: 1, via: "data-manager" } },
       });
-      await expect
-        .poll(() => control.inspectArtifactTargetLeaseChildSettlement(lease, child)?.publication, {
-          timeout: 10000,
-        })
-        .toBe("committed");
+      // The parent settles its data-manager child from the authenticated status.
+      await control.settleDataManagerLeaseChild(lease, child, terminal);
+      expect(
+        (await control.inspectArtifactTargetLeaseChildSettlement(lease, child))?.publication,
+      ).toBe("committed");
       const inode = statSync(join(data, "consumer/fixture")).ino;
       unlinkSync(join(data, "src/fixture"));
       const observed = unwrapDataManagerResponse(

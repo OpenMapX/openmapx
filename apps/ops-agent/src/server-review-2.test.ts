@@ -86,7 +86,7 @@ describe("reviewed durable admission boundary", () => {
       revisionId: `cfg1_${"t".repeat(43)}`,
     };
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       claimTimeoutMs: 5,
       resourceClaimer: {
         claim: async (_operation, fingerprint) => {
@@ -144,7 +144,7 @@ describe("reviewed durable admission boundary", () => {
         revisionId: `cfg1_${"r".repeat(43)}`,
       };
       const app = await buildOpsAgentServer({
-        tokens: { api: apiToken, "data-manager": dataManagerToken },
+        tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
         journal: {
           records: () => records,
           replace: async (next) => {
@@ -242,7 +242,7 @@ describe("reviewed durable admission boundary", () => {
     });
     const dispatch = vi.fn(async () => pullResult);
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourceClaimer: allow,
       journal: { records: () => [tombstone], replace: async () => undefined },
       maxJobEntries: 1,
@@ -294,7 +294,7 @@ describe("reviewed durable admission boundary", () => {
     };
     const dispatched: string[][] = [];
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourceClaimer: {
         claim: async (operation, fingerprint) => {
           sourceReference = operation;
@@ -351,7 +351,7 @@ describe("reviewed durable admission boundary", () => {
     };
     const dispatch = vi.fn(async () => pullResult);
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourceClaimer: allow,
       journal,
       now: () => new Date(baseTime),
@@ -391,7 +391,7 @@ describe("reviewed durable admission boundary", () => {
       },
     };
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourceClaimer: allow,
       journal,
       now: () => new Date(baseTime),
@@ -464,7 +464,7 @@ describe("reviewed durable admission boundary", () => {
     let releaseFirst!: () => void;
     const firstBlocked = new Promise<void>((resolve) => (releaseFirst = resolve));
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourceClaimer: allow,
       journal,
       now: () => new Date(baseTime),
@@ -560,7 +560,7 @@ describe("reviewed durable admission boundary", () => {
       return { changed: true };
     });
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourceClaimer: allow,
       now: () => new Date(baseTime),
       dispatch,
@@ -599,7 +599,7 @@ describe("reviewed durable admission boundary", () => {
     result.lines[255] = "x".repeat(budget - baseBytes);
     expect(Buffer.byteLength(JSON.stringify(result), "utf8")).toBe(budget);
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourceClaimer: allow,
       now: () => new Date(baseTime),
       dispatch: async () => result,
@@ -651,7 +651,7 @@ describe("reviewed durable admission boundary", () => {
       }),
     );
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourceClaimer: allow,
       journal: { records: () => records, replace: async () => undefined },
       now: () => new Date(baseTime),
@@ -690,7 +690,7 @@ describe("reviewed durable admission boundary", () => {
     });
     const dispatch = vi.fn(async () => pullResult);
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourceClaimer: allow,
       journal,
       now: () => new Date(baseTime + 1_000),
@@ -747,7 +747,7 @@ describe("reviewed durable admission boundary", () => {
       terminalAt: new Date(baseTime).toISOString(),
     });
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourceClaimer: allow,
       journal: { records: () => [existing], replace: async () => undefined },
       now: () => new Date(baseTime),
@@ -783,7 +783,7 @@ describe("reviewed durable admission boundary", () => {
     };
     const seen: string[] = [];
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourceClaimer: claimer,
       claimTimeoutMs: 5,
       maxConcurrency: 1,
@@ -856,7 +856,7 @@ describe("reviewed durable admission boundary", () => {
       },
     };
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourceClaimer: claimer,
       maxConcurrency: 1,
       now: () => new Date(baseTime),
@@ -881,7 +881,7 @@ describe("reviewed durable admission boundary", () => {
   it("contains a throwing audit sink on success and failure", async () => {
     let fail = false;
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourceClaimer: allow,
       now: () => new Date(baseTime),
       audit: () => {
@@ -923,7 +923,7 @@ describe("reviewed durable admission boundary", () => {
     const blocked = new Promise<void>((resolve) => (release = resolve));
     let calls = 0;
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourceClaimer: allow,
       now: () => new Date(baseTime),
       operationTimeoutMs: 5,
@@ -1004,7 +1004,7 @@ describe("asynchronous operation slots", () => {
 
   it("a throw during terminal bookkeeping releases the concurrency slot", async () => {
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourceClaimer: releasingClaimer(() => {
         throw new Error("release failed synchronously");
       }),
@@ -1031,7 +1031,7 @@ describe("asynchronous operation slots", () => {
     const blocked = new Promise<void>((resolve) => (unblock = resolve));
     let calls = 0;
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourceClaimer: allow,
       maxConcurrency: 2,
       now: () => new Date(baseTime),
@@ -1061,7 +1061,7 @@ describe("operation context for configuration helper drain", () => {
     const counts: number[] = [];
     const journal: OpsJobJournal = { records: () => [], replace: async () => {} };
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourceClaimer: allow,
       journal,
       now: () => new Date(baseTime),

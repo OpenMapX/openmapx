@@ -19,6 +19,7 @@ import {
 import { AnchoredDirectory } from "../../../../../packages/core/src/build-artifacts/filesystem";
 import { safeArtifactPath } from "../../../../../packages/core/src/build-artifacts/manifest";
 import { atomicWriteJsonSync } from "../../utils/atomic-write";
+import { ownedLease } from "../execution/owned-lease";
 import type { DataExecutionContext } from "../execution/runtime";
 import { dataExecutionInputFingerprint } from "../execution/store";
 import { publishDataChange } from "../execution/worker-scope";
@@ -55,15 +56,15 @@ export async function retainPreviousHealthyCatalogSlot(
   const owner = executionAuthorityState(context.authority),
     record = await context.record();
   assertControlExecutionForward(context.authority);
-  assertArtifactTargetLeaseForward(context.targetAuthority);
+  assertArtifactTargetLeaseForward(ownedLease(context));
   if (
     owner.kind !== "catalog.validate" ||
     record.input.kind !== "catalog.validate" ||
     record.input.proposalId !== proposalId ||
     dataExecutionInputFingerprint(record.input) !== owner.execution.operationFingerprint ||
-    context.targetAuthority.mode !== "owner" ||
+    ownedLease(context).mode !== "owner" ||
     !["motis", "motis-staging", "motis-feed-proxy"].every((id) =>
-      context.targetAuthority.serviceIds.includes(id),
+      ownedLease(context).serviceIds.includes(id),
     ) ||
     !Number.isSafeInteger(minimumDiskBytes) ||
     minimumDiskBytes < 0
@@ -79,8 +80,8 @@ export async function retainPreviousHealthyCatalogSlot(
   if (
     !stop ||
     stop.state !== "terminal" ||
-    inspectArtifactTargetLeaseChildSettlement(context.targetAuthority, stop.execution)?.outcome !==
-      "committed"
+    (await inspectArtifactTargetLeaseChildSettlement(ownedLease(context), stop.execution))
+      ?.outcome !== "committed"
   )
     throw Error(
       "Stop staging under the original validation reservation before preserving rollback data",

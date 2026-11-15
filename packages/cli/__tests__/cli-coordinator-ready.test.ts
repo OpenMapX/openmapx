@@ -53,7 +53,6 @@ it("starts an unavailable coordinator without recreation under actual existing o
       serviceIds: ["data-manager", "motis"],
     });
     lease = await control.acquireArtifactTargetLease({
-      dataRoot: join(host.infraDir, "data"),
       owner: authority,
       serviceIds: ["data-manager", "motis"],
     });

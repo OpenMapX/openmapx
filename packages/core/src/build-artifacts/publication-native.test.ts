@@ -1,19 +1,13 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import {
-  existsSync,
-  lstatSync,
-  mkdtempSync,
-  readFileSync,
-  rmdirSync,
-  rmSync,
-  statSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { executionRefSchema } from "../ops/execution-ref";
+import { configurationWriterLockPath } from "../services/configuration-ownership";
+import { readLockHolder } from "../services/recoverable-lock";
 import type { ValidatedBuildBundle } from "./archive";
 import * as control from "./control-authority";
 import { inspectArtifactPublication, publishValidatedBuild } from "./publication";
@@ -24,7 +18,7 @@ afterEach(async () => {
   for (const close of cleanup.reverse().splice(0)) await close();
 });
 it.each(["old-directory", "build-record"])(
-  "restores the original complete set after native death at %s and explicit host writer recovery",
+  "restores the original complete set after native death at %s, reclaiming the dead writer's lock",
   async (point) => {
     const root = mkdtempSync(join(tmpdir(), "omx-publication-native-"));
     cleanup.push(() => rmSync(root, { recursive: true, force: true }));
@@ -60,22 +54,15 @@ it.each(["old-directory", "build-record"])(
       },
       { timeout: 30000, interval: 50 },
     );
-    const writerPaths = [join(root, "state/ops-agent/configuration/.writer")];
-    const writersBefore = writerPaths.map((path) => ({ path, identity: lstatSync(path) }));
+    const writerLock = configurationWriterLockPath(root);
+    expect(readLockHolder(writerLock)?.pid).toBe(child.pid);
     child.kill("SIGKILL");
     const [code, signal] = await exited;
     expect(code).toBeNull();
     expect(signal).toBe("SIGKILL");
-    // This isolated fixture owns its ONLY writer and has just killed it. Model
-    // the documented explicit host operation; production never steals this lock
-    // using elapsed time, a PID, or a missing process as execution authority.
-    // Explicit recovery removes only the exact empty fixture-owned writer lock.
-    for (const { path, identity: before } of writersBefore) {
-      const after = lstatSync(path);
-      expect([after.dev, after.ino]).toEqual([before.dev, before.ino]);
-      expect(after.isDirectory() && !after.isSymbolicLink()).toBe(true);
-      rmdirSync(path); // Empty, exact owned lock only; no recursive deletion.
-    }
+    // The killed writer's lock stays on disk; the next writer reclaims it
+    // because its holder process is provably gone.
+    expect(readLockHolder(writerLock)?.pid).toBe(child.pid);
 
     const state = JSON.parse(readFileSync(join(root, "fault.json"), "utf8")) as {
         execution: unknown;
@@ -127,7 +114,7 @@ it.each(["old-directory", "build-record"])(
       outcome: "not_committed",
       reason: "failed",
     });
-    expect(() => leases.verifyRetainedArtifactTargetRootRelease(authority)).toThrow();
+    await expect(leases.verifyRetainedArtifactTargetRootRelease(authority)).rejects.toThrow();
     control.retainControlEffectReceipt(authority, {
       outcome: "contained",
       publication: "not_started",
@@ -141,7 +128,9 @@ it.each(["old-directory", "build-record"])(
       control.verifyControlEffectSettlement(installation, authority.execution),
     );
     await leases.releaseArtifactTargetLease(lease);
-    expect(leases.verifyRetainedArtifactTargetRootRelease(authority).releasedAt).toBeGreaterThan(0);
+    expect(
+      (await leases.verifyRetainedArtifactTargetRootRelease(authority)).releasedAt,
+    ).toBeGreaterThan(0);
   },
   60000,
 );

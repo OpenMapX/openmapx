@@ -47,7 +47,7 @@ it.skipIf(process.env.RUN_ARTIFACT_INGRESS_TESTS !== "1")(
     const runtime = createUnavailableRuntime();
     installArtifactTransferRuntime(runtime, store);
     const agent = buildOpsAgentServer({
-      tokens: { api: token, "data-manager": "b".repeat(43) },
+      tokens: { api: token, "data-manager": "b".repeat(43), "host-cli": "h".repeat(43) },
       runtime,
       artifactTransfers: store,
       resourcePolicy: { allowGlobal: () => true },

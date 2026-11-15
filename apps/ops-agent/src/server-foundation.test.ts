@@ -84,7 +84,7 @@ describe("ops-agent async foundation", () => {
       return operation.kind === "service.pull" ? pullResult : { reachable: true };
     });
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourcePolicy: allowAllResources,
       now: () => new Date(baseTime),
       randomBytes: () => Buffer.alloc(18, 23),
@@ -225,7 +225,7 @@ describe("ops-agent async foundation", () => {
 
   it("rejects resource and option mismatches for an exact retained terminal key", async () => {
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourcePolicy: allowAllResources,
       now: () => new Date(baseTime),
       randomBytes: () => Buffer.alloc(18, 29),
@@ -308,7 +308,7 @@ describe("ops-agent async foundation", () => {
       },
     );
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourcePolicy: allowAllResources,
       now: () => new Date(baseTime),
       randomBytes: () => Buffer.alloc(18, idByte++),
@@ -448,7 +448,7 @@ describe("ops-agent async foundation", () => {
         },
       );
       const app = await buildOpsAgentServer({
-        tokens: { api: apiToken, "data-manager": dataManagerToken },
+        tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
         resourcePolicy: allowAllResources,
         journal,
         maxConcurrency: 1,
@@ -514,7 +514,7 @@ describe("ops-agent async foundation", () => {
     let calls = 0;
     const audits: OpsAuditEvent[] = [];
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourcePolicy: allowAllResources,
       now: () => new Date(baseTime),
       operationTimeoutMs: 10,
@@ -571,7 +571,7 @@ describe("ops-agent async foundation", () => {
 
   it("accepts only bounded UTF-8 log events from the typed execution context", async () => {
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourcePolicy: allowAllResources,
       now: () => new Date(baseTime),
       randomBytes: () => Buffer.alloc(18, 24),
@@ -629,7 +629,7 @@ describe("ops-agent async foundation", () => {
 
   it("reports a host update as its safe error code through the async protocol", async () => {
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourcePolicy: allowAllResources,
       now: () => new Date(baseTime),
       dispatch: async () => {
@@ -665,7 +665,7 @@ describe("ops-agent async foundation", () => {
 
   it("rejects oversized sync output and retains the maximum build-all receipt", async () => {
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourcePolicy: allowAllResources,
       now: () => new Date(baseTime),
       randomBytes: () => Buffer.alloc(18, 25),
@@ -722,7 +722,7 @@ describe("ops-agent async foundation", () => {
     let nowMs = baseTime;
     let randomValue = 30;
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourcePolicy: allowAllResources,
       now: () => new Date(nowMs),
       randomBytes: () => Buffer.alloc(18, randomValue++),
@@ -799,7 +799,7 @@ describe("ops-agent async foundation", () => {
   it("bounds entries that need recovery separately from capacity for new work", async () => {
     let randomValue = 60;
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourcePolicy: allowAllResources,
       now: () => new Date(baseTime),
       randomBytes: () => Buffer.alloc(18, randomValue++),
@@ -810,12 +810,17 @@ describe("ops-agent async foundation", () => {
         return { changed: true };
       },
     });
+    // A stop that needs recovery keeps its target leased; new work uses another one.
     const submit = (kind: "service.stop" | "service.restart", name: string) =>
       app.inject({
         method: "POST",
         url: "/v1/operations",
         headers: auth(),
-        payload: request({ kind, serviceId: "redis" }, `ops1_${name}`, key(`opk1_${name}`)),
+        payload: request(
+          { kind, serviceId: kind === "service.stop" ? "redis" : "osrm" },
+          `ops1_${name}`,
+          key(`opk1_${name}`),
+        ),
       });
     const finish = async (id: string) =>
       eventually(
@@ -835,5 +840,98 @@ describe("ops-agent async foundation", () => {
     expect((await submit("service.restart", "recoveryCapThird0")).statusCode).toBe(429);
     expect((await finish(stuck)).json().result.errorClass).toBe("recovery_required");
     await app.close();
+  });
+});
+
+describe("one admission path for target effects", () => {
+  it("answers busy for a restart or removal of a held target and audits the holder", async () => {
+    const control = await import("@openmapx/core/build-artifacts");
+    const { mkdtempSync, mkdirSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const root = mkdtempSync(join(tmpdir(), "omx-leased-admission-"));
+    mkdirSync(join(root, "data"), { mode: 0o700 });
+    await control.provisionControlInstallation(root);
+    const installation = control.openControlInstallation({
+      infraDir: root,
+      role: "ops-agent",
+      serviceIds: ["redis", "osrm"],
+    });
+    const leaseStore = control.openLeaseStore({
+      directory: control.leaseStoreDirectory(root),
+      purpose: "test",
+    });
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const audit: OpsAuditEvent[] = [];
+    const app = await buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
+      resourcePolicy: allowAllResources,
+      controlInstallation: installation,
+      leaseStore,
+      audit: (event) => audit.push(event),
+      dispatch: async (operation) => {
+        if (operation.kind === "service.stop") await blocked;
+        return { changed: true };
+      },
+    });
+    try {
+      const submit = (operation: OpsOperation, name: string) =>
+        app.inject({
+          method: "POST",
+          url: "/v1/operations",
+          headers: auth(),
+          // Issued now: this test may run long after the module's base time.
+          payload: {
+            ...request(operation, `ops1_${name}Lease`, key(`opk1_${name}Lease`)),
+            issuedAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 20_000).toISOString(),
+          },
+        });
+      const stop = await submit({ kind: "service.stop", serviceId: "redis" }, "leasedStop00000");
+      expect(stop.statusCode).toBe(202);
+      await eventually(
+        async () => leaseStore.list(),
+        (leases) => leases.some((lease) => lease.targets.includes("redis")),
+      );
+      const holder = leaseStore.list()[0]!.owner.operationKey;
+      for (const [operation, name] of [
+        [{ kind: "service.restart", serviceId: "redis" }, "leasedRestart00"],
+        [{ kind: "service.remove", serviceId: "redis" }, "leasedRemove000"],
+      ] as const) {
+        const refused = await submit(operation, name);
+        expect(refused.statusCode).toBe(409);
+        expect(refused.json().error.class).toBe("busy");
+      }
+      expect(
+        audit
+          .filter((event) => event.heldBy?.includes(holder))
+          .map((event) => [event.kind, event.result]),
+      ).toEqual([
+        ["service.restart", "denied"],
+        ["service.remove", "denied"],
+      ]);
+      // Another target is free.
+      expect(
+        (await submit({ kind: "service.restart", serviceId: "osrm" }, "leasedOther0000"))
+          .statusCode,
+      ).toBe(202);
+      release();
+      await eventually(
+        async () => leaseStore.list(),
+        (leases) => !leases.some((lease) => lease.targets.includes("redis")),
+      );
+      expect(
+        (await submit({ kind: "service.restart", serviceId: "redis" }, "leasedAfter0000"))
+          .statusCode,
+      ).toBe(202);
+    } finally {
+      release();
+      await app.close();
+      control.closeControlInstallation(installation);
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

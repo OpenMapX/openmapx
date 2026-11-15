@@ -415,7 +415,6 @@ export function retainOwnedDataTransitCandidate(
     );
     if (canonicalJson(prior) !== canonicalJson(value))
       throw Error("Original candidate bytes/owner changed");
-    publishCandidate(authority, prior);
     return controlDigest(prior);
   }
   if (publication && (publication.binding || publication.publication.state !== "unissued"))
@@ -429,7 +428,6 @@ export function retainOwnedDataTransitCandidate(
     signControl(s.installation.privateKey, "openmapx-data-candidate-v1", parsed),
     true,
   );
-  publishCandidate(authority, parsed);
   return controlDigest(parsed);
 }
 export function assertOwnedDataTransitCandidate(
@@ -459,66 +457,51 @@ const publishedSchema = z.strictObject({
   operationFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   serviceIds: targetSchema,
 });
-function sharedDirectory(local: ReturnType<typeof installationState>) {
-  const data = new AnchoredDirectory(local.dataRoot),
-    control = data.directory(".admin-target-control"),
-    executions = control.directory("executions"),
-    role = executions.directory("data-manager");
-  return {
-    role,
-    close() {
-      role.close();
-      executions.close();
-      control.close();
-      data.close();
-    },
-  };
-}
-function publishCandidate(
+/**
+ * The candidate a transit phase acts on, as the agent receives it with the
+ * child's grant. Null when the phase has no retained candidate.
+ */
+export function publishedDataTransitCandidate(
   authority: VerifiedExecutionAuthority,
-  candidate: z.infer<typeof schema>,
-): void {
-  const s = executionAuthorityState(authority),
-    slot =
-      s.reservations.find((r) => r.phase === candidate.phase && r.ordinal === candidate.ordinal) ??
-      s.plan.find((r) => r.phase === candidate.phase && r.ordinal === candidate.ordinal);
-  if (!slot) throw Error("Dated original candidate slot required");
-  assertControlExecutionForward(authority);
-  const payload = publishedSchema.parse({
-      version: 2,
-      installationId: s.installation.installation.installationId,
-      origin: s.origin,
-      candidate,
-      childOperationKey: slot.execution.operationKey,
-      operationFingerprint:
-        "operationFingerprint" in slot
-          ? slot.operationFingerprint
-          : slot.execution.operationFingerprint,
-      serviceIds: [...slot.serviceIds],
-    }),
-    bytes = canonicalJson(
-      signControl(s.installation.privateKey, "openmapx-data-candidate-publication-v2", payload),
-    ),
-    directory = sharedDirectory(s.installation),
-    name = `${slot.execution.operationKey}.data-candidate.json`;
+  input: { phase: ControlChildPhase; ordinal: number },
+): Record<string, unknown> | undefined {
+  const s = executionAuthorityState(authority);
+  let saved: unknown;
   try {
-    let prior: Buffer | undefined;
-    try {
-      prior = directory.role.read(name, 8192);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-    if (prior) {
-      if (prior.toString("utf8") !== bytes) throw Error("Original published candidate changed");
-      return;
-    }
-    directory.role.write(name, bytes, true);
-  } finally {
-    directory.close();
+    saved = readPrivateRecord(s.installation, "observations", name(authority, input.ordinal), 8192);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
   }
+  const candidate = verifyControl(
+    s.installation.installation.publicKey,
+    "openmapx-data-candidate-v1",
+    saved,
+    schema,
+  );
+  const slot =
+    s.reservations.find((r) => r.phase === candidate.phase && r.ordinal === candidate.ordinal) ??
+    s.plan.find((r) => r.phase === candidate.phase && r.ordinal === candidate.ordinal);
+  if (!slot || candidate.phase !== input.phase)
+    throw Error("Dated original candidate slot required");
+  return publishedSchema.parse({
+    version: 2,
+    installationId: s.installation.installation.installationId,
+    origin: s.origin,
+    candidate,
+    childOperationKey: slot.execution.operationKey,
+    operationFingerprint:
+      "operationFingerprint" in slot
+        ? slot.operationFingerprint
+        : slot.execution.operationFingerprint,
+    serviceIds: [...slot.serviceIds],
+  });
 }
-/** Fixed registry resource input. This reads shared signed evidence, never a
- * sibling role's private state, and never authorizes execution by itself. */
+/**
+ * Fixed registry resource input: the candidate data-manager recorded with the
+ * child's grant in the lease store, re-checked against the files. It never
+ * authorizes execution by itself.
+ */
 export function inspectDataTransitCandidate(
   installation: ControlInstallation,
   operationKey: string,
@@ -529,93 +512,89 @@ export function inspectDataTransitCandidate(
     (operation.kind !== "motis.primary.promote" && operation.kind !== "feedProxy.validateAndReload")
   )
     throw Error("Fixed transit candidate required");
-  const local = installationState(installation),
-    directory = sharedDirectory(local);
+  const local = installationState(installation);
+  if (!local.leases.listSync) throw Error("This role cannot read delegations");
+  const grant = local.leases
+    .listSync()
+    .flatMap((lease) => lease.children)
+    .find(
+      (child) => child.execution.operationKey === operationKey && child.recipient === "ops-agent",
+    );
+  if (!grant?.evidence) throw Error("Transit candidate missing from the child grant");
+  const proof = publishedSchema.parse(grant.evidence),
+    candidate = proof.candidate;
+  if (
+    proof.installationId !== installation.installationId ||
+    proof.childOperationKey !== operationKey ||
+    proof.operationFingerprint !== controlDigest(operation) ||
+    operationKey !==
+      controlChildOperationKey(
+        candidate.execution.operationKey,
+        candidate.phase,
+        candidate.ordinal,
+      ) ||
+    candidate.execution.executor !== "data-manager"
+  )
+    throw Error("Original candidate parent/phase/body changed");
+  const expectedEpoch = verifyCatalogActivationCandidate(installation, candidate);
+  const promotion = operation.kind === "motis.primary.promote";
+  if (
+    promotion
+      ? candidate.phase !== "promote-primary" ||
+        candidate.candidateId !== operation.preparedRunId ||
+        candidate.candidateId !== expectedEpoch ||
+        canonicalJson(proof.serviceIds) !== canonicalJson(["motis"])
+      : !["proxy-stage", "proxy-commit", "proxy-restore"].includes(candidate.phase) ||
+        candidate.candidateId !== operation.candidateId ||
+        canonicalJson(proof.serviceIds) !== canonicalJson(["motis-feed-proxy"])
+  )
+    throw Error("Candidate identity/target mismatch");
+  const root = realpathSync(local.dataRoot),
+    path = realpathSync(join(root, promotion ? "motis/live" : "motis-feed-proxy"));
+  if (!path.startsWith(root + sep)) throw Error("Candidate escaped data root");
+  const confined = new AnchoredDirectory(path);
   try {
-    const proof = verifyControl(
-        local.publicKeys["data-manager"],
-        "openmapx-data-candidate-publication-v2",
-        JSON.parse(
-          directory.role.read(`${operationKey}.data-candidate.json`, 8192).toString("utf8"),
-        ),
-        publishedSchema,
-      ),
-      candidate = proof.candidate;
-    if (
-      proof.installationId !== installation.installationId ||
-      proof.childOperationKey !== operationKey ||
-      proof.operationFingerprint !== controlDigest(operation) ||
-      operationKey !==
-        controlChildOperationKey(
-          candidate.execution.operationKey,
-          candidate.phase,
-          candidate.ordinal,
-        ) ||
-      candidate.execution.executor !== "data-manager"
-    )
-      throw Error("Original candidate parent/phase/body changed");
-    const expectedEpoch = verifyCatalogActivationCandidate(installation, candidate);
-    const promotion = operation.kind === "motis.primary.promote";
-    if (
-      promotion
-        ? candidate.phase !== "promote-primary" ||
-          candidate.candidateId !== operation.preparedRunId ||
-          candidate.candidateId !== expectedEpoch ||
-          canonicalJson(proof.serviceIds) !== canonicalJson(["motis"])
-        : !["proxy-stage", "proxy-commit", "proxy-restore"].includes(candidate.phase) ||
-          candidate.candidateId !== operation.candidateId ||
-          canonicalJson(proof.serviceIds) !== canonicalJson(["motis-feed-proxy"])
-    )
-      throw Error("Candidate identity/target mismatch");
-    const root = realpathSync(local.dataRoot),
-      path = realpathSync(join(root, promotion ? "motis/live" : "motis-feed-proxy"));
-    if (!path.startsWith(root + sep)) throw Error("Candidate escaped data root");
-    const confined = new AnchoredDirectory(path);
-    try {
-      if (canonicalJson(identity(confined.stat)) !== canonicalJson(candidate.directory))
-        throw Error("Candidate directory replaced");
-      const expected = promotion
-        ? ["motis-candidate-manifest.json"]
-        : ["conf/default.conf", "feed-proxy-vars.json"];
-      if (canonicalJson(candidate.files.map((f) => f.name)) !== canonicalJson(expected))
-        throw Error("Candidate files changed");
-      let manifestBytes: Buffer | undefined;
-      for (const file of candidate.files) {
-        const parts = file.name.split("/"),
-          nested = parts.length === 2 ? confined.directory(parts[0]!) : undefined,
-          parent = nested ?? confined;
-        try {
-          const current = readCandidateFile(parent, parts.at(-1)!);
-          if (
-            canonicalJson(current.inode) !== canonicalJson(file.inode) ||
-            current.sha256 !== file.sha256
-          )
-            throw Error("Candidate inode/bytes replaced");
-          if (promotion) manifestBytes = current.bytes;
-        } finally {
-          nested?.close();
-        }
-      }
-      if (promotion) {
+    if (canonicalJson(identity(confined.stat)) !== canonicalJson(candidate.directory))
+      throw Error("Candidate directory replaced");
+    const expected = promotion
+      ? ["motis-candidate-manifest.json"]
+      : ["conf/default.conf", "feed-proxy-vars.json"];
+    if (canonicalJson(candidate.files.map((f) => f.name)) !== canonicalJson(expected))
+      throw Error("Candidate files changed");
+    let manifestBytes: Buffer | undefined;
+    for (const file of candidate.files) {
+      const parts = file.name.split("/"),
+        nested = parts.length === 2 ? confined.directory(parts[0]!) : undefined,
+        parent = nested ?? confined;
+      try {
+        const current = readCandidateFile(parent, parts.at(-1)!);
         if (
-          !manifestBytes ||
-          candidate.consumer !== null ||
-          candidateArtifacts(confined, manifestBytes, expectedEpoch) !== candidate.artifactsDigest
+          canonicalJson(current.inode) !== canonicalJson(file.inode) ||
+          current.sha256 !== file.sha256
         )
-          throw Error("Prepared candidate artifacts changed");
-      } else if (
-        candidate.artifactsDigest !== null ||
-        canonicalJson(proxyConsumer(confined, candidate.files[0]!)) !==
-          canonicalJson(candidate.consumer)
-      )
-        throw Error("Mounted candidate inode/bytes replaced");
-    } finally {
-      confined.close();
+          throw Error("Candidate inode/bytes replaced");
+        if (promotion) manifestBytes = current.bytes;
+      } finally {
+        nested?.close();
+      }
     }
-    return { digest: controlDigest(proof), proof };
+    if (promotion) {
+      if (
+        !manifestBytes ||
+        candidate.consumer !== null ||
+        candidateArtifacts(confined, manifestBytes, expectedEpoch) !== candidate.artifactsDigest
+      )
+        throw Error("Prepared candidate artifacts changed");
+    } else if (
+      candidate.artifactsDigest !== null ||
+      canonicalJson(proxyConsumer(confined, candidate.files[0]!)) !==
+        canonicalJson(candidate.consumer)
+    )
+      throw Error("Mounted candidate inode/bytes replaced");
   } finally {
-    directory.close();
+    confined.close();
   }
+  return { digest: controlDigest(proof), proof };
 }
 /** Recheck the actual admitted parent, target lease and snapshot at each fixed
  * Docker effect boundary; a previously returned resource claim is insufficient. */
@@ -669,8 +648,6 @@ export const {
   commitFeedProxyValidationFailure,
   recordFeedProxyReloadAttempted,
   inspectFeedProxyValidationFailure,
-  publishFeedProxyCanonicalTerminal,
-  verifyFeedProxyCanonicalTerminal,
 } = (() => {
   const digest = z.string().regex(/^[a-f0-9]{64}$/);
   const schema = z
@@ -781,12 +758,6 @@ export const {
         const prior = read(authority);
         if (prior.candidateId !== candidateId || prior.candidateDigest !== candidateDigest)
           throw Error("Validation candidate changed");
-        const dir = witnessDirectory(s.installation);
-        try {
-          dir.role.read(`${s.execution.operationKey}.proxy-terminal.json`, 4096);
-        } finally {
-          dir.close();
-        }
         return;
       }
       write(
@@ -808,7 +779,6 @@ export const {
         }),
         true,
       );
-      reserveWitness(authority);
     });
   }
   function commitFeedProxyValidationFailure(
@@ -868,195 +838,11 @@ export const {
     return proofDigest;
   }
 
-  const terminalSchema = z.strictObject({
-    version: z.literal(2),
-    installationId: z.uuid(),
-    origin: controlOriginSchema,
-    execution: executionRefSchema,
-    admissionDigest: digest,
-    phase: z.enum(["pending", "canonical"]),
-    status: z.unknown().nullable(),
-    terminalAt: z.number().int().positive().safe().nullable(),
-    terminalDigest: digest.nullable(),
-    padding: z.string().max(4096),
-  });
-  function witnessDirectory(local: ReturnType<typeof executionAuthorityState>["installation"]) {
-    const data = new AnchoredDirectory(local.dataRoot),
-      control = data.directory(".admin-target-control"),
-      executions = control.directory("executions"),
-      role = executions.directory("ops-agent");
-    return {
-      role,
-      close() {
-        role.close();
-        executions.close();
-        control.close();
-        data.close();
-      },
-    };
-  }
-  function writeWitness(
-    authority: VerifiedExecutionAuthority,
-    payload: z.infer<typeof terminalSchema>,
-    exclusive: boolean,
-  ) {
-    const s = state(authority),
-      dir = witnessDirectory(s.installation),
-      name = `${s.execution.operationKey}.proxy-terminal.json`;
-    try {
-      const value = { ...payload, padding: "" },
-        domain = "openmapx-proxy-canonical-terminal-v2";
-      const room =
-        4096 -
-        Buffer.byteLength(canonicalJson(signControl(s.installation.privateKey, domain, value)));
-      if (room < 0) throw Error("Proxy terminal cell capacity exceeded");
-      value.padding = " ".repeat(room);
-      const bytes = canonicalJson(signControl(s.installation.privateKey, domain, value));
-      dir.role.write(name, bytes, exclusive);
-    } finally {
-      dir.close();
-    }
-  }
-  function reserveWitness(authority: VerifiedExecutionAuthority) {
-    const s = state(authority);
-    writeWitness(
-      authority,
-      terminalSchema.parse({
-        version: 2,
-        installationId: s.installation.installation.installationId,
-        origin: s.origin,
-        execution: s.execution,
-        admissionDigest: s.receiptDigest,
-        phase: "pending",
-        status: null,
-        terminalAt: null,
-        terminalDigest: null,
-        padding: "",
-      }),
-      true,
-    );
-  }
-  /** Only an already sealed original complete canonical tuple can publish this
-   * finite shared proxy witness. It creates no new terminal time or status. */
-  function publishFeedProxyCanonicalTerminal(
-    authority: VerifiedExecutionAuthority,
-    input: OpsJobStatus,
-    terminalAt: number,
-  ) {
-    const s = state(authority),
-      status = parseOpsJobStatus(input),
-      terminalDigest = controlTerminalReceiptDigest(status);
-    const original = verifyControl(
-      s.installation.installation.publicKey,
-      "openmapx-control-terminal-v1",
-      readPrivateRecord(
-        s.installation,
-        "observations",
-        `terminal-${s.execution.operationKey}.json`,
-        8192,
-      ),
-      z
-        .object({
-          phase: z.literal("canonical"),
-          execution: executionRefSchema,
-          admissionDigest: digest,
-          terminalAt: z.number(),
-          terminalDigest: digest,
-        })
-        .passthrough(),
-    );
-    if (
-      controlDigest(original.execution) !== controlDigest(s.execution) ||
-      original.admissionDigest !== s.receiptDigest ||
-      original.terminalAt !== terminalAt ||
-      original.terminalDigest !== terminalDigest
-    )
-      throw Error("Original canonical proxy terminal required");
-    const dir = witnessDirectory(s.installation);
-    try {
-      const prior = verifyControl(
-        s.installation.installation.publicKey,
-        "openmapx-proxy-canonical-terminal-v2",
-        JSON.parse(
-          dir.role.read(`${s.execution.operationKey}.proxy-terminal.json`, 4096).toString("utf8"),
-        ),
-        terminalSchema,
-      );
-      if (
-        prior.installationId !== s.installation.installation.installationId ||
-        prior.admissionDigest !== s.receiptDigest ||
-        !sameControlOrigin(prior.origin, s.origin) ||
-        controlDigest(prior.execution) !== controlDigest(s.execution)
-      )
-        throw Error("Original reserved proxy terminal changed");
-      if (prior.phase === "canonical") {
-        if (prior.terminalDigest !== terminalDigest || prior.terminalAt !== terminalAt)
-          throw Error("Proxy canonical terminal changed");
-        return;
-      }
-      // Diagnostics are observational and deliberately excluded from the exact
-      // canonical digest. Keep the fixed shared tuple bounded.
-      writeWitness(
-        authority,
-        {
-          ...prior,
-          phase: "canonical",
-          status: { ...status, diagnostics: { tail: [], truncated: false } },
-          terminalDigest,
-          terminalAt,
-        },
-        false,
-      );
-    } finally {
-      dir.close();
-    }
-  }
-  function verifyFeedProxyCanonicalTerminal(
-    parent: VerifiedExecutionAuthority,
-    execution: ExecutionRef,
-  ): OpsJobStatus {
-    const s = executionAuthorityState(parent),
-      dir = witnessDirectory(s.installation);
-    try {
-      const proof = verifyControl(
-        s.installation.publicKeys["ops-agent"],
-        "openmapx-proxy-canonical-terminal-v2",
-        JSON.parse(
-          dir.role.read(`${execution.operationKey}.proxy-terminal.json`, 4096).toString("utf8"),
-        ),
-        terminalSchema,
-      );
-      if (
-        proof.phase !== "canonical" ||
-        proof.installationId !== s.installation.installation.installationId ||
-        !sameControlOrigin(proof.origin, s.origin) ||
-        controlDigest(proof.execution) !== controlDigest(execution) ||
-        !proof.terminalAt
-      )
-        throw Error("Original canonical proxy child missing");
-      const status = parseOpsJobStatus(proof.status);
-      if (
-        status.kind !== "feedProxy.validateAndReload" ||
-        status.operationId !== execution.executionId ||
-        status.operationKey !== execution.operationKey ||
-        status.fingerprint !== execution.fingerprint ||
-        status.deadlineAt !== execution.deadlineAt ||
-        controlTerminalReceiptDigest(status) !== proof.terminalDigest
-      )
-        throw Error("Canonical proxy status changed");
-      return status;
-    } finally {
-      dir.close();
-    }
-  }
-
   return {
     feedProxyValidationCompletionDigest,
     reserveFeedProxyValidation,
     commitFeedProxyValidationFailure,
     recordFeedProxyReloadAttempted,
     inspectFeedProxyValidationFailure,
-    publishFeedProxyCanonicalTerminal,
-    verifyFeedProxyCanonicalTerminal,
   };
 })();

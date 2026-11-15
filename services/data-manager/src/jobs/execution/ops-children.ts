@@ -390,10 +390,12 @@ import {
   issueControlChildPhase,
   lookupControlChildPhaseAttempt,
   lookupControlChildPhaseBinding,
-  verifyFeedProxyCanonicalTerminal,
+  publishedDataTransitCandidate,
+  recordOpsControlTerminalObservation,
 } from "@openmapx/core/build-artifacts";
 import { type OpsJobStatus, type OpsResultFor, parseOpsResult } from "@openmapx/core/ops";
 import { opsClient } from "../../ops-client.js";
+import { ownedLease } from "./owned-lease.js";
 import type { DataExecutionContext } from "./runtime.js";
 import type { FreshDataChildReservation } from "./store.js";
 export class DataOpsObservationPending extends Error {
@@ -471,10 +473,10 @@ async function observeChild(
     };
     if (child.state !== "terminal") child = await checkpointCurrent(context, saved);
     if (["succeeded", "failed", "timed_out"].includes(status.state)) {
-      let evidence: ReturnType<typeof inspectArtifactTargetLeaseChildSettlement>;
+      let evidence: Awaited<ReturnType<typeof inspectArtifactTargetLeaseChildSettlement>>;
       try {
-        evidence = inspectArtifactTargetLeaseChildSettlement(
-          context.targetAuthority,
+        evidence = await inspectArtifactTargetLeaseChildSettlement(
+          ownedLease(context),
           child.execution,
         );
       } catch {
@@ -482,14 +484,8 @@ async function observeChild(
         continue;
       }
       if (evidence && evidence.outcome !== "unknown" && evidence.publication !== "unknown") {
-        if (child.operation.kind === "feedProxy.validateAndReload") {
-          try {
-            verifyFeedProxyCanonicalTerminal(context.authority, child.execution);
-          } catch {
-            await delay(100, undefined, { signal });
-            continue;
-          }
-        }
+        // Recovery reads the terminal status back from this role's own record.
+        recordOpsControlTerminalObservation(context.installation, child.execution, status);
         child = await checkpointCurrent(context, {
           ...child,
           state: "terminal",
@@ -599,8 +595,9 @@ export async function runOwnedDataOpsOperation<K extends DataEffectKind>(
       const issued = await issueControlChildPhase(context.authority, {
         phase: slot.phase,
         ordinal: slot.ordinal,
-        lease: context.targetAuthority,
+        lease: ownedLease(context),
         childPublicKey: controlRolePublicKey(context.installation, "ops-agent"),
+        evidence: publishedDataTransitCandidate(context.authority, slot),
       });
       const reference = lookupControlChildPhaseAttempt(context.authority, slot);
       if (!reference?.leaseId) throw new DataOpsObservationPending(slot.operationKey);

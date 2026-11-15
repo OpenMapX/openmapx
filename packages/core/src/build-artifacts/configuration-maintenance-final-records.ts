@@ -38,7 +38,7 @@ export const configurationOwnerIdentitySchema = z
     origin: controlOriginSchema,
     ownerPrepare: executionRefSchema,
     admissionDigest: digest,
-    rootCertificateDigest: digest,
+    leaseId: id,
     maintenanceId: id,
     candidateId: id,
     planDigest: digest,
@@ -317,7 +317,7 @@ export function assertUnusedConfigurationMaintenanceFinalState(
     !same(original.identity.origin, owner.origin) ||
     !same(original.identity.ownerPrepare, owner.plan.prepare) ||
     original.identity.admissionDigest !== owner.admissionDigest ||
-    original.identity.rootCertificateDigest !== owner.rootCertificateDigest ||
+    original.identity.leaseId !== owner.leaseId ||
     original.identity.maintenanceId !== owner.plan.operation.maintenanceId ||
     original.identity.candidateId !== owner.plan.operation.candidateId ||
     original.identity.planDigest !== owner.plan.planDigest ||
@@ -536,7 +536,7 @@ function assertExecutedConfigurationMaintenanceFinalState(
     !same(original.identity.origin, owner.origin) ||
     !same(original.identity.ownerPrepare, owner.plan.prepare) ||
     original.identity.admissionDigest !== owner.admissionDigest ||
-    original.identity.rootCertificateDigest !== owner.rootCertificateDigest ||
+    original.identity.leaseId !== owner.leaseId ||
     original.identity.maintenanceId !== owner.plan.operation.maintenanceId ||
     original.identity.candidateId !== owner.plan.operation.candidateId ||
     original.identity.planDigest !== owner.plan.planDigest ||

@@ -195,14 +195,13 @@ async function prepareConfigurationHandoffLaunch(
   )
     throw Error("Original retained helper grant required");
   const observed = inspectArtifactDelegation({
-    dataRoot: local.installation.dataRoot,
     installation: local.installation.installation,
     assertion: attempt.assertion,
   });
   if (
     bytes(observed.execution) !== bytes(bound.execution) ||
     observed.recipient !== "configuration-helper" ||
-    observed.ownerCertificateDigest !== owned.owner.rootCertificateDigest ||
+    observed.leaseId !== owned.owner.leaseId ||
     bytes(observed.owner) !== bytes(owned.owner.plan.prepare)
   )
     throw Error("Original helper target ownership changed");
@@ -233,7 +232,6 @@ async function prepareConfigurationHandoffLaunch(
     sourceDigest,
     environmentNames,
     preparerAdmissionDigest: local.receiptDigest,
-    ownerCertificateDigest: owned.owner.rootCertificateDigest,
     leaseId: observed.leaseId,
     delegationId: observed.delegationId,
     assertion: attempt.assertion,

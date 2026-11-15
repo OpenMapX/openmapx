@@ -4,7 +4,6 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import {
-  ArtifactTargetJournalBusyError,
   adoptArtifactTargetLease,
   assertArtifactTargetLeaseExecution,
   assertConfigurationHandoffHostSources as assertHostSources,
@@ -16,6 +15,7 @@ import {
   closeControlInstallation,
   controlDigest,
   executionAuthorityState,
+  LeaseStoreBusyError,
   openFixedChildInstallation,
   readConfigurationHandoffSpawnIntent,
   readPrivateRecord,
@@ -50,7 +50,7 @@ const children = new WeakMap<
   }
 >();
 function sourceReadBusy(error: unknown): boolean {
-  return error instanceof ArtifactTargetJournalBusyError;
+  return error instanceof LeaseStoreBusyError;
 }
 /** Retry only the caller's certified pre-write contention. The original
  * deadline remains authoritative; no lock is removed or stolen. */
@@ -139,14 +139,13 @@ export async function openConfigurationHandoffChild(input: {
       execution,
       () =>
         adoptArtifactTargetLease({
-          dataRoot: join(infraDir, "data"),
           assertion: input.assertion,
           peer,
           execution,
           serviceIds: intent.operation.serviceIds,
         }),
       // Any other error may follow partial adoption and is never retried.
-      (error) => error instanceof ArtifactTargetJournalBusyError,
+      (error) => error instanceof LeaseStoreBusyError,
     );
     const authority = retainAdmittedControlExecution(installation, {
       execution,

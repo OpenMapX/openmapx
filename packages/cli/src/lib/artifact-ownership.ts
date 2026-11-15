@@ -13,6 +13,7 @@ import {
 import { services } from "@openmapx/core/server";
 import { cliControlContext, pruneHostControlRecords } from "./control-context";
 import { cliAcquisitionOptions, cliProcessOptions } from "./execution-deadline";
+import { hostCliLeases } from "./host-leases";
 import { repoPaths } from "./paths";
 
 type ArtifactOperation = Extract<
@@ -35,6 +36,7 @@ export async function openCliArtifactOwner(operation: ArtifactOperation, rootDir
     infraDir: paths.infraDir,
     role: "host-cli",
     serviceIds: targets,
+    leases: hostCliLeases(paths.infraDir),
   });
   let lease: control.TargetLeaseAuthority | undefined;
   try {
@@ -86,7 +88,6 @@ export async function openCliArtifactOwner(operation: ArtifactOperation, rootDir
     });
     if (hardlinks) control.retainGenerationHardlinksOwnerPlan(authority, hardlinks);
     lease = await control.acquireArtifactTargetLease({
-      dataRoot: join(paths.infraDir, "data"),
       serviceIds: targets,
       owner: authority,
       signal,

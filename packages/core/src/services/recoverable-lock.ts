@@ -136,6 +136,16 @@ export async function lockHolderGone(
   containerRunning: ContainerRunning = dockerContainerRunning,
 ): Promise<boolean> {
   if (holder.bootId && self.bootId && holder.bootId !== self.bootId) return true;
+  // Every process of a container shares its PID namespace, so the same container
+  // in another namespace has restarted since and the holder ended with it.
+  if (
+    holder.containerId &&
+    holder.containerId === self.containerId &&
+    holder.pidNamespace &&
+    self.pidNamespace &&
+    holder.pidNamespace !== self.pidNamespace
+  )
+    return true;
   if (holder.pidNamespace && holder.pidNamespace === self.pidNamespace) {
     if (!processAlive(holder.pid)) return true;
     const startTime = processStartTime(holder.pid);
@@ -149,14 +159,17 @@ export async function lockHolderGone(
 function readHolderFile(path: string): { holder?: LockHolder; ino: number } | undefined {
   let descriptor: number;
   try {
-    descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    // Never block on a FIFO someone placed at the lock path.
+    descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw error;
   }
   try {
     const stat = fstatSync(descriptor);
-    if (!stat.isFile() || stat.size > 4096) return { ino: stat.ino };
+    // Waiting never turns another kind of file into a lock; leave it to the operator.
+    if (!stat.isFile()) throw new Error(`${path} is not a lock file; remove it by hand`);
+    if (stat.size > 4096) return { ino: stat.ino };
     const buffer = Buffer.alloc(stat.size);
     readSync(descriptor, buffer, 0, buffer.length, 0);
     try {
@@ -217,7 +230,11 @@ export async function acquireRecoverableLock(
     try {
       descriptor = openSync(
         path,
-        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+        constants.O_WRONLY |
+          constants.O_CREAT |
+          constants.O_EXCL |
+          constants.O_NOFOLLOW |
+          constants.O_NONBLOCK,
         0o600,
       );
     } catch (error) {

@@ -180,6 +180,35 @@ const PRODUCTION_SOURCE_ROOTS = [
 const DOCKER_INVOCATION =
   /\b(?:execa|execFile|execFileSync|spawn|spawnSync|exec)\s*\(\s*(['"`])docker\1/;
 
+/**
+ * Exclusive access to targets is held in the agent's lease store only. The
+ * shared admission directory on the data volume, which every role could write,
+ * must not come back in code, tests, manifests or scripts.
+ */
+const SHARED_ADMISSION_DIRECTORY = [".admin", "target", "control"].join("-");
+const ADMISSION_SCAN_ROOTS = ["apps", "services", "packages", "scripts"];
+const ADMISSION_SCAN_EXTENSIONS = [".ts", ".tsx", ".mts", ".js", ".mjs", ".json", ".sh", ".yml"];
+
+function walkAll(directory: string): string[] {
+  const files: string[] = [];
+  let entries: string[];
+  try {
+    entries = readdirSync(directory);
+  } catch {
+    return files;
+  }
+  for (const name of entries) {
+    const path = join(directory, name);
+    if (statSync(path).isDirectory()) {
+      if (["node_modules", "dist", ".turbo", ".next", "coverage"].includes(name)) continue;
+      files.push(...walkAll(path));
+    } else if (ADMISSION_SCAN_EXTENSIONS.some((extension) => name.endsWith(extension))) {
+      files.push(path);
+    }
+  }
+  return files;
+}
+
 export interface AuthorityViolation {
   file: string;
   detail: string;
@@ -394,6 +423,17 @@ export function findAuthorityViolations(root: string = ROOT): AuthorityViolation
         violations.push({
           file: relative(root, file),
           detail: "invokes the Docker CLI directly",
+        });
+      }
+    }
+  }
+
+  for (const scanRoot of ADMISSION_SCAN_ROOTS) {
+    for (const file of walkAll(join(root, scanRoot))) {
+      if (readFileSync(file, "utf8").includes(SHARED_ADMISSION_DIRECTORY)) {
+        violations.push({
+          file: relative(root, file),
+          detail: `names the removed shared admission directory ${SHARED_ADMISSION_DIRECTORY}`,
         });
       }
     }

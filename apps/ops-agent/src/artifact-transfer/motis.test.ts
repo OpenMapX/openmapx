@@ -462,7 +462,7 @@ it("imports an actual portable candidate through the production agent with desti
     resourceClaimer: host.claimer,
     controlInstallation: installation,
     artifactTransfers: store,
-    tokens: { api: host.token, "data-manager": "d".repeat(43) },
+    tokens: { api: host.token, "data-manager": "d".repeat(43), "host-cli": "h".repeat(43) },
   });
   const token = join(host.root, "portable-token");
   writeFileSync(token, host.token, { mode: 0o600 });

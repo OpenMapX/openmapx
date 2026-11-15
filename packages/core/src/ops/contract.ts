@@ -46,6 +46,7 @@ import {
 import { configurationApplyResultSchema } from "./configuration-result-records";
 import { dataInspectionResultSchema } from "./data-inventory-records";
 import { dataWorkflowReceiptSchema } from "./job-evidence";
+import { leaseOperationSchemas, leaseResultSchemas } from "./lease-records";
 import {
   standaloneIntegrationOperationSchemas,
   standaloneIntegrationResultSchemas,
@@ -197,11 +198,14 @@ export const OPS_OPERATION_KINDS = [
   "transitousLock.approve",
   "gbfsCatalogLock.inspect",
   "transitousPin.inspect",
+  "lease.acquire",
+  "lease.read",
+  "lease.update",
 ] as const;
 
 export type OpsOperationKind = (typeof OPS_OPERATION_KINDS)[number];
 
-export type OpsRole = "api" | "data-manager";
+export type OpsRole = "api" | "data-manager" | "host-cli";
 export type OpsExecutionMode = "sync" | "async";
 
 export interface OpsKindPolicy {
@@ -343,6 +347,10 @@ export const OPS_KIND_POLICIES = {
   "gbfsCatalogLock.inspect": sync("data-manager", 30_000),
   // Read-only, for the admin panel: the pins, never a proposal or a change.
   "transitousPin.inspect": sync("api", 30_000),
+  // Data-manager and the host CLI claim targets through the agent; see authorizeOpsOperation.
+  "lease.acquire": sync("data-manager", 15_000, 256 * 1024),
+  "lease.read": sync("data-manager", 15_000, 256 * 1024),
+  "lease.update": sync("data-manager", 15_000, 256 * 1024),
 } as const satisfies Record<OpsOperationKind, OpsKindPolicy>;
 
 /** Read streams/diagnostics do not acquire control-root authority or a retention dependency. */
@@ -698,6 +706,7 @@ export const opsOperationSchema = z.discriminatedUnion("kind", [
   pairedPinApprovalInputSchema,
   kindOnly("gbfsCatalogLock.inspect"),
   kindOnly("transitousPin.inspect"),
+  ...leaseOperationSchemas,
 ]);
 export type OpsOperation = z.infer<typeof opsOperationSchema>;
 export type TrustedConfigurationApplyOperation = Extract<
@@ -739,6 +748,8 @@ export type OpsRequest = z.infer<typeof opsRequestSchema>;
 export function authorizeOpsOperation(role: OpsRole, kind: OpsOperationKind): boolean {
   // Decode retained historical records, but never admit a new remote file writer.
   if (kind === "data.generateApiKeys") return false;
+  // The host CLI reaches the agent only to claim targets for its own commands.
+  if (role === "host-cli") return kind.startsWith("lease.");
   return (
     OPS_KIND_POLICIES[kind].role === role ||
     (role === "data-manager" && kind === "catalogPins.inspect")
@@ -1425,6 +1436,7 @@ export const OPS_RESULT_SCHEMAS = {
     lockedAt: timestampSchema,
     lockedBy: actorLabelSchema,
   }),
+  ...leaseResultSchemas,
 } as const satisfies Record<OpsOperationKind, z.ZodType>;
 
 export type OpsResultFor<K extends OpsOperationKind> = z.infer<(typeof OPS_RESULT_SCHEMAS)[K]>;

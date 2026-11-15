@@ -17,6 +17,7 @@ import { runOwnedDataStep } from "./data-execution";
 import { DataUpdateFailure, runDataUpdate } from "./data-update";
 import { cliAcquisitionOptions } from "./execution-deadline";
 import { readGeneratedHardlinkPlan } from "./hardlinks";
+import { hostCliLeases } from "./host-leases";
 import { log } from "./output";
 import { repoPaths } from "./paths";
 import { buildServices, ServiceBuildExecutionError } from "./service-builds";
@@ -44,6 +45,7 @@ export async function runCliDataUpdate(options: {
       infraDir: paths.infraDir,
       role: "host-cli",
       serviceIds: targets,
+      leases: hostCliLeases(paths.infraDir),
     });
     await pruneHostControlRecords(installation);
     const operation = {
@@ -140,7 +142,6 @@ export async function runCliDataUpdate(options: {
           control.assertDataUpdateSources(authority);
           if (!lease)
             lease = await control.acquireArtifactTargetLease({
-              dataRoot: join(paths.infraDir, "data"),
               serviceIds: control.controlRegisteredServiceIds(context.installation),
               owner: authority,
               signal: cliAcquisitionOptions().signal,

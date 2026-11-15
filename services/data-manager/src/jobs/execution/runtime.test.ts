@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, existsSync as requireExists, rmSync, statSync } from "node:fs";
 import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import { createControlRootOperationKey } from "@openmapx/core/ops";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -261,14 +261,10 @@ describe.skipIf(
       });
       expect((await store.inspect(id))?.finishedAt).not.toBeNull();
       expect(dispatches).toBe(1);
-      expect(
-        (await import("node:fs")).existsSync(
-          join(root, "data/.admin-target-control/locks/data-manager"),
-        ),
-      ).toBe(false);
+      expect(control.heldTargets(root).includes("data-manager")).toBe(false);
       const recovered = await store.inspect(id);
       expect(
-        control.verifyDataControlTerminalWitness(installation, recovered!.execution).status,
+        control.readDataControlTerminalObservation(installation, recovered!.execution).status,
       ).toEqual(recovered!.status);
       await runtime.reconcile();
       expect(dispatches).toBe(1);
@@ -497,7 +493,7 @@ describe.skipIf(
       expect(retained?.triggeredBy).toBe("cron");
       expect(retained?.finishedAt).not.toBeNull();
       expect(
-        control.verifyDataControlTerminalWitness(installation, retained!.execution).status,
+        control.readDataControlTerminalObservation(installation, retained!.execution).status,
       ).toEqual(retained!.status);
       expect(dispatches).toBe(1);
     } finally {
@@ -579,9 +575,7 @@ describe.skipIf(
       expect(forwards).toBe(0);
       expect((await store.inspect(id))?.finishedAt).toBeNull();
       expect((await store.inspect(id))?.status.publication).toBe("unknown");
-      expect(
-        (await import("node:fs")).existsSync(join(data, ".admin-target-control/locks/motis")),
-      ).toBe(true);
+      expect(control.heldTargets(dirname(data)).includes("motis")).toBe(true);
     } finally {
       await runtime.close();
       if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
@@ -635,13 +629,9 @@ describe.skipIf(
           .poll(async () => (await store.inspect(id!))?.status.status, { timeout: 15000 })
           .toBe("ok");
         await expect
-          .poll(
-            async () =>
-              !(await import("node:fs")).existsSync(
-                join(data, ".admin-target-control/locks/data-manager"),
-              ),
-            { timeout: 15000 },
-          )
+          .poll(async () => !control.heldTargets(dirname(data)).includes("data-manager"), {
+            timeout: 15000,
+          })
           .toBe(true);
         await runtime.close();
         const record = await store.inspect(id);
@@ -816,8 +806,8 @@ describe.skipIf(
         );
         id = admitted.id;
         await readyGate;
-        const lock = join(root, "data/.admin-target-control/locks/data-manager"),
-          inode = statSync(lock).ino;
+        const held = () => control.heldTargets(root).includes("data-manager");
+        expect(held()).toBe(true);
         if (mode === "consume-after-abort") {
           start();
           await expect.poll(active, { timeout: 5000 }).toBe(1);
@@ -836,7 +826,7 @@ describe.skipIf(
                   cancelPackets: proxy.packets(),
                   status: row?.status.status,
                   finished: row?.finishedAt !== null,
-                  fence: requireExists(lock),
+                  fence: held(),
                 };
               },
               { timeout: 5000 },
@@ -849,7 +839,7 @@ describe.skipIf(
               finished: false,
               fence: true,
             });
-          expect(statSync(lock).ino).toBe(inode);
+          expect(held()).toBe(true);
         }
         proxy.release();
         await expect.poll(() => querySettled, { timeout: 5000 }).toBe(true);
@@ -868,7 +858,7 @@ describe.skipIf(
         expect(callbacks).toBe(0);
         // Durable terminal SQL precedes asynchronous physical lease release.
         // The worker connection's barrier above does not await that release.
-        await expect.poll(() => requireExists(lock), { timeout: 5000 }).toBe(false);
+        await expect.poll(held, { timeout: 5000 }).toBe(false);
       } finally {
         proxy.release();
         start();

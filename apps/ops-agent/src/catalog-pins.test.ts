@@ -52,7 +52,7 @@ it("serializes the largest legal paired pins through the actual HTTP server/clie
   });
   const runtime = createTransitousLockRuntime(createUnavailableRuntime(), { rootDir: root });
   const app = buildOpsAgentServer({
-    tokens: { api: apiToken, "data-manager": dmToken },
+    tokens: { api: apiToken, "data-manager": dmToken, "host-cli": "h".repeat(43) },
     runtime,
     resourcePolicy: createRegistryResourcePolicy({
       serviceIds: ["motis"],

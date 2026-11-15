@@ -46,6 +46,7 @@ import {
   withHostDataControlContext,
 } from "./control-context";
 import { cliAcquisitionOptions } from "./execution-deadline";
+import { hostCliLeases } from "./host-leases";
 import { repoPaths } from "./paths";
 export async function executeDurableDataStep(
   input: DataExecutionInput,
@@ -258,6 +259,7 @@ export async function runCliDataStep(
       infraDir: repoPaths().infraDir,
       role: "host-cli",
       serviceIds: ["data-manager"],
+      leases: hostCliLeases(repoPaths().infraDir),
     });
   await pruneHostControlRecords(installation);
   const normalized = normalizeExecutionAdmission({

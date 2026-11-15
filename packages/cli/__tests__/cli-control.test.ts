@@ -1,0 +1,128 @@
+import { randomUUID } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import * as control from "@openmapx/core/build-artifacts";
+import type { ExecutionRef } from "@openmapx/core/ops";
+import { services } from "@openmapx/core/server";
+import { Command } from "commander";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { registerControlCommands } from "../src/commands/control";
+import { dockerCompose } from "../src/lib/docker";
+
+vi.mock("../src/lib/docker", async (original) => ({
+  ...(await original<typeof import("../src/lib/docker")>()),
+  dockerCompose: vi.fn(),
+}));
+
+let root: string;
+let infraDir: string;
+let printed: string[];
+beforeEach(() => {
+  root = mkdtempSync(join(tmpdir(), "openmapx-control-"));
+  infraDir = join(root, "infra/docker");
+  writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
+  mkdirSync(infraDir, { recursive: true });
+  vi.stubEnv("OPENMAPX_ROOT_DIR", root);
+  printed = [];
+  vi.spyOn(console, "log").mockImplementation((line: string) => {
+    printed.push(String(line));
+  });
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(process, "exit").mockImplementation((code) => {
+    throw Error(`exit:${code}`);
+  });
+  vi.mocked(dockerCompose)
+    .mockReset()
+    .mockResolvedValue({
+      exitCode: 0,
+      stdout: "alpha running\n",
+      stderr: "",
+    } as Awaited<ReturnType<typeof dockerCompose>>);
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+  rmSync(root, { recursive: true, force: true });
+});
+async function run(...args: string[]) {
+  const program = new Command().exitOverride();
+  registerControlCommands(program);
+  await expect(program.parseAsync(["node", "openmapx", "control", ...args])).rejects.toThrow(
+    "exit:0",
+  );
+}
+function owner(): ExecutionRef {
+  return {
+    executor: "host-cli",
+    principal: "host-cli",
+    executionId: randomUUID(),
+    operationKey: `opk1_${randomUUID().replaceAll("-", "")}`,
+    operationFingerprint: "a".repeat(64),
+    fingerprint: "b".repeat(64),
+    deadlineAt: Date.now() + 60_000,
+  };
+}
+const store = () =>
+  control.openLeaseStore({ directory: control.leaseStoreDirectory(infraDir), purpose: "test" });
+async function held(ownerKind = "service.stop") {
+  const execution = owner();
+  await control
+    .localLeaseBackend(store())
+    .acquire({ owner: execution, ownerKind, targets: ["alpha"] });
+  return execution;
+}
+const auditLog = () =>
+  readFileSync(join(control.leaseStoreDirectory(infraDir), "control-audit.jsonl"), "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+
+describe("openmapx control", () => {
+  it("shows held leases with their owner and targets", async () => {
+    const execution = await held();
+    await run("status");
+    const text = printed.join("\n");
+    expect(text).toContain(execution.operationKey);
+    expect(text).toContain("targets: alpha");
+  });
+
+  it("clears the lease of an operation, prints what runs and audits it", async () => {
+    const execution = await held();
+    await run("clear", "--op", execution.operationKey);
+    expect(store().list()).toEqual([]);
+    expect(printed.join("\n")).toContain("alpha: running");
+    expect(auditLog()).toMatchObject([
+      { action: "clear", operationKey: execution.operationKey, lease: { targets: ["alpha"] } },
+    ]);
+  });
+
+  it("resolves an operation's unknown outcome and releases its targets", async () => {
+    const execution = await held("service.restart");
+    await run("resolve", "--op", execution.operationKey, "--as", "failed");
+    expect(store().list()).toEqual([]);
+    expect(auditLog()).toMatchObject([
+      { action: "resolve", operationKey: execution.operationKey, as: "failed" },
+    ]);
+  });
+
+  it("clears a lock by its file name and records the holder it removed", async () => {
+    const path = join(control.leaseStoreDirectory(infraDir), "leases.lock");
+    mkdirSync(control.leaseStoreDirectory(infraDir), { recursive: true });
+    const holder = {
+      version: 1,
+      purpose: "gone writer",
+      pid: 1,
+      startTime: null,
+      bootId: null,
+      pidNamespace: "elsewhere",
+      containerId: null,
+      acquiredAt: Date.now(),
+    };
+    writeFileSync(path, JSON.stringify(holder));
+    expect(services.readLockHolder(path)).toEqual(holder);
+    await run("clear", "--lock", "leases.lock");
+    expect(services.readLockHolder(path)).toBeUndefined();
+    expect(auditLog()).toMatchObject([{ action: "clear-lock", lock: "leases.lock", holder }]);
+  });
+});

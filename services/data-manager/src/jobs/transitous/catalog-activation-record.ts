@@ -14,6 +14,7 @@ import {
 } from "@openmapx/core/catalog-pins";
 import { canonicalJson, type ExecutionRef } from "@openmapx/core/ops";
 import { runOpsOperation } from "../../ops-client.js";
+import { ownedLease } from "../execution/owned-lease.js";
 import type { DataExecutionContext } from "../execution/runtime.js";
 import { publishDataChange } from "../execution/worker-scope.js";
 export async function retainCatalogActivationRecord(
@@ -48,8 +49,8 @@ export async function retainCatalogActivationRecord(
     )
   )
     throw Error("Original settled promotion and fixed approval reservation required");
-  const physical = inspectArtifactTargetLeaseChildSettlement(
-    context.targetAuthority,
+  const physical = await inspectArtifactTargetLeaseChildSettlement(
+    ownedLease(context),
     promotion.execution,
   );
   if (

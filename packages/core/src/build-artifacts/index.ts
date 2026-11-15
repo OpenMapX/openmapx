@@ -23,6 +23,7 @@ export {
 } from "./configuration-source-witness";
 export {
   type ArtifactDelegationAssertion,
+  agentStoreLeases,
   assertControlExecutionForward,
   assertControlStorageAvailable,
   assertFreshControlRoot,
@@ -48,6 +49,7 @@ export {
   executionAuthorityState,
   fixedCliArguments,
   inspectConfigurationPreEffectRefusal,
+  inspectRemoteDelegation,
   loadControlStartup,
   localFeedCredentialTemplateMac,
   markFeedProxyReloadAttempted,
@@ -60,9 +62,13 @@ export {
   prepareFixedControlChild,
   provisionControlInstallation,
   readConfigurationHandoffSpawnIntent,
+  readDataControlTerminalObservation,
   readFixedCliSpawnIntent,
+  readOpsControlTerminalObservation,
   readPrivateRecord,
   readVerifiedStagedCoordinatorOwnership,
+  recordDataControlTerminalObservation,
+  recordOpsControlTerminalObservation,
   repairControlJournalTerminal,
   replaceControlRegisteredServiceIds,
   reserveControlTerminal,
@@ -85,6 +91,7 @@ export {
   type VerifiedStagedCoordinatorOwnerBaseline,
   type VerifiedStagedCoordinatorOwnership,
   verifiedCoordinatorPullBaselineState,
+  verifiedRemoteParentExecution,
   verifiedRetainedControlParent,
   verifiedStagedCoordinatorOwnerBaselineState,
   verifiedStagedCoordinatorOwnershipState,
@@ -92,7 +99,6 @@ export {
   verifyControlPeer,
   verifyControlRecoveryAuthority,
   verifyCoordinatorPullAdmissionSource,
-  verifyDataControlTerminalWitness,
   verifyFixedCliControlPeer,
   verifyMaintenanceCoordinatorPrerequisite,
   verifyParentExecution,
@@ -115,6 +121,7 @@ export {
   assertDataTransitCandidateForExecution,
   assertOwnedDataTransitCandidate,
   inspectDataTransitCandidate,
+  publishedDataTransitCandidate,
   retainOwnedDataTransitCandidate,
 } from "./data-execution-candidate";
 export {
@@ -136,7 +143,6 @@ export {
   feedProxyValidationCompletionDigest,
   inspectFeedProxyValidationFailure,
   reserveFeedProxyValidation,
-  verifyFeedProxyCanonicalTerminal,
 } from "./feed-proxy-validation";
 export { AnchoredDirectory } from "./filesystem";
 export {
@@ -175,6 +181,13 @@ export {
   readOwnedGenerationHardlinkPlan,
   retainGenerationHardlinksOwnerPlan,
 } from "./generation-hardlinks-owner";
+export {
+  type LeaseOperation,
+  type LeaseSender,
+  opsClientLeaseSender,
+  remoteLeaseBackend,
+} from "./lease-remote";
+export * from "./lease-store";
 export * from "./manifest";
 export {
   CANDIDATE_MANIFEST_FILENAME,
@@ -186,15 +199,7 @@ export {
   readCandidateManifest,
   verifyCandidateManifest,
 } from "./motis-candidate";
-export {
-  inspectControlAdmission,
-  inspectDataExecutionAdmission,
-  verifiedParentForArtifactDelegation,
-} from "./peer-admission";
+export { inspectControlAdmission, inspectDataExecutionAdmission } from "./peer-admission";
 export * from "./prepared-evidence";
-export {
-  reconcileFailedServiceLifecycle,
-  recoverServiceLifecycleByKey,
-} from "./service-lifecycle-recovery";
 export * from "./target-lease";
 export { verifyConfigurationMaintenanceRootClosure as assertConfigurationMaintenanceRootClosure } from "./target-lease";

@@ -1,10 +1,8 @@
-import { existsSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { createInterface } from "node:readline";
 import * as c from "../control-authority";
-import { AnchoredDirectory } from "../filesystem";
-import { inspectControlAdmission, verifiedParentForArtifactDelegation } from "../peer-admission";
+import { inspectControlAdmission } from "../peer-admission";
 import * as l from "../target-lease";
+import { verifiedParentForArtifactDelegation } from "../target-lease";
 
 for await (const line of createInterface({ input: process.stdin })) {
   try {
@@ -35,7 +33,6 @@ for await (const line of createInterface({ input: process.stdin })) {
         serviceIds: ["osrm"],
       });
       const lease = await l.acquireArtifactTargetLease({
-        dataRoot: join(input.infraDir, "data"),
         serviceIds: ["osrm"],
         owner: authority,
       });
@@ -52,33 +49,6 @@ for await (const line of createInterface({ input: process.stdin })) {
       const origin = c.retainedExecutionOrigin(c.installationState(installation), input.execution);
       c.closeControlInstallation(installation);
       process.stdout.write(`${JSON.stringify({ ok: true, leaseId: lease.leaseId, origin })}\n`);
-    } else if (input.mode === "observe-interleaving") {
-      const installation = c.openControlInstallation({
-        infraDir: input.infraDir,
-        role: "data-manager",
-        serviceIds: ["motis"],
-      });
-      const read = AnchoredDirectory.prototype.read;
-      let paused = false;
-      AnchoredDirectory.prototype.read = function (name, max, privateMode) {
-        const bytes = read.call(this, name, max, privateMode);
-        if (!paused && this.path.endsWith("/observations")) {
-          paused = true;
-          writeFileSync(input.ready, "ready");
-          const until = Date.now() + 10000;
-          while (!existsSync(input.resume)) {
-            if (Date.now() >= until) throw Error("Interleaving resume timed out");
-            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
-          }
-        }
-        return bytes;
-      };
-      l.inspectArtifactDelegation({
-        dataRoot: join(input.infraDir, "data"),
-        assertion: input.assertion,
-        installation,
-      });
-      process.stdout.write(`${JSON.stringify({ ok: true })}\n`);
     } else if (input.mode === "owner") {
       const installation = c.openControlInstallation({
         infraDir: input.infraDir,
@@ -87,7 +57,6 @@ for await (const line of createInterface({ input: process.stdin })) {
       });
       const authority = c.retainAdmittedControlExecution(installation, input.admitted);
       const lease = await l.acquireArtifactTargetLease({
-        dataRoot: join(input.infraDir, "data"),
         serviceIds: input.admitted.serviceIds,
         owner: authority,
       });
@@ -114,7 +83,6 @@ for await (const line of createInterface({ input: process.stdin })) {
         recipient: "configuration-helper",
       });
       const lease = await l.adoptArtifactTargetLease({
-        dataRoot: join(input.infraDir, "data"),
         assertion: input.assertion,
         peer,
         execution: input.execution,
@@ -139,7 +107,6 @@ for await (const line of createInterface({ input: process.stdin })) {
         input.execution,
       );
       const lease = await l.adoptArtifactTargetLease({
-        dataRoot: join(input.infraDir, "data"),
         assertion: input.assertion,
         peer,
         execution: input.execution,
@@ -193,7 +160,6 @@ for await (const line of createInterface({ input: process.stdin })) {
           : (() => {
               // Primitive protocol fixture, not the future generation-bound DM HTTP adapter.
               const inspected = l.inspectArtifactDelegation({
-                dataRoot: join(input.infraDir, "data"),
                 assertion: input.assertion,
                 installation,
               });
@@ -214,7 +180,6 @@ for await (const line of createInterface({ input: process.stdin })) {
                 ),
                 adopt: (execution: typeof input.execution) =>
                   l.adoptArtifactTargetLease({
-                    dataRoot: join(input.infraDir, "data"),
                     assertion: input.assertion,
                     peer,
                     execution,

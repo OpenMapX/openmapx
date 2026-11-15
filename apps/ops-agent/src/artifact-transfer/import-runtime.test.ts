@@ -71,7 +71,7 @@ async function fixture() {
       resourceClaimer: host.claimer,
       controlInstallation: installation,
       artifactTransfers: store,
-      tokens: { api: host.token, "data-manager": "d".repeat(43) },
+      tokens: { api: host.token, "data-manager": "d".repeat(43), "host-cli": "h".repeat(43) },
     });
   let lose = false;
   app.addHook("onSend", async (request, reply, payload) => {
@@ -321,7 +321,7 @@ it("imports through the real registered server and original target root after a 
     fingerprint: status.fingerprint,
     deadlineAt: status.deadlineAt,
   });
-  verifyRetainedArtifactTargetRootRelease(
+  await verifyRetainedArtifactTargetRootRelease(
     restoreAdmittedControlExecution(f.installation, execution),
   );
   expect(
@@ -473,7 +473,7 @@ it("reconciles the original prepared publication after exact foreign-inode repai
       resourceClaimer: f.createResourceClaimer(runtime),
       controlInstallation: installation,
       artifactTransfers: store,
-      tokens: { api: f.token, "data-manager": "d".repeat(43) },
+      tokens: { api: f.token, "data-manager": "d".repeat(43), "host-cli": "h".repeat(43) },
     });
   cleanups.push(() => app.close());
   const freshClient = new OpsClient({
@@ -500,7 +500,9 @@ it("reconciles the original prepared publication after exact foreign-inode repai
     fingerprint: status.fingerprint,
     deadlineAt: status.deadlineAt,
   });
-  verifyRetainedArtifactTargetRootRelease(restoreAdmittedControlExecution(installation, execution));
+  await verifyRetainedArtifactTargetRootRelease(
+    restoreAdmittedControlExecution(installation, execution),
+  );
   expect(
     journal.records().filter((job) => job.operation.kind === "artifactTransfer.import"),
   ).toHaveLength(1);
@@ -629,7 +631,7 @@ it("observes committed publication after result loss without rewriting its origi
     fingerprint: original.fingerprint,
     deadlineAt: original.deadlineAt,
   });
-  verifyRetainedArtifactTargetRootRelease(
+  await verifyRetainedArtifactTargetRootRelease(
     restoreAdmittedControlExecution(next.installation, execution),
   );
   expect(readFileSync(join(f.infraDir, "data/osrm-graph/region.osrm"), "utf8")).toBe(files);
@@ -676,7 +678,7 @@ async function reassembleCommittedFixture(f: Awaited<ReturnType<typeof fixture>>
       resourceClaimer: f.createResourceClaimer(runtime),
       controlInstallation: installation,
       artifactTransfers: store,
-      tokens: { api: f.token, "data-manager": "d".repeat(43) },
+      tokens: { api: f.token, "data-manager": "d".repeat(43), "host-cli": "h".repeat(43) },
     });
   cleanups.push(() => app.close());
   const freshClient = new OpsClient({

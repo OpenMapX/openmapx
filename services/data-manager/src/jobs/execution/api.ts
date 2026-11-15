@@ -6,7 +6,6 @@ import type {
   DataExecutionIdentity,
   DataExecutionInput,
   DataExecutionStatus,
-  generationHardlinksNonAdmissionSchema,
   startGenerationHardlinksExecutionSchema,
 } from "@openmapx/core/data-manager-contracts";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -15,17 +14,14 @@ import { requestPrincipal } from "../../auth.js";
 import type { DataManagerPrincipal } from "../../principals.js";
 import { registerDataManagerRoute } from "../../route-contract.js";
 
-/** The receiver performs signed admission/adoption, separately from bearer
+/** The receiver checks the delegation or parent a caller names, after bearer
  * authentication. A missing receiver never authorizes a compatibility worker. */
 export interface DataExecutionReceiver {
   recoverUnadmittedPreparation?(
     request: DataConfigurationFencePrepare,
     rawHeaders: readonly string[],
+    transportPrincipal: DataManagerPrincipal,
   ): Promise<z.infer<typeof configurationPrepareNonAdmissionSchema>>;
-  attestUnadoptedHardlinks?(
-    request: z.infer<typeof startGenerationHardlinksExecutionSchema>,
-    rawHeaders: readonly string[],
-  ): Promise<z.infer<typeof generationHardlinksNonAdmissionSchema>>;
   observeReviewedTransit?(request: {
     key: string;
     countries: string[];
@@ -67,7 +63,8 @@ export interface DataExecutionReceiver {
   ): Promise<DataConfigurationFenceReceipt>;
   inspectFence(
     maintenanceId: string,
-    rawHeaders: readonly string[],
+    expected: { candidateId: string; ownerLeaseId: string },
+    transportPrincipal: DataManagerPrincipal,
   ): Promise<DataConfigurationFenceReceipt | null>;
   settleFence(
     input: DataConfigurationFenceSettle,
@@ -107,10 +104,6 @@ export function registerDataExecutionApi(
         await receiver.admitHardlinks(request.body, request.raw.rawHeaders, principal(request)),
       );
   });
-  registerDataManagerRoute(app, "recoverUnadmittedGenerationHardlinks", async (request, reply) => {
-    if (!receiver?.attestUnadoptedHardlinks) return unavailable(reply);
-    return receiver.attestUnadoptedHardlinks(request.body, request.raw.rawHeaders);
-  });
   registerDataManagerRoute(app, "prepareDataConfigurationFence", async (request, reply) => {
     if (!receiver) return unavailable(reply);
     return receiver.prepareFence(request.body, request.raw.rawHeaders, principal(request));
@@ -120,14 +113,19 @@ export function registerDataExecutionApi(
     "recoverUnadmittedConfigurationPreparation",
     async (request, reply) => {
       if (!receiver?.recoverUnadmittedPreparation) return unavailable(reply);
-      return receiver.recoverUnadmittedPreparation(request.body, request.raw.rawHeaders);
+      return receiver.recoverUnadmittedPreparation(
+        request.body,
+        request.raw.rawHeaders,
+        principal(request),
+      );
     },
   );
   registerDataManagerRoute(app, "inspectDataConfigurationFence", async (request, reply) => {
     if (!receiver) return unavailable(reply);
     const receipt = await receiver.inspectFence(
       request.params.maintenanceId,
-      request.raw.rawHeaders,
+      request.query,
+      principal(request),
     );
     return (
       receipt ?? reply.code(404).send({ error: "Configuration maintenance identity is unknown" })

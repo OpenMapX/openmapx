@@ -106,6 +106,32 @@ describe("recoverable lock", () => {
     expect(asked).toEqual(["a".repeat(64)]);
   });
 
+  it("reclaims a holder of this container from before the container restarted", async () => {
+    const container = "b".repeat(64);
+    const self = { ...currentLockHolder("self"), bootId: null, containerId: container };
+    const before = foreign({ bootId: null, containerId: container, pidNamespace: "pid:[old]" });
+    expect(await lockHolderGone(before, { ...self, pidNamespace: "pid:[new]" }, neverAsked)).toBe(
+      true,
+    );
+    // The same namespace keeps judging the holder's own process.
+    expect(
+      await lockHolderGone(
+        { ...before, pidNamespace: "pid:[new]", pid: process.pid },
+        { ...self, pidNamespace: "pid:[new]" },
+        neverAsked,
+      ),
+    ).toBe(false);
+  });
+
+  it("refuses a lock path that is not a lock file at once", async () => {
+    const path = lockPath();
+    const { mkdirSync } = await import("node:fs");
+    mkdirSync(path);
+    await expect(acquireRecoverableLock(path, { purpose: "next", waitMs: 60_000 })).rejects.toThrow(
+      "is not a lock file",
+    );
+  });
+
   it("never reclaims a holder that cannot be proved gone", async () => {
     const path = lockPath();
     writeFileSync(

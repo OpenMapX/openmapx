@@ -1,10 +1,9 @@
 import { setTimeout as settleDelay } from "node:timers/promises";
 import {
+  type ArtifactTargetLease,
   acquireArtifactTargetLease,
   assertArtifactTargetLeaseForward,
   assertControlExecutionForward,
-  type BorrowedArtifactTargetLease,
-  bindBorrowedControlExecution,
   ControlExecutionFencedError,
   type ControlInstallation,
   cancelArtifactTargetLease,
@@ -13,10 +12,8 @@ import {
   releaseArtifactTargetLease,
   restoreAdmittedControlExecution,
   restoreArtifactTargetLeaseForSettlement,
-  restoreGenerationHardlinksLeaseForSettlement,
   retainAdmittedControlExecution,
   settleArtifactTargetLeaseChild,
-  type TargetLeaseAuthority,
   type VerifiedExecutionAuthority,
   type VerifiedPreparedGenerationAdmission,
   verifyControlEffectSettlement,
@@ -38,6 +35,7 @@ import {
   type DataOpsChildAttempt,
   dataChildControlReservation,
 } from "./ops-children.js";
+import { ownedLease } from "./owned-lease.js";
 import type { DataExecutionPatch, DataExecutionRecord, DataExecutionStore } from "./store.js";
 import { withDataExecutionScope } from "./worker-scope.js";
 export type DataExecutionProgressPatch = Partial<
@@ -51,7 +49,9 @@ export interface DataExecutionContext {
   readonly execution: ExecutionRef;
   readonly executionVersion: number;
   readonly signal: AbortSignal;
-  readonly targetAuthority: TargetLeaseAuthority;
+  /** The execution's own lease in the agent's store. A hardlink leaf runs under
+   * its caller's lease and has none. */
+  readonly targetAuthority?: ArtifactTargetLease;
   readonly authority: VerifiedExecutionAuthority;
   readonly installation: ControlInstallation;
   readonly store: DataExecutionStore;
@@ -78,7 +78,8 @@ export interface DataExecutionRuntime {
       sourceJobId?: string;
       triggeredBy?: string;
       idempotencyKey?: string;
-      adopt?: (execution: ExecutionRef) => Promise<BorrowedArtifactTargetLease | undefined>;
+      /** Checks the normalized identity against what the caller named. */
+      adopt?: (execution: ExecutionRef) => Promise<undefined>;
     },
   ): Promise<DataExecutionStatus>;
   inspect(id: string): Promise<DataExecutionStatus | null>;
@@ -87,6 +88,25 @@ export interface DataExecutionRuntime {
   requestCancel(identity: DataExecutionIdentity): Promise<DataExecutionStatus>;
   reconcile(): Promise<void>;
   close(): Promise<void>;
+}
+/** Settles and releases the execution's own lease after its terminal record,
+ * then records the terminal for later steps that build on it. */
+async function releaseOwnLease(
+  journal: {
+    installation: ControlInstallation;
+    recordContainedTerminal(e: ExecutionRef): Promise<void>;
+  },
+  execution: ExecutionRef,
+  lease: ArtifactTargetLease | undefined,
+) {
+  if (lease) {
+    await settleArtifactTargetLeaseChild(
+      lease,
+      verifyControlEffectSettlement(journal.installation, execution),
+    );
+    await releaseArtifactTargetLease(lease);
+  }
+  await journal.recordContainedTerminal(execution);
 }
 export function dataExecutionTargetIds(input: DataExecutionInput): string[] {
   return ["transit-sync", "catalog.validate", "catalog.activate"].includes(input.kind)
@@ -125,7 +145,7 @@ export function createDataExecutionRuntime(deps: {
       authority = restoreAdmittedControlExecution(owner.installation, record.execution),
       lease =
         record.input.kind === "generation-hardlinks"
-          ? restoreGenerationHardlinksLeaseForSettlement(authority)
+          ? undefined
           : restoreArtifactTargetLeaseForSettlement(authority);
     let tail: Promise<unknown> = Promise.resolve(),
       version = record.version;
@@ -197,7 +217,7 @@ export function createDataExecutionRuntime(deps: {
                 executionCanceled = true;
               } catch {}
               try {
-                await cancelArtifactTargetLease(owned.targetAuthority);
+                if (owned.targetAuthority) await cancelArtifactTargetLease(owned.targetAuthority);
                 leaseCanceled = true;
               } catch {}
               if (executionCanceled && leaseCanceled) return;
@@ -215,7 +235,7 @@ export function createDataExecutionRuntime(deps: {
         } catch {
           /* Original identity/lease gaps retain the durable cancellation intent. */
         } finally {
-          if (context) closeArtifactTargetLeaseHandle(context.targetAuthority);
+          if (context?.targetAuthority) closeArtifactTargetLeaseHandle(context.targetAuthority);
         }
       })
       .finally(() => recovering.delete(record.status.id));
@@ -223,13 +243,13 @@ export function createDataExecutionRuntime(deps: {
   }
   async function start(
     record: DataExecutionRecord,
-    adopt?: (execution: ExecutionRef) => Promise<BorrowedArtifactTargetLease | undefined>,
+    adopt?: (execution: ExecutionRef) => Promise<undefined>,
     parent?: VerifiedParentExecution,
     hardlinkPlan?: unknown,
   ) {
     const owner = requireJournal(),
       targets = dataExecutionTargetIds(record.input);
-    const borrowed = await adopt?.(record.execution);
+    await adopt?.(record.execution);
     const authority = retainAdmittedControlExecution(owner.installation, {
       execution: record.execution,
       kind: record.input.kind,
@@ -239,22 +259,19 @@ export function createDataExecutionRuntime(deps: {
         ? { requestedDeadlineAt: record.requestedDeadlineAt }
         : {}),
       ...(parent ? { parent } : {}),
-      serviceIds: borrowed?.serviceIds ?? targets,
+      serviceIds: targets,
       reservations: record.reservations.map(dataChildControlReservation),
     });
-    if (borrowed) bindBorrowedControlExecution(borrowed, authority);
-    if (record.input.kind === "generation-hardlinks") {
-      if (hardlinkPlan === undefined) throw Error("Signed durable generation plan required");
+    const leaf = record.input.kind === "generation-hardlinks";
+    if (leaf) {
+      if (hardlinkPlan === undefined) throw Error("Durable generation plan required");
       await owner.retainHardlinksPlan(authority, hardlinkPlan);
     }
     await owner.begin(authority);
-    const lease =
-      borrowed ??
-      (await acquireArtifactTargetLease({
-        dataRoot: owner.dataRoot,
-        serviceIds: targets,
-        owner: authority,
-      }));
+    // A hardlink leaf runs under the lease of the agent or host CLI that issued it.
+    const lease = leaf
+      ? undefined
+      : await acquireArtifactTargetLease({ serviceIds: targets, owner: authority });
     const controller = new AbortController();
     let entry: LiveEntry;
     const context: DataExecutionContext = {
@@ -299,7 +316,7 @@ export function createDataExecutionRuntime(deps: {
       assertForward() {
         controller.signal.throwIfAborted();
         assertControlExecutionForward(authority);
-        assertArtifactTargetLeaseForward(lease);
+        if (lease) assertArtifactTargetLeaseForward(lease);
       },
     };
     entry = { record, controller, context, task: Promise.resolve(), tail: Promise.resolve() };
@@ -420,16 +437,7 @@ export function createDataExecutionRuntime(deps: {
         });
         if (isDataExecutionTerminal(entry.record.status)) {
           await owner.assertOwnedProxyRecoverySettled(record.execution);
-          await settleArtifactTargetLeaseChild(
-            lease,
-            verifyControlEffectSettlement(owner.installation, record.execution),
-          );
-          if (lease.mode === "owner") {
-            await owner.assertOwnedProxyRecoverySettled(record.execution);
-            await releaseArtifactTargetLease(lease);
-            await owner.publishContainedTerminal(record.execution);
-          } else if (record.input.kind === "generation-hardlinks")
-            await owner.publishContainedTerminal(record.execution);
+          await releaseOwnLease(owner, record.execution, lease);
         }
       } catch (error) {
         // An I/O/CAS/containment gap is not a terminal receipt or permission to
@@ -453,7 +461,7 @@ export function createDataExecutionRuntime(deps: {
       } finally {
         clearTimeout(timer);
         clearInterval(ancestry);
-        closeArtifactTargetLeaseHandle(lease);
+        if (lease) closeArtifactTargetLeaseHandle(lease);
         active.delete(record.status.id);
       }
     })();
@@ -474,11 +482,12 @@ export function createDataExecutionRuntime(deps: {
             restoreAdmittedControlExecution(owner.installation, saved.execution);
         if (entry) cancelControlExecution(authority);
         else cancelRecovered(saved);
-        if (entry) {
+        const own = entry?.context.targetAuthority;
+        if (own) {
           const until = now() + 15000;
           for (;;) {
             try {
-              await cancelArtifactTargetLease(entry.context.targetAuthority);
+              await cancelArtifactTargetLease(own);
               break;
             } catch (error) {
               if (now() >= until) throw error;
@@ -529,27 +538,15 @@ export function createDataExecutionRuntime(deps: {
             await owner.assertOwnedProxyRecoverySettled(record.execution);
             await owner.repairTerminal(record.execution);
             await owner.publishTerminal(record.execution);
-            try {
-              await owner.publishContainedTerminal(record.execution);
-              continue;
-            } catch {}
             const authority = restoreAdmittedControlExecution(owner.installation, record.execution),
               lease =
                 record.input.kind === "generation-hardlinks"
-                  ? restoreGenerationHardlinksLeaseForSettlement(authority)
+                  ? undefined
                   : restoreArtifactTargetLeaseForSettlement(authority);
             try {
-              await settleArtifactTargetLeaseChild(
-                lease,
-                verifyControlEffectSettlement(owner.installation, record.execution),
-              );
-              if (lease.mode === "owner") {
-                await releaseArtifactTargetLease(lease);
-                await owner.publishContainedTerminal(record.execution);
-              } else if (record.input.kind === "generation-hardlinks")
-                await owner.publishContainedTerminal(record.execution);
+              await releaseOwnLease(owner, record.execution, lease);
             } finally {
-              closeArtifactTargetLeaseHandle(lease);
+              if (lease) closeArtifactTargetLeaseHandle(lease);
             }
           } catch {
             /* Original absent proof or released lease grants no new authority. */
@@ -574,13 +571,13 @@ export function createDataExecutionRuntime(deps: {
             // Final approval is the fixed graph's last effect. Reconcile only
             // its original address and authenticated, fully settled child tree.
             cancelControlExecution(observation.authority);
-            await cancelArtifactTargetLease(observation.targetAuthority);
+            await cancelArtifactTargetLease(ownedLease(observation));
             if ((await cancelAndSettleOwnedDataOpsChildren(observation)) !== "settled") throw error;
             await owner.repairCommittedCatalogActivation(record.execution);
             recovered = await owner.restoreCompletion(record.execution);
           }
           cancelControlExecution(recovered.authority);
-          await cancelArtifactTargetLease(recovered.lease);
+          if (recovered.lease) await cancelArtifactTargetLease(recovered.lease);
           const context = observation;
           if (
             (await cancelAndSettleOwnedDataOpsChildren(context)) !== "settled" ||
@@ -614,15 +611,7 @@ export function createDataExecutionRuntime(deps: {
           );
           if (!saved) throw new DataExecutionOwnershipLost("Recovery terminal CAS lost");
           await owner.assertOwnedProxyRecoverySettled(record.execution);
-          await settleArtifactTargetLeaseChild(
-            recovered.lease,
-            verifyControlEffectSettlement(owner.installation, record.execution),
-          );
-          if (recovered.lease.mode === "owner") {
-            await releaseArtifactTargetLease(recovered.lease);
-            await owner.publishContainedTerminal(record.execution);
-          } else if (record.input.kind === "generation-hardlinks")
-            await owner.publishContainedTerminal(record.execution);
+          await releaseOwnLease(owner, record.execution, recovered.lease);
         } catch (error) {
           jobChildLogger({ job: "data-execution-recovery", jobId: record.status.id }).warn(
             {
@@ -652,8 +641,9 @@ export function createDataExecutionRuntime(deps: {
             }
           } catch {}
         } finally {
-          if (recovered) closeArtifactTargetLeaseHandle(recovered.lease);
-          if (observation) closeArtifactTargetLeaseHandle(observation.targetAuthority);
+          if (recovered?.lease) closeArtifactTargetLeaseHandle(recovered.lease);
+          if (observation?.targetAuthority)
+            closeArtifactTargetLeaseHandle(observation.targetAuthority);
         }
       }
     },

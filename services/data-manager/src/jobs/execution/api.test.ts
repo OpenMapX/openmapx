@@ -24,21 +24,6 @@ it("keeps observation and mutation routes closed without a durable receiver", as
       url: "/executions",
       payload: { operationKey: "opk1_abcdefghijklmnop", input: { kind: "download-fonts" } },
     },
-    {
-      method: "POST" as const,
-      url: "/executions/generation-hardlinks/recovery",
-      payload: {
-        operationKey: "opk1_abcdefghijklmnop",
-        requestedDeadlineAt: Date.now() + 60000,
-        input: {
-          kind: "generation-hardlinks",
-          revisionId: `cfg1_${"a".repeat(43)}`,
-          planDigest: "a".repeat(64),
-          coordinatorMode: "ensure-running",
-        },
-        plan: { plan: [], prune: true },
-      },
-    },
     { method: "GET" as const, url: `/executions/${id}` },
     { method: "GET" as const, url: "/executions/by-key/opk1_abcdefghijklmnop" },
     {
@@ -46,7 +31,10 @@ it("keeps observation and mutation routes closed without a durable receiver", as
       url: `/executions/${id}/cancel`,
       payload: { operationKey: "opk1_abcdefghijklmnop", fingerprint: "a".repeat(64) },
     },
-    { method: "GET" as const, url: `/executions/configuration-maintenance/${id}` },
+    {
+      method: "GET" as const,
+      url: `/executions/configuration-maintenance/${id}?candidateId=${id}&ownerLeaseId=${id}`,
+    },
   ]) {
     const result = await app.inject({ ...request, headers });
     expect(result.statusCode, result.body).toBe(503);

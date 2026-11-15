@@ -77,7 +77,7 @@ function auth(token: string) {
 describe("ops-agent request boundary", () => {
   it("reports health without privacy backup collector evidence", async () => {
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
     });
     expect((await app.inject({ method: "GET", url: "/health" })).json()).toEqual({ ok: true });
     await app.close();
@@ -86,7 +86,7 @@ describe("ops-agent request boundary", () => {
   it("authenticates and resolves role before operation validation or dispatch", async () => {
     const dispatch = vi.fn();
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourcePolicy: allowAll,
       now: () => new Date(nowIso),
       dispatch,
@@ -113,7 +113,7 @@ describe("ops-agent request boundary", () => {
 
   it("rejects unknown fields, stale/future/duplicate requests, and excessive bodies", async () => {
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourcePolicy: allowAll,
       now: () => new Date(nowIso),
       bodyLimit: 512,
@@ -186,7 +186,7 @@ describe("ops-agent request boundary", () => {
     const events: OpsAuditEvent[] = [];
     const secret = `${apiToken} docker argv http://ops-agent:4300`;
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourcePolicy: allowAll,
       now: () => new Date(nowIso),
       audit: (event) => events.push(event),
@@ -221,11 +221,11 @@ describe("ops-agent request boundary", () => {
   it("requires distinct role credentials and fails closed on resource authorization", async () => {
     expect(() =>
       buildActualOpsAgentServer({
-        tokens: { api: apiToken, "data-manager": apiToken },
+        tokens: { api: apiToken, "data-manager": apiToken, "host-cli": "h".repeat(43) },
       }),
     ).toThrow("distinct");
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourcePolicy: {},
       now: () => new Date(nowIso),
       dispatch: vi.fn(),
@@ -297,7 +297,7 @@ describe("ops-agent lifecycle deadlines", () => {
       },
     });
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourceClaimer: host.claimer,
       controlInstallation: installation,
       now: () => new Date(nowIso),
@@ -359,7 +359,7 @@ describe("ops-agent lifecycle deadlines", () => {
           }),
       );
       const app = await buildOpsAgentServer({
-        tokens: { api: apiToken, "data-manager": dataManagerToken },
+        tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
         resourcePolicy: allowAll,
         now: () => new Date(nowIso),
         dispatch,
@@ -423,7 +423,7 @@ describe("retained execution deadlines", () => {
     let calls = 0;
     const records: import("./journal").PersistedOpsJob[][] = [];
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourcePolicy: allowAll,
       journal: {
         records: () => [],
@@ -509,7 +509,7 @@ describe("retained execution deadlines", () => {
     let signal: AbortSignal | undefined;
     let finish!: (x: unknown) => void;
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourcePolicy: allowAll,
       dispatch: async (_o, _r, c) => {
         signal = c.signal;
@@ -550,7 +550,7 @@ describe("retained execution deadlines", () => {
   it("rejects unsigned wire parent and delegation headers before effects", async () => {
     const dispatch = vi.fn();
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourcePolicy: allowAll,
       now: () => new Date(nowIso),
       dispatch,
@@ -606,7 +606,7 @@ describe("execution identity at the agent boundary", () => {
     let finish!: (x: unknown) => void;
     let execution: import("@openmapx/core/ops").ExecutionRef | undefined;
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourcePolicy: allowAll,
       dispatch: async (_o, _r, c) => {
         execution = c.execution;
@@ -660,7 +660,7 @@ describe("execution identity at the agent boundary", () => {
     let fail!: (x: unknown) => void;
     const snapshots: import("./journal").PersistedOpsJob[][] = [];
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourcePolicy: allowAll,
       now: () => new Date(nowIso),
       journal: {
@@ -719,7 +719,7 @@ it("observer abort leaves the admitted backend running until its real completion
   let backendSignal: AbortSignal | undefined;
   let finish!: (x: unknown) => void;
   const app = await buildOpsAgentServer({
-    tokens: { api: apiToken, "data-manager": dataManagerToken },
+    tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
     resourcePolicy: allowAll,
     now: () => new Date(nowIso),
     dispatch: async (_o, _r, c) => {
@@ -839,7 +839,7 @@ it.each([0, 1])(
     });
     const retained: import("./journal").PersistedOpsJob[][] = [];
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourcePolicy: allowAll,
       runtime,
       journal: {
@@ -925,7 +925,7 @@ describe("ops protocol version", () => {
       maxDurationSeconds: 300,
     };
     const app = await buildOpsAgentServer({
-      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
       resourcePolicy: allowAll,
       now: () => new Date(nowIso),
       dispatch: async () =>
@@ -1015,7 +1015,7 @@ describe("ops protocol version", () => {
 it("refuses cancellation without the execution fingerprint", async () => {
   let finish!: (x: unknown) => void;
   const app = await buildOpsAgentServer({
-    tokens: { api: apiToken, "data-manager": dataManagerToken },
+    tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": "h".repeat(43) },
     resourcePolicy: allowAll,
     now: () => new Date(nowIso),
     dispatch: async () =>

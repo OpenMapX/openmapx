@@ -179,7 +179,7 @@ async function fixture(reader: "selection" | "digest") {
     assertRetained: () => {
       expect(currentConfigurationGeneration(infraDir)).toBe(previous.revisionId);
       // The writer released its lock.
-      expect(existsSync(join(infraDir, CONFIGURATION_DIRECTORY, ".writer"))).toBe(false);
+      expect(existsSync(join(infraDir, CONFIGURATION_DIRECTORY, "writer.lock"))).toBe(false);
       expect(
         readdirSync(join(infraDir, CONFIGURATION_GENERATIONS)).every(
           (name) => !name.startsWith("."),

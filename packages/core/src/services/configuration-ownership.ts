@@ -1,16 +1,15 @@
-import { lstatSync, mkdirSync, rmdirSync, type Stats } from "node:fs";
+import { lstatSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
+import { acquireRecoverableLock, LockBusyError } from "./recoverable-lock";
 
-/** The writer lock, in the agent's state: `state/ops-agent/configuration/.writer`. */
+/** The writer lock, in the agent's state: `state/ops-agent/configuration/writer.lock`. */
 const CONFIGURATION_DIRECTORY = ["state", "ops-agent", "configuration"] as const;
-const LOCK_NAME = ".writer";
-const WAIT_MS = 5_000;
+const LOCK_NAME = "writer.lock";
 
 export class ConfigurationWriterBusyError extends Error {
-  constructor() {
+  constructor(cause?: LockBusyError) {
     super(
-      "Configuration writer is busy: another configuration change is running. Try again when it finishes.",
+      `Configuration writer is busy: another configuration change is running. Try again when it finishes.${cause?.holder ? ` ${cause.message}` : ""}`,
     );
   }
 }
@@ -37,64 +36,12 @@ function assertOwnDirectory(path: string): void {
   }
 }
 
-async function acquireLockDirectory(path: string, signal?: AbortSignal): Promise<() => void> {
-  const deadline = performance.now() + WAIT_MS;
-  for (;;) {
-    signal?.throwIfAborted();
-    if (performance.now() >= deadline) throw new ConfigurationWriterBusyError();
-    try {
-      mkdirSync(path, { mode: 0o700 });
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      let existing: Stats;
-      try {
-        existing = lstatSync(path);
-      } catch (inspectionError) {
-        if ((inspectionError as NodeJS.ErrnoException).code === "ENOENT") continue;
-        throw inspectionError;
-      }
-      if (
-        !existing.isDirectory() ||
-        existing.isSymbolicLink() ||
-        existing.uid !== owner() ||
-        (existing.mode & 0o777) !== 0o700
-      ) {
-        throw new Error("Unsafe configuration writer ownership");
-      }
-      const remaining = deadline - performance.now();
-      if (remaining <= 0) throw new ConfigurationWriterBusyError();
-      await delay(Math.min(25, remaining), undefined, { signal });
-    }
-  }
-  const held = lstatSync(path);
-  let released = false;
-  return () => {
-    if (released) throw new Error("Configuration ownership already released");
-    const current = lstatSync(path);
-    if (
-      current.dev !== held.dev ||
-      current.ino !== held.ino ||
-      !current.isDirectory() ||
-      current.isSymbolicLink()
-    ) {
-      throw new Error("Configuration writer ownership changed");
-    }
-    // No recursive deletion: unexpected contents fail closed.
-    rmdirSync(path);
-    released = true;
-  };
-}
-
 /**
- * POSIX mkdir provides exclusive ownership across CLI and host processes on the
- * same local filesystem. Never remove an existing lock, including after a crash:
- * time, a PID and a failed liveness check are not authority to steal ownership.
- * Recovery requires stopping ALL writers before an operator removes the lock.
- *
- * The lock and everything it guards live in the agent's state directory, which
- * the host CLI shares as the same user; `infra/docker`'s own modes decide
- * nothing.
+ * Exclusive configuration writer for the agent, its helper and the host CLI.
+ * The lock file records its holder, and another writer reclaims it only when
+ * that holder is provably gone; it is never held across a Docker effect.
+ * The lock and everything it guards live in the agent's state directory,
+ * which the host CLI shares as the same user.
  */
 export async function acquireConfigurationOwnership(
   infraDir: string,
@@ -108,5 +55,18 @@ export async function acquireConfigurationOwnership(
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   assertOwnDirectory(state);
   assertOwnDirectory(directory);
-  return acquireLockDirectory(join(directory, LOCK_NAME), signal);
+  try {
+    return await acquireRecoverableLock(join(directory, LOCK_NAME), {
+      purpose: "configuration writer",
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof LockBusyError) throw new ConfigurationWriterBusyError(error);
+    throw error;
+  }
+}
+
+/** The writer lock's path, for the operator exit. */
+export function configurationWriterLockPath(infraDir: string): string {
+  return join(infraDir, ...CONFIGURATION_DIRECTORY, LOCK_NAME);
 }
