@@ -24,6 +24,10 @@
 # Digitransit returns 403 to automated link checkers; the pages work in a browser.
 ^https://digitransit\.fi/en/developers/
 
+# Transitous trip lookups name one service day and answer 404 once it has
+# passed. Fixture provenance records the exact request that was captured.
+^https://api\.transitous\.org/api/v\d+/trip\?
+
 # German federal law portal times out from GitHub-hosted runners on nearly every
 # run; the pages load normally from a browser in Germany.
 ^https://www\.gesetze-im-internet\.de/
