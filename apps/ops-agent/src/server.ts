@@ -2163,7 +2163,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     // A step whose terminal was journaled before its owner record was updated
     // (the agent stopped in between) is recorded now; recording is idempotent.
     for (const job of jobsById.values())
-      if (job.terminalAt !== undefined && !recoveryRequired(job)) recordStepTerminal(job);
+      if (job.terminalAt !== undefined && !recoveryRequired(job) && !recordStepTerminal(job))
+        console.warn("Maintenance step terminal not recorded", job.operationId);
     if (options.controlInstallation) {
       const prune = startControlPrune(options.controlInstallation, {
         onError: (error) => console.warn("Control record prune failed", error),
