@@ -166,7 +166,7 @@ it.each(
         });
         const journal = await openOpsJobJournal(file);
         app = buildOpsAgentServer({
-          tokens: { api: token, "data-manager": "b".repeat(32), "host-cli": "h".repeat(43) },
+          tokens: { api: token, "data-manager": "b".repeat(32) },
           controlInstallation: installation,
           journal,
           dispatch,
@@ -310,7 +310,6 @@ it.each(
           tokens: {
             api: Buffer.alloc(32, 7).toString("base64url"),
             "data-manager": "b".repeat(32),
-            "host-cli": "h".repeat(43),
           },
           controlInstallation: installation,
           journal,
@@ -335,7 +334,6 @@ it.each(
           tokens: {
             api: Buffer.alloc(32, 7).toString("base64url"),
             "data-manager": "b".repeat(32),
-            "host-cli": "h".repeat(43),
           },
           controlInstallation: installation,
           journal: unproved,
@@ -502,7 +500,6 @@ it("repairs a borrowed terminal worker after the actual canonical-digest restart
       tokens: {
         api: Buffer.alloc(32, 7).toString("base64url"),
         "data-manager": "b".repeat(32),
-        "host-cli": "h".repeat(43),
       },
       controlInstallation: installation,
       journal,

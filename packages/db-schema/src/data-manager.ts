@@ -86,8 +86,6 @@ export const configurationFence = dataManager.table(
     operationKey: text("operation_key").notNull().unique(),
     candidateId: uuid("candidate_id").notNull(),
     planDigest: text("plan_digest").notNull(),
-    /** The agent's maintenance lease the fence was prepared for. */
-    ownerLeaseId: uuid("owner_lease_id").notNull(),
     /** The prepare request body, compared on a repeated prepare. */
     input: jsonb("input").notNull(),
     /** "prepared" | "settled" */

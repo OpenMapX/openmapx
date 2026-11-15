@@ -202,7 +202,7 @@ journal.replace = async (records) => {
   if (input.boundary === "terminal") stop(terminal);
 };
 const app = buildOpsAgentServer({
-  tokens: { api: token, "data-manager": "b".repeat(32), "host-cli": "h".repeat(43) },
+  tokens: { api: token, "data-manager": "b".repeat(32) },
   controlInstallation: installation,
   journal,
   resourcePolicy: { allowBackup: () => true, allowGlobal: () => true, allowService: () => true },

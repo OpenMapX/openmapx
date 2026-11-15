@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { dockerCompose } from "../src/lib/docker";
+import { dockerDaemonReachable } from "../src/lib/docker";
 import { leasedHostEffect, withHostTargets } from "../src/lib/host-effect";
 
 vi.mock("../src/lib/docker", async (original) => ({
   ...(await original<typeof import("../src/lib/docker")>()),
-  dockerCompose: vi.fn(),
+  dockerDaemonReachable: vi.fn(),
 }));
 
 let root: string;
@@ -25,14 +25,7 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation((line: string) => {
     errors.push(String(line));
   });
-  // The agent's container is not running, so the CLI writes the store itself.
-  vi.mocked(dockerCompose)
-    .mockReset()
-    .mockResolvedValue({
-      exitCode: 0,
-      stdout: "",
-      stderr: "",
-    } as Awaited<ReturnType<typeof dockerCompose>>);
+  vi.mocked(dockerDaemonReachable).mockReset().mockResolvedValue(true);
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -95,6 +88,43 @@ describe("host effects under a lease", () => {
         throw Error("restore failed");
       }),
     ).rejects.toThrow("restore failed");
+    expect(held()).toEqual([]);
+  });
+
+  it("releases the targets of a command that exited with a failure", async () => {
+    expect(await leasedHostEffect("compose.down", ["alpha"], async () => 1)).toBe(1);
+    expect(held()).toEqual([]);
+  });
+
+  it("keeps the targets of a command killed by a signal, for control resolve", async () => {
+    expect(await leasedHostEffect("services.stop", ["alpha"], async () => 137)).toBe(137);
+    const [lease] = control
+      .openLeaseStore({ directory: control.leaseStoreDirectory(infraDir), purpose: "test" })
+      .list();
+    expect(lease).toMatchObject({
+      targets: ["alpha"],
+      state: "recovery_required",
+      settlement: { outcome: "unknown", publication: "unknown" },
+    });
+    expect(errors.join("\n")).toContain(`control resolve --op ${lease?.owner.operationKey}`);
+  });
+
+  it("keeps the targets of a failure while the Docker daemon cannot be reached", async () => {
+    vi.mocked(dockerDaemonReachable).mockResolvedValue(false);
+    await expect(
+      withHostTargets({ kind: "backup.create", targets: ["postgis"] }, async () => {
+        throw Error("lost the daemon");
+      }),
+    ).rejects.toThrow("lost the daemon");
+    expect(held()).toEqual(["postgis"]);
+  });
+
+  it("leases a service the agent has never seen, such as a community service just installed", async () => {
+    expect(
+      await withHostTargets({ kind: "services.restart", targets: ["community-late"] }, async () =>
+        held(),
+      ),
+    ).toEqual(["community-late"]);
     expect(held()).toEqual([]);
   });
 });

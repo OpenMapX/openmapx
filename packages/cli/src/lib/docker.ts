@@ -1,3 +1,4 @@
+import { constants } from "node:os";
 import { services as coreServices } from "@openmapx/core/server";
 import { execa } from "execa";
 import { cliProcessOptions } from "./execution-deadline";
@@ -46,7 +47,19 @@ export async function dockerComposeStream(args: string[]): Promise<number> {
     reject: false,
   });
   const result = await sub;
-  return result.exitCode ?? 0;
+  // A command killed by a signal reports 128 plus the signal's number, as a shell does.
+  if (result.signal) return 128 + (constants.signals[result.signal] ?? 0);
+  return result.exitCode ?? 1;
+}
+
+/** Whether the Docker daemon answers, to tell a failed command from a lost connection. */
+export async function dockerDaemonReachable(): Promise<boolean> {
+  const result = await execa("docker", ["info", "--format", "{{.ID}}"], {
+    ...cliProcessOptions(),
+    reject: false,
+    timeout: 15_000,
+  });
+  return result.exitCode === 0;
 }
 
 /**

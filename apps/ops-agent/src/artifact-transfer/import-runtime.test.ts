@@ -71,7 +71,7 @@ async function fixture() {
       resourceClaimer: host.claimer,
       controlInstallation: installation,
       artifactTransfers: store,
-      tokens: { api: host.token, "data-manager": "d".repeat(43), "host-cli": "h".repeat(43) },
+      tokens: { api: host.token, "data-manager": "d".repeat(43) },
     });
   let lose = false;
   app.addHook("onSend", async (request, reply, payload) => {
@@ -473,7 +473,7 @@ it("reconciles the original prepared publication after exact foreign-inode repai
       resourceClaimer: f.createResourceClaimer(runtime),
       controlInstallation: installation,
       artifactTransfers: store,
-      tokens: { api: f.token, "data-manager": "d".repeat(43), "host-cli": "h".repeat(43) },
+      tokens: { api: f.token, "data-manager": "d".repeat(43) },
     });
   cleanups.push(() => app.close());
   const freshClient = new OpsClient({
@@ -678,7 +678,7 @@ async function reassembleCommittedFixture(f: Awaited<ReturnType<typeof fixture>>
       resourceClaimer: f.createResourceClaimer(runtime),
       controlInstallation: installation,
       artifactTransfers: store,
-      tokens: { api: f.token, "data-manager": "d".repeat(43), "host-cli": "h".repeat(43) },
+      tokens: { api: f.token, "data-manager": "d".repeat(43) },
     });
   cleanups.push(() => app.close());
   const freshClient = new OpsClient({

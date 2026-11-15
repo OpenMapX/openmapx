@@ -794,7 +794,6 @@ it.each([false, true])(
       tokens: {
         api: token,
         "data-manager": Buffer.alloc(32, 8).toString("base64url"),
-        "host-cli": "h".repeat(43),
       },
       journal,
       controlInstallation: installation,
@@ -860,7 +859,6 @@ it.each([false, true])(
         tokens: {
           api: token,
           "data-manager": Buffer.alloc(32, 8).toString("base64url"),
-          "host-cli": "h".repeat(43),
         },
         journal: reloaded,
         controlInstallation: installation,

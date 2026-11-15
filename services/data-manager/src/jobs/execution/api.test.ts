@@ -33,7 +33,7 @@ it("keeps observation and mutation routes closed without a durable receiver", as
     },
     {
       method: "GET" as const,
-      url: `/executions/configuration-maintenance/${id}?candidateId=${id}&ownerLeaseId=${id}`,
+      url: `/executions/configuration-maintenance/${id}?candidateId=${id}`,
     },
   ]) {
     const result = await app.inject({ ...request, headers });

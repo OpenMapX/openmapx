@@ -3,6 +3,7 @@ import { lstatSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { canonicalJson } from "../ops/canonical-json";
+import { opsBusyHolderMessage } from "../ops/contract";
 import type { ExecutionRef } from "../ops/execution-ref";
 import {
   type LeaseChild,
@@ -46,7 +47,13 @@ export class TargetBusyError extends Error {
     readonly holder: Pick<LeaseRecord, "leaseId" | "owner" | "ownerKind" | "state">,
   ) {
     super(
-      `Target lease busy: ${target} is held by ${holder.owner.executor} operation ${holder.owner.operationKey} (${holder.ownerKind}, ${holder.state}). See \`openmapx control status\`.`,
+      opsBusyHolderMessage({
+        target,
+        executor: holder.owner.executor,
+        operationKey: holder.owner.operationKey,
+        ownerKind: holder.ownerKind,
+        state: holder.state,
+      }),
     );
   }
 }
@@ -162,6 +169,23 @@ export function admitLease(
   };
   leases.push(record);
   return record;
+}
+
+/**
+ * Drops a lease whose owner never recorded its attempt, so nothing ran under
+ * it. A lease that already has children is left for its owner.
+ */
+export async function abandonUnstartedLease(
+  store: LeaseStore,
+  leaseId: string,
+  owner: ExecutionRef,
+): Promise<void> {
+  await store.update((leases) => {
+    const index = leases.findIndex((lease) => lease.leaseId === leaseId);
+    const lease = leases[index];
+    if (lease && sameExecution(lease.owner, owner) && lease.children.length === 0)
+      leases.splice(index, 1);
+  });
 }
 
 /** Whether the owner, or the child `key`, and every ancestor may still begin effects. */

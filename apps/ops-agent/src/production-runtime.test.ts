@@ -190,7 +190,6 @@ describe("assembled production service authority", () => {
       tokens: {
         api: host.token,
         "data-manager": Buffer.alloc(32, 23).toString("base64url"),
-        "host-cli": "h".repeat(43),
       },
       runtime: host.runtime,
       resourceClaimer: host.claimer,
@@ -312,7 +311,6 @@ describe("assembled production service authority", () => {
         tokens: {
           api: host.token,
           "data-manager": Buffer.alloc(32, 23).toString("base64url"),
-          "host-cli": "h".repeat(43),
         },
         runtime: host.runtime,
         resourceClaimer: host.claimer,
@@ -429,7 +427,6 @@ describe("assembled production service authority", () => {
       tokens: {
         api: host.token,
         "data-manager": Buffer.alloc(32, 23).toString("base64url"),
-        "host-cli": "h".repeat(43),
       },
       runtime: host.runtime,
       resourceClaimer: host.claimer,
@@ -618,7 +615,7 @@ describe("assembled production service authority", () => {
     const api = Buffer.alloc(32, 31).toString("base64url"),
       dm = Buffer.alloc(32, 32).toString("base64url");
     const app = buildOpsAgentServer({
-      tokens: { api, "data-manager": dm, "host-cli": "h".repeat(43) },
+      tokens: { api, "data-manager": dm },
       runtime: host.runtime,
       resourceClaimer: host.claimer,
     });

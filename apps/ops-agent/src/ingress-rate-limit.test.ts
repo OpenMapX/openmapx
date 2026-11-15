@@ -91,7 +91,6 @@ it("shares the actual server ingress budget across operations and artifact route
         return "a".repeat(43);
       },
       "data-manager": "b".repeat(43),
-      "host-cli": "h".repeat(43),
     },
     artifactTransfers: store,
   });

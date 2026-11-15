@@ -83,7 +83,7 @@ describe("production core restart workflow", () => {
       });
       const journal = await openOpsJobJournal(services.agentStatePaths(host.infraDir).journal);
       const app = buildOpsAgentServer({
-        tokens: { api: host.token, "data-manager": "d".repeat(32), "host-cli": "h".repeat(43) },
+        tokens: { api: host.token, "data-manager": "d".repeat(32) },
         runtime,
         resourceClaimer: host.claimer,
         journal,

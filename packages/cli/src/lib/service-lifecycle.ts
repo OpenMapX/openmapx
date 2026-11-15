@@ -176,7 +176,6 @@ export async function runCliServiceLifecycle(options: {
       infraDir: paths.infraDir,
       role: "host-cli",
       serviceIds: targets,
-      leases: (await import("./host-leases")).hostCliLeases(paths.infraDir),
     });
   if (!inherited) await pruneHostControlRecords(installation);
   const admittedAt = Date.now(),

@@ -249,7 +249,7 @@ it.skipIf(
       runtime: host.runtime,
       journal: agentJournal,
       controlInstallation: agentInstallation,
-      tokens: { api: token, "data-manager": "d".repeat(43), "host-cli": "h".repeat(43) },
+      tokens: { api: token, "data-manager": "d".repeat(43) },
       resourceClaimer: createProductionRegistryResourceClaimer({
         services: host.loaded.map((s) => ({
           serviceId: s.manifest.id,

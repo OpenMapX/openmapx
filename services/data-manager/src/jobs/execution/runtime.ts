@@ -14,6 +14,8 @@ import {
   restoreArtifactTargetLeaseForSettlement,
   retainAdmittedControlExecution,
   settleArtifactTargetLeaseChild,
+  settleOwnLeaseChild,
+  TargetBusyError,
   type VerifiedExecutionAuthority,
   type VerifiedPreparedGenerationAdmission,
   verifyControlEffectSettlement,
@@ -26,7 +28,11 @@ import {
   dataExecutionResultSchema,
   isDataExecutionTerminal,
 } from "@openmapx/core/data-manager-contracts";
-import type { ExecutionRef, VerifiedParentExecution } from "@openmapx/core/ops";
+import {
+  type ExecutionRef,
+  OpsClientError,
+  type VerifiedParentExecution,
+} from "@openmapx/core/ops";
 import { jobChildLogger } from "../../logger.js";
 import { cancelAndSettleRetainedTransitousScripts } from "../transitous/script-runner.js";
 import { dataExecutionDiagnostic } from "./diagnostics.js";
@@ -90,7 +96,8 @@ export interface DataExecutionRuntime {
   close(): Promise<void>;
 }
 /** Settles and releases the execution's own lease after its terminal record,
- * then records the terminal for later steps that build on it. */
+ * or, for a hardlink leaf, settles its child in the issuer's lease; then
+ * records the terminal for later steps that build on it. */
 async function releaseOwnLease(
   journal: {
     installation: ControlInstallation;
@@ -105,7 +112,7 @@ async function releaseOwnLease(
       verifyControlEffectSettlement(journal.installation, execution),
     );
     await releaseArtifactTargetLease(lease);
-  }
+  } else await settleOwnLeaseChild(journal.installation, execution);
   await journal.recordContainedTerminal(execution);
 }
 export function dataExecutionTargetIds(input: DataExecutionInput): string[] {
@@ -267,11 +274,20 @@ export function createDataExecutionRuntime(deps: {
       if (hardlinkPlan === undefined) throw Error("Durable generation plan required");
       await owner.retainHardlinksPlan(authority, hardlinkPlan);
     }
-    await owner.begin(authority);
     // A hardlink leaf runs under the lease of the agent or host CLI that issued it.
-    const lease = leaf
-      ? undefined
-      : await acquireArtifactTargetLease({ serviceIds: targets, owner: authority });
+    // Other executions claim their targets first: a held target, or an agent
+    // that cannot answer, ends the execution as failed before any effect, with
+    // its publication unchanged.
+    let lease: ArtifactTargetLease | undefined;
+    let refusal: unknown;
+    if (!leaf)
+      try {
+        lease = await acquireArtifactTargetLease({ serviceIds: targets, owner: authority });
+      } catch (error) {
+        if (!(error instanceof TargetBusyError || error instanceof OpsClientError)) throw error;
+        refusal = error;
+      }
+    await owner.begin(authority);
     const controller = new AbortController();
     let entry: LiveEntry;
     const context: DataExecutionContext = {
@@ -360,6 +376,7 @@ export function createDataExecutionRuntime(deps: {
           authority,
           Promise.resolve()
             .then(() => {
+              if (refusal) throw refusal;
               context.assertForward();
               return withDataExecutionScope(context, () => deps.dispatch(record.input, context));
             })
@@ -437,7 +454,8 @@ export function createDataExecutionRuntime(deps: {
         });
         if (isDataExecutionTerminal(entry.record.status)) {
           await owner.assertOwnedProxyRecoverySettled(record.execution);
-          await releaseOwnLease(owner, record.execution, lease);
+          if (!refusal) await releaseOwnLease(owner, record.execution, lease);
+          else await owner.recordContainedTerminal(record.execution);
         }
       } catch (error) {
         // An I/O/CAS/containment gap is not a terminal receipt or permission to

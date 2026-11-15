@@ -39,6 +39,18 @@ const containedProcessFailures = new WeakSet<object>();
 export function isContainedProcessFailure(error: unknown): boolean {
   return typeof error === "object" && error !== null && containedProcessFailures.has(error);
 }
+const reportedProcessFailures = new WeakSet<object>();
+/** A Docker client cut off from the daemon cannot say how far its command got. */
+const LOST_DAEMON =
+  /Cannot connect to the Docker daemon|error during connect|connection reset by peer/i;
+/**
+ * A command that ran to its own end and reported a failure with an exit code:
+ * not killed, timed out or cancelled, nothing left running, and the Docker
+ * daemon still answered it. Its outcome is known even though it failed.
+ */
+export function isReportedProcessFailure(error: unknown): boolean {
+  return typeof error === "object" && error !== null && reportedProcessFailures.has(error);
+}
 
 import { openAnchoredDirectory } from "./anchored-directory";
 import type { PersistedOpsJob } from "./journal";
@@ -183,7 +195,17 @@ export async function runContainedStreamingProcess(
       exit.signal !== null
     ) {
       const error = new OpsExecutionFailure(timedOut ? "timeout" : "runtime", { diagnostics });
-      if (!exit.residualDescendants && !exit.containmentFailed) containedProcessFailures.add(error);
+      if (!exit.residualDescendants && !exit.containmentFailed) {
+        containedProcessFailures.add(error);
+        if (
+          !timedOut &&
+          !options.signal.aborted &&
+          !exit.spawnFailed &&
+          exit.signal === null &&
+          !diagnostics.tail.some((line) => LOST_DAEMON.test(line.message))
+        )
+          reportedProcessFailures.add(error);
+      }
       throw error;
     }
     return diagnostics;

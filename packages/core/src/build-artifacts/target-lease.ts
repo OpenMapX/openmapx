@@ -135,6 +135,8 @@ export interface LeaseBackend {
   }): Promise<LeaseRecord>;
   cancel(input: { leaseId: string; key: string | null }): Promise<LeaseRecord | undefined>;
   release(input: { leaseId: string }): Promise<void>;
+  /** Settles the data-manager child named by the settlement's identity, if it is still held. */
+  settleChild(settlement: LeaseSettlement): Promise<LeaseRecord | undefined>;
 }
 
 const MAX_DESCENDANTS = 64;
@@ -243,6 +245,28 @@ export const leaseRules = {
     node.state = knownSettlement(input.settlement) ? "settled" : "recovery_required";
     return lease;
   },
+  /**
+   * Data-manager reports the outcome of a child it ran under another role's
+   * lease. The child is found by its identity; an outcome already recorded with
+   * the same result is kept, and a released lease leaves nothing to settle.
+   */
+  settleChild(leases: LeaseRecord[], settlement: LeaseSettlement) {
+    for (const lease of leases) {
+      const child = lease.children.find(
+        (value) =>
+          value.recipient === "data-manager" && sameExecution(value.execution, settlement.identity),
+      );
+      if (!child) continue;
+      if (
+        child.state === "settled" &&
+        child.settlement?.outcome === settlement.outcome &&
+        child.settlement.publication === settlement.publication
+      )
+        return lease;
+      return leaseRules.settle(leases, { leaseId: lease.leaseId, key: child.key, settlement });
+    }
+    return undefined;
+  },
   cancel(leases: LeaseRecord[], input: Parameters<LeaseBackend["cancel"]>[0]) {
     const lease = leases.find((value) => value.leaseId === input.leaseId);
     if (!lease) return undefined;
@@ -275,6 +299,8 @@ export function localLeaseBackend(store: LeaseStore, now: () => number = Date.no
     settle: (input) => store.update((leases) => leaseRules.settle(leases, input)),
     cancel: (input) => store.update((leases) => leaseRules.cancel(leases, input)),
     release: (input) => store.update((leases) => leaseRules.release(leases, input)),
+    settleChild: (settlement) =>
+      store.update((leases) => leaseRules.settleChild(leases, settlement)),
   };
 }
 
@@ -423,6 +449,28 @@ export function verifyFiniteControlEdge(
   throw Error("Unauthorized finite control edge");
 }
 
+/**
+ * Acquires the root lease of `owner`, or returns the one it already holds. A
+ * holder that is finishing gets five seconds to release, within the deadline;
+ * after that a held target refuses with the holder named.
+ */
+export async function admitRootLease(
+  backend: Pick<LeaseBackend, "acquire">,
+  input: Parameters<LeaseBackend["acquire"]>[0],
+  signal?: AbortSignal,
+): Promise<LeaseRecord> {
+  const until = Math.min(Date.now() + 5000, input.owner.deadlineAt);
+  for (;;) {
+    try {
+      return await backend.acquire(input);
+    } catch (error) {
+      if (!(error instanceof TargetBusyError) || Date.now() >= until) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      signal?.throwIfAborted();
+    }
+  }
+}
+
 export async function acquireArtifactTargetLease(options: {
   serviceIds: readonly string[];
   owner: VerifiedExecutionAuthority;
@@ -447,23 +495,11 @@ export async function acquireArtifactTargetLease(options: {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
-  // A holder that is finishing gets five seconds to release, within the deadline.
-  const until = Math.min(Date.now() + 5000, authority.execution.deadlineAt);
-  let record: LeaseRecord;
-  for (;;) {
-    try {
-      record = await authority.installation.leases.acquire({
-        owner: authority.execution,
-        ownerKind: authority.kind,
-        targets: serviceIds,
-      });
-      break;
-    } catch (error) {
-      if (!(error instanceof TargetBusyError) || Date.now() >= until) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      options.signal?.throwIfAborted();
-    }
-  }
+  const record = await admitRootLease(
+    authority.installation.leases,
+    { owner: authority.execution, ownerKind: authority.kind, targets: serviceIds },
+    options.signal,
+  );
   // The lease is recorded before this owner's private reference to it, so an
   // owner that dies in between leaves a held lease that is still visible.
   writePrivateRecord(
@@ -1210,6 +1246,21 @@ export async function settleDataManagerLeaseChild(
     publication: status.publication,
     terminalReceiptDigest: observed.terminalDigest,
   });
+}
+/**
+ * Data-manager reports the known outcome of a hardlink child it ran under the
+ * agent's or the host CLI's lease, from its own effect settlement. It does so
+ * after its terminal, at startup repair and in recovery, so a known outcome is
+ * recorded even when the issuer's own observation was interrupted.
+ */
+export async function settleOwnLeaseChild(
+  installation: import("./control-authority").ControlInstallation,
+  execution: ExecutionRef,
+): Promise<void> {
+  const settlement = childSettlementState(
+    verifyControlEffectSettlement(installation, execution),
+  ).evidence;
+  await installationState(installation).leases.settleChild(settlement);
 }
 /**
  * Settles the child `execution` this lease node issued, from the answer its

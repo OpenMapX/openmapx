@@ -66,7 +66,7 @@ it.each(["succeeded", "canceled"] as const)(
       runtime,
       journal,
       controlInstallation: installation,
-      tokens: { api: "a".repeat(43), "data-manager": token, "host-cli": "h".repeat(43) },
+      tokens: { api: "a".repeat(43), "data-manager": token },
       resourceClaimer: createProductionRegistryResourceClaimer({
         services: [{ serviceId: "valhalla", enabled: true, isBuiltIn: true }],
         integrationIds: [],

@@ -67,7 +67,7 @@ const holderSchema = leaseRecordSchema.pick({
   state: true,
 });
 
-/** What data-manager and the host CLI ask the agent to do with their leases. */
+/** What data-manager asks the agent to do with its leases, and with the children it runs. */
 export const leaseOperationSchemas = [
   z.strictObject({
     kind: z.literal("lease.acquire"),
@@ -90,6 +90,8 @@ export const leaseOperationSchemas = [
       z.strictObject({ action: z.literal("release") }),
     ]),
   }),
+  /** Data-manager reports the known outcome of a child it ran under another's lease. */
+  z.strictObject({ kind: z.literal("lease.settleChild"), settlement: leaseSettlementSchema }),
 ] as const;
 export const leaseResultSchemas = {
   "lease.acquire": z.discriminatedUnion("outcome", [
@@ -98,4 +100,5 @@ export const leaseResultSchemas = {
   ]),
   "lease.read": z.strictObject({ lease: leaseRecordSchema.nullable() }),
   "lease.update": z.strictObject({ lease: leaseRecordSchema.nullable() }),
+  "lease.settleChild": z.strictObject({ lease: leaseRecordSchema.nullable() }),
 } as const;

@@ -76,7 +76,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         tokens: {
           api: state.host.token,
           "data-manager": "b".repeat(43),
-          "host-cli": "h".repeat(43),
         },
         runtime: state.host.runtime,
         resourceClaimer: state.host.claimer,

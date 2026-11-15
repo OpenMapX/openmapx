@@ -391,7 +391,7 @@ it("uses actual server job state when excluding a live log observer from drain",
     release = Promise.withResolvers<void>(),
     checked = Promise.withResolvers<number>();
   const app = buildOpsAgentServer({
-    tokens: { api, "data-manager": dm, "host-cli": "h".repeat(43) },
+    tokens: { api, "data-manager": dm },
     resourcePolicy: { allowGlobal: () => true, allowService: () => true },
     dispatch: async (operation, _runtime, context) => {
       if (operation.kind === "service.logs.follow") {

@@ -1446,6 +1446,17 @@ const effectObservationSchema = z.discriminatedUnion("kind", [
   }),
   z.strictObject({ kind: z.literal("not-started") }),
   z.strictObject({ kind: z.literal("unresolved") }),
+  z.strictObject({ kind: z.literal("reported-failure") }),
+]);
+/** Leased Docker effects whose command reports its failure: it ran to its end, so its outcome is known. */
+const REPORTED_FAILURE_KINDS = new Set([
+  "service.stop",
+  "service.restart",
+  "service.remove",
+  "stack.stop",
+  "serviceRepository.remove",
+  "backup.create",
+  "backup.restore",
 ]);
 /** No fence exists for this maintenance owner: its fence child was never
  * issued, or the data-manager settled it without effect (a refusal, or the
@@ -1894,6 +1905,11 @@ export function retainControlEffectReceipt(
         outcome = "committed";
         publication = "committed";
       }
+    } else if (receipt.kind === "reported-failure") {
+      if (!REPORTED_FAILURE_KINDS.has(s.kind) || s.installation.installation.role !== "ops-agent")
+        throw Error("Only a leased agent Docker effect reports its own failure");
+      outcome = "contained";
+      publication = "committed";
     } else if (receipt.kind === "feed-proxy-validation-failure") {
       if (
         s.kind !== "feedProxy.validateAndReload" ||

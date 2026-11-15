@@ -334,7 +334,6 @@ function inspectOwnedFence(owner: ConfigurationMaintenanceOwnerRecord, signal?: 
   return inspectDataConfigurationFence(owner.plan.operation.maintenanceId, {
     transport: configurationDataManagerTransport(),
     candidateId: owner.plan.operation.candidateId,
-    ownerLeaseId: owner.leaseId,
     signal,
   });
 }
@@ -3606,6 +3605,12 @@ export function registerConfigurationMaintenanceSource(runtime: OpsRuntime, sour
           ordinal: reserved.ordinal,
           lease,
           childPublicKey: controlRolePublicKey(state.installation.installation, "data-manager"),
+          // What an operator's `openmapx control resolve` needs to settle the fence.
+          evidence: {
+            maintenanceId: plan.dmPrepare.maintenanceId,
+            candidateId: plan.dmPrepare.candidateId,
+            planDigest: plan.dmPrepare.planDigest,
+          },
         });
         consumeControlChildDispatch(issued.dispatchTicket);
         assertion = issued.assertion;

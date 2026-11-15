@@ -4,6 +4,7 @@ import { open } from "node:fs/promises";
 import type { ArtifactStageClaim, TransferStage } from "./artifact-transfer";
 import { type ArtifactStageStreamInput, withArtifactStream } from "./artifact-transfer-client";
 import {
+  isOpsBusyHolderMessage,
   OPS_KIND_POLICIES,
   OPS_MAX_HTTP_RESPONSE_BYTES,
   OPS_MAX_REQUEST_TTL_MS,
@@ -194,12 +195,26 @@ function parseResponse(raw: string, requestId: string, status: number): OpsRespo
     Array.isArray(error) ||
     !exactKeys(error as Record<string, unknown>, ["class", "message"]) ||
     !ERROR_CLASSES.has((error as { class?: OpsErrorClass }).class as OpsErrorClass) ||
-    (error as { message?: unknown }).message !==
-      OPS_PUBLIC_ERROR_MESSAGES[(error as { class: OpsErrorClass }).class]
+    ((error as { message?: unknown }).message !==
+      OPS_PUBLIC_ERROR_MESSAGES[(error as { class: OpsErrorClass }).class] &&
+      !(
+        (error as { class: OpsErrorClass }).class === "busy" &&
+        isOpsBusyHolderMessage((error as { message?: unknown }).message)
+      ))
   ) {
     throw new OpsClientError("runtime", status);
   }
   return envelope as unknown as OpsResponseEnvelope;
+}
+
+/** The client error for a refused request; a busy refusal names the holding operation. */
+function opsEnvelopeError(
+  error: { class: OpsErrorClass; message: string },
+  status: number,
+): OpsClientError {
+  const failure = new OpsClientError(error.class, status);
+  if (isOpsBusyHolderMessage(error.message)) failure.message = error.message;
+  return failure;
 }
 
 export interface OpsClientOptions {
@@ -353,7 +368,7 @@ export class OpsClient {
         requestId,
         response.status,
       );
-      if (!envelope.ok) throw new OpsClientError(envelope.error.class, response.status);
+      if (!envelope.ok) throw opsEnvelopeError(envelope.error, response.status);
       if (!response.ok) throw new OpsClientError("runtime", response.status);
       return envelope.result;
     } catch (error) {
@@ -567,7 +582,7 @@ export class OpsClient {
         requestId,
         response.status,
       );
-      if (!envelope.ok) throw new OpsClientError(envelope.error.class, response.status);
+      if (!envelope.ok) throw opsEnvelopeError(envelope.error, response.status);
       if (!response.ok) throw new OpsClientError("runtime", response.status);
       const result = envelope.result;
       if (!result || typeof result !== "object" || Array.isArray(result)) {

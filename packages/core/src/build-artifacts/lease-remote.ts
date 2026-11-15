@@ -5,7 +5,7 @@ import type { LeaseBackend } from "./target-lease";
 
 export type LeaseOperation = Extract<
   OpsOperation,
-  { kind: "lease.acquire" | "lease.read" | "lease.update" }
+  { kind: "lease.acquire" | "lease.read" | "lease.update" | "lease.settleChild" }
 >;
 /** Sends one lease operation to the agent and returns its typed result. */
 export type LeaseSender = (operation: LeaseOperation) => Promise<unknown>;
@@ -19,9 +19,9 @@ export function opsClientLeaseSender(client: OpsClient | (() => OpsClient)): Lea
 }
 
 /**
- * Leases through the agent, for data-manager and the host CLI. Every call is a
- * typed agent operation under the caller's own token; the agent applies the
- * same rules as to its own leases and refuses another principal's.
+ * Leases through the agent, for data-manager. Every call is a typed agent
+ * operation under data-manager's own token; the agent applies the same rules
+ * as to its own leases and refuses another principal's.
  */
 export function remoteLeaseBackend(send: LeaseSender): LeaseBackend {
   async function run<K extends LeaseOperation["kind"]>(
@@ -70,5 +70,7 @@ export function remoteLeaseBackend(send: LeaseSender): LeaseBackend {
     release: async (input) => {
       await update(input.leaseId, { action: "release" });
     },
+    settleChild: async (settlement) =>
+      (await run({ kind: "lease.settleChild", settlement })).lease ?? undefined,
   };
 }

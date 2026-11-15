@@ -40,7 +40,6 @@ export type ConfigurationPrepareNonAdmission = z.infer<
 >;
 export const dataConfigurationFenceInspectQuerySchema = z.strictObject({
   candidateId: z.uuid(),
-  ownerLeaseId: z.uuid(),
 });
 export const dataConfigurationFenceReceiptSchema = z.strictObject({
   ...binding,

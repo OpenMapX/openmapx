@@ -1126,7 +1126,7 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
         control.recordOpsControlTerminalObservation(dm, bound.execution, status);
         expect(control.readOpsControlTerminalObservation(dm, bound.execution).state).toBe("failed");
         await expect(
-          await control.inspectArtifactTargetLeaseChildSettlement(lease, bound.execution),
+          control.inspectArtifactTargetLeaseChildSettlement(lease, bound.execution),
         ).resolves.toMatchObject({ outcome: "contained", publication: "not_started" });
         const repaired = JSON.parse(readFileSync(terminalPath, "utf8")).payload;
         expect(repaired.terminalDigest).toBe(originalTerminal.terminalDigest);

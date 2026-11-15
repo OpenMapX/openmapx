@@ -126,7 +126,6 @@ it("production bootstrap retains health and observation when the release store i
         tokens: {
           api: token,
           "data-manager": Buffer.alloc(32, 2).toString("base64url"),
-          "host-cli": "h".repeat(43),
         },
         resourcePolicy: { allowGlobal: () => true, allowService: () => true },
         journal: { records: () => [retained], replace: async () => undefined },

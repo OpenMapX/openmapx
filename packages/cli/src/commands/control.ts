@@ -2,15 +2,13 @@ import { createHash } from "node:crypto";
 import { closeSync, fsyncSync, openSync, readFileSync, writeSync } from "node:fs";
 import { basename, join } from "node:path";
 import {
-  type LeaseOperation,
   type LeaseRecord,
   leaseStoreDirectory,
   openLeaseStore,
 } from "@openmapx/core/build-artifacts";
-import { canonicalJson, OpsClient, opsOperationSchema } from "@openmapx/core/ops";
+import { canonicalJson } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import type { Command } from "commander";
-import { runsInAgent } from "../lib/agent-integrations";
 import { completeCliCommand } from "../lib/control-context";
 import { settleMaintenanceFence } from "../lib/control-resolve";
 import { dockerCompose } from "../lib/docker";
@@ -83,6 +81,38 @@ function findLease(operationKey: string): LeaseRecord {
     );
   if (!lease) throw new Error(`No lease names operation ${operationKey}`);
   return lease;
+}
+
+/**
+ * A maintenance root an operator cleared, from the audit file: its fence can
+ * still be settled with `control resolve`.
+ */
+function clearedMaintenance(operationKey: string): LeaseRecord | undefined {
+  let lines: string[];
+  try {
+    lines = readFileSync(
+      join(leaseStoreDirectory(repoPaths().infraDir), "control-audit.jsonl"),
+      "utf8",
+    ).split("\n");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+  for (const line of lines.reverse()) {
+    if (!line) continue;
+    const entry = JSON.parse(line) as { action?: string; lease?: LeaseRecord | null };
+    if (
+      entry.action === "clear" &&
+      entry.lease?.owner.operationKey === operationKey &&
+      entry.lease.ownerKind === "configurationMaintenance.prepare"
+    )
+      return entry.lease;
+  }
+  return undefined;
+}
+
+function hasFence(lease: LeaseRecord): boolean {
+  return lease.children.some((child) => child.phase === "configuration-fence");
 }
 
 function readJournal(): {
@@ -170,6 +200,10 @@ export function registerControlCommands(program: Command): void {
         return index < 0 ? undefined : leases.splice(index, 1)[0];
       });
       audit({ action: "clear", operationKey: options.op, lease: removed ?? null });
+      if (lease.ownerKind === "configurationMaintenance.prepare" && hasFence(lease))
+        log.warn(
+          `The data-manager's configuration fence of this maintenance stays prepared and keeps refusing data jobs until \`openmapx control resolve --op ${lease.owner.operationKey} --as committed|failed\` settles it.`,
+        );
       completeCliCommand(0);
     });
 
@@ -181,7 +215,12 @@ export function registerControlCommands(program: Command): void {
     .action(async (options: { op: string; as: string }) => {
       if (options.as !== "committed" && options.as !== "failed")
         throw new Error("--as must be committed or failed");
-      const lease = findLease(options.op);
+      const cleared = store()
+        .list()
+        .some((value) => value.owner.operationKey === options.op)
+        ? undefined
+        : clearedMaintenance(options.op);
+      const lease = cleared ?? findLease(options.op);
       if (lease.owner.operationKey !== options.op)
         throw new Error("Resolve the operation that owns the lease");
       for (const line of describe(lease)) log.info(line);
@@ -189,7 +228,7 @@ export function registerControlCommands(program: Command): void {
       // A maintenance root also holds the data-manager fence; the same idempotent
       // settle the agent uses releases it.
       if (lease.ownerKind === "configurationMaintenance.prepare")
-        await settleMaintenanceFence(repoPaths().infraDir, lease, options.as);
+        await settleMaintenanceFence(lease, options.as);
       const outcome: "committed" | "contained" =
         options.as === "committed" ? "committed" : "contained";
       const evidence = (identity: LeaseRecord["owner"]) => ({
@@ -221,20 +260,4 @@ export function registerControlCommands(program: Command): void {
       audit({ action: "resolve", operationKey: options.op, as: options.as, lease });
       completeCliCommand(0);
     });
-
-  // The host CLI's transport to the agent: run as the fixed CLI in the agent's
-  // container, with the host-CLI token the agent created.
-  control.command("lease <request>", { hidden: true }).action(async (request: string) => {
-    if (!runsInAgent()) throw new Error("Runs only in the operations agent's container");
-    const operation = opsOperationSchema.parse(JSON.parse(request)) as LeaseOperation;
-    if (!operation.kind.startsWith("lease.")) throw new Error("Lease operations only");
-    const client = new OpsClient({
-      baseUrl: `http://127.0.0.1:${process.env.PORT?.trim() || "4300"}`,
-      tokenFile: services.hostCliTokenPath(repoPaths().infraDir),
-    });
-    const submitted = await client.execute(operation);
-    if (submitted.execution !== "sync") throw new Error("Lease operations answer at once");
-    process.stdout.write(`${JSON.stringify(submitted.value)}\n`);
-    completeCliCommand(0);
-  });
 }

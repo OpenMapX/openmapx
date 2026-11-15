@@ -45,13 +45,12 @@ export async function inspectDataConfigurationFence(
   options: {
     transport: DataManagerTransport;
     candidateId: string;
-    ownerLeaseId: string;
     signal?: AbortSignal;
   },
 ): Promise<DataConfigurationFenceReceipt> {
   const result = await sdk.inspectDataConfigurationFence(
     maintenanceId,
-    { candidateId: options.candidateId, ownerLeaseId: options.ownerLeaseId },
+    { candidateId: options.candidateId },
     { transport: options.transport, signal: options.signal },
   );
   return dataConfigurationFenceReceiptSchema.parse(unwrapDataManagerResponse(result));
@@ -70,15 +69,18 @@ export async function recoverUnadmittedDataConfigurationFence(
   );
   return configurationPrepareNonAdmissionSchema.parse(unwrapDataManagerResponse(result));
 }
+/** Without a control assertion the request is the operator's resolution, sent with the host CLI's token. */
 export async function settleDataConfigurationFence(
   input: DataConfigurationFenceSettle,
-  options: ControlOptions,
+  options: Omit<ControlOptions, "controlAssertion"> & { controlAssertion?: string },
 ): Promise<DataConfigurationFenceReceipt> {
   const body = boundedBody(dataConfigurationFenceSettleSchema.parse(input));
   const result = await sdk.settleDataConfigurationFence(body.maintenanceId, body, {
     transport: options.transport,
     signal: options.signal,
-    headers: { "x-openmapx-control-delegation": boundedHeader(options.controlAssertion) },
+    ...(options.controlAssertion === undefined
+      ? {}
+      : { headers: { "x-openmapx-control-delegation": boundedHeader(options.controlAssertion) } }),
   });
   return dataConfigurationFenceReceiptSchema.parse(unwrapDataManagerResponse(result));
 }

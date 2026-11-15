@@ -344,8 +344,8 @@ describe.skipIf(
         }
       }
       // A fence row for the same maintenance means the preparation was admitted.
-      await f.sql`INSERT INTO data_manager.configuration_fence(maintenance_id,fence_id,operation_key,candidate_id,plan_digest,owner_lease_id,input,state)
-        VALUES(${f.input.maintenanceId},${randomUUID()},${`opk1_${randomUUID().replaceAll("-", "")}`},${f.input.candidateId},${f.input.planDigest},${randomUUID()},${JSON.stringify(f.input)}::jsonb,'prepared')`;
+      await f.sql`INSERT INTO data_manager.configuration_fence(maintenance_id,fence_id,operation_key,candidate_id,plan_digest,input,state)
+        VALUES(${f.input.maintenanceId},${randomUUID()},${`opk1_${randomUUID().replaceAll("-", "")}`},${f.input.candidateId},${f.input.planDigest},${JSON.stringify(f.input)}::jsonb,'prepared')`;
       try {
         expect((await request()).status).not.toBe(200);
       } finally {
@@ -986,7 +986,6 @@ async function ownedFenceFixture(
       tokens: {
         api: host.token,
         "data-manager": Buffer.alloc(32, 23).toString("base64url"),
-        "host-cli": "h".repeat(43),
       },
       journal: await openOpsJobJournal(join(root, "state/ops-agent/jobs-v1.json")),
     }),

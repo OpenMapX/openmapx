@@ -1,28 +1,7 @@
-import { randomBytes } from "node:crypto";
-import { chmodSync, lstatSync, mkdirSync, readFileSync, renameSync } from "node:fs";
+import { chmodSync, lstatSync, mkdirSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { atomicWrite } from "../release-files";
 
-/**
- * The token the host CLI presents to the agent. The agent creates it at
- * startup in its own state; only the deployment user, through `docker compose
- * exec ops-agent`, can read it.
- */
-export function hostCliTokenPath(infraDir: string): string {
-  return join(infraDir, "state", "ops-agent", "host-cli.token");
-}
-export function ensureHostCliToken(infraDir: string): string {
-  const path = hostCliTokenPath(infraDir);
-  try {
-    const existing = readFileSync(path, "utf8").trim();
-    if (/^[A-Za-z0-9_-]{43}$/.test(existing)) return existing;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
-  const token = randomBytes(32).toString("base64url");
-  writeAgentStateFile(infraDir, "host-cli.token", `${token}\n`);
-  return token;
-}
 /** Replaces one of the agent's state files atomically, creating its directory (0700) first. */
 export function writeAgentStateFile(infraDir: string, name: string, contents: string): void {
   const directory = join(infraDir, "state", "ops-agent");

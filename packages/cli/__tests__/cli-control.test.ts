@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as control from "@openmapx/core/build-artifacts";
+import { settleDataConfigurationFence } from "@openmapx/core/data-manager-sdk";
 import type { ExecutionRef } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { Command } from "commander";
@@ -14,10 +15,15 @@ vi.mock("../src/lib/docker", async (original) => ({
   ...(await original<typeof import("../src/lib/docker")>()),
   dockerCompose: vi.fn(),
 }));
+vi.mock("@openmapx/core/data-manager-sdk", async (original) => ({
+  ...(await original<typeof import("@openmapx/core/data-manager-sdk")>()),
+  settleDataConfigurationFence: vi.fn(),
+}));
 
 let root: string;
 let infraDir: string;
 let printed: string[];
+let warned: string[];
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "openmapx-control-"));
   infraDir = join(root, "infra/docker");
@@ -28,7 +34,11 @@ beforeEach(() => {
   vi.spyOn(console, "log").mockImplementation((line: string) => {
     printed.push(String(line));
   });
-  vi.spyOn(console, "error").mockImplementation(() => {});
+  warned = [];
+  vi.spyOn(console, "error").mockImplementation((line: string) => {
+    warned.push(String(line));
+  });
+  vi.mocked(settleDataConfigurationFence).mockReset();
   vi.spyOn(process, "exit").mockImplementation((code) => {
     throw Error(`exit:${code}`);
   });
@@ -124,5 +134,57 @@ describe("openmapx control", () => {
     await run("clear", "--lock", "leases.lock");
     expect(services.readLockHolder(path)).toBeUndefined();
     expect(auditLog()).toMatchObject([{ action: "clear-lock", lock: "leases.lock", holder }]);
+  });
+
+  it("warns that clearing a maintenance leaves its fence, which resolve then settles", async () => {
+    const agent: ExecutionRef = {
+      ...owner(),
+      executor: "ops-agent",
+      principal: "api",
+      executionId: `job1_${randomUUID().replaceAll("-", "")}`,
+    };
+    const evidence = {
+      maintenanceId: randomUUID(),
+      candidateId: randomUUID(),
+      planDigest: "c".repeat(64),
+    };
+    await store().update((leases) => {
+      const lease = control.leaseRules.acquire(
+        leases,
+        { owner: agent, ownerKind: "configurationMaintenance.prepare", targets: ["alpha"] },
+        Date.now(),
+      );
+      control.leaseRules.delegate(
+        leases,
+        {
+          leaseId: lease.leaseId,
+          child: {
+            key: randomUUID(),
+            parentKey: null,
+            parent: agent,
+            execution: { ...owner(), executor: "data-manager", principal: "data-manager" },
+            kind: "configuration-maintenance.prepare",
+            phase: "configuration-fence",
+            recipient: "data-manager",
+            targets: ["alpha"],
+            permittedFurtherEdges: [],
+            depth: 1,
+            evidence,
+          },
+        },
+        Date.now(),
+      );
+    });
+    await run("clear", "--op", agent.operationKey);
+    expect(store().list()).toEqual([]);
+    expect(warned.join("\n")).toContain(
+      `fence of this maintenance stays prepared and keeps refusing data jobs until \`openmapx control resolve --op ${agent.operationKey}`,
+    );
+    await run("resolve", "--op", agent.operationKey, "--as", "failed");
+    expect(vi.mocked(settleDataConfigurationFence)).toHaveBeenCalledWith(
+      { ...evidence, outcome: "contained" },
+      expect.not.objectContaining({ controlAssertion: expect.anything() }),
+    );
+    expect(auditLog().map((entry) => entry.action)).toEqual(["clear", "resolve"]);
   });
 });

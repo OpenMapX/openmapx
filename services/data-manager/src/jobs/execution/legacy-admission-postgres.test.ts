@@ -1030,7 +1030,6 @@ it.skipIf(!enabled)(
       tokens: {
         api: Buffer.alloc(32, 6).toString("base64url"),
         "data-manager": token,
-        "host-cli": Buffer.alloc(32, 7).toString("base64url"),
       },
       controlInstallation: agent,
       runtime: createTransitousLockRuntime(createUnavailableRuntime(), { rootDir: repository }),

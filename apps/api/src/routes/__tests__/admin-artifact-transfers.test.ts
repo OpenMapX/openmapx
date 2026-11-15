@@ -55,7 +55,7 @@ it("generated SDK streams through real admin/API and typed/raw agent paths, enfo
   const audit: unknown[] = [];
   const agent = buildOpsAgentServer({
     audit: (event) => audit.push(event),
-    tokens: { api: token, "data-manager": "b".repeat(43), "host-cli": "h".repeat(43) },
+    tokens: { api: token, "data-manager": "b".repeat(43) },
     runtime,
     artifactTransfers: store,
     resourcePolicy: { allowGlobal: () => true },

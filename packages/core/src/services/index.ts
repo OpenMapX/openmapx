@@ -2,8 +2,6 @@ export { openAdminDataWorkflow } from "./admin-data-workflow";
 export {
   type AgentStatePaths,
   agentStatePaths,
-  ensureHostCliToken,
-  hostCliTokenPath,
   prepareAgentStateDirectories,
 } from "./agent-state";
 export { prepareAgentStores } from "./agent-stores";

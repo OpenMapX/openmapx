@@ -52,7 +52,6 @@ const fenceRowSchema = z.object({
   operation_key: z.string(),
   candidate_id: z.uuid(),
   plan_digest: z.string(),
-  owner_lease_id: z.uuid(),
   input: dataConfigurationFencePrepareSchema,
   state: z.enum(["prepared", "settled"]),
   outcome: dataConfigurationFenceOutcomeSchema.nullable(),
@@ -275,10 +274,9 @@ export function createDataConfigurationFenceStore(
     if (!fence) return;
     const receipt = receiptOf(fence);
     // During maintenance only the maintenance owner's own hardlink leaf runs:
-    // the agent issued it under the lease the fence was prepared for.
+    // the agent issued it under the maintenance owner the fence was prepared for.
     if (
       principal !== "ops-agent" ||
-      delegation.leaseId !== fence.owner_lease_id ||
       canonicalJson(delegation.owner) !== canonicalJson(receipt.ownerPrepare) ||
       request.input.revisionId !== receipt.revisionId ||
       request.input.planDigest !== receipt.hardlinkPlanDigest ||
@@ -442,14 +440,13 @@ export function createDataConfigurationFenceStore(
           );
           if (active.length || transfers.length) throw new DataFenceBusy();
           const inserted = await tx.unsafe(
-            "INSERT INTO data_manager.configuration_fence(maintenance_id,fence_id,operation_key,candidate_id,plan_digest,owner_lease_id,input,state) VALUES($1::uuid,$2::uuid,$3,$4::uuid,$5,$6::uuid,$7::text::jsonb,'prepared') RETURNING *",
+            "INSERT INTO data_manager.configuration_fence(maintenance_id,fence_id,operation_key,candidate_id,plan_digest,input,state) VALUES($1::uuid,$2::uuid,$3,$4::uuid,$5,$6::text::jsonb,'prepared') RETURNING *",
             [
               input.maintenanceId,
               execution.executionId,
               execution.operationKey,
               input.candidateId,
               input.planDigest,
-              verified.delegation.leaseId,
               canonicalJson(input),
             ],
           );
@@ -460,42 +457,42 @@ export function createDataConfigurationFenceStore(
     /** The fence row of `maintenanceId`, for the agent only. */
     async inspect(
       maintenanceId: string,
-      expected: { candidateId: string; ownerLeaseId: string },
+      expected: { candidateId: string },
       transportPrincipal: ControlTransportPrincipal,
     ) {
       if (transportPrincipal !== "ops-agent") throw forbidden("Agent transport required");
       const saved = await row(sql, "maintenance_id", maintenanceId);
       if (!saved) return null;
-      if (
-        saved.candidate_id !== expected.candidateId ||
-        saved.owner_lease_id !== expected.ownerLeaseId
-      )
+      if (saved.candidate_id !== expected.candidateId)
         throw Error("Configuration fence owner changed");
       return receiptOf(saved);
     },
     /** Settles the prepared row once. The header is the agent's original
      * prepare delegation; a repeated settle with the same outcome returns the
-     * settled receipt, another outcome is a conflict. */
+     * settled receipt, another outcome is a conflict. The host CLI's token
+     * settles without a delegation: that is the operator resolving the
+     * maintenance with `openmapx control resolve`. */
     async settle(
       value: DataConfigurationFenceSettle,
       rawHeaders: readonly string[],
       transportPrincipal: ControlTransportPrincipal,
     ) {
       const input = dataConfigurationFenceSettleSchema.parse(value);
-      let execution: z.infer<typeof fenceRowSchema>["input"]["ownerPrepare"];
-      try {
-        if (transportPrincipal !== "ops-agent") throw Error("Agent transport required");
-        const delegation = inspectRemoteDelegation(installation, rawHeaders, transportPrincipal);
-        if (
-          delegation.parent.executor !== "ops-agent" ||
-          delegation.kind !== "configuration-maintenance.prepare" ||
-          delegation.phase !== "configuration-fence"
-        )
-          throw Error("Configuration fence delegation identity conflict");
-        execution = delegation.execution;
-      } catch {
-        throw forbidden("Agent configuration fence delegation rejected");
-      }
+      let execution: z.infer<typeof fenceRowSchema>["input"]["ownerPrepare"] | undefined;
+      if (transportPrincipal !== "host-cli")
+        try {
+          if (transportPrincipal !== "ops-agent") throw Error("Agent transport required");
+          const delegation = inspectRemoteDelegation(installation, rawHeaders, transportPrincipal);
+          if (
+            delegation.parent.executor !== "ops-agent" ||
+            delegation.kind !== "configuration-maintenance.prepare" ||
+            delegation.phase !== "configuration-fence"
+          )
+            throw Error("Configuration fence delegation identity conflict");
+          execution = delegation.execution;
+        } catch {
+          throw forbidden("Agent configuration fence delegation rejected");
+        }
       // The conditional UPDATE and its read-back are the guard: a racing data
       // admission sees the row either prepared (busy) or settled (open).
       return sql.transaction(async (tx) => {
@@ -505,8 +502,9 @@ export function createDataConfigurationFenceStore(
             statusCode: 404,
           });
         if (
-          saved.fence_id !== execution.executionId ||
-          saved.operation_key !== execution.operationKey
+          execution &&
+          (saved.fence_id !== execution.executionId ||
+            saved.operation_key !== execution.operationKey)
         )
           throw forbidden("Configuration fence delegation identity conflict");
         if (saved.candidate_id !== input.candidateId || saved.plan_digest !== input.planDigest)

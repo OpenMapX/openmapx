@@ -184,7 +184,7 @@ it.skipIf(
       runtime: agentRuntime,
       journal: agentJournal,
       controlInstallation: agentInstallation,
-      tokens: { api: token, "data-manager": "d".repeat(43), "host-cli": "h".repeat(43) },
+      tokens: { api: token, "data-manager": "d".repeat(43) },
       resourcePolicy: { allowGlobal: () => true, allowService: () => true },
     });
     await agent.listen({ host: "127.0.0.1", port: 0 });

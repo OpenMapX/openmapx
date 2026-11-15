@@ -7,7 +7,7 @@ let release!: () => void;
 const held = new Promise<void>((resolve) => { release = resolve; });
 process.on("message", (message) => { if (message === "release") release(); });
 const app = await startOpsAgentServer({
-  tokens: { api: "shutdown-fixture-token", "data-manager": "shutdown-dm-token", "host-cli": "h".repeat(43) },
+  tokens: { api: "shutdown-fixture-token", "data-manager": "shutdown-dm-token" },
   resourcePolicy: createRegistryResourcePolicy({ serviceIds: [], integrationIds: [], trustedData: denyAllTrustedOpsData }),
   dispatch: async () => {
     process.send?.({ event: "working" });

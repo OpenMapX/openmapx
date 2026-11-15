@@ -534,7 +534,6 @@ describe("authenticated conditional configuration admission", () => {
         tokens: {
           api: token,
           "data-manager": Buffer.alloc(32, 8).toString("base64url"),
-          "host-cli": "h".repeat(43),
         },
         resourceClaimer: claimer,
         controlInstallation: installation,

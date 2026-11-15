@@ -297,7 +297,6 @@ describe("integration store", () => {
       tokens: {
         api: apiToken,
         "data-manager": Buffer.alloc(32, 32).toString("base64url"),
-        "host-cli": "h".repeat(43),
       },
       resourcePolicy: allowAllResources,
       journal,
@@ -389,7 +388,6 @@ describe("integration store", () => {
       tokens: {
         api: apiToken,
         "data-manager": Buffer.alloc(32, 32).toString("base64url"),
-        "host-cli": "h".repeat(43),
       },
       resourcePolicy: allowAllResources,
       journal,

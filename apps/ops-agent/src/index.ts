@@ -162,7 +162,6 @@ async function main(): Promise<void> {
       container: existsSync("/run/secrets/openmapx-control-verifiers"),
       leases: localLeaseBackend(leaseStore),
     });
-    const hostCliToken = services.ensureHostCliToken(paths.infraDir);
     if (controlStartup.reason) console.error(controlStartup.reason);
     if (controlStartup.installation) {
       try {
@@ -285,7 +284,7 @@ async function main(): Promise<void> {
     const initialPolicyAuthority = await policyAuthority();
     await startOpsAgentServer(
       {
-        tokens: { api: apiToken, "data-manager": dataManagerToken, "host-cli": hostCliToken },
+        tokens: { api: apiToken, "data-manager": dataManagerToken },
         leaseStore,
         resourceClaimer: createProductionRegistryResourceClaimer({
           services: initialPolicyAuthority.services,

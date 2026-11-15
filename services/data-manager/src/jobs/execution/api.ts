@@ -63,7 +63,7 @@ export interface DataExecutionReceiver {
   ): Promise<DataConfigurationFenceReceipt>;
   inspectFence(
     maintenanceId: string,
-    expected: { candidateId: string; ownerLeaseId: string },
+    expected: { candidateId: string },
     transportPrincipal: DataManagerPrincipal,
   ): Promise<DataConfigurationFenceReceipt | null>;
   settleFence(

@@ -32,7 +32,6 @@ import {
 import { execa } from "execa";
 import { cliControlContext, pruneHostControlRecords } from "./control-context";
 import { cliProcessOptions } from "./execution-deadline";
-import { hostCliLeases } from "./host-leases";
 import { repoPaths } from "./paths";
 import {
   ensurePlatformPrivateDirectory,
@@ -332,7 +331,6 @@ export async function generateTransitousApiKeys(
     infraDir: paths.infraDir,
     role: "host-cli",
     serviceIds: ["motis"],
-    leases: hostCliLeases(paths.infraDir),
   });
   let lease: control.ArtifactTargetLease | undefined;
   let authority: control.VerifiedExecutionAuthority | undefined;

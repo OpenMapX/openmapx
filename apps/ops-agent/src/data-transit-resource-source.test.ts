@@ -178,7 +178,7 @@ async function fixture(
     ...(admissionPolicy === "late" ? { now: () => new Date(Date.now() + 120000) } : {}),
     controlInstallation: agent,
     resourceClaimer: claimer,
-    tokens: { api: "a".repeat(43), "data-manager": token, "host-cli": "h".repeat(43) },
+    tokens: { api: "a".repeat(43), "data-manager": token },
   });
   await app.listen({ host: "127.0.0.1", port: 0 });
   const address = app.server.address();

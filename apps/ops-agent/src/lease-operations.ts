@@ -17,20 +17,15 @@ import { childPhaseKinds } from "../../../packages/core/src/build-artifacts/cont
 
 type LeaseOperation = Extract<
   OpsOperation,
-  { kind: "lease.acquire" | "lease.read" | "lease.update" }
+  { kind: "lease.acquire" | "lease.read" | "lease.update" | "lease.settleChild" }
 >;
-const recipients: Partial<Record<OpsRole, string>> = {
-  // Data-manager's children are the agent's own operations; the host CLI's are
-  // data-manager executions.
-  "data-manager": "ops-agent",
-  "host-cli": "data-manager",
-};
 
 /**
- * Leases data-manager and the host CLI hold through the agent. Each caller
- * sees and changes only leases its own executions own, and the same rules
- * apply as to the agent's leases: one admission path, children recorded
- * before they start, release only once everything has a known outcome.
+ * Leases data-manager holds through the agent. It sees and changes only
+ * leases its own executions own, and the same rules apply as to the agent's
+ * leases: one admission path, children recorded before they start, release
+ * only once everything has a known outcome. It also reports the outcome of a
+ * child it ran under the agent's or the host CLI's lease.
  */
 export async function runLeaseOperation(
   installation: ControlInstallation,
@@ -38,10 +33,18 @@ export async function runLeaseOperation(
   role: OpsRole,
   operation: LeaseOperation,
 ): Promise<OpsResultFor<LeaseOperation["kind"]>> {
-  if (role !== "data-manager" && role !== "host-cli") throw new LeaseRefused();
+  if (role !== "data-manager") throw new LeaseRefused();
   const owned = (lease: LeaseRecord | undefined) =>
     lease && lease.owner.executor === role ? lease : undefined;
   const now = Date.now();
+  if (operation.kind === "lease.settleChild") {
+    if (operation.settlement.identity.executor !== role) throw new LeaseRefused();
+    return {
+      lease:
+        (await store.update((leases) => leaseRules.settleChild(leases, operation.settlement))) ??
+        null,
+    };
+  }
   if (operation.kind === "lease.acquire") {
     const registered = new Set(controlRegisteredServiceIds(installation));
     if (
@@ -84,7 +87,7 @@ export async function runLeaseOperation(
         if (
           child.parentKey !== null ||
           child.depth !== 1 ||
-          child.recipient !== recipients[role] ||
+          child.recipient !== "ops-agent" ||
           canonicalJson(child.parent) !== canonicalJson(current.owner) ||
           canonicalJson(child.permittedFurtherEdges) !== canonicalJson(edges) ||
           !(childPhaseKinds as Record<string, readonly string[]>)[child.phase]?.includes(
@@ -96,12 +99,8 @@ export async function runLeaseOperation(
         return leaseRules.delegate(leases, { leaseId: current.leaseId, child }, now);
       }
       case "settle": {
-        if (action.key !== null) {
-          const child = current.children.find((value) => value.key === action.key);
-          // A caller settles only a child it issued whose recipient cannot reach the store.
-          if (child?.parentKey !== null || child.recipient !== "data-manager")
-            throw new LeaseRefused();
-        }
+        // Data-manager's children are the agent's own operations, which settle themselves.
+        if (action.key !== null) throw new LeaseRefused();
         return leaseRules.settle(leases, { leaseId: current.leaseId, ...action });
       }
       case "cancel":

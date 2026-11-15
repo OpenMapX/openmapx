@@ -119,7 +119,6 @@ describe.skipIf(!enabled)(
         tokens: {
           api: host.token,
           "data-manager": Buffer.alloc(32, 23).toString("base64url"),
-          "host-cli": "h".repeat(43),
         },
         runtime: host.runtime,
         resourceClaimer: host.claimer,

@@ -28,7 +28,7 @@ it("refuses paired approval as a bearer-only root before reserving a worker", as
   const app = buildOpsAgentServer({
     controlInstallation: installation,
     journal,
-    tokens: { api: "a".repeat(32), "data-manager": "b".repeat(32), "host-cli": "h".repeat(43) },
+    tokens: { api: "a".repeat(32), "data-manager": "b".repeat(32) },
     resourcePolicy: { allowGlobal: () => true },
   });
   try {
@@ -151,7 +151,7 @@ it.each(["normal", "ready-failure", "wrong-target", "canceled", "cancel-journal-
     const token = "b".repeat(32);
     const journalFile = coreServices.agentStatePaths(root).journal;
     const options = {
-      tokens: { api: "a".repeat(32), "data-manager": token, "host-cli": "h".repeat(43) },
+      tokens: { api: "a".repeat(32), "data-manager": token },
       controlInstallation: agent,
       resourcePolicy: { allowGlobal: () => true, allowService: () => true },
       dispatch: async (_operation: unknown, _runtime: unknown, context: OpsExecutionContext) => {

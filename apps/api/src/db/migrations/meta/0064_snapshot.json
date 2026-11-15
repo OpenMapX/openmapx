@@ -1,5 +1,5 @@
 {
-  "id": "12f39f65-a4b7-4cf2-9250-1d2565604fb2",
+  "id": "3877f309-a95f-4098-a80d-f59c87d61ba5",
   "prevId": "6612793a-c6b1-45e2-ad89-200a4214a323",
   "version": "7",
   "dialect": "postgresql",
@@ -1656,12 +1656,6 @@
         "plan_digest": {
           "name": "plan_digest",
           "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "owner_lease_id": {
-          "name": "owner_lease_id",
-          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
