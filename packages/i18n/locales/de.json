@@ -2605,6 +2605,8 @@
     "removeAreaDescription": "Dies löscht die gecachten Kartendaten für \"{name}\" ({size}).",
     "storageTitle": "Speicher",
     "storageDescription": "Zwischengespeicherte Kartenkacheln, optionale kürzliche Kartendaten und Offline-Kartenpakete.",
+    "storageUsage": "Belegung",
+    "storageMapData": "Kartendaten",
     "totalUsed": "Belegt: {used} von {total} ({percent}%)",
     "appShell": "App-Shell",
     "preferences": "Einstellungen",
@@ -3149,7 +3151,7 @@
   "menu": {
     "saved": "Gespeichert",
     "timeline": "Ihre Zeitleiste",
-    "shareMap": "Karte teilen oder einbetten",
+    "shareMap": "Karte teilen",
     "importFile": "Datei importieren (GPX, GeoJSON, KML)",
     "importFailed": "Datei konnte nicht gelesen werden. Unterstützt: GPX, GeoJSON, KML.",
     "offlineMaps": "Offline-Karten",
@@ -3197,10 +3199,6 @@
     "replaceConnection": "Zugangsdaten ersetzen",
     "visitFallback": "Unbenannter Besuch",
     "journeyFallback": "Weg",
-    "selected": "Ausgewählt",
-    "pointCount": "Punkte",
-    "elevationGain": "Anstieg",
-    "elevationLoss": "Abstieg",
     "entriesAriaLabel": "Zeitleisteneinträge",
     "summary": {
       "distance": "Entfernung",
@@ -3226,6 +3224,19 @@
       "TIMELINE_UPSTREAM_UNAVAILABLE": "Dawarich ist derzeit nicht erreichbar. Versuchen Sie es später erneut.",
       "TIMELINE_RESPONSE_INVALID": "Dawarich hat Daten zurückgegeben, die OpenMapX nicht sicher lesen konnte.",
       "unknown": "Ihre Zeitleiste konnte nicht geladen werden. Versuchen Sie es erneut."
+    },
+    "elevationGain": "Anstieg",
+    "elevationLoss": "Abstieg",
+    "modes": {
+      "walking": "Zu Fuß",
+      "running": "Laufen",
+      "cycling": "Fahrrad",
+      "driving": "Auto",
+      "bus": "Bus",
+      "train": "Bahn",
+      "flying": "Flug",
+      "boat": "Schiff",
+      "motorcycle": "Motorrad"
     }
   },
   "saved": {

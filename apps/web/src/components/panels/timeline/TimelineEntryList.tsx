@@ -1,12 +1,11 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import Stack from "@mui/material/Stack";
 import type { PersonalTimelineDayV1 } from "@openmapx/core";
 import { usePersonalTimelineStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
-import { TimelineEntryCard } from "./TimelineEntryCard";
+import { TimelineEntryRow } from "./TimelineEntryRow";
 
 export function TimelineEntryList({ day }: { day: PersonalTimelineDayV1 }) {
   const t = useTranslations("timeline");
@@ -32,16 +31,15 @@ export function TimelineEntryList({ day }: { day: PersonalTimelineDayV1 }) {
   }, [selectedEntryId]);
 
   return (
-    <Stack
-      component="ul"
-      spacing={1.25}
-      aria-label={t("entriesAriaLabel")}
-      sx={{ listStyle: "none", p: 0, m: 0 }}
-    >
-      {entries.map((entry) => (
+    <Box component="ul" aria-label={t("entriesAriaLabel")} sx={{ listStyle: "none", p: 0, m: 0 }}>
+      {entries.map((entry, index) => (
         <Box component="li" key={entry.id} sx={{ minWidth: 0 }}>
-          <TimelineEntryCard
+          <TimelineEntryRow
             entry={entry}
+            before={entries[index - 1]}
+            after={entries[index + 1]}
+            // A rule above each place, as between the stops of a trip.
+            divider={index > 0 && entry.type === "visit"}
             timeZone={day.timeZone}
             selected={entry.id === selectedEntryId}
             elementRef={(element) => {
@@ -55,6 +53,6 @@ export function TimelineEntryList({ day }: { day: PersonalTimelineDayV1 }) {
           />
         </Box>
       ))}
-    </Stack>
+    </Box>
   );
 }

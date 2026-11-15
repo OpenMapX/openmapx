@@ -2605,6 +2605,8 @@
     "removeAreaDescription": "This will delete the cached map data for \"{name}\" ({size}).",
     "storageTitle": "Storage",
     "storageDescription": "Cached map tiles, optional recent map data, and offline map packages.",
+    "storageUsage": "Usage",
+    "storageMapData": "Map data",
     "totalUsed": "Used: {used} of {total} ({percent}%)",
     "appShell": "App shell",
     "preferences": "Preferences",
@@ -3149,7 +3151,7 @@
   "menu": {
     "saved": "Saved",
     "timeline": "Your timeline",
-    "shareMap": "Share or embed map",
+    "shareMap": "Share map",
     "importFile": "Import file (GPX, GeoJSON, KML)",
     "importFailed": "Couldn't read that file. Supported: GPX, GeoJSON, KML.",
     "offlineMaps": "Offline maps",
@@ -3197,10 +3199,6 @@
     "replaceConnection": "Replace credentials",
     "visitFallback": "Unnamed visit",
     "journeyFallback": "Journey",
-    "selected": "Selected",
-    "pointCount": "Points",
-    "elevationGain": "Ascent",
-    "elevationLoss": "Descent",
     "entriesAriaLabel": "Timeline entries",
     "summary": {
       "distance": "Distance",
@@ -3226,6 +3224,19 @@
       "TIMELINE_UPSTREAM_UNAVAILABLE": "Dawarich cannot be reached right now. Try again later.",
       "TIMELINE_RESPONSE_INVALID": "Dawarich returned data OpenMapX could not safely read.",
       "unknown": "Your timeline could not be loaded. Try again."
+    },
+    "elevationGain": "Ascent",
+    "elevationLoss": "Descent",
+    "modes": {
+      "walking": "Walking",
+      "running": "Running",
+      "cycling": "Cycling",
+      "driving": "Driving",
+      "bus": "Bus",
+      "train": "Train",
+      "flying": "Flying",
+      "boat": "Boat",
+      "motorcycle": "Motorcycle"
     }
   },
   "saved": {

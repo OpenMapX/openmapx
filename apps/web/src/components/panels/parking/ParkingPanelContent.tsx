@@ -2,7 +2,9 @@
 
 import ClearIcon from "@mui/icons-material/Clear";
 import DirectionsIcon from "@mui/icons-material/Directions";
-import EditLocationAltIcon from "@mui/icons-material/EditLocationAlt";
+import EditNoteOutlinedIcon from "@mui/icons-material/EditNoteOutlined";
+import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
+import ScheduleIcon from "@mui/icons-material/Schedule";
 import ShareIcon from "@mui/icons-material/Share";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -17,14 +19,17 @@ import {
   useDirectionsStore,
   useParkedLocations,
   useParkingStore,
+  useReverseGeocoding,
   useSidebarStore,
   useUpdateParkedLocation,
   useVehicles,
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DateTimeField } from "@/components/ui/DateTimeField";
 import { buildLocationShareUrl, shareUrl } from "@/lib/deepLink";
+import { LocationCardAction } from "../locationCard";
+import { useParkingAddressBackfill } from "./useSaveParking";
 
 /** Quiet period before a typed note reaches the server. */
 const NOTE_COMMIT_DEBOUNCE_MS = 600;
@@ -104,16 +109,25 @@ export function ParkingPanelContent() {
   }, [parked]);
 
   const updateMutate = update.mutate;
+  const backfillAddress = useParkingAddressBackfill();
   useEffect(() => {
     if (!pickedCoords || !recordId) return;
     const [lng, lat] = pickedCoords;
     // The stored address described the old position, so it is dropped rather
     // than left pointing somewhere the car no longer is.
     updateMutate({ id: recordId, lat, lng, address: null });
+    void backfillAddress(recordId, [lng, lat]);
     useParkingStore.getState().setPickedCoords(null);
-  }, [pickedCoords, recordId, updateMutate]);
+  }, [pickedCoords, recordId, updateMutate, backfillAddress]);
+
+  // Shown from the record; a spot whose save-time lookup failed is looked up here.
+  const { data: reverse } = useReverseGeocoding(
+    record && !record.address ? [record.lng, record.lat] : null,
+    locale,
+  );
 
   if (!record) return null;
+  const address = record.address ?? reverse?.address ?? null;
 
   const vehicle = vehicles?.find((v) => v.id === record.vehicleId) ?? null;
   const expiresMs = record.expiresAt ? Date.parse(record.expiresAt) : null;
@@ -132,7 +146,7 @@ export function ParkingPanelContent() {
     directions.setWaypoint(
       directions.waypoints.length - 1,
       [record.lng, record.lat],
-      record.address ?? t("title"),
+      address ?? t("title"),
     );
     directions.open();
     useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
@@ -169,62 +183,76 @@ export function ParkingPanelContent() {
         )}
       </Box>
 
-      {record.address && <Typography variant="body2">{record.address}</Typography>}
-
-      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-        <Button variant="contained" startIcon={<DirectionsIcon />} onClick={handleDirections}>
-          {t("directions")}
-        </Button>
-        <Button startIcon={<ShareIcon />} onClick={() => void handleShare()}>
-          {t("share")}
-        </Button>
-        <Button color="error" startIcon={<ClearIcon />} onClick={handleClear}>
-          {t("clear")}
-        </Button>
-      </Box>
-
-      <TextField
-        size="small"
-        fullWidth
-        label={t("note")}
-        placeholder={t("notePlaceholder")}
-        value={noteDraft}
-        onChange={(e) => commitNote(e.target.value)}
-      />
-
-      <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
-        <DateTimeField
-          label={t("expires")}
-          dateLabel={t("expires")}
-          value={toLocalInput(record.expiresAt)}
-          clearable
-          onChange={(next) =>
-            update.mutate({
-              id: record.id,
-              expiresAt: next === "" ? null : new Date(next).toISOString(),
-            })
-          }
+      <Box sx={{ display: "flex", gap: 1, overflowX: "auto", scrollbarWidth: "none" }}>
+        <LocationCardAction
+          primary
+          icon={<DirectionsIcon />}
+          label={t("directions")}
+          onClick={handleDirections}
         />
-        {remaining !== null &&
-          (remaining <= 0 ? (
-            <Chip size="small" color="error" label={t("expired")} />
-          ) : (
-            <Chip size="small" label={t("timeLeft", { duration: formatRemaining(remaining) })} />
-          ))}
+        <LocationCardAction
+          icon={<ShareIcon />}
+          label={t("share")}
+          onClick={() => void handleShare()}
+        />
+        <LocationCardAction icon={<ClearIcon />} label={t("clear")} onClick={handleClear} />
       </Box>
 
-      <Button
-        startIcon={<EditLocationAltIcon />}
-        onClick={() => useParkingStore.getState().setPicking(true)}
-        disabled={picking}
-      >
-        {t("changeLocation")}
-      </Button>
-      {picking && (
-        <Typography variant="caption" color="text.secondary" role="status">
-          {t("pickOnMap")}
-        </Typography>
-      )}
+      <DetailRow icon={<LocationOnOutlinedIcon />}>
+        {address && <Typography>{address}</Typography>}
+        <Button
+          size="small"
+          onClick={() => useParkingStore.getState().setPicking(true)}
+          disabled={picking}
+          sx={{ ml: -1, px: 1 }}
+        >
+          {t("changeLocation")}
+        </Button>
+        {picking && (
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            role="status"
+            sx={{ display: "block" }}
+          >
+            {t("pickOnMap")}
+          </Typography>
+        )}
+      </DetailRow>
+
+      <DetailRow icon={<EditNoteOutlinedIcon />}>
+        <TextField
+          size="small"
+          fullWidth
+          label={t("note")}
+          placeholder={t("notePlaceholder")}
+          value={noteDraft}
+          onChange={(e) => commitNote(e.target.value)}
+        />
+      </DetailRow>
+
+      <DetailRow icon={<ScheduleIcon />}>
+        <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
+          <DateTimeField
+            label={t("expires")}
+            dateLabel={t("expires")}
+            value={toLocalInput(record.expiresAt)}
+            clearable
+            onChange={(next) =>
+              update.mutate({
+                id: record.id,
+                expiresAt: next === "" ? null : new Date(next).toISOString(),
+              })
+            }
+          />
+          {remaining !== null &&
+            (remaining <= 0 ? (
+              <Chip size="small" color="error" label={t("expired")} />
+            ) : (
+              <Chip size="small" label={t("timeLeft", { duration: formatRemaining(remaining) })} />
+            ))}
+        </Box>
+      </DetailRow>
 
       <Snackbar
         open={toast !== null}
@@ -232,6 +260,18 @@ export function ParkingPanelContent() {
         autoHideDuration={2500}
         onClose={() => setToast(null)}
       />
+    </Box>
+  );
+}
+
+/** A detail of the parked spot, behind an icon in the place rows' column. */
+function DetailRow({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
+      <Box sx={{ display: "flex", color: "text.secondary", pt: 0.75, "& svg": { fontSize: 22 } }}>
+        {icon}
+      </Box>
+      <Box sx={{ flex: 1, minWidth: 0 }}>{children}</Box>
     </Box>
   );
 }

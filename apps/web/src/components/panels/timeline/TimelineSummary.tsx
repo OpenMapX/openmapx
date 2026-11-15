@@ -23,7 +23,10 @@ export function TimelineSummary({ summary, distanceUnit }: TimelineSummaryProps)
   });
   const items = [
     { label: t("distance"), value: `${number.format(summary.totalDistance)} ${distanceUnit}` },
-    { label: t("places"), value: integer.format(summary.placesVisited) },
+    // Counts saved places only; a day of unnamed stops would read "0".
+    ...(summary.placesVisited > 0
+      ? [{ label: t("places"), value: integer.format(summary.placesVisited) }]
+      : []),
     { label: t("moving"), value: minutes.format(summary.movingMinutes) },
     { label: t("stationary"), value: minutes.format(summary.stationaryMinutes) },
   ];
@@ -33,7 +36,7 @@ export function TimelineSummary({ summary, distanceUnit }: TimelineSummaryProps)
       component="dl"
       sx={{
         display: "grid",
-        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+        gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))`,
         gap: 1,
         m: 0,
         mb: 2,

@@ -14,9 +14,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import {
   itineraryContributors,
-  RailDot,
   railSegment,
-  TimelineRow,
   TransitLegTimeline,
 } from "@/components/panels/directions/TransitLegTimeline";
 import { DepartureTime } from "@/components/panels/transit/DepartureTime";
@@ -24,6 +22,7 @@ import {
   TransitDataStatus,
   TransitQueryNotice,
 } from "@/components/panels/transit/TransitDataStatus";
+import { RailDot, TimelineRow } from "@/components/ui/TimelineRail";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { useTripEndLabels } from "@/lib/navigation/useTripEndLabels";
 import { stopTransitTime } from "@/lib/transitTime";

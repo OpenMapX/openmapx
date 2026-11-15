@@ -2,6 +2,8 @@
 
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import HomeIcon from "@mui/icons-material/Home";
+import WorkIcon from "@mui/icons-material/Work";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import IconButton from "@mui/material/IconButton";
@@ -15,6 +17,7 @@ import {
   useDataSourceStore,
   useDataSources,
   useDirectionsStore,
+  useLabeledPlaces,
   useMapStore,
   usePlaceStore,
   useSearchStore,
@@ -23,6 +26,8 @@ import {
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { homeAndWork, openLabeledPlace } from "@/components/panels/saved/openLabeledPlace";
+import { useMap } from "@/integration-api/map/MapContext";
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
 import { FINE_POINTER_QUERY } from "@/lib/useFinePointer";
@@ -100,6 +105,11 @@ function SvgIcon({ path, size = 16 }: { path: string; size?: number }) {
 
 export function CategoryChips() {
   const t = useTranslations("search");
+  const tSaved = useTranslations("saved");
+  // Home and Work lead the row once set, a tap away as in native map apps.
+  const { data: labels } = useLabeledPlaces();
+  const { flyTo } = useMap();
+  const labelChips = homeAndWork(labels);
   const { activeCategory, setActiveCategory, clearCategory } = useCategorySearchStore();
   const textSearchActive = useCategorySearchStore((s) => s.mode === "text");
   const { setQuery } = useSearchStore();
@@ -305,6 +315,19 @@ export function CategoryChips() {
       >
         {/* Sized to its chips, so the resize observer sees late chips arrive. */}
         <Box sx={{ display: "flex", gap: 1, width: "max-content" }}>
+          {labelChips.map(({ key, label }) => {
+            const Icon = key === "home" ? HomeIcon : WorkIcon;
+            return (
+              <Chip
+                key={`label:${key}`}
+                icon={<Icon sx={{ fontSize: 18 }} />}
+                label={tSaved(key)}
+                onClick={() => openLabeledPlace(label, flyTo)}
+                variant="outlined"
+                sx={chipSx(false)}
+              />
+            );
+          })}
           {chips.map((chip) => {
             if (chip.kind === "source") {
               const { source } = chip;

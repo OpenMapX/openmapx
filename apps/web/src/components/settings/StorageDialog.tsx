@@ -1,21 +1,21 @@
 "use client";
 
+import CloseIcon from "@mui/icons-material/Close";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
-import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
-import Divider from "@mui/material/Divider";
-import FormControlLabel from "@mui/material/FormControlLabel";
+import IconButton from "@mui/material/IconButton";
 import LinearProgress from "@mui/material/LinearProgress";
-import Stack from "@mui/material/Stack";
-import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { type ChangeEvent, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
+import {
+  mobileFullScreenDialogPaperSx,
+  useFullScreenOnMobile,
+} from "@/integration-api/runtime/useFullScreenOnMobile";
 import { createOfflinePackageStorage } from "@/lib/offlineAreas";
 import {
   isStoragePersisted,
@@ -36,6 +36,7 @@ import {
   STREET_LEVEL_IMAGERY_TILE_CACHE,
   VECTOR_TILE_CACHE,
 } from "@/lib/swCaches";
+import { ActionRow, Section, SwitchRow, ValueRow } from "./settingsPrimitives";
 
 interface CacheRow {
   cacheName: string;
@@ -149,6 +150,8 @@ async function inspectStorage(t: (key: string) => string): Promise<StorageInfo> 
 
 export function StorageDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useTranslations("settings");
+  const tc = useTranslations("common");
+  const fullScreen = useFullScreenOnMobile();
   const queryClient = useQueryClient();
   const [info, setInfo] = useState<StorageInfo | null>(null);
   const [busy, setBusy] = useState(false);
@@ -176,8 +179,7 @@ export function StorageDialog({ open, onClose }: { open: boolean; onClose: () =>
     void refresh();
   }, [open, refresh]);
 
-  const handleRecentMapDataCacheChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const enabled = event.target.checked;
+  const handleRecentMapDataCacheChange = async (enabled: boolean) => {
     setRecentMapDataCacheEnabledState(enabled);
     setBusy(true);
     try {
@@ -224,134 +226,89 @@ export function StorageDialog({ open, onClose }: { open: boolean; onClose: () =>
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>{t("storageTitle")}</DialogTitle>
-      <DialogContent>
-        <DialogContentText sx={{ mb: 2 }}>{t("storageDescription")}</DialogContentText>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="xs"
+      fullWidth
+      fullScreen={fullScreen}
+      slotProps={{ paper: { sx: mobileFullScreenDialogPaperSx } }}
+    >
+      <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        {t("storageTitle")}
+        <IconButton onClick={onClose} aria-label={tc("close")} edge="end">
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
+      <DialogContent dividers sx={{ px: 0, pt: 0 }} aria-busy={busy}>
+        <Typography variant="body2" sx={{ px: 3, pt: 2, color: "text.secondary" }}>
+          {t("storageDescription")}
+        </Typography>
 
-        <Box sx={{ mb: 2 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={recentMapDataCacheEnabled}
-                disabled={busy}
-                onChange={(event) => {
-                  void handleRecentMapDataCacheChange(event);
-                }}
-              />
-            }
-            label={
-              <Stack spacing={0.5}>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    fontWeight: 600,
-                  }}
-                >
-                  {t("rememberRecentMapData")}
+        {info && (info.total.quota > 0 || info.rows.length > 0) && (
+          <Section title={t("storageUsage")}>
+            {info.total.quota > 0 && (
+              <Box sx={{ px: 3, pb: 1 }}>
+                <Typography variant="body2" sx={{ mb: 0.75 }}>
+                  {t("totalUsed", {
+                    used: formatBytes(info.total.used),
+                    total: formatBytes(info.total.quota),
+                    percent: info.total.percent,
+                  })}
                 </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: "text.secondary",
-                  }}
-                >
-                  {t("rememberRecentMapDataDescription")}
-                </Typography>
-              </Stack>
-            }
-            sx={{ alignItems: "flex-start", m: 0 }}
-          />
-        </Box>
-
-        {info?.total.quota ? (
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="body2" sx={{ mb: 0.5 }}>
-              {t("totalUsed", {
-                used: formatBytes(info.total.used),
-                total: formatBytes(info.total.quota),
-                percent: info.total.percent,
-              })}
-            </Typography>
-            <LinearProgress variant="determinate" value={info.total.percent} />
-          </Box>
-        ) : null}
-
-        {persistSupported && persisted !== null ? (
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
-              {t("persistentStorageTitle")}
-            </Typography>
-            <Typography variant="body2" sx={{ color: "text.secondary", mb: persisted ? 0 : 1 }}>
-              {persisted ? t("persistentStorageOn") : t("persistentStorageOff")}
-            </Typography>
-            {persisted ? null : (
-              <Button variant="outlined" size="small" onClick={handleEnablePersist} disabled={busy}>
-                {t("enablePersistentStorage")}
-              </Button>
+                <LinearProgress
+                  variant="determinate"
+                  value={info.total.percent}
+                  sx={{ height: 6, borderRadius: 3 }}
+                />
+              </Box>
             )}
-          </Box>
-        ) : null}
+            {info.rows.map((row) => (
+              <ValueRow key={row.label} label={row.label} value={formatBytes(row.bytes)} />
+            ))}
+          </Section>
+        )}
 
-        <Stack spacing={1}>
-          {info?.rows.length === 0 ? (
+        {persistSupported && persisted !== null && (
+          <Section title={t("persistentStorageTitle")}>
             <Typography
               variant="body2"
-              sx={{
-                color: "text.secondary",
-              }}
+              sx={{ px: 3, pb: persisted ? 1.5 : 1, color: "text.secondary" }}
             >
-              —
+              {persisted ? t("persistentStorageOn") : t("persistentStorageOff")}
             </Typography>
-          ) : (
-            info?.rows.map((row) => (
-              <Stack
-                key={row.label}
-                direction="row"
-                sx={{
-                  justifyContent: "space-between",
-                  py: 0.5,
-                }}
-              >
-                <Typography variant="body2">{row.label}</Typography>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: "text.secondary",
-                  }}
-                >
-                  {formatBytes(row.bytes)}
-                </Typography>
-              </Stack>
-            ))
-          )}
-        </Stack>
+            {!persisted && (
+              <Box sx={{ px: 3, pb: 1.5 }}>
+                <Button variant="tonal" onClick={handleEnablePersist} disabled={busy}>
+                  {t("enablePersistentStorage")}
+                </Button>
+              </Box>
+            )}
+          </Section>
+        )}
 
-        <Divider sx={{ my: 3 }} />
-
-        <Stack spacing={2}>
-          <Box>
-            <Typography variant="body2" sx={{ mb: 1 }}>
-              {t("clearRecentMapDataDescription")}
-            </Typography>
-            <Button color="warning" onClick={handleClearRecentMapData} disabled={busy}>
-              {t("clearRecentMapData")}
-            </Button>
-          </Box>
-
-          <Box>
-            <Typography variant="body2" sx={{ mb: 1 }}>
-              {t("clearTilesDescription")}
-            </Typography>
-            <Button color="warning" onClick={handleClearTiles} disabled={busy}>
-              {t("clearTiles")}
-            </Button>
-          </Box>
-        </Stack>
+        <Section title={t("storageMapData")}>
+          <SwitchRow
+            label={t("rememberRecentMapData")}
+            description={t("rememberRecentMapDataDescription")}
+            checked={recentMapDataCacheEnabled}
+            disabled={busy}
+            onChange={(enabled) => void handleRecentMapDataCacheChange(enabled)}
+          />
+          <ActionRow
+            label={t("clearRecentMapData")}
+            description={t("clearRecentMapDataDescription")}
+            onClick={() => void handleClearRecentMapData()}
+            disabled={busy}
+          />
+          <ActionRow
+            label={t("clearTiles")}
+            description={t("clearTilesDescription")}
+            onClick={() => void handleClearTiles()}
+            disabled={busy}
+          />
+        </Section>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>{t("cancel")}</Button>
-      </DialogActions>
     </Dialog>
   );
 }

@@ -56,6 +56,7 @@ import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { TransitLegStops } from "@/components/panels/transit/TransitLegStops";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { ClickableRow } from "@/components/ui/ClickableRow";
+import { RailDot, type RailSegment, TimelineRow } from "@/components/ui/TimelineRail";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { legTransitTime } from "@/lib/transitTime";
@@ -514,18 +515,8 @@ export function TransitLegTimeline({
   );
 }
 
-/** Width of the rail column, and of the line drawn in it. */
-const RAIL_WIDTH = 48;
-const LINE_WIDTH = 8;
-/** Where a point's marker sits: level with its name's first line. */
-const NODE_Y = 20;
 /** The walk between two platforms of an interchange. */
 const INTERCHANGE: RailSegment = { color: "#9E9E9E", dotted: true };
-
-interface RailSegment {
-  color: string;
-  dotted: boolean;
-}
 
 /** How a leg is drawn on the rail: rides in their line's colour, the rest as dots. */
 export function railSegment(leg: TripLeg | undefined): RailSegment | undefined {
@@ -533,128 +524,6 @@ export function railSegment(leg: TripLeg | undefined): RailSegment | undefined {
   const street = STREET_LEG[leg.mode];
   if (street) return { color: street.color, dotted: true };
   return { color: routeColor({ color: leg.route?.color, mode: leg.mode }), dotted: false };
-}
-
-function RailLine({
-  segment,
-  top,
-  bottom,
-  height,
-}: {
-  segment?: RailSegment;
-  top: number;
-  bottom?: number;
-  height?: number;
-}) {
-  if (!segment) return null;
-  return (
-    <Box
-      sx={{
-        position: "absolute",
-        left: "50%",
-        transform: "translateX(-50%)",
-        width: LINE_WIDTH,
-        top,
-        bottom,
-        height,
-        ...(segment.dotted
-          ? {
-              backgroundImage: `radial-gradient(circle, ${segment.color} 2.5px, transparent 3px)`,
-              backgroundSize: `${LINE_WIDTH}px 10px`,
-              backgroundRepeat: "repeat-y",
-              backgroundPosition: "center top",
-            }
-          : { bgcolor: segment.color }),
-      }}
-    />
-  );
-}
-
-/**
- * One row of the timeline: the rail with an optional marker, what happens
- * there, and when. A point row joins the leg that arrives (`above`) to the one
- * that leaves (`below`); a leg row carries one segment `through`.
- */
-export function TimelineRow({
-  above,
-  below,
-  through,
-  node,
-  nodeY = NODE_Y,
-  time,
-  divider = false,
-  dense = false,
-  children,
-}: {
-  above?: RailSegment;
-  below?: RailSegment;
-  through?: RailSegment;
-  node?: ReactNode;
-  nodeY?: number;
-  time?: ReactNode;
-  divider?: boolean;
-  /** A tighter row, for the stops a ride passes. */
-  dense?: boolean;
-  children?: ReactNode;
-}) {
-  const cell = {
-    py: dense ? 0.5 : 1,
-    borderTop: divider ? 1 : 0,
-    borderColor: "divider",
-  } as const;
-  return (
-    <Box sx={{ display: "grid", gridTemplateColumns: `${RAIL_WIDTH}px minmax(0, 1fr) auto` }}>
-      <Box aria-hidden sx={{ position: "relative" }}>
-        {through ? (
-          <RailLine segment={through} top={0} bottom={0} />
-        ) : (
-          <>
-            <RailLine segment={above} top={0} height={nodeY} />
-            <RailLine segment={below} top={nodeY} bottom={0} />
-          </>
-        )}
-        {node && (
-          <Box
-            sx={{
-              position: "absolute",
-              left: "50%",
-              top: nodeY,
-              transform: "translate(-50%, -50%)",
-              display: "flex",
-            }}
-          >
-            {node}
-          </Box>
-        )}
-      </Box>
-      <Box sx={{ ...cell, pl: 0.5, minWidth: 0 }}>{children}</Box>
-      <Box sx={{ ...cell, pl: 1, textAlign: "right", whiteSpace: "nowrap" }}>{time}</Box>
-    </Box>
-  );
-}
-
-/** A stop on the rail: a ring in the line's colour, filled to stand out. */
-export function RailDot({
-  color,
-  size = 16,
-  filled = false,
-}: {
-  color: string;
-  size?: number;
-  filled?: boolean;
-}) {
-  return (
-    <Box
-      sx={{
-        width: size,
-        height: size,
-        borderRadius: "50%",
-        border: `${Math.max(2, Math.round(size / 5))}px solid`,
-        borderColor: color,
-        bgcolor: filled ? color : "background.paper",
-      }}
-    />
-  );
 }
 
 const MODE_ICON: Partial<Record<TransportMode, SvgIconComponent>> = {
