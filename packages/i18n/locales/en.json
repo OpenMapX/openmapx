@@ -111,6 +111,10 @@
     "connectionAlternative": "Next option {time}",
     "walkOnStreet": "{action} onto {street}",
     "walkToLevel": "{action} to level {level}",
+    "walkStayOnStreet": "{action} to stay on {street}",
+    "walkHead": "Head {direction, select, n {north} ne {northeast} e {east} se {southeast} s {south} sw {southwest} w {west} other {northwest}}",
+    "walkHeadOnStreet": "Head {direction, select, n {north} ne {northeast} e {east} se {southeast} s {south} sw {southwest} w {west} other {northwest}} on {street}",
+    "walkCrossStreet": "Cross {street}",
     "walkDir": {
       "depart": "Head out",
       "continue": "Continue",
@@ -121,6 +125,7 @@
       "sharpLeft": "Sharp left",
       "sharpRight": "Sharp right",
       "uturn": "Make a U-turn",
+      "cross": "Cross the street",
       "stairs": "Take the stairs",
       "elevator": "Take the elevator",
       "arrive": "Arrive at {place}"

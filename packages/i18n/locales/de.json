@@ -111,6 +111,10 @@
     "connectionAlternative": "Nächste Option {time}",
     "walkOnStreet": "{action} auf {street}",
     "walkToLevel": "{action} zu Ebene {level}",
+    "walkStayOnStreet": "{action}, weiter auf {street}",
+    "walkHead": "Richtung {direction, select, n {Norden} ne {Nordosten} e {Osten} se {Südosten} s {Süden} sw {Südwesten} w {Westen} other {Nordwesten}} losgehen",
+    "walkHeadOnStreet": "Auf {street} Richtung {direction, select, n {Norden} ne {Nordosten} e {Osten} se {Südosten} s {Süden} sw {Südwesten} w {Westen} other {Nordwesten}} losgehen",
+    "walkCrossStreet": "{street} überqueren",
     "walkDir": {
       "depart": "Losgehen",
       "continue": "Geradeaus",
@@ -121,6 +125,7 @@
       "sharpLeft": "Scharf links",
       "sharpRight": "Scharf rechts",
       "uturn": "Wenden",
+      "cross": "Straße überqueren",
       "stairs": "Treppe nehmen",
       "elevator": "Aufzug nehmen",
       "arrive": "Ankunft an {place}"
