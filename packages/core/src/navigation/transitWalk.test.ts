@@ -149,6 +149,18 @@ describe("nextWalkManeuver", () => {
     expect(nextWalkManeuver(steps, 0, 10)).toEqual({ index: 2, distanceMeters: 40 });
   });
 
+  it("folds a flight of stairs split into several steps to the same level", () => {
+    const steps = [
+      step({ distanceMeters: 20 }),
+      step({ instruction: "STAIRS", toLevel: -3, distanceMeters: 10 }),
+      step({ distanceMeters: 5 }),
+      step({ instruction: "STAIRS", toLevel: -3, distanceMeters: 15 }),
+      step({ instruction: "LEFT", distanceMeters: 30 }),
+    ];
+    expect(nextWalkManeuver(steps, 0, 5)).toEqual({ index: 1, distanceMeters: 5 });
+    expect(nextWalkManeuver(steps, 1, 0)).toEqual({ index: 4, distanceMeters: 20 });
+  });
+
   it("runs to the end of the walk when only bare continues remain", () => {
     const steps = [step({ distanceMeters: 10 }), step({ distanceMeters: 25 })];
     expect(nextWalkManeuver(steps, 0, 7)).toEqual({ index: null, distanceMeters: 32 });

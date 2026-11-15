@@ -126,9 +126,9 @@ export function walkLegStepProgress(
 /**
  * The next walk step worth announcing after `currentStepIndex`, and how far
  * away it is. Planners split a walk into many steps that only say "continue",
- * with no turn, level or new street; showing those leaves the walker reading
- * "Continue, then continue". They are folded into the distance instead, so the
- * countdown runs to the next real turn. `index` is null when no such step
+ * with no turn, level or new street, or that carry on up the same stairs;
+ * showing those leaves the walker reading "Continue, then continue". They are
+ * folded into the distance instead, so the countdown runs to the next real turn. `index` is null when no such step
  * remains, meaning the walk ends at its destination `distanceMeters` away.
  */
 export function nextWalkManeuver(
@@ -137,24 +137,34 @@ export function nextWalkManeuver(
   distanceToNextStepMeters: number,
 ): { index: number | null; distanceMeters: number } {
   let distanceMeters = distanceToNextStepMeters;
+  // Each step is weighed against the last one that wasn't folded away, so a
+  // flight of stairs split by a bare "continue" still reads as one.
+  const current = steps[currentStepIndex];
+  const last = current ? walkStepInfo(current) : undefined;
   for (let i = currentStepIndex + 1; i < steps.length; i++) {
-    const previousStreet = steps[i - 1]?.streetName || undefined;
-    if (!isBareContinue(walkStepInfo(steps[i]), previousStreet)) {
-      return { index: i, distanceMeters };
-    }
+    if (!addsNothing(walkStepInfo(steps[i]), last)) return { index: i, distanceMeters };
     distanceMeters += steps[i].distanceMeters || 0;
   }
   return { index: null, distanceMeters };
 }
 
-/** A step that only carries on: no turn, no level change, no new street. */
-function isBareContinue(info: WalkStepInfo, previousStreet: string | undefined): boolean {
+/**
+ * A step that only carries on: no turn, no new street, or the same stairs or
+ * lift as the step before, to the same level.
+ */
+function addsNothing(info: WalkStepInfo, previous: WalkStepInfo | undefined): boolean {
+  if (info.instructionText) return false;
+  if (info.stairs || info.elevator) {
+    return (
+      !!previous &&
+      previous.stairs === info.stairs &&
+      previous.elevator === info.elevator &&
+      previous.toLevel === info.toLevel
+    );
+  }
   return (
     info.maneuver.type === "continue" &&
-    !info.instructionText &&
-    (!info.streetName || info.streetName === previousStreet) &&
-    !info.stairs &&
-    !info.elevator
+    (!info.streetName || info.streetName === previous?.streetName)
   );
 }
 

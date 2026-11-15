@@ -154,11 +154,14 @@ function LiveStopTime({
   event = "departure",
   tripId,
   stopId,
+  emphasis = false,
 }: {
   time: TransitTime;
   event?: TransitTimeEvent;
   tripId?: string;
   stopId?: string;
+  /** Body-sized and in full colour, as the times column of the trip's timeline. */
+  emphasis?: boolean;
 }) {
   const { data: journey } = useVehicleJourney(tripId ?? null);
   const stop = stopId ? journey?.stops.find((s) => s.stopId === stopId) : undefined;
@@ -169,7 +172,12 @@ function LiveStopTime({
   const changed = (transitDelayMinutes(pair) ?? 0) !== 0;
   return (
     <>
-      <DepartureTime {...pair} variant="caption" canceled={stop?.canceled} muted />
+      <DepartureTime
+        {...pair}
+        variant={emphasis ? "body2" : "caption"}
+        canceled={stop?.canceled}
+        muted={!emphasis}
+      />
       {changed && prediction && stop && (
         <AttributionStrip attributions={contributorsForRecords([stop])} variant="inline" />
       )}

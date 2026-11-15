@@ -14,6 +14,8 @@ vi.mock("@/lib/mobile/useMobileRuntime", () => ({
 vi.mock("@openmapx/core", async (original) => ({
   ...(await original<typeof import("@openmapx/core")>()),
   useVehicleJourney: () => ({ isError: false }),
+  useRouteAlerts: () => ({ data: undefined }),
+  useStopTransfers: () => ({ data: undefined }),
 }));
 const time = (clock: string) => `2026-11-06T${clock}:00Z`;
 const leg: TripLeg = {
@@ -91,7 +93,10 @@ it("shows delay on an upcoming selected ride", () => {
       transitProgress={null}
     />,
   );
-  expect(screen.getByText("08:44")).toHaveStyle({ textDecoration: "line-through" });
-  expect(screen.getByText("08:45")).toBeInTheDocument();
-  expect(screen.getByText("navigation.delayMinutes")).toBeInTheDocument();
+  // Both rides show the planned time struck through beside the live one.
+  const scheduled = screen.getAllByText("08:44");
+  expect(scheduled).toHaveLength(2);
+  for (const time of scheduled) expect(time).toHaveStyle({ textDecoration: "line-through" });
+  expect(screen.getAllByText("08:45")).toHaveLength(2);
+  expect(screen.getAllByText("navigation.delayMinutes").length).toBeGreaterThan(0);
 });

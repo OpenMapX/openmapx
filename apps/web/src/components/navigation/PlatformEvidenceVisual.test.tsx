@@ -32,6 +32,7 @@ vi.mock("@/integration-api/runtime/useDateTimeFormat", () => ({
 vi.mock("@openmapx/core", async (original) => ({
   ...(await original<object>()),
   useVehicleJourney: () => ({ data: undefined, isError: false, isFetching: false }),
+  useRouteAlerts: () => ({ data: undefined }),
   useStopTransfers: () => ({ data: undefined }),
 }));
 const codes = ["2", "2", "2", "3", "1", "3", "3", "3", "5 A-C"];
