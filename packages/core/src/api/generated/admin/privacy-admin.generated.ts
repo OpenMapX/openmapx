@@ -808,7 +808,7 @@ export type ExportPrivacyAdminCaseHeaders = {
   "x-admin-reauth-proof": string;
 };
 
-export type ExportPrivacyAdminCaseBody = { [key: string]: unknown };
+export type ExportPrivacyAdminCaseBody = { [key: string]: never };
 
 export type ExportPrivacyAdminCase400 =
   | {
