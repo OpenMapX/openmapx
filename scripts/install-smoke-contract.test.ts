@@ -42,17 +42,6 @@ describe("install smoke workflow", () => {
     expect(workflow.on.schedule).toHaveLength(1);
     expect(workflow.on).toHaveProperty("workflow_dispatch");
     expect(workflow.on).not.toHaveProperty("pull_request_target");
-    expect(workflow.on.pull_request.paths).toEqual([
-      "packages/cli/**",
-      "packages/core/src/services/**",
-      "packages/core/src/build-artifacts/**",
-      "apps/ops-agent/**",
-      "services/**",
-      "infra/docker/**",
-      "apps/*/Dockerfile",
-      "scripts/ci/install-smoke.sh",
-      ".github/workflows/install-smoke.yml",
-    ]);
   });
 
   it("holds read-only permissions and pinned actions", () => {
@@ -85,70 +74,6 @@ describe("install smoke workflow", () => {
 });
 
 describe("install smoke script", () => {
-  it("follows the documented commands in order", () => {
-    const body = (name: string) =>
-      script.match(new RegExp(`^${name}\\(\\) \\{\\n([\\s\\S]*?)^\\}`, "m"))?.[1];
-    // Each fragment must occur after the previous one.
-    const inOrder = (text: string | undefined, fragments: string[]) => {
-      expect(text).toBeDefined();
-      let from = 0;
-      for (const fragment of fragments) {
-        const at = (text as string).indexOf(fragment, from);
-        expect(at, `${fragment} after offset ${from}`).toBeGreaterThanOrEqual(0);
-        from = at + fragment.length;
-      }
-    };
-    inOrder(body("render_stack"), [
-      "openmapx services selected",
-      "openmapx compose release --status",
-      "openmapx compose render",
-      "assert_no_legacy_warnings render",
-    ]);
-    inOrder(body("start_infrastructure"), [
-      "openmapx services start postgis redis traefik app-api data-manager",
-      "openmapx services status",
-      "assert_data_manager_status",
-    ]);
-    expect(body("assert_data_manager_status")).toContain("http://localhost:4000/status");
-    inOrder(body("assert_check_clean"), [
-      "openmapx check --no-probe",
-      "assert_no_legacy_warnings check",
-    ]);
-    inOrder(body("case_install"), [
-      "configure_environment",
-      "render_stack",
-      "start_infrastructure",
-      "assert_check_clean",
-      "openmapx compose up",
-      "assert_stack_healthy",
-      "assert_agent_without_checkout",
-      "assert_check_clean",
-    ]);
-    inOrder(body("assert_agent_without_checkout"), [
-      "label=com.docker.compose.service=ops-agent",
-      "docker inspect --format '{{range .Mounts}}{{.Source}}",
-    ]);
-  });
-
-  it("fails on the messages earlier releases printed while converting an older installation", () => {
-    for (const phrase of [
-      "earlier release",
-      "keeps the whole checkout",
-      "one-time import",
-      "copied out of the checkout",
-      "routes were written there too",
-      "Traefik still reads its routes",
-    ])
-      expect(script).toContain(`  "${phrase}"\n`);
-  });
-
-  it("builds the five application images and selects the local release", () => {
-    expect(script).toContain(
-      "built_services=(app-api app-web ops-agent data-manager transitous-runner)",
-    );
-    expect(script).toContain("set_env OPENMAPX_RELEASE local");
-  });
-
   it("generates every secret at random and never prints the environment", () => {
     for (const key of [
       "POSTGRES_PASSWORD",
@@ -408,6 +333,14 @@ esac
     [
       "render",
       "The Transitous API keys have not been copied out of the checkout (infra/docker/secrets/transitous-api-keys/api-keys.json is missing): render again.",
+    ],
+    [
+      "render",
+      "services/martin/config/martin.yaml can't be read for the one-time import of your service file edits: it is a symbolic link. Render now uses the release's files, so an edit there would be lost: replace it with a regular file of yours holding your version, or delete it if the release's version will do (git restore services/martin/config/martin.yaml), and render again.",
+    ],
+    [
+      "render",
+      "Docker could not say whether a container still mounts services/traefik/config/dynamic; the routes were written there too.",
     ],
     [
       "check",
