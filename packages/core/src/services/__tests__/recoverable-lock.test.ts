@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -161,5 +169,34 @@ describe("recoverable lock", () => {
     expect(() => release()).toThrow(/taken from this holder/);
     expect(readLockHolder(path)?.purpose).toBe("next");
     next();
+  });
+
+  it("never removes a new holder's file that replaced the stale one it judged", async () => {
+    const path = lockPath();
+    writeFileSync(
+      path,
+      JSON.stringify(
+        foreign({ pidNamespace: "elsewhere", containerId: "c".repeat(64), pid: 4242 }),
+      ),
+    );
+    let live: number | undefined;
+    // While this reclaimer asks Docker about the old holder, another reclaimer
+    // removes that file and a new writer takes the lock.
+    const replaced = async () => {
+      unlinkSync(path);
+      writeFileSync(path, JSON.stringify(currentLockHolder("new writer")));
+      live = statSync(path).ino;
+      return false;
+    };
+    await expect(
+      acquireRecoverableLock(path, {
+        purpose: "late reclaimer",
+        waitMs: 200,
+        containerRunning: replaced,
+      }),
+    ).rejects.toBeInstanceOf(LockBusyError);
+    expect(statSync(path).ino).toBe(live);
+    expect(readLockHolder(path)?.purpose).toBe("new writer");
+    expect(existsSync(`${path}.reclaim`)).toBe(false);
   });
 });

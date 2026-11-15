@@ -188,10 +188,11 @@ export function readLockHolder(path: string): LockHolder | undefined {
 }
 
 /**
- * Moves a stale lock aside. Reclaimers race through `rename`; the one that
- * finds it moved a different file than the one it judged puts that file back.
+ * Moves the file at `path` aside if it is still the one judged (`ino`); one
+ * that changed meanwhile is put back. Used for the reclaim guard, and by the
+ * operator's clear, which acts on a holder it named.
  */
-function reclaim(path: string, ino: number): void {
+function moveAside(path: string, ino: number): void {
   const aside = `${path}.stale-${randomBytes(6).toString("hex")}`;
   try {
     renameSync(path, aside);
@@ -208,6 +209,50 @@ function reclaim(path: string, ino: number): void {
   }
   unlinkSync(aside);
   fsyncDirectory(dirname(path));
+}
+
+/**
+ * Removes a lock whose holder is gone. Reclaimers take turns through a guard
+ * file beside the lock, and the one holding it removes the lock only if it is
+ * still the file it judged: a new holder's file is never removed, because
+ * nobody else removes or replaces the lock while the guard is held. Resolves
+ * false when another reclaimer holds the guard; the caller looks again.
+ */
+async function reclaim(
+  path: string,
+  ino: number,
+  self: LockHolder,
+  containerRunning?: ContainerRunning,
+): Promise<boolean> {
+  const guard = `${path}.reclaim`;
+  let descriptor: number;
+  try {
+    descriptor = openSync(
+      guard,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+      0o600,
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    // A reclaimer that died while holding the guard leaves it behind.
+    const other = readHolderFile(guard);
+    if (other?.holder && (await lockHolderGone(other.holder, self, containerRunning)))
+      moveAside(guard, other.ino);
+    return false;
+  }
+  try {
+    writeSync(descriptor, JSON.stringify(self));
+  } finally {
+    closeSync(descriptor);
+  }
+  try {
+    if (readHolderFile(path)?.ino !== ino) return true;
+    unlinkSync(path);
+    fsyncDirectory(dirname(path));
+    return true;
+  } finally {
+    unlinkSync(guard);
+  }
 }
 
 export interface RecoverableLockOptions {
@@ -269,7 +314,8 @@ export async function acquireRecoverableLock(
       // An unreadable holder record is only trusted as stale once it has stayed
       // unreadable past the wait, so a holder still writing it is not displaced.
       if (existing.holder || performance.now() >= deadline) {
-        reclaim(path, existing.ino);
+        if (await reclaim(path, existing.ino, self, options.containerRunning)) continue;
+        await delay(5, undefined, { signal: options.signal });
         continue;
       }
     }
@@ -291,10 +337,12 @@ export async function withRecoverableLock<T>(
   }
 }
 
-/** The operator exit for a lock whose holder cannot be proved gone. */
+/** The operator exit for a lock whose holder cannot be proved gone, and for its reclaim guard. */
 export function clearRecoverableLock(path: string): LockHolder | undefined {
+  const guard = readHolderFile(`${path}.reclaim`);
+  if (guard) moveAside(`${path}.reclaim`, guard.ino);
   const existing = readHolderFile(path);
   if (!existing) return undefined;
-  reclaim(path, existing.ino);
+  moveAside(path, existing.ino);
   return existing.holder;
 }
