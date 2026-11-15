@@ -36,7 +36,7 @@ import { decideServiceAction } from "./service-action-policy";
 
 const containedProcessFailures = new WeakSet<object>();
 /** Only actual contained-process adapters mint this observation; it is not request authority. */
-export function isContainedProcessFailure(error: unknown): boolean {
+function isContainedProcessFailure(error: unknown): boolean {
   return typeof error === "object" && error !== null && containedProcessFailures.has(error);
 }
 const reportedProcessFailures = new WeakSet<object>();
