@@ -447,6 +447,8 @@
     "themeLight": "Light mode (click for dark)",
     "themeDark": "Dark mode (click for system)",
     "themeSystem": "System theme (click for light)",
+    "legend": "Map key",
+    "legendShowOnMap": "Show on map",
     "showLegend": "Show overlay legend",
     "hideLegend": "Hide overlay legend"
   },

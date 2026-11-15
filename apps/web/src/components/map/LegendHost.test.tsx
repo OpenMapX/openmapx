@@ -2,11 +2,11 @@
 
 import { useMeasurementStore } from "@integrations/overlay-tool-measurement/store";
 import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
-import { useNavigationStore, useSidebarStore } from "@openmapx/core";
+import { createOverlayStore, useNavigationStore, useSidebarStore } from "@openmapx/core";
 import type { IntegrationMetadata } from "@openmapx/core/api-contracts";
 import { IntegrationRegistry } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MAP_FOOTER_OBSTRUCTION_ID,
@@ -100,21 +100,26 @@ afterEach(() => {
 });
 
 describe("LegendHost", () => {
+  // The box the legends and tools stand in, positioned over the map's bottom edge.
+  const anchor = () => document.querySelector<HTMLElement>("[data-legend-anchor]");
+
   it("shows and releases the host for each independent standalone tool", () => {
     renderHost();
-    expect(screen.queryByRole("button", { name: "hideLegend" })).toBeNull();
+    expect(anchor()).toBeNull();
     act(() => useMeasurementStore.getState().activate());
-    expect(screen.getByRole("button", { name: "hideLegend" })).toBeInTheDocument();
+    expect(anchor()).toBeInTheDocument();
+    // A tool is a toolbar with its own close button; there is no legend to fold.
+    expect(screen.queryByRole("button", { name: "showLegend" })).toBeNull();
     act(() => useMeasurementStore.getState().deactivate());
-    expect(screen.queryByRole("button", { name: "hideLegend" })).toBeNull();
+    expect(anchor()).toBeNull();
     act(() => useTravelTimeStore.getState().activate());
-    expect(screen.getByRole("button", { name: "hideLegend" })).toBeInTheDocument();
+    expect(anchor()).toBeInTheDocument();
     act(() => useTravelTimeStore.getState().deactivate());
-    expect(screen.queryByRole("button", { name: "hideLegend" })).toBeNull();
+    expect(anchor()).toBeNull();
   });
 
   function hostRules(): string {
-    const host = screen.getByRole("button", { name: "hideLegend" }).parentElement;
+    const host = anchor();
     return [...document.querySelectorAll("style")]
       .map((style) => style.textContent ?? "")
       .filter((css) => css.includes(`.${host?.classList[1]}{`))
@@ -122,7 +127,7 @@ describe("LegendHost", () => {
   }
 
   function bottomRule(): string {
-    const host = screen.getByRole("button", { name: "hideLegend" }).parentElement;
+    const host = anchor();
     return [...document.querySelectorAll("style")]
       .map((style) => style.textContent ?? "")
       .filter((css) => css.includes(`.${host?.classList[1]}{bottom:`))
@@ -190,7 +195,8 @@ describe("LegendHost", () => {
     useMeasurementStore.getState().activate();
     renderHost();
 
-    const host = screen.getByRole("button", { name: "hideLegend" }).parentElement!;
+    const host = anchor();
+    if (!host) throw new Error("no legend anchor");
     const transition = getComputedStyle(host).transition;
     expect(transition).not.toMatch(/(^|,)\s*(bottom|all)(\s|$)/);
   });
@@ -226,5 +232,64 @@ describe("LegendHost", () => {
       expect(bottomRule()).toMatch(/min-width:0px\)\{[^}]*\{bottom:34px;/);
       expect(hostRules()).toContain("animation-range:4px 444px;");
     });
+  });
+});
+
+describe("LegendHost with several overlay legends", () => {
+  const legendOverlay = (name: string): IntegrationMetadata => ({
+    id: `overlay-${name}`,
+    name,
+    enabled: true,
+    isBuiltIn: true,
+    domains: ["map-overlay"],
+    frontend: {
+      mapLayer: true,
+      layerSelector: {
+        group: "map-details",
+        labelKey: name,
+        icon: "layers",
+        preview: "preview.svg",
+      },
+      overlay: {
+        legend: {
+          kind: "categorical",
+          title: `${name} title`,
+          items: [{ color: "#f00", label: name }],
+        },
+      },
+    },
+  });
+  const legends = new IntegrationRegistry([legendOverlay("alpha"), legendOverlay("beta")]);
+  const alpha = createOverlayStore({ overlayId: "alpha", extra: {} });
+  const beta = createOverlayStore({ overlayId: "beta", extra: {} });
+
+  afterEach(() => {
+    act(() => {
+      alpha.getState().closePanel();
+      beta.getState().closePanel();
+    });
+  });
+
+  it("shows one legend at a time, the one turned on last, behind a tab each", () => {
+    render(
+      <IntegrationRegistryContext.Provider value={legends}>
+        <LegendHost />
+      </IntegrationRegistryContext.Provider>,
+    );
+    act(() => alpha.getState().openPanel());
+    act(() => beta.getState().openPanel());
+
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["alpha", "beta"]);
+    expect(screen.getByRole("tab", { name: "beta" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("beta title")).toBeInTheDocument();
+    expect(screen.queryByText("alpha title")).toBeNull();
+
+    fireEvent.click(screen.getByRole("tab", { name: "alpha" }));
+    expect(screen.getByText("alpha title")).toBeInTheDocument();
+    expect(screen.queryByText("beta title")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "hideLegend" }));
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.getByRole("button", { name: "showLegend" })).toBeInTheDocument();
   });
 });
