@@ -78,6 +78,9 @@ vi.mock("@openmapx/core", async (importOriginal) => {
     usePresetSuggest: (...a: unknown[]) => usePresetSuggestMock(...a),
     useChipTranslations: (...a: unknown[]) => useChipTranslationsMock(...a),
     useDataSources: () => useDataSourcesMock(),
+    // A focused box looks up the viewport's country to rank brand matches; no
+    // test here depends on a resolved country.
+    useCountryFromCoordinates: () => ({ data: null }),
     useLabeledPlaces: () => useLabeledPlacesMock(),
     // The mobile empty state only needs a signed-out session. Keep the real
     // Better Auth client (and its delayed browser lifecycle) out of this test.

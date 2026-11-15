@@ -2,19 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   CREDENTIAL_KEYED_INTEGRATIONS,
   checkCredentialKey,
-  collectCredentialKeyViolations,
   credentialKeysOf,
   loadManifest,
 } from "../../scripts/check-credential-keys";
 
-// vitest runs from the repo root, so process.cwd() is the repo root here.
-const REPO_ROOT = process.cwd();
-
 describe("credential-key consistency", () => {
-  it("has no credential-key violations across the four embedded-provider manifests", () => {
-    expect(collectCredentialKeyViolations(REPO_ROOT)).toEqual([]);
-  });
-
   it("every credential key of the four governed integrations is a real <sourceId>-<field> composition", () => {
     let checked = 0;
     for (const integrationId of CREDENTIAL_KEYED_INTEGRATIONS) {

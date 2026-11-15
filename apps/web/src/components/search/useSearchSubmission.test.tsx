@@ -14,6 +14,8 @@ const nlp = vi.hoisted(() => vi.fn());
 vi.mock("@openmapx/core", async (original) => ({
   ...(await original<typeof import("@openmapx/core")>()),
   useNlpSearch: (...args: unknown[]) => nlp(...args),
+  // A signed-out session, without the real Better Auth client's session request.
+  useSession: () => ({ data: null, isPending: false }),
 }));
 
 const viewport = {

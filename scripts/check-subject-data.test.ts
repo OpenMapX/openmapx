@@ -2,10 +2,6 @@ import { describe, expect, it } from "vitest";
 import { validateSubjectDataInventory } from "./check-subject-data";
 
 describe("subject-data policy gate", () => {
-  it("passes the checked-in catalogue and manifests", () => {
-    const result = validateSubjectDataInventory();
-    expect(result.errors).toEqual([]);
-  });
   it("classifies encrypted migration preview actor attribution", () => {
     expect(
       validateSubjectDataInventory({

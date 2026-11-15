@@ -6,7 +6,7 @@ import { render, screen, userEvent, waitFor } from "@/test";
 import { WriteReviewDialog } from "./WriteReviewDialog";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
-vi.mock("../../../../../../packages/core/src/auth/useSession", () => ({
+vi.mock("../../../../../../../packages/core/src/auth/useSession", () => ({
   useSession: () => ({ data: { user: { id: "owner" }, session: { id: "session" } } }),
 }));
 vi.mock("@openmapx/integration-framework/react", () => ({
