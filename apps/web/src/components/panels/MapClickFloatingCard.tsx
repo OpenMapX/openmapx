@@ -10,7 +10,6 @@ import ShareIcon from "@mui/icons-material/Share";
 import StraightenIcon from "@mui/icons-material/Straighten";
 import TripOriginIcon from "@mui/icons-material/TripOrigin";
 import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
 import ListItemText from "@mui/material/ListItemText";
 import MenuItem from "@mui/material/MenuItem";
@@ -30,8 +29,7 @@ import {
   useSidebarStore,
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
-import type { MouseEvent, ReactNode } from "react";
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useState } from "react";
 import {
   describeMapLocation,
   type MapLocation,
@@ -45,27 +43,8 @@ import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { measureFrom, routeFromOrTo, shareLocationLink } from "@/lib/locationActions";
-import { useMapFooterBox } from "@/lib/mapFooterCenter";
-import { subscribeMobileFooterSurfaces, topMobileFooterSurface } from "@/lib/mobileFooterSurface";
 import { useBackDismiss } from "@/lib/useBackDismiss";
-
-const CARD_GAP = 8;
-
-function sheetTop(): number | null {
-  const surface = topMobileFooterSurface();
-  return surface ? surface.bottom - surface.visibleHeight : null;
-}
-
-/**
- * Where the phone card rests: above an open sheet, or above the map footer —
- * never over the map credits, which have to stay readable.
- */
-function usePhoneCardBottom(): string {
-  const footer = useMapFooterBox();
-  const top = useSyncExternalStore(subscribeMobileFooterSurfaces, sheetTop, () => null);
-  if (top !== null) return `${Math.max(0, window.innerHeight - top) + CARD_GAP}px`;
-  return `calc(var(--omx-map-footer-bottom, var(--omx-safe-bottom)) + ${footer.height + CARD_GAP}px)`;
-}
+import { LocationCard, LocationCardAction } from "./locationCard";
 
 export function MapClickFloatingCard() {
   const tc = useTranslations("common");
@@ -84,7 +63,6 @@ export function MapClickFloatingCard() {
   const { saveAt } = useSaveParking();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [copyAnchor, setCopyAnchor] = useState<HTMLElement | null>(null);
-  const phoneCardBottom = usePhoneCardBottom();
 
   const { data: reverseGeo, isLoading } = useReverseGeocoding(clickedLngLat, locale);
   useBackDismiss(clickedLngLat !== null, () => setClickedLngLat(null));
@@ -200,28 +178,12 @@ export function MapClickFloatingCard() {
     // within thumb reach instead of a menu under the finger.
     return (
       <>
-        <Paper
-          elevation={3}
-          role="region"
-          aria-label={tm("ariaLabel", { location: placeName })}
-          sx={{
-            position: "absolute",
-            zIndex: 11,
-            borderRadius: 3,
-            overflow: "hidden",
-            ...(isMobile
-              ? { left: CARD_GAP, right: CARD_GAP, bottom: phoneCardBottom }
-              : {
-                  bottom: 24,
-                  left: "50%",
-                  transform: "translateX(-50%)",
-                  width: "min(480px, calc(100% - 32px))",
-                }),
-          }}
-        >
-          <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, px: 2, pt: 1.5 }}>
-            <LocationOnIcon sx={{ color: "text.secondary", fontSize: 22, mt: 0.25 }} />
-            <Box sx={{ flex: 1, minWidth: 0 }}>
+        <LocationCard
+          ariaLabel={tm("ariaLabel", { location: placeName })}
+          icon={<LocationOnIcon />}
+          onClose={() => setClickedLngLat(null)}
+          heading={
+            <>
               {title}
               {placeName !== coordLabel && (
                 <Box
@@ -243,68 +205,54 @@ export function MapClickFloatingCard() {
                   {coordLabel}
                 </Box>
               )}
-            </Box>
-            <IconButton
-              onClick={() => setClickedLngLat(null)}
-              aria-label={tc("close")}
-              sx={{ width: 44, height: 44, mr: -1.5, mt: -1 }}
-            >
-              <CloseIcon />
-            </IconButton>
-          </Box>
-          <Box
-            sx={{
-              display: "flex",
-              gap: 1,
-              px: 2,
-              pt: 1.5,
-              pb: 1.5,
-              // A phone scrolls the row under the thumb; wider screens have
-              // the room to show every action at once.
-              ...(isMobile
-                ? {
-                    overflowX: "auto",
-                    scrollbarWidth: "none",
-                    "&::-webkit-scrollbar": { display: "none" },
-                  }
-                : { flexWrap: "wrap" }),
-            }}
-          >
-            <Action
-              primary
-              icon={<DirectionsIcon />}
-              label={tp("directions")}
-              onClick={() => handleRoute("destination")}
-            />
-            <Action
-              icon={<TripOriginIcon />}
-              label={tm("fromHere")}
-              onClick={() => handleRoute("origin")}
-            />
-            <Action icon={<ShareIcon />} label={tc("share")} onClick={() => void handleShare()} />
-            <Action
-              icon={<LocalParkingIcon />}
-              label={tParking("saveParking")}
-              onClick={() => void handleSaveParking()}
-            />
-            <Action
-              icon={<ContentCopyIcon />}
-              label={tc("copy")}
-              onClick={(event) => handleCopy(event.currentTarget)}
-              menuOpen={copyRows.length > 1 ? copyAnchor !== null : undefined}
-            />
-            <Action
-              icon={<StraightenIcon />}
-              label={tm("measureDistance")}
-              onClick={() => {
-                if (!clickedLngLat) return;
-                measureFrom(clickedLngLat);
-                setClickedLngLat(null);
-              }}
-            />
-            <Action icon={<InfoOutlinedIcon />} label={tc("details")} onClick={handleCoordClick} />
-          </Box>
-        </Paper>
+            </>
+          }
+          actions={
+            <>
+              <LocationCardAction
+                primary
+                icon={<DirectionsIcon />}
+                label={tp("directions")}
+                onClick={() => handleRoute("destination")}
+              />
+              <LocationCardAction
+                icon={<TripOriginIcon />}
+                label={tm("fromHere")}
+                onClick={() => handleRoute("origin")}
+              />
+              <LocationCardAction
+                icon={<ShareIcon />}
+                label={tc("share")}
+                onClick={() => void handleShare()}
+              />
+              <LocationCardAction
+                icon={<LocalParkingIcon />}
+                label={tParking("saveParking")}
+                onClick={() => void handleSaveParking()}
+              />
+              <LocationCardAction
+                icon={<ContentCopyIcon />}
+                label={tc("copy")}
+                onClick={(event) => handleCopy(event.currentTarget)}
+                menuOpen={copyRows.length > 1 ? copyAnchor !== null : undefined}
+              />
+              <LocationCardAction
+                icon={<StraightenIcon />}
+                label={tm("measureDistance")}
+                onClick={() => {
+                  if (!clickedLngLat) return;
+                  measureFrom(clickedLngLat);
+                  setClickedLngLat(null);
+                }}
+              />
+              <LocationCardAction
+                icon={<InfoOutlinedIcon />}
+                label={tc("details")}
+                onClick={handleCoordClick}
+              />
+            </>
+          }
+        />
         <Menu
           anchorEl={copyAnchor}
           open={copyAnchor !== null}
@@ -402,44 +350,5 @@ export function MapClickFloatingCard() {
       </Paper>
       {feedbackToast}
     </>
-  );
-}
-
-function Action({
-  icon,
-  label,
-  onClick,
-  primary,
-  menuOpen,
-}: {
-  icon: ReactNode;
-  label: string;
-  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
-  primary?: boolean;
-  /** Set on a button that opens a menu: whether that menu is open. */
-  menuOpen?: boolean;
-}) {
-  return (
-    <Button
-      variant={primary ? "contained" : "outlined"}
-      startIcon={icon}
-      onClick={onClick}
-      {...(menuOpen !== undefined && {
-        "aria-haspopup": "menu" as const,
-        "aria-expanded": menuOpen,
-      })}
-      sx={{
-        flexShrink: 0,
-        minHeight: 40,
-        borderRadius: 999,
-        textTransform: "none",
-        whiteSpace: "nowrap",
-        ...(primary
-          ? { bgcolor: BRAND, "&:hover": { bgcolor: "var(--omx-brand-hover)" } }
-          : { color: "text.primary", borderColor: "divider" }),
-      }}
-    >
-      {label}
-    </Button>
   );
 }

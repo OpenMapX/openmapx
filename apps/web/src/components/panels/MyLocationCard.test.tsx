@@ -18,6 +18,12 @@ vi.mock("./parking/useSaveParking", () => ({
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
+const share = vi.hoisted(() => ({ link: vi.fn(async () => "copied" as const) }));
+vi.mock("@/lib/locationActions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/locationActions")>()),
+  shareLocationLink: share.link,
+}));
+
 import { MyLocationCard } from "./MyLocationCard";
 
 beforeEach(() => {
@@ -56,6 +62,13 @@ describe("MyLocationCard", () => {
       expect(screen.getByText("parking.locationUnavailable")).toBeInTheDocument(),
     );
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("shares a link to the location and says when it was copied instead", async () => {
+    render(<MyLocationCard coords={[6.6, 51.55]} onClose={() => {}} />);
+    await userEvent.click(screen.getByRole("button", { name: /common.share/ }));
+    expect(share.link).toHaveBeenCalledWith(expect.objectContaining({ coordinates: [6.6, 51.55] }));
+    expect(await screen.findByText("mapContextMenu.linkCopied")).toBeInTheDocument();
   });
 
   it("seeds the directions origin and opens the panel", async () => {
