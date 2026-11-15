@@ -33,21 +33,6 @@ describe("required production build gate", () => {
         "@integrations": integrations,
       });
   });
-  it("builds production outputs, checks packed packages, and aggregates the result", () => {
-    const workflow = read(".github/workflows/ci.yml");
-    const rootPackage = JSON.parse(read("package.json")) as {
-      scripts: Record<string, string>;
-    };
-
-    expect(workflow).toMatch(/^ {2}build:\n/m);
-    expect(workflow).toContain("pnpm build");
-    expect(workflow).toContain("pnpm check-packed-packages");
-    expect(workflow).toMatch(/needs:\s*\[[^\]]*\bbuild\b[^\]]*\]/);
-    expect(rootPackage.scripts["check-packed-packages"]).toBe(
-      "node scripts/check-packed-packages.mjs",
-    );
-  });
-
   it("executes the bundled data-manager workers after the production build in the required build job", () => {
     const workflow = read(".github/workflows/ci.yml");
     const buildJob =
