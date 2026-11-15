@@ -800,7 +800,7 @@ function guarded<T>(s: State, run: () => T, checkTargets = true): T {
   }
 }
 function writeNode(s: State, node: RootRecord | ChildRecord) {
-  const domain = `${s.node === null ? "openmapx-lease-owner" : "openmapx-lease-child"}-v${node.version === 2 ? 2 : 1}`;
+  const domain = s.node === null ? "openmapx-lease-owner-v2" : "openmapx-lease-child-v2";
   writeBounded(
     s,
     s.node === null ? "owner" : "children",
@@ -1723,7 +1723,6 @@ export async function adoptArtifactTargetLease(options: {
         (!forwardAncestry(t, grant.parentNode) || Date.now() >= grant.child.deadlineAt)
       )
         throw Error("Stale or canceled delegation");
-      if (!retained && !grant.origin) throw Error("Control origin required");
       const admissionName = `${grant.delegationId}.json`;
       const pending = {
         version: 1,
