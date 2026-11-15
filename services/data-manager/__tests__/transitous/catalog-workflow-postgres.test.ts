@@ -12,6 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
+import { type AddressInfo, createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { promisify } from "node:util";
@@ -452,6 +453,20 @@ it
       const dockerBridge = (await bridge.listen({ host: "127.0.0.1", port: 0 })) + "/docker";
       const require = createRequire(import.meta.url),
         loader = require.resolve("tsx/esm");
+      // The agent reads a data-manager execution's terminal status from
+      // data-manager itself, so it learns the port data-manager will listen on.
+      const dmPort = await new Promise<number>((resolvePort, rejectPort) => {
+        const probe = createServer();
+        probe.once("error", rejectPort);
+        probe.listen(0, "127.0.0.1", () => {
+          const { port } = probe.address() as AddressInfo;
+          probe.close(() => resolvePort(port));
+        });
+      });
+      const agentDmTokenFile = join(f.root, "dm-agent-token");
+      writeFileSync(agentDmTokenFile, `${Buffer.alloc(32, 23).toString("base64url")}-agent`, {
+        mode: 0o600,
+      });
       async function startAgent(catalogFault: string, listenPort = 0) {
         const child = spawn(
           process.execPath,
@@ -460,7 +475,14 @@ it
             loader,
             resolve("apps/ops-agent/src/test-fixtures/staged-coordinator-request-process.mjs"),
           ],
-          { stdio: ["pipe", "pipe", "pipe"] },
+          {
+            stdio: ["pipe", "pipe", "pipe"],
+            env: {
+              ...process.env,
+              DATA_MANAGER_URL: `http://127.0.0.1:${dmPort}`,
+              DATA_MANAGER_TOKEN_FILE: agentDmTokenFile,
+            },
+          },
         );
         children.push(child);
         let stderr = "";
@@ -647,7 +669,7 @@ it
         operationsPolicy: policy,
         executionReceiver: receiver,
       });
-      let dmUrl = await dm.listen({ host: "127.0.0.1", port: 0 }),
+      let dmUrl = await dm.listen({ host: "127.0.0.1", port: dmPort }),
         transport = sdk.createDataManagerTransport({ baseUrl: dmUrl, authToken: token });
       async function startNativeDm(listenPort = 0) {
         const child = spawn(
@@ -716,7 +738,11 @@ it
       let nativeDm: Awaited<ReturnType<typeof startNativeDm>> | undefined;
       if (fault === "dm-pointer" || fault === "runner-refusal" || fault === "before-pointer") {
         await runtime.close();
-        nativeDm = await startNativeDm();
+        // The native data-manager takes over the port the agent knows.
+        dm.server.closeAllConnections();
+        await dm.close();
+        dm = undefined;
+        nativeDm = await startNativeDm(dmPort);
         transport = sdk.createDataManagerTransport({ baseUrl: nativeDm.url, authToken: token });
       }
       async function terminal(id: string) {
