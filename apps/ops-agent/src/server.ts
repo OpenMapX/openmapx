@@ -192,13 +192,14 @@ const DEFAULT_CLAIM_TIMEOUT_MS = 5_000;
 const MAX_JOB_ID_ATTEMPTS = 8;
 const MAX_RETAINED_EVENTS_PER_JOB = 64;
 const MAX_RETAINED_EVENT_BYTES_PER_JOB = 32 * 1024;
+// New work and entries that need recovery have a bound each.
 export const OPS_AGENT_RETENTION_LIMITS = {
-  maxJobs: DEFAULT_JOB_ENTRIES,
+  maxJobs: 2 * DEFAULT_JOB_ENTRIES,
   maxEventsPerJob: MAX_RETAINED_EVENTS_PER_JOB,
   maxEventBytesPerJob: MAX_RETAINED_EVENT_BYTES_PER_JOB,
   maxResultBytesPerJob: OPS_MAX_RESULT_BYTES,
   maxAggregateJournalBytes: 24 * 1024 * 1024,
-  maxAggregateEventBytes: DEFAULT_JOB_ENTRIES * MAX_RETAINED_EVENT_BYTES_PER_JOB,
+  maxAggregateEventBytes: 2 * DEFAULT_JOB_ENTRIES * MAX_RETAINED_EVENT_BYTES_PER_JOB,
 } as const;
 // Conservative read-only surface while the release store cannot be read safely.
 const RELEASE_RECOVERY_READ_KINDS = new Set<OpsOperationKind>([
@@ -241,8 +242,6 @@ export interface OpsAuditEvent {
 }
 
 export interface BuildOpsAgentServerOptions {
-  /** Receives background failures such as a failed control record prune. */
-  logger?: { warn(message: string, error: unknown): void };
   artifactTransfers?: ArtifactTransferStore;
   controlInstallation?: ControlInstallation;
   terminalClaimCleanup?: VerifiedTerminalClaimCleanup;
@@ -702,12 +701,49 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         return true;
     return false;
   };
+  /** Records a maintenance step's terminal with its owner. False only when a
+   * step's terminal could not be recorded. */
+  const recordStepTerminal = (job: JobRecord): boolean => {
+    if (
+      !options.controlInstallation ||
+      job.terminalAt === undefined ||
+      !(
+        isTrustedConfigurationApplyOperation(job.operation) ||
+        job.operation.kind === "configuration.hardlinks.apply" ||
+        job.operation.kind === "configurationHandoff.prepare" ||
+        job.operation.kind === "service.recreate" ||
+        job.operation.kind === "service.recreateIsolated"
+      ) ||
+      !job.operation.maintenanceId
+    )
+      return true;
+    try {
+      recordOwnedConfigurationMaintenanceStepTerminal(
+        options.controlInstallation,
+        job.operation,
+        executionFor(job),
+        statusFor(job),
+        job.terminalAt,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  };
   /** Entries that need recovery are bounded separately, so they never use up
    * the capacity for new work. */
-  const journalFull = () => {
-    let recovery = 0;
-    for (const job of jobsById.values()) if (recoveryRequired(job)) recovery++;
-    return jobsById.size - recovery >= maxJobEntries || recovery >= maxJobEntries;
+  const journalFull = (jobs: Iterable<JobRecord> = jobsById.values(), adding?: JobRecord) => {
+    let recovery = 0,
+      total = 0;
+    for (const job of jobs) {
+      total++;
+      if (recoveryRequired(job)) recovery++;
+    }
+    if (adding)
+      return recoveryRequired(adding)
+        ? recovery >= maxJobEntries
+        : total - recovery >= maxJobEntries;
+    return total - recovery >= maxJobEntries || recovery >= maxJobEntries;
   };
 
   const truncateUtf8 = (message: string, maxBytes: number): string => {
@@ -1553,33 +1589,10 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
                   statusFor(job),
                   job.terminalAt,
                 );
-              if (
-                terminalDurable &&
-                claimReleased &&
-                authority &&
-                options.controlInstallation &&
-                job.terminalAt !== undefined &&
-                (isTrustedConfigurationApplyOperation(job.operation) ||
-                  job.operation.kind === "configuration.hardlinks.apply" ||
-                  job.operation.kind === "configurationHandoff.prepare" ||
-                  job.operation.kind === "service.recreate" ||
-                  job.operation.kind === "service.recreateIsolated") &&
-                job.operation.maintenanceId
-              ) {
-                try {
-                  recordOwnedConfigurationMaintenanceStepTerminal(
-                    options.controlInstallation,
-                    job.operation,
-                    executionFor(job),
-                    statusFor(job),
-                    job.terminalAt,
-                  );
-                } catch {
-                  // The step's terminal is not recorded with its owner; the
-                  // maintenance stays held for recovery and nothing replays.
-                  stickyRecoveryRequired.add(job.operationId);
-                }
-              }
+              if (terminalDurable && claimReleased && authority && !recordStepTerminal(job))
+                // The step's terminal is not recorded with its owner; the
+                // maintenance stays held for recovery and nothing replays.
+                stickyRecoveryRequired.add(job.operationId);
             } finally {
               // The slot is returned even when terminal bookkeeping throws.
               activeControllers.delete(job.operationId);
@@ -1933,7 +1946,7 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
           // An entry already past its retention is not brought back, so it
           // cannot keep the records it names from the prune.
           if (!retainedJob(restored, now().getTime())) continue;
-          if (next.size >= maxJobEntries)
+          if (journalFull(next.values(), restored))
             throw Error("Original maintenance control recovery capacity exceeded");
         }
         next.set(restored.operationId, restored);
@@ -2147,10 +2160,13 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
         }
     }
     if (changed) await journal.replace([...jobsById.values()].map(persisted));
+    // A step whose terminal was journaled before its owner record was updated
+    // (the agent stopped in between) is recorded now; recording is idempotent.
+    for (const job of jobsById.values())
+      if (job.terminalAt !== undefined && !recoveryRequired(job)) recordStepTerminal(job);
     if (options.controlInstallation) {
       const prune = startControlPrune(options.controlInstallation, {
-        onError: (error) =>
-          (options.logger ?? { warn: console.warn }).warn("Control record prune failed", error),
+        onError: (error) => console.warn("Control record prune failed", error),
         keep: (operationKey) =>
           newestStagedCoordinatorKey() === operationKey || journalReferences(operationKey),
       });

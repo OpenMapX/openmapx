@@ -3638,6 +3638,131 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       },
       120000,
     );
+    it("records a durable nonempty maintenance step terminal on agent restart after its owner write was lost", async () => {
+      dm = await ownedDataManager({
+        sql: fixture.sql,
+        infraDir: host.infraDir,
+        serviceIds: host.loaded.map((service) => service.manifest.id),
+      });
+      vi.stubEnv("DATA_MANAGER_URL", dm.baseUrl);
+      vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile(dm.token));
+      host.setRows([
+        host.row,
+        {
+          ...host.row,
+          Id: "c".repeat(64),
+          State: "running",
+          ConfigImage: "example/data-manager:1",
+          Labels: { ...host.row.Labels, "com.docker.compose.service": "data-manager" },
+        },
+      ]);
+      const source = join(host.infraDir, "data/source-osm");
+      mkdirSync(source, { recursive: true });
+      writeFileSync(join(source, "fixture.pbf"), "public-osm-fixture");
+      const ctx = await job(),
+        observation = new AbortController();
+      ctx.signal = observation.signal;
+      await owned(ctx, async () => {
+        const candidate = await prospective.prepareProspectiveConfiguration({
+            actorId: ctx.jobId,
+            operationKey: `opk1_${ctx.jobId.replaceAll("-", "")}`,
+            expectedCurrentRevisionId: host.initial.revisionId,
+            followUp: "service-apply",
+            overlay: {
+              purpose: "service-secret",
+              coordinatorMode: "require-running",
+              changes: [
+                {
+                  kind: "service-secret",
+                  serviceId: "data-manager",
+                  key: "TOKEN",
+                  action: "set",
+                  value: "synthetic-maintenance-step-restart-credential",
+                },
+              ],
+            },
+          }),
+          maintenance = await import("../configuration-maintenance"),
+          store = await import("../../../../ops-agent/src/configuration-maintenance-store"),
+          { AnchoredDirectory } = await import(
+            "../../../../../packages/core/src/build-artifacts/filesystem"
+          ),
+          prepared = await maintenance.prepareConfigurationMaintenance(candidate),
+          decision = await prospective.commitProspectiveConfigurationMaintenance(candidate);
+        await maintenance.decideConfigurationMaintenance(decision);
+        await maintenance.executeConfigurationMaintenanceStep(candidate, 0);
+        const step = prepared.steps[1]!,
+          canonical = () =>
+            store
+              .readOwnedConfigurationMaintenance(
+                restoreAdmittedControlExecution(installation, prepared.prepare),
+              )
+              .apiControls.steps.find((value) => value.execution.operationKey === step.operationKey)
+              ?.canonical ?? null;
+        // The agent journals the step's terminal, then stops before the owner
+        // record carries it: fail exactly that owner write once.
+        const write = AnchoredDirectory.prototype.write;
+        let lost = false;
+        const fault = vi.spyOn(AnchoredDirectory.prototype, "write").mockImplementation(function (
+          this: InstanceType<typeof AnchoredDirectory>,
+          ...args
+        ) {
+          const [name, bytes] = args;
+          if (!lost && name === `${prepared.binding.maintenanceId}.json`) {
+            const recorded = (
+              JSON.parse(String(bytes)) as {
+                payload?: {
+                  apiControls?: {
+                    steps?: { execution: { operationKey: string }; canonical: unknown }[];
+                  };
+                };
+              }
+            ).payload?.apiControls?.steps?.find(
+              (value) => value.execution.operationKey === step.operationKey,
+            );
+            if (recorded?.canonical) {
+              lost = true;
+              throw Error("Synthetic agent stop before the step terminal reached its owner");
+            }
+          }
+          return write.apply(this, args);
+        });
+        const timer = setTimeout(() => observation.abort(), 45000);
+        try {
+          await maintenance
+            .executeConfigurationMaintenanceStep(candidate, 1)
+            .catch(() => undefined);
+        } finally {
+          clearTimeout(timer);
+          fault.mockRestore();
+        }
+        expect(lost).toBe(true);
+        expect(canonical()).toBeNull();
+        await app.close();
+        closeControlInstallation(installation);
+        const journal = await openOpsJobJournal(
+          join(host.infraDir, "state/ops-agent/jobs-v1.json"),
+        );
+        expect(
+          journal.records().find((value) => value.operationKey === step.operationKey)?.state,
+        ).toBe("succeeded");
+        installation = openControlInstallation({
+          infraDir: host.infraDir,
+          role: "ops-agent",
+          serviceIds: host.loaded.map((value) => value.manifest.id),
+        });
+        const restartedRuntime = await host.reopenRuntime();
+        app = buildOpsAgentServer({
+          tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
+          runtime: restartedRuntime,
+          resourceClaimer: host.createResourceClaimer(restartedRuntime),
+          journal,
+          controlInstallation: installation,
+        });
+        vi.stubEnv("OPS_AGENT_URL", await app.listen({ host: "127.0.0.1", port: 0 }));
+        expect(canonical()).not.toBeNull();
+      });
+    }, 120000);
     it.each(["contained", "retirement", "pointer-ack-loss"])(
       "settles the actual durable nonempty contained final after a known native generation noncommit through the current persister (mode=%s)",
       async (mode) => {
