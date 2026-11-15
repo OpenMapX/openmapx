@@ -103,12 +103,10 @@ import {
   controlDigest,
   controlOriginSchema,
   digest,
-  originRecordDomain,
   sameControlOrigin,
   signControl,
   targetSchema,
   uuid,
-  validateOriginRecord,
   verifyControl,
 } from "./control-records";
 import {
@@ -138,7 +136,7 @@ export type BorrowedArtifactTargetLease = {
 export type TargetLeaseAuthority = ArtifactTargetLease | BorrowedArtifactTargetLease;
 const inode = z.strictObject({ dev: z.string().regex(/^\d+$/), ino: z.string().regex(/^\d+$/) });
 const certificateSchema = z.strictObject({
-  version: z.union([z.literal(1), z.literal(2)]),
+  version: z.literal(2),
   origin: controlOriginSchema,
   installationId: uuid,
   leaseId: uuid,
@@ -187,7 +185,7 @@ const outcomeSchema = z.strictObject({
 });
 const phaseSchema = z.enum(["held", "cancel_pending", "recovery_required", "settled"]);
 const rootSchema = z.strictObject({
-  version: z.literal(2).optional(),
+  version: z.literal(2),
   origin: controlOriginSchema,
   certificate: signedCertificateSchema,
   sequence: z.number().int().nonnegative().safe(),
@@ -197,7 +195,7 @@ const rootSchema = z.strictObject({
 });
 type RootRecord = z.infer<typeof rootSchema>;
 const grantSchema = z.strictObject({
-  version: z.union([z.literal(1), z.literal(2)]),
+  version: z.literal(2),
   origin: controlOriginSchema,
   installationId: uuid,
   leaseId: uuid,
@@ -217,7 +215,7 @@ const grantSchema = z.strictObject({
 });
 type Grant = z.infer<typeof grantSchema>;
 const childSchema = z.strictObject({
-  version: z.literal(2).optional(),
+  version: z.literal(2),
   origin: controlOriginSchema,
   delegationId: uuid,
   grantDigest: digest,
@@ -425,7 +423,7 @@ function json(dir: AnchoredDirectory, name: string, max = 131072): unknown {
 function readRoot(s: State): RootRecord {
   return verifyControl(
     s.certificate.ownerPublicKey,
-    originRecordDomain("openmapx-lease-owner", json(s.ledger, "owner.json")),
+    "openmapx-lease-owner-v2",
     json(s.ledger, "owner.json"),
     rootSchema,
   );
@@ -439,12 +437,7 @@ function readGrant(s: State, id: string, parentKey: string): Grant {
     const envelope = z
       .strictObject({ grant: z.unknown(), transition: z.unknown() })
       .parse(json(dir, `${uuid.parse(id)}.json`));
-    const grant = verifyControl(
-      parentKey,
-      originRecordDomain("openmapx-lease-grant", envelope.grant),
-      envelope.grant,
-      grantSchema,
-    );
+    const grant = verifyControl(parentKey, "openmapx-lease-grant-v2", envelope.grant, grantSchema);
     const transition = verifyControl(
       parentKey,
       "openmapx-lease-intent-v1",
@@ -452,7 +445,6 @@ function readGrant(s: State, id: string, parentKey: string): Grant {
       transitionSchema,
     );
     if (
-      !validateOriginRecord(grant) ||
       !sameControlOrigin(grant.origin, s.certificate.origin) ||
       grant.delegationId !== id ||
       transition.delegationId !== id ||
@@ -541,14 +533,8 @@ function readChild(s: State, grant: Grant): ObservedChild | undefined {
         },
       };
     }
-    const child = verifyControl(
-      grant.childPublicKey,
-      originRecordDomain("openmapx-lease-child", raw),
-      raw,
-      childSchema,
-    );
+    const child = verifyControl(grant.childPublicKey, "openmapx-lease-child-v2", raw, childSchema);
     if (
-      !validateOriginRecord(child) ||
       !sameControlOrigin(child.origin, grant.origin) ||
       child.delegationId !== grant.delegationId ||
       controlDigest(child.execution) !== controlDigest(grant.child)
@@ -624,7 +610,6 @@ function tree(s: State): LeaseTree {
   if (!s.journalGuardHeld) return guarded(s, () => tree(s), false);
   const root = readRoot(s);
   if (
-    !validateOriginRecord(root) ||
     !sameControlOrigin(root.origin, s.certificate.origin) ||
     controlDigest(root.certificate) !== controlDigest(s.certificateEnvelope)
   )
@@ -944,7 +929,7 @@ function assertImagePullTargetLeaseCompatibility(
     ),
     admitted = verifyControl(
       state.installation.installation.publicKey,
-      originRecordDomain("openmapx-control-execution", raw),
+      "openmapx-control-execution-v2",
       raw,
       z
         .object({
@@ -955,7 +940,6 @@ function assertImagePullTargetLeaseCompatibility(
         .passthrough(),
     );
   if (
-    !state.origin ||
     state.installation.fixedChildId ||
     state.kind !== kind ||
     controlDigest(raw) !== state.receiptDigest ||
@@ -1048,7 +1032,6 @@ function assertImagePullTargetLeaseCompatibility(
           slots = owner.slots;
         if (
           !slots ||
-          !validateOriginRecord(root) ||
           !sameControlOrigin(root.origin, owner.certificate.origin) ||
           controlDigest(root.certificate) !== controlDigest(owner.certificateEnvelope)
         )
@@ -1198,7 +1181,6 @@ export async function acquireArtifactTargetLease(options: {
     ledger.directory("grants", true).close();
     ledger.directory("children", true).close();
     const key = newControlKey();
-    if (!authority.origin) throw Error("Control origin required");
     const certificate: Certificate = {
       version: 2,
       origin: authority.origin,
@@ -1521,7 +1503,6 @@ function publishReservedLeaseGrant(
     delegationId = fixedControlChildId(s.installation, child.childPublicKey, s.execution);
   } else if (child.childPublicKey !== s.installation.publicKeys[child.recipient])
     throw Error("Child role key mismatch");
-  if (!s.certificate.origin) throw Error("Legacy lease is observation-only; upgrade producer");
   const grant: Grant = {
     version: 2,
     origin: s.certificate.origin,
@@ -1612,12 +1593,11 @@ function openState(
     const cert = certificateSchema.parse(envelope.payload);
     const certificate = verifyControl(
       installation.publicKeys[cert.owner.executor],
-      originRecordDomain("openmapx-lease-certificate", envelope),
+      "openmapx-lease-certificate-v2",
       envelope,
       certificateSchema,
     );
     if (
-      !validateOriginRecord(certificate) ||
       certificate.installationId !== installation.installation.installationId ||
       certificate.leaseId !== leaseId
     )
@@ -1858,7 +1838,7 @@ export function bindBorrowedControlExecution(
     ["generation-hardlinks", "configuration-maintenance.prepare"].includes(a.kind) &&
     a.installation.installation.role === "data-manager"
   ) {
-    if (!s.node || !a.origin) throw Error("Original generation adoption required");
+    if (!s.node) throw Error("Original generation adoption required");
     const payload = {
       version: 2,
       origin: a.origin,
@@ -1904,8 +1884,7 @@ export function retainedConfigurationFenceAdoption(authority: VerifiedExecutionA
   const owner = executionAuthorityState(authority);
   if (
     owner.kind !== "configuration-maintenance.prepare" ||
-    owner.installation.installation.role !== "data-manager" ||
-    !owner.origin
+    owner.installation.installation.role !== "data-manager"
   )
     throw Error("Original normal DM fence adopter required");
   const value = verifyControl(
@@ -1941,11 +1920,7 @@ export function restoreGenerationHardlinksLeaseForSettlement(
   authority: VerifiedExecutionAuthority,
 ): BorrowedArtifactTargetLease {
   const a = executionAuthorityState(authority);
-  if (
-    a.kind !== "generation-hardlinks" ||
-    a.installation.installation.role !== "data-manager" ||
-    !a.origin
-  )
+  if (a.kind !== "generation-hardlinks" || a.installation.installation.role !== "data-manager")
     throw Error("Original generation receiver required");
   const retained = verifyControl(
     a.installation.installation.publicKey,
@@ -2099,8 +2074,7 @@ export async function settlePreparedConfigurationHandoff(
   if (
     owner.kind !== "configurationHandoff.prepare" ||
     owner.installation.fixedChildId ||
-    owner.installation.installation.role !== "ops-agent" ||
-    !owner.origin
+    owner.installation.installation.role !== "ops-agent"
   )
     throw Error("Original handoff preparer required");
   const admitted = readPrivateRecord(
@@ -2186,7 +2160,7 @@ export async function settleRetainedConfigurationHandoffHelper(
   authority: VerifiedExecutionAuthority,
 ): Promise<void> {
   const owner = executionAuthorityState(authority);
-  if (owner.kind !== "configuration-helper" || !owner.installation.fixedChildId || !owner.origin)
+  if (owner.kind !== "configuration-helper" || !owner.installation.fixedChildId)
     throw Error("Original completed fixed helper required");
   const raw = readPrivateRecord(
       owner.installation,
@@ -2392,7 +2366,6 @@ export function configurationMaintenanceTargetOwner(lease: ArtifactTargetLease) 
       s.node !== null ||
       s.installation.installation.role !== "ops-agent" ||
       s.authority?.kind !== "configurationMaintenance.prepare" ||
-      !s.certificate.origin ||
       current.root.phase === "settled" ||
       s.slots?.release
     )
@@ -2872,7 +2845,6 @@ export function settleUnadmittedConfigurationPrepare(
     inspected.kind !== "configuration-maintenance.prepare" ||
     inspected.phase !== "configuration-fence" ||
     inspected.recipient !== "data-manager" ||
-    !inspected.origin ||
     controlDigest(inspected.parent) !== controlDigest(inspected.owner) ||
     controlDigest(input.ownerPrepare) !== controlDigest(inspected.owner) ||
     canonicalJson(input.serviceIds) !== canonicalJson(inspected.serviceIds) ||
@@ -3071,7 +3043,6 @@ export function observeUnadoptedServiceHardlinkGrant(
     grant.kind !== "generation-hardlinks" ||
     grant.phase !== "hardlinks" ||
     grant.recipient !== "data-manager" ||
-    !grant.origin ||
     controlDigest(grant.parent) !== controlDigest(grant.owner) ||
     Date.now() < grant.owner.deadlineAt ||
     Date.now() < grant.execution.deadlineAt
@@ -3173,7 +3144,6 @@ export async function revokeUnadoptedServiceHardlinks(
           throw Error("Original failed lifecycle receipt changed");
         continue;
       }
-      if (!grant.origin) throw Error("Original origin-bound grant required");
       const revoked = unadoptedLifecycleSchema.parse({
         version: 1,
         origin: grant.origin,
@@ -3329,7 +3299,6 @@ export async function reconcileConfigurationPreEffectRoot(
   inspectConfigurationPreEffectRefusal(authority);
   const state = executionAuthorityState(authority),
     name = `${state.execution.operationKey}.json`;
-  if (!state.origin) throw Error("Original pre-effect root source required");
   let raw: unknown;
   try {
     raw = readPrivateRecord(state.installation, "execution-leases", name);
@@ -3480,8 +3449,6 @@ export function verifyConfigurationHelperReady(lease: BorrowedArtifactTargetLeas
 export function assertArtifactTargetLeaseForward(lease: TargetLeaseAuthority): void {
   const s = stateOf(lease);
   if (s.settlementOnly) throw Error("Recovered lease permits settlement only");
-  if (!s.certificate.origin)
-    throw Error("Legacy lease is observation/settlement only; upgrade producer");
   if (s.verifiedAuthority) assertControlExecutionForward(s.verifiedAuthority);
   const t = tree(s);
   const node = s.node === null ? t.root : t.children.get(s.node);
@@ -3492,7 +3459,7 @@ export function assertArtifactTargetLeaseForward(lease: TargetLeaseAuthority): v
 export function catalogPinTargetOwner(lease: TargetLeaseAuthority) {
   assertArtifactTargetLeaseForward(lease);
   const s = stateOf(lease);
-  if (!s.certificate.serviceIds.includes("motis") || !s.certificate.origin)
+  if (!s.certificate.serviceIds.includes("motis"))
     throw Error("MOTIS target authority required for catalog pins");
   if (!["ops-agent", "host-cli"].includes(s.installation.installation.role))
     throw Error("Catalog pins are owned by the agent or standalone host CLI");

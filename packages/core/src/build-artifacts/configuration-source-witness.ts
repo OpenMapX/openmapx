@@ -78,7 +78,6 @@ export function captureConfigurationHandoffHostSources(
   if (
     state.kind !== "configurationHandoff.prepare" ||
     local.fixedChildId ||
-    !state.origin ||
     !child.fixedChildId ||
     helper.installationId !== local.installation.installationId ||
     fixedControlChildId(local, helper.publicKey, state.execution) !== child.fixedChildId

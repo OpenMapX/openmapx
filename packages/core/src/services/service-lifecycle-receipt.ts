@@ -278,7 +278,6 @@ function inspect(dataRoot: string, execution: ExecutionRef, allowRecovery = fals
         !same(owner.execution, execution) ||
         owner.kind !== `service.${seed.action}` ||
         owner.installation.installation.publicKey !== seed.childPublicKey ||
-        !owner.origin ||
         water.signer !== "child" ||
         pending.sequence !== water.sequence + 1 ||
         receipt.sequence !== pending.sequence ||
@@ -457,7 +456,6 @@ export async function openServiceLifecycleReceipt(options: {
         }),
         true,
       );
-      if (!state.origin) throw Error("Original lifecycle origin required");
       opened.directory.write(name, bytes, true);
     }
   } finally {
@@ -552,7 +550,6 @@ export async function openServiceLifecycleReceipt(options: {
           signControl(owner.installation.privateKey, highWaterDomain, pending),
           false,
         );
-        if (!owner.origin) throw Error("Control origin required");
         directory.directory.write(name, bytes, false, () => {
           assertConfigurationGenerationWriter(writer);
           if (!sameInode(before, directory.directory.fileIdentity(name)))

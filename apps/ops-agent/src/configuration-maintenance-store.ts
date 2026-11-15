@@ -256,7 +256,6 @@ function assertOwner(
     state.installation.fixedChildId ||
     state.installation.installation.role !== "ops-agent" ||
     state.kind !== "configurationMaintenance.prepare" ||
-    !state.origin ||
     owner.installationId !== state.installation.installation.installationId ||
     controlDigest(owner.origin) !== controlDigest(state.origin) ||
     owner.admissionDigest !== state.receiptDigest ||
@@ -362,7 +361,6 @@ export function retainOwnedConfigurationMaintenance(
     root = configurationMaintenanceTargetOwner(lease),
     plan = source.plan;
   if (
-    !state.origin ||
     canonicalJson(root.execution) !== canonicalJson(plan.prepare) ||
     canonicalJson(root.serviceIds) !== canonicalJson(plan.serviceIds) ||
     plan.apiParent.issuer !== "api"
@@ -892,7 +890,6 @@ export async function assertOwnedMaintenanceRecreateRuntime(
     );
   if (
     !step ||
-    !child.origin ||
     canonicalJson(child.origin) !== canonicalJson(owner.origin) ||
     canonicalJson(step.operation) !== canonicalJson(operation)
   )
@@ -935,7 +932,6 @@ export async function assertOwnedMaintenanceHandoffRuntime(
     step.phase !== "maintenance-handoff" ||
     !owner.plan.handoff ||
     !owner.plan.nestedHandoff ||
-    !child.origin ||
     canonicalJson(child.origin) !== canonicalJson(owner.origin) ||
     canonicalJson(step.operation) !== canonicalJson(operation) ||
     child.kind !== operation.kind ||
@@ -982,7 +978,6 @@ export async function inspectOwnedMaintenanceGenerationRuntime(
     step.phase !== "configuration-commit" ||
     step.operationFingerprint !== child.execution.operationFingerprint ||
     canonicalJson(step.operation) !== canonicalJson(operation) ||
-    !child.origin ||
     canonicalJson(child.origin) !== canonicalJson(owner.origin) ||
     owner.receipt.decision?.decision !== "continue" ||
     !owner.apiControls.decide ||

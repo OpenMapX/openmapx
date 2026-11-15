@@ -254,7 +254,6 @@ export async function artifactPublicationFingerprint(
 function checkedOwner(input: ArtifactPublicationInput) {
   const owner = executionAuthorityState(input.authority);
   if (
-    !owner.origin ||
     owner.kind !== "artifactTransfer.import" ||
     input.lease.mode !== "owner" ||
     owner.installation.fixedChildId ||
@@ -837,8 +836,7 @@ export async function publishValidatedBuild(
  * use this to settle a stage; public receipt IDs or result strings are insufficient. */
 export function inspectArtifactPublication(authority: VerifiedExecutionAuthority) {
   const state = executionAuthorityState(authority);
-  if (state.kind !== "artifactTransfer.import" || !state.origin)
-    throw Error("Original import authority required");
+  if (state.kind !== "artifactTransfer.import") throw Error("Original import authority required");
   const journal = readJournal({ ...state, origin: state.origin });
   if (!journal) return null;
   if (journal.executionDigest !== controlDigest(state.execution))
@@ -857,8 +855,7 @@ export function inspectArtifactPublication(authority: VerifiedExecutionAuthority
  * physical release. This permits a new deliberate import of the same stage. */
 export function cleanupRestoredArtifactPublication(authority: VerifiedExecutionAuthority): void {
   const state = executionAuthorityState(authority);
-  if (state.kind !== "artifactTransfer.import" || !state.origin)
-    throw Error("Original import authority required");
+  if (state.kind !== "artifactTransfer.import") throw Error("Original import authority required");
   const journal = readJournal({ ...state, origin: state.origin });
   if (
     !journal ||
@@ -904,8 +901,7 @@ export function inspectSettledArtifactImport(
   terminalAt: number,
 ) {
   const owner = executionAuthorityState(authority);
-  if (owner.kind !== "artifactTransfer.import" || !owner.origin)
-    throw Error("Original import required");
+  if (owner.kind !== "artifactTransfer.import") throw Error("Original import required");
   const journal = readJournal({ ...owner, origin: owner.origin });
   if (!journal || !["committed", "restored"].includes(journal.phase))
     throw Error("Original settled import required");
@@ -944,11 +940,7 @@ export function inspectSettledArtifactImport(
  * publication and the original whole target tree is physically released. */
 export function inspectUnstartedArtifactImport(authority: VerifiedExecutionAuthority) {
   const owner = executionAuthorityState(authority);
-  if (
-    owner.kind !== "artifactTransfer.import" ||
-    !owner.origin ||
-    readJournal({ ...owner, origin: owner.origin })
-  )
+  if (owner.kind !== "artifactTransfer.import" || readJournal({ ...owner, origin: owner.origin }))
     throw Error("Unstarted original import required");
   const started = readPrivateRecord(
     owner.installation,
@@ -986,11 +978,7 @@ export function inspectUnstartedArtifactImport(authority: VerifiedExecutionAutho
  * original issuer, prove every finite child unused, then retain nonissuance. */
 export function retainUnstartedArtifactImport(authority: VerifiedExecutionAuthority) {
   const owner = executionAuthorityState(authority);
-  if (
-    owner.kind !== "artifactTransfer.import" ||
-    !owner.origin ||
-    readJournal({ ...owner, origin: owner.origin })
-  )
+  if (owner.kind !== "artifactTransfer.import" || readJournal({ ...owner, origin: owner.origin }))
     throw Error("Unstarted import required");
   const started = readPrivateRecord(
     owner.installation,
@@ -1016,8 +1004,7 @@ export function retainUnstartedArtifactImport(authority: VerifiedExecutionAuthor
 /** Fixed original body projection; callers cannot substitute stage/owner IDs. */
 export function originalArtifactImportOperation(authority: VerifiedExecutionAuthority) {
   const owner = executionAuthorityState(authority);
-  if (owner.kind !== "artifactTransfer.import" || !owner.origin)
-    throw Error("Original import required");
+  if (owner.kind !== "artifactTransfer.import") throw Error("Original import required");
   const admitted = readPrivateRecord(
     owner.installation,
     "executions",
@@ -1039,7 +1026,6 @@ export function originalArtifactValidationOperation(authority: VerifiedExecution
   const owner = executionAuthorityState(authority);
   if (
     owner.kind !== "artifactTransfer.validate" ||
-    !owner.origin ||
     owner.installation.installation.role !== "ops-agent"
   )
     throw Error("Original validation required");

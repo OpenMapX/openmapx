@@ -39,7 +39,6 @@ import {
 // biome-ignore-end lint/suspicious/noImportCycles: Shared original execution verification described above.
 import {
   controlOriginSchema,
-  originRecordDomain,
   sameControlOrigin,
   signControl,
   targetSchema,
@@ -249,7 +248,7 @@ function catalogActivationCandidate(s: ReturnType<typeof executionAuthorityState
     ),
     admitted = verifyControl(
       s.installation.installation.publicKey,
-      originRecordDomain("openmapx-control-execution", raw),
+      "openmapx-control-execution-v2",
       raw,
       z
         .object({
@@ -483,7 +482,7 @@ function publishCandidate(
     slot =
       s.reservations.find((r) => r.phase === candidate.phase && r.ordinal === candidate.ordinal) ??
       s.plan.find((r) => r.phase === candidate.phase && r.ordinal === candidate.ordinal);
-  if (!slot || !s.origin) throw Error("Dated original candidate slot required");
+  if (!slot) throw Error("Dated original candidate slot required");
   assertControlExecutionForward(authority);
   const payload = publishedSchema.parse({
       version: 2,
@@ -639,7 +638,7 @@ export function verifyDataTransitCandidateForExecution(
     ),
     admission = verifyControl(
       s.installation.installation.publicKey,
-      originRecordDomain("openmapx-control-execution", raw),
+      "openmapx-control-execution-v2",
       raw,
       z.object({ parent: retainedParentExecutionSchema }).passthrough(),
     );
@@ -706,8 +705,7 @@ export const {
     const s = executionAuthorityState(authority);
     if (
       s.installation.installation.role !== "ops-agent" ||
-      s.kind !== "feedProxy.validateAndReload" ||
-      !s.origin
+      s.kind !== "feedProxy.validateAndReload"
     )
       throw Error("Original fixed proxy authority required");
     return s;

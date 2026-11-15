@@ -72,8 +72,7 @@ const domain = "openmapx-artifact-import-owner-v1";
 const name = (a: VerifiedExecutionAuthority) => `artifact-import-${a.execution.operationKey}.json`;
 function originalImportPlan(authority: VerifiedExecutionAuthority) {
   const owner = executionAuthorityState(authority);
-  if (owner.kind !== "artifactTransfer.import" || !owner.origin)
-    throw Error("Original import owner required");
+  if (owner.kind !== "artifactTransfer.import") throw Error("Original import owner required");
   const raw = readPrivateRecord(owner.installation, "observations", name(authority), 8192);
   return verifyControl(owner.installation.installation.publicKey, domain, raw, planSchema);
 }
@@ -251,8 +250,7 @@ export async function prepareArtifactImportAdmission(
 }
 export function retainArtifactImportPlan(authority: VerifiedExecutionAuthority, plan: ImportPlan) {
   const owner = executionAuthorityState(authority);
-  if (owner.kind !== "artifactTransfer.import" || !owner.origin)
-    throw Error("Original import root required");
+  if (owner.kind !== "artifactTransfer.import") throw Error("Original import root required");
   writePrivateRecord(
     owner.installation,
     "observations",

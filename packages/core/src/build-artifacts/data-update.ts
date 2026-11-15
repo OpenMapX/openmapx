@@ -79,7 +79,6 @@ function validate(authority: VerifiedExecutionAuthority, plan: DataUpdatePlan) {
   const s = executionAuthorityState(authority);
   if (
     s.kind !== "data.update" ||
-    !s.origin ||
     opsOperationFingerprint(plan.operation) !== s.execution.operationFingerprint
   )
     throw Error("Original Full Update authority required");
@@ -119,7 +118,6 @@ export function readDataUpdatePlan(authority: VerifiedExecutionAuthority): DataU
   const s = executionAuthorityState(authority),
     name = `data-update-plan-${s.execution.operationKey}.json`,
     raw = readPrivateRecord(s.installation, "observations", name, 128 * 1024);
-  if (!s.origin) throw Error("Dated Full Update owner required");
   const plan = verifyControl(
     s.installation.installation.publicKey,
     domain,

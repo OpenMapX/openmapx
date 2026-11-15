@@ -35,7 +35,6 @@ export async function openAdminDataWorkflow(options: {
   const state = executionAuthorityState(options.authority);
   if (
     state.kind !== "data.update" ||
-    !state.origin ||
     state.execution.operationKey !== options.operationKey ||
     state.execution.fingerprint !== options.fingerprint
   )

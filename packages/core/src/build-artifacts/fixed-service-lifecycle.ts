@@ -44,7 +44,7 @@ export function ownedServiceLifecycleFinalRevisionId(
   authority: VerifiedExecutionAuthority,
 ): string {
   const s = executionAuthorityState(authority);
-  if (!["service.start", "service.update"].includes(s.kind) || !s.origin)
+  if (!["service.start", "service.update"].includes(s.kind))
     throw Error("Original lifecycle authority required");
   return serviceLifecycleFinalRevisionId(s.origin.rootKey);
 }

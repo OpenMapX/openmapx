@@ -43,7 +43,6 @@ import {
   digest,
   signControl,
   uuid,
-  validateOriginRecord,
   verifyControl,
 } from "./control-records";
 // biome-ignore-start lint/suspicious/noImportCycles: Exact and reserved children share the same live guards; phase schemas are lazy and these cross-module calls run after initialization.
@@ -161,9 +160,7 @@ function readCell(
     raw,
     cellSchema,
   );
-  if (!state.origin) throw Error("Reserved phase origin is missing");
   if (
-    !validateOriginRecord(cell) ||
     cell.installationId !== state.installation.installation.installationId ||
     controlDigest(cell.origin) !== controlDigest(state.origin) ||
     controlDigest(cell.parent) !== controlDigest(state.execution) ||
@@ -226,7 +223,6 @@ function writeCell(
 /** Called by durable admission before any forward witness/effect becomes ready. */
 export function initializeControlChildReservations(authority: VerifiedExecutionAuthority): void {
   const state = executionAuthorityState(authority);
-  if (!state.origin) throw Error("Missing reserved phase origin");
   const cells = state.reservations.map((r) => ({
     r,
     cell: cellSchema.parse({

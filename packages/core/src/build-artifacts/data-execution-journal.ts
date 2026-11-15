@@ -339,8 +339,7 @@ export function createDataExecutionControlJournal(
       state.kind !== "catalog.activate" ||
       input.kind !== "catalog.activate" ||
       !input.acknowledgeLicenseChanges ||
-      controlDigest(input) !== state.execution.operationFingerprint ||
-      !state.origin
+      controlDigest(input) !== state.execution.operationFingerprint
     )
       throw Error("Original reviewed catalog activation required");
     assertRetainedCatalogActivationChildrenSettled(authority);
@@ -524,7 +523,6 @@ export function createDataExecutionControlJournal(
         .find((child) => child.phase === "proxy-restore");
       if (
         s.installation !== local ||
-        !s.origin ||
         !restore ||
         child?.state !== "reserved" ||
         child.operationKey !== restore.execution.operationKey ||
@@ -557,8 +555,7 @@ export function createDataExecutionControlJournal(
       const state = executionAuthorityState(authority);
       if (
         state.installation !== local ||
-        !["transit-sync", "catalog.validate"].includes(state.kind) ||
-        !state.origin
+        !["transit-sync", "catalog.validate"].includes(state.kind)
       )
         throw Error("Original transit worker required");
       try {
@@ -586,8 +583,7 @@ export function createDataExecutionControlJournal(
         body = transitousRunnerRequestSchema.parse(request);
       if (
         state.installation !== local ||
-        !["transit-sync", "catalog.validate"].includes(state.kind) ||
-        !state.origin
+        !["transit-sync", "catalog.validate"].includes(state.kind)
       )
         throw Error("Original transit worker required");
       withPrivateEffectWriter(state, () => {
@@ -815,7 +811,6 @@ export function createDataExecutionControlJournal(
         result = undefined;
         error = Error("Remote runner containment remains unknown");
       }
-      if (!state.origin) throw Error("Dated contained worker origin required");
       const proof =
         state.kind === "catalog.activate" &&
         result?.kind === "catalog.activate" &&
@@ -860,7 +855,7 @@ export function createDataExecutionControlJournal(
     async repairCommittedCatalogActivation(execution: ExecutionRef): Promise<void> {
       const authority = restoreAdmittedControlExecution(installation, execution),
         state = executionAuthorityState(authority);
-      if (state.kind !== "catalog.activate" || !state.origin)
+      if (state.kind !== "catalog.activate")
         throw Error("Original catalog activation owner required");
       // This closes all future issuance under the original owner, even when its
       // deadline passed. Every already-issued physical child must be settled.
@@ -889,10 +884,7 @@ export function createDataExecutionControlJournal(
         workerSchema,
       );
       if (proof.outcome === "catalog-activation-committed") {
-        if (
-          !state.origin ||
-          canonicalJson(proof) !== canonicalJson(await catalogActivationCompletion(authority))
-        )
+        if (canonicalJson(proof) !== canonicalJson(await catalogActivationCompletion(authority)))
           throw Error("Original final approval completion changed");
       }
       if (
@@ -955,7 +947,6 @@ export function createDataExecutionControlJournal(
       )
         throw Error("Contained worker/current child union changed");
       if (
-        !s.origin ||
         owned.publication === "unknown" ||
         terminal.publication !== owned.publication ||
         !isDataExecutionTerminal(terminal) ||

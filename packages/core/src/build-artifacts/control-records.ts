@@ -48,16 +48,6 @@ export function sameControlOrigin(
         a.issuer === b.issuer &&
         a.notAfter === b.notAfter;
 }
-export function originRecordDomain(base: string, envelope: unknown): string {
-  const version = (envelope as { payload?: { version?: number } } | null)?.payload?.version;
-  return `${base}-v${version === 2 ? 2 : 1}`;
-}
-export function validateOriginRecord(value: {
-  version?: number;
-  origin?: ControlExecutionOrigin;
-}): boolean {
-  return value.version === 2 ? !!value.origin : value.origin === undefined;
-}
 export const uuid = z.uuid();
 export const digest = z.string().regex(/^[a-f0-9]{64}$/);
 export function controlDigest(value: unknown): string {
