@@ -8,6 +8,7 @@ import MenuIcon from "@mui/icons-material/Menu";
 import RouteIcon from "@mui/icons-material/Route";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import ShareIcon from "@mui/icons-material/Share";
+import TuneIcon from "@mui/icons-material/Tune";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -17,6 +18,7 @@ import MenuItem from "@mui/material/MenuItem";
 import Snackbar from "@mui/material/Snackbar";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { AutocompleteResult, DirectionsResult, LngLat, TravelMode } from "@openmapx/core";
 import {
@@ -1067,6 +1069,48 @@ export function DirectionsPanelContent() {
     </Box>
   );
 
+  // In a phone's sheet the driving switch and the departure time share a row.
+  const timeInModeRow = inSheet && mode === "driving" && showTimePicker && !hidesRouteControls;
+  // Leave now / depart at / arrive by, for transit and timed driving.
+  const timeChip = (
+    <ClickableRow
+      aria-expanded={timePickerOpen}
+      onClick={() => setTimePickerOpen((v) => !v)}
+      sx={{
+        width: "auto",
+        gap: 0.75,
+        px: 1.75,
+        py: 0.75,
+        borderRadius: "12px",
+        bgcolor: activeTimeMode !== "now" ? `${BRAND}18` : "action.hover",
+        "&:hover": {
+          bgcolor: activeTimeMode !== "now" ? `${BRAND}28` : "action.selected",
+        },
+        transition: "background-color 0.15s",
+      }}
+    >
+      <ScheduleIcon
+        sx={{ fontSize: 18, color: activeTimeMode !== "now" ? BRAND : "text.primary" }}
+      />
+      <Typography
+        variant="body2"
+        color={activeTimeMode !== "now" ? BRAND : "text.primary"}
+        sx={{
+          fontWeight: 500,
+        }}
+      >
+        {activeTimeMode === "now"
+          ? t("departNow")
+          : activeTimeMode === "depart"
+            ? `${t("departAt")} ${activeTimeValue ? fmt.time(activeTimeValue) : ""}`
+            : `${t("arriveBy")} ${activeTimeValue ? fmt.time(activeTimeValue) : ""}`}
+      </Typography>
+      <ExpandMoreIcon
+        sx={{ fontSize: 18, color: activeTimeMode !== "now" ? BRAND : "text.primary" }}
+      />
+    </ClickableRow>
+  );
+
   return (
     // Tapping the collapsed sheet's background opens it to mid. Keyboard users
     // change the sheet's height from the focusable sheet itself.
@@ -1092,6 +1136,37 @@ export function DirectionsPanelContent() {
         <Typography variant="subtitle2" sx={{ ml: 1, flex: 1, fontWeight: 600 }}>
           {t("routes")}
         </Typography>
+        {/* Route options and sharing live in the title row, not rows of their own. */}
+        {!hidesRouteControls && (
+          <Tooltip title={t("options")}>
+            <IconButton
+              size="small"
+              aria-label={t("options")}
+              aria-expanded={showOptions}
+              onClick={() => setShowOptions((v) => !v)}
+              sx={{
+                width: 44,
+                height: 44,
+                flexShrink: 0,
+                color: showOptions ? "primary.main" : undefined,
+              }}
+            >
+              <TuneIcon sx={{ fontSize: 22 }} />
+            </IconButton>
+          </Tooltip>
+        )}
+        {!hidesRouteControls && allWaypointsFilled && (
+          <Tooltip title={tp("share")}>
+            <IconButton
+              size="small"
+              aria-label={tp("share")}
+              onClick={handleShare}
+              sx={{ width: 44, height: 44, flexShrink: 0 }}
+            >
+              <ShareIcon sx={{ fontSize: 22 }} />
+            </IconButton>
+          </Tooltip>
+        )}
         <IconButton
           size="small"
           onClick={() => useSidebarStore.getState().closeSidebar()}
@@ -1144,7 +1219,14 @@ export function DirectionsPanelContent() {
         // WaypointList's px (12px) + WaypointRow's 24px icon column + its 4px gap.
         // In a phone's sheet the fields float above the map; it lines up with
         // the sheet's content and keeps its distance from the divider below.
-        <Box sx={inSheet ? { px: 2, pt: 1, pb: 1.5 } : { pl: 5, pr: 1.5, pt: 1 }}>
+        <Box
+          sx={[
+            inSheet ? { px: 2, pt: 1, pb: 1.5 } : { pl: 5, pr: 1.5, pt: 1 },
+            { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 },
+          ]}
+        >
+          {/* Departure first, where transit has it too. */}
+          {timeInModeRow && timeChip}
           <ToggleButtonGroup
             size="small"
             exclusive
@@ -1229,65 +1311,8 @@ export function DirectionsPanelContent() {
 
         {/* Leave now / Depart at / Arrive by (transit only) + Options (non-transit).
             Flight mode renders its own form below, so this row is hidden. */}
-        {!hidesRouteControls && (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: showTimePicker ? "space-between" : "flex-end",
-              px: 2,
-              py: 1,
-            }}
-          >
-            {showTimePicker && (
-              <ClickableRow
-                aria-expanded={timePickerOpen}
-                onClick={() => setTimePickerOpen((v) => !v)}
-                sx={{
-                  width: "auto",
-                  gap: 0.75,
-                  px: 1.75,
-                  py: 0.75,
-                  borderRadius: "12px",
-                  bgcolor: activeTimeMode !== "now" ? `${BRAND}18` : "action.hover",
-                  "&:hover": {
-                    bgcolor: activeTimeMode !== "now" ? `${BRAND}28` : "action.selected",
-                  },
-                  transition: "background-color 0.15s",
-                }}
-              >
-                <ScheduleIcon
-                  sx={{ fontSize: 18, color: activeTimeMode !== "now" ? BRAND : "text.primary" }}
-                />
-                <Typography
-                  variant="body2"
-                  color={activeTimeMode !== "now" ? BRAND : "text.primary"}
-                  sx={{
-                    fontWeight: 500,
-                  }}
-                >
-                  {activeTimeMode === "now"
-                    ? t("departNow")
-                    : activeTimeMode === "depart"
-                      ? `${t("departAt")} ${activeTimeValue ? fmt.time(activeTimeValue) : ""}`
-                      : `${t("arriveBy")} ${activeTimeValue ? fmt.time(activeTimeValue) : ""}`}
-                </Typography>
-                <ExpandMoreIcon
-                  sx={{ fontSize: 18, color: activeTimeMode !== "now" ? BRAND : "text.primary" }}
-                />
-              </ClickableRow>
-            )}
-
-            <Button
-              size="small"
-              aria-expanded={showOptions}
-              color={showOptions ? "primary" : "inherit"}
-              onClick={() => setShowOptions((v) => !v)}
-              sx={{ px: 1.5, color: showOptions ? undefined : "text.secondary" }}
-            >
-              {t("options")}
-            </Button>
-          </Box>
+        {!hidesRouteControls && showTimePicker && !timeInModeRow && (
+          <Box sx={{ display: "flex", alignItems: "center", px: 2, py: 1 }}>{timeChip}</Box>
         )}
 
         {/* Depart-at / arrive-by picker (shared by transit + driving) */}
@@ -1301,15 +1326,6 @@ export function DirectionsPanelContent() {
         )}
 
         {showOptions && !hidesRouteControls && <RouteOptions />}
-
-        {/* Share row — sits between the options row and the offered routes */}
-        {!hidesRouteControls && allWaypointsFilled && (
-          <Box sx={{ px: 1.5, py: 0.5 }}>
-            <Button size="small" startIcon={<ShareIcon />} onClick={handleShare}>
-              {tp("share")}
-            </Button>
-          </Box>
-        )}
 
         <Divider />
 
