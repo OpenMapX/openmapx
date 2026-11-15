@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getMapObstructionInsets, publishMapObstruction } from "@/lib/mapObstructions";
-import { fireEvent, render, screen } from "@/test";
+import { act, fireEvent, render, screen } from "@/test";
 
 const isMobileRef = { current: true };
 const sourcesRef: { current: Array<{ id: string; categoryChipLabel: string }> } = { current: [] };
+const labelsRef: { current: unknown[] | undefined } = { current: undefined };
+const flyTo = vi.fn();
+vi.mock("@/integration-api/map/MapContext", () => ({ useMap: () => ({ flyTo }) }));
 const integrationsRef: {
   current: Array<{ frontend: { searchCategory: { id: string; showInChipBar?: boolean } } }>;
 } = { current: [] };
@@ -14,7 +17,11 @@ vi.mock("@mui/material/useMediaQuery", () => ({ default: () => isMobileRef.curre
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();
-  return { ...actual, useDataSources: () => ({ data: { sources: sourcesRef.current } }) };
+  return {
+    ...actual,
+    useDataSources: () => ({ data: { sources: sourcesRef.current } }),
+    useLabeledPlaces: () => ({ data: labelsRef.current }),
+  };
 });
 
 import {
@@ -22,6 +29,8 @@ import {
   useDataSourceStore,
   useDirectionsStore,
   useMapStore,
+  usePlaceStore,
+  useSidebarStore,
 } from "@openmapx/core";
 import { CategoryChips } from "./CategoryChips";
 
@@ -62,6 +71,7 @@ describe("CategoryChips map obstruction", () => {
     stubLayout();
     isMobileRef.current = true;
     sourcesRef.current = [];
+    labelsRef.current = undefined;
     integrationsRef.current = [];
     // The store's default zoom is 2, which is below the chip row's own
     // visibility threshold.
@@ -109,6 +119,45 @@ describe("CategoryChips discovery order", () => {
     useDirectionsStore.setState({ isOpen: false });
     useCategorySearchStore.setState({ activeCategory: null, mode: "category" });
     useDataSourceStore.setState({ activeSource: null });
+  });
+
+  it("leads with Home and Work once set, and opens the place with a tap", () => {
+    labelsRef.current = [
+      {
+        id: "w",
+        label: "Work",
+        name: "Office",
+        address: "Charlottenstraße 1",
+        lat: 52.513,
+        lng: 13.392,
+      },
+      {
+        id: "h",
+        label: "home",
+        name: "Home",
+        address: "Kastanienallee 1",
+        lat: 52.539,
+        lng: 13.411,
+      },
+    ];
+    render(<CategoryChips />);
+    const chips = screen.getAllByRole("button").map((chip) => chip.textContent);
+    expect(chips.slice(0, 2)).toEqual(["saved.home", "saved.work"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "saved.home" }));
+    expect(usePlaceStore.getState().selectedPlace?.coordinates).toEqual([13.411, 52.539]);
+    expect(flyTo).toHaveBeenCalledWith([13.411, 52.539], 15);
+    act(() => {
+      usePlaceStore.getState().setSelectedPlace(null);
+      useSidebarStore.getState().closeAll();
+    });
+    labelsRef.current = undefined;
+  });
+
+  it("shows no Home or Work chip until one is set", () => {
+    labelsRef.current = [];
+    render(<CategoryChips />);
+    expect(screen.queryByRole("button", { name: "saved.home" })).toBeNull();
   });
 
   it("puts everyday places before transport sources regardless of source registration order", () => {

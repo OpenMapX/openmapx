@@ -13,19 +13,8 @@ import ListItemText from "@mui/material/ListItemText";
 import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 import type { LabeledPlace } from "@openmapx/core";
-import {
-  createPlace,
-  idsFromPrimary,
-  PANEL,
-  useDeleteLabel,
-  useLabeledPlaces,
-  usePlaceStore,
-  useSidebarStore,
-} from "@openmapx/core";
-import {
-  savedPlaceContributors,
-  savedPlaceContributorsForPlace,
-} from "@openmapx/core/saved-place-contributors";
+import { useDeleteLabel, useLabeledPlaces, usePlaceStore } from "@openmapx/core";
+import { savedPlaceContributors } from "@openmapx/core/saved-place-contributors";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { AttributionDetailsGroup } from "@/components/ui/AttributionDetailsGroup";
@@ -34,6 +23,7 @@ import { ClickableRow } from "@/components/ui/ClickableRow";
 import Menu from "@/components/ui/Menu";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
+import { openLabeledPlace } from "./openLabeledPlace";
 
 interface PlaceholderLabel {
   key: "home" | "work";
@@ -52,23 +42,7 @@ export function SavedLabeledTab() {
   const setSelectedPlace = usePlaceStore((s) => s.setSelectedPlace);
   const { flyTo } = useMap();
 
-  const handleLabelClick = (label: LabeledPlace) => {
-    const identity = (label.placeId ? idsFromPrimary(label.placeId) : null) ?? {
-      primaryScheme: "label",
-      ids: { label: label.id },
-    };
-    setSelectedPlace(
-      createPlace({
-        ...identity,
-        ...savedPlaceContributorsForPlace(label.fieldContributors),
-        name: label.name,
-        address: label.address ?? "",
-        coordinates: [label.lng, label.lat],
-      }),
-    );
-    useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
-    flyTo([label.lng, label.lat], 15);
-  };
+  const handleLabelClick = (label: LabeledPlace) => openLabeledPlace(label, flyTo);
 
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [menuLabel, setMenuLabel] = useState<LabeledPlace | null>(null);
