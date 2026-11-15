@@ -69,6 +69,7 @@ import {
   cancelArtifactTargetLease,
   cancelControlExecution,
   closeArtifactTargetLeaseHandle,
+  configurationMaintenanceRootReleased,
   configurationMaintenanceTargetOwner,
   consumeControlChildDispatch,
   controlDigest,
@@ -2097,21 +2098,26 @@ export function restoreOwnedMaintenanceFinal(
     const contained = final.ownerFinal.payload.outcome === "contained";
     if (contained) assertContainedConfigurationMaintenanceFinalState(owner);
     else assertAppliedConfigurationMaintenanceFinalState(owner);
-    const actual = readOriginalMaintenanceFinalChildren(
-      authority,
-      observeConfigurationMaintenanceRuntimeTree(authority),
-    );
+    // The children were compared before the root was released; the store
+    // keeps no released tree to compare again.
+    const actual = configurationMaintenanceRootReleased(authority)
+      ? undefined
+      : readOriginalMaintenanceFinalChildren(
+          authority,
+          observeConfigurationMaintenanceRuntimeTree(authority),
+        );
     if (
-      (!contained && !actual.complete) ||
-      (contained &&
-        (actual.generationResult?.outcome !== "not_committed" ||
-          actual.generationResult.cleanupFailed ||
-          actual.children.length !== 1)) ||
-      canonicalJson(actual.children) !== canonicalJson(final.evidence.children) ||
-      final.evidence.generation.commitReceiptDigest !==
-        (contained ? null : actual.generation?.terminalDigest) ||
-      canonicalJson(final.evidence.followUp.receiptDigests) !==
-        canonicalJson(actual.followUpReceiptDigests)
+      actual &&
+      ((!contained && !actual.complete) ||
+        (contained &&
+          (actual.generationResult?.outcome !== "not_committed" ||
+            actual.generationResult.cleanupFailed ||
+            actual.children.length !== 1)) ||
+        canonicalJson(actual.children) !== canonicalJson(final.evidence.children) ||
+        final.evidence.generation.commitReceiptDigest !==
+          (contained ? null : actual.generation?.terminalDigest) ||
+        canonicalJson(final.evidence.followUp.receiptDigests) !==
+          canonicalJson(actual.followUpReceiptDigests))
     )
       throw Error("Original applied final child sources changed");
   } else assertUnusedConfigurationMaintenanceFinalState(owner);

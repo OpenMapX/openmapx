@@ -81,6 +81,8 @@ export interface DataExecutionRuntime {
       id?: string;
       principal?: ExecutionRef["principal"];
       hardlinkPlan?: unknown;
+      /** For a hardlink leaf: the targets of the issuer's lease it runs under. */
+      serviceIds?: readonly string[];
       sourceJobId?: string;
       triggeredBy?: string;
       idempotencyKey?: string;
@@ -253,9 +255,11 @@ export function createDataExecutionRuntime(deps: {
     adopt?: (execution: ExecutionRef) => Promise<undefined>,
     parent?: VerifiedParentExecution,
     hardlinkPlan?: unknown,
+    leafTargets?: readonly string[],
   ) {
     const owner = requireJournal(),
-      targets = dataExecutionTargetIds(record.input);
+      leaf = record.input.kind === "generation-hardlinks",
+      targets = leaf && leafTargets ? [...leafTargets] : dataExecutionTargetIds(record.input);
     await adopt?.(record.execution);
     const authority = retainAdmittedControlExecution(owner.installation, {
       execution: record.execution,
@@ -269,7 +273,6 @@ export function createDataExecutionRuntime(deps: {
       serviceIds: targets,
       reservations: record.reservations.map(dataChildControlReservation),
     });
-    const leaf = record.input.kind === "generation-hardlinks";
     if (leaf) {
       if (hardlinkPlan === undefined) throw Error("Durable generation plan required");
       await owner.retainHardlinksPlan(authority, hardlinkPlan);
@@ -534,7 +537,13 @@ export function createDataExecutionRuntime(deps: {
       const { created, record } = await store.admit(input, options);
       if (created)
         try {
-          await start(record, options.adopt, options.parent, options.hardlinkPlan);
+          await start(
+            record,
+            options.adopt,
+            options.parent,
+            options.hardlinkPlan,
+            options.serviceIds,
+          );
         } catch (cause) {
           await store.checkpoint(record.status.id, record.version, { publication: "unknown" });
           throw new DataExecutionRuntimeUnavailable("Data admission requires ownership recovery", {

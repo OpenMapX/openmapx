@@ -1243,17 +1243,19 @@ export async function settleDataManagerLeaseChild(
     ? leaseChildrenOf(record, s.node).find((value) => sameExecution(value.execution, execution))
     : undefined;
   if (!record || !child) throw Error("Exact retained child grant required");
-  if (settledKnown(child)) return child.settlement as ChildSettlement;
   if (
     !["ok", "partial", "error", "canceled", "interrupted"].includes(status.status) ||
     status.publication === "unknown"
   )
-    return null;
+    return settledKnown(child) ? (child.settlement as ChildSettlement) : null;
+  // Recorded even when data-manager already settled the child itself: later
+  // steps of this owner build on the status it observed.
   const observed = recordDataControlTerminalObservation(
     s.installation.installation,
     execution,
     status,
   );
+  if (settledKnown(child)) return child.settlement as ChildSettlement;
   return settleIssuedLeaseChild(lease, execution, {
     outcome:
       status.publication === "not_started"
@@ -1458,17 +1460,24 @@ export function observeConfigurationMaintenanceRuntimeTree(
 ): ConfigurationMaintenanceClosureObservation {
   return closureFromRecord(maintenanceLease(authority), authority);
 }
+/**
+ * Whether the maintenance root is gone from the store after the release its
+ * owner recorded. The store releases it only after the closure check passed,
+ * and the released tree is no longer kept.
+ */
+export function configurationMaintenanceRootReleased(
+  authority: VerifiedExecutionAuthority,
+): boolean {
+  const state = executionAuthorityState(authority);
+  return (
+    !localLeases(state.installation.leases)?.readSync(executionLeaseId(authority)) &&
+    Boolean(executionLease(authority).releasedAt)
+  );
+}
 export function verifyConfigurationMaintenanceRootClosure(
   authority: VerifiedExecutionAuthority,
 ): void {
-  // The store releases a maintenance root only after this check passed, and the
-  // owner records the release; the released tree is no longer kept.
-  const state = executionAuthorityState(authority);
-  if (
-    !localLeases(state.installation.leases)?.readSync(executionLeaseId(authority)) &&
-    executionLease(authority).releasedAt
-  )
-    return;
+  if (configurationMaintenanceRootReleased(authority)) return;
   const observation = observeConfigurationMaintenanceRuntimeTree(authority);
   try {
     assertConfigurationMaintenanceRootClosure(authority, observation);

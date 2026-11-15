@@ -111,6 +111,7 @@ export function createDataExecutionReceiver(deps: {
         principal: verified.execution.principal,
         adopt: verified.adopt,
         hardlinkPlan: request.plan,
+        serviceIds: verified.serviceIds,
       });
     },
     async admitLocal(value, source) {
