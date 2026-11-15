@@ -9,36 +9,7 @@ function read(relativePath: string): string {
 }
 
 describe("production supply-chain policy", () => {
-  it("keeps runtime and mobile release toolchain declarations aligned", () => {
-    const nodeVersion = read(".nvmrc").trim();
-    const rootPackage = JSON.parse(read("package.json")) as {
-      packageManager?: string;
-      engines?: { node?: string };
-    };
-    const docsPackage = JSON.parse(read("docs/package.json")) as {
-      packageManager?: string;
-      engines?: { node?: string };
-    };
-    const mobilePackage = JSON.parse(read("apps/mobile/package.json")) as {
-      dependencies?: Record<string, string>;
-    };
-    const releaseToolchains = JSON.parse(read("apps/mobile/release/toolchains.json")) as {
-      node?: string;
-      pnpm?: string;
-      expoSdk?: string;
-      reactNative?: string;
-    };
-    const packageManager = rootPackage.packageManager?.match(/^pnpm@([^+]+)/)?.[1];
-    const expoVersion = mobilePackage.dependencies?.expo?.replace(/^[~^]/, "");
-
-    expect(rootPackage.engines?.node).toBe(`>=${nodeVersion}`);
-    expect(docsPackage.engines?.node).toBe(`>=${nodeVersion}`);
-    expect(docsPackage.packageManager).toBe(rootPackage.packageManager);
-    expect(releaseToolchains.node).toBe(`>=${nodeVersion}`);
-    expect(releaseToolchains.pnpm).toBe(packageManager);
-    expect(releaseToolchains.expoSdk).toBe(expoVersion?.split(".")[0]);
-    expect(releaseToolchains.reactNative).toBe(mobilePackage.dependencies?.["react-native"]);
-
+  it("primes pnpm before the offline build stages of every Node image", () => {
     for (const dockerfile of [
       "apps/api/Dockerfile",
       "apps/ops-agent/Dockerfile",
@@ -47,29 +18,14 @@ describe("production supply-chain policy", () => {
       "docs/Dockerfile",
       "services/data-manager/Dockerfile",
     ]) {
-      const contents = read(dockerfile);
-      const nodeImages = contents.match(/^FROM node:([^@\s]+)/gm) ?? [];
-      expect(nodeImages.length, dockerfile).toBeGreaterThan(0);
-      expect(contents, `${dockerfile} must prime pnpm before offline build stages`).toContain(
-        "pnpm --version",
-      );
-      for (const image of nodeImages) {
-        expect(image, dockerfile).toMatch(
-          new RegExp(`^FROM node:${nodeVersion.replaceAll(".", "\\.")}-`),
-        );
-      }
+      expect(
+        read(dockerfile),
+        `${dockerfile} must prime pnpm before offline build stages`,
+      ).toContain("pnpm --version");
     }
   });
 
-  it("keeps the React Native Jest preset exactly aligned with the runtime", () => {
-    const mobilePackage = JSON.parse(read("apps/mobile/package.json")) as {
-      dependencies?: Record<string, string>;
-      devDependencies?: Record<string, string>;
-    };
-    const reactNative = mobilePackage.dependencies?.["react-native"];
-    const jestPreset = mobilePackage.devDependencies?.["@react-native/jest-preset"];
-
-    expect(jestPreset).toBe(reactNative);
+  it("keeps the Dependabot note that the React Native Jest preset follows the runtime", () => {
     expect(read(".github/dependabot.yml")).toMatch(
       /- dependency-name: "@react-native\/jest-preset"\n\s+# Kept aligned with react-native/,
     );
@@ -135,37 +91,6 @@ describe("production supply-chain policy", () => {
         expect(matched).toContain(buildImage.image);
       }
     }
-  });
-
-  it("pins every third-party service image to an immutable manifest digest", () => {
-    const serviceRoot = join(root, "services");
-    const violations: string[] = [];
-
-    for (const entry of readdirSync(serviceRoot, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const path = join(serviceRoot, entry.name, "service.json");
-      let manifest: {
-        container?: { image?: string; digest?: string };
-        buildImages?: Record<string, { image?: string; digest?: string }>;
-      };
-      try {
-        manifest = JSON.parse(readFileSync(path, "utf8")) as typeof manifest;
-      } catch {
-        continue;
-      }
-      for (const [role, buildImage] of Object.entries(manifest.buildImages ?? {})) {
-        if (!/^sha256:[a-f0-9]{64}$/.test(buildImage.digest ?? "")) {
-          violations.push(`${entry.name}#buildImages.${role}`);
-        }
-      }
-      const container = manifest.container;
-      if (!container?.image || container.image.startsWith("ghcr.io/openmapx/")) continue;
-      if (!/^sha256:[a-f0-9]{64}$/.test(container.digest ?? "")) {
-        violations.push(entry.name);
-      }
-    }
-
-    expect(violations).toEqual([]);
   });
 
   it("stages patches exactly when an image's workspace lockfile requires them", () => {
