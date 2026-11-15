@@ -47,7 +47,8 @@ openmapx/
 └── docs/                     this documentation site
 ```
 
-The CLI writes generated Compose files, release overlays, and hardlink plans
+The CLI writes configuration generations (Compose files with release image pins,
+and hardlink plans)
 under `infra/docker/`. That directory also contains operator input and durable
 state, including `.env`, service selection, secrets, and data; it is not a
 throwaway build directory. Do not hand-edit generated Compose output.

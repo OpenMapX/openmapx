@@ -54,22 +54,26 @@ checked release update. Images must provide the supported configuration helper.
 A cancel request does not undo an already committed update. If work has committed,
 the original verified completion wins. A failed pull, interrupted helper, missing
 mount or uncertain publication can leave the operation fenced as requiring recovery.
-The system does not claim a rollback from an error message or an old overlay alone.
+The system does not claim a rollback from an error message or old image pins alone.
 It releases ownership only after proving the original operation settled.
 
-Inspect the original job and host ops-agent journal. Do not delete locks, fabricate
-completion, or submit repeated fresh updates while an outcome is unknown. Restore
-connectivity and observe the original operation; where exact recovery is unavailable,
-use host access to diagnose and recover the deployment. Initial Docker installation,
+Inspect the original job and the host's `pnpm openmapx control status`. Do not delete
+locks, fabricate completion, or submit repeated fresh updates while an outcome is
+unknown. Restore connectivity and observe the original operation; where exact recovery
+is unavailable, resolve the operation from the host with `openmapx control resolve`
+(see [Upgrading](../install/upgrading.md#operations-whose-outcome-is-unknown)). Initial Docker installation,
 bootstrap credentials, offline agent recovery and destructive full-stack shutdown
 remain host operations. The UI does not expose arbitrary environment variables,
 mount paths, executable options or Docker socket access.
 
 ## Clear a selected release pin
 
-In **System → Updates**, **Selected pin** is separate from the running release.
-**Clear selected release pin** requires the exact `CLEAR RELEASE PIN` confirmation
-and queues an Activity job bound to that pin. A changed pin is refused. Clearing
-leaves images, running containers and the configured channel
-unchanged. It does not select local images: a later configuration action may
-resolve the configured channel again. Finish any pending data-manager update first.
+In **System → Updates**, **Selected pin** names the release the applied
+configuration generation pins. **Clear selected release pin** requires the exact
+`CLEAR RELEASE PIN` confirmation and queues an Activity job bound to that pin. A
+changed pin is refused. Clearing renders the applied configuration again as a new
+generation without pins; running containers keep their images until they are next
+recreated, and the configured channel is unchanged. It does not select local
+images: a later start may pin the configured channel again. Finish any pending
+data-manager update first. To return to the previous generation with its pins, use
+`openmapx control rollback` from the host (see [Upgrading](../install/upgrading.md#rolling-back)).

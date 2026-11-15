@@ -105,20 +105,20 @@ the defaults, so do not copy a file containing only optional engines.
 ```bash
 pnpm openmapx compose release
 pnpm openmapx compose release --status
-pnpm openmapx compose render
 ```
 
-Select the release first: render takes the services' files from the selected
-release, not from the checkout, and refuses while the checkout's built-in
-services differ from that release's. Render creates platform secret files and a configuration generation under
+`compose release` resolves the release and renders the first configuration
+generation pinning it. Render takes the services' files from the pinned release,
+not from the checkout, and refuses while the checkout's built-in services differ
+from that release's. Render creates platform secret files and a configuration generation under
 `infra/docker/state/ops-agent/configuration/generations/`. The
 `infra/docker/state/ops-agent/configuration/current` pointer selects the generated Compose
 file and hardlink plan. Keep these deployment files; do not edit generated YAML.
 
-Release resolution writes `infra/docker/state/ops-agent/releases/docker-compose.release.yml`, pinning the
-complete application image set. If the registry cannot be reached, restore
-access before continuing. `--status` reports the local selection; it does not
-inspect running containers. See [Upgrading](./upgrading.md) for channel and pin
+The generation's compose file pins the complete application image set, and the
+generation keeps the release manifest beside it. Later renders keep those pins.
+If the registry cannot be reached, restore access before continuing. `--status`
+reports the applied configuration's pins; it does not inspect running containers. See [Upgrading](./upgrading.md) for channel and pin
 changes.
 
 ## 5. Bring up the infrastructure first
@@ -206,7 +206,7 @@ pnpm openmapx compose up
 pnpm openmapx services status
 ```
 
-This starts all services in the current selection, retaining the release overlay.
+This starts all services in the current selection with the release pins of the applied configuration.
 With prepared data from steps 6 and 7, it stops on the `/link` refusal described
 in step 8; start the stack with `services start` and the service ids instead.
 If you added a first-import engine such as Nominatim or Valhalla, expect a long

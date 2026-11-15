@@ -24,7 +24,8 @@ this choice with the operator and enables it by default.
 The host checkout supplies the CLI, service definitions, and configuration used
 to operate the stack. Application images are prebuilt and selected through a
 release manifest. A Git pull updates the checkout but leaves running containers
-unchanged; a release selection writes image pins but does not replace containers.
+unchanged; a release selection renders a new configuration that pins the release's
+images but does not replace containers.
 Both operations are followed by an explicit service update.
 
 Application release metadata selects six digest-pinned images, including the
@@ -175,9 +176,9 @@ pnpm openmapx compose release --check
 ```
 
 The check pulls only the small metadata image, validates the six immutable
-image pins, and caches the canonical manifest. It prints a
-**Checked release** ID and a **Manifest digest**. It does not write the release
-overlay, download application images or replace containers. Configuration changes
+image pins, and caches the canonical manifest under its digest. It prints a
+**Checked release** ID and a **Manifest digest**. It does not change the applied
+configuration's pins, download application images or replace containers. Configuration changes
 require inspection before checking again.
 
 Create a private directory for the client receipt and an operator-provided
@@ -256,12 +257,13 @@ remove it.
 
 Bare `pnpm openmapx compose release` is for a clean installation without an
 existing Data Manager, or restoring the exact immutable pin its container already
-uses. It refuses a different pin, ambiguous/unavailable Docker observations, or
-an active transaction. The container's recorded image reference and actual image
-identity must both match. It never recreates containers.
+uses. It renders a new configuration generation that pins the resolved release.
+It refuses a different Data Manager pin and ambiguous or unavailable Docker
+observations; the container's recorded image reference and actual image identity
+must both match. It never recreates containers.
 
 Do not select a new pin and then run `services update data-manager`. Host service
-lifecycle commands preserve an existing selection; a Data Manager update needs
+lifecycle commands keep the applied pins; a Data Manager update needs
 the coordinated producer above. Updating other services individually does not
 complete an application release and API migrations move forward only.
 
@@ -271,26 +273,19 @@ prerelease. Exact versions or metadata
 image digests pin a particular selection. A missing preview or pin fails without
 choosing main. See [Product releases](../developer/product-releases.md).
 
-A legacy transaction or unconsumed handoff must finish or recover before a new
-update. Preserve those records and inspect Activity and diagnostics; do not delete
-writer guards or reinterpret a selected overlay as proof of completion.
+An unfinished update or unconsumed handoff must finish or recover before a new
+update. Preserve those records and inspect Activity and diagnostics; do not
+reinterpret pinned images in the applied configuration as proof of completion.
 
 ### Recovering a refused host service update
 
 A standalone host `services start` or `services update` that fails releases its
 service locks as it exits, once its failure is recorded under
-`infra/docker/data/ops-agent/lifecycle/<operation-key>.json`, so you can fix the
+`infra/docker/state/ops-agent/lifecycle/<operation-key>.json`, so you can fix the
 cause and run the command again. Containers that already started are left running;
 the retry converges on them. The locks stay in place when the failure could not be
 recorded, or when a hardlink request had already been issued to Data Manager. A
 later command that finds a service locked names the operation holding it.
-
-When the command failed at the hardlink step itself, `services recover-update`
-below may release the locks. When the hardlink request had already completed and a
-later step failed, such as a Compose start that hit a port conflict,
-`recover-update` refuses with `Original failure before hardlink completion required`
-and no automated release exists yet: those services stay locked. Keep the original
-records and do not delete guards.
 
 A read-only traffic inspection failure is terminal. Data Manager also settles an
 interrupted legacy data job by observation, at startup and then every minute. It
@@ -304,28 +299,33 @@ restarted mid-operation it reports the operation as failed with a
 recovery-required outcome, which does not prove the host effect ended, so the job
 stays interrupted until the operation's deadline plus 30 seconds has passed.
 
-For a standalone host `services start` or `services update` that failed at
-hardlinks after committing its configuration, retain its original operation key
-from `infra/docker/data/ops-agent/lifecycle/<operation-key>.json`. Once the
-original deadline has expired, the installation owner can run:
+### Operations whose outcome is unknown
+
+Every command that changes containers (stop, restart, start, recreate, update,
+remove, `compose up` and `compose down`, backup create and restore) first claims
+its services in the operations agent's lease store. While one holds a service,
+another refuses at once with a message that names the holder's operation key and
+points to `openmapx control status`. A failure Docker reports releases the
+services; a crash, timeout, killed command or lost connection to the Docker
+daemon leaves the outcome unknown, and the services stay held until you resolve
+it. On the host:
 
 ```bash
-pnpm openmapx services recover-update --operation-key ORIGINAL_OPERATION_KEY
+pnpm openmapx control status                                  # held leases, unfinished operations, lock holders
+pnpm openmapx control resolve --op OPERATION_KEY --as failed  # or --as committed
+pnpm openmapx control clear --op OPERATION_KEY                # drop a lease whose holder is gone
+pnpm openmapx control clear --lock writer                     # a lock whose holder cannot be proved gone
 ```
 
-This requires the updated CLI, Data Manager and ops-agent. It verifies the original signed
-failure and asks Data Manager to attest, under its database admission lock, that
-the original child has no SQL admission or private adoption record. Only then
-can it revoke that unused grant and release the original service locks. A missing
-file or HTTP 404 alone is insufficient. Adopted or uncertain work still refuses.
-Keep all original records when it refuses; do not delete guards.
-
-Recovery preserves the failed receipt and committed configuration. It neither
-replays the child nor changes containers, and does not make a backup. After
-successful recovery, use **System → Updates** or the checked `system update`
-workflow above for the next application release. An already blocked installation
-may require a separately supervised upgrade before these fixes can run; changing
-the checkout alone does not update its running Data Manager.
+Check the containers first: each command prints what Docker reports for the held
+services before it changes anything. Resolve as `committed` when the effect
+completed and as `failed` when it did not. Resolving a configuration maintenance
+also settles Data Manager's configuration fence, which otherwise keeps refusing
+data jobs; clearing one leaves that fence prepared until you resolve it. Every
+clear and resolve is appended to `infra/docker/state/ops-agent/control-audit.jsonl`.
+A lock is reclaimed automatically when its holder is provably gone; on macOS, and
+for a host CLI holder seen from a container, `control clear --lock` is the way out
+once you have checked that the holder has exited.
 
 Rendering stops, with the reason, when `infra/docker/.env` is not the deployment
 user's own regular file, has more than one link, or its group or others can write
@@ -337,41 +337,38 @@ inspect the original Activity job and preserve its recovery records. Do not infe
 a rollback from a disconnected API or an unchanged release-status field.
 System status includes all five application services.
 
-API and CLI service lifecycle commands automatically include an
-existing release overlay, so restarting or re-rendering the stack retains the
-digest-pinned release. Keep the overlay with the deployment;
-clear it with `pnpm openmapx compose release --clear` only when intentionally
-removing the local selection.
+The applied configuration generation holds the release's image pins, so
+restarting or re-rendering the stack keeps the digest-pinned release. Clear the
+pins with `pnpm openmapx compose release --clear` only when intentionally running
+images without a release.
 Forks and mirrored registries select their own channel with
 `OPENMAPX_RELEASE` and `OPENMAPX_RELEASE_MANIFEST_REPOSITORY` (see [Configuration](./configuration.md)).
-`services update` preserves an existing release selection and stops before
-container recreation if pulling that pinned release fails. Use System → Updates or the authenticated `system update` workflow
+`services update` keeps the applied release pins and stops before container
+recreation if pulling that pinned release fails. Use System → Updates or the authenticated `system update` workflow
 when deliberately applying a newer release.
 
-For local-image workflows, explicit `OPENMAPX_RELEASE=local` disables automatic release resolution. It does
-not remove or bypass an existing release overlay. Clear the local selection
-explicitly:
+For local-image workflows, explicit `OPENMAPX_RELEASE=local` disables automatic
+release resolution. It does not remove the pins of the applied configuration.
+Clear them explicitly:
 
 ```bash
 pnpm openmapx compose release --clear
 ```
 
-This idempotent command removes only `infra/docker/state/ops-agent/releases/docker-compose.release.yml`.
-It inspects existing Data Manager containers and refuses to clear a valid overlay
-that a matching coordinator still uses. Clearing mismatched or malformed state is
-only a recovery action; Docker ambiguity or observation failure refuses. It
-preserves running containers and `state/ops-agent/releases/store` manifests and recorded
-running state. It refuses to clear while the release store is locked or an update
-transaction awaits completion or recovery. `--clear` cannot be combined with
-`--status` or `--check`.
+This renders the applied configuration again as a new generation without pins;
+running containers keep their images until they are next recreated. It refuses
+while the running Data Manager uses the pinned image, and on ambiguous or failed
+Docker observations. `--clear` cannot be combined with `--status` or `--check`.
 
 Clearing does not change your environment. If automatic resolution remains
-enabled, the next start/update selects a release again. To use local images,
-separately set `OPENMAPX_RELEASE=local` in your deployment environment.
-With no overlay and resolution disabled, service updates pull
-the manifest tags and may continue after pull failures to allow local images.
-This is not an offline mode; Compose can still pull application images.
-`compose pull` resolves a coherent release when no overlay exists and product services are included; it preserves existing deliberate pins. Exact helper pull failures never build a replacement image.
+enabled, the next `compose up` pins a release again. To use local images,
+separately set `OPENMAPX_RELEASE=local` in your deployment environment. With no
+pins and resolution disabled, service updates pull the manifest tags and may
+continue after pull failures to allow local images. This is not an offline mode;
+Compose can still pull application images. `compose up` and `compose pull` pin
+the release the configured selection resolves to when the applied configuration
+pins none and product services are included; they keep existing pins. Exact
+helper pull failures never build a replacement image.
 
 To reconcile the **entire** enabled stack while retaining the selected app
 release, use the CLI:
@@ -381,9 +378,8 @@ pnpm openmapx compose pull
 pnpm openmapx compose up
 ```
 
-`compose up` refreshes the generated base file without overwriting the existing
-release selection in `docker-compose.release.yml`. Heavy backend engines that did
-not change are left running untouched.
+`compose up` renders a new generation that keeps the applied release pins. Heavy
+backend engines that did not change are left running untouched.
 
 :::note[Pull vs. build]
 There is no "rebuild the app" step in a normal upgrade. The application images are
@@ -418,8 +414,7 @@ containers or make a backup.
 
 Start a fresh checked update afterward; use `--no-backup` for CLI updates and
 their resumes when that is your selected policy, or disable the panel's backup
-option. `services recover-update` does not recover an API-owned application
-job. Do not delete locks, clear database flags or replay the preparation grant.
+option. Do not delete locks, clear database flags or replay the preparation grant.
 
 ## 5. Database migrations apply automatically
 
@@ -444,8 +439,9 @@ the error is logged there. If you created an optional
 
 :::caution[Migrations move forward only]
 Drizzle migrations are forward-only. There is no automatic down-migration. Once a
-new `app-api` has migrated the database, rolling back to an older app image is not
-supported unless you also restore the matching database backup. For upgrades
+new `app-api` has migrated the database, `openmapx control rollback` refuses to
+return to the older release (see [Rolling back](#rolling-back)); restore the
+matching database backup instead. For upgrades
 that cross a schema change, consider taking the optional backup in step 1 when
 the deployment contains state you cannot readily recreate.
 :::
@@ -488,7 +484,7 @@ curl --fail --silent --show-error https://maps.example.com/api/status
 
 Replace `maps.example.com` with the actual domain. The CLI loads `.env` only into
 its own process, so `${DOMAIN}` is not automatically available in your shell.
-`compose release --status` reports local pins, while `services status` reports
+`compose release --status` reports the applied configuration's pins, while `services status` reports
 container/health state; neither alone proves matching running digests. Inspect
 the running image identity when verifying an exact release.
 
@@ -506,13 +502,34 @@ and [OSM data queries](../guides/osm-data-queries.md).
 
 ## Rolling back
 
-Rollback needs a recovery decision. Image selection does not reverse database
-migrations or a committed configuration change. Preserve the previous coherent
-manifest and matching database/configuration backups. If a rollback is compatible,
-set `OPENMAPX_RELEASE` to its exact metadata digest, check it with `--check` and
-review it through the same coordinated workflow. There is no positional
-`compose release <release>` command. Bare selection is permitted only for bootstrap
-or restoring the exact Data Manager pin already in use.
+`openmapx control rollback` returns to the configuration generation that was
+applied before the current one, with the release it pins:
+
+```bash
+pnpm openmapx control rollback        # print the plan; nothing changes
+pnpm openmapx control rollback --yes  # roll back
+```
+
+It renders that generation's configuration and release again as a new generation
+and recreates the services in the self-update order: every other service first,
+then PostGIS, Redis, the web app, the API, Traefik and the operations agent last.
+A service that fails to recreate stops the rollback; the services after it are
+left as they are.
+
+**Rolling back also reverts every configuration change made since that
+generation:** the release selection, the selected services, service
+configuration and secrets all return to the previous generation's. Re-apply any
+change you still want afterwards.
+
+The command refuses when the release would change and the database has a newer
+migration than the previous release ships. The migrator only applies migrations
+newer than the newest applied one, so an older API would otherwise run against a
+newer schema without complaint. CI records each release's newest migration in its
+release manifest; a release published before that, or a previous configuration
+without pins, cannot be checked and is refused too. In those cases, restore the
+backup taken before the update. PostGIS must be running so that the command can
+read the database's migrations. Only the latest switch between generations is
+recorded, so a second rollback returns to the configuration you rolled back from.
 
 ## Reclaiming disk after an upgrade
 

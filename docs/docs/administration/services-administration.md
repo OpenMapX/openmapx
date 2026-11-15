@@ -100,8 +100,8 @@ new targets to the request. Updates offer **without dependency recreation**, cor
 Builds take an optional region, a "continue on errors" toggle, and MOTIS-only import
 (`--import`) for a selected MOTIS build or Build All with enabled, buildable MOTIS.
 Other actions cannot carry these options. Whole-stack starts explicitly name the
-frozen generated service closure so release-overlay entries cannot create disabled
-services. Each
+frozen generated service closure, so they never create a service the generation
+does not enable. Each
 action is queued as a background job — the toast names the job id, and the
 **View Jobs** link opens the activity view where the job's log streams.
 
@@ -115,7 +115,8 @@ check the returned job before deliberately requesting another run.
 
 **Stage selected images** downloads immutable image content without rendering,
 retagging, starting, or recreating services. It resolves the configured image for
-the host's platform; release-managed services use the exact selected release pin.
+the host's platform; release-managed services use the exact release pin of the
+applied configuration.
 Configured tags and running-container ownership stay unchanged. In local release
 mode, floating references are resolved to manifest digests. An unavailable or
 ambiguous platform manifest fails before downloading. Follow the retained job in
@@ -235,7 +236,14 @@ closure. It preserves existing Data Manager and operations-agent containers with
 `--no-recreate`, then applies ordinary services with `--no-deps`. Apply or update
 Data Manager from its service page. Use **System → Deployment** or **System → Updates** to replace
 the agent through the guarded helper. Up does not silently replace either
-protected container or start services mentioned only by a release overlay.
+protected container.
+
+Stop, restart, start, update, removal, Compose Up and Down, and backup create and
+restore each claim their services first, in the operations agent's lease store,
+from the panel and from the host CLI alike. While another operation holds one of
+the services, the action is refused at once with a busy message that names the
+holding operation's key and points to `openmapx control status`. Pulling, staging
+images, builds and probes take no lease.
 
 Full shutdown stops the panel and its agent, so the page shows a copyable host
 command instead of a nonfunctional stop button:
@@ -482,29 +490,33 @@ The agent handles SIGTERM and SIGINT by closing its listener and awaiting close
 hooks, including any running prune pass. Its shutdown deadline is 30 seconds;
 the shipped Compose manifest allows 45 seconds before Docker forces termination.
 Re-render and recreate the agent to adopt that Compose setting. A forced stop,
-process crash or power failure can still leave an operation or writer guard
-requiring supervised recovery.
+process crash or power failure can still leave an operation whose outcome is
+unknown, or a lock whose holder cannot be proved gone.
 
-If a service reports a busy or unrecoverable writer after a crash:
+If a service reports a busy target, writer or lock after a crash, recover from the
+host:
 
-1. Preserve the logs and an ownership/mode-preserving copy of the control stores.
-   Identify the affected role and its actual mounts using the deployment's
-   rendered Compose configuration.
-2. Stop app-api, Data Manager and the operations agent, and establish that no host
-   CLI, fixed CLI or helper container can still write those same stores. The age
-   of a directory or absence of one PID is insufficient evidence.
-3. Only after establishing that exclusion, an interrupted **empty writer-guard
-   directory** may be removed with `rmdir` at its verified exact path. Do not
-   recursively remove a control store, target lease/lock, execution, receipt or
-   index record. Do not delete signed records to make capacity available.
-4. Restart the services and inspect their recovery logs and Activity. Original
-   signature and completion checks still apply. Removing a stale
-   writer guard proves neither cancellation nor containment: an uncertain
-   operation must remain fenced until its original recovery requirements hold.
+1. Run `pnpm openmapx control status`. It lists the held leases with their
+   operation keys and children, the agent operations without a final outcome, and
+   the holders of the configuration writer, lease store and backup store locks.
+2. For an operation whose outcome is unknown, check the containers (the command
+   prints what Docker reports for the held services), then record the outcome
+   with `pnpm openmapx control resolve --op <key> --as committed|failed`. This
+   releases the lease; for a configuration maintenance it also settles Data
+   Manager's configuration fence.
+3. For a lease whose holder is gone, `pnpm openmapx control clear --op <key>`
+   drops it. A cleared configuration maintenance leaves the fence prepared until
+   you resolve the same operation.
+4. A lock is reclaimed automatically when its holder is provably gone. When it is
+   not (on macOS, or a host CLI holder seen from a container), first check that
+   the named process has exited, then run
+   `pnpm openmapx control clear --lock writer|leases|backups`.
 
-Mismatched signed files or missing completion evidence need separate supervised
-recovery. Do not repair those by editing signatures, copying records or
-repeatedly deleting guards.
+Every clear and resolve is appended to
+`infra/docker/state/ops-agent/control-audit.jsonl` and printed. Do not delete the
+lease store, lock files or signed records by hand: a missing record proves
+neither cancellation nor containment, and an uncertain operation must stay held
+until it is resolved.
 
 ## Platform configuration topics
 

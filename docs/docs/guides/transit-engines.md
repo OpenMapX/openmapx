@@ -85,8 +85,8 @@ pnpm openmapx data generate-api-keys
 Keep this file private. Data-manager mounts its directory read-only and reads
 `/config/transitous/api-keys.json` at every run, so edits apply at the next one.
 See the [secrets directory's README](https://github.com/OpenMapX/openmapx/blob/main/infra/docker/secrets/README.md)
-for its layout. The release overlay must be selected before a
-host-side MOTIS build so its helper image matches the release.
+for its layout. A release must be pinned before a host-side MOTIS build, so its
+helper image matches the release.
 
 ### 3. Build the prepared data
 

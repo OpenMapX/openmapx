@@ -18,9 +18,9 @@ import { type ContainerRunning, withRecoverableLock } from "../services/recovera
 /**
  * Target leases, in the operations agent's own state directory, which no other
  * service mounts. Every writer that changes containers claims its targets here
- * first: the agent for its own operations and on behalf of data-manager and the
- * host CLI, the configuration helper while the agent is replaced, the agent's
- * fixed CLI children, and the host CLI directly only while the agent is down.
+ * first: the agent for its own operations and on behalf of data-manager, the
+ * configuration helper while the agent is replaced, the agent's fixed CLI
+ * children, and the host CLI, which writes the file itself.
  *
  * The file is replaced atomically under a recoverable lock, held only for the
  * read and write, never across a Docker effect. A lease names its owner and
