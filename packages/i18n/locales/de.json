@@ -3178,7 +3178,8 @@
     "privacy": "Datenschutz",
     "terms": "Nutzungsbedingungen",
     "imprint": "Impressum",
-    "parking": "Parken"
+    "parking": "Parken",
+    "signInHint": "Melden Sie sich an, um Orte zu speichern, Ihren Parkplatz zu merken und Ihre Zeitleiste zu sehen."
   },
   "timeline": {
     "onboardingTitle": "Ihre Zeitleiste",

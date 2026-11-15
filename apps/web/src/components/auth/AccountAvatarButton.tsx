@@ -23,10 +23,23 @@ interface Props {
   sx?: SxProps<Theme>;
   /** Signed out, show a labelled "Sign in" button instead of a blank avatar. */
   labelledSignIn?: boolean;
+  /**
+   * Opens something else instead of the account popover or sign-in, such as
+   * the phone's menu, which carries the account itself.
+   */
+  onOpen?: () => void;
+  /** The button's name when `onOpen` makes it open more than the account. */
+  openLabel?: string;
 }
 
 /** Avatar button with auth flow: opens AuthDialog when signed-out, AccountMenu when signed-in. */
-export function AccountAvatarButton({ size = 36, sx, labelledSignIn = false }: Props) {
+export function AccountAvatarButton({
+  size = 36,
+  sx,
+  labelledSignIn = false,
+  onOpen,
+  openLabel,
+}: Props) {
   const t = useTranslations("map");
   const { authorityKey, data: session, isPending } = useSettledSessionAuthority();
   const [authOpen, setAuthOpen] = useState(false);
@@ -49,7 +62,9 @@ export function AccountAvatarButton({ size = 36, sx, labelledSignIn = false }: P
   const avatarSrc = user?.image ? proxyImageUrl(user.image) : undefined;
 
   const handleAvatarClick = () => {
-    if (user) {
+    if (onOpen) {
+      onOpen();
+    } else if (user) {
       setMenuAnchor(avatarRef.current);
     } else {
       setAuthOpen(true);
@@ -73,7 +88,7 @@ export function AccountAvatarButton({ size = 36, sx, labelledSignIn = false }: P
           ref={avatarRef}
           component="button"
           type="button"
-          aria-label={t("account")}
+          aria-label={openLabel ?? t("account")}
           src={avatarSrc}
           onClick={handleAvatarClick}
           sx={[

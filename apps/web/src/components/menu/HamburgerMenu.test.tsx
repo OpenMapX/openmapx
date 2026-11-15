@@ -9,6 +9,8 @@ vi.mock("next/link", () => ({
   ),
 }));
 vi.mock("@/components/auth/AuthDialog", () => ({ AuthDialog: () => null }));
+vi.mock("@/components/auth/useSignOut", () => ({ useSignOut: () => vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("@/components/pwa/InstallEntry", () => ({
   InstallEntry: () => null,
   IosInstallHintDialog: () => null,
@@ -22,6 +24,8 @@ vi.mock("@/lib/importGeoFile", () => ({
 }));
 
 const session = { current: { data: null as unknown, isPending: false } };
+const phone = vi.hoisted(() => ({ current: false }));
+vi.mock("@mui/material/useMediaQuery", () => ({ default: () => phone.current }));
 const parked = vi.hoisted(() => ({ current: { data: [] as unknown[] } }));
 vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();
@@ -34,6 +38,7 @@ import { HamburgerMenu } from "./HamburgerMenu";
 
 afterEach(() => {
   session.current = { data: null, isPending: false };
+  phone.current = false;
   act(() => {
     useMenuStore.getState().close();
     useSidebarStore.getState().closeAll();
@@ -84,5 +89,33 @@ describe("HamburgerMenu personal timeline navigation", () => {
 
     expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.TIMELINE);
     expect(useMenuStore.getState().isOpen).toBe(false);
+  });
+});
+
+describe("HamburgerMenu on a phone, where the avatar opens it", () => {
+  it("leads with signing in while signed out", () => {
+    phone.current = true;
+    openMenu();
+    expect(screen.getByRole("button", { name: "map.signIn" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "account.signOut" })).toBeNull();
+  });
+
+  it("names the account and offers its settings and signing out", () => {
+    phone.current = true;
+    session.current = {
+      data: { user: { id: "user-a", name: "Ada Lovelace", email: "ada@example.test" } },
+      isPending: false,
+    };
+    openMenu();
+    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "account.accountSettings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "account.signOut" })).toBeInTheDocument();
+  });
+
+  it("keeps the desktop menu free of the account, which has its own avatar menu", () => {
+    session.current = { data: { user: { id: "user-a", name: "Ada" } }, isPending: false };
+    openMenu();
+    expect(screen.queryByText("Ada")).toBeNull();
+    expect(screen.queryByRole("button", { name: "account.signOut" })).toBeNull();
   });
 });
