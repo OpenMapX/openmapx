@@ -1,5 +1,5 @@
 ---
-impacts: [breaking]
+impacts: [breaking, migration]
 ---
 
 ## What changes
