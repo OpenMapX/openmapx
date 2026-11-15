@@ -3199,10 +3199,6 @@
     "replaceConnection": "Zugangsdaten ersetzen",
     "visitFallback": "Unbenannter Besuch",
     "journeyFallback": "Weg",
-    "selected": "Ausgewählt",
-    "pointCount": "Punkte",
-    "elevationGain": "Anstieg",
-    "elevationLoss": "Abstieg",
     "entriesAriaLabel": "Zeitleisteneinträge",
     "summary": {
       "distance": "Entfernung",
@@ -3228,6 +3224,19 @@
       "TIMELINE_UPSTREAM_UNAVAILABLE": "Dawarich ist derzeit nicht erreichbar. Versuchen Sie es später erneut.",
       "TIMELINE_RESPONSE_INVALID": "Dawarich hat Daten zurückgegeben, die OpenMapX nicht sicher lesen konnte.",
       "unknown": "Ihre Zeitleiste konnte nicht geladen werden. Versuchen Sie es erneut."
+    },
+    "elevationGain": "Anstieg",
+    "elevationLoss": "Abstieg",
+    "modes": {
+      "walking": "Zu Fuß",
+      "running": "Laufen",
+      "cycling": "Fahrrad",
+      "driving": "Auto",
+      "bus": "Bus",
+      "train": "Bahn",
+      "flying": "Flug",
+      "boat": "Schiff",
+      "motorcycle": "Motorrad"
     }
   },
   "saved": {

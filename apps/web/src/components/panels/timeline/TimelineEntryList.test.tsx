@@ -78,13 +78,15 @@ describe("TimelineEntryList", () => {
     ]);
     const visit = screen.getByRole("button", { name: /timeline.visitFallback/ });
     expect(visit).toHaveTextContent("90 min");
-    expect(visit).toHaveTextContent("5");
-    expect(screen.getByText("coffee")).toBeInTheDocument();
-    expect(screen.getByText("cycling")).toBeInTheDocument();
-    expect(screen.getByText("12.5 km")).toBeInTheDocument();
-    expect(screen.getByText("25 km/h")).toBeInTheDocument();
-    expect(screen.getByText("timeline.elevationGain: 42 m")).toBeInTheDocument();
-    expect(screen.getByText("timeline.elevationLoss: 0 m")).toBeInTheDocument();
+    expect(screen.getByText("coffee · work")).toBeInTheDocument();
+    // A journey reads as one line: how, how long, how far, and any climb.
+    const ride = screen.getByRole("button", { name: /timeline.modes.cycling/ });
+    expect(ride).toHaveTextContent(
+      "timeline.modes.cycling · 30 min · 12.5 km · timeline.elevationGain 42 m",
+    );
+    // A zero descent and the point count are noise, not information.
+    expect(ride).not.toHaveTextContent("timeline.elevationLoss");
+    expect(visit).not.toHaveTextContent("5");
 
     const minimal = screen.getByRole("button", { name: /timeline.journeyFallback/ });
     expect(minimal).not.toHaveTextContent("0 km");
