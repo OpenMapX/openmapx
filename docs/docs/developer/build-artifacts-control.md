@@ -520,10 +520,11 @@ child names a data-manager job or helper container.
 
 ### Other target rules
 
-- **Writer lock.** The CLI goes through the agent when it is up. When the agent is
-  down, a lock file records PID, boot ID and process start time, and is reclaimed
-  only when that process is provably gone. The lock is never held across a Docker
-  effect.
+- **Lease store and writer lock.** The agent, its helper and the host CLI write the
+  lease store directly, each under the same lock file. A lock file records PID,
+  boot ID, PID namespace, container and process start time, and is reclaimed only
+  when that process is provably gone. Reclaimers take turns through a short guard
+  file beside the lock. The lock is never held across a Docker effect.
 - **Desired configuration.** The payload travels in the authenticated operation.
   The job row moves through three phases: candidate prepared; rows and decision
   saved in one transaction; generation applied by a keyed operation. Recovery runs
@@ -532,6 +533,18 @@ child names a data-manager job or helper container.
   previous pointer is the manual rollback target.
 - **Operator exit.** `openmapx control status`, plus `control clear --op <key>` or
   `control resolve --as committed|failed`: host-only, printing what is believed
-  live, and audited.
+  live, and audited. Clearing a configuration maintenance leaves the data-manager's
+  configuration fence prepared; `control resolve` of the same operation settles it,
+  also after a clear.
+- **Lock reclaim limits.** Some dead holders cannot be proved gone, and their lock
+  stays until `openmapx control clear --lock <name>`:
+  - a holder in another PID namespace without a container ID, such as the host CLI
+    as the agent or the helper sees it;
+  - any holder on macOS, which records no process start time, so a reused process
+    ID counts as alive.
+
+  Check that the named process is gone first. The same command also removes a
+  reclaim guard that a dead reclaimer left beside the lock.
+
 - **Self-update order.** Pull first, drain, run the helper from the current image,
   recreate in order with verification after each service, agent last.
