@@ -1,7 +1,7 @@
 import { computePlusCode, type Place } from "@openmapx/core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createQueryWrapper } from "@/test/query";
 import { MobileSheetContext } from "../sheet/sheetState";
 
@@ -57,6 +57,27 @@ class StubIntersectionObserver {
   disconnect() {}
 }
 vi.stubGlobal("IntersectionObserver", StubIntersectionObserver);
+
+// Sections the overview loads on its own. The place has no tide station, marine
+// forecast or crawled menu (204), no delivery platform serves it, and the
+// current weather is still loading when a test looks.
+const unmockedFetch = globalThis.fetch;
+beforeEach(() => {
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const { pathname } = new URL(String(input), "http://localhost");
+    if (
+      /^\/api\/integrations\/knowledge-[a-z-]+\/(tides|marine)$/.test(pathname) ||
+      pathname === "/api/integrations/restaurants/menu"
+    ) {
+      return new Response(null, { status: 204 });
+    }
+    if (pathname === "/api/integrations/food-delivery/providers") {
+      return Response.json({ providers: [] });
+    }
+    if (pathname === "/api/integrations/weather/current") return new Promise<Response>(() => {});
+    return unmockedFetch(input, init);
+  });
+});
 
 const { PlaceOverviewTab } = await import("./PlaceOverviewTab");
 const { MutationErrorNotice } = await import("../../MutationErrorNotice");

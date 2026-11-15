@@ -211,6 +211,22 @@ beforeEach(() => {
     .mockReturnValue({ data: undefined, isLoading: false, isError: false });
   useAutocompleteMock.mockReset().mockReturnValue({ data: [] });
   optimizeMutate.mockReset();
+  // Background loads the panel makes on its own: the transit planners' features,
+  // the destination's country and the fuel prices around it. None is known here.
+  const unmocked = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const { pathname } = new URL(String(input), "http://localhost");
+    if (pathname === "/api/integrations/transit/planning-capabilities") {
+      return Response.json({ providers: [] });
+    }
+    if (pathname === "/api/integrations/geocoding/geocode/country") {
+      return Response.json({ countryCode: null });
+    }
+    if (pathname === "/api/integrations/data-source/fuel/search") {
+      return Response.json({ data: [], attributions: [] });
+    }
+    return unmocked(input, init);
+  });
   act(() => {
     useDirectionsStore.getState().close();
     useDirectionsStore.getState().setMode("driving");

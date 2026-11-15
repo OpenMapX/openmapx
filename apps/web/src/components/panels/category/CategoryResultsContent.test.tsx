@@ -1,5 +1,10 @@
 import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
-import type { CategoryCardEnrichmentRequest, CategoryPlace, SearchIntent } from "@openmapx/core";
+import type {
+  BrandDetail,
+  CategoryCardEnrichmentRequest,
+  CategoryPlace,
+  SearchIntent,
+} from "@openmapx/core";
 import {
   API_ENDPOINTS,
   ApiClientError,
@@ -63,6 +68,19 @@ beforeEach(() => {
 function MapProbe({ map }: { map: { zoomIn: () => void; zoomOut: () => void } }) {
   useMap().mapRef.current = map as never;
   return null;
+}
+
+/** A catalogue record with nothing beyond the brand's identity. */
+function brandDetail(qid: string, name: string): BrandDetail {
+  return {
+    qid,
+    name,
+    kind: ["brand"],
+    matchNames: [name],
+    countries: [],
+    tagSets: [],
+    itemCount: 0,
+  };
 }
 
 function renderPanel(
@@ -174,6 +192,9 @@ describe("category activation search area", () => {
   it.each(["category", "brand"] as const)(
     "captures current map bounds for an ordinary %s activation",
     async (kind) => {
+      // The brand header card loads the brand's catalogue record.
+      if (kind === "brand")
+        vi.spyOn(apiClient, "get").mockResolvedValue(brandDetail("Q1", "Example"));
       act(() => {
         useCategorySearchStore.getState().setSearchBbox(resolved);
         if (kind === "category") useCategorySearchStore.getState().setActiveCategory("restaurants");
@@ -1734,7 +1755,11 @@ describe("category result ordering", () => {
 });
 
 describe("CategoryResultsContent brand empty state", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it("shows the brand-specific empty message when a brand search has no results in view", () => {
+    // The brand header card loads the brand's catalogue record.
+    vi.spyOn(apiClient, "get").mockResolvedValue(brandDetail("Q41171", "Aldi"));
     act(() => {
       useCategorySearchStore
         .getState()
